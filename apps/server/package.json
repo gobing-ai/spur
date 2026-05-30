@@ -1,0 +1,30 @@
+{
+    "name": "@gobing-ai/spur-server",
+    "type": "module",
+    "private": true,
+    "exports": {
+        ".": "./src/index.ts"
+    },
+    "scripts": {
+        "build": "bun build src/index.ts --outdir dist --target bun",
+        "dev": "bun --hot run src/index.ts",
+        "test": "bun test tests --preload ./tests/setup.ts",
+        "test-cf": "vitest run --config vitest.cf.config.ts",
+        "typecheck": "tsc --noEmit"
+    },
+    "dependencies": {
+        "@gobing-ai/spur-config": "workspace:*",
+        "@gobing-ai/spur-contracts": "workspace:*",
+        "@orpc/openapi": "1.14.4",
+        "@orpc/server": "1.14.4",
+        "@orpc/zod": "1.14.4",
+        "hono": "4.12.23"
+    },
+    "devDependencies": {
+        "@cloudflare/vitest-pool-workers": "0.16.10",
+        "@types/bun": "1.3.14",
+        "typescript": "6.0.3",
+        "vitest": "4.1.7",
+        "wrangler": "4.95.0"
+    }
+}

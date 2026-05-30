@@ -1,0 +1,3 @@
+name = "spur-server"
+main = "src/worker.ts"
+compatibility_date = "2026-05-30"

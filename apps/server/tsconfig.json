@@ -1,0 +1,5 @@
+{
+    "$schema": "https://json.schemastore.org/tsconfig",
+    "extends": "../../tooling/typescript/server.json",
+    "include": ["src/**/*.ts", "tests/**/*.ts", "vitest.cf.config.ts"]
+}

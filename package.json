@@ -12,17 +12,31 @@
         "dev": "bun run --filter '*' dev",
         "build": "bun run --filter '*' build",
         "test": "bun test --coverage --pass-with-no-tests",
-        "typecheck": "tsc --noEmit",
+        "test-cf": "bun run --filter '@gobing-ai/spur-server' test-cf",
+        "typecheck": "bun run --filter '*' typecheck",
         "lint": "biome check . && bun run typecheck",
         "format": "biome check . --write",
         "autofix": "bun run format && bun run typecheck",
         "check": "bun run lint && bun run test"
     },
     "dependencies": {
+        "@astrojs/cloudflare": "13.6.0",
+        "@cloudflare/vitest-pool-workers": "0.16.10",
         "@gobing-ai/ts-db": "^0.1.8",
         "@gobing-ai/ts-infra": "^0.1.8",
         "@gobing-ai/ts-runtime": "^0.1.8",
-        "@gobing-ai/ts-utils": "^0.1.8"
+        "@gobing-ai/ts-utils": "^0.1.8",
+        "@orpc/client": "1.14.4",
+        "@orpc/contract": "1.14.4",
+        "@orpc/openapi": "1.14.4",
+        "@orpc/openapi-client": "1.14.4",
+        "@orpc/server": "1.14.4",
+        "@orpc/zod": "1.14.4",
+        "astro": "6.4.2",
+        "hono": "4.12.23",
+        "vitest": "4.1.7",
+        "wrangler": "4.95.0",
+        "zod": "4.4.3"
     },
     "devDependencies": {
         "@biomejs/biome": "2.4.16",

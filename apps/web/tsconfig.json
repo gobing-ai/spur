@@ -1,0 +1,5 @@
+{
+    "$schema": "https://json.schemastore.org/tsconfig",
+    "extends": "../../tooling/typescript/react.json",
+    "include": ["src/**/*.ts", "tests/**/*.ts", "astro.config.mjs", "env.d.ts"]
+}
