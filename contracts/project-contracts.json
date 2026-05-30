@@ -10,11 +10,10 @@
         "webDescription": "spur WebApp"
     },
     "workspaces": {
-        "packages/contracts": "@spur/contracts",
-        "packages/core": "@spur/core",
-        "packages/api-types": "@spur/api-types",
-        "apps/cli": "@spur/cli",
-        "apps/server": "@spur/server",
-        "apps/web": "@spur/web"
+        "packages/contracts": "@gobing-ai/spur-contracts",
+        "packages/config": "@gobing-ai/spur-config",
+        "apps/cli": "@gobing-ai/spur-cli",
+        "apps/server": "@gobing-ai/spur-server",
+        "apps/web": "@gobing-ai/spur-web"
     }
 }

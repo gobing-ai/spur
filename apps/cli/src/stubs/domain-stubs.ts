@@ -1,5 +1,5 @@
 /** Domain subsystem names that intentionally remain stubbed in task 0161. */
-export type StubDomain = 'rule' | 'workflow' | 'agent' | 'history';
+export type StubDomain = 'workflow' | 'history';
 
 /** Descriptive error for domain commands awaiting Phase 3 package extraction. */
 export class DomainStubError extends Error {
@@ -9,19 +9,9 @@ export class DomainStubError extends Error {
     }
 }
 
-/** Throw the rule-engine stub replacement error. */
-export function throwRuleStub(): never {
-    throw new DomainStubError('rule', '0158', '@gobing-ai/ts-rule-engine');
-}
-
 /** Throw the workflow-engine stub replacement error. */
 export function throwWorkflowStub(): never {
     throw new DomainStubError('workflow', '0162', '@gobing-ai/ts-dual-workflow-engine');
-}
-
-/** Throw the agent-runner stub replacement error. */
-export function throwAgentStub(): never {
-    throw new DomainStubError('agent', '0158', '@gobing-ai/ts-ai-runner');
 }
 
 /** Throw the history subsystem stub replacement error. */

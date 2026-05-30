@@ -1,10 +1,12 @@
 #!/usr/bin/env bun
 import { parseArgs } from './args';
+import { runAgentCommand } from './commands/agent';
 import { runInitCommand } from './commands/init';
 import { runInspectCommand } from './commands/inspect';
 import { runMigrateCommand } from './commands/migrate';
+import { runRuleCommand } from './commands/rule';
 import { runStatusCommand } from './commands/status';
-import { runAgentCommand, runHistoryCommand, runRuleCommand, runWorkflowCommand } from './commands/stubs';
+import { runHistoryCommand, runWorkflowCommand } from './commands/stubs';
 import { runWorkspaceCommand } from './commands/workspace';
 import { CLI_CONFIG } from './config';
 import { type CliContext, createCliContext } from './context';
@@ -68,11 +70,11 @@ export async function dispatch(argv: string[], context: CliContext): Promise<num
                 subcommand === undefined ? parsed.positionals : [subcommand, ...parsed.positionals],
             );
         case 'rule':
-            return runRuleCommand(context);
+            return runRuleCommand(subcommand, context, parsed.flags, parsed.positionals);
         case 'workflow':
             return runWorkflowCommand(context);
         case 'agent':
-            return runAgentCommand(context);
+            return runAgentCommand(subcommand, context, parsed.flags, parsed.positionals);
         case 'history':
             return runHistoryCommand(context);
         default:
@@ -94,7 +96,9 @@ export function helpText(): string {
         '  spur workspace add [--name <name>] [--root <path>] [--agent <agent>] [--json]',
         '  spur workspace list [--json]',
         '  spur inspect <path> [--json]',
-        '  spur rule|workflow|agent|history',
+        '  spur rule run [--preset <name>] [--rule <id>] [--fail-on <severity>] [--json]',
+        '  spur agent list|doctor [agent] [--json]',
+        '  spur workflow|history',
     ].join('\n');
 }
 
