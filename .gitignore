@@ -137,4 +137,5 @@ docs/.ftree/
 /.antigravitycli/
 .ant-colony/
 .pi-lens/
+!.env.example
 .wolf/
