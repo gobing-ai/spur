@@ -1,0 +1,1 @@
+ALTER TABLE `queue_jobs` ADD `expires_at` integer;

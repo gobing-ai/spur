@@ -1,0 +1,1 @@
+ALTER TABLE `history_raw_session_codex` ADD `model` text;

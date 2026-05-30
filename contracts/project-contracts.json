@@ -1,0 +1,20 @@
+{
+    "version": 1,
+    "projectIdentity": {
+        "displayName": "spur",
+        "brandName": "spur",
+        "projectSlug": "spur",
+        "rootPackageName": "spur",
+        "repositoryUrl": "https://github.com/gobing-ai/spur",
+        "apiTitle": "spur API",
+        "webDescription": "spur WebApp"
+    },
+    "workspaces": {
+        "packages/contracts": "@spur/contracts",
+        "packages/core": "@spur/core",
+        "packages/api-types": "@spur/api-types",
+        "apps/cli": "@spur/cli",
+        "apps/server": "@spur/server",
+        "apps/web": "@spur/web"
+    }
+}

@@ -1,0 +1,1 @@
+CREATE INDEX `queue_jobs_ready_idx` ON `queue_jobs` (`status`,`next_retry_at`,`created_at`);

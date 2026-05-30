@@ -1,0 +1,13 @@
+telemetry = false
+
+[install]
+smol = true
+exact = true
+
+[test]
+coverage = true
+coverageReporter = ["text", "lcov"]
+coverageThreshold = { lines = 0.85, functions = 0.9 }
+passWithNoTests = true
+pathIgnorePatterns = ["vendors/**", "drizzle/**"]
+coveragePathIgnorePatterns = ["**/tests/**/fixtures/**"]
