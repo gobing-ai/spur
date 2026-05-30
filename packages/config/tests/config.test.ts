@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { buildConfigFromEnv, configSchema } from '../src';
+import { buildConfigFromEnv, configSchema, parseEnvBoolean } from '../src';
 
 describe('config', () => {
     test('builds defaults for a development scaffold', () => {
@@ -25,5 +25,22 @@ describe('config', () => {
             telemetry: { enabled: true },
             logging: { level: 'debug' },
         });
+    });
+
+    test('parses boolean environment values explicitly', () => {
+        expect(parseEnvBoolean('true')).toBe(true);
+        expect(parseEnvBoolean('1')).toBe(true);
+        expect(parseEnvBoolean('false')).toBe(false);
+        expect(parseEnvBoolean('0')).toBe(false);
+        expect(parseEnvBoolean(undefined)).toBeUndefined();
+        expect(() => parseEnvBoolean('definitely')).toThrow('Invalid boolean environment value');
+    });
+
+    test('does not treat the string false as truthy', () => {
+        expect(
+            buildConfigFromEnv({
+                SPUR_TELEMETRY_ENABLED: 'false',
+            }).telemetry.enabled,
+        ).toBe(false);
     });
 });
