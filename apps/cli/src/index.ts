@@ -7,7 +7,7 @@ import { runInspectCommand } from './commands/inspect';
 import { runMigrateCommand } from './commands/migrate';
 import { runRuleCommand } from './commands/rule';
 import { runStatusCommand } from './commands/status';
-import { runWorkflowCommand } from './commands/stubs';
+import { runWorkflowCommand } from './commands/workflow';
 import { runWorkspaceCommand } from './commands/workspace';
 import { CLI_CONFIG } from './config';
 import { type CliContext, createCliContext } from './context';
@@ -73,7 +73,7 @@ export async function dispatch(argv: string[], context: CliContext): Promise<num
         case 'rule':
             return runRuleCommand(subcommand, context, parsed.flags, parsed.positionals);
         case 'workflow':
-            return runWorkflowCommand(context);
+            return runWorkflowCommand(subcommand, context, parsed.flags, parsed.positionals);
         case 'agent':
             return runAgentCommand(subcommand, context, parsed.flags, parsed.positionals);
         case 'history':
@@ -100,7 +100,8 @@ export function helpText(): string {
         '  spur rule run [--preset <name>] [--rule <id>] [--fail-on <severity>] [--json]',
         '  spur agent list|doctor [agent] [--json]',
         '  spur history import --source <source> [--file <path>|--root <path>] [--mode <mode>] [--json]',
-        '  spur workflow',
+        '  spur workflow validate|run <workflow.yaml> [--json]',
+        '  spur workflow list [--json]',
     ].join('\n');
 }
 

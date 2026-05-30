@@ -16,7 +16,7 @@ describe('CLI migrate and extracted domains', () => {
         expect(result.applied).toBe(0);
     });
 
-    test('runs extracted rule, agent, and history commands while keeping workflow stubbed', async () => {
+    test('runs extracted rule, agent, history, and workflow commands', async () => {
         const cwd = await createTempProject();
         const output = createCapturedOutput();
 
@@ -37,9 +37,6 @@ describe('CLI migrate and extracted domains', () => {
 
         expect(await main(['agent', 'missing'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
         expect(output.errors.at(-1)).toContain('Unknown agent command');
-
-        expect(await main(['workflow'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
-        expect(output.errors.at(-1)).toContain('@gobing-ai/ts-dual-workflow-engine');
 
         expect(await main(['history'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
         expect(output.errors.at(-1)).toContain('Usage: spur history import');
@@ -87,6 +84,50 @@ describe('CLI migrate and extracted domains', () => {
             }),
         ).toBe(1);
         expect(output.errors.at(-1)).toContain('Invalid history import mode');
+
+        expect(await main(['workflow'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
+        expect(output.errors.at(-1)).toContain('Usage: spur workflow');
+
+        const workflowFile = join(cwd, 'workflow.yaml');
+        await writeFile(
+            workflowFile,
+            [
+                'name: cli-workflow',
+                'initialState: start',
+                'terminalStates: [done]',
+                'states:',
+                '  - id: start',
+                '    onEnter:',
+                '      - kind: note',
+                '        options:',
+                '          message: hello',
+                '  - id: done',
+                'transitions:',
+                '  - from: start',
+                '    to: done',
+            ].join('\n'),
+        );
+        expect(await main(['workflow', 'validate', workflowFile, '--json'], { cwd, output, dbUrl: ':memory:' })).toBe(
+            0,
+        );
+        expect(JSON.parse(output.messages.at(-1) ?? '{}')).toMatchObject({ ok: true });
+
+        const workflowDb = join(cwd, '.spur', 'workflow.db');
+        expect(
+            await main(['workflow', 'run', workflowFile, '--run-id', 'cli-run', '--json'], {
+                cwd,
+                output,
+                dbUrl: workflowDb,
+            }),
+        ).toBe(0);
+        expect(JSON.parse(output.messages.at(-1) ?? '{}')).toMatchObject({
+            runId: 'cli-run',
+            workflowName: 'cli-workflow',
+            status: 'done',
+        });
+
+        expect(await main(['workflow', 'list', '--json'], { cwd, output, dbUrl: workflowDb })).toBe(0);
+        expect(JSON.parse(output.messages.at(-1) ?? '{}').runs).toHaveLength(1);
     });
 
     test('runs rule command file mode and error branches', async () => {

@@ -1,6 +1,7 @@
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { DbAdapter } from '@gobing-ai/ts-db';
+import { WORKFLOW_ENGINE_SCHEMA_SQL } from '@gobing-ai/ts-dual-workflow-engine';
 import { HISTORY_IMPORT_SCHEMA_SQL } from '@gobing-ai/ts-llm-jsonl-importer';
 
 /** Embedded CLI migration used when no migration folder is available. */
@@ -24,10 +25,13 @@ CREATE TABLE IF NOT EXISTS workspaces (
 CREATE TABLE IF NOT EXISTS runs (
     id TEXT PRIMARY KEY,
     workspace_id TEXT,
+    workflow_name TEXT,
+    mode TEXT,
     status TEXT NOT NULL,
     agent TEXT,
     started_at INTEGER NOT NULL,
     completed_at INTEGER,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     FOREIGN KEY (workspace_id) REFERENCES workspaces(id)
@@ -50,6 +54,7 @@ CREATE TABLE IF NOT EXISTS transition_runs (
     run_id TEXT NOT NULL,
     from_state TEXT NOT NULL,
     to_state TEXT NOT NULL,
+    trigger TEXT,
     status TEXT NOT NULL,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
@@ -77,6 +82,8 @@ CREATE TABLE IF NOT EXISTS artifacts (
 );
 
 ${HISTORY_IMPORT_SCHEMA_SQL}
+
+${WORKFLOW_ENGINE_SCHEMA_SQL}
 `;
 
 /** Built-in migrations for compiled binaries and test use. */
