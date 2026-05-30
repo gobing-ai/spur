@@ -1,5 +1,5 @@
 /** Domain subsystem names that intentionally remain stubbed in task 0161. */
-export type StubDomain = 'workflow' | 'history';
+export type StubDomain = 'workflow';
 
 /** Descriptive error for domain commands awaiting Phase 3 package extraction. */
 export class DomainStubError extends Error {
@@ -12,9 +12,4 @@ export class DomainStubError extends Error {
 /** Throw the workflow-engine stub replacement error. */
 export function throwWorkflowStub(): never {
     throw new DomainStubError('workflow', '0162', '@gobing-ai/ts-dual-workflow-engine');
-}
-
-/** Throw the history subsystem stub replacement error. */
-export function throwHistoryStub(): never {
-    throw new DomainStubError('history', '0160/0157', '@gobing-ai/ts-llm-jsonl-importer + ts-data-pipeline');
 }

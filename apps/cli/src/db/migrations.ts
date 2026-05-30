@@ -1,6 +1,7 @@
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { DbAdapter } from '@gobing-ai/ts-db';
+import { HISTORY_IMPORT_SCHEMA_SQL } from '@gobing-ai/ts-llm-jsonl-importer';
 
 /** Embedded CLI migration used when no migration folder is available. */
 export interface CliMigration {
@@ -74,6 +75,8 @@ CREATE TABLE IF NOT EXISTS artifacts (
     updated_at INTEGER NOT NULL,
     FOREIGN KEY (run_id) REFERENCES runs(id)
 );
+
+${HISTORY_IMPORT_SCHEMA_SQL}
 `;
 
 /** Built-in migrations for compiled binaries and test use. */

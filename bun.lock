@@ -40,6 +40,7 @@
         "@gobing-ai/spur-config": "workspace:*",
         "@gobing-ai/ts-ai-runner": "link:@gobing-ai/ts-ai-runner",
         "@gobing-ai/ts-db": "^0.1.8",
+        "@gobing-ai/ts-llm-jsonl-importer": "link:@gobing-ai/ts-llm-jsonl-importer",
         "@gobing-ai/ts-rule-engine": "link:@gobing-ai/ts-rule-engine",
         "@gobing-ai/ts-runtime": "^0.1.8",
         "@gobing-ai/ts-utils": "^0.1.8",
@@ -239,6 +240,8 @@
     "@gobing-ai/ts-db": ["@gobing-ai/ts-db@0.1.8", "", { "dependencies": { "@gobing-ai/ts-runtime": "^0.1.0" }, "peerDependencies": { "drizzle-orm": ">=0.38.0" } }, "sha512-QODzr+Us4e9PvRllm1NxcLKrQGKJGV76YDLOsb/RGvmgApW2vO9lLm7JMuei0eIfdARDH5GGX7MoE6G/LhaEEA=="],
 
     "@gobing-ai/ts-infra": ["@gobing-ai/ts-infra@0.1.8", "", { "dependencies": { "@gobing-ai/ts-db": "^0.1.0", "@gobing-ai/ts-runtime": "^0.1.0" }, "peerDependencies": { "@opentelemetry/api": "^1.9.0" } }, "sha512-WwOlAyE9riVCLj43xr1SRUPmbIZwac2nRII9BFmw3IWm6r907U5Jxf23565j4FP91Ut0ZuXQwPnDfSAonPoOAg=="],
+
+    "@gobing-ai/ts-llm-jsonl-importer": ["@gobing-ai/ts-llm-jsonl-importer@link:@gobing-ai/ts-llm-jsonl-importer", {}],
 
     "@gobing-ai/ts-rule-engine": ["@gobing-ai/ts-rule-engine@link:@gobing-ai/ts-rule-engine", {}],
 

@@ -1,12 +1,13 @@
 #!/usr/bin/env bun
 import { parseArgs } from './args';
 import { runAgentCommand } from './commands/agent';
+import { runHistoryCommand } from './commands/history';
 import { runInitCommand } from './commands/init';
 import { runInspectCommand } from './commands/inspect';
 import { runMigrateCommand } from './commands/migrate';
 import { runRuleCommand } from './commands/rule';
 import { runStatusCommand } from './commands/status';
-import { runHistoryCommand, runWorkflowCommand } from './commands/stubs';
+import { runWorkflowCommand } from './commands/stubs';
 import { runWorkspaceCommand } from './commands/workspace';
 import { CLI_CONFIG } from './config';
 import { type CliContext, createCliContext } from './context';
@@ -76,7 +77,7 @@ export async function dispatch(argv: string[], context: CliContext): Promise<num
         case 'agent':
             return runAgentCommand(subcommand, context, parsed.flags, parsed.positionals);
         case 'history':
-            return runHistoryCommand(context);
+            return runHistoryCommand(subcommand, context, parsed.flags, parsed.positionals);
         default:
             context.output.error(`Unknown command: ${command}`);
             context.output.write(helpText());
@@ -98,7 +99,8 @@ export function helpText(): string {
         '  spur inspect <path> [--json]',
         '  spur rule run [--preset <name>] [--rule <id>] [--fail-on <severity>] [--json]',
         '  spur agent list|doctor [agent] [--json]',
-        '  spur workflow|history',
+        '  spur history import --source <source> [--file <path>|--root <path>] [--mode <mode>] [--json]',
+        '  spur workflow',
     ].join('\n');
 }
 

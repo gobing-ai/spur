@@ -16,6 +16,7 @@
         "@gobing-ai/spur-config": "workspace:*",
         "@gobing-ai/ts-ai-runner": "link:@gobing-ai/ts-ai-runner",
         "@gobing-ai/ts-db": "^0.1.8",
+        "@gobing-ai/ts-llm-jsonl-importer": "link:@gobing-ai/ts-llm-jsonl-importer",
         "@gobing-ai/ts-rule-engine": "link:@gobing-ai/ts-rule-engine",
         "@gobing-ai/ts-runtime": "^0.1.8",
         "@gobing-ai/ts-utils": "^0.1.8"

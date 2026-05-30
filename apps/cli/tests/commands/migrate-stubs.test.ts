@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { main } from '../../src';
 import { createCapturedOutput, createTempProject } from '../helpers';
 
-describe('CLI migrate and domain stubs', () => {
+describe('CLI migrate and extracted domains', () => {
     test('applies regenerated CLI migrations', async () => {
         const cwd = await createTempProject();
         const output = createCapturedOutput();
@@ -16,7 +16,7 @@ describe('CLI migrate and domain stubs', () => {
         expect(result.applied).toBe(0);
     });
 
-    test('runs extracted rule and agent commands while keeping pending domains stubbed', async () => {
+    test('runs extracted rule, agent, and history commands while keeping workflow stubbed', async () => {
         const cwd = await createTempProject();
         const output = createCapturedOutput();
 
@@ -42,7 +42,51 @@ describe('CLI migrate and domain stubs', () => {
         expect(output.errors.at(-1)).toContain('@gobing-ai/ts-dual-workflow-engine');
 
         expect(await main(['history'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
-        expect(output.errors.at(-1)).toContain('@gobing-ai/ts-llm-jsonl-importer');
+        expect(output.errors.at(-1)).toContain('Usage: spur history import');
+
+        const historyFile = join(cwd, 'history.jsonl');
+        await writeFile(
+            historyFile,
+            `${JSON.stringify({ id: 'msg-1', timestamp: '2026-05-30T00:00:00.000Z', content: 'hello' })}\n`,
+        );
+        expect(
+            await main(['history', 'import', '--source', 'codex', '--file', historyFile, '--json'], {
+                cwd,
+                output,
+                dbUrl: ':memory:',
+            }),
+        ).toBe(0);
+        expect(JSON.parse(output.messages.at(-1) ?? '{}')).toMatchObject({
+            source: 'codex',
+            importedRecords: 1,
+            scannedFiles: 1,
+        });
+
+        const plainHistoryFile = join(cwd, 'plain-history.jsonl');
+        await writeFile(
+            plainHistoryFile,
+            `${JSON.stringify({ id: 'msg-2', timestamp: '2026-05-30T00:00:00.000Z', content: 'plain' })}\n`,
+        );
+        expect(
+            await main(['history', 'import', '--source', 'codex', '--file', plainHistoryFile], {
+                cwd,
+                output,
+                dbUrl: ':memory:',
+            }),
+        ).toBe(0);
+        expect(output.messages.at(-1)).toContain('history import codex');
+
+        expect(await main(['history', 'import', '--source', 'missing'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
+        expect(output.errors.at(-1)).toContain('Invalid history source');
+
+        expect(
+            await main(['history', 'import', '--source', 'codex', '--mode', 'bad'], {
+                cwd,
+                output,
+                dbUrl: ':memory:',
+            }),
+        ).toBe(1);
+        expect(output.errors.at(-1)).toContain('Invalid history import mode');
     });
 
     test('runs rule command file mode and error branches', async () => {
