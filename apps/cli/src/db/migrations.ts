@@ -79,6 +79,9 @@ CREATE TABLE IF NOT EXISTS artifacts (
 /** Built-in migrations for compiled binaries and test use. */
 export const CLI_MIGRATIONS: CliMigration[] = [{ id: '0000_spur_cli_foundation', sql: CLI_SCHEMA_SQL }];
 
+/** Filename marker for regenerated CLI-owned migrations. */
+export const CLI_MIGRATION_FILE_MARKER = '_spur_cli_';
+
 /** Apply CLI-owned migrations with an isolated journal table. */
 export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MIGRATIONS): Promise<number> {
     await adapter.exec(
@@ -109,7 +112,7 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
 /** Load SQL migration files from a regenerated local migration folder. */
 export async function loadSqlMigrations(folder: string): Promise<CliMigration[]> {
     const entries = (await readdir(folder))
-        .filter((entry) => entry.endsWith('.sql'))
+        .filter((entry) => entry.endsWith('.sql') && entry.includes(CLI_MIGRATION_FILE_MARKER))
         .sort((left, right) => left.localeCompare(right));
 
     const migrations: CliMigration[] = [];
