@@ -30,6 +30,22 @@
         "typescript": "6.0.3",
       },
     },
+    "apps/cli": {
+      "name": "@gobing-ai/spur-cli",
+      "version": "0.1.0",
+      "bin": {
+        "spur": "./src/index.ts",
+      },
+      "dependencies": {
+        "@gobing-ai/spur-config": "workspace:*",
+        "@gobing-ai/ts-db": "^0.1.8",
+        "@gobing-ai/ts-runtime": "^0.1.8",
+        "@gobing-ai/ts-utils": "^0.1.8",
+      },
+      "devDependencies": {
+        "@types/bun": "1.3.14",
+      },
+    },
     "apps/server": {
       "name": "@gobing-ai/spur-server",
       "dependencies": {
@@ -205,6 +221,8 @@
     "@esbuild/win32-ia32": ["@esbuild/win32-ia32@0.27.3", "", { "os": "win32", "cpu": "ia32" }, "sha512-QLKSFeXNS8+tHW7tZpMtjlNb7HKau0QDpwm49u0vUp9y1WOF+PEzkU84y9GqYaAVW8aH8f3GcBck26jh54cX4Q=="],
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.27.3", "", { "os": "win32", "cpu": "x64" }, "sha512-4uJGhsxuptu3OcpVAzli+/gWusVGwZZHTlS63hh++ehExkVT8SgiEf7/uC/PclrPPkLhZqGgCTjd0VWLo6xMqA=="],
+
+    "@gobing-ai/spur-cli": ["@gobing-ai/spur-cli@workspace:apps/cli"],
 
     "@gobing-ai/spur-config": ["@gobing-ai/spur-config@workspace:packages/config"],
 
