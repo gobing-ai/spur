@@ -125,11 +125,30 @@ Single packages/domain package (not split persistence+analytics — premature at
 
 ### Review
 
-## Review — 2026-05-31
-
-**Verdict: PASS**
+**Verdict: PASS** — 2026-05-31
 
 **Scope:** new `packages/domain` (@gobing-ai/spur-domain), `apps/cli` rewiring, `.spur/rules` boundary enforcement, bunfig coverage.
+
+#### Requirements traceability
+
+- [x] **R1** Create `packages/domain` (@gobing-ai/spur-domain) + tsconfig → **MET** | `packages/domain/package.json` (deps: ts-db, ts-runtime, drizzle-orm, link: workflow/importer), `tsconfig.json` extends base.
+- [x] **R2** Move db/ + analytics/ + tests into packages/domain → **MET** | `git mv` preserved history; `apps/cli/src/{db,analytics}` removed; tests under `packages/domain/tests/{dao,analytics}`.
+- [x] **R3** Rewire CLI imports to @gobing-ai/spur-domain (workspace:*) → **MET** | 6 import sites repointed; no `../db`/`../analytics` remain; `apps/cli/package.json` adds `@gobing-ai/spur-domain: workspace:*`.
+- [x] **R4** Lean on ts-db BaseDao → **MET (resolved to EntityDao per operator choice)** | All 6 DAOs extend `EntityDao<table, pk>` over Drizzle `sqliteTable` schema (schema/*.ts). EntityDao CRUD used; WorkspaceDao upsert-by-name is the one documented raw-adapter fallback. drizzle-orm added as domain dep. Importer/workflow tables stay raw SQL per ADR-007.
+- [x] **R5** server + web unchanged, stay thin → **MET** | zero diff/status on apps/server, apps/web.
+- [x] **R6** Gate green → **MET** | lint + 186 tests + test-cf + build all pass; migration smoke = 16 tables (schema parity).
+- [x] **R7** Enforcement rules after extraction → **MET** | `.spur/rules/boundary/dao-boundary.yaml`: `ts-db-only-in-domain` + `raw-sql-only-in-domain-dao`, both error, both pass. Bonus: `createMigratedDb` in domain means CLI no longer imports ts-db (dep removed).
+- [x] **R8** Fix broken preset files → **MET** | local `structure/require-test-override.yaml` excludes declaration-only files; `boundary` category added; `rule list` no longer reports presets invalid.
+- [x] **R9** Global spur stays the gate, not rebuilt → **MET** | all rule authoring validated against `/Users/robin/xprojects/spur/dist/cli/spur`; binary untouched.
+
+#### Notes
+
+- Coverage: Drizzle schema declaration files excluded (`bunfig.toml`) — pure table objects, no logic. Added 2 WorkspaceDao tests (sort, upsert).
+- Boundary improvement (beyond task): domain owns the full DB lifecycle via `createMigratedDb`; apps never touch `@gobing-ai/ts-db`.
+- No regressions: identical 16-table schema; CLI commands work end-to-end.
+
+#### Findings: P1/P2/P3/P4 — none open.
+
 
 ### Requirements traceability
 
@@ -157,6 +176,8 @@ Single packages/domain package (not split persistence+analytics — premature at
 
 ### Gate (2026-05-31)
 
+**Timestamp:** 2026-05-31T00:00:00Z
+
 - Command: `bun run lint` → PASS. Biome clean (119 files); typecheck clean across 6 workspaces (config, contracts, domain, server, cli, web).
 - Command: `bun run test` → PASS. 186 pass / 0 fail / 521 expect(); aggregate 99.80% funcs / 99.87% lines; per-file thresholds met (workspace-dao 100%, db.ts 100%). Schema declaration files excluded from coverage (pure Drizzle tables, no logic).
 - Command: `bun run test-cf` → PASS (1 passed, Workers runtime).
@@ -164,6 +185,19 @@ Single packages/domain package (not split persistence+analytics — premature at
 - Migration smoke: fresh DB → `spur migrate` → 16 tables, identical to pre-extraction schema (workspaces, runs, phase_runs, transition_runs, workflow_states, artifacts + history_etl_*/ledger/checkpoint + journal).
 - CLI functional smoke: `spur init --name smoke` (WorkspaceDao.add + ArtifactDao.record via EntityDao) + `spur workspace list` → PASS end-to-end against new DAO layer.
 - Domain package tests: 96 pass (moved DAO + analytics tests re-pointed to EntityDao DAOs).
+
+### Global spur gate (quality tool at /Users/robin/xprojects/spur/dist/cli/spur)
+
+- `spur rule run --preset recommended --fail-on warning` → exit 0 (0 errors, 0 warnings after local structure override for declaration-only files).
+- `spur rule run --preset spur-dev --rule coverage-gate --fail-on warning` → exit 0.
+- `spur rule run --rule ts-db-only-in-domain` → 0 errors (boundary holds: no ts-db import outside packages/domain).
+- `spur rule run --rule raw-sql-only-in-domain-dao` → 0 errors (raw SQL centralized in domain).
+- `spur rule list` → `boundary/dao-boundary.yaml (2 rules) ✓`; previously-broken `recommended.yaml`/`spur-dev.yaml` no longer report invalid.
+
+### R5 verification (apps/server, apps/web untouched)
+
+- `git diff --name-only <start>..HEAD -- apps/server apps/web` → empty; `git status -s apps/server apps/web` → empty. Both stay thin transport.
+
 
 ### Global spur gate (quality tool at /Users/robin/xprojects/spur/dist/cli/spur)
 
