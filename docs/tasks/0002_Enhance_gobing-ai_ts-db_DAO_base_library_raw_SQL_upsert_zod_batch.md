@@ -1,9 +1,9 @@
 ---
 name: "Enhance @gobing-ai/ts-db DAO base library (raw SQL, upsert, zod, batch)"
 description: "Enhance @gobing-ai/ts-db DAO base library (raw SQL, upsert, zod, batch)"
-status: Todo
+status: Canceled
 created_at: 2026-05-31T17:30:43.643Z
-updated_at: 2026-05-31T17:35:32.140Z
+updated_at: 2026-05-31T18:34:45.914Z
 folder: docs/tasks
 type: task
 feature-id: ""
@@ -187,17 +187,7 @@ spur rule: forbid `adapter.run|exec|queryFirst|queryAll` and string-SQL literals
 
 ### Solution
 
-**ts-db is a COMPLETE decoupling facade; drizzle is an internal implementation detail that never appears in consumer code.** The current library has the right intent but leaks (lossy DbClient subset + `as unknown as` casts + raw SQL escaping outside the abstraction). The redesign COMPLETES the facade rather than removing it.
-
-**Resolution of the earlier A-vs-B question:** option-B layering (raw on BaseDao, structured CRUD on EntityDao extends BaseDao), BUT every signature is ts-db's OWN vocabulary, not a drizzle pass-through. Two classes, clear responsibilities (raw vs structured), zero drizzle leakage. Earlier "expose db.client / drizzle sql`` tag" ideas REJECTED — they violate G1.
-
-**The 90/10 discipline (keeps it simple):** structured tier covers the 90% (CRUD + list with a tiny predicate/order spec); the raw tier is the explicit, rule-gated 10% as NAMED DAO methods (e.g. analytics.costsByModel(since)) with drizzle hidden in the body. No exposed query-builder DSL → no second ORM.
-
-**The one real cost of strict G1:** ts-db must re-surface a SMALL predicate/order spec so consumers express where/orderBy without importing drizzle. Bounded to a tiny typed vocabulary (eq/in/gte/...), not a builder. This is the deliberate, contained re-implementation that buys full swappability.
-
-**Rejected alternatives:** expose db.client:DrizzleDatabase (violates G1); merge BaseDao into EntityDao (loses non-entity seam G3); rich facade / own query-builder DSL (reinvents drizzle = the complexity to avoid); pervasive zod (runtime cost, no safety gain over edge validation); redesign migrations (not broken — port).
-
-**Industry best practice honored for this stack (bun:sqlite/D1 + drizzle + zod):** derive validation+migration from one schema (drizzle-zod + drizzle-kit); RETURNING over JS-constructed rows; multi-VALUES batch for ETL; keyset pagination for large scans; WAL + foreign_keys pragmas (already defaulted — keep). The facade adds the decoupling layer these tools don't provide on their own.
+Superseded by task 0003 (Redesign @gobing-ai/ts-db as a decoupling facade). Recreated with an accurate title/filename and consolidated, debris-free content. Do not implement this task.
 
 
 ### Plan

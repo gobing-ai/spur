@@ -29,7 +29,8 @@
       "Bash(rg -n \"sql\\\\`|batch|prepare|transaction|\\\\.all\\\\\\(|\\\\.get\\\\\\(\" src/adapters/bun-sqlite.ts)",
       "Bash(rg -rn \"drizzle-zod|createInsertSchema|createSelectSchema\" . --glob '!node_modules')",
       "Bash(rg -n \"class.*Adapter|implements DbAdapter\" src/adapters/*.ts)",
-      "Bash(sed -n '1,50p' src/adapters/d1.ts)"
+      "Bash(sed -n '1,50p' src/adapters/d1.ts)",
+      "Bash(tasks check *)"
     ]
   }
 }
