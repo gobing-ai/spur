@@ -1,4 +1,5 @@
 import { type ImportMode, type LlmJsonlSource, runJsonlImport } from '@gobing-ai/ts-llm-jsonl-importer';
+import { aggregateCosts, computeRecordCost, formatSummary, queryAllEtlRecords } from '../analytics';
 import { booleanFlag, stringFlag } from '../args';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
@@ -13,13 +14,25 @@ export async function runHistoryCommand(
     flags: Record<string, string | boolean>,
     positionals: readonly string[],
 ): Promise<number> {
-    if (subcommand !== 'import') {
-        context.output.error(
-            'Usage: spur history import --source <source> [--file <path>|--root <path>] [--mode full|incremental|force-file] [--json]',
-        );
-        return 1;
+    switch (subcommand) {
+        case 'import':
+            return await runHistoryImport(context, flags, positionals);
+        case 'analyze':
+            return await runHistoryAnalyze(context, flags);
+        default:
+            context.output.error(
+                'Usage: spur history import --source <source> [--file <path>|--root <path>] [--mode full|incremental|force-file] [--json]\n' +
+                    '       spur history analyze [--since <iso-date>] [--json]',
+            );
+            return 1;
     }
+}
 
+async function runHistoryImport(
+    context: CliContext,
+    flags: Record<string, string | boolean>,
+    positionals: readonly string[],
+): Promise<number> {
     const source = parseSource(stringFlag(flags, 'source', 'pi'));
     const mode = parseMode(stringFlag(flags, 'mode', flags.file === undefined ? 'incremental' : 'force-file'));
     const file = stringFlag(flags, 'file', positionals[0] ?? '');
@@ -51,6 +64,22 @@ export async function runHistoryCommand(
     }
 
     return result.parseErrors.length === 0 && result.validationErrors.length === 0 ? 0 : 1;
+}
+
+async function runHistoryAnalyze(context: CliContext, flags: Record<string, string | boolean>): Promise<number> {
+    const since = stringFlag(flags, 'since', '');
+    const db = await context.getDb();
+    const records = await queryAllEtlRecords(db, since.length > 0 ? since : undefined);
+    const priced = records.map((record) => computeRecordCost(record));
+    const summary = aggregateCosts(priced);
+
+    if (booleanFlag(flags, 'json')) {
+        context.output.write(toJson(summary));
+    } else {
+        context.output.write(formatSummary(summary));
+    }
+
+    return 0;
 }
 
 function parseSource(value: string): LlmJsonlSource {
