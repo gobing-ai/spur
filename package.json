@@ -18,9 +18,9 @@
 
         "test-pre-check": "spur rule run --preset recommended --fail-on warning",
         "test-post-check": "spur rule run --preset spur-dev --rule coverage-gate --fail-on warning",
+        "test-cf": "bun run --filter '@gobing-ai/spur-server' test-cf",
 
         "test": "NODE_ENV=test bun test --coverage --coverage-dir=.coverage --reporter=dots",
-        "test-cf": "bun run --filter '@gobing-ai/spur-server' test-cf",
         "check": "bun run lint && bun run test",
         "spur-check": "bun run lint && bun run test-pre-check && bun run test && bun run test-post-check",
 
