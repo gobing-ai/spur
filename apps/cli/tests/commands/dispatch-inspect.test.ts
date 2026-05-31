@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
+import { createBufferTarget, setDefaultOutputTargets } from '@gobing-ai/ts-utils';
 import { dispatch, helpText, main } from '../../src';
 import { createCliContext } from '../../src/context';
 import { gitContext } from '../../src/git-context';
@@ -54,8 +55,17 @@ describe('CLI dispatch and inspect', () => {
         expect(git.root).toContain('spur-new');
     });
 
-    test('exposes console output implementation', () => {
-        expect(() => consoleOutput.write('')).not.toThrow();
-        expect(() => consoleOutput.error('')).not.toThrow();
+    test('console output writes to the process default targets', () => {
+        const stdout = createBufferTarget();
+        const stderr = createBufferTarget();
+        const restore = setDefaultOutputTargets({ stdout, stderr });
+        try {
+            consoleOutput.write('to-stdout');
+            consoleOutput.error('to-stderr');
+        } finally {
+            restore();
+        }
+        expect(stdout.text()).toBe('to-stdout\n');
+        expect(stderr.text()).toBe('to-stderr\n');
     });
 });
