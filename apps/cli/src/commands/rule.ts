@@ -32,12 +32,13 @@ export async function runRuleCommand(
             : await loadPresetRules(preset, { workdir: context.cwd });
     const selectedRule = typeof flags.rule === 'string' ? flags.rule : positionals[0];
     const filteredRules = selectedRule === undefined ? rules : rules.filter((rule) => rule.id === selectedRule);
-    const result = await new RuleEngine().evaluate(filteredRules, context.cwd);
+    const engine = new RuleEngine();
+    const result = await engine.evaluate(filteredRules, context.cwd);
 
     if (booleanFlag(flags, 'json')) {
         context.output.write(toJson({ preset, ruleCount: filteredRules.length, ...result }));
     } else {
-        context.output.write(new RuleEngine().host.formatters.get('text').format(result));
+        context.output.write(engine.host.formatters.get('text').format(result));
     }
 
     return result.findings.some((finding) => SEVERITY_RANK[finding.severity] >= SEVERITY_RANK[failOn]) ? 1 : 0;
