@@ -10,6 +10,28 @@ BYOK LLM platform. It wraps agents you already have installed and authenticated,
 discipline, constraint checking, workflow orchestration, history analytics, and operational
 visibility.
 
+## Documentation map
+
+Read the doc that governs your change before editing code. On conflict, **lower number wins**
+(`00_ADR` is binding and overrides all others). Edit the **authoritative** doc for a topic; never
+fix a symptom in a derived doc.
+
+| Doc | Answers | Authority | When to read / edit |
+|-----|---------|-----------|---------------------|
+| `docs/00_ADR.md` | *Why* the structure is this way — binding architecture decisions | **Authoritative** (wins all conflicts) | Read before any structural change; edit (add a dated entry) before diverging from a decision |
+| `docs/01_PRD.md` | *What* the product is, scope, in/out of scope | Authoritative for scope | Read before adding a command/feature; edit when scope changes |
+| `docs/02_ROADMAP.md` | *When* — phases, current vs deferred work | Derived from PRD/ADR | Read to place work in a phase; edit when phase status changes |
+| `docs/03_ARCHITECTURE.md` | *How* — current module boundaries, data flow, invariants | Derived from ADR (ADR wins) | Read before cross-module/seam/schema work; edit when boundaries actually change |
+| `docs/04_DESIGN.md` | Concrete surface — every CLI command, config schema, data shapes | Derived | Read/edit when changing a command, flag, env var, or table |
+| `docs/05_FEATURES.md` | Feature decomposition + status (✅/🔶/⏳/💤) | Derived | Read to find a feature's state; edit when a feature's status changes |
+
+A code change that contradicts `00_ADR.md` requires editing the ADR first (add a new dated entry
+that supersedes the old one — never silently diverge). Any new cross-cutting choice (a new
+app/package, a transport swap, an auth boundary, a DB swap) gets a new ADR entry. A change that
+touches a command/config/schema must keep `04_DESIGN.md` in sync **in the same commit**.
+
+## Stack & layout
+
 Bun + TypeScript + Biome monorepo on **Bun workspaces (no Turborepo)**. Layout:
 
 ```
@@ -131,21 +153,6 @@ If a check fails, fix the root cause. **Never** bypass with `--no-verify`, `--fo
 - History keeps raw data in files (no `history_raw_*` tables); the DB holds only validated ETL rows,
   an import ledger, and per-file checkpoints.
 - Old migrations under `drizzle/_legacy_reference/` are inert reference only — never activate them.
-
-## Architecture decision record (binding)
-
-`docs/00_ADR.md` is the **authoritative architecture decision record**. It captures the decisions
-that define the project's shape — greenfield re-foundation, Bun-workspaces (no Turborepo), ts-libs
-package boundary, oRPC type seam, package-owned schema. Treat it as a constraint:
-
-- Read it before any non-trivial change to the workspace graph, the contract layer, the server
-  transport, the ts-libs boundary, or the DB schema.
-- A change that contradicts a recorded decision requires updating the ADR first (add a new dated
-  entry that supersedes the old one) — never silently diverge.
-- New cross-cutting choices (a new app/package, a transport swap, an auth boundary, a real DB swap)
-  get a new ADR entry in the same file.
-
-There is no separate decisions doc; `docs/00_ADR.md` is the single home for architecture decisions.
 
 ## Conventions & boundaries
 
