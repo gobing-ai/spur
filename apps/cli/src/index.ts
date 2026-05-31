@@ -100,6 +100,7 @@ export function helpText(): string {
         '  spur rule run [--preset <name>] [--rule <id>] [--fail-on <severity>] [--json]',
         '  spur agent list|doctor [agent] [--json]',
         '  spur history import --source <source> [--file <path>|--root <path>] [--mode <mode>] [--json]',
+        '  spur history analyze [--since <iso-date>] [--json]',
         '  spur workflow validate|run <workflow.yaml> [--json]',
         '  spur workflow list [--json]',
     ].join('\n');
