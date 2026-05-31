@@ -1,6 +1,6 @@
 import { join } from 'node:path';
+import { applyCliMigrations, loadSqlMigrations } from '@gobing-ai/spur-domain';
 import type { CliContext } from '../context';
-import { applyCliMigrations, loadSqlMigrations } from '../db';
 import { toJson } from '../output';
 
 /** Apply the regenerated Spur CLI schema migrations. */

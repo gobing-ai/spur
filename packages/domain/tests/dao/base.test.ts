@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { createId } from '../../src/db/base';
+import { createId } from '../../src/dao/base';
 
 describe('db base', () => {
     test('createId generates prefixed id', () => {

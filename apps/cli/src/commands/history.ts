@@ -1,5 +1,5 @@
+import { aggregateCosts, computeRecordCost, formatSummary, queryAllEtlRecords } from '@gobing-ai/spur-domain';
 import { type ImportMode, type LlmJsonlSource, runJsonlImport } from '@gobing-ai/ts-llm-jsonl-importer';
-import { aggregateCosts, computeRecordCost, formatSummary, queryAllEtlRecords } from '../analytics';
 import { booleanFlag, stringFlag } from '../args';
 import type { CliContext } from '../context';
 import { toJson } from '../output';

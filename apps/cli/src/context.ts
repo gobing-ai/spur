@@ -1,9 +1,8 @@
 import { dirname, join, resolve } from 'node:path';
 import { buildConfigFromEnv } from '@gobing-ai/spur-config';
-import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
+import { createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
 import { type FileSystem, getFs, NodeFileSystem, setFileSystem } from '@gobing-ai/ts-runtime';
 import { CLI_CONFIG } from './config';
-import { applyCliMigrations } from './db';
 import type { CommandOutput } from './output';
 
 /** Runtime dependencies shared by CLI commands. */
@@ -53,10 +52,5 @@ export async function createMigratedDbAdapter(
     if (url !== ':memory:') {
         await new NodeFileSystem().mkdir(dirname(url));
     }
-    const adapter = await createDbAdapter({
-        driver: 'bun-sqlite',
-        url,
-    });
-    await applyCliMigrations(adapter);
-    return adapter;
+    return createMigratedDb({ url });
 }

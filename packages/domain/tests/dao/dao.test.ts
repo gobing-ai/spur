@@ -11,7 +11,7 @@ import {
     TransitionRunDao,
     WorkflowStateDao,
     WorkspaceDao,
-} from '../../src/db';
+} from '../../src/index';
 
 describe('CLI DAOs', () => {
     test('persist core workflow records against ts-db', async () => {
@@ -19,15 +19,15 @@ describe('CLI DAOs', () => {
         await applyCliMigrations(adapter);
 
         const workspace = await new WorkspaceDao(adapter).add({ name: 'main', root: '/tmp/spur' });
-        const run = await new RunDao(adapter).create({ workspaceId: workspace.id, agent: 'pi' });
+        const run = await new RunDao(adapter).open({ workspaceId: workspace.id, agent: 'pi' });
         const foundRun = await new RunDao(adapter).findById(run.id);
-        const phase = await new PhaseRunDao(adapter).create({ runId: run.id, phase: 'implement' });
-        const transition = await new TransitionRunDao(adapter).create({
+        const phase = await new PhaseRunDao(adapter).open({ runId: run.id, phase: 'implement' });
+        const transition = await new TransitionRunDao(adapter).open({
             runId: run.id,
             fromState: 'plan',
             toState: 'implement',
         });
-        const state = await new WorkflowStateDao(adapter).create({
+        const state = await new WorkflowStateDao(adapter).snapshot({
             runId: run.id,
             state: 'running',
             data: { phase: 1 },

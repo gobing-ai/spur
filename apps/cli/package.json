@@ -14,8 +14,8 @@
     },
     "dependencies": {
         "@gobing-ai/spur-config": "workspace:*",
+        "@gobing-ai/spur-domain": "workspace:*",
         "@gobing-ai/ts-ai-runner": "link:@gobing-ai/ts-ai-runner",
-        "@gobing-ai/ts-db": "^0.1.8",
         "@gobing-ai/ts-dual-workflow-engine": "link:@gobing-ai/ts-dual-workflow-engine",
         "@gobing-ai/ts-llm-jsonl-importer": "link:@gobing-ai/ts-llm-jsonl-importer",
         "@gobing-ai/ts-rule-engine": "link:@gobing-ai/ts-rule-engine",

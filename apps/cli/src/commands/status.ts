@@ -1,6 +1,6 @@
 import { join } from 'node:path';
+import { WorkspaceDao } from '@gobing-ai/spur-domain';
 import type { CliContext } from '../context';
-import { WorkspaceDao } from '../db';
 import { gitContext } from '../git-context';
 import { toJson } from '../output';
 

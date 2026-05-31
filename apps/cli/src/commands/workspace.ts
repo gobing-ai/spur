@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
+import { WorkspaceDao } from '@gobing-ai/spur-domain';
 import { booleanFlag, stringFlag } from '../args';
 import type { CliContext } from '../context';
-import { WorkspaceDao } from '../db';
 import { CommandError } from '../errors';
 import { toJson } from '../output';
 

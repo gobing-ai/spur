@@ -1,0 +1,22 @@
+# Local override — declaration-only files do not require a corresponding test.
+rules:
+  - id: require-corresponding-test
+    description: "Every source file must have a corresponding test in tests/, excluding declaration-only files."
+    severity: warning
+    evaluator:
+      type: test-location
+      config:
+        expected: "**/*.test.*"
+        requireCorrespondingTest: true
+    include:
+      - "packages/**/src/**/*.ts"
+      - "apps/**/src/**/*.ts"
+    exclude:
+      - "**/index.ts"
+      - "**/*.d.ts"
+      - "**/types.ts"
+      - "**/schema/**"
+      - "**/migrations.ts"
+      - "**/db.ts"
+      - "**/node_modules/**"
+      - "**/tests/**"

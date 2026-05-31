@@ -1,0 +1,43 @@
+# DAO boundary rules — keep database access centralized in packages/domain.
+#
+# Enforces ADR-006/007: domain engines and persistence live in packages, apps
+# stay thin. Raw SQL and the ts-db adapter must not leak into apps or other
+# packages — all DB access goes through @gobing-ai/spur-domain DAOs.
+rules:
+  - id: ts-db-only-in-domain
+    description: >
+      @gobing-ai/ts-db may only be imported inside packages/domain. Apps and
+      other packages must consume persistence through @gobing-ai/spur-domain
+      DAOs, never the raw adapter. (ADR-006/007)
+    severity: error
+    evaluator:
+      type: forbidden-import
+      config:
+        forbidden:
+          - specifier: "@gobing-ai/ts-db"
+        scope:
+          include:
+            - "apps/**/src/**/*.ts"
+            - "packages/config/src/**/*.ts"
+            - "packages/contracts/src/**/*.ts"
+          exclude:
+            - "**/node_modules/**"
+            - "**/tests/**"
+
+  - id: raw-sql-only-in-domain-dao
+    description: >
+      Raw SQL string literals (SELECT/INSERT/UPDATE/DELETE/CREATE TABLE) must
+      stay inside packages/domain. Centralizing SQL keeps the schema and queries
+      in one auditable place behind the DAO layer. (ADR-007)
+    severity: error
+    evaluator:
+      type: regex
+      config:
+        pattern: "(SELECT |INSERT INTO|UPDATE |DELETE FROM|CREATE TABLE)"
+    include:
+      - "apps/**/src/**/*.ts"
+      - "packages/config/src/**/*.ts"
+      - "packages/contracts/src/**/*.ts"
+    exclude:
+      - "**/node_modules/**"
+      - "**/tests/**"

@@ -9,7 +9,7 @@ import {
     CLI_MIGRATIONS,
     CLI_SCHEMA_SQL,
     loadSqlMigrations,
-} from '../../src/db/migrations';
+} from '../../src/migrations';
 
 describe('db migrations', () => {
     describe('CLI_SCHEMA_SQL', () => {
