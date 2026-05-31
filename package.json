@@ -29,23 +29,10 @@
         "spur-check:full": "bun run lint && bun run test-pre-check:full && bun run test:full && bun run test-post-check:full"
     },
     "dependencies": {
-        "@astrojs/cloudflare": "13.6.0",
-        "@cloudflare/vitest-pool-workers": "0.16.10",
         "@gobing-ai/ts-db": "^0.1.8",
         "@gobing-ai/ts-infra": "^0.1.8",
         "@gobing-ai/ts-runtime": "^0.1.8",
-        "@gobing-ai/ts-utils": "^0.1.8",
-        "@orpc/client": "1.14.4",
-        "@orpc/contract": "1.14.4",
-        "@orpc/openapi": "1.14.4",
-        "@orpc/openapi-client": "1.14.4",
-        "@orpc/server": "1.14.4",
-        "@orpc/zod": "1.14.4",
-        "astro": "6.4.2",
-        "hono": "4.12.23",
-        "vitest": "4.1.7",
-        "wrangler": "4.95.0",
-        "zod": "4.4.3"
+        "@gobing-ai/ts-utils": "^0.1.8"
     },
     "devDependencies": {
         "@biomejs/biome": "2.4.16",
