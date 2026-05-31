@@ -16,7 +16,8 @@
             "!**/node_modules",
             "!**/vendors",
             "!docs/.tasks",
-            "!drizzle"
+            "!drizzle",
+            "!**/.spur"
         ]
     },
     "formatter": {
