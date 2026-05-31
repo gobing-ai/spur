@@ -130,6 +130,41 @@ describe('CLI migrate and extracted domains', () => {
         expect(JSON.parse(output.messages.at(-1) ?? '{}').runs).toHaveLength(1);
     });
 
+    test('runs history analyze with --json and text output', async () => {
+        const cwd = await createTempProject();
+        const output = createCapturedOutput();
+        const dbUrl = join(cwd, '.spur', 'analyze-test.db');
+
+        // Import test data first so analyze has rows to query.
+        const historyFile = join(cwd, 'analyze-test.jsonl');
+        await writeFile(
+            historyFile,
+            `${JSON.stringify({ id: 'a1', timestamp: '2026-05-30T00:00:00.000Z', content: 'hello world', model: 'claude-sonnet-4-20250514', usage: { input_tokens: 100, output_tokens: 50 } })}\n`,
+        );
+        await main(['history', 'import', '--source', 'claude', '--file', historyFile], { cwd, output, dbUrl });
+
+        // JSON output
+        expect(await main(['history', 'analyze', '--json'], { cwd, output, dbUrl })).toBe(0);
+        const jsonResult = JSON.parse(output.messages.at(-1) ?? '{}') as {
+            totals: { costUsd: number; records: number };
+        };
+        expect(jsonResult.totals.records).toBeGreaterThanOrEqual(1);
+        expect(jsonResult.totals.costUsd).toBeGreaterThan(0);
+
+        // Text output
+        output.messages.length = 0;
+        expect(await main(['history', 'analyze'], { cwd, output, dbUrl })).toBe(0);
+        expect(output.messages.at(-1)).toContain('Total:');
+        expect(output.messages.at(-1)).toContain('By source:');
+
+        // Default usage error still shows
+        output.errors.length = 0;
+        output.messages.length = 0;
+        expect(await main(['history'], { cwd, output, dbUrl })).toBe(1);
+        expect(output.errors.at(-1)).toContain('Usage: spur history import');
+        expect(output.errors.at(-1)).toContain('history analyze');
+    });
+
     test('runs rule command file mode and error branches', async () => {
         const cwd = await createTempProject();
         const output = createCapturedOutput();
