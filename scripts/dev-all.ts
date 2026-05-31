@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { type ChildProcess, execSync, spawn } from 'node:child_process';
-import { echoError } from '@spur/core';
+import { echoError } from '@gobing-ai/ts-utils';
 
 type ManagedProcess = {
     label: string;
@@ -49,8 +49,8 @@ freePort(3000, 'server');
 freePort(4321, 'web');
 
 const managed = [
-    spawnManaged('server', ['run', '--filter', '@spur/server', 'dev']),
-    spawnManaged('web', ['run', '--filter', '@spur/web', 'dev']),
+    spawnManaged('server', ['run', '--filter', '@gobing-ai/spur-server', 'dev']),
+    spawnManaged('web', ['run', '--filter', '@gobing-ai/spur-web', 'dev']),
 ];
 
 let shuttingDown = false;
