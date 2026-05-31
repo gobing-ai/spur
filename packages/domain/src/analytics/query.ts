@@ -1,6 +1,10 @@
 import type { DbAdapter } from '@gobing-ai/ts-db';
 import type { CostRecord, EtlPayload } from './types';
 
+// SECURITY INVARIANT: these table names are interpolated directly into SQL
+// (SQLite cannot parameterize identifiers). They MUST remain a hardcoded
+// compile-time allowlist — never derive a source table name from user input.
+// `SourceTable` narrows callers to this set so the compiler enforces it.
 const SOURCE_TABLES = [
     'history_etl_pi',
     'history_etl_claude',
@@ -11,10 +15,13 @@ const SOURCE_TABLES = [
     'history_etl_openclaw',
 ] as const;
 
+/** A known history ETL table name — the only values safe to interpolate into SQL. */
+export type SourceTable = (typeof SOURCE_TABLES)[number];
+
 /** Query all imported ETL records from one source table. */
 export async function queryEtlRecords(
     db: DbAdapter,
-    sourceTable: string,
+    sourceTable: SourceTable,
     since?: string,
 ): Promise<readonly EtlPayload[]> {
     const rows =

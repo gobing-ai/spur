@@ -190,7 +190,7 @@ describe('analytics', () => {
                 }),
             },
         ]);
-        const records = await queryEtlRecords(db, 'history_etl_test');
+        const records = await queryEtlRecords(db, 'history_etl_pi');
         expect(records).toHaveLength(2);
         expect(records[0]?.source_record_id).toBe('a');
         expect(records[1]?.source_record_id).toBe('b');
@@ -206,7 +206,7 @@ describe('analytics', () => {
                 }),
             },
         ]);
-        const records = await queryEtlRecords(db, 'history_etl_test', '2026-05-01');
+        const records = await queryEtlRecords(db, 'history_etl_pi', '2026-05-01');
         expect(records).toHaveLength(1);
         expect(records[0]?.source_record_id).toBe('recent');
     });

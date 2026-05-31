@@ -125,29 +125,23 @@ Single packages/domain package (not split persistence+analytics — premature at
 
 ### Review
 
-**Verdict: PASS** — 2026-05-31
 
-**Scope:** new `packages/domain` (@gobing-ai/spur-domain), `apps/cli` rewiring, `.spur/rules` boundary enforcement, bunfig coverage.
+#### Verification (dev-verify, --fix all) — 2026-05-31
 
-#### Requirements traceability
+**Verdict: PASS** | Phase 7 SECU + Phase 8 traceability | Gate: `bun run check` → 186 pass / 0 fail.
 
-- [x] **R1** Create `packages/domain` (@gobing-ai/spur-domain) + tsconfig → **MET** | `packages/domain/package.json` (deps: ts-db, ts-runtime, drizzle-orm, link: workflow/importer), `tsconfig.json` extends base.
-- [x] **R2** Move db/ + analytics/ + tests into packages/domain → **MET** | `git mv` preserved history; `apps/cli/src/{db,analytics}` removed; tests under `packages/domain/tests/{dao,analytics}`.
-- [x] **R3** Rewire CLI imports to @gobing-ai/spur-domain (workspace:*) → **MET** | 6 import sites repointed; no `../db`/`../analytics` remain; `apps/cli/package.json` adds `@gobing-ai/spur-domain: workspace:*`.
-- [x] **R4** Lean on ts-db BaseDao → **MET (resolved to EntityDao per operator choice)** | All 6 DAOs extend `EntityDao<table, pk>` over Drizzle `sqliteTable` schema (schema/*.ts). EntityDao CRUD used; WorkspaceDao upsert-by-name is the one documented raw-adapter fallback. drizzle-orm added as domain dep. Importer/workflow tables stay raw SQL per ADR-007.
-- [x] **R5** server + web unchanged, stay thin → **MET** | zero diff/status on apps/server, apps/web.
-- [x] **R6** Gate green → **MET** | lint + 186 tests + test-cf + build all pass; migration smoke = 16 tables (schema parity).
-- [x] **R7** Enforcement rules after extraction → **MET** | `.spur/rules/boundary/dao-boundary.yaml`: `ts-db-only-in-domain` + `raw-sql-only-in-domain-dao`, both error, both pass. Bonus: `createMigratedDb` in domain means CLI no longer imports ts-db (dep removed).
-- [x] **R8** Fix broken preset files → **MET** | local `structure/require-test-override.yaml` excludes declaration-only files; `boundary` category added; `rule list` no longer reports presets invalid.
-- [x] **R9** Global spur stays the gate, not rebuilt → **MET** | all rule authoring validated against `/Users/robin/xprojects/spur/dist/cli/spur`; binary untouched.
+Phase 8 (independently re-verified against code, not self-report): R1–R9 all **MET** — domain package present, old dirs removed, tests moved, `workspace:*` dep + no relative db/analytics imports, 6/6 DAOs extend EntityDao, server/web untouched, both boundary rules exit 0, presets valid (0 invalid in `rule list`), global binary untouched.
 
-#### Notes
+Phase 7 SECU findings:
 
-- Coverage: Drizzle schema declaration files excluded (`bunfig.toml`) — pure table objects, no logic. Added 2 WorkspaceDao tests (sort, upsert).
-- Boundary improvement (beyond task): domain owns the full DB lifecycle via `createMigratedDb`; apps never touch `@gobing-ai/ts-db`.
-- No regressions: identical 16-table schema; CLI commands work end-to-end.
+| # | Title | Dimension | Location | Status |
+|---|-------|-----------|----------|--------|
+| 1 | ETL table name interpolated into SQL; param accepted any string | Security/Correctness (P3) | `analytics/query.ts:15` | **FIXED** — narrowed param to `SourceTable` union (compile-time allowlist) + documented SECURITY INVARIANT. Updated 2 mock tests to allowlisted name. |
+| 2 | `queryAllEtlRecords` runs 7 sequential queries | Efficiency (P4) | `analytics/query.ts:31` | **Accepted** — 7 fixed small queries on local SQLite, on-demand; parallelizing not worth the complexity (R2). |
 
-#### Findings: P1/P2/P3/P4 — none open.
+No P1/P2 findings. Secrets scan clean (hits were LLM usage field names). `migrate.ts:8` `.catch(()=>undefined)` is an intentional documented fallback, not a swallowed error. WorkspaceDao raw-SQL upsert fallback is parameterized + documented.
+
+**Fix-pass 2026-05-31:** 1 fixed (P3), 0 failed, 1 accepted (P4). Verdict remains PASS.
 
 
 ### Requirements traceability
