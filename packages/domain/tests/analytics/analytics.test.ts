@@ -256,9 +256,9 @@ describe('analytics', () => {
 /** Create a minimal mock DbAdapter that returns controlled rows from queryAll. */
 function createMockDb(rows: Array<{ payload_json: string }>): DbAdapter {
     return {
-        getDb() {
-            throw new Error('unused');
-        },
+        // ts-db 0.2.x exposes the internal typed db via `db`; this mock only uses
+        // the string-SQL methods, so `db` is an unused stub.
+        db: {} as DbAdapter['db'],
         exec: async () => {},
         run: async () => {},
         queryFirst: async <T>() => undefined as T | undefined,
