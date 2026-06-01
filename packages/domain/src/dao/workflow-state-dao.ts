@@ -16,7 +16,7 @@ export interface CreateWorkflowStateInput {
 /** DAO for persisted workflow state snapshots. */
 export class WorkflowStateDao extends EntityDao<typeof workflowStates, typeof workflowStates.id> {
     constructor(adapter: DbAdapter) {
-        super(adapter.getDb(), workflowStates, workflowStates.id, 'workflow_states');
+        super(adapter, workflowStates, [workflowStates.id], 'workflow_states');
     }
 
     /** Persist a workflow state snapshot as JSON. */
