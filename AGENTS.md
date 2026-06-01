@@ -69,10 +69,16 @@ from the separate `~/xprojects/ts-libs/` repository:
 
 Never introduce a new runtime, package manager, linter, formatter, or Turborepo.
 
-> **Dependency caveat.** The four extracted engines are currently wired via `bun link`
-> (`link:@gobing-ai/ts-*` in `apps/cli/package.json`), so this repo does **not** build from a
-> clean clone without `~/xprojects/ts-libs/` checked out and globally linked. Publishing them to
-> npm and switching to semver is a tracked follow-up.
+> **Dependency source.** Spur consumes released `@gobing-ai/ts-*` packages by semver. Temporary
+> `bun link @gobing-ai/ts-*` is acceptable only while validating an unreleased shared-library fix;
+> remove the link and return to semver once the package is released.
+
+> **Shared-library evolution.** If a `@gobing-ai/ts-*` package cannot support a Spur requirement
+> cleanly, prefer enhancing the owning package in `~/xprojects/ts-libs/` over adding workaround
+> code or leaking implementation details into Spur. Keep the boundary explicit: make the smallest
+> upstream change that turns the shared package into the right facade, verify `ts-libs` with its own
+> gates, then consume it from Spur through a published semver version or an explicit temporary
+> `bun link`. Document any temporary link requirement in the task until the package is released.
 
 ## Code style (enforced by `biome.json`)
 
