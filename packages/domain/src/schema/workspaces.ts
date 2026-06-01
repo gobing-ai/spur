@@ -1,5 +1,4 @@
-import { defineTable, standardColumns } from '@gobing-ai/ts-db/schema';
-import { text } from 'drizzle-orm/sqlite-core';
+import { defineTable, standardColumns, text } from '@gobing-ai/ts-db/schema';
 
 /** Workspace registry — static binding of a repo/workdir to agents and purpose. */
 export const workspacesTable = defineTable('workspaces', {
