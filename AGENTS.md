@@ -73,6 +73,17 @@ Never introduce a new runtime, package manager, linter, formatter, or Turborepo.
 > `bun link @gobing-ai/ts-*` is acceptable only while validating an unreleased shared-library fix;
 > remove the link and return to semver once the package is released.
 
+> **Version SSOT — Bun Catalog.** Every dependency **shared across two or more workspaces** (the
+> `@gobing-ai/ts-*` family, the `@orpc/*` seam, `typescript`, `@types/bun`, `zod`) is declared **once**
+> in the root `package.json` under `workspaces.catalog`, and each workspace references it with
+> `"catalog:"` — never a literal version. **Package-private deps stay as literals** in their own
+> manifest (e.g. `figlet` in cli, `hono`/`wrangler`/`vitest` in server, `astro` in web, `drizzle-zod`
+> in domain, root-only `@biomejs/biome`/`lefthook`). Rule of thumb: a dep in ≥2 manifests → catalog;
+> a dep in exactly one → literal. To bump a shared dep, edit the root catalog block and run
+> `bun install`; do **not** edit version strings in `apps/*` or `packages/*`. The lockfile mirrors the
+> catalog map. (`bun publish` inlines `catalog:` to the resolved version, but Spur's apps are
+> unpublished and the packages are internal, so this never surfaces externally.)
+
 > **Shared-library evolution.** If a `@gobing-ai/ts-*` package cannot support a Spur requirement
 > cleanly, prefer enhancing the owning package in `~/xprojects/ts-libs/` over adding workaround
 > code or leaking implementation details into Spur. Keep the boundary explicit: make the smallest
