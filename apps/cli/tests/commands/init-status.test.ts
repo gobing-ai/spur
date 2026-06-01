@@ -18,13 +18,12 @@ describe('CLI init/status', () => {
         const status = JSON.parse(output.messages.at(-1) ?? '{}') as {
             ok: boolean;
             spurConfig: boolean;
-            workspaces: number;
         };
         expect(status.ok).toBe(true);
         expect(status.spurConfig).toBe(true);
-        expect(status.workspaces).toBe(1);
 
         expect(await main(['status'], { cwd, output, dbUrl })).toBe(0);
         expect(output.messages.at(-1)).toContain('Project: ok');
+        expect(output.messages.at(-1)).not.toContain('Workspaces:');
     });
 });
