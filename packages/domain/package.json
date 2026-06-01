@@ -12,15 +12,15 @@
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
-        "@gobing-ai/ts-db": "^0.2.4",
-        "@gobing-ai/ts-dual-workflow-engine": "^0.2.4",
-        "@gobing-ai/ts-llm-jsonl-importer": "^0.2.4",
-        "@gobing-ai/ts-runtime": "^0.2.4",
+        "@gobing-ai/ts-db": "catalog:",
+        "@gobing-ai/ts-dual-workflow-engine": "catalog:",
+        "@gobing-ai/ts-llm-jsonl-importer": "catalog:",
+        "@gobing-ai/ts-runtime": "catalog:",
         "drizzle-zod": "^0.5.1",
-        "zod": "^4.4.3"
+        "zod": "catalog:"
     },
     "devDependencies": {
-        "@types/bun": "1.3.14",
-        "typescript": "6.0.3"
+        "@types/bun": "catalog:",
+        "typescript": "catalog:"
     }
 }
