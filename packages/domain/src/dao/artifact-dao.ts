@@ -16,7 +16,7 @@ export interface CreateArtifactInput {
 /** DAO for artifact metadata created by CLI workflows. */
 export class ArtifactDao extends EntityDao<typeof artifacts, typeof artifacts.id> {
     constructor(adapter: DbAdapter) {
-        super(adapter.getDb(), artifacts, artifacts.id, 'artifacts');
+        super(adapter, artifacts, [artifacts.id], 'artifacts');
     }
 
     /** Persist artifact metadata. */
