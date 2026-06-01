@@ -16,7 +16,8 @@ describe('CLI dispatch and status', () => {
         expect(output.messages.at(-1)).toContain('0.1.0');
         expect(output.messages.at(-1)).not.toContain('spur 0.1.0');
         expect(helpText()).toContain('Global options:');
-        expect(helpText()).toContain('agent list|doctor');
+        expect(helpText()).toContain('agent list');
+        expect(helpText()).toContain('agent doctor');
         expect(helpText()).toContain('rule validate');
         expect(helpText()).toContain('rule list');
         expect(helpText()).toContain('history report');
