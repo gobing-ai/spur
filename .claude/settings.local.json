@@ -1,36 +1,38 @@
 {
-  "permissions": {
-    "allow": [
-      "Bash(timeout 300 bun run lint)",
-      "Bash(timeout 300 bun run test)",
-      "Bash(timeout 200 bun run lint)",
-      "Bash(biome check *)",
-      "Bash(git check-ignore *)",
-      "Bash(timeout 180 bun run test-cf)",
-      "Bash(rm -f /private/tmp/spur-review-migrate.db)",
-      "Bash(DATABASE_URL=/private/tmp/spur-review-migrate.db timeout 60 bun run apps/cli/src/index.ts migrate --json)",
-      "Bash(rm -f /private/tmp/spur-review-migrate2.db)",
-      "Bash(DATABASE_URL=/private/tmp/spur-review-migrate2.db bun run apps/cli/src/index.ts migrate --json)",
-      "Bash(sed -n '1,60p' apps/cli/src/commands/init.ts)",
-      "Bash(sed -n '1,40p' apps/cli/src/commands/inspect.ts)",
-      "Bash(bun test *)",
-      "Bash(/Users/robin/xprojects/spur/dist/cli/spur rule *)",
-      "Bash(xargs cat)",
-      "Bash(tasks --help)",
-      "Bash(tasks list *)",
-      "Bash(tasks create *)",
-      "Bash(timeout 200 bun run test)",
-      "Bash(timeout 250 bun run build)",
-      "Bash(timeout 300 bun run check)",
-      "Bash(rm -f /private/tmp/spur-final-verify.db)",
-      "Bash(DATABASE_URL=/private/tmp/spur-final-verify.db bun run apps/cli/src/index.ts migrate --json)",
-      "Bash(tasks update *)",
-      "Bash(sed -n '1,60p' src/adapters/bun-sqlite.ts)",
-      "Bash(rg -n \"sql\\\\`|batch|prepare|transaction|\\\\.all\\\\\\(|\\\\.get\\\\\\(\" src/adapters/bun-sqlite.ts)",
-      "Bash(rg -rn \"drizzle-zod|createInsertSchema|createSelectSchema\" . --glob '!node_modules')",
-      "Bash(rg -n \"class.*Adapter|implements DbAdapter\" src/adapters/*.ts)",
-      "Bash(sed -n '1,50p' src/adapters/d1.ts)",
-      "Bash(tasks check *)"
-    ]
-  }
+    "permissions": {
+        "allow": [
+            "Skill(rd3:brainstorm)",
+            "Skill(rd3:task-decomposition)",
+
+            "WebFetch(domain:hono.dev)",
+            "WebFetch(domain:www.npmjs.com)",
+            "WebFetch(domain:orm.drizzle.team)",
+            "WebFetch(domain:biomejs.dev)",
+            "WebFetch(domain:logtape.org)",
+            "WebFetch(domain:mael.dev)",
+            "WebFetch(domain:developers.cloudflare.com)",
+
+            "Bash(bun run:*)",
+            "Bash(bun test:*)",
+            "Bash(bun add:*)",
+            "Bash(echo:*)",
+            "Bash(grep export:*)",
+            "Bash(bunx biome:*)",
+            "Bash(bun tsc:*)",
+            "Bash(bun biome *)",
+            "Bash(dist/cli:*)",
+            "Bash(npm view *)",
+            "Bash(rtk ls *)",
+            "Bash(rtk cat *)",
+            "Bash(rtk find *)",
+            "Bash(rtk grep *)",
+            "Bash(rtk wc *)",
+            "Bash(npx biome *)",
+            "Bash(tasks:*)",
+            "Bash(ftree:*)",
+            "Bash(rg:*)",
+            "Bash(sg:*)",
+            "Bash(grep *)"
+        ]
+    }
 }
