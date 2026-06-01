@@ -19,10 +19,13 @@ export async function runHistoryCommand(
             return await runHistoryImport(context, flags, positionals);
         case 'analyze':
             return await runHistoryAnalyze(context, flags);
+        case 'report':
+            return runHistoryReport(context, flags);
         default:
             context.output.error(
                 'Usage: spur history import --source <source> [--file <path>|--root <path>] [--mode full|incremental|force-file] [--json]\n' +
-                    '       spur history analyze [--since <iso-date>] [--json]',
+                    '       spur history analyze [--since <iso-date>] [--json]\n' +
+                    '       spur history report [--json]',
             );
             return 1;
     }
@@ -79,6 +82,12 @@ async function runHistoryAnalyze(context: CliContext, flags: Record<string, stri
         context.output.write(formatSummary(summary));
     }
 
+    return 0;
+}
+
+function runHistoryReport(context: CliContext, flags: Record<string, string | boolean>): number {
+    const message = 'TODO: spur history report is reserved for the richer report surface.';
+    context.output.write(booleanFlag(flags, 'json') ? toJson({ status: 'todo', message }) : message);
     return 0;
 }
 
