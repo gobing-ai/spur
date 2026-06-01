@@ -13,28 +13,34 @@ import {
 
 describe('db migrations', () => {
     describe('CLI_SCHEMA_SQL', () => {
+        // DDL for the domain tables is generated from the defineTable definitions
+        // (quoted identifiers), so match the table name with optional quotes
+        // rather than the exact hand-written format.
+        const hasCreateTable = (table: string): boolean =>
+            new RegExp(`CREATE TABLE IF NOT EXISTS "?${table}"?`).test(CLI_SCHEMA_SQL);
+
         test('contains workspaces table', () => {
-            expect(CLI_SCHEMA_SQL).toContain('CREATE TABLE IF NOT EXISTS workspaces');
+            expect(hasCreateTable('workspaces')).toBe(true);
         });
 
         test('contains runs table', () => {
-            expect(CLI_SCHEMA_SQL).toContain('CREATE TABLE IF NOT EXISTS runs');
+            expect(hasCreateTable('runs')).toBe(true);
         });
 
         test('contains phase_runs table', () => {
-            expect(CLI_SCHEMA_SQL).toContain('CREATE TABLE IF NOT EXISTS phase_runs');
+            expect(hasCreateTable('phase_runs')).toBe(true);
         });
 
         test('contains transition_runs table', () => {
-            expect(CLI_SCHEMA_SQL).toContain('CREATE TABLE IF NOT EXISTS transition_runs');
+            expect(hasCreateTable('transition_runs')).toBe(true);
         });
 
         test('contains workflow_states table', () => {
-            expect(CLI_SCHEMA_SQL).toContain('CREATE TABLE IF NOT EXISTS workflow_states');
+            expect(hasCreateTable('workflow_states')).toBe(true);
         });
 
         test('contains artifacts table', () => {
-            expect(CLI_SCHEMA_SQL).toContain('CREATE TABLE IF NOT EXISTS artifacts');
+            expect(hasCreateTable('artifacts')).toBe(true);
         });
     });
 
