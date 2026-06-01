@@ -28,11 +28,9 @@ Legend: ✅ done · 🔶 partial (MVP, depth pending) · ⏳ planned · 💤 def
 | Feature | Status | Acceptance |
 |---------|--------|-----------|
 | Arg dispatch + help/version | ✅ | `dispatch()` routes all commands; `--json` everywhere |
-| `spur init` scaffold | ✅ | writes `.spur/config.json`, registers workspace (idempotent) |
-| `spur status` | ✅ | reports config/package/workspace/git context |
+| `spur init` scaffold | ✅ | writes `.spur/config.json` and records config artifact |
+| `spur status [path]` | ✅ | reports config/package/git context and optional path metadata |
 | `spur migrate` | ✅ | applies CLI-owned schema via isolated journal |
-| `spur inspect <path>` | ✅ | file metadata |
-| `spur workspace add\|list` | ✅ | local workspace registry |
 | Exit-code + `--json` schema contracts hardened | 🔶 | stabilize across all commands (Phase 1) |
 
 ## 3. Agents (`ts-ai-runner`)
@@ -41,7 +39,7 @@ Legend: ✅ done · 🔶 partial (MVP, depth pending) · ⏳ planned · 💤 def
 |---------|--------|-----------|
 | `spur agent list` (detection) | ✅ | installed/missing per known agent |
 | `spur agent doctor [agent]` (readiness) | ✅ | usable/needs-auth/missing + tier; exit on tier-1 failure |
-| `spur agent run <task>` (execution + capture) | 💤 | execute via `AiRunner`, capture stdout/stderr as artifacts |
+| `spur agent run <prompt>` (execution + capture) | ✅ | execute via `AiRunner`, capture stdout/stderr as artifacts |
 | Channel resolution / slash-command translation | 💤 | design before porting |
 
 ## 4. Rules (`ts-rule-engine`)
