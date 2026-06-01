@@ -32,6 +32,14 @@ export function parseArgs(argv: string[]): ParsedArgs {
             continue;
         }
 
+        if (parsingFlags && token.startsWith('-') && token.length > 1) {
+            const alias = token.slice(1);
+            if (alias === 'h') flags.help = true;
+            else if (alias === 'v') flags.verbose = true;
+            else flags[alias] = true;
+            continue;
+        }
+
         if (command.length < 2 && positionals.length === 0) {
             command.push(token);
         } else {
