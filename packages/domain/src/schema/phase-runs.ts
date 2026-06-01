@@ -1,9 +1,9 @@
-import { standardColumns } from '@gobing-ai/ts-db';
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { defineTable, standardColumns } from '@gobing-ai/ts-db/schema';
+import { integer, text } from 'drizzle-orm/sqlite-core';
 import { runs } from './runs';
 
 /** One occupancy episode of a single workflow phase within a run. */
-export const phaseRuns = sqliteTable('phase_runs', {
+export const phaseRunsTable = defineTable('phase_runs', {
     id: text('id').primaryKey(),
     runId: text('run_id')
         .notNull()
@@ -14,3 +14,6 @@ export const phaseRuns = sqliteTable('phase_runs', {
     completedAt: integer('completed_at'),
     ...standardColumns,
 });
+
+/** The Drizzle table for DAOs/queries. DDL + zod are derived on `phaseRunsTable`. */
+export const phaseRuns = phaseRunsTable.table;
