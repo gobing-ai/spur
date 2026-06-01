@@ -1,14 +1,14 @@
 #!/usr/bin/env bun
+import figlet from 'figlet';
+import standard from 'figlet/fonts/Standard';
 import { parseArgs } from './args';
 import { runAgentCommand } from './commands/agent';
 import { runHistoryCommand } from './commands/history';
 import { runInitCommand } from './commands/init';
-import { runInspectCommand } from './commands/inspect';
 import { runMigrateCommand } from './commands/migrate';
 import { runRuleCommand } from './commands/rule';
 import { runStatusCommand } from './commands/status';
 import { runWorkflowCommand } from './commands/workflow';
-import { runWorkspaceCommand } from './commands/workspace';
 import { CLI_CONFIG } from './config';
 import { type CliContext, createCliContext } from './context';
 import { errorMessage } from './errors';
@@ -45,13 +45,13 @@ export async function dispatch(argv: string[], context: CliContext): Promise<num
     const parsed = parseArgs(argv);
     const [command, subcommand] = parsed.command;
 
-    if (command === undefined || command === 'help' || parsed.flags.help === true) {
-        context.output.write(helpText());
+    if (command === 'version') {
+        context.output.write(CLI_CONFIG.binaryVersion);
         return 0;
     }
 
-    if (command === 'version' || parsed.flags.version === true) {
-        context.output.write(CLI_CONFIG.binaryVersion);
+    if (command === undefined || command === 'help' || parsed.flags.help === true) {
+        context.output.write(helpText());
         return 0;
     }
 
@@ -59,17 +59,13 @@ export async function dispatch(argv: string[], context: CliContext): Promise<num
         case 'init':
             return runInitCommand(context, parsed.flags);
         case 'status':
-            return runStatusCommand(context, parsed.flags);
-        case 'migrate':
-            return runMigrateCommand(context, parsed.flags);
-        case 'workspace':
-            return runWorkspaceCommand(subcommand, context, parsed.flags);
-        case 'inspect':
-            return runInspectCommand(
+            return runStatusCommand(
                 context,
                 parsed.flags,
                 subcommand === undefined ? parsed.positionals : [subcommand, ...parsed.positionals],
             );
+        case 'migrate':
+            return runMigrateCommand(context, parsed.flags);
         case 'rule':
             return runRuleCommand(subcommand, context, parsed.flags, parsed.positionals);
         case 'workflow':
@@ -88,25 +84,48 @@ export async function dispatch(argv: string[], context: CliContext): Promise<num
 /** Render short CLI usage text. */
 export function helpText(): string {
     return [
-        `${CLI_CONFIG.binaryLabel} ${CLI_CONFIG.binaryVersion}`,
+        CLI_CONFIG.binaryVersion,
         '',
-        'Usage:',
-        '  spur init [--name <name>] [--json]',
-        '  spur status [--json]',
-        '  spur migrate [--json]',
-        '  spur workspace add [--name <name>] [--root <path>] [--agent <agent>] [--json]',
-        '  spur workspace list [--json]',
-        '  spur inspect <path> [--json]',
-        '  spur rule run [--preset <name>] [--rule <id>] [--fail-on <severity>] [--json]',
-        '  spur agent list|doctor [agent] [--json]',
-        '  spur history import --source <source> [--file <path>|--root <path>] [--mode <mode>] [--json]',
-        '  spur history analyze [--since <iso-date>] [--json]',
-        '  spur workflow validate|run <workflow.yaml> [--json]',
-        '  spur workflow list [--json]',
+        'Usage: spur [global options] <command>',
+        '',
+        'Global options:',
+        '  --json                         Output machine-readable JSON where supported',
+        '  -v, --verbose                  Show internal progress diagnostics where supported',
+        '  -h, --help                     Display this help',
+        '',
+        'Commands:',
+        '  init [--name <name>] [--json]                                      Scaffold .spur/config.json for this project',
+        '  status [path] [--json]                                             Show project, .spur, Git, and optional path status',
+        '  migrate [--json]                                                   Apply CLI-owned schema migrations (temporary helper)',
+        '  agent run <prompt> [--agent <name>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--json]',
+        '                                                                      Execute a prompt or slash command via a coding agent',
+        '  agent list|doctor [agent] [--json]                                 Detect installed agents or check agent readiness',
+        '  rule run [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <severity>] [--json]',
+        '                                                                      Evaluate constraint rules over the working tree',
+        '  rule validate [--file <path>|--preset <name>|<path>] [--json]       Validate rule files or presets without evaluating them',
+        '  rule list [--preset <name>] [--json]                               List discovered local rules',
+        '  history import --source <source> [--file <path>|--root <path>] [--mode <mode>] [--dry-run] [--json]',
+        '                                                                      Import agent conversation JSONL',
+        '  history analyze [--since <iso-date>] [--json]                      Summarize imported history cost and usage',
+        '  history report [--json]                                            Reserved report surface; prints TODO marker for now',
+        '  workflow validate|run <workflow.yaml> [--run-id <id>] [--json]      Validate or execute a workflow definition',
+        '  workflow list [--json]                                             List persisted workflow runs',
+        '  help                                                               Display this help',
     ].join('\n');
 }
 
+/** Render the startup ASCII banner without runtime font file I/O. */
+export function bannerText(): string {
+    figlet.parseFont('Standard', standard);
+    return figlet.textSync(CLI_CONFIG.binaryLabel, { font: 'Standard' });
+}
+
 if (import.meta.main) {
+    const argv = process.argv.slice(2);
+    const versionOnly = argv[0] === 'version';
+    if (!argv.includes('--json') && !versionOnly) {
+        consoleOutput.write(bannerText());
+    }
     const exitCode = await main();
     process.exit(exitCode);
 }
