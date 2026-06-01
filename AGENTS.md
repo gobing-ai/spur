@@ -96,7 +96,8 @@ bun run lint       # biome check + per-workspace tsc --noEmit  (the gate)
 bun run format     # biome check --write                       (autofix)
 bun run test       # bun test --coverage (all workspaces)
 bun run test-cf    # Cloudflare Workers Vitest (server)
-bun run build      # build all workspaces
+bun run clean      # reset root dist/
+bun run build      # clean, then build cli/server/web into root dist/
 bun run check      # lint + test (local gate)
 bun run dev        # bun run --filter '*' dev
 ```
