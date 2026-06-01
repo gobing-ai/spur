@@ -1,86 +1,34 @@
-export { artifacts } from './artifacts';
-export { phaseRuns } from './phase-runs';
-export { runs } from './runs';
-export { transitionRuns } from './transition-runs';
-export { workflowStates } from './workflow-states';
-export { workspaces } from './workspaces';
+import { artifactsTable } from './artifacts';
+import { phaseRunsTable } from './phase-runs';
+import { runsTable } from './runs';
+import { transitionRunsTable } from './transition-runs';
+import { workflowStatesTable } from './workflow-states';
+import { workspacesTable } from './workspaces';
+
+export { artifacts, artifactsTable } from './artifacts';
+export { phaseRuns, phaseRunsTable } from './phase-runs';
+export { runs, runsTable } from './runs';
+export { transitionRuns, transitionRunsTable } from './transition-runs';
+export { workflowStates, workflowStatesTable } from './workflow-states';
+export { workspaces, workspacesTable } from './workspaces';
 
 /**
- * CREATE TABLE SQL for the six Spur-owned domain tables.
+ * Schema DDL for the six Spur-owned domain tables — the single source of truth
+ * (ADR-011). Each statement is DERIVED from its `defineTable` definition via
+ * `createTableSql`; there is no hand-written DDL to keep in sync.
  *
- * Kept as explicit SQL (not generated from the Drizzle objects) so the applied
- * schema is byte-stable and ADR-007 is preserved: the package owns its schema.
- * The Drizzle table objects above drive the typed DAO layer (EntityDao); this
- * SQL drives migrations. The two must stay in sync — every column here has a
- * matching column in its `schema/*.ts` table.
+ * Order matters: a table must be created after any table its foreign keys
+ * reference (workspaces → runs → phase/transition/workflow_state/artifacts).
+ * Each statement is `;`-terminated so the composed script is a valid,
+ * splittable multi-statement migration.
  */
-export const DOMAIN_SCHEMA_SQL = `
-CREATE TABLE IF NOT EXISTS workspaces (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
-    root TEXT NOT NULL,
-    purpose TEXT,
-    default_agent TEXT,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS runs (
-    id TEXT PRIMARY KEY,
-    workspace_id TEXT,
-    workflow_name TEXT,
-    mode TEXT,
-    status TEXT NOT NULL,
-    agent TEXT,
-    started_at INTEGER NOT NULL,
-    completed_at INTEGER,
-    metadata_json TEXT NOT NULL DEFAULT '{}',
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    FOREIGN KEY (workspace_id) REFERENCES workspaces(id)
-);
-
-CREATE TABLE IF NOT EXISTS phase_runs (
-    id TEXT PRIMARY KEY,
-    run_id TEXT NOT NULL,
-    phase TEXT NOT NULL,
-    status TEXT NOT NULL,
-    started_at INTEGER,
-    completed_at INTEGER,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    FOREIGN KEY (run_id) REFERENCES runs(id)
-);
-
-CREATE TABLE IF NOT EXISTS transition_runs (
-    id TEXT PRIMARY KEY,
-    run_id TEXT NOT NULL,
-    from_state TEXT NOT NULL,
-    to_state TEXT NOT NULL,
-    trigger TEXT,
-    status TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    FOREIGN KEY (run_id) REFERENCES runs(id)
-);
-
-CREATE TABLE IF NOT EXISTS workflow_states (
-    id TEXT PRIMARY KEY,
-    run_id TEXT NOT NULL,
-    state TEXT NOT NULL,
-    data_json TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    FOREIGN KEY (run_id) REFERENCES runs(id)
-);
-
-CREATE TABLE IF NOT EXISTS artifacts (
-    id TEXT PRIMARY KEY,
-    run_id TEXT,
-    path TEXT NOT NULL,
-    kind TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    FOREIGN KEY (run_id) REFERENCES runs(id)
-);
-`;
+export const DOMAIN_SCHEMA_SQL = [
+    workspacesTable.createTableSql,
+    runsTable.createTableSql,
+    phaseRunsTable.createTableSql,
+    transitionRunsTable.createTableSql,
+    workflowStatesTable.createTableSql,
+    artifactsTable.createTableSql,
+]
+    .map((sql) => `${sql};`)
+    .join('\n\n');
