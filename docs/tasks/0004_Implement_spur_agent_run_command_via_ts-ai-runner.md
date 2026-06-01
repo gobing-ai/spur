@@ -47,7 +47,7 @@ This task adds `spur agent run <prompt>` and all necessary supporting logic, lev
 - [x] **R5.1** `--mode` text|json validation, exit 2 → **MET** | `agent.ts:135-139`, test `:137`
 - [x] **R6.1** codex resume+prompt throw → catch → exit 2 → **MET** | `agent.ts:193-205, 211-215`, tests `:652,:691`
 - [x] **R6.2** other agents continue resumes → **MET** | `agent.ts:186` (continue passthrough)
-- [x] **R7.1-7.4** slash detect + per-agent translation, inline w/ TODO → **MET** | `agent.ts:25-47, 181`, tests `:312-364`
+- [x] **R7.1-7.4** slash detect + per-agent translation → **MET** | promoted to `@gobing-ai/ts-ai-runner@0.2.5` (`src/slash-command.ts`); Spur imports it at `agent.ts:11,15` and uses it at `agent.ts:157`; no inline copy remains. Translation table + unit tests now live in the owning package.
 - [x] **R8.0-8.4** stream/buffered executor, no TTY re-echo, json envelope → **MET** | `agent.ts:161-168, 296-318`, tests `:401-520`
 - [x] **R9** exit codes 0/1/2/3 incl. signal → **MET** | `agent.ts:221-227`
 - [x] **R10.1** Tier-2 warning, not blocking, suppressed in json → **MET** | `agent.ts:175-177`, tests `:531,:571`
@@ -103,7 +103,7 @@ apps/cli/src/commands/agent.ts
   isAgentName(), TIER1_PRIORITY, TIER2_AGENTS // resolution + warnings
   AgentName, PromptOptions, AgentRunResult    // types  (PromptOptions: { input?, continue?, model?, mode? })
 
-INLINE in apps/cli/src/commands/agent.ts (see R7.4 — not in ts-ai-runner yet)
+@gobing-ai/ts-ai-runner (since 0.2.5 — promoted from inline; see R7.4)
   isClaudeStyleSlashCommand(input): boolean   // slash-command detection
   translateSlashCommand(agent, input): string // slash-command translation
 
@@ -144,9 +144,9 @@ User: spur agent run "Fix the login bug" --agent pi --mode json
 
 ### Plan
 
-1. **Slash-command translation (inline — Phase 1):**
-   - Implement `isClaudeStyleSlashCommand()` + `translateSlashCommand()` inline in `apps/cli/src/commands/agent.ts` (R7.4) with a `// TODO: promote to @gobing-ai/ts-ai-runner` marker.
-   - File a follow-up ts-libs task to add `src/slash-command.ts` and re-export it; no blocking dependency on a new ts-ai-runner release.
+1. **Slash-command translation (✅ promoted to ts-ai-runner@0.2.5):**
+   - `isClaudeStyleSlashCommand()` + `translateSlashCommand()` live in `@gobing-ai/ts-ai-runner` (`src/slash-command.ts`), re-exported from `index.ts`, released in 0.2.5. Spur imports them; no inline copy.
+   - Initially landed inline in `apps/cli/src/commands/agent.ts` (Phase 1), then promoted upstream per the AGENTS.md "enhance the owning package" rule once the API stabilized.
    - No `AiRunner.buildPromptCommand()` needed — diagnostics use the existing `getAgentShim().getPromptCommand()`.
 
 2. **Implement `runAgentRun()` in `apps/cli/src/commands/agent.ts`:**
@@ -209,7 +209,7 @@ User: spur agent run "Fix the login bug" --agent pi --mode json
 
 | Risk | Mitigation |
 |------|-----------|
-| `@gobing-ai/ts-ai-runner` missing slash-command translation | **Resolved as decision, not risk:** implement inline in CLI with TODO (R7.4); file ts-libs follow-up. No release dependency. |
+| `@gobing-ai/ts-ai-runner` missing slash-command translation | **Resolved (R7.4):** promoted to ts-ai-runner@0.2.5 (`src/slash-command.ts`); Spur consumes it by semver. No inline code, no leak. |
 | Output streaming vs capture | **Resolved.** Executor uses `stdout: ['inherit','pipe']` when streaming (`ts-runtime/process-executor.ts:105`) — streams live **and** captures. `canStream` requires `!forceBuffered && policy.mode==='stream' && isTTY` (lines 96-99); `runPromptCommand` passes `forceBuffered=false`, so streaming activates iff the CLI injects a `mode:'stream'` executor and stdout is a TTY (R8.0). No double-output if the CLI skips re-echo on the TTY path (R8.1). |
 | Executor `OutputPolicy` is construction-time, not per-call | The CLI must pick stream-vs-buffered when building the executor, before it knows `--json`. Resolve `--json` during flag validation, then construct the executor accordingly (buffered for json, stream for text). Single construction helper (R8.4). |
 | `runPromptCommand` may throw (codex resume) before returning a result | `getPromptCommand` runs inside `runPromptCommand`; wrap the call in try/catch and map the throw to exit 2 (R6.1). |
