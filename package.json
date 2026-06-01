@@ -26,10 +26,10 @@
         "spur-check:full": "bun run lint && bun run test-pre-check:full && bun run test:full && bun run test-post-check:full"
     },
     "dependencies": {
-        "@gobing-ai/ts-db": "^0.2.3",
-        "@gobing-ai/ts-infra": "^0.2.3",
-        "@gobing-ai/ts-runtime": "^0.2.3",
-        "@gobing-ai/ts-utils": "^0.2.3"
+        "@gobing-ai/ts-db": "^0.2.4",
+        "@gobing-ai/ts-infra": "^0.2.4",
+        "@gobing-ai/ts-runtime": "^0.2.4",
+        "@gobing-ai/ts-utils": "^0.2.4"
     },
     "devDependencies": {
         "@biomejs/biome": "2.4.16",
