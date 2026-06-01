@@ -15,24 +15,21 @@
         "lint": "biome check . && bun run typecheck",
         "format": "biome check . --write",
         "autofix": "bun run format && bun run typecheck",
-
-        "test-pre-check": "spur rule run --preset recommended --fail-on warning",
-        "test-post-check": "spur rule run --preset spur-dev --rule coverage-gate --fail-on warning",
+        "test-pre-check": "spur rule run --preset recommended-pre-check --fail-on warning",
+        "test-post-check": "spur rule run --preset recommended-post-check --rule coverage-gate --fail-on warning",
         "test-cf": "bun run --filter '@gobing-ai/spur-server' test-cf",
-
         "test": "NODE_ENV=test bun test --coverage --coverage-dir=.coverage --reporter=dots",
         "check": "bun run lint && bun run test",
         "spur-check": "bun run lint && bun run test-pre-check && bun run test && bun run test-post-check",
-
         "test:full": "NODE_ENV=test bun test --update-snapshots --coverage --coverage-dir=.coverage",
         "check:full": "bun run lint && bun run test:full",
         "spur-check:full": "bun run lint && bun run test-pre-check:full && bun run test:full && bun run test-post-check:full"
     },
     "dependencies": {
-        "@gobing-ai/ts-db": "^0.1.8",
-        "@gobing-ai/ts-infra": "^0.1.8",
-        "@gobing-ai/ts-runtime": "^0.1.8",
-        "@gobing-ai/ts-utils": "^0.1.8"
+        "@gobing-ai/ts-db": "^0.2.3",
+        "@gobing-ai/ts-infra": "^0.2.3",
+        "@gobing-ai/ts-runtime": "^0.2.3",
+        "@gobing-ai/ts-utils": "^0.2.3"
     },
     "devDependencies": {
         "@biomejs/biome": "2.4.16",
