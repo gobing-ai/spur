@@ -16,7 +16,7 @@ export interface CreateRunInput {
 /** DAO for workflow run persistence owned by Spur. */
 export class RunDao extends EntityDao<typeof runs, typeof runs.id> {
     constructor(adapter: DbAdapter) {
-        super(adapter.getDb(), runs, runs.id, 'runs');
+        super(adapter, runs, [runs.id], 'runs');
     }
 
     /** Create a new run row. */
