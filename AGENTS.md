@@ -108,19 +108,20 @@ Bun. Run with `bun run apps/cli/src/index.ts <command>` during development.
 ## CLI surface
 
 Supported commands (the harness loop). `init`, `agent`, `history`, `rule`, `workflow` are the
-committed product surface; `status`, `migrate`, `inspect`, `workspace` are supporting utilities.
+committed product surface; `status` and `migrate` are supporting utilities.
 
 ```
 spur init       [--name <name>] [--json]
 spur agent      list|doctor [agent] [--json]
 spur history    import --source <source> [--file <path>|--root <path>] [--mode <mode>] [--json]
 spur history    analyze [--since <iso-date>] [--json]
+spur history    report [--json]  # TODO marker; implementation deferred
 spur rule       run [--preset <name>] [--rule <id>] [--fail-on <severity>] [--json]
+spur rule       validate [--file <path>|--preset <name>|<path>] [--json]
+spur rule       list [--preset <name>] [--json]
 spur workflow   validate|run <workflow.yaml> [--json] | list [--json]
-spur status     [--json]
+spur status     [path] [--json]
 spur migrate    [--json]
-spur inspect    <path> [--json]
-spur workspace  add|list [...] [--json]
 ```
 
 Every command supports `--json` for machine consumption.
