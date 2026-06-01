@@ -11,9 +11,9 @@ describe('args parsing', () => {
         });
 
         test('parses positionals after --', () => {
-            const result = parseArgs(['node', 'spur', 'inspect', '--json', '--', 'file1', 'file2']);
+            const result = parseArgs(['node', 'spur', 'status', '--json', '--', 'file1', 'file2']);
             expect(result.flags).toEqual({ json: true });
-            expect(result.positionals).toEqual(['inspect', 'file1', 'file2']);
+            expect(result.positionals).toEqual(['status', 'file1', 'file2']);
         });
 
         test('parses empty argv', () => {
@@ -54,6 +54,12 @@ describe('args parsing', () => {
             const result = parseArgs(['status', '--json', '--verbose']);
             expect(result.flags.json).toBe(true);
             expect(result.flags.verbose).toBe(true);
+        });
+
+        test('parses global short flag aliases', () => {
+            expect(parseArgs(['-h']).flags.help).toBe(true);
+            expect(parseArgs(['-v']).flags.verbose).toBe(true);
+            expect(parseArgs(['-V']).flags.V).toBe(true);
         });
 
         test('stops parsing flags after --', () => {
