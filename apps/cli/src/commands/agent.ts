@@ -8,9 +8,11 @@ import {
     DoctorRunner,
     getAgentShim,
     isAgentName,
+    isClaudeStyleSlashCommand,
     type PromptOptions,
     TIER1_PRIORITY,
     TIER2_AGENTS,
+    translateSlashCommand,
 } from '@gobing-ai/ts-ai-runner';
 import { NodeProcessExecutor, type OutputPolicy } from '@gobing-ai/ts-runtime';
 import { booleanFlag, stringFlag } from '../args';
@@ -18,36 +20,10 @@ import type { CliContext } from '../context';
 import { toJson } from '../output';
 
 // ---------------------------------------------------------------------------
-// Slash-command translation (inline — Phase 1)
-// TODO: promote to @gobing-ai/ts-ai-runner as src/slash-command.ts
-// ---------------------------------------------------------------------------
-
-const SLASH_COMMAND_RE = /^\/([a-zA-Z0-9._-]+):([a-zA-Z0-9._-]+)(\s.*)?$/;
-
-function isClaudeStyleSlashCommand(input: string): boolean {
-    return SLASH_COMMAND_RE.test(input);
-}
-
-function translateSlashCommand(agent: AgentName, input: string): string {
-    const match = SLASH_COMMAND_RE.exec(input);
-    if (!match) return input;
-    const [, plugin, command, rest = ''] = match;
-    const args = rest.trimStart();
-    const suffix = args.length > 0 ? ` ${args}` : '';
-    switch (agent) {
-        case 'claude':
-            return `/${plugin}:${command}${suffix}`;
-        case 'codex':
-            return `$${plugin}-${command}${suffix}`;
-        case 'pi':
-            return `/skill:${plugin}-${command}${suffix}`;
-        default:
-            return `/${plugin}-${command}${suffix}`;
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Public command dispatch
+//
+// Slash-command translation (isClaudeStyleSlashCommand / translateSlashCommand)
+// lives in @gobing-ai/ts-ai-runner so it is reusable across consumers.
 // ---------------------------------------------------------------------------
 
 /** Runtime dependencies injectable for tests. */
