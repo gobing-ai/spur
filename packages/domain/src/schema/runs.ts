@@ -1,5 +1,4 @@
-import { defineTable, standardColumns } from '@gobing-ai/ts-db/schema';
-import { integer, text } from 'drizzle-orm/sqlite-core';
+import { defineTable, integer, standardColumns, text } from '@gobing-ai/ts-db/schema';
 import { workspaces } from './workspaces';
 
 /** Workflow run — one execution of a workflow against a task. */
