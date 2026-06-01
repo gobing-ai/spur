@@ -29,12 +29,13 @@ to the agent CLI. `--cwd` sets the working directory. `--json` emits a machine-r
 `/plugin:command` are translated per-agent (claude pass-through, codex `$`, pi `/skill:`).
 Exit 0 on success, 1 on agent-not-found, 2 on invalid arguments, 3 on agent execution failure.
 
-#### `spur agent list|doctor [agent] [--json]`
-- `list` — detect installed agents; prints `ok|missing <name> [version]`.
-- `doctor [agent]` — readiness check per agent; prints `usable|needs-auth|missing <agent> tier=<n> [version]`.
-  Exit 1 if any **tier-1** agent is not usable.
-Backed by `ts-ai-runner` `AgentDetector` / `DoctorRunner`. Agents: claude, codex, gemini, pi,
-opencode, antigravity, openclaw.
+#### `spur agent list [--json]`
+Detect installed agents; prints `ok|missing <name> [version]`. Backed by `ts-ai-runner`
+`AgentDetector`. Agents: claude, codex, gemini, pi, opencode, antigravity, openclaw.
+
+#### `spur agent doctor [agent] [--json]`
+Readiness check per agent; prints `usable|needs-auth|missing <agent> tier=<n> [version]`.
+Exit 1 if any **tier-1** agent is not usable. Backed by `ts-ai-runner` `DoctorRunner`.
 
 #### `spur rule run [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <severity>] [--json]`
 Evaluate constraint rules over the working tree. `--preset` (default `recommended`) or `--file` for
@@ -46,7 +47,7 @@ an ad-hoc rule file; `--rule <id>` filters to one rule. `--fail-on error|warning
 - `list` — list discovered local rules from `.spur/rules`; with `--preset`, list the resolved preset rules.
 Backed by `ts-rule-engine`.
 
-#### `spur workflow validate|run <workflow.yaml> [--json]` · `spur workflow list [--json]`
+#### `spur workflow validate <workflow.yaml> [--json]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--json]` · `spur workflow list [--json]`
 - `validate <file>` — load + Zod-validate a workflow definition.
 - `run <file> [--run-id <id>]` — execute; prints `<status>: <name> -> <finalState>`; exit 1 unless `done`.
 - `list` — list persisted workflow runs.
