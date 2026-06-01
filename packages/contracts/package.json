@@ -12,11 +12,11 @@
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
-        "@orpc/contract": "1.14.4",
-        "zod": "4.4.3"
+        "@orpc/contract": "catalog:",
+        "zod": "catalog:"
     },
     "devDependencies": {
-        "@types/bun": "1.3.14",
-        "typescript": "6.0.3"
+        "@types/bun": "catalog:",
+        "typescript": "catalog:"
     }
 }
