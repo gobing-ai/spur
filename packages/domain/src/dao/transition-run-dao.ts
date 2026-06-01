@@ -17,7 +17,7 @@ export interface CreateTransitionRunInput {
 /** DAO for workflow transition run rows. */
 export class TransitionRunDao extends EntityDao<typeof transitionRuns, typeof transitionRuns.id> {
     constructor(adapter: DbAdapter) {
-        super(adapter.getDb(), transitionRuns, transitionRuns.id, 'transition_runs');
+        super(adapter, transitionRuns, [transitionRuns.id], 'transition_runs');
     }
 
     /** Create a transition run placeholder row. */
