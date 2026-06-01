@@ -10,7 +10,8 @@
     "scripts": {
         "prepare": "lefthook install",
         "dev": "bun run --filter '*' dev",
-        "build": "bun run --filter '*' build",
+        "clean": "rm -rf dist && find apps packages -type d -name dist -prune -exec rm -rf {} + && mkdir -p dist",
+        "build": "bun run clean && bun run --filter '@gobing-ai/spur-cli' build && bun run --filter '@gobing-ai/spur-server' build && bun run --filter '@gobing-ai/spur-web' build",
         "typecheck": "bun run --filter '*' typecheck",
         "lint": "biome check . && bun run typecheck",
         "format": "biome check . --write",
