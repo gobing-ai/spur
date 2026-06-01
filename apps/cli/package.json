@@ -20,9 +20,11 @@
         "@gobing-ai/ts-llm-jsonl-importer": "^0.2.4",
         "@gobing-ai/ts-rule-engine": "^0.2.4",
         "@gobing-ai/ts-runtime": "^0.2.4",
-        "@gobing-ai/ts-utils": "^0.2.4"
+        "@gobing-ai/ts-utils": "^0.2.4",
+        "figlet": "^1.11.0"
     },
     "devDependencies": {
-        "@types/bun": "1.3.14"
+        "@types/bun": "1.3.14",
+        "@types/figlet": "^1.7.0"
     }
 }
