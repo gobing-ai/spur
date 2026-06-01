@@ -1,20 +1,30 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { createBufferTarget, setDefaultOutputTargets } from '@gobing-ai/ts-utils';
-import { dispatch, helpText, main } from '../../src';
+import { bannerText, dispatch, helpText, main } from '../../src';
 import { createCliContext } from '../../src/context';
 import { gitContext } from '../../src/git-context';
 import { consoleOutput } from '../../src/output';
 import { createCapturedOutput, createTempProject } from '../helpers';
 
-describe('CLI dispatch and inspect', () => {
+describe('CLI dispatch and status', () => {
     test('renders help, version, and unknown command output', async () => {
         const cwd = await createTempProject();
         const output = createCapturedOutput();
 
         expect(await main(['help'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
-        expect(output.messages.at(-1)).toContain('spur 0.1.0');
-        expect(helpText()).toContain('workspace add');
+        expect(output.messages.at(-1)).toContain('0.1.0');
+        expect(output.messages.at(-1)).not.toContain('spur 0.1.0');
+        expect(helpText()).toContain('Global options:');
+        expect(helpText()).toContain('agent list|doctor');
+        expect(helpText()).toContain('rule validate');
+        expect(helpText()).toContain('rule list');
+        expect(helpText()).toContain('history report');
+        expect(helpText()).not.toContain('--version');
+        expect(helpText()).not.toContain('workspace');
+        expect(helpText()).not.toContain('inspect');
+        expect(bannerText()).toContain('___');
+        expect(bannerText()).not.toContain('spur CLI v0.1.0');
 
         expect(await main(['version'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
         expect(output.messages.at(-1)).toBe('0.1.0');
@@ -23,31 +33,28 @@ describe('CLI dispatch and inspect', () => {
         expect(output.errors.at(-1)).toContain('Unknown command');
     });
 
-    test('inspects files and reports missing file errors', async () => {
+    test('status reports optional path metadata and missing path errors', async () => {
         const cwd = await createTempProject();
         const output = createCapturedOutput();
         await Bun.write(join(cwd, 'sample.txt'), 'sample');
 
-        expect(await main(['inspect', 'sample.txt', '--json'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
-        const inspected = JSON.parse(output.messages.at(-1) ?? '{}') as {
-            path: string;
-            size: number;
-            isFile: boolean;
-            isDirectory: boolean;
+        expect(await main(['status', 'sample.txt', '--json'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
+        const status = JSON.parse(output.messages.at(-1) ?? '{}') as {
+            target: { path: string; size: number; isFile: boolean; isDirectory: boolean };
         };
-        expect(inspected).toEqual({ path: 'sample.txt', size: 6, isFile: true, isDirectory: false });
+        expect(status.target).toEqual({ path: 'sample.txt', size: 6, isFile: true, isDirectory: false });
 
-        expect(await main(['inspect', 'missing.txt'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
-        expect(output.errors.at(-1)).toContain('file does not exist');
+        expect(await main(['status', 'missing.txt'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
+        expect(output.errors.at(-1)).toContain('path does not exist');
     });
 
-    test('dispatches with an explicit context', async () => {
+    test('dispatches unknown commands with an explicit context', async () => {
         const cwd = await createTempProject();
         const output = createCapturedOutput();
         const context = createCliContext({ cwd, output, dbUrl: ':memory:' });
 
-        expect(await dispatch(['workspace'], context)).toBe(0);
-        expect(output.messages.at(-1)).toBe('No workspaces registered');
+        expect(await dispatch(['workspace'], context)).toBe(1);
+        expect(output.errors.at(-1)).toContain('Unknown command');
     });
 
     test('resolves git context in a repository', async () => {
