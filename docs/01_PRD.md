@@ -64,14 +64,18 @@ them.
 | Project scaffold | `spur init` | local CLI + DAOs | done |
 | Agent detection / health | `spur agent list\|doctor` | `ts-ai-runner` | done |
 | Constraint rule evaluation | `spur rule run` | `ts-rule-engine` | done |
+| Constraint rule discovery / validation | `spur rule list\|validate` | `ts-rule-engine` | done |
 | Workflow validate / run / list | `spur workflow ...` | `ts-dual-workflow-engine` | done |
 | History import (7 sources) | `spur history import` | `ts-llm-jsonl-importer` | done |
 | History cost analytics | `spur history analyze` | local analytics consumer | done |
+| History report surface | `spur history report` | placeholder | TODO marker only |
 
 ### 5.2 Supporting utilities
 
-`spur status`, `spur migrate`, `spur inspect`, `spur workspace add|list` — operational helpers that
-keep the local project consistent. Stable but not the headline product surface.
+`spur status [path]` and `spur migrate` — operational helpers that keep the local project
+consistent. Stable but not the headline product surface. `spur status [path]` owns basic path
+metadata; the former standalone `spur inspect <path>` surface is removed. `spur migrate` remains a
+temporary helper until the migration lifecycle is finalized.
 
 ### 5.3 Deferred (needs design before porting)
 
