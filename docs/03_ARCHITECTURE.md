@@ -91,7 +91,7 @@ src/
   context.ts        CliContext: cwd, env, fs, output, lazy migrated DB adapter
   config.ts         CLI constants (config dir/file, db file, labels)
   output.ts         Human/JSON output sink
-  commands/         init · status · migrate · workspace · inspect · rule · workflow · agent · history
+  commands/         init · status · migrate · rule · workflow · agent · history
   db/               Local DAOs (workspace, run, phase-run, transition-run, workflow-state, artifact)
                     + migrations (composes package schema SQL)
   analytics/        History cost analytics — domain consumer of imported ETL rows
