@@ -18,7 +18,7 @@ Legend: ✅ done · 🔶 partial (MVP, depth pending) · ⏳ planned · 💤 def
 |---------|--------|-----------|
 | Bun-workspace monorepo, no Turborepo | ✅ | `bun run --filter '*'` orchestrates; no `turbo.json` |
 | ts-base tooling (Biome, Lefthook, tsconfig presets) | ✅ | `bun run lint` gate green |
-| ts-libs infra deps via semver | ✅ | `ts-db/infra/runtime/utils` at `^0.1.8` |
+| ts-libs infra deps via semver | ✅ | `ts-db/infra/runtime/utils` at `^0.2.3` |
 | Extracted engines published + semver-pinned | ⏳ | replace `link:` with `^x.y.z`; clean-clone build works |
 | oRPC type seam (contracts, implement, generated OpenAPI) | ✅ | health vertical slice; drift is a compile error |
 | Package-owned schema + CLI migrator | ✅ | `spur migrate` creates full schema; legacy migrations inert |
