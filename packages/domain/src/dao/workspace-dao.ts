@@ -17,42 +17,27 @@ export type WorkspaceRecord = typeof workspaces.$inferSelect;
 
 /** DAO for the static workspace binding registry. */
 export class WorkspaceDao extends EntityDao<typeof workspaces, typeof workspaces.id> {
-    constructor(private readonly adapter: DbAdapter) {
-        super(adapter.getDb(), workspaces, workspaces.id, 'workspaces');
+    constructor(adapter: DbAdapter) {
+        super(adapter, workspaces, [workspaces.id], 'workspaces');
     }
 
-    /** Add or replace a workspace by name. */
+    /** Add or replace a workspace by name (upsert on the unique name). */
     async add(input: AddWorkspaceInput): Promise<WorkspaceRecord> {
-        const now = Date.now();
-        const id = input.id ?? createId('wrk');
-
-        // EntityDao has no upsert; the name-unique conflict path needs raw SQL.
-        // Parameterized + injection-safe — this is the adapter's documented write API.
-        await this.adapter.run(
-            `INSERT INTO workspaces (id, name, root, purpose, default_agent, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)
-             ON CONFLICT(name) DO UPDATE SET
-                 root = excluded.root,
-                 purpose = excluded.purpose,
-                 default_agent = excluded.default_agent,
-                 updated_at = excluded.updated_at`,
-            id,
-            input.name,
-            input.root,
-            input.purpose ?? null,
-            input.defaultAgent ?? null,
-            now,
-            now,
+        return this.upsert(
+            {
+                id: input.id ?? createId('wrk'),
+                name: input.name,
+                root: input.root,
+                purpose: input.purpose ?? null,
+                defaultAgent: input.defaultAgent ?? null,
+            },
+            [workspaces.name],
+            {
+                root: input.root,
+                purpose: input.purpose ?? null,
+                defaultAgent: input.defaultAgent ?? null,
+            },
         );
-
-        const record = await this.findByName(input.name);
-        if (record === undefined) throw new Error(`Workspace "${input.name}" not found after upsert`);
-        return record;
-    }
-
-    /** Find a workspace by its stable name. */
-    async findByName(name: string): Promise<WorkspaceRecord | undefined> {
-        return this.findBy(workspaces.name, name);
     }
 
     /** List all workspaces ordered by name for deterministic CLI output. */
