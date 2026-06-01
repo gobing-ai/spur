@@ -67,7 +67,7 @@ gate failure, not a review nit.
 are published to npm. They are not members of this repo's `workspaces` array.
 
 **Decision.** Consume the four stable infra packages (`ts-db`, `ts-infra`, `ts-runtime`,
-`ts-utils`) by npm semver (`^0.1.8`). `workspace:*` is **invalid** for these deps and must never
+`ts-utils`) by npm semver (`^0.2.3`). `workspace:*` is **invalid** for these deps and must never
 appear in a committed manifest. `bun link` is permitted only as temporary inner-loop tooling while
 a ts-libs package is being changed; it must be unlinked, published, and pinned to semver before its
 task's gate.
@@ -194,3 +194,37 @@ product command set is `init`, `agent`, `history`, `rule`, `workflow`; supportin
 **Consequences.** SQLite + local files are the default store. Commands beyond the committed set from
 old spur (asset inspection, richer run inspection) are deferred until their need and design are
 reconfirmed — they are not ported speculatively.
+
+---
+
+## ADR-011: ts-db Consumed as a Facade; Tables Are a Single Source of Truth
+
+**Status:** Accepted · **Date:** 2026-06-01
+
+**Context.** Spur consumes `@gobing-ai/ts-db@0.2.3`, which is a drizzle-free facade with a
+single-source-of-truth schema model (ts-libs ADR-005/007). Earlier, `packages/domain` defined tables
+as raw `sqliteTable` objects **and** hand-wrote `DOMAIN_SCHEMA_SQL` — two descriptions that could
+drift. The 0.2.3 `defineTable` derives the table, its zod schemas, and its `CREATE TABLE` DDL from
+one definition.
+
+**Decision.** As a *consumer* of ts-db, Spur follows the facade contract:
+
+1. **ts-db is imported only inside `packages/domain`.** Apps (`cli`, `server`, `web`) and the other
+   local packages (`config`, `contracts`) consume persistence through `@gobing-ai/spur-domain` DAOs —
+   never `@gobing-ai/ts-db` directly, never the raw adapter.
+2. **drizzle-orm is confined to `packages/domain/src/schema/`.** Table authoring legitimately uses
+   drizzle column builders (`text`, `integer`) as input to `defineTable`; nowhere else in Spur may
+   import `drizzle-orm` (not DAOs, analytics, apps). Business/query code uses the ts-db vocabulary
+   (`EntityDao`, `BaseDao`, the predicate spec).
+3. **Tables are defined with `defineTable`** (from `@gobing-ai/ts-db/schema`) — not bare `sqliteTable`.
+   Each schema file exports the `DefinedTable` (for DDL/zod) plus its `.table` (for DAOs/FKs).
+4. **DDL is derived, never hand-written.** `DOMAIN_SCHEMA_SQL` is composed from each table's
+   `createTableSql`. No raw `CREATE TABLE` for a Drizzle-backed table (only the migration journal and
+   package-owned SQL from ts-libs are exempt). `.sql` text-imports are forbidden (non-portable).
+5. **Raw string SQL stays inside `packages/domain`** (the DAO/migration layer), never in apps.
+
+**Consequences.** Drift between table/DDL/zod is structurally impossible; the storage engine stays
+swappable; apps remain drizzle- and SQL-free. Enforced by `.spur/rules/boundary/dao-boundary.yaml`
+(`ts-db-only-in-domain`, `drizzle-only-in-domain-schema`, `tables-via-defineTable`,
+`no-hand-written-ddl-for-drizzle-tables`, `raw-sql-only-in-domain`). `drizzle-zod` + `zod` are
+dependencies of `packages/domain` because it imports the `@gobing-ai/ts-db/schema` subpath.
