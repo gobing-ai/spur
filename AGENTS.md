@@ -112,6 +112,7 @@ committed product surface; `status` and `migrate` are supporting utilities.
 
 ```
 spur init       [--name <name>] [--json]
+spur agent      run <prompt> [--agent <name>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--json]
 spur agent      list|doctor [agent] [--json]
 spur history    import --source <source> [--file <path>|--root <path>] [--mode <mode>] [--json]
 spur history    analyze [--since <iso-date>] [--json]
