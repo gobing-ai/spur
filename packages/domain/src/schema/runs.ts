@@ -1,9 +1,9 @@
-import { standardColumns } from '@gobing-ai/ts-db';
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { defineTable, standardColumns } from '@gobing-ai/ts-db/schema';
+import { integer, text } from 'drizzle-orm/sqlite-core';
 import { workspaces } from './workspaces';
 
 /** Workflow run — one execution of a workflow against a task. */
-export const runs = sqliteTable('runs', {
+export const runsTable = defineTable('runs', {
     id: text('id').primaryKey(),
     workspaceId: text('workspace_id').references(() => workspaces.id),
     workflowName: text('workflow_name'),
@@ -15,3 +15,6 @@ export const runs = sqliteTable('runs', {
     metadataJson: text('metadata_json').notNull().default('{}'),
     ...standardColumns,
 });
+
+/** The Drizzle table for DAOs/queries. DDL + zod are derived on `runsTable`. */
+export const runs = runsTable.table;
