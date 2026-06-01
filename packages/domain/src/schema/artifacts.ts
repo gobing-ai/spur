@@ -1,5 +1,4 @@
-import { defineTable, standardColumns } from '@gobing-ai/ts-db/schema';
-import { text } from 'drizzle-orm/sqlite-core';
+import { defineTable, standardColumns, text } from '@gobing-ai/ts-db/schema';
 import { runs } from './runs';
 
 /** Reference to a captured output file (log, patch, report, generated config). */
