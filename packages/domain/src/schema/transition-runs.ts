@@ -1,9 +1,9 @@
-import { standardColumns } from '@gobing-ai/ts-db';
-import { sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { defineTable, standardColumns } from '@gobing-ai/ts-db/schema';
+import { text } from 'drizzle-orm/sqlite-core';
 import { runs } from './runs';
 
 /** A recorded transition between workflow states within a run. */
-export const transitionRuns = sqliteTable('transition_runs', {
+export const transitionRunsTable = defineTable('transition_runs', {
     id: text('id').primaryKey(),
     runId: text('run_id')
         .notNull()
@@ -14,3 +14,6 @@ export const transitionRuns = sqliteTable('transition_runs', {
     status: text('status').notNull(),
     ...standardColumns,
 });
+
+/** The Drizzle table for DAOs/queries. DDL + zod are derived on `transitionRunsTable`. */
+export const transitionRuns = transitionRunsTable.table;
