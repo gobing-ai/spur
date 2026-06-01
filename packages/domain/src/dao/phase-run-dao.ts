@@ -16,7 +16,7 @@ export interface CreatePhaseRunInput {
 /** DAO for workflow phase run rows. */
 export class PhaseRunDao extends EntityDao<typeof phaseRuns, typeof phaseRuns.id> {
     constructor(adapter: DbAdapter) {
-        super(adapter.getDb(), phaseRuns, phaseRuns.id, 'phase_runs');
+        super(adapter, phaseRuns, [phaseRuns.id], 'phase_runs');
     }
 
     /** Create a phase run placeholder row. */
