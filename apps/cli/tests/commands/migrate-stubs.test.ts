@@ -20,7 +20,9 @@ describe('CLI migrate and extracted domains', () => {
         const cwd = await createTempProject();
         const output = createCapturedOutput();
 
-        expect(await main(['rule', 'run', '--json'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
+        // Isolate from the user's global rules so the empty-project run is hermetic.
+        const isolatedEnv = { SPUR_GLOBAL_RULES_DIR: cwd };
+        expect(await main(['rule', 'run', '--json'], { cwd, output, dbUrl: ':memory:', env: isolatedEnv })).toBe(0);
         expect(JSON.parse(output.messages.at(-1) ?? '{}')).toMatchObject({ preset: 'recommended', ruleCount: 0 });
 
         expect(await main(['agent', 'list', '--json'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
