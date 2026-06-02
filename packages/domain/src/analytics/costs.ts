@@ -109,10 +109,12 @@ export function formatSummary(summary: AnalyticsSummary): string {
     return lines.join('\n');
 }
 
+/** Comparator that orders daily entries by ISO date string, ascending. */
 export function byDateAsc(a: { date: string }, b: { date: string }): number {
     return a.date.localeCompare(b.date);
 }
 
+/** Comparator that orders `[key, stats]` entries by USD cost, descending. */
 export function byCostDesc([, a]: [string, { costUsd: number }], [, b]: [string, { costUsd: number }]): number {
     return b.costUsd - a.costUsd;
 }
