@@ -24,11 +24,14 @@ Clean greenfield foundation, apps ported, engines extracted to ts-libs.
 
 Make the harness robust and clean before adding surface.
 
-- [ ] **Publish the four extracted engines to npm; switch `link:` → semver** (ADR-004 open item). This
-  is the gate that makes the repo build from a clean clone.
-- [ ] Cutover: make this repo the canonical Spur (replace the legacy tree or re-point the remote).
+- [x] **Publish the extracted engines; switch `link:` → semver** (ADR-004). All `@gobing-ai/ts-*`
+  resolve via the root catalog at `^0.3.0`; no `link:` remnants; `bun run build` green from a clean
+  install. This is the gate that makes the repo build from a clean clone.
+- [~] Cutover: make this repo the canonical Spur. `origin` is `github.com/gobing-ai/spur.git`; confirm
+  the legacy tree is retired/re-pointed.
 - [ ] Harden each command: richer error messages, exit-code contracts, `--json` schema stability.
-- [ ] Self-host the quality gate via `spur rule run` (recommended + spur-dev presets, coverage gate).
+- [x] Self-host the quality gate via `spur rule run`. `spur-check` runs `recommended-pre-check` +
+  `recommended-post-check` presets via the local CLI (`spur rule run --fail-on warning`).
 - [ ] Squash re-foundation commit noise; clean conventional-commit history.
 - [ ] Expand test coverage on DB-dependent paths (history analytics queries, workflow run failures).
 
