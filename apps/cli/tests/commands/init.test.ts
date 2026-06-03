@@ -30,6 +30,8 @@ describe('init command', () => {
         expect(existsSync(join(cwd, '.spur', 'rules', 'recommended.yaml'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'rules', 'spur-dev.yaml'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'workflows', 'basic.yaml'))).toBe(true);
+        // Team-mode agent specs directory is tracked via .gitkeep.
+        expect(existsSync(join(cwd, '.spur', 'agents', '.gitkeep'))).toBe(true);
     });
 
     test('seeds the global rules directory from the bundled presets', async () => {
@@ -54,6 +56,8 @@ describe('init command', () => {
         expect(existsSync(join(cwd, '.spur', 'config.json'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'rules'))).toBe(false);
         expect(existsSync(join(cwd, '.spur', 'workflows'))).toBe(false);
+        // The agents directory is core team-mode infra, created even in --minimal mode.
+        expect(existsSync(join(cwd, '.spur', 'agents', '.gitkeep'))).toBe(true);
     });
 
     test('re-init without --force is blocked, with --force overwrites', async () => {
