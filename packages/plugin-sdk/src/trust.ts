@@ -31,7 +31,10 @@ const POLICY: Record<Exclude<TrustLevel, 'bundled'>, Record<CapabilityTier, bool
 
 // ── TrustEngine ──────────────────────────────────────────────────────
 
+/** Enforces capability trust policy — checks declaration + tier at registration time. */
 export class TrustEngine {
+    constructor() {}
+
     /**
      * Enforce trust policy for a registration.
      * Throws PluginTrustError if the trust level forbids this capability.
@@ -41,7 +44,6 @@ export class TrustEngine {
         // R4.3: plugin must declare the capability
         // (declares() is called by the host before enforce, but double-check here for safety)
         if (level === 'bundled') return; // unconditionally allowed
-
         const tier = CAPABILITY_TIERS[capability];
         const allowed = POLICY[level]?.[tier];
         if (allowed === undefined || !allowed) {
@@ -49,9 +51,7 @@ export class TrustEngine {
                 ctx.pluginName,
                 capability,
                 level,
-                tier === 'privileged'
-                    ? `'${capability}' is a privileged capability, not allowed at trust level '${level}'`
-                    : `capability '${capability}' is not allowed at trust level '${level}'`,
+                `'${capability}' is not allowed at trust level '${level}'`,
             );
         }
     }
