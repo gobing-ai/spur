@@ -30,6 +30,17 @@ export {
     type RuleValidateServiceResult,
 } from './services/rule-service';
 export type {
+    AgentSpecInput,
+    InboxEntry,
+    InboxResult,
+    SendResult,
+    TeamServiceContext,
+    TeamServiceOutput,
+    TeamStatusEntry,
+    TeamStatusResult,
+} from './services/team-service';
+export { TeamService } from './services/team-service';
+export type {
     WorkflowAppServiceContext,
     WorkflowListResult,
     WorkflowRunResult,
