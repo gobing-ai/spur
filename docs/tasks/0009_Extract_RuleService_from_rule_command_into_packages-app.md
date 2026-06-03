@@ -60,6 +60,37 @@ RuleService extracted and wired. CLI rule.ts is a 70-line dispatcher (≤100 tar
 
 ### Review
 
+## Review — 2026-06-03 (dev-verify --force --fix all)
+
+**Verdict: PASS**
+**Scope:** `apps/cli/src/commands/rule.ts`, `packages/app/src/services/rule-service.ts`, `packages/app/src/index.ts`, and corresponding rule tests
+**Mode:** verify (Phase 7 SECU + Phase 8 traceability)
+**Channel:** current
+**Gate:** `bun run check` → PASS; `test-cf`, `build`, pre-check, and post-check also PASS
+
+### Phase 7 — SECU
+
+No findings across Security, Efficiency, Correctness, or Usability. The audited source has no hardcoded secrets, unsafe browser sinks, command execution, broad `any`, unsafe casts, empty catches, or synchronous filesystem calls. Recursive rule-file discovery is bounded by the configured rules directory and uses the injected `FileSystem`.
+
+### Phase 8 — Requirements Traceability
+
+- [x] **R1** RuleService class + context → **MET** | `packages/app/src/services/rule-service.ts` defines `RuleService` and `RuleServiceContext` (`cwd`, `env`, `fs`, `output`).
+- [x] **R2** public evaluate/validate/list methods returning structured results → **MET** | `RuleService.evaluate`, `RuleService.validate`, and `RuleService.list` return `RuleEvaluationServiceResult`, `RuleValidateServiceResult`, and `RuleListServiceResult`.
+- [x] **R3** former command helpers private/package-internal → **MET** | `ruleRoots`, `presetFileExists`, `listLocalRules`, `listRuleFiles`, `verboseOutcome`, `verboseFindingLines`, `verboseSummary`, and `emptyResultMessage` are private service methods; `compareRuleEntries` remains module-local and unexported.
+- [x] **R4** public API exports service + result types only → **MET** | `packages/app/src/index.ts` exports `RuleService` and public rule service types; no private helpers are re-exported.
+- [x] **R5** CLI wrapper ≤100 lines → **MET** | `apps/cli/src/commands/rule.ts` is 70 lines.
+- [x] **R6** rule tests migrated/adapted → **MET** | `packages/app/tests/services/rule-service.test.ts` covers service behavior; `apps/cli/tests/commands/rule.test.ts` keeps thin dispatch coverage.
+- [x] **R7** coverage target ≥85% lines / ≥90% funcs → **MET** | focused rule test run reports `packages/app/src/services/rule-service.ts` at 100% lines / 100% funcs; full gate reports aggregate 99.46% lines / 100% funcs.
+- [x] **Acceptance** golden output parity + gate → **MET** | `diff -ru .tmp/golden-0005 .tmp/after-0005` clean; `bun run check`, `bun run test-cf`, `bun run build`, `bun run test-pre-check`, and `bun run test-post-check` pass.
+
+### Findings Fixed
+
+No actionable findings. `--fix all` had nothing to change for task 0009.
+
+### Post-fix Verdict
+
+PASS. No P1/P2/P3/P4 findings remain, all requirements are met, rule-command output parity is preserved, and all verification gates are green.
+
 **Verdict: PASS** (dev-verify --force, 2026-06-03).
 
 Phase 7 (SECU): no findings. No secrets, no bare `any`, no unsafe casts, no empty catch, no blocking sync I/O in rule-service.ts or rule.ts.
@@ -85,5 +116,3 @@ Phase 8 (traceability): R2 (RuleService.evaluate/validate/list) MET · R6.1 (rul
 | ---- | ---- | ----- | ---- |
 
 ### References
-
-
