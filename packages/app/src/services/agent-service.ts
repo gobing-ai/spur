@@ -1,4 +1,4 @@
-import { existsSync, statSync } from 'node:fs';
+import { stat } from 'node:fs/promises';
 import { isatty } from 'node:tty';
 import {
     AgentDetector,
@@ -132,11 +132,12 @@ export class AgentService {
         // validate --cwd
         const cwd = stringFlag(flags, 'cwd', '');
         if (cwd !== '') {
-            if (!existsSync(cwd)) {
+            const cwdStat = await this.statCwd(cwd);
+            if (cwdStat === null) {
                 this.ctx.output.error(`Invalid --cwd: ${cwd} does not exist`);
                 return 2;
             }
-            if (!statSync(cwd).isDirectory()) {
+            if (!cwdStat.isDirectory()) {
                 this.ctx.output.error(`Invalid --cwd: ${cwd} is not a directory`);
                 return 2;
             }
@@ -262,6 +263,14 @@ export class AgentService {
             return { ok: false, exitCode: 1, message: `Agent not installed: ${name}` };
         }
         return { ok: true, agent: name };
+    }
+
+    private async statCwd(cwd: string): Promise<Awaited<ReturnType<typeof stat>> | null> {
+        try {
+            return await stat(cwd);
+        } catch {
+            return null;
+        }
     }
 
     // -------------------------------------------------------------------------
