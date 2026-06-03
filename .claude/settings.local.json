@@ -18,7 +18,7 @@
       "Bash(bun tsc:*)",
       "Bash(bun biome *)",
       "Bash(bun unlink *)",
-      "Bash(bun link *)"
+      "Bash(bun link *)",
       "Bash(bun install *)",
       "Bash(bun update *)",
       "Bash(bun pm *)",
@@ -41,7 +41,7 @@
       "Bash(grep *)",
       "Bash(biome check *)",
       "Bash(npx tsc *)",
-      "Bash(spur rule *)",
+      "Bash(spur rule *)"
     ]
   }
 }
