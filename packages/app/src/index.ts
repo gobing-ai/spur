@@ -14,6 +14,14 @@ export type {
 } from './services/history-service';
 export { HistoryService } from './services/history-service';
 export {
+    type ModuleLoader,
+    type PluginCandidate,
+    PluginLoader,
+    type PluginLoadResult,
+    type ValidatedPlugin,
+} from './services/plugin-loader';
+export { type PluginListEntry, PluginService, type PluginServiceContext } from './services/plugin-service';
+export {
     type Colorize,
     type FailOnSeverity,
     type RuleEvaluateOptions,
