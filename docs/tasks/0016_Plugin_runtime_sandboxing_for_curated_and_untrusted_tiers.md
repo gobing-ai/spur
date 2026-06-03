@@ -1,9 +1,9 @@
 ---
 name: Plugin runtime sandboxing for curated and untrusted tiers
 description: Plugin runtime sandboxing for curated and untrusted tiers
-status: Backlog
+status: Blocked
 created_at: 2026-06-03T17:06:55.474Z
-updated_at: 2026-06-03T17:17:58.123Z
+updated_at: 2026-06-03T22:43:14.811Z
 folder: docs/tasks
 type: task
 feature-id: F-5 plugin-system
