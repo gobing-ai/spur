@@ -41,7 +41,9 @@
       "Bash(grep *)",
       "Bash(biome check *)",
       "Bash(npx tsc *)",
-      "Bash(spur rule *)"
+
+      "Bash(spur rule *)",
+      "Bash(spur agent *)"
     ]
   }
 }
