@@ -4,12 +4,14 @@ import { Registry } from './base';
 
 // ── Rule TImpl ───────────────────────────────────────────────────────
 
+/** Plugin rule evaluator: receives context, returns pass/fail + message. */
 export interface RuleImpl {
     evaluate: (context: Record<string, unknown>) => { pass: boolean; message: string };
 }
 
 // ── RuleRegistry ─────────────────────────────────────────────────────
 
+/** Registry of plugin rule evaluators. */
 export class RuleRegistry extends Registry<RuleImpl> {
     constructor(trust: TrustEngine, logger: Logger) {
         super('rules', trust, logger);
