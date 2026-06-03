@@ -3,6 +3,7 @@ import type { PluginManifest } from './schema';
 
 // ── Public types ─────────────────────────────────────────────────────
 
+/** Registry capability kind — one of the nine plugin extension points. */
 export type Capability =
     | 'commands'
     | 'api'
@@ -14,12 +15,15 @@ export type Capability =
     | 'skills'
     | 'workers';
 
+/** Provenance tier for a plugin — from builtin (trusted) to untrusted. */
 export type PluginSource = 'builtin' | 'bundled' | 'curated' | 'local' | 'untrusted';
 
+/** Trust level from the plugin manifest. */
 export type TrustLevel = PluginManifest['trust'];
 
 // ── Registration context ─────────────────────────────────────────────
 
+/** Context passed into every registry .register() call. */
 export interface RegistrationContext {
     source: PluginSource;
     pluginName: string;
@@ -28,6 +32,7 @@ export interface RegistrationContext {
 
 // ── SpurPlugin interface ─────────────────────────────────────────────
 
+/** Contract every Spur plugin module must implement. */
 export interface SpurPlugin {
     readonly name: string;
     readonly version: string;
@@ -38,6 +43,7 @@ export interface SpurPlugin {
 
 // ── Error classes ────────────────────────────────────────────────────
 
+/** Thrown when two plugins try to register the same capability:name pair. */
 export class PluginCollisionError extends Error {
     constructor(capability: Capability, name: string, existingPlugin: string) {
         super(`Plugin collision: '${name}' already registered for '${capability}' by '${existingPlugin}'`);
@@ -45,6 +51,7 @@ export class PluginCollisionError extends Error {
     }
 }
 
+/** Thrown when a trust level forbids a capability registration. */
 export class PluginTrustError extends Error {
     constructor(pluginName: string, capability: Capability, level: TrustLevel, reason: string) {
         super(`Trust error for '${pluginName}': ${capability} denied at trust level '${level}' — ${reason}`);
@@ -52,6 +59,7 @@ export class PluginTrustError extends Error {
     }
 }
 
+/** Thrown when a plugin did not declare a capability:name in its manifest. */
 export class PluginNotDeclaredError extends Error {
     constructor(pluginName: string, capability: Capability, name: string) {
         super(`Plugin '${pluginName}' did not declare capability '${capability}:${name}' in its manifest`);
