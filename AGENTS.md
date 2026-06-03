@@ -12,23 +12,34 @@ visibility.
 
 ## Documentation map
 
-Read the doc that governs your change before editing code. On conflict, **lower number wins**
-(`00_ADR` is binding and overrides all others). Edit the **authoritative** doc for a topic; never
-fix a symptom in a derived doc.
+Each doc owns exactly **one question** about the system and is the single source of truth for it.
+A fact lives in **one** doc; other docs link to it, never restate it. Read the doc that governs
+your change before editing code; edit the **authoritative** doc for the topic, never patch a
+symptom in a derived one.
 
-| Doc | Answers | Authority | When to read / edit |
-|-----|---------|-----------|---------------------|
-| `docs/00_ADR.md` | *Why* the structure is this way — binding architecture decisions | **Authoritative** (wins all conflicts) | Read before any structural change; edit (add a dated entry) before diverging from a decision |
-| `docs/01_PRD.md` | *What* the product is, scope, in/out of scope | Authoritative for scope | Read before adding a command/feature; edit when scope changes |
-| `docs/02_ROADMAP.md` | *When* — phases, current vs deferred work | Derived from PRD/ADR | Read to place work in a phase; edit when phase status changes |
-| `docs/03_ARCHITECTURE.md` | *How* — current module boundaries, data flow, invariants | Derived from ADR (ADR wins) | Read before cross-module/seam/schema work; edit when boundaries actually change |
-| `docs/04_DESIGN.md` | Concrete surface — every CLI command, config schema, data shapes | Derived | Read/edit when changing a command, flag, env var, or table |
-| `docs/05_FEATURES.md` | Feature decomposition + status (✅/🔶/⏳/💤) | Derived | Read to find a feature's state; edit when a feature's status changes |
+**Conflict rule:** lower number wins. `00_ADR` is binding and overrides all others on *decisions*;
+`01_PRD` is authoritative on *scope*. On conflict, fix the authoritative doc and flag the drift.
 
-A code change that contradicts `00_ADR.md` requires editing the ADR first (add a new dated entry
-that supersedes the old one — never silently diverge). Any new cross-cutting choice (a new
-app/package, a transport swap, an auth boundary, a DB swap) gets a new ADR entry. A change that
-touches a command/config/schema must keep `04_DESIGN.md` in sync **in the same commit**.
+| Doc | Owns the question | Authority | Read / edit when |
+|-----|-------------------|-----------|------------------|
+| `docs/00_ADR.md` | **WHY** — which cross-cutting decision was made, and the one-line reason | **Authoritative** (wins all) | Read before any structural change; add a dated entry before diverging from a decision |
+| `docs/01_PRD.md` | **WHAT** — product vision, users, scope (in / out / deferred) | **Authoritative on scope** | Read before adding a command/feature; edit when scope changes |
+| `docs/02_ROADMAP.md` | **WHEN** — phases, current vs deferred, sequencing | Derived | Read to place work in a phase; edit when phase status changes |
+| `docs/03_ARCHITECTURE.md` | **HOW** — module boundaries, data flow, runtime model, invariants, the *rationale* behind a decision | Derived (ADR wins) | Read before cross-module/seam/schema work; edit when boundaries or mechanisms change |
+| `docs/04_DESIGN.md` | **SURFACE** — concrete shapes: every CLI command, flag, config key, env var, table, DTO | Derived | Read/edit when changing a command, flag, env var, or schema |
+| `docs/05_FEATURES.md` | **STATUS** — feature decomposition + state (✅ done / 🔶 partial / ⏳ planned / 💤 deferred) | Derived | Read to find a feature's state; edit when a feature's status changes |
+
+**Routing — put each fact in its owning doc, link from the rest:**
+
+- Decision + one-line reason → `00`. Rationale/consequences in depth → `03`.
+- Scope (in/out/deferred) → `01`. Mechanism / data flow / invariants → `03`.
+- Command/flag/config/schema/DTO shapes → `04`. Phase timing → `02`. Feature status → `05`.
+- If you're writing *how it's built* or *why* inside `00`/`01`/`02`, it belongs in `03`/`04`.
+
+A code change that contradicts `00_ADR.md` requires adding a new dated ADR entry that supersedes the
+old one **first** — never silently diverge. Any new cross-cutting choice (new app/package, transport
+swap, auth boundary, DB swap) gets a new ADR entry pointing to its `03`/`04` detail. A change that
+touches a command/config/schema keeps `04_DESIGN.md` in sync in the **same commit**.
 
 ## Stack & layout
 
@@ -155,7 +166,7 @@ If a check fails, fix the root cause. **Never** bypass with `--no-verify`, `--fo
 ## Testing
 
 - Tests live in `tests/` next to the code (`<workspace>/tests/**/*.test.ts`), using `bun:test`.
-- Coverage target is **line >= 85% and function >= 90% in aggregate** (`bunfig.toml`).
+- Coverage target is **per file line >= 90% and function >= 90% in aggregate** (`bunfig.toml`).
 - DAOs test against in-memory SQLite (`:memory:`); inject a fresh adapter per test.
 - Names describe behavior under a condition; assertions tie to the requirement, not the implementation.
 
