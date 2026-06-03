@@ -1,9 +1,9 @@
 ---
 name: "Extract packages/app application services layer"
 description: "Extract an application services layer (packages/app) from fat CLI command files to restore pre-migration architecture separation and create natural plugin seams"
-status: Todo
+status: Done
 created_at: 2026-06-02T18:00:00Z
-updated_at: 2026-06-02T18:00:00Z
+updated_at: 2026-06-03T07:21:38.806Z
 folder: docs/tasks
 type: task
 feature-id: "F-4 app-services"
@@ -384,6 +384,31 @@ The parent's own gates (R8 public-API surface, R11 full gate including `test-cf`
 27. Run `bun run autofix && bun run spur-check`.
 28. Manual smoke: `spur rule run`, `spur agent run "hello"`, `spur workflow list`, `spur history analyze`.
 29. Verify `git status` shows only intentional changes; no dead code left in `commands/`.
+
+### Testing
+
+- Command: `bun run lint`, `bun run test`, `bun run test-cf`, `bun run build`, `bun run test-pre-check`, `bun run test-post-check`; golden-snapshot R10 diff
+- Scope: full integrated tree after extracting all four services
+- Result: PASS. lint clean (7 workspaces typecheck); 262 tests pass / 0 fail across 44 files; test-cf 1 pass; build all workspaces; pre-check "All 10 rules passed"; post-check "All 3 rules passed". Service coverage: rule 97.56%/99.63%, agent/workflow/history 100%/100%.
+- Evidence: R10 — `.tmp/golden-0005` vs `.tmp/after-0005` byte-identical for all 10 sampled commands (rule run/list, agent list, workflow list, history analyze; plain + --json), exit codes preserved.
+- Next action: none. All four children Done.
+
+### Review
+
+**Verdict: PASS** (dev-verify --force, 2026-06-03).
+
+Aggregate verification of the four child extractions (0008 scaffold, 0009 Rule, 0010 Agent, 0011 Workflow+History), all Done.
+
+Phase 7 (SECU) across `packages/app`: clean. One P3 type-safety finding (workflow double-cast) fixed under `--fix all`.
+
+Phase 8 (parent requirements traceability):
+- R7/R8: `@gobing-ai/spur-app` exports all four services (RuleService, AgentService, WorkflowAppService, HistoryService) + 15 result/option/context types; no internal helpers leaked. MET.
+- R10: byte-identical CLI behavior — all 10 sampled commands diff identical to the pre-refactor baseline; exit codes preserved. MET.
+- R11: full gate green — lint, 262 tests (0 fail), test-cf, build, test-pre-check ("All 10 rules passed"), test-post-check ("All 3 rules passed"). MET.
+- R12: domain boundary intact — `packages/app` → `@gobing-ai/spur-domain` via public index only; no reverse import; no code moved out of domain; domain still exports DbAdapter/createMigratedDb/applyCliMigrations/DAOs/schema/analytics. MET.
+- R6: rule.ts 70 (≤100), agent.ts 35 (≤80) MET; workflow.ts 66 (+6) and history.ts 62 (+2) are minor accepted variances from the ≤60 target (workflow grew from inlining `requiredWorkflowFile` to keep the public API clean per R8).
+
+Commits: 7e9d2d4 (scaffold), d355d62 (service extraction), 71a5481 (verify type fix), task-doc backfills.
 
 ### References
 
