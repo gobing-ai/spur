@@ -7,6 +7,7 @@ export {
     CLI_MIGRATIONS,
     CLI_SCHEMA_SQL,
     type CliMigration,
+    INBOX_MESSAGES_SCHEMA_SQL,
     loadSqlMigrations,
 } from './migrations';
 export { DOMAIN_SCHEMA_SQL } from './schema';
