@@ -39,8 +39,7 @@
         "build:binary": "bun build src/index.ts --compile --outfile ../../dist/cli/spur",
         "test": "bun test tests --coverage --pass-with-no-tests",
         "typecheck": "tsc --noEmit",
-        "prepublishOnly": "bun run build",
-        "release": "bun publish"
+        "prepublishOnly": "bun run build"
     },
     "devDependencies": {
         "@gobing-ai/spur-config": "workspace:0.1.0",
