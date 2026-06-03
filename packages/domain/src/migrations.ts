@@ -11,6 +11,30 @@ export interface CliMigration {
     sql: string;
 }
 
+/**
+ * DDL for the team-mode `inbox_messages` table owned by `@gobing-ai/ts-db`
+ * (`InboxMessageDao`). ts-db ships the Drizzle table but no SQL constant, so the
+ * DDL is mirrored here and kept byte-compatible with `drizzle/0001_spur_team_inbox.sql`.
+ * Column types and the `(to_id, status)` pending-lookup index must match the package.
+ */
+export const INBOX_MESSAGES_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS inbox_messages (
+    id TEXT PRIMARY KEY,
+    from_id TEXT,
+    to_id TEXT NOT NULL,
+    body TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued',
+    in_reply_to TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    delivered_at INTEGER,
+    inject_attempts INTEGER NOT NULL DEFAULT 0,
+    inject_error TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_inbox_messages_to_status ON inbox_messages (to_id, status);
+`;
+
 /** SQL that creates the Spur CLI-owned domain tables plus package-owned tables. */
 export const CLI_SCHEMA_SQL = `
 ${DOMAIN_SCHEMA_SQL}
@@ -18,10 +42,21 @@ ${DOMAIN_SCHEMA_SQL}
 ${HISTORY_IMPORT_SCHEMA_SQL}
 
 ${WORKFLOW_ENGINE_SCHEMA_SQL}
+
+${INBOX_MESSAGES_SCHEMA_SQL}
 `;
 
-/** Built-in migrations for compiled binaries and test use. */
-export const CLI_MIGRATIONS: CliMigration[] = [{ id: '0000_spur_cli_foundation', sql: CLI_SCHEMA_SQL }];
+/**
+ * Built-in migrations for compiled binaries and test use. `0000` provisions a
+ * fresh database with the full current schema (inbox included); `0001` is the
+ * incremental step that adds `inbox_messages` to databases created before team
+ * mode. Both are idempotent (`CREATE TABLE IF NOT EXISTS`), so applying them in
+ * sequence is safe regardless of the database's age.
+ */
+export const CLI_MIGRATIONS: CliMigration[] = [
+    { id: '0000_spur_cli_foundation', sql: CLI_SCHEMA_SQL },
+    { id: '0001_spur_team_inbox', sql: INBOX_MESSAGES_SCHEMA_SQL },
+];
 
 /** Filename marker for regenerated CLI-owned migrations. */
 export const CLI_MIGRATION_FILE_MARKER = '_spur_cli_';
