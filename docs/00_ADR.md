@@ -204,5 +204,4 @@ must still be load-bearing because first-party primitives will migrate onto it l
 readings are withdrawn. **Scope authority:** sandboxing-out-of-scope follows `01_PRD §5.4`.
 
 **Detail:** `03 §11 Plugin Substrate` (mechanism, two-class loading, trust engine, harness overlay);
-manifest/config schemas and the trust ladder in `04 §6 Plugin System`. *(Sections added in the
-03/04 migration step.)*
+manifest/config schemas and the trust ladder in `04 §6 Plugin System`.

@@ -2,7 +2,7 @@
 
 **Version:** 1.0.0
 **Status:** Active
-**Last Updated:** 2026-05-30
+**Last Updated:** 2026-06-03
 **Owner:** Robin Min
 
 ## 1. Product Vision
@@ -69,6 +69,7 @@ them.
 | History import (7 sources) | `spur history import` | `ts-llm-jsonl-importer` | done |
 | History cost analytics | `spur history analyze` | local analytics consumer | done |
 | History report surface | `spur history report` | placeholder | TODO marker only |
+| Agent run execution | `spur agent run` | `ts-ai-runner` (`AiRunner`) | wip — single-shot done; team-mode pending verification |
 
 ### 5.2 Supporting utilities
 
@@ -81,8 +82,6 @@ temporary helper until the migration lifecycle is finalized.
 
 Carried in old spur but **not** ported until their need and design are reconfirmed:
 
-- **Agent run execution** (`spur agent run <task>`) — `ts-ai-runner` exposes `AiRunner`; the CLI
-  surface and run-capture model need design.
 - **Rich run inspection** (timeline, events, gates, artifacts) — depends on a run model wired
   through the workflow engine's persistence.
 - **Asset inspection / SSOT asset model** — old `@spur/assets` was discarded; rebuild only if needed.

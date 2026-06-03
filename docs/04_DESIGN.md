@@ -3,7 +3,7 @@
 **Version:** 1.0.0
 **Status:** Active
 **Derived from:** `docs/03_ARCHITECTURE.md`, current codebase
-**Last Updated:** 2026-05-30
+**Last Updated:** 2026-06-03
 **Owner:** Robin Min
 
 The external, user-facing design surface: every CLI command, the config schema, and the persisted
@@ -180,3 +180,34 @@ One config object per source: `source` discriminant, `displayName`, `filePattern
 | `GET /` | Redirect to `/api/health` |
 
 Web (`apps/web`) renders live health from the typed oRPC client. Deeper read surface is Phase 4.
+
+## 6. Plugin System (Design — deferred, no code shipped; ADR-012)
+
+> Forward design only. The shapes below are the SDK/loader contract ADR-012 commits to; they become
+> active as Phase-5 slices land. Mechanism lives in `03 §11`.
+
+All plugin files are **YAML**, validated by a per-file-type Zod schema (the SSOT for that file) —
+one format across the project, no new parser. A file is never consumed unvalidated; `safeParse`
+failures surface in the loader's `validate()` step (bad **bundled** → fail-fast, bad `local` →
+logged and skipped).
+
+### 6.1 Manifest — `plugin.yaml` (`PluginManifestSchema`)
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `name` | string | Unique plugin id. |
+| `version` | semver string | Plugin version. |
+| `trust` | enum | `bundled` \| `curated` \| `local` \| `untrusted`. |
+| `capabilities` | record | Declared capabilities by kind (command, api, ui, event, harness, provider, rule, skill/worker). A plugin may register only what it declares and its tier permits. |
+| `allow` | block (optional) | Declared resource grants (forward-looking; not runtime-enforced in Phase 1). |
+
+### 6.2 Config override — `.spur/plugins/<name>.yaml` (`PluginConfigSchema`)
+
+Per-plugin override layer, validated (by `PluginConfigSchema` or a plugin-supplied `configSchema`)
+**before** merge over the plugin's defaults.
+
+### 6.3 Trust ladder
+
+`bundled` > `curated` > `local` > `untrusted`. Used for **registration-time capability gating**
+only. `bundled` is never gated. `untrusted` is **not loaded** (fail-closed). Runtime sandboxing is
+out of scope (PRD §5.4).

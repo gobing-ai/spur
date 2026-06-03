@@ -3,7 +3,7 @@
 **Version:** 1.0.0
 **Status:** Canonical
 **Derived from:** `docs/01_PRD.md`, `docs/00_ADR.md`
-**Last Updated:** 2026-05-30
+**Last Updated:** 2026-06-03
 **Owner:** Robin Min
 
 This document describes the **current** architecture of Spur. It specifies module boundaries
@@ -163,6 +163,22 @@ Tables: `workspaces`, `runs`, `phase_runs`, `transition_runs`, `workflow_states`
 `history_import_ledger`, `history_import_checkpoint`, `history_etl_<source>`, plus the workflow
 engine's tables.
 
+### 8.1 Persistence boundary (ADR-011)
+
+Spur consumes `@gobing-ai/ts-db` as a drizzle-free facade with a single-source-of-truth schema
+model, so table/DDL/Zod drift is structurally impossible. Five rules, enforced by
+`.spur/rules/boundary/dao-boundary.yaml`:
+
+1. **`ts-db` is imported only inside `packages/domain`** — apps and the other local packages consume
+   persistence through `@gobing-ai/spur-domain` DAOs, never `ts-db` or the raw adapter directly.
+2. **`drizzle-orm` is confined to `packages/domain/src/schema/`** — column builders are input to
+   `defineTable`; no other file (DAOs, analytics, apps) may import drizzle.
+3. **Tables are defined with `defineTable`** (from `@gobing-ai/ts-db/schema`), never bare
+   `sqliteTable`; each schema file exports the `DefinedTable` plus its `.table`.
+4. **DDL is derived, never hand-written** — `DOMAIN_SCHEMA_SQL` composes each table's
+   `createTableSql`; no raw `CREATE TABLE` for a Drizzle-backed table, no `.sql` text-imports.
+5. **Raw string SQL stays inside `packages/domain`** (DAO/migration layer), never in apps.
+
 ## 9. Observability & Security
 
 - Logging/telemetry ride `ts-infra` (logger + OpenTelemetry); telemetry is opt-in, default local-only.
@@ -180,3 +196,41 @@ engine's tables.
 | Old migrations reactivated | Inert under `_legacy_reference/`; loader filters `_spur_cli_` marker |
 | Engine MVP gaps mistaken for parity | Roadmap Phase 3 tracks the depth restore explicitly |
 | History raw bloat / parse errors | Raw stays in files; only validated ETL persisted (ADR-008) |
+
+## 11. Plugin Substrate (Design — deferred, no code shipped; ADR-012)
+
+> Forward design only. No plugin code ships yet (`05_FEATURES` marks it `💤`). This section is the
+> mechanism the ADR-012 decision points to; it becomes "current" as Phase-5 slices land.
+
+The plugin system is the project's **foundational extension substrate**, designed from day one to
+carry first-party primitives (harnesses, rule evaluators, providers, history sources, workflow
+actions) — even though those migrate onto it incrementally rather than up front. It sits **below**
+most capability code, on the startup hot path.
+
+- **Standalone SDK.** `packages/plugin-sdk` (`@gobing-ai/spur-plugin-sdk`) depends only on
+  `ts-infra` (`Logger`, `EventBus`, `EventMap`). The host (`packages/app`) depends on the SDK; the
+  SDK never depends on core — no circular `app ↔ sdk` edge.
+- **Two-class loading.** The loader splits plugins by origin: **core/bundled** plugins (shipped in
+  the install dir) load **fail-fast** — a failure is a fatal startup error because the plugin *is*
+  the system — while **`local`/`curated`** plugins are **fail-soft** (logged and skipped, never
+  crash Spur). "Invalid plugins are skipped" applies only to the non-core classes.
+- **Built-ins are pre-registered, not special-cased.** Current hardcoded built-ins (the seven
+  `AgentShim`s, rule evaluators, …) are modeled as implicit pre-registrations through the same
+  `register()` path a future bundled-plugin primitive uses, so later migration is a *move*, not a
+  re-architecture.
+- **Trust ladder (`bundled` > `curated` > `local` > `untrusted`)** ships as **registration-time
+  gating** only: a plugin cannot register a capability it did not declare or its tier forbids.
+  `bundled` is the floor the core stands on and is **never gated**. Runtime sandboxing (fs/net/shell
+  isolation) is **accepted out of scope** (PRD §5.4 + ADR-010); the `untrusted` tier is not loaded
+  at all (fail-closed).
+- **Harness registry — no upstream change.** `AgentName` is a compile-time union only; at runtime
+  `AGENT_SHIMS` is a plain object and a harness only needs to satisfy the structural `AgentShim`
+  interface. The Spur-side `HarnessRegistry` keeps a `Map<string, AgentShim>` overlay: resolution
+  checks the overlay first, then falls back to `getAgentShim` for built-ins.
+- **Event seam.** A thin Spur-side `EventRegistry` wraps the typed `EventBus`, fanning glob patterns
+  (`agent.*`, `*`) out to concrete keys and rate-limiting high-churn events (`usage.record`).
+- **Explicit startup ordering.** Discovery/registration of core plugins runs **before** command
+  dispatch and **before** the server mounts routes, so a primitive is available the moment any
+  dependent code runs. Registry `register()` signatures are public, SemVer-significant SDK contracts.
+
+Concrete file shapes (manifest, config, trust enum) live in `04 §6`.
