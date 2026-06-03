@@ -47,27 +47,57 @@ R1: Create packages/app/package.json with name @gobing-ai/spur-app, type module,
 
 - [x] Inspect sibling package manifests (`config`, `domain`) + tsconfig + tooling presets for the canonical shape
 - [x] Verify dependency drift: lockfile on 0.3.0, node_modules half-stale
-- [ ] Create `packages/app/package.json` (`@gobing-ai/spur-app`, deps per parent R7, `catalog:` for shared)
-- [ ] Create `packages/app/tsconfig.json` extending `tooling/typescript/base.json`
-- [ ] Create `packages/app/src/index.ts` placeholder
-- [ ] Run `bun install` → reconcile node_modules to lockfile (0.3.0), resolve `@gobing-ai/spur-app`
-- [ ] Verify `@gobing-ai/spur-app` resolves; `bun run lint` green
-- [ ] Smoke-test a sibling import of the empty package
+- [x] Create `packages/app/package.json` (`@gobing-ai/spur-app`, deps per parent R7, `catalog:` for shared)
+- [x] Create `packages/app/tsconfig.json` extending `tooling/typescript/base.json`
+- [x] Create `packages/app/src/index.ts` placeholder
+- [x] Run `bun install` → reconcile node_modules to lockfile (0.3.0), resolve `@gobing-ai/spur-app`
+- [x] Verify `@gobing-ai/spur-app` resolves; `bun run lint` green
+- [x] Smoke-test a sibling import of the empty package
 
 
 ### Plan
 
 - [x] Inspect sibling package manifests (`config`, `domain`) + tsconfig + tooling presets for the canonical shape
 - [x] Verify dependency drift: lockfile on 0.3.0, node_modules half-stale
-- [ ] Create `packages/app/package.json` (`@gobing-ai/spur-app`, deps per parent R7, `catalog:` for shared)
-- [ ] Create `packages/app/tsconfig.json` extending `tooling/typescript/base.json`
-- [ ] Create `packages/app/src/index.ts` placeholder
-- [ ] Run `bun install` → reconcile node_modules to lockfile (0.3.0), resolve `@gobing-ai/spur-app`
-- [ ] Verify `@gobing-ai/spur-app` resolves; `bun run lint` green
-- [ ] Smoke-test a sibling import of the empty package
+- [x] Create `packages/app/package.json` (`@gobing-ai/spur-app`, deps per parent R7, `catalog:` for shared)
+- [x] Create `packages/app/tsconfig.json` extending `tooling/typescript/base.json`
+- [x] Create `packages/app/src/index.ts` placeholder
+- [x] Run `bun install` → reconcile node_modules to lockfile (0.3.0), resolve `@gobing-ai/spur-app`
+- [x] Verify `@gobing-ai/spur-app` resolves; `bun run lint` green
+- [x] Smoke-test a sibling import of the empty package
 
 
 ### Review
+
+## Review — 2026-06-03 (dev-verify --force --fix all)
+
+**Verdict: PASS**
+**Scope:** `packages/app/{package.json,tsconfig.json,src/index.ts}` plus current public index after downstream service extractions
+**Mode:** verify (Phase 7 SECU + Phase 8 traceability)
+**Channel:** current
+**Gate:** `bun run check` → PASS after fix pass
+
+### Phase 7 — SECU
+
+No remaining findings across Security, Efficiency, Correctness, and Usability for the 0008 scaffold surface. The scope is workspace metadata, TypeScript config, and public exports; no secrets, unsafe sinks, database loops, broad `any`, or swallowed errors were found.
+
+### Phase 8 — Requirements Traceability
+
+- [x] **R1** package manifest (`@gobing-ai/spur-app`, type module, exports, full parent R7 dependency set, `catalog:` where shared) → **MET** | `packages/app/package.json`; `--fix all` restored `@gobing-ai/spur-config`, `@gobing-ai/ts-utils`, and `@gobing-ai/ts-infra`, then `bun install` reconciled `bun.lock`.
+- [x] **R2** tsconfig extends ts-base → **MET** | `packages/app/tsconfig.json` extends `../../tooling/typescript/base.json`.
+- [x] **R3** workspace registered + resolves → **MET** | root `packages/*` workspace glob; `bun pm ls` includes `@gobing-ai/spur-app@workspace:packages/app`.
+- [x] **R4** public index exists → **MET** | `packages/app/src/index.ts` now exports the extracted service API after tasks 0009–0011.
+- [x] **R5** install clean, lint green, sibling import resolves → **MET** | `bun install` exit 0; `bun --cwd apps/cli -e "import('@gobing-ai/spur-app')"` resolved `AgentService`, `HistoryService`, `RuleService`, `WorkflowAppService`; `bun run check` passed.
+
+### Findings Fixed
+
+| # | Title | Dimension | Location | Resolution |
+|---|-------|-----------|----------|------------|
+| 1 | Manifest drift from required parent dependency set | Correctness | `packages/app/package.json` | Restored the three required dependencies removed from the dirty tree and reconciled the lockfile with `bun install`. |
+
+### Post-fix Verdict
+
+PASS. No P1/P2/P3/P4 findings remain, all 0008 requirements are met, and the project check gate is green.
 
 ## Review — 2026-06-03 (dev-verify --force)
 
@@ -110,5 +140,4 @@ Found and repaired a **dangling global `bun link`** for `@gobing-ai/ts-rule-engi
 | ---- | ---- | ----- | ---- |
 
 ### References
-
 
