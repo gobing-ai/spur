@@ -1,9 +1,9 @@
 ---
 name: "Wire team mode into Spur CLI and app layer"
 description: "Consume ts-ai-runner team mode primitives, wire up CLI commands (spur message, spur team, spur agent create), add DB migration for inbox_messages, and build the TeamService application layer"
-status: Todo
+status: Done
 created_at: 2026-06-02T18:15:00Z
-updated_at: 2026-06-02T18:15:00Z
+updated_at: 2026-06-03T16:34:24.293Z
 folder: docs/tasks
 type: task
 feature-id: "F-6 team-mode"
@@ -16,9 +16,9 @@ tags: ["team-mode", "feature", "cli", "app-services", "messaging", "orchestratio
 impl_progress:
   planning: pending
   design: pending
-  implementation: pending
-  review: pending
-  testing: pending
+  implementation: completed
+  review: completed
+  testing: completed
 ---
 
 ## 0007. Wire Team Mode into Spur CLI and App Layer
@@ -322,6 +322,237 @@ export class TeamService {
 41. `bun run build` succeeds.
 42. `bun run autofix && bun run spur-check` passes.
 43. Manual smoke test: full round-trip with two agents.
+
+### Solution
+
+Wired team mode end-to-end across DB, app layer, and CLI by consuming the
+`@gobing-ai/ts-ai-runner@0.3.0` team primitives (`TeamOrchestrator`,
+`MessageService`, `buildIdentityPreamble`, agent-spec helpers) and the
+`@gobing-ai/ts-db@0.3.0` `InboxMessageDao`.
+
+**DB (R1).** Added `drizzle/0001_spur_team_inbox.sql` (with the `_spur_cli_`
+marker) and an `INBOX_MESSAGES_SCHEMA_SQL` constant in
+`packages/domain/src/migrations.ts`, folded into `CLI_SCHEMA_SQL` and registered
+as a discrete `0001_spur_team_inbox` entry in `CLI_MIGRATIONS` so existing
+databases get the table incrementally. DDL mirrors the ts-db Drizzle schema
+(11 columns + `(to_id, status)` index).
+
+**App layer (R2).** Added `packages/app/src/services/team-service.ts` —
+`TeamService` wraps the orchestrator/message-service over the CLI `DbAdapter`
+with lazily-built DB dependencies. Methods: `sendMessage`, `getInbox`,
+`replyToMessage` (threads to the original sender via `in_reply_to`), `getStatus`,
+`assignTask` (sets `assignee:` in task frontmatter), `createAgentSpec`/
+`deleteAgentSpec`/`listAgentSpecs`, `buildIdentity`. Added `@gobing-ai/ts-db` to
+the app package (catalog ref). Exported from `packages/app/src/index.ts`.
+
+**CLI (R3-R7).**
+- `spur agent run` extended flags (`--purpose/--tags/--system-prompt/--task`)
+  map straight through to the upstream `PromptOptions` identity-preamble fields;
+  `--drain` resolves the addressed `--agent <spec-id>`, folds its pending inbox
+  into the prompt, and rewrites `--agent` to the spec's coding-agent type.
+- New `apps/cli/src/commands/message.ts` (`send|inbox|reply`) and
+  `apps/cli/src/commands/team.ts` (`assign|status` + `start|stop` Phase-4 stubs).
+- `spur agent create|edit|delete` + `list --specs` added to `agent.ts`.
+- `spur init` now scaffolds `.spur/agents/.gitkeep` (always, even `--minimal`);
+  `spur status` reports agent spec ids found there.
+- Registered `message` and `team` groups in `apps/cli/src/index.ts` + help text.
+
+**Design coherence note.** Agent-spec `type` and the runner's `AgentName` are
+distinct namespaces (`claude-code` spec type vs. `claude` runner name). The
+`--drain` path makes this explicit by mapping spec id → spec type. Upstream
+`validateAgentId` (`[a-z][a-z0-9_-]{1,63}`) and the non-empty-`purpose`
+round-trip requirement are honored rather than re-implemented; empty purpose
+defaults to `"<type> agent"`.
+
+**Phase 4 (R8)** — `spur team start|stop` ship as the specified deferred stubs;
+the persistent daemon, HTTP API, and SSE streaming remain out of scope.
+
+`docs/04_DESIGN.md` (command surface + `inbox_messages` table row) and
+`docs/05_FEATURES.md` (new Team Mode section) updated in sync.
+
+
+### Testing
+
+Verified 2026-06-03. All five gate commands pass.
+
+- `bun run lint` — Biome clean + `tsc --noEmit` green across all 7 workspaces.
+- `bun run test` — **327 pass, 0 fail**, 844 assertions, 48 files. Coverage gate
+  met: aggregate **100% function / 99.36% line** (threshold 90% func / 85% line).
+  New code coverage: `team-service.ts` 100%/100%, `message.ts` 100%/100%,
+  `team.ts` 100%/100%, `agent.ts` 100%/100%, `migrations.ts` 100%/100%.
+- `bun run test-cf` — server Cloudflare Workers Vitest: 1 file / 1 test pass.
+- `bun run build` — cli (1.51 MB bundle), server (compiled), web (Astro) all
+  exit 0.
+
+New tests:
+- `packages/app/tests/services/team-service.test.ts` — 16 tests: send/inbox/reply
+  flow (incl. reply threading + operator-originated rejection), spec
+  create/delete/list (duplicate + invalid-id guards), `getStatus`, `assignTask`
+  (set/replace/missing), `buildIdentity` peers (R9.5).
+- `apps/cli/tests/commands/message.test.ts` — 11 tests (R9.1).
+- `apps/cli/tests/commands/team.test.ts` — 8 tests incl. assign mutates task file
+  (R9.4) and daemon stubs.
+- `apps/cli/tests/commands/agent-team.test.ts` — create/edit/delete/list-specs +
+  `run --drain` with injected runner doubles (R9.2, R9.3).
+- Extended `migrations.test.ts` (inbox table + 0001 migration), `init.test.ts`
+  (`.spur/agents/.gitkeep`), `status.test.ts` (spec reporting), `agent-service.test.ts`
+  (team-flag pass-through), `dispatch-inspect.test.ts` (message/team routing).
+
+Manual smoke (R10.6) on a fresh temp project: `init` → `agent create planner
+--type claude` → `agent list --specs` → `message send/inbox/reply` (reply threaded
+to sender) → `team assign 0099 planner` (frontmatter mutated) → `team status` →
+`status --json` (agentSpecs listed) → `team start` (stub) → `agent delete --force`.
+All round-trip correctly.
+
+No tests skipped, `.skip`'d, or commented out.
+
+
+### Review
+
+
+
+**Verdict: PASS** (self-review; workflow-owned verification, `--channel current`).
+
+Traceability — every requirement met:
+- R1 (DB migration) ✅ — `0001_spur_team_inbox.sql` + registered; table usable after migration (tested).
+- R2 (TeamService) ✅ — all specified methods present + exported; 100% covered.
+- R3 (agent run flags) ✅ — `--purpose/--tags/--system-prompt/--task` → PromptOptions; `--drain` folds inbox; existing `spur agent run "x"` unchanged.
+- R4 (message group) ✅ — send/inbox/reply with `--json`; reply threads via `in_reply_to`.
+- R5 (agent create/edit/delete) ✅ — spec YAML; upstream `validateAgentId`; duplicate + missing guards; `list --specs`.
+- R6 (team group) ✅ — assign mutates frontmatter; status lists specs; start/stop stubs.
+- R7 (`.spur/agents/`) ✅ — init `.gitkeep`; status reports specs.
+- R8 (Phase 4) ✅ — stubs only, as specified; daemon deferred.
+- R9 (tests/coverage) ✅ — 327 pass; aggregate 100% func / 99.36% line.
+- R10 (gate) ✅ — lint/test/test-cf/build all green; manual smoke passed.
+
+Risks / follow-ups (non-blocking):
+- Spec `type` vs runner `AgentName` namespace gap is real; `--drain` maps id→type,
+  but a spec whose `type` isn't a valid `AgentName` will only fail at `run`
+  resolution time. Acceptable for Phase 1-3; revisit when the daemon lands.
+- `index.ts` lines 141-147 (`import.meta.main` entrypoint) are structurally
+  uncovered by tests — pre-existing pattern, not a regression.
+- ADR check: no `00_ADR.md` divergence — change consumes package-owned schema
+  (ADR-007) and stays local-first (ADR-010); `04_DESIGN.md` + `05_FEATURES.md`
+  updated in the same change.
+
+SECU: no secrets, no `.env`, no external network; message bodies are stored
+verbatim in local SQLite (operator-trusted). No injection surface (parameterized
+DAO queries upstream).
+
+
+
+---
+
+## Verification — 2026-06-03 (`/rd3:dev-verify --fix all --force`)
+
+**Mode:** verify (Phase 7 SECU + Phase 8 traceability) · **Channel:** current (dogfood-safe)
+**Scope:** team-service.ts, message.ts, team.ts, agent.ts, init.ts, status.ts, agent-service.ts, migrations.ts, 0001_spur_team_inbox.sql
+**Gate after fix:** `bun run lint` PASS · `bun run test` 328 pass / 0 fail · coverage 100% func / 99.36% line
+**Verdict: PASS** (1 P2 found and fixed; no open blockers)
+
+### P1 — Blockers
+_None._
+
+### P2 — Warnings (fixed in this pass)
+| # | Title | Dimension | Location | Resolution |
+|---|-------|-----------|----------|------------|
+| 1 | `team assign` corrupts task files whose frontmatter contains a `$`-sequence | Correctness | `team-service.ts:316` (`setFrontmatterField`) | `String.replace` interpreted `$&`/`$1`/`` $` ``/`$'` in the replacement string as special patterns. **Fixed** by passing function replacers (`() => …`) so content is written verbatim. Regression test added (`$1.00`/`$&` survive `assignTask`). Logged bug-121. |
+
+### P3 — Info (reviewed, not actioned — intentional design)
+| # | Title | Dimension | Location | Note |
+|---|-------|-----------|----------|------|
+| 2 | `message send --to/--from` not syntactically validated via `validateAgentId` | Correctness | `message.ts:38-48` | Deliberate: team mode addresses agents **before** their spec exists (deferred `--drain` delivery). Recipient flows only into a parameterized DAO insert (no injection) + a CLI display string (no XSS). Adding validation would be a behavior change on a Done task for marginal benefit; declined to avoid over-engineering. |
+| 3 | `agent edit` builds path from raw `id` rather than `spec.id` | Usability | `agent.ts:132` | Equal by construction (`find(e => e.id === id)`); `Bun.spawn` uses array form (no shell injection from `$EDITOR`). Cosmetic only; left as-is. |
+
+### P4 — Suggestions
+_None material._
+
+### Phase 7 SECU summary
+- **Security:** No hardcoded secrets. No shell injection — `Bun.spawn([editor, path])` is array-form (no `sh -c`); a hostile `$EDITOR` cannot inject. No SQL injection — all DB access is via parameterized `InboxMessageDao` (upstream). `assignTask` calls `validateAgentId` before writing, so an `agentId` with newlines/colons cannot inject YAML. `setFrontmatterField` regexes are linear (no ReDoS) and use the literal key `assignee` (no regex injection).
+- **Efficiency:** No N+1 or await-in-loop in the new paths. DB deps built lazily (spec-only ops never open a DB).
+- **Correctness:** One real defect (P2, fixed). No `any`, no empty catch, no swallowed errors. Reply correctly rejects unknown/operator-originated messages.
+- **Usability:** Consistent error messages with exit codes (2 = bad args, 1 = not-found/failure). Clear JSON envelopes.
+
+### Phase 8 — Requirements traceability
+- R1 DB migration → **MET** (`0001_spur_team_inbox.sql` + `INBOX_MESSAGES_SCHEMA_SQL`; table usable, tested).
+- R2 TeamService → **MET** (all methods + exports; 100% covered).
+- R3 agent run flags → **MET** (`--purpose/--tags/--system-prompt/--task` → PromptOptions; `--drain` folds inbox; legacy `run "x"` unchanged).
+- R4 message group → **MET** (send/inbox/reply; reply threads via `in_reply_to`).
+- R5 agent create/edit/delete + list --specs → **MET** (upstream `validateAgentId`; duplicate/missing guards).
+- R6 team group → **MET** (assign now corruption-safe; status lists specs; start/stop stubs).
+- R7 `.spur/agents/` → **MET** (init `.gitkeep`; status reports specs).
+- R8 Phase 4 → **MET** (stubs only, as specified).
+- R9 tests/coverage → **MET** (328 pass; 100% func / 99.36% line).
+- R10 gate → **MET** (lint/test/test-cf/build green; manual smoke passed).
+
+No scope drift. No `00_ADR.md` divergence (consumes package-owned schema ADR-007, stays local-first ADR-010).
+
+
+
+---
+
+### Verify follow-up — 2026-06-03 ("fix all remaining")
+
+The two P3/P4 findings previously marked "intentional / not actioned" were applied
+on request:
+
+- **P3 (Correctness) — recipient id validation.** `TeamService.sendMessage` now
+  runs `validateAgentId` on `toId` and on a non-null `fromId`; `getInbox` validates
+  `agentId`. Existence is still NOT required (deferred `--drain` delivery), only
+  syntax — a typo surfaces immediately instead of creating an unaddressable row.
+- **P3 (Usability) — clean error exits.** `message` and `team` command dispatchers
+  now wrap execution in try/catch, mapping a thrown validation/lookup error to a
+  clean **exit 2** with the message, instead of letting it bubble to the top-level
+  handler as a generic exit 1.
+- **P4 — `agent edit`** builds the spec path from `spec.id` (canonical, validated)
+  rather than the raw `id` argument.
+
+Tests added: service-level (`sendMessage`/`getInbox` reject malformed ids; valid
+future-agent accepted), CLI-level (`message send` bad id → exit 2; `team assign`
+missing task → exit 2). Logged bug-122.
+
+**Gate (post-follow-up):** `bun run lint` PASS · `bun run test` **332 pass / 0
+fail**, coverage 100% func / 99.36% line · `bun run test-cf` PASS · `bun run build`
+all exit 0. Postflight audit: **PASS, 0 blockers**. No open findings remain.
+
+
+### P1 — Blockers
+_None._
+
+### P2 — Warnings (fixed in this pass)
+| # | Title | Dimension | Location | Resolution |
+|---|-------|-----------|----------|------------|
+| 1 | `team assign` corrupts task files whose frontmatter contains a `$`-sequence | Correctness | `team-service.ts:316` (`setFrontmatterField`) | `String.replace` interpreted `$&`/`$1`/`` $` ``/`$'` in the replacement string as special patterns. **Fixed** by passing function replacers (`() => …`) so content is written verbatim. Regression test added (`$1.00`/`$&` survive `assignTask`). Logged bug-121. |
+
+### P3 — Info (reviewed, not actioned — intentional design)
+| # | Title | Dimension | Location | Note |
+|---|-------|-----------|----------|------|
+| 2 | `message send --to/--from` not syntactically validated via `validateAgentId` | Correctness | `message.ts:38-48` | Deliberate: team mode addresses agents **before** their spec exists (deferred `--drain` delivery). Recipient flows only into a parameterized DAO insert (no injection) + a CLI display string (no XSS). Adding validation would be a behavior change on a Done task for marginal benefit; declined to avoid over-engineering. |
+| 3 | `agent edit` builds path from raw `id` rather than `spec.id` | Usability | `agent.ts:132` | Equal by construction (`find(e => e.id === id)`); `Bun.spawn` uses array form (no shell injection from `$EDITOR`). Cosmetic only; left as-is. |
+
+### P4 — Suggestions
+_None material._
+
+### Phase 7 SECU summary
+- **Security:** No hardcoded secrets. No shell injection — `Bun.spawn([editor, path])` is array-form (no `sh -c`); a hostile `$EDITOR` cannot inject. No SQL injection — all DB access is via parameterized `InboxMessageDao` (upstream). `assignTask` calls `validateAgentId` before writing, so an `agentId` with newlines/colons cannot inject YAML. `setFrontmatterField` regexes are linear (no ReDoS) and use the literal key `assignee` (no regex injection).
+- **Efficiency:** No N+1 or await-in-loop in the new paths. DB deps built lazily (spec-only ops never open a DB).
+- **Correctness:** One real defect (P2, fixed). No `any`, no empty catch, no swallowed errors. Reply correctly rejects unknown/operator-originated messages.
+- **Usability:** Consistent error messages with exit codes (2 = bad args, 1 = not-found/failure). Clear JSON envelopes.
+
+### Phase 8 — Requirements traceability
+- R1 DB migration → **MET** (`0001_spur_team_inbox.sql` + `INBOX_MESSAGES_SCHEMA_SQL`; table usable, tested).
+- R2 TeamService → **MET** (all methods + exports; 100% covered).
+- R3 agent run flags → **MET** (`--purpose/--tags/--system-prompt/--task` → PromptOptions; `--drain` folds inbox; legacy `run "x"` unchanged).
+- R4 message group → **MET** (send/inbox/reply; reply threads via `in_reply_to`).
+- R5 agent create/edit/delete + list --specs → **MET** (upstream `validateAgentId`; duplicate/missing guards).
+- R6 team group → **MET** (assign now corruption-safe; status lists specs; start/stop stubs).
+- R7 `.spur/agents/` → **MET** (init `.gitkeep`; status reports specs).
+- R8 Phase 4 → **MET** (stubs only, as specified).
+- R9 tests/coverage → **MET** (328 pass; 100% func / 99.36% line).
+- R10 gate → **MET** (lint/test/test-cf/build green; manual smoke passed).
+
+No scope drift. No `00_ADR.md` divergence (consumes package-owned schema ADR-007, stays local-first ADR-010).
+
 
 ### References
 
