@@ -11,10 +11,11 @@ export async function runStatusCommand(
     positionals: string[] = [],
 ): Promise<number> {
     const targetPath = positionals[0];
-    const [packageJsonExists, spurConfigExists, git] = await Promise.all([
+    const [packageJsonExists, spurConfigExists, git, agentSpecs] = await Promise.all([
         context.fs.exists(join(context.cwd, 'package.json')),
         context.fs.exists(join(context.cwd, '.spur', 'config.json')),
         gitContext(context.cwd),
+        listAgentSpecIds(context),
     ]);
     const target = targetPath === undefined ? undefined : await readTargetStatus(context, targetPath);
 
@@ -23,6 +24,7 @@ export async function runStatusCommand(
         packageJson: packageJsonExists,
         spurConfig: spurConfigExists,
         git,
+        agentSpecs,
         ...(target === undefined ? {} : { target }),
     };
 
@@ -33,6 +35,7 @@ export async function runStatusCommand(
             [
                 `Project: ${status.ok ? 'ok' : 'missing package.json'}`,
                 `.spur: ${spurConfigExists ? 'ok' : 'missing'}`,
+                `Agents: ${agentSpecs.length === 0 ? 'none' : agentSpecs.join(', ')}`,
                 `Git: ${git.root === null ? 'none' : `${git.branch ?? 'detached'}${git.dirty ? ' dirty' : ' clean'}`}`,
                 ...(target === undefined ? [] : [`Path: ${target.path}\t${target.size} bytes`]),
             ].join('\n'),
@@ -40,6 +43,21 @@ export async function runStatusCommand(
     }
 
     return status.ok ? 0 : 1;
+}
+
+/**
+ * List agent spec ids found under `.spur/agents/` (file stem of each `.yaml`/`.yml`).
+ * Tolerant by design: a missing directory yields an empty list and `.gitkeep` is
+ * ignored, so status never fails on an un-initialized or specless project.
+ */
+async function listAgentSpecIds(context: CliContext): Promise<string[]> {
+    const dir = join(context.cwd, '.spur', 'agents');
+    if (!(await context.fs.exists(dir))) return [];
+    const entries = await context.fs.readDir(dir);
+    return entries
+        .filter((entry) => entry.endsWith('.yaml') || entry.endsWith('.yml'))
+        .map((entry) => entry.replace(/\.ya?ml$/, ''))
+        .sort();
 }
 
 async function readTargetStatus(
