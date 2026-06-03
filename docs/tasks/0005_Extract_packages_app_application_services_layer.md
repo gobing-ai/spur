@@ -315,10 +315,10 @@ The split is by **service deliverable** (not by implementation phase): the `pack
 
 #### Subtasks
 
-- [ ] [0008 - Scaffold packages/app workspace and public service index](0008_Scaffold_packages-app_workspace_and_public_service_index.md)
-- [ ] [0009 - Extract RuleService (448-line worst case)](0009_Extract_RuleService_from_rule_command_into_packages-app.md)
-- [ ] [0010 - Extract AgentService](0010_Extract_AgentService_from_agent_command_into_packages-app.md)
-- [ ] [0011 - Extract WorkflowService + HistoryService](0011_Extract_WorkflowService_and_HistoryService_into_packages-app.md)
+- [x] [0008 - Scaffold packages/app workspace and public service index](0008_Scaffold_packages-app_workspace_and_public_service_index.md)
+- [x] [0009 - Extract RuleService (448-line worst case)](0009_Extract_RuleService_from_rule_command_into_packages-app.md)
+- [x] [0010 - Extract AgentService](0010_Extract_AgentService_from_agent_command_into_packages-app.md)
+- [x] [0011 - Extract WorkflowService + HistoryService](0011_Extract_WorkflowService_and_HistoryService_into_packages-app.md)
 
 **Dependency order:** `0008 → (0009 ‖ 0010 ‖ 0011)` — scaffold first, then the three extractions in parallel.
 
@@ -394,6 +394,43 @@ The parent's own gates (R8 public-API surface, R11 full gate including `test-cf`
 - Next action: none. All four children Done.
 
 ### Review
+
+## Review — 2026-06-03 (dev-verify --force --fix all)
+
+**Verdict: PASS**
+**Scope:** aggregate app-services extraction across `packages/app`, CLI command wrappers, service tests, public package API, golden snapshots, and domain boundary
+**Mode:** verify (Phase 7 SECU + Phase 8 traceability)
+**Channel:** current
+**Gate:** `bun run autofix && bun run spur-check` → PASS; `test-cf` and `build` also PASS
+
+### Phase 7 — SECU
+
+No remaining findings across Security, Efficiency, Correctness, or Usability. Prior child-pass fixes are incorporated: async `AgentService` `--cwd` stat checks, exact workflow/history wrapper line counts with required export JSDoc, and type-safe workflow run result derivation. The app layer has no hardcoded secrets, unsafe browser sinks, command execution, broad `any`, blocking sync I/O, empty catches, or domain deep imports.
+
+### Phase 8 — Requirements Traceability
+
+- [x] **R1** `packages/app` workspace scaffold → **MET** | `packages/app/package.json`, `packages/app/tsconfig.json`, and `packages/app/src/` exist and follow workspace conventions.
+- [x] **R2** RuleService extraction → **MET** | `RuleService.evaluate`, `validate`, `list`, private rule roots/listing/formatting helpers, and migrated tests are in `packages/app`.
+- [x] **R3** AgentService extraction → **MET** | `AgentService.resolve`, `run`, `list`, `doctor`, private resolver/output helpers, and DI seam are in `packages/app`.
+- [x] **R4** Workflow service extraction → **MET** | `WorkflowAppService.validate`, `run`, and `list` are implemented with the engine imported as `EngineWorkflowService` to avoid name collision.
+- [x] **R5** History service extraction → **MET** | `HistoryService.import` and `analyze` are implemented with private `parseSource`/`parseMode` helpers.
+- [x] **R6** thin CLI wrappers → **MET** | `rule.ts` 70/100, `agent.ts` 35/80, `workflow.ts` 60/60, `history.ts` 60/60.
+- [x] **R7** app manifest dependencies → **MET** | `packages/app/package.json` includes the required `spur-*` and `ts-*` deps, using `catalog:` for shared packages.
+- [x] **R8** public API exports → **MET after fix pass** | `packages/app/src/index.ts` exports all four services, result types, and parent-required Rule aliases (`RuleEvaluationResult`, `RuleValidateResult`, `RuleListResult`) without re-exporting private helpers.
+- [x] **R9** migrated + thin-wrapper tests → **MET** | service suites live under `packages/app/tests/services/`; CLI command tests remain as thin dispatch coverage.
+- [x] **R10** behavior parity → **MET** | `diff -ru .tmp/golden-0005 .tmp/after-0005` is clean for all sampled plain/json outputs and exit files.
+- [x] **R11** gate → **MET** | `bun run autofix`, `bun run spur-check`, `bun run test-cf`, and `bun run build` all pass; full test suite is 269 pass / 0 fail with aggregate 100% funcs / 99.46% lines.
+- [x] **R12** domain boundary → **MET** | `packages/domain` remains standalone; `packages/app` depends on `@gobing-ai/spur-domain` via public imports only; no reverse app import or domain code move detected.
+
+### Findings Fixed
+
+| # | Title | Dimension | Location | Resolution |
+|---|-------|-----------|----------|------------|
+| 1 | Parent-required Rule result type names missing from public API | Usability | `packages/app/src/index.ts` | Added type-only public aliases: `RuleEvaluationResult`, `RuleValidateResult`, and `RuleListResult`, while preserving the existing `*ServiceResult` names. |
+
+### Post-fix Verdict
+
+PASS. All child tasks are complete, parent R1-R12 are met, no P1/P2/P3/P4 findings remain, and all required gates are green on the final tree.
 
 **Verdict: PASS** (dev-verify --force, 2026-06-03).
 
