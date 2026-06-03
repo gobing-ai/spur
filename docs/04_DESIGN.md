@@ -211,3 +211,26 @@ Per-plugin override layer, validated (by `PluginConfigSchema` or a plugin-suppli
 `bundled` > `curated` > `local` > `untrusted`. Used for **registration-time capability gating**
 only. `bundled` is never gated. `untrusted` is **not loaded** (fail-closed). Runtime sandboxing is
 out of scope (PRD §5.4).
+
+### 6.4 Server route seam (Phase 5c)
+
+Plugins contribute HTTP routes via the `api` capability registry. A plugin registers a
+framework-agnostic fetch handler under a prefix:
+
+```ts
+host.api.register(prefix, { handler, openapi? }, ctx);
+```
+
+| Shape | Type | Notes |
+|-------|------|-------|
+| `ApiImpl.handler` | `(req: Request) => Response \| Promise<Response>` | A Hono router's `.fetch` satisfies this. The SDK carries no Hono dependency. |
+| `ApiImpl.openapi` | `PluginOpenApiFragment` (optional) | `{ paths }` — plain OpenAPI 3.1 path items, merged into the generated spec. |
+
+- **Mount point:** `apps/server` mounts each entry under `/api/plugins/<prefix>` and
+  `/api/plugins/<prefix>/*`, **before** the oRPC `/api/*` middleware and `notFound` (`03 §11`
+  ordering). Seam: `mountPluginRoutes(app, apiRegistry)` + `collectPluginOpenApiPaths(apiRegistry)`.
+- **Prefix collision** throws `PluginCollisionError` at registration (existing `Registry.register`).
+- **OpenAPI:** plugin `openapi.paths` are re-prefixed under `/plugins/<prefix>` and merged into
+  `/openapi.json` by `generateOpenApiSpec(pluginPaths)`.
+- **Lifecycle:** `SpurPlugin` exposes optional `onServerStart(host)` / `onServerStop(host)`; the host
+  fans them out via `PluginHost.startServerHooks()` / `stopServerHooks()`.

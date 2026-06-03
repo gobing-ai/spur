@@ -39,6 +39,10 @@ export interface SpurPlugin {
     readonly trust: TrustLevel;
     onLoad(host: PluginHost): void | Promise<void>;
     onUnload?(host: PluginHost): void | Promise<void>;
+    /** Invoked after plugin routes are mounted, before the server starts serving. */
+    onServerStart?(host: PluginHost): void | Promise<void>;
+    /** Invoked on server shutdown, before plugins unload. */
+    onServerStop?(host: PluginHost): void | Promise<void>;
 }
 
 // ── Error classes ────────────────────────────────────────────────────

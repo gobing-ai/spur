@@ -20,7 +20,7 @@ export {
     type SpurPlugin,
     type TrustLevel,
 } from './plugin';
-export { type ApiImpl, ApiRegistry } from './registries/api';
+export { type ApiImpl, ApiRegistry, type PluginOpenApiFragment } from './registries/api';
 // Concrete registries (public — ADR-012 Decision 7)
 export { type CommandImpl, CommandRegistry } from './registries/command';
 export { type EventImpl, EventRegistry as PluginEventRegistry } from './registries/event';

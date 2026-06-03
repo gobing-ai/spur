@@ -111,4 +111,28 @@ export class PluginHost {
     isLoaded(name: string): boolean {
         return this.loadedPlugins.has(name);
     }
+
+    /**
+     * Invoke onServerStart on every loaded plugin that implements it.
+     * Called by the server after plugin routes are mounted, before serving.
+     */
+    async startServerHooks(): Promise<void> {
+        for (const plugin of this.loadedPlugins.values()) {
+            if (plugin.onServerStart) {
+                await plugin.onServerStart(this);
+            }
+        }
+    }
+
+    /**
+     * Invoke onServerStop on every loaded plugin that implements it.
+     * Called by the server on shutdown, before plugins unload.
+     */
+    async stopServerHooks(): Promise<void> {
+        for (const plugin of this.loadedPlugins.values()) {
+            if (plugin.onServerStop) {
+                await plugin.onServerStop(this);
+            }
+        }
+    }
 }

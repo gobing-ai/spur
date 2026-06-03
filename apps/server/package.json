@@ -15,6 +15,7 @@
     "dependencies": {
         "@gobing-ai/spur-config": "workspace:*",
         "@gobing-ai/spur-contracts": "workspace:*",
+        "@gobing-ai/spur-plugin-sdk": "workspace:0.1.0",
         "@orpc/openapi": "catalog:",
         "@orpc/server": "catalog:",
         "@orpc/zod": "catalog:",
@@ -22,6 +23,7 @@
     },
     "devDependencies": {
         "@cloudflare/vitest-pool-workers": "0.16.10",
+        "@gobing-ai/ts-infra": "catalog:",
         "@types/bun": "catalog:",
         "typescript": "catalog:",
         "vitest": "4.1.7",

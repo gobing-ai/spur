@@ -129,4 +129,47 @@ describe('PluginHost', () => {
     it('unloadPlugin is no-op for unknown name', async () => {
         await expect(host.unloadPlugin('nonexistent')).resolves.toBeUndefined();
     });
+
+    it('startServerHooks invokes onServerStart on loaded plugins that implement it', async () => {
+        const started: string[] = [];
+        const withHook: SpurPlugin = {
+            name: 'srv-hook',
+            version: '1.0.0',
+            trust: 'curated',
+            onLoad: () => {},
+            onServerStart: () => {
+                started.push('srv-hook');
+            },
+        };
+        const withoutHook: SpurPlugin = {
+            name: 'no-hook',
+            version: '1.0.0',
+            trust: 'curated',
+            onLoad: () => {},
+        };
+        await host.loadPlugin(withHook, { source: 'curated', pluginName: 'srv-hook', trustLevel: 'curated' });
+        await host.loadPlugin(withoutHook, { source: 'curated', pluginName: 'no-hook', trustLevel: 'curated' });
+
+        await host.startServerHooks();
+
+        expect(started).toEqual(['srv-hook']);
+    });
+
+    it('stopServerHooks invokes onServerStop on loaded plugins that implement it', async () => {
+        let stopped = false;
+        const plugin: SpurPlugin = {
+            name: 'stop-hook',
+            version: '1.0.0',
+            trust: 'curated',
+            onLoad: () => {},
+            onServerStop: () => {
+                stopped = true;
+            },
+        };
+        await host.loadPlugin(plugin, { source: 'curated', pluginName: 'stop-hook', trustLevel: 'curated' });
+
+        await host.stopServerHooks();
+
+        expect(stopped).toBe(true);
+    });
 });
