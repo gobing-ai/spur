@@ -27,8 +27,8 @@ Make the harness robust and clean before adding surface.
 - [x] **Publish the extracted engines; switch `link:` → semver** (ADR-004). All `@gobing-ai/ts-*`
   resolve via the root catalog at `^0.3.0`; no `link:` remnants; `bun run build` green from a clean
   install. This is the gate that makes the repo build from a clean clone.
-- [~] Cutover: make this repo the canonical Spur. `origin` is `github.com/gobing-ai/spur.git`; confirm
-  the legacy tree is retired/re-pointed.
+- [x] Cutover: this repo is the canonical Spur (`origin` = `github.com/gobing-ai/spur.git`); legacy
+  tree retired / remote re-pointed.
 - [ ] Harden each command: richer error messages, exit-code contracts, `--json` schema stability.
 - [x] Self-host the quality gate via `spur rule run`. `spur-check` runs `recommended-pre-check` +
   `recommended-post-check` presets via the local CLI (`spur rule run --fail-on warning`).
