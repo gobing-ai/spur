@@ -4,6 +4,7 @@ import { Registry } from './base';
 
 // ── Command TImpl ────────────────────────────────────────────────────
 
+/** Plugin slash-command implementation with name and execute function. */
 export interface CommandImpl {
     name: string;
     execute: (args: string[]) => void | Promise<void>;
@@ -11,6 +12,7 @@ export interface CommandImpl {
 
 // ── CommandRegistry ──────────────────────────────────────────────────
 
+/** Registry of plugin slash commands with built-in seeding. */
 export class CommandRegistry extends Registry<CommandImpl> {
     constructor(trust: TrustEngine, logger: Logger) {
         super('commands', trust, logger);
