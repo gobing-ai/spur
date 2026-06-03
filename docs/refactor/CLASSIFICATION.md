@@ -1,19 +1,19 @@
 # Code Classification Matrix
 
-**Task:** 0163 — Classify and distribute existing code to ts-libs and spur-new
+**Task:** 0163 — Classify and distribute existing code to ts-libs and the current Spur repo
 **Generated:** 2026-05-30
-**Source repo:** `/Users/robin/xprojects/spur`
-**Target repo:** `/Users/robin/xprojects/spur-new`
+**Source repo:** `/Users/robin/xprojects/spur-old` (the old Spur, renamed; read-only reference)
+**Target repo:** `/Users/robin/xprojects/spur` (the current repo this doc lives in)
 **Reference libraries:** `/Users/robin/xprojects/ts-libs`
 
 ## Purpose
 
-This document is the migration map for the re-foundation work. Old `spur` remains a read-only reference. Follow-up tasks use this matrix to decide whether each old export is:
+This document is the migration map for the re-foundation work. Old `spur` (now `spur-old`) remains a read-only reference. Follow-up tasks use this matrix to decide whether each old export is:
 
 - already covered by `@gobing-ai/ts-*` and should be discarded from Spur-specific code,
 - generic but missing from ts-libs and therefore a future ts-libs implementation task,
 - a new standalone ts-libs package extraction,
-- Spur-domain code that migrates into `spur-new`, or
+- Spur-domain code that migrates into the current Spur repo, or
 - dead/obsolete code to discard.
 
 ## Current ts-libs Verification Amendments
@@ -21,8 +21,8 @@ This document is the migration map for the re-foundation work. Old `spur` remain
 The matrix below originated from the task planning notes, then was checked against the current local `ts-libs` checkout on 2026-05-30. These amendments are authoritative when they differ from older planning text:
 
 - `@gobing-ai/ts-runtime` already exports the file-system helpers `readJsonFile`, `writeJsonFile`, `atomicWriteFile`, `atomicWriteJson`, `walkDir`, `resolveProjectPath`, `getProjectRoot`, `ensureDirForFile`, `getFs`, `setFileSystem`, and `createLogStream`. Treat matching old `@spur/core` helpers as covered by ts-runtime, not net-new ts-libs work.
-- `@gobing-ai/ts-runtime` already includes generic config/env interpolation primitives such as `buildConfigFromObject`, `buildConfigFromYaml`, `parseConfigYaml`, `interpolateEnv`, `interpolateTree`, `getNodeEnv`, `isTestEnv`, and `getDatabaseUrl`. Reuse these where they match; keep only Spur-specific config shape in `spur-new`.
-- `@gobing-ai/ts-infra` currently exports `JobQueue` and `QueueConsumer` interfaces but still does not export `DBJobQueue`/`DBQueueConsumer` implementations. DB-backed queue implementation remains separate work or local `spur-new` wiring.
+- `@gobing-ai/ts-runtime` already includes generic config/env interpolation primitives such as `buildConfigFromObject`, `buildConfigFromYaml`, `parseConfigYaml`, `interpolateEnv`, `interpolateTree`, `getNodeEnv`, `isTestEnv`, and `getDatabaseUrl`. Reuse these where they match; keep only Spur-specific config shape in `spur`.
+- `@gobing-ai/ts-infra` currently exports `JobQueue` and `QueueConsumer` interfaces but still does not export `DBJobQueue`/`DBQueueConsumer` implementations. DB-backed queue implementation remains separate work or local `spur` wiring.
 - `@gobing-ai/ts-utils` currently exports only `access`, `api-response`, `const`, `cursor`, `date`, `errors`, `origin`, and `output`. It still lacks `collections`, `path/glob`, general YAML document parsing, and redaction modules.
 
 ## C2 Rule for Absorb Items
@@ -30,7 +30,7 @@ The matrix below originated from the task planning notes, then was checked again
 "Absorb into ts-libs" means one of two things:
 
 - **Already present:** use the existing ts-libs implementation and do not migrate old Spur code.
-- **Missing today:** create a dedicated future ts-libs task, or inline locally into `spur-new` until that package work is scheduled and gated.
+- **Missing today:** create a dedicated future ts-libs task, or inline locally into `spur` until that package work is scheduled and gated.
 
 This task does not implement net-new ts-libs features.
 
@@ -67,7 +67,7 @@ This task does not implement net-new ts-libs features.
 
 #### Absorb into ts-libs / Current Gaps
 
-> Current-state rule: rows marked **already present** are consumed from ts-libs and old Spur code is discarded. Rows marked **NET-NEW** are future ts-libs work or temporary local `spur-new` code.
+> Current-state rule: rows marked **already present** are consumed from ts-libs and old Spur code is discarded. Rows marked **NET-NEW** are future ts-libs work or temporary local `spur` code.
 
 | Export | Target Package | Rationale |
 |--------|---------------|-----------|
@@ -76,9 +76,9 @@ This task does not implement net-new ts-libs features.
 | `resolveProjectPath`, `getProjectRoot` | Already present in `@gobing-ai/ts-runtime` | Use ts-runtime implementation; no net-new work. |
 | `ensureDirForFile`, `getFs`, `setFileSystem`, `createLogStream` | Already present in `@gobing-ai/ts-runtime` | Use ts-runtime implementation; no net-new work. |
 | `buildSourceLayers`, `parseYamlString`, `readYamlFile`, `resolveSourcePath`, `validateWithZod`, `SourceLayer`, `SourceLayerOptions`, `isExistingDirectory`, `isExistingFile`, `LoaderError` | `@gobing-ai/ts-utils` (new `yaml-loader` module) OR `@gobing-ai/ts-runtime` | YAML loading with Zod validation is generic; source-layer concept is spur-domain but the loader primitives are reusable |
-| `DBJobQueue`, `DBQueueConsumer` implementations | `@gobing-ai/ts-infra` or local `spur-new` | **NET-NEW:** ts-infra exposes only interfaces. Implement as a separate gated ts-libs task, or inline in `spur-new` if the CLI needs DB-backed queues before that task. |
+| `DBJobQueue`, `DBQueueConsumer` implementations | `@gobing-ai/ts-infra` or local `spur` | **NET-NEW:** ts-infra exposes only interfaces. Implement as a separate gated ts-libs task, or inline in `spur` if the CLI needs DB-backed queues before that task. |
 
-#### Migrate to spur-new (spur-domain, not reusable)
+#### Migrate to spur (spur-domain, not reusable)
 
 | Export | Destination | Rationale |
 |--------|-------------|-----------|
@@ -94,7 +94,7 @@ This task does not implement net-new ts-libs features.
 | `WorkspaceDao`, `WorkspaceRecord`, `AddWorkspaceInput` | `apps/cli/src/db/workspace-dao.ts` | Spur workspace registry |
 | `attachDefaultObservers`, `attachFileObserver`, `attachLogObserver`, `attachMetricsObserver`, `attachTelemetryObserver` | `apps/cli/src/observers/` or `apps/server/src/observers/` | EventBus lifecycle wiring — spur-domain convenience |
 | `ActionRegistry`, `createDefaultRegistry`, `HealthPingAction`, `LogAction`, `QueueStatsAction`, `QueueStatsDaoProvider`, `CreateDefaultRegistryOptions`, `SchedulerOptions`, `SchedulerAction` | `apps/cli/src/scheduler/` or `apps/server/src/scheduler/` | Scheduler action wiring — spur-domain |
-| `LOG_CATEGORY_APP`, `LOG_CATEGORY_CLI`, `LOG_FILE_PATH` | `packages/config/src/const.ts` in spur-new | Spur-specific logging constants |
+| `LOG_CATEGORY_APP`, `LOG_CATEGORY_CLI`, `LOG_FILE_PATH` | `packages/config/src/const.ts` in spur | Spur-specific logging constants |
 
 #### Discard (not needed)
 
@@ -107,7 +107,7 @@ This task does not implement net-new ts-libs features.
 
 #### Absorb into ts-libs (ts-utils) — ⚠️ NET-NEW ts-utils modules (C2)
 
-> None of these target modules (`collections`, `path`, `yaml`, `redaction`) exist in ts-utils today. Same rule as above: inline into spur-new for the refactor; absorb into ts-utils as a separate, gated ts-libs task. **The redaction primitives are needed by 0160 (importer pipeline) — those must land somewhere concrete before 0160, either inlined in the importer package or implemented in ts-utils first.**
+> None of these target modules (`collections`, `path`, `yaml`, `redaction`) exist in ts-utils today. Same rule as above: inline into spur for the refactor; absorb into ts-utils as a separate, gated ts-libs task. **The redaction primitives are needed by 0160 (importer pipeline) — those must land somewhere concrete before 0160, either inlined in the importer package or implemented in ts-utils first.**
 
 | Export | Rationale |
 |--------|-----------|
@@ -117,11 +117,11 @@ This task does not implement net-new ts-libs features.
 | `parseYamlDocument`, `parseYamlWithSchema`, `YamlParseContext` | YAML parsing with Zod validation → new `@gobing-ai/ts-utils` yaml module (net-new) |
 | `redact`, `redactWithRules`, `RedactionRuleInput` | Redaction primitives → new `@gobing-ai/ts-utils` redaction module (net-new; **blocks 0160 — resolve placement first**) |
 
-#### Migrate to spur-new
+#### Migrate to spur
 
 | Export | Destination | Rationale |
 |--------|-------------|-----------|
-| `PackageManifest`, `assertNoWorkspaceDependency`, `readPackageJson` | `packages/tooling/` in spur-new (keep as small local util) | Package boundary enforcement; spur-specific linting rules |
+| `PackageManifest`, `assertNoWorkspaceDependency`, `readPackageJson` | `packages/tooling/` in spur (keep as small local util) | Package boundary enforcement; spur-specific linting rules |
 
 #### Discard
 
@@ -141,13 +141,13 @@ This task does not implement net-new ts-libs features.
 | `gates/` (7 exports) | `@gobing-ai/ts-rule-engine` | 0158 | Gates evaluate rule-like conditions; belong in rule-engine |
 | `agent/` (4 exports) | `@gobing-ai/ts-ai-runner` | 0158 | High-level agent service wraps AiRunner |
 
-#### Migrate to spur-new
+#### Migrate to spur
 
 | Export | Destination | Rationale |
 |--------|-------------|-----------|
 | `config/profile.ts` — loadProfile, NormalizedProfile | With ts-rule-engine (config module) | Profile loading is rule-engine domain |
 | `config/interpolation.ts` — env var interpolation | `@gobing-ai/ts-utils` or ts-runtime | Generic env interpolation is reusable |
-| `persistence/` — DAO implementations | spur-new `apps/cli/src/db/` | Persistence adapters — spur-domain wiring |
+| `persistence/` — DAO implementations | spur `apps/cli/src/db/` | Persistence adapters — spur-domain wiring |
 
 #### Discard
 
@@ -168,7 +168,7 @@ This task does not implement net-new ts-libs features.
 | `EtlBlock`, `EtlRow`, `EtlTrait` | Discard | Old ETL trait pattern — replaced by ts-data-pipeline (0157) |
 | `RedactionRule`, `RedactionRulePack` + schemas | `@gobing-ai/ts-utils` (redaction module) | Generic redaction types |
 
-#### Migrate to spur-new contracts
+#### Migrate to spur contracts
 
 | Export | Destination | Rationale |
 |--------|-------------|-----------|
@@ -177,7 +177,7 @@ This task does not implement net-new ts-libs features.
 | `Workspace`, `Run`, `PhaseRun`, `RunEvent`, `WorkflowState`, `GateResult`, `Artifact`, `AssetRef` + schemas | `packages/contracts/src/domain.ts` | Spur domain entity schemas |
 | `SpurEvent`, `SpurEventPayloadMap` + payload types | `packages/contracts/src/events.ts` | Spur event taxonomy |
 | `SPUR_ENV_VARS`, `SPUR_LOG_LEVELS` | `packages/config/src/env.ts` | Environment variable contract |
-| Error classes (`DuplicateWorkspaceNameError`, `FSMError`, etc.) | Distribute: rule errors → ts-rule-engine, workflow errors → ts-dual-workflow-engine, spur errors → spur-new | Error classes belong with domain packages |
+| Error classes (`DuplicateWorkspaceNameError`, `FSMError`, etc.) | Distribute: rule errors → ts-rule-engine, workflow errors → ts-dual-workflow-engine, spur errors → spur | Error classes belong with domain packages |
 
 ### @spur/history-ingest (~15 files, ~2.8k LOC)
 
@@ -197,7 +197,7 @@ Old 35-file adapter pattern, `history-ingest-service.ts` + `ingest-service.ts` t
 
 | Scope | New Approach | Task | Notes |
 |-------|-------------|------|-------|
-| Entire package | Consumer of `@gobing-ai/ts-data-pipeline` in spur-new | 0157 | Old ETL trait pattern discarded. Generic toolkit built first. Analytics rebuilt as consumer. |
+| Entire package | Consumer of `@gobing-ai/ts-data-pipeline` in spur | 0157 | Old ETL trait pattern discarded. Generic toolkit built first. Analytics rebuilt as consumer. |
 
 ### @spur/assets (~5 files, ~0.3k LOC)
 
@@ -211,7 +211,7 @@ Unclear scope. Asset inspection can be rebuilt from scratch if needed.
 
 | Export | Action | Rationale |
 |--------|--------|-----------|
-| `gitContext`, `GitContext` | Migrate to spur-new CLI as inline utility | Small, useful, spur-domain |
+| `gitContext`, `GitContext` | Migrate to spur CLI as inline utility | Small, useful, spur-domain |
 | Workspace registry + everything else | Discard | Unclear scope; rebuild from scratch with WorkspaceDao |
 
 ### @spur/api-types (~2 files, ~0.1k LOC)
@@ -233,7 +233,7 @@ There is no `packages/profiles/` in old spur. Profile config code lives in `pack
 | Discard (ts-libs duplicate) | ~100 exports (@spur/core) |
 | Absorb → ts-libs | ~20 exports (@spur/tooling → ts-utils/ts-runtime) |
 | New → ts-libs | 5 packages (ai-runner, rule-engine, workflow-engine, jsonl-importer, data-pipeline) |
-| Migrate → spur-new | ~40 exports (DAOs, contracts, events, scheduler wiring) |
+| Migrate → spur | ~40 exports (DAOs, contracts, events, scheduler wiring) |
 | Discard (dead/bloat) | ~30 exports (adapter bloat, coverage anchors, version constants) |
 | Defer | 2 packages (history-analytics redesign, assets maybe never) |
 
@@ -241,7 +241,7 @@ There is no `packages/profiles/` in old spur. Profile config code lives in `pack
 
 1. **ConstraintRule et al. move INTO ts-rule-engine**, not a separate contracts package. Types belong with their domain.
 2. **Spur-new `packages/contracts/` is transport DTOs only** — API envelopes, health check, pagination. No domain types.
-3. **No `@spur/core` in new codebase.** Everything is ts-libs or local spur-new.
+3. **No `@spur/core` in new codebase.** Everything is ts-libs or local spur.
 4. **`@spur/kernel` ceases to exist.** Distributed: ai-runner → ts-ai-runner, rules → ts-rule-engine, workflow → ts-dual-workflow-engine, gates → ts-rule-engine.
 5. **Old history-ingest + history-analytics are reference-only.** Complete redesigns.
 
@@ -249,8 +249,8 @@ There is no `packages/profiles/` in old spur. Profile config code lives in `pack
 
 | Gap | Default Decision | Follow-up |
 | --- | --- | --- |
-| Generic source-layer YAML loader primitives: `buildSourceLayers`, `readYamlFile`, `validateWithZod`, source descriptors | Inline locally in `spur-new` until a reusable shape is proven | Consider ts-runtime/ts-utils enhancement only after 0158/0162 config loaders settle. |
-| `DBJobQueue` / `DBQueueConsumer` implementations | Inline in `spur-new` only if CLI/server need DB-backed queue before ts-infra catches up | Separate ts-infra task if reused outside Spur. |
+| Generic source-layer YAML loader primitives: `buildSourceLayers`, `readYamlFile`, `validateWithZod`, source descriptors | Inline locally in `spur` until a reusable shape is proven | Consider ts-runtime/ts-utils enhancement only after 0158/0162 config loaders settle. |
+| `DBJobQueue` / `DBQueueConsumer` implementations | Inline in `spur` only if CLI/server need DB-backed queue before ts-infra catches up | Separate ts-infra task if reused outside Spur. |
 | ts-utils collections/path/yaml/redaction modules | Redaction must be resolved before 0160; other helpers can inline locally | Create explicit ts-utils task(s), or keep in importer/rule-engine packages if not broadly reusable. |
 
 ## Follow-up Task Mapping
@@ -259,13 +259,13 @@ There is no `packages/profiles/` in old spur. Profile config code lives in `pack
 | --- | --- |
 | 0157 | Extract `ts-data-pipeline`, rebuild analytics as a consumer, and remove old ETL trait assumptions. |
 | 0158 | Extract `ts-ai-runner` and `ts-rule-engine`, including rule/gate contracts. |
-| 0159 | Port server/web app contracts and oRPC seam into `spur-new`. |
+| 0159 | Port server/web app contracts and oRPC seam into `spur`. |
 | 0160 | Extract `ts-llm-jsonl-importer`; decide redaction placement before importer gate. |
-| 0161 | Port CLI and local Spur-domain persistence/wiring into `spur-new`. |
+| 0161 | Port CLI and local Spur-domain persistence/wiring into `spur`. |
 | 0162 | Extract `ts-dual-workflow-engine`. |
 
 ## Verification Notes
 
 - Old Spur baseline gate passed before this document was written.
-- `spur-new` scaffold gate passed after this document was written.
+- `spur` scaffold gate passed after this document was written.
 - This document intentionally lives at `docs/refactor/CLASSIFICATION.md` to avoid collisions with copied `docs/00_ADR.md` and `docs/01-06`.
