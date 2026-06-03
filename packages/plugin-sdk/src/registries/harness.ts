@@ -8,6 +8,7 @@ import { Registry } from './base';
 // Built-in harnesses (e.g. codex, claude) are seeded via preRegister().
 // Plugins can replace or extend with custom harnesses subjected to trust policy.
 
+/** Harness implementation: environment detection + prompt execution. */
 export interface HarnessImpl {
     /** Detect whether this harness applies to the current environment. */
     detect: () => boolean;
@@ -15,6 +16,7 @@ export interface HarnessImpl {
     execute: (prompt: string) => Promise<string>;
 }
 
+/** Registry of agent harnesses (detect + execute prompts). */
 export class HarnessRegistry extends Registry<HarnessImpl> {
     constructor(trust: TrustEngine, logger: Logger) {
         super('harnesses', trust, logger);
