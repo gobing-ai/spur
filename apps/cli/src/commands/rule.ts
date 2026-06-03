@@ -85,7 +85,7 @@ async function runRuleEvaluation(
     const failOn = parseFailOn(stringFlag(flags, 'fail-on', 'error'));
     const rules =
         typeof flags.file === 'string'
-            ? await loadRuleFile(flags.file)
+            ? (await loadRuleFile(flags.file)).rules
             : await loadPresetRules(preset, { roots: ruleRoots(context) });
     const selectedRule = typeof flags.rule === 'string' ? flags.rule : positionals[0];
     const filteredRules = selectedRule === undefined ? rules : rules.filter((rule) => rule.id === selectedRule);
@@ -239,10 +239,26 @@ async function runRuleValidate(
     positionals: readonly string[],
 ): Promise<number> {
     const source = ruleSource(flags, positionals);
+    const json = booleanFlag(flags, 'json');
+    const validateSchema = booleanFlag(flags, 'no-schema') ? false : undefined;
+
+    const errors = await collectValidationErrors(context, source, validateSchema);
+    if (errors !== null) {
+        const result = { valid: false, kind: source.kind, source: source.value, errors };
+        if (json) {
+            context.output.write(toJson(result));
+        } else {
+            context.output.error(
+                `invalid ${source.kind}: ${source.value}\n${errors.map((e) => `  - ${e}`).join('\n')}`,
+            );
+        }
+        return 1;
+    }
+
     const rules =
         source.kind === 'file'
-            ? await loadRuleFile(source.value)
-            : await loadPresetRules(source.value, { roots: ruleRoots(context) });
+            ? (await loadRuleFile(source.value, validateSchema === undefined ? undefined : { validateSchema })).rules
+            : await loadPresetRules(source.value, { roots: ruleRoots(context), validateSchema });
     const result = {
         valid: true,
         kind: source.kind,
@@ -252,13 +268,62 @@ async function runRuleValidate(
     };
 
     context.output.write(
-        booleanFlag(flags, 'json')
+        json
             ? toJson(result)
             : `valid ${result.kind}: ${result.source}\nrules: ${result.ruleCount}${
                   result.rules.length > 0 ? `\n${result.rules.join('\n')}` : ''
               }`,
     );
     return 0;
+}
+
+/**
+ * Validate the source and return its error messages, or `null` when it is valid.
+ *
+ * Surfaces clean diagnostics for the failure modes a bare load would otherwise leak
+ * as uncaught exceptions or silent false-positives: a missing file, a preset that
+ * resolves to no preset file, or a structural/schema parse error.
+ */
+async function collectValidationErrors(
+    context: CliContext,
+    source: { kind: 'file' | 'preset'; value: string },
+    validateSchema: boolean | undefined,
+): Promise<string[] | null> {
+    if (source.kind === 'file') {
+        const absolute = resolve(context.cwd, source.value);
+        if (!(await context.fs.exists(absolute))) return [`File not found: ${absolute}`];
+        try {
+            await loadRuleFile(absolute, validateSchema === undefined ? undefined : { validateSchema });
+            return null;
+        } catch (error) {
+            return [errorText(error)];
+        }
+    }
+
+    if (!(await presetFileExists(context, source.value))) {
+        return [`Preset "${source.value}" not found in any rules root (${ruleRoots(context).join(', ')})`];
+    }
+    try {
+        await loadPresetRules(source.value, { roots: ruleRoots(context), validateSchema });
+        return null;
+    } catch (error) {
+        return [errorText(error)];
+    }
+}
+
+/** True when a `<name>.{yaml,yml,json}` preset file exists in any configured root. */
+async function presetFileExists(context: CliContext, name: string): Promise<boolean> {
+    for (const root of ruleRoots(context)) {
+        for (const ext of ['yaml', 'yml', 'json']) {
+            if (await context.fs.exists(join(root, `${name}.${ext}`))) return true;
+        }
+    }
+    return false;
+}
+
+/** Extract a readable message from a thrown value. */
+function errorText(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
 }
 
 async function runRuleList(context: CliContext, flags: Record<string, string | boolean>): Promise<number> {
@@ -316,7 +381,7 @@ async function listLocalRules(context: CliContext): Promise<RuleListEntry[]> {
     const files = await listRuleFiles(context, root, '');
     const entries: RuleListEntry[] = [];
     for (const file of files) {
-        const rules = await loadRuleFile(join(root, file));
+        const { rules } = await loadRuleFile(join(root, file));
         for (const rule of rules) {
             entries.push({
                 id: rule.id,
