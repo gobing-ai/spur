@@ -60,6 +60,40 @@ AgentService extracted and wired. agent.ts is a 35-line dispatcher (≤80 met). 
 
 ### Review
 
+## Review — 2026-06-03 (dev-verify --force --fix all)
+
+**Verdict: PASS**
+**Scope:** `apps/cli/src/commands/agent.ts`, `packages/app/src/services/agent-service.ts`, `packages/app/src/index.ts`, and corresponding agent tests
+**Mode:** verify (Phase 7 SECU + Phase 8 traceability)
+**Channel:** current
+**Gate:** `bun run check` → PASS; `test-cf`, `build`, pre-check, and post-check also PASS
+
+### Phase 7 — SECU
+
+One P3 efficiency finding was fixed during `--fix all`: `AgentService.run` used synchronous filesystem checks for `--cwd` validation. This is a CLI path, not a server hot path, but the fix is mechanical and keeps the service fully async. No remaining findings across Security, Efficiency, Correctness, or Usability. No secrets, unsafe browser sinks, command execution, broad `any`, unsafe casts, or empty catches remain in the audited source.
+
+### Phase 8 — Requirements Traceability
+
+- [x] **R1** AgentService class + context/injection seam → **MET** | `packages/app/src/services/agent-service.ts` defines `AgentService`, `AgentServiceContext`, and `AgentRunDeps`; injected runner/detector/doctor dependencies are accepted by public methods for testability.
+- [x] **R2** public resolve/run/list/doctor methods → **MET** | `AgentService.resolve`, `AgentService.run`, `AgentService.list`, and `AgentService.doctor` cover the parent R3 surface.
+- [x] **R3** former resolver/output helpers private → **MET** | `resolveAgent`, `resolveAgentAuto`, `resolveAgentCurrent`, `resolveAgentExplicit`, and `handleRunOutput` are private service methods.
+- [x] **R4** public API exports service + result/seam types → **MET** | `packages/app/src/index.ts` exports `AgentService`, `AgentResolveResult`, `AgentRunDeps`, `AgentServiceContext`, and `AgentServiceOutput`.
+- [x] **R5** CLI wrapper ≤80 lines → **MET** | `apps/cli/src/commands/agent.ts` is 35 lines.
+- [x] **R6** agent tests migrated/adapted → **MET** | `packages/app/tests/services/agent-service.test.ts` contains the DI-heavy service suite; `apps/cli/tests/commands/agent.test.ts` keeps thin dispatch coverage.
+- [x] **R7** coverage target ≥85% lines / ≥90% funcs → **MET** | focused agent test run reports `packages/app/src/services/agent-service.ts` at 100% lines / 100% funcs; full gate reports aggregate 99.46% lines / 100% funcs.
+- [x] **R8** `SPUR_AGENT` current-agent behavior unchanged → **MET** | `AgentService.run` reads `this.ctx.env.SPUR_AGENT` for `--agent current`; migrated test asserts `doctorRunner.runOne('pi')`.
+- [x] **Acceptance** golden output parity + gate → **MET** | `diff -ru .tmp/golden-0005 .tmp/after-0005` clean; `bun run check`, `bun run test-cf`, `bun run build`, `bun run test-pre-check`, and `bun run test-post-check` pass.
+
+### Findings Fixed
+
+| # | Title | Dimension | Location | Resolution |
+|---|-------|-----------|----------|------------|
+| 1 | Blocking filesystem checks in `--cwd` validation | Efficiency | `packages/app/src/services/agent-service.ts` | Replaced `existsSync`/`statSync` with async `stat()` via private `statCwd()` while preserving existing error messages and exit codes. |
+
+### Post-fix Verdict
+
+PASS. No P1/P2/P3/P4 findings remain, all task requirements are met, agent-list output parity is preserved, and all verification gates are green.
+
 **Verdict: PASS** (dev-verify --force, 2026-06-03).
 
 Phase 7 (SECU): no findings. agent-service.ts / agent.ts clean across all four dimensions; AgentRunDeps injection seam preserved.
@@ -85,5 +119,3 @@ Phase 8 (traceability): R3 (resolve/run/list/doctor) MET · R6.2 (agent.ts 35 �
 | ---- | ---- | ----- | ---- |
 
 ### References
-
-
