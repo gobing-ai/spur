@@ -94,7 +94,7 @@ export function helpText(): string {
         '  -h, --help                     Display this help',
         '',
         'Commands:',
-        '  init [--name <name>] [--json]                                      Scaffold .spur/config.json for this project',
+        '  init [--name <name>] [--force] [--minimal] [--json]                Scaffold .spur (config, local rules + workflow; seed global rules)',
         '  status [path] [--json]                                             Show project, .spur, Git, and optional path status',
         '  migrate [--json]                                                   Apply CLI-owned schema migrations (temporary helper)',
         '  agent run <prompt> [--agent <name>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--json]',
