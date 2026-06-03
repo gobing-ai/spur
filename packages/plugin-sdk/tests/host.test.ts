@@ -172,4 +172,59 @@ describe('PluginHost', () => {
 
         expect(stopped).toBe(true);
     });
+
+    it('startServerHooks is fail-soft: one throwing hook does not block the rest', async () => {
+        let secondRan = false;
+        const thrower: SpurPlugin = {
+            name: 'bad-start',
+            version: '1.0.0',
+            trust: 'curated',
+            onLoad: () => {},
+            onServerStart: () => {
+                throw new Error('boom');
+            },
+        };
+        const good: SpurPlugin = {
+            name: 'good-start',
+            version: '1.0.0',
+            trust: 'curated',
+            onLoad: () => {},
+            onServerStart: () => {
+                secondRan = true;
+            },
+        };
+        await host.loadPlugin(thrower, { source: 'curated', pluginName: 'bad-start', trustLevel: 'curated' });
+        await host.loadPlugin(good, { source: 'curated', pluginName: 'good-start', trustLevel: 'curated' });
+
+        // Must not reject, and must still run the second plugin's hook.
+        await expect(host.startServerHooks()).resolves.toBeUndefined();
+        expect(secondRan).toBe(true);
+    });
+
+    it('stopServerHooks is fail-soft: a throwing hook does not skip remaining cleanup', async () => {
+        let cleanedUp = false;
+        const thrower: SpurPlugin = {
+            name: 'bad-stop',
+            version: '1.0.0',
+            trust: 'curated',
+            onLoad: () => {},
+            onServerStop: () => {
+                throw new Error('boom');
+            },
+        };
+        const good: SpurPlugin = {
+            name: 'good-stop',
+            version: '1.0.0',
+            trust: 'curated',
+            onLoad: () => {},
+            onServerStop: () => {
+                cleanedUp = true;
+            },
+        };
+        await host.loadPlugin(thrower, { source: 'curated', pluginName: 'bad-stop', trustLevel: 'curated' });
+        await host.loadPlugin(good, { source: 'curated', pluginName: 'good-stop', trustLevel: 'curated' });
+
+        await expect(host.stopServerHooks()).resolves.toBeUndefined();
+        expect(cleanedUp).toBe(true);
+    });
 });

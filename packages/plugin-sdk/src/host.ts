@@ -115,23 +115,32 @@ export class PluginHost {
     /**
      * Invoke onServerStart on every loaded plugin that implements it.
      * Called by the server after plugin routes are mounted, before serving.
+     * Fail-soft: a throwing hook is logged and skipped so one plugin cannot
+     * block the rest (ADR-012 — local/curated never crash the host).
      */
     async startServerHooks(): Promise<void> {
         for (const plugin of this.loadedPlugins.values()) {
-            if (plugin.onServerStart) {
+            if (!plugin.onServerStart) continue;
+            try {
                 await plugin.onServerStart(this);
+            } catch (err) {
+                this.logger.error(`Plugin '${plugin.name}' onServerStart failed`, { err });
             }
         }
     }
 
     /**
      * Invoke onServerStop on every loaded plugin that implements it.
-     * Called by the server on shutdown, before plugins unload.
+     * Called by the server on shutdown, before plugins unload. Fail-soft so a
+     * throwing hook never skips the remaining plugins' cleanup.
      */
     async stopServerHooks(): Promise<void> {
         for (const plugin of this.loadedPlugins.values()) {
-            if (plugin.onServerStop) {
+            if (!plugin.onServerStop) continue;
+            try {
                 await plugin.onServerStop(this);
+            } catch (err) {
+                this.logger.error(`Plugin '${plugin.name}' onServerStop failed`, { err });
             }
         }
     }

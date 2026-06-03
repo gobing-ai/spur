@@ -11,20 +11,40 @@ import type { Hono } from 'hono';
 /** Base path under which all plugin routes mount. */
 export const PLUGIN_ROUTE_BASE = '/api/plugins';
 
+/**
+ * Allowed plugin prefix: a single lowercase path segment. The prefix becomes a
+ * live Hono route pattern, so anything beyond `[a-z0-9_-]` (slashes, wildcards,
+ * `:` params, `..`) could inject unintended routes — reject it at the seam.
+ */
+const PREFIX_PATTERN = /^[a-z0-9][a-z0-9_-]*$/;
+
+/** Thrown when a plugin's API prefix is not a safe single path segment. */
+export class InvalidPluginPrefixError extends Error {
+    constructor(prefix: string) {
+        super(
+            `Invalid plugin API prefix '${prefix}': must match ${PREFIX_PATTERN} ` +
+                `(a single lowercase path segment; no '/', '*', ':' or '..').`,
+        );
+        this.name = 'InvalidPluginPrefixError';
+    }
+}
+
 /** A resolved plugin route: its prefix and the implementation behind it. */
 interface PluginRoute {
     prefix: string;
     impl: ApiImpl;
 }
 
-/** Resolve every registered API entry to its prefix + impl. */
+/** Resolve every registered API entry to its prefix + impl, validating each prefix. */
 function resolveRoutes(apiRegistry: ApiRegistry): PluginRoute[] {
     const routes: PluginRoute[] = [];
     for (const { name } of apiRegistry.list()) {
         const impl = apiRegistry.get(name);
-        if (impl) {
-            routes.push({ prefix: name, impl });
+        if (!impl) continue;
+        if (!PREFIX_PATTERN.test(name)) {
+            throw new InvalidPluginPrefixError(name);
         }
+        routes.push({ prefix: name, impl });
     }
     return routes;
 }

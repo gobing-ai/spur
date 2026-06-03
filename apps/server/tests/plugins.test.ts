@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { PluginCollisionError, PluginHost } from '@gobing-ai/spur-plugin-sdk';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { createApp, generateOpenApiSpec } from '../src';
+import { InvalidPluginPrefixError } from '../src/plugins';
 
 /** Build a host whose api registry carries the given registrations. */
 function hostWith(register: (host: PluginHost) => void): PluginHost {
@@ -80,6 +81,33 @@ describe('plugin route seam', () => {
         expect(spec.paths['/plugins/docs-plugin/ping']?.get?.summary).toBe('Plugin ping');
         // The contract-derived health path is still present.
         expect(spec.paths['/health']).toBeDefined();
+    });
+
+    test('rejects an unsafe prefix containing path separators at mount', () => {
+        const host = hostWith((h) => {
+            h.api.register('evil/../health', { handler: () => new Response('x') }, ctx);
+        });
+
+        expect(() => createApp({ apiRegistry: host.api })).toThrow(InvalidPluginPrefixError);
+    });
+
+    test('rejects a wildcard prefix at mount', () => {
+        const host = hostWith((h) => {
+            h.api.register('*', { handler: () => new Response('x') }, ctx);
+        });
+
+        expect(() => createApp({ apiRegistry: host.api })).toThrow(InvalidPluginPrefixError);
+    });
+
+    test('accepts a valid hyphenated prefix', async () => {
+        const host = hostWith((h) => {
+            h.api.register('my-plugin_2', { handler: () => new Response('ok') }, ctx);
+        });
+
+        const app = createApp({ apiRegistry: host.api });
+        const response = await app.request('/api/plugins/my-plugin_2/x');
+
+        expect(response.status).toBe(200);
     });
 
     test('without an apiRegistry the app behaves exactly as before', async () => {

@@ -29,6 +29,16 @@ Phase 5c of the plugin system (ADR-012). Server extensibility.
 
 host.api.register(prefix, router) mounts plugin Hono routers under prefix in apps/server; prefix collision -> error at registration; plugin routes appear in generated OpenAPI; onServerStart/onServerStop hooks; tests incl. test-cf.
 
+**Traceability (re-verified 2026-06-03):**
+
+- [x] **R1** — `host.api.register(prefix, router)` mounts under prefix → **MET** | `apps/server/src/plugins.ts` `mountPluginRoutes` (`/api/plugins/<prefix>` + `/*`); prefix now validated by `PREFIX_PATTERN`. Test: "mounts a plugin route".
+- [x] **R2** — prefix collision → error at registration → **MET** | `packages/plugin-sdk/src/registries/base.ts:43` `PluginCollisionError`. Test: "a prefix collision throws PluginCollisionError".
+- [x] **R3** — plugin routes appear in generated OpenAPI → **MET** | `app.ts:25-26` + `openapi.ts` `generateOpenApiSpec(pluginPaths)`. Test: "plugin OpenAPI fragment appears in the generated spec".
+- [x] **R4** — `onServerStart`/`onServerStop` hooks → **MET** | `plugin.ts` + `host.ts` `startServerHooks`/`stopServerHooks` (fail-soft). Tests: host suite (4 hook tests incl. fail-soft).
+- [x] **R5** — tests incl. test-cf → **MET** | `apps/server/tests/cf/plugin-routes.cf.ts`; `bun run test-cf` 2/2 pass.
+
+All requirements MET. Verdict PASS. SECU hardening: prefix validation (P2) + fail-soft hooks (P3) applied with tests.
+
 
 ### Q&A
 
@@ -98,7 +108,7 @@ Phase 5c delivered. Plugin API routes mount into the live Hono server and surfac
 
 ### Review
 
-**Verdict: PASS**
+**Verdict: PASS** (re-verification 2026-06-03, `dev-verify --force --fix all`)
 
 Stage 4 verification — requirement traceability (task 0014 Requirements → delivery):
 
@@ -107,21 +117,33 @@ Stage 4 verification — requirement traceability (task 0014 Requirements → de
 | `host.api.register(prefix, router)` mounts plugin Hono routers under prefix in `apps/server` | PASS | `mountPluginRoutes(app, apiRegistry)` (`apps/server/src/plugins.ts`) mounts `/api/plugins/<prefix>` + `/*`; a Hono router's `.fetch` satisfies `ApiImpl.handler`. Test: "mounts a plugin route". |
 | prefix collision → error at registration | PASS | `Registry.register` throws `PluginCollisionError` (`packages/plugin-sdk/src/registries/base.ts:43`). Test: "a prefix collision throws PluginCollisionError". |
 | plugin routes appear in generated OpenAPI | PASS | `collectPluginOpenApiPaths` + `generateOpenApiSpec(pluginPaths)` merge re-prefixed paths. Test: "plugin OpenAPI fragment appears in the generated spec". |
-| `onServerStart` / `onServerStop` hooks | PASS | Optional `SpurPlugin` hooks + `PluginHost.startServerHooks()` / `stopServerHooks()`. Tests: host suite "startServerHooks invokes…", "stopServerHooks invokes…". |
-| tests incl. `test-cf` | PASS | `apps/server/tests/cf/plugin-routes.cf.ts` proves a mounted route serves under the Workers pool; `bun run test-cf` 2/2 pass. |
+| `onServerStart` / `onServerStop` hooks | PASS | Optional `SpurPlugin` hooks + `PluginHost.startServerHooks()` / `stopServerHooks()` (now fail-soft). Tests: host suite "startServerHooks invokes…", "…fail-soft…". |
+| tests incl. `test-cf` | PASS | `apps/server/tests/cf/plugin-routes.cf.ts`; `bun run test-cf` 2/2 pass. |
 
-**Architecture / boundary review:**
-- SDK Hono-free invariant (ADR-012, `03 §11`) upheld — mount seam lives in `apps/server`; SDK carries only plain-JSON `PluginOpenApiFragment`. ✅
-- Startup ordering (`03 §11`: plugin routes before server claims `/api/*`) honored — `mountPluginRoutes` runs before the oRPC middleware and `notFound`. ✅
-- No-registry path is behavior-preserving (regression test asserts unchanged health + 404). ✅
-- SemVer: all SDK additions are optional/additive (minor). ✅
-- Docs synced same change: `04 §6.4` (route seam shapes), `05_FEATURES` (substrate 💤→🔶). ✅
+## Phase 7 — SECU findings (2 found, both fixed)
 
-**Scope note (not a defect):** the server `index.ts` Bun.serve entrypoint does not yet construct a `PluginHost` or load plugins; the lifecycle hooks are delivered as the SDK/host contract and tested at the host level. Wiring them into a plugin-loading server bootstrap is harness-integration work, out of this seam task's scope.
+| # | Title | Dimension | Location | P | Disposition |
+|---|-------|-----------|----------|---|-------------|
+| 1 | Plugin API prefix was unvalidated and interpolated directly into Hono route patterns — a prefix with `/`, `*`, `:` or `..` could inject unintended routes or shadow other plugins | Security | `apps/server/src/plugins.ts` `resolveRoutes` | P2 | **FIXED** — added `PREFIX_PATTERN = /^[a-z0-9][a-z0-9_-]*$/` + `InvalidPluginPrefixError`, validated at the mount seam (fail-loud). Tests: rejects `evil/../health`, rejects `*`, accepts `my-plugin_2`. |
+| 2 | `startServerHooks`/`stopServerHooks` aborted the whole loop on the first throwing hook — violates ADR-012 fail-soft for local/curated and skips remaining shutdown cleanup | Correctness | `packages/plugin-sdk/src/host.ts` | P3 | **FIXED** — wrapped each hook in try/catch, log via `host.logger.error` and continue. Tests: "startServerHooks is fail-soft…", "stopServerHooks is fail-soft…". |
 
-**Gates:** lint clean · test 527 pass (coverage threshold met, new files 100/100) · test-cf 2 pass · build all exit 0. No skipped/`.skip`/`xfail` tests.
+No P1 blockers. No hardcoded secrets, no injection sinks (`eval`/`exec`/`innerHTML`), no `any`, no empty catches, no N+1. Plugin handlers run in-process with no runtime sandbox — **out of scope per ADR-012** (sandboxing deferred), not a finding.
 
-**SECU:** no new external input trust boundary beyond the existing trust-ladder gating; plugin handlers run in-process (runtime sandboxing explicitly out of scope per ADR-012). No secrets, no `.env`, no workflow edits.
+## Architecture / boundary review
+
+- SDK Hono-free invariant (ADR-012, `03 §11`) upheld — mount seam + prefix validation live in `apps/server`; SDK carries only plain-JSON `PluginOpenApiFragment`. ✅
+- Startup ordering honored — `mountPluginRoutes` runs before the oRPC `/api/*` middleware and `notFound`. ✅
+- No-registry path behavior-preserving (regression test). ✅
+- SemVer: SDK additions optional/additive (minor); fail-soft change is behavioral hardening, not a contract break. ✅
+- Docs synced: `04 §6.4`, `05_FEATURES` (substrate 🔶). ✅
+
+## Scope note (not a defect)
+
+The server `index.ts` Bun.serve entrypoint does not construct a `PluginHost`/load plugins; lifecycle hooks are delivered as the SDK/host contract and tested at the host level. Wiring them into a plugin-loading server bootstrap is harness-integration work, out of this seam task's scope.
+
+## Gates (post-fix)
+
+lint clean · test 532 pass (coverage threshold met; `plugins.ts` + `host.ts` 100/100) · test-cf 2 pass · build all exit 0. No skipped/`.skip`/`xfail` tests.
 
 
 ### Testing
