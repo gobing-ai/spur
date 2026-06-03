@@ -77,7 +77,21 @@ Legend: ✅ done · 🔶 partial (MVP, depth pending) · ⏳ planned · 💤 def
 | DB-dependent query test coverage | 🔶 | integration tests for `query.ts` (Phase 1) |
 | Windowing/forecasting toolkit | 💤 | extract only with ≥2 consumers; else stay inline |
 
-## 7. Server / Web (read surface)
+## 7. Team Mode (`ts-ai-runner` team primitives + `TeamService`)
+
+| Feature | Status | Acceptance |
+|---------|--------|-----------|
+| `inbox_messages` migration + schema composition | ✅ | `0001_spur_team_inbox`; table usable after `applyCliMigrations` |
+| `TeamService` (app layer) over `TeamOrchestrator`/`MessageService` | ✅ | send/inbox/reply, specs, status, assign; 100% covered |
+| `spur message send\|inbox\|reply` | ✅ | durable queue; reply threads to original sender via `in_reply_to` |
+| `spur agent create\|edit\|delete` + `list --specs` | ✅ | spec YAML under `.spur/agents/`; id validation; duplicate guard |
+| `spur agent run --purpose/--tags/--system-prompt/--task/--drain` | ✅ | identity flags → `PromptOptions`; `--drain` folds inbox into prompt |
+| `spur team assign\|status` | ✅ | `assign` sets task `assignee:`; `status` lists specs (stopped in Phase 1-3) |
+| `.spur/agents/` scaffold + `spur status` reporting | ✅ | `spur init` seeds `.gitkeep`; status lists spec ids |
+| `spur team start\|stop` daemon | 💤 | Phase 4 stubs ship; persistent orchestrator + live stdin deferred |
+| Server team HTTP API + SSE/WebSocket streaming | ⏳ | Phase 4 |
+
+## 8. Server / Web (read surface)
 
 | Feature | Status | Acceptance |
 |---------|--------|-----------|
@@ -87,7 +101,7 @@ Legend: ✅ done · 🔶 partial (MVP, depth pending) · ⏳ planned · 💤 def
 | Read-only run/history/analytics procedures | ⏳ | Phase 4 |
 | Inspection dashboards | ⏳ | Phase 4 |
 
-## 8. Deferred (needs design before build)
+## 9. Deferred (needs design before build)
 
 | Feature | Why deferred |
 |---------|--------------|
