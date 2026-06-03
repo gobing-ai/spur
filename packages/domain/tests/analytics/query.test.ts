@@ -255,4 +255,34 @@ describe('analytics query', () => {
             adapter.close();
         });
     });
+
+    // A persisted payload_json is always valid JSON under the validate-before-persist
+    // contract, so a parse failure signals DB corruption/tampering. The reader must fail
+    // loud with the offending table (not a bare opaque SyntaxError) so `spur history
+    // analyze` is diagnosable, never silently dropping or mis-reporting cost data.
+    describe('malformed payload_json', () => {
+        test('queryEtlRecords throws a contextual error naming the table', async () => {
+            const adapter = await setupEtlDb();
+            await adapter.run(
+                "INSERT INTO history_etl_pi (payload_json, imported_at) VALUES (?, '2026-05-30')",
+                '{not valid json',
+            );
+
+            await expect(queryEtlRecords(adapter, 'history_etl_pi')).rejects.toThrow(
+                /Malformed payload_json in history_etl_pi/,
+            );
+            adapter.close();
+        });
+
+        test('queryAllEtlRecords throws a contextual error naming the offending table', async () => {
+            const adapter = await setupEtlDb();
+            await adapter.run(
+                "INSERT INTO history_etl_claude (payload_json, imported_at) VALUES (?, '2026-05-30')",
+                'definitely-not-json',
+            );
+
+            await expect(queryAllEtlRecords(adapter)).rejects.toThrow(/Malformed payload_json in history_etl_claude/);
+            adapter.close();
+        });
+    });
 });

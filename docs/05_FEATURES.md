@@ -74,7 +74,7 @@ Legend: ✅ done · 🔶 partial (MVP, depth pending) · ⏳ planned · 💤 def
 | Field firewall (fieldMap + transforms) | ✅ | raw→canonical decoupling |
 | Redaction (secrets/PII before dedup) | ✅ | runs before SHA-256 hashing |
 | `spur history analyze` (cost/token analytics) | ✅ | totals + per-source/model/day |
-| DB-dependent query test coverage | 🔶 | integration tests for `query.ts` (Phase 1) |
+| DB-dependent query test coverage | ✅ | `query.ts` integration-tested against in-memory SQLite (single/all-source, since-filter, empty, malformed-payload guard); 100% line/func |
 | Windowing/forecasting toolkit | 💤 | extract only with ≥2 consumers; else stay inline |
 
 ## 7. Team Mode (`ts-ai-runner` team primitives + `TeamService`)

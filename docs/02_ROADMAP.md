@@ -33,7 +33,9 @@ Make the harness robust and clean before adding surface.
 - [x] Self-host the quality gate via `spur rule run`. `spur-check` runs `recommended-pre-check` +
   `recommended-post-check` presets via the local CLI (`spur rule run --fail-on warning`).
 - [ ] Squash re-foundation commit noise; clean conventional-commit history.
-- [ ] Expand test coverage on DB-dependent paths (history analytics queries, workflow run failures).
+- [x] Expand test coverage on DB-dependent paths. History `query.ts` is integration-tested against
+  in-memory SQLite (single/all-source, since-filter, empty, malformed-`payload_json` guard); workflow
+  validate/run failure paths covered. Both at 100% line/func.
 
 **Exit:** clean-clone build works; CLI self-hosts its own gate; history/coverage paths covered.
 

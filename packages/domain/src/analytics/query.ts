@@ -18,6 +18,23 @@ const SOURCE_TABLES = [
 /** A known history ETL table name — the only values safe to interpolate into SQL. */
 export type SourceTable = (typeof SOURCE_TABLES)[number];
 
+/**
+ * Parse a stored `payload_json` cell. The history pipeline validates rows
+ * before persist, so a parse failure means DB corruption or tampering — fail
+ * loud with the table and a truncated snippet rather than a bare SyntaxError,
+ * so `spur history analyze` points at the offending row instead of crashing
+ * opaquely.
+ */
+function parsePayload(raw: string, table: string): EtlPayload {
+    try {
+        return JSON.parse(raw) as EtlPayload;
+    } catch (error) {
+        const snippet = raw.length > 80 ? `${raw.slice(0, 80)}…` : raw;
+        const reason = error instanceof Error ? error.message : String(error);
+        throw new Error(`Malformed payload_json in ${table}: ${reason} (payload: ${snippet})`);
+    }
+}
+
 /** Query all imported ETL records from one source table. */
 export async function queryEtlRecords(
     db: DbAdapter,
@@ -31,7 +48,7 @@ export async function queryEtlRecords(
                   since,
               )
             : await db.queryAll<{ payload_json: string }>(`SELECT payload_json FROM ${sourceTable}`);
-    return rows.map((row) => JSON.parse(row.payload_json) as EtlPayload);
+    return rows.map((row) => parsePayload(row.payload_json, sourceTable));
 }
 
 /** Query ETL records from all source tables. */
@@ -47,7 +64,7 @@ export async function queryAllEtlRecords(db: DbAdapter, since?: string): Promise
                   )
                 : await db.queryAll<{ payload_json: string }>(`SELECT payload_json FROM ${table}`);
         for (const row of rows) {
-            const payload = JSON.parse(row.payload_json) as EtlPayload;
+            const payload = parsePayload(row.payload_json, table);
             results.push(etlToCostRecord(payload, source));
         }
     }
