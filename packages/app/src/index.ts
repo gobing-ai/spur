@@ -17,13 +17,16 @@ export {
     type Colorize,
     type FailOnSeverity,
     type RuleEvaluateOptions,
+    type RuleEvaluationServiceResult as RuleEvaluationResult,
     type RuleEvaluationServiceResult,
     type RuleListEntry,
+    type RuleListServiceResult as RuleListResult,
     type RuleListServiceResult,
     RuleService,
     type RuleServiceContext,
     type RuleServiceOutput,
     type RuleValidateOptions,
+    type RuleValidateServiceResult as RuleValidateResult,
     type RuleValidateServiceResult,
 } from './services/rule-service';
 export type {
