@@ -8,6 +8,8 @@ folder: docs/tasks
 type: task
 feature-id: "F-4 app-services"
 priority: high
+preset: complex
+profile: complex
 dependencies: ["@gobing-ai/ts-* 0.2.5 published (for slash-command translation in ts-ai-runner)"]
 tags: ["refactor", "architecture", "app-services", "cleanup", "pre-team-mode"]
 impl_progress:
@@ -121,14 +123,14 @@ future plugin system (task 0006) would attach.
   - `R11.1` — `bun run lint` clean.
   - `R11.2` — `bun run test` passes; no tests skipped.
   - `R11.3` — `bun run test-cf` passes.
-- **R12** — `packages/domain` is NOT merged into `packages/app`:
-  1. `packages/domain` remains a standalone workspace.
-  2. `packages/app` depends on `@gobing-ai/spur-domain`, not the reverse.
-  3. `packages/app` imports only from `@gobing-ai/spur-domain`'s public API (`index.ts`).
-  4. No code is moved OUT of `packages/domain` into `packages/app`.
-  5. `packages/domain` continues to export `DbAdapter`, `createMigratedDb`, `applyCliMigrations`, DAOs, schema, and analytics helpers.
   - `R11.4` — `bun run build` succeeds.
   - `R11.5` — `bun run autofix && bun run spur-check` passes.
+- **R12** — `packages/domain` is NOT merged into `packages/app`:
+  - `R12.1` — `packages/domain` remains a standalone workspace.
+  - `R12.2` — `packages/app` depends on `@gobing-ai/spur-domain`, not the reverse.
+  - `R12.3` — `packages/app` imports only from `@gobing-ai/spur-domain`'s public API (`index.ts`).
+  - `R12.4` — No code is moved OUT of `packages/domain` into `packages/app`.
+  - `R12.5` — `packages/domain` continues to export `DbAdapter`, `createMigratedDb`, `applyCliMigrations`, DAOs, schema, and analytics helpers.
 
 ### Design
 
@@ -304,6 +306,31 @@ export async function runRuleCommand(
     }
 }
 ```
+
+### Solution
+
+This task is decomposed into four deliverable-based child tasks. Decomposition is **mandatory** under the rubric (composite score ~12 ≥ 5 = `must decompose`): ~12-16h effort, 4 independently-reviewable service deliverables, new workspace + 4 CLI modules touched, moderate coordination through the shared `RuleServiceContext` pattern, medium regression risk from the strict R10 byte-identical invariant.
+
+The split is by **service deliverable** (not by implementation phase): the `packages/app` scaffold is the dependency root, after which the three service extractions are independently implementable, testable, and reviewable in parallel. Workflow and History are merged into one child because each alone (120 / 106 lines) is near the 2h floor and they share the identical thin-wrapper pattern — splitting further would over-decompose.
+
+#### Subtasks
+
+- [ ] [0008 - Scaffold packages/app workspace and public service index](0008_Scaffold_packages-app_workspace_and_public_service_index.md)
+- [ ] [0009 - Extract RuleService (448-line worst case)](0009_Extract_RuleService_from_rule_command_into_packages-app.md)
+- [ ] [0010 - Extract AgentService](0010_Extract_AgentService_from_agent_command_into_packages-app.md)
+- [ ] [0011 - Extract WorkflowService + HistoryService](0011_Extract_WorkflowService_and_HistoryService_into_packages-app.md)
+
+**Dependency order:** `0008 → (0009 ‖ 0010 ‖ 0011)` — scaffold first, then the three extractions in parallel.
+
+**Estimated total effort:** 14-19 hours.
+
+#### No-regression baseline (R10)
+
+Golden output snapshots captured at `.tmp/golden-0005/` before any change (10 commands × stdout/stderr/exit): `rule run --preset recommended`, `rule list`, `agent list`, `workflow list`, `history analyze`, each plain + `--json`. Each child task diffs its relevant snapshots byte-for-byte before/after extraction to prove R10 (identical stdout/stderr/exit/`--json`). All baseline commands exit 0 at HEAD `7b50f22`.
+
+#### Parent acceptance (verified after all children complete)
+
+The parent's own gates (R8 public-API surface, R11 full gate including `test-cf`/`build`/`spur-check`, R12 domain-boundary invariant) are verified once 0008-0011 land. The parent stays non-terminal (`Todo`/`WIP`) until then.
 
 ### Plan
 

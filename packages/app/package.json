@@ -1,0 +1,30 @@
+{
+    "name": "@gobing-ai/spur-app",
+    "version": "0.1.0",
+    "type": "module",
+    "private": true,
+    "exports": {
+        ".": "./src/index.ts"
+    },
+    "scripts": {
+        "build": "bun build src/index.ts --outdir dist --target bun",
+        "dev": "bun test --watch",
+        "test": "bun test tests",
+        "typecheck": "tsc --noEmit"
+    },
+    "dependencies": {
+        "@gobing-ai/spur-config": "workspace:0.1.0",
+        "@gobing-ai/spur-domain": "workspace:0.1.0",
+        "@gobing-ai/ts-ai-runner": "catalog:",
+        "@gobing-ai/ts-dual-workflow-engine": "catalog:",
+        "@gobing-ai/ts-infra": "catalog:",
+        "@gobing-ai/ts-llm-jsonl-importer": "catalog:",
+        "@gobing-ai/ts-rule-engine": "catalog:",
+        "@gobing-ai/ts-runtime": "catalog:",
+        "@gobing-ai/ts-utils": "catalog:"
+    },
+    "devDependencies": {
+        "@types/bun": "catalog:",
+        "typescript": "catalog:"
+    }
+}

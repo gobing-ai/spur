@@ -16,7 +16,7 @@
     },
     "apps/cli": {
       "name": "@gobing-ai/spur-cli",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "bin": {
         "spur": "./dist/index.js",
       },
@@ -67,8 +67,28 @@
         "typescript": "catalog:",
       },
     },
+    "packages/app": {
+      "name": "@gobing-ai/spur-app",
+      "version": "0.1.0",
+      "dependencies": {
+        "@gobing-ai/spur-config": "workspace:0.1.0",
+        "@gobing-ai/spur-domain": "workspace:0.1.0",
+        "@gobing-ai/ts-ai-runner": "catalog:",
+        "@gobing-ai/ts-dual-workflow-engine": "catalog:",
+        "@gobing-ai/ts-infra": "catalog:",
+        "@gobing-ai/ts-llm-jsonl-importer": "catalog:",
+        "@gobing-ai/ts-rule-engine": "catalog:",
+        "@gobing-ai/ts-runtime": "catalog:",
+        "@gobing-ai/ts-utils": "catalog:",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/config": {
       "name": "@gobing-ai/spur-config",
+      "version": "0.1.0",
       "dependencies": {
         "zod": "catalog:",
       },
@@ -90,6 +110,7 @@
     },
     "packages/domain": {
       "name": "@gobing-ai/spur-domain",
+      "version": "0.1.0",
       "dependencies": {
         "@gobing-ai/ts-db": "catalog:",
         "@gobing-ai/ts-dual-workflow-engine": "catalog:",
@@ -244,6 +265,8 @@
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.27.3", "", { "os": "win32", "cpu": "x64" }, "sha512-4uJGhsxuptu3OcpVAzli+/gWusVGwZZHTlS63hh++ehExkVT8SgiEf7/uC/PclrPPkLhZqGgCTjd0VWLo6xMqA=="],
 
+    "@gobing-ai/spur-app": ["@gobing-ai/spur-app@workspace:packages/app"],
+
     "@gobing-ai/spur-cli": ["@gobing-ai/spur-cli@workspace:apps/cli"],
 
     "@gobing-ai/spur-config": ["@gobing-ai/spur-config@workspace:packages/config"],
@@ -261,6 +284,8 @@
     "@gobing-ai/ts-db": ["@gobing-ai/ts-db@0.3.0", "", { "dependencies": { "@gobing-ai/ts-runtime": "^0.3.0", "@gobing-ai/ts-utils": "^0.3.0" }, "peerDependencies": { "drizzle-orm": ">=0.38.0", "drizzle-zod": ">=0.5.0", "zod": ">=3.23.0" }, "optionalPeers": ["drizzle-zod", "zod"] }, "sha512-yVLyKupDleE9Mdi0eoFoLEHAWz2onL0heywWsNdRWaQ9dHeaJk5emVgCqdtniwcSnVid7mgdbArxsp9sSEy5Iw=="],
 
     "@gobing-ai/ts-dual-workflow-engine": ["@gobing-ai/ts-dual-workflow-engine@0.3.0", "", { "dependencies": { "@gobing-ai/ts-db": "^0.3.0", "@gobing-ai/ts-runtime": "^0.3.0", "@gobing-ai/ts-utils": "^0.3.0", "zod": "^4.1.0" } }, "sha512-u7VOkW202A4xeWYQ6vBnBoUfCOKVFczX8xii0WeI8f0gixwImVtkoad3yiCVSEveayJ/BcZTlnp8JupJQwwsVg=="],
+
+    "@gobing-ai/ts-infra": ["@gobing-ai/ts-infra@0.3.0", "", { "dependencies": { "@gobing-ai/ts-db": "^0.3.0" }, "peerDependencies": { "@opentelemetry/api": "^1.9.0", "@opentelemetry/exporter-metrics-otlp-http": ">=0.200.0", "@opentelemetry/exporter-trace-otlp-http": ">=0.200.0", "@opentelemetry/resources": "^2.0.0", "@opentelemetry/sdk-metrics": "^2.0.0", "@opentelemetry/sdk-trace-node": "^2.0.0", "@opentelemetry/semantic-conventions": "^1.30.0" }, "optionalPeers": ["@opentelemetry/exporter-metrics-otlp-http", "@opentelemetry/exporter-trace-otlp-http", "@opentelemetry/resources", "@opentelemetry/sdk-metrics", "@opentelemetry/sdk-trace-node"] }, "sha512-bTC5wxSrilzNPPYwHMixpScx11+yWiEM5GSLkkPlO2WTfE5SraaXSgvdiUlkEURPD5onHLLGSIsFWsFZkbN2gQ=="],
 
     "@gobing-ai/ts-llm-jsonl-importer": ["@gobing-ai/ts-llm-jsonl-importer@0.3.0", "", { "dependencies": { "@gobing-ai/ts-db": "^0.3.0", "@gobing-ai/ts-runtime": "^0.3.0", "@gobing-ai/ts-utils": "^0.3.0", "zod": "^4.1.0" } }, "sha512-IMV4NzxOnuWP6uZ5n0kVyCLoxVGoNoBx3SNU5dkZb+v1rzbqMGdiGjSlyhWAhwFe1Ksc5p3kwia5z8a34xrT8A=="],
 
@@ -327,6 +352,8 @@
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.9", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.0.3", "@jridgewell/sourcemap-codec": "^1.4.10" } }, "sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ=="],
 
     "@opentelemetry/api": ["@opentelemetry/api@1.9.1", "", {}, "sha512-gLyJlPHPZYdAk1JENA9LeHejZe1Ti77/pTeFm/nMXmQH/HFZlcS/O2XJB+L8fkbrNSqhdtlvjBVjxwUYanNH5Q=="],
+
+    "@opentelemetry/semantic-conventions": ["@opentelemetry/semantic-conventions@1.41.1", "", {}, "sha512-/UhIkaZgPutTFmQ7RnIJGgDXZmtEJ7Dvi86xNTFWcnRxVRNk/aotsqDJYeEvDP+FSMB2SdW+pQzNMcWP0rwuNA=="],
 
     "@orpc/client": ["@orpc/client@1.14.4", "", { "dependencies": { "@orpc/shared": "1.14.4", "@orpc/standard-server": "1.14.4", "@orpc/standard-server-fetch": "1.14.4", "@orpc/standard-server-peer": "1.14.4" } }, "sha512-i6Z9FikIm9Qz3Br10vk8/cllgjdYdlRKK2OV3x2/CdOBRr+B68tboNdpH3eeb1kv8/Zd6ZsXcWaDfrANdj2GZQ=="],
 
