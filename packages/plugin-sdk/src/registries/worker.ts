@@ -7,12 +7,14 @@ import { Registry } from './base';
 // A plugin-provided worker exposes a `process` entry point that receives
 // an arbitrary payload and returns an async result.
 
+/** Plugin worker: async process entry point receiving an arbitrary payload. */
 export interface WorkerImpl {
     process(payload: unknown): Promise<unknown>;
 }
 
 // ── WorkerRegistry ─────────────────────────────────────────────────────
 
+/** Registry of plugin workers. */
 export class WorkerRegistry extends Registry<WorkerImpl> {
     constructor(trust: TrustEngine, logger: Logger) {
         super('workers', trust, logger);
