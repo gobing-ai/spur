@@ -5,6 +5,7 @@ import type { TrustEngine } from '../trust';
 
 // ── Registry entry ───────────────────────────────────────────────────
 
+/** A single registered entry pairing an implementation with its source plugin. */
 export interface RegistryEntry<T> {
     name: string;
     impl: T;
@@ -18,6 +19,7 @@ export interface RegistryEntry<T> {
 // Built-ins are seeded via preRegister() and resolved through the
 // same get() path — enabling the 5f migration-as-move.
 
+/** Abstract typed registry — validates collisions + trust, resolves by name. */
 export abstract class Registry<TImpl> {
     private readonly entries = new Map<string, RegistryEntry<TImpl>>();
 
