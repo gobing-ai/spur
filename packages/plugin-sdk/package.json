@@ -1,0 +1,23 @@
+{
+    "name": "@gobing-ai/spur-plugin-sdk",
+    "version": "0.1.0",
+    "type": "module",
+    "private": true,
+    "exports": {
+        ".": "./src/index.ts"
+    },
+    "scripts": {
+        "build": "bun build src/index.ts --outdir dist --target bun",
+        "dev": "bun test --watch",
+        "test": "bun test tests",
+        "typecheck": "tsc --noEmit"
+    },
+    "dependencies": {
+        "@gobing-ai/ts-infra": "catalog:",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@types/bun": "catalog:",
+        "typescript": "catalog:"
+    }
+}
