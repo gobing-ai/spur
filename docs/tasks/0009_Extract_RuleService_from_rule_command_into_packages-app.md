@@ -1,9 +1,9 @@
 ---
 name: Extract RuleService from rule command into packages-app
 description: Extract RuleService from rule command into packages-app
-status: Testing
+status: Done
 created_at: 2026-06-03T06:12:16.722Z
-updated_at: 2026-06-03T07:14:11.019Z
+updated_at: 2026-06-03T07:17:44.766Z
 folder: docs/tasks
 type: task
 feature-id: F-4 app-services
@@ -60,7 +60,13 @@ RuleService extracted and wired. CLI rule.ts is a 70-line dispatcher (≤100 tar
 
 ### Review
 
-**Verdict: PASS** (integration gate, 2026-06-03). SECU clean (no secrets/any/unsafe sinks in extracted service). Requirements: R2 (RuleService API) MET, R6.1 (rule.ts ≤100 → 70) MET, R8 (public API, no internal leak) MET, R9.1 (tests migrated) MET, R10 (byte-identical rule run/list) MET. Coverage 97.56% line / 99.63% function.
+**Verdict: PASS** (dev-verify --force, 2026-06-03).
+
+Phase 7 (SECU): no findings. No secrets, no bare `any`, no unsafe casts, no empty catch, no blocking sync I/O in rule-service.ts or rule.ts.
+
+Phase 8 (traceability): R2 (RuleService.evaluate/validate/list) MET · R6.1 (rule.ts 70 ≤100) MET · R8 (index exports service + types only, no internal helpers) MET · R9.1 (tests migrated to packages/app) MET · R10 (rule run + rule list byte-identical, plain + --json) MET. Coverage 97.56% line / 99.63% function.
+
+`--fix all`: 0 actionable findings.
 
 
 ### Testing

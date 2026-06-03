@@ -1,9 +1,9 @@
 ---
 name: Extract AgentService from agent command into packages-app
 description: Extract AgentService from agent command into packages-app
-status: Testing
+status: Done
 created_at: 2026-06-03T06:12:27.584Z
-updated_at: 2026-06-03T07:14:11.263Z
+updated_at: 2026-06-03T07:17:44.849Z
 folder: docs/tasks
 type: task
 feature-id: F-4 app-services
@@ -60,7 +60,13 @@ AgentService extracted and wired. agent.ts is a 35-line dispatcher (≤80 met). 
 
 ### Review
 
-**Verdict: PASS** (integration gate, 2026-06-03). SECU clean. Requirements: R3 (AgentService API + DI seam) MET, R6.2 (agent.ts ≤80 → 35) MET, R8 MET, R9.2 (tests migrated) MET, R10.4 (SPUR_AGENT unchanged) MET, R10 (agent list byte-identical) MET. Coverage 100% line / 100% function.
+**Verdict: PASS** (dev-verify --force, 2026-06-03).
+
+Phase 7 (SECU): no findings. agent-service.ts / agent.ts clean across all four dimensions; AgentRunDeps injection seam preserved.
+
+Phase 8 (traceability): R3 (resolve/run/list/doctor) MET · R6.2 (agent.ts 35 ≤80) MET · R8 MET · R9.2 (tests migrated, DI mocks adapted) MET · R10.4 (SPUR_AGENT unchanged) MET · R10 (agent list byte-identical) MET. Coverage 100% / 100%.
+
+`--fix all`: 0 actionable findings.
 
 
 ### Testing

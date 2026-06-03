@@ -17,13 +17,14 @@ export type WorkflowValidateResult =
     | { ok: true; valid: true; workflow: Awaited<ReturnType<typeof loadWorkflowDef>> }
     | { ok: false; valid: false; file: string; errors: string[] };
 
-/** Result of a workflow run operation. */
-export interface WorkflowRunResult {
-    status: string;
-    workflowName: string;
-    finalState: string;
-    [key: string]: unknown;
-}
+/**
+ * Result of a workflow run operation: the engine's run result, widened with an
+ * index signature so it serializes cleanly via `toJson`. Derived from the engine
+ * return type so the field names stay in lockstep with the engine.
+ */
+export type WorkflowRunResult = Awaited<ReturnType<InstanceType<typeof EngineWorkflowService>['runFile']>> & {
+    readonly [key: string]: unknown;
+};
 
 /** Result of a workflow list operation. */
 export interface WorkflowListResult {
@@ -82,7 +83,7 @@ export class WorkflowAppService {
             workdir: this.ctx.cwd,
             runId: runId ?? crypto.randomUUID(),
         });
-        return result as unknown as WorkflowRunResult;
+        return result as WorkflowRunResult;
     }
 
     /** List persisted workflow runs. */

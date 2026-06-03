@@ -1,9 +1,9 @@
 ---
 name: Extract WorkflowService and HistoryService into packages-app
 description: Extract WorkflowService and HistoryService into packages-app
-status: Testing
+status: Done
 created_at: 2026-06-03T06:12:40.140Z
-updated_at: 2026-06-03T07:14:11.496Z
+updated_at: 2026-06-03T07:17:44.935Z
 folder: docs/tasks
 type: task
 feature-id: F-4 app-services
@@ -60,7 +60,11 @@ WorkflowAppService + HistoryService extracted and wired. workflow.ts 66 lines, h
 
 ### Review
 
-**Verdict: PASS** (integration gate, 2026-06-03). SECU clean. Requirements: R4 (WorkflowAppService API, collision resolved via EngineWorkflowService alias) MET, R5 (HistoryService API) MET, R6.3 (workflow.ts ≤60 → 66, +6 accepted variance from inlined requiredWorkflowFile), R6.4 (history.ts ≤60 → 62, +2 accepted variance), R8 MET, R9.3 (tests migrated) MET, R10 (workflow list/history analyze byte-identical) MET. Coverage 100% line / 100% function both services.
+**Verdict: PASS** (dev-verify --force, 2026-06-03).
+
+Phase 7 (SECU): one P3 (type-safety) finding FIXED under --fix all — workflow-service.ts:85 `as unknown as WorkflowRunResult` double-cast replaced with a type derived from the engine's runFile return signature (single safe widening cast; field names now stay in lockstep with the engine). Verified: typecheck clean, workflow output still byte-identical. history-service.ts / both CLI wrappers clean.
+
+Phase 8 (traceability): R4 (WorkflowAppService, EngineWorkflowService alias resolves collision) MET · R5 (HistoryService import/analyze) MET · R6.3 (workflow.ts 66, +6 accepted variance from inlined requiredWorkflowFile) · R6.4 (history.ts 62, +2 accepted variance) · R8 MET · R9.3 (tests migrated, hermetic) MET · R10 (workflow list + history analyze byte-identical) MET. Coverage 100% / 100% both services.
 
 
 ### Testing
