@@ -1,0 +1,63 @@
+# [STRICT — opt-in] HTTP-client boundaries. Absorbed from
+# ts-libs/.spur/rules/typescript/external-api-boundaries.yaml. NOT in
+# recommended-pre-check: Spur has no central api-client seam yet, and the
+# server's Hono/Workers entrypoint legitimately exposes a `fetch` handler.
+# Opt in via: spur rule run --preset strict  (or --rule <id>).
+include:
+  - "apps/**/src/**/*.ts"
+  - "packages/**/src/**/*.ts"
+exclude:
+  - "**/tests/**"
+  - "**/*.test.ts"
+  - "**/node_modules/**"
+  - "**/dist/**"
+
+rules:
+  - id: no-direct-fetch
+    description: "Prefer a centralized HTTP client over ad-hoc fetch(...). The server's Hono/Workers fetch entrypoint is exempt."
+    severity: warning
+    evaluator:
+      type: regex
+      config:
+        pattern: "(^|[^.[:alnum:]_])fetch\\("
+    exclude:
+      # Hono/Cloudflare Workers entrypoint — `fetch` is the platform contract.
+      - "apps/server/src/worker.ts"
+      - "apps/server/src/app.ts"
+
+  - id: no-globalthis-fetch
+    description: "Avoid globalThis.fetch(...); route HTTP through a client seam when one exists."
+    severity: warning
+    evaluator:
+      type: regex
+      config:
+        pattern: "globalThis\\.fetch\\("
+
+  - id: no-xml-http-request
+    description: "Do not use XMLHttpRequest in a Bun/Node codebase."
+    severity: error
+    evaluator:
+      type: regex
+      config:
+        pattern: "new\\s+XMLHttpRequest\\("
+
+  - id: no-third-party-http-clients
+    description: "Use the platform fetch / a project client instead of ad-hoc HTTP client libraries (axios/got/ky/ofetch/undici)."
+    severity: error
+    evaluator:
+      type: forbidden-import
+      config:
+        forbidden:
+          - specifier: "axios"
+          - specifier: "got"
+          - specifier: "ky"
+          - specifier: "ofetch"
+          - specifier: "undici"
+        scope:
+          include:
+            - "apps/**/*.ts"
+            - "packages/**/*.ts"
+          exclude:
+            - "**/tests/**"
+            - "**/*.test.ts"
+            - "**/dist/**"
