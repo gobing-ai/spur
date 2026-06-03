@@ -32,6 +32,26 @@ describe('CLI dispatch and status', () => {
 
         expect(await main(['unknown'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
         expect(output.errors.at(-1)).toContain('Unknown command');
+
+        // Team-mode command groups are advertised in help.
+        expect(helpText()).toContain('message send');
+        expect(helpText()).toContain('team assign');
+        expect(helpText()).toContain('agent create');
+    });
+
+    test('dispatches message and team command groups', async () => {
+        const cwd = await createTempProject();
+        const output = createCapturedOutput();
+
+        // message send → enqueue (routed through dispatch).
+        expect(
+            await main(['message', 'send', '--to', 'planner', 'hi', '--json'], { cwd, output, dbUrl: ':memory:' }),
+        ).toBe(0);
+        expect(JSON.parse(output.messages.at(-1) ?? '{}').toId).toBe('planner');
+
+        // team status on a specless project routes through dispatch and exits 0.
+        expect(await main(['team', 'status'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
+        expect(output.messages.at(-1)).toMatch(/No agent specs found/);
     });
 
     test('status reports optional path metadata and missing path errors', async () => {
