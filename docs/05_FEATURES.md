@@ -107,5 +107,5 @@ Legend: ✅ done · 🔶 partial (MVP, depth pending) · ⏳ planned · 💤 def
 |---------|--------------|
 | Asset SSOT model / `spur asset inspect` | Old `@spur/assets` discarded; rebuild only if needed |
 | Rich `spur inspect <run-id>` (timeline/events/gates) | Depends on Phase 2 run model |
-| Extension/plugin seams | Phase 5; first-party registries stay stable in the meantime |
+| Plugin **substrate** (SDK, discovery, registries, trust ladder) — first-party primitives live on it | 💤 Design settled in **ADR-012** (task 0006). Low-level substrate, not an add-on: harnesses/rules/providers/history sources are *eventually* bundled plugins on top of it (substrate now, migrate later — Decision 7). Build re-scoped into Phase-5 slices 5a–5f (ROADMAP): two-class fail-fast/fail-soft loading, public registry contracts, `bundled` = unconditionally allowed. Harness registry (5d) rides the structural `AgentShim` overlay — no upstream gate; sandboxing (5e) accepted out of scope (PRD §5.4 + ADR-010); 5f migrates built-in harnesses onto bundled plugins |
 | Remote/cooperation transport | Out of scope until a concrete need surfaces |
