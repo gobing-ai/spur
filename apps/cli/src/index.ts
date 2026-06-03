@@ -5,9 +5,11 @@ import { parseArgs } from './args';
 import { runAgentCommand } from './commands/agent';
 import { runHistoryCommand } from './commands/history';
 import { runInitCommand } from './commands/init';
+import { runMessageCommand } from './commands/message';
 import { runMigrateCommand } from './commands/migrate';
 import { runRuleCommand } from './commands/rule';
 import { runStatusCommand } from './commands/status';
+import { runTeamCommand } from './commands/team';
 import { runWorkflowCommand } from './commands/workflow';
 import { CLI_CONFIG } from './config';
 import { type CliContext, createCliContext } from './context';
@@ -72,6 +74,10 @@ export async function dispatch(argv: string[], context: CliContext): Promise<num
             return runWorkflowCommand(subcommand, context, parsed.flags, parsed.positionals);
         case 'agent':
             return runAgentCommand(subcommand, context, parsed.flags, parsed.positionals);
+        case 'message':
+            return runMessageCommand(subcommand, context, parsed.flags, parsed.positionals);
+        case 'team':
+            return runTeamCommand(subcommand, context, parsed.flags, parsed.positionals);
         case 'history':
             return runHistoryCommand(subcommand, context, parsed.flags, parsed.positionals);
         default:
@@ -99,8 +105,17 @@ export function helpText(): string {
         '  migrate [--json]                                                   Apply CLI-owned schema migrations (temporary helper)',
         '  agent run <prompt> [--agent <name>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--json]',
         '                                                                      Execute a prompt or slash command via a coding agent',
-        '  agent list [--json]                                                List detected coding agents',
+        '  agent list [--json] [--specs]                                      List detected coding agents (and team specs)',
         '  agent doctor [agent] [--json]                                      Check agent readiness',
+        '  agent create <id> --type <agent> [flags]                           Write a team agent spec to .spur/agents/<id>.yaml',
+        '  agent edit <id>                                                    Open an agent spec in $EDITOR (or print its path)',
+        '  agent delete <id> [--force]                                        Remove an agent spec',
+        '  message send --to <id> <body> [--from <id>] [--json]               Enqueue a message for an agent',
+        '  message inbox --agent <id> [--json]                                List messages addressed to an agent',
+        '  message reply <msg-id> <body> [--json]                             Thread a reply to a message',
+        '  team assign <task-id> <agent-id>                                   Set the assignee on a task file',
+        '  team status [--json]                                               List agent specs and their run status',
+        '  team start | team stop                                             Team daemon (Phase 4, deferred stubs)',
         '  rule run [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <severity>] [--json]',
         '                                                                      Evaluate constraint rules over the working tree',
         '  rule validate [--file <path>|--preset <name>|<path>] [--json]       Validate rule files or presets without evaluating them',
