@@ -257,6 +257,54 @@ describe('AgentService.run validation', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Tests: AgentService.run — team-mode identity flags
+// ---------------------------------------------------------------------------
+
+describe('AgentService.run team-mode flags', () => {
+    test('--purpose, --tags, --system-prompt, --task reach PromptOptions', async () => {
+        const svc = makeService();
+        const { deps, runner } = mockDeps();
+        const exitCode = await svc.run(
+            'hello',
+            {
+                agent: 'pi',
+                json: true,
+                purpose: 'plan the work',
+                tags: 'alpha, beta ,',
+                'system-prompt': 'be terse',
+                task: '0042',
+            },
+            deps,
+        );
+        expect(exitCode).toBe(0);
+        const call = runner.runPromptCommand.mock.calls[0];
+        const promptOptions = call?.[1] as {
+            purpose?: string;
+            tags?: string[];
+            systemPrompt?: string;
+            taskId?: string;
+        };
+        expect(promptOptions.purpose).toBe('plan the work');
+        // tags are split, trimmed, and emptied entries dropped.
+        expect(promptOptions.tags).toEqual(['alpha', 'beta']);
+        expect(promptOptions.systemPrompt).toBe('be terse');
+        expect(promptOptions.taskId).toBe('0042');
+    });
+
+    test('omits team-mode fields from PromptOptions when flags are absent', async () => {
+        const svc = makeService();
+        const { deps, runner } = mockDeps();
+        const exitCode = await svc.run('hello', { agent: 'pi', json: true }, deps);
+        expect(exitCode).toBe(0);
+        const promptOptions = runner.runPromptCommand.mock.calls[0]?.[1] as Record<string, unknown>;
+        expect(promptOptions.purpose).toBeUndefined();
+        expect(promptOptions.tags).toBeUndefined();
+        expect(promptOptions.systemPrompt).toBeUndefined();
+        expect(promptOptions.taskId).toBeUndefined();
+    });
+});
+
+// ---------------------------------------------------------------------------
 // Tests: AgentService.run — agent resolution
 // ---------------------------------------------------------------------------
 
