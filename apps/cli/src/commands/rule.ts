@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 import {
+    bundledRulesRoot,
     type ConstraintFinding,
     type ConstraintRule,
     loadPresetRules,
@@ -28,6 +29,14 @@ const GLOBAL_RULES_DIR = join('.config', 'spur', 'rules');
  *
  * `SPUR_GLOBAL_RULES_DIR` overrides the global root (resolved against the working
  * directory); set it to a known-empty path to isolate a run from user globals.
+ * Setting it also suppresses the bundled fallback below, so the caller gets a
+ * fully hermetic rule layer (the local root plus the explicit global override) —
+ * which is what tests and reproducible CI runs need.
+ *
+ * Otherwise the presets bundled with `@gobing-ai/ts-rule-engine` are appended as
+ * the lowest-priority root so `--preset recommended` resolves to a working ruleset
+ * on a clean install, before `spur init` has seeded the user-global directory.
+ * Local and global roots still shadow individual bundled files per relative path.
  */
 function ruleRoots(context: CliContext): string[] {
     const roots: string[] = [];
@@ -39,11 +48,13 @@ function ruleRoots(context: CliContext): string[] {
     }
     roots.push(resolve(context.cwd, LOCAL_RULES_DIR));
     const globalOverride = context.env.SPUR_GLOBAL_RULES_DIR;
-    roots.push(
-        globalOverride !== undefined && globalOverride.length > 0
-            ? resolve(context.cwd, globalOverride)
-            : join(homedir(), GLOBAL_RULES_DIR),
-    );
+    const hasGlobalOverride = globalOverride !== undefined && globalOverride.length > 0;
+    roots.push(hasGlobalOverride ? resolve(context.cwd, globalOverride) : join(homedir(), GLOBAL_RULES_DIR));
+    // An explicit global override means a hermetic run; skip the bundled fallback.
+    if (!hasGlobalOverride) {
+        const bundled = bundledRulesRoot();
+        if (bundled !== null) roots.push(bundled);
+    }
     return roots;
 }
 
@@ -106,6 +117,11 @@ async function runRuleEvaluation(
         context.output.write(emptyResultMessage(flags, preset, selectedRule, filteredRules.length));
     }
 
+    // A run that evaluated zero rules is a misconfiguration, not a pass: a
+    // constraint gate that silently checks nothing is the worst failure mode.
+    // Fail loud so an unseeded install or a typo'd --preset/--rule/--file is
+    // caught instead of green-lit. The emptyResultMessage above explains which.
+    if (filteredRules.length === 0) return 1;
     return result.findings.some((finding) => SEVERITY_RANK[finding.severity] >= SEVERITY_RANK[failOn]) ? 1 : 0;
 }
 
