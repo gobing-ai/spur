@@ -180,6 +180,12 @@ export async function runInitCommand(context: CliContext, flags: Record<string, 
     await context.fs.writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`);
     result.created.push(configPath);
 
+    // Team-mode agent specs live under .spur/agents/; seed the directory with a
+    // .gitkeep so it is tracked before any `spur agent create` writes a spec.
+    const agentsDir = join(context.cwd, CLI_CONFIG.configDir, 'agents');
+    await context.fs.mkdir(agentsDir);
+    await writeIfNew(context, join(agentsDir, '.gitkeep'), '', force, result);
+
     if (!minimal) {
         await context.fs.mkdir(join(context.cwd, LOCAL_RULES_DIR));
         await context.fs.mkdir(join(context.cwd, LOCAL_WORKFLOWS_DIR));
