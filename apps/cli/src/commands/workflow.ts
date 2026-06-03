@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import {
     createDefaultWorkflowEngineHost,
     DbWorkflowPersistenceAdapter,
@@ -36,13 +37,39 @@ async function validateWorkflow(
     positionals: readonly string[],
 ): Promise<number> {
     const file = requiredWorkflowFile(positionals);
-    const workflow = await loadWorkflowDef(file);
-    if (booleanFlag(flags, 'json')) {
-        context.output.write(toJson({ ok: true, workflow }));
+    const json = booleanFlag(flags, 'json');
+    const absolute = resolve(context.cwd, file);
+
+    if (!(await context.fs.exists(absolute))) {
+        return reportInvalidWorkflow(context, file, [`File not found: ${absolute}`], json);
+    }
+
+    // loadWorkflowDef runs structural (Zod), $schema, and semantic validation; it
+    // throws on the first failure. Catch it so an invalid workflow is reported with
+    // a non-zero exit instead of leaking an uncaught error.
+    let workflow: Awaited<ReturnType<typeof loadWorkflowDef>>;
+    try {
+        workflow = await loadWorkflowDef(absolute, { validateSchema: !booleanFlag(flags, 'no-schema') });
+    } catch (error) {
+        return reportInvalidWorkflow(context, file, [error instanceof Error ? error.message : String(error)], json);
+    }
+
+    if (json) {
+        context.output.write(toJson({ ok: true, valid: true, workflow }));
     } else {
         context.output.write(`workflow valid: ${workflow.name}`);
     }
     return 0;
+}
+
+/** Emit a structured/human invalid-workflow result and return a failure exit code. */
+function reportInvalidWorkflow(context: CliContext, file: string, errors: string[], json: boolean): number {
+    if (json) {
+        context.output.write(toJson({ ok: false, valid: false, file, errors }));
+    } else {
+        context.output.error(`workflow invalid: ${file}\n${errors.map((message) => `  - ${message}`).join('\n')}`);
+    }
+    return 1;
 }
 
 async function runWorkflow(
