@@ -178,12 +178,24 @@ export class AgentService {
         const input =
             prompt !== undefined && isClaudeStyleSlashCommand(prompt) ? translateSlashCommand(agent, prompt) : prompt;
 
+        // team-mode identity flags map straight through to PromptOptions; the
+        // shim renders them into the agent's identity preamble. `--task` reads the
+        // task file (if present) so the agent gets the task id + title as context.
+        const purpose = stringFlag(flags, 'purpose', '') || undefined;
+        const tags = parseTagsFlag(flags);
+        const systemPrompt = stringFlag(flags, 'system-prompt', '') || undefined;
+        const taskId = stringFlag(flags, 'task', '') || undefined;
+
         // build PromptOptions
         const promptOptions: PromptOptions = {
             input,
             continue: continueFlag || undefined,
             model: stringFlag(flags, 'model', '') || undefined,
             mode: mode as 'text' | 'json',
+            ...(purpose !== undefined ? { purpose } : {}),
+            ...(tags !== undefined ? { tags } : {}),
+            ...(systemPrompt !== undefined ? { systemPrompt } : {}),
+            ...(taskId !== undefined ? { taskId } : {}),
         };
 
         // dispatch diagnostics (suppressed in --json)
@@ -314,4 +326,15 @@ function stringFlag(flags: Record<string, string | boolean>, name: string, fallb
 
 function booleanFlag(flags: Record<string, string | boolean>, name: string): boolean {
     return flags[name] === true;
+}
+
+/** Parse the comma-separated `--tags` flag into trimmed, non-empty tags, or undefined when absent. */
+function parseTagsFlag(flags: Record<string, string | boolean>): string[] | undefined {
+    const raw = stringFlag(flags, 'tags', '');
+    if (raw === '') return undefined;
+    const tags = raw
+        .split(',')
+        .map((tag) => tag.trim())
+        .filter(Boolean);
+    return tags.length > 0 ? tags : undefined;
 }
