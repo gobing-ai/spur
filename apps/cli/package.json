@@ -35,11 +35,11 @@
     },
     "scripts": {
         "dev": "bun run src/index.ts",
-        "build": "bun build src/index.ts --target=bun --outfile dist/index.js",
-        "build:binary": "bun build src/index.ts --compile --outfile ../../dist/cli/spur",
+        "build": "bun build src/index.ts --compile --outfile ../../dist/cli/spur",
+        "build:bundle": "bun build src/index.ts --target=bun --outfile dist/index.js",
         "test": "bun test tests --coverage --pass-with-no-tests",
         "typecheck": "tsc --noEmit",
-        "prepublishOnly": "bun run build"
+        "prepublishOnly": "bun run build:bundle"
     },
     "devDependencies": {
         "@gobing-ai/spur-app": "workspace:0.1.0",
