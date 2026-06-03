@@ -40,9 +40,7 @@ export async function runHistoryCommand(
         }
         default:
             context.output.error(
-                'Usage: spur history import --source <source> [--file <path>|--root <path>] [--mode full|incremental|force-file] [--json]\n' +
-                    '       spur history analyze [--since <iso-date>] [--json]\n' +
-                    '       spur history report [--json]',
+                'Usage: spur history import --source <source> [--file <path>|--root <path>] [--mode full|incremental|force-file] [--json]\n       spur history analyze [--since <iso-date>] [--json]\n       spur history report [--json]',
             );
             return 1;
     }
