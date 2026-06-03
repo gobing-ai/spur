@@ -60,6 +60,39 @@ WorkflowAppService + HistoryService extracted and wired. workflow.ts 66 lines, h
 
 ### Review
 
+## Review — 2026-06-03 (dev-verify --force --fix all)
+
+**Verdict: PASS**
+**Scope:** `apps/cli/src/commands/workflow.ts`, `apps/cli/src/commands/history.ts`, `packages/app/src/services/workflow-service.ts`, `packages/app/src/services/history-service.ts`, `packages/app/src/index.ts`, and corresponding workflow/history tests
+**Mode:** verify (Phase 7 SECU + Phase 8 traceability)
+**Channel:** current
+**Gate:** `bun run check` → PASS; `test-cf`, `build`, pre-check, and post-check also PASS
+
+### Phase 7 — SECU
+
+No remaining findings across Security, Efficiency, Correctness, or Usability. The audited source has no hardcoded secrets, unsafe browser sinks, command execution, broad `any`, blocking sync I/O, or unsafe `any` casts. Workflow engine naming remains collision-safe via `WorkflowAppService` and `EngineWorkflowService`.
+
+### Phase 8 — Requirements Traceability
+
+- [x] **R1** app-layer workflow service + name-collision fix → **MET** | `packages/app/src/services/workflow-service.ts` defines `WorkflowAppService`; engine service is imported as `EngineWorkflowService`; public methods `validate`, `run`, and `list` are present.
+- [x] **R2** history service import/analyze surface → **MET** | `packages/app/src/services/history-service.ts` defines `HistoryService.import` and `HistoryService.analyze`.
+- [x] **R3** parsing/required-file helpers moved/private → **MET with accepted wrapper exception** | `parseSource` and `parseMode` are private module helpers in `history-service.ts`; workflow required-file validation remains private to the thin CLI wrapper to avoid exporting a CLI-only helper from the app API.
+- [x] **R4** public exports → **MET** | `packages/app/src/index.ts` exports both services and `WorkflowValidateResult`, `WorkflowRunResult`, `WorkflowListResult`, `HistoryImportResult`, and `HistoryAnalyzeResult` without re-exporting private helpers.
+- [x] **R5** CLI wrappers ≤60 lines → **MET after fix pass** | `apps/cli/src/commands/workflow.ts` is 60 lines; `apps/cli/src/commands/history.ts` is 60 lines.
+- [x] **R6** workflow/history tests migrated/adapted → **MET** | Service suites live in `packages/app/tests/services/workflow-service.test.ts` and `packages/app/tests/services/history-service.test.ts`; CLI dispatch coverage remains in `apps/cli/tests/commands/`.
+- [x] **R7** coverage target ≥85% lines / ≥90% funcs → **MET** | full gate reports `workflow-service.ts` and `history-service.ts` at 100% lines / 100% funcs, with aggregate 99.46% lines / 100% funcs.
+- [x] **Acceptance** golden output parity + gate → **MET** | `diff -ru .tmp/golden-0005 .tmp/after-0005` clean; `bun run check`, `bun run test-cf`, `bun run build`, `bun run test-pre-check`, and `bun run test-post-check` pass.
+
+### Findings Fixed
+
+| # | Title | Dimension | Location | Resolution |
+|---|-------|-----------|----------|------------|
+| 1 | CLI wrappers exceeded the literal line-count target | Usability | `apps/cli/src/commands/workflow.ts`, `apps/cli/src/commands/history.ts` | Reduced formatter-stable wrapper code without changing output or exit behavior; both files now meet the ≤60-line target and retain required export JSDoc. |
+
+### Post-fix Verdict
+
+PASS. No P1/P2/P3/P4 findings remain, all task requirements are met or explicitly documented as an accepted wrapper-private exception, workflow/history golden output parity is preserved, and all verification gates are green.
+
 **Verdict: PASS** (dev-verify --force, 2026-06-03).
 
 Phase 7 (SECU): one P3 (type-safety) finding FIXED under --fix all — workflow-service.ts:85 `as unknown as WorkflowRunResult` double-cast replaced with a type derived from the engine's runFile return signature (single safe widening cast; field names now stay in lockstep with the engine). Verified: typecheck clean, workflow output still byte-identical. history-service.ts / both CLI wrappers clean.
@@ -83,5 +116,3 @@ Phase 8 (traceability): R4 (WorkflowAppService, EngineWorkflowService alias reso
 | ---- | ---- | ----- | ---- |
 
 ### References
-
-
