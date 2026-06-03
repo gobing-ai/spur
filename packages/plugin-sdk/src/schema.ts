@@ -2,10 +2,12 @@ import { z } from 'zod';
 
 // ── Trust level ──────────────────────────────────────────────────────
 
+/** Trust level for a plugin, controlling allowed capabilities. */
 export const TrustLevelSchema = z.enum(['bundled', 'curated', 'local', 'untrusted']);
 
 // ── Capabilities manifest ────────────────────────────────────────────
 
+/** Declared capabilities a plugin requests in its manifest. */
 export const CapabilitiesSchema = z
     .object({
         commands: z.array(z.string()).optional(),
@@ -20,10 +22,12 @@ export const CapabilitiesSchema = z
     })
     .strict();
 
+/** Manifest shape for plugin capabilities. */
 export type CapabilitiesManifest = z.infer<typeof CapabilitiesSchema>;
 
 // ── Allow block (policy only in 5a) ──────────────────────────────────
 
+/** Runtime policy grants (filesystem, network, shell commands). */
 export const AllowSchema = z
     .object({
         filesystem: z.array(z.string()).optional(),
@@ -34,6 +38,7 @@ export const AllowSchema = z
 
 // ── Plugin manifest ──────────────────────────────────────────────────
 
+/** Zod schema for plugin.yaml manifest validation. */
 export const PluginManifestSchema = z
     .object({
         name: z.string().regex(/^[a-z][a-z0-9-]*$/),
@@ -47,16 +52,20 @@ export const PluginManifestSchema = z
     })
     .strict();
 
+/** Parsed plugin manifest type. */
 export type PluginManifest = z.infer<typeof PluginManifestSchema>;
 
 // ── Plugin config schema (base; plugins may extend) ──────────────────
 
+/** Loose record type for plugin configuration values. */
 export const PluginConfigSchema = z.record(z.string(), z.unknown());
 
+/** Plugin config — an open string-keyed record. */
 export type PluginConfig = z.infer<typeof PluginConfigSchema>;
 
 // ── Error class ──────────────────────────────────────────────────────
 
+/** Thrown when plugin.yaml fails Zod validation with path-pointed messages. */
 export class PluginManifestError extends Error {
     public readonly issues: z.ZodIssue[];
 
