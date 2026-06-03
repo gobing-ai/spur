@@ -1,9 +1,9 @@
 ---
 name: Extract AgentService from agent command into packages-app
 description: Extract AgentService from agent command into packages-app
-status: Backlog
+status: Testing
 created_at: 2026-06-03T06:12:27.584Z
-updated_at: 2026-06-03T06:12:27.584Z
+updated_at: 2026-06-03T07:14:11.263Z
 folder: docs/tasks
 type: task
 feature-id: F-4 app-services
@@ -37,22 +37,40 @@ R1: Create packages/app/src/services/agent-service.ts with an AgentService class
 
 ### Design
 
+- Scope: Extracted agent orchestration from apps/cli/src/commands/agent.ts (294→35 lines) into AgentService (packages/app/src/services/agent-service.ts, 308 lines).
+- Key decision: AgentService takes context (cwd, env, output) plus optional AgentRunDeps — the dependency-injection seam preserved so tests can inject mock runner/detector/doctorRunner. resolve/run/list/doctor are public; resolveAgent* and handleRunOutput are private.
+- Boundaries affected: agent.ts (thin wrapper, kept its 3-test dispatch stub), packages/app index (exports AgentService + AgentResolveResult + AgentRunDeps + output types), agent-service.test.ts (migrated 36-test DI suite).
+- Risks: R10 byte-identical for agent list; agent run/doctor covered via injected-mock tests. Verified.
 
 
 ### Solution
 
+AgentService extracted and wired. agent.ts is a 35-line dispatcher (≤80 met). AgentRunDeps injection seam retained for testability. Integration fix: agent-service.test.ts output-mock helpers were typed to AgentServiceOutput (was inferred () => void, mismatched the 1-arg write). Implemented by subagent (worktree), integrated onto main (d355d62).
 
 
 ### Plan
 
+- [x] Capture golden snapshots for agent list (plain + --json)
+- [x] Implement AgentService preserving AgentRunDeps injection
+- [x] Rewrite agent.ts as thin wrapper (35 lines)
+- [x] Migrate agent tests to packages/app/tests/services/agent-service.test.ts
+- [x] Keep apps/cli/tests/commands/agent.test.ts dispatch stub
+- [x] Verify byte-identical agent list; run gate
 
 
 ### Review
 
+**Verdict: PASS** (integration gate, 2026-06-03). SECU clean. Requirements: R3 (AgentService API + DI seam) MET, R6.2 (agent.ts ≤80 → 35) MET, R8 MET, R9.2 (tests migrated) MET, R10.4 (SPUR_AGENT unchanged) MET, R10 (agent list byte-identical) MET. Coverage 100% line / 100% function.
 
 
 ### Testing
 
+- Command: bun run test; agent list diff vs golden
+- Scope: AgentService.resolve/run/list/doctor + agent.ts dispatch
+- Result: PASS. agent-service.ts coverage 100% line / 100% function. agent list byte-identical (plain + --json, exit 0). agent run/doctor verified via injected mocks.
+- Evidence: diff .tmp/golden-0005 vs .tmp/after-0005 → agent_list, agent_list_json identical. 250/250 suite tests pass.
+- Next action: none.
+- Timestamp: 2026-06-03T07:17:26Z
 
 
 ### Artifacts

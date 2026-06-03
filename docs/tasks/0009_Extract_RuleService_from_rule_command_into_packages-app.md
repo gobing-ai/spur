@@ -1,9 +1,9 @@
 ---
 name: Extract RuleService from rule command into packages-app
 description: Extract RuleService from rule command into packages-app
-status: Backlog
+status: Testing
 created_at: 2026-06-03T06:12:16.722Z
-updated_at: 2026-06-03T06:12:16.722Z
+updated_at: 2026-06-03T07:14:11.019Z
 folder: docs/tasks
 type: task
 feature-id: F-4 app-services
@@ -37,22 +37,40 @@ R1: Create packages/app/src/services/rule-service.ts with a RuleService class. C
 
 ### Design
 
+- Scope: Extracted all application logic from apps/cli/src/commands/rule.ts (448→70 lines) into RuleService (packages/app/src/services/rule-service.ts, ~499 lines incl. tests-facing types).
+- Key decision: RuleService takes the structural CliContext (cwd, env, fs, output); CLI passes makeColorize(...) which satisfies the Colorize structural type. evaluate/validate/list return structured results carrying exitCode + formatted text so the wrapper only dispatches and writes.
+- Boundaries affected: rule.ts (thin wrapper), packages/app index (exports RuleService + result types), rule-service.test.ts (migrated from cli, 439 lines), apps/cli/tests/commands/rule.test.ts (dispatch stub restored for the dogfood require-corresponding-test + coverage-gate rules).
+- Risks: R10 byte-identical output for rule run/list. Verified via golden snapshots.
 
 
 ### Solution
 
+RuleService extracted and wired. CLI rule.ts is a 70-line dispatcher (≤100 target met). All former top-level helpers (ruleRoots, presetFileExists, listLocalRules, listRuleFiles, verbose* formatters, emptyResultMessage, collectValidationErrors) are now private to the service. Public API exports RuleService + result/option types only (no internal helpers), per R8. Implemented by subagent in an isolated worktree, then integrated onto main (commit d355d62) with import-order + dispatch-stub fixes.
 
 
 ### Plan
 
+- [x] Capture golden snapshots for rule run/list (plain + --json)
+- [x] Implement RuleService with private orchestration/formatting helpers
+- [x] Rewrite rule.ts as thin wrapper (70 lines)
+- [x] Migrate rule tests to packages/app/tests/services/rule-service.test.ts
+- [x] Restore apps/cli/tests/commands/rule.test.ts dispatch stub (dogfood rule + coverage)
+- [x] Verify byte-identical output; run gate
 
 
 ### Review
 
+**Verdict: PASS** (integration gate, 2026-06-03). SECU clean (no secrets/any/unsafe sinks in extracted service). Requirements: R2 (RuleService API) MET, R6.1 (rule.ts ≤100 → 70) MET, R8 (public API, no internal leak) MET, R9.1 (tests migrated) MET, R10 (byte-identical rule run/list) MET. Coverage 97.56% line / 99.63% function.
 
 
 ### Testing
 
+- Command: bun run test (full suite), bun run apps/cli/src/index.ts rule run/list diff vs golden
+- Scope: RuleService.evaluate/validate/list + rule.ts dispatch
+- Result: PASS. rule-service.ts coverage 97.56% line / 99.63% function (≥85/90 target). 250/250 suite tests pass. rule run + rule list byte-identical to pre-refactor baseline.
+- Evidence: diff .tmp/golden-0005 vs .tmp/after-0005 → rule_run_recommended, rule_run_json, rule_list, rule_list_json all identical (exit 0). Dogfood test-pre-check: "All 10 rules passed".
+- Next action: none.
+- Timestamp: 2026-06-03T07:17:26Z
 
 
 ### Artifacts

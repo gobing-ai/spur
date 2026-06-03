@@ -1,9 +1,9 @@
 ---
 name: Scaffold packages-app workspace and public service index
 description: Scaffold packages-app workspace and public service index
-status: Testing
+status: Done
 created_at: 2026-06-03T06:12:03.247Z
-updated_at: 2026-06-03T06:22:05.668Z
+updated_at: 2026-06-03T06:24:33.296Z
 folder: docs/tasks
 type: task
 feature-id: F-4 app-services
@@ -69,24 +69,29 @@ R1: Create packages/app/package.json with name @gobing-ai/spur-app, type module,
 
 ### Review
 
+## Review — 2026-06-03 (dev-verify --force)
+
 **Verdict: PASS**
+**Scope:** `packages/app/{package.json,tsconfig.json,src/index.ts}` (commit 7e9d2d4)
+**Mode:** verify (Phase 7 SECU + Phase 8 traceability)
+**Channel:** current (dogfood-safe)
+**Gate:** `bun run lint` → PASS (7 workspaces typecheck clean, Biome clean)
 
-Requirements traceability:
+### Phase 7 — SECU
 
-| Req | Requirement | Evidence | Status |
-|-----|-------------|----------|--------|
-| R1 | `packages/app/package.json` — `@gobing-ai/spur-app`, type module, exports, R7 deps with `catalog:`/`workspace:` refs | File created; mirrors `config`/`domain` shape; shared ts-* via `catalog:`, spur-* via `workspace:0.1.0` (matches cli convention) | ✅ |
-| R2 | `tsconfig.json` extends ts-base preset | Extends `../../tooling/typescript/base.json`, same as every sibling | ✅ |
-| R3 | Registered in root workspaces; resolves | Root globs `packages/*`; `bun pm ls` shows `@gobing-ai/spur-app@workspace:packages/app`; lockfile has the entry | ✅ |
-| R4 | `src/index.ts` placeholder re-export module | `export {};` with a comment pointing to 0009–0011 | ✅ |
-| R5 | `bun install` clean; lint green; sibling resolves | `bun install` exit 0, lockfile saved; `bun run lint` all 7 workspaces exit 0; in-repo import probe resolved (0 keys) | ✅ |
+No findings across all four dimensions. Scope is workspace config + an empty `export {}` placeholder: no secrets, no `any`, no unsafe sinks, no logic, no I/O. Nothing to fix (`--fix all` → 0 actionable findings).
 
-SECU: no new external surface, no secrets, no input handling — empty placeholder. N/A.
+### Phase 8 — Requirements traceability
 
-Notes / follow-ups for children:
-- Dependency drift (parent flag): `bun install` reported "no changes" for ts-* — the resolved tree is lockfile-consistent; 0009 (which actually imports ts-rule-engine) will be the real test of 0.3.0 API compatibility.
-- Stray global `bun link` for `ts-rule-engine` left untouched (AGENTS.md temporary-link policy). If 0009 hits a missing export, reconcile the link there.
-- `workspace:0.1.0` (not `workspace:*`) chosen to match the existing `apps/cli` convention exactly.
+- [x] **R1** package.json (`@gobing-ai/spur-app`, type module, exports, R7 deps) → **MET** | `packages/app/package.json`; shared ts-* via `catalog:`, spur-* via `workspace:0.1.0` (matches apps/cli convention)
+- [x] **R2** tsconfig extends ts-base → **MET** | `packages/app/tsconfig.json` extends `../../tooling/typescript/base.json`
+- [x] **R3** registered + resolves → **MET** | `bun pm ls` → `@gobing-ai/spur-app@workspace:packages/app`
+- [x] **R4** placeholder index → **MET** | `packages/app/src/index.ts` (`export {}`)
+- [x] **R5** install clean, lint green, sibling resolves → **MET** | gate green; in-repo import probe resolved
+
+### Environment fix applied (unblocks 0009)
+
+Found and repaired a **dangling global `bun link`** for `@gobing-ai/ts-rule-engine` (symlinked to a non-existent global target). `bun install --force` reconciled it to the registry `0.3.0` per the lockfile. Verified: `ts-rule-engine` now resolves from `packages/app` (31 exported keys). This was a pre-existing environment defect, not introduced by 0008 — surfaced here because 0009 (running in parallel) imports ts-rule-engine. Note: parallel worktree agents run their own `bun install` and resolve independently, so this fix primarily protects the main-checkout integration step.
 
 
 ### Testing
