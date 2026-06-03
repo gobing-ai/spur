@@ -7,6 +7,7 @@ import { runHistoryCommand } from './commands/history';
 import { runInitCommand } from './commands/init';
 import { runMessageCommand } from './commands/message';
 import { runMigrateCommand } from './commands/migrate';
+import { runPluginCommand } from './commands/plugin';
 import { runRuleCommand } from './commands/rule';
 import { runStatusCommand } from './commands/status';
 import { runTeamCommand } from './commands/team';
@@ -76,6 +77,8 @@ export async function dispatch(argv: string[], context: CliContext): Promise<num
             return runAgentCommand(subcommand, context, parsed.flags, parsed.positionals);
         case 'message':
             return runMessageCommand(subcommand, context, parsed.flags, parsed.positionals);
+        case 'plugin':
+            return runPluginCommand(subcommand, context, parsed.flags, parsed.positionals);
         case 'team':
             return runTeamCommand(subcommand, context, parsed.flags, parsed.positionals);
         case 'history':
@@ -127,6 +130,8 @@ export function helpText(): string {
         '  workflow validate <workflow.yaml> [--json]                        Validate a workflow definition',
         '  workflow run <workflow.yaml> [--run-id <id>] [--json]              Execute a workflow definition',
         '  workflow list [--json]                                             List persisted workflow runs',
+        '  plugin list [--json]                                               List discovered and loaded plugins',
+        '  plugin info <name> [--json]                                        Show manifest and status for a plugin',
         '  help                                                               Display this help',
     ].join('\n');
 }
