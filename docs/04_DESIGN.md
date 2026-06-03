@@ -17,8 +17,14 @@ binary is `spur` (`apps/cli/src/index.ts`, run under Bun).
 
 ### 1.1 Committed product commands
 
-#### `spur init [--name <name>] [--json]`
-Scaffold a local Spur project. Writes `.spur/config.json` and records the config artifact.
+#### `spur init [--name <name>] [--force] [--minimal] [--json]`
+Scaffold a local Spur project. Writes `.spur/config.json` and records the config artifact. Unless
+`--minimal`, also creates `.spur/rules/` (with `recommended.yaml` + `spur-dev.yaml` presets) and
+`.spur/workflows/basic.yaml`. On first run it seeds `~/.config/spur/rules/` from the presets bundled
+with `@gobing-ai/ts-rule-engine` (existing files are never overwritten), so `spur rule run --preset
+recommended` resolves a real ruleset from any project. Re-running is blocked (exit 1) unless `--force`
+is given, preventing a stray `init` from clobbering a configured project. `--json` emits
+`{ ok, project, config, created[], skipped[], globalRulesSeeded }`.
 
 #### `spur agent run <prompt> [--agent <name>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--json]`
 Execute a prompt or slash command via a coding agent. `--agent` (default `auto`) selects the first
@@ -40,7 +46,12 @@ Exit 1 if any **tier-1** agent is not usable. Backed by `ts-ai-runner` `DoctorRu
 #### `spur rule run [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <severity>] [--json]`
 Evaluate constraint rules over the working tree. `--preset` (default `recommended`) or `--file` for
 an ad-hoc rule file; `--rule <id>` filters to one rule. `--fail-on error|warning|info` (default
-`error`) sets the exit-1 threshold. Backed by `ts-rule-engine`.
+`error`) sets the exit-1 threshold. Rule roots resolve highest-priority-first: `SPUR_RULES_PATH`,
+local `.spur/rules`, the user-global `~/.config/spur/rules`, then the presets bundled with
+`ts-rule-engine` as a fallback so `recommended` works before `spur init` seeds the global layer. A
+run that resolves **zero rules** exits 1 (fail-loud: a gate that checks nothing is not a pass).
+Setting `SPUR_GLOBAL_RULES_DIR` overrides the global root and suppresses the bundled fallback for a
+hermetic run. Backed by `ts-rule-engine`.
 
 #### `spur rule validate [--file <path>|--preset <name>|<path>] [--json]` · `spur rule list [--preset <name>] [--json]`
 - `validate` — load and normalize a rule file or preset without evaluating it.
