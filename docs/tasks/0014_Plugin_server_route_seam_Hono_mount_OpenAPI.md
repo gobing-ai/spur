@@ -126,6 +126,8 @@ Stage 4 verification — requirement traceability (task 0014 Requirements → de
 
 ### Testing
 
+_Executed: 2026-06-03T22:06Z_
+
 **Suites added/extended:**
 - `packages/plugin-sdk/tests/host.test.ts` (+2): `startServerHooks` invokes `onServerStart` only on plugins implementing it (asserts selective firing across a hook/no-hook pair); `stopServerHooks` invokes `onServerStop`.
 - `apps/server/tests/plugins.test.ts` (new, 7 tests): prefix mount (sub-path), bare-prefix mount, collision → `PluginCollisionError`, unregistered prefix → 404, OpenAPI fragment re-prefixed into spec, no-registry regression, `generateOpenApiSpec` merge.
