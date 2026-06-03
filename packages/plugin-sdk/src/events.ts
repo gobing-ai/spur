@@ -2,6 +2,7 @@ import type { EventBus, EventMap } from '@gobing-ai/ts-infra';
 
 // ── Spur event map (R8.2) ────────────────────────────────────────────
 
+/** Typed map of Spur domain events extending the platform EventMap. */
 export interface SpurEventMap extends EventMap {
     'agent.run.start': (detail: { agent: string; prompt: string; cwd?: string }) => void;
     'agent.run.complete': (detail: { agent: string; exitCode: number; durationMs: number }) => void;
