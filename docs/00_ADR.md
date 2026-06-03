@@ -205,3 +205,17 @@ readings are withdrawn. **Scope authority:** sandboxing-out-of-scope follows `01
 
 **Detail:** `03 §11 Plugin Substrate` (mechanism, two-class loading, trust engine, harness overlay);
 manifest/config schemas and the trust ladder in `04 §6 Plugin System`.
+
+**Addendum (2026-06-03) — Phase 5d (harness overlay) deferred; "no upstream change" scoped to
+resolution only.** The original decision claimed the harness seam "needs no upstream change." On
+implementation review (task 0015) this holds for **resolution** — a Spur-side overlay
+`Map<string, AgentShim>` checked before `getAgentShim` resolves a plugin shim with no upstream edit —
+but **not for execution**: `@gobing-ai/ts-ai-runner`'s `AiRunner.runPromptCommand(agent: AgentName, …)`
+accepts only the closed `AgentName` union and re-resolves via `getAgentShim` internally, so it cannot
+run an injected plugin shim. Executing a plugin harness therefore requires *either* an upstream
+`AiRunner` change to accept an injected `AgentShim`, *or* Spur re-implementing the subprocess +
+identity-preamble path (duplicating the runner). **Decision:** defer Phase 5d. Its only real consumer
+is the unscheduled **5f** built-in-harness migration, and no committed PRD surface (the 7 supported
+agents in `01_PRD §1`/`§5.1`) needs user-defined agent types. 5d is reactivated only when 5f is
+scheduled or a concrete product need for plugin-defined harnesses appears; the upstream `AiRunner`
+injection is its prerequisite, not an optional nicety. Tracked in task 0015 (status `Blocked`).
