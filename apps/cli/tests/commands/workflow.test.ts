@@ -10,11 +10,13 @@ function nullOutput(): CommandOutput {
     return { write: () => {}, error: () => {} };
 }
 
-function captureOutput(): { output: CommandOutput; lines: string[] } {
+function captureOutput(): { output: CommandOutput; lines: string[]; errors: string[] } {
     const lines: string[] = [];
+    const errors: string[] = [];
     return {
         lines,
-        output: { write: (m: string) => lines.push(m), error: () => {} },
+        errors,
+        output: { write: (m: string) => lines.push(m), error: (m: string) => errors.push(m) },
     };
 }
 
@@ -73,6 +75,53 @@ describe('workflow command', () => {
     test('validate with missing file throws', async () => {
         const ctx = createCliContext({ output: nullOutput() });
         await expect(runWorkflowCommand('validate', ctx, {}, [])).rejects.toThrow('Workflow file path is required');
+    });
+
+    test('validate reports a non-existent file as invalid with exit 1', async () => {
+        const { lines, output } = captureOutput();
+        const ctx = createCliContext({ output });
+        const exitCode = await runWorkflowCommand('validate', ctx, { json: true }, ['/tmp/no-such-workflow.yaml']);
+        expect(exitCode).toBe(1);
+        // JSON output (even when invalid) goes to stdout for machine consumption.
+        expect(JSON.parse(lines.at(-1) ?? '{}')).toMatchObject({ valid: false });
+        expect(lines.at(-1)).toContain('File not found');
+    });
+
+    test('validate reports invalid workflow as human-readable text on stderr', async () => {
+        const { errors, output } = captureOutput();
+        const ctx = createCliContext({ output });
+        const exitCode = await runWorkflowCommand('validate', ctx, {}, ['/tmp/no-such-workflow-human.yaml']);
+        expect(exitCode).toBe(1);
+        expect(errors.at(-1)).toContain('workflow invalid');
+        expect(errors.at(-1)).toContain('File not found');
+    });
+
+    test('validate reports a workflow with an unknown transition target as invalid', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-bad-'));
+        const path = join(dir, 'bad.yaml');
+        await writeFile(
+            path,
+            [
+                'name: broken',
+                'kind: state-machine',
+                'initialState: start',
+                'states:',
+                '  - id: start',
+                '  - id: done',
+                'transitions:',
+                '  - from: start',
+                '    to: ghost',
+                'terminalStates: [done]',
+            ].join('\n'),
+        );
+        const { lines, output } = captureOutput();
+        const ctx = createCliContext({ output });
+        const exitCode = await runWorkflowCommand('validate', ctx, { json: true }, [path]);
+        expect(exitCode).toBe(1);
+        const result = JSON.parse(lines.at(-1) ?? '{}');
+        expect(result.valid).toBe(false);
+        expect(result.errors[0]).toContain('ghost');
+        await rm(dir, { recursive: true });
     });
 
     test('list subcommand works', async () => {
