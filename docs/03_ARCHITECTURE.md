@@ -197,10 +197,11 @@ model, so table/DDL/Zod drift is structurally impossible. Five rules, enforced b
 | Engine MVP gaps mistaken for parity | Roadmap Phase 3 tracks the depth restore explicitly |
 | History raw bloat / parse errors | Raw stays in files; only validated ETL persisted (ADR-008) |
 
-## 11. Plugin Substrate (Design — deferred, no code shipped; ADR-012)
+## 11. Plugin Substrate (Partial — slices 5a–5c shipped; ADR-012)
 
-> Forward design only. No plugin code ships yet (`05_FEATURES` marks it `💤`). This section is the
-> mechanism the ADR-012 decision points to; it becomes "current" as Phase-5 slices land.
+> Slices **5a (SDK + registries), 5b (discovery/loader/CLI), 5c (server route seam)** have landed
+> (`05_FEATURES` marks the substrate `🔶`); **5d–5f remain forward design**. This section is the
+> mechanism the ADR-012 decision points to; it becomes fully "current" as the remaining slices land.
 
 The plugin system is the project's **foundational extension substrate**, designed from day one to
 carry first-party primitives (harnesses, rule evaluators, providers, history sources, workflow

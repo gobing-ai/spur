@@ -76,11 +76,12 @@ Plugin substrate — the foundational extension model first-party primitives eve
 slices; each passes the gate alone and preserves R10 backward-compat. 5a–5d are the critical path;
 5e is out of scope; 5f is unscheduled.
 
-- [ ] **5a — Plugin SDK** (`@gobing-ai/spur-plugin-sdk`): registries + `PluginConfig` merge + trust
-  *policy* (registration-time gating, no runtime sandbox).
-- [ ] **5b — Discovery + CLI**: `PluginLoader` in `packages/app`; `spur plugin list|info`.
-- [ ] **5c — Server seam**: mount plugin Hono routes; appear in generated OpenAPI.
-- [ ] **5d — Harness registry**: Spur-side `AgentShim` overlay (no upstream gate).
+- [x] **5a — Plugin SDK** (`@gobing-ai/spur-plugin-sdk`): registries + `PluginConfig` merge + trust
+  *policy* (registration-time gating, no runtime sandbox). *(task 0012)*
+- [x] **5b — Discovery + CLI**: `PluginLoader` in `packages/app`; `spur plugin list|info`. *(task 0013)*
+- [x] **5c — Server seam**: mount plugin Hono routes under `/api/plugins/<prefix>`; appear in
+  generated OpenAPI; `onServerStart`/`onServerStop` lifecycle hooks. *(task 0014)*
+- [ ] **5d — Harness registry**: Spur-side `AgentShim` overlay (no upstream gate). *(task 0015)*
 - [ ] **5e — Runtime sandboxing** *(out of scope — PRD §5.4 + ADR-010)*: fs/net/shell isolation;
   revisited only if non-operator-authored plugins are onboarded.
 - [ ] **5f — First primitive migration** *(unscheduled)*: move the seven built-in harnesses (then

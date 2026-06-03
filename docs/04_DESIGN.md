@@ -181,10 +181,10 @@ One config object per source: `source` discriminant, `displayName`, `filePattern
 
 Web (`apps/web`) renders live health from the typed oRPC client. Deeper read surface is Phase 4.
 
-## 6. Plugin System (Design — deferred, no code shipped; ADR-012)
+## 6. Plugin System (Partial — slices 5a–5c shipped; ADR-012)
 
-> Forward design only. The shapes below are the SDK/loader contract ADR-012 commits to; they become
-> active as Phase-5 slices land. Mechanism lives in `03 §11`.
+> The SDK/loader/server-seam shapes below are **active** (slices 5a–5c shipped; see `§6.4` for the
+> route seam). Remaining slices (5d–5f) stay forward design. Mechanism lives in `03 §11`.
 
 All plugin files are **YAML**, validated by a per-file-type Zod schema (the SSOT for that file) —
 one format across the project, no new parser. A file is never consumed unvalidated; `safeParse`
