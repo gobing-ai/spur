@@ -42,16 +42,25 @@ describe('db migrations', () => {
         test('contains artifacts table', () => {
             expect(hasCreateTable('artifacts')).toBe(true);
         });
+
+        test('contains inbox_messages table', () => {
+            expect(hasCreateTable('inbox_messages')).toBe(true);
+        });
     });
 
     describe('CLI_MIGRATIONS', () => {
-        test('has foundation migration', () => {
-            expect(CLI_MIGRATIONS).toHaveLength(1);
+        test('has foundation and team-inbox migrations', () => {
+            expect(CLI_MIGRATIONS).toHaveLength(2);
             expect(CLI_MIGRATIONS[0]?.id).toBe('0000_spur_cli_foundation');
+            expect(CLI_MIGRATIONS[1]?.id).toBe('0001_spur_team_inbox');
         });
 
-        test('migration SQL matches CLI_SCHEMA_SQL', () => {
+        test('foundation migration SQL matches CLI_SCHEMA_SQL', () => {
             expect(CLI_MIGRATIONS[0]?.sql).toBe(CLI_SCHEMA_SQL);
+        });
+
+        test('team-inbox migration creates inbox_messages', () => {
+            expect(CLI_MIGRATIONS[1]?.sql).toContain('CREATE TABLE IF NOT EXISTS inbox_messages');
         });
     });
 
@@ -102,6 +111,27 @@ describe('db migrations', () => {
             );
             const rows = await adapter.queryAll('SELECT * FROM workspaces');
             expect(rows).toHaveLength(1);
+            adapter.close();
+        });
+
+        test('inbox_messages table is usable after migration', async () => {
+            const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            await applyCliMigrations(adapter);
+            await adapter.run(
+                'INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+                'm1',
+                'planner',
+                'hi',
+                Date.now(),
+                Date.now(),
+            );
+            const rows = await adapter.queryAll<{ status: string }>(
+                'SELECT status FROM inbox_messages WHERE to_id = ?',
+                'planner',
+            );
+            expect(rows).toHaveLength(1);
+            // status defaults to 'queued' per the package schema.
+            expect(rows[0]?.status).toBe('queued');
             adapter.close();
         });
     });
