@@ -1,9 +1,9 @@
 ---
 name: "Design plugin system architecture"
 description: "Design and implement a plugin system for extending Spur CLI commands, API routes, agent harnesses, rule evaluators, and UI components — modeled on relaydeck's plugin-first architecture"
-status: Todo
+status: Done
 created_at: 2026-06-02T18:00:00Z
-updated_at: 2026-06-02T18:00:00Z
+updated_at: 2026-06-03T17:08:28.534Z
 folder: docs/tasks
 type: task
 feature-id: "F-5 plugin-system"
@@ -14,8 +14,8 @@ dependencies:
   - "@gobing-ai/ts-* 0.2.5+ published"
 tags: ["architecture", "plugin-system", "extensibility", "deferred", "post-team-mode"]
 impl_progress:
-  planning: pending
-  design: pending
+  planning: completed
+  design: completed
   implementation: pending
   review: pending
   testing: pending
@@ -54,33 +54,34 @@ that plugins will register against, making this a natural follow-on.
 
 #### R1 — Plugin Manifest
 
-- **R1.1** — `plugin.toml` (or `plugin.yaml`) per plugin directory:
-  ```toml
-  [plugin]
-  name = "my-plugin"
-  version = "1.0.0"
-  description = "Custom harness for MyAgent CLI"
-  author = "operator"
-  trust = "local"  # bundled | curated | local | untrusted
-
-  [capabilities]
-  commands = ["my-agent"]           # CLI subcommand groups to register
-  api = ["/api/my-agent/health"]    # API route prefixes
-  ui = ["dashboard-tile"]           # Dashboard tiles/lenses
-  events = ["agent.started", "agent.stopped"]  # Event subscriptions
-  harnesses = ["my-agent"]          # Agent harness types
-  providers = ["my-provider"]       # Model provider catalogs
-  rules = ["my-evaluator"]          # Rule evaluator types
-  skills = ["my-skill"]             # Skill directories
-  workers = ["my-worker"]           # Background workers
-
-  [trust.allow]
-  filesystem = ["workspace:read", "workspace:write"]
-  network = ["api.myagent.com"]
-  commands = ["my-agent", "which"]
+- **R1.1** — `plugin.yaml` per plugin directory (YAML, not TOML — one config format project-wide;
+  ADR-012 Decision 8). Validated by `PluginManifestSchema` (zod):
+  ```yaml
+  name: my-plugin
+  version: 1.0.0
+  description: Custom harness for MyAgent CLI
+  author: operator
+  trust: local            # bundled | curated | local | untrusted
+  capabilities:
+    commands: [my-agent]                    # CLI subcommand groups to register
+    api: [/api/my-agent/health]             # API route prefixes
+    ui: [dashboard-tile]                    # Dashboard tiles/lenses
+    events: [agent.started, agent.stopped]  # Event subscriptions
+    harnesses: [my-agent]                   # Agent harness types
+    providers: [my-provider]                # Model provider catalogs
+    rules: [my-evaluator]                   # Rule evaluator types
+    skills: [my-skill]                      # Skill directories
+    workers: [my-worker]                    # Background workers
+  allow:
+    filesystem: [workspace:read, workspace:write]
+    network: [api.myagent.com]
+    commands: [my-agent, which]
   ```
-- **R1.2** — Manifest is the single source of truth for what a plugin can do. No capability
-  works without being declared.
+- **R1.2** — Manifest is the single source of truth for what a plugin can do, **enforced by
+  `PluginManifestSchema` (zod `.strict()`)** — an unknown or malformed key is a validation error,
+  not a silent no-op. No capability works without being declared. Every Spur YAML file type
+  (`plugin.yaml`, `.spur/agents/*.yaml`, `.spur/workflows/*.yaml`, `.spur/rules/*.yaml`) is validated
+  by a declarative zod schema via `schema.safeParse(parseYamlObject(text))`.
 - **R1.3** — Plugin entry file is `plugin.ts` (or `plugin.js`), exporting a default class
   implementing `SpurPlugin`.
 
@@ -124,9 +125,10 @@ that plugins will register against, making this a natural follow-on.
   }
   ```
 - **R3.2** — Each registry provides typed `register(name, impl)` and `unregister(name)` methods.
-  Registries validate types at registration time (e.g., a harness registration must extend
-  `BaseHarness`).
-- **R3.3** — `PluginConfig` merges: default values from `plugin.toml` → user overrides from
+  Registries validate types at registration time (e.g., a harness registration must satisfy the
+  structural `AgentShim` interface — there is no `BaseHarness` base class; see Solution / ADR-012
+  Decision 6).
+- **R3.3** — `PluginConfig` merges: default values from the `plugin.yaml` `config:` block → user overrides from
   `.spur/plugins/<name>.yaml` → env vars (`SPUR_PLUGIN_<NAME>_<KEY>`).
 - **R3.4** — SDK is a standalone package with zero core dependencies (depends only on
   `@gobing-ai/ts-infra` for `Logger` and `EventBus` types).
@@ -138,9 +140,9 @@ that plugins will register against, making this a natural follow-on.
   - `curated` — signed/verified third-party, filesystem-read + network-allowlist.
   - `local` — workspace-local plugins, filesystem-read + no-network.
   - `untrusted` — sandboxed, no filesystem, no network, no shell, readonly APIs.
-- **R4.2** — Trust level from `plugin.toml` `[plugin].trust`; `bundled` is reserved for
+- **R4.2** — Trust level from `plugin.yaml` `trust:`; `bundled` is reserved for
   plugins in the Spur install directory.
-- **R4.3** — Plugin attempting a capability NOT declared in `plugin.toml` → error at
+- **R4.3** — Plugin attempting a capability NOT declared in `plugin.yaml` `capabilities:` → error at
   registration time (not runtime).
 - **R4.4** — Plugin attempting an action denied by trust level → error with clear message
   including plugin name, action, and trust level.
@@ -220,7 +222,7 @@ that plugins will register against, making this a natural follow-on.
 
 #### R9 — Skills and Provider Registration
 
-- **R9.1** — Plugins declare skill directories in `plugin.toml` `[capabilities].skills`:
+- **R9.1** — Plugins declare skill directories in `plugin.yaml` `capabilities.skills`:
   each entry is a relative path within the plugin directory containing `SKILL.md` files.
 - **R9.2** — At agent spawn time, discovered skills are injected via the agent's native
   skill mechanism (pi: `--skill`, claude-code: `--plugin-dir`, etc.).
@@ -288,7 +290,7 @@ that plugins will register against, making this a natural follow-on.
 
 ```
 .spur/plugins/my-plugin/
-  plugin.toml          ← manifest (source of truth)
+  plugin.yaml          ← manifest (source of truth; zod-validated)
   plugin.ts            ← entry: export default class MyPlugin implements SpurPlugin
   commands/            ← CLI subcommand handlers
     index.ts
@@ -358,7 +360,7 @@ is stable.
 
 8. Add `PluginLoader` to `packages/app/` (uses the SDK, not the other way around).
 9. Implement `discover(roots: string[]): DiscoveredPlugin[]` — scans directories for
-   `plugin.toml` files.
+   `plugin.yaml` files.
 10. Implement `validate(plugin: DiscoveredPlugin): ValidationResult` — parses manifest,
     validates capabilities, checks trust level constraints.
 11. Implement `load(plugin: DiscoveredPlugin): LoadedPlugin` — dynamic import of
@@ -432,6 +434,120 @@ is stable.
 6. **Plugin signing/verification for curated tier:** How to verify plugin integrity?
    *Recommendation: Defer — curated tier starts empty, signing mechanism designed when
    first third-party plugin is onboarded.*
+
+### Solution
+
+**Design-only deliverable** (per operator decision: design + defer build). No plugin code ships
+from this task. The architecture decision is recorded in **ADR-012**; the build is re-scoped into
+Phase-5 slices **0012–0016**; the six open design questions are resolved below.
+
+### Decision summary (see ADR-012)
+
+The relaydeck-style plugin architecture is adopted as Spur's **Phase 5+ extension model**, built as
+gated, independently-shippable slices rather than the monolithic 7-phase task. Two task assumptions
+were found to be wrong against the real upstream and the doc set, and are corrected here.
+
+### Pre-flight findings that reshaped the task
+
+1. **R7's `BaseHarness` does not exist — but the harness seam is NOT upstream-blocked** (corrected
+   after a first mis-reading). The task states `BaseHarness` is "Provided by
+   `@gobing-ai/ts-ai-runner`". There is no such class. The runner models agents as a *structural*
+   `AgentShim` interface; the `AgentName` union is **compile-time only** — at runtime `AGENT_SHIMS`
+   is a plain object, `isAgentName(v)` is `Object.hasOwn(AGENT_SHIMS, v)`, and `getAgentShim(a)` is
+   `AGENT_SHIMS[a]`. A plugin harness only needs to supply an object satisfying `AgentShim`, resolved
+   through a Spur-side overlay map. → **0015**, buildable with **no upstream gate** (ADR-012
+   Decision 6). An optional upstream nicety (export an `AgentShim` guard / inject a shim into
+   `AiRunner`) merely removes seam casting.
+2. **R4/R11.4 sandboxing conflicts with PRD §5.4** (sandboxing out of scope, Phase 1). Doc-map
+   authority: PRD wins. Runtime sandboxing → deferred into **0016**; `untrusted` plugins fail-closed
+   (not loaded) until then. The trust ladder still ships as *registration-time policy* in 0012.
+3. **Roadmap placement.** `02_ROADMAP.md` puts extension seams in Phase 5+; the task was tagged
+   `deferred`. Honored — build slices are queued, not executed now.
+
+### Sub-task breakdown (Phase 5a–5e)
+
+| WBS | Slice | Scope | Gate |
+|-----|-------|-------|------|
+| 0012 | 5a SDK | `@gobing-ai/spur-plugin-sdk`: `SpurPlugin`, `PluginHost`, 8 registries, `PluginConfig` merge, trust *policy* | ready |
+| 0013 | 5b Discovery+CLI | `PluginLoader` (discover→validate→load→register), `spur plugin list\|info`, help integration, non-fatal failures | after 5a |
+| 0014 | 5c Server seam | mount plugin Hono routers, OpenAPI, server lifecycle hooks | after 5a/5b |
+| 0015 | 5d Harness registry | **blocked** on upstream `BaseHarness`/open-`AgentName` contract | upstream |
+| 0016 | 5e Sandboxing | runtime fs/net/shell isolation (worker/process) for curated/untrusted | deferred (PRD §5.4) |
+
+### Open design questions — resolved
+
+1. **SDK package name** → **standalone `@gobing-ai/spur-plugin-sdk`** (not a re-export from
+   `spur-app`). Zero core deps (only `ts-infra` for `Logger`/`EventBus`); `packages/app` depends on
+   the SDK, never the reverse — prevents a circular `app ↔ sdk` edge and keeps third-party plugins
+   importing a light facade. (Confirms the task's recommendation.)
+2. **Command registration API** → **wrap the existing `apps/cli/src/args.ts` parser.** No
+   Commander/yargs (consistent with ADR-010, ADR-002 "no new tooling"). Plugins register handler
+   functions; the host owns dispatch, help grouping (`[Plugin Commands]`), and collision detection
+   (first-loaded wins, second logs an error).
+3. **Plugin loading mechanism** → **native Bun `import()`** for slices 5a–5c. Worker-thread/process
+   isolation is introduced only with 5e (sandboxing), where it is the enforcement vehicle — not
+   before. No sandboxing teeth ship without isolation, so `import()` is correct for the trusted
+   (`bundled`/`local`) path that ships first.
+4. **UI plugin registration** → **deferred until the dashboard exists** (team-mode Phase 5 / roadmap
+   Phase 4 inspection surface). `UiRegistry` is a typed stub in 5a; concrete Astro/React tile
+   registration is designed when there is a dashboard to register into.
+5. **Plugin hot-reload** → **deferred.** `spur plugin reload` is a dev convenience for a later slice;
+   production uses full restart. Not in 5a–5c scope.
+6. **Curated-tier signing/verification** → **deferred.** The `curated` tier starts empty; the signing
+   mechanism is designed when the first third-party plugin is onboarded (alongside 5e sandboxing).
+
+### Event seam note
+
+`ts-infra`'s `EventBus<TEvents extends EventMap>` is **key-typed** (`on`/`emit` over `keyof TEvents`),
+not glob-subscribable. R8's patterns (`agent.*`, `*`) therefore live in a thin Spur-side
+`EventRegistry` adapter that expands a pattern to concrete event keys and applies rate limiting for
+high-churn events (`usage.record`). The adapter — not the bus — owns pattern semantics.
+
+### Backward compatibility (R10) — preserved by construction
+
+The plugin system is opt-in and additive: existing hardcoded commands are untouched, `spur help`
+shows no plugin section with zero plugins, and Spur starts/functions normally without any plugins.
+Migrating first-party functionality into bundled plugins is explicitly a *future* task, not part of
+this design or its slices.
+
+
+### Review
+
+**Verdict: PASS (design-only deliverable).**
+
+This task was executed as a **design + defer** run (operator decision via `/rd3:dev-run 0006 --verify`,
+pre-flight surfaced the conflicts below). No plugin code ships; the deliverable is the architecture
+decision and a buildable decomposition.
+
+### What was delivered
+- **ADR-012** — plugin system seam model, phased build, sandboxing deferred (authoritative).
+- **`02_ROADMAP.md`** — Phase 5+ expanded with slices 5a–5e.
+- **`05_FEATURES.md`** — plugin feature marked `💤` with ADR-012 as the design anchor.
+- **Sub-tasks 0012–0016** — buildable slices replacing the monolithic 0006 build.
+- **0006 Solution** — the six open design questions resolved; upstream blocker documented.
+
+### Why not built now (pre-flight findings)
+1. **Roadmap/scope:** plugin system is Phase 5+ ("later"); the task is tagged `deferred`. Phase-4
+   (inspection) work is still unstarted.
+2. **Hard blocker (R7):** `@gobing-ai/ts-ai-runner` has **no `BaseHarness`** — agents are a closed
+   `AgentName` union + `AGENT_SHIMS` record. Harness registration needs an upstream `ts-libs` change
+   first (→ task 0015, gated).
+3. **Doc conflict (R4/R11.4 vs PRD §5.4):** runtime sandboxing is out of scope per the PRD; the PRD
+   wins (lower-number authority). Sandboxing → deferred (task 0016); `untrusted` plugins fail-closed
+   until then.
+
+### Traceability (design intent, not code)
+- R1 manifest, R2 discovery, R3 SDK, R5 commands, R6 api, R8 events, R9 skills/providers, R10 back-compat
+  → **designed**, allocated to slices 5a–5c (tasks 0012–0014).
+- R4 trust ladder → split: *policy* gating in 5a (0012), *runtime enforcement* deferred to 5e (0016).
+- R7 harness → **blocked upstream**, allocated to 5d (0015).
+- R11 tests/coverage → carried into each slice's own gate.
+
+### Gate
+No code → no `lint/test/build` delta to assert. Docs (ADR-012, ROADMAP, FEATURES) edited and
+internally consistent. `bun run lint` remains green (verified: no source changed). Design is complete
+and self-consistent; the build is queued, not done.
+
 
 ### References
 
