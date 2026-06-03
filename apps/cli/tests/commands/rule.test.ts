@@ -189,6 +189,61 @@ describe('rule command', () => {
         expect(output.messages.at(-1)).toContain('boundary-sample');
     });
 
+    test('rule validate reports a missing file as invalid with exit 1', async () => {
+        const cwd = await createTempProject();
+        const output = createCapturedOutput();
+        const missing = join(cwd, 'does-not-exist.yaml');
+
+        const exitCode = await runRuleCommand(
+            'validate',
+            createCliContext({ cwd, output }),
+            { file: missing, json: true },
+            [],
+        );
+
+        expect(exitCode).toBe(1);
+        expect(JSON.parse(output.messages.at(-1) ?? '{}')).toMatchObject({ valid: false, kind: 'file' });
+        expect(output.messages.at(-1)).toContain('File not found');
+    });
+
+    test('rule validate reports a malformed rule file as invalid with exit 1', async () => {
+        const cwd = await createTempProject();
+        const output = createCapturedOutput();
+        const file = join(cwd, 'bad.yaml');
+        await writeFile(file, 'not: a-valid-rule-file\n');
+
+        const exitCode = await runRuleCommand('validate', createCliContext({ cwd, output }), { file, json: true }, []);
+
+        expect(exitCode).toBe(1);
+        expect(JSON.parse(output.messages.at(-1) ?? '{}').valid).toBe(false);
+    });
+
+    test('rule validate reports invalid file as human-readable text on stderr', async () => {
+        const cwd = await createTempProject();
+        const output = createCapturedOutput();
+        const missing = join(cwd, 'gone.yaml');
+
+        const exitCode = await runRuleCommand('validate', createCliContext({ cwd, output }), { file: missing }, []);
+
+        expect(exitCode).toBe(1);
+        expect(output.errors.at(-1)).toContain('invalid file');
+        expect(output.errors.at(-1)).toContain('File not found');
+    });
+
+    test('rule validate reports an unknown preset as invalid (not a silent empty pass)', async () => {
+        const cwd = await createTempProject();
+        const output = createCapturedOutput();
+        // Isolate from the user's global rules so the preset genuinely does not exist.
+        const context = createCliContext({ cwd, output, env: { SPUR_GLOBAL_RULES_DIR: cwd } });
+
+        const exitCode = await runRuleCommand('validate', context, { preset: 'no-such-preset', json: true }, []);
+
+        expect(exitCode).toBe(1);
+        const result = JSON.parse(output.messages.at(-1) ?? '{}');
+        expect(result.valid).toBe(false);
+        expect(result.errors[0]).toContain('not found');
+    });
+
     test('rule run resolves a local preset whose categories live in the global root', async () => {
         const cwd = await createTempProject();
         const globalRoot = join(cwd, 'global-rules');
