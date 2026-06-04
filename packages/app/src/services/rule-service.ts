@@ -1,5 +1,5 @@
 import { homedir } from 'node:os';
-import { delimiter, join, resolve } from 'node:path';
+import { delimiter, join, relative, resolve } from 'node:path';
 import {
     bundledRulesRoot,
     type ConstraintFinding,
@@ -98,11 +98,45 @@ export interface RuleListEntry {
     file: string;
 }
 
+/** One rule source layer in a file inventory listing. */
+export interface RuleSourceLayerEntry {
+    id: string;
+    path: string;
+    priority: number;
+}
+
+/** One rule file in a file inventory listing. */
+export interface RuleListFileEntry {
+    path: string;
+    source: string;
+    valid: boolean;
+    ruleCount: number;
+    ruleIds: string[];
+    error?: string;
+}
+
+/** Rule files grouped under one category directory. */
+export interface RuleListCategoryEntry {
+    name: string;
+    files: RuleListFileEntry[];
+}
+
 /** Structured result returned by RuleService.list(). */
 export interface RuleListServiceResult {
     preset: string | undefined;
     ruleCount: number;
     rules: RuleListEntry[];
+    mode: 'layered' | 'flat' | 'empty' | 'preset';
+    layers: RuleSourceLayerEntry[];
+    totalFiles: number;
+    categories: RuleListCategoryEntry[];
+    uncategorized: RuleListFileEntry[];
+}
+
+interface RuleSourceLayer {
+    id: string;
+    path: string;
+    priority: number;
 }
 
 /**
@@ -220,12 +254,19 @@ export class RuleService {
      * Returns a structured result. Output writing is left to the caller.
      */
     async list(preset?: string): Promise<RuleListServiceResult> {
-        const entries = preset === undefined ? await this.listLocalRules() : await this.listPresetRules(preset);
+        if (preset === undefined) return await this.listDiscoveredRuleFiles();
+
+        const entries = await this.listPresetRules(preset);
 
         return {
             preset,
             ruleCount: entries.length,
             rules: entries,
+            mode: 'preset',
+            layers: this.ruleSourceLayers({ includeBundled: true }),
+            totalFiles: 0,
+            categories: [],
+            uncategorized: [],
         };
     }
 
@@ -252,23 +293,33 @@ export class RuleService {
      * Local and global roots still shadow individual bundled files per relative path.
      */
     private ruleRoots(): string[] {
+        return this.ruleSourceLayers({ includeBundled: true }).map((layer) => layer.path);
+    }
+
+    private ruleSourceLayers(opts: { includeBundled: boolean }): RuleSourceLayer[] {
         const { cwd, env } = this.context;
-        const roots: string[] = [];
+        const layers: RuleSourceLayer[] = [];
         const envValue = env.SPUR_RULES_PATH;
         if (envValue !== undefined && envValue.length > 0) {
             for (const entry of envValue.split(delimiter)) {
-                if (entry.length > 0) roots.push(resolve(cwd, entry));
+                if (entry.length > 0) {
+                    layers.push({ id: 'env-override', path: resolve(cwd, entry), priority: -10 });
+                }
             }
         }
-        roots.push(resolve(cwd, LOCAL_RULES_DIR));
+        layers.push({ id: 'local', path: resolve(cwd, LOCAL_RULES_DIR), priority: 0 });
         const globalOverride = env.SPUR_GLOBAL_RULES_DIR;
         const hasGlobalOverride = globalOverride !== undefined && globalOverride.length > 0;
-        roots.push(hasGlobalOverride ? resolve(cwd, globalOverride) : join(homedir(), GLOBAL_RULES_DIR));
-        if (!hasGlobalOverride) {
+        layers.push({
+            id: 'global',
+            path: hasGlobalOverride ? resolve(cwd, globalOverride) : join(homedir(), GLOBAL_RULES_DIR),
+            priority: 10,
+        });
+        if (opts.includeBundled && !hasGlobalOverride) {
             const bundled = bundledRulesRoot();
-            if (bundled !== null) roots.push(bundled);
+            if (bundled !== null) layers.push({ id: 'bundled', path: bundled, priority: 20 });
         }
-        return roots;
+        return layers;
     }
 
     /**
@@ -455,26 +506,86 @@ export class RuleService {
             .sort(compareRuleEntries);
     }
 
-    private async listLocalRules(): Promise<RuleListEntry[]> {
-        const { cwd, fs } = this.context;
-        const root = join(cwd, '.spur', 'rules');
-        if (!(await fs.exists(root))) return [];
-        const files = await this.listRuleFiles(root, '');
-        const entries: RuleListEntry[] = [];
-        for (const file of files) {
-            const { rules } = await loadRuleFile(join(root, file));
-            for (const rule of rules) {
-                entries.push({
-                    id: rule.id,
-                    description: rule.description,
-                    severity: rule.severity,
-                    enabled: rule.enabled,
-                    evaluator: rule.evaluator.type,
-                    file,
+    private async listDiscoveredRuleFiles(): Promise<RuleListServiceResult> {
+        const layers = await this.existingRuleSourceLayers();
+        const merged = new Map<string, { absolutePath: string; source: string }>();
+        for (const layer of layers) {
+            for (const file of await this.listRuleFilesInLayer(layer.path)) {
+                if (!merged.has(file)) merged.set(file, { absolutePath: join(layer.path, file), source: layer.id });
+            }
+        }
+
+        const files: RuleListFileEntry[] = [];
+        for (const [file, entry] of [...merged.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+            try {
+                const { rules } = await loadRuleFile(entry.absolutePath);
+                files.push({
+                    path: file,
+                    source: entry.source,
+                    valid: true,
+                    ruleCount: rules.length,
+                    ruleIds: rules.map((rule) => rule.id).sort(),
+                });
+            } catch (error) {
+                files.push({
+                    path: file,
+                    source: entry.source,
+                    valid: false,
+                    ruleCount: 0,
+                    ruleIds: [],
+                    error: this.errorText(error),
                 });
             }
         }
-        return entries.sort(compareRuleEntries);
+
+        const categoryNames = [...new Set(files.flatMap((file) => this.categoryName(file.path) ?? []))].sort();
+        const categories = categoryNames.map((name) => ({
+            name,
+            files: files.filter((file) => file.path.startsWith(`${name}/`)),
+        }));
+        const uncategorized = files.filter((file) => this.categoryName(file.path) === null);
+
+        return {
+            preset: undefined,
+            ruleCount: files.reduce((count, file) => count + file.ruleCount, 0),
+            rules: [],
+            mode: files.length === 0 ? 'empty' : categoryNames.length > 0 ? 'layered' : 'flat',
+            layers: layers.map((layer, index) => ({ id: layer.id, path: layer.path, priority: index })),
+            totalFiles: files.length,
+            categories,
+            uncategorized,
+        };
+    }
+
+    private async existingRuleSourceLayers(): Promise<RuleSourceLayer[]> {
+        const layers: RuleSourceLayer[] = [];
+        for (const layer of this.ruleSourceLayers({ includeBundled: false }).sort((a, b) => a.priority - b.priority)) {
+            if (await this.context.fs.exists(layer.path)) layers.push(layer);
+        }
+        return layers;
+    }
+
+    private async listRuleFilesInLayer(root: string): Promise<string[]> {
+        const categoryDirs = await this.listCategoryDirs(root);
+        if (categoryDirs.length > 0) {
+            const files: string[] = [];
+            for (const category of categoryDirs) {
+                files.push(...(await this.listRuleFiles(root, category)));
+            }
+            return files.sort();
+        }
+        return (await this.listRuleFiles(root, '')).sort();
+    }
+
+    private async listCategoryDirs(root: string): Promise<string[]> {
+        const entries = await this.context.fs.readDir(root);
+        const dirs: string[] = [];
+        for (const entry of entries.sort()) {
+            if (entry === 'presets') continue;
+            const stat = await this.context.fs.stat(join(root, entry));
+            if (stat?.isDirectory()) dirs.push(entry);
+        }
+        return dirs;
     }
 
     private async listRuleFiles(root: string, relativeDir: string): Promise<string[]> {
@@ -488,11 +599,17 @@ export class RuleService {
             const stat = await fs.stat(absolutePath);
             if (stat?.isDirectory()) {
                 files.push(...(await this.listRuleFiles(root, relativePath)));
-            } else if (stat?.isFile() && relativeDir.length > 0 && /\.(ya?ml|json)$/i.test(entry)) {
+            } else if (stat?.isFile() && /\.(ya?ml|json)$/i.test(entry)) {
                 files.push(relativePath);
             }
         }
         return files;
+    }
+
+    private categoryName(path: string): string | null {
+        const normalized = relative('.', path);
+        const separatorIndex = normalized.indexOf('/');
+        return separatorIndex > 0 ? normalized.slice(0, separatorIndex) : null;
     }
 }
 
