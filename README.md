@@ -23,8 +23,9 @@ idea → agent detection + health → constraint checking → workflow orchestra
 
 - **Rule Engine** — YAML-driven constraint checking backed by [`@gobing-ai/ts-rule-engine`][rule].
   Evaluators (regex, AST via ast-grep, path, TSDoc, forbidden-import, secrets, coverage gate),
-  composable presets (`recommended`, `spur-dev`), and auto-fixers. Bundled presets ship with the
-  engine, so `spur rule run` works on a clean install.
+  composable presets (`recommended`, `spur-dev`), and auto-fixers. `--verbose` streams per-rule
+  progress with execution time (e.g. `✓ passed - 0.12s`). Bundled presets ship with the engine,
+  so `spur rule run` works on a clean install.
 - **Workflow Engine** — FSM state-machine and transition-flow workflows backed by
   [`@gobing-ai/ts-dual-workflow-engine`][wf]. Define multi-step processes (implement → check → fix
   loops) as YAML with guards, gates, and bounded iteration.
@@ -76,9 +77,11 @@ apps/
   server/       Hono on Bun.serve / Cloudflare Worker; oRPC OpenAPI handler  (@gobing-ai/spur-server)
   web/          Astro + Cloudflare adapter; typed oRPC OpenAPI client        (@gobing-ai/spur-web)
 packages/
-  contracts/    oRPC transport contracts only — health/DTOs, no domain types (@gobing-ai/spur-contracts)
-  config/       Zod config schema + env parsing                              (@gobing-ai/spur-config)
-  domain/       Spur-domain DAOs + schema (workspaces, runs, artifacts, …)   (@gobing-ai/spur-domain)
+  app/          Application services (AgentService, RuleService, WorkflowService, …) (@gobing-ai/spur-app)
+  contracts/    oRPC transport contracts only — health/DTOs, no domain types          (@gobing-ai/spur-contracts)
+  config/       Zod config schema + env parsing                                       (@gobing-ai/spur-config)
+  domain/       Spur-domain DAOs + schema (workspaces, runs, artifacts, …)            (@gobing-ai/spur-domain)
+  plugin-sdk/   Plugin SDK — capability registries, host contracts, trust model       (@gobing-ai/spur-plugin-sdk)
 tooling/
   typescript/   Shared tsconfig presets (base/server/react)
 drizzle/        0000_spur_cli_foundation.sql (active) + _legacy_reference/ (inert)
@@ -119,7 +122,7 @@ spur init       [--name <name>] [--force] [--minimal] [--json]
 spur agent      run <prompt> [--agent <name>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--json]
 spur agent      list [--json]
 spur agent      doctor [agent] [--json]
-spur rule       run [--preset <name>] [--rule <id>] [--fail-on <severity>] [--json]
+spur rule       run [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <severity>] [--verbose] [--json]
 spur rule       validate [--file <path>|--preset <name>|<path>] [--json]
 spur rule       list [--preset <name>] [--json]
 spur workflow   validate <workflow.yaml> [--json]
