@@ -5,6 +5,54 @@ import { toJson } from '../output';
 
 export type { AgentRunDeps };
 
+/** Render detailed usage for `spur agent`. */
+export function helpText(): string {
+    return [
+        'spur agent - run and inspect supported coding agents',
+        '',
+        'Usage: spur agent <command> [options]',
+        '',
+        'Commands:',
+        '  run <prompt> [--agent <name>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--json]',
+        '      Execute a prompt or slash command via a coding agent.',
+        '  list [--json] [--specs]',
+        '      List detected coding agents, or team agent specs with --specs.',
+        '  doctor [agent] [--json]',
+        '      Check agent readiness.',
+        '  create <id> --type <agent-type> [flags]',
+        '      Write a team agent spec to .spur/agents/<id>.yaml.',
+        '  edit <id>',
+        '      Open an agent spec in $EDITOR, or print its path.',
+        '  delete <id> [--force]',
+        '      Remove an agent spec.',
+        '  help',
+        '      Show this help.',
+        '',
+        'Options:',
+        '  --agent <name>             Agent name, current, or auto',
+        '  --continue                 Resume the previous agent session',
+        '  --model <name>             Agent model argument',
+        '  --mode <mode>              Agent output mode: text|json',
+        '  --cwd <path>               Working directory for agent execution',
+        '  --purpose <text>           Team identity purpose',
+        '  --tags <a,b>               Team identity tags',
+        '  --system-prompt <text>     Team identity system prompt',
+        '  --task <id>                Team identity task id',
+        '  --drain                    Prepend pending inbox messages for --agent <id>',
+        '  --specs                    List team specs instead of detected agents',
+        '  --type <agent-type>        Agent spec type for create',
+        '  --force                    Required for delete',
+        '  --json                     Output machine-readable JSON where supported',
+        '  -h, --help                 Show this help',
+        '',
+        'Examples:',
+        '  spur agent list',
+        '  spur agent doctor codex',
+        '  spur agent run "summarize this repo" --agent codex',
+        '  spur agent create planner --type codex --purpose "planning agent"',
+    ].join('\n');
+}
+
 /** Execute `spur agent` commands backed by @gobing-ai/ts-ai-runner. */
 export async function runAgentCommand(
     subcommand: string | undefined,
