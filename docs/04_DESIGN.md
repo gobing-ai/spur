@@ -78,10 +78,11 @@ Team coordination (backed by `TeamService`).
   there is no daemon yet); `--json` emits `{ agents: [...] }`.
 - `start` / `stop` — Phase-4 deferred stubs that print the daemon-not-available message and exit 0.
 
-#### `spur rule run [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <severity>] [--json]`
+#### `spur rule run [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <severity>] [--verbose] [--json]`
 Evaluate constraint rules over the working tree. `--preset` (default `recommended`) or `--file` for
 an ad-hoc rule file; `--rule <id>` filters to one rule. `--fail-on error|warning|info` (default
-`error`) sets the exit-1 threshold. Rule roots resolve highest-priority-first: `SPUR_RULES_PATH`,
+`error`) sets the exit-1 threshold. `--verbose` streams per-rule progress with execution time to
+stderr (e.g. `✓ passed - 0.12s`). Rule roots resolve highest-priority-first: `SPUR_RULES_PATH`,
 local `.spur/rules`, the user-global `~/.config/spur/rules`, then the presets bundled with
 `ts-rule-engine` as a fallback so `recommended` works before `spur init` seeds the global layer. A
 run that resolves **zero rules** exits 1 (fail-loud: a gate that checks nothing is not a pass).
@@ -90,7 +91,9 @@ hermetic run. Backed by `ts-rule-engine`.
 
 #### `spur rule validate [--file <path>|--preset <name>|<path>] [--json]` · `spur rule list [--preset <name>] [--json]`
 - `validate` — load and normalize a rule file or preset without evaluating it.
-- `list` — list discovered local rules from `.spur/rules`; with `--preset`, list the resolved preset rules.
+- `list` — list the effective rule-file inventory grouped by source layer and category (`local`, `global`,
+  and any `SPUR_RULES_PATH` override, deduped by relative path); with `--preset`, list the resolved preset
+  rules.
 Backed by `ts-rule-engine`.
 
 #### `spur workflow validate <workflow.yaml> [--json]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--json]` · `spur workflow list [--json]`
