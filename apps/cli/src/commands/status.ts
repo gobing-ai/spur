@@ -4,6 +4,24 @@ import { CommandError } from '../errors';
 import { gitContext } from '../git-context';
 import { toJson } from '../output';
 
+/** Render detailed usage for `spur status`. */
+export function helpText(): string {
+    return [
+        'spur status - show project, Git, and optional path status',
+        '',
+        'Usage: spur status [path] [options]',
+        '',
+        'Options:',
+        '  --json             Output machine-readable JSON',
+        '  -h, --help         Show this help',
+        '',
+        'Examples:',
+        '  spur status',
+        '  spur status package.json',
+        '  spur status --json',
+    ].join('\n');
+}
+
 /** Report basic project and Git status. */
 export async function runStatusCommand(
     context: CliContext,
