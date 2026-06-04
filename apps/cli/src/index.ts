@@ -2,16 +2,16 @@
 import figlet from 'figlet';
 import standard from 'figlet/fonts/Standard';
 import { parseArgs } from './args';
-import { runAgentCommand } from './commands/agent';
-import { runHistoryCommand } from './commands/history';
-import { runInitCommand } from './commands/init';
-import { runMessageCommand } from './commands/message';
-import { runMigrateCommand } from './commands/migrate';
-import { runPluginCommand } from './commands/plugin';
-import { runRuleCommand } from './commands/rule';
-import { runStatusCommand } from './commands/status';
-import { runTeamCommand } from './commands/team';
-import { runWorkflowCommand } from './commands/workflow';
+import { helpText as agentHelpText, runAgentCommand } from './commands/agent';
+import { helpText as historyHelpText, runHistoryCommand } from './commands/history';
+import { helpText as initHelpText, runInitCommand } from './commands/init';
+import { helpText as messageHelpText, runMessageCommand } from './commands/message';
+import { helpText as migrateHelpText, runMigrateCommand } from './commands/migrate';
+import { helpText as pluginHelpText, runPluginCommand } from './commands/plugin';
+import { helpText as ruleHelpText, runRuleCommand } from './commands/rule';
+import { runStatusCommand, helpText as statusHelpText } from './commands/status';
+import { runTeamCommand, helpText as teamHelpText } from './commands/team';
+import { runWorkflowCommand, helpText as workflowHelpText } from './commands/workflow';
 import { CLI_CONFIG } from './config';
 import { type CliContext, createCliContext } from './context';
 import { errorMessage } from './errors';
@@ -53,6 +53,24 @@ export async function dispatch(argv: string[], context: CliContext): Promise<num
         return 0;
     }
 
+    if (command === 'help' && subcommand !== undefined) {
+        const commandHelp = commandHelpText(subcommand);
+        if (commandHelp === undefined) {
+            context.output.error(`No help available for command: ${subcommand}`);
+            return 1;
+        }
+        context.output.write(commandHelp);
+        return 0;
+    }
+
+    if (command !== undefined && (subcommand === 'help' || parsed.flags.help === true)) {
+        const commandHelp = commandHelpText(command);
+        if (commandHelp !== undefined) {
+            context.output.write(commandHelp);
+            return 0;
+        }
+    }
+
     if (command === undefined || command === 'help' || parsed.flags.help === true) {
         context.output.write(helpText());
         return 0;
@@ -87,6 +105,33 @@ export async function dispatch(argv: string[], context: CliContext): Promise<num
             context.output.error(`Unknown command: ${command}`);
             context.output.write(helpText());
             return 1;
+    }
+}
+
+function commandHelpText(command: string): string | undefined {
+    switch (command) {
+        case 'init':
+            return initHelpText();
+        case 'status':
+            return statusHelpText();
+        case 'migrate':
+            return migrateHelpText();
+        case 'agent':
+            return agentHelpText();
+        case 'message':
+            return messageHelpText();
+        case 'team':
+            return teamHelpText();
+        case 'rule':
+            return ruleHelpText();
+        case 'history':
+            return historyHelpText();
+        case 'workflow':
+            return workflowHelpText();
+        case 'plugin':
+            return pluginHelpText();
+        default:
+            return undefined;
     }
 }
 
