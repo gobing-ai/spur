@@ -403,25 +403,43 @@ describe('RuleService.validate()', () => {
 // ---------------------------------------------------------------------------
 
 describe('RuleService.list()', () => {
-    test('lists discovered local rules', async () => {
+    test('lists discovered rule files grouped by effective source layer', async () => {
         const cwd = await createTempProject();
         const output = createCapturedOutput();
+        const globalRoot = join(cwd, 'global-rules');
         await writeRuleFile(cwd, '.spur/rules/boundary/sample.yaml', 'boundary-sample');
+        await writeRuleFile(globalRoot, 'boundary/sample.yaml', 'shadowed-global-sample');
+        await writeRuleFile(globalRoot, 'quality/coverage.yaml', 'coverage-gate');
         await writeFile(join(cwd, '.spur', 'rules', 'recommended.yaml'), 'name: recommended\nextends:\n  - boundary\n');
 
-        const result = await new RuleService(makeContext(cwd, output)).list();
+        const result = await new RuleService(makeContext(cwd, output, { SPUR_GLOBAL_RULES_DIR: globalRoot })).list();
 
-        expect(result.ruleCount).toBe(1);
-        expect(result.rules).toMatchObject([
-            { id: 'boundary-sample', file: 'boundary/sample.yaml', severity: 'error', enabled: true },
+        expect(result.mode).toBe('layered');
+        expect(result.totalFiles).toBe(2);
+        expect(result.ruleCount).toBe(2);
+        expect(result.layers.map((layer) => layer.id)).toEqual(['local', 'global']);
+        expect(result.categories).toMatchObject([
+            {
+                name: 'boundary',
+                files: [{ path: 'boundary/sample.yaml', source: 'local', ruleIds: ['boundary-sample'] }],
+            },
+            {
+                name: 'quality',
+                files: [{ path: 'quality/coverage.yaml', source: 'global', ruleIds: ['coverage-gate'] }],
+            },
         ]);
+        expect(result.rules).toEqual([]);
     });
 
     test('returns empty result when no local rules exist', async () => {
         const cwd = await createTempProject();
-        const result = await new RuleService(makeContext(cwd, nullOutput())).list();
+        const result = await new RuleService(
+            makeContext(cwd, nullOutput(), { SPUR_GLOBAL_RULES_DIR: join(cwd, 'none') }),
+        ).list();
         expect(result.ruleCount).toBe(0);
         expect(result.rules).toEqual([]);
+        expect(result.totalFiles).toBe(0);
+        expect(result.categories).toEqual([]);
     });
 
     test('lists rules from a named preset', async () => {
