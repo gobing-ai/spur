@@ -5,6 +5,32 @@ import { EventBus, getLogger } from '@gobing-ai/ts-infra';
 import type { ParsedArgs } from '../args';
 import type { CliContext } from '../context';
 
+/** Render detailed usage for `spur plugin`. */
+export function helpText(): string {
+    return [
+        'spur plugin - inspect discovered plugins',
+        '',
+        'Usage: spur plugin <command> [options]',
+        '',
+        'Commands:',
+        '  list [--json]',
+        '      List discovered and loaded plugins.',
+        '  info <name> [--json]',
+        '      Show manifest and status for a plugin.',
+        '  help',
+        '      Show this help.',
+        '',
+        'Options:',
+        '  --name <name>       Plugin name for info',
+        '  --json              Output machine-readable JSON',
+        '  -h, --help          Show this help',
+        '',
+        'Examples:',
+        '  spur plugin list',
+        '  spur plugin info core',
+    ].join('\n');
+}
+
 /**
  * CLI handler for `spur plugin <list|info>`.
  *
