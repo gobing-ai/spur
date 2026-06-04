@@ -4,6 +4,40 @@ import { booleanFlag, stringFlag } from '../args';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
 
+/** Render detailed usage for `spur history`. */
+export function helpText(): string {
+    return [
+        'spur history - import and analyze coding-agent history',
+        '',
+        'Usage: spur history <command> [options]',
+        '',
+        'Commands:',
+        '  import --source <source> [--file <path>|--root <path>] [--mode <mode>] [--dry-run] [--json]',
+        '      Import agent conversation JSONL.',
+        '  analyze [--since <iso-date>] [--json]',
+        '      Summarize imported token, cost, and usage data.',
+        '  report [--json]',
+        '      Reserved richer report surface; currently prints a TODO marker.',
+        '  help',
+        '      Show this help.',
+        '',
+        'Options:',
+        '  --source <source>      pi|claude|codex|gemini|opencode|antigravity|openclaw',
+        '  --file <path>          Import one JSONL file',
+        '  --root <path>          Scan a history root',
+        '  --mode <mode>          full|incremental|force-file',
+        '  --dry-run              Scan without persisting imported records',
+        '  --since <iso-date>     Lower bound for analysis',
+        '  --json                 Output machine-readable JSON where supported',
+        '  -h, --help             Show this help',
+        '',
+        'Examples:',
+        '  spur history import --source codex --root ~/.codex/sessions',
+        '  spur history import --source claude --file session.jsonl --mode force-file',
+        '  spur history analyze --since 2026-06-01',
+    ].join('\n');
+}
+
 /** Execute history-domain commands. */
 export async function runHistoryCommand(
     subcommand: string | undefined,
