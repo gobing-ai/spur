@@ -28,6 +28,7 @@ export {
     type RuleEvaluationServiceResult as RuleEvaluationResult,
     type RuleEvaluationServiceResult,
     type RuleListEntry,
+    type RuleListFileEntry,
     type RuleListServiceResult as RuleListResult,
     type RuleListServiceResult,
     RuleService,
