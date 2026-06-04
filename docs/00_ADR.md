@@ -219,3 +219,19 @@ is the unscheduled **5f** built-in-harness migration, and no committed PRD surfa
 agents in `01_PRD §1`/`§5.1`) needs user-defined agent types. 5d is reactivated only when 5f is
 scheduled or a concrete product need for plugin-defined harnesses appears; the upstream `AiRunner`
 injection is its prerequisite, not an optional nicety. Tracked in task 0015 (status `Blocked`).
+
+---
+
+## ADR-013: CLI Help Is Command-Scoped
+
+**Status:** Accepted · **Date:** 2026-06-04
+
+**Decision.** Keep one executable CLI layer, but require every top-level command module to export a
+dedicated `helpText()` usage renderer registered in the dispatcher help registry via aliased imports.
+`spur <command> --help`, `spur <command> help`, and `spur help <command>` are equivalent. Global help
+remains only the compact command index in `apps/cli/src/index.ts`.
+
+**Why.** A one-layer CLI still needs command-local usage; falling back to global help hides command
+contracts and causes migration drift.
+
+**Detail:** concrete command surfaces in `04 §1 CLI Surface`.
