@@ -1,4 +1,9 @@
-import { type FailOnSeverity, RuleService } from '@gobing-ai/spur-app';
+import {
+    type FailOnSeverity,
+    type RuleListFileEntry,
+    type RuleListServiceResult,
+    RuleService,
+} from '@gobing-ai/spur-app';
 import { booleanFlag, stringFlag } from '../args';
 import { makeColorize, shouldColor } from '../colors';
 import type { CliContext } from '../context';
@@ -36,14 +41,9 @@ export async function runRuleCommand(
             context.output.write(
                 booleanFlag(flags, 'json')
                     ? JSON.stringify(result, null, 2)
-                    : result.rules.length === 0
-                      ? 'No rules found.'
-                      : result.rules
-                            .map(
-                                (entry) =>
-                                    `${entry.id}\t${entry.severity}\t${entry.enabled ? 'enabled' : 'disabled'}\t${entry.file}`,
-                            )
-                            .join('\n'),
+                    : preset === undefined
+                      ? formatRuleFileList(result)
+                      : formatPresetRuleList(result),
             );
             return 0;
         }
@@ -51,6 +51,54 @@ export async function runRuleCommand(
             context.output.error(`Unknown rule command: ${subcommand}`);
             return 1;
     }
+}
+
+function formatRuleFileList(result: RuleListServiceResult): string {
+    if (result.totalFiles === 0) return 'No rules found.';
+
+    const lines = [
+        `Sources: ${result.layers.map((layer) => `${layer.id} (${layer.path})`).join(', ')} (${result.mode} mode)`,
+        `Total files: ${result.totalFiles}`,
+        '',
+    ];
+
+    for (const category of result.categories) {
+        lines.push(`  ${category.name}/`);
+        for (const file of category.files) {
+            lines.push(`    ${formatRuleFileEntry(file)}`);
+        }
+    }
+    for (const file of result.uncategorized) {
+        lines.push(`  ${formatRuleFileEntry(file)}`);
+    }
+    return lines.join('\n');
+}
+
+function formatRuleFileEntry(entry: RuleListFileEntry): string {
+    const source = sourceLabel(entry.source);
+    if (!entry.valid) return `❌ ${entry.path} (invalid: ${entry.error ?? 'unknown error'}) [${source}]`;
+    const label = entry.ruleCount === 1 ? 'rule' : 'rules';
+    return `✓ ${entry.path} (${entry.ruleCount} ${label}) [${source}]`;
+}
+
+function sourceLabel(id: string): string {
+    if (id === 'env-override') return 'env override';
+    if (id === 'local') return 'project layer';
+    if (id === 'global') return 'user layer';
+    if (id === 'bundled') return 'bundled layer';
+    return id;
+}
+
+function formatPresetRuleList(result: RuleListServiceResult): string {
+    if (result.rules.length === 0) return 'No rules found.';
+    return result.rules
+        .map(
+            (entry) =>
+                `${entry.id}\tseverity=${entry.severity}\tstatus=${
+                    entry.enabled ? 'enabled' : 'disabled'
+                }\tsource=${entry.file}`,
+        )
+        .join('\n');
 }
 
 function resolveSource(
