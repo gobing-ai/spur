@@ -17,6 +17,19 @@ describe('PluginHost', () => {
     let bus: EventBus<SpurEventMap>;
     let host: PluginHost;
 
+    /** Logger that writes nowhere — used by fail-soft tests to avoid error-log noise. */
+    const silentLogger = {
+        trace() {},
+        debug() {},
+        info() {},
+        warn() {},
+        error() {},
+        fatal() {},
+        child() {
+            return this;
+        },
+    };
+
     beforeEach(() => {
         bus = new EventBus<SpurEventMap>();
         host = new PluginHost(bus);
@@ -175,6 +188,7 @@ describe('PluginHost', () => {
 
     it('startServerHooks is fail-soft: one throwing hook does not block the rest', async () => {
         let secondRan = false;
+        const hostS = new PluginHost(new EventBus<SpurEventMap>(), { logger: silentLogger });
         const thrower: SpurPlugin = {
             name: 'bad-start',
             version: '1.0.0',
@@ -193,16 +207,17 @@ describe('PluginHost', () => {
                 secondRan = true;
             },
         };
-        await host.loadPlugin(thrower, { source: 'curated', pluginName: 'bad-start', trustLevel: 'curated' });
-        await host.loadPlugin(good, { source: 'curated', pluginName: 'good-start', trustLevel: 'curated' });
+        await hostS.loadPlugin(thrower, { source: 'curated', pluginName: 'bad-start', trustLevel: 'curated' });
+        await hostS.loadPlugin(good, { source: 'curated', pluginName: 'good-start', trustLevel: 'curated' });
 
         // Must not reject, and must still run the second plugin's hook.
-        await expect(host.startServerHooks()).resolves.toBeUndefined();
+        await expect(hostS.startServerHooks()).resolves.toBeUndefined();
         expect(secondRan).toBe(true);
     });
 
     it('stopServerHooks is fail-soft: a throwing hook does not skip remaining cleanup', async () => {
         let cleanedUp = false;
+        const hostS = new PluginHost(new EventBus<SpurEventMap>(), { logger: silentLogger });
         const thrower: SpurPlugin = {
             name: 'bad-stop',
             version: '1.0.0',
@@ -221,10 +236,10 @@ describe('PluginHost', () => {
                 cleanedUp = true;
             },
         };
-        await host.loadPlugin(thrower, { source: 'curated', pluginName: 'bad-stop', trustLevel: 'curated' });
-        await host.loadPlugin(good, { source: 'curated', pluginName: 'good-stop', trustLevel: 'curated' });
+        await hostS.loadPlugin(thrower, { source: 'curated', pluginName: 'bad-stop', trustLevel: 'curated' });
+        await hostS.loadPlugin(good, { source: 'curated', pluginName: 'good-stop', trustLevel: 'curated' });
 
-        await expect(host.stopServerHooks()).resolves.toBeUndefined();
+        await expect(hostS.stopServerHooks()).resolves.toBeUndefined();
         expect(cleanedUp).toBe(true);
     });
 });
