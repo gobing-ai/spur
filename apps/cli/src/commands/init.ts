@@ -7,6 +7,27 @@ import { CLI_CONFIG } from '../config';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
 
+/** Render detailed usage for `spur init`. */
+export function helpText(): string {
+    return [
+        'spur init - scaffold a local Spur project',
+        '',
+        'Usage: spur init [options]',
+        '',
+        'Options:',
+        '  --name <name>      Project name (default: current directory name)',
+        '  --force            Recreate files that already exist',
+        '  --minimal          Only write the minimal .spur scaffold',
+        '  --json             Output machine-readable JSON',
+        '  -h, --help         Show this help',
+        '',
+        'Examples:',
+        '  spur init',
+        '  spur init --name platform-tools',
+        '  spur init --minimal --json',
+    ].join('\n');
+}
+
 /** Global user rules root, relative to the home directory (mirrors `rule.ts`). */
 const GLOBAL_RULES_DIR = join('.config', 'spur', 'rules');
 
