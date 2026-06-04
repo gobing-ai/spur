@@ -8,6 +8,46 @@ import { booleanFlag, stringFlag } from '../args';
 import { makeColorize, shouldColor } from '../colors';
 import type { CliContext } from '../context';
 
+/** Render detailed usage for `spur rule`. */
+export function helpText(): string {
+    return [
+        'spur rule - manage constraint rules and presets',
+        '',
+        'Usage: spur rule <command> [options]',
+        '',
+        'Commands:',
+        '  run [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <severity>] [--verbose] [--json]',
+        '      Evaluate constraint rules over the working tree.',
+        '  validate [--file <path>|--preset <name>|<path>] [--json]',
+        '      Validate a rule file or preset without evaluating it.',
+        '  list [--preset <name>] [--json]',
+        '      List discovered rule files, or list resolved rules for a preset.',
+        '  help',
+        '      Show this help.',
+        '',
+        'Options:',
+        '  --preset <name>        Preset to load (default: recommended)',
+        '  --file <path>          Ad-hoc rule file for run or validate',
+        '  --rule <id>            Filter run to one rule ID',
+        '  --fail-on <severity>   Exit 1 threshold: error|warning|info (default: error)',
+        '  --verbose              Stream per-rule progress to stderr',
+        '  --json                 Output machine-readable JSON where supported',
+        '  -h, --help             Show this help',
+        '',
+        'Examples:',
+        '  spur rule run --preset recommended',
+        '  spur rule run --preset spur-dev --verbose',
+        '  spur rule validate --preset recommended',
+        '  spur rule validate .spur/rules/boundary/imports.yaml --json',
+        '  spur rule list --preset recommended',
+        '',
+        'Exit codes:',
+        '  0 = success/pass',
+        '  1 = validation errors, findings at or above --fail-on, or no rules evaluated',
+        '  2 = system error',
+    ].join('\n');
+}
+
 /** Execute `spur rule` commands backed by @gobing-ai/ts-rule-engine. */
 export async function runRuleCommand(
     subcommand: string | undefined,
