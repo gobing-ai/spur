@@ -7,6 +7,35 @@ import { toJson } from '../output';
 const DAEMON_STUB_MESSAGE =
     'Team daemon not yet available. Use `spur agent run --drain` for deferred message delivery.';
 
+/** Render detailed usage for `spur team`. */
+export function helpText(): string {
+    return [
+        'spur team - coordinate team agent assignments and status',
+        '',
+        'Usage: spur team <command> [options]',
+        '',
+        'Commands:',
+        '  assign <task-id> <agent-id>',
+        '      Set the assignee on a task file.',
+        '  status [--json]',
+        '      List agent specs and their run status.',
+        '  start',
+        '      Deferred daemon stub.',
+        '  stop',
+        '      Deferred daemon stub.',
+        '  help',
+        '      Show this help.',
+        '',
+        'Options:',
+        '  --json             Output machine-readable JSON where supported',
+        '  -h, --help         Show this help',
+        '',
+        'Examples:',
+        '  spur team assign 0012 planner',
+        '  spur team status --json',
+    ].join('\n');
+}
+
 /** Execute `spur team` commands backed by TeamService. */
 export async function runTeamCommand(
     subcommand: string | undefined,
