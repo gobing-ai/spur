@@ -3,7 +3,7 @@
 **Version:** 1.0.0
 **Status:** Canonical
 **Derived from:** `docs/01_PRD.md`, `docs/00_ADR.md`
-**Last Updated:** 2026-06-03
+**Last Updated:** 2026-06-04
 **Owner:** Robin Min
 
 This document describes the **current** architecture of Spur. It specifies module boundaries
@@ -15,25 +15,25 @@ and invariants, not schemas or signatures (those live in code). When it conflict
 Bun-workspace monorepo (no Turborepo, ADR-002). Spur owns three apps and two thin local packages;
 all reusable engines are external `@gobing-ai/ts-*` packages (ADR-006).
 
-```
 spur/
 ├── apps/
 │   ├── cli/         Primary surface — arg dispatch, domain commands, local DAOs, migrations
 │   ├── server/      Hono + oRPC OpenAPI handler; Bun + Cloudflare Worker entrypoints
 │   └── web/         Astro + Cloudflare adapter; typed oRPC OpenAPI client
 ├── packages/
+│   ├── app/         Application services (AgentService, RuleService, WorkflowService, …)
 │   ├── contracts/   oRPC transport contracts ONLY (health/DTOs) — @gobing-ai/spur-contracts
-│   └── config/      Zod config schema + env parsing — @gobing-ai/spur-config
+│   ├── config/      Zod config schema + env parsing — @gobing-ai/spur-config
+│   ├── domain/      Spur-domain DAOs + schema (workspaces, runs, workflow-states, …)
+│   └── plugin-sdk/  Plugin SDK — capability registries, host contracts, trust model
 ├── tooling/typescript/   Shared tsconfig presets (base/server/react)
 └── drizzle/         0000_spur_cli_foundation.sql (active) + _legacy_reference/ (inert)
-```
 
 ### 1.1 External dependency boundary (ADR-004/006)
-
 ```
-apps/* ──► packages/{contracts, config}
+apps/* ──► packages/{app, contracts, config, domain, plugin-sdk}
 apps/* ──► @gobing-ai/ts-{utils, infra, runtime, db}          (semver)
-apps/cli ─► @gobing-ai/ts-{ai-runner, rule-engine,            (link: → semver pending)
+apps/cli ─► @gobing-ai/ts-{ai-runner, rule-engine,            (semver)
                            dual-workflow-engine, llm-jsonl-importer}
 ```
 
@@ -118,9 +118,10 @@ never enter `packages/contracts`.
 
 A constraint rule declares an id, severity, target paths, an evaluator, options, and a message.
 `RuleEngine.evaluate(rules, cwd)` returns findings; the CLI owns exit-code policy (`--fail-on`).
-Presets compose via `loadPresetRules`; ad-hoc files via `loadRuleFile`. Formatters (text/json) are
-host-registered. Rules are configuration — adding one edits YAML, not code.
-
+`--verbose` streams per-rule progress to stderr with execution time (e.g. `✓ passed - 0.12s`),
+surfaced by the application-service `RuleService.evaluateVerbose()`. Presets compose via
+`loadPresetRules`; ad-hoc files via `loadRuleFile`. Formatters (text/json) are host-registered.
+Rules are configuration — adding one edits YAML, not code.
 ## 6. Workflows (`ts-dual-workflow-engine`, `spur workflow`)
 
 Two execution models behind one host (ADR-009):
