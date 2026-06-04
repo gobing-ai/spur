@@ -51,6 +51,7 @@
         "@gobing-ai/ts-llm-jsonl-importer": "catalog:",
         "@gobing-ai/ts-rule-engine": "catalog:",
         "@gobing-ai/ts-runtime": "catalog:",
+        "@gobing-ai/ts-infra": "catalog:",
         "@gobing-ai/ts-utils": "catalog:",
         "@types/bun": "catalog:",
         "@types/figlet": "^1.7.0",
