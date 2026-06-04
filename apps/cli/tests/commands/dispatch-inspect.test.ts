@@ -2,6 +2,16 @@ import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { createBufferTarget, setDefaultOutputTargets } from '@gobing-ai/ts-utils';
 import { bannerText, dispatch, helpText, main } from '../../src';
+import { helpText as agentHelpText } from '../../src/commands/agent';
+import { helpText as historyHelpText } from '../../src/commands/history';
+import { helpText as initHelpText } from '../../src/commands/init';
+import { helpText as messageHelpText } from '../../src/commands/message';
+import { helpText as migrateHelpText } from '../../src/commands/migrate';
+import { helpText as pluginHelpText } from '../../src/commands/plugin';
+import { helpText as ruleHelpText } from '../../src/commands/rule';
+import { helpText as statusHelpText } from '../../src/commands/status';
+import { helpText as teamHelpText } from '../../src/commands/team';
+import { helpText as workflowHelpText } from '../../src/commands/workflow';
 import { createCliContext } from '../../src/context';
 import { gitContext } from '../../src/git-context';
 import { consoleOutput } from '../../src/output';
@@ -37,6 +47,55 @@ describe('CLI dispatch and status', () => {
         expect(helpText()).toContain('message send');
         expect(helpText()).toContain('team assign');
         expect(helpText()).toContain('agent create');
+    });
+
+    test('renders command-scoped help for rule commands', async () => {
+        const cwd = await createTempProject();
+        const output = createCapturedOutput();
+
+        expect(await main(['rule', '--help'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
+        expect(output.messages.at(-1)).toBe(ruleHelpText());
+        expect(output.messages.at(-1)).toContain('spur rule - manage constraint rules and presets');
+        expect(output.messages.at(-1)).toContain('Usage: spur rule <command> [options]');
+        expect(output.messages.at(-1)).toContain('rule run');
+        expect(output.messages.at(-1)).not.toContain('Global options:');
+
+        expect(await main(['rule', 'help'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
+        expect(output.messages.at(-1)).toBe(ruleHelpText());
+
+        expect(await main(['help', 'rule'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
+        expect(output.messages.at(-1)).toBe(ruleHelpText());
+    });
+
+    test('renders command-scoped help for every existing command', async () => {
+        const cwd = await createTempProject();
+        const output = createCapturedOutput();
+        const helpByCommand = {
+            init: initHelpText,
+            status: statusHelpText,
+            migrate: migrateHelpText,
+            agent: agentHelpText,
+            message: messageHelpText,
+            team: teamHelpText,
+            rule: ruleHelpText,
+            history: historyHelpText,
+            workflow: workflowHelpText,
+            plugin: pluginHelpText,
+        };
+
+        for (const [command, renderHelp] of Object.entries(helpByCommand)) {
+            const expected = renderHelp();
+
+            expect(await main([command, '--help'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
+            expect(output.messages.at(-1)).toBe(expected);
+
+            expect(await main([command, 'help'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
+            expect(output.messages.at(-1)).toBe(expected);
+
+            expect(await main(['help', command], { cwd, output, dbUrl: ':memory:' })).toBe(0);
+            expect(output.messages.at(-1)).toBe(expected);
+            expect(output.messages.at(-1)).not.toContain('Global options:');
+        }
     });
 
     test('dispatches message and team command groups', async () => {
