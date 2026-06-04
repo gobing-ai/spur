@@ -6,6 +6,37 @@ import { toJson } from '../output';
 /** Default sender used for operator-originated messages. */
 const DEFAULT_FROM = 'operator';
 
+/** Render detailed usage for `spur message`. */
+export function helpText(): string {
+    return [
+        'spur message - send and inspect durable inter-agent messages',
+        '',
+        'Usage: spur message <command> [options]',
+        '',
+        'Commands:',
+        '  send --to <id> <body> [--from <id>] [--json]',
+        '      Enqueue a message for an agent.',
+        '  inbox --agent <id> [--json]',
+        '      List messages addressed to an agent.',
+        '  reply <msg-id> <body> [--json]',
+        '      Thread a reply to a message.',
+        '  help',
+        '      Show this help.',
+        '',
+        'Options:',
+        '  --to <id>          Recipient agent id for send',
+        '  --from <id>        Sender agent id for send (default: operator)',
+        '  --agent <id>       Recipient agent id for inbox',
+        '  --json             Output machine-readable JSON',
+        '  -h, --help         Show this help',
+        '',
+        'Examples:',
+        '  spur message send --to planner "review task 0012"',
+        '  spur message inbox --agent planner',
+        '  spur message reply msg_123 "done"',
+    ].join('\n');
+}
+
 /** Execute `spur message` commands backed by TeamService. */
 export async function runMessageCommand(
     subcommand: string | undefined,
