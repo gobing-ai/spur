@@ -289,10 +289,12 @@ export class RuleService {
             const counter = color.dim(`[${index + 1}/${total}]`);
             const type = color.dim(`(${rule.evaluator.type})`);
             this.context.output.error(`${color.dim('▶')} ${counter} ${rule.id} ${type}`);
+            const startedAt = performance.now();
             const result = await engine.evaluate([rule], this.context.cwd);
+            const elapsed = ((performance.now() - startedAt) / 1000).toFixed(2);
             findings.push(...result.findings);
             fixes.push(...result.fixes);
-            this.context.output.error(`  ${this.verboseOutcome(result.findings, color)}`);
+            this.context.output.error(`  ${this.verboseOutcome(result.findings, color)} - ${elapsed}s`);
             for (const line of this.verboseFindingLines(result.findings, color)) {
                 this.context.output.error(line);
             }
