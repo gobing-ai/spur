@@ -94,6 +94,8 @@ hermetic run. Backed by `ts-rule-engine`.
 - `list` — list the effective rule-file inventory grouped by source layer and category (`local`, `global`,
   and any `SPUR_RULES_PATH` override, deduped by relative path); with `--preset`, list the resolved preset
   rules.
+- `help` / `--help` — print the command-scoped rule usage, including subcommands, options, examples,
+  and exit codes. `spur help rule` is equivalent.
 Backed by `ts-rule-engine`.
 
 #### `spur workflow validate <workflow.yaml> [--json]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--json]` · `spur workflow list [--json]`
@@ -123,6 +125,10 @@ stabilize before the report implementation is designed.
 | `spur status [path] [--json]` | Project health: config present, package.json present, git context, team agent spec ids found under `.spur/agents/`; optional path metadata (size, isFile, isDirectory). |
 | `spur migrate [--json]` | Temporary helper: apply CLI-owned schema migrations; reports `{ ok, applied }`. |
 | `spur help` / `spur version` | Usage / version. |
+
+Per ADR-013, every top-level command module exports its own `helpText()` usage renderer. The
+dispatcher imports those renderers with aliases and registers them for `spur <command> --help`,
+`spur <command> help`, and `spur help <command>`; global help remains a compact command index.
 
 ## 2. Configuration
 
