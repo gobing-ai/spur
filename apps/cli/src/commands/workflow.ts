@@ -4,6 +4,37 @@ import type { CliContext } from '../context';
 import { toJson } from '../output';
 
 const USAGE = 'Usage: spur workflow validate|run <workflow.yaml> [--json] | spur workflow list [--json]';
+
+/** Render detailed usage for `spur workflow`. */
+export function helpText(): string {
+    return [
+        'spur workflow - validate and execute workflow YAML files',
+        '',
+        'Usage: spur workflow <command> [options]',
+        '',
+        'Commands:',
+        '  validate <workflow.yaml> [--json]',
+        '      Validate a workflow definition.',
+        '  run <workflow.yaml> [--run-id <id>] [--json]',
+        '      Execute a workflow definition.',
+        '  list [--json]',
+        '      List persisted workflow runs.',
+        '  help',
+        '      Show this help.',
+        '',
+        'Options:',
+        '  --run-id <id>       Persisted run id for workflow run',
+        '  --no-schema         Skip JSON-schema validation where supported',
+        '  --json              Output machine-readable JSON where supported',
+        '  -h, --help          Show this help',
+        '',
+        'Examples:',
+        '  spur workflow validate .spur/workflows/basic.yaml',
+        '  spur workflow run .spur/workflows/basic.yaml --run-id smoke',
+        '  spur workflow list --json',
+    ].join('\n');
+}
+
 function requiredWorkflowFile(positionals: readonly string[]): string {
     const file = positionals[0];
     if (file === undefined) throw new Error('Workflow file path is required');
