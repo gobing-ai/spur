@@ -43,7 +43,7 @@ describe('init command', () => {
         // Bundled categories land in the isolated global root so any project's
         // `rule run --preset recommended` resolves a real ruleset afterwards.
         expect(existsSync(join(globalDir, 'recommended.yaml'))).toBe(true);
-        expect(existsSync(join(globalDir, 'typescript', 'tsdoc-exports.yaml'))).toBe(true);
+        expect(existsSync(join(globalDir, 'quality', 'tsdoc-exports.yaml'))).toBe(true);
         expect(existsSync(join(globalDir, 'quality', 'coverage-gate.yaml'))).toBe(true);
     });
 
