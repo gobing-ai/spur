@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PluginHost } from '@gobing-ai/spur-plugin-sdk';
 import { EventBus, type Logger } from '@gobing-ai/ts-infra';
-import { NodeFileSystem } from '@gobing-ai/ts-runtime';
+import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { PluginLoader } from '../src/services/plugin-loader';
 
 function createTempDir(): string {
@@ -60,7 +60,7 @@ function newLoader(
             if (dirName === 'bad-b' || dirName === 'bad-l') throw new Error('BROKEN');
             return { default: { name: dirName, version: '1.0.0', trust: 'local', onLoad() {} } };
         });
-    return new PluginLoader(newHost(), new NodeFileSystem(), silentLogger, env, mockLoad);
+    return new PluginLoader(newHost(), createNodeFileSystem(), silentLogger, env, mockLoad);
 }
 
 // ═══════════════════════════════════════════════════════════════════════
