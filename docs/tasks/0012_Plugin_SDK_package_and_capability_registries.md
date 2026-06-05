@@ -317,7 +317,7 @@ Verdict: **PASS** (re-verified 2026-06-03 via `--force --fix all`)
 
 ### Testing
 
-- Command: `NODE_ENV=test bun test --coverage packages/plugin-sdk/tests/`
+- Command: `NODE_ENV=test bun test --coverage --coverage-dir=.coverage packages/plugin-sdk/tests/`
 - Scope: schema validation, trust engine policy table, registry CRUD + collision, event glob adapter + rate limiting, config merge precedence, host plugin load/unload cycle
 - Result: **150 pass, 0 fail** — coverage 99.71% line / 98.44% func
 - Evidence: 15 test files covering all 16 source files; every trust policy cell tested; collision and error paths exercised
@@ -333,6 +333,5 @@ Verdict: **PASS** (re-verified 2026-06-03 via `--force --fix all`)
 
 
 ### References
-
 
 
