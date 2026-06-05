@@ -1,21 +1,16 @@
 ---
 import { createApiClient } from '../lib/rpc-client';
 
-// biome-ignore lint/correctness/noUnusedVariables: Astro template consumes this frontmatter value.
-let health:
+const _health:
     | {
           status: 'ok';
           timestamp: string;
           service: 'spur';
           version: string;
       }
-    | undefined;
-
-try {
-    health = await createApiClient().health();
-} catch {
-    health = undefined;
-}
+    | undefined = await createApiClient()
+    .health()
+    .catch(() => undefined);
 ---
 
 <!doctype html>
@@ -36,15 +31,15 @@ try {
                 <dl>
                     <div>
                         <dt>API</dt>
-                        <dd>{health?.status ?? 'offline'}</dd>
+                        <dd>{_health?.status ?? 'offline'}</dd>
                     </div>
                     <div>
                         <dt>Version</dt>
-                        <dd>{health?.version ?? '-'}</dd>
+                        <dd>{_health?.version ?? '-'}</dd>
                     </div>
                     <div>
                         <dt>Checked</dt>
-                        <dd>{health?.timestamp ?? '-'}</dd>
+                        <dd>{_health?.timestamp ?? '-'}</dd>
                     </div>
                 </dl>
             </section>
