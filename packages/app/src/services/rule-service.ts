@@ -54,6 +54,7 @@ export interface RuleServiceContext {
 export interface RuleEvaluateOptions {
     preset: string;
     failOn: FailOnSeverity;
+    stopOnFirst?: FailOnSeverity;
     file?: string;
     rule?: string;
     json: boolean;
@@ -156,7 +157,7 @@ export class RuleService {
      * Returns a structured result including the exit code the CLI should use.
      */
     async evaluate(opts: RuleEvaluateOptions): Promise<RuleEvaluationServiceResult> {
-        const { preset, failOn, file, rule, json, verbose, color } = opts;
+        const { preset, failOn, stopOnFirst, file, rule, json, verbose, color } = opts;
 
         const rules =
             file !== undefined
@@ -169,8 +170,8 @@ export class RuleService {
         const engine = new RuleEngine();
         const result =
             verbose && !json
-                ? await this.evaluateVerbose(engine, filteredRules, color)
-                : await engine.evaluate(filteredRules, this.context.cwd);
+                ? await this.evaluateVerbose(engine, filteredRules, color, stopOnFirst)
+                : await engine.evaluate(filteredRules, this.context.cwd, stopOnFirst);
 
         const serviceResult: RuleEvaluationServiceResult = {
             preset,
@@ -331,6 +332,7 @@ export class RuleService {
         engine: RuleEngine,
         rules: readonly ConstraintRule[],
         color: Colorize,
+        stopOnFirst?: FailOnSeverity,
     ): Promise<RuleEngineResult> {
         const total = rules.length;
         this.context.output.error(`Evaluating ${total} ${total === 1 ? 'rule' : 'rules'}…`);
@@ -348,6 +350,13 @@ export class RuleService {
             this.context.output.error(`  ${this.verboseOutcome(result.findings, color)} - ${elapsed}s`);
             for (const line of this.verboseFindingLines(result.findings, color)) {
                 this.context.output.error(line);
+            }
+            if (
+                stopOnFirst !== undefined &&
+                result.findings.some((f) => SEVERITY_RANK[f.severity] >= SEVERITY_RANK[stopOnFirst])
+            ) {
+                this.context.output.error(color.dim(`Stopping: first ${stopOnFirst}+ finding reached.`));
+                break;
             }
         }
         return { findings, fixes };
