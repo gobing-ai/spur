@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { NodeFileSystem } from '@gobing-ai/ts-runtime';
+import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import type { Colorize, RuleServiceContext, RuleServiceOutput } from '../../src/services/rule-service';
 import { RuleService } from '../../src/services/rule-service';
 
@@ -43,7 +43,7 @@ function makeContext(
     output: RuleServiceOutput,
     env: Record<string, string | undefined> = {},
 ): RuleServiceContext {
-    return { cwd, env, fs: new NodeFileSystem(), output };
+    return { cwd, env, fs: createNodeFileSystem(), output };
 }
 
 function noColor(): Colorize {
