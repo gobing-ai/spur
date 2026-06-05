@@ -3,8 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { initializeLogger } from '@gobing-ai/ts-infra';
-import { type FileSystem, NodeFileSystem } from '@gobing-ai/ts-runtime';
+import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
 import { runPluginCommand } from '../../src/commands/plugin';
 import type { CliContext } from '../../src/context';
 
@@ -13,7 +12,7 @@ type TestCtx = CliContext & { _output: string[]; _errors: string[] };
 function makeContext(cwd: string, fsOverride?: FileSystem): TestCtx {
     const output: string[] = [];
     const errors: string[] = [];
-    const fs = fsOverride ?? new NodeFileSystem();
+    const fs = fsOverride ?? createNodeFileSystem();
     return {
         cwd,
         env: process.env as Record<string, string | undefined>,
@@ -45,7 +44,6 @@ describe('runPluginCommand', () => {
     let load: (id: string) => Promise<Record<string, unknown>>;
 
     beforeAll(() => {
-        initializeLogger('error');
         load = mockModuleLoader();
         tmpDir = join(tmpdir(), `spur-cli-${randomUUID()}`);
         mkdirSync(tmpDir, { recursive: true });
@@ -54,7 +52,6 @@ describe('runPluginCommand', () => {
 
     afterAll(() => {
         rmSync(tmpDir, { recursive: true, force: true });
-        initializeLogger('info');
     });
 
     it('list outputs plugin entries', async () => {
@@ -83,7 +80,7 @@ describe('runPluginCommand', () => {
     });
 
     it('list handles broken readFile (error path)', async () => {
-        const realFs = new NodeFileSystem();
+        const realFs = createNodeFileSystem();
         const brokenFs = Object.create(realFs) as FileSystem;
         brokenFs.readFile = async () => {
             throw new Error('INJECTED ERROR');
@@ -110,7 +107,7 @@ describe('runPluginCommand', () => {
     });
 
     it('info handles broken readFile (error path)', async () => {
-        const realFs = new NodeFileSystem();
+        const realFs = createNodeFileSystem();
         const brokenFs = Object.create(realFs) as FileSystem;
         brokenFs.readFile = async () => {
             throw new Error('DISK FAILURE');
