@@ -1,0 +1,27 @@
+# No Biome suppression comments in production source.
+# Absorbed from ts-libs/.spur/rules/typescript/no-biome-suppressions.yaml,
+# re-scoped to Spur's monorepo layout:
+#   - include uses the `src/` path fragment because the regex evaluator's
+#     current loose matcher does not correctly handle deep ** globs
+#     (apps/**/src/**/*.ts collapses to an unmatchable fragment)
+#   - this still covers apps/**/src + packages/**/src production source
+#   - test files excluded where noExplicitAny / useLiteralKeys suppressions
+#     are sometimes legitimate in test helpers
+#   - severity kept as error (encodes AGENTS.md gate rule: "No new biome-ignore
+#     added solely to silence the gate")
+include:
+  - "src/"
+exclude:
+  - "**/node_modules/**"
+  - "**/dist/**"
+  - "**/tests/**"
+rules:
+  - id: no-biome-suppressions
+    description: >
+      Do not use biome-ignore or biome-ignore-all comments to suppress lint
+      rules.  Fix the underlying issue instead.
+    severity: error
+    evaluator:
+      type: regex
+      config:
+        pattern: "biome-ignore"
