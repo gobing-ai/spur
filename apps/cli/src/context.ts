@@ -1,7 +1,7 @@
 import { dirname, join, resolve } from 'node:path';
 import { buildConfigFromEnv } from '@gobing-ai/spur-config';
 import { createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
-import { type FileSystem, getFs, NodeFileSystem, setFileSystem } from '@gobing-ai/ts-runtime';
+import { createNodeFileSystem, type FileSystem, NodeFileSystem, setFileSystem } from '@gobing-ai/ts-runtime';
 import { CLI_CONFIG } from './config';
 import type { CommandOutput } from './output';
 
@@ -23,15 +23,15 @@ export function createCliContext(options: {
 }): CliContext {
     const cwd = resolve(options.cwd ?? process.cwd());
     const env = options.env ?? process.env;
-    const fs = new NodeFileSystem();
-    setFileSystem(fs);
+    const fs = createNodeFileSystem();
+    setFileSystem(new NodeFileSystem());
 
     let dbPromise: Promise<DbAdapter> | undefined;
 
     return {
         cwd,
         env,
-        fs: getFs(),
+        fs,
         output: options.output,
         getDb: async () => {
             dbPromise ??= createMigratedDbAdapter(cwd, env, options.dbUrl);
@@ -50,7 +50,7 @@ export async function createMigratedDbAdapter(
     const configuredUrl = env.DATABASE_URL === undefined ? join(cwd, CLI_CONFIG.databaseFile) : config.database.url;
     const url = dbUrl ?? configuredUrl;
     if (url !== ':memory:') {
-        await new NodeFileSystem().mkdir(dirname(url));
+        await createNodeFileSystem().ensureDir(dirname(url));
     }
     return createMigratedDb({ url });
 }
