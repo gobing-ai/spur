@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { PluginHost } from '@gobing-ai/spur-plugin-sdk';
 import { EventBus, getLogger } from '@gobing-ai/ts-infra';
-import { NodeFileSystem } from '@gobing-ai/ts-runtime';
+import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { PluginService, type PluginServiceContext } from '../../src/services/plugin-service';
 
 describe('PluginService', () => {
@@ -10,7 +10,7 @@ describe('PluginService', () => {
         const host = new PluginHost(bus, { logger: getLogger('test') });
         const ctx: PluginServiceContext = {
             host,
-            fs: new NodeFileSystem(),
+            fs: createNodeFileSystem(),
         };
         const service = new PluginService(ctx);
         expect(service).toBeDefined();
@@ -21,7 +21,7 @@ describe('PluginService', () => {
         const host = new PluginHost(bus, { logger: getLogger('test') });
         const service = new PluginService({
             host,
-            fs: new NodeFileSystem(),
+            fs: createNodeFileSystem(),
         });
         const plugins = await service.list();
         expect(Array.isArray(plugins)).toBe(true);
@@ -33,7 +33,7 @@ describe('PluginService', () => {
         const host = new PluginHost(bus, { logger: getLogger('test') });
         const service = new PluginService({
             host,
-            fs: new NodeFileSystem(),
+            fs: createNodeFileSystem(),
         });
         const info = await service.info('nonexistent');
         expect(info).toBeNull();
