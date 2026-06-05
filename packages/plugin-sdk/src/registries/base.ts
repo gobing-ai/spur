@@ -37,9 +37,8 @@ export abstract class Registry<TImpl> {
      * First-registered wins — built-ins occupy their names before plugins load.
      */
     register(name: string, impl: TImpl, ctx: RegistrationContext): void {
-        if (this.entries.has(name)) {
-            // biome-ignore lint/style/noNonNullAssertion: guarded by .has() above
-            const existing = this.entries.get(name)!;
+        const existing = this.entries.get(name);
+        if (existing !== undefined) {
             throw new PluginCollisionError(this.capability, name, existing.source);
         }
         this.trust.enforce(this.capability, ctx.trustLevel, ctx);
@@ -79,9 +78,8 @@ export abstract class Registry<TImpl> {
      * same get() as plugin entries.
      */
     protected preRegister(name: string, impl: TImpl): void {
-        if (this.entries.has(name)) {
-            // biome-ignore lint/style/noNonNullAssertion: guarded by .has() above
-            const existing = this.entries.get(name)!;
+        const existing = this.entries.get(name);
+        if (existing !== undefined) {
             throw new PluginCollisionError(this.capability, name, existing.source);
         }
         this.entries.set(name, { name, impl, source: 'builtin' });
