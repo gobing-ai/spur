@@ -5,7 +5,6 @@ import {
     buildIdentityPreamble,
     deleteAgentSpec as deleteAgentSpecFile,
     loadAgentSpecs,
-    MessageService,
     saveAgentSpec,
     TeamOrchestrator,
     validateAgentId,
@@ -89,9 +88,9 @@ export interface AgentSpecInput {
 
 /**
  * Application-layer orchestration for `spur message`, `spur team`, and team-aware
- * `spur agent` commands. Wraps `TeamOrchestrator` and `MessageService` from
- * `@gobing-ai/ts-ai-runner` over the CLI's SQLite adapter. Agent specs are read
- * from and written to `.spur/agents/` via the package's spec helpers.
+ * `spur agent` commands. Wraps `TeamOrchestrator` from `@gobing-ai/ts-ai-runner`
+ * over the CLI's SQLite adapter. Agent specs are read from and written to
+ * `.spur/agents/` via the package's spec helpers.
  *
  * The constructor is synchronous and cheap; the DB-backed dependencies are built
  * lazily on first use so that purely spec-oriented operations (`createAgentSpec`,
@@ -101,7 +100,6 @@ export class TeamService {
     private readonly ctx: TeamServiceContext;
     private readonly configDir: string;
     private orchestratorPromise?: Promise<TeamOrchestrator>;
-    private messageServicePromise?: Promise<MessageService>;
 
     constructor(ctx: TeamServiceContext) {
         this.ctx = ctx;
@@ -123,16 +121,16 @@ export class TeamService {
     async sendMessage(fromId: string | null, toId: string, body: string, replyTo?: string): Promise<SendResult> {
         validateAgentId(toId);
         if (fromId !== null) validateAgentId(fromId);
-        const messages = await this.messageService();
-        const msgId = await messages.enqueue(fromId, toId, body, replyTo);
+        const dao = await this.inboxDao();
+        const msgId = await dao.enqueue(fromId, toId, body, replyTo);
         return { msgId, toId, status: 'queued', injected: false };
     }
 
     /** List the pending + delivered messages addressed to an agent. */
     async getInbox(agentId: string, limit?: number, offset?: number): Promise<InboxResult> {
         validateAgentId(agentId);
-        const messages = await this.messageService();
-        const rows = await messages.inbox(agentId, limit, offset);
+        const dao = await this.inboxDao();
+        const rows = await dao.inbox(agentId, limit, offset);
         return {
             messages: rows.map((row) => ({
                 id: row.id,
@@ -277,15 +275,8 @@ export class TeamService {
         return new InboxMessageDao(db);
     }
 
-    private messageService(): Promise<MessageService> {
-        this.messageServicePromise ??= this.inboxDao().then((dao) => new MessageService(dao));
-        return this.messageServicePromise;
-    }
-
     private orchestrator(): Promise<TeamOrchestrator> {
-        this.orchestratorPromise ??= this.messageService().then(
-            (messages) => new TeamOrchestrator(this.configDir, messages),
-        );
+        this.orchestratorPromise ??= this.inboxDao().then((dao) => new TeamOrchestrator(this.configDir, dao));
         return this.orchestratorPromise;
     }
 
