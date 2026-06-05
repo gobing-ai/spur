@@ -1,11 +1,13 @@
-# Recommended post-check preset — documentation & coverage gates only.
+# Recommended post-check preset — coverage gate only.
 # Use with: spur rule run --preset recommended-post-check --fail-on warning
 #
-# Runs AFTER tests (test-post-check). Enforces TSDoc on exports and
-# the coverage gate on fresh .coverage/lcov.info.
+# Runs AFTER tests (test-post-check). Enforces the coverage gate on
+# fresh .coverage/lcov.info output from bun test --coverage.
+# TSDoc-on-exports is NOT enforced: Spur is an application repo, not a
+# published library surface. If Spur later publishes a library package
+# (e.g. plugin-sdk) that warrants documented exports, author a
+# quality/tsdoc-export rule at that time.
 # All other rules (typescript, structure, boundary) run in pre-check.
 name: recommended-post-check
-description: >
-  Post-test quality gates: TSDoc documentation and coverage gate only.
 extends:
   - quality
