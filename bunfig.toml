@@ -9,6 +9,7 @@ coverage = true
 coverageReporter = ["text", "lcov"]
 coverageThreshold = { lines = 0.9, functions = 0.9 }
 passWithNoTests = true
+preload = ["./tests/setup.ts"]
 pathIgnorePatterns = ["vendors/**", "drizzle/**"]
 coveragePathIgnorePatterns = [
     "**/tests/**/fixtures/**",
