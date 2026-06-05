@@ -16,7 +16,7 @@ export function helpText(): string {
         'Usage: spur rule <command> [options]',
         '',
         'Commands:',
-        '  run [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <severity>] [--verbose] [--json]',
+        '  run [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <severity>] [--stop-on-first [<severity>]] [--verbose] [--json]',
         '      Evaluate constraint rules over the working tree.',
         '  validate [--file <path>|--preset <name>|<path>] [--json]',
         '      Validate a rule file or preset without evaluating it.',
@@ -30,6 +30,8 @@ export function helpText(): string {
         '  --file <path>          Ad-hoc rule file for run or validate',
         '  --rule <id>            Filter run to one rule ID',
         '  --fail-on <severity>   Exit 1 threshold: error|warning|info (default: error)',
+        '  --stop-on-first [<severity>]  Stop evaluation after first rule with findings at/above severity (default: error)',
+        '                         Traversal control (when to stop) — orthogonal to --fail-on (what to fail on).',
         '  --verbose              Stream per-rule progress to stderr',
         '  --json                 Output machine-readable JSON where supported',
         '  -h, --help             Show this help',
@@ -60,12 +62,19 @@ export async function runRuleCommand(
         case 'run': {
             const preset = stringFlag(flags, 'preset', 'recommended');
             const failOn = parseFailOn(stringFlag(flags, 'fail-on', 'error'));
+            const rawStopOnFirst = flags['stop-on-first'];
+            const stopOnFirst =
+                rawStopOnFirst === true
+                    ? parseStopOnFirst('error')
+                    : typeof rawStopOnFirst === 'string'
+                      ? parseStopOnFirst(rawStopOnFirst)
+                      : undefined;
             const file = typeof flags.file === 'string' ? flags.file : undefined;
             const rule = typeof flags.rule === 'string' ? flags.rule : positionals[0];
             const json = booleanFlag(flags, 'json');
             const verbose = booleanFlag(flags, 'verbose') && !json;
             const color = makeColorize(shouldColor(context.env, process.stderr));
-            const result = await service.evaluate({ preset, failOn, file, rule, json, verbose, color });
+            const result = await service.evaluate({ preset, failOn, stopOnFirst, file, rule, json, verbose, color });
             return result.exitCode;
         }
         case 'validate': {
@@ -155,4 +164,10 @@ function resolveSource(
 function parseFailOn(value: string): FailOnSeverity {
     if (value === 'error' || value === 'warning' || value === 'info') return value;
     throw new Error(`Invalid --fail-on value "${value}". Expected error, warning, or info.`);
+}
+
+/** Severity threshold for --stop-on-first. Reuses the same set as --fail-on. */
+function parseStopOnFirst(value: string): FailOnSeverity {
+    if (value === 'error' || value === 'warning' || value === 'info') return value;
+    throw new Error(`Invalid --stop-on-first value "${value}". Expected error, warning, or info.`);
 }
