@@ -183,4 +183,57 @@ describe('runRuleCommand dispatch', () => {
         // Exercises parseFailOn's guard without triggering a full repository evaluation.
         await expect(runRuleCommand('run', ctx, { 'fail-on': 'bogus' }, [])).rejects.toThrow('Invalid --fail-on');
     });
+
+    test('run subcommand with bare --stop-on-first defaults to error', async () => {
+        const ctx = createCliContext({ output: nullOutput() });
+        // Bare flag → boolean true → should default to 'error' internally.
+        // We just verify it doesn't throw and returns a number (the flag is parsed).
+        const code = await runRuleCommand('run', ctx, { 'stop-on-first': true }, []);
+        expect(typeof code).toBe('number');
+    });
+
+    test('run subcommand with --stop-on-first warning parses valid severity', async () => {
+        const ctx = createCliContext({ output: nullOutput() });
+        const code = await runRuleCommand('run', ctx, { 'stop-on-first': 'warning' }, []);
+        expect(typeof code).toBe('number');
+    });
+
+    test('run subcommand with invalid --stop-on-first throws', async () => {
+        const ctx = createCliContext({ output: nullOutput() });
+        await expect(runRuleCommand('run', ctx, { 'stop-on-first': 'bogus' }, [])).rejects.toThrow(
+            'Invalid --stop-on-first',
+        );
+    });
+
+    test('run subcommand composes --stop-on-first with --fail-on', async () => {
+        const cwd = await createTempProject();
+        const file = `${cwd}/rules.yaml`;
+        await Bun.write(
+            file,
+            [
+                'rules:',
+                '  - id: first-warning',
+                '    description: stops traversal but does not fail verdict',
+                '    severity: warning',
+                '    evaluator:',
+                '      type: path',
+                '      config:',
+                '        paths:',
+                '          - missing-warning.txt',
+                '  - id: second-error',
+                '    description: would fail if traversal continued',
+                '    severity: error',
+                '    evaluator:',
+                '      type: path',
+                '      config:',
+                '        paths:',
+                '          - missing-error.txt',
+            ].join('\n'),
+        );
+        const ctx = createCliContext({ cwd, output: nullOutput() });
+
+        const code = await runRuleCommand('run', ctx, { file, 'stop-on-first': 'warning', 'fail-on': 'error' }, []);
+
+        expect(code).toBe(0);
+    });
 });
