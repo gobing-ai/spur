@@ -296,6 +296,136 @@ describe('RuleService.evaluate()', () => {
             ruleCount: 1,
         });
     });
+
+    test('stopOnFirst stops batch evaluation after first finding at threshold', async () => {
+        const cwd = await createTempProject();
+        const output = createCapturedOutput();
+        const file = join(cwd, '.spur', 'rules', 'multi.yaml');
+        await mkdir(dirname(file), { recursive: true });
+        await writeFile(
+            file,
+            [
+                'rules:',
+                '  - id: first-fail',
+                '    description: will fail',
+                '    severity: error',
+                '    evaluator:',
+                '      type: path',
+                '      config:',
+                '        paths:',
+                '          - does-not-exist.txt',
+                '  - id: second-fail',
+                '    description: would fail if traversal continued',
+                '    severity: error',
+                '    evaluator:',
+                '      type: path',
+                '      config:',
+                '        paths:',
+                '          - also-missing.txt',
+            ].join('\n'),
+        );
+
+        const full = await new RuleService(makeContext(cwd, output)).evaluate({
+            preset: 'recommended',
+            failOn: 'error',
+            file,
+            json: true,
+            verbose: false,
+            color: noColor(),
+        });
+        expect(full.findings.length).toBe(2);
+        expect(full.ruleCount).toBe(2);
+
+        const stopped = await new RuleService(makeContext(cwd, output)).evaluate({
+            preset: 'recommended',
+            failOn: 'error',
+            file,
+            json: true,
+            verbose: false,
+            color: noColor(),
+            stopOnFirst: 'error',
+        });
+        expect(stopped.findings.length).toBe(1);
+        expect(stopped.findings[0]?.ruleId).toBe('first-fail');
+        expect(stopped.exitCode).toBe(1);
+    });
+
+    test('stopOnFirst × failOn composition: stop on warning but fail only on error', async () => {
+        const cwd = await createTempProject();
+        const output = createCapturedOutput();
+        const file = join(cwd, '.spur', 'rules', 'warn.yaml');
+        await mkdir(dirname(file), { recursive: true });
+        await writeFile(
+            file,
+            [
+                'rules:',
+                '  - id: warn-rule',
+                '    description: warns',
+                '    severity: warning',
+                '    evaluator:',
+                '      type: path',
+                '      config:',
+                '        paths:',
+                '          - does-not-exist.txt',
+            ].join('\n'),
+        );
+
+        const result = await new RuleService(makeContext(cwd, output)).evaluate({
+            preset: 'recommended',
+            failOn: 'error',
+            stopOnFirst: 'warning',
+            file,
+            json: true,
+            verbose: false,
+            color: noColor(),
+        });
+        expect(result.findings.length).toBe(1);
+        expect(result.findings.some((f) => f.severity === 'warning')).toBe(true);
+        expect(result.exitCode).toBe(0);
+    });
+
+    test('stopOnFirst verbose emits stop message', async () => {
+        const cwd = await createTempProject();
+        const output = createCapturedOutput();
+        const file = join(cwd, '.spur', 'rules', 'fail.yaml');
+        await mkdir(dirname(file), { recursive: true });
+        await writeFile(
+            file,
+            [
+                'rules:',
+                '  - id: failing',
+                '    description: fails',
+                '    severity: error',
+                '    evaluator:',
+                '      type: path',
+                '      config:',
+                '        paths:',
+                '          - does-not-exist.txt',
+                '  - id: should-not-run',
+                '    description: should not be reached',
+                '    severity: error',
+                '    evaluator:',
+                '      type: path',
+                '      config:',
+                '        paths:',
+                '          - also-missing.txt',
+            ].join('\n'),
+        );
+
+        await new RuleService(makeContext(cwd, output)).evaluate({
+            preset: 'recommended',
+            failOn: 'error',
+            stopOnFirst: 'error',
+            file,
+            json: false,
+            verbose: true,
+            color: noColor(),
+        });
+
+        const progress = output.errors.join('\n');
+        expect(progress).toContain('Stopping: first error+ finding reached.');
+        expect(progress).not.toContain('should-not-run');
+    });
 });
 
 // ---------------------------------------------------------------------------
