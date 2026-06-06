@@ -59,12 +59,6 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
     registerTeamCommand(program, context);
     registerWorkflowCommand(program, context);
 
-    // Render the top-level command list grouped by domain instead of commander's
-    // flat alphabetical list. Each row's summary is pulled from the registered
-    // command, so adding a noun only requires assigning it to a group below.
-    program.configureHelp({ visibleCommands: () => [] });
-    program.addHelpText('after', () => renderCommandGroups(program));
-
     try {
         await program.parseAsync(argv, { from: 'user' });
         return exitCode;
@@ -75,33 +69,6 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
         output.error(errorMessage(err));
         return exitCode !== 0 ? exitCode : 1;
     }
-}
-
-/** Top-level commands grouped by domain for the `spur help` listing. */
-const COMMAND_GROUPS: readonly { title: string; commands: readonly string[] }[] = [
-    { title: 'Harness', commands: ['agent', 'message', 'team'] },
-    { title: 'Policy', commands: ['rule'] },
-    { title: 'Workflow', commands: ['workflow'] },
-    { title: 'History', commands: ['history'] },
-    { title: 'Extension', commands: ['plugin'] },
-    { title: 'Project', commands: ['init', 'status', 'migrate'] },
-];
-
-/** Build the domain-grouped "Commands:" block for top-level help, sourced from registered specs. */
-export function renderCommandGroups(program: Command): string {
-    const summaryOf = (name: string): string => {
-        const cmd = program.commands.find((c) => c.name() === name);
-        return cmd?.summary() ?? cmd?.description() ?? '';
-    };
-    const width = Math.max(...COMMAND_GROUPS.flatMap((g) => g.commands.map((c) => c.length)));
-    const lines = ['Commands:'];
-    for (const group of COMMAND_GROUPS) {
-        lines.push(`  ${group.title}`);
-        for (const name of group.commands) {
-            lines.push(`    ${name.padEnd(width)}  ${summaryOf(name)}`.trimEnd());
-        }
-    }
-    return lines.join('\n');
 }
 
 /** Render the startup ASCII banner without runtime font file I/O. */
