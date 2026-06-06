@@ -2,35 +2,60 @@
 import { fileURLToPath } from 'node:url';
 
 /**
- * Single-package release helper, aligned with the ts-libs release UX
- * (`bump-ver` / `drop-tags` + a tag→CI→npm-Trusted-Publishing flow) but pared
- * down: Spur publishes exactly one package, `@gobing-ai/spur-cli`. There is no
- * dependency ordering, aggregate tag, or `workspace:` range substitution to do —
- * the published CLI is a self-contained bundle with zero runtime dependencies, so
- * its bundled internal deps (spur-config, spur-domain) never reach the registry.
+ * Multi-package release helper, aligned with the ts-libs release UX
+ * (`bump-ver` / `drop-tags` + a tag→CI→npm-Trusted-Publishing flow).
+ * Each publishable package is keyed by a short ID (e.g. `spur-cli`) in
+ * `RELEASE_PACKAGES`. The published CLI is a self-contained bundle with
+ * zero runtime dependencies, so its bundled internal deps (spur-config,
+ * spur-domain) never reach the registry.
  */
 
 const repoRoot = fileURLToPath(new URL('../', import.meta.url));
 
-const releaseConfig = {
-    /** The one publishable package whose version drives a release. */
-    packageDir: 'apps/cli',
-    packageName: '@gobing-ai/spur-cli',
-    /** `<name>-v<version>` — same separator ts-libs uses; this tag triggers Publish. */
-    tagVersionSeparator: '-v',
-    publishWorkflow: 'publish.yml',
-    releaseCommitType: 'chore',
-    releaseCommitScope: 'release',
-    releaseCommitSubject: (version: string) => `bump spur-cli to ${version}`,
-    releaseTagMessage: (tag: string) => `release: ${tag}`,
-    ghRunListLimit: 5,
-} as const;
+interface ReleaseConfig {
+    packageDir: string;
+    packageName: string;
+    tagVersionSeparator: string;
+    publishWorkflow: string;
+    releaseCommitType: string;
+    releaseCommitScope: string;
+    releaseCommitSubject: (version: string) => string;
+    releaseTagMessage: (tag: string) => string;
+    ghRunListLimit: number;
+}
+
+const RELEASE_PACKAGES = {
+    'spur-cli': {
+        packageDir: 'apps/cli',
+        packageName: '@gobing-ai/spur-cli',
+        tagVersionSeparator: '-v',
+        publishWorkflow: 'publish.yml',
+        releaseCommitType: 'chore',
+        releaseCommitScope: 'release',
+        releaseCommitSubject: (version: string) => `bump spur-cli to ${version}`,
+        releaseTagMessage: (tag: string) => `release: ${tag}`,
+        ghRunListLimit: 5,
+    },
+    'spur-plugin-sdk': {
+        packageDir: 'packages/plugin-sdk',
+        packageName: '@gobing-ai/spur-plugin-sdk',
+        tagVersionSeparator: '-v',
+        publishWorkflow: 'publish.yml',
+        releaseCommitType: 'chore',
+        releaseCommitScope: 'release',
+        releaseCommitSubject: (version: string) => `bump spur-plugin-sdk to ${version}`,
+        releaseTagMessage: (tag: string) => `release: ${tag}`,
+        ghRunListLimit: 5,
+    },
+} as const satisfies Record<string, ReleaseConfig>;
+
+type PackageId = keyof typeof RELEASE_PACKAGES;
 
 const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z-.]+)?(?:\+[0-9A-Za-z-.]+)?$/;
 
 /** The git tag that, when pushed, triggers the Publish workflow. */
-function releaseTag(version: string): string {
-    return `${releaseConfig.packageName}${releaseConfig.tagVersionSeparator}${version}`;
+function releaseTag(config: ReleaseConfig, version: string): string {
+    return `${config.packageName}${config.tagVersionSeparator}${version}`;
 }
 
 /** Run a command synchronously, capturing stdout; never throws (caller checks `ok`). */
@@ -69,51 +94,55 @@ function assertCleanTreeOnBranch(): string {
     return branch;
 }
 
-function assertTagFree(tag: string, version: string): void {
+function assertTagFree(config: ReleaseConfig, tag: string, version: string): void {
     const localTags = new Set(git(['tag', '-l']).split('\n').filter(Boolean));
     if (localTags.has(tag)) {
-        throw new Error(`tag already exists locally: ${tag}. Run "bun run drop-tags ${version}" first.`);
+        const id = Object.keys(RELEASE_PACKAGES).find((k) => RELEASE_PACKAGES[k] === config);
+        throw new Error(`tag already exists locally: ${tag}. Run "bun run drop-tags ${id} ${version}" first.`);
     }
     // Remote clash is best-effort: a missing/unreachable origin must not block a
     // release (the push step would surface a genuine remote problem anyway).
     const remote = run(['git', 'ls-remote', '--tags', 'origin']);
     if (remote.ok && remote.stdout.includes(`refs/tags/${tag}`)) {
-        throw new Error(`tag already exists on origin: ${tag}. Run "bun run drop-tags ${version} --remote" first.`);
+        const id = Object.keys(RELEASE_PACKAGES).find((k) => RELEASE_PACKAGES[k] === config);
+        throw new Error(
+            `tag already exists on origin: ${tag}. Run "bun run drop-tags ${id} ${version} --remote" first.`,
+        );
     }
     if (!remote.ok) {
         console.warn('warning: could not check origin for tag clashes (remote unreachable); continuing.');
     }
 }
 
-async function bumpVersion(version: string, options: { push: boolean }): Promise<void> {
+async function bumpVersion(config: ReleaseConfig, version: string, options: { push: boolean }): Promise<void> {
     if (!SEMVER.test(version)) {
         throw new Error(`"${version}" is not a valid semver version (expected e.g. 0.1.4).`);
     }
 
-    const tag = releaseTag(version);
+    const tag = releaseTag(config, version);
     const branch = assertCleanTreeOnBranch();
-    assertTagFree(tag, version);
+    assertTagFree(config, tag, version);
 
-    if (npmViewVersion(releaseConfig.packageName, version)) {
-        throw new Error(`${releaseConfig.packageName}@${version} is already published on npm. Use a new version.`);
+    if (npmViewVersion(config.packageName, version)) {
+        throw new Error(`${config.packageName}@${version} is already published on npm. Use a new version.`);
     }
 
-    const manifestPath = `${repoRoot}${releaseConfig.packageDir}/package.json`;
+    const manifestPath = `${repoRoot}${config.packageDir}/package.json`;
     const manifest = await Bun.file(manifestPath).json();
     const previous = manifest.version;
     manifest.version = version;
     await Bun.write(manifestPath, `${JSON.stringify(manifest, null, 4)}\n`);
-    console.log(`${releaseConfig.packageName}: ${previous} -> ${version}`);
+    console.log(`${config.packageName}: ${previous} -> ${version}`);
 
-    const staged = [`${releaseConfig.packageDir}/package.json`];
+    const staged = [`${config.packageDir}/package.json`];
     if (Bun.file(`${repoRoot}bun.lock`).size > 0) staged.push('bun.lock');
     git(['add', ...staged]);
 
-    const message = `${releaseConfig.releaseCommitType}(${releaseConfig.releaseCommitScope}): ${releaseConfig.releaseCommitSubject(version)}`;
+    const message = `${config.releaseCommitType}(${config.releaseCommitScope}): ${config.releaseCommitSubject(version)}`;
     git(['commit', '-m', message]);
     console.log(`Committed: ${message}`);
 
-    git(['tag', '-a', tag, '-m', releaseConfig.releaseTagMessage(tag)]);
+    git(['tag', '-a', tag, '-m', config.releaseTagMessage(tag)]);
     console.log(`Tagged: ${tag}`);
 
     if (!options.push) {
@@ -130,14 +159,14 @@ async function bumpVersion(version: string, options: { push: boolean }): Promise
     git(['push', 'origin', tag]);
 
     console.log(`\nReleased ${version}. The Publish workflow should now be running:`);
-    console.log(`  gh run list --workflow=${releaseConfig.publishWorkflow} --limit ${releaseConfig.ghRunListLimit}`);
+    console.log(`  gh run list --workflow=${config.publishWorkflow} --limit ${config.ghRunListLimit}`);
 }
 
-async function dropTags(version: string, options: { remote: boolean }): Promise<void> {
+async function dropTags(config: ReleaseConfig, version: string, options: { remote: boolean }): Promise<void> {
     if (!SEMVER.test(version)) {
         throw new Error(`"${version}" is not a valid semver version (expected e.g. 0.1.2).`);
     }
-    const tag = releaseTag(version);
+    const tag = releaseTag(config, version);
 
     const localTags = new Set(git(['tag', '-l']).split('\n').filter(Boolean));
     if (localTags.has(tag)) {
@@ -155,25 +184,33 @@ async function dropTags(version: string, options: { remote: boolean }): Promise<
 
 function usage(message?: string): never {
     if (message) console.error(`error: ${message}\n`);
+    const ids = Object.keys(RELEASE_PACKAGES).join(', ');
     console.error('Usage:');
-    console.error('  bun run bump-ver <version> [--push]    bump spur-cli, commit, tag, optionally push');
-    console.error('  bun run drop-tags <version> [--remote] delete the release tag locally (and on origin)');
+    console.error(`  bun run bump-ver <package-id> <version> [--push]    bump package, commit, tag, optionally push`);
+    console.error(
+        `  bun run drop-tags <package-id> <version> [--remote] delete the release tag locally (and on origin)`,
+    );
+    console.error(`\nPackage IDs: ${ids}`);
     process.exit(message ? 1 : 0);
 }
 
 const [command, ...args] = process.argv.slice(2);
-const version = args.find((arg) => !arg.startsWith('--'));
+const positionalArgs = args.filter((arg) => !arg.startsWith('--'));
+const packageId = positionalArgs[0] as PackageId | undefined;
+const version = positionalArgs[1];
 
 try {
     switch (command) {
         case 'bump-version':
         case 'bump-ver':
-            if (!version) usage('bump-ver <version> [--push]');
-            await bumpVersion(version, { push: args.includes('--push') });
+            if (!packageId || !version) usage('bump-ver <package-id> <version> [--push]');
+            if (!(packageId in RELEASE_PACKAGES)) usage(`unknown package "${packageId}"`);
+            await bumpVersion(RELEASE_PACKAGES[packageId], version, { push: args.includes('--push') });
             break;
         case 'drop-tags':
-            if (!version) usage('drop-tags <version> [--remote]');
-            await dropTags(version, { remote: args.includes('--remote') });
+            if (!packageId || !version) usage('drop-tags <package-id> <version> [--remote]');
+            if (!(packageId in RELEASE_PACKAGES)) usage(`unknown package "${packageId}"`);
+            await dropTags(RELEASE_PACKAGES[packageId], version, { remote: args.includes('--remote') });
             break;
         default:
             usage();
