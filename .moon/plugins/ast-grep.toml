@@ -1,0 +1,29 @@
+name = "ast-grep"
+type = "cli"
+
+[platform.linux]
+download-file = "app-{arch}-unknown-linux-gnu.zip"
+
+[platform.macos]
+download-file = "app-{arch}-apple-darwin.zip"
+
+[platform.windows]
+download-file = "app-{arch}-pc-windows-msvc.zip"
+
+[install]
+download-url = "https://github.com/ast-grep/ast-grep/releases/download/{version}/{download_file}"
+
+[install.arch]
+aarch64 = "aarch64"
+x86_64 = "x86_64"
+
+[install.exes.sg]
+exe-path = "sg"
+primary = true
+
+[install.exes.ast-grep]
+exe-path = "ast-grep"
+no-shim = true
+
+[resolve]
+git-url = "https://github.com/ast-grep/ast-grep"

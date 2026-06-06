@@ -1,0 +1,4 @@
+-P ubuntu-latest=node:22-bookworm
+--container-architecture linux/arm64
+--bind
+--reuse
