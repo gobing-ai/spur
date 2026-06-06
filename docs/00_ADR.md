@@ -247,10 +247,15 @@ root Bun catalog as a CLI-only shared dep). Each noun exports
 `registerXxxCommand(program, context)`; `apps/cli/src/index.ts` builds a single `Command`, registers
 all 10 nouns, and runs `parseAsync`. Commander owns option parsing, subcommand dispatch, `--help`
 rendering, and the noun-verb grammar (`spur <noun> <verb> …`; `init`/`status`/`migrate` verb-less;
-all other nouns require a verb). The **one** override: top-level help suppresses commander's flat
-command list and renders a domain-grouped listing (`renderCommandGroups()` over a `COMMAND_GROUPS`
-table). Exit codes propagate through a mutable `context.setExitCode` ref captured in `main()` because
-Bun's `process.exit` cannot be intercepted by commander's `exitOverride`.
+all other nouns require a verb). Exit codes propagate through a mutable `context.setExitCode` ref
+captured in `main()` because Bun's `process.exit` cannot be intercepted by commander's `exitOverride`.
+
+- **2026-06-06 — Revert domain-grouped top-level help.** The `configureHelp({ visibleCommands: () => [] })`
+  and `renderCommandGroups()` override was removed. Top-level `spur --help` now renders commander's
+  standard flat alphabetical command list. The grouped listing was judged inferior to commander's
+  built-in rendering. The `COMMAND_GROUPS` table and custom renderer are deleted; `docs/04_DESIGN.md`
+  §1.0 help-dispatch table updated accordingly. References in ADR-014 paragraph and task 0021 R5
+  are superseded by this entry.
 
 **Why.** The hand-rolled `CommandSpec`/`renderCommandHelp`/`resolveVerb`/`args.ts` approach (and the
 ADR-013 per-command `helpText()` + help registry) was a maintenance burden re-implementing what
