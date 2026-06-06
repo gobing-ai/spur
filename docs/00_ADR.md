@@ -1,6 +1,6 @@
 # 00 ADR — Spur
 
-**Status:** Authoritative · **Last Updated:** 2026-06-03 · **Owner:** Robin Min
+**Status:** Authoritative · **Last Updated:** 2026-06-06 · **Owner:** Robin Min
 
 The single source of truth for Spur's cross-cutting **decisions**. Each `ADR-NNN` records *what was
 decided* and *the one-line reason* — the mechanism, rationale-in-depth, and consequences live in
@@ -224,7 +224,7 @@ injection is its prerequisite, not an optional nicety. Tracked in task 0015 (sta
 
 ## ADR-013: CLI Help Is Command-Scoped
 
-**Status:** Accepted · **Date:** 2026-06-04
+**Status:** Superseded by ADR-014 · **Date:** 2026-06-04
 
 **Decision.** Keep one executable CLI layer, but require every top-level command module to export a
 dedicated `helpText()` usage renderer registered in the dispatcher help registry via aliased imports.
@@ -235,3 +235,31 @@ remains only the compact command index in `apps/cli/src/index.ts`.
 contracts and causes migration drift.
 
 **Detail:** concrete command surfaces in `04 §1 CLI Surface`.
+
+---
+
+## ADR-014: CLI Dispatch and Help via Commander
+
+**Status:** Accepted · **Date:** 2026-06-06
+
+**Decision.** Build the CLI surface on `commander` + `@commander-js/extra-typings` (added to the
+root Bun catalog as a CLI-only shared dep). Each noun exports
+`registerXxxCommand(program, context)`; `apps/cli/src/index.ts` builds a single `Command`, registers
+all 10 nouns, and runs `parseAsync`. Commander owns option parsing, subcommand dispatch, `--help`
+rendering, and the noun-verb grammar (`spur <noun> <verb> …`; `init`/`status`/`migrate` verb-less;
+all other nouns require a verb). The **one** override: top-level help suppresses commander's flat
+command list and renders a domain-grouped listing (`renderCommandGroups()` over a `COMMAND_GROUPS`
+table). Exit codes propagate through a mutable `context.setExitCode` ref captured in `main()` because
+Bun's `process.exit` cannot be intercepted by commander's `exitOverride`.
+
+**Why.** The hand-rolled `CommandSpec`/`renderCommandHelp`/`resolveVerb`/`args.ts` approach (and the
+ADR-013 per-command `helpText()` + help registry) was a maintenance burden re-implementing what
+commander provides natively — the same library the original Spur already used. Migrating removes
+bespoke parsing/dispatch/help code in favor of a maintained dependency.
+
+**Supersedes ADR-013** (command-scoped `helpText()` + dispatcher help registry — withdrawn; commander
+renders command-scoped help, and `spur <noun> --help` / `spur <noun> help` / `spur help <noun>` stay
+equivalent through commander). **Reverses the earlier "no Commander, hand-rolled CLI" constraint**
+recorded in task 0021's Design section; the catalog dependency add is the intended consequence.
+
+**Detail:** `04 §1 CLI Surface` (`§1.0 CLI grammar` + help dispatch); migration notes in task 0021.
