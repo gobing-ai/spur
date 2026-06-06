@@ -1,105 +1,94 @@
+import type { Command } from '@commander-js/extra-typings';
 import {
     type FailOnSeverity,
     type RuleListFileEntry,
     type RuleListServiceResult,
     RuleService,
 } from '@gobing-ai/spur-app';
-import { booleanFlag, stringFlag } from '../args';
 import { makeColorize, shouldColor } from '../colors';
 import type { CliContext } from '../context';
 
-/** Render detailed usage for `spur rule`. */
-export function helpText(): string {
-    return [
-        'spur rule - manage constraint rules and presets',
-        '',
-        'Usage: spur rule <command> [options]',
-        '',
-        'Commands:',
-        '  run [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <severity>] [--stop-on-first [<severity>]] [--verbose] [--json]',
-        '      Evaluate constraint rules over the working tree.',
-        '  validate [--file <path>|--preset <name>|<path>] [--json]',
-        '      Validate a rule file or preset without evaluating it.',
-        '  list [--preset <name>] [--json]',
-        '      List discovered rule files, or list resolved rules for a preset.',
-        '  help',
-        '      Show this help.',
-        '',
-        'Options:',
-        '  --preset <name>        Preset to load (default: recommended)',
-        '  --file <path>          Ad-hoc rule file for run or validate',
-        '  --rule <id>            Filter run to one rule ID',
-        '  --fail-on <severity>   Exit 1 threshold: error|warning|info (default: error)',
-        '  --stop-on-first [<severity>]  Stop evaluation after first rule with findings at/above severity (default: error)',
-        '                         Traversal control (when to stop) — orthogonal to --fail-on (what to fail on).',
-        '  --verbose              Stream per-rule progress to stderr',
-        '  --json                 Output machine-readable JSON where supported',
-        '  -h, --help             Show this help',
-        '',
-        'Examples:',
-        '  spur rule run --preset recommended',
-        '  spur rule run --preset spur-dev --verbose',
-        '  spur rule validate --preset recommended',
-        '  spur rule validate .spur/rules/boundary/imports.yaml --json',
-        '  spur rule list --preset recommended',
-        '',
-        'Exit codes:',
-        '  0 = success/pass',
-        '  1 = validation errors, findings at or above --fail-on, or no rules evaluated',
-        '  2 = system error',
-    ].join('\n');
-}
+/** Register `spur rule` commands. */
+export function registerRuleCommand(program: Command, context: CliContext): void {
+    const rule = program.command('rule').summary('manage constraint rules and presets');
 
-/** Execute `spur rule` commands backed by @gobing-ai/ts-rule-engine. */
-export async function runRuleCommand(
-    subcommand: string | undefined,
-    context: CliContext,
-    flags: Record<string, string | boolean>,
-    positionals: string[],
-): Promise<number> {
-    const service = new RuleService(context);
-    switch (subcommand ?? 'run') {
-        case 'run': {
-            const preset = stringFlag(flags, 'preset', 'recommended');
-            const failOn = parseFailOn(stringFlag(flags, 'fail-on', 'error'));
-            const rawStopOnFirst = flags['stop-on-first'];
+    rule.command('run')
+        .summary('Evaluate constraint rules over the working tree.')
+        .option('--preset <name>', 'Preset to load (default: recommended)', 'recommended')
+        .option('--file <path>', 'Ad-hoc rule file')
+        .option('--rule <id>', 'Filter run to one rule ID')
+        .option('--fail-on <severity>', 'Exit 1 threshold: error|warning|info (default: error)', 'error')
+        .option('--stop-on-first [severity]', 'Stop evaluation after first rule with findings at/above severity')
+        .option('--verbose', 'Stream per-rule progress to stderr')
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (options) => {
+            const service = new RuleService(context);
+            const preset = options.preset ?? 'recommended';
+            const failOn = parseFailOn(options.failOn ?? 'error');
+            const rawStopOnFirst = options.stopOnFirst;
             const stopOnFirst =
                 rawStopOnFirst === true
                     ? parseStopOnFirst('error')
                     : typeof rawStopOnFirst === 'string'
                       ? parseStopOnFirst(rawStopOnFirst)
                       : undefined;
-            const file = typeof flags.file === 'string' ? flags.file : undefined;
-            const rule = typeof flags.rule === 'string' ? flags.rule : positionals[0];
-            const json = booleanFlag(flags, 'json');
-            const verbose = booleanFlag(flags, 'verbose') && !json;
+            const file = options.file;
+            const rule = options.rule;
+            const json = options.json === true;
+            const verbose = options.verbose === true && !json;
             const color = makeColorize(shouldColor(context.env, process.stderr));
-            const result = await service.evaluate({ preset, failOn, stopOnFirst, file, rule, json, verbose, color });
-            return result.exitCode;
-        }
-        case 'validate': {
-            const source = resolveSource(flags, positionals);
-            const json = booleanFlag(flags, 'json');
-            const validateSchema = booleanFlag(flags, 'no-schema') ? false : undefined;
+            const result = await service.evaluate({
+                preset,
+                failOn,
+                stopOnFirst,
+                file,
+                rule,
+                json,
+                verbose,
+                color,
+            });
+            context.setExitCode(result.exitCode);
+        });
+
+    rule.command('validate')
+        .summary('Validate a rule file or preset without evaluating it.')
+        .argument('[file-or-preset]', 'File path or preset name to validate')
+        .option('--file <path>', 'Ad-hoc rule file path')
+        .option('--preset <name>', 'Preset name')
+        .option('--kind <type>', 'Source kind: file or preset')
+        .option('--no-schema', 'Skip schema validation')
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (fileOrPreset, options) => {
+            const service = new RuleService(context);
+            const source = resolveSource(
+                { file: options.file, preset: options.preset },
+                fileOrPreset ? [fileOrPreset] : [],
+            );
+            if (options.kind && (options.kind === 'file' || options.kind === 'preset')) {
+                source.kind = options.kind;
+            }
+            const json = options.json === true;
+            const validateSchema = options.schema === false ? false : undefined;
             const result = await service.validate({ source, json, validateSchema });
-            return result.exitCode;
-        }
-        case 'list': {
-            const preset = typeof flags.preset === 'string' ? flags.preset : undefined;
+            context.setExitCode(result.exitCode);
+        });
+
+    rule.command('list')
+        .summary('List discovered rule files, or list resolved rules for a preset.')
+        .option('--preset <name>', 'Preset to list rules for')
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (options) => {
+            const service = new RuleService(context);
+            const preset = options.preset;
             const result = await service.list(preset);
             context.output.write(
-                booleanFlag(flags, 'json')
+                options.json
                     ? JSON.stringify(result, null, 2)
                     : preset === undefined
                       ? formatRuleFileList(result)
                       : formatPresetRuleList(result),
             );
-            return 0;
-        }
-        default:
-            context.output.error(`Unknown rule command: ${subcommand}`);
-            return 1;
-    }
+        });
 }
 
 function formatRuleFileList(result: RuleListServiceResult): string {
@@ -151,7 +140,7 @@ function formatPresetRuleList(result: RuleListServiceResult): string {
 }
 
 function resolveSource(
-    flags: Record<string, string | boolean>,
+    flags: Record<string, string | undefined>,
     positionals: readonly string[],
 ): { kind: 'file' | 'preset'; value: string } {
     if (typeof flags.file === 'string') return { kind: 'file', value: flags.file };
