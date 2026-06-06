@@ -3,7 +3,7 @@
 **Version:** 1.0.0
 **Status:** Active
 **Derived from:** `docs/03_ARCHITECTURE.md`, current codebase
-**Last Updated:** 2026-06-03
+**Last Updated:** 2026-06-06
 **Owner:** Robin Min
 
 The external, user-facing design surface: every CLI command, the config schema, and the persisted
@@ -14,6 +14,35 @@ ADR wins.
 
 All commands accept `--json` for machine-readable output and return a meaningful exit code. The
 binary is `spur` (`apps/cli/src/index.ts`, run under Bun).
+
+### 1.0 CLI grammar
+
+The canonical invocation shape is:
+
+```
+spur <noun> [<verb>] [positionals] [--flags]
+```
+
+**Noun-verb contract:**
+
+- Every multi-verb noun follows `spur <noun> <verb> …`. The verb is the second positional token.
+- `init`, `status`, and `migrate` are the only sanctioned **verb-less** commands. They accept
+  flags and optional positionals directly.
+- All other nouns require a verb. Commander enforces this: calling `spur workflow` without a verb
+  prints commander's help and exits 1.
+
+**Help dispatch:**
+
+| Invocation | Behavior |
+|---|---|
+| `spur` / `spur help` / `spur --help` | Commander-generated top-level help (lists all registered commands) |
+| `spur <noun> --help` | Commander-generated command-scoped help (options, subcommands) |
+
+The CLI surface is built on `commander` + `@commander-js/extra-typings`. Each noun exports a
+`registerXxxCommand(program, context)` function from `apps/cli/src/commands/<noun>.ts`. Adding a
+noun requires writing its registration function and importing it in `apps/cli/src/index.ts`.
+Commander handles option parsing, `--help` rendering, and subcommand dispatch.
+
 
 ### 1.1 Committed product commands
 
