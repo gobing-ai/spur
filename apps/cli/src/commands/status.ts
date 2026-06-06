@@ -1,41 +1,41 @@
 import { join } from 'node:path';
+import type { Command } from '@commander-js/extra-typings';
 import type { CliContext } from '../context';
 import { CommandError } from '../errors';
 import { gitContext } from '../git-context';
 import { toJson } from '../output';
 
-/** Render detailed usage for `spur status`. */
-export function helpText(): string {
-    return [
-        'spur status - show project, Git, and optional path status',
-        '',
-        'Usage: spur status [path] [options]',
-        '',
-        'Options:',
-        '  --json             Output machine-readable JSON',
-        '  -h, --help         Show this help',
-        '',
-        'Examples:',
-        '  spur status',
-        '  spur status package.json',
-        '  spur status --json',
-    ].join('\n');
+/** Register `spur status` command. */
+export function registerStatusCommand(program: Command, context: CliContext): void {
+    program
+        .command('status')
+        .summary('show project, Git, and optional path status')
+        .option('--json', 'Output machine-readable JSON')
+        .argument('[path]', 'Optional file/dir path to check')
+        .action(async (path, options) => {
+            try {
+                const code = await runStatusCore(path, options, context);
+                context.setExitCode(code);
+            } catch (err) {
+                context.output.error(err instanceof Error ? err.message : String(err));
+                context.setExitCode(1);
+            }
+        });
 }
 
 /** Report basic project and Git status. */
-export async function runStatusCommand(
+async function runStatusCore(
+    path: string | undefined,
+    options: { json?: boolean },
     context: CliContext,
-    flags: Record<string, string | boolean>,
-    positionals: string[] = [],
 ): Promise<number> {
-    const targetPath = positionals[0];
     const [packageJsonExists, spurConfigExists, git, agentSpecs] = await Promise.all([
         context.fs.exists(join(context.cwd, 'package.json')),
         context.fs.exists(join(context.cwd, '.spur', 'config.json')),
         gitContext(context.cwd),
         listAgentSpecIds(context),
     ]);
-    const target = targetPath === undefined ? undefined : await readTargetStatus(context, targetPath);
+    const target = path === undefined ? undefined : await readTargetStatus(context, path);
 
     const status = {
         ok: packageJsonExists,
@@ -46,7 +46,7 @@ export async function runStatusCommand(
         ...(target === undefined ? {} : { target }),
     };
 
-    if (flags.json === true) {
+    if (options.json === true) {
         context.output.write(toJson(status));
     } else {
         context.output.write(
@@ -80,15 +80,15 @@ async function listAgentSpecIds(context: CliContext): Promise<string[]> {
 
 async function readTargetStatus(
     context: CliContext,
-    path: string,
+    targetPath: string,
 ): Promise<{
     path: string;
     size: number;
     isFile: boolean;
     isDirectory: boolean;
 }> {
-    const resolved = join(context.cwd, path);
+    const resolved = join(context.cwd, targetPath);
     const stat = await context.fs.stat(resolved);
     if (stat === null) throw new CommandError(`status failed: path does not exist at ${resolved}`);
-    return { path, size: stat.size, isFile: stat.isFile(), isDirectory: stat.isDirectory() };
+    return { path: targetPath, size: stat.size, isFile: stat.isFile(), isDirectory: stat.isDirectory() };
 }
