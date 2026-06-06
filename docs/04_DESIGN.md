@@ -84,7 +84,7 @@ the spec path).
 Readiness check per agent; prints `usable|needs-auth|missing <agent> tier=<n> [version]`.
 Exit 1 if any **tier-1** agent is not usable. Backed by `ts-ai-runner` `DoctorRunner`.
 
-#### `spur agent create <id> --type <agent-type> [flags]` · `spur agent edit <id>` · `spur agent delete <id> [--force]`
+#### `spur agent create <id> --type <agent-type> [--json] [flags]` · `spur agent edit <id>` · `spur agent delete <id> [--force]`
 Manage team agent specs under `.spur/agents/<id>.yaml` (backed by `ts-ai-runner` agent-spec helpers
 and the app-layer `TeamService`).
 - `create` — write a spec. Flags: `--name`, `--workspace`, `--purpose`, `--tags <a,b>`, `--model`,
