@@ -40,6 +40,12 @@ rules:
       type: rg
       config:
         pattern: "new\\s+XMLHttpRequest\\("
+    # Correctness rule (not a seam rule): XHR is never valid under Bun, so it
+    # applies to scripts/ tooling too — override the file-level apps+packages scope.
+    include:
+      - "apps/**/src/**/*.ts"
+      - "packages/**/src/**/*.ts"
+      - "scripts/**/*.ts"
 
   - id: no-third-party-http-clients
     description: "Use the platform fetch / a project client instead of ad-hoc HTTP client libraries (axios/got/ky/ofetch/undici)."
@@ -57,6 +63,7 @@ rules:
           include:
             - "apps/**/*.ts"
             - "packages/**/*.ts"
+            - "scripts/**/*.ts"
           exclude:
             - "**/tests/**"
             - "**/*.test.ts"
