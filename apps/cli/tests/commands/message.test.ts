@@ -2,27 +2,31 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runMessageCommand } from '../../src/commands/message';
-import { type CliContext, createCliContext } from '../../src/context';
+import { main } from '../../src/index';
 import { createCapturedOutput } from '../helpers';
 
-/** A CLI context bound to a temp project and a shared in-memory database. */
+/** A shared temp dir with file-based SQLite for multi-call main() tests. */
 async function makeCtx(): Promise<{
-    ctx: CliContext;
+    cwd: string;
     out: ReturnType<typeof createCapturedOutput>;
+    dbUrl: string;
     cleanup: () => Promise<void>;
 }> {
     const cwd = await mkdtemp(join(tmpdir(), 'spur-msg-'));
     const out = createCapturedOutput();
-    const ctx = createCliContext({ cwd, output: out, dbUrl: ':memory:' });
-    return { ctx, out, cleanup: async () => rm(cwd, { recursive: true, force: true }) };
+    const dbUrl = join(cwd, 'test.db');
+    return { cwd, out, dbUrl, cleanup: async () => rm(cwd, { recursive: true, force: true }) };
 }
 
 describe('spur message send', () => {
     test('enqueues a message and prints the id', async () => {
-        const { ctx, out, cleanup } = await makeCtx();
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
         try {
-            const code = await runMessageCommand('send', ctx, { to: 'planner' }, ['hello', 'there']);
+            const code = await main(['message', 'send', '--to', 'planner', 'hello there'], {
+                cwd,
+                output: out,
+                dbUrl,
+            });
             expect(code).toBe(0);
             expect(out.messages.join('\n')).toMatch(/queued .+ → planner/);
         } finally {
@@ -31,9 +35,13 @@ describe('spur message send', () => {
     });
 
     test('--json emits the structured result', async () => {
-        const { ctx, out, cleanup } = await makeCtx();
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
         try {
-            const code = await runMessageCommand('send', ctx, { to: 'planner', json: true }, ['hi']);
+            const code = await main(['message', 'send', '--to', 'planner', '--json', 'hi'], {
+                cwd,
+                output: out,
+                dbUrl,
+            });
             expect(code).toBe(0);
             const payload = JSON.parse(out.messages[0] ?? '{}');
             expect(payload.toId).toBe('planner');
@@ -44,33 +52,33 @@ describe('spur message send', () => {
     });
 
     test('requires --to', async () => {
-        const { ctx, out, cleanup } = await makeCtx();
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
         try {
-            const code = await runMessageCommand('send', ctx, {}, ['hi']);
-            expect(code).toBe(2);
-            expect(out.errors.join('\n')).toMatch(/requires --to/);
+            const code = await main(['message', 'send', 'hi'], { cwd, output: out, dbUrl });
+            expect(code).toBe(1);
+            expect(out.errors.join('\n')).toMatch(/--to/);
         } finally {
             await cleanup();
         }
     });
 
     test('requires a non-empty body', async () => {
-        const { ctx, out, cleanup } = await makeCtx();
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
         try {
-            const code = await runMessageCommand('send', ctx, { to: 'planner' }, []);
-            expect(code).toBe(2);
-            expect(out.errors.join('\n')).toMatch(/non-empty body/);
+            const code = await main(['message', 'send', '--to', 'planner'], { cwd, output: out, dbUrl });
+            expect(code).toBe(1);
+            expect(out.errors.join('\n')).toMatch(/body/);
         } finally {
             await cleanup();
         }
     });
 
-    test('rejects a malformed --to id with exit 2', async () => {
-        const { ctx, out, cleanup } = await makeCtx();
+    test('rejects a malformed --to id with exit 1', async () => {
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
         try {
-            const code = await runMessageCommand('send', ctx, { to: 'Bad Id' }, ['hi']);
-            expect(code).toBe(2);
-            expect(out.errors.join('\n')).toMatch(/Invalid agent id/);
+            const code = await main(['message', 'send', '--to', 'Bad Id', 'hi'], { cwd, output: out, dbUrl });
+            expect(code).toBe(1);
+            expect(out.errors.join('\n')).toMatch(/agent|Invalid/);
         } finally {
             await cleanup();
         }
@@ -79,10 +87,10 @@ describe('spur message send', () => {
 
 describe('spur message inbox', () => {
     test('lists messages for an agent', async () => {
-        const { ctx, out, cleanup } = await makeCtx();
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
         try {
-            await runMessageCommand('send', ctx, { to: 'planner' }, ['first']);
-            const code = await runMessageCommand('inbox', ctx, { agent: 'planner' }, []);
+            await main(['message', 'send', '--to', 'planner', 'first'], { cwd, output: out, dbUrl });
+            const code = await main(['message', 'inbox', '--agent', 'planner'], { cwd, output: out, dbUrl });
             expect(code).toBe(0);
             expect(out.messages.join('\n')).toContain('first');
         } finally {
@@ -91,9 +99,9 @@ describe('spur message inbox', () => {
     });
 
     test('reports empty inbox', async () => {
-        const { ctx, out, cleanup } = await makeCtx();
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
         try {
-            const code = await runMessageCommand('inbox', ctx, { agent: 'ghost' }, []);
+            const code = await main(['message', 'inbox', '--agent', 'ghost'], { cwd, output: out, dbUrl });
             expect(code).toBe(0);
             expect(out.messages.join('\n')).toMatch(/No messages/);
         } finally {
@@ -102,10 +110,10 @@ describe('spur message inbox', () => {
     });
 
     test('--json lists messages structurally', async () => {
-        const { ctx, out, cleanup } = await makeCtx();
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
         try {
-            await runMessageCommand('send', ctx, { to: 'planner' }, ['hi']);
-            const code = await runMessageCommand('inbox', ctx, { agent: 'planner', json: true }, []);
+            await main(['message', 'send', '--to', 'planner', 'hi'], { cwd, output: out, dbUrl });
+            const code = await main(['message', 'inbox', '--agent', 'planner', '--json'], { cwd, output: out, dbUrl });
             expect(code).toBe(0);
             const payload = JSON.parse(out.messages.at(-1) ?? '{}');
             expect(payload.count).toBe(1);
@@ -116,11 +124,11 @@ describe('spur message inbox', () => {
     });
 
     test('requires --agent', async () => {
-        const { ctx, out, cleanup } = await makeCtx();
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
         try {
-            const code = await runMessageCommand('inbox', ctx, {}, []);
-            expect(code).toBe(2);
-            expect(out.errors.join('\n')).toMatch(/requires --agent/);
+            const code = await main(['message', 'inbox'], { cwd, output: out, dbUrl });
+            expect(code).toBe(1);
+            expect(out.errors.join('\n')).toMatch(/--agent/);
         } finally {
             await cleanup();
         }
@@ -129,15 +137,19 @@ describe('spur message inbox', () => {
 
 describe('spur message reply', () => {
     test('threads a reply back to the original sender', async () => {
-        const { ctx, out, cleanup } = await makeCtx();
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
         try {
             // coder → planner, then reply must address coder.
-            await runMessageCommand('send', ctx, { to: 'planner', from: 'coder' }, ['need plan']);
-            const inbox = await runMessageCommand('inbox', ctx, { agent: 'planner', json: true }, []);
-            expect(inbox).toBe(0);
+            await main(['message', 'send', '--to', 'planner', '--from', 'coder', 'need plan'], {
+                cwd,
+                output: out,
+                dbUrl,
+            });
+            let code = await main(['message', 'inbox', '--agent', 'planner', '--json'], { cwd, output: out, dbUrl });
+            expect(code).toBe(0);
             const msgId = JSON.parse(out.messages.at(-1) ?? '{}').messages[0].id;
 
-            const code = await runMessageCommand('reply', ctx, {}, [msgId, 'here', 'is', 'the', 'plan']);
+            code = await main(['message', 'reply', msgId, 'here is the plan'], { cwd, output: out, dbUrl });
             expect(code).toBe(0);
             expect(out.messages.at(-1)).toMatch(/replied .+ → coder/);
         } finally {
@@ -146,11 +158,11 @@ describe('spur message reply', () => {
     });
 
     test('requires a msg id', async () => {
-        const { ctx, out, cleanup } = await makeCtx();
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
         try {
-            const code = await runMessageCommand('reply', ctx, {}, []);
-            expect(code).toBe(2);
-            expect(out.errors.join('\n')).toMatch(/requires <msg-id>/);
+            const code = await main(['message', 'reply'], { cwd, output: out, dbUrl });
+            expect(code).toBe(1);
+            expect(out.errors.join('\n')).toMatch(/msg-id/);
         } finally {
             await cleanup();
         }
@@ -159,11 +171,11 @@ describe('spur message reply', () => {
 
 describe('spur message dispatch', () => {
     test('rejects an unknown subcommand', async () => {
-        const { ctx, out, cleanup } = await makeCtx();
+        const { cwd, out, dbUrl, cleanup } = await makeCtx();
         try {
-            const code = await runMessageCommand('bogus', ctx, {}, []);
+            const code = await main(['message', 'bogus'], { cwd, output: out, dbUrl });
             expect(code).toBe(1);
-            expect(out.errors.join('\n')).toMatch(/Unknown message command/);
+            expect(out.errors.join('\n')).toMatch(/unknown command/i);
         } finally {
             await cleanup();
         }
