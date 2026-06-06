@@ -17,7 +17,7 @@ rules:
     description: "Prefer a centralized HTTP client over ad-hoc fetch(...). The server's Hono/Workers fetch entrypoint is exempt."
     severity: warning
     evaluator:
-      type: regex
+      type: rg
       config:
         pattern: "(^|[^.[:alnum:]_])fetch\\("
     exclude:
@@ -29,7 +29,7 @@ rules:
     description: "Avoid globalThis.fetch(...); route HTTP through a client seam when one exists."
     severity: warning
     evaluator:
-      type: regex
+      type: rg
       config:
         pattern: "globalThis\\.fetch\\("
 
@@ -37,7 +37,7 @@ rules:
     description: "Do not use XMLHttpRequest in a Bun/Node codebase."
     severity: error
     evaluator:
-      type: regex
+      type: rg
       config:
         pattern: "new\\s+XMLHttpRequest\\("
 
