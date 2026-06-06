@@ -15,7 +15,7 @@ rules:
     description: "Production source must use the output seam (apps/cli/src/output.ts / ts-utils echo) instead of direct console output."
     severity: error
     evaluator:
-      type: regex
+      type: rg
       config:
         pattern: "console\\.(log|error|warn|info|debug|dir|time|trace)"
 
@@ -23,6 +23,6 @@ rules:
     description: "Use the output seam (ts-utils echo/echoError) instead of process.stdout/stderr.write directly."
     severity: error
     evaluator:
-      type: regex
+      type: rg
       config:
         pattern: "process\\.(stdout|stderr)\\.write"
