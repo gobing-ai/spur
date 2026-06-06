@@ -4,8 +4,7 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { mkdir } from 'node:fs/promises';
-import { runRuleCommand } from '../../src/commands/rule';
-import { createCliContext } from '../../src/context';
+import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
 import { createCapturedOutput, createTempProject } from '../helpers';
 
@@ -21,8 +20,6 @@ async function writeRuleFile(cwd: string): Promise<void> {
             'rules:',
             '  - id: sample-rule',
             '    description: Sample rule',
-            '    severity: error',
-            '    enabled: true',
             '    evaluator:',
             '      type: path',
             '      config:',
@@ -34,14 +31,12 @@ async function writeRuleFile(cwd: string): Promise<void> {
 
 describe('runRuleCommand dispatch', () => {
     test('unknown subcommand returns 1', async () => {
-        const ctx = createCliContext({ output: nullOutput() });
-        const exitCode = await runRuleCommand('unknown-cmd', ctx, {}, []);
+        const exitCode = await main(['rule', 'unknown-cmd'], { output: nullOutput() });
         expect(exitCode).toBe(1);
     });
 
     test('list subcommand returns a number', async () => {
-        const ctx = createCliContext({ output: nullOutput() });
-        const exitCode = await runRuleCommand('list', ctx, {}, []);
+        const exitCode = await main(['rule', 'list'], { output: nullOutput() });
         expect(typeof exitCode).toBe('number');
     });
 
@@ -51,9 +46,12 @@ describe('runRuleCommand dispatch', () => {
         await Bun.write(`${cwd}/.spur/rules/recommended.yaml`, 'name: recommended\nextends:\n  - boundary\n');
         await writeRuleFile(cwd);
         const output = createCapturedOutput();
-        const ctx = createCliContext({ cwd, output, env: { SPUR_GLOBAL_RULES_DIR: `${cwd}/empty-global-rules` } });
 
-        const exitCode = await runRuleCommand('list', ctx, {}, []);
+        const exitCode = await main(['rule', 'list'], {
+            cwd,
+            output,
+            env: { SPUR_GLOBAL_RULES_DIR: `${cwd}/empty-global-rules` },
+        });
 
         expect(exitCode).toBe(0);
         expect(output.messages.at(-1)).toContain('Sources: local');
@@ -82,13 +80,12 @@ describe('runRuleCommand dispatch', () => {
             ].join('\n'),
         );
         const output = createCapturedOutput();
-        const ctx = createCliContext({
+
+        await main(['rule', 'list'], {
             cwd,
             output,
             env: { SPUR_RULES_PATH: `${envRoot}/.spur/rules`, SPUR_GLOBAL_RULES_DIR: globalRoot },
         });
-
-        await runRuleCommand('list', ctx, {}, []);
 
         expect(output.messages.at(-1)).toContain('✓ boundary/sample.yaml (1 rule) [env override]');
         expect(output.messages.at(-1)).toContain('✓ quality/global.yaml (1 rule) [user layer]');
@@ -112,9 +109,8 @@ describe('runRuleCommand dispatch', () => {
         );
         await Bun.write(`${cwd}/.spur/rules/bad.yaml`, 'not: a-rule-file\n');
         const output = createCapturedOutput();
-        const ctx = createCliContext({ cwd, output, env: { SPUR_GLOBAL_RULES_DIR: `${cwd}/empty-global-rules` } });
 
-        await runRuleCommand('list', ctx, {}, []);
+        await main(['rule', 'list'], { cwd, output, env: { SPUR_GLOBAL_RULES_DIR: `${cwd}/empty-global-rules` } });
 
         expect(output.messages.at(-1)).toContain('Total files: 2');
         expect(output.messages.at(-1)).toContain('✓ sample.yaml (1 rule) [project layer]');
@@ -124,9 +120,12 @@ describe('runRuleCommand dispatch', () => {
     test('list subcommand reports empty inventory', async () => {
         const cwd = await createTempProject();
         const output = createCapturedOutput();
-        const ctx = createCliContext({ cwd, output, env: { SPUR_GLOBAL_RULES_DIR: `${cwd}/empty-global-rules` } });
 
-        const exitCode = await runRuleCommand('list', ctx, {}, []);
+        const exitCode = await main(['rule', 'list'], {
+            cwd,
+            output,
+            env: { SPUR_GLOBAL_RULES_DIR: `${cwd}/empty-global-rules` },
+        });
 
         expect(exitCode).toBe(0);
         expect(output.messages.at(-1)).toBe('No rules found.');
@@ -138,9 +137,12 @@ describe('runRuleCommand dispatch', () => {
         await Bun.write(`${cwd}/.spur/rules/recommended.yaml`, 'name: recommended\nextends:\n  - boundary\n');
         await writeRuleFile(cwd);
         const output = createCapturedOutput();
-        const ctx = createCliContext({ cwd, output, env: { SPUR_GLOBAL_RULES_DIR: `${cwd}/empty-global-rules` } });
 
-        const exitCode = await runRuleCommand('list', ctx, { preset: 'recommended' }, []);
+        const exitCode = await main(['rule', 'list', '--preset', 'recommended'], {
+            cwd,
+            output,
+            env: { SPUR_GLOBAL_RULES_DIR: `${cwd}/empty-global-rules` },
+        });
 
         expect(exitCode).toBe(0);
         expect(output.messages.at(-1)).toContain(
@@ -149,9 +151,9 @@ describe('runRuleCommand dispatch', () => {
     });
 
     test('validate subcommand returns a number', async () => {
-        const ctx = createCliContext({ output: nullOutput() });
-        // validate of a preset is fast (no repository scan) and exercises resolveSource.
-        const exitCode = await runRuleCommand('validate', ctx, { preset: 'recommended', json: true }, []);
+        const exitCode = await main(['rule', 'validate', '--preset', 'recommended', '--json'], {
+            output: nullOutput(),
+        });
         expect(typeof exitCode).toBe('number');
     });
 
@@ -171,38 +173,30 @@ describe('runRuleCommand dispatch', () => {
                 '          - package.json',
             ].join('\n'),
         );
-        const ctx = createCliContext({ cwd, output: nullOutput() });
 
-        const exitCode = await runRuleCommand('validate', ctx, {}, [file]);
+        const exitCode = await main(['rule', 'validate', file], { cwd, output: nullOutput() });
 
         expect(exitCode).toBe(0);
     });
 
     test('run subcommand with an invalid --fail-on throws', async () => {
-        const ctx = createCliContext({ output: nullOutput() });
-        // Exercises parseFailOn's guard without triggering a full repository evaluation.
-        await expect(runRuleCommand('run', ctx, { 'fail-on': 'bogus' }, [])).rejects.toThrow('Invalid --fail-on');
+        const exitCode = await main(['rule', 'run', '--fail-on', 'bogus'], { output: nullOutput() });
+        expect(exitCode).toBe(1);
     });
 
     test('run subcommand with bare --stop-on-first defaults to error', async () => {
-        const ctx = createCliContext({ output: nullOutput() });
-        // Bare flag → boolean true → should default to 'error' internally.
-        // We just verify it doesn't throw and returns a number (the flag is parsed).
-        const code = await runRuleCommand('run', ctx, { 'stop-on-first': true }, []);
+        const code = await main(['rule', 'run', '--stop-on-first'], { output: nullOutput() });
         expect(typeof code).toBe('number');
     });
 
     test('run subcommand with --stop-on-first warning parses valid severity', async () => {
-        const ctx = createCliContext({ output: nullOutput() });
-        const code = await runRuleCommand('run', ctx, { 'stop-on-first': 'warning' }, []);
+        const code = await main(['rule', 'run', '--stop-on-first', 'warning'], { output: nullOutput() });
         expect(typeof code).toBe('number');
     });
 
     test('run subcommand with invalid --stop-on-first throws', async () => {
-        const ctx = createCliContext({ output: nullOutput() });
-        await expect(runRuleCommand('run', ctx, { 'stop-on-first': 'bogus' }, [])).rejects.toThrow(
-            'Invalid --stop-on-first',
-        );
+        const exitCode = await main(['rule', 'run', '--stop-on-first', 'bogus'], { output: nullOutput() });
+        expect(exitCode).toBe(1);
     });
 
     test('run subcommand composes --stop-on-first with --fail-on', async () => {
@@ -230,9 +224,11 @@ describe('runRuleCommand dispatch', () => {
                 '          - missing-error.txt',
             ].join('\n'),
         );
-        const ctx = createCliContext({ cwd, output: nullOutput() });
 
-        const code = await runRuleCommand('run', ctx, { file, 'stop-on-first': 'warning', 'fail-on': 'error' }, []);
+        const code = await main(['rule', 'run', '--file', file, '--stop-on-first', 'warning', '--fail-on', 'error'], {
+            cwd,
+            output: nullOutput(),
+        });
 
         expect(code).toBe(0);
     });
