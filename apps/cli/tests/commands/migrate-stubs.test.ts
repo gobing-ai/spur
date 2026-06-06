@@ -41,11 +41,11 @@ describe('CLI migrate and extracted domains', () => {
         expect(output.messages.at(-1)).toContain('antigravity');
 
         expect(await main(['agent', 'missing'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
-        expect(output.errors.at(-1)).toContain('Unknown agent command');
+        expect(output.errors.at(-1)).toMatch(/unknown command/);
 
         expect(await main(['history'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
-        expect(output.errors.at(-1)).toContain('Usage: spur history import');
-
+        // Commander shows help on stderr when a required subcommand is missing.
+        expect(output.errors.join('\\n')).toContain('import');
         const historyFile = join(cwd, 'history.jsonl');
         await writeFile(
             historyFile,
@@ -91,7 +91,7 @@ describe('CLI migrate and extracted domains', () => {
         expect(output.errors.at(-1)).toContain('Invalid history import mode');
 
         expect(await main(['workflow'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
-        expect(output.errors.at(-1)).toContain('Usage: spur workflow');
+        expect(output.errors.at(-1)).toContain('spur workflow');
 
         const workflowFile = join(cwd, 'workflow.yaml');
         await writeFile(
@@ -162,12 +162,11 @@ describe('CLI migrate and extracted domains', () => {
         expect(output.messages.at(-1)).toContain('Total:');
         expect(output.messages.at(-1)).toContain('By source:');
 
-        // Default usage error still shows
+        // Commander shows help when no subcommand is given
         output.errors.length = 0;
         output.messages.length = 0;
         expect(await main(['history'], { cwd, output, dbUrl })).toBe(1);
-        expect(output.errors.at(-1)).toContain('Usage: spur history import');
-        expect(output.errors.at(-1)).toContain('history analyze');
+        expect(output.errors.join('\\n')).toContain('import');
     });
 
     test('runs rule command file mode and error branches', async () => {
@@ -207,7 +206,7 @@ describe('CLI migrate and extracted domains', () => {
         expect(JSON.parse(output.messages.at(-1) ?? '{}')).toMatchObject({ ruleCount: 1 });
 
         expect(await main(['rule', 'bad'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
-        expect(output.errors.at(-1)).toContain('Unknown rule command');
+        expect(output.errors.at(-1)).toMatch(/unknown command/);
 
         expect(await main(['rule', 'run', '--fail-on', 'bad'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
         expect(output.errors.at(-1)).toContain('Invalid --fail-on value');
