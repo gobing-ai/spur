@@ -14,13 +14,14 @@ install or to ts-libs.
 | `boundary` | `boundary/` | DB/DAO boundary enforcement |
 | `structure` | `structure/` | File layout and protected-file rules |
 | `quality` | `quality/` | Post-test gates (coverage) |
+| `surface` | `surface/` | CLI surface consistency (registerXxxCommand wiring, --json serialization) |
 
 ## Presets
 
 | Preset | When | Extends |
 |---|---|---|
 | `recommended-pre-check` | Before tests | `typescript`, `structure`, `boundary` |
-| `recommended-post-check` | After tests | `quality` |
+| `recommended-post-check` | After tests | `quality`, `surface` |
 | `strict-check` | Opt-in | `strict` |
 
 ## Relationship to ts-libs
