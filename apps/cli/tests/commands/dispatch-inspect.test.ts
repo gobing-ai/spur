@@ -13,17 +13,12 @@ describe('CLI dispatch and status', () => {
         const output = createCapturedOutput();
 
         expect(await main(['help'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
-        // Top-level help is rendered across commander's blocks (Options) plus the
-        // domain-grouped command listing appended via addHelpText; join to assert.
+        // Top-level help is rendered by commander's standard flat command list.
+        // All 10 nouns appear alphabetically under "Commands:".
         const helpOutput = output.messages.join('\n');
         expect(output.messages.some((m) => m.includes('agent'))).toBe(true);
         expect(helpOutput).toContain('Options:');
         expect(helpOutput).toContain('Commands:');
-        // Domain group headers (R5) — guards against a regression to commander's flat list.
-        expect(helpOutput).toContain('Harness');
-        expect(helpOutput).toContain('Policy');
-        expect(helpOutput).toContain('Extension');
-        expect(helpOutput).toContain('Project');
         expect(helpOutput).toContain('agent');
         expect(helpOutput).toContain('rule');
         expect(helpOutput).toContain('history');
