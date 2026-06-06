@@ -8,6 +8,8 @@ import type { CommandOutput } from './output';
 /** Runtime dependencies shared by CLI commands. */
 export interface CliContext {
     cwd: string;
+    /** Called by command handlers to signal the intended exit code. */
+    setExitCode(code: number): void;
     env: Record<string, string | undefined>;
     fs: FileSystem;
     output: CommandOutput;
@@ -20,6 +22,7 @@ export function createCliContext(options: {
     env?: Record<string, string | undefined>;
     output: CommandOutput;
     dbUrl?: string;
+    setExitCode?: (code: number) => void;
 }): CliContext {
     const cwd = resolve(options.cwd ?? process.cwd());
     const env = options.env ?? process.env;
@@ -32,6 +35,7 @@ export function createCliContext(options: {
         cwd,
         env,
         fs,
+        setExitCode: options.setExitCode ?? noopSetExitCode,
         output: options.output,
         getDb: async () => {
             dbPromise ??= createMigratedDbAdapter(cwd, env, options.dbUrl);
@@ -39,6 +43,9 @@ export function createCliContext(options: {
         },
     };
 }
+
+/** No-op fallback when `setExitCode` is not provided to createCliContext. */
+export function noopSetExitCode(_code: number): void {}
 
 /** Create the CLI SQLite adapter and apply the local Spur schema. */
 export async function createMigratedDbAdapter(
