@@ -1,11 +1,12 @@
 # Bun/tooling rules — Spur standardizes on Bun + bun:test (AGENTS.md "Stack").
 # Absorbed from ts-libs/.spur/rules/typescript/bun-only.yaml, re-scoped for the
-# apps/** + packages/** app-monorepo layout and the server's Cloudflare Workers
-# Vitest suite (the one sanctioned non-bun:test runner — `*.cf.ts`).
+# apps/** + packages/** + scripts/** app-monorepo layout and the server's
+# Cloudflare Workers Vitest suite (the one sanctioned non-bun:test runner — `*.cf.ts`).
 include:
   - "package.json"
   - "apps/**/*.ts"
   - "packages/**/*.ts"
+  - "scripts/**/*.ts"
   - ".spur/**/*.yaml"
 exclude:
   - "**/node_modules/**"
@@ -16,13 +17,14 @@ rules:
     description: "Use bun scripts instead of npm, pnpm, or yarn commands (AGENTS.md: no npm/pnpm/yarn)."
     severity: error
     evaluator:
-      type: regex
+      type: rg
       config:
         pattern: "\\b(npm run|pnpm|yarn)\\b"
     include:
       - "package.json"
       - "apps/*/package.json"
       - "packages/*/package.json"
+      - "scripts/**/*.ts"
       - "**/*.yml"
       - "**/*.yaml"
     exclude:
@@ -33,7 +35,7 @@ rules:
     description: "Unit/integration tests must use bun:test, not Jest or Mocha. The server's Cloudflare Workers suite (*.cf.ts) is the only sanctioned Vitest runner."
     severity: error
     evaluator:
-      type: regex
+      type: rg
       config:
         pattern: "from [''\"](jest|mocha|@jest)"
     include:
@@ -44,7 +46,7 @@ rules:
     description: "Use bun:test APIs instead of vitest, except the server's Cloudflare Workers tests (*.cf.ts) which must run under the Workers pool via Vitest."
     severity: error
     evaluator:
-      type: regex
+      type: rg
       config:
         pattern: "from ['\"]vitest['\"]|vi\\.(fn|spyOn|mock|stub)\\b"
     include:
