@@ -1,5 +1,5 @@
+import type { Command } from '@commander-js/extra-typings';
 import { TeamService, type TeamStatusEntry } from '@gobing-ai/spur-app';
-import { booleanFlag } from '../args';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
 
@@ -7,85 +7,52 @@ import { toJson } from '../output';
 const DAEMON_STUB_MESSAGE =
     'Team daemon not yet available. Use `spur agent run --drain` for deferred message delivery.';
 
-/** Render detailed usage for `spur team`. */
-export function helpText(): string {
-    return [
-        'spur team - coordinate team agent assignments and status',
-        '',
-        'Usage: spur team <command> [options]',
-        '',
-        'Commands:',
-        '  assign <task-id> <agent-id>',
-        '      Set the assignee on a task file.',
-        '  status [--json]',
-        '      List agent specs and their run status.',
-        '  start',
-        '      Deferred daemon stub.',
-        '  stop',
-        '      Deferred daemon stub.',
-        '  help',
-        '      Show this help.',
-        '',
-        'Options:',
-        '  --json             Output machine-readable JSON where supported',
-        '  -h, --help         Show this help',
-        '',
-        'Examples:',
-        '  spur team assign 0012 planner',
-        '  spur team status --json',
-    ].join('\n');
-}
+/** Register `spur team` commands. */
+export function registerTeamCommand(program: Command, context: CliContext): void {
+    const noun = program.command('team').summary('coordinate team agent assignments and status');
 
-/** Execute `spur team` commands backed by TeamService. */
-export async function runTeamCommand(
-    subcommand: string | undefined,
-    context: CliContext,
-    flags: Record<string, string | boolean>,
-    positionals: string[],
-): Promise<number> {
-    const svc = new TeamService(context);
-    try {
-        switch (subcommand) {
-            case 'assign':
-                return await runTeamAssign(svc, context, positionals);
-            case 'status':
-                return await runTeamStatus(svc, context, flags);
-            case 'start':
-            case 'stop':
-                context.output.write(DAEMON_STUB_MESSAGE);
-                return 0;
-            default:
-                context.output.error(`Unknown team command: ${subcommand ?? '(none)'}`);
-                return 1;
-        }
-    } catch (error) {
-        // Surface validation (bad agent id) and lookup (missing task file) errors
-        // as a clean exit rather than an uncaught throw.
-        context.output.error(error instanceof Error ? error.message : String(error));
-        return 2;
-    }
+    noun.command('assign')
+        .description('Set the assignee on a task file.')
+        .argument('<task-id>', 'Task file id')
+        .argument('<agent-id>', 'Agent spec id')
+        .action(async (taskId, agentId) => {
+            const code = await runTeamAssign(taskId, agentId, context);
+            context.setExitCode(code);
+        });
+
+    noun.command('status')
+        .description('List agent specs and their run status.')
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (options) => {
+            const code = await runTeamStatus(options, context);
+            context.setExitCode(code);
+        });
+
+    noun.command('start')
+        .description('Deferred daemon stub.')
+        .action(() => {
+            context.output.write(DAEMON_STUB_MESSAGE);
+        });
+
+    noun.command('stop')
+        .description('Deferred daemon stub.')
+        .action(() => {
+            context.output.write(DAEMON_STUB_MESSAGE);
+        });
 }
 
 /** `spur team assign <task-id> <agent-id>` */
-async function runTeamAssign(svc: TeamService, context: CliContext, positionals: string[]): Promise<number> {
-    const taskId = positionals[0];
-    const agentId = positionals[1];
-    if (taskId === undefined || agentId === undefined) {
-        context.output.error('team assign requires <task-id> <agent-id>');
-        return 2;
-    }
+async function runTeamAssign(taskId: string, agentId: string, context: CliContext): Promise<number> {
+    const svc = new TeamService(context);
     await svc.assignTask(taskId, agentId);
     context.output.write(`assigned ${taskId} → ${agentId}`);
     return 0;
 }
 
 /** `spur team status [--json]` */
-async function runTeamStatus(
-    svc: TeamService,
-    context: CliContext,
-    flags: Record<string, string | boolean>,
-): Promise<number> {
-    const json = booleanFlag(flags, 'json');
+async function runTeamStatus(options: { json?: boolean }, context: CliContext): Promise<number> {
+    const svc = new TeamService(context);
+    const json = options.json === true;
     const status = await svc.getStatus();
     if (json) {
         context.output.write(toJson(status));
