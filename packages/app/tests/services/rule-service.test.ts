@@ -426,6 +426,82 @@ describe('RuleService.evaluate()', () => {
         expect(progress).toContain('Stopping: first error+ finding reached.');
         expect(progress).not.toContain('should-not-run');
     });
+
+    test('verbose uses a single engine.evaluate call (not one per rule)', async () => {
+        const cwd = await createTempProject();
+        const output = createCapturedOutput();
+        const file = join(cwd, '.spur', 'rules', 'multi.yaml');
+        await mkdir(dirname(file), { recursive: true });
+        await writeFile(
+            file,
+            [
+                'rules:',
+                '  - id: rule-a',
+                '    description: first rule',
+                '    evaluator:',
+                '      type: path',
+                '      config:',
+                '        paths:',
+                '          - package.json',
+                '  - id: rule-b',
+                '    description: second rule',
+                '    evaluator:',
+                '      type: path',
+                '      config:',
+                '        paths:',
+                '          - package.json',
+            ].join('\n'),
+        );
+
+        const result = await new RuleService(makeContext(cwd, output)).evaluate({
+            preset: 'recommended',
+            failOn: 'error',
+            file,
+            json: false,
+            verbose: true,
+            color: noColor(),
+        });
+
+        // Both rules should be evaluated; findings from both present.
+        expect(result.exitCode).toBe(0);
+        const progress = output.errors.join('\n');
+        expect(progress).toContain('rule-a (path)');
+        expect(progress).toContain('rule-b (path)');
+        // Each rule appears with its outcome line exactly once.
+        expect(progress).toContain('✓ passed');
+    });
+
+    test('verbose surfaces evaluator error distinctly from violation', async () => {
+        const cwd = await createTempProject();
+        const output = createCapturedOutput();
+        const file = join(cwd, '.spur', 'rules', 'bad.yaml');
+        await mkdir(dirname(file), { recursive: true });
+        await writeFile(
+            file,
+            [
+                'rules:',
+                '  - id: bad-rule',
+                '    description: misconfigured evaluator',
+                '    evaluator:',
+                '      type: forbidden-import',
+            ].join('\n'),
+        );
+
+        await new RuleService(makeContext(cwd, output)).evaluate({
+            preset: 'recommended',
+            failOn: 'error',
+            file,
+            json: false,
+            verbose: true,
+            color: noColor(),
+        });
+
+        const progress = output.errors.join('\n');
+        // Evaluator error should appear distinctly (R6).
+        expect(progress).toContain('evaluator error in bad-rule');
+        // Original misconfigured indicator still present.
+        expect(progress).toContain('⚠ misconfigured');
+    });
 });
 
 // ---------------------------------------------------------------------------

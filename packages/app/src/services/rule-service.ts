@@ -1,5 +1,6 @@
 import { homedir } from 'node:os';
 import { delimiter, join, relative, resolve } from 'node:path';
+import { EventBus } from '@gobing-ai/ts-infra';
 import {
     bundledRulesRoot,
     type ConstraintFinding,
@@ -7,6 +8,7 @@ import {
     loadPresetRules,
     loadRuleFile,
     RuleEngine,
+    type RuleEngineEvents,
     type RuleEngineResult,
 } from '@gobing-ai/ts-rule-engine';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
@@ -163,36 +165,40 @@ export class RuleService {
             file !== undefined
                 ? (await loadRuleFile(file)).rules
                 : await loadPresetRules(preset, { roots: this.ruleRoots() });
-
         const selectedRule = rule;
         const filteredRules = selectedRule === undefined ? rules : rules.filter((r) => r.id === selectedRule);
 
-        const engine = new RuleEngine();
-        const result =
-            verbose && !json
-                ? await this.evaluateVerbose(engine, filteredRules, color, stopOnFirst)
-                : await engine.evaluate(filteredRules, this.context.cwd, stopOnFirst);
+        let enabledCount = filteredRules.filter((r) => r.enabled !== false).length;
+
+        let result: RuleEngineResult;
+        if (verbose && !json) {
+            const [engineResult, enabled] = await this.evaluateVerbose(filteredRules, color, stopOnFirst);
+            result = engineResult;
+            enabledCount = enabled;
+        } else {
+            result = await new RuleEngine().evaluate(filteredRules, this.context.cwd, stopOnFirst);
+        }
 
         const serviceResult: RuleEvaluationServiceResult = {
             preset,
-            ruleCount: filteredRules.length,
+            ruleCount: enabledCount,
             findings: result.findings,
             fixes: result.fixes,
             exitCode: 0,
         };
 
         if (json) {
-            this.context.output.write(JSON.stringify({ preset, ruleCount: filteredRules.length, ...result }, null, 2));
+            this.context.output.write(JSON.stringify({ preset, ruleCount: enabledCount, ...result }, null, 2));
         } else if (verbose) {
             // Verbose already streamed per-rule findings inline; print only a summary line.
-            this.context.output.write(this.verboseSummary(result.findings, filteredRules.length));
+            this.context.output.write(this.verboseSummary(result.findings, enabledCount));
         } else if (result.findings.length > 0) {
-            this.context.output.write(engine.host.formatters.get('text').format(result));
+            this.context.output.write(new RuleEngine().host.formatters.get('text').format(result));
         } else {
-            this.context.output.write(this.emptyResultMessage(file, preset, selectedRule, filteredRules.length));
+            this.context.output.write(this.emptyResultMessage(file, preset, selectedRule, enabledCount));
         }
 
-        if (filteredRules.length === 0) {
+        if (enabledCount === 0) {
             serviceResult.exitCode = 1;
         } else if (result.findings.some((f) => SEVERITY_RANK[f.severity] >= SEVERITY_RANK[failOn])) {
             serviceResult.exitCode = 1;
@@ -324,42 +330,88 @@ export class RuleService {
     }
 
     /**
-     * Evaluate rules one at a time, streaming per-rule progress so the user sees which
-     * rule is running and its outcome. Progress goes to stderr (`output.error`) to keep
+     * Evaluate all rules in a single engine call, streaming per-rule progress via
+     * the engine's EventBus. Progress goes to stderr (`output.error`) to keep
      * stdout clean for the final result. Returns the same aggregate shape as a batch run.
      */
     private async evaluateVerbose(
-        engine: RuleEngine,
         rules: readonly ConstraintRule[],
         color: Colorize,
         stopOnFirst?: FailOnSeverity,
-    ): Promise<RuleEngineResult> {
-        const total = rules.length;
-        this.context.output.error(`Evaluating ${total} ${total === 1 ? 'rule' : 'rules'}…`);
-        const findings: ConstraintFinding[] = [];
-        const fixes: RuleEngineResult['fixes'] = [];
-        for (const [index, rule] of rules.entries()) {
-            const counter = color.dim(`[${index + 1}/${total}]`);
+    ): Promise<[RuleEngineResult, number]> {
+        const enabledRules = rules.filter((r) => r.enabled !== false);
+        const disabledRules = rules.filter((r) => r.enabled === false);
+        const enabledCount = enabledRules.length;
+        const totalCount = rules.length;
+
+        // Track evaluation order so we can emit detail lines for failing rules
+        // after the aggregate result is available.
+        const evalOrder: string[] = [];
+        const pendingDetails = new Map<string, number>(); // ruleId → durationMs
+
+        const events = new EventBus<RuleEngineEvents>();
+
+        // Header: show total rule count (enabled + disabled).
+        const noun = totalCount === 1 ? 'rule' : 'rules';
+        const suffix = disabledRules.length > 0 ? color.dim(` (${disabledRules.length} disabled)`) : '';
+        this.context.output.error(`Evaluating ${totalCount} ${noun}…${suffix}`);
+
+        // Emit progress lines for disabled rules up front, numbered before enabled rules.
+        for (const [index, rule] of disabledRules.entries()) {
+            const counter = color.dim(`[${index + 1}/${totalCount}]`);
             const type = color.dim(`(${rule.evaluator.type})`);
             this.context.output.error(`${color.dim('▶')} ${counter} ${rule.id} ${type}`);
-            const startedAt = performance.now();
-            const result = await engine.evaluate([rule], this.context.cwd);
-            const elapsed = ((performance.now() - startedAt) / 1000).toFixed(2);
-            findings.push(...result.findings);
-            fixes.push(...result.fixes);
-            this.context.output.error(`  ${this.verboseOutcome(result.findings, color)} - ${elapsed}s`);
-            for (const line of this.verboseFindingLines(result.findings, color)) {
+            this.context.output.error(`  ${color.dim('⊘ disabled')} — skipped`);
+        }
+
+        events.on('rule.eval.start', ({ ruleId, index, total }) => {
+            evalOrder.push(ruleId);
+            // Shift index past the disabled rules so counter is continuous across all rules.
+            const shifted = index + disabledRules.length;
+            const counter = color.dim(`[${shifted}/${total + disabledRules.length}]`);
+            const rule = rules.find((r) => r.id === ruleId);
+            const type = color.dim(rule ? `(${rule.evaluator.type})` : '');
+            this.context.output.error(`${color.dim('▶')} ${counter} ${ruleId} ${type}`);
+        });
+
+        events.on('rule.eval.done', ({ ruleId, findings, durationMs }) => {
+            const elapsed = (durationMs / 1000).toFixed(2);
+            if (findings === 0) {
+                this.context.output.error(`  ${color.green('✓ passed')} - ${elapsed}s`);
+            } else {
+                // Outcome requires severity breakdown from aggregate result — defer.
+                pendingDetails.set(ruleId, durationMs);
+            }
+        });
+
+        events.on('rule.eval.error', ({ ruleId, error }) => {
+            // R6: surface evaluator crash distinctly from normal violation findings.
+            this.context.output.error(`  ${color.yellow(`! evaluator error in ${ruleId}: ${error}`)}`);
+        });
+
+        const engine = new RuleEngine({ events });
+        const result = await engine.evaluate([...rules], this.context.cwd, stopOnFirst);
+
+        // Emit outcome + detail lines for rules that had findings (deferred from rule.eval.done).
+        for (const ruleId of evalOrder) {
+            if (!pendingDetails.has(ruleId)) continue;
+            const ruleFindings = result.findings.filter((f) => f.ruleId === ruleId);
+            const elapsed = ((pendingDetails.get(ruleId) ?? 0) / 1000).toFixed(2);
+            this.context.output.error(`  ${this.verboseOutcome(ruleFindings, color)} - ${elapsed}s`);
+            for (const line of this.verboseFindingLines(ruleFindings, color)) {
                 this.context.output.error(line);
             }
-            if (
-                stopOnFirst !== undefined &&
-                result.findings.some((f) => SEVERITY_RANK[f.severity] >= SEVERITY_RANK[stopOnFirst])
-            ) {
-                this.context.output.error(color.dim(`Stopping: first ${stopOnFirst}+ finding reached.`));
-                break;
-            }
         }
-        return { findings, fixes };
+
+        // When stopOnFirst short-circuits, emit the stop message.
+        if (
+            stopOnFirst !== undefined &&
+            result.findings.some((f) => SEVERITY_RANK[f.severity] >= SEVERITY_RANK[stopOnFirst])
+        ) {
+            this.context.output.error(color.dim(`Stopping: first ${stopOnFirst}+ finding reached.`));
+        }
+
+        return [result, enabledCount];
     }
 
     /**
