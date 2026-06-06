@@ -57,7 +57,7 @@ rules:
       under packages/domain/src/schema/. (ADR-011)
     severity: error
     evaluator:
-      type: regex
+      type: rg
       config:
         pattern: "sqliteTable\\("
     include:
@@ -74,12 +74,12 @@ rules:
       package-owned schema SQL re-exported from ts-libs. (ADR-011)
     severity: error
     evaluator:
-      type: regex
+      type: rg
       config:
         # Match DDL statement form (CREATE/ALTER/DROP TABLE <name> ... '(' or ';'),
-        # not the bare words in prose/comments.
-        pattern: "(CREATE|ALTER|DROP)\\s+TABLE\\s+(IF\\s+(NOT\\s+)?EXISTS\\s+)?[\"'`]?[A-Za-z_][A-Za-z0-9_]*[\"'`]?\\s*[(;]"
-        flags: "i"
+        # not the bare words in prose/comments. Inline `(?i)` replaces the JS
+        # `flags: i` — the rg evaluator honors inline flags, not a `flags` field.
+        pattern: "(?i)(CREATE|ALTER|DROP)\\s+TABLE\\s+(IF\\s+(NOT\\s+)?EXISTS\\s+)?[\"'`]?[A-Za-z_][A-Za-z0-9_]*[\"'`]?\\s*[(;]"
     include:
       - "apps/**/src/**/*.ts"
       - "packages/**/src/**/*.ts"
@@ -95,7 +95,7 @@ rules:
       through @gobing-ai/spur-domain DAOs. (ADR-011)
     severity: error
     evaluator:
-      type: regex
+      type: rg
       config:
         pattern: "(SELECT |INSERT INTO|UPDATE |DELETE FROM)"
     include:
@@ -113,7 +113,7 @@ rules:
       derive DDL via createTableSql instead. (ADR-011)
     severity: error
     evaluator:
-      type: regex
+      type: rg
       config:
         pattern: "from\\s+['\"][^'\"]*\\.sql['\"]"
     include:
