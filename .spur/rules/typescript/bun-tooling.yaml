@@ -41,6 +41,7 @@ rules:
     include:
       - "apps/**/*.test.ts"
       - "packages/**/*.test.ts"
+      - "scripts/**/*.test.ts"
 
   - id: no-vitest-imports-or-apis
     description: "Use bun:test APIs instead of vitest, except the server's Cloudflare Workers tests (*.cf.ts) which must run under the Workers pool via Vitest."
@@ -52,6 +53,7 @@ rules:
     include:
       - "apps/**/*.ts"
       - "packages/**/*.ts"
+      - "scripts/**/*.ts"
     exclude:
       - "apps/server/tests/cf/**"
       - "apps/server/vitest.cf.config.ts"
