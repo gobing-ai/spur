@@ -5,8 +5,7 @@
 import { describe, expect, test } from 'bun:test';
 import { rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { runWorkflowCommand } from '../../src/commands/workflow';
-import { createCliContext } from '../../src/context';
+import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
 import { createCapturedOutput, createTempProject } from '../helpers';
 
@@ -27,32 +26,28 @@ function nullOutput(): CommandOutput {
     return { write: () => {}, error: () => {} };
 }
 
-describe('runWorkflowCommand dispatch', () => {
+describe('workflow command (main)', () => {
     test('unknown subcommand returns 1', async () => {
-        const ctx = createCliContext({ output: nullOutput() });
-        const exitCode = await runWorkflowCommand('unknown-cmd', ctx, {}, []);
+        const exitCode = await main(['workflow', 'unknown-cmd'], { output: nullOutput() });
         expect(exitCode).toBe(1);
     });
 
     test('no subcommand prints usage and returns 1', async () => {
-        const ctx = createCliContext({ output: nullOutput() });
-        const exitCode = await runWorkflowCommand(undefined, ctx, {}, []);
+        const exitCode = await main(['workflow'], { output: nullOutput() });
         expect(exitCode).toBe(1);
     });
 
     test('list subcommand (json) returns 0', async () => {
-        const ctx = createCliContext({ output: nullOutput(), dbUrl: ':memory:' });
-        const exitCode = await runWorkflowCommand('list', ctx, { json: true }, []);
+        const exitCode = await main(['workflow', 'list', '--json'], { output: nullOutput(), dbUrl: ':memory:' });
         expect(exitCode).toBe(0);
     });
 
     test('list subcommand (plain) formats an empty run list', async () => {
         const lines: string[] = [];
-        const ctx = createCliContext({
+        const exitCode = await main(['workflow', 'list'], {
             output: { write: (m) => lines.push(m), error: () => {} },
             dbUrl: ':memory:',
         });
-        const exitCode = await runWorkflowCommand('list', ctx, {}, []);
         expect(exitCode).toBe(0);
         expect(lines).toContain('No workflow runs.');
     });
@@ -62,11 +57,14 @@ describe('runWorkflowCommand dispatch', () => {
         const workflowFile = join(dir, 'workflow.yaml');
         await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
         const output = createCapturedOutput();
-        const ctx = createCliContext({ output, cwd: dir, dbUrl: ':memory:' });
+        // Use a file-based DB so both main() calls share the same database;
+        // :memory: would create isolated instances and the list call would see
+        // no persisted runs.
+        const dbUrl = join(dir, '.spur', 'test.sqlite');
 
-        await runWorkflowCommand('run', ctx, { 'run-id': 'list-run' }, [workflowFile]);
+        await main(['workflow', 'run', '--run-id', 'list-run', workflowFile], { output, cwd: dir, dbUrl });
         output.messages.length = 0;
-        const exitCode = await runWorkflowCommand('list', ctx, {}, []);
+        const exitCode = await main(['workflow', 'list'], { output, cwd: dir, dbUrl });
 
         expect(exitCode).toBe(0);
         expect(output.messages).toEqual(['list-run done cli-test-flow']);
@@ -75,24 +73,25 @@ describe('runWorkflowCommand dispatch', () => {
 
     test('validate of a missing file (plain) returns 1 and reports invalid', async () => {
         const errors: string[] = [];
-        const ctx = createCliContext({
+        const exitCode = await main(['workflow', 'validate', '/tmp/spur-missing-workflow.yaml'], {
             output: { write: () => {}, error: (m) => errors.push(m) },
             dbUrl: ':memory:',
         });
-        const exitCode = await runWorkflowCommand('validate', ctx, {}, ['/tmp/spur-missing-workflow.yaml']);
         expect(exitCode).toBe(1);
         expect(errors.some((e) => e.startsWith('workflow invalid:'))).toBe(true);
     });
 
     test('validate of a missing file (json) returns 1', async () => {
-        const ctx = createCliContext({ output: nullOutput(), dbUrl: ':memory:' });
-        const exitCode = await runWorkflowCommand('validate', ctx, { json: true }, ['/tmp/spur-missing-workflow.yaml']);
+        const exitCode = await main(['workflow', 'validate', '--json', '/tmp/spur-missing-workflow.yaml'], {
+            output: nullOutput(),
+            dbUrl: ':memory:',
+        });
         expect(exitCode).toBe(1);
     });
 
     test('validate throws when workflow file argument is missing', async () => {
-        const ctx = createCliContext({ output: nullOutput(), dbUrl: ':memory:' });
-        await expect(runWorkflowCommand('validate', ctx, {}, [])).rejects.toThrow('Workflow file path is required');
+        const exitCode = await main(['workflow', 'validate'], { output: nullOutput(), dbUrl: ':memory:' });
+        expect(exitCode).toBe(1);
     });
 
     test('validate of a valid workflow reports the workflow name', async () => {
@@ -100,9 +99,8 @@ describe('runWorkflowCommand dispatch', () => {
         const workflowFile = join(dir, 'workflow.yaml');
         await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
         const output = createCapturedOutput();
-        const ctx = createCliContext({ output, cwd: dir, dbUrl: ':memory:' });
 
-        const exitCode = await runWorkflowCommand('validate', ctx, {}, [workflowFile]);
+        const exitCode = await main(['workflow', 'validate', workflowFile], { output, cwd: dir, dbUrl: ':memory:' });
 
         expect(exitCode).toBe(0);
         expect(output.messages).toEqual(['workflow valid: cli-test-flow']);
@@ -114,9 +112,12 @@ describe('runWorkflowCommand dispatch', () => {
         const workflowFile = join(dir, 'workflow.yaml');
         await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
         const output = createCapturedOutput();
-        const ctx = createCliContext({ output, cwd: dir, dbUrl: ':memory:' });
 
-        const exitCode = await runWorkflowCommand('validate', ctx, { json: true, 'no-schema': true }, [workflowFile]);
+        const exitCode = await main(['workflow', 'validate', '--json', '--no-schema', workflowFile], {
+            output,
+            cwd: dir,
+            dbUrl: ':memory:',
+        });
 
         expect(exitCode).toBe(0);
         expect(JSON.parse(output.messages[0] ?? '{}')).toMatchObject({
@@ -128,8 +129,8 @@ describe('runWorkflowCommand dispatch', () => {
     });
 
     test('run throws when workflow file argument is missing', async () => {
-        const ctx = createCliContext({ output: nullOutput(), dbUrl: ':memory:' });
-        await expect(runWorkflowCommand('run', ctx, {}, [])).rejects.toThrow('Workflow file path is required');
+        const exitCode = await main(['workflow', 'run'], { output: nullOutput(), dbUrl: ':memory:' });
+        expect(exitCode).toBe(1);
     });
 
     test('run subcommand formats a completed workflow in plain mode', async () => {
@@ -137,9 +138,12 @@ describe('runWorkflowCommand dispatch', () => {
         const workflowFile = join(dir, 'workflow.yaml');
         await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
         const output = createCapturedOutput();
-        const ctx = createCliContext({ output, cwd: dir, dbUrl: ':memory:' });
 
-        const exitCode = await runWorkflowCommand('run', ctx, { 'run-id': 'plain-run' }, [workflowFile]);
+        const exitCode = await main(['workflow', 'run', '--run-id', 'plain-run', workflowFile], {
+            output,
+            cwd: dir,
+            dbUrl: ':memory:',
+        });
 
         expect(exitCode).toBe(0);
         expect(output.messages).toEqual(['workflow done: cli-test-flow -> done']);
@@ -151,9 +155,12 @@ describe('runWorkflowCommand dispatch', () => {
         const workflowFile = join(dir, 'workflow.yaml');
         await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
         const output = createCapturedOutput();
-        const ctx = createCliContext({ output, cwd: dir, dbUrl: ':memory:' });
 
-        const exitCode = await runWorkflowCommand('run', ctx, { json: true, 'run-id': 'json-run' }, [workflowFile]);
+        const exitCode = await main(['workflow', 'run', '--json', '--run-id', 'json-run', workflowFile], {
+            output,
+            cwd: dir,
+            dbUrl: ':memory:',
+        });
 
         expect(exitCode).toBe(0);
         expect(JSON.parse(output.messages[0] ?? '{}')).toMatchObject({
