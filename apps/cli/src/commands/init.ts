@@ -1,32 +1,11 @@
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
+import type { Command } from '@commander-js/extra-typings';
 import { ArtifactDao } from '@gobing-ai/spur-domain';
 import { bundledRulesRoot, listBundledRuleFiles } from '@gobing-ai/ts-rule-engine';
-import { booleanFlag } from '../args';
 import { CLI_CONFIG } from '../config';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
-
-/** Render detailed usage for `spur init`. */
-export function helpText(): string {
-    return [
-        'spur init - scaffold a local Spur project',
-        '',
-        'Usage: spur init [options]',
-        '',
-        'Options:',
-        '  --name <name>      Project name (default: current directory name)',
-        '  --force            Recreate files that already exist',
-        '  --minimal          Only write the minimal .spur scaffold',
-        '  --json             Output machine-readable JSON',
-        '  -h, --help         Show this help',
-        '',
-        'Examples:',
-        '  spur init',
-        '  spur init --name platform-tools',
-        '  spur init --minimal --json',
-    ].join('\n');
-}
 
 /** Global user rules root, relative to the home directory (mirrors `rule.ts`). */
 const GLOBAL_RULES_DIR = join('.config', 'spur', 'rules');
@@ -171,79 +150,102 @@ async function seedGlobalRules(context: CliContext): Promise<number> {
     return written;
 }
 
-/** Initialize or refresh the local `.spur` project scaffold. */
-export async function runInitCommand(context: CliContext, flags: Record<string, string | boolean>): Promise<number> {
-    const json = booleanFlag(flags, 'json');
-    const force = booleanFlag(flags, 'force');
-    const minimal = booleanFlag(flags, 'minimal');
-    const projectName = typeof flags.name === 'string' ? flags.name : 'default';
-    const configPath = join(context.cwd, CLI_CONFIG.configFile);
+/** Register `spur init` command. */
+export function registerInitCommand(program: Command, context: CliContext): void {
+    program
+        .command('init')
+        .summary('scaffold a local Spur project')
+        .option('--name <name>', 'Project name (default: current directory name)')
+        .option('--force', 'Recreate files that already exist')
+        .option('--minimal', 'Only write the minimal .spur scaffold')
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (options) => {
+            const json = options.json === true;
+            const force = options.force === true;
+            const minimal = options.minimal === true;
+            const projectName = options.name ?? 'default';
+            const configPath = join(context.cwd, CLI_CONFIG.configFile);
 
-    // Re-init guard: a config that already exists is only overwritten with --force,
-    // so a stray `spur init` cannot silently clobber a configured project.
-    if (!force && (await context.fs.exists(configPath))) {
-        const message = `Already initialized: ${CLI_CONFIG.configFile}. Use --force to overwrite.`;
-        context.output.write(
-            json ? toJson({ ok: false, reason: 'already-initialized', config: CLI_CONFIG.configFile }) : message,
-        );
-        return 1;
-    }
+            // Re-init guard: a config that already exists is only overwritten with --force,
+            // so a stray `spur init` cannot silently clobber a configured project.
+            if (!force && (await context.fs.exists(configPath))) {
+                const message = `Already initialized: ${CLI_CONFIG.configFile}. Use --force to overwrite.`;
+                context.output.write(
+                    json
+                        ? toJson({ ok: false, reason: 'already-initialized', config: CLI_CONFIG.configFile })
+                        : message,
+                );
+                context.setExitCode(1);
+            }
 
-    const result: ScaffoldResult = { created: [], skipped: [] };
-    const config = {
-        version: 1,
-        project: projectName,
-        database: CLI_CONFIG.databaseFile,
-        generatedBy: '@gobing-ai/spur-cli',
-    };
-
-    await context.fs.ensureDir(join(context.cwd, CLI_CONFIG.configDir));
-    await context.fs.writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`);
-    result.created.push(configPath);
-
-    // Team-mode agent specs live under .spur/agents/; seed the directory with a
-    // .gitkeep so it is tracked before any `spur agent create` writes a spec.
-    const agentsDir = join(context.cwd, CLI_CONFIG.configDir, 'agents');
-    await context.fs.ensureDir(agentsDir);
-    await writeIfNew(context, join(agentsDir, '.gitkeep'), '', force, result);
-
-    if (!minimal) {
-        await context.fs.ensureDir(join(context.cwd, LOCAL_RULES_DIR));
-        await context.fs.ensureDir(join(context.cwd, LOCAL_WORKFLOWS_DIR));
-        await writeIfNew(
-            context,
-            join(context.cwd, LOCAL_RULES_DIR, 'recommended.yaml'),
-            RECOMMENDED_PRESET,
-            force,
-            result,
-        );
-        await writeIfNew(context, join(context.cwd, LOCAL_RULES_DIR, 'spur-dev.yaml'), SPUR_DEV_PRESET, force, result);
-        await writeIfNew(context, join(context.cwd, LOCAL_WORKFLOWS_DIR, 'basic.yaml'), BASIC_WORKFLOW, force, result);
-    }
-
-    const db = await context.getDb();
-    await new ArtifactDao(db).record({ path: configPath, kind: 'config' });
-
-    const seeded = await seedGlobalRules(context);
-
-    if (json) {
-        context.output.write(
-            toJson({
-                ok: true,
+            const result: ScaffoldResult = { created: [], skipped: [] };
+            const config = {
+                version: 1,
                 project: projectName,
-                config: CLI_CONFIG.configFile,
-                ...result,
-                globalRulesSeeded: seeded,
-            }),
-        );
-        return 0;
-    }
+                database: CLI_CONFIG.databaseFile,
+                generatedBy: '@gobing-ai/spur-cli',
+            };
 
-    context.output.write(`Initialized ${CLI_CONFIG.configFile}`);
-    for (const path of result.created) context.output.write(`  ✓ ${path}`);
-    for (const path of result.skipped) context.output.write(`  - ${path} (exists)`);
-    if (seeded > 0) {
-        context.output.write(`  ✓ seeded ${seeded} rule file(s) to ~/${GLOBAL_RULES_DIR}`);
-    }
-    return 0;
+            await context.fs.ensureDir(join(context.cwd, CLI_CONFIG.configDir));
+            await context.fs.writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`);
+            result.created.push(configPath);
+
+            // Team-mode agent specs live under .spur/agents/; seed the directory with a
+            // .gitkeep so it is tracked before any `spur agent create` writes a spec.
+            const agentsDir = join(context.cwd, CLI_CONFIG.configDir, 'agents');
+            await context.fs.ensureDir(agentsDir);
+            await writeIfNew(context, join(agentsDir, '.gitkeep'), '', force, result);
+
+            if (!minimal) {
+                await context.fs.ensureDir(join(context.cwd, LOCAL_RULES_DIR));
+                await context.fs.ensureDir(join(context.cwd, LOCAL_WORKFLOWS_DIR));
+                await writeIfNew(
+                    context,
+                    join(context.cwd, LOCAL_RULES_DIR, 'recommended.yaml'),
+                    RECOMMENDED_PRESET,
+                    force,
+                    result,
+                );
+                await writeIfNew(
+                    context,
+                    join(context.cwd, LOCAL_RULES_DIR, 'spur-dev.yaml'),
+                    SPUR_DEV_PRESET,
+                    force,
+                    result,
+                );
+                await writeIfNew(
+                    context,
+                    join(context.cwd, LOCAL_WORKFLOWS_DIR, 'basic.yaml'),
+                    BASIC_WORKFLOW,
+                    force,
+                    result,
+                );
+            }
+
+            const db = await context.getDb();
+            await new ArtifactDao(db).record({ path: configPath, kind: 'config' });
+
+            const seeded = await seedGlobalRules(context);
+
+            if (json) {
+                context.output.write(
+                    toJson({
+                        ok: true,
+                        project: projectName,
+                        config: CLI_CONFIG.configFile,
+                        ...result,
+                        globalRulesSeeded: seeded,
+                    }),
+                );
+            }
+
+            if (!json) {
+                context.output.write(`Initialized ${CLI_CONFIG.configFile}`);
+                for (const path of result.created) context.output.write(`  ✓ ${path}`);
+                for (const path of result.skipped) context.output.write(`  - ${path} (exists)`);
+                if (seeded > 0) {
+                    context.output.write(`  ✓ seeded ${seeded} rule file(s) to ~/${GLOBAL_RULES_DIR}`);
+                }
+            }
+        });
 }
