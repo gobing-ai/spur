@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { type ConstraintRule, RuleEngine, type RuleEngineResult } from '@gobing-ai/ts-rule-engine';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import type { Colorize, RuleServiceContext, RuleServiceOutput } from '../../src/services/rule-service';
 import { RuleService } from '../../src/services/rule-service';
@@ -431,6 +432,8 @@ describe('RuleService.evaluate()', () => {
         const cwd = await createTempProject();
         const output = createCapturedOutput();
         const file = join(cwd, '.spur', 'rules', 'multi.yaml');
+        const originalEvaluate = RuleEngine.prototype.evaluate;
+        const evaluateRuleCounts: number[] = [];
         await mkdir(dirname(file), { recursive: true });
         await writeFile(
             file,
@@ -453,22 +456,37 @@ describe('RuleService.evaluate()', () => {
             ].join('\n'),
         );
 
-        const result = await new RuleService(makeContext(cwd, output)).evaluate({
-            preset: 'recommended',
-            failOn: 'error',
-            file,
-            json: false,
-            verbose: true,
-            color: noColor(),
-        });
+        RuleEngine.prototype.evaluate = async function (
+            this: RuleEngine,
+            rules: ConstraintRule[],
+            workdir: string,
+            stopOnFirst?: 'error' | 'warning' | 'info',
+        ): Promise<RuleEngineResult> {
+            evaluateRuleCounts.push(rules.length);
+            return await originalEvaluate.call(this, rules, workdir, stopOnFirst);
+        };
 
-        // Both rules should be evaluated; findings from both present.
-        expect(result.exitCode).toBe(0);
-        const progress = output.errors.join('\n');
-        expect(progress).toContain('rule-a (path)');
-        expect(progress).toContain('rule-b (path)');
-        // Each rule appears with its outcome line exactly once.
-        expect(progress).toContain('✓ passed');
+        try {
+            const result = await new RuleService(makeContext(cwd, output)).evaluate({
+                preset: 'recommended',
+                failOn: 'error',
+                file,
+                json: false,
+                verbose: true,
+                color: noColor(),
+            });
+
+            // Both rules should be evaluated in one batch, not one engine call per rule.
+            expect(result.exitCode).toBe(0);
+            expect(evaluateRuleCounts).toEqual([2]);
+            const progress = output.errors.join('\n');
+            expect(progress).toContain('rule-a (path)');
+            expect(progress).toContain('rule-b (path)');
+            // Each rule appears with its outcome line exactly once.
+            expect(progress).toContain('✓ passed');
+        } finally {
+            RuleEngine.prototype.evaluate = originalEvaluate;
+        }
     });
 
     test('verbose surfaces evaluator error distinctly from violation', async () => {
