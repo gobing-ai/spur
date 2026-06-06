@@ -3,7 +3,6 @@
     "allow": [
       "Skill(rd3:brainstorm)",
       "Skill(rd3:task-decomposition)",
-
       "WebFetch(domain:hono.dev)",
       "WebFetch(domain:www.npmjs.com)",
       "WebFetch(domain:orm.drizzle.team)",
@@ -11,7 +10,6 @@
       "WebFetch(domain:logtape.org)",
       "WebFetch(domain:mael.dev)",
       "WebFetch(domain:developers.cloudflare.com)",
-
       "Bash(bun run:*)",
       "Bash(bun test:*)",
       "Bash(bun add:*)",
@@ -23,7 +21,6 @@
       "Bash(bun update *)",
       "Bash(bun pm *)",
       "Bash(bunx biome:*)",
-
       "Bash(npx biome *)",
       "Bash(echo:*)",
       "Bash(grep export:*)",
@@ -41,9 +38,9 @@
       "Bash(grep *)",
       "Bash(biome check *)",
       "Bash(npx tsc *)",
-
       "Bash(spur rule *)",
-      "Bash(spur agent *)"
+      "Bash(spur agent *)",
+      "Read(//tmp/**)"
     ]
   }
 }
