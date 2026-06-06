@@ -42,6 +42,7 @@
         "prepublishOnly": "bun run build:bundle"
     },
     "devDependencies": {
+        "@commander-js/extra-typings": "catalog:",
         "@gobing-ai/spur-app": "workspace:0.1.0",
         "@gobing-ai/spur-config": "workspace:0.1.0",
         "@gobing-ai/spur-domain": "workspace:0.1.0",
@@ -55,6 +56,7 @@
         "@gobing-ai/ts-utils": "catalog:",
         "@types/bun": "catalog:",
         "@types/figlet": "^1.7.0",
+        "commander": "catalog:",
         "figlet": "^1.11.0"
     }
 }
