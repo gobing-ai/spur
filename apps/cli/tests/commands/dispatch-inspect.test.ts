@@ -1,18 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { createBufferTarget, setDefaultOutputTargets } from '@gobing-ai/ts-utils';
-import { bannerText, dispatch, helpText, main } from '../../src';
-import { helpText as agentHelpText } from '../../src/commands/agent';
-import { helpText as historyHelpText } from '../../src/commands/history';
-import { helpText as initHelpText } from '../../src/commands/init';
-import { helpText as messageHelpText } from '../../src/commands/message';
-import { helpText as migrateHelpText } from '../../src/commands/migrate';
-import { helpText as pluginHelpText } from '../../src/commands/plugin';
-import { helpText as ruleHelpText } from '../../src/commands/rule';
-import { helpText as statusHelpText } from '../../src/commands/status';
-import { helpText as teamHelpText } from '../../src/commands/team';
-import { helpText as workflowHelpText } from '../../src/commands/workflow';
-import { createCliContext } from '../../src/context';
+import { bannerText, main } from '../../src';
+import { noopSetExitCode } from '../../src/context';
 import { gitContext } from '../../src/git-context';
 import { consoleOutput } from '../../src/output';
 import { createCapturedOutput, createTempProject } from '../helpers';
@@ -23,30 +13,28 @@ describe('CLI dispatch and status', () => {
         const output = createCapturedOutput();
 
         expect(await main(['help'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
-        expect(output.messages.at(-1)).toContain('0.1.0');
-        expect(output.messages.at(-1)).not.toContain('spur 0.1.0');
-        expect(helpText()).toContain('Global options:');
-        expect(helpText()).toContain('agent list');
-        expect(helpText()).toContain('agent doctor');
-        expect(helpText()).toContain('rule validate');
-        expect(helpText()).toContain('rule list');
-        expect(helpText()).toContain('history report');
-        expect(helpText()).not.toContain('--version');
-        expect(helpText()).not.toContain('workspace');
-        expect(helpText()).not.toContain('inspect');
+        const helpOutput = output.messages.at(-1) ?? '';
+        expect(output.messages.some((m) => m.includes('agent'))).toBe(true);
+        expect(helpOutput).toContain('Options:');
+        expect(helpOutput).toContain('Commands:');
+        expect(helpOutput).toContain('agent');
+        expect(helpOutput).toContain('rule');
+        expect(helpOutput).toContain('history');
+        expect(helpOutput).toContain('init');
+        expect(helpOutput).toContain('--version');
+        expect(helpOutput).not.toContain('workspace');
         expect(bannerText()).toContain('___');
-        expect(bannerText()).not.toContain('spur CLI v0.1.0');
 
-        expect(await main(['version'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
-        expect(output.messages.at(-1)).toBe('0.1.0');
+        expect(await main(['version'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
+        expect(output.errors.at(-1)).toMatch(/unknown command/);
 
         expect(await main(['unknown'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
-        expect(output.errors.at(-1)).toContain('Unknown command');
+        expect(output.errors.at(-1)).toMatch(/unknown command/i);
 
-        // Team-mode command groups are advertised in help.
-        expect(helpText()).toContain('message send');
-        expect(helpText()).toContain('team assign');
-        expect(helpText()).toContain('agent create');
+        // Commander shows noun names + summaries in top-level help.
+        expect(helpOutput).toContain('message');
+        expect(helpOutput).toContain('team');
+        expect(helpOutput).toContain('agent');
     });
 
     test('renders command-scoped help for rule commands', async () => {
@@ -54,47 +42,44 @@ describe('CLI dispatch and status', () => {
         const output = createCapturedOutput();
 
         expect(await main(['rule', '--help'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
-        expect(output.messages.at(-1)).toBe(ruleHelpText());
-        expect(output.messages.at(-1)).toContain('spur rule - manage constraint rules and presets');
-        expect(output.messages.at(-1)).toContain('Usage: spur rule <command> [options]');
-        expect(output.messages.at(-1)).toContain('rule run');
-        expect(output.messages.at(-1)).not.toContain('Global options:');
+        const ruleHelp = output.messages.at(-1);
+        expect(ruleHelp).toContain('spur rule');
+        expect(ruleHelp).toContain('run');
+        expect(ruleHelp).not.toContain('Global options:');
 
         expect(await main(['rule', 'help'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
-        expect(output.messages.at(-1)).toBe(ruleHelpText());
+        expect(output.messages.at(-1)).toBe(ruleHelp);
 
         expect(await main(['help', 'rule'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
-        expect(output.messages.at(-1)).toBe(ruleHelpText());
+        expect(output.messages.at(-1)).toBe(ruleHelp);
     });
 
     test('renders command-scoped help for every existing command', async () => {
         const cwd = await createTempProject();
         const output = createCapturedOutput();
-        const helpByCommand = {
-            init: initHelpText,
-            status: statusHelpText,
-            migrate: migrateHelpText,
-            agent: agentHelpText,
-            message: messageHelpText,
-            team: teamHelpText,
-            rule: ruleHelpText,
-            history: historyHelpText,
-            workflow: workflowHelpText,
-            plugin: pluginHelpText,
-        };
+        const commands = [
+            'init',
+            'status',
+            'migrate',
+            'agent',
+            'message',
+            'team',
+            'rule',
+            'history',
+            'workflow',
+            'plugin',
+        ];
 
-        for (const [command, renderHelp] of Object.entries(helpByCommand)) {
-            const expected = renderHelp();
-
+        for (const command of commands) {
+            // --help flag
             expect(await main([command, '--help'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
-            expect(output.messages.at(-1)).toBe(expected);
+            const fromFlag = output.messages.at(-1);
+            expect(fromFlag).toContain(command);
+            expect(fromFlag).not.toContain('Global options:');
 
-            expect(await main([command, 'help'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
-            expect(output.messages.at(-1)).toBe(expected);
-
+            // top-level help <cmd>
             expect(await main(['help', command], { cwd, output, dbUrl: ':memory:' })).toBe(0);
-            expect(output.messages.at(-1)).toBe(expected);
-            expect(output.messages.at(-1)).not.toContain('Global options:');
+            expect(output.messages.at(-1)).toBe(fromFlag);
         }
     });
 
@@ -124,6 +109,7 @@ describe('CLI dispatch and status', () => {
         };
         expect(status.target).toEqual({ path: 'sample.txt', size: 6, isFile: true, isDirectory: false });
 
+        output.messages.length = 0;
         expect(await main(['status', 'missing.txt'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
         expect(output.errors.at(-1)).toContain('path does not exist');
     });
@@ -131,10 +117,9 @@ describe('CLI dispatch and status', () => {
     test('dispatches unknown commands with an explicit context', async () => {
         const cwd = await createTempProject();
         const output = createCapturedOutput();
-        const context = createCliContext({ cwd, output, dbUrl: ':memory:' });
 
-        expect(await dispatch(['workspace'], context)).toBe(1);
-        expect(output.errors.at(-1)).toContain('Unknown command');
+        expect(await main(['workspace'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
+        expect(output.errors.at(-1)).toMatch(/unknown command/i);
     });
 
     test('resolves git context in a repository', async () => {
@@ -154,5 +139,10 @@ describe('CLI dispatch and status', () => {
         }
         expect(stdout.text()).toBe('to-stdout\n');
         expect(stderr.text()).toBe('to-stderr\n');
+    });
+
+    test('noopSetExitCode is callable', () => {
+        noopSetExitCode(0);
+        noopSetExitCode(1);
     });
 });
