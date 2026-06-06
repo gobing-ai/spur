@@ -1,7 +1,8 @@
 # Protected-file rules — secret detection and git/repo safety. Absorbed from
 # ts-libs/.spur/rules/structure/protected-files.yaml, re-scoped for apps/** +
-# packages/**. Mirrors the AGENTS.md safety boundaries (no secrets, no .env,
-# no unreviewed workflows, no destructive git).
+# packages/** + scripts/** (release/dev tooling is a prime secret-leak site).
+# Mirrors the AGENTS.md safety boundaries (no secrets, no .env, no unreviewed
+# workflows, no destructive git).
 rules:
   - id: no-hardcoded-secrets
     description: "Hardcoded secrets detected; read secrets from environment/config boundaries instead. Spur never stores agent API keys (AGENTS.md)."
@@ -10,21 +11,26 @@ rules:
       type: secrets-scanner
       config:
         categories: [api-key, token, private-key, password, connection-string]
+        # The secrets-scanner uses the in-process LOOSE matcher (substring/suffix
+        # fragments), not ripgrep globs. Deep globs like `apps/**/*.ts` collapse to
+        # `apps/.ts` and match NOTHING — so scope must be path FRAGMENTS:
+        # `apps/`, `packages/`, `scripts/` cover all TS source via substring match.
         scope:
           include:
-            - "apps/**/*.ts"
-            - "packages/**/*.ts"
+            - "apps/"
+            - "packages/"
+            - "scripts/"
           exclude:
-            - "**/tests/**"
-            - "**/*.test.ts"
-            - "**/node_modules/**"
-            - "**/dist/**"
+            - "/tests/"
+            - ".test.ts"
+            - "/node_modules/"
+            - "/dist/"
 
   - id: no-unsafe-git-commands
     description: "Unsafe git commands (force-push, hard reset) can overwrite history or cause data loss (AGENTS.md CRITICAL safety)."
     severity: error
     evaluator:
-      type: regex
+      type: rg
       config:
         pattern: "git\\s+.*(push\\s+.*--force|push\\s+.*--force-with-lease\\b)|git\\s+.*reset\\s+(-H|--hard)\\b"
     include:
