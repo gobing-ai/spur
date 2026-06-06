@@ -1,91 +1,120 @@
+import type { Command } from '@commander-js/extra-typings';
 import { type AgentRunDeps, AgentService, type AgentSpecInput, TeamService } from '@gobing-ai/spur-app';
-import { booleanFlag, stringFlag } from '../args';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
 
 export type { AgentRunDeps };
 
-/** Render detailed usage for `spur agent`. */
-export function helpText(): string {
-    return [
-        'spur agent - run and inspect supported coding agents',
-        '',
-        'Usage: spur agent <command> [options]',
-        '',
-        'Commands:',
-        '  run <prompt> [--agent <name>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--json]',
-        '      Execute a prompt or slash command via a coding agent.',
-        '  list [--json] [--specs]',
-        '      List detected coding agents, or team agent specs with --specs.',
-        '  doctor [agent] [--json]',
-        '      Check agent readiness.',
-        '  create <id> --type <agent-type> [flags]',
-        '      Write a team agent spec to .spur/agents/<id>.yaml.',
-        '  edit <id>',
-        '      Open an agent spec in $EDITOR, or print its path.',
-        '  delete <id> [--force]',
-        '      Remove an agent spec.',
-        '  help',
-        '      Show this help.',
-        '',
-        'Options:',
-        '  --agent <name>             Agent name, current, or auto',
-        '  --continue                 Resume the previous agent session',
-        '  --model <name>             Agent model argument',
-        '  --mode <mode>              Agent output mode: text|json',
-        '  --cwd <path>               Working directory for agent execution',
-        '  --purpose <text>           Team identity purpose',
-        '  --tags <a,b>               Team identity tags',
-        '  --system-prompt <text>     Team identity system prompt',
-        '  --task <id>                Team identity task id',
-        '  --drain                    Prepend pending inbox messages for --agent <id>',
-        '  --specs                    List team specs instead of detected agents',
-        '  --type <agent-type>        Agent spec type for create',
-        '  --force                    Required for delete',
-        '  --json                     Output machine-readable JSON where supported',
-        '  -h, --help                 Show this help',
-        '',
-        'Examples:',
-        '  spur agent list',
-        '  spur agent doctor codex',
-        '  spur agent run "summarize this repo" --agent codex',
-        '  spur agent create planner --type codex --purpose "planning agent"',
-    ].join('\n');
+/** Register `spur agent` commands on the CLI program. */
+export function registerAgentCommand(program: Command, context: CliContext): void {
+    const agent = program.command('agent').summary('run and inspect supported coding agents');
+
+    agent
+        .command('list')
+        .description('List detected coding agents, or team agent specs with --specs.')
+        .option('--json', 'Output machine-readable JSON')
+        .option('--specs', 'List team specs instead of detected agents')
+        .action(async (options) => {
+            const svc = new AgentService({ cwd: context.cwd, env: context.env, output: context.output });
+            const code = await runAgentList(svc, context, { json: options.json, specs: options.specs });
+            context.setExitCode(code);
+        });
+
+    agent
+        .command('doctor')
+        .description('Check agent readiness.')
+        .option('--json', 'Output machine-readable JSON')
+        .argument('[agent]', 'Agent to check')
+        .action(async (agentName, options) => {
+            const svc = new AgentService({ cwd: context.cwd, env: context.env, output: context.output });
+            const code = await svc.doctor({ json: options.json === true, agent: agentName }, undefined);
+            context.setExitCode(code);
+        });
+
+    agent
+        .command('run')
+        .description('Execute a prompt or slash command via a coding agent.')
+        .option('--agent <name>', 'Agent name, current, or auto')
+        .option('--continue', 'Resume the previous agent session')
+        .option('--model <name>', 'Agent model argument')
+        .option('--mode <mode>', 'Agent output mode: text|json')
+        .option('--cwd <path>', 'Working directory for agent execution')
+        .option('--json', 'Output machine-readable JSON where supported')
+        .option('--drain', 'Prepend pending inbox messages for --agent <id>')
+        .argument('<prompt>', 'The prompt or slash command to execute')
+        .action(async (prompt, options) => {
+            const flags = commanderOptionsToFlags(options);
+            const code = await runAgentRun(prompt, context, flags);
+            context.setExitCode(code);
+        });
+
+    agent
+        .command('create')
+        .description('Write a team agent spec to .spur/agents/<id>.yaml.')
+        .option('--type <agent-type>', 'Agent spec type for create')
+        .option('--tags <a,b>', 'Team identity tags')
+        .option('--system-prompt <text>', 'Team identity system prompt')
+        .option('--name <name>', 'Agent name')
+        .option('--workspace <path>', 'Workspace path')
+        .option('--purpose <text>', 'Team identity purpose')
+        .option('--auto-start', 'Auto-start flag')
+        .option('--model <name>', 'Agent model argument')
+        .option('--autonomy <level>', 'Autonomy level')
+        .option('--no-identity-preamble', 'Disable identity preamble')
+        .option('--json', 'Output machine-readable JSON')
+        .argument('<id>', 'Agent spec id')
+        .action(async (id, options) => {
+            const flags = commanderOptionsToFlags(options);
+            const code = await runAgentCreate(id, context, flags);
+            context.setExitCode(code);
+        });
+
+    agent
+        .command('edit')
+        .description('Open an agent spec in $EDITOR, or print its path.')
+        .argument('<id>', 'Agent spec id')
+        .action(async (id) => {
+            const code = await runAgentEdit(id, context);
+            context.setExitCode(code);
+        });
+
+    agent
+        .command('delete')
+        .description('Remove an agent spec.')
+        .option('--force', 'Required for delete')
+        .argument('<id>', 'Agent spec id')
+        .action(async (id, options) => {
+            const flags = commanderOptionsToFlags(options);
+            const code = await runAgentDelete(id, context, flags);
+            context.setExitCode(code);
+        });
 }
 
-/** Execute `spur agent` commands backed by @gobing-ai/ts-ai-runner. */
-export async function runAgentCommand(
-    subcommand: string | undefined,
-    context: CliContext,
-    flags: Record<string, string | boolean>,
-    positionals: string[],
-): Promise<number> {
-    const command = subcommand ?? 'list';
-    const svc = new AgentService({ cwd: context.cwd, env: context.env, output: context.output });
-    if (command === 'list') return runAgentList(svc, context, flags);
-    if (command === 'doctor') {
-        const agent = typeof flags.agent === 'string' ? flags.agent : positionals[0];
-        return svc.doctor({ json: booleanFlag(flags, 'json'), agent }, undefined);
+/** Map commander-style camelCase option keys to kebab-case flags internal handlers expect. */
+function commanderOptionsToFlags(options: Record<string, unknown>): Record<string, string | boolean> {
+    const flags: Record<string, string | boolean> = {};
+    for (const [k, v] of Object.entries(options)) {
+        if (v === undefined) continue;
+        // commander camelCase → kebab-case (e.g. systemPrompt → system-prompt)
+        const key = k.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
+        // --no-* flags: commander strips "no" prefix and sets value=false; restore.
+        if (v === false && /^[a-z]/.test(k)) flags[`no-${key}`] = true;
+        else flags[key] = v as string | boolean;
     }
-    if (command === 'run') return runAgentRun(positionals[0], context, flags);
-    if (command === 'create') return runAgentCreate(positionals[0], context, flags);
-    if (command === 'edit') return runAgentEdit(positionals[0], context);
-    if (command === 'delete') return runAgentDelete(positionals[0], context, flags);
-    context.output.error(`Unknown agent command: ${command}`);
-    return 1;
+    return flags;
 }
 
 /** `spur agent list [--json] [--specs]` — optionally list team agent specs instead of detection. */
 async function runAgentList(
     svc: AgentService,
     context: CliContext,
-    flags: Record<string, string | boolean>,
+    opts: { json?: boolean; specs?: boolean },
 ): Promise<number> {
-    if (!booleanFlag(flags, 'specs')) {
-        return svc.list({ json: booleanFlag(flags, 'json') });
+    if (!opts.specs) {
+        return svc.list({ json: opts.json ?? false });
     }
     const specs = new TeamService(context).listAgentSpecs();
-    if (booleanFlag(flags, 'json')) {
+    if (opts.json) {
         context.output.write(
             toJson({
                 specs: specs.map((spec) => ({
@@ -116,13 +145,13 @@ async function runAgentCreate(
         context.output.error('agent create requires <id>');
         return 2;
     }
-    const type = stringFlag(flags, 'type', '');
+    const type = typeof flags.type === 'string' ? flags.type : '';
     if (type === '') {
         context.output.error('agent create requires --type <agent-type>');
         return 2;
     }
-    const tags = stringFlag(flags, 'tags', '');
-    const systemPrompt = stringFlag(flags, 'system-prompt', '');
+    const tags = typeof flags.tags === 'string' ? flags.tags : '';
+    const systemPrompt = typeof flags.systemPrompt === 'string' ? flags.systemPrompt : '';
     const input: AgentSpecInput = {
         id,
         type,
@@ -130,13 +159,13 @@ async function runAgentCreate(
         ...(typeof flags.workspace === 'string' ? { workspace: flags.workspace } : {}),
         ...(typeof flags.purpose === 'string' ? { purpose: flags.purpose } : {}),
         ...(tags === '' ? {} : { tags: parseTags(tags) }),
-        ...(booleanFlag(flags, 'auto-start') ? { autoStart: true } : {}),
+        ...(flags.autoStart === true ? { autoStart: true } : {}),
         config: buildAgentConfig(flags, systemPrompt),
     };
 
     try {
         const spec = await new TeamService(context).createAgentSpec(input);
-        if (booleanFlag(flags, 'json')) {
+        if (flags.json === true) {
             context.output.write(toJson({ ok: true, spec }));
         } else {
             context.output.write(`created .spur/agents/${spec.id}.yaml`);
@@ -162,7 +191,7 @@ function buildAgentConfig(flags: Record<string, string | boolean>, systemPrompt:
     if (typeof flags.model === 'string') config.model = flags.model;
     if (typeof flags.autonomy === 'string') config.autonomy = flags.autonomy;
     if (systemPrompt !== '') config.systemPrompt = systemPrompt;
-    if (booleanFlag(flags, 'no-identity-preamble')) config.identityPreamble = false;
+    if (flags['no-identity-preamble'] === true) config.identityPreamble = false;
     return config;
 }
 
@@ -198,7 +227,7 @@ async function runAgentDelete(
         context.output.error('agent delete requires <id>');
         return 2;
     }
-    if (!booleanFlag(flags, 'force')) {
+    if (flags.force !== true) {
         context.output.error(`Refusing to delete ${id} without --force`);
         return 2;
     }
@@ -227,7 +256,7 @@ export async function runAgentRun(
     // its inbox into the prompt and rewrite `--agent` to the spec's underlying type
     // so resolution still works; in Phase 1-3 there is no live stdin, so prepending
     // is how deferred messages reach the agent.
-    if (booleanFlag(flags, 'drain')) {
+    if (flags.drain === true) {
         const { prompt: drained, flags: rewritten } = await drainIntoPrompt(prompt, context, flags);
         return svc.run(drained, rewritten, deps);
     }
@@ -244,7 +273,7 @@ async function drainIntoPrompt(
     context: CliContext,
     flags: Record<string, string | boolean>,
 ): Promise<{ prompt: string | undefined; flags: Record<string, string | boolean> }> {
-    const recipient = stringFlag(flags, 'agent', '');
+    const recipient = typeof flags.agent === 'string' ? flags.agent : '';
     if (recipient === '' || recipient === 'auto' || recipient === 'current') {
         context.output.error('--drain requires an explicit --agent <id> matching a message recipient');
         return { prompt, flags };
