@@ -35,17 +35,14 @@ spur <noun> [<verb>] [positionals] [--flags]
 
 | Invocation | Behavior |
 |---|---|
-| `spur` / `spur help` / `spur --help` | Top-level help: commander's `Options` block plus a **domain-grouped** command listing (Harness / Policy / Workflow / History / Extension / Project) |
+| `spur` / `spur help` / `spur --help` | Top-level help: commander's standard flat command listing (alphabetical, with summaries) |
 | `spur <noun> --help` | Commander-generated command-scoped help (options, subcommands) |
 
 The CLI surface is built on `commander` + `@commander-js/extra-typings`. Each noun exports a
 `registerXxxCommand(program, context)` function from `apps/cli/src/commands/<noun>.ts`. Adding a
 noun requires writing its registration function and importing it in `apps/cli/src/index.ts`.
-Commander handles option parsing, `--help` rendering, and subcommand dispatch. The top-level
-command list is the one exception: `index.ts` suppresses commander's flat list
-(`configureHelp({ visibleCommands: () => [] })`) and renders `renderCommandGroups()` instead,
-which groups nouns by domain and pulls each row's summary from the registered command. A new noun
-must be assigned to a group in the `COMMAND_GROUPS` table.
+Commander handles option parsing, `--help` rendering, and subcommand dispatch — no custom
+help rendering overrides remain.
 
 
 ### 1.1 Committed product commands
