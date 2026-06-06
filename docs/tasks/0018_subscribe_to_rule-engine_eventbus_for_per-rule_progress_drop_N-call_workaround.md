@@ -37,6 +37,18 @@ spur consumes @gobing-ai/ts-rule-engine@^0.3.1 (PUBLISHED dep, not workspace). T
 - **R6**: Surface `rule.eval.error` (evaluator crash) distinctly from a violation finding in verbose output. → **Done when**: a run with a throwing evaluator shows a distinct "evaluator error" line (not a normal violation line); a pure-violation run shows no such line.
 - **R7**: Full gate + build green; no per-call perf regression. → **Done when**: spur's gate + build pass; a timing assertion (or call-count assertion from R3) confirms one `evaluate` replaces N — engine setup is paid once, not per rule.
 
+**Verification verdict — 2026-06-06 (`rd3-dev-verify 0018 --auto --fix all --force`): PASS**
+
+| Requirement | Verdict | Evidence |
+|---|---|---|
+| R1 | MET | Root catalog pins `@gobing-ai/ts-infra` and `@gobing-ai/ts-rule-engine` to `^0.3.2`; package probe from `packages/app` resolves `ts-rule-engine` `0.3.2` and imports `EventBus`. |
+| R2 | MET | `packages/app/src/services/rule-service.ts` imports `EventBus` + `RuleEngineEvents`; `evaluateVerbose` constructs `new EventBus<RuleEngineEvents>()` and passes it to `new RuleEngine({ events })`. |
+| R3 | MET | `evaluateVerbose` calls `engine.evaluate([...rules], cwd, stopOnFirst)` once; test `verbose uses a single engine.evaluate call (not one per rule)` now wraps `RuleEngine.prototype.evaluate` and asserts one call with both rules. |
+| R4 | MET | Existing verbose tests still pass; focused `rule-service.test.ts` run passes all 22 tests after the test hardening. |
+| R5 | MET | Non-verbose path still calls `new RuleEngine().evaluate(...)` directly; no event-bus branch is used when `verbose` is false or `json` is true. |
+| R6 | MET | `rule.eval.error` handler emits `! evaluator error in <ruleId>: <error>`; dedicated test `verbose surfaces evaluator error distinctly from violation` passes. |
+| R7 | MET | Focused service test passes with 98.53% function / 99.74% line coverage for `rule-service.ts`; full gate/build results recorded below. |
+
 
 ### Q&A
 
@@ -98,6 +110,14 @@ printSummary(result);  // rule-service.ts:186, unchanged
 - **R6 additive.** `rule.eval.error` handler emits a distinct `! evaluator error in <ruleId>: <message>` line. Existing tests pass unmodified; new test verifies the distinct line.
 - **Non-verbose path frozen.** Only change: `new RuleEngine()` is constructed inline instead of shared variable. No behavioral change.
 
+**Verification review — 2026-06-06 (`rd3-dev-verify 0018 --auto --fix all --force`):**
+
+| # | Title | Dimension | Location | Recommendation |
+|---|---|---|---|---|
+| 1 | Single-evaluate test did not assert call count | Correctness | `packages/app/tests/services/rule-service.test.ts` | Fixed: wrapped `RuleEngine.prototype.evaluate` in the verbose multi-rule test and asserted exactly one call with two rules. |
+
+**Fix-pass 2026-06-06:** 1 fixed, 0 failed, 0 skipped.
+
 ### Testing
 
 - All 20 existing tests pass unmodified (R4 verified).
@@ -105,6 +125,8 @@ printSummary(result);  // rule-service.ts:186, unchanged
 - Total: 22 tests in rule-service.test.ts, 551 across full suite.
 - Coverage: `rule-service.ts` at 98.46% function / 99.72% line coverage.
 - Gate: lint + typecheck + full test suite green.
+- Verification rerun: `bun test packages/app/tests/services/rule-service.test.ts` passes all 22 tests; `rule-service.ts` coverage is 98.53% function / 99.74% line.
+- Verification gate: `bun run lint`, `bun run test` (551 pass), `bun run test-cf` (2 pass), and `bun run build` all pass.
 
 ### Artifacts
 
@@ -112,5 +134,3 @@ printSummary(result);  // rule-service.ts:186, unchanged
 | ---- | ---- | ----- | ---- |
 
 ### References
-
-
