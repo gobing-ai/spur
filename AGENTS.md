@@ -140,7 +140,7 @@ spur agent      doctor [agent] [--json]
 spur history    import --source <source> [--file <path>|--root <path>] [--mode <mode>] [--json]
 spur history    analyze [--since <iso-date>] [--json]
 spur history    report [--json]  # TODO marker; implementation deferred
-spur rule       run [--preset <name>] [--rule <id>] [--fail-on <severity>] [--json]
+spur rule       run [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <severity>] [--stop-on-first [<severity>]] [--verbose] [--json]
 spur rule       validate [--file <path>|--preset <name>|<path>] [--json]
 spur rule       list [--preset <name>] [--json]
 spur workflow   validate <workflow.yaml> [--json]

@@ -78,16 +78,20 @@ Team coordination (backed by `TeamService`).
   there is no daemon yet); `--json` emits `{ agents: [...] }`.
 - `start` / `stop` — Phase-4 deferred stubs that print the daemon-not-available message and exit 0.
 
-#### `spur rule run [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <severity>] [--verbose] [--json]`
+#### `spur rule run [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <severity>] [--stop-on-first [<severity>]] [--verbose] [--json]`
 Evaluate constraint rules over the working tree. `--preset` (default `recommended`) or `--file` for
 an ad-hoc rule file; `--rule <id>` filters to one rule. `--fail-on error|warning|info` (default
-`error`) sets the exit-1 threshold. `--verbose` streams per-rule progress with execution time to
-stderr (e.g. `✓ passed - 0.12s`). Rule roots resolve highest-priority-first: `SPUR_RULES_PATH`,
-local `.spur/rules`, the user-global `~/.config/spur/rules`, then the presets bundled with
-`ts-rule-engine` as a fallback so `recommended` works before `spur init` seeds the global layer. A
-run that resolves **zero rules** exits 1 (fail-loud: a gate that checks nothing is not a pass).
-Setting `SPUR_GLOBAL_RULES_DIR` overrides the global root and suppresses the bundled fallback for a
-hermetic run. Backed by `ts-rule-engine`.
+`error`) sets the exit-1 threshold. `--stop-on-first [<severity>]` (default `error` when bare) stops
+evaluation after the first rule with findings at or above the given severity — this controls
+**traversal** (when to stop), orthogonal to `--fail-on` which controls **verdict** (what to fail on).
+They compose: stop early, then threshold the partial findings via `--fail-on`. Omitting
+`--stop-on-first` preserves the default exhaustive scan. `--verbose` streams per-rule progress with
+execution time to stderr (e.g. `✓ passed - 0.12s`). Rule roots resolve highest-priority-first:
+`SPUR_RULES_PATH`, local `.spur/rules`, the user-global `~/.config/spur/rules`, then the presets
+bundled with `ts-rule-engine` as a fallback so `recommended` works before `spur init` seeds the
+global layer. A run that resolves **zero rules** exits 1 (fail-loud: a gate that checks nothing is
+not a pass). Setting `SPUR_GLOBAL_RULES_DIR` overrides the global root and suppresses the bundled
+fallback for a hermetic run. Backed by `ts-rule-engine`.
 
 #### `spur rule validate [--file <path>|--preset <name>|<path>] [--json]` · `spur rule list [--preset <name>] [--json]`
 - `validate` — load and normalize a rule file or preset without evaluating it.
