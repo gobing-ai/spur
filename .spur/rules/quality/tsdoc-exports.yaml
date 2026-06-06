@@ -1,20 +1,14 @@
-# TSDoc-on-exports — explicitly NOT enforced in Spur.
-# Absorbed from ts-libs/.spur/rules/quality/tsdoc-exports.yaml, but DISABLED.
+# TSDoc-on-exports — enforced by Spur's post-check gate.
+# Absorbed from ts-libs/.spur/rules/quality/tsdoc-exports.yaml.
 #
-# Rationale: ts-libs added per-export JSDoc for *published libraries* (library
-# API docs concern). Spur is an application repo, not a published API surface.
-# Blanket TSDoc-on-exports is low-value churn against app code. If Spur later
-# publishes a library package (e.g. plugin-sdk), re-enable for that scope.
-#
-# This file exists to shadow the global tsdoc-export rule and prevent it from
-# leaking into local preset resolution. The recommended-post-check preset
-# comment documents this decision.
+# Rationale: exported symbols are public integration points even in application
+# workspaces and vendor references. The post-check gate keeps those boundaries
+# documented.
 rules:
   - id: every-export-has-tsdoc
     description: >
-      TSDoc on exports is NOT enforced in Spur (application repo). This rule
-      is explicitly disabled to shadow the global install version.
+      Exported declarations must have a preceding TSDoc comment.
     severity: error
-    enabled: false
+    enabled: true
     evaluator:
       type: tsdoc-export
