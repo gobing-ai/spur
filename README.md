@@ -23,7 +23,7 @@ idea → agent detection + health → constraint checking → workflow orchestra
 
 - **Rule Engine** — YAML-driven constraint checking backed by [`@gobing-ai/ts-rule-engine`][rule].
   Evaluators (regex, AST via ast-grep, path, TSDoc, forbidden-import, secrets, coverage gate),
-  composable presets (`recommended`, `spur-dev`), and auto-fixers. `--verbose` streams per-rule
+  composable presets (`recommended`, `recommended-post-check`), and auto-fixers. `--verbose` streams per-rule
   progress with execution time (e.g. `✓ passed - 0.12s`). Bundled presets ship with the engine,
   so `spur rule run` works on a clean install.
 - **Workflow Engine** — FSM state-machine and transition-flow workflows backed by
