@@ -43,7 +43,7 @@ describe('runRuleCommand dispatch', () => {
     test('list subcommand prints rule files grouped by source layer', async () => {
         const cwd = await createTempProject();
         await mkdir(`${cwd}/.spur/rules`, { recursive: true });
-        await Bun.write(`${cwd}/.spur/rules/recommended.yaml`, 'name: recommended\nextends:\n  - boundary\n');
+        await Bun.write(`${cwd}/.spur/rules/recommended-pre-check.yaml`, 'name: recommended\nextends:\n  - boundary\n');
         await writeRuleFile(cwd);
         const output = createCapturedOutput();
 
@@ -134,11 +134,14 @@ describe('runRuleCommand dispatch', () => {
     test('list subcommand with --preset keeps rule-level output', async () => {
         const cwd = await createTempProject();
         await mkdir(`${cwd}/.spur/rules`, { recursive: true });
-        await Bun.write(`${cwd}/.spur/rules/recommended.yaml`, 'name: recommended\nextends:\n  - boundary\n');
+        await Bun.write(
+            `${cwd}/.spur/rules/recommended-pre-check.yaml`,
+            'name: recommended-pre-check\nextends:\n  - boundary\n',
+        );
         await writeRuleFile(cwd);
         const output = createCapturedOutput();
 
-        const exitCode = await main(['rule', 'list', '--preset', 'recommended'], {
+        const exitCode = await main(['rule', 'list', '--preset', 'recommended-pre-check'], {
             cwd,
             output,
             env: { SPUR_GLOBAL_RULES_DIR: `${cwd}/empty-global-rules` },
@@ -146,7 +149,7 @@ describe('runRuleCommand dispatch', () => {
 
         expect(exitCode).toBe(0);
         expect(output.messages.at(-1)).toContain(
-            'sample-rule\tseverity=error\tstatus=enabled\tsource=preset:recommended',
+            'sample-rule\tseverity=error\tstatus=enabled\tsource=preset:recommended-pre-check',
         );
     });
 
