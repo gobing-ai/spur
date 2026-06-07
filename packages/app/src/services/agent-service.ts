@@ -133,7 +133,7 @@ export class AgentService {
         const cwd = stringFlag(flags, 'cwd', '');
         if (cwd !== '') {
             const cwdStat = await this.statCwd(cwd);
-            if (cwdStat === null) {
+            if (!cwdStat) {
                 this.ctx.output.error(`Invalid --cwd: ${cwd} does not exist`);
                 return 2;
             }
