@@ -41,7 +41,11 @@ describe('init command', () => {
 
         // Bundled ts-rule-engine categories land in the isolated global root so any
         // project's `rule run --preset recommended-pre-check` resolves a real ruleset.
-        expect(existsSync(join(globalDir, 'recommended.yaml'))).toBe(true);
+        // ts-rule-engine 0.3.3 ships the generic `example.yaml` preset plus the
+        // category demo rules; the spur-specific recommended/spur-dev presets were
+        // removed from the engine (ts-libs task 0022, ADR-015) and now live in Spur's
+        // own ./config (seeded below via seedGlobalConfig).
+        expect(existsSync(join(globalDir, 'example.yaml'))).toBe(true);
         expect(existsSync(join(globalDir, 'quality', 'tsdoc-exports.yaml'))).toBe(true);
         expect(existsSync(join(globalDir, 'quality', 'coverage-gate.yaml'))).toBe(true);
         // Bundled config assets (from seedGlobalConfig) also land here.
