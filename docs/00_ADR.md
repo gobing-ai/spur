@@ -268,3 +268,46 @@ equivalent through commander). **Reverses the earlier "no Commander, hand-rolled
 recorded in task 0021's Design section; the catalog dependency add is the intended consequence.
 
 **Detail:** `04 §1 CLI Surface` (`§1.0 CLI grammar` + help dispatch); migration notes in task 0021.
+
+---
+
+## ADR-015: Default Config Is Spur-Owned at Repo-Root `./config`
+
+**Status:** Accepted · **Date:** 2026-06-07
+
+**Decision.** Repo-root `./config/{rules,workflows,plugins}` is the **single source of truth** for all
+Spur default config files, separating config assets from source code. The build copies `./config` into
+`apps/cli/dist/config` and ships it via the package `files` array; runtime resolves bundled defaults
+from `dist/config`, lazily seeds them into `~/.config/spur/` on first `spur init` (never overwriting),
+and `spur init` scaffolds a project's `.spur/` from that seeded layer. The three-layer resolution model
+(`bundled` > global `~/.config/spur` > local `.spur`) is unchanged; **no symlinks** participate in the
+install or init flow.
+
+Ownership splits by concern:
+- **`@gobing-ai/ts-rule-engine` keeps only generic demo rules** — one example per builtin evaluator
+  (`no-biome-suppressions`, `coverage-gate`, `tsdoc-exports`, `test-location`) plus a generic
+  `example.yaml` preset its own tests reference. It no longer ships Spur-specific presets.
+- **Spur owns its presets and workflows** under `./config` (`recommended-pre-check.yaml`,
+  `recommended-post-check.yaml`, `workflows/basic.yaml`), authored as real files — **not** as embedded
+  TypeScript string literals in `init.ts`.
+
+**The bare `recommended` preset is removed.** `recommended-pre-check` is the new default for
+`spur rule run`. This is a **BREAKING CHANGE** for any script invoking `--preset recommended`.
+
+**Why.** Default config was scattered and cross-repo: spur-specific rule/preset files lived in the
+generic rule-engine package, while workflows/presets were hardcoded as TS strings in `init.ts` (a
+duplication the code itself flagged as fragile). A generic rule engine has no business owning a
+consumer's opinionated presets. Centralizing in `./config` makes the source of truth inspectable,
+versioned with the app, and the single input to build → install → init. The rule-engine's bundled-rule
+**fallback mechanism** (`rule-service.ts` appends `bundledRulesRoot()` as the lowest-priority layer) is
+independent of any preset name and is retained — only the spur-specific *files* and the default *preset
+name* change.
+
+**`--compile` caveat.** The `bun build --compile` binary (`dist/cli/spur`) cannot read a sibling
+`dist/config`; it relies on the `~/.config/spur` seed. The published global install
+(`bun install -g`, runs `dist/index.js`) reads `dist/config` directly, so this is the primary path.
+
+**Detail:** asset layout, init flow, and preset vocabulary in `04 §2.3 Default config assets` and
+`04 §1.1` (`spur init`, `spur rule run`); cross-repo cleanup sequenced so ts-libs preset deletion lands
+only after Spur's centralization is green. Trust-ladder `bundled` plugins (ADR-012) gain their home at
+`./config/plugins`.
