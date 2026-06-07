@@ -1,6 +1,6 @@
 {
     "name": "@gobing-ai/spur-cli",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "description": "Spur CLI — local-first harness for mainstream coding agents: constraint checking, workflow orchestration, agent health, and history analytics. Bun-native; exposes the `spur` command.",
     "keywords": [
         "spur",
@@ -46,7 +46,7 @@
         "@gobing-ai/spur-app": "workspace:0.1.0",
         "@gobing-ai/spur-config": "workspace:0.1.0",
         "@gobing-ai/spur-domain": "workspace:0.1.0",
-        "@gobing-ai/spur-plugin-sdk": "workspace:0.1.0",
+        "@gobing-ai/spur-plugin-sdk": "workspace:0.1.2",
         "@gobing-ai/ts-ai-runner": "catalog:",
         "@gobing-ai/ts-dual-workflow-engine": "catalog:",
         "@gobing-ai/ts-llm-jsonl-importer": "catalog:",
