@@ -1,5 +1,6 @@
 import { homedir } from 'node:os';
 import { delimiter, join, relative, resolve } from 'node:path';
+import { bundledConfigRoot } from '@gobing-ai/spur-config';
 import { EventBus } from '@gobing-ai/ts-infra';
 import {
     bundledRulesRoot,
@@ -333,6 +334,13 @@ export class RuleService {
             priority: 10,
         });
         if (opts.includeBundled && !hasGlobalOverride) {
+            // Spur's own bundled config presets (recommended-pre-check, etc.) at priority 15,
+            // between global and the ts-rule-engine demo categories at priority 20.
+            const bundledConfig = bundledConfigRoot();
+            if (bundledConfig !== null) {
+                layers.push({ id: 'bundled-config', path: join(bundledConfig, 'rules'), priority: 15 });
+            }
+            // Generic demo rules from ts-rule-engine (categories: typescript, quality, structure).
             const bundled = bundledRulesRoot();
             if (bundled !== null) layers.push({ id: 'bundled', path: bundled, priority: 20 });
         }
