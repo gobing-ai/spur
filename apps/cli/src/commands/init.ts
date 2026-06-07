@@ -5,6 +5,7 @@ import { bundledConfigRoot, listBundledConfigFiles } from '@gobing-ai/spur-confi
 import { ArtifactDao } from '@gobing-ai/spur-domain';
 import { bundledRulesRoot, listBundledRuleFiles } from '@gobing-ai/ts-rule-engine';
 import { CLI_CONFIG } from '../config';
+import { SCAFFOLD_MANIFEST } from '../config/scaffold-manifest';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
 
@@ -13,93 +14,6 @@ const GLOBAL_CONFIG_DIR = join('.config', 'spur');
 
 /** Global user rules root, relative to the home directory (mirrors `rule.ts`). */
 const GLOBAL_RULES_DIR = join(GLOBAL_CONFIG_DIR, 'rules');
-/** Local project scaffold templates written under `.spur/` unless `--minimal`. */
-const LOCAL_RULES_DIR = join(CLI_CONFIG.configDir, 'rules');
-const LOCAL_WORKFLOWS_DIR = join(CLI_CONFIG.configDir, 'workflows');
-
-/** Recommended preset for the local layer — inherits the bundled categories. */
-const RECOMMENDED_PRESET = `# Recommended preset — portable rule categories.
-# Use with: spur rule run --preset recommended-pre-check
-#
-# Categories resolve from the bundled rules and ~/.config/spur/rules. Drop
-# same-named files under .spur/rules/ to override an individual bundled rule.
-name: recommended-pre-check
-extends:
-  - typescript
-  - structure
-  - quality
-`;
-
-/** Stricter development preset for the local layer. */
-const SPUR_DEV_PRESET = `# Development preset — stricter rules for development workflow.
-# Use with: spur rule run --preset recommended-post-check --rule coverage-gate --fail-on warning
-name: recommended-post-check
-extends:
-  - typescript
-  - quality/coverage-gate
-`;
-
-/**
- * Canonical implement → check → fix loop, authored for the
- * @gobing-ai/ts-dual-workflow-engine state-machine schema. Kept byte-for-byte in
- * sync with `.spur/workflows/basic.yaml`, which `workflow validate` exercises.
- */
-const BASIC_WORKFLOW = `# Canonical basic workflow: implement -> check -> fix until the check passes or the
-# iteration bound is exhausted. Authored for the @gobing-ai/ts-dual-workflow-engine
-# state-machine schema (initialState / states[].id / onEnter / top-level transitions).
-name: basic
-kind: state-machine
-description: The canonical implement-check-fix-until-pass loop
-iterationBound: 2
-initialState: implement
-terminalStates:
-  - done
-  - failed
-states:
-  - id: implement
-    description: Implement the requested task
-    onEnter:
-      - kind: note
-        options:
-          message: 'Implementing task: \${task}'
-
-  - id: check
-    description: Verify the implementation passes all checks
-    onEnter:
-      - kind: shell
-        options:
-          command: bun run check
-
-  - id: fix
-    description: Address failures from the check pass
-    onEnter:
-      - kind: note
-        options:
-          message: 'Please fix the issues found'
-
-  - id: done
-    description: Terminal — workflow completed successfully
-  - id: failed
-    description: Terminal — workflow failed
-
-transitions:
-  - from: implement
-    to: check
-    description: Hand the implemented task to the check pass
-
-  - from: check
-    to: done
-    description: Check passed — finish successfully
-    guard:
-      kind: action-ok
-  - from: check
-    to: fix
-    description: Check failed — route to a fix attempt
-
-  - from: fix
-    to: check
-    description: Re-run the check after fixing
-`;
 
 /** Files created or skipped during a scaffold, reported in the result envelope. */
 interface ScaffoldResult {
@@ -226,29 +140,18 @@ export function registerInitCommand(program: Command, context: CliContext): void
             await writeIfNew(context, join(agentsDir, '.gitkeep'), '', force, result);
 
             if (!minimal) {
-                await context.fs.ensureDir(join(context.cwd, LOCAL_RULES_DIR));
-                await context.fs.ensureDir(join(context.cwd, LOCAL_WORKFLOWS_DIR));
-                await writeIfNew(
-                    context,
-                    join(context.cwd, LOCAL_RULES_DIR, 'recommended-pre-check.yaml'),
-                    RECOMMENDED_PRESET,
-                    force,
-                    result,
-                );
-                await writeIfNew(
-                    context,
-                    join(context.cwd, LOCAL_RULES_DIR, 'recommended-post-check.yaml'),
-                    SPUR_DEV_PRESET,
-                    force,
-                    result,
-                );
-                await writeIfNew(
-                    context,
-                    join(context.cwd, LOCAL_WORKFLOWS_DIR, 'basic.yaml'),
-                    BASIC_WORKFLOW,
-                    force,
-                    result,
-                );
+                // Resolve the bundled config root once; fall back gracefully if absent
+                // (e.g. compiled binary without sibling config/ directory).
+                const configRoot = bundledConfigRoot();
+                if (configRoot !== null) {
+                    for (const entry of SCAFFOLD_MANIFEST) {
+                        const sourcePath = join(configRoot, entry.source);
+                        if (!(await context.fs.exists(sourcePath))) continue;
+                        const targetPath = join(context.cwd, CLI_CONFIG.configDir, entry.target);
+                        await context.fs.ensureDir(join(targetPath, '..'));
+                        await writeIfNew(context, targetPath, await context.fs.readFile(sourcePath), force, result);
+                    }
+                }
             }
 
             const db = await context.getDb();
