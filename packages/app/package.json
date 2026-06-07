@@ -23,7 +23,8 @@
         "@gobing-ai/ts-llm-jsonl-importer": "catalog:",
         "@gobing-ai/ts-rule-engine": "catalog:",
         "@gobing-ai/ts-runtime": "catalog:",
-        "@gobing-ai/ts-utils": "catalog:"
+        "@gobing-ai/ts-utils": "catalog:",
+        "yaml": "^2.9.0"
     },
     "devDependencies": {
         "@types/bun": "catalog:",
