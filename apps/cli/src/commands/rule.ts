@@ -19,6 +19,8 @@ export function registerRuleCommand(program: Command, context: CliContext): void
         .option('--rule <id>', 'Filter run to one rule ID')
         .option('--fail-on <severity>', 'Exit 1 threshold: error|warning|info (default: error)', 'error')
         .option('--stop-on-first [severity]', 'Stop evaluation after first rule with findings at/above severity')
+        .option('--fix-mode <mode>', 'Fix collection/apply mode: none|suggest|auto (default: none)', 'none')
+        .option('--dry-run', 'Preview fixes without writing (use with --fix-mode auto)')
         .option('--verbose', 'Stream per-rule progress to stderr')
         .option('--json', 'Output machine-readable JSON')
         .action(async (options) => {
@@ -32,6 +34,8 @@ export function registerRuleCommand(program: Command, context: CliContext): void
                     : typeof rawStopOnFirst === 'string'
                       ? parseStopOnFirst(rawStopOnFirst)
                       : undefined;
+            const fixMode = parseFixMode(options.fixMode ?? 'none');
+            const dryRun = options.dryRun === true;
             const file = options.file;
             const rule = options.rule;
             const json = options.json === true;
@@ -41,6 +45,8 @@ export function registerRuleCommand(program: Command, context: CliContext): void
                 preset,
                 failOn,
                 stopOnFirst,
+                fixMode,
+                dryRun,
                 file,
                 rule,
                 json,
@@ -177,4 +183,10 @@ function parseFailOn(value: string): FailOnSeverity {
 function parseStopOnFirst(value: string): FailOnSeverity {
     if (value === 'error' || value === 'warning' || value === 'info') return value;
     throw new Error(`Invalid --stop-on-first value "${value}". Expected error, warning, or info.`);
+}
+
+/** Parse and validate --fix-mode value. */
+function parseFixMode(value: string): 'none' | 'suggest' | 'auto' {
+    if (value === 'none' || value === 'suggest' || value === 'auto') return value;
+    throw new Error(`Invalid --fix-mode value "${value}". Expected none, suggest, or auto.`);
 }
