@@ -1,18 +1,18 @@
 ---
 name: fix the default config files container for spur
 description: fix the default config files container for spur
-status: Todo
+status: Done
 created_at: 2026-06-07T04:09:20.796Z
-updated_at: 2026-06-07T05:24:07.817Z
+updated_at: 2026-06-07T21:34:46.314Z
 folder: docs/tasks
 type: task
 feature-id: ""
 impl_progress:
   planning: done
-  design: pending
-  implementation: pending
-  review: pending
-  testing: pending
+  design: done
+  implementation: done
+  review: done
+  testing: done
 ---
 
 ## 0023. fix the default config files container for spur
@@ -63,7 +63,7 @@ If possible, I tent to go with this way:
 
 ### Design
 
-
+Parent tracking task. Decomposed into three sequential subtasks (0024→0025→0026) plus one cross-repo task in ts-libs (0022). Design contract and locked decisions are documented in the Solution section below. Key architectural decisions codified in ADR-015 (`docs/00_ADR.md`) and surface design in `docs/04_DESIGN.md §2.3`.
 
 ### Solution
 
@@ -106,19 +106,39 @@ ts-libs 0022 is **blocked** until spur-new 0024–0026 are merged and green — 
 
 ### Plan
 
-
+- [x] 0024 — Centralize spur default config into repo-root config tree (Done)
+- [x] 0025 — Wire config resolution, build pipeline, and global seed (Done)
+- [x] 0026 — Redesign `spur init` from config tree; drop bare `recommended` preset (Done)
+- [ ] ts-libs 0022 — Remove spur-specific presets from rule-engine (separate repo, not blocking this task)
 
 ### Review
 
-
+Verdict: **PASS** — all spur-new subtasks (0024, 0025, 0026) are Done with full verification.
+- `bun run spur-check`: 21/21 rules pass, 549 tests pass, 0 fail.
+- Config tree at repo-root `config/` is the single source of truth.
+- Build copies `config/` → `dist/config/`; bundled config layer resolves at runtime.
+- `spur init` reads from manifest + `bundledConfigRoot()`, no embedded TS strings.
+- Bare `recommended` preset dropped; `recommended-pre-check` is the new default (BREAKING CHANGE).
 
 ### Testing
 
-
+- Command: `bun run spur-check` (lint + typecheck + pre/post-check rules + full test suite)
+- Scope: 549 tests across 71 files
+- Result: **pass** — 549 pass, 0 fail, coverage 99.80% functions / 99.47% lines
+- ts-libs 0022 has its own test scope in that repo; not part of this verification.
 
 ### Artifacts
 
 | Type | Path | Agent | Date |
 | ---- | ---- | ----- | ---- |
-
+| config | config/rules/recommended-pre-check.yaml (new) | lord-robb | 2026-06-07 |
+| config | config/rules/recommended-post-check.yaml (new) | lord-robb | 2026-06-07 |
+| config | config/workflows/basic.yaml (new) | lord-robb | 2026-06-07 |
+| source | packages/config/src/bundled-config.ts (new) | lord-robb | 2026-06-07 |
+| source | apps/cli/src/config/scaffold-manifest.ts (new) | lord-robb | 2026-06-07 |
+| source | apps/cli/src/commands/init.ts (rewrite) | lord-robb | 2026-06-07 |
+| source | apps/cli/src/commands/rule.ts (default preset rename) | lord-robb | 2026-06-07 |
+| source | packages/app/src/services/rule-service.ts (bundled-config layer) | lord-robb | 2026-06-07 |
+| test | packages/config/tests/bundled-config.test.ts (new) | lord-robb | 2026-06-07 |
+| test | apps/cli/tests/config/scaffold-manifest.test.ts (new) | lord-robb | 2026-06-07 |
 ### References
