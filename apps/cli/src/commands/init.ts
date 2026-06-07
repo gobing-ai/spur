@@ -16,11 +16,11 @@ const LOCAL_WORKFLOWS_DIR = join(CLI_CONFIG.configDir, 'workflows');
 
 /** Recommended preset for the local layer — inherits the bundled categories. */
 const RECOMMENDED_PRESET = `# Recommended preset — portable rule categories.
-# Use with: spur rule run --preset recommended
+# Use with: spur rule run --preset recommended-pre-check
 #
 # Categories resolve from the bundled rules and ~/.config/spur/rules. Drop
 # same-named files under .spur/rules/ to override an individual bundled rule.
-name: recommended
+name: recommended-pre-check
 extends:
   - typescript
   - structure
@@ -29,8 +29,8 @@ extends:
 
 /** Stricter development preset for the local layer. */
 const SPUR_DEV_PRESET = `# Development preset — stricter rules for development workflow.
-# Use with: spur rule run --preset spur-dev --rule coverage-gate --fail-on warning
-name: spur-dev
+# Use with: spur rule run --preset recommended-post-check --rule coverage-gate --fail-on warning
+name: recommended-post-check
 extends:
   - typescript
   - quality/coverage-gate
@@ -132,7 +132,7 @@ async function writeIfNew(
  * Copy the rule presets bundled with `@gobing-ai/ts-rule-engine` into the user's
  * global rules directory on first run. Existing files are never overwritten, so a
  * user's customizations and `--force` re-inits leave the global layer intact. This
- * is what makes `spur rule run --preset recommended` resolve to a real ruleset
+ * is what makes `spur rule run --preset recommended-pre-check` resolve to a real ruleset
  * from any project, independent of the bundled fallback. Returns files written.
  */
 async function seedGlobalRules(context: CliContext): Promise<number> {
@@ -201,14 +201,14 @@ export function registerInitCommand(program: Command, context: CliContext): void
                 await context.fs.ensureDir(join(context.cwd, LOCAL_WORKFLOWS_DIR));
                 await writeIfNew(
                     context,
-                    join(context.cwd, LOCAL_RULES_DIR, 'recommended.yaml'),
+                    join(context.cwd, LOCAL_RULES_DIR, 'recommended-pre-check.yaml'),
                     RECOMMENDED_PRESET,
                     force,
                     result,
                 );
                 await writeIfNew(
                     context,
-                    join(context.cwd, LOCAL_RULES_DIR, 'spur-dev.yaml'),
+                    join(context.cwd, LOCAL_RULES_DIR, 'recommended-post-check.yaml'),
                     SPUR_DEV_PRESET,
                     force,
                     result,
