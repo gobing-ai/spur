@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export { bundledConfigRoot, listBundledConfigFiles, resetBundledConfigCache } from './bundled-config';
+
 /** Spur environment variable names consumed by app-layer packages. */
 export const SPUR_ENV_VARS = {
     nodeEnv: 'NODE_ENV',
