@@ -1,6 +1,6 @@
 ---
 name: spur-rules
-description: Operate `spur rule` as the project's constraint quality gate across its full lifecycle — run presets, author rules to add constraints, fine-tune for delivery quality, validate rule files and preset schemas, and extend the engine. A deterministic verifier in the LLM code-delivery loop. Triggers on "spur rule", "constraint check", "rule gate", "quality gate", ".spur/rules", presets like "recommended-pre-check", "add a rule", "fine-tune rules", "validate rule file", "custom evaluator", or verifying generated code against project standards.
+description: Operate `spur rule` as the project's constraint quality gate across its full lifecycle — run presets, author rules, fine-tune for delivery quality, validate rule files and preset schemas, and extend the engine. The deterministic verifier in the LLM code-delivery loop. Triggers on "spur rule", "constraint check", "rule gate", "quality gate", ".spur/rules", "recommended-pre-check", "add a rule", "fine-tune rules", "validate rule file", or verifying generated code against project standards.
 license: Apache-2.0
 metadata:
   author: spur
@@ -33,8 +33,8 @@ Operating the gate well is a full lifecycle — not just running it. This skill 
 
 ## Lifecycle map
 
-| Phase | What you do | Where |
-| ----- | ----------- | ----- |
+| Phase | Activity | Where |
+| ----- | -------- | ----- |
 | **Run & fix** | Gate the diff, interpret findings, self-correct, re-run until green | this file |
 | **Author** | Add a constraint by writing a new rule when a standard/anti-pattern emerges | [references/authoring-rules.md](references/authoring-rules.md) |
 | **Fine-tune** | Dial in quality: severity, glob scoping, exemptions, preset `disable`/`overrides`, layering | [references/fine-tuning.md](references/fine-tuning.md) |
@@ -42,7 +42,7 @@ Operating the gate well is a full lifecycle — not just running it. This skill 
 
 ## When to use
 
-Use this skill when you need to:
+Use this skill to:
 
 - **Gate generated code** — run a preset over changes before declaring a task done or committing.
 - **Add a constraint** — codify a new rule (forbidden pattern, import boundary, required test,
