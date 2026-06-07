@@ -14,7 +14,7 @@ export function registerRuleCommand(program: Command, context: CliContext): void
 
     rule.command('run')
         .summary('Evaluate constraint rules over the working tree.')
-        .option('--preset <name>', 'Preset to load (default: recommended)', 'recommended')
+        .option('--preset <name>', 'Preset to load (default: recommended-pre-check)', 'recommended-pre-check')
         .option('--file <path>', 'Ad-hoc rule file')
         .option('--rule <id>', 'Filter run to one rule ID')
         .option('--fail-on <severity>', 'Exit 1 threshold: error|warning|info (default: error)', 'error')
@@ -23,7 +23,7 @@ export function registerRuleCommand(program: Command, context: CliContext): void
         .option('--json', 'Output machine-readable JSON')
         .action(async (options) => {
             const service = new RuleService(context);
-            const preset = options.preset ?? 'recommended';
+            const preset = options.preset ?? 'recommended-pre-check';
             const failOn = parseFailOn(options.failOn ?? 'error');
             const rawStopOnFirst = options.stopOnFirst;
             const stopOnFirst =
@@ -165,7 +165,7 @@ function resolveSource(
     if (typeof flags.preset === 'string') return { kind: 'preset', value: flags.preset };
     const positional = positionals[0];
     if (positional !== undefined) return { kind: 'file', value: positional };
-    return { kind: 'preset', value: 'recommended' };
+    return { kind: 'preset', value: 'recommended-pre-check' };
 }
 
 function parseFailOn(value: string): FailOnSeverity {
