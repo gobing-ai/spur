@@ -111,14 +111,23 @@ Team coordination (backed by `TeamService`).
   there is no daemon yet); `--json` emits `{ agents: [...] }`.
 - `start` / `stop` — Phase-4 deferred stubs that print the daemon-not-available message and exit 0.
 
-#### `spur rule run [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <severity>] [--stop-on-first [<severity>]] [--verbose] [--json]`
+#### `spur rule run [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <severity>] [--stop-on-first [<severity>]] [--fix-mode <mode>] [--dry-run] [--verbose] [--json]`
 Evaluate constraint rules over the working tree. `--preset` (default `recommended-pre-check`) or
 `--file` for an ad-hoc rule file; `--rule <id>` filters to one rule. `--fail-on error|warning|info` (default
 `error`) sets the exit-1 threshold. `--stop-on-first [<severity>]` (default `error` when bare) stops
 evaluation after the first rule with findings at or above the given severity — this controls
 **traversal** (when to stop), orthogonal to `--fail-on` which controls **verdict** (what to fail on).
 They compose: stop early, then threshold the partial findings via `--fail-on`. Omitting
-`--stop-on-first` preserves the default exhaustive scan. `--verbose` streams per-rule progress with
+`--stop-on-first` preserves the default exhaustive scan.
+
+`--fix-mode none|suggest|auto` (default `none`) controls fix collection and application:
+- `none` — fixes not collected. Byte-identical to the pre-`--fix-mode` behavior.
+- `suggest` — collect candidate fixes, surface them (`fixes[]` in `--json`), **write nothing**.
+- `auto` — collect AND apply. Effective per-rule mode is `min(rule.fix.mode, maxFixMode)`.
+  `--dry-run` previews the diff without writing.
+
+Exit code is governed by `--fail-on` based on **findings** alone; applying a fix does NOT retroactively
+clear the exit code (the operator re-runs to confirm green). `--verbose` streams per-rule progress with
 execution time to stderr (e.g. `✓ passed - 0.12s`). Rule roots resolve highest-priority-first:
 `SPUR_RULES_PATH`, local `.spur/rules`, the user-global `~/.config/spur/rules`, then the generic demo
 rules bundled with `ts-rule-engine` as a fallback so a preset's categories resolve before `spur init`
