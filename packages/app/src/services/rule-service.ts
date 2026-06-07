@@ -6,6 +6,9 @@ import {
     bundledRulesRoot,
     type ConstraintFinding,
     type ConstraintRule,
+    type Fix,
+    type FixApplicationResult,
+    type FixMode,
     loadPresetRules,
     loadRuleFile,
     RuleEngine,
@@ -63,6 +66,10 @@ export interface RuleEvaluateOptions {
     json: boolean;
     verbose: boolean;
     color: Colorize;
+    /** Fix collection/apply mode: 'none' (default) | 'suggest' | 'auto'. */
+    fixMode?: FixMode;
+    /** Preview fixes without writing (only meaningful with fixMode='auto'). */
+    dryRun?: boolean;
 }
 
 /** Structured result returned by RuleService.evaluate(). */
@@ -70,7 +77,9 @@ export interface RuleEvaluationServiceResult {
     preset: string;
     ruleCount: number;
     findings: ConstraintFinding[];
-    fixes: RuleEngineResult['fixes'];
+    fixes: Fix[];
+    /** Present when fixMode='auto' and fixes were applied (not a dry-run). */
+    applied?: FixApplicationResult;
     exitCode: number;
 }
 
@@ -167,7 +176,18 @@ export class RuleService {
      * Returns a structured result including the exit code the CLI should use.
      */
     async evaluate(opts: RuleEvaluateOptions): Promise<RuleEvaluationServiceResult> {
-        const { preset, failOn, stopOnFirst, file, rule, json, verbose, color } = opts;
+        const {
+            preset,
+            failOn,
+            stopOnFirst,
+            file,
+            rule,
+            json,
+            verbose,
+            color,
+            fixMode = 'none',
+            dryRun = false,
+        } = opts;
 
         const rules =
             file !== undefined
@@ -180,11 +200,19 @@ export class RuleService {
 
         let result: RuleEngineResult;
         if (verbose && !json) {
-            const [engineResult, enabled] = await this.evaluateVerbose(filteredRules, color, stopOnFirst);
+            const [engineResult, enabled] = await this.evaluateVerbose(filteredRules, color, stopOnFirst, fixMode);
             result = engineResult;
             enabledCount = enabled;
+        } else if (fixMode !== 'none') {
+            result = await new RuleEngine().evaluateWithFixes(filteredRules, this.context.cwd, fixMode, stopOnFirst);
         } else {
             result = await new RuleEngine().evaluate(filteredRules, this.context.cwd, stopOnFirst);
+        }
+
+        // Apply fixes when fixMode='auto' and fixes were collected.
+        let applied: FixApplicationResult | undefined;
+        if (fixMode === 'auto' && result.fixes.length > 0) {
+            applied = await new RuleEngine().applyFixes(this.context.cwd, result.fixes, dryRun);
         }
 
         const serviceResult: RuleEvaluationServiceResult = {
@@ -192,16 +220,25 @@ export class RuleService {
             ruleCount: enabledCount,
             findings: result.findings,
             fixes: result.fixes,
+            applied,
             exitCode: 0,
         };
 
         if (json) {
-            this.context.output.write(JSON.stringify({ preset, ruleCount: enabledCount, ...result }, null, 2));
+            const payload: Record<string, unknown> = { preset, ruleCount: enabledCount, ...result };
+            if (applied) payload.applied = applied;
+            this.context.output.write(JSON.stringify(payload, null, 2));
         } else if (verbose) {
             // Verbose already streamed per-rule findings inline; print only a summary line.
             this.context.output.write(this.verboseSummary(result.findings, enabledCount));
+            if (fixMode !== 'none' && result.fixes.length > 0) {
+                this.writeFixSummary(result.fixes, applied, dryRun, color);
+            }
         } else if (result.findings.length > 0) {
             this.context.output.write(new RuleEngine().host.formatters.get('text').format(result));
+            if (fixMode !== 'none' && result.fixes.length > 0) {
+                this.writeFixSummary(result.fixes, applied, dryRun, color);
+            }
         } else {
             this.context.output.write(this.emptyResultMessage(file, preset, selectedRule, enabledCount));
         }
@@ -356,6 +393,7 @@ export class RuleService {
         rules: readonly ConstraintRule[],
         color: Colorize,
         stopOnFirst?: FailOnSeverity,
+        fixMode: FixMode = 'none',
     ): Promise<[RuleEngineResult, number]> {
         const enabledRules = rules.filter((r) => r.enabled !== false);
         const disabledRules = rules.filter((r) => r.enabled === false);
@@ -406,9 +444,11 @@ export class RuleService {
             // R6: surface evaluator crash distinctly from normal violation findings.
             this.context.output.error(`  ${color.yellow(`! evaluator error in ${ruleId}: ${error}`)}`);
         });
-
         const engine = new RuleEngine({ events });
-        const result = await engine.evaluate([...rules], this.context.cwd, stopOnFirst);
+        const result =
+            fixMode !== 'none'
+                ? await engine.evaluateWithFixes([...rules], this.context.cwd, fixMode, stopOnFirst)
+                : await engine.evaluate([...rules], this.context.cwd, stopOnFirst);
 
         // Emit outcome + detail lines for rules that had findings (deferred from rule.eval.done).
         for (const ruleId of evalOrder) {
@@ -498,6 +538,34 @@ export class RuleService {
             .map((s) => `${counts[s]} ${s}${counts[s] === 1 ? '' : 's'}`);
         if (errored > 0) parts.push(`${errored} misconfigured ${errored === 1 ? 'rule' : 'rules'}`);
         return `${parts.join(', ')} across ${ruleCount} ${rulesNoun}.`;
+    }
+
+    /** Write a human-readable summary of collected/applied fixes to stdout. */
+    private writeFixSummary(
+        fixes: readonly Fix[],
+        applied: FixApplicationResult | undefined,
+        dryRun: boolean,
+        color: Colorize,
+    ): void {
+        if (!applied) {
+            // suggest mode — candidates only.
+            const noun = fixes.length === 1 ? 'fix' : 'fixes';
+            this.context.output.write(color.cyan(`${fixes.length} ${noun} suggested (not applied).`));
+            return;
+        }
+        if (dryRun) {
+            this.context.output.write(color.cyan('Dry-run fix preview:'));
+            if (applied.diff) this.context.output.write(applied.diff);
+        } else {
+            const files = applied.changedFiles.length === 1 ? 'file' : 'files';
+            this.context.output.write(
+                color.green(`${applied.applied.length} fixes applied across ${applied.changedFiles.length} ${files}.`),
+            );
+            if (applied.deferred.length > 0) {
+                const noun = applied.deferred.length === 1 ? 'fix' : 'fixes';
+                this.context.output.write(color.yellow(`${applied.deferred.length} ${noun} deferred (overlapping).`));
+            }
+        }
     }
 
     /**
