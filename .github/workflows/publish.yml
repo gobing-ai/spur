@@ -97,6 +97,6 @@ jobs:
 
             - name: Publish
               working-directory: ${{ steps.pkg.outputs.dir }}
-              run: bun publish
+              run: bun ../../scripts/ci-publish.ts .
               env:
-                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+                  NPM_CONFIG_PROVENANCE: 'true'
