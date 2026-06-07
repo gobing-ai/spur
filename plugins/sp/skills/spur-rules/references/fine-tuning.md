@@ -62,6 +62,27 @@ evaluator:
 
 Never widen `exclude` just to make the gate green — that is gate-gaming (see SKILL.md gotchas).
 
+### Exclusions are exceptions, not a whitelist
+
+The chronic failure mode of refining is **exclusion creep**: each carve-out looks justified on its own,
+but they accumulate until the rule's `exclude` hollows out its `include` and the rule enforces almost
+nothing — a blocklist degraded into a de-facto allowlist. The per-change overlap check does not catch
+this (it guards rule-vs-rule collision, not erosion of a rule's own coverage), so guard it explicitly
+when adding any exclusion:
+
+- **Every exclusion earns its place.** It needs a specific, documented reason — the legitimate case
+  *and* why it is legitimate (`# the ONE place X is allowed (ADR-n)`), not a bare path. An exclusion
+  you cannot justify in one line does not belong.
+- **Narrowest possible.** Exclude a single file or the one directory that genuinely must be exempt —
+  never a broad glob that silences a whole tree to dodge one finding.
+- **Accumulation is a smell, not a solution.** When a rule keeps needing more exclusions, the rule's
+  scope is wrong: re-scope its `include`, split it into concern-specific rules, or reconsider whether
+  the policy holds — do not keep carving. A rule whose exclusions cover most of its scope should be
+  re-scoped or retired, not extended.
+- **Test the net.** After adding an exclusion, confirm the rule still fires on the cases it must catch
+  (the should-fire fixture still fires); an exclusion that also suppresses a real violation is a
+  false negative, not an exemption.
+
 ## Preset composition
 
 A preset bundles rules for a lifecycle stage. The shape (verified against Spur's presets):
