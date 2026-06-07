@@ -134,6 +134,13 @@ export interface RuleListServiceResult {
     totalFiles: number;
     categories: RuleListCategoryEntry[];
     uncategorized: RuleListFileEntry[];
+    presets: RuleListPresetEntry[];
+}
+/** One available preset with its resolved rules. */
+export interface RuleListPresetEntry {
+    name: string;
+    ruleCount: number;
+    rules: RuleListEntry[];
 }
 
 interface RuleSourceLayer {
@@ -261,10 +268,12 @@ export class RuleService {
      * Returns a structured result. Output writing is left to the caller.
      */
     async list(preset?: string): Promise<RuleListServiceResult> {
-        if (preset === undefined) return await this.listDiscoveredRuleFiles();
-
+        if (preset === undefined) {
+            const files = await this.listDiscoveredRuleFiles();
+            const presets = await this.listAvailablePresets();
+            return { ...files, presets };
+        }
         const entries = await this.listPresetRules(preset);
-
         return {
             preset,
             ruleCount: entries.length,
@@ -274,6 +283,7 @@ export class RuleService {
             totalFiles: 0,
             categories: [],
             uncategorized: [],
+            presets: [],
         };
     }
 
@@ -566,6 +576,50 @@ export class RuleService {
             }))
             .sort(compareRuleEntries);
     }
+    /**
+     * Discover all root-level preset files across rule roots, resolve their rules,
+     * and return a sorted list. Skipped presets (load failure) are silently omitted.
+     */
+    private async listAvailablePresets(): Promise<RuleListPresetEntry[]> {
+        const presetNames = await this.discoverRootPresetNames();
+        const entries: RuleListPresetEntry[] = [];
+        for (const name of presetNames) {
+            try {
+                const rules = await this.listPresetRules(name);
+                entries.push({ name, ruleCount: rules.length, rules });
+            } catch {
+                // preset failed to load — skip
+            }
+        }
+        return entries;
+    }
+
+    /** Collect unique preset names from root-level YAML/JSON files across all rule roots. */
+    private async discoverRootPresetNames(): Promise<string[]> {
+        const candidates = new Set<string>();
+        for (const layer of await this.existingRuleSourceLayers()) {
+            const entries = await this.context.fs.readDir(layer.path);
+            for (const entry of entries) {
+                const match = entry.match(/^([\w-]+)\.(?:ya?ml|json)$/i);
+                if (match === null) continue;
+                const name = match[1] ?? '';
+                if (name.length === 0) continue;
+                const stat = await this.context.fs.stat(join(layer.path, entry));
+                if (stat?.isFile()) candidates.add(name);
+            }
+        }
+        const names: string[] = [];
+        const roots = this.ruleRoots();
+        for (const name of candidates) {
+            try {
+                await loadPresetRules(name, { roots });
+                names.push(name);
+            } catch {
+                // not a valid preset — skip
+            }
+        }
+        return names.sort();
+    }
 
     private async listDiscoveredRuleFiles(): Promise<RuleListServiceResult> {
         const layers = await this.existingRuleSourceLayers();
@@ -615,6 +669,7 @@ export class RuleService {
             totalFiles: files.length,
             categories,
             uncategorized,
+            presets: [],
         };
     }
 
