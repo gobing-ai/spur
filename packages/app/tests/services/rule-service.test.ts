@@ -549,15 +549,18 @@ describe('RuleService.validate()', () => {
         const cwd = await createTempProject();
         const output = createCapturedOutput();
         await writeRuleFile(cwd, '.spur/rules/boundary/sample.yaml', 'boundary-sample');
-        await writeFile(join(cwd, '.spur', 'rules', 'recommended.yaml'), 'name: recommended\nextends:\n  - boundary\n');
+        await writeFile(
+            join(cwd, '.spur', 'rules', 'recommended-pre-check.yaml'),
+            'name: recommended\nextends:\n  - boundary\n',
+        );
 
         const result = await new RuleService(makeContext(cwd, output)).validate({
-            source: { kind: 'preset', value: 'recommended' },
+            source: { kind: 'preset', value: 'recommended-pre-check' },
             json: false,
         });
 
         expect(result.exitCode).toBe(0);
-        expect(output.messages.at(-1)).toContain('valid preset: recommended');
+        expect(output.messages.at(-1)).toContain('valid preset: recommended-pre-check');
         expect(output.messages.at(-1)).toContain('boundary-sample');
     });
 
@@ -634,7 +637,10 @@ describe('RuleService.list()', () => {
         await writeRuleFile(cwd, '.spur/rules/boundary/sample.yaml', 'boundary-sample');
         await writeRuleFile(globalRoot, 'boundary/sample.yaml', 'shadowed-global-sample');
         await writeRuleFile(globalRoot, 'quality/coverage.yaml', 'coverage-gate');
-        await writeFile(join(cwd, '.spur', 'rules', 'recommended.yaml'), 'name: recommended\nextends:\n  - boundary\n');
+        await writeFile(
+            join(cwd, '.spur', 'rules', 'recommended-pre-check.yaml'),
+            'name: recommended\nextends:\n  - boundary\n',
+        );
 
         const result = await new RuleService(makeContext(cwd, output, { SPUR_GLOBAL_RULES_DIR: globalRoot })).list();
 
@@ -670,12 +676,15 @@ describe('RuleService.list()', () => {
         const cwd = await createTempProject();
         const output = createCapturedOutput();
         await writeRuleFile(cwd, '.spur/rules/boundary/sample.yaml', 'boundary-sample');
-        await writeFile(join(cwd, '.spur', 'rules', 'recommended.yaml'), 'name: recommended\nextends:\n  - boundary\n');
+        await writeFile(
+            join(cwd, '.spur', 'rules', 'recommended-pre-check.yaml'),
+            'name: recommended-pre-check\nextends:\n  - boundary\n',
+        );
 
-        const result = await new RuleService(makeContext(cwd, output)).list('recommended');
+        const result = await new RuleService(makeContext(cwd, output)).list('recommended-pre-check');
 
-        expect(result.preset).toBe('recommended');
+        expect(result.preset).toBe('recommended-pre-check');
         expect(result.rules.some((r) => r.id === 'boundary-sample')).toBe(true);
-        expect(result.rules.every((r) => r.file === 'preset:recommended')).toBe(true);
+        expect(result.rules.every((r) => r.file === 'preset:recommended-pre-check')).toBe(true);
     });
 });
