@@ -154,7 +154,7 @@ describe('runRuleCommand dispatch', () => {
     });
 
     test('validate subcommand returns a number', async () => {
-        const exitCode = await main(['rule', 'validate', '--preset', 'recommended', '--json'], {
+        const exitCode = await main(['rule', 'validate', '--preset', 'recommended-pre-check', '--json'], {
             output: nullOutput(),
         });
         expect(typeof exitCode).toBe('number');
