@@ -1,0 +1,6 @@
+# Development preset — stricter rules for development workflow.
+# Use with: spur rule run --preset recommended-post-check --rule coverage-gate --fail-on warning
+name: recommended-post-check
+extends:
+  - typescript
+  - quality/coverage-gate

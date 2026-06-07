@@ -1,0 +1,10 @@
+# Recommended preset — portable rule categories.
+# Use with: spur rule run --preset recommended-pre-check
+#
+# Categories resolve from the bundled rules and ~/.config/spur/rules. Drop
+# same-named files under .spur/rules/ to override an individual bundled rule.
+name: recommended-pre-check
+extends:
+  - typescript
+  - structure
+  - quality
