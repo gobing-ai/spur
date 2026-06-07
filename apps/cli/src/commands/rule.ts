@@ -92,24 +92,42 @@ export function registerRuleCommand(program: Command, context: CliContext): void
 }
 
 function formatRuleFileList(result: RuleListServiceResult): string {
-    if (result.totalFiles === 0) return 'No rules found.';
+    const lines: string[] = [];
 
-    const lines = [
-        `Sources: ${result.layers.map((layer) => `${layer.id} (${layer.path})`).join(', ')} (${result.mode} mode)`,
-        `Total files: ${result.totalFiles}`,
-        '',
-    ];
-
-    for (const category of result.categories) {
-        lines.push(`  ${category.name}/`);
-        for (const file of category.files) {
-            lines.push(`    ${formatRuleFileEntry(file)}`);
+    // ── Part 1: file inventory ──────────────────────────────────────
+    if (result.totalFiles > 0) {
+        lines.push(
+            `Sources: ${result.layers.map((layer) => `${layer.id} (${layer.path})`).join(', ')} (${result.mode} mode)`,
+            `Total files: ${result.totalFiles}`,
+            '',
+        );
+        for (const category of result.categories) {
+            lines.push(`  ${category.name}/`);
+            for (const file of category.files) {
+                lines.push(`    ${formatRuleFileEntry(file)}`);
+            }
+        }
+        for (const file of result.uncategorized) {
+            lines.push(`  ${formatRuleFileEntry(file)}`);
         }
     }
-    for (const file of result.uncategorized) {
-        lines.push(`  ${formatRuleFileEntry(file)}`);
+
+    // ── Part 2: available presets ───────────────────────────────────
+    if (result.presets.length > 0) {
+        lines.push('');
+        for (const preset of result.presets) {
+            const label = preset.ruleCount === 1 ? 'rule' : 'rules';
+            lines.push(`${preset.name}  (${preset.ruleCount} ${label})`);
+            for (const rule of preset.rules) {
+                const status = rule.enabled ? '✓' : '⊘';
+                lines.push(`  ${status} ${rule.id.padEnd(32)} severity=${rule.severity}`);
+            }
+            lines.push('');
+        }
     }
-    return lines.join('\n');
+
+    if (lines.length === 0) return 'No rules found.';
+    return lines.join('\n').trimEnd();
 }
 
 function formatRuleFileEntry(entry: RuleListFileEntry): string {
