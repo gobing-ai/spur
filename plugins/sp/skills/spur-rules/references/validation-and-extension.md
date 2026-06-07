@@ -49,9 +49,10 @@ spur rule run --preset rg-migration --fail-on error --json
 ## Extending the engine
 
 The built-in evaluators cover most needs. When they don't, the library (`@gobing-ai/ts-rule-engine`)
-supports three extension kinds. **These are library-level APIs — the `spur rule` CLI does not expose
-extension loading flags**, so extensions are consumed by code that drives `RuleEngine` directly, or
-by `ts-rule-engine` itself gaining the capability upstream.
+supports four extension kinds: **resolvers**, **evaluators**, **fixers** (since 0.3.4), and **formatters**.
+Fixer extensions may be loaded from a preset or rule file via the `extensions.fixers` block (gated by
+`allowExtensions`). The other kinds are library-level APIs consumed by code that drives `RuleEngine`
+directly, or by `ts-rule-engine` gaining capabilities upstream.
 
 ### Custom evaluator (direct API)
 
@@ -114,15 +115,15 @@ the fix path:
 
 | Capability | In library? | On `spur rule` CLI? | Fix path |
 | ---------- | ----------- | ------------------- | -------- |
-| Apply fixes (`applyFixes`) | Yes | **No** (`run` only surfaces findings) | Agent applies edits from findings, re-runs. Upstream: add `--apply-fixes`. |
-| Fix authority `none`/`suggest`/`auto` | Yes (`min(rule, caller)`) | **No** caller authority flag | Library-only today. |
+| Apply fixes (`applyFixes`) | Yes | **Yes** — `--fix-mode auto` applies fixes; `--fix-mode auto --dry-run` previews the diff | Task 0027. Surfaces `evaluateWithFixes` + `applyFixes` from `ts-rule-engine`. |
+| Fix authority `none`/`suggest`/`auto` | Yes (`min(rule, caller)`) | **Yes** — `--fix-mode none\|suggest\|auto` | Task 0027. Maps 1:1 to library `maxFixMode`. |
 | Custom evaluators/resolvers/formatters | Yes (`allowExtensions`) | **No** loading flag | Drive `RuleEngine` from code, or add upstream CLI support. |
 | `EventBus` observability (`rule.*` events, `durationMs`) | Yes | **No** | Library-only; for progress bars/dashboards. |
-| Custom **fixer** providers | **No** (`extensions` has resolvers/evaluators/formatters, not fixers) | No | Tool gap. Workaround: `exit-code` rule running a fix script. Upstream: add `extensions.fixers`. |
+| Custom **fixer** providers | **Yes** (`extensions` includes `fixers` since `ts-rule-engine@0.3.4`) | **Yes** (loads via preset or rule-file `extensions.fixers` with `allowExtensions`) | Task 0027 (catalog bump to 0.3.4). Upstream: ts-libs 0023 moved fixers onto the host registry. |
 | FP/FN rate tracking | **No** | No | Tool gap. Convention: track in YAML comments. |
 | Rule-ID rename migration | **No** | No | Tool gap. Don't rename IDs. |
 
 **Per project policy:** when `ts-rule-engine` can't support a Spur need cleanly, prefer enhancing the
-shared package upstream over leaking a workaround into Spur. The CLI gaps above are the natural
-candidates for `spur` CLI surface growth; the fixer-extension and tracking gaps are `ts-rule-engine`
-evolution candidates.
+shared package upstream over leaking a workaround into Spur. The remaining gaps above (custom
+evaluator loading via CLI flag, `EventBus` observability, FP/FN tracking, rule-ID migration) are
+`ts-rule-engine` evolution candidates or future CLI surface growth.
