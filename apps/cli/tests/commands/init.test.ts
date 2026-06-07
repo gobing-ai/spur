@@ -39,11 +39,15 @@ describe('init command', () => {
 
         expect(await main(['init'], options)).toBe(0);
 
-        // Bundled categories land in the isolated global root so any project's
-        // `rule run --preset recommended-pre-check` resolves a real ruleset afterwards.
+        // Bundled ts-rule-engine categories land in the isolated global root so any
+        // project's `rule run --preset recommended-pre-check` resolves a real ruleset.
         expect(existsSync(join(globalDir, 'recommended.yaml'))).toBe(true);
         expect(existsSync(join(globalDir, 'quality', 'tsdoc-exports.yaml'))).toBe(true);
         expect(existsSync(join(globalDir, 'quality', 'coverage-gate.yaml'))).toBe(true);
+        // Bundled config assets (from seedGlobalConfig) also land here.
+        expect(existsSync(join(globalDir, 'rules', 'recommended-pre-check.yaml'))).toBe(true);
+        expect(existsSync(join(globalDir, 'rules', 'recommended-post-check.yaml'))).toBe(true);
+        expect(existsSync(join(globalDir, 'workflows', 'basic.yaml'))).toBe(true);
     });
 
     test('--minimal skips local rules and workflow scaffold', async () => {
