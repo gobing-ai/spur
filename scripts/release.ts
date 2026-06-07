@@ -291,7 +291,9 @@ function usage(message?: string): never {
     if (message) console.error(`error: ${message}\n`);
     const ids = Object.keys(RELEASE_PACKAGES).join(', ');
     console.error('Usage:');
-    console.error(`  bun run bump-ver <package-id> <version> [--push]    bump one package, commit, tag, optionally push`);
+    console.error(
+        `  bun run bump-ver <package-id> <version> [--push]    bump one package, commit, tag, optionally push`,
+    );
     console.error(`  bun run bump-ver --all <version> [--push]              bump both packages in one commit + tags`);
     console.error(`  bun run drop-tags <package-id> <version> [--remote] delete one package's release tag`);
     console.error(`  bun run drop-tags --all <version> [--remote]              delete both packages' release tags`);
