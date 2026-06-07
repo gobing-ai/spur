@@ -1,5 +1,5 @@
 ---
-description: Turn a natural-language constraint or anti-pattern into a validated, smoke-tested YAML rule
+description: Author a validated, smoke-tested constraint rule
 argument-hint: "\"<description>\" [--file <path>] [--preset <target>]"
 allowed-tools: ["Bash", "Read", "Write", "Skill"]
 ---
@@ -8,18 +8,18 @@ allowed-tools: ["Bash", "Read", "Write", "Skill"]
 
 Wraps the **sp:spur-rules** skill (`add` operation).
 
-Codify a new constraint: **first check whether an existing rule/preset already covers the concern**
-(extend or refine it rather than duplicate — on your confirmation), and only author from scratch when
-it is genuinely new. Then select the right evaluator, write the real config shape, validate the file,
-and smoke-test it in both directions (fires on a known-bad fixture, stays quiet on a known-good one)
-before trusting it. Optionally wire it into a preset.
+Codify a new constraint. **First check whether an existing rule/preset already covers the concern**
+(extend or refine it rather than duplicate — on user confirmation); author from scratch only when the
+concern is genuinely new. Then select the right evaluator, write the real config shape, validate the
+file, and smoke-test it in both directions (fires on a known-bad fixture, stays quiet on a known-good
+one) before trusting it. Optionally wire it into a preset.
 
 ## When to use
 
-- A new standard or anti-pattern emerges and you want the gate to enforce it forever.
-- You can describe the constraint in plain language but don't know the evaluator/config shape.
-- You're not sure if it's already covered — the command checks the catalog first and recommends
-  extend/refine over adding a near-duplicate.
+- A new standard or anti-pattern emerges and the gate should enforce it forever.
+- The constraint is describable in plain language but its evaluator/config shape is unknown.
+- Coverage is uncertain — this command checks the catalog first and recommends extend/refine over
+  adding a near-duplicate.
 
 ## Arguments
 
@@ -43,3 +43,9 @@ Delegates to **sp:spur-rules** skill:
 ```
 Skill(skill="sp:spur-rules", args="add $ARGUMENTS")
 ```
+
+## Platform Notes
+
+- **Claude Code:** native — `Skill()` delegation and `$ARGUMENTS` work directly.
+- **Other platforms:** `Skill()` and `$ARGUMENTS` are Claude-specific. Invoke the `sp:spur-rules`
+  skill's `add` operation directly and pass the description/flags as arguments in chat.

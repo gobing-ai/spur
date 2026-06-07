@@ -1,5 +1,5 @@
 ---
-description: Survey the codebase for recurring anti-patterns that should become constraint rules, and report ranked candidates (propose-only)
+description: Discover recurring anti-patterns worth codifying as rules
 argument-hint: "[<path-or-glob>]"
 allowed-tools: ["Bash", "Read", "Grep", "Glob", "Skill"]
 ---
@@ -10,12 +10,12 @@ Wraps the **sp:spur-rules** skill (`scan` operation).
 
 Proactive rule discovery: surveys code for **repeated** smells that should be enforced as rules,
 clusters them by concern, filters out concerns already in the catalog, and reports ranked candidates.
-**Propose-only** — it authors nothing. Each candidate you accept hands off to `/sp:rule-add` (which
+**Propose-only** — it authors nothing. Each accepted candidate hands off to `/sp:rule-add` (which
 reconciles against the catalog) or `/sp:rule-refine` (to extend an existing rule).
 
 ## When to use
 
-- Get the constraint catalog ahead of defects instead of only reacting to problems you notice.
+- Get the constraint catalog ahead of defects instead of only reacting to noticed problems.
 - After a feature lands, scan the diff for patterns worth codifying.
 - Periodically audit the codebase for systematic smells (untested modules, ad-hoc boundary breaks,
   inconsistent conventions) that no rule yet catches.
@@ -43,3 +43,9 @@ Delegates to **sp:spur-rules** skill:
 ```
 Skill(skill="sp:spur-rules", args="scan $ARGUMENTS")
 ```
+
+## Platform Notes
+
+- **Claude Code:** native — `Skill()` delegation and `$ARGUMENTS` work directly.
+- **Other platforms:** `Skill()` and `$ARGUMENTS` are Claude-specific. Invoke the `sp:spur-rules`
+  skill's `scan` operation directly and pass the optional scope as an argument in chat.
