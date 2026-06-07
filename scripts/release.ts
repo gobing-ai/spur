@@ -278,17 +278,23 @@ async function dropTags(config: ReleaseConfig, version: string, options: { remot
     }
 }
 
+async function dropAll(version: string, options: { remote: boolean }): Promise<void> {
+    if (!SEMVER.test(version)) {
+        throw new Error(`"${version}" is not a valid semver version (expected e.g. 0.1.2).`);
+    }
+    for (const config of [RELEASE_PACKAGES['spur-cli'], RELEASE_PACKAGES['spur-plugin-sdk']]) {
+        await dropTags(config, version, options);
+    }
+}
+
 function usage(message?: string): never {
     if (message) console.error(`error: ${message}\n`);
     const ids = Object.keys(RELEASE_PACKAGES).join(', ');
     console.error('Usage:');
-    console.error(
-        `  bun run bump-ver <package-id> <version> [--push]    bump one package, commit, tag, optionally push`,
-    );
+    console.error(`  bun run bump-ver <package-id> <version> [--push]    bump one package, commit, tag, optionally push`);
     console.error(`  bun run bump-ver --all <version> [--push]              bump both packages in one commit + tags`);
-    console.error(
-        `  bun run drop-tags <package-id> <version> [--remote] delete the release tag locally (and on origin)`,
-    );
+    console.error(`  bun run drop-tags <package-id> <version> [--remote] delete one package's release tag`);
+    console.error(`  bun run drop-tags --all <version> [--remote]              delete both packages' release tags`);
     console.error(`\nPackage IDs: ${ids}`);
     process.exit(message ? 1 : 0);
 }
@@ -313,6 +319,12 @@ try {
             await bumpVersion(RELEASE_PACKAGES[packageId], version, { push: args.includes('--push') });
             break;
         case 'drop-tags':
+            if (args.includes('--all')) {
+                const allVersion = positionalArgs[0];
+                if (!allVersion) usage('drop-tags --all <version> [--remote]');
+                await dropAll(allVersion, { remote: args.includes('--remote') });
+                break;
+            }
             if (!packageId || !version) usage('drop-tags <package-id> <version> [--remote]');
             if (!(packageId in RELEASE_PACKAGES)) usage(`unknown package "${packageId}"`);
             await dropTags(RELEASE_PACKAGES[packageId], version, { remote: args.includes('--remote') });
