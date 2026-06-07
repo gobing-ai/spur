@@ -311,3 +311,36 @@ name* change.
 `04 §1.1` (`spur init`, `spur rule run`); cross-repo cleanup sequenced so ts-libs preset deletion lands
 only after Spur's centralization is green. Trust-ladder `bundled` plugins (ADR-012) gain their home at
 `./config/plugins`.
+
+---
+
+## ADR-016: Slash Commands Only Where the LLM Adds Value Over the CLI
+
+**Status:** Accepted · **Date:** 2026-06-07
+
+**Decision.** A Spur slash command (`plugins/*/commands/*.md`) is justified **only** when it converts
+**non-deterministic intent into a reliable sequence** the CLI cannot express as one verb. Do **not**
+add a command that merely forwards flags to an existing deterministic CLI verb — the CLI is the robust
+interface, and an equivalent wrapper adds a translation layer, a drift surface, and no value. The
+decision test, applied per candidate:
+
+| Candidate | Verdict |
+|-----------|---------|
+| Deterministic + single CLI verb (e.g. `spur rule run`/`validate`/`list`) | **CLI directly — no command.** The skill still drives it in natural language. |
+| A complex/multi-step CLI dance the LLM would orchestrate reliably | **Command** — it simplifies a real workflow. |
+| Fuzzy human intent → a reliable generated/edited artifact (e.g. NL → validated YAML rule) | **Command** — this is the LLM's value. |
+
+This composes with the **Fat Skill, thin wrapper** rule: the skill (`sp:spur-rules`) owns all logic as
+named operations; a command is a ~50-line `Skill()` delegation, never a reimplementation. A **subagent**
+(`agents/*.md`) is the same delegation in a separate context window — warranted only when the work is
+heavy/multi-step enough to justify context isolation, or when the operator wants to hand off a whole
+lifecycle; otherwise prefer a command. Worked application: of six `spur rule` operations,
+`run`/`validate`/`list` stay CLI-only; `scan`/`add`/`refine` became the three commands.
+
+**Why.** Mirroring every CLI verb as a slash command floods the surface with zero-value forwarders that
+drift from the CLI they wrap. Reserving commands for the non-deterministic cases keeps the wrapper layer
+small, honest, and aligned with where an LLM actually beats a deterministic tool.
+
+**Detail:** the operation taxonomy and per-operation contracts live in
+`plugins/sp/skills/spur-rules/references/operations.md`; this ADR governs the command-vs-CLI-vs-subagent
+choice for any future Spur plugin surface.
