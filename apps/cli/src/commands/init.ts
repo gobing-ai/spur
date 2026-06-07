@@ -1,15 +1,18 @@
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
+import { bundledConfigRoot, listBundledConfigFiles } from '@gobing-ai/spur-config';
 import { ArtifactDao } from '@gobing-ai/spur-domain';
 import { bundledRulesRoot, listBundledRuleFiles } from '@gobing-ai/ts-rule-engine';
 import { CLI_CONFIG } from '../config';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
 
-/** Global user rules root, relative to the home directory (mirrors `rule.ts`). */
-const GLOBAL_RULES_DIR = join('.config', 'spur', 'rules');
+/** Global user config root, relative to the home directory. */
+const GLOBAL_CONFIG_DIR = join('.config', 'spur');
 
+/** Global user rules root, relative to the home directory (mirrors `rule.ts`). */
+const GLOBAL_RULES_DIR = join(GLOBAL_CONFIG_DIR, 'rules');
 /** Local project scaffold templates written under `.spur/` unless `--minimal`. */
 const LOCAL_RULES_DIR = join(CLI_CONFIG.configDir, 'rules');
 const LOCAL_WORKFLOWS_DIR = join(CLI_CONFIG.configDir, 'workflows');
@@ -150,6 +153,32 @@ async function seedGlobalRules(context: CliContext): Promise<number> {
     return written;
 }
 
+/**
+ * Copy the default config assets bundled in `dist/config/` (or `config/` in dev)
+ * into the user's global config directory on first run. Seeds both `rules/` and
+ * `workflows/` subdirectories. Existing files are never overwritten, preserving
+ * user customizations. Returns the number of files written.
+ */
+async function seedGlobalConfig(context: CliContext): Promise<number> {
+    const source = bundledConfigRoot();
+    if (source === null) return 0;
+    // Target is ~/.config/spur/ (same parent as globalRulesRoot, one level up).
+    const globalOverride = context.env.SPUR_GLOBAL_RULES_DIR;
+    const target =
+        globalOverride !== undefined && globalOverride.length > 0
+            ? resolve(context.cwd, globalOverride)
+            : join(homedir(), GLOBAL_CONFIG_DIR);
+    // Only create subdirs that have files to seed (rules, workflows).
+    let written = 0;
+    for (const relPath of listBundledConfigFiles()) {
+        const destination = join(target, relPath);
+        if (await context.fs.exists(destination)) continue;
+        await context.fs.ensureDir(join(target, ...relPath.split('/').slice(0, -1)));
+        await context.fs.writeFile(destination, await context.fs.readFile(join(source, relPath)));
+        written += 1;
+    }
+    return written;
+}
 /** Register `spur init` command. */
 export function registerInitCommand(program: Command, context: CliContext): void {
     program
@@ -225,7 +254,8 @@ export function registerInitCommand(program: Command, context: CliContext): void
             const db = await context.getDb();
             await new ArtifactDao(db).record({ path: configPath, kind: 'config' });
 
-            const seeded = await seedGlobalRules(context);
+            const rulesSeeded = await seedGlobalRules(context);
+            const configSeeded = await seedGlobalConfig(context);
 
             if (json) {
                 context.output.write(
@@ -234,7 +264,8 @@ export function registerInitCommand(program: Command, context: CliContext): void
                         project: projectName,
                         config: CLI_CONFIG.configFile,
                         ...result,
-                        globalRulesSeeded: seeded,
+                        globalRulesSeeded: rulesSeeded,
+                        globalConfigSeeded: configSeeded,
                     }),
                 );
             }
@@ -243,8 +274,11 @@ export function registerInitCommand(program: Command, context: CliContext): void
                 context.output.write(`Initialized ${CLI_CONFIG.configFile}`);
                 for (const path of result.created) context.output.write(`  ✓ ${path}`);
                 for (const path of result.skipped) context.output.write(`  - ${path} (exists)`);
-                if (seeded > 0) {
-                    context.output.write(`  ✓ seeded ${seeded} rule file(s) to ~/${GLOBAL_RULES_DIR}`);
+                if (rulesSeeded > 0) {
+                    context.output.write(`  ✓ seeded ${rulesSeeded} rule file(s) to ~/${GLOBAL_RULES_DIR}`);
+                }
+                if (configSeeded > 0) {
+                    context.output.write(`  ✓ seeded ${configSeeded} config file(s) to ~/${GLOBAL_CONFIG_DIR}`);
                 }
             }
         });
