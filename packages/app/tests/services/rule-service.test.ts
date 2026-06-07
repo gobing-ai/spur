@@ -526,6 +526,166 @@ describe('RuleService.evaluate()', () => {
 });
 
 // ---------------------------------------------------------------------------
+// evaluate() — fix-mode
+// ---------------------------------------------------------------------------
+
+describe('RuleService.evaluate() — --fix-mode', () => {
+    /** Write a rule file with a regex evaluator that finds and can fix a pattern. */
+    async function writeFixableRuleFile(cwd: string): Promise<string> {
+        const file = join(cwd, '.spur', 'rules', 'fixable.yaml');
+        await mkdir(dirname(file), { recursive: true });
+        await writeFile(
+            file,
+            [
+                'rules:',
+                '  - id: no-todo',
+                '    description: No TODO comments',
+                '    severity: warning',
+                '    fix:',
+                '      mode: auto',
+                '      replacement: "DONE"',
+                '    evaluator:',
+                '      type: regex',
+                '      config:',
+                '        pattern: "TODO"',
+                '        forbid: true',
+                '        paths:',
+                '          - "**/*.ts"',
+            ].join('\n'),
+        );
+        return file;
+    }
+
+    test('fix-mode none (default) does not populate fixes', async () => {
+        const cwd = await createTempProject();
+        const output = createCapturedOutput();
+        await writeFile(join(cwd, 'example.ts'), '// TODO: fix this\n');
+        const file = await writeFixableRuleFile(cwd);
+
+        const result = await new RuleService(makeContext(cwd, output)).evaluate({
+            preset: 'recommended-pre-check',
+            file,
+            failOn: 'error',
+            json: true,
+            verbose: false,
+            color: noColor(),
+        });
+
+        // Default is fixMode='none' — fixes should be empty (byte-identical to pre-fix-mode behavior).
+        expect(result.fixes).toEqual([]);
+        expect(result.applied).toBeUndefined();
+        const json = JSON.parse(output.messages.at(-1) ?? '{}');
+        expect(json.fixes).toEqual([]);
+    });
+
+    test('fix-mode suggest populates fixes[] in JSON and writes nothing', async () => {
+        const cwd = await createTempProject();
+        const output = createCapturedOutput();
+        await writeFile(join(cwd, 'example.ts'), '// TODO: fix this\n');
+        const file = await writeFixableRuleFile(cwd);
+
+        const result = await new RuleService(makeContext(cwd, output)).evaluate({
+            preset: 'recommended-pre-check',
+            file,
+            failOn: 'error',
+            fixMode: 'suggest',
+            json: true,
+            verbose: false,
+            color: noColor(),
+        });
+
+        // suggest: fixes collected but NOT applied.
+        expect(result.fixes.length).toBeGreaterThan(0);
+        expect(result.applied).toBeUndefined();
+        const json = JSON.parse(output.messages.at(-1) ?? '{}');
+        expect(json.fixes.length).toBeGreaterThan(0);
+        expect(json).not.toHaveProperty('applied');
+
+        // File should still contain the TODO — nothing was written.
+        const { readFile } = await import('node:fs/promises');
+        const content = await readFile(join(cwd, 'example.ts'), 'utf-8');
+        expect(content).toContain('TODO');
+    });
+
+    test('fix-mode auto applies fixes and reports applied block', async () => {
+        const cwd = await createTempProject();
+        const output = createCapturedOutput();
+        await writeFile(join(cwd, 'example.ts'), '// TODO: fix this\n');
+        const file = await writeFixableRuleFile(cwd);
+
+        const result = await new RuleService(makeContext(cwd, output)).evaluate({
+            preset: 'recommended-pre-check',
+            file,
+            failOn: 'error',
+            fixMode: 'auto',
+            json: true,
+            verbose: false,
+            color: noColor(),
+        });
+
+        // auto: fixes collected AND applied.
+        expect(result.fixes.length).toBeGreaterThan(0);
+        expect(result.applied).toBeDefined();
+        expect(result.applied?.applied.length).toBeGreaterThan(0);
+        const json = JSON.parse(output.messages.at(-1) ?? '{}');
+        expect(json.applied).toBeDefined();
+        expect(json.applied.applied.length).toBeGreaterThan(0);
+    });
+
+    test('fix-mode auto with dry-run previews diff without writing', async () => {
+        const cwd = await createTempProject();
+        const output = createCapturedOutput();
+        await writeFile(join(cwd, 'example.ts'), '// TODO: fix this\n');
+        const file = await writeFixableRuleFile(cwd);
+
+        const result = await new RuleService(makeContext(cwd, output)).evaluate({
+            preset: 'recommended-pre-check',
+            file,
+            failOn: 'error',
+            fixMode: 'auto',
+            dryRun: true,
+            json: true,
+            verbose: false,
+            color: noColor(),
+        });
+
+        // dry-run: applied block present with diff, but file unchanged.
+        expect(result.applied).toBeDefined();
+        expect(result.applied?.diff.length).toBeGreaterThan(0);
+
+        const { readFile } = await import('node:fs/promises');
+        const content = await readFile(join(cwd, 'example.ts'), 'utf-8');
+        expect(content).toContain('TODO');
+    });
+
+    test('exit code is governed by findings, not fixes (R4)', async () => {
+        const cwd = await createTempProject();
+        const output = createCapturedOutput();
+        await writeFile(join(cwd, 'example.ts'), '// TODO: fix this\n');
+        const file = await writeFixableRuleFile(cwd);
+
+        // Rule severity is warning; --fail-on is error (default).
+        // Findings exist but don't breach the threshold → exit 0 even though fixes were applied.
+        const result = await new RuleService(makeContext(cwd, output)).evaluate({
+            preset: 'recommended-pre-check',
+            file,
+            failOn: 'error',
+            fixMode: 'auto',
+            json: true,
+            verbose: false,
+            color: noColor(),
+        });
+
+        // Warning-level finding with --fail-on error → exit 0.
+        expect(result.findings.length).toBeGreaterThan(0);
+        expect(result.findings[0]?.severity).toBe('warning');
+        expect(result.exitCode).toBe(0);
+        // Fixes were applied but exit code stays 0 (threshold-based).
+        expect(result.applied).toBeDefined();
+    });
+});
+
+// ---------------------------------------------------------------------------
 // validate()
 // ---------------------------------------------------------------------------
 
