@@ -15,7 +15,7 @@
     "dependencies": {
         "@gobing-ai/spur-config": "workspace:0.1.0",
         "@gobing-ai/spur-domain": "workspace:0.1.0",
-        "@gobing-ai/spur-plugin-sdk": "workspace:0.1.6",
+        "@gobing-ai/spur-plugin-sdk": "workspace:0.1.7",
         "@gobing-ai/ts-ai-runner": "catalog:",
         "@gobing-ai/ts-db": "catalog:",
         "@gobing-ai/ts-dual-workflow-engine": "catalog:",
