@@ -49,13 +49,16 @@ help rendering overrides remain.
 
 #### `spur init [--name <name>] [--force] [--minimal] [--json]`
 Scaffold a local Spur project. Writes `.spur/config.json` and records the config artifact. Unless
-`--minimal`, also creates `.spur/rules/` (with `recommended-pre-check.yaml` + `recommended-post-check.yaml` presets) and
-`.spur/workflows/basic.yaml`. Always creates `.spur/agents/` (with a `.gitkeep`) for team-mode agent
-specs, regardless of `--minimal`. On first run it seeds `~/.config/spur/rules/` from the presets
-bundled with `@gobing-ai/ts-rule-engine` (existing files are never overwritten), so `spur rule run
---preset recommended` resolves a real ruleset from any project. Re-running is blocked (exit 1) unless
-`--force` is given, preventing a stray `init` from clobbering a configured project. `--json` emits
-`{ ok, project, config, created[], skipped[], globalRulesSeeded }`.
+`--minimal`, scaffolds `.spur/` from the default config assets (§2.3): `.spur/rules/` (with the
+`recommended-pre-check.yaml` + `recommended-post-check.yaml` presets) and `.spur/workflows/basic.yaml`.
+The set of scaffolded files is an explicit reviewed manifest (`scaffold-manifest.ts`) — adding a default
+is a one-line manifest edit, not new control flow. Files are read from the resolved config source, not
+embedded as string literals. Always creates `.spur/agents/` (with a `.gitkeep`) for team-mode agent
+specs, regardless of `--minimal`. On first run it seeds `~/.config/spur/` from the bundled `dist/config`
+assets (existing files are never overwritten), so `spur rule run` resolves a real ruleset from any
+project. Re-running is blocked (exit 1) unless `--force` is given, preventing a stray `init` from
+clobbering a configured project. `--json` emits
+`{ ok, project, config, created[], skipped[], globalConfigSeeded }`.
 
 #### `spur agent run <prompt> [--agent <name>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--purpose <text>] [--tags <a,b>] [--system-prompt <text>] [--task <id>] [--drain] [--json]`
 Execute a prompt or slash command via a coding agent. `--agent` (default `auto`) selects the first
@@ -109,17 +112,17 @@ Team coordination (backed by `TeamService`).
 - `start` / `stop` — Phase-4 deferred stubs that print the daemon-not-available message and exit 0.
 
 #### `spur rule run [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <severity>] [--stop-on-first [<severity>]] [--verbose] [--json]`
-Evaluate constraint rules over the working tree. `--preset` (default `recommended`) or `--file` for
-an ad-hoc rule file; `--rule <id>` filters to one rule. `--fail-on error|warning|info` (default
+Evaluate constraint rules over the working tree. `--preset` (default `recommended-pre-check`) or
+`--file` for an ad-hoc rule file; `--rule <id>` filters to one rule. `--fail-on error|warning|info` (default
 `error`) sets the exit-1 threshold. `--stop-on-first [<severity>]` (default `error` when bare) stops
 evaluation after the first rule with findings at or above the given severity — this controls
 **traversal** (when to stop), orthogonal to `--fail-on` which controls **verdict** (what to fail on).
 They compose: stop early, then threshold the partial findings via `--fail-on`. Omitting
 `--stop-on-first` preserves the default exhaustive scan. `--verbose` streams per-rule progress with
 execution time to stderr (e.g. `✓ passed - 0.12s`). Rule roots resolve highest-priority-first:
-`SPUR_RULES_PATH`, local `.spur/rules`, the user-global `~/.config/spur/rules`, then the presets
-bundled with `ts-rule-engine` as a fallback so `recommended` works before `spur init` seeds the
-global layer. A run that resolves **zero rules** exits 1 (fail-loud: a gate that checks nothing is
+`SPUR_RULES_PATH`, local `.spur/rules`, the user-global `~/.config/spur/rules`, then the generic demo
+rules bundled with `ts-rule-engine` as a fallback so a preset's categories resolve before `spur init`
+seeds the global layer. A run that resolves **zero rules** exits 1 (fail-loud: a gate that checks nothing is
 not a pass). Setting `SPUR_GLOBAL_RULES_DIR` overrides the global root and suppresses the bundled
 fallback for a hermetic run. Backed by `ts-rule-engine`.
 
@@ -184,6 +187,42 @@ Server/web layer config (`buildConfigFromEnv`):
 | `logging.level` | `SPUR_LOG_LEVEL` | `info` (debug\|info\|warn\|error) |
 
 Boolean env vars are parsed strictly (`true/1/yes/on` vs `false/0/no/off`); other values throw.
+
+### 2.3 Default config assets — repo-root `./config` (ADR-015)
+
+Repo-root `./config` is the single source of truth for all Spur default config, separated from source
+code:
+
+```
+config/
+  rules/
+    recommended-pre-check.yaml      # default preset for `spur rule run`
+    recommended-post-check.yaml     # stricter dev gate (coverage)
+  workflows/
+    basic.yaml                      # canonical implement → check → fix loop
+  plugins/
+    .gitkeep                        # home for future bundled plugins (ADR-012)
+```
+
+**Build → install → init flow:**
+
+| Stage | Action |
+|-------|--------|
+| Build (`build:bundle`) | Copy `./config` → `apps/cli/dist/config`; shipped via the package `files` array. |
+| Install (`bun install -g`) | `dist/config` ships inside the package — no `postinstall` (unreliable for global installs). |
+| First run / `spur init` | `seedGlobalConfig()` copies `dist/config/{rules,workflows}` → `~/.config/spur/` (never overwrites). |
+| `spur init` scaffold | Per the `scaffold-manifest.ts` list, copy resolved defaults → `.spur/` unless present or `--force`. |
+| Runtime resolution | `bundled` (`dist/config` + ts-rule-engine demo rules) > global (`~/.config/spur`) > local (`.spur`). |
+
+**Ownership split.** `@gobing-ai/ts-rule-engine` ships only generic demo rules (one per builtin
+evaluator) + a generic `example.yaml` preset for its own tests. Spur owns its presets and workflows
+here. The bare `recommended` preset is removed; `recommended-pre-check` is the default (BREAKING, ADR-015).
+
+**`--compile` caveat.** The compiled binary (`dist/cli/spur`) cannot read a sibling `dist/config`; it
+relies on the `~/.config/spur` seed. The published global install (`dist/index.js`) reads `dist/config`
+directly and is the primary path.
+
+No symlinks participate in install or init — config propagates by copy-and-resolve only.
 
 ## 3. Data Shapes
 
