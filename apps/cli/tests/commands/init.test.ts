@@ -26,8 +26,8 @@ describe('init command', () => {
         expect(await main(['init'], options)).toBe(0);
 
         expect(existsSync(join(cwd, '.spur', 'config.json'))).toBe(true);
-        expect(existsSync(join(cwd, '.spur', 'rules', 'recommended.yaml'))).toBe(true);
-        expect(existsSync(join(cwd, '.spur', 'rules', 'spur-dev.yaml'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'rules', 'recommended-pre-check.yaml'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'rules', 'recommended-post-check.yaml'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'workflows', 'basic.yaml'))).toBe(true);
         // Team-mode agent specs directory is tracked via .gitkeep.
         expect(existsSync(join(cwd, '.spur', 'agents', '.gitkeep'))).toBe(true);
@@ -40,7 +40,7 @@ describe('init command', () => {
         expect(await main(['init'], options)).toBe(0);
 
         // Bundled categories land in the isolated global root so any project's
-        // `rule run --preset recommended` resolves a real ruleset afterwards.
+        // `rule run --preset recommended-pre-check` resolves a real ruleset afterwards.
         expect(existsSync(join(globalDir, 'recommended.yaml'))).toBe(true);
         expect(existsSync(join(globalDir, 'quality', 'tsdoc-exports.yaml'))).toBe(true);
         expect(existsSync(join(globalDir, 'quality', 'coverage-gate.yaml'))).toBe(true);
