@@ -49,7 +49,7 @@ help rendering overrides remain.
 
 #### `spur init [--name <name>] [--force] [--minimal] [--json]`
 Scaffold a local Spur project. Writes `.spur/config.json` and records the config artifact. Unless
-`--minimal`, also creates `.spur/rules/` (with `recommended.yaml` + `spur-dev.yaml` presets) and
+`--minimal`, also creates `.spur/rules/` (with `recommended-pre-check.yaml` + `recommended-post-check.yaml` presets) and
 `.spur/workflows/basic.yaml`. Always creates `.spur/agents/` (with a `.gitkeep`) for team-mode agent
 specs, regardless of `--minimal`. On first run it seeds `~/.config/spur/rules/` from the presets
 bundled with `@gobing-ai/ts-rule-engine` (existing files are never overwritten), so `spur rule run
