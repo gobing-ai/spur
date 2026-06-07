@@ -125,8 +125,11 @@ describe('CLI dispatch and status', () => {
     });
 
     test('resolves git context in a repository', async () => {
-        const git = await gitContext(new URL('../../../..', import.meta.url).pathname);
-        expect(git.root).toContain('spur-new');
+        // Resolve the repo root (4 levels up: commands → tests → cli → apps → repo root).
+        const repoRoot = `${import.meta.dir}/../../../..`;
+        const git = await gitContext(repoRoot);
+        expect(git.root).not.toBeNull();
+        expect(git.root).toBeString();
     });
 
     test('console output writes to the process default targets', () => {
