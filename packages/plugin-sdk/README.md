@@ -144,9 +144,11 @@ export const myPlugin: SpurPlugin = {
 };
 ```
 
-### 2. Write the manifest
+### 2. Write the manifest — `plugin.yaml`
 
-Every plugin needs a `plugin.yaml` declaring its trust level and capabilities:
+**This is not a sample. Spur's `PluginLoader` discovers, parses, and enforces it at runtime.**
+
+Every plugin directory must contain a `plugin.yaml`. Spur discovers plugins by scanning for directories with this file (see "Discovery roots" below).
 
 ```yaml
 # plugin.yaml
@@ -165,7 +167,16 @@ config:
   greeting: hello
 ```
 
-Validate the manifest programmatically:
+#### What `capabilities.*` does — it's enforced at registration time
+
+`capabilities.commands` and `capabilities.events` are **declarations** — they tell the trust engine what your plugin intends to use. When your `onLoad()` calls `host.commands.register('my-cmd', ...)`, the registry's `register()` method calls `TrustEngine.enforce()` which:
+
+1. Checks your trust level allows `commands` (e.g., `local` allows it, `untrusted` does too)
+2. Checks the manifest `capabilities.commands` list includes `'my-cmd'`
+
+If your manifest doesn't declare `my-cmd` under `capabilities.commands`, you get `PluginNotDeclaredError`. If your trust level forbids `commands`, you get `PluginTrustError`. This is checked at registration time — not at manifest-parse time — because the registration context (which plugin, what source) matters.
+
+Validate the manifest programmatically (useful in tests):
 
 ```typescript
 import { validateManifest, PluginManifestError } from '@gobing-ai/spur-plugin-sdk';
@@ -179,8 +190,6 @@ try {
     }
 }
 ```
-
-### 3. Configuration merging
 
 Plugin configuration merges three layers (lowest to highest precedence):
 
@@ -265,28 +274,63 @@ host.eventRegistry.subscribe('*', (event, detail) => { ... });
 
 High-churn events (`usage.record`) have a built-in token-bucket throttle.
 
-## Within Spur (internal usage)
 
-Spur's own rule engine and workflow engine register as plugins through this SDK:
+## Plugin Lifecycle: Discovery → Validation → Registration
 
-```typescript
-// apps/server/src/plugins.ts
-import { PluginHost } from '@gobing-ai/spur-plugin-sdk';
+Plugins are discovered and loaded by `PluginLoader` (in `@gobing-ai/spur-app`), which uses the SDK types and schemas. The flow:
 
-const host = new PluginHost(bus, { logger });
-await host.loadPlugin(ruleEnginePlugin, { source: 'builtin', pluginName: 'spur-rule-engine', trustLevel: 'bundled' });
-await host.loadPlugin(workflowEnginePlugin, { source: 'builtin', pluginName: 'spur-workflow-engine', trustLevel: 'bundled' });
+1. **Discover** — scan four roots (in priority order) for directories containing `plugin.yaml`
+2. **Validate** — parse `plugin.yaml` with `yaml`, validate against `PluginManifestSchema` via `validateManifest()`
+3. **Load** — `import()` the plugin's `index.ts`, check it exports a `SpurPlugin`
+4. **Register** — call `host.loadPlugin(plugin, ctx)`, which invokes `onLoad(host)`, where the plugin registers capabilities
 
-// Built-in commands use seedBuiltin before loading any external plugins
-host.commands.seedBuiltin('spur-rule-run', { name: 'spur-rule-run', execute: ruleCommandHandler });
+### Where to put `plugin.yaml`
+
+| Root | Path | Source | Priority |
+|---|---|---|---|
+| Env override | `$SPUR_PLUGIN_PATH` (colon-separated) | `local` | Highest |
+| Project-local | `.spur/plugins/<plugin-name>/plugin.yaml` | `local` | |
+| User-global | `~/.spur/plugins/<plugin-name>/plugin.yaml` | `curated` | |
+| Bundled | `<installDir>/plugins/<plugin-name>/plugin.yaml` | `bundled` | Lowest |
+
+Each plugin lives in its own directory — a folder containing `plugin.yaml` and `index.ts`:
+
+```
+.spur/plugins/my-plugin/
+├── plugin.yaml          # manifest (trust, capabilities, config)
+└── index.ts             # SpurPlugin implementation
 ```
 
-External plugins are discovered via `PluginLoader` (in `@gobing-ai/spur-app`) from three roots:
-1. **Bundled** — `packages/plugin-sdk/src/builtins/`
-2. **User-global** — `~/.spur/plugins/`
-3. **Project-local** — `.spur/plugins/`
+### How Spur bootstraps plugins
 
-## Error Handling
+Spur's CLI (`apps/cli/src/commands/plugin.ts`) creates a `PluginHost` + `PluginService`, which runs the full pipeline:
+
+```typescript
+const host = new PluginHost(new EventBus({}), { logger });
+const service = new PluginService({ host, fs, logger, projectRoot: cwd });
+await service.ensureBootstrapped(); // discover → validate → register all
+```
+
+Spur's own built-in rule engine and workflow engine are loaded as `bundled` plugins with unconditional trust, seeded via `host.commands.seedBuiltin()` before any external plugin loads.
+
+### As a downstream developer
+
+**To create a plugin:**
+
+1. Create `.spur/plugins/<name>/plugin.yaml` with your trust level and declared capabilities
+2. Create `.spur/plugins/<name>/index.ts` exporting a `SpurPlugin`
+3. In `onLoad(host)`, register exactly what you declared in `capabilities`
+
+**To validate your manifest manually:**
+
+```typescript
+import { parse } from 'yaml'; // or any YAML parser
+import { validateManifest } from '@gobing-ai/spur-plugin-sdk';
+
+const raw = await Bun.file('.spur/plugins/my-plugin/plugin.yaml').text();
+const manifest = validateManifest(parse(raw));
+// manifest is now a typed PluginManifest — capabilities.commands, capabilities.events, etc.
+```
 
 | Error | When |
 |---|---|
