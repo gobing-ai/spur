@@ -162,6 +162,66 @@ async function bumpVersion(config: ReleaseConfig, version: string, options: { pu
     console.log(`  gh run list --workflow=${config.publishWorkflow} --limit ${config.ghRunListLimit}`);
 }
 
+async function bumpAll(version: string, options: { push: boolean }): Promise<void> {
+    if (!SEMVER.test(version)) {
+        throw new Error(`"${version}" is not a valid semver version (expected e.g. 0.1.4).`);
+    }
+
+    const branch = assertCleanTreeOnBranch();
+    const configs = [RELEASE_PACKAGES['spur-cli'], RELEASE_PACKAGES['spur-plugin-sdk']];
+
+    // Pre-flight: check all tags and npm before touching any file.
+    for (const config of configs) {
+        const tag = releaseTag(config, version);
+        assertTagFree(config, tag, version);
+        if (npmViewVersion(config.packageName, version)) {
+            throw new Error(`${config.packageName}@${version} is already published on npm. Use a new version.`);
+        }
+    }
+
+    // Bump all manifests in one pass.
+    const staged: string[] = [];
+    for (const config of configs) {
+        const manifestPath = `${repoRoot}${config.packageDir}/package.json`;
+        const manifest = await Bun.file(manifestPath).json();
+        const previous = manifest.version;
+        manifest.version = version;
+        await Bun.write(manifestPath, `${JSON.stringify(manifest, null, 4)}\n`);
+        console.log(`${config.packageName}: ${previous} -> ${version}`);
+        staged.push(`${config.packageDir}/package.json`);
+    }
+
+    if (Bun.file(`${repoRoot}bun.lock`).size > 0) staged.push('bun.lock');
+    git(['add', ...staged]);
+
+    const message = `chore(release): bump spur-cli and spur-plugin-sdk to ${version}`;
+    git(['commit', '-m', message]);
+    console.log(`Committed: ${message}`);
+
+    // Tag both.
+    for (const config of configs) {
+        const tag = releaseTag(config, version);
+        git(['tag', '-a', tag, '-m', config.releaseTagMessage(tag)]);
+        console.log(`Tagged: ${tag}`);
+    }
+
+    if (!options.push) {
+        console.log('\nDone (local). Review, then push to release:');
+        console.log(`  git push origin ${branch}`);
+        console.log(`  git push origin @gobing-ai/spur-cli-v${version} @gobing-ai/spur-plugin-sdk-v${version}`);
+        console.log('Or re-run with --push next time to do this automatically.');
+        return;
+    }
+
+    console.log(`\nPushing branch ${branch} (tags excluded)...`);
+    git(['push', 'origin', branch]);
+    console.log('Pushing release trigger tags...');
+    git(['push', 'origin', `@gobing-ai/spur-cli-v${version}`, `@gobing-ai/spur-plugin-sdk-v${version}`]);
+
+    console.log(`\nReleased ${version} for both packages. The Publish workflows should now be running:`);
+    console.log(`  gh run list --workflow=publish.yml --limit 5`);
+}
+
 async function dropTags(config: ReleaseConfig, version: string, options: { remote: boolean }): Promise<void> {
     if (!SEMVER.test(version)) {
         throw new Error(`"${version}" is not a valid semver version (expected e.g. 0.1.2).`);
@@ -186,7 +246,10 @@ function usage(message?: string): never {
     if (message) console.error(`error: ${message}\n`);
     const ids = Object.keys(RELEASE_PACKAGES).join(', ');
     console.error('Usage:');
-    console.error(`  bun run bump-ver <package-id> <version> [--push]    bump package, commit, tag, optionally push`);
+    console.error(
+        `  bun run bump-ver <package-id> <version> [--push]    bump one package, commit, tag, optionally push`,
+    );
+    console.error(`  bun run bump-ver --all <version> [--push]              bump both packages in one commit + tags`);
     console.error(
         `  bun run drop-tags <package-id> <version> [--remote] delete the release tag locally (and on origin)`,
     );
@@ -203,6 +266,12 @@ try {
     switch (command) {
         case 'bump-version':
         case 'bump-ver':
+            if (args.includes('--all')) {
+                const allVersion = positionalArgs[0];
+                if (!allVersion) usage('bump-ver --all <version> [--push]');
+                await bumpAll(allVersion, { push: args.includes('--push') });
+                break;
+            }
             if (!packageId || !version) usage('bump-ver <package-id> <version> [--push]');
             if (!(packageId in RELEASE_PACKAGES)) usage(`unknown package "${packageId}"`);
             await bumpVersion(RELEASE_PACKAGES[packageId], version, { push: args.includes('--push') });
