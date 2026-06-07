@@ -92,7 +92,7 @@ describe('RuleService.evaluate()', () => {
         const cwd = await createTempProject();
         const service = new RuleService(makeContext(cwd, nullOutput()));
         const result = await service.evaluate({
-            preset: 'recommended',
+            preset: 'recommended-pre-check',
             failOn: 'error',
             json: false,
             verbose: false,
@@ -107,7 +107,7 @@ describe('RuleService.evaluate()', () => {
         const file = await writeRuleFile(cwd, 'rules.yaml', 'sample-rule');
 
         const result = await new RuleService(makeContext(cwd, output)).evaluate({
-            preset: 'recommended',
+            preset: 'recommended-pre-check',
             failOn: 'error',
             file,
             json: true,
@@ -116,7 +116,10 @@ describe('RuleService.evaluate()', () => {
         });
 
         expect(result.exitCode).toBe(0);
-        expect(JSON.parse(output.messages.at(-1) ?? '{}')).toMatchObject({ preset: 'recommended', ruleCount: 1 });
+        expect(JSON.parse(output.messages.at(-1) ?? '{}')).toMatchObject({
+            preset: 'recommended-pre-check',
+            ruleCount: 1,
+        });
     });
 
     test('distinguishes "passed" from "nothing evaluated" in human output', async () => {
@@ -168,7 +171,7 @@ describe('RuleService.evaluate()', () => {
         const file = await writeRuleFile(cwd, 'rules.yaml', 'package-exists');
 
         const result = await new RuleService(makeContext(cwd, output)).evaluate({
-            preset: 'recommended',
+            preset: 'recommended-pre-check',
             failOn: 'error',
             file,
             json: false,
@@ -205,7 +208,7 @@ describe('RuleService.evaluate()', () => {
         );
 
         const result = await new RuleService(makeContext(cwd, output)).evaluate({
-            preset: 'recommended',
+            preset: 'recommended-pre-check',
             failOn: 'error',
             file,
             json: false,
@@ -237,7 +240,7 @@ describe('RuleService.evaluate()', () => {
         );
 
         await new RuleService(makeContext(cwd, output)).evaluate({
-            preset: 'recommended',
+            preset: 'recommended-pre-check',
             failOn: 'error',
             file,
             json: false,
@@ -257,7 +260,7 @@ describe('RuleService.evaluate()', () => {
         const file = await writeRuleFile(cwd, 'rules.yaml', 'package-exists');
 
         await new RuleService(makeContext(cwd, output)).evaluate({
-            preset: 'recommended',
+            preset: 'recommended-pre-check',
             failOn: 'error',
             file,
             json: false,
@@ -327,7 +330,7 @@ describe('RuleService.evaluate()', () => {
         );
 
         const full = await new RuleService(makeContext(cwd, output)).evaluate({
-            preset: 'recommended',
+            preset: 'recommended-pre-check',
             failOn: 'error',
             file,
             json: true,
@@ -338,7 +341,7 @@ describe('RuleService.evaluate()', () => {
         expect(full.ruleCount).toBe(2);
 
         const stopped = await new RuleService(makeContext(cwd, output)).evaluate({
-            preset: 'recommended',
+            preset: 'recommended-pre-check',
             failOn: 'error',
             file,
             json: true,
@@ -372,7 +375,7 @@ describe('RuleService.evaluate()', () => {
         );
 
         const result = await new RuleService(makeContext(cwd, output)).evaluate({
-            preset: 'recommended',
+            preset: 'recommended-pre-check',
             failOn: 'error',
             stopOnFirst: 'warning',
             file,
@@ -414,7 +417,7 @@ describe('RuleService.evaluate()', () => {
         );
 
         await new RuleService(makeContext(cwd, output)).evaluate({
-            preset: 'recommended',
+            preset: 'recommended-pre-check',
             failOn: 'error',
             stopOnFirst: 'error',
             file,
@@ -468,7 +471,7 @@ describe('RuleService.evaluate()', () => {
 
         try {
             const result = await new RuleService(makeContext(cwd, output)).evaluate({
-                preset: 'recommended',
+                preset: 'recommended-pre-check',
                 failOn: 'error',
                 file,
                 json: false,
@@ -506,7 +509,7 @@ describe('RuleService.evaluate()', () => {
         );
 
         await new RuleService(makeContext(cwd, output)).evaluate({
-            preset: 'recommended',
+            preset: 'recommended-pre-check',
             failOn: 'error',
             file,
             json: false,
