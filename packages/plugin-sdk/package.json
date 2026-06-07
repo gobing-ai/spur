@@ -1,6 +1,6 @@
 {
     "name": "@gobing-ai/spur-plugin-sdk",
-    "version": "0.1.4",
+    "version": "0.1.5",
     "description": "Spur Plugin SDK — types, schemas, and runtime for building Spur plugins with trust levels, capability registries, and event hooks.",
     "keywords": [
         "spur",
