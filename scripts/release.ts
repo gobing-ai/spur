@@ -202,11 +202,23 @@ async function bumpAll(version: string, options: { push: boolean }): Promise<voi
 
     const branch = assertCleanTreeOnBranch();
     const configs = [RELEASE_PACKAGES['spur-cli'], RELEASE_PACKAGES['spur-plugin-sdk']];
+    const aggregateTag = `@gobing-ai/spur-v${version}`;
 
-    // Pre-flight: check all tags and npm before touching any file.
+    // Pre-flight: check all tags (aggregate + per-package) and npm before touching any file.
+    const existingLocal = new Set(git(['tag', '-l']).split('\n').filter(Boolean));
+    const allTags = [aggregateTag, ...configs.map((c) => releaseTag(c, version))];
+    for (const tag of allTags) {
+        if (existingLocal.has(tag)) throw new Error(`tag already exists locally: ${tag}`);
+    }
+    const remoteRefs = git(['ls-remote', '--tags', 'origin']);
+    for (const tag of allTags) {
+        if (remoteRefs.includes(`refs/tags/${tag}`)) {
+            throw new Error(
+                `tag already exists on origin: ${tag}. Run "bun run drop-tags --all ${version} --remote" first.`,
+            );
+        }
+    }
     for (const config of configs) {
-        const tag = releaseTag(config, version);
-        assertTagFree(config, tag, version);
         if (npmViewVersion(config.packageName, version)) {
             throw new Error(`${config.packageName}@${version} is already published on npm. Use a new version.`);
         }
@@ -222,7 +234,6 @@ async function bumpAll(version: string, options: { push: boolean }): Promise<voi
         await Bun.write(manifestPath, `${JSON.stringify(manifest, null, 4)}\n`);
         console.log(`${config.packageName}: ${previous} -> ${version}`);
         staged.push(`${config.packageDir}/package.json`);
-        // Cascade workspace pin updates for consumers.
         const pinChanges = await updateWorkspacePins(config.packageName, previous, version);
         staged.push(...pinChanges);
     }
@@ -234,28 +245,30 @@ async function bumpAll(version: string, options: { push: boolean }): Promise<voi
     git(['commit', '-m', message]);
     console.log(`Committed: ${message}`);
 
-    // Tag both.
+    // Per-package tags for traceability + aggregate tag to trigger publish.
     for (const config of configs) {
         const tag = releaseTag(config, version);
         git(['tag', '-a', tag, '-m', config.releaseTagMessage(tag)]);
-        console.log(`Tagged: ${tag}`);
+        console.log(`Tagged (trace): ${tag}`);
     }
+    git(['tag', '-a', aggregateTag, '-m', `Spur ${version} — spur-cli + spur-plugin-sdk`]);
+    console.log(`Tagged (publish): ${aggregateTag}`);
 
     if (!options.push) {
         console.log('\nDone (local). Review, then push to release:');
         console.log(`  git push origin ${branch}`);
-        console.log(`  git push origin @gobing-ai/spur-cli-v${version} @gobing-ai/spur-plugin-sdk-v${version}`);
+        console.log(`  git push origin ${aggregateTag}`);
         console.log('Or re-run with --push next time to do this automatically.');
         return;
     }
 
     console.log(`\nPushing branch ${branch} (tags excluded)...`);
     git(['push', 'origin', branch]);
-    console.log('Pushing release trigger tags...');
-    git(['push', 'origin', `@gobing-ai/spur-cli-v${version}`, `@gobing-ai/spur-plugin-sdk-v${version}`]);
+    console.log(`Pushing release trigger tag ${aggregateTag}...`);
+    git(['push', 'origin', aggregateTag]);
 
-    console.log(`\nReleased ${version} for both packages. The Publish workflows should now be running:`);
-    console.log(`  gh run list --workflow=publish.yml --limit 5`);
+    console.log(`\nReleased ${version} for both packages. The Publish workflow should now be running:`);
+    console.log(`  gh run list --workflow=publish.yml --limit 3`);
 }
 
 async function dropTags(config: ReleaseConfig, version: string, options: { remote: boolean }): Promise<void> {
@@ -284,6 +297,21 @@ async function dropAll(version: string, options: { remote: boolean }): Promise<v
     }
     for (const config of [RELEASE_PACKAGES['spur-cli'], RELEASE_PACKAGES['spur-plugin-sdk']]) {
         await dropTags(config, version, options);
+    }
+    // Also drop the aggregate tag.
+    const aggregateTag = `@gobing-ai/spur-v${version}`;
+    const localTags = new Set(git(['tag', '-l']).split('\n').filter(Boolean));
+    if (localTags.has(aggregateTag)) {
+        git(['tag', '-d', aggregateTag]);
+        console.log(`Deleted local tag ${aggregateTag}`);
+    }
+    if (options.remote) {
+        const result = run(['git', 'push', 'origin', `:refs/tags/${aggregateTag}`]);
+        console.log(
+            result.ok
+                ? `Deleted remote tag ${aggregateTag}`
+                : `Remote tag ${aggregateTag} not present or already removed`,
+        );
     }
 }
 
