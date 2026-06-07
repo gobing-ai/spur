@@ -132,13 +132,18 @@ require-misses): [references/authoring-rules.md](references/authoring-rules.md).
 ### Step 3: Fix and re-run
 
 Fix the *specific* violation the finding names — no drive-by refactors — then re-run the same
-command. **The CLI never applies fixes** (`spur rule run` surfaces findings only); the agent makes
-the edit and re-runs. Loop until exit 0.
+command. By default, `spur rule run` surfaces findings only; the agent makes the edit and re-runs.
+Loop until exit 0.
+
+**`--fix-mode` shortcut:** when the violation is mechanically fixable (e.g. a regex replacement),
+`spur rule run --fix-mode auto` applies the fix and reports the result. The exit code still reflects
+the *findings* (not whether fixes were applied), so re-run to confirm green. `--fix-mode suggest`
+surfaces candidate fixes in `--json` output without writing.
 
 ## Command surface
 
 ```
-spur rule run      [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <sev>] [--stop-on-first [<sev>]] [--verbose] [--json]
+spur rule run      [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <sev>] [--stop-on-first [<sev>]] [--fix-mode <none|suggest|auto>] [--dry-run] [--verbose] [--json]
 spur rule validate [--file <path>|--preset <name>|<path>] [--no-schema] [--json]
 spur rule list     [--preset <name>] [--json]
 ```
