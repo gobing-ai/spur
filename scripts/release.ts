@@ -83,6 +83,37 @@ function npmViewVersion(name: string, version: string): boolean {
     return result.ok && result.stdout === version;
 }
 
+/**
+ * Scan every workspace package.json for `"<pkgName>": "workspace:<oldVersion>"`
+ * and rewrite to `"workspace:<newVersion>"`. Returns the relative paths
+ * of any manifest files that were changed (already written to disk).
+ */
+async function updateWorkspacePins(pkgName: string, oldVersion: string, newVersion: string): Promise<string[]> {
+    const changed: string[] = [];
+    // Resolve via git to stay fast and .gitignore-aware.
+    const files = git(['ls-files', 'apps/*/package.json', 'packages/*/package.json'])
+        .split('\n')
+        .filter((f) => f.length > 0);
+
+    for (const file of files) {
+        const manifest = await Bun.file(`${repoRoot}${file}`).json();
+        let dirty = false;
+        const pin = `workspace:${oldVersion}`;
+        for (const field of ['dependencies', 'devDependencies', 'peerDependencies'] as const) {
+            const deps = manifest[field] as Record<string, string> | undefined;
+            if (deps?.[pkgName] === pin) {
+                deps[pkgName] = `workspace:${newVersion}`;
+                dirty = true;
+            }
+        }
+        if (dirty) {
+            await Bun.write(`${repoRoot}${file}`, `${JSON.stringify(manifest, null, 4)}\n`);
+            console.log(`  ↳ ${file}: ${pkgName} workspace pin ${oldVersion} → ${newVersion}`);
+            changed.push(file);
+        }
+    }
+    return changed;
+}
 function assertCleanTreeOnBranch(): string {
     if (git(['status', '--porcelain']) !== '') {
         throw new Error('working tree is not clean. Commit or stash changes before releasing.');
@@ -126,15 +157,17 @@ async function bumpVersion(config: ReleaseConfig, version: string, options: { pu
     if (npmViewVersion(config.packageName, version)) {
         throw new Error(`${config.packageName}@${version} is already published on npm. Use a new version.`);
     }
-
     const manifestPath = `${repoRoot}${config.packageDir}/package.json`;
     const manifest = await Bun.file(manifestPath).json();
-    const previous = manifest.version;
+    const previous: string = manifest.version;
     manifest.version = version;
     await Bun.write(manifestPath, `${JSON.stringify(manifest, null, 4)}\n`);
     console.log(`${config.packageName}: ${previous} -> ${version}`);
 
     const staged = [`${config.packageDir}/package.json`];
+    // Cascade workspace pin updates for consumers of this package.
+    const pinChanges = await updateWorkspacePins(config.packageName, previous, version);
+    staged.push(...pinChanges);
     if (Bun.file(`${repoRoot}bun.lock`).size > 0) staged.push('bun.lock');
     git(['add', ...staged]);
 
@@ -184,11 +217,14 @@ async function bumpAll(version: string, options: { push: boolean }): Promise<voi
     for (const config of configs) {
         const manifestPath = `${repoRoot}${config.packageDir}/package.json`;
         const manifest = await Bun.file(manifestPath).json();
-        const previous = manifest.version;
+        const previous: string = manifest.version;
         manifest.version = version;
         await Bun.write(manifestPath, `${JSON.stringify(manifest, null, 4)}\n`);
         console.log(`${config.packageName}: ${previous} -> ${version}`);
         staged.push(`${config.packageDir}/package.json`);
+        // Cascade workspace pin updates for consumers.
+        const pinChanges = await updateWorkspacePins(config.packageName, previous, version);
+        staged.push(...pinChanges);
     }
 
     if (Bun.file(`${repoRoot}bun.lock`).size > 0) staged.push('bun.lock');
