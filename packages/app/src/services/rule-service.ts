@@ -306,8 +306,8 @@ export class RuleService {
      * which is what tests and reproducible CI runs need.
      *
      * Otherwise the presets bundled with `@gobing-ai/ts-rule-engine` are appended as
-     * the lowest-priority root so `--preset recommended` resolves to a working ruleset
-     * on a clean install, before `spur init` has seeded the user-global directory.
+     * the lowest-priority root so `--preset recommended-pre-check` resolves to a working
+     * ruleset on a clean install, before `spur init` has seeded the user-global directory.
      * Local and global roots still shadow individual bundled files per relative path.
      */
     private ruleRoots(): string[] {
