@@ -163,6 +163,11 @@ Tighten or adjust an existing rule/preset with the smallest change that meets th
    See [fine-tuning.md](fine-tuning.md) for each mechanism's real shape.
 3. **Apply the smallest change.** Add a rationale comment for any exemption (`# <path> is the one
    place X is allowed (ADR-n)`). Never widen scope merely to pass a gate — that is gate-gaming.
+   **For any `exclude`/`--exempt` change, apply exclusion discipline**
+   ([fine-tuning.md → Exclusions are exceptions, not a whitelist](fine-tuning.md#exclusions-are-exceptions-not-a-whitelist)):
+   each exclusion must be the narrowest possible, carry a one-line justification, and leave the rule
+   still firing on the cases it must catch. If a rule needs ever more exclusions, re-scope or split it
+   rather than carving further — accumulating carve-outs turns a blocklist into a de-facto allowlist.
 4. **Preview if `--dry-run`** — emit a unified diff of the YAML change and stop (no write). This is a
    skill-level output; the CLI has no dry-run for edits.
 5. **Verify** — run the [validate-and-smoke-test core](#sub-procedure-validate-and-smoke-test). A
