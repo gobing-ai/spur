@@ -106,14 +106,16 @@ The shared verification core. Inputs: a rule file path + a rule ID. Steps:
 `spur rule run` is a direct CLI verb; there is no slash command for it. The skill drives the loop when
 asked in natural language. Detailed in SKILL.md → "The harness loop". Procedure:
 
-1. `spur rule run [--preset <name>] [--rule <id>] [--file <path>] [--fail-on <sev>] [--stop-on-first [<sev>]] --json`
+1. `spur rule run [--preset <name>] [--rule <id>] [--file <path>] [--fail-on <sev>] [--stop-on-first [<sev>]] [--fix-mode <none|suggest|auto>] [--dry-run] --json`
 2. Read the exit code (binary gate) AND `findings[]` (actionable detail).
 3. Split findings: policy violations (fix the code) vs. evaluator errors
    (`kind: "error"`, `code: "evaluator:<type>"`, `filePath: null` — fix the rule/environment).
-4. Apply the **specific** fix per violation — no drive-by refactors. The CLI never applies fixes.
+4. Apply the **specific** fix per violation — no drive-by refactors. By default the CLI surfaces
+   findings only; use `--fix-mode auto` to apply mechanically fixable violations, then re-run to
+   confirm green.
 5. Re-run the same command. Loop until exit 0.
 
-Output contract: exit code + parsed findings + violation/evaluator-error split + per-finding fix.
+Output contract: exit code + parsed findings + violation/evaluator-error split + per-finding fix + optional `fixes[]`/`applied` (when `--fix-mode` ≠ `none`).
 
 ## add
 
