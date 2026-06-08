@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 import { fileURLToPath } from 'node:url';
 
 /**
@@ -10,7 +9,7 @@ import { fileURLToPath } from 'node:url';
  * spur-domain) never reach the registry.
  */
 
-const repoRoot = fileURLToPath(new URL('../', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 
 interface ReleaseConfig {
     packageDir: string;
@@ -306,7 +305,7 @@ async function bumpAll(version: string, options: { push: boolean }): Promise<voi
     console.log(`  gh run list --workflow=publish.yml --limit 3`);
 }
 
-async function dropTags(config: ReleaseConfig, version: string, options: { remote: boolean }): Promise<void> {
+async function dropTagsFor(config: ReleaseConfig, version: string, options: { remote: boolean }): Promise<void> {
     if (!SEMVER.test(version)) {
         throw new Error(`"${version}" is not a valid semver version (expected e.g. 0.1.2).`);
     }
@@ -331,7 +330,7 @@ async function dropAll(version: string, options: { remote: boolean }): Promise<v
         throw new Error(`"${version}" is not a valid semver version (expected e.g. 0.1.2).`);
     }
     for (const config of [RELEASE_PACKAGES['spur-cli'], RELEASE_PACKAGES['spur-plugin-sdk']]) {
-        await dropTags(config, version, options);
+        await dropTagsFor(config, version, options);
     }
     // Also drop the aggregate tag.
     const aggregateTag = `@gobing-ai/spur-v${version}`;
@@ -350,7 +349,7 @@ async function dropAll(version: string, options: { remote: boolean }): Promise<v
     }
 }
 
-function usage(message?: string): never {
+function releaseUsage(message?: string): never {
     if (message) console.error(`error: ${message}\n`);
     const ids = Object.keys(RELEASE_PACKAGES).join(', ');
     console.error('Usage:');
@@ -364,40 +363,43 @@ function usage(message?: string): never {
     process.exit(message ? 1 : 0);
 }
 
-const [command, ...args] = process.argv.slice(2);
-const positionalArgs = args.filter((arg) => !arg.startsWith('--'));
-const packageId = positionalArgs[0] as PackageId | undefined;
-const version = positionalArgs[1];
-
-try {
-    switch (command) {
-        case 'bump-version':
-        case 'bump-ver':
-            if (args.includes('--all')) {
-                const allVersion = positionalArgs[0];
-                if (!allVersion) usage('bump-ver --all <version> [--push]');
-                await bumpAll(allVersion, { push: args.includes('--push') });
-                break;
-            }
-            if (!packageId || !version) usage('bump-ver <package-id> <version> [--push]');
-            if (!(packageId in RELEASE_PACKAGES)) usage(`unknown package "${packageId}"`);
-            await bumpVersion(RELEASE_PACKAGES[packageId], version, { push: args.includes('--push') });
-            break;
-        case 'drop-tags':
-            if (args.includes('--all')) {
-                const allVersion = positionalArgs[0];
-                if (!allVersion) usage('drop-tags --all <version> [--remote]');
-                await dropAll(allVersion, { remote: args.includes('--remote') });
-                break;
-            }
-            if (!packageId || !version) usage('drop-tags <package-id> <version> [--remote]');
-            if (!(packageId in RELEASE_PACKAGES)) usage(`unknown package "${packageId}"`);
-            await dropTags(RELEASE_PACKAGES[packageId], version, { remote: args.includes('--remote') });
-            break;
-        default:
-            usage();
+/**
+ * Entry for `spur-dev bump-ver ...` — bump one package or all, commit, tag, optionally push.
+ * "All packages" is the default: a bare `bump-ver <version>` (single positional that parses
+ * as semver, or explicit `--all`) bumps every package. The two-arg `bump-ver <pkg> <version>`
+ * form scopes to one package.
+ */
+export async function bumpVer(args: string[]): Promise<void> {
+    const positional = args.filter((arg) => !arg.startsWith('--'));
+    if (args.includes('--all') || (positional.length === 1 && SEMVER.test(positional[0] ?? ''))) {
+        const allVersion = positional[0];
+        if (!allVersion) releaseUsage('bump-ver [--all] <version> [--push]');
+        await bumpAll(allVersion, { push: args.includes('--push') });
+        return;
     }
-} catch (error) {
-    console.error(`error: ${error instanceof Error ? error.message : String(error)}`);
-    process.exit(1);
+    const packageId = positional[0] as PackageId | undefined;
+    const version = positional[1];
+    if (!packageId || !version) releaseUsage('bump-ver <version> | bump-ver <package-id> <version> [--push]');
+    if (!(packageId in RELEASE_PACKAGES)) releaseUsage(`unknown package "${packageId}"`);
+    await bumpVersion(RELEASE_PACKAGES[packageId], version, { push: args.includes('--push') });
+}
+
+/**
+ * Entry for `spur-dev drop-tags ...` — delete one package's release tag or all.
+ * Mirrors `bumpVer`: a bare `drop-tags <version>` drops every package's tag (plus the
+ * aggregate); `drop-tags <pkg> <version>` scopes to one.
+ */
+export async function dropTags(args: string[]): Promise<void> {
+    const positional = args.filter((arg) => !arg.startsWith('--'));
+    if (args.includes('--all') || (positional.length === 1 && SEMVER.test(positional[0] ?? ''))) {
+        const allVersion = positional[0];
+        if (!allVersion) releaseUsage('drop-tags [--all] <version> [--remote]');
+        await dropAll(allVersion, { remote: args.includes('--remote') });
+        return;
+    }
+    const packageId = positional[0] as PackageId | undefined;
+    const version = positional[1];
+    if (!packageId || !version) releaseUsage('drop-tags <version> | drop-tags <package-id> <version> [--remote]');
+    if (!(packageId in RELEASE_PACKAGES)) releaseUsage(`unknown package "${packageId}"`);
+    await dropTagsFor(RELEASE_PACKAGES[packageId], version, { remote: args.includes('--remote') });
 }
