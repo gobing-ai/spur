@@ -1,13 +1,13 @@
 import type { Command } from '@commander-js/extra-typings';
 import type { ModuleLoader } from '@gobing-ai/spur-app';
 import { PluginService } from '@gobing-ai/spur-app';
-import { PluginHost } from '@gobing-ai/spur-plugin-sdk';
+import { PluginHost, type SpurEventMap } from '@gobing-ai/spur-plugin-sdk';
 import { EventBus, getLogger } from '@gobing-ai/ts-infra';
 import type { CliContext } from '../context';
 
 function createPluginService(context: CliContext, loadModule?: ModuleLoader): PluginService {
     const logger = getLogger('spur:plugin');
-    const bus = new EventBus({});
+    const bus = new EventBus<SpurEventMap>({});
     const host = new PluginHost(bus, { logger });
 
     return new PluginService({
