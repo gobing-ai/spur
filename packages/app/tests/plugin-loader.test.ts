@@ -46,7 +46,8 @@ const silentLogger: Logger = {
 };
 
 function newHost(): PluginHost {
-    return new PluginHost(new EventBus({} as never), { logger: silentLogger });
+    // biome-ignore lint/suspicious/noExplicitAny: ts-infra 0.3.5 duplicate instances — structurally identical EventBus
+    return new PluginHost(new EventBus({}) as any, { logger: silentLogger });
 }
 
 function newLoader(
