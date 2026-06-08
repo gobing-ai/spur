@@ -23,13 +23,20 @@ export function createCliContext(options: {
     output: CommandOutput;
     dbUrl?: string;
     setExitCode?: (code: number) => void;
+    /** Pre-built DB adapter from runNodeApplication services.db (R4 eager injection). */
+    db?: DbAdapter;
 }): CliContext {
     const cwd = resolve(options.cwd ?? process.cwd());
     const env = options.env ?? process.env;
     const fs = createNodeFileSystem();
     setFileSystem(new NodeFileSystem());
 
+    // When runNodeApplication injects an eager DB adapter, use it directly (R4).
+    // Otherwise fall back to lazy creation for tests and the pre-bootstrap path.
     let dbPromise: Promise<DbAdapter> | undefined;
+    if (options.db) {
+        dbPromise = Promise.resolve(options.db);
+    }
 
     return {
         cwd,
