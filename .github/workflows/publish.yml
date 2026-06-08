@@ -61,7 +61,7 @@ jobs:
                   (cd packages/plugin-sdk && bun run build)
 
             - name: Publish spur-plugin-sdk
-              run: bun scripts/ci-publish.ts packages/plugin-sdk
+              run: bun scripts/spur-dev.ts publish packages/plugin-sdk
 
             - name: Publish spur-cli
-              run: bun scripts/ci-publish.ts apps/cli
+              run: bun scripts/spur-dev.ts publish apps/cli
