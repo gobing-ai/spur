@@ -4,6 +4,6 @@ export const CLI_CONFIG = {
     binaryLabel: 'spur',
     binaryVersion: '0.1.8',
     configDir: '.spur',
-    configFile: '.spur/config.json',
+    configFile: '.spur/config.yaml',
     databaseFile: '.spur/spur.db',
 } as const;
