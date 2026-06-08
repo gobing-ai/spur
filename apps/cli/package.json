@@ -36,7 +36,8 @@
     "scripts": {
         "dev": "bun run src/index.ts",
         "build": "bun build src/index.ts --compile --outfile ../../dist/cli/spur",
-        "build:bundle": "bun build src/index.ts --target=bun --outfile dist/index.js && rm -rf dist/config && cp -r ../../config dist/config",
+        "build:binaries": "bun run ../../scripts/spur-dev.ts build-binaries",
+        "build:bundle": "bun build src/index.ts --target=bun --outfile dist/index.js && bun run ../../scripts/spur-dev.ts bundle-config dist/config",
         "test": "bun test tests --coverage --coverage-dir=../../.coverage --pass-with-no-tests",
         "typecheck": "tsc --noEmit",
         "prepublishOnly": "bun run build:bundle"
