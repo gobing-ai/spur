@@ -6,7 +6,8 @@ import { PluginService, type PluginServiceContext } from '../../src/services/plu
 
 describe('PluginService', () => {
     it('constructs without error', () => {
-        const bus = new EventBus({} as never);
+        // biome-ignore lint/suspicious/noExplicitAny: ts-infra 0.3.5 duplicate instances — structurally identical EventBus
+        const bus = new EventBus({}) as any;
         const host = new PluginHost(bus, { logger: getLogger('test') });
         const ctx: PluginServiceContext = {
             host,
@@ -17,7 +18,8 @@ describe('PluginService', () => {
     });
 
     it('list() returns empty array when no plugins found', async () => {
-        const bus = new EventBus({} as never);
+        // biome-ignore lint/suspicious/noExplicitAny: ts-infra 0.3.5 duplicate instances — structurally identical EventBus
+        const bus = new EventBus({}) as any;
         const host = new PluginHost(bus, { logger: getLogger('test') });
         const service = new PluginService({
             host,
@@ -29,7 +31,8 @@ describe('PluginService', () => {
     });
 
     it('info() returns null for unknown plugin', async () => {
-        const bus = new EventBus({} as never);
+        // biome-ignore lint/suspicious/noExplicitAny: ts-infra 0.3.5 duplicate instances — structurally identical EventBus
+        const bus = new EventBus({}) as any;
         const host = new PluginHost(bus, { logger: getLogger('test') });
         const service = new PluginService({
             host,
