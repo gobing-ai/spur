@@ -31,7 +31,7 @@ async function runStatusCore(
 ): Promise<number> {
     const [packageJsonExists, spurConfigExists, git, agentSpecs] = await Promise.all([
         context.fs.exists(join(context.cwd, 'package.json')),
-        context.fs.exists(join(context.cwd, '.spur', 'config.json')),
+        context.fs.exists(join(context.cwd, '.spur', 'config.yaml')),
         gitContext(context.cwd),
         listAgentSpecIds(context),
     ]);
