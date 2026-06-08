@@ -25,7 +25,7 @@ describe('init command', () => {
 
         expect(await main(['init'], options)).toBe(0);
 
-        expect(existsSync(join(cwd, '.spur', 'config.json'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'config.yaml'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'rules', 'recommended-pre-check.yaml'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'rules', 'recommended-post-check.yaml'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'workflows', 'basic.yaml'))).toBe(true);
@@ -64,7 +64,7 @@ describe('init command', () => {
 
         expect(await main(['init', '--minimal'], options)).toBe(0);
 
-        expect(existsSync(join(cwd, '.spur', 'config.json'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'config.yaml'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'rules'))).toBe(false);
         expect(existsSync(join(cwd, '.spur', 'workflows'))).toBe(false);
         // The agents directory is core team-mode infra, created even in --minimal mode.
