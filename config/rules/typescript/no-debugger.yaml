@@ -1,0 +1,27 @@
+# No `debugger` statements in production source.
+# Part of the recommended-pre-check preset — a debugger left in shipped source
+# halts execution under an attached inspector and is never intended for commit.
+#
+# Scope: production source plus scripts tooling. Tests excluded (a debugger in a
+# local test run is a transient debugging aid, not shipped behavior) — though the
+# focus/skip rule already guards the more common test-hygiene mistake. Pattern is
+# ripgrep dialect: `\bdebugger\b` matches the statement, not substrings like
+# `debuggerPort`.
+include:
+  - "apps/**/src/**/*.ts"
+  - "packages/**/src/**/*.ts"
+  - "scripts/**/*.ts"
+exclude:
+  - "**/node_modules/**"
+  - "**/dist/**"
+  - "**/tests/**"
+rules:
+  - id: no-debugger-statement
+    description: >
+      Do not commit `debugger` statements in production source. They pause
+      execution under an attached inspector and have no place in shipped code.
+    severity: error
+    evaluator:
+      type: rg
+      config:
+        pattern: "\\bdebugger\\b\\s*;?"
