@@ -3,6 +3,7 @@
     "allow": [
       "Skill(rd3:brainstorm)",
       "Skill(rd3:task-decomposition)",
+      "Skill(sp:rule-refine)",
       "WebFetch(domain:hono.dev)",
       "WebFetch(domain:www.npmjs.com)",
       "WebFetch(domain:orm.drizzle.team)",
