@@ -26,13 +26,10 @@ rules:
   - id: cli-json-output
     description: >
       Command files that register --json options must call toJson() or
-      JSON.stringify() to produce machine-readable output. rule.ts delegates
-      JSON formatting to RuleService and is excluded from this check.
+      JSON.stringify() to produce machine-readable output.
     severity: error
     evaluator:
       type: rg
       config:
         pattern: "toJson\\b|JSON\\.stringify\\b"
         mode: require
-    exclude:
-      - "apps/cli/src/commands/rule.ts"
