@@ -1,0 +1,64 @@
+# [STRICT — opt-in] Runtime boundaries. Absorbed from
+# ts-libs/.spur/rules/typescript/runtime-boundaries.yaml. NOT in
+# recommended-pre-check: Spur consumes ts-runtime's ProcessExecutor/FileSystem
+# seams but also does light direct fs/spawn at app edges, so these run as
+# opt-in hygiene with explicit allowlists for the sanctioned sites.
+# `no-direct-process-env` is intentionally omitted — config-from-env is Spur's
+# design (packages/config, apps/cli/context, plugin-loader).
+include:
+  - "apps/**/src/**/*.ts"
+  - "packages/**/src/**/*.ts"
+exclude:
+  - "**/tests/**"
+  - "**/*.test.ts"
+  - "**/node_modules/**"
+  - "**/dist/**"
+
+rules:
+  - id: no-direct-process-spawn
+    description: "Agent/process execution must go through ts-ai-runner / ts-runtime's ProcessExecutor. The only sanctioned direct spawn is `spur agent edit` opening $EDITOR."
+    severity: warning
+    evaluator:
+      type: forbidden-import
+      config:
+        forbidden:
+          - specifier: "node:child_process"
+          - specifier: "child_process"
+          - pattern: "Bun\\.(spawn|spawnSync)\\s*\\("
+            matchMode: usage
+          - specifier: "execa"
+          - specifier: "zx"
+        scope:
+          include:
+            - "apps/**/src/**/*.ts"
+            - "packages/**/src/**/*.ts"
+          exclude:
+            - "**/tests/**"
+            - "**/*.test.ts"
+            - "**/dist/**"
+            # `spur agent edit` opens the operator's $EDITOR interactively.
+            - "apps/cli/src/commands/agent.ts"
+
+  - id: no-direct-fs-io
+    description: "Prefer ts-runtime's FileSystem seam for fs IO. Light direct fs at app edges (service stat/access, migration loading) is allowlisted."
+    severity: warning
+    evaluator:
+      type: forbidden-import
+      config:
+        forbidden:
+          - pattern: "from\\s+['\"]node:fs(?:/promises)?['\"]|require\\(['\"]node:fs"
+            matchMode: usage
+          - pattern: "\\bBun\\.(?:write)\\("
+            matchMode: usage
+        scope:
+          include:
+            - "apps/**/src/**/*.ts"
+            - "packages/**/src/**/*.ts"
+          exclude:
+            - "**/tests/**"
+            - "**/*.test.ts"
+            - "**/dist/**"
+            # Sanctioned direct-fs sites (no local FileSystem seam re-implemented):
+            - "packages/app/src/services/workflow-service.ts"
+            - "packages/app/src/services/agent-service.ts"
+            - "packages/domain/src/migrations.ts"

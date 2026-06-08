@@ -1,0 +1,28 @@
+# Output boundary rules — terminal writes go through the output seam
+# (apps/cli/src/output.ts → ts-utils echo/echoError), never raw console/stdout.
+# Absorbed from ts-libs/.spur/rules/typescript/no-raw-output.yaml, re-scoped to
+# the app-monorepo layout. Spur's only sanctioned sink is the ts-utils helper,
+# so no local exclusions are needed.
+include:
+  - "apps/**/src/**/*.ts"
+  - "packages/**/src/**/*.ts"
+exclude:
+  - "**/node_modules/**"
+  - "**/dist/**"
+
+rules:
+  - id: no-console-output
+    description: "Production source must use the output seam (apps/cli/src/output.ts / ts-utils echo) instead of direct console output."
+    severity: error
+    evaluator:
+      type: rg
+      config:
+        pattern: "console\\.(log|error|warn|info|debug|dir|time|trace)"
+
+  - id: no-raw-stdout-stderr
+    description: "Use the output seam (ts-utils echo/echoError) instead of process.stdout/stderr.write directly."
+    severity: error
+    evaluator:
+      type: rg
+      config:
+        pattern: "process\\.(stdout|stderr)\\.write"

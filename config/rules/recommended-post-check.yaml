@@ -1,6 +1,13 @@
-# Development preset — stricter rules for development workflow.
-# Use with: spur rule run --preset recommended-post-check --rule coverage-gate --fail-on warning
+# Recommended post-check preset — coverage gate, exported-symbol docs, and
+# CLI surface consistency.
+# Use with: spur rule run --preset recommended-post-check --fail-on warning
+#
+# Runs AFTER tests (test-post-check). Enforces the coverage gate on
+# fresh .coverage/lcov.info output from bun test --coverage, checks exported
+# declarations for TSDoc comments, and verifies the CLI surface
+# (registerXxxCommand wiring + --json serialization) matches docs.
+# All other rules (typescript, structure, boundary) run in pre-check.
 name: recommended-post-check
 extends:
-  - typescript
-  - quality/coverage-gate
+  - quality
+  - surface

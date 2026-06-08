@@ -1,10 +1,10 @@
-# Recommended preset — portable rule categories.
+# Recommended pre-check preset — portable rule categories from global install.
 # Use with: spur rule run --preset recommended-pre-check
 #
-# Categories resolve from the bundled rules and ~/.config/spur/rules. Drop
-# same-named files under .spur/rules/ to override an individual bundled rule.
+# Runs BEFORE tests (test-pre-check). TypeScript quality + structural + DB
+# boundary rules. TSDoc exports run in post-check alongside coverage-gate.
 name: recommended-pre-check
 extends:
   - typescript
   - structure
-  - quality
+  - boundary

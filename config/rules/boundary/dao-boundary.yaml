@@ -1,0 +1,124 @@
+# DAO / database boundary rules — keep DB access centralized in packages/domain,
+# drizzle confined to schema authoring, and table DDL derived (not hand-written).
+# Enforces ADR-011 (ts-db consumed as a facade; tables are a single source of truth).
+rules:
+  - id: ts-db-only-in-domain
+    description: >
+      @gobing-ai/ts-db may only be imported inside packages/domain. Apps and
+      other packages must consume persistence through @gobing-ai/spur-domain
+      DAOs, never the raw adapter. (ADR-011)
+    severity: error
+    evaluator:
+      type: forbidden-import
+      config:
+        forbidden:
+          - specifier: "@gobing-ai/ts-db"
+          - specifier: "@gobing-ai/ts-db/schema"
+          - specifier: "@gobing-ai/ts-db/bun-sqlite"
+          - specifier: "@gobing-ai/ts-db/d1"
+        scope:
+          include:
+            - "apps/**/src/**/*.ts"
+            - "packages/config/src/**/*.ts"
+            - "packages/contracts/src/**/*.ts"
+          exclude:
+            - "**/node_modules/**"
+            - "**/tests/**"
+
+  - id: drizzle-only-in-domain-schema
+    description: >
+      drizzle-orm is an internal detail of the ts-db facade. Spur may import it
+      ONLY in packages/domain/src/schema/ (table authoring via defineTable column
+      builders). DAOs, analytics, apps, and other packages must use the ts-db
+      vocabulary (EntityDao/BaseDao + predicate spec), never drizzle. (ADR-011)
+    severity: error
+    evaluator:
+      type: forbidden-import
+      config:
+        forbidden:
+          - specifier: "drizzle-orm"
+          - specifier: "drizzle-orm/sqlite-core"
+          - specifier: "drizzle-orm/bun-sqlite"
+          - specifier: "drizzle-orm/d1"
+          - specifier: "drizzle-zod"
+        scope:
+          include:
+            - "apps/**/src/**/*.ts"
+            - "packages/**/src/**/*.ts"
+          exclude:
+            - "packages/domain/src/schema/**"
+            - "**/node_modules/**"
+            - "**/tests/**"
+
+  - id: tables-via-defineTable
+    description: >
+      Tables must be defined with defineTable() (from @gobing-ai/ts-db/schema),
+      not bare sqliteTable() — so DDL and zod derive from one source. Allowed only
+      under packages/domain/src/schema/. (ADR-011)
+    severity: error
+    evaluator:
+      type: rg
+      config:
+        pattern: "sqliteTable\\("
+    include:
+      - "apps/**/src/**/*.ts"
+      - "packages/**/src/**/*.ts"
+    exclude:
+      - "**/node_modules/**"
+      - "**/tests/**"
+
+  - id: no-hand-written-ddl-for-drizzle-tables
+    description: >
+      Domain tables derive their CREATE TABLE via createTableSql (single source of
+      truth) — do not hand-write DDL. Exempt: the CLI migration journal and
+      package-owned schema SQL re-exported from ts-libs. (ADR-011)
+    severity: error
+    evaluator:
+      type: rg
+      config:
+        # Match DDL statement form (CREATE/ALTER/DROP TABLE <name> ... '(' or ';'),
+        # not the bare words in prose/comments. Inline `(?i)` replaces the JS
+        # `flags: i` — the rg evaluator honors inline flags, not a `flags` field.
+        pattern: "(?i)(CREATE|ALTER|DROP)\\s+TABLE\\s+(IF\\s+(NOT\\s+)?EXISTS\\s+)?[\"'`]?[A-Za-z_][A-Za-z0-9_]*[\"'`]?\\s*[(;]"
+    include:
+      - "apps/**/src/**/*.ts"
+      - "packages/**/src/**/*.ts"
+    exclude:
+      - "packages/domain/src/migrations.ts"
+      - "**/node_modules/**"
+      - "**/tests/**"
+
+  - id: raw-sql-only-in-domain
+    description: >
+      Raw SQL string literals (SELECT/INSERT/UPDATE/DELETE) must stay inside
+      packages/domain (the DAO/migration layer). Apps and other packages query
+      through @gobing-ai/spur-domain DAOs. (ADR-011)
+    severity: error
+    evaluator:
+      type: rg
+      config:
+        pattern: "(SELECT |INSERT INTO|UPDATE |DELETE FROM)"
+    include:
+      - "apps/**/src/**/*.ts"
+      - "packages/config/src/**/*.ts"
+      - "packages/contracts/src/**/*.ts"
+    exclude:
+      - "**/node_modules/**"
+      - "**/tests/**"
+
+  - id: no-sql-text-imports
+    description: >
+      .sql text-imports (import ... from './x.sql' with { type: 'text' }) are
+      non-portable through build/publish and are forbidden. Inline SQL in .ts or
+      derive DDL via createTableSql instead. (ADR-011)
+    severity: error
+    evaluator:
+      type: rg
+      config:
+        pattern: "from\\s+['\"][^'\"]*\\.sql['\"]"
+    include:
+      - "apps/**/src/**/*.ts"
+      - "packages/**/src/**/*.ts"
+    exclude:
+      - "**/node_modules/**"
+      - "**/tests/**"
