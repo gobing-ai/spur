@@ -1,3 +1,4 @@
+export { type InboxMessage, InboxMessageDao } from '@gobing-ai/ts-db';
 export { ArtifactDao, type ArtifactRecord, type CreateArtifactInput } from './artifact-dao';
 export { createId } from './base';
 export { type CreatePhaseRunInput, PhaseRunDao, type PhaseRunRecord } from './phase-run-dao';
