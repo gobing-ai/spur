@@ -15,7 +15,7 @@
     "dependencies": {
         "@gobing-ai/spur-config": "workspace:*",
         "@gobing-ai/spur-contracts": "workspace:*",
-        "@gobing-ai/spur-plugin-sdk": "workspace:0.1.7",
+        "@gobing-ai/spur-plugin-sdk": "workspace:0.1.8",
         "@orpc/openapi": "catalog:",
         "@orpc/server": "catalog:",
         "@orpc/zod": "catalog:",
