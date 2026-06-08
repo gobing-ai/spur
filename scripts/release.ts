@@ -15,6 +15,8 @@ const repoRoot = fileURLToPath(new URL('../', import.meta.url));
 interface ReleaseConfig {
     packageDir: string;
     packageName: string;
+    /** Optional source file whose version constant must be rewritten alongside package.json. */
+    versionSourceFile?: string;
     tagVersionSeparator: string;
     publishWorkflow: string;
     releaseCommitType: string;
@@ -28,6 +30,7 @@ const RELEASE_PACKAGES = {
     'spur-cli': {
         packageDir: 'apps/cli',
         packageName: '@gobing-ai/spur-cli',
+        versionSourceFile: 'apps/cli/src/config.ts',
         tagVersionSeparator: '-v',
         publishWorkflow: 'publish.yml',
         releaseCommitType: 'chore',
@@ -114,6 +117,29 @@ async function updateWorkspacePins(pkgName: string, oldVersion: string, newVersi
     }
     return changed;
 }
+
+/**
+ * Rewrite the `binaryVersion` string literal in a source file so the compiled
+ * binary carries the correct version without runtime package.json reads.
+ * Returns `true` when the file was actually modified.
+ */
+async function updateVersionSourceFile(filePath: string, previous: string, next: string): Promise<boolean> {
+    const absPath = `${repoRoot}${filePath}`;
+    const content = await Bun.file(absPath).text();
+    // Match: binaryVersion: 'x.y.z' or binaryVersion: "x.y.z"
+    const updated = content.replace(
+        /(binaryVersion:\s*['"])\d+\.\d+\.\d+(?:-[0-9A-Za-z-.]+)?(?:\+[0-9A-Za-z-.]+)?(['"])/,
+        `$1${next}$2`,
+    );
+    if (updated === content) {
+        console.warn(`  ⚠ ${filePath}: binaryVersion pattern not found (expected ${previous})`);
+        return false;
+    }
+    await Bun.write(absPath, updated);
+    console.log(`  ↳ ${filePath}: binaryVersion ${previous} → ${next}`);
+    return true;
+}
+
 function assertCleanTreeOnBranch(): string {
     if (git(['status', '--porcelain']) !== '') {
         throw new Error('working tree is not clean. Commit or stash changes before releasing.');
@@ -165,6 +191,11 @@ async function bumpVersion(config: ReleaseConfig, version: string, options: { pu
     console.log(`${config.packageName}: ${previous} -> ${version}`);
 
     const staged = [`${config.packageDir}/package.json`];
+    // Update in-source version constant (e.g. binaryVersion in config.ts) for compiled binaries.
+    if (config.versionSourceFile) {
+        const updated = await updateVersionSourceFile(config.versionSourceFile, previous, version);
+        if (updated) staged.push(config.versionSourceFile);
+    }
     // Cascade workspace pin updates for consumers of this package.
     const pinChanges = await updateWorkspacePins(config.packageName, previous, version);
     staged.push(...pinChanges);
@@ -234,6 +265,10 @@ async function bumpAll(version: string, options: { push: boolean }): Promise<voi
         await Bun.write(manifestPath, `${JSON.stringify(manifest, null, 4)}\n`);
         console.log(`${config.packageName}: ${previous} -> ${version}`);
         staged.push(`${config.packageDir}/package.json`);
+        if (config.versionSourceFile) {
+            const updated = await updateVersionSourceFile(config.versionSourceFile, previous, version);
+            if (updated) staged.push(config.versionSourceFile);
+        }
         const pinChanges = await updateWorkspacePins(config.packageName, previous, version);
         staged.push(...pinChanges);
     }
