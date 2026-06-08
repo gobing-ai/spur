@@ -19,6 +19,7 @@ rules:
         scope:
           include:
             - "apps/**/src/**/*.ts"
+            - "packages/app/src/**/*.ts"
             - "packages/config/src/**/*.ts"
             - "packages/contracts/src/**/*.ts"
           exclude:
@@ -100,6 +101,7 @@ rules:
         pattern: "(SELECT |INSERT INTO|UPDATE |DELETE FROM)"
     include:
       - "apps/**/src/**/*.ts"
+      - "packages/app/src/**/*.ts"
       - "packages/config/src/**/*.ts"
       - "packages/contracts/src/**/*.ts"
     exclude:
