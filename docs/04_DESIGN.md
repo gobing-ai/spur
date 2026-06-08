@@ -48,7 +48,7 @@ help rendering overrides remain.
 ### 1.1 Committed product commands
 
 #### `spur init [--name <name>] [--force] [--minimal] [--json]`
-Scaffold a local Spur project. Writes `.spur/config.json` and records the config artifact. Unless
+Scaffold a local Spur project. Writes `.spur/config.yaml` (§2.1) and records the config artifact. Unless
 `--minimal`, scaffolds `.spur/` from the default config assets (§2.3): `.spur/rules/` (with the
 `recommended-pre-check.yaml` + `recommended-post-check.yaml` presets) and `.spur/workflows/basic.yaml`.
 The set of scaffolded files is an explicit reviewed manifest (`scaffold-manifest.ts`) — adding a default
@@ -178,11 +178,50 @@ dispatcher imports those renderers with aliases and registers them for `spur <co
 
 ## 2. Configuration
 
-### 2.1 Project config — `.spur/config.json`
-Written by `spur init`:
-```json
-{ "version": 1, "project": "<name>", "database": ".spur/spur.db", "generatedBy": "@gobing-ai/spur-cli" }
+### 2.1 Project config — `.spur/config.yaml` (ADR-017)
+Written by `spur init`. Single YAML config surface; the legacy `.spur/config.json` project marker is
+retired. Resolution order: project `.spur/config.yaml` (cwd) → fallback `~/.config/spur/config.yaml`.
+
+Two top-level concerns:
+- **Portable `bootstrap:` block** — consumed by `@gobing-ai/ts-infra` `runNodeApplication`. Shared across
+  `spur-cli` and (future) `spur-server`. Keys map 1:1 to ts-infra's `LoggingOptions` /
+  `TelemetryOptions` / `DatabaseOptions` / `SchedulerOptions`.
+- **Spur app section** — everything except `bootstrap:`, validated by a local zod schema
+  (`spurAppConfigSchema`). Keys are agent/rules/workflows/redaction/version/name.
+
+```yaml
+version: "1"
+name: <project-name>
+bootstrap:
+  logging:
+    enabled: true
+    level: info           # debug | info | warn | error
+    console: true
+    json: true
+  telemetry:
+    enabled: false        # CLI: off by default (per-invocation latency)
+    serviceName: spur-cli
+    environment: development
+  database:
+    enabled: true
+    driver: bun-sqlite
+    url: .spur/spur.db    # ${DATABASE_URL} interpolation supported
+  scheduler:
+    enabled: false        # CLI is run-once; no scheduler
+agent:
+  default: pi
+rules:
+  paths:
+    - .spur/rules/**/*.yaml
+workflows:
+  paths:
+    - .spur/workflows/
+redaction:
+  enabled: false
 ```
+
+`${ENV_VAR}` interpolation works via `ts-runtime` `interpolateTree` (used inside
+`runNodeApplication`).
 
 ### 2.2 App config — `@gobing-ai/spur-config` (Zod)
 Server/web layer config (`buildConfigFromEnv`):
