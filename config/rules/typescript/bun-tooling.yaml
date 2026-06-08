@@ -29,6 +29,7 @@ rules:
       - "**/*.yaml"
     exclude:
       # Rule-definition YAML legitimately names these tools in patterns/descriptions.
+      - "config/rules/**"
       - ".spur/rules/**"
 
   - id: enforce-bun-test
