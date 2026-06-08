@@ -15,8 +15,8 @@ describe('CLI init/status', () => {
         const env = { ...process.env, SPUR_GLOBAL_RULES_DIR: await mkdtemp(join(tmpdir(), 'spur-glob-')) };
 
         expect(await main(['init', '--name', 'fixture'], { cwd, output, dbUrl, env })).toBe(0);
-        expect(existsSync(join(cwd, '.spur', 'config.json'))).toBe(true);
-        expect(output.messages.some((message) => message.includes('Initialized .spur/config.json'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'config.yaml'))).toBe(true);
+        expect(output.messages.some((message) => message.includes('Initialized .spur/config.yaml'))).toBe(true);
 
         expect(await main(['status', '--json'], { cwd, output, dbUrl, env })).toBe(0);
         const status = JSON.parse(output.messages.at(-1) ?? '{}') as {
