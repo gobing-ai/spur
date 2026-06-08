@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import type { DbAdapter } from '@gobing-ai/spur-domain';
+import { type DbAdapter, InboxMessageDao } from '@gobing-ai/spur-domain';
 import {
     type AgentSpec,
     buildIdentityPreamble,
@@ -9,7 +9,6 @@ import {
     TeamOrchestrator,
     validateAgentId,
 } from '@gobing-ai/ts-ai-runner';
-import { InboxMessageDao } from '@gobing-ai/ts-db';
 import { getFs } from '@gobing-ai/ts-runtime';
 
 // ---------------------------------------------------------------------------
