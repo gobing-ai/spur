@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.9] — 2026-06-08
+
+### Changed
+
+- **`@gobing-ai/ts-infra` bump to `^0.3.5`** — adds `runApplication` / `runNodeApplication` bootstrap orchestrator subpaths.
+- **CLI bootstrap standardized on `runNodeApplication`** (ADR-017) — `spur-cli`'s `main()` now delegates to `ts-infra`'s `runNodeApplication`, providing deterministic logger/telemetry/events/DB lifecycle. `spur-server` can reuse the identical wiring.
+- **Single config surface** — `.spur/config.yaml` is now the sole config file. The legacy `.spur/config.json` project marker is retired. Resolution: project `.spur/config.yaml` → fallback `~/.config/spur/config.yaml`. `spur init` writes a minimal `.spur/config.yaml` with a `bootstrap:` block consumed by `ts-infra` and a Spur app section validated by `spurAppConfigSchema`.
+- **DB created eagerly** — injected via `runNodeApplication` `services.db`, replacing lazy creation in `createCliContext`.
+
+# Changelog
+
 ## [0.1.1] — 2026-06-06
 
 Spur v0.1.1 is the first published release after the re-foundation onto the `spur-new` monorepo.
