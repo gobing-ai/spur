@@ -41,7 +41,40 @@ idea → agent detection + health → constraint checking → workflow orchestra
 
 ---
 
+## Install
+
+Get the `spur` harness tool. Two paths, depending on whether you run Bun. Both expose a global
+`spur` command and seed defaults into `~/.config/spur/` on first run.
+
+**With Bun (`>= 1.3.0`) — recommended:**
+
+```bash
+bun install -g @gobing-ai/spur-cli   # global `spur` command
+# or run ad-hoc, no install:
+bunx @gobing-ai/spur-cli --help
+```
+
+**Without Bun — standalone binary (macOS / Linux):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gobing-ai/spur/main/scripts/install.sh | sh
+```
+
+Installs to `~/.local/bin` (override via `SPUR_INSTALL`), embeds the Bun runtime, and runs
+`spur init` for you. Full options and Windows/WSL notes live in the
+[CLI README](./apps/cli/README.md#install).
+
+```bash
+spur --help
+spur init       # seed ~/.config/spur/ — idempotent
+```
+
+---
+
 ## Quick Start
+
+> For **developing Spur itself** (running from source). To just *use* the tool, see
+> [Install](#install) above.
 
 ```bash
 # Prerequisites: Bun 1.3.14 (pinned in .prototools)
