@@ -1,9 +1,24 @@
 # TSDoc-on-exports — enforced by Spur's post-check gate.
 # Absorbed from ts-libs/.spur/rules/quality/tsdoc-exports.yaml.
 #
-# Rationale: exported symbols are public integration points even in application
-# workspaces and vendor references. The post-check gate keeps those boundaries
-# documented.
+# Rationale: exported symbols in production source (apps/**/src, packages/**/src)
+# are public integration points that warrant doc comments. The post-check gate
+# keeps those boundaries documented.
+#
+# Scope tightened from the evaluator's default (**/*.ts) to production source only.
+# Excluded: tests (no public API contract), stubs (declaration-only), schema/
+# migrations/db (implementation internals, not public API), dist, node_modules.
+include:
+  - "apps/**/src/**/*.ts"
+  - "packages/**/src/**/*.ts"
+exclude:
+  - "**/node_modules/**"
+  - "**/dist/**"
+  - "**/tests/**"
+  - "**/stubs/**"
+  - "**/schema/**"   # drizzle DDL definitions — not public API surface
+  - "**/migrations.ts"
+  - "**/db.ts"
 rules:
   - id: every-export-has-tsdoc
     description: >
