@@ -2,8 +2,8 @@
 # the registerXxxCommand convention and that --json claims are backed by real
 # output serialization (toJson or JSON.stringify).
 #
-# Part of the recommended-post-check preset. Run:
-#   spur rule run --preset recommended-post-check
+# Part of the recommended-pre-check preset. Run:
+#   spur rule run --preset recommended-pre-check
 
 include:
   - "apps/cli/src/commands/*.ts"

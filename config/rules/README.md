@@ -20,8 +20,8 @@ install or to ts-libs.
 
 | Preset | When | Extends |
 |---|---|---|
-| `recommended-pre-check` | Before tests | `typescript`, `structure`, `boundary` |
-| `recommended-post-check` | After tests | `quality`, `surface` |
+| `recommended-pre-check` | Before tests | `typescript`, `structure`, `boundary`, `surface` |
+| `recommended-post-check` | After tests | `quality` |
 | `strict-check` | Opt-in | `strict` |
 
 ## Relationship to ts-libs
