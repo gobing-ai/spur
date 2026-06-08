@@ -1,0 +1,140 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://github.com/gobing-ai/spur/schemas/spur-config.schema.json",
+    "title": "Spur Project Configuration",
+    "description": "Schema for .spur/config.yaml — the single project configuration surface consumed by spur-cli and (future) spur-server.",
+    "type": "object",
+    "required": ["version", "name"],
+    "properties": {
+        "$schema": {
+            "type": "string",
+            "description": "Reference to this schema for IDE validation. spur-cli resolves this at runtime via loadStructuredConfig."
+        },
+        "version": {
+            "type": "string",
+            "description": "Config schema version. Currently '1'."
+        },
+        "name": {
+            "type": "string",
+            "description": "Project name written by spur init."
+        },
+        "bootstrap": {
+            "type": "object",
+            "description": "Portable bootstrap block consumed by @gobing-ai/ts-infra runNodeApplication. Shared across spur-cli and spur-server.",
+            "properties": {
+                "logging": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean",
+                            "description": "Enable structured logging via LogTape."
+                        },
+                        "level": {
+                            "type": "string",
+                            "enum": ["trace", "debug", "info", "warn", "error", "fatal"],
+                            "description": "Minimum log level."
+                        },
+                        "console": {
+                            "type": "boolean",
+                            "description": "Emit log records to console (stderr)."
+                        },
+                        "json": {
+                            "type": "boolean",
+                            "description": "Format log records as JSON Lines. false = text format."
+                        },
+                        "file": {
+                            "type": "boolean",
+                            "description": "Write log records to a file sink. Uses filePath when set, otherwise disabled."
+                        },
+                        "filePath": {
+                            "type": "string",
+                            "description": "Path to the log file. Relative to project root. Default: .spur/logs/spur.log."
+                        }
+                    }
+                },
+                "telemetry": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean",
+                            "description": "Enable OpenTelemetry tracing/metrics export."
+                        },
+                        "serviceName": {
+                            "type": "string",
+                            "description": "Service name reported to OTel collectors."
+                        },
+                        "environment": {
+                            "type": "string",
+                            "description": "Deployment environment label."
+                        }
+                    }
+                },
+                "database": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean",
+                            "description": "Enable the SQLite database adapter."
+                        },
+                        "driver": {
+                            "type": "string",
+                            "enum": ["bun-sqlite"],
+                            "description": "Database driver. Currently only bun-sqlite."
+                        },
+                        "url": {
+                            "type": "string",
+                            "description": "Database file path. Supports ${DATABASE_URL} interpolation. Default: .spur/spur.db."
+                        }
+                    }
+                },
+                "scheduler": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean",
+                            "description": "Enable the scheduled-task runner. OFF by default for CLI (run-once)."
+                        }
+                    }
+                }
+            }
+        },
+        "agent": {
+            "type": "object",
+            "properties": {
+                "default": {
+                    "type": "string",
+                    "description": "Default coding agent (e.g. pi, claude, codex)."
+                }
+            }
+        },
+        "rules": {
+            "type": "object",
+            "properties": {
+                "paths": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Glob paths to rule files."
+                }
+            }
+        },
+        "workflows": {
+            "type": "object",
+            "properties": {
+                "paths": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Glob paths to workflow directories."
+                }
+            }
+        },
+        "redaction": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "description": "Enable sensitive-data redaction in CLI output."
+                }
+            }
+        }
+    }
+}
