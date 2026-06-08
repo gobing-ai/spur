@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 import { Command } from '@commander-js/extra-typings';
+import type { ApplicationRuntime } from '@gobing-ai/ts-infra/application';
+import { runNodeApplication } from '@gobing-ai/ts-infra/application-node';
 import figlet from 'figlet';
 import standard from 'figlet/fonts/Standard';
 import { registerAgentCommand } from './commands/agent';
@@ -13,10 +15,12 @@ import { registerStatusCommand } from './commands/status';
 import { registerTeamCommand } from './commands/team';
 import { registerWorkflowCommand } from './commands/workflow';
 import { CLI_CONFIG } from './config';
-import { createCliContext } from './context';
+import { loadSpurConfig } from './config/loader';
+import { resolveConfigFile } from './config/resolver';
+import { type SpurAppConfig, SpurAppConfigSchema } from './config/schema';
+import { createCliContext, createMigratedDbAdapter } from './context';
 import { errorMessage } from './errors';
 import { type CommandOutput, consoleOutput } from './output';
-
 /** Options for programmatic CLI execution in tests. */
 export interface MainOptions {
     cwd?: string;
@@ -29,16 +33,59 @@ export interface MainOptions {
 export async function main(argv = process.argv.slice(2), options: MainOptions = {}): Promise<number> {
     const output = options.output ?? consoleOutput;
     let exitCode = 0;
-    const context = createCliContext({
-        cwd: options.cwd,
-        env: options.env,
-        output,
-        dbUrl: options.dbUrl,
-        setExitCode: (code: number) => {
-            exitCode = code;
-        },
-    });
 
+    const configFile = resolveConfigFile(options.cwd);
+    const db = await createMigratedDbAdapter(options.cwd ?? process.cwd(), options.env ?? process.env, options.dbUrl);
+
+    if (configFile !== undefined) {
+        // Validate against JSON Schema ($schema in config file) before bootstrapping.
+        // Throws StructuredConfigSchemaError on validation failure — fail fast, fix config.
+        await loadSpurConfig(configFile);
+
+        // Bootstrap through runNodeApplication — standard path (R1).
+        const app = await runNodeApplication<SpurAppConfig>({
+            configLoader: {
+                configFile,
+                bootstrapSection: 'bootstrap',
+                appConfig: { safeParse: (raw) => SpurAppConfigSchema.safeParse(raw) },
+            },
+            services: { db },
+            async start(_appRt: ApplicationRuntime<SpurAppConfig>) {
+                const context = createCliContext({
+                    cwd: options.cwd,
+                    env: options.env,
+                    output,
+                    db,
+                });
+                exitCode = await runCommandDispatch(argv, context, output);
+            },
+        });
+        await app.stop('shutdown');
+    } else {
+        // No config file — direct path (pre-init, tests).
+        // This preserves the exact same behavior as before for un-initialized projects.
+        const context = createCliContext({
+            cwd: options.cwd,
+            env: options.env,
+            output,
+            db,
+        });
+        exitCode = await runCommandDispatch(argv, context, output);
+    }
+
+    return exitCode;
+}
+
+/** Build the Commander program and run the dispatch. Returns exit code. */
+async function runCommandDispatch(
+    argv: string[],
+    context: ReturnType<typeof createCliContext>,
+    output: CommandOutput,
+): Promise<number> {
+    let exitCode = 0;
+    context.setExitCode = (code: number) => {
+        exitCode = code;
+    };
     const program = new Command();
     program.name('spur').version(CLI_CONFIG.binaryVersion).exitOverride();
     program.configureOutput({
@@ -47,7 +94,7 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
     });
     program.option('-v, --cli-verbose', 'Show internal diagnostics');
 
-    // Register every noun command group.
+    // Register every noun command group — UNCHANGED (R3).
     registerAgentCommand(program, context);
     registerHistoryCommand(program, context);
     registerInitCommand(program, context);
