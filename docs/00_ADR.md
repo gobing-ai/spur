@@ -344,3 +344,28 @@ small, honest, and aligned with where an LLM actually beats a deterministic tool
 **Detail:** the operation taxonomy and per-operation contracts live in
 `plugins/sp/skills/spur-rules/references/operations.md`; this ADR governs the command-vs-CLI-vs-subagent
 choice for any future Spur plugin surface.
+
+
+---
+
+## ADR-017: CLI Bootstrap Standardized on ts-infra runApplication
+
+**Status:** Accepted · **Date:** 2026-06-08
+
+**Decision.** Rewire `spur-cli`'s `main()` to run through `@gobing-ai/ts-infra`'s
+`runNodeApplication` (the Node/Bun convenience subpath over the portable `runApplication`).
+This standardizes the bootstrap so `spur-server` can reuse the identical wiring later.
+Configuration surface consolidates from two parallel files (`.spur/config.json` project marker +
+`.spur/config.yaml` app config) to a single `.spur/config.yaml` with a portable `bootstrap:`
+section consumed by ts-infra and an app-specific section validated by a local zod schema.
+The JSON project marker is retired; `init` writes `.spur/config.yaml`; `status` checks
+`.spur/config.yaml`. Resolution order: project `.spur/config.yaml` → fallback
+`~/.config/spur/config.yaml`.
+
+**Why.** The bootstrap was hand-rolled per-app with no shared lifecycle. `ts-infra` 0.3.5
+introduced `runApplication` / `runNodeApplication` specifically to standardize this — using it
+eliminates duplication, gives CLI and server the same logger/telemetry/events/DB wiring, and
+makes a future Bun↔Node runtime swap a config change rather than a rewrite. The two-config-file
+split (JSON marker + YAML config) was an inconsistency that needed reconciliation.
+
+**Detail:** schema format in `04 §2.1`; bootstrap wiring in `03 §2 Runtime model`.
