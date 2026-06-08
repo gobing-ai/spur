@@ -52,6 +52,10 @@ describe('init command', () => {
         expect(existsSync(join(globalDir, 'rules', 'recommended-pre-check.yaml'))).toBe(true);
         expect(existsSync(join(globalDir, 'rules', 'recommended-post-check.yaml'))).toBe(true);
         expect(existsSync(join(globalDir, 'workflows', 'basic.yaml'))).toBe(true);
+        // The bundled example is seeded under its canonical name, never verbatim:
+        // a fresh install gets a working ~/.config/spur/config.yaml automatically.
+        expect(existsSync(join(globalDir, 'config.yaml'))).toBe(true);
+        expect(existsSync(join(globalDir, 'config.example.yaml'))).toBe(false);
     });
 
     test('--minimal skips local rules and workflow scaffold', async () => {
