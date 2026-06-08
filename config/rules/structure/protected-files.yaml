@@ -32,7 +32,7 @@ rules:
     evaluator:
       type: rg
       config:
-        pattern: "git\\s+.*(push\\s+.*--force|push\\s+.*--force-with-lease\\b)|git\\s+.*reset\\s+(-H|--hard)\\b"
+        pattern: "git\\s+.*(push\\s+.*--force|push\\s+.*--force-with-lease\\b)|git\\s+.*reset\\s+--hard\\b"
     include:
       - "**/*.sh"
       - "**/*.bash"
