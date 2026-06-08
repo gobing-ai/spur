@@ -23,8 +23,12 @@
     "bin": {
         "spur": "./dist/index.js"
     },
+    "exports": {
+        "./schemas/*": "./schemas/*"
+    },
     "files": [
         "dist",
+        "schemas",
         "README.md"
     ],
     "engines": {
