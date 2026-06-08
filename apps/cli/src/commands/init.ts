@@ -15,6 +15,12 @@ const GLOBAL_CONFIG_DIR = join('.config', 'spur');
 /** Global user rules root, relative to the home directory (mirrors `rule.ts`). */
 const GLOBAL_RULES_DIR = join(GLOBAL_CONFIG_DIR, 'rules');
 
+/** Bundled example config filename, seeded as {@link GLOBAL_CONFIG_FILE} on first run. */
+const GLOBAL_CONFIG_EXAMPLE = 'config.example.yaml';
+
+/** Canonical global user config filename written into `~/.config/spur/`. */
+const GLOBAL_CONFIG_FILE = 'config.yaml';
+
 /** Files created or skipped during a scaffold, reported in the result envelope. */
 interface ScaffoldResult {
     created: string[];
@@ -85,10 +91,24 @@ async function seedGlobalConfig(context: CliContext): Promise<number> {
     // Only create subdirs that have files to seed (rules, workflows).
     let written = 0;
     for (const relPath of listBundledConfigFiles()) {
+        // The example is seeded under its canonical name `config.yaml` below, not
+        // verbatim — a user edits `config.yaml`, never a `.example` file.
+        if (relPath === GLOBAL_CONFIG_EXAMPLE) continue;
         const destination = join(target, relPath);
         if (await context.fs.exists(destination)) continue;
         await context.fs.ensureDir(join(target, ...relPath.split('/').slice(0, -1)));
         await context.fs.writeFile(destination, await context.fs.readFile(join(source, relPath)));
+        written += 1;
+    }
+
+    // Seed `config.example.yaml` as `~/.config/spur/config.yaml` on first run so a
+    // fresh install has a working global config without manual renaming. Never
+    // overwrite an existing config — the user owns it once it exists.
+    const examplePath = join(source, GLOBAL_CONFIG_EXAMPLE);
+    const globalConfigPath = join(target, GLOBAL_CONFIG_FILE);
+    if ((await context.fs.exists(examplePath)) && !(await context.fs.exists(globalConfigPath))) {
+        await context.fs.ensureDir(target);
+        await context.fs.writeFile(globalConfigPath, await context.fs.readFile(examplePath));
         written += 1;
     }
     return written;
