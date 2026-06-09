@@ -88,6 +88,35 @@ describe('WorkflowAppService', () => {
         });
     });
 
+    describe('run', () => {
+        test('runs a workflow with an explicit runId and per-run vars', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-run-'));
+            const path = join(dir, 'test.yaml');
+            await writeFile(path, MINIMAL_WORKFLOW_YAML);
+
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const result = await svc.run(path, { runId: 'svc-run-1', vars: { taskId: '0042' } });
+
+            expect(result.status).toBe('done');
+            expect(result.runId).toBe('svc-run-1');
+            expect(result.finalState).toBe('done');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('defaults the runId and runs with no options', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-run-'));
+            const path = join(dir, 'test.yaml');
+            await writeFile(path, MINIMAL_WORKFLOW_YAML);
+
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const result = await svc.run(path);
+
+            expect(result.status).toBe('done');
+            expect(result.runId.length).toBeGreaterThan(0);
+            await rm(dir, { recursive: true, force: true });
+        });
+    });
+
     describe('list', () => {
         test('returns empty runs array when no runs exist', async () => {
             const svc = new WorkflowAppService(makeCtx());
