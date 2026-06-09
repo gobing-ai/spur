@@ -37,40 +37,51 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
     const configFile = resolveConfigFile(options.cwd);
     const db = await createMigratedDbAdapter(options.cwd ?? process.cwd(), options.env ?? process.env, options.dbUrl);
 
-    if (configFile !== undefined) {
-        // Validate against JSON Schema ($schema in config file) before bootstrapping.
-        // Throws StructuredConfigSchemaError on validation failure — fail fast, fix config.
-        await loadSpurConfig(configFile);
+    try {
+        if (configFile !== undefined) {
+            // Validate against JSON Schema ($schema in config file) before bootstrapping.
+            // Throws StructuredConfigSchemaError on validation failure — fail fast, fix config.
+            await loadSpurConfig(configFile);
 
-        // Bootstrap through runNodeApplication — standard path (R1).
-        const app = await runNodeApplication<SpurAppConfig>({
-            configLoader: {
-                configFile,
-                bootstrapSection: 'bootstrap',
-                appConfig: { safeParse: (raw) => SpurAppConfigSchema.safeParse(raw) },
-            },
-            services: { db },
-            async start(_appRt: ApplicationRuntime<SpurAppConfig>) {
-                const context = createCliContext({
-                    cwd: options.cwd,
-                    env: options.env,
-                    output,
-                    db,
-                });
-                exitCode = await runCommandDispatch(argv, context, output);
-            },
-        });
-        await app.stop('shutdown');
-    } else {
-        // No config file — direct path (pre-init, tests).
-        // This preserves the exact same behavior as before for un-initialized projects.
-        const context = createCliContext({
-            cwd: options.cwd,
-            env: options.env,
-            output,
-            db,
-        });
-        exitCode = await runCommandDispatch(argv, context, output);
+            // Bootstrap through runNodeApplication — standard path (R1).
+            const app = await runNodeApplication<SpurAppConfig>({
+                configLoader: {
+                    configFile,
+                    bootstrapSection: 'bootstrap',
+                    appConfig: { safeParse: (raw) => SpurAppConfigSchema.safeParse(raw) },
+                },
+                // Under test, force logging off so initializeLogger() does not
+                // reconfigure LogTape with a console sink — which would reset the
+                // global mute installed in tests/setup.ts and leak JSON log lines
+                // from every later app.* logger (e.g. the rule engine).
+                config: process.env.NODE_ENV === 'test' ? { logging: { enabled: false } } : undefined,
+                services: { db },
+                async start(_appRt: ApplicationRuntime<SpurAppConfig>) {
+                    const context = createCliContext({
+                        cwd: options.cwd,
+                        env: options.env,
+                        output,
+                        db,
+                    });
+                    exitCode = await runCommandDispatch(argv, context, output);
+                },
+            });
+            await app.stop('shutdown');
+        } else {
+            // No config file — direct path (pre-init, tests).
+            // This preserves the exact same behavior as before for un-initialized projects.
+            const context = createCliContext({
+                cwd: options.cwd,
+                env: options.env,
+                output,
+                db,
+            });
+            exitCode = await runCommandDispatch(argv, context, output);
+        }
+    } finally {
+        // ADR-018: ts-infra 0.3.6 no longer closes a caller-injected services.db.
+        // Spur owns the adapter it creates — close it in both bootstrap branches.
+        await db.close();
     }
 
     return exitCode;
