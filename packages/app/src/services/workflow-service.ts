@@ -26,6 +26,12 @@ export type WorkflowRunResult = Awaited<ReturnType<InstanceType<typeof EngineWor
     readonly [key: string]: unknown;
 };
 
+/** Options for a workflow run: a persisted run id and per-run variable overrides. */
+export interface WorkflowRunOptions {
+    runId?: string;
+    vars?: Record<string, string>;
+}
+
 /** Result of a workflow list operation. */
 export interface WorkflowListResult {
     runs: Awaited<ReturnType<InstanceType<typeof EngineWorkflowService>['listRuns']>>;
@@ -77,11 +83,12 @@ export class WorkflowAppService {
     }
 
     /** Load and run a workflow file. Returns the engine run result. */
-    async run(file: string, runId?: string): Promise<WorkflowRunResult> {
+    async run(file: string, opts: WorkflowRunOptions = {}): Promise<WorkflowRunResult> {
         const svc = await this.createEngineService();
         const result = await svc.runFile(file, {
             workdir: this.ctx.cwd,
-            runId: runId ?? crypto.randomUUID(),
+            runId: opts.runId ?? crypto.randomUUID(),
+            ...(opts.vars ? { vars: opts.vars } : {}),
         });
         return result as WorkflowRunResult;
     }
