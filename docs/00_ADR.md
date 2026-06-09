@@ -396,3 +396,25 @@ makes a future Bun↔Node runtime swap a config change rather than a rewrite. Th
 split (JSON marker + YAML config) was an inconsistency that needed reconciliation.
 
 **Detail:** schema format in `04 §2.1`; bootstrap wiring in `03 §2 Runtime model`.
+
+---
+
+## ADR-019: Server Bootstrap Splits Portable/Worker vs Node/Bun by Runtime
+
+**Status:** Accepted · **Date:** 2026-06-09
+
+**Decision.** The Spur server runs on two runtimes — `Bun.serve` (`src/index.ts`) and Cloudflare
+Workers (`src/worker.ts`). The portable `runApplication` (`@gobing-ai/ts-infra/application`) is
+Workers-safe; the Node/Bun convenience `runNodeApplication` (`@gobing-ai/ts-infra/application-node`)
+pulls in `node:fs` and is **not** Workers-safe. Therefore each entry uses the bootstrap layer it is
+allowed to use: the Bun entry via `runNodeApplication` (mirroring the CLI per ADR-017), and the
+Worker entry via the portable `runApplication` behind a lazy singleton (cached bootstrap promise,
+no top-level await). The shared `createApp` and `serverBootstrapConfig` live in `src/bootstrap.ts`
+so the two entries share config logic and the Hono app factory without coupling to either bootstrap
+subpath.
+
+**Why.** The server was the last Spur app with hand-rolled bootstrap. Standardizing on ts-infra's
+lifecycle eliminates duplication with the CLI, gives the server structured logging/telemetry/events,
+and keeps the Worker bundle free of `node:*` imports by design.
+
+**Detail:** bootstrap wiring in `03 §2 Runtime model`; bootstrap subpath split in `04 §5`.

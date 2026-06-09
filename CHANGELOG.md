@@ -2,10 +2,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Server bootstrap standardized on `ts-infra`** (ADR-019) — `spur-server` now bootstraps through `@gobing-ai/ts-infra` using a runtime-aware split: `runNodeApplication` for the Bun entry (`src/index.ts`) and portable `runApplication` behind a lazy singleton for the Cloudflare Workers entry (`src/worker.ts`). Shared config and Hono app factory extracted to `src/bootstrap.ts`. `createApp` accepts an optional `ApplicationRuntime` to thread `logger`/`events`/`db` into Hono context and oRPC handler `context`.
+
 ### Removed
 
 - **`@gobing-ai/spur-plugin-sdk` package removed.** The plugin substrate moved upstream to a bare `PluginHost` + `Plugin` lifecycle core in `@gobing-ai/ts-infra`, consumed via `runApplication` (ADR-012 amendment). `packages/plugin-sdk` is deleted; the server's unused plugin-route plumbing is removed. The previously published `@gobing-ai/spur-plugin-sdk@0.1.8` remains on npm but receives no further releases. The release script and Publish workflow no longer build or publish it.
-
 ## [0.1.9] — 2026-06-08
 
 ### Changed

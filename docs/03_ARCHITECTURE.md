@@ -78,9 +78,16 @@ flowchart TD
     JSONL[(Agent JSONL files)] -.read.-> HI
 ```
 
-The server/web tier is a separate, read-oriented inspection surface (Phase 4). The server runs on
-Bun (`Bun.serve`) or Cloudflare Workers (`worker.ts`) by sharing one Hono app built at module scope.
+The server/web tier is a separate, read-oriented inspection surface (Phase 4). The server
+bootstrap splits by runtime (ADR-019):
 
+- **Bun entry (`index.ts`)** → `runNodeApplication` (`@gobing-ai/ts-infra/application-node`):
+  YAML config loading, file log sink, owned DB adapter, `Bun.serve` started inside `start(appRt)`.
+- **Worker entry (`worker.ts`)** → portable `runApplication` (`@gobing-ai/ts-infra/application`):
+  lazy singleton (cached promise, no top-level await), inline config, zero `node:*` imports.
+
+Both entries share `src/bootstrap.ts` (`createApp`, `serverBootstrapConfig`) — the Hono app
+factory and bootstrap config block are runtime-agnostic.
 ## 3. CLI Architecture (`apps/cli`)
 
 ```

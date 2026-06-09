@@ -311,6 +311,24 @@ One config object per source: `source` discriminant, `displayName`, `filePattern
 
 Web (`apps/web`) renders live health from the typed oRPC client. Deeper read surface is Phase 4.
 
+### 5.1 Bootstrap (ADR-019)
+
+The server bootstraps through `@gobing-ai/ts-infra` using a runtime-aware split:
+
+| Entry | Bootstrap | Subpath | Workers-Safe? |
+|-------|-----------|---------|---------------|
+| `src/index.ts` (Bun) | `runNodeApplication` | `ts-infra/application-node` | No (uses `node:fs`) |
+| `src/worker.ts` (CF Workers) | `runApplication` | `ts-infra/application` | Yes |
+
+**Shared seam (`src/bootstrap.ts`):**
+
+| Export | Role |
+|--------|------|
+| `serverBootstrapConfig(env)` | Common `logging`/`telemetry`/`events` block with test-mute guard |
+| `createApp(appRt?)` | Hono app factory; optional `ApplicationRuntime` threads `logger`/`events`/`db` into Hono context + oRPC handler `context` |
+
+The Worker entry uses a **lazy singleton** (`let rtPromise`) — no top-level await, `runApplication`
+initialized on first `fetch`. The Bun entry uses `runNodeApplication` mirroring the CLI (ADR-017).
 ## 6. Plugin System (Removed — ADR-012 amended 2026-06-09)
 
 > **Amendment (2026-06-09):** The standalone `@gobing-ai/spur-plugin-sdk` is deleted. The bare
