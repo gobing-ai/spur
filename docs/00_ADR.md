@@ -220,6 +220,33 @@ agents in `01_PRD §1`/`§5.1`) needs user-defined agent types. 5d is reactivate
 scheduled or a concrete product need for plugin-defined harnesses appears; the upstream `AiRunner`
 injection is its prerequisite, not an optional nicety. Tracked in task 0015 (status `Blocked`).
 
+**Amendment (2026-06-09) — Substrate home moves to ts-infra; SDK deleted; registries deferred.**
+The `@gobing-ai/spur-plugin-sdk` package (~945 LOC of capability registries, trust engine,
+event registry, manifest schema) had zero real consumers (no `plugin.yaml` on disk, no
+registry methods called from production code). Per Q&A 0029 (2026-06-08), the decision record
+is amended to reflect the new shape:
+
+- **Substrate home: ts-infra, not a standalone Spur SDK.** A bare `Plugin` (lifecycle-only:
+  `onLoad`/`onStart`/`onStop`/`onUnload` + `failFast`) and `PluginHost` (register, lifecycle
+  fan-out with fail-fast load, fail-soft start/stop/unload in reverse registration order) were
+  upstreamed to `@gobing-ai/ts-infra` (ts-libs tasks 0025–0028, ADRs 015–018), shipping in
+  `0.3.6`. The `runApplication` / `runNodeApplication` bootstrap drives the plugin lifecycle
+  natively via `plugins`/`pluginHost` options.
+- **`packages/plugin-sdk` is deleted.** Spur imports `Plugin`, `PluginHost`, and
+  `PluginSummary` from `@gobing-ai/ts-infra/application`.
+- **Capability registries (api, command, event, harness, provider, rule, skill, ui, worker)
+  are deferred — not permanently rejected.** They can be re-added later on top of the ts-infra
+  `Plugin` interface when a real plugin consumer exists. The four-tier trust ladder
+  (`bundled` > `curated` > `local` > `untrusted`) is likewise deferred.
+- **Server plugin routes (`apps/server/src/plugins.ts` + its `ApiRegistry`/`mountPluginRoutes`
+  seam) are removed.** They had no consumer beyond their own tests.
+
+This amendment **supersedes** the original ADR-012 decision text for substrate home, SDK
+scope, and deferred mechanism. The harness-overlay addendum (Phase 5d) is unaffected.
+
+**Detail:** `03 §11 Plugin Substrate`, `04 §6 Plugin System` — updated to point at ts-infra
+core and mark Spur registries/trust as removed.
+
 ---
 
 ## ADR-013: CLI Help Is Command-Scoped
