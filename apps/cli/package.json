@@ -1,5 +1,5 @@
 {
-    "name": "@gobing-ai/spur-cli",
+    "name": "@gobing-ai/spur",
     "version": "0.1.8",
     "description": "Spur CLI \u2014 local-first harness for mainstream coding agents: constraint checking, workflow orchestration, agent health, and history analytics. Bun-native; exposes the `spur` command.",
     "keywords": [
