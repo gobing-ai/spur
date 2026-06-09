@@ -48,7 +48,7 @@ jobs:
                       echo "CLI version mismatch: tag=${TAG_VERSION}, package.json=${CLI_VERSION}" >&2
                       exit 1
                   fi
-                  echo "Publishing @gobing-ai/spur-cli@${CLI_VERSION}"
+                  echo "Publishing @gobing-ai/spur@${CLI_VERSION}"
 
             - name: Build
               run: (cd apps/cli && bun run build:bundle)
