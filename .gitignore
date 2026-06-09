@@ -75,6 +75,7 @@ web_modules/
 out
 # Nuxt.js build / generate output
 .nuxt
+spur.js
 spur-cli
 dist
 # Gatsby files
