@@ -81,4 +81,25 @@ describe('loadSpurConfig', () => {
         expect(config.version).toBe('1');
         expect(config.name).toBe('schema-test');
     });
+
+    test('rejects a non-spur-cli $schema package instead of resolving via node_modules', async () => {
+        // Spur only owns its embedded schema. A `$schema` pointing at another package must
+        // NOT fall back to a node_modules lookup — that path is absent in a compiled binary
+        // and would crash with ENOENT at runtime. The loader rejects it up front with a
+        // clear, binary-safe error rather than depending on the dev tree's installed deps.
+        const otherPath = join(cwd, '.spur', 'other-schema.yaml');
+        await Bun.write(
+            otherPath,
+            [
+                '$schema: "@gobing-ai/ts-rule-engine/schemas/rule-file.schema.json"',
+                'version: "1"',
+                'name: not-a-rule-file',
+                '',
+            ].join('\n'),
+        );
+
+        await expect(loadSpurConfig(otherPath, { validateSchema: true })).rejects.toThrow(
+            /Unsupported \$schema package "@gobing-ai\/ts-rule-engine"/,
+        );
+    });
 });
