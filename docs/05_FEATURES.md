@@ -107,5 +107,5 @@ Legend: ✅ done · 🔶 partial (MVP, depth pending) · ⏳ planned · 💤 def
 |---------|--------------|
 | Asset SSOT model / `spur asset inspect` | Old `@spur/assets` discarded; rebuild only if needed |
 | Rich `spur inspect <run-id>` (timeline/events/gates) | Depends on Phase 2 run model |
-| Plugin **substrate** (SDK, discovery, registries, trust ladder) | 🔶 Partial — ADR-012; mechanism `03 §11`, shapes `04 §6`. Shipped: 5a SDK + registries, 5b discovery/loader/CLI, 5c server route seam (`/api/plugins/<prefix>` + OpenAPI + lifecycle hooks). Remaining 5d–5f in `02_ROADMAP` |
+| Plugin **substrate** (SDK, discovery, registries, trust ladder) | 🔶 Partial — ADR-012 amended; mechanism `03 §11`, shapes `04 §6`. Shipped now means ts-infra lifecycle core only. Spur-side SDK, discovery/loader/CLI, server route seam, registries, and trust ladder are removed/deferred until a real plugin consumer exists. |
 | Remote/cooperation transport | Out of scope until a concrete need surfaces |

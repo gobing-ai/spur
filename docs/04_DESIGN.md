@@ -359,6 +359,7 @@ and drives the plugin lifecycle natively — no Spur-side host wiring needed.
 | Manifest (`plugin.yaml`) | Removed | Re-addable as YAML + Zod on the ts-infra `Plugin` interface |
 | Capability registries | Removed | 9 registries (api, command, event, harness, provider, rule, skill, ui, worker) — re-addable |
 | Trust ladder | Removed | 4-tier (`bundled` > `curated` > `local` > `untrusted`) — re-addable as registration-time gating |
+| CLI plugin command | Removed | `spur plugin list|info` — re-addable when plugin discovery returns |
 | Server route seam | Removed | `mountPluginRoutes` / `collectPluginOpenApiPaths` — re-addable when plugins exist |
 | Plugin config override | Removed | Per-plugin `.spur/plugins/<name>.yaml` — re-addable |
 | Event registry | Removed | Glob-pattern + rate-limiting wrapper over `EventBus` — re-addable |

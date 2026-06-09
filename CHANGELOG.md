@@ -9,6 +9,8 @@
 ### Removed
 
 - **`@gobing-ai/spur-plugin-sdk` package removed.** The plugin substrate moved upstream to a bare `PluginHost` + `Plugin` lifecycle core in `@gobing-ai/ts-infra`, consumed via `runApplication` (ADR-012 amendment). `packages/plugin-sdk` is deleted; the server's unused plugin-route plumbing is removed. The previously published `@gobing-ai/spur-plugin-sdk@0.1.8` remains on npm but receives no further releases. The release script and Publish workflow no longer build or publish it.
+- **`spur plugin` placeholder command removed.** Plugin discovery is deferred after the ADR-012 amendment, so the always-empty `plugin list|info` CLI surface is removed until a real plugin consumer exists.
+
 ## [0.1.9] — 2026-06-08
 
 ### Changed

@@ -83,9 +83,10 @@ path; 5d is deferred (ADR-012 addendum 2026-06-03); 5e is out of scope; 5f is un
 
 - [x] **5a — Plugin SDK** (`@gobing-ai/spur-plugin-sdk`): registries + `PluginConfig` merge + trust
   *policy* (registration-time gating, no runtime sandbox). *(task 0012)*
-- [x] **5b — Discovery + CLI**: `PluginLoader` in `packages/app`; `spur plugin list|info`. *(task 0013)*
-- [x] **5c — Server seam**: mount plugin Hono routes under `/api/plugins/<prefix>`; appear in
-  generated OpenAPI; `onServerStart`/`onServerStop` lifecycle hooks. *(task 0014)*
+- [x] **5b — Discovery + CLI**: superseded by the 2026-06-09 ADR-012 amendment; `PluginLoader` and
+  `spur plugin list|info` are removed until a real plugin consumer exists. *(task 0013, reversed)*
+- [x] **5c — Server seam**: superseded by the 2026-06-09 ADR-012 amendment; `/api/plugins/<prefix>`
+  route mounting and server plugin hooks are removed until plugins return. *(task 0014, reversed)*
 - [ ] **5d — Harness registry** *(deferred — ADR-012 addendum 2026-06-03)*: Spur-side `AgentShim`
   overlay. Resolution needs no upstream change, but **execution does** (`AiRunner` accepts only the
   closed `AgentName` union). No committed PRD surface consumes plugin-defined agent types; its only
