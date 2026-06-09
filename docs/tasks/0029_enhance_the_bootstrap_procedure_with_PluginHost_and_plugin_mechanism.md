@@ -1,9 +1,9 @@
 ---
 name: enhance the bootstrap procedure with PluginHost and plugin mechanism
 description: enhance the bootstrap procedure with PluginHost and plugin mechanism
-status: Backlog
+status: Done
 created_at: 2026-06-08T18:13:17.156Z
-updated_at: 2026-06-08T18:13:17.156Z
+updated_at: 2026-06-09T06:29:32.107Z
 folder: docs/tasks
 type: task
 feature-id: ""
@@ -206,11 +206,42 @@ clean `git status`. No `--no-verify`, no suppression-only fixes.
 
 ### Review
 
+## Verification — 2026-06-09 (dev-verify --auto --fix all --force)
 
+**Verdict: PASS (with one gap found and fixed during the pass).**
+
+Phase 8 — requirements traceability (verified on disk):
+
+- [x] **R1** (code-review plugin-sdk; simplify if over-engineered) → **MET** | `packages/plugin-sdk`
+  deleted; Q1–Q2 record the over-engineering verdict and the upstream-and-delete decision.
+- [x] **R2** (built-in plugins for logging/eventbus/db in packages/app) → **MET (correctly scoped down)** |
+  Per Q3, ts-infra already exposes these as internal built-in plugins; Spur consumes the lifecycle rather
+  than double-layering. No Spur re-plugin-ization — the right call, not a miss.
+- [x] **R3** (leverage runApplication to unify CLI+server bootstrap) → **MET** | `apps/cli/src/index.ts`
+  drives `runNodeApplication`; server adopts the same path under task 0030.
+- [x] **R4 [ADR-018]** (own injected DB lifecycle; close in both branches) → **MET; regression test ADDED
+  this pass** | `apps/cli/src/index.ts:86-90` closes `db` in a `try/finally` covering both the
+  `runNodeApplication` and no-config branches. The required "shutdown-closes-db test to prevent
+  regression" was **missing** — added in this pass (see Testing).
+
+SECU (Phase 7) on the bootstrap surface: no P1/P2. Security — injected `services.db` is caller-owned and
+explicitly closed; no leak, no secret exposure. Correctness — `finally` guarantees close on the throw
+path (e.g. `--version`'s Commander exitOverride). Efficiency/Usability — clean.
+
+| # | Title | Dimension | Location | Disposition |
+|---|-------|-----------|----------|-------------|
+| 1 | Missing ADR-018 DB-close regression test (explicit R4 requirement) | Correctness (P2) | `apps/cli/tests/bootstrap.test.ts` | **FIXED** — added `db?` injection seam to `MainOptions` + 2 tests asserting `db.close()` runs on shutdown for both branches via a `close`-spy Proxy over a real `:memory:` adapter. |
 
 ### Testing
 
-
+- **Gap closed:** R4's regression guard did not exist. Added `db?: DbAdapter` to `MainOptions`
+  (`apps/cli/src/index.ts`) so a spy adapter can be injected, then two tests in `bootstrap.test.ts`:
+  `closes the injected DB adapter on shutdown — runNodeApplication path` and `— no-config path`. Both
+  inject a Proxy that flags `close()` while delegating to a real adapter, and assert `closed() === true`.
+  These fail if `db.close()` is removed from `main()`'s `finally`.
+- **Gates (all green):** `bun run lint` (Biome + all-workspace `tsc --noEmit`) clean · `bun test apps/cli`
+  **163 pass / 0 fail** (was 161 → +2) · `bun run test-cf` 1 pass · `bun build --compile` succeeds.
+- **Result:** task requirements fully traceable to code + tests; no skipped/`.skip` tests.
 
 ### Artifacts
 
