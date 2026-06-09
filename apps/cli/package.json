@@ -21,13 +21,13 @@
     "author": "Robin Min <minlongbing@gmail.com>",
     "type": "module",
     "bin": {
-        "spur": "./dist/index.js"
+        "spur": "./spur-cli/index.js"
     },
     "exports": {
         "./schemas/*": "./schemas/*"
     },
     "files": [
-        "dist",
+        "spur-cli",
         "schemas",
         "README.md"
     ],
@@ -41,7 +41,7 @@
         "dev": "bun run src/index.ts",
         "build": "bun build src/index.ts --compile --outfile ../../dist/cli/spur",
         "build:binaries": "bun run ../../scripts/spur-dev.ts build-binaries",
-        "build:bundle": "bun build src/index.ts --target=bun --outfile dist/index.js && bun run ../../scripts/spur-dev.ts bundle-config dist/config",
+        "build:bundle": "bun build src/index.ts --target=bun --outfile spur-cli/index.js && bun run ../../scripts/spur-dev.ts bundle-config spur-cli/config",
         "test": "bun test tests --coverage --coverage-dir=../../.coverage --pass-with-no-tests",
         "typecheck": "tsc --noEmit",
         "prepublishOnly": "bun run build:bundle"
