@@ -1,41 +1,29 @@
 import { describe, expect, it } from 'bun:test';
-import { PluginHost } from '@gobing-ai/spur-plugin-sdk';
-import { EventBus, getLogger } from '@gobing-ai/ts-infra';
-import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
-import { PluginService, type PluginServiceContext } from '../../src/services/plugin-service';
+import { PluginService } from '../../src/services/plugin-service';
 
-describe('PluginService', () => {
-    it('constructs without error', () => {
-        const bus = new EventBus({});
-        const host = new PluginHost(bus, { logger: getLogger('test') });
-        const ctx: PluginServiceContext = {
-            host,
-            fs: createNodeFileSystem(),
-        };
-        const service = new PluginService(ctx);
-        expect(service).toBeDefined();
+describe('PluginService (no-op — plugin discovery deferred)', () => {
+    it('list returns empty array', async () => {
+        const svc = new PluginService();
+        const result = await svc.list();
+        expect(result).toEqual([]);
     });
 
-    it('list() returns empty array when no plugins found', async () => {
-        const bus = new EventBus({});
-        const host = new PluginHost(bus, { logger: getLogger('test') });
-        const service = new PluginService({
-            host,
-            fs: createNodeFileSystem(),
-        });
-        const plugins = await service.list();
-        expect(Array.isArray(plugins)).toBe(true);
-        // In CI/tmpdir, no plugins are expected to be found naturally
+    it('info returns null for any name', async () => {
+        const svc = new PluginService();
+        const result = await svc.info('any-plugin');
+        expect(result).toBeNull();
     });
 
-    it('info() returns null for unknown plugin', async () => {
-        const bus = new EventBus({});
-        const host = new PluginHost(bus, { logger: getLogger('test') });
-        const service = new PluginService({
-            host,
-            fs: createNodeFileSystem(),
-        });
-        const info = await service.info('nonexistent');
-        expect(info).toBeNull();
+    it('ensureBootstrapped is a no-op', async () => {
+        const svc = new PluginService();
+        await svc.ensureBootstrapped();
+        // No throw means success — the method is a no-op.
+    });
+
+    it('list after ensureBootstrapped is still empty', async () => {
+        const svc = new PluginService();
+        await svc.ensureBootstrapped();
+        const result = await svc.list();
+        expect(result).toEqual([]);
     });
 });
