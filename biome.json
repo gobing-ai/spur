@@ -11,6 +11,7 @@
             "**",
             "!**/.claude",
             "!**/dist",
+            "!**/spur-cli",
             "!**/.turbo",
             "!**/.coverage",
             "!**/node_modules",
