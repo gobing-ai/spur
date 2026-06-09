@@ -1,8 +1,3 @@
-import type { PluginHost } from '@gobing-ai/spur-plugin-sdk';
-import type { Logger } from '@gobing-ai/ts-infra';
-import type { FileSystem } from '@gobing-ai/ts-runtime';
-import { type ModuleLoader, PluginLoader, type PluginLoadResult } from './plugin-loader';
-
 /** Entry returned by {@link PluginService.list} for CLI display and JSON output. */
 export interface PluginListEntry {
     name: string;
@@ -12,47 +7,26 @@ export interface PluginListEntry {
     dir: string;
 }
 
-/** Context required to instantiate {@link PluginService}. */
-export interface PluginServiceContext {
-    host: PluginHost;
-    fs: FileSystem;
-    logger?: Logger;
-    env?: Record<string, string | undefined>;
-    installDir?: string;
-    projectRoot?: string;
-    /** Optional module loader for tests. Defaults to dynamic import(). */
-    loadModule?: ModuleLoader;
-}
-
-/** High-level service wrapping {@link PluginLoader} with bootstrap-on-first-use semantics. */
+/**
+ * Thin no-op plugin service.
+ *
+ * Plugin discovery is deferred until a real plugin consumer exists (ADR-012
+ * amendment 2026-06-09). When re-enabled, plugins will be discovered via
+ * plugin.yaml scan → dynamic import → host.register, targeting the bare
+ * ts-infra `Plugin` interface.
+ */
 export class PluginService {
-    private readonly loader: PluginLoader;
-    private results: PluginLoadResult[] = [];
-    private bootstrapped = false;
-
-    constructor(private readonly ctx: PluginServiceContext) {
-        this.loader = new PluginLoader(ctx.host, ctx.fs, ctx.logger, ctx.env, ctx.loadModule);
-    }
+    constructor() {}
 
     async ensureBootstrapped(): Promise<void> {
-        if (this.bootstrapped) return;
-        this.results = await this.loader.bootstrap(this.ctx.installDir, this.ctx.projectRoot);
-        this.bootstrapped = true;
+        // No-op: no plugins exist yet.
     }
 
     async list(): Promise<PluginListEntry[]> {
-        await this.ensureBootstrapped();
-        return this.results.map((r) => ({
-            name: r.name,
-            version: r.version,
-            source: r.source,
-            status: r.status,
-            dir: r.dir,
-        }));
+        return [];
     }
 
-    async info(name: string): Promise<PluginListEntry | null> {
-        await this.ensureBootstrapped();
-        return this.results.find((r) => r.name === name) ?? null;
+    async info(_name: string): Promise<PluginListEntry | null> {
+        return null;
     }
 }
