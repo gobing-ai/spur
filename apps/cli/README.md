@@ -1,4 +1,4 @@
-# @gobing-ai/spur-cli
+# @gobing-ai/spur
 
 **The `spur` command** — a local-first harness for mainstream coding agents (Claude Code, Codex,
 Gemini CLI, Antigravity, pi, OpenCode, OpenClaw). Spur is **not** a coding agent; it wraps the agents
@@ -16,11 +16,11 @@ The npm package ships a Bun bundle and runs under the Bun runtime you already ha
 
 ```bash
 # Install globally → use the `spur` command everywhere
-bun install -g @gobing-ai/spur-cli
+bun install -g @gobing-ai/spur
 spur --help
 
 # …or run ad-hoc with no install
-bunx @gobing-ai/spur-cli --help
+bunx @gobing-ai/spur --help
 ```
 
 ### If you don't have Bun — standalone binary
