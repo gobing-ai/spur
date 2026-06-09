@@ -26,7 +26,7 @@ export function serverBootstrapConfig(env: Record<string, string | undefined>): 
     const isTest = env.NODE_ENV === 'test';
     return {
         logging: {
-            enabled: !isTest, // mute JSON log leakage in tests (parity with spur-cli)
+            enabled: !isTest, // mute JSON log leakage in tests (parity with spur)
             level: (env.SPUR_LOG_LEVEL as LoggingOptions['level']) ?? 'info',
         },
         telemetry: { enabled: false },
