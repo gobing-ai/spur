@@ -13,14 +13,13 @@ export type {
     HistoryServiceContext,
 } from './services/history-service';
 export { HistoryService } from './services/history-service';
-export {
-    type ModuleLoader,
-    type PluginCandidate,
-    PluginLoader,
-    type PluginLoadResult,
-    type ValidatedPlugin,
+export type {
+    ModuleLoader,
+    PluginCandidate,
+    PluginLoadResult,
+    ValidatedPlugin,
 } from './services/plugin-loader';
-export { type PluginListEntry, PluginService, type PluginServiceContext } from './services/plugin-service';
+export { type PluginListEntry, PluginService } from './services/plugin-service';
 export {
     type Colorize,
     type FailOnSeverity,
