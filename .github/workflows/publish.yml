@@ -44,24 +44,14 @@ jobs:
                   TAG="${GITHUB_REF_NAME}"
                   TAG_VERSION="${TAG#@gobing-ai/spur-v}"
                   CLI_VERSION=$(node -e "console.log(require('./apps/cli/package.json').version)")
-                  PLUGIN_VERSION=$(node -e "console.log(require('./packages/plugin-sdk/package.json').version)")
                   if [ "${CLI_VERSION}" != "${TAG_VERSION}" ]; then
                       echo "CLI version mismatch: tag=${TAG_VERSION}, package.json=${CLI_VERSION}" >&2
                       exit 1
                   fi
-                  if [ "${PLUGIN_VERSION}" != "${TAG_VERSION}" ]; then
-                      echo "Plugin SDK version mismatch: tag=${TAG_VERSION}, package.json=${PLUGIN_VERSION}" >&2
-                      exit 1
-                  fi
-                  echo "Publishing @gobing-ai/spur-cli@${CLI_VERSION} + @gobing-ai/spur-plugin-sdk@${PLUGIN_VERSION}"
+                  echo "Publishing @gobing-ai/spur-cli@${CLI_VERSION}"
 
-            - name: Build both packages
-              run: |
-                  (cd apps/cli && bun run build:bundle)
-                  (cd packages/plugin-sdk && bun run build)
-
-            - name: Publish spur-plugin-sdk
-              run: bun scripts/spur-dev.ts publish packages/plugin-sdk
+            - name: Build
+              run: (cd apps/cli && bun run build:bundle)
 
             - name: Publish spur-cli
               run: bun scripts/spur-dev.ts publish apps/cli
