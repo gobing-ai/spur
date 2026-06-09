@@ -11,7 +11,7 @@ export interface CapturedOutput extends CommandOutput {
 
 /** Create a temporary project directory with a package manifest. */
 export async function createTempProject(): Promise<string> {
-    const dir = await mkdtemp(join(tmpdir(), 'spur-cli-'));
+    const dir = await mkdtemp(join(tmpdir(), 'spur-'));
     await Bun.write(join(dir, 'package.json'), `${JSON.stringify({ name: 'fixture', type: 'module' }, null, 2)}\n`);
     return dir;
 }
