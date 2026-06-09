@@ -1,7 +1,7 @@
 {
     "name": "@gobing-ai/spur",
     "version": "0.1.8",
-    "description": "Spur CLI \u2014 local-first harness for mainstream coding agents: constraint checking, workflow orchestration, agent health, and history analytics. Bun-native; exposes the `spur` command.",
+    "description": "Spur CLI — local-first harness for mainstream coding agents: constraint checking, workflow orchestration, agent health, and history analytics. Bun-native; exposes the `spur` command.",
     "keywords": [
         "spur",
         "cli",
@@ -21,12 +21,13 @@
     "author": "Robin Min <minlongbing@gmail.com>",
     "type": "module",
     "bin": {
-        "spur": "./spur-cli/index.js"
+        "spur": "spur.js"
     },
     "exports": {
         "./schemas/*": "./schemas/*"
     },
     "files": [
+        "spur.js",
         "spur-cli",
         "schemas",
         "README.md"
@@ -41,7 +42,7 @@
         "dev": "bun run src/index.ts",
         "build": "bun build src/index.ts --compile --outfile ../../dist/cli/spur",
         "build:binaries": "bun run ../../scripts/spur-dev.ts build-binaries",
-        "build:bundle": "bun build src/index.ts --target=bun --outfile spur-cli/index.js && bun run ../../scripts/spur-dev.ts bundle-config spur-cli/config",
+        "build:bundle": "bun build src/index.ts --target=bun --outfile spur.js && bun run ../../scripts/spur-dev.ts bundle-config spur-cli/config",
         "test": "bun test tests --coverage --coverage-dir=../../.coverage --pass-with-no-tests",
         "typecheck": "tsc --noEmit",
         "prepublishOnly": "bun run build:bundle"
