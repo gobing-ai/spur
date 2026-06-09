@@ -38,9 +38,12 @@ try {
         case 'drop-tags':
             await dropTags(args);
             break;
-        case 'publish':
-            await publish(args[0]);
+        case 'publish': {
+            const otpIndex = args.indexOf('--otp');
+            const otp = otpIndex !== -1 ? args[otpIndex + 1] : undefined;
+            await publish(args[0], otp);
             break;
+        }
         case 'bundle-config':
             await bundleConfig(args[0]);
             break;
