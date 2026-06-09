@@ -311,56 +311,36 @@ One config object per source: `source` discriminant, `displayName`, `filePattern
 
 Web (`apps/web`) renders live health from the typed oRPC client. Deeper read surface is Phase 4.
 
-## 6. Plugin System (Partial — slices 5a–5c shipped; ADR-012)
+## 6. Plugin System (Removed — ADR-012 amended 2026-06-09)
 
-> The SDK/loader/server-seam shapes below are **active** (slices 5a–5c shipped; see `§6.4` for the
-> route seam). Remaining slices (5d–5f) stay forward design. Mechanism lives in `03 §11`.
+> **Amendment (2026-06-09):** The standalone `@gobing-ai/spur-plugin-sdk` is deleted. The bare
+> lifecycle core (`Plugin` + `PluginHost`) lives upstream in `@gobing-ai/ts-infra` (shipped in
+> `0.3.6`). Capability registries, trust ladder, manifest-driven discovery, and the server route
+> seam are **deferred** — re-addable later on top of the ts-infra `Plugin` interface when a real
+> plugin consumer exists. Mechanism lives in `03 §11`.
 
-All plugin files are **YAML**, validated by a per-file-type Zod schema (the SSOT for that file) —
-one format across the project, no new parser. A file is never consumed unvalidated; `safeParse`
-failures surface in the loader's `validate()` step (bad **bundled** → fail-fast, bad `local` →
-logged and skipped).
+### 6.1 Current state
 
-### 6.1 Manifest — `plugin.yaml` (`PluginManifestSchema`)
-
-| Field | Type | Notes |
-|-------|------|-------|
-| `name` | string | Unique plugin id. |
-| `version` | semver string | Plugin version. |
-| `trust` | enum | `bundled` \| `curated` \| `local` \| `untrusted`. |
-| `capabilities` | record | Declared capabilities by kind (command, api, ui, event, harness, provider, rule, skill/worker). A plugin may register only what it declares and its tier permits. |
-| `allow` | block (optional) | Declared resource grants (forward-looking; not runtime-enforced in Phase 1). |
-
-### 6.2 Config override — `.spur/plugins/<name>.yaml` (`PluginConfigSchema`)
-
-Per-plugin override layer, validated (by `PluginConfigSchema` or a plugin-supplied `configSchema`)
-**before** merge over the plugin's defaults.
-
-### 6.3 Trust ladder
-
-`bundled` > `curated` > `local` > `untrusted`. Used for **registration-time capability gating**
-only. `bundled` is never gated. `untrusted` is **not loaded** (fail-closed). Runtime sandboxing is
-out of scope (PRD §5.4).
-
-### 6.4 Server route seam (Phase 5c)
-
-Plugins contribute HTTP routes via the `api` capability registry. A plugin registers a
-framework-agnostic fetch handler under a prefix:
+Spur consumes the ts-infra `Plugin` interface directly:
 
 ```ts
-host.api.register(prefix, { handler, openapi? }, ctx);
+import type { Plugin, PluginHost } from '@gobing-ai/ts-infra/application';
 ```
 
-| Shape | Type | Notes |
-|-------|------|-------|
-| `ApiImpl.handler` | `(req: Request) => Response \| Promise<Response>` | A Hono router's `.fetch` satisfies this. The SDK carries no Hono dependency. |
-| `ApiImpl.openapi` | `PluginOpenApiFragment` (optional) | `{ paths }` — plain OpenAPI 3.1 path items, merged into the generated spec. |
+The `Plugin` interface provides lifecycle hooks only: `onLoad`, `onStart`, `onStop`, `onUnload`,
+plus `failFast`. The `PluginHost` drives registration and lifecycle fan-out (load → start →
+stop → unload) with fail-fast load, fail-soft start/stop/unload in reverse registration order.
 
-- **Mount point:** `apps/server` mounts each entry under `/api/plugins/<prefix>` and
-  `/api/plugins/<prefix>/*`, **before** the oRPC `/api/*` middleware and `notFound` (`03 §11`
-  ordering). Seam: `mountPluginRoutes(app, apiRegistry)` + `collectPluginOpenApiPaths(apiRegistry)`.
-- **Prefix collision** throws `PluginCollisionError` at registration (existing `Registry.register`).
-- **OpenAPI:** plugin `openapi.paths` are re-prefixed under `/plugins/<prefix>` and merged into
-  `/openapi.json` by `generateOpenApiSpec(pluginPaths)`.
-- **Lifecycle:** `SpurPlugin` exposes optional `onServerStart(host)` / `onServerStop(host)`; the host
-  fans them out via `PluginHost.startServerHooks()` / `stopServerHooks()`.
+The `runApplication` / `runNodeApplication` bootstrap accepts `plugins`/`pluginHost` options
+and drives the plugin lifecycle natively — no Spur-side host wiring needed.
+
+### 6.2 Deferred (not permanently rejected)
+
+| Concern | Status | Notes |
+|---------|--------|-------|
+| Manifest (`plugin.yaml`) | Removed | Re-addable as YAML + Zod on the ts-infra `Plugin` interface |
+| Capability registries | Removed | 9 registries (api, command, event, harness, provider, rule, skill, ui, worker) — re-addable |
+| Trust ladder | Removed | 4-tier (`bundled` > `curated` > `local` > `untrusted`) — re-addable as registration-time gating |
+| Server route seam | Removed | `mountPluginRoutes` / `collectPluginOpenApiPaths` — re-addable when plugins exist |
+| Plugin config override | Removed | Per-plugin `.spur/plugins/<name>.yaml` — re-addable |
+| Event registry | Removed | Glob-pattern + rate-limiting wrapper over `EventBus` — re-addable |
