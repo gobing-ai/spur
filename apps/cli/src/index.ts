@@ -10,7 +10,6 @@ import { registerHistoryCommand } from './commands/history';
 import { registerInitCommand } from './commands/init';
 import { registerMessageCommand } from './commands/message';
 import { registerMigrateCommand } from './commands/migrate';
-import { registerPluginCommand } from './commands/plugin';
 import { registerRuleCommand } from './commands/rule';
 import { registerStatusCommand } from './commands/status';
 import { registerTeamCommand } from './commands/team';
@@ -116,7 +115,6 @@ async function runCommandDispatch(
     registerInitCommand(program, context);
     registerMessageCommand(program, context);
     registerMigrateCommand(program, context);
-    registerPluginCommand(program, context);
     registerRuleCommand(program, context);
     registerStatusCommand(program, context);
     registerTeamCommand(program, context);
