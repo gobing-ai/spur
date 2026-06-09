@@ -49,9 +49,9 @@ Get the `spur` harness tool. Two paths, depending on whether you run Bun. Both e
 **With Bun (`>= 1.3.0`) — recommended:**
 
 ```bash
-bun install -g @gobing-ai/spur-cli   # global `spur` command
+bun install -g @gobing-ai/spur   # global `spur` command
 # or run ad-hoc, no install:
-bunx @gobing-ai/spur-cli --help
+bunx @gobing-ai/spur --help
 ```
 
 **Without Bun — standalone binary (macOS / Linux):**
@@ -106,7 +106,7 @@ Bun workspaces (no Turborepo). Generic engines live **outside** this repo as rel
 
 ```
 apps/
-  cli/          Spur CLI — primary surface; arg dispatch + domain commands   (@gobing-ai/spur-cli)
+  cli/          Spur CLI — primary surface; arg dispatch + domain commands   (@gobing-ai/spur)
   server/       Hono on Bun.serve / Cloudflare Worker; oRPC OpenAPI handler  (@gobing-ai/spur-server)
   web/          Astro + Cloudflare adapter; typed oRPC OpenAPI client        (@gobing-ai/spur-web)
 packages/
@@ -225,7 +225,7 @@ silence the gate.
 `spur init` writes `.spur/config.json`:
 
 ```json
-{ "version": 1, "project": "<name>", "database": ".spur/spur.db", "generatedBy": "@gobing-ai/spur-cli" }
+{ "version": 1, "project": "<name>", "database": ".spur/spur.db", "generatedBy": "@gobing-ai/spur" }
 ```
 
 App-layer config (server/web) comes from `@gobing-ai/spur-config` (`buildConfigFromEnv`): `DATABASE_URL`,
