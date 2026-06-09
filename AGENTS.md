@@ -47,7 +47,7 @@ Bun + TypeScript + Biome monorepo on **Bun workspaces (no Turborepo)**. Layout:
 
 ```
 apps/
-  cli/          # Spur CLI — primary surface; arg dispatch + domain commands (@gobing-ai/spur-cli)
+  cli/          # Spur CLI — primary surface; arg dispatch + domain commands (@gobing-ai/spur)
   server/       # Hono on Bun.serve / Cloudflare Worker; oRPC OpenAPI handler (@gobing-ai/spur-server)
   web/          # Astro + Cloudflare adapter; typed oRPC OpenAPI client (@gobing-ai/spur-web)
 packages/
