@@ -1,10 +1,53 @@
-import { createApp } from './app';
+import type { ApplicationRuntime, InfraEvents } from '@gobing-ai/ts-infra/application';
+import { runApplication } from '@gobing-ai/ts-infra/application';
+import { createApp, serverBootstrapConfig } from './bootstrap';
 
-const app = createApp();
+type AppRuntime = ApplicationRuntime<unknown, InfraEvents>;
+
+/** Bootstraps the portable application from env. Overridable in tests. */
+export type BootstrapFn = (env: Record<string, string | undefined>) => Promise<AppRuntime>;
+
+const defaultBootstrap: BootstrapFn = (env) =>
+    runApplication({
+        config: serverBootstrapConfig(env),
+        async start(_appRt: ApplicationRuntime) {
+            // No server-level side effects needed — the app is created on
+            // each request via createApp(appRt) in the fetch handler.
+        },
+    });
+
+/** Cached bootstrap promise — initialized lazily on first request. */
+let rtPromise: Promise<AppRuntime> | undefined;
+
+/**
+ * Lazily bootstrap the application once per isolate and cache the promise.
+ *
+ * A rejected bootstrap is NOT cached: the failed promise is cleared so the next
+ * request retries instead of replaying a stale rejection. `bootstrap` is injectable
+ * so the failure-and-retry path is unit-testable without module mocking.
+ */
+export function getRuntime(
+    env: Record<string, string | undefined>,
+    bootstrap: BootstrapFn = defaultBootstrap,
+): Promise<AppRuntime> {
+    if (!rtPromise) {
+        rtPromise = bootstrap(env).catch((err) => {
+            rtPromise = undefined;
+            throw err;
+        });
+    }
+    return rtPromise;
+}
+
+/** Reset the cached runtime. Test-only seam for isolating singleton state. */
+export function resetRuntime(): void {
+    rtPromise = undefined;
+}
 
 /** Cloudflare Worker fetch entrypoint for the server app. */
 export default {
-    fetch(request: Request, env?: Record<string, string | undefined>) {
-        return app.fetch(request, env);
+    async fetch(request: Request, env?: Record<string, string | undefined>) {
+        const appRt = await getRuntime(env ?? {});
+        return createApp(appRt).fetch(request, env);
     },
 };
