@@ -177,9 +177,13 @@ restructuring — then re-run. Loop until the run reaches the expected terminal 
 
 ```
 spur workflow validate <file> [--no-schema] [--json]
-spur workflow run      <file> [--run-id <id>] [--json]
+spur workflow run      <file> [--run-id <id>] [--vars <json>] [--json]
 spur workflow list     [--json]
 ```
+
+`--vars` takes a JSON object of per-run variable overrides (e.g. `--vars '{"taskId":"0042"}'`),
+merged over the workflow's `vars` so one parameterized workflow serves many inputs without editing the
+YAML. Values must be strings (workflow vars are `string→string`).
 
 `validate` and `run` exit non-zero on failure (`run` exits non-zero when the final status is not
 `done`). `list` prints persisted run records (`<id> <status> <workflow-name>`). Inspect what has run
