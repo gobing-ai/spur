@@ -3,7 +3,7 @@
 #
 # Downloads the compiled `spur` binary from a GitHub Release and installs it to a
 # directory on PATH, then seeds the global config via `spur init`. Users who have
-# Bun should prefer `npm i -g @gobing-ai/spur-cli` (smaller, auto-updates via npm).
+# Bun should prefer `npm i -g @gobing-ai/spur` (smaller, auto-updates via npm).
 #
 #   curl -fsSL https://raw.githubusercontent.com/gobing-ai/spur/main/scripts/install.sh | sh
 #
@@ -28,7 +28,7 @@ arch=$(uname -m)
 case "${os}" in
     Darwin) os='darwin' ;;
     Linux) os='linux' ;;
-    *) err "unsupported OS: ${os} (use 'npm i -g @gobing-ai/spur-cli' instead)" ;;
+    *) err "unsupported OS: ${os} (use 'npm i -g @gobing-ai/spur' instead)" ;;
 esac
 case "${arch}" in
     arm64 | aarch64) arch='arm64' ;;
