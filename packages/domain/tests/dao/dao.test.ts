@@ -44,7 +44,7 @@ describe('CLI DAOs', () => {
     });
 
     test('loads only regenerated CLI SQL migrations from a mixed folder', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'spur-cli-migrations-'));
+        const dir = await mkdtemp(join(tmpdir(), 'spur-migrations-'));
         await Bun.write(join(dir, '0000_init.sql'), 'CREATE TABLE old_schema (id TEXT PRIMARY KEY);');
         await Bun.write(join(dir, '0002_extra.sql'), 'CREATE TABLE IF NOT EXISTS extra_table_2 (id TEXT PRIMARY KEY);');
         await Bun.write(
@@ -63,7 +63,7 @@ describe('CLI DAOs', () => {
     });
 
     test('falls back to embedded migrations for an empty folder', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'spur-cli-empty-migrations-'));
+        const dir = await mkdtemp(join(tmpdir(), 'spur-empty-migrations-'));
         const migrations = await loadSqlMigrations(dir);
         expect(migrations[0]?.id).toBe('0000_spur_cli_foundation');
     });
