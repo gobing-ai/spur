@@ -4,7 +4,7 @@
 # seams but also does light direct fs/spawn at app edges, so these run as
 # opt-in hygiene with explicit allowlists for the sanctioned sites.
 # `no-direct-process-env` is intentionally omitted — config-from-env is Spur's
-# design (packages/config, apps/cli/context, plugin-loader).
+# design (packages/config, apps/cli/context).
 include:
   - "apps/**/src/**/*.ts"
   - "packages/**/src/**/*.ts"
