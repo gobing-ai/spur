@@ -16,7 +16,7 @@ async function loadJson(path: string): Promise<Record<string, unknown>> {
 }
 
 /** Resolve workspace/catalog ranges in `<package-dir>`, then `npm publish` it. */
-export async function publish(target: string | undefined): Promise<void> {
+export async function publish(target: string | undefined, otp?: string): Promise<void> {
     if (!target) {
         throw new Error('Usage: spur-dev publish <package-dir>');
     }
@@ -79,7 +79,9 @@ export async function publish(target: string | undefined): Promise<void> {
         throw new Error(`build:bundle failed (exit ${build.exitCode})`);
     }
 
-    const result = Bun.spawnSync(['npm', 'publish', '--access', 'public'], {
+    const publishArgs = ['npm', 'publish', '--access', 'public'];
+    if (otp) publishArgs.push('--otp', otp);
+    const result = Bun.spawnSync(publishArgs, {
         cwd: dir,
         stdio: ['ignore', 'pipe', 'pipe'],
     });
