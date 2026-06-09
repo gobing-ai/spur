@@ -24,10 +24,10 @@
       },
     },
     "apps/cli": {
-      "name": "@gobing-ai/spur-cli",
+      "name": "@gobing-ai/spur",
       "version": "0.1.8",
       "bin": {
-        "spur": "./dist/index.js",
+        "spur": "./spur-cli/index.js",
       },
       "devDependencies": {
         "@commander-js/extra-typings": "catalog:",
@@ -287,9 +287,9 @@
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.27.3", "", { "os": "win32", "cpu": "x64" }, "sha512-4uJGhsxuptu3OcpVAzli+/gWusVGwZZHTlS63hh++ehExkVT8SgiEf7/uC/PclrPPkLhZqGgCTjd0VWLo6xMqA=="],
 
-    "@gobing-ai/spur-app": ["@gobing-ai/spur-app@workspace:packages/app"],
+    "@gobing-ai/spur": ["@gobing-ai/spur@workspace:apps/cli"],
 
-    "@gobing-ai/spur-cli": ["@gobing-ai/spur-cli@workspace:apps/cli"],
+    "@gobing-ai/spur-app": ["@gobing-ai/spur-app@workspace:packages/app"],
 
     "@gobing-ai/spur-config": ["@gobing-ai/spur-config@workspace:packages/config"],
 
