@@ -3,7 +3,7 @@ import type { ApplicationRuntime } from '@gobing-ai/ts-infra/application';
 import { createApp, serverBootstrapConfig } from '../src/bootstrap';
 
 describe('serverBootstrapConfig', () => {
-    test('disables logging in test mode (parity with spur-cli)', () => {
+    test('disables logging in test mode (parity with spur)', () => {
         const cfg = serverBootstrapConfig({ NODE_ENV: 'test' });
         expect(cfg.logging.enabled).toBe(false);
         expect(cfg.telemetry.enabled).toBe(false);
