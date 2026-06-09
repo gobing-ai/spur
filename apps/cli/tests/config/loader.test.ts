@@ -23,7 +23,7 @@ describe('loadSpurConfig', () => {
         await Bun.write(
             configPath,
             [
-                '$schema: "@gobing-ai/spur-cli/schemas/spur-config.schema.json"',
+                '$schema: "@gobing-ai/spur/schemas/spur-config.schema.json"',
                 'version: "1"',
                 'name: test-project',
                 'bootstrap:',
@@ -67,7 +67,7 @@ describe('loadSpurConfig', () => {
         await Bun.write(
             schemaPath,
             [
-                '$schema: "@gobing-ai/spur-cli/schemas/spur-config.schema.json"',
+                '$schema: "@gobing-ai/spur/schemas/spur-config.schema.json"',
                 'version: "1"',
                 'name: schema-test',
                 '',
@@ -82,7 +82,7 @@ describe('loadSpurConfig', () => {
         expect(config.name).toBe('schema-test');
     });
 
-    test('rejects a non-spur-cli $schema package instead of resolving via node_modules', async () => {
+    test('rejects a non-spur $schema package instead of resolving via node_modules', async () => {
         // Spur only owns its embedded schema. A `$schema` pointing at another package must
         // NOT fall back to a node_modules lookup — that path is absent in a compiled binary
         // and would crash with ENOENT at runtime. The loader rejects it up front with a
