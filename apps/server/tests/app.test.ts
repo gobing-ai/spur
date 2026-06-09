@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { HealthResponse } from '@gobing-ai/spur-contracts';
+import type { ApplicationRuntime } from '@gobing-ai/ts-infra/application';
 import { createApp, generateOpenApiSpec } from '../src';
 import worker from '../src/worker';
 
@@ -43,6 +44,24 @@ describe('server app', () => {
 
     test('serves the same app through the Worker entrypoint', async () => {
         const response = await worker.fetch(new Request('https://spur.test/api/health'), {});
+
+        expect(response.status).toBe(200);
+    });
+
+    test('threads ApplicationRuntime logger into Hono context when provided', async () => {
+        // Minimal ApplicationRuntime shape — only the fields createApp reads.
+        const mockRt = {
+            config: {} as unknown,
+            appConfig: undefined,
+            logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+            events: { emit: () => {}, on: () => {}, off: () => {} },
+            db: undefined,
+            pluginHost: {} as unknown,
+            stop: async () => {},
+        } as unknown as ApplicationRuntime;
+
+        const app = createApp(mockRt);
+        const response = await app.request('/api/health');
 
         expect(response.status).toBe(200);
     });
