@@ -34,7 +34,3 @@ rules:
           - "**/schema/**"
           - "**/migrations.ts"
           - "**/db.ts"
-          # Plugin discovery deferred (ADR-012 2026-06-09). Branches for non-empty
-          # results are unreachable until plugins return — exclude from per-file gate.
-          - "apps/cli/src/commands/plugin.ts"
-          - "packages/app/src/services/plugin-service.ts"
