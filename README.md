@@ -114,7 +114,6 @@ packages/
   contracts/    oRPC transport contracts only — health/DTOs, no domain types          (@gobing-ai/spur-contracts)
   config/       Zod config schema + env parsing                                       (@gobing-ai/spur-config)
   domain/       Spur-domain DAOs + schema (workspaces, runs, artifacts, …)            (@gobing-ai/spur-domain)
-  plugin-sdk/   Plugin SDK — capability registries, host contracts, trust model       (@gobing-ai/spur-plugin-sdk)
 tooling/
   typescript/   Shared tsconfig presets (base/server/react)
 drizzle/        0000_spur_cli_foundation.sql (active) + _legacy_reference/ (inert)
