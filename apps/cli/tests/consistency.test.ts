@@ -213,11 +213,7 @@ describe('CLI surface consistency', () => {
         const docNames = new Set(docNouns.map((n) => n.name));
 
         const undocumented = codeNouns.filter((cn) => !docNames.has(cn.name)).map((cn) => cn.name);
-        // Known: plugin is documented in §6 (Plugin System) but not in §1.1 CLI surface.
-        // TODO: add `spur plugin` to §1.1 or §1.2 when the plugin command stabilizes.
-        const knownUndocumented = new Set(['plugin']);
-        const real = undocumented.filter((n) => !knownUndocumented.has(n));
-        expect(real).toEqual([]);
+        expect(undocumented).toEqual([]);
     });
 
     test('every --json claim in code matches the doc', async () => {

@@ -59,18 +59,7 @@ describe('CLI dispatch and status', () => {
     test('renders command-scoped help for every existing command', async () => {
         const cwd = await createTempProject();
         const output = createCapturedOutput();
-        const commands = [
-            'init',
-            'status',
-            'migrate',
-            'agent',
-            'message',
-            'team',
-            'rule',
-            'history',
-            'workflow',
-            'plugin',
-        ];
+        const commands = ['init', 'status', 'migrate', 'agent', 'message', 'team', 'rule', 'history', 'workflow'];
 
         for (const command of commands) {
             // --help flag
