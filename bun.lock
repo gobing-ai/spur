@@ -25,9 +25,9 @@
     },
     "apps/cli": {
       "name": "@gobing-ai/spur",
-      "version": "0.1.8",
+      "version": "0.2.1",
       "bin": {
-        "spur": "./spur-cli/index.js",
+        "spur": "spur.js",
       },
       "devDependencies": {
         "@commander-js/extra-typings": "catalog:",
@@ -45,6 +45,7 @@
         "@types/figlet": "^1.7.0",
         "commander": "catalog:",
         "figlet": "^1.11.0",
+        "zod": "catalog:",
       },
     },
     "apps/server": {
