@@ -1,7 +1,7 @@
 /**
  * Load and validate `.spur/config.yaml` using ts-runtime's `loadStructuredConfig`.
  *
- * The config file declares `$schema: "@gobing-ai/spur-cli/schemas/spur-config.schema.json"`.
+ * The config file declares `$schema: "@gobing-ai/spur/schemas/spur-config.schema.json"`.
  * The schema is **statically imported** so Bun embeds it into the compiled binary
  * (`bun build --compile`) — a runtime `node_modules` lookup via `import.meta.resolve`
  * does not exist inside a standalone binary and previously failed with ENOENT. Reads of
@@ -22,10 +22,10 @@ import spurConfigSchema from '../../schemas/spur-config.schema.json';
  * recognizes and serves from the embedded copy. The NUL byte guarantees it never collides
  * with a real filesystem path.
  */
-const EMBEDDED_PREFIX = '\0embedded-spur-cli';
+const EMBEDDED_PREFIX = '\0embedded-spur';
 
 /** Manifest specifier ts-runtime asks for when resolving the CLI's schema ref. */
-const SPUR_CLI_MANIFEST = '@gobing-ai/spur-cli/package.json';
+const SPUR_CLI_MANIFEST = '@gobing-ai/spur/package.json';
 
 /** Pre-serialized embedded schema text — avoids re-stringifying on every load. */
 const EMBEDDED_SCHEMA_TEXT = JSON.stringify(spurConfigSchema);
@@ -36,14 +36,14 @@ const EMBEDDED_SCHEMA_TEXT = JSON.stringify(spurConfigSchema);
  * Spur only owns and ships its own config schema, which is embedded into the binary. Any
  * other bare-package `$schema` cannot be served from a compiled binary (there is no
  * `node_modules` to resolve against), so a `node_modules` lookup would only "work" in a
- * dev tree and fail at runtime as ENOENT. We therefore reject non-spur-cli specifiers up
+ * dev tree and fail at runtime as ENOENT. We therefore reject non-spur specifiers up
  * front with a clear error instead of resolving a path that does not survive packaging.
  */
 function resolveSchema(specifier: string): string {
     if (specifier === SPUR_CLI_MANIFEST) return `${EMBEDDED_PREFIX}/package.json`;
     throw new Error(
         `Unsupported $schema package "${specifier.replace(/\/package\.json$/, '')}". ` +
-            'Spur only resolves its own embedded schema (@gobing-ai/spur-cli); use that or a relative/absolute $schema ref.',
+            'Spur only resolves its own embedded schema (@gobing-ai/spur); use that or a relative/absolute $schema ref.',
     );
 }
 
