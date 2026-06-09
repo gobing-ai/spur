@@ -144,9 +144,11 @@ fallback for a hermetic run. Backed by `ts-rule-engine`.
   and exit codes. `spur help rule` is equivalent.
 Backed by `ts-rule-engine`.
 
-#### `spur workflow validate <workflow.yaml> [--json]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--json]` · `spur workflow list [--json]`
+#### `spur workflow validate <workflow.yaml> [--json]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--json]` · `spur workflow list [--json]`
 - `validate <file>` — load + Zod-validate a workflow definition.
-- `run <file> [--run-id <id>]` — execute; prints `<status>: <name> -> <finalState>`; exit 1 unless `done`.
+- `run <file> [--run-id <id>] [--vars <json>]` — execute; prints `<status>: <name> -> <finalState>`;
+  exit 1 unless `done`. `--vars` takes a JSON object of per-run variable overrides
+  (e.g. `--vars '{"taskId":"0042"}'`), merged over the workflow's `vars` for `${vars.*}` resolution.
 - `list` — list persisted workflow runs.
 Backed by `ts-dual-workflow-engine` (`WorkflowService` + `DbWorkflowPersistenceAdapter`).
 
