@@ -12,7 +12,7 @@
     "workspaces": {
         "packages/contracts": "@gobing-ai/spur-contracts",
         "packages/config": "@gobing-ai/spur-config",
-        "apps/cli": "@gobing-ai/spur-cli",
+        "apps/cli": "@gobing-ai/spur",
         "apps/server": "@gobing-ai/spur-server",
         "apps/web": "@gobing-ai/spur-web"
     }
