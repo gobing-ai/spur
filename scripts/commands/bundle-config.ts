@@ -1,11 +1,14 @@
 /**
- * Copy the repo-root `config/` tree into a package's `dist/config/` for the npm
- * tarball, excluding assets that are not real config: rule-engine test fixtures
- * (`rules/fixtures/`), OS junk (`.DS_Store`), and editor temp files. The CLI's
- * `seedGlobalConfig` only ever reads `.yaml`/`.json`, so shipping `.ts` fixtures
- * would bloat the tarball without ever being used.
+ * Copy the repo-root `config/` tree into a package's bundled config dir for the
+ * npm tarball, excluding test fixtures and OS junk, then inject `$schema`
+ * directives so end users get IDE validation via the published schemas.
+ *
+ * Source config files do NOT carry `$schema` — adding them would break tests
+ * in the monorepo dev environment where `@gobing-ai/spur` is a workspace
+ * (node module resolution can't find it).
  */
-import { cp, rm } from 'node:fs/promises';
+import { cp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { basename, dirname, join } from 'node:path';
 
 const SOURCE = new URL('../../config', import.meta.url).pathname;
 
@@ -13,7 +16,7 @@ const SOURCE = new URL('../../config', import.meta.url).pathname;
 // entry: returning false prunes the entry (and, for a directory, its subtree).
 const EXCLUDE = /(^|\/)(\.DS_Store|fixtures)($|\/)/;
 
-/** Bundle `config/` into `target`, excluding fixtures and OS junk. */
+/** Bundle `config/` into `target`, excluding fixtures and OS junk, then inject `$schema`. */
 export async function bundleConfig(target: string | undefined): Promise<void> {
     if (!target) {
         throw new Error('Usage: spur-dev bundle-config <dist-config-dir>');
@@ -23,5 +26,42 @@ export async function bundleConfig(target: string | undefined): Promise<void> {
         recursive: true,
         filter: (src) => !EXCLUDE.test(src.slice(SOURCE.length)),
     });
-    console.log(`Bundled config -> ${target} (fixtures and OS junk excluded)`);
+
+    // Inject $schema directives so end-user IDE validation resolves against
+    // the schemas shipped alongside the CLI in the npm package.
+    // Source files deliberately omit $schema to keep dev-env tests passing.
+    const injected = await injectSchemas(target, '');
+
+    console.log(`Bundled config -> ${target} (fixtures/OS junk excluded, ${injected} $schema directives injected)`);
+}
+
+const SCHEMA_PREFIX = '@gobing-ai/spur/schemas/';
+
+/** Map a YAML file path (relative to config root) to its $schema specifier. */
+function schemaFor(relPath: string): string | null {
+    if (basename(relPath) === 'config.example.yaml') return null; // already has $schema
+    if (relPath.startsWith('workflows/')) return `${SCHEMA_PREFIX}state-machine-workflow.schema.json`;
+    // Presets are at the rules/ root; rule files live in category subdirs.
+    if (dirname(relPath) === 'rules') return `${SCHEMA_PREFIX}preset.schema.json`;
+    if (relPath.startsWith('rules/')) return `${SCHEMA_PREFIX}rule-file.schema.json`;
+    return null;
+}
+
+async function injectSchemas(dir: string, relPrefix: string): Promise<number> {
+    let count = 0;
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name);
+        const rel = relPrefix ? `${relPrefix}/${entry.name}` : entry.name;
+        if (entry.isDirectory()) {
+            count += await injectSchemas(full, rel);
+        } else if (entry.name.endsWith('.yaml')) {
+            const schema = schemaFor(rel);
+            if (schema) {
+                const content = await readFile(full, 'utf-8');
+                await writeFile(full, `$schema: "${schema}"\n${content}`);
+                count++;
+            }
+        }
+    }
+    return count;
 }

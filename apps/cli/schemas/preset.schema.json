@@ -1,0 +1,54 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://github.com/gobing-ai/spur/schemas/preset.schema.json",
+    "title": "@gobing-ai/ts-rule-engine Preset",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["name"],
+    "properties": {
+        "$schema": { "type": "string" },
+        "name": { "type": "string", "minLength": 1 },
+        "extends": { "type": "array", "items": { "type": "string" } },
+        "disable": { "type": "array", "items": { "type": "string" } },
+        "overrides": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "fix": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                            "mode": { "enum": ["none", "suggest", "auto"] }
+                        }
+                    }
+                }
+            }
+        },
+        "extensions": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "resolvers": { "type": "array", "items": { "$ref": "#/$defs/relativeExtensionPath" } },
+                "evaluators": { "type": "array", "items": { "$ref": "#/$defs/relativeExtensionPath" } },
+                "fixers": { "type": "array", "items": { "$ref": "#/$defs/relativeExtensionPath" } },
+                "formatters": { "type": "array", "items": { "$ref": "#/$defs/relativeExtensionPath" } }
+            }
+        }
+    },
+    "$defs": {
+        "relativeExtensionPath": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Relative module path; absolute paths and '..' traversal are forbidden.",
+            "not": {
+                "anyOf": [
+                    { "pattern": "^[/\\\\]" },
+                    { "pattern": "^[A-Za-z]:[/\\\\]" },
+                    { "pattern": "(^|[/\\\\])\\.\\.([/\\\\]|$)" }
+                ]
+            }
+        }
+    }
+}

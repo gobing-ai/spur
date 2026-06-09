@@ -1,0 +1,78 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://github.com/gobing-ai/spur/schemas/transition-flow-workflow.schema.json",
+    "title": "@gobing-ai/ts-dual-workflow-engine Transition-flow Workflow",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["kind", "name", "initialNode", "nodes", "edges"],
+    "properties": {
+        "$schema": { "type": "string" },
+        "kind": { "const": "transition-flow" },
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string" },
+        "description": { "type": "string" },
+        "initialNode": { "type": "string", "minLength": 1 },
+        "terminalNodes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "iterationBound": { "type": "integer", "exclusiveMinimum": 0 },
+        "vars": {
+            "type": "object",
+            "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+            "additionalProperties": { "type": "string" }
+        },
+        "env": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "allow": { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" } }
+            }
+        },
+        "nodes": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id"],
+                "properties": {
+                    "id": { "type": "string", "minLength": 1 },
+                    "description": { "type": "string" },
+                    "type": { "enum": ["action", "gate", "parallel", "decision"] },
+                    "action": { "$ref": "#/$defs/action" }
+                }
+            }
+        },
+        "edges": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["from", "to"],
+                "properties": {
+                    "from": { "type": "string", "minLength": 1 },
+                    "to": { "type": "string", "minLength": 1 },
+                    "description": { "type": "string" },
+                    "condition": { "$ref": "#/$defs/guard" }
+                }
+            }
+        }
+    },
+    "$defs": {
+        "action": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind"],
+            "properties": {
+                "kind": { "type": "string", "minLength": 1 },
+                "options": { "type": "object", "additionalProperties": true }
+            }
+        },
+        "guard": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind"],
+            "properties": {
+                "kind": { "type": "string", "minLength": 1 },
+                "options": { "type": "object", "additionalProperties": true }
+            }
+        }
+    }
+}
