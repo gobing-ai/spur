@@ -150,6 +150,46 @@ describe('workflow command (main)', () => {
         await rm(dir, { recursive: true, force: true });
     });
 
+    test('run subcommand accepts a valid --vars override and completes', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'workflow.yaml');
+        await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
+        const output = createCapturedOutput();
+
+        const exitCode = await main(
+            ['workflow', 'run', '--run-id', 'vars-run', '--vars', '{"taskId":"0042"}', workflowFile],
+            { output, cwd: dir, dbUrl: ':memory:' },
+        );
+
+        expect(exitCode).toBe(0);
+        expect(output.messages).toEqual(['workflow done: cli-test-flow -> done']);
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('run subcommand rejects malformed --vars JSON with exit 1', async () => {
+        const exitCode = await main(['workflow', 'run', '--vars', '{not json', '/tmp/x.yaml'], {
+            output: nullOutput(),
+            dbUrl: ':memory:',
+        });
+        expect(exitCode).toBe(1);
+    });
+
+    test('run subcommand rejects a non-object --vars value with exit 1', async () => {
+        const exitCode = await main(['workflow', 'run', '--vars', '["a","b"]', '/tmp/x.yaml'], {
+            output: nullOutput(),
+            dbUrl: ':memory:',
+        });
+        expect(exitCode).toBe(1);
+    });
+
+    test('run subcommand rejects a non-string --vars value with exit 1', async () => {
+        const exitCode = await main(['workflow', 'run', '--vars', '{"n":1}', '/tmp/x.yaml'], {
+            output: nullOutput(),
+            dbUrl: ':memory:',
+        });
+        expect(exitCode).toBe(1);
+    });
+
     test('run subcommand writes json for a completed workflow', async () => {
         const dir = await createTempProject();
         const workflowFile = join(dir, 'workflow.yaml');
