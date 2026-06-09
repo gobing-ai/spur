@@ -3,7 +3,6 @@ import { fileURLToPath } from 'node:url';
 /**
  * Multi-package release helper, aligned with the ts-libs release UX
  * (`bump-ver` / `drop-tags` + a tag→CI→npm-Trusted-Publishing flow).
- * Each publishable package is keyed by a short ID (e.g. `spur-cli`) in
  * `RELEASE_PACKAGES`. The published CLI is a self-contained bundle with
  * zero runtime dependencies, so its bundled internal deps (spur-config,
  * spur-domain) never reach the registry.
@@ -26,22 +25,22 @@ interface ReleaseConfig {
 }
 
 const RELEASE_PACKAGES = {
-    'spur-cli': {
+    spur: {
         packageDir: 'apps/cli',
-        packageName: '@gobing-ai/spur-cli',
+        packageName: '@gobing-ai/spur',
         versionSourceFile: 'apps/cli/src/config.ts',
         tagVersionSeparator: '-v',
         publishWorkflow: 'publish.yml',
         releaseCommitType: 'chore',
         releaseCommitScope: 'release',
-        releaseCommitSubject: (version: string) => `bump spur-cli to ${version}`,
+        releaseCommitSubject: (version: string) => `bump spur to ${version}`,
         releaseTagMessage: (tag: string) => `release: ${tag}`,
         ghRunListLimit: 5,
     },
 } as const satisfies Record<string, ReleaseConfig>;
 
 /** Packages bumped together by the aggregate (`--all`) release path. */
-const ALL_RELEASE_PACKAGES: readonly ReleaseConfig[] = [RELEASE_PACKAGES['spur-cli']];
+const ALL_RELEASE_PACKAGES: readonly ReleaseConfig[] = [RELEASE_PACKAGES.spur];
 
 type PackageId = keyof typeof RELEASE_PACKAGES;
 
