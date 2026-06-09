@@ -138,7 +138,7 @@ describe('db migrations', () => {
 
     describe('loadSqlMigrations', () => {
         test('falls back to embedded migrations for empty folder', async () => {
-            const dir = await mkdtemp(join(tmpdir(), 'spur-cli-test-migrations-'));
+            const dir = await mkdtemp(join(tmpdir(), 'spur-test-migrations-'));
             const migrations = await loadSqlMigrations(dir);
             expect(migrations.length).toBeGreaterThan(0);
             expect(migrations[0]?.id).toBe('0000_spur_cli_foundation');
@@ -146,7 +146,7 @@ describe('db migrations', () => {
         });
 
         test('loads migration files with marker', async () => {
-            const dir = await mkdtemp(join(tmpdir(), 'spur-cli-test-migrations-'));
+            const dir = await mkdtemp(join(tmpdir(), 'spur-test-migrations-'));
             await writeFile(
                 join(dir, '0001_spur_cli_test.sql'),
                 'CREATE TABLE IF NOT EXISTS test_t (id TEXT PRIMARY KEY);',
