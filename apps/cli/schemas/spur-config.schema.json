@@ -2,13 +2,13 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://github.com/gobing-ai/spur/schemas/spur-config.schema.json",
     "title": "Spur Project Configuration",
-    "description": "Schema for .spur/config.yaml — the single project configuration surface consumed by spur-cli and (future) spur-server.",
+    "description": "Schema for .spur/config.yaml — the single project configuration surface consumed by spur and (future) spur-server.",
     "type": "object",
     "required": ["version", "name"],
     "properties": {
         "$schema": {
             "type": "string",
-            "description": "Reference to this schema for IDE validation. spur-cli resolves this at runtime via loadStructuredConfig."
+            "description": "Reference to this schema for IDE validation. spur resolves this at runtime via loadStructuredConfig."
         },
         "version": {
             "type": "string",
@@ -20,7 +20,7 @@
         },
         "bootstrap": {
             "type": "object",
-            "description": "Portable bootstrap block consumed by @gobing-ai/ts-infra runNodeApplication. Shared across spur-cli and spur-server.",
+            "description": "Portable bootstrap block consumed by @gobing-ai/ts-infra runNodeApplication. Shared across spur and spur-server.",
             "properties": {
                 "logging": {
                     "type": "object",
