@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { Command } from '@commander-js/extra-typings';
+import type { DbAdapter } from '@gobing-ai/spur-domain';
 import type { ApplicationRuntime } from '@gobing-ai/ts-infra/application';
 import { runNodeApplication } from '@gobing-ai/ts-infra/application-node';
 import figlet from 'figlet';
@@ -27,6 +28,8 @@ export interface MainOptions {
     env?: Record<string, string | undefined>;
     output?: CommandOutput;
     dbUrl?: string;
+    /** Pre-built DB adapter. Injectable so tests can assert close-on-shutdown (ADR-018). */
+    db?: DbAdapter;
 }
 
 /** Run the Spur CLI with explicit argv and injectable runtime dependencies. */
@@ -35,7 +38,9 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
     let exitCode = 0;
 
     const configFile = resolveConfigFile(options.cwd);
-    const db = await createMigratedDbAdapter(options.cwd ?? process.cwd(), options.env ?? process.env, options.dbUrl);
+    const db =
+        options.db ??
+        (await createMigratedDbAdapter(options.cwd ?? process.cwd(), options.env ?? process.env, options.dbUrl));
 
     try {
         if (configFile !== undefined) {
