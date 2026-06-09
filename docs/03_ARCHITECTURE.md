@@ -25,13 +25,12 @@ spur/
 │   ├── contracts/   oRPC transport contracts ONLY (health/DTOs) — @gobing-ai/spur-contracts
 │   ├── config/      Zod config schema + env parsing — @gobing-ai/spur-config
 │   ├── domain/      Spur-domain DAOs + schema (workspaces, runs, workflow-states, …)
-│   └── plugin-sdk/  Plugin SDK — capability registries, host contracts, trust model
 ├── tooling/typescript/   Shared tsconfig presets (base/server/react)
 └── drizzle/         0000_spur_cli_foundation.sql (active) + _legacy_reference/ (inert)
 
 ### 1.1 External dependency boundary (ADR-004/006)
 ```
-apps/* ──► packages/{app, contracts, config, domain, plugin-sdk}
+apps/* ──► packages/{app, contracts, config, domain}
 apps/* ──► @gobing-ai/ts-{utils, infra, runtime, db}          (semver)
 apps/cli ─► @gobing-ai/ts-{ai-runner, rule-engine,            (semver)
                            dual-workflow-engine, llm-jsonl-importer}
@@ -198,41 +197,38 @@ model, so table/DDL/Zod drift is structurally impossible. Five rules, enforced b
 | Engine MVP gaps mistaken for parity | Roadmap Phase 3 tracks the depth restore explicitly |
 | History raw bloat / parse errors | Raw stays in files; only validated ETL persisted (ADR-008) |
 
-## 11. Plugin Substrate (Partial — slices 5a–5c shipped; ADR-012)
+## 11. Plugin Substrate (Amended — ADR-012 2026-06-09)
 
-> Slices **5a (SDK + registries), 5b (discovery/loader/CLI), 5c (server route seam)** have landed
-> (`05_FEATURES` marks the substrate `🔶`); **5d–5f remain forward design**. This section is the
-> mechanism the ADR-012 decision points to; it becomes fully "current" as the remaining slices land.
+> **Amendment (2026-06-09):** The standalone SDK is deleted; the bare lifecycle core (`Plugin` +
+> `PluginHost`) lives upstream in `@gobing-ai/ts-infra` (shipped in `0.3.6`). Capability
+> registries, trust ladder, and manifest-driven discovery are **deferred** — re-addable later
+> on top of the ts-infra `Plugin` interface when a real plugin consumer exists.
+> `05_FEATURES` marks the substrate `🔶`; remaining slices 5d–5f stay forward design.
 
-The plugin system is the project's **foundational extension substrate**, designed from day one to
-carry first-party primitives (harnesses, rule evaluators, providers, history sources, workflow
-actions) — even though those migrate onto it incrementally rather than up front. It sits **below**
-most capability code, on the startup hot path.
+The plugin mechanism is the project's **lifecycle extension seam**, upstreamed into ts-infra so
+every `runApplication`/`runNodeApplication` consumer shares the same plugin lifecycle. It sits
+**below** most capability code, on the startup hot path.
 
-- **Standalone SDK.** `packages/plugin-sdk` (`@gobing-ai/spur-plugin-sdk`) depends only on
-  `ts-infra` (`Logger`, `EventBus`, `EventMap`). The host (`packages/app`) depends on the SDK; the
-  SDK never depends on core — no circular `app ↔ sdk` edge.
-- **Two-class loading.** The loader splits plugins by origin: **core/bundled** plugins (shipped in
-  the install dir) load **fail-fast** — a failure is a fatal startup error because the plugin *is*
-  the system — while **`local`/`curated`** plugins are **fail-soft** (logged and skipped, never
-  crash Spur). "Invalid plugins are skipped" applies only to the non-core classes.
-- **Built-ins are pre-registered, not special-cased.** Current hardcoded built-ins (the seven
-  `AgentShim`s, rule evaluators, …) are modeled as implicit pre-registrations through the same
-  `register()` path a future bundled-plugin primitive uses, so later migration is a *move*, not a
-  re-architecture.
-- **Trust ladder (`bundled` > `curated` > `local` > `untrusted`)** ships as **registration-time
-  gating** only: a plugin cannot register a capability it did not declare or its tier forbids.
-  `bundled` is the floor the core stands on and is **never gated**. Runtime sandboxing (fs/net/shell
-  isolation) is **accepted out of scope** (PRD §5.4 + ADR-010); the `untrusted` tier is not loaded
-  at all (fail-closed).
-- **Harness registry — no upstream change.** `AgentName` is a compile-time union only; at runtime
-  `AGENT_SHIMS` is a plain object and a harness only needs to satisfy the structural `AgentShim`
-  interface. The Spur-side `HarnessRegistry` keeps a `Map<string, AgentShim>` overlay: resolution
-  checks the overlay first, then falls back to `getAgentShim` for built-ins.
-- **Event seam.** A thin Spur-side `EventRegistry` wraps the typed `EventBus`, fanning glob patterns
-  (`agent.*`, `*`) out to concrete keys and rate-limiting high-churn events (`usage.record`).
-- **Explicit startup ordering.** Discovery/registration of core plugins runs **before** command
-  dispatch and **before** the server mounts routes, so a primitive is available the moment any
-  dependent code runs. Registry `register()` signatures are public, SemVer-significant SDK contracts.
-
-Concrete file shapes (manifest, config, trust enum) live in `04 §6`.
+- **Core in ts-infra.** `Plugin` (lifecycle-only: `onLoad`/`onStart`/`onStop`/`onUnload` +
+  `failFast`) and `PluginHost` (register, lifecycle fan-out with fail-fast load, fail-soft
+  start/stop/unload in reverse registration order) are imported from
+  `@gobing-ai/ts-infra/application`. The `runApplication` / `runNodeApplication` bootstrap
+  drives the plugin lifecycle natively via `plugins`/`pluginHost` options.
+- **Two-class loading (deferred).** The loader's fail-fast/fail-soft split by origin was part
+  of the deleted SDK. When plugins are re-added, `failFast` on the `Plugin` interface provides
+  the same mechanism: set `failFast: true` on critical plugins to abort bootstrap on failure.
+- **Built-ins are pre-registered, not special-cased.** ts-infra registers its own core services
+  (logger, telemetry, scheduler, user-callback) as internal built-in plugins on the PluginHost
+  lifecycle. Spur consumes the lifecycle; it does not re-plugin-ize core services.
+- **Trust ladder (deferred).** The four-tier model (`bundled` > `curated` > `local` >
+  `untrusted`) is removed with the SDK; re-addable as registration-time gating on the ts-infra
+  `Plugin` interface when plugins return.
+- **Harness registry (deferred — Phase 5d).** Tracked in task 0015 (status `Blocked`); requires
+  upstream `AiRunner` injection before reactivation.
+- **Explicit startup ordering.** When plugins are registered, `startAll()` runs before command
+  dispatch so primitives are available the moment any dependent code runs.
+- **Server route seam (removed).** `apps/server/src/plugins.ts` (`mountPluginRoutes`,
+  `collectPluginOpenApiPaths`, `ApiRegistry`) is deleted; no real consumer existed.
+- **Event seam (removed).** The Spur-side `EventRegistry` wrapping the typed `EventBus` was part
+  of the SDK; the `PluginHost`'s `events` field (a raw `EventBus<EventMap>`) is the direct seam
+  for plugins that need it.
