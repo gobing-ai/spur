@@ -3,8 +3,10 @@
  *
  * Resolves `workspace:*` and `catalog:` deps to real semver ranges so
  * `npm publish --access public` accepts the manifest, then publishes.
- * The original package.json is restored afterward. `npm` (not `bun publish`)
  * is required: only the npm CLI implements the OIDC provenance handshake.
+ *
+ * Builds the package BEFORE calling npm publish so that bin files exist on disk
+ * when npm validates them (npm ≥ 11 checks bin existence pre-lifecycle-scripts).
  */
 
 const repoRoot = new URL('../../', import.meta.url).pathname;
@@ -61,6 +63,20 @@ export async function publish(target: string | undefined): Promise<void> {
     if (changed > 0) {
         await Bun.write(manifestPath, `${JSON.stringify(manifest, null, 4)}\n`);
         console.log(`Resolved ${changed} workspace/catalog range(s)`);
+    }
+
+    // Build before npm publish so bin files exist when npm validates them.
+    // npm ≥ 11 checks bin file existence BEFORE running prepublishOnly, so
+    // relying on the lifecycle hook alone causes npm to strip the bin entry.
+    const build = Bun.spawnSync(['bun', 'run', 'build:bundle'], {
+        cwd: dir,
+        stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    if (build.exitCode !== 0) {
+        // Restore original manifest before throwing on build failure.
+        if (changed > 0) await Bun.write(manifestPath, original);
+        console.error(build.stderr.toString().trim());
+        throw new Error(`build:bundle failed (exit ${build.exitCode})`);
     }
 
     const result = Bun.spawnSync(['npm', 'publish', '--access', 'public'], {
