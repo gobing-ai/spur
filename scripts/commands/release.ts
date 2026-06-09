@@ -38,18 +38,10 @@ const RELEASE_PACKAGES = {
         releaseTagMessage: (tag: string) => `release: ${tag}`,
         ghRunListLimit: 5,
     },
-    'spur-plugin-sdk': {
-        packageDir: 'packages/plugin-sdk',
-        packageName: '@gobing-ai/spur-plugin-sdk',
-        tagVersionSeparator: '-v',
-        publishWorkflow: 'publish.yml',
-        releaseCommitType: 'chore',
-        releaseCommitScope: 'release',
-        releaseCommitSubject: (version: string) => `bump spur-plugin-sdk to ${version}`,
-        releaseTagMessage: (tag: string) => `release: ${tag}`,
-        ghRunListLimit: 5,
-    },
 } as const satisfies Record<string, ReleaseConfig>;
+
+/** Packages bumped together by the aggregate (`--all`) release path. */
+const ALL_RELEASE_PACKAGES: readonly ReleaseConfig[] = [RELEASE_PACKAGES['spur-cli']];
 
 type PackageId = keyof typeof RELEASE_PACKAGES;
 
@@ -231,7 +223,7 @@ async function bumpAll(version: string, options: { push: boolean }): Promise<voi
     }
 
     const branch = assertCleanTreeOnBranch();
-    const configs = [RELEASE_PACKAGES['spur-cli'], RELEASE_PACKAGES['spur-plugin-sdk']];
+    const configs = ALL_RELEASE_PACKAGES;
     const aggregateTag = `@gobing-ai/spur-v${version}`;
 
     // Pre-flight: check all tags (aggregate + per-package) and npm before touching any file.
@@ -275,7 +267,8 @@ async function bumpAll(version: string, options: { push: boolean }): Promise<voi
     if (Bun.file(`${repoRoot}bun.lock`).size > 0) staged.push('bun.lock');
     git(['add', ...staged]);
 
-    const message = `chore(release): bump spur-cli and spur-plugin-sdk to ${version}`;
+    const shortNames = configs.map((c) => c.packageName.replace('@gobing-ai/', '')).join(' + ');
+    const message = `chore(release): bump ${shortNames} to ${version}`;
     git(['commit', '-m', message]);
     console.log(`Committed: ${message}`);
 
@@ -285,7 +278,7 @@ async function bumpAll(version: string, options: { push: boolean }): Promise<voi
         git(['tag', '-a', tag, '-m', config.releaseTagMessage(tag)]);
         console.log(`Tagged (trace): ${tag}`);
     }
-    git(['tag', '-a', aggregateTag, '-m', `Spur ${version} — spur-cli + spur-plugin-sdk`]);
+    git(['tag', '-a', aggregateTag, '-m', `Spur ${version} — ${shortNames}`]);
     console.log(`Tagged (publish): ${aggregateTag}`);
 
     if (!options.push) {
@@ -301,7 +294,7 @@ async function bumpAll(version: string, options: { push: boolean }): Promise<voi
     console.log(`Pushing release trigger tag ${aggregateTag}...`);
     git(['push', 'origin', aggregateTag]);
 
-    console.log(`\nReleased ${version} for both packages. The Publish workflow should now be running:`);
+    console.log(`\nReleased ${version}. The Publish workflow should now be running:`);
     console.log(`  gh run list --workflow=publish.yml --limit 3`);
 }
 
@@ -329,7 +322,7 @@ async function dropAll(version: string, options: { remote: boolean }): Promise<v
     if (!SEMVER.test(version)) {
         throw new Error(`"${version}" is not a valid semver version (expected e.g. 0.1.2).`);
     }
-    for (const config of [RELEASE_PACKAGES['spur-cli'], RELEASE_PACKAGES['spur-plugin-sdk']]) {
+    for (const config of ALL_RELEASE_PACKAGES) {
         await dropTagsFor(config, version, options);
     }
     // Also drop the aggregate tag.
@@ -356,9 +349,9 @@ function releaseUsage(message?: string): never {
     console.error(
         `  bun run bump-ver <package-id> <version> [--push]    bump one package, commit, tag, optionally push`,
     );
-    console.error(`  bun run bump-ver --all <version> [--push]              bump both packages in one commit + tags`);
+    console.error(`  bun run bump-ver --all <version> [--push]              bump all packages in one commit + tags`);
     console.error(`  bun run drop-tags <package-id> <version> [--remote] delete one package's release tag`);
-    console.error(`  bun run drop-tags --all <version> [--remote]              delete both packages' release tags`);
+    console.error(`  bun run drop-tags --all <version> [--remote]              delete all packages' release tags`);
     console.error(`\nPackage IDs: ${ids}`);
     process.exit(message ? 1 : 0);
 }
