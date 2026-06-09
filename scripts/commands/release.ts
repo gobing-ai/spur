@@ -274,8 +274,10 @@ async function bumpAll(version: string, options: { push: boolean }): Promise<voi
     // Per-package tags for traceability + aggregate tag to trigger publish.
     for (const config of configs) {
         const tag = releaseTag(config, version);
-        git(['tag', '-a', tag, '-m', config.releaseTagMessage(tag)]);
-        console.log(`Tagged (trace): ${tag}`);
+        if (tag !== aggregateTag) {
+            git(['tag', '-a', tag, '-m', config.releaseTagMessage(tag)]);
+            console.log(`Tagged (trace): ${tag}`);
+        }
     }
     git(['tag', '-a', aggregateTag, '-m', `Spur ${version} — ${shortNames}`]);
     console.log(`Tagged (publish): ${aggregateTag}`);
