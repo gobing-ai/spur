@@ -55,7 +55,7 @@
         "tree": "tree . -a -I 'node_modules|.git|.coverage|vendors|.tmp'",
         "dev": "bun run --filter '*' dev",
         "clean": "rm -rf dist && find apps packages -type d -name dist -prune -exec rm -rf {} + && mkdir -p dist",
-        "build": "bun run clean && bun run --filter '@gobing-ai/spur-cli' build && bun run --filter '@gobing-ai/spur-server' build && bun run --filter '@gobing-ai/spur-web' build",
+        "build": "bun run clean && bun run --filter '@gobing-ai/spur' build && bun run --filter '@gobing-ai/spur-server' build && bun run --filter '@gobing-ai/spur-web' build",
         "typecheck": "bun run --filter '*' typecheck",
         "lint": "biome check . && bun run typecheck",
         "format": "biome check . --write",
