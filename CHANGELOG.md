@@ -6,6 +6,10 @@
 
 - **Server bootstrap standardized on `ts-infra`** (ADR-019) — `spur-server` now bootstraps through `@gobing-ai/ts-infra` using a runtime-aware split: `runNodeApplication` for the Bun entry (`src/index.ts`) and portable `runApplication` behind a lazy singleton for the Cloudflare Workers entry (`src/worker.ts`). Shared config and Hono app factory extracted to `src/bootstrap.ts`. `createApp` accepts an optional `ApplicationRuntime` to thread `logger`/`events`/`db` into Hono context and oRPC handler `context`.
 
+### Added
+
+- **HITL workflow actions and responders** — three human-in-the-loop action runners (`hitl.confirm`, `hitl.select`, `hitl.input`) plus CLI (`ClackHitlResponder`) and non-interactive (`DefaultHitlResponder`) responders. Answers flow back via engine `setVars` so guards can branch on user input. Responder selected per `isatty(1)`: interactive `@clack/prompts` when attached to a terminal, configured defaults in CI/headless. Wired through `SpurWorkflowBuiltinsOptions`, `WorkflowAppServiceContext`, and `CliContext` with the same injection pattern as `agent.run`/`rule.check`. Engine catalog bumped to `^0.3.10` for `HitlResponder` contract.
+
 ### Removed
 
 - **`@gobing-ai/spur-plugin-sdk` package removed.** The plugin substrate moved upstream to a bare `PluginHost` + `Plugin` lifecycle core in `@gobing-ai/ts-infra`, consumed via `runApplication` (ADR-012 amendment). `packages/plugin-sdk` is deleted; the server's unused plugin-route plumbing is removed. The previously published `@gobing-ai/spur-plugin-sdk@0.1.8` remains on npm but receives no further releases. The release script and Publish workflow no longer build or publish it.
