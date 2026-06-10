@@ -1,4 +1,5 @@
 import { dirname, join, resolve } from 'node:path';
+import { AgentService, RuleService } from '@gobing-ai/spur-app';
 import { buildConfigFromEnv } from '@gobing-ai/spur-config';
 import { createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem, type FileSystem, NodeFileSystem, setFileSystem } from '@gobing-ai/ts-runtime';
@@ -14,6 +15,8 @@ export interface CliContext {
     fs: FileSystem;
     output: CommandOutput;
     getDb(): Promise<DbAdapter>;
+    agentService(): AgentService;
+    ruleService(): RuleService;
 }
 
 /** Build a CLI context for production execution or tests. */
@@ -48,6 +51,8 @@ export function createCliContext(options: {
             dbPromise ??= createMigratedDbAdapter(cwd, env, options.dbUrl);
             return dbPromise;
         },
+        agentService: () => new AgentService({ cwd, env, output: options.output }),
+        ruleService: () => new RuleService({ cwd, env, fs, output: options.output }),
     };
 }
 
