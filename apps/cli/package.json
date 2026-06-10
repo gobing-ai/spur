@@ -54,18 +54,19 @@
         "@gobing-ai/spur-domain": "workspace:0.1.0",
         "@gobing-ai/ts-ai-runner": "catalog:",
         "@gobing-ai/ts-dual-workflow-engine": "catalog:",
+        "@gobing-ai/ts-infra": "catalog:",
         "@gobing-ai/ts-llm-jsonl-importer": "catalog:",
         "@gobing-ai/ts-rule-engine": "catalog:",
         "@gobing-ai/ts-runtime": "catalog:",
-        "@gobing-ai/ts-infra": "catalog:",
         "@gobing-ai/ts-utils": "catalog:",
         "@types/bun": "catalog:",
         "@types/figlet": "^1.7.0",
         "commander": "catalog:",
-        "zod": "catalog:",
-        "figlet": "^1.11.0"
+        "figlet": "^1.11.0",
+        "zod": "catalog:"
     },
     "dependencies": {
-        "@clack/prompts": "1.5.1"
+        "@clack/prompts": "1.5.1",
+        "node-notifier": "10.0.1"
     }
 }
