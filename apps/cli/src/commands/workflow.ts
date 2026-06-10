@@ -33,6 +33,14 @@ function parseVars(raw: string | undefined): Record<string, string> | undefined 
 
 /** Register `spur workflow` commands. */
 export function registerWorkflowCommand(program: Command, context: CliContext): void {
+    const makeSvc = () =>
+        new WorkflowAppService({
+            cwd: context.cwd,
+            getDb: () => context.getDb(),
+            agentService: () => context.agentService(),
+            ruleService: () => context.ruleService(),
+        });
+
     const workflow = program.command('workflow').summary('validate and execute workflow YAML files');
 
     workflow
@@ -42,8 +50,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .option('--no-schema', 'Skip schema validation')
         .option('--json', 'Output machine-readable JSON where supported')
         .action(async (file, options) => {
-            const svc = new WorkflowAppService({ cwd: context.cwd, getDb: () => context.getDb() });
-            const result = await svc.validate(file, { validateSchema: options.schema });
+            const result = await makeSvc().validate(file, { validateSchema: options.schema });
             if (options.json) {
                 context.output.write(toJson(result));
             } else if (result.valid) {
@@ -65,8 +72,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .option('--json', 'Output machine-readable JSON where supported')
         .action(async (file, options) => {
             const vars = parseVars(options.vars);
-            const svc = new WorkflowAppService({ cwd: context.cwd, getDb: () => context.getDb() });
-            const result = await svc.run(file, { runId: options.runId || undefined, vars });
+            const result = await makeSvc().run(file, { runId: options.runId || undefined, vars });
             context.output.write(
                 options.json
                     ? toJson(result)
@@ -80,8 +86,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .description('List persisted workflow runs.')
         .option('--json', 'Output machine-readable JSON where supported')
         .action(async (options) => {
-            const svc = new WorkflowAppService({ cwd: context.cwd, getDb: () => context.getDb() });
-            const { runs } = await svc.list();
+            const { runs } = await makeSvc().list();
             if (options.json) {
                 context.output.write(toJson({ runs }));
             } else {
