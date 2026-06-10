@@ -30,6 +30,7 @@ function makeCtx(cwd = process.cwd()) {
         },
         agentService: () => ({ run: async () => 0 }) as unknown as AgentService,
         ruleService: () => ({ evaluate: async () => ({ exitCode: 0, findings: [] }) }) as unknown as RuleService,
+        hitlResponder: () => ({ respond: async () => ({ value: 'yes' }) }),
     };
 }
 
