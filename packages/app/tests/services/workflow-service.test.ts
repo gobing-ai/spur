@@ -3,6 +3,8 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createMigratedDb } from '@gobing-ai/spur-domain';
+import type { AgentService } from '../../src/services/agent-service';
+import type { RuleService } from '../../src/services/rule-service';
 import { WorkflowAppService } from '../../src/services/workflow-service';
 
 const MINIMAL_WORKFLOW_YAML = `name: test-flow
@@ -26,6 +28,8 @@ function makeCtx(cwd = process.cwd()) {
             db ??= createMigratedDb({ url: ':memory:' });
             return db;
         },
+        agentService: () => ({ run: async () => 0 }) as unknown as AgentService,
+        ruleService: () => ({ evaluate: async () => ({ exitCode: 0, findings: [] }) }) as unknown as RuleService,
     };
 }
 
