@@ -7,6 +7,9 @@ import {
     WorkflowService as EngineWorkflowService,
     loadWorkflowDef,
 } from '@gobing-ai/ts-dual-workflow-engine';
+import { registerSpurBuiltins } from '../workflow/builtins';
+import type { AgentService } from './agent-service';
+import type { RuleService } from './rule-service';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -41,6 +44,8 @@ export interface WorkflowListResult {
 export interface WorkflowAppServiceContext {
     cwd: string;
     getDb(): Promise<DbAdapter>;
+    agentService(): AgentService;
+    ruleService(): RuleService;
 }
 
 // ---------------------------------------------------------------------------
@@ -99,16 +104,13 @@ export class WorkflowAppService {
         const runs = await svc.listRuns();
         return { runs };
     }
-
-    // -------------------------------------------------------------------------
-    // Private helpers
-    // -------------------------------------------------------------------------
-
     private async createEngineService(): Promise<EngineWorkflowService> {
-        return new EngineWorkflowService(
-            createDefaultWorkflowEngineHost(),
-            new DbWorkflowPersistenceAdapter(await this.ctx.getDb()),
-        );
+        const host = createDefaultWorkflowEngineHost();
+        registerSpurBuiltins(host, {
+            agentService: this.ctx.agentService(),
+            ruleService: this.ctx.ruleService(),
+        });
+        return new EngineWorkflowService(host, new DbWorkflowPersistenceAdapter(await this.ctx.getDb()));
     }
 }
 
