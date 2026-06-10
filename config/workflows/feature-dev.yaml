@@ -1,102 +1,74 @@
-# Robin's feature-development loop: brainstorm → new-task → refine → implement → check →
-# fix (until pass) → cross-agent verify. Agent-driven steps (slash commands) are modelled
-# as note actions that emit the exact command the operator/agent should run; the only
-# deterministic shell gate is the autofix+spur-check step, stubbed to a note here for
-# dry-run shape verification (swap in the real shell command for actual use — see comment).
-#
-# Mode: state-machine — the check→fix retry loop is the dominant shape; one state active
-# at a time; action-ok guards the short-circuit to done.
-#
-# Enhancement opportunity: the engine currently has no built-in action kind that drives
-# an LLM agent or invokes a slash command. All /rd3:* steps are advisory (note actions).
-# A future `slash` or `agent` action kind would make this workflow truly executable.
-# See dogfood findings in the authoring report.
 "$schema": "@gobing-ai/ts-dual-workflow-engine/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: feature-dev
 description: >
-  Robin's end-to-end feature-development loop: brainstorm vague intent into a task,
-  refine and implement it, gate on autofix+spur-check, fix until clean, then
-  cross-agent verify. Agent-driven /rd3:* steps are emitted as operator notes;
-  the shell gate is the only deterministic action in the loop.
-# iterationBound covers the full transition count across all states.
-# The linear prefix (brainstorm→new-task→refine→implement→check) consumes 4 transitions;
-# each fix cycle adds 2 (check→fix, fix→check). A bound of 20 allows ~8 fix cycles
-# before the engine fails the run — generous for a real feature, safe against runaway.
+  End-to-end feature-development loop: brainstorm → new-task → refine → implement →
+  check (autofix+spur-check) → fix (until clean) → verify. Agent-driven steps use
+  agent.run; the check gate uses rule.check for deterministic constraint gating.
+  The session latch (Q8) auto-continues agent sessions across steps — no per-step
+  `continue` wiring needed.
 iterationBound: 20
 initialState: brainstorm
 terminalStates:
   - done
   - failed
 vars:
-  # Per-run override: pass --vars '{"taskId":"0042"}' when running for a real task.
-  # The placeholder "TASK-ID" is intentional for dry-run shape verification.
   taskId: TASK-ID
 
 states:
   - id: brainstorm
     description: Turn vague intent into a structured feature list via /rd3:dev-brainstorm
     onEnter:
-      - kind: note
+      - kind: agent.run
         options:
-          message: "Run: /rd3:dev-brainstorm\nCaptures vague intent and produces a feature list. When done, advance to new-task."
+          input: /rd3:dev-brainstorm
 
   - id: new-task
     description: Convert the feature list into a task file via /rd3:dev-new-task
     onEnter:
-      - kind: note
+      - kind: agent.run
         options:
-          message: "Run: /rd3:dev-new-task\nCreates a new task file from the feature list. Record the task ID, then advance."
+          input: /rd3:dev-new-task
 
   - id: refine
     description: Auto-refine the task definition via /rd3:dev-refine
     onEnter:
-      - kind: note
+      - kind: agent.run
         options:
-          message: "Run: /rd3:dev-refine ${vars.taskId} --focus all --auto\nRefines scope, acceptance criteria, and subtasks. Advance when done."
+          input: /rd3:dev-refine ${vars.taskId} --focus all --auto
 
   - id: implement
     description: Implement + verify the task via /rd3:dev-run
     onEnter:
-      - kind: note
+      - kind: agent.run
         options:
-          message: "Run: /rd3:dev-run ${vars.taskId} --auto --verify\nImplements the task and runs built-in verification. Advance to check when done."
+          input: /rd3:dev-run ${vars.taskId} --auto --verify
 
   - id: check
     description: >
-      Gate: run autofix then the full spur-check suite.
-      For dry-run shape verification this emits a note; swap in the real shell
-      command for actual use:
-        kind: shell
-        options:
-          command: "bun run autofix && bun run spur-check"
+      Deterministic constraint gate via rule.check (recommended-pre-check preset).
+      Catches formatting, type, and structural issues before verification.
     onEnter:
-      # DRY-RUN STUB: replace this note with the shell action below for real use.
-      # Real command:
-      #   - kind: shell
-      #     options:
-      #       command: "bun run autofix && bun run spur-check"
-      - kind: note
+      - kind: rule.check
         options:
-          message: "STUB (dry-run): replace with shell action → bun run autofix && bun run spur-check"
+          preset: recommended-pre-check
+          failOn: warning
 
   - id: fix
     description: >
-      Fix failures from the check gate. The operator/agent chooses the appropriate
-      sub-command based on the failure type:
-        generic failures  → /rd3:dev-fixall "bun run autofix && bun run spur-check"
-        unit test gaps    → /rd3:dev-unit <source-file> --auto
+      Fix failures from the check gate. The latched agent session carries context
+      from the previous steps so the fixer knows what went wrong.
     onEnter:
-      - kind: note
+      - kind: agent.run
         options:
-          message: "Fix failures from the check gate:\n  generic:       /rd3:dev-fixall \"bun run autofix && bun run spur-check\"\n  unit test gap: /rd3:dev-unit <source-file> --auto\nRe-run check after fixing."
+          input: "Fix the failures from the previous check pass for task ${vars.taskId}; run /rd3:dev-fixall or /rd3:dev-unit as appropriate."
 
   - id: verify
     description: Cross-agent verification via /rd3:dev-verify
     onEnter:
-      - kind: note
+      - kind: agent.run
         options:
-          message: "Run: /rd3:dev-verify ${vars.taskId} --auto --fix all --force --channel codex/auto\nCross-agent verification pass. Advance to done on success."
+          input: /rd3:dev-verify ${vars.taskId} --auto --fix all --force --channel codex/auto
 
   - id: done
     description: Terminal — feature implemented, checked, and verified successfully.
@@ -123,7 +95,6 @@ transitions:
     description: Implementation done; run the gate
 
   # Check gate: action-ok guard FIRST so a passing check short-circuits to verify.
-  # Without this ordering the unconditional fix edge would always win.
   - from: check
     to: verify
     description: Check passed — advance to cross-agent verification
