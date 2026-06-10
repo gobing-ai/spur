@@ -2,9 +2,10 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { DoctorResult } from '@gobing-ai/ts-ai-runner';
 import { NodeFileSystem, setFileSystem } from '@gobing-ai/ts-runtime';
 import { main } from '../../src';
-import { runAgentRun } from '../../src/commands/agent';
+import { type AgentRunDeps, runAgentRun } from '../../src/commands/agent';
 import { type CliContext, createCliContext } from '../../src/context';
 import { createCapturedOutput } from '../helpers';
 
@@ -229,6 +230,19 @@ describe('spur agent list --specs', () => {
 });
 
 describe('spur agent run --drain', () => {
+    type MockRunner = {
+        runPromptCommand(
+            _agent: unknown,
+            opts: { input?: string },
+        ): Promise<{ exitCode: number; stdout: string; stderr: string; durationMs: number }>;
+    };
+    type MockDetector = {
+        detectOne(_agent: string): Promise<{ version: string }>;
+    };
+    type MockDoctor = {
+        runOne(_agent: string): Promise<DoctorResult>;
+        runAll(): Promise<DoctorResult[]>;
+    };
     // A doctor double that reports a usable claude for both explicit and auto resolution.
     function fakeDoctor() {
         const result = {
@@ -260,19 +274,11 @@ describe('spur agent run --drain', () => {
             };
             const fakeDetector = { detectOne: async () => ({ version: '1' }) };
 
-            const code = await runAgentRun(
-                'do work',
-                ctx,
-                { agent: 'planner', drain: true, json: true },
-                {
-                    // biome-ignore lint/suspicious/noExplicitAny: test doubles for injected deps.
-                    runner: fakeRunner as any,
-                    // biome-ignore lint/suspicious/noExplicitAny: test doubles for injected deps.
-                    detector: fakeDetector as any,
-                    // biome-ignore lint/suspicious/noExplicitAny: test doubles for injected deps.
-                    doctorRunner: fakeDoctor() as any,
-                },
-            );
+            const code = await runAgentRun('do work', ctx, { agent: 'planner', drain: true, json: true }, {
+                runner: fakeRunner as MockRunner,
+                detector: fakeDetector as MockDetector,
+                doctorRunner: fakeDoctor() as MockDoctor,
+            } as unknown as AgentRunDeps);
             expect(code).toBe(0);
             // Drain relies on the same DB context; when called via main() the
             // per-call :memory: DBs are isolated, so drain won't find the pending
@@ -286,21 +292,13 @@ describe('spur agent run --drain', () => {
     test('errors when --drain has no explicit --agent but still runs', async () => {
         const { ctx, out, cleanup } = await makeCtx();
         try {
-            const code = await runAgentRun(
-                'hi',
-                ctx,
-                { drain: true, json: true },
-                {
-                    runner: {
-                        runPromptCommand: async () => ({ exitCode: 0, stdout: '', stderr: '', durationMs: 1 }),
-                        // biome-ignore lint/suspicious/noExplicitAny: test doubles for injected deps.
-                    } as any,
-                    // biome-ignore lint/suspicious/noExplicitAny: test doubles for injected deps.
-                    detector: { detectOne: async () => ({ version: '1' }) } as any,
-                    // biome-ignore lint/suspicious/noExplicitAny: test doubles for injected deps.
-                    doctorRunner: fakeDoctor() as any,
-                },
-            );
+            const code = await runAgentRun('hi', ctx, { drain: true, json: true }, {
+                runner: {
+                    runPromptCommand: async () => ({ exitCode: 0, stdout: '', stderr: '', durationMs: 1 }),
+                } as MockRunner,
+                detector: { detectOne: async () => ({ version: '1' }) } as MockDetector,
+                doctorRunner: fakeDoctor() as MockDoctor,
+            } as unknown as AgentRunDeps);
             // Drain warns + no-ops; run proceeds via auto resolution, so exit is 0.
             expect(code).toBe(0);
             expect(out.errors.join('\n')).toMatch(/--drain requires an explicit --agent/);
