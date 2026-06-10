@@ -25,6 +25,9 @@ export interface CliContext {
      * Create a HITL responder: interactive Clack only when stdout is a TTY AND output is not `--json`,
      * otherwise the non-interactive default. `--json` must never trigger an interactive prompt — it
      * would corrupt the JSON stream and block a machine consumer.
+     *
+     * DesktopNotifierHitlResponder (native OS dialogs + node-notifier) is available via
+     * explicit import from `./workflow/hitl/desktop-notifier-responder`.
      */
     hitlResponder(json?: boolean): HitlResponder;
 }
