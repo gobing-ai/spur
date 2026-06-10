@@ -50,3 +50,9 @@ export type {
     WorkflowValidateResult,
 } from './services/workflow-service';
 export { WorkflowAppService } from './services/workflow-service';
+export { AgentRunActionRunner } from './workflow/actions/agent-run';
+export { FileExistsActionRunner } from './workflow/actions/file-exists';
+export { FileReadActionRunner } from './workflow/actions/file-read';
+export { RuleCheckActionRunner } from './workflow/actions/rule-check';
+// Workflow built-in action runners
+export { registerSpurBuiltins, type SpurWorkflowBuiltinsOptions } from './workflow/builtins';
