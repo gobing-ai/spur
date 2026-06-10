@@ -1,10 +1,14 @@
 import { dirname, join, resolve } from 'node:path';
+import { isatty } from 'node:tty';
 import { AgentService, RuleService } from '@gobing-ai/spur-app';
 import { buildConfigFromEnv } from '@gobing-ai/spur-config';
 import { createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
+import type { HitlResponder } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, type FileSystem, NodeFileSystem, setFileSystem } from '@gobing-ai/ts-runtime';
 import { CLI_CONFIG } from './config';
 import type { CommandOutput } from './output';
+import { ClackHitlResponder } from './workflow/hitl/clack-responder';
+import { DefaultHitlResponder } from './workflow/hitl/default-responder';
 
 /** Runtime dependencies shared by CLI commands. */
 export interface CliContext {
@@ -17,6 +21,12 @@ export interface CliContext {
     getDb(): Promise<DbAdapter>;
     agentService(): AgentService;
     ruleService(): RuleService;
+    /**
+     * Create a HITL responder: interactive Clack only when stdout is a TTY AND output is not `--json`,
+     * otherwise the non-interactive default. `--json` must never trigger an interactive prompt — it
+     * would corrupt the JSON stream and block a machine consumer.
+     */
+    hitlResponder(json?: boolean): HitlResponder;
 }
 
 /** Build a CLI context for production execution or tests. */
@@ -53,6 +63,8 @@ export function createCliContext(options: {
         },
         agentService: () => new AgentService({ cwd, env, output: options.output }),
         ruleService: () => new RuleService({ cwd, env, fs, output: options.output }),
+        hitlResponder: (json?: boolean) =>
+            isatty(1) && json !== true ? new ClackHitlResponder() : new DefaultHitlResponder(),
     };
 }
 
