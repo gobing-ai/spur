@@ -33,12 +33,15 @@ function parseVars(raw: string | undefined): Record<string, string> | undefined 
 
 /** Register `spur workflow` commands. */
 export function registerWorkflowCommand(program: Command, context: CliContext): void {
-    const makeSvc = () =>
+    // `json` selects the HITL responder: interactive prompts must never fire under --json
+    // (they would corrupt the JSON stream). Only `run` invokes actions, so only it passes json=true.
+    const makeSvc = (json?: boolean) =>
         new WorkflowAppService({
             cwd: context.cwd,
             getDb: () => context.getDb(),
             agentService: () => context.agentService(),
             ruleService: () => context.ruleService(),
+            hitlResponder: () => context.hitlResponder(json),
         });
 
     const workflow = program.command('workflow').summary('validate and execute workflow YAML files');
@@ -72,7 +75,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .option('--json', 'Output machine-readable JSON where supported')
         .action(async (file, options) => {
             const vars = parseVars(options.vars);
-            const result = await makeSvc().run(file, { runId: options.runId || undefined, vars });
+            const result = await makeSvc(options.json).run(file, { runId: options.runId || undefined, vars });
             context.output.write(
                 options.json
                     ? toJson(result)
