@@ -64,5 +64,8 @@
         "commander": "catalog:",
         "zod": "catalog:",
         "figlet": "^1.11.0"
+    },
+    "dependencies": {
+        "@clack/prompts": "1.5.1"
     }
 }
