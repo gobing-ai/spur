@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+    type HitlResponder,
     MemoryWorkflowPersistenceAdapter,
     StateMachineDriver,
     WorkflowEngineHost,
@@ -14,6 +15,7 @@ describe('registerSpurBuiltins', () => {
         registerSpurBuiltins(host, {
             agentService: { run: async () => 0 } as unknown as AgentService,
             ruleService: { evaluate: async () => ({ exitCode: 0, findings: [] }) } as unknown as RuleService,
+            hitlResponder: { respond: async () => ({ value: 'yes' }) } as unknown as HitlResponder,
         });
 
         const actions = host.listActions();
@@ -28,6 +30,7 @@ describe('registerSpurBuiltins', () => {
         registerSpurBuiltins(host, {
             agentService: { run: async () => 0 } as unknown as AgentService,
             ruleService: { evaluate: async () => ({ exitCode: 0, findings: [] }) } as unknown as RuleService,
+            hitlResponder: { respond: async () => ({ value: 'yes' }) } as unknown as HitlResponder,
         });
 
         expect(host.actionOrigin('agent.run')).toBe('builtin');
@@ -41,6 +44,7 @@ describe('registerSpurBuiltins', () => {
         registerSpurBuiltins(host, {
             agentService: { run: async () => 0 } as unknown as AgentService,
             ruleService: { evaluate: async () => ({ exitCode: 0, findings: [] }) } as unknown as RuleService,
+            hitlResponder: { respond: async () => ({ value: 'yes' }) } as unknown as HitlResponder,
         });
 
         const result = await host.runAction(
@@ -74,6 +78,7 @@ describe('registerSpurBuiltins', () => {
         registerSpurBuiltins(host, {
             agentService,
             ruleService: { evaluate: async () => ({ exitCode: 0, findings: [] }) } as unknown as RuleService,
+            hitlResponder: { respond: async () => ({ value: 'yes' }) } as unknown as HitlResponder,
         });
 
         const result = await new StateMachineDriver({
@@ -101,5 +106,59 @@ describe('registerSpurBuiltins', () => {
         // First agent.run opens the session (latch unset → continue not forced true);
         // second inherits it (latch set by step 1's setVars → continue true).
         expect(continueSeen).toEqual([undefined, true]);
+    });
+
+    test('hitl answer propagates to a later step via setVars end-to-end (R7)', async () => {
+        // Prove a hitl.input answer is merged into run vars and is visible to a later
+        // node's action — the cross-step path that unit tests (which only assert the
+        // runner's setVars shape) cannot cover. Mirrors the 0032 latch e2e test.
+        let resolvedInLaterStep: unknown;
+        // A workflow template string the engine's resolveTemplates interprets at runtime — NOT a JS
+        // template literal. Built by concatenation so the source doesn't contain a `${` that Biome's
+        // noTemplateCurlyInString would (correctly, for JS) flag.
+        const hitlInputTemplate = `$${'{vars.__hitlInput}'}`;
+        const host = new WorkflowEngineHost();
+        registerSpurBuiltins(host, {
+            agentService: { run: async () => 0 } as unknown as AgentService,
+            ruleService: { evaluate: async () => ({ exitCode: 0, findings: [] }) } as unknown as RuleService,
+            // The responder supplies the human's answer; the action stores it in __hitlInput.
+            hitlResponder: { respond: async () => ({ value: 'ship it' }) } as unknown as HitlResponder,
+        });
+        // A capture action records the template value it received, proving ${vars.__hitlInput}
+        // resolved from the earlier hitl.input step's setVars.
+        host.registerAction(
+            {
+                kind: 'capture',
+                async execute(options: Record<string, unknown>) {
+                    resolvedInLaterStep = options.seen;
+                    return { ok: true };
+                },
+            },
+            'extension',
+        );
+
+        const result = await new StateMachineDriver({
+            host,
+            persistence: new MemoryWorkflowPersistenceAdapter(),
+        }).run(
+            {
+                name: 'hitl-e2e',
+                initialState: 'ask',
+                terminalStates: ['done'],
+                states: [
+                    { id: 'ask', onEnter: [{ kind: 'hitl.input', options: { prompt: 'Decision?' } }] },
+                    { id: 'use', onEnter: [{ kind: 'capture', options: { seen: hitlInputTemplate } }] },
+                    { id: 'done' },
+                ],
+                transitions: [
+                    { from: 'ask', to: 'use' },
+                    { from: 'use', to: 'done' },
+                ],
+            },
+            { runId: 'hitl-e2e-1' },
+        );
+
+        expect(result.status).toBe('done');
+        expect(resolvedInLaterStep).toBe('ship it');
     });
 });
