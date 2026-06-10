@@ -5,6 +5,7 @@ import {
     createDefaultWorkflowEngineHost,
     DbWorkflowPersistenceAdapter,
     WorkflowService as EngineWorkflowService,
+    type HitlResponder,
     loadWorkflowDef,
 } from '@gobing-ai/ts-dual-workflow-engine';
 import { registerSpurBuiltins } from '../workflow/builtins';
@@ -46,6 +47,7 @@ export interface WorkflowAppServiceContext {
     getDb(): Promise<DbAdapter>;
     agentService(): AgentService;
     ruleService(): RuleService;
+    hitlResponder(): HitlResponder;
 }
 
 // ---------------------------------------------------------------------------
@@ -109,6 +111,7 @@ export class WorkflowAppService {
         registerSpurBuiltins(host, {
             agentService: this.ctx.agentService(),
             ruleService: this.ctx.ruleService(),
+            hitlResponder: this.ctx.hitlResponder(),
         });
         return new EngineWorkflowService(host, new DbWorkflowPersistenceAdapter(await this.ctx.getDb()));
     }
