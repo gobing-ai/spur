@@ -156,7 +156,8 @@ Backed by `ts-rule-engine`.
   (`~/.config/spur/workflows/`) layers, grouped by source.
 - `trace` — query persisted workflow run history. No argument: list recent runs (default last 20,
   newest first) with filters `--workflow`, `--status`, `--since`, `--last`. With `<run-id>`:
-  per-run timeline of state entries and transitions.
+  per-run timeline of state entries, transitions, and action executions interleaved by `created_at`.
+  Action lines include the action kind, duration when finalized, and an in-flight/success/failure marker.
 Backed by `ts-dual-workflow-engine` (`WorkflowService` + `DbWorkflowPersistenceAdapter`).
 
 #### `spur history import --source <source> [--file <path>|--root <path>] [--mode <mode>] [--dry-run] [--json]`
