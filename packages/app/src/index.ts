@@ -1,5 +1,7 @@
 // Public API surface for @gobing-ai/spur-app.
 // Application-services layer extracted from the CLI command files (tasks 0009–0011).
+
+export type { RuleEvalRunRow, RuleRunRow } from '@gobing-ai/spur-domain';
 export type {
     AgentResolveResult,
     AgentRunDeps,
