@@ -1,11 +1,20 @@
 import { homedir } from 'node:os';
 import { delimiter, join, relative, resolve } from 'node:path';
 import { bundledConfigRoot } from '@gobing-ai/spur-config';
+import {
+    createId,
+    type DbAdapter,
+    RuleEvalRunDao,
+    type RuleEvalRunRow,
+    RuleRunDao,
+    type RuleRunRow,
+} from '@gobing-ai/spur-domain';
 import { EventBus } from '@gobing-ai/ts-infra';
 import {
     bundledRulesRoot,
     type ConstraintFinding,
     type ConstraintRule,
+    DbRulePersistenceAdapter,
     type Fix,
     type FixApplicationResult,
     type FixMode,
@@ -14,6 +23,7 @@ import {
     RuleEngine,
     type RuleEngineEvents,
     type RuleEngineResult,
+    type RulePersistenceAdapter,
 } from '@gobing-ai/ts-rule-engine';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 
@@ -54,6 +64,8 @@ export interface RuleServiceContext {
     env: Record<string, string | undefined>;
     fs: FileSystem;
     output: RuleServiceOutput;
+    /** Optional lazy DB adapter for persistence and trace queries. */
+    getDb?: () => Promise<DbAdapter>;
 }
 
 /** Options for RuleService.evaluate(). */
@@ -198,21 +210,62 @@ export class RuleService {
 
         let enabledCount = filteredRules.filter((r) => r.enabled !== false).length;
 
+        // Persist run history when a DB is available. Spur stamps the run id
+        // (R1.4) so the run can be re-queried via `spur rule trace <run-id>`.
+        const db = await this.context.getDb?.();
+        const persistence = db ? new DbRulePersistenceAdapter(db) : undefined;
+        const runId = createId('rule');
+        const runMeta: Record<string, unknown> = {
+            preset: file === undefined ? preset : undefined,
+            sourceKind: file !== undefined ? 'file' : 'preset',
+            sourceValue: file ?? preset,
+            failOn,
+            stopOnFirst,
+            dryRun,
+            metadataJson: JSON.stringify(
+                selectedRule === undefined ? { cwd: this.context.cwd } : { cwd: this.context.cwd, rule: selectedRule },
+            ),
+        };
+        const engineOptions = { persistence, runId, runMeta };
+        const engine = new RuleEngine(engineOptions);
+
         let result: RuleEngineResult;
         if (verbose && !json) {
-            const [engineResult, enabled] = await this.evaluateVerbose(filteredRules, color, stopOnFirst, fixMode);
+            const [engineResult, enabled] = await this.evaluateVerbose(
+                engineOptions,
+                filteredRules,
+                color,
+                stopOnFirst,
+                fixMode,
+            );
             result = engineResult;
             enabledCount = enabled;
         } else if (fixMode !== 'none') {
-            result = await new RuleEngine().evaluateWithFixes(filteredRules, this.context.cwd, fixMode, stopOnFirst);
+            result = await engine.evaluateWithFixes(filteredRules, this.context.cwd, fixMode, stopOnFirst);
         } else {
-            result = await new RuleEngine().evaluate(filteredRules, this.context.cwd, stopOnFirst);
+            result = await engine.evaluate(filteredRules, this.context.cwd, stopOnFirst);
         }
 
         // Apply fixes when fixMode='auto' and fixes were collected.
         let applied: FixApplicationResult | undefined;
         if (fixMode === 'auto' && result.fixes.length > 0) {
             applied = await new RuleEngine().applyFixes(this.context.cwd, result.fixes, dryRun);
+            // The engine finalizes the run row before fixes are applied
+            // (applied_fix_count=0, by contract); stamp the real applied count
+            // once application completes. Dry runs record no applied writes.
+            if (persistence && db && !dryRun) {
+                const row = await new RuleRunDao(db).byId(runId);
+                if (row) {
+                    await persistence.updateRunStatus(
+                        runId,
+                        row.status === 'failed' ? 'failed' : 'done',
+                        row.finding_count,
+                        row.fix_count,
+                        applied.applied.length,
+                        row.duration_ms ?? 0,
+                    );
+                }
+            }
         }
 
         const serviceResult: RuleEvaluationServiceResult = {
@@ -235,7 +288,7 @@ export class RuleService {
                 this.writeFixSummary(result.fixes, applied, dryRun, color);
             }
         } else if (result.findings.length > 0) {
-            this.context.output.write(new RuleEngine().host.formatters.get('text').format(result));
+            this.context.output.write(engine.host.formatters.get('text').format(result));
             if (fixMode !== 'none' && result.fixes.length > 0) {
                 this.writeFixSummary(result.fixes, applied, dryRun, color);
             }
@@ -325,28 +378,36 @@ export class RuleService {
         };
     }
 
-    // -------------------------------------------------------------------------
-    // Private helpers
-    // -------------------------------------------------------------------------
+    // ── Trace ──────────────────────────────────────────────────────────
 
-    /**
-     * Build the ordered rule-source roots for the active context, highest priority
-     * first: `SPUR_RULES_PATH` entries, the local project root (`.spur/rules`), then
-     * the global user root (`~/.config/spur/rules`). Local roots shadow global ones
-     * per relative path, so a project overrides individual rule files while inheriting
-     * the rest of a preset's categories from the global layer.
-     *
-     * `SPUR_GLOBAL_RULES_DIR` overrides the global root (resolved against the working
-     * directory); set it to a known-empty path to isolate a run from user globals.
-     * Setting it also suppresses the bundled fallback below, so the caller gets a
-     * fully hermetic rule layer (the local root plus the explicit global override) —
-     * which is what tests and reproducible CI runs need.
-     *
-     * Otherwise the presets bundled with `@gobing-ai/ts-rule-engine` are appended as
-     * the lowest-priority root so `--preset recommended-pre-check` resolves to a working
-     * ruleset on a clean install, before `spur init` has seeded the user-global directory.
-     * Local and global roots still shadow individual bundled files per relative path.
-     */
+    /** List recent rule runs with optional filters. */
+    async traceList(filter: {
+        preset?: string;
+        status?: string;
+        since?: string;
+        limit: number;
+    }): Promise<{ runs: RuleRunRow[] }> {
+        const db = await this.context.getDb?.();
+        if (!db) return { runs: [] };
+        const dao = new RuleRunDao(db);
+        const runs = await dao.list(filter);
+        return { runs };
+    }
+
+    /** Show per-run detail including eval rows. */
+    async traceDetail(runId: string): Promise<{ run: RuleRunRow; evaluations: RuleEvalRunRow[] }> {
+        const db = await this.context.getDb?.();
+        if (!db) throw new Error('Run not found');
+        const runDao = new RuleRunDao(db);
+        const evalDao = new RuleEvalRunDao(db);
+        const run = await runDao.byId(runId);
+        if (!run) throw new Error('Run not found');
+        const evaluations = await evalDao.byRunId(runId);
+        return { run, evaluations };
+    }
+
+    // ── Private helpers ────────────────────────────────────────────────
+
     private ruleRoots(): string[] {
         return this.ruleSourceLayers({ includeBundled: true }).map((layer) => layer.path);
     }
@@ -390,6 +451,7 @@ export class RuleService {
      * stdout clean for the final result. Returns the same aggregate shape as a batch run.
      */
     private async evaluateVerbose(
+        engineOptions: { persistence?: RulePersistenceAdapter; runId: string; runMeta: Record<string, unknown> },
         rules: readonly ConstraintRule[],
         color: Colorize,
         stopOnFirst?: FailOnSeverity,
@@ -406,6 +468,7 @@ export class RuleService {
         const pendingDetails = new Map<string, number>(); // ruleId → durationMs
 
         const events = new EventBus<RuleEngineEvents>();
+        const engine = new RuleEngine({ ...engineOptions, events });
 
         // Header: show total rule count (enabled + disabled).
         const noun = totalCount === 1 ? 'rule' : 'rules';
@@ -444,7 +507,6 @@ export class RuleService {
             // R6: surface evaluator crash distinctly from normal violation findings.
             this.context.output.error(`  ${color.yellow(`! evaluator error in ${ruleId}: ${error}`)}`);
         });
-        const engine = new RuleEngine({ events });
         const result =
             fixMode !== 'none'
                 ? await engine.evaluateWithFixes([...rules], this.context.cwd, fixMode, stopOnFirst)
