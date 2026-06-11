@@ -53,6 +53,10 @@ export function createCliContext(options: {
     if (options.db) {
         dbPromise = Promise.resolve(options.db);
     }
+    const getDb = async (): Promise<DbAdapter> => {
+        dbPromise ??= createMigratedDbAdapter(cwd, env, options.dbUrl);
+        return dbPromise;
+    };
 
     return {
         cwd,
@@ -60,12 +64,9 @@ export function createCliContext(options: {
         fs,
         setExitCode: options.setExitCode ?? noopSetExitCode,
         output: options.output,
-        getDb: async () => {
-            dbPromise ??= createMigratedDbAdapter(cwd, env, options.dbUrl);
-            return dbPromise;
-        },
+        getDb,
         agentService: () => new AgentService({ cwd, env, output: options.output }),
-        ruleService: () => new RuleService({ cwd, env, fs, output: options.output }),
+        ruleService: () => new RuleService({ cwd, env, fs, output: options.output, getDb }),
         hitlResponder: (json?: boolean) =>
             isatty(1) && json !== true ? new ClackHitlResponder() : new DefaultHitlResponder(),
     };
