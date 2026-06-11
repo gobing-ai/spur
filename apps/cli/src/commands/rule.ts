@@ -1,15 +1,17 @@
 import type { Command } from '@commander-js/extra-typings';
 import {
     type FailOnSeverity,
+    type RuleEvalRunRow,
     type RuleListFileEntry,
     type RuleListServiceResult,
+    type RuleRunRow,
     RuleService,
 } from '@gobing-ai/spur-app';
 import { makeColorize, shouldColor } from '../colors';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
 
-/** Register `spur rule` commands. */
+/** Register the `spur rule` command and its subcommands on the CLI program. */
 export function registerRuleCommand(program: Command, context: CliContext): void {
     const rule = program.command('rule').summary('manage constraint rules and presets');
 
@@ -98,22 +100,58 @@ export function registerRuleCommand(program: Command, context: CliContext): void
         });
 
     rule.command('trace')
-        .summary('Show persisted rule run history (reserved).')
+        .summary('Show persisted rule run history.')
         .argument('[run-id]', 'Run ID for per-run detail')
         .option('--preset <name>', 'Filter by preset name')
         .option('--status <status>', 'Filter by status: done, failed')
         .option('--since <iso-date>', 'Filter runs started on or after this date')
         .option('--last <n>', 'Limit results (default 20)', '20')
         .option('--json', 'Output machine-readable JSON')
-        .action(async (_runId, options) => {
+        .action(async (runId, options) => {
+            const last = parseInt(options.last, 10);
+            if (!Number.isInteger(last) || last < 1) {
+                context.output.error('--last must be a positive integer');
+                context.setExitCode(1);
+                return;
+            }
             if (options.status !== undefined && !['done', 'failed'].includes(options.status)) {
                 context.output.error('--status must be one of: done, failed');
                 context.setExitCode(1);
                 return;
             }
-            const message =
-                'TODO: spur rule trace is reserved for rule execution history (pending rule-engine persistence).';
-            context.output.write(options.json ? toJson({ status: 'todo', message }) : message);
+            if (options.since !== undefined && Number.isNaN(Date.parse(options.since))) {
+                context.output.error('--since must be a valid ISO date');
+                context.setExitCode(1);
+                return;
+            }
+            const svc = context.ruleService();
+            try {
+                if (runId) {
+                    const detail = await svc.traceDetail(runId);
+                    if (options.json) {
+                        context.output.write(toJson(detail));
+                    } else {
+                        context.output.write(formatTraceDetail(detail));
+                    }
+                } else {
+                    const { runs } = await svc.traceList({
+                        preset: options.preset,
+                        status: options.status,
+                        since: options.since,
+                        limit: last,
+                    });
+                    if (options.json) {
+                        context.output.write(toJson({ runs }));
+                    } else if (runs.length === 0) {
+                        context.output.write('No rule runs found.');
+                    } else {
+                        context.output.write(formatTraceList(runs));
+                    }
+                }
+            } catch (error) {
+                context.output.error(error instanceof Error ? error.message : String(error));
+                context.setExitCode(1);
+            }
         });
 }
 
@@ -209,4 +247,46 @@ function parseStopOnFirst(value: string): FailOnSeverity {
 function parseFixMode(value: string): 'none' | 'suggest' | 'auto' {
     if (value === 'none' || value === 'suggest' || value === 'auto') return value;
     throw new Error(`Invalid --fix-mode value "${value}". Expected none, suggest, or auto.`);
+}
+/**
+ * Format a list of rule runs as a tab-separated table for plain-text output.
+ * Columns: RUN ID, PRESET, STATUS, RULES, FINDINGS, FIXES, STARTED.
+ */
+export function formatTraceList(runs: RuleRunRow[]): string {
+    const header = ['RUN ID', 'PRESET', 'STATUS', 'RULES', 'FINDINGS', 'FIXES', 'STARTED'];
+    const rows = runs.map((r) => [
+        r.id.slice(0, 12),
+        r.preset ?? '-',
+        r.status,
+        String(r.rule_count),
+        String(r.finding_count),
+        String(r.fix_count),
+        r.started_at.slice(0, 19).replace('T', ' '),
+    ]);
+    return [header.join('\t'), ...rows.map((row) => row.join('\t'))].join('\n');
+}
+
+/**
+ * Format a single rule run detail (run metadata + per-rule evaluation rows)
+ * for plain-text output.
+ */
+export function formatTraceDetail(detail: { run: RuleRunRow; evaluations: RuleEvalRunRow[] }): string {
+    const r = detail.run;
+    const lines: string[] = [];
+    lines.push(`Run: ${r.id} — ${r.preset ?? '-'} — ${r.status}`);
+    lines.push(
+        `Rules: ${r.rule_count}   Findings: ${r.finding_count}   Fixes: ${r.fix_count}   Duration: ${r.duration_ms != null ? `${(r.duration_ms / 1000).toFixed(2)}s` : '-'}`,
+    );
+    const stopOn = r.stop_on_first ?? 'none';
+    lines.push(`Fail-on: ${r.fail_on ?? 'error'}   Stop-on-first: ${stopOn}   Fix-mode: ${r.fix_mode}`);
+    lines.push('');
+    for (const ev of detail.evaluations) {
+        const icon = ev.status === 'failed' ? '✗' : ev.status === 'done' && ev.finding_count > 0 ? '!' : '✓';
+        const dur = ev.duration_ms != null ? `${ev.duration_ms}ms` : '-';
+        lines.push(`  ${icon} ${ev.rule_id.padEnd(30)} ${String(ev.finding_count).padStart(3)} findings   ${dur}`);
+        if (ev.error) {
+            lines.push(`    error: ${ev.error}`);
+        }
+    }
+    return lines.join('\n');
 }
