@@ -32,12 +32,23 @@ export class HitlSelectActionRunner implements ActionRunner {
 
         const varName = asString(options.var) ?? '__hitlAnswer';
 
+        context.events?.emit('workflow.hitl.ask', {
+            runId: context.runId,
+            node: context.stateOrNodeId,
+            kind: 'select',
+            message: prompt,
+        });
         const answer = await this.responder.respond({
             kind: 'select',
             prompt,
             options: choiceList,
             runId: context.runId,
             node: context.stateOrNodeId,
+        });
+        context.events?.emit('workflow.hitl.response', {
+            runId: context.runId,
+            node: context.stateOrNodeId,
+            ok: !answer.cancelled,
         });
 
         if (answer.cancelled) {
