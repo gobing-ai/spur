@@ -235,4 +235,36 @@ describe('runRuleCommand dispatch', () => {
 
         expect(code).toBe(0);
     });
+
+    test('trace subcommand prints TODO marker (plain)', async () => {
+        const lines: string[] = [];
+        const exitCode = await main(['rule', 'trace'], {
+            output: { write: (m) => lines.push(m), error: () => {} },
+        });
+        expect(exitCode).toBe(0);
+        expect(lines).toContain(
+            'TODO: spur rule trace is reserved for rule execution history (pending rule-engine persistence).',
+        );
+    });
+
+    test('trace subcommand prints TODO marker (json)', async () => {
+        const lines: string[] = [];
+        const exitCode = await main(['rule', 'trace', '--json'], {
+            output: { write: (m) => lines.push(m), error: () => {} },
+        });
+        expect(exitCode).toBe(0);
+        const output = JSON.parse(lines.join(''));
+        expect(output.status).toBe('todo');
+        expect(output.message).toContain('TODO');
+    });
+
+    test('trace subcommand rejects invalid --status', async () => {
+        const exitCode = await main(['rule', 'trace', '--status', 'bogus'], { output: nullOutput() });
+        expect(exitCode).toBe(1);
+    });
+
+    test('trace subcommand accepts valid --status done', async () => {
+        const exitCode = await main(['rule', 'trace', '--status', 'done'], { output: nullOutput() });
+        expect(exitCode).toBe(0);
+    });
 });
