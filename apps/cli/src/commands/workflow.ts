@@ -236,9 +236,11 @@ function formatTraceTimeline(result: WorkflowTraceTimeline): string {
         if (event.kind === 'phase') {
             const ts = event.startedAt ?? event.completedAt ?? '';
             lines.push(`  ${event.phase.padEnd(20)} ${event.status.padEnd(10)} ${ts}`);
-        } else {
+        } else if (event.kind === 'transition') {
             const guard = event.trigger ? `  [${event.trigger}]` : '';
             lines.push(`    → ${event.to}${guard}`);
+        } else {
+            lines.push(`    ⚡ ${event.actionKind.padEnd(15)} ${event.duration.padEnd(6)}${event.label}`);
         }
     }
     return lines.join('\n').trimEnd();
