@@ -1,5 +1,4 @@
 import type { ActionResult, ActionRunContext, ActionRunner, Vars } from '@gobing-ai/ts-dual-workflow-engine';
-import type { RawHttpResponse } from '@gobing-ai/ts-infra';
 
 const KIND = 'http.request';
 
@@ -10,6 +9,13 @@ const KIND = 'http.request';
 /** Narrow HTTP requester interface backed by APIClient. */
 export interface HttpRequester {
     rawRequest(method: string, url: string, body?: string, opts?: HttpRequesterOptions): Promise<RawHttpResponse>;
+}
+
+/** Raw HTTP response shape consumed by the workflow action runner. */
+export interface RawHttpResponse {
+    status: number;
+    headers: Record<string, string>;
+    body: string;
 }
 
 /** Options forwarded to the underlying HTTP requester. */
