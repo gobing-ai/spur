@@ -8,6 +8,7 @@ import {
     type HitlResponder,
     loadWorkflowDef,
 } from '@gobing-ai/ts-dual-workflow-engine';
+import type { HostAllowlist, HttpRequester } from '../workflow/actions/http-request';
 import { registerSpurBuiltins } from '../workflow/builtins';
 import type { AgentService } from './agent-service';
 import type { RuleService } from './rule-service';
@@ -41,13 +42,15 @@ export interface WorkflowListResult {
     runs: Awaited<ReturnType<InstanceType<typeof EngineWorkflowService>['listRuns']>>;
 }
 
-/** Context injected into WorkflowAppService. */
+/** Runtime dependencies injected into WorkflowAppService. */
 export interface WorkflowAppServiceContext {
     cwd: string;
     getDb(): Promise<DbAdapter>;
     agentService(): AgentService;
     ruleService(): RuleService;
     hitlResponder(): HitlResponder;
+    httpRequester?(): HttpRequester;
+    hostAllowlist?(): HostAllowlist;
 }
 
 // ---------------------------------------------------------------------------
@@ -112,6 +115,8 @@ export class WorkflowAppService {
             agentService: this.ctx.agentService(),
             ruleService: this.ctx.ruleService(),
             hitlResponder: this.ctx.hitlResponder(),
+            httpRequester: this.ctx.httpRequester?.(),
+            hostAllowlist: this.ctx.hostAllowlist?.(),
         });
         return new EngineWorkflowService(host, new DbWorkflowPersistenceAdapter(await this.ctx.getDb()));
     }
