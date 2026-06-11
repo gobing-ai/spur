@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import type { ActionRunContext, Vars } from '@gobing-ai/ts-dual-workflow-engine';
-import type { RawHttpResponse } from '@gobing-ai/ts-infra';
 import {
     type HostAllowlist,
     HttpRequestActionRunner,
     type HttpRequester,
+    type RawHttpResponse,
 } from '../../../src/workflow/actions/http-request';
 
 // ---------------------------------------------------------------------------
