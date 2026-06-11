@@ -46,13 +46,28 @@ describe('db migrations', () => {
         test('contains inbox_messages table', () => {
             expect(hasCreateTable('inbox_messages')).toBe(true);
         });
+
+        test('contains rule_runs and rule_eval_runs tables', () => {
+            expect(hasCreateTable('rule_runs')).toBe(true);
+            expect(hasCreateTable('rule_eval_runs')).toBe(true);
+        });
     });
 
     describe('CLI_MIGRATIONS', () => {
-        test('has foundation and team-inbox migrations', () => {
-            expect(CLI_MIGRATIONS).toHaveLength(2);
+        test('has foundation, team-inbox, and rule-history migrations', () => {
+            expect(CLI_MIGRATIONS).toHaveLength(3);
             expect(CLI_MIGRATIONS[0]?.id).toBe('0000_spur_cli_foundation');
-            expect(CLI_MIGRATIONS[1]?.id).toBe('0001_spur_team_inbox');
+            expect(CLI_MIGRATIONS[1]?.id).toBe('0001_spur_cli_team_inbox');
+            expect(CLI_MIGRATIONS[2]?.id).toBe('0002_spur_cli_rule_history');
+        });
+
+        test('every migration id carries the folder-load filename marker', () => {
+            // loadSqlMigrations filters drizzle/*.sql by CLI_MIGRATION_FILE_MARKER;
+            // an embedded id without the marker means its folder twin is silently
+            // skipped by `spur migrate` (the original 0001_spur_team_inbox bug).
+            for (const migration of CLI_MIGRATIONS) {
+                expect(migration.id).toContain(CLI_MIGRATION_FILE_MARKER);
+            }
         });
 
         test('foundation migration SQL matches CLI_SCHEMA_SQL', () => {
@@ -61,6 +76,58 @@ describe('db migrations', () => {
 
         test('team-inbox migration creates inbox_messages', () => {
             expect(CLI_MIGRATIONS[1]?.sql).toContain('CREATE TABLE IF NOT EXISTS inbox_messages');
+        });
+
+        test('rule-history migration creates rule run tables', () => {
+            expect(CLI_MIGRATIONS[2]?.sql).toContain('CREATE TABLE IF NOT EXISTS rule_runs');
+            expect(CLI_MIGRATIONS[2]?.sql).toContain('CREATE TABLE IF NOT EXISTS rule_eval_runs');
+        });
+
+        test('existing DB that already applied 0000 gains rule tables via 0002', async () => {
+            // Simulate a database migrated before task 0040: the journal marks
+            // 0000/0001 applied, but the foundation SQL it ran had no rule tables.
+            // Without the incremental 0002 step, `rule trace` would silently
+            // return empty forever on such databases.
+            const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            await applyCliMigrations(adapter, [
+                { id: '0000_spur_cli_foundation', sql: 'CREATE TABLE IF NOT EXISTS workspaces (id TEXT);' },
+                { id: '0001_spur_cli_team_inbox', sql: 'CREATE TABLE IF NOT EXISTS inbox_messages (id TEXT);' },
+            ]);
+
+            const applied = await applyCliMigrations(adapter);
+            expect(applied).toBe(1);
+            await adapter.run(
+                `INSERT INTO rule_runs (id, source_kind, status, started_at, created_at, updated_at)
+                 VALUES ('r1', 'preset', 'done', datetime('now'), datetime('now'), datetime('now'))`,
+            );
+            const rows = await adapter.queryAll('SELECT id FROM rule_runs');
+            expect(rows).toHaveLength(1);
+            adapter.close();
+        });
+
+        test('DB journaled under the legacy 0001_spur_team_inbox id upgrades safely', async () => {
+            // The inbox migration was renamed to carry the marker; old DBs hold
+            // the legacy id. The renamed migration re-applies (idempotent DDL)
+            // and the inbox table stays usable — no duplicate-table failure.
+            const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            await applyCliMigrations(adapter, [
+                { id: '0000_spur_cli_foundation', sql: CLI_SCHEMA_SQL },
+                { id: '0001_spur_team_inbox', sql: 'SELECT 1;' },
+            ]);
+
+            const applied = await applyCliMigrations(adapter);
+            expect(applied).toBe(2); // renamed inbox migration + rule history
+            await adapter.run(
+                'INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+                'm1',
+                'planner',
+                'hi',
+                Date.now(),
+                Date.now(),
+            );
+            const rows = await adapter.queryAll('SELECT id FROM inbox_messages');
+            expect(rows).toHaveLength(1);
+            adapter.close();
         });
     });
 
