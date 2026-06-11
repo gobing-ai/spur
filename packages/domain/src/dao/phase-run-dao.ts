@@ -30,4 +30,20 @@ export class PhaseRunDao extends EntityDao<typeof phaseRuns, typeof phaseRuns.id
             completedAt: null,
         });
     }
+
+    /** Raw phase rows by run id for trace timeline. */
+    phaseRowsByRunId(runId: string): Promise<
+        Array<{
+            phase: string;
+            status: string;
+            started_at: string | null;
+            completed_at: string | null;
+            created_at: number;
+        }>
+    > {
+        return this.adapter.queryAll(
+            'SELECT phase, status, started_at, completed_at, created_at FROM phase_runs WHERE run_id = ? ORDER BY created_at',
+            runId,
+        );
+    }
 }
