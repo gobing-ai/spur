@@ -7,6 +7,7 @@ import {
 } from '@gobing-ai/spur-app';
 import { makeColorize, shouldColor } from '../colors';
 import type { CliContext } from '../context';
+import { toJson } from '../output';
 
 /** Register `spur rule` commands. */
 export function registerRuleCommand(program: Command, context: CliContext): void {
@@ -94,6 +95,25 @@ export function registerRuleCommand(program: Command, context: CliContext): void
                       ? formatRuleFileList(result)
                       : formatPresetRuleList(result),
             );
+        });
+
+    rule.command('trace')
+        .summary('Show persisted rule run history (reserved).')
+        .argument('[run-id]', 'Run ID for per-run detail')
+        .option('--preset <name>', 'Filter by preset name')
+        .option('--status <status>', 'Filter by status: done, failed')
+        .option('--since <iso-date>', 'Filter runs started on or after this date')
+        .option('--last <n>', 'Limit results (default 20)', '20')
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (_runId, options) => {
+            if (options.status !== undefined && !['done', 'failed'].includes(options.status)) {
+                context.output.error('--status must be one of: done, failed');
+                context.setExitCode(1);
+                return;
+            }
+            const message =
+                'TODO: spur rule trace is reserved for rule execution history (pending rule-engine persistence).';
+            context.output.write(options.json ? toJson({ status: 'todo', message }) : message);
         });
 }
 
