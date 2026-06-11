@@ -3,7 +3,8 @@
  * Behavioral tests for WorkflowAppService live in packages/app/tests/services/workflow-service.test.ts.
  */
 import { describe, expect, test } from 'bun:test';
-import { rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
@@ -42,32 +43,31 @@ describe('workflow command (main)', () => {
         expect(exitCode).toBe(0);
     });
 
-    test('list subcommand (plain) formats an empty run list', async () => {
+    test('list subcommand (plain) shows empty when no workflows found', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-list-empty-'));
         const lines: string[] = [];
         const exitCode = await main(['workflow', 'list'], {
             output: { write: (m) => lines.push(m), error: () => {} },
+            cwd: dir,
             dbUrl: ':memory:',
         });
         expect(exitCode).toBe(0);
-        expect(lines).toContain('No workflow runs.');
+        expect(lines).toContain('No workflows found.');
+        await rm(dir, { recursive: true, force: true });
     });
 
-    test('list subcommand (plain) formats persisted workflow runs', async () => {
+    test('list subcommand (plain) discovers workflow YAML files', async () => {
         const dir = await createTempProject();
-        const workflowFile = join(dir, 'workflow.yaml');
-        await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
+        const wfDir = join(dir, '.spur', 'workflows');
+        await mkdir(wfDir, { recursive: true });
+        await writeFile(join(wfDir, 'test.yaml'), MINIMAL_WORKFLOW_YAML);
         const output = createCapturedOutput();
-        // Use a file-based DB so both main() calls share the same database;
-        // :memory: would create isolated instances and the list call would see
-        // no persisted runs.
-        const dbUrl = join(dir, '.spur', 'test.sqlite');
 
-        await main(['workflow', 'run', '--run-id', 'list-run', workflowFile], { output, cwd: dir, dbUrl });
-        output.messages.length = 0;
-        const exitCode = await main(['workflow', 'list'], { output, cwd: dir, dbUrl });
+        const exitCode = await main(['workflow', 'list'], { output, cwd: dir, dbUrl: ':memory:' });
 
         expect(exitCode).toBe(0);
-        expect(output.messages).toEqual(['list-run done cli-test-flow']);
+        expect(output.messages.some((m) => m.includes('cli-test-flow'))).toBe(true);
+        expect(output.messages.some((m) => m.includes('state-machine'))).toBe(true);
         await rm(dir, { recursive: true, force: true });
     });
 
@@ -150,6 +150,42 @@ describe('workflow command (main)', () => {
         await rm(dir, { recursive: true, force: true });
     });
 
+    test('run subcommand forwards --dry-run so failing actions are not executed', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'failing.yaml');
+        // exit 1 fails a real run; a forwarded --dry-run skips the action and completes.
+        await writeFile(
+            workflowFile,
+            [
+                'name: cli-dry-flow',
+                'kind: state-machine',
+                'initialState: start',
+                'states:',
+                '  - id: start',
+                '    onEnter:',
+                '      - kind: shell',
+                '        options:',
+                '          command: exit 1',
+                '  - id: done',
+                'transitions:',
+                '  - from: start',
+                '    to: done',
+                'terminalStates: [done]',
+            ].join('\n'),
+        );
+        const output = createCapturedOutput();
+
+        const exitCode = await main(['workflow', 'run', '--dry-run', '--run-id', 'dry-run-1', workflowFile], {
+            output,
+            cwd: dir,
+            dbUrl: ':memory:',
+        });
+
+        expect(exitCode).toBe(0);
+        expect(output.messages).toEqual(['workflow done: cli-dry-flow -> done']);
+        await rm(dir, { recursive: true, force: true });
+    });
+
     test('run subcommand accepts a valid --vars override and completes', async () => {
         const dir = await createTempProject();
         const workflowFile = join(dir, 'workflow.yaml');
@@ -208,6 +244,67 @@ describe('workflow command (main)', () => {
             workflowName: 'cli-test-flow',
             finalState: 'done',
         });
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    // ── trace ──
+
+    test('trace subcommand (json) returns 0', async () => {
+        const exitCode = await main(['workflow', 'trace', '--json'], { output: nullOutput(), dbUrl: ':memory:' });
+        expect(exitCode).toBe(0);
+    });
+
+    test('trace subcommand (plain) shows empty run list', async () => {
+        const lines: string[] = [];
+        const exitCode = await main(['workflow', 'trace'], {
+            output: { write: (m) => lines.push(m), error: () => {} },
+            dbUrl: ':memory:',
+        });
+        expect(exitCode).toBe(0);
+        expect(lines).toContain('No workflow runs.');
+    });
+
+    test('trace subcommand rejects invalid --last', async () => {
+        const exitCode = await main(['workflow', 'trace', '--last', '0'], { output: nullOutput(), dbUrl: ':memory:' });
+        expect(exitCode).toBe(1);
+    });
+
+    test('trace subcommand rejects invalid --status', async () => {
+        const exitCode = await main(['workflow', 'trace', '--status', 'bogus'], {
+            output: nullOutput(),
+            dbUrl: ':memory:',
+        });
+        expect(exitCode).toBe(1);
+    });
+
+    test('trace subcommand accepts --status done', async () => {
+        const exitCode = await main(['workflow', 'trace', '--status', 'done'], {
+            output: nullOutput(),
+            dbUrl: ':memory:',
+        });
+        expect(exitCode).toBe(0);
+    });
+
+    test('trace subcommand (plain) lists runs and shows run-id timeline', async () => {
+        const dir = await createTempProject();
+        const wfDir = join(dir, '.spur', 'workflows');
+        await mkdir(wfDir, { recursive: true });
+        const workflowFile = join(wfDir, 'test.yaml');
+        await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
+        const output = createCapturedOutput();
+        const dbUrl = join(dir, '.spur', 'test.sqlite');
+
+        await main(['workflow', 'run', '--run-id', 'trace-test-run', workflowFile], { output, cwd: dir, dbUrl });
+        output.messages.length = 0;
+
+        const exitCode = await main(['workflow', 'trace'], { output, cwd: dir, dbUrl });
+        expect(exitCode).toBe(0);
+        expect(output.messages.some((m) => m.includes('trace-test-run'))).toBe(true);
+
+        output.messages.length = 0;
+        const exitCode2 = await main(['workflow', 'trace', 'trace-test-run'], { output, cwd: dir, dbUrl });
+        expect(exitCode2).toBe(0);
+        expect(output.messages.some((m) => m.includes('trace-test-run'))).toBe(true);
         await rm(dir, { recursive: true, force: true });
     });
 });
