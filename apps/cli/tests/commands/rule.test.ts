@@ -4,6 +4,8 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { mkdir } from 'node:fs/promises';
+import type { RuleEvalRunRow, RuleRunRow } from '@gobing-ai/spur-app';
+import { formatTraceDetail, formatTraceList } from '../../src/commands/rule';
 import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
 import { createCapturedOutput, createTempProject } from '../helpers';
@@ -236,26 +238,53 @@ describe('runRuleCommand dispatch', () => {
         expect(code).toBe(0);
     });
 
-    test('trace subcommand prints TODO marker (plain)', async () => {
+    test('trace subcommand lists empty runs (fresh DB)', async () => {
         const lines: string[] = [];
         const exitCode = await main(['rule', 'trace'], {
             output: { write: (m) => lines.push(m), error: () => {} },
+            dbUrl: ':memory:',
         });
         expect(exitCode).toBe(0);
-        expect(lines).toContain(
-            'TODO: spur rule trace is reserved for rule execution history (pending rule-engine persistence).',
-        );
+        expect(lines[0]).toBe('No rule runs found.');
     });
 
-    test('trace subcommand prints TODO marker (json)', async () => {
+    test('trace subcommand prints empty list (json, fresh DB)', async () => {
         const lines: string[] = [];
         const exitCode = await main(['rule', 'trace', '--json'], {
             output: { write: (m) => lines.push(m), error: () => {} },
+            dbUrl: ':memory:',
         });
         expect(exitCode).toBe(0);
         const output = JSON.parse(lines.join(''));
-        expect(output.status).toBe('todo');
-        expect(output.message).toContain('TODO');
+        expect(output.runs).toEqual([]);
+    });
+
+    test('trace subcommand rejects non-positive --last', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['rule', 'trace', '--last', '0'], { output, dbUrl: ':memory:' });
+        expect(exitCode).toBe(1);
+        expect(output.errors.at(-1)).toBe('--last must be a positive integer');
+    });
+
+    test('trace subcommand rejects non-numeric --last', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['rule', 'trace', '--last', 'abc'], { output, dbUrl: ':memory:' });
+        expect(exitCode).toBe(1);
+        expect(output.errors.at(-1)).toBe('--last must be a positive integer');
+    });
+
+    test('trace subcommand rejects malformed --since', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['rule', 'trace', '--since', 'not-a-date'], { output, dbUrl: ':memory:' });
+        expect(exitCode).toBe(1);
+        expect(output.errors.at(-1)).toBe('--since must be a valid ISO date');
+    });
+
+    test('trace subcommand with unknown run id exits 1 with clear error', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['rule', 'trace', 'rule_does-not-exist'], { output, dbUrl: ':memory:' });
+        expect(exitCode).toBe(1);
+        expect(output.errors.at(-1)).toBe('Run not found');
     });
 
     test('trace subcommand rejects invalid --status', async () => {
@@ -266,5 +295,237 @@ describe('runRuleCommand dispatch', () => {
     test('trace subcommand accepts valid --status done', async () => {
         const exitCode = await main(['rule', 'trace', '--status', 'done'], { output: nullOutput() });
         expect(exitCode).toBe(0);
+    });
+});
+
+describe('rule trace end-to-end', () => {
+    test('rule run persists a run that trace lists and details', async () => {
+        const cwd = await createTempProject();
+        const dbUrl = `${cwd}/trace-test.db`;
+        const file = `${cwd}/rules.yaml`;
+        await Bun.write(
+            file,
+            [
+                'rules:',
+                '  - id: sample-rule',
+                '    description: Sample rule',
+                '    evaluator:',
+                '      type: path',
+                '      config:',
+                '        paths:',
+                '          - package.json',
+            ].join('\n'),
+        );
+
+        const runExit = await main(['rule', 'run', '--file', file], { cwd, output: nullOutput(), dbUrl });
+        expect(runExit).toBe(0);
+
+        const listOutput = createCapturedOutput();
+        const listExit = await main(['rule', 'trace', '--json'], { cwd, output: listOutput, dbUrl });
+        expect(listExit).toBe(0);
+        const { runs } = JSON.parse(listOutput.messages.join('')) as { runs: RuleRunRow[] };
+        expect(runs).toHaveLength(1);
+        expect(runs[0]?.status).toBe('done');
+        expect(runs[0]?.rule_count).toBe(1);
+        expect(runs[0]?.source_kind).toBe('file');
+
+        const runId = runs[0]?.id ?? '';
+        const detailOutput = createCapturedOutput();
+        const detailExit = await main(['rule', 'trace', runId, '--json'], { cwd, output: detailOutput, dbUrl });
+        expect(detailExit).toBe(0);
+        const detail = JSON.parse(detailOutput.messages.join('')) as {
+            run: RuleRunRow;
+            evaluations: RuleEvalRunRow[];
+        };
+        expect(detail.run.id).toBe(runId);
+        expect(detail.evaluations).toHaveLength(1);
+        expect(detail.evaluations[0]?.rule_id).toBe('sample-rule');
+        expect(detail.evaluations[0]?.status).toBe('done');
+
+        const plainOutput = createCapturedOutput();
+        const plainExit = await main(['rule', 'trace', runId], { cwd, output: plainOutput, dbUrl });
+        expect(plainExit).toBe(0);
+        expect(plainOutput.messages.at(-1)).toContain('sample-rule');
+    });
+});
+
+describe('formatTraceList', () => {
+    test('renders header and rows', () => {
+        const runs: RuleRunRow[] = [
+            {
+                id: 'rule-abc123-def',
+                preset: 'recommended-pre-check',
+                status: 'done',
+                source_kind: 'preset',
+                source_value: null,
+                rule_count: 12,
+                finding_count: 0,
+                fix_count: 0,
+                applied_fix_count: 0,
+                fail_on: 'error',
+                stop_on_first: null,
+                fix_mode: 'none',
+                dry_run: 0,
+                started_at: '2026-06-11T20:00:00Z',
+                completed_at: null,
+                duration_ms: null,
+                metadata_json: '{}',
+            },
+        ];
+        const output = formatTraceList(runs);
+        expect(output).toContain('RUN ID');
+        expect(output).toContain('rule-abc123');
+        expect(output).toContain('recommended-pre-check');
+        expect(output).toContain('done');
+    });
+
+    test('renders preset as dash when null', () => {
+        const runs: RuleRunRow[] = [
+            {
+                id: 'r1',
+                preset: null,
+                status: 'done',
+                source_kind: 'preset',
+                source_value: null,
+                rule_count: 1,
+                finding_count: 0,
+                fix_count: 0,
+                applied_fix_count: 0,
+                fail_on: 'error',
+                stop_on_first: null,
+                fix_mode: 'none',
+                dry_run: 0,
+                started_at: '2026-01-01T00:00:00Z',
+                completed_at: null,
+                duration_ms: null,
+                metadata_json: '{}',
+            },
+        ];
+        const output = formatTraceList(runs);
+        expect(output).toContain('\t-\t');
+    });
+});
+
+describe('formatTraceDetail', () => {
+    test('renders run summary and eval rows', () => {
+        const run: RuleRunRow = {
+            id: 'rule-def456',
+            preset: 'recommended-pre-check',
+            status: 'done',
+            source_kind: 'preset',
+            source_value: null,
+            rule_count: 12,
+            finding_count: 3,
+            fix_count: 1,
+            applied_fix_count: 0,
+            fail_on: 'error',
+            stop_on_first: null,
+            fix_mode: 'suggest',
+            dry_run: 0,
+            duration_ms: 1420,
+            started_at: '2026-01-01T00:00:00Z',
+            completed_at: null,
+            metadata_json: '{}',
+        };
+        const evaluations: RuleEvalRunRow[] = [
+            {
+                id: 'e1',
+                run_id: 'rule-def456',
+                rule_id: 'no-hardcoded-secrets',
+                severity: 'error',
+                evaluator: 'rg',
+                status: 'done',
+                finding_count: 0,
+                fix_count: 0,
+                duration_ms: 85,
+                error: null,
+                findings_json: null,
+                fixes_json: null,
+                started_at: '2026-01-01T00:00:00Z',
+                completed_at: null,
+            },
+            {
+                id: 'e2',
+                run_id: 'rule-def456',
+                rule_id: 'no-biome-suppressions',
+                severity: 'error',
+                evaluator: 'rg',
+                status: 'done',
+                finding_count: 2,
+                fix_count: 0,
+                duration_ms: 34,
+                error: null,
+                findings_json: null,
+                fixes_json: null,
+                started_at: '2026-01-01T00:00:00Z',
+                completed_at: null,
+            },
+            {
+                id: 'e3',
+                run_id: 'rule-def456',
+                rule_id: 'no-npm-pnpm-yarn-scripts',
+                severity: 'error',
+                evaluator: 'rg',
+                status: 'done',
+                finding_count: 0,
+                fix_count: 0,
+                duration_ms: 19,
+                error: null,
+                findings_json: null,
+                fixes_json: null,
+                started_at: '2026-01-01T00:00:00Z',
+                completed_at: null,
+            },
+        ];
+        const output = formatTraceDetail({ run, evaluations });
+        expect(output).toContain('rule-def456');
+        expect(output).toContain('recommended-pre-check');
+        expect(output).toContain('1.42s');
+        expect(output).toContain('no-hardcoded-secrets');
+        expect(output).toContain('no-biome-suppressions');
+        expect(output).toContain('  2 findings');
+    });
+
+    test('renders error for failed eval rows', () => {
+        const run: RuleRunRow = {
+            id: 'r1',
+            preset: null,
+            status: 'done',
+            source_kind: 'preset',
+            source_value: null,
+            rule_count: 1,
+            finding_count: 1,
+            fix_count: 0,
+            applied_fix_count: 0,
+            fail_on: 'error',
+            stop_on_first: null,
+            fix_mode: 'none',
+            dry_run: 0,
+            duration_ms: 100,
+            started_at: '2026-01-01T00:00:00Z',
+            completed_at: null,
+            metadata_json: '{}',
+        };
+        const evaluations: RuleEvalRunRow[] = [
+            {
+                id: 'e1',
+                run_id: 'r1',
+                rule_id: 'crashy',
+                severity: 'error',
+                evaluator: 'rg',
+                status: 'failed',
+                finding_count: 1,
+                fix_count: 0,
+                duration_ms: 5,
+                error: 'boom',
+                findings_json: null,
+                fixes_json: null,
+                started_at: '2026-01-01T00:00:00Z',
+                completed_at: null,
+            },
+        ];
+        const output = formatTraceDetail({ run, evaluations });
+        expect(output).toContain('✗');
+        expect(output).toContain('boom');
     });
 });
