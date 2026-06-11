@@ -61,6 +61,7 @@
         "@gobing-ai/ts-utils": "catalog:",
         "@types/bun": "catalog:",
         "@types/figlet": "^1.7.0",
+        "@types/node-notifier": "8.0.5",
         "commander": "catalog:",
         "figlet": "^1.11.0",
         "zod": "catalog:"
