@@ -135,21 +135,28 @@ seeds the global layer. A run that resolves **zero rules** exits 1 (fail-loud: a
 not a pass). Setting `SPUR_GLOBAL_RULES_DIR` overrides the global root and suppresses the bundled
 fallback for a hermetic run. Backed by `ts-rule-engine`.
 
-#### `spur rule validate [--file <path>|--preset <name>|<path>] [--json]` · `spur rule list [--preset <name>] [--json]`
+#### `spur rule validate [--file <path>|--preset <name>|<path>] [--json]` · `spur rule list [--preset <name>] [--json]` · `spur rule trace [run-id] [--preset <name>] [--status <s>] [--since <date>] [--last <n>] [--json]`
 - `validate` — load and normalize a rule file or preset without evaluating it.
 - `list` — list the effective rule-file inventory grouped by source layer and category (`local`, `global`,
   and any `SPUR_RULES_PATH` override, deduped by relative path); with `--preset`, list the resolved preset
   rules.
+- `trace` — reserved CLI surface for rule execution history (TODO marker; pending rule-engine persistence).
 - `help` / `--help` — print the command-scoped rule usage, including subcommands, options, examples,
   and exit codes. `spur help rule` is equivalent.
 Backed by `ts-rule-engine`.
 
-#### `spur workflow validate <workflow.yaml> [--json]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--json]` · `spur workflow list [--json]`
+#### `spur workflow validate <workflow.yaml> [--json] [--no-schema]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--json]` · `spur workflow list [--json]` · `spur workflow trace [run-id] [--workflow <name>] [--status <s>] [--since <date>] [--last <n>] [--json]`
 - `validate <file>` — load + Zod-validate a workflow definition.
-- `run <file> [--run-id <id>] [--vars <json>]` — execute; prints `<status>: <name> -> <finalState>`;
+- `run <file> [--run-id <id>] [--vars <json>] [--dry-run]` — execute; prints `<status>: <name> -> <finalState>`;
   exit 1 unless `done`. `--vars` takes a JSON object of per-run variable overrides
   (e.g. `--vars '{"taskId":"0042"}'`), merged over the workflow's `vars` for `${vars.*}` resolution.
-- `list` — list persisted workflow runs.
+  `--dry-run` validates the definition and walks the transition graph without executing actions
+  — useful for verifying workflow structure before committing side effects.
+- `list` — list available workflow YAML files across project (`.spur/workflows/`) and global
+  (`~/.config/spur/workflows/`) layers, grouped by source.
+- `trace` — query persisted workflow run history. No argument: list recent runs (default last 20,
+  newest first) with filters `--workflow`, `--status`, `--since`, `--last`. With `<run-id>`:
+  per-run timeline of state entries and transitions.
 Backed by `ts-dual-workflow-engine` (`WorkflowService` + `DbWorkflowPersistenceAdapter`).
 
 #### `spur history import --source <source> [--file <path>|--root <path>] [--mode <mode>] [--dry-run] [--json]`
@@ -250,6 +257,7 @@ config/
     recommended-post-check.yaml     # stricter dev gate (coverage)
   workflows/
     basic.yaml                      # canonical implement → check → fix loop
+    feature-dev.yaml                # agent-driven feature loop with pre/test/post gates
   plugins/
     .gitkeep                        # home for future bundled plugins (ADR-012)
 ```
