@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
 import { type ConstraintRule, RuleEngine, type RuleEngineResult } from '@gobing-ai/ts-rule-engine';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import type { Colorize, RuleServiceContext, RuleServiceOutput } from '../../src/services/rule-service';
@@ -849,5 +850,98 @@ describe('RuleService.list()', () => {
         expect(result.preset).toBe('recommended-pre-check');
         expect(result.rules.some((r) => r.id === 'boundary-sample')).toBe(true);
         expect(result.rules.every((r) => r.file === 'preset:recommended-pre-check')).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// trace + run persistence
+// ---------------------------------------------------------------------------
+
+describe('RuleService trace', () => {
+    async function makeDbContext(
+        cwd: string,
+        output: RuleServiceOutput,
+    ): Promise<{ context: RuleServiceContext; db: DbAdapter }> {
+        const db = await createMigratedDb({ url: ':memory:' });
+        return { context: { ...makeContext(cwd, output), getDb: async () => db }, db };
+    }
+
+    async function insertRun(db: DbAdapter, id: string, startedAt: string, preset = 'p1'): Promise<void> {
+        await db.run(
+            `INSERT INTO rule_runs (id, preset, source_kind, status, started_at, created_at, updated_at)
+             VALUES (?, ?, 'preset', 'done', ?, datetime('now'), datetime('now'))`,
+            id,
+            preset,
+            startedAt,
+        );
+    }
+
+    test('evaluate() persists a finalized run row with Spur-stamped id and metadata', async () => {
+        const cwd = await createTempProject();
+        const file = await writeRuleFile(cwd, 'rules.yaml', 'sample-rule');
+        const { context } = await makeDbContext(cwd, nullOutput());
+
+        const result = await new RuleService(context).evaluate({
+            preset: 'recommended-pre-check',
+            failOn: 'error',
+            file,
+            json: true,
+            verbose: false,
+            color: noColor(),
+        });
+        expect(result.exitCode).toBe(0);
+
+        const runs = await new RuleService(context).traceList({ limit: 20 });
+        expect(runs.runs).toHaveLength(1);
+        const run = runs.runs[0];
+        expect(run?.id.startsWith('rule_')).toBe(true);
+        expect(run?.status).toBe('done');
+        expect(run?.source_kind).toBe('file');
+        expect(run?.rule_count).toBe(1);
+        expect(JSON.parse(run?.metadata_json ?? '{}')).toMatchObject({ cwd });
+
+        const detail = await new RuleService(context).traceDetail(run?.id ?? '');
+        expect(detail.evaluations).toHaveLength(1);
+        expect(detail.evaluations[0]?.rule_id).toBe('sample-rule');
+    });
+
+    test('traceList returns runs newest first and respects limit', async () => {
+        const cwd = await createTempProject();
+        const { context, db } = await makeDbContext(cwd, nullOutput());
+        await insertRun(db, 'run-old', '2026-01-01T00:00:00Z');
+        await insertRun(db, 'run-new', '2026-02-01T00:00:00Z');
+
+        const all = await new RuleService(context).traceList({ limit: 20 });
+        expect(all.runs.map((r) => r.id)).toEqual(['run-new', 'run-old']);
+
+        const limited = await new RuleService(context).traceList({ limit: 1 });
+        expect(limited.runs).toHaveLength(1);
+    });
+
+    test('traceList passes preset/status/since filters through to the DAO', async () => {
+        const cwd = await createTempProject();
+        const { context, db } = await makeDbContext(cwd, nullOutput());
+        await insertRun(db, 'run-a', '2026-01-01T00:00:00Z', 'preset-a');
+        await insertRun(db, 'run-b', '2026-06-01T00:00:00Z', 'preset-b');
+
+        const byPreset = await new RuleService(context).traceList({ preset: 'preset-a', limit: 20 });
+        expect(byPreset.runs.map((r) => r.id)).toEqual(['run-a']);
+
+        const since = await new RuleService(context).traceList({ since: '2026-03-01T00:00:00Z', limit: 20 });
+        expect(since.runs.map((r) => r.id)).toEqual(['run-b']);
+    });
+
+    test('traceDetail throws Run not found for a missing id', async () => {
+        const cwd = await createTempProject();
+        const { context } = await makeDbContext(cwd, nullOutput());
+        expect(new RuleService(context).traceDetail('rule_missing')).rejects.toThrow('Run not found');
+    });
+
+    test('trace methods degrade without a DB context', async () => {
+        const cwd = await createTempProject();
+        const service = new RuleService(makeContext(cwd, nullOutput()));
+        const list = await service.traceList({ limit: 20 });
+        expect(list.runs).toEqual([]);
+        expect(service.traceDetail('rule_x')).rejects.toThrow('Run not found');
     });
 });
