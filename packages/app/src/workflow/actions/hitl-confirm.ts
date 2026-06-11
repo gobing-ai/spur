@@ -26,11 +26,22 @@ export class HitlConfirmActionRunner implements ActionRunner {
 
         const varName = asString(options.var) ?? '__hitlAnswer';
 
+        context.events?.emit('workflow.hitl.ask', {
+            runId: context.runId,
+            node: context.stateOrNodeId,
+            kind: 'confirm',
+            message: prompt,
+        });
         const answer = await this.responder.respond({
             kind: 'confirm',
             prompt,
             runId: context.runId,
             node: context.stateOrNodeId,
+        });
+        context.events?.emit('workflow.hitl.response', {
+            runId: context.runId,
+            node: context.stateOrNodeId,
+            ok: !(answer.cancelled || answer.value === 'cancel'),
         });
 
         if (answer.cancelled || answer.value === 'cancel') {
