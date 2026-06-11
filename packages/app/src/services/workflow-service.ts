@@ -4,7 +4,7 @@ import { access, readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
-import { PhaseRunDao, RunDao, TransitionRunDao } from '@gobing-ai/spur-domain';
+import { ActionRunDao, PhaseRunDao, RunDao, TransitionRunDao } from '@gobing-ai/spur-domain';
 
 import {
     createDefaultWorkflowEngineHost,
@@ -92,10 +92,20 @@ export interface WorkflowTraceListResult {
     total: number;
 }
 
-/** A timeline event: either a phase entry or a transition. */
+/** A timeline event: phase entry, transition, or action execution. */
 export type TimelineEvent =
     | { kind: 'phase'; phase: string; status: string; startedAt: string | null; completedAt: string | null }
-    | { kind: 'transition'; from: string; to: string; trigger: string | null };
+    | { kind: 'transition'; from: string; to: string; trigger: string | null }
+    | {
+          kind: 'action';
+          actionId: string;
+          node: string;
+          actionKind: string;
+          status: string;
+          duration: string;
+          ok: boolean;
+          label: string;
+      };
 
 /** Result of a per-run trace with timeline. */
 export interface WorkflowTraceTimeline {
@@ -250,19 +260,22 @@ export class WorkflowAppService {
 
         const phaseRows = await new PhaseRunDao(db).phaseRowsByRunId(runId);
         const transitionRows = await new TransitionRunDao(db).transitionRowsByRunId(runId);
+        const actionRows = await new ActionRunDao(db).actionRowsByRunId(runId);
 
         const events: TimelineEvent[] = [];
         let pi = 0;
         let ti = 0;
+        let ai = 0;
         type PR = (typeof phaseRows)[number];
         type TR = (typeof transitionRows)[number];
-        while (pi < phaseRows.length || ti < transitionRows.length) {
+        type AR = (typeof actionRows)[number];
+        while (pi < phaseRows.length || ti < transitionRows.length || ai < actionRows.length) {
             const pCreated = pi < phaseRows.length ? (phaseRows[pi] as PR).created_at : Number.POSITIVE_INFINITY;
             const tCreated =
                 ti < transitionRows.length ? (transitionRows[ti] as TR).created_at : Number.POSITIVE_INFINITY;
-            if (pCreated <= tCreated) {
-                const p = phaseRows[pi] as PR;
-                pi++;
+            const aCreated = ai < actionRows.length ? (actionRows[ai] as AR).created_at : Number.POSITIVE_INFINITY;
+            if (pCreated <= tCreated && pCreated <= aCreated) {
+                const p = phaseRows[pi++] as PR;
                 events.push({
                     kind: 'phase',
                     phase: p.phase,
@@ -270,10 +283,23 @@ export class WorkflowAppService {
                     startedAt: p.started_at,
                     completedAt: p.completed_at,
                 });
-            } else {
-                const t = transitionRows[ti] as TR;
-                ti++;
+            } else if (tCreated <= aCreated) {
+                const t = transitionRows[ti++] as TR;
                 events.push({ kind: 'transition', from: t.from_state, to: t.to_state, trigger: t.trigger });
+            } else {
+                const a = actionRows[ai++] as AR;
+                const duration = a.duration_ms !== null ? `${a.duration_ms}ms` : '';
+                const label = a.status === 'running' ? ' (in-flight)' : a.ok === 1 ? ' ✓' : ' ✗';
+                events.push({
+                    kind: 'action',
+                    actionId: a.id,
+                    node: a.node,
+                    actionKind: a.kind,
+                    status: a.status,
+                    duration: duration,
+                    ok: a.ok === 1,
+                    label: label,
+                } as TimelineEvent);
             }
         }
 
