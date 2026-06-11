@@ -1,9 +1,9 @@
 ---
 name: Fix workflow list, add workflow/rule trace, and add --dry-run
 description: Fix workflow list semantic (files not runs), add workflow trace and rule trace for execution history, and add --dry-run flag
-status: in_progress
+status: done
 created_at: 2026-06-11T06:00:00.000Z
-updated_at: 2026-06-11T21:00:00.000Z
+updated_at: 2026-06-11T19:10:00.000Z
 folder: docs/tasks
 type: task
 feature-id: ""
