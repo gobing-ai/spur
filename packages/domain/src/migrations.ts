@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { DbAdapter } from '@gobing-ai/ts-db';
 import { WORKFLOW_ENGINE_SCHEMA_SQL } from '@gobing-ai/ts-dual-workflow-engine';
 import { HISTORY_IMPORT_SCHEMA_SQL } from '@gobing-ai/ts-llm-jsonl-importer';
+import { RULE_ENGINE_SCHEMA_SQL } from '@gobing-ai/ts-rule-engine';
 import { DOMAIN_SCHEMA_SQL } from './schema';
 
 /** Embedded CLI migration used when no migration folder is available. */
@@ -14,7 +15,7 @@ export interface CliMigration {
 /**
  * DDL for the team-mode `inbox_messages` table owned by `@gobing-ai/ts-db`
  * (`InboxMessageDao`). ts-db ships the Drizzle table but no SQL constant, so the
- * DDL is mirrored here and kept byte-compatible with `drizzle/0001_spur_team_inbox.sql`.
+ * DDL is mirrored here and kept byte-compatible with `drizzle/0001_spur_cli_team_inbox.sql`.
  * Column types and the `(to_id, status)` pending-lookup index must match the package.
  */
 export const INBOX_MESSAGES_SCHEMA_SQL = `
@@ -43,6 +44,8 @@ ${HISTORY_IMPORT_SCHEMA_SQL}
 
 ${WORKFLOW_ENGINE_SCHEMA_SQL}
 
+${RULE_ENGINE_SCHEMA_SQL}
+
 ${INBOX_MESSAGES_SCHEMA_SQL}
 `;
 
@@ -50,12 +53,18 @@ ${INBOX_MESSAGES_SCHEMA_SQL}
  * Built-in migrations for compiled binaries and test use. `0000` provisions a
  * fresh database with the full current schema (inbox included); `0001` is the
  * incremental step that adds `inbox_messages` to databases created before team
- * mode. Both are idempotent (`CREATE TABLE IF NOT EXISTS`), so applying them in
- * sequence is safe regardless of the database's age.
+ * mode; `0002` adds the rule-engine run history tables (`rule_runs`,
+ * `rule_eval_runs`) to databases created before task 0040. All are idempotent
+ * (`CREATE TABLE IF NOT EXISTS`), so applying them in sequence is safe
+ * regardless of the database's age.
  */
 export const CLI_MIGRATIONS: CliMigration[] = [
     { id: '0000_spur_cli_foundation', sql: CLI_SCHEMA_SQL },
-    { id: '0001_spur_team_inbox', sql: INBOX_MESSAGES_SCHEMA_SQL },
+    // Renamed from `0001_spur_team_inbox` so the filename carries the
+    // `_spur_cli_` marker that folder-based loads filter on. DBs journaled
+    // under the old id re-apply the idempotent DDL once and move on.
+    { id: '0001_spur_cli_team_inbox', sql: INBOX_MESSAGES_SCHEMA_SQL },
+    { id: '0002_spur_cli_rule_history', sql: RULE_ENGINE_SCHEMA_SQL },
 ];
 
 /** Filename marker for regenerated CLI-owned migrations. */
