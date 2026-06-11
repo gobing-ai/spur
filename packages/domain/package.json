@@ -16,6 +16,7 @@
         "@gobing-ai/ts-db": "catalog:",
         "@gobing-ai/ts-dual-workflow-engine": "catalog:",
         "@gobing-ai/ts-llm-jsonl-importer": "catalog:",
+        "@gobing-ai/ts-rule-engine": "catalog:",
         "@gobing-ai/ts-runtime": "catalog:",
         "drizzle-zod": "^0.5.1",
         "zod": "catalog:"
