@@ -10,7 +10,25 @@ import type { RuleService } from '../../src/services/rule-service';
 import { registerSpurBuiltins } from '../../src/workflow/builtins';
 
 describe('registerSpurBuiltins', () => {
-    test('registers all four action kinds', () => {
+    test('registers all action kinds including http.request when requester provided', () => {
+        const host = new WorkflowEngineHost();
+        registerSpurBuiltins(host, {
+            agentService: { run: async () => 0 } as unknown as AgentService,
+            ruleService: { evaluate: async () => ({ exitCode: 0, findings: [] }) } as unknown as RuleService,
+            hitlResponder: { respond: async () => ({ value: 'yes' }) } as unknown as HitlResponder,
+            httpRequester: { rawRequest: async () => ({ status: 200, headers: {}, body: '' }) },
+            hostAllowlist: new Set(['https://api.example.com']),
+        });
+
+        const actions = host.listActions();
+        expect(actions).toContain('agent.run');
+        expect(actions).toContain('rule.check');
+        expect(actions).toContain('file.exists');
+        expect(actions).toContain('file.read');
+        expect(actions).toContain('http.request');
+    });
+
+    test('http.request is not registered when no requester provided', () => {
         const host = new WorkflowEngineHost();
         registerSpurBuiltins(host, {
             agentService: { run: async () => 0 } as unknown as AgentService,
@@ -19,10 +37,7 @@ describe('registerSpurBuiltins', () => {
         });
 
         const actions = host.listActions();
-        expect(actions).toContain('agent.run');
-        expect(actions).toContain('rule.check');
-        expect(actions).toContain('file.exists');
-        expect(actions).toContain('file.read');
+        expect(actions).not.toContain('http.request');
     });
 
     test('registers with origin builtin', () => {
@@ -31,12 +46,15 @@ describe('registerSpurBuiltins', () => {
             agentService: { run: async () => 0 } as unknown as AgentService,
             ruleService: { evaluate: async () => ({ exitCode: 0, findings: [] }) } as unknown as RuleService,
             hitlResponder: { respond: async () => ({ value: 'yes' }) } as unknown as HitlResponder,
+            httpRequester: { rawRequest: async () => ({ status: 200, headers: {}, body: '' }) },
+            hostAllowlist: new Set(['https://api.example.com']),
         });
 
         expect(host.actionOrigin('agent.run')).toBe('builtin');
         expect(host.actionOrigin('rule.check')).toBe('builtin');
         expect(host.actionOrigin('file.exists')).toBe('builtin');
         expect(host.actionOrigin('file.read')).toBe('builtin');
+        expect(host.actionOrigin('http.request')).toBe('builtin');
     });
 
     test('agent.run resolves through host.runAction', async () => {
