@@ -98,14 +98,14 @@ src/
   config.ts         CLI constants (config dir/file, db file, labels)
   output.ts         Human/JSON output sink
   commands/         init · status · migrate · rule · workflow · agent · history
-  db/               Local DAOs (workspace, run, phase-run, transition-run, workflow-state, artifact)
-                    + migrations (composes package schema SQL)
-  analytics/        History cost analytics — domain consumer of imported ETL rows
   git-context.ts    Inline git status helper
 ```
 
 - **Commands** parse flags, call a package API, format output, return an exit code. No business logic.
-- **DAOs** extend a thin `SpurDao` over `ts-db` and use the adapter's prepared-statement API.
+- **DAOs and migrations** live in `packages/domain` (`dao/`: workspace, run, phase-run, transition-run,
+  workflow-state, artifact, rule-run, rule-eval-run; `migrations.ts` composes domain + engine package
+  schema SQL). DAOs use the adapter's prepared-statement API. `analytics/` (history cost analytics)
+  also lives in `packages/domain`.
 - **Context** lazily builds and migrates the SQLite adapter on first DB access.
 
 ## 4. Type Seam — oRPC (ADR-005)
