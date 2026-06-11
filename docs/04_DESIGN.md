@@ -140,7 +140,12 @@ fallback for a hermetic run. Backed by `ts-rule-engine`.
 - `list` — list the effective rule-file inventory grouped by source layer and category (`local`, `global`,
   and any `SPUR_RULES_PATH` override, deduped by relative path); with `--preset`, list the resolved preset
   rules.
-- `trace` — reserved CLI surface for rule execution history (TODO marker; pending rule-engine persistence).
+- `trace` — query persisted rule run history from SQLite. No argument: list recent runs (default last 20,
+  newest first) with filters `--preset`, `--status` (`done`|`failed`), `--since` (ISO date), `--last` (positive
+  integer). With `<run-id>`: per-run detail showing summary metadata and per-rule evaluation rows in
+  execution order with finding counts, duration, and status. `--json` returns structured DTOs.
+  Runs are persisted inline by `spur rule run` when a DB is available (direct writes from the
+  `ts-rule-engine` `RulePersistenceAdapter`; Spur writes via `DbRulePersistenceAdapter`).
 - `help` / `--help` — print the command-scoped rule usage, including subcommands, options, examples,
   and exit codes. `spur help rule` is equivalent.
 Backed by `ts-rule-engine`.
@@ -295,7 +300,7 @@ No symlinks participate in install or init — config propagates by copy-and-res
 | `history_import_ledger` | importer | One row per imported record (hash, source, file, line) |
 | `history_import_checkpoint` | importer | Incremental position, composite PK `(source, source_file)` |
 | `history_etl_<source>` | importer | Validated per-source ETL rows (`payload_json`, `imported_at`) |
-| `inbox_messages` | ts-db (`InboxMessageDao`) | Durable inter-agent message queue; indexed on `(to_id, status)`. Added by migration `0001_spur_team_inbox`; composed into `CLI_SCHEMA_SQL` via `INBOX_MESSAGES_SCHEMA_SQL`. |
+| `inbox_messages` | ts-db (`InboxMessageDao`) | Durable inter-agent message queue; indexed on `(to_id, status)`. Added by migration `0001_spur_cli_team_inbox`; composed into `CLI_SCHEMA_SQL` via `INBOX_MESSAGES_SCHEMA_SQL`. |
 
 ### 3.2 SourceDefinition (history import)
 One config object per source: `source` discriminant, `displayName`, `filePatterns`, `defaultRoots`,
