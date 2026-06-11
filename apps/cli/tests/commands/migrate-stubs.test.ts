@@ -134,8 +134,9 @@ describe('CLI migrate and extracted domains', () => {
             status: 'done',
         });
 
-        expect(await main(['workflow', 'list', '--json'], { cwd, output, dbUrl: workflowDb })).toBe(0);
-        expect(JSON.parse(output.messages.at(-1) ?? '{}').runs).toHaveLength(1);
+        expect(await main(['workflow', 'trace', '--json'], { cwd, output, dbUrl: workflowDb })).toBe(0);
+        const traceResult = JSON.parse(output.messages.at(-1) ?? '{}');
+        expect(traceResult.entries).toHaveLength(1);
     });
 
     test('runs history analyze with --json and text output', async () => {
