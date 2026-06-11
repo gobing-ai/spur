@@ -26,11 +26,22 @@ export class HitlInputActionRunner implements ActionRunner {
 
         const varName = asString(options.var) ?? '__hitlInput';
 
+        context.events?.emit('workflow.hitl.ask', {
+            runId: context.runId,
+            node: context.stateOrNodeId,
+            kind: 'input',
+            message: prompt,
+        });
         const answer = await this.responder.respond({
             kind: 'input',
             prompt,
             runId: context.runId,
             node: context.stateOrNodeId,
+        });
+        context.events?.emit('workflow.hitl.response', {
+            runId: context.runId,
+            node: context.stateOrNodeId,
+            ok: !answer.cancelled,
         });
 
         if (answer.cancelled) {
