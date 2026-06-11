@@ -23,6 +23,23 @@ terminalStates:
   - done
 `;
 
+const ACTION_WORKFLOW_YAML = `name: cli-action-flow
+kind: state-machine
+initialState: start
+states:
+  - id: start
+    onEnter:
+      - kind: note
+        options:
+          message: trace me
+  - id: done
+transitions:
+  - from: start
+    to: done
+terminalStates:
+  - done
+`;
+
 function nullOutput(): CommandOutput {
     return { write: () => {}, error: () => {} };
 }
@@ -290,7 +307,7 @@ describe('workflow command (main)', () => {
         const wfDir = join(dir, '.spur', 'workflows');
         await mkdir(wfDir, { recursive: true });
         const workflowFile = join(wfDir, 'test.yaml');
-        await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
+        await writeFile(workflowFile, ACTION_WORKFLOW_YAML);
         const output = createCapturedOutput();
         const dbUrl = join(dir, '.spur', 'test.sqlite');
 
@@ -305,6 +322,7 @@ describe('workflow command (main)', () => {
         const exitCode2 = await main(['workflow', 'trace', 'trace-test-run'], { output, cwd: dir, dbUrl });
         expect(exitCode2).toBe(0);
         expect(output.messages.some((m) => m.includes('trace-test-run'))).toBe(true);
+        expect(output.messages.some((m) => m.includes('note'))).toBe(true);
         await rm(dir, { recursive: true, force: true });
     });
 });
