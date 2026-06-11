@@ -44,9 +44,15 @@ export type {
 } from './services/team-service';
 export { TeamService } from './services/team-service';
 export type {
+    TimelineEvent,
     WorkflowAppServiceContext,
+    WorkflowListEntry,
     WorkflowListResult,
     WorkflowRunResult,
+    WorkflowTraceEntry,
+    WorkflowTraceFilter,
+    WorkflowTraceListResult,
+    WorkflowTraceTimeline,
     WorkflowValidateResult,
 } from './services/workflow-service';
 export { WorkflowAppService } from './services/workflow-service';
