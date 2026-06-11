@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createMigratedDb } from '@gobing-ai/spur-domain';
@@ -108,6 +108,41 @@ describe('WorkflowAppService', () => {
             await rm(dir, { recursive: true, force: true });
         });
 
+        test('dryRun walks transitions to done without executing actions', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-dry-'));
+            const marker = join(dir, 'marker.txt');
+            const path = join(dir, 'dry.yaml');
+            // The shell action would create a side effect AND fail the run if executed;
+            // a dry run must do neither.
+            await writeFile(
+                path,
+                [
+                    'name: dry-flow',
+                    'kind: state-machine',
+                    'initialState: start',
+                    'states:',
+                    '  - id: start',
+                    '    onEnter:',
+                    '      - kind: shell',
+                    '        options:',
+                    `          command: touch ${marker} && exit 1`,
+                    '  - id: done',
+                    'transitions:',
+                    '  - from: start',
+                    '    to: done',
+                    'terminalStates: [done]',
+                ].join('\n'),
+            );
+
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const result = await svc.run(path, { runId: 'svc-dry-1', dryRun: true });
+
+            expect(result.status).toBe('done');
+            expect(result.finalState).toBe('done');
+            expect(await Bun.file(marker).exists()).toBe(false);
+            await rm(dir, { recursive: true, force: true });
+        });
+
         test('defaults the runId and runs with no options', async () => {
             const dir = await mkdtemp(join(tmpdir(), 'spur-wf-run-'));
             const path = join(dir, 'test.yaml');
@@ -123,11 +158,178 @@ describe('WorkflowAppService', () => {
     });
 
     describe('list', () => {
-        test('returns empty runs array when no runs exist', async () => {
+        test('returns empty entries when no workflow files exist', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-list-'));
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const result = await svc.list([join(dir, '.spur', 'workflows')]);
+            expect(Array.isArray(result.entries)).toBe(true);
+            expect(result.entries.length).toBe(0);
+            expect(result.totalFiles).toBe(0);
+            expect(result.layers.length).toBeGreaterThanOrEqual(1);
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('discovers workflow files and extracts name + kind', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-list-'));
+            const wfDir = join(dir, '.spur', 'workflows');
+            await mkdir(wfDir, { recursive: true });
+            await writeFile(
+                join(wfDir, 'basic.yaml'),
+                'name: test-flow\nkind: state-machine\ninitialState: start\nstates:\n  - id: start\n  - id: done\ntransitions:\n  - from: start\n    to: done\nterminalStates:\n  - done\n',
+            );
+            await writeFile(
+                join(wfDir, 'ci.yaml'),
+                'name: ci-pipeline\nkind: transition-flow\nstates: []\ntransitions: []\n',
+            );
+
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const result = await svc.list([join(dir, '.spur', 'workflows')]);
+
+            expect(result.totalFiles).toBe(2);
+            const names = result.entries.map((e) => e.name).sort();
+            expect(names).toEqual(['ci-pipeline', 'test-flow']);
+            const kinds = result.entries.map((e) => e.kind).sort();
+            expect(kinds).toEqual(['state-machine', 'transition-flow']);
+            for (const entry of result.entries) {
+                expect(entry.valid).toBe(true);
+                expect(entry.source).toBe('project');
+            }
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('skips unparseable YAML files gracefully', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-list-'));
+            const wfDir = join(dir, '.spur', 'workflows');
+            await mkdir(wfDir, { recursive: true });
+            await writeFile(join(wfDir, 'bad.yaml'), 'not: valid: yaml: [[');
+
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const result = await svc.list([join(dir, '.spur', 'workflows')]);
+
+            expect(result.totalFiles).toBe(1);
+            expect(result.entries[0]?.valid).toBe(false);
+            expect(result.entries[0]?.error).toBeDefined();
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('tolerates missing directories', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-list-'));
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const result = await svc.list([join(dir, 'nonexistent')]);
+            expect(result.totalFiles).toBe(0);
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('follows symlinked workflow directories', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-list-'));
+            // Real directory with the YAML file
+            const realDir = join(dir, 'real-workflows');
+            await mkdir(realDir, { recursive: true });
+            await writeFile(join(realDir, 'test.yaml'), MINIMAL_WORKFLOW_YAML);
+            // Symlinked .spur/workflows → real-workflows
+            const wfDir = join(dir, '.spur', 'workflows');
+            await mkdir(join(dir, '.spur'), { recursive: true });
+            await symlink(realDir, wfDir, 'dir');
+
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const result = await svc.list([join(dir, '.spur', 'workflows')]);
+
+            expect(result.totalFiles).toBe(1);
+            expect(result.entries[0]?.valid).toBe(true);
+            expect(result.entries[0]?.name).toBe('test-flow');
+            await rm(dir, { recursive: true, force: true });
+        });
+    });
+
+    describe('trace', () => {
+        test('returns empty listing when no runs exist', async () => {
             const svc = new WorkflowAppService(makeCtx());
-            const { runs } = await svc.list();
-            expect(Array.isArray(runs)).toBe(true);
-            expect(runs.length).toBe(0);
+            const result = await svc.trace({});
+            expect('entries' in result).toBe(true);
+            if ('entries' in result) {
+                expect(Array.isArray(result.entries)).toBe(true);
+                expect(result.entries.length).toBe(0);
+                expect(result.total).toBe(0);
+            }
+        });
+
+        test('lists runs after execution with default last=20', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-trace-'));
+            const path = join(dir, 'test.yaml');
+            await writeFile(path, MINIMAL_WORKFLOW_YAML);
+
+            const svc = new WorkflowAppService(makeCtx(dir));
+            await svc.run(path, { runId: 'trace-run-1' });
+
+            const result = await svc.trace({});
+            expect('entries' in result).toBe(true);
+            if ('entries' in result) {
+                expect(result.entries.length).toBeGreaterThanOrEqual(1);
+                const entry = result.entries.find((e) => e.runId === 'trace-run-1');
+                expect(entry).toBeDefined();
+                expect(entry?.workflowName).toBe('test-flow');
+                expect(entry?.status).toBe('done');
+            }
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('filters by workflow name', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-trace-'));
+            await writeFile(join(dir, 'a.yaml'), MINIMAL_WORKFLOW_YAML);
+            await writeFile(join(dir, 'b.yaml'), MINIMAL_WORKFLOW_YAML.replace('test-flow', 'other-flow'));
+
+            const svc = new WorkflowAppService(makeCtx(dir));
+            await svc.run(join(dir, 'a.yaml'), { runId: 'trace-a' });
+            await svc.run(join(dir, 'b.yaml'), { runId: 'trace-b' });
+
+            const result = await svc.trace({ workflow: 'test-flow' });
+            expect('entries' in result).toBe(true);
+            if ('entries' in result) {
+                expect(result.entries.length).toBeGreaterThanOrEqual(1);
+                for (const e of result.entries) {
+                    expect(e.workflowName).toBe('test-flow');
+                }
+            }
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('retrieves per-run timeline', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-trace-'));
+            const path = join(dir, 'test.yaml');
+            await writeFile(path, MINIMAL_WORKFLOW_YAML);
+
+            const svc = new WorkflowAppService(makeCtx(dir));
+            await svc.run(path, { runId: 'trace-timeline-1' });
+
+            const result = await svc.trace('trace-timeline-1');
+            expect('events' in result).toBe(true);
+            if ('events' in result) {
+                expect(result.run.runId).toBe('trace-timeline-1');
+                expect(result.run.workflowName).toBe('test-flow');
+                expect(result.events.length).toBeGreaterThan(0);
+            }
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('throws for unknown run-id', async () => {
+            const svc = new WorkflowAppService(makeCtx());
+            await expect(svc.trace('nonexistent-run')).rejects.toThrow('Run not found');
+        });
+
+        test('labels dry runs', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-trace-'));
+            const path = join(dir, 'test.yaml');
+            await writeFile(path, MINIMAL_WORKFLOW_YAML);
+
+            const svc = new WorkflowAppService(makeCtx(dir));
+            await svc.run(path, { runId: 'trace-dry-1', dryRun: true });
+
+            const result = await svc.trace('trace-dry-1');
+            expect('events' in result).toBe(true);
+            if ('events' in result) {
+                expect(result.run.isDryRun).toBe(true);
+            }
+            await rm(dir, { recursive: true, force: true });
         });
     });
 });
