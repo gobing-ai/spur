@@ -81,7 +81,7 @@ Legend: ✅ done · 🔶 partial (MVP, depth pending) · ⏳ planned · 💤 def
 
 | Feature | Status | Acceptance |
 |---------|--------|-----------|
-| `inbox_messages` migration + schema composition | ✅ | `0001_spur_team_inbox`; table usable after `applyCliMigrations` |
+| `inbox_messages` migration + schema composition | ✅ | `0001_spur_cli_team_inbox`; table usable after `applyCliMigrations` |
 | `TeamService` (app layer) over `TeamOrchestrator`/`MessageService` | ✅ | send/inbox/reply, specs, status, assign; 100% covered |
 | `spur message send\|inbox\|reply` | ✅ | durable queue; reply threads to original sender via `in_reply_to` |
 | `spur agent create\|edit\|delete` + `list --specs` | ✅ | spec YAML under `.spur/agents/`; id validation; duplicate guard |
