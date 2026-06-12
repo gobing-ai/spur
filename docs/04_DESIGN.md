@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.0.1
+version: 1.1.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-06-12
@@ -239,7 +239,7 @@ redaction:
 `runNodeApplication`).
 
 ### 2.2 App config — `@gobing-ai/spur-config` (Zod)
-Server/web layer config (`buildConfigFromEnv`):
+Env-derived config (`ln(env)`), consumed by both the CLI context and the server Bun entry:
 
 | Key | Env var | Default |
 |-----|---------|---------|
@@ -301,6 +301,7 @@ No symlinks participate in install or init — config propagates by copy-and-res
 | `history_import_checkpoint` | importer | Incremental position, composite PK `(source, source_file)` |
 | `history_etl_<source>` | importer | Validated per-source ETL rows (`payload_json`, `imported_at`) |
 | `inbox_messages` | ts-db (`InboxMessageDao`) | Durable inter-agent message queue; indexed on `(to_id, status)`. Added by migration `0001_spur_cli_team_inbox`; composed into `CLI_SCHEMA_SQL` via `INBOX_MESSAGES_SCHEMA_SQL`. |
+| `rule_runs`, `rule_eval_runs` | ts-rule-engine (≥0.3.15) | Persisted rule-run history powering `spur rule trace`; added by migration `0002_spur_cli_rule_history`. `applied_fix_count` is re-stamped by Spur after `applyFixes`. |
 
 ### 3.2 SourceDefinition (history import)
 One config object per source: `source` discriminant, `displayName`, `filePatterns`, `defaultRoots`,
@@ -379,3 +380,18 @@ and drives the plugin lifecycle natively — no Spur-side host wiring needed.
 | Server route seam | Removed | `mountPluginRoutes` / `collectPluginOpenApiPaths` — re-addable when plugins exist |
 | Plugin config override | Removed | Per-plugin `.spur/plugins/<name>.yaml` — re-addable |
 | Event registry | Removed | Glob-pattern + rate-limiting wrapper over `EventBus` — re-addable |
+
+## 7. Planning Layer Surface (reserved — ADR-020; filled by Roadmap §1.5 Stage D)
+
+Landing zone for the rd3-migration design output, reserved now so the system design has a defined
+home and lands as subsection fills, not doc restructuring. Nothing below is invokable until
+shipped (`05 §9` tracks status).
+
+| Subsection | Will own | Design input until filled |
+|------------|----------|---------------------------|
+| 7.1 `spur task` commands | Verbs, flags, exit codes — CRUD, WBS, `--section --from-file`, list/kanban, check, batch-create, resolve, migrate | triage doc Group A |
+| 7.2 `spur feature` commands | Verbs/flags — CRUD, INDEX refresh, task-links, check, goal derivation | triage doc Group B + the feature-file design spec (`cc-agents/docs/plans/2026-06-10-rd3-tasks-operator-feedback.md`) |
+| 7.3 Frontmatter schemas | Zod field tables for task + feature files incl. `schema_version`, `parent_wbs`, `feature-id`, status enums | same design spec + triage A18/X02 |
+| 7.4 Section-Status-Matrix + format rules | Config file shapes under `./config` (ADR-015); warning-first enforcement core | triage A13/A14; `03 §12.3` |
+| 7.5 Lifecycle workflow definitions | `config/workflows/` task/feature lifecycle YAML shapes + guard wiring | ADR-022; `03 §12.2` |
+| 7.6 Task DTOs | oRPC contract shapes for the board | server/web design task (ADR-021.b) |

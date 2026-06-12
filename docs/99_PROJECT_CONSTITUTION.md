@@ -377,6 +377,13 @@ if it recurs, a new rule in §6.
 
 - [2026-06-11] spur-new: The module list still described a hand-rolled parser two ADRs after it
   was replaced — stale module descriptions survive migrations silently (§6.4 rule 4).
+- [2026-06-12] spur-new: A wildcard dependency edge (`apps/* ──► packages/{…}`) hid three real
+  per-app differences and masked a dead manifest dep. Draw boundary diagrams per-app and verify
+  against the manifests.
+- [2026-06-12] spur-new: The runtime diagram showed the CLI calling engines directly, bypassing
+  the `packages/app` service layer the code actually routes through — a diagram can contradict an
+  accepted boundary for weeks. When an ADR canonizes a boundary, re-derive every diagram that
+  depicts it.
 - [2026-06-11] spur-new: Accepted-but-unbuilt design text reads as current architecture unless
   the section title says otherwise — always flag `(accepted design — not yet built)` (§6.4
   rule 1).

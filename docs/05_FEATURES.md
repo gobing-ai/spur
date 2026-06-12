@@ -2,7 +2,7 @@
 doc: 05_FEATURES
 owns: STATUS — feature decomposition + state (✅ / 🔶 / ⏳ / 💤)
 authority: derived
-version: 1.1.1
+version: 1.2.0
 derived_from: [01_PRD, 02_ROADMAP, 04_DESIGN]
 owner: Robin Min
 updated_at: 2026-06-12
@@ -46,8 +46,8 @@ Legend: ✅ done · 🔶 partial (MVP, depth pending) · ⏳ planned · 💤 def
 |---------|--------|-----------|
 | `spur agent list` (detection) | ✅ | installed/missing per known agent |
 | `spur agent doctor [agent]` (readiness) | ✅ | usable/needs-auth/missing + tier; exit on tier-1 failure |
-| `spur agent run <prompt>` (execution + capture) | 🔶 | single-shot migrated, pending verification; team-mode pending verification |
-| Channel resolution / slash-command translation | 💤 | design before porting |
+| `spur agent run <prompt>` (execution + capture) | 🔶 | single-shot migrated, pending verification; team-mode pending verification (triage M12) |
+| Slash-command translation | ✅ | Claude-style `/plugin:cmd` translated per agent via ts-ai-runner `translateSlashCommand` (agent-service) — corrected 2026-06-12 after code verification (was 💤) |
 
 ## 4. Rules (`ts-rule-engine`)
 
@@ -57,9 +57,11 @@ Legend: ✅ done · 🔶 partial (MVP, depth pending) · ⏳ planned · 💤 def
 | Built-in evaluators: regex/rg, path/file-exist, forbidden-import, exit-code, secrets-scanner, agent-detection | ✅ | covered by ts-libs tests |
 | Text + JSON formatters | ✅ | host-registered |
 | `spur rule trace [run-id]` (persisted run history) | ✅ | engine persistence (`rule_runs`/`rule_eval_runs`, ts-rule-engine ≥0.3.15); filters `--preset/--status/--since/--last` |
-| Advanced evaluators: import-boundary, test-location, tsdoc-export, coverage-gate, ast-grep, schema-artifact | 🔶 | restore to parity (Phase 3) |
-| Fixers + SARIF output | ⏳ | Phase 3 |
-| Self-host the quality gate (`spur rule run` as CI check) | ⏳ | Phase 1 |
+| Advanced evaluators restored: import-boundary, test-location, tsdoc-export, coverage-gate | ✅ | shipped in ts-rule-engine ≥0.3.x; test-location/tsdoc-export/coverage-gate active in `.spur/rules` |
+| Advanced evaluators pending: ast-grep, schema-artifact | ⏳ | Phase 3 |
+| Fix engine (`--fix-mode none\|suggest\|auto`, `--dry-run`) | ✅ | per-rule effective mode `min(rule.fix.mode, maxFixMode)`; exit code from findings only |
+| SARIF output | ⏳ | Phase 3 |
+| Self-host the quality gate (`spur rule run` as CI check) | ✅ | `spur-check` script: lint + pre-check preset + tests + post-check preset — corrected 2026-06-12 (was ⏳; shipped in Phase 1) |
 
 ## 5. Workflows (`ts-dual-workflow-engine`)
 
@@ -69,9 +71,10 @@ Legend: ✅ done · 🔶 partial (MVP, depth pending) · ⏳ planned · 💤 def
 | `spur workflow run` (FSM driver + persistence) | ✅ | runs to terminal state; persists run |
 | `spur workflow list` | ✅ | lists persisted runs |
 | `spur workflow trace [run-id]` (run history + timeline) | ✅ | filters `--workflow/--status/--since/--last`; per-run detail on id |
-| State-machine + transition-flow modes | 🔶 | both present; gates/parallel/decision depth pending |
-| Gates as transition predicates, iteration bounding, resume | ⏳ | Phase 3 |
-| Built-in actions (shell, check, find-changed-files, find-unit-gaps) | 🔶 | core present; expand in Phase 3 |
+| State-machine + transition-flow modes | 🔶 | both present; parallel/decision depth pending |
+| Guards as transition predicates + iteration bounding | ✅ | guards live in shipped workflows (`basic.yaml`, `feature-dev.yaml`); `iterationBound` counts all transitions — corrected 2026-06-12 (was ⏳) |
+| Parallel/decision nodes, resume from last successful phase | ⏳ | Phase 3; pause/continue + HITL arrive with the ADR-022 upstream work |
+| Built-in actions (shell, note, check, http.request, find-changed-files, find-unit-gaps) | 🔶 | core present (`http.request` rides ts-infra `APIClient`); no `agent`/`slash` action kind yet — LLM steps delegate to `spur agent run` via shell |
 
 ## 6. History (`ts-llm-jsonl-importer` + analytics consumer)
 
@@ -117,7 +120,7 @@ Decomposition and per-item dispositions live in
 
 | Feature | Status | Acceptance |
 |---------|--------|-----------|
-| Collective design stage (schemas, lifecycle design, server/web design task, skill contract) | ⏳ | `04_DESIGN.md` sections + ts-libs gap tasks exist before wave implementation |
+| Collective design stage (schemas, lifecycle design, server/web design task, skill contract) | ⏳ | fills the reserved `04 §7.1–7.6` landing zone + ts-libs gap tasks filed, before wave implementation |
 | Task management (`spur task` CRUD/WBS/sections/check/migrate) | ⏳ | agents drive the two hot paths across the 7 corpora; check validates schema + matrix |
 | Variant templates + Section-Status-Matrix + format rules | ⏳ | warning-first enforcement; hard core (AC/Solution/Review formats) gates |
 | Shared BDD validator (Gherkin subset + checklist + coverage) | ⏳ | one implementation behind task check, feature check, pipeline output |

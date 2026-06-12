@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.1.1
+version: 1.2.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-06-12
@@ -18,28 +18,38 @@ and invariants, not schemas or signatures (those live in code).
 
 ## 1. Topology
 
-Bun-workspace monorepo (no Turborepo, ADR-002). Spur owns three apps and two thin local packages;
-all reusable engines are external `@gobing-ai/ts-*` packages (ADR-006).
+Bun-workspace monorepo (no Turborepo, ADR-002). Spur owns three apps and four local packages
+(ADR-001 as amended); all reusable engines are external `@gobing-ai/ts-*` packages (ADR-006).
 
 spur/
 ├── apps/
-│   ├── cli/         Primary surface — arg dispatch, domain commands, local DAOs, migrations
+│   ├── cli/         Primary surface — commander dispatch (ADR-014) + transport-wrapper commands
 │   ├── server/      Hono + oRPC OpenAPI handler; Bun + Cloudflare Worker entrypoints
 │   └── web/         Astro + Cloudflare adapter; typed oRPC OpenAPI client
 ├── packages/
-│   ├── app/         Application services (AgentService, RuleService, WorkflowService, …)
+│   ├── app/         Application services — Agent/History/Plugin/Rule/Team/Workflow (ADR-021)
 │   ├── contracts/   oRPC transport contracts ONLY (health/DTOs) — @gobing-ai/spur-contracts
 │   ├── config/      Zod config schema + env parsing — @gobing-ai/spur-config
-│   ├── domain/      Spur-domain DAOs + schema (workspaces, runs, workflow-states, …)
+│   ├── domain/      DAOs + schema + analytics + migrations; sole ts-db importer (ADR-011)
+├── plugins/sp/      Agent-facing layer: Fat Skills + thin command/subagent wrappers (ADR-016/023)
+├── config/          Spur-owned default config SSOT — rules/, workflows/, plugins/ (ADR-015)
 ├── tooling/typescript/   Shared tsconfig presets (base/server/react)
-└── drizzle/         0000_spur_cli_foundation.sql (active) + _legacy_reference/ (inert)
+└── drizzle/         0000_spur_cli_foundation.sql + incremental _spur_cli_ migrations + _legacy_reference/ (inert)
 
-### 1.1 External dependency boundary (ADR-004/006)
+### 1.1 External dependency boundary (ADR-004/006/021)
+
+Per-app edges as they exist today (manifest-verified):
+
 ```
-apps/* ──► packages/{app, contracts, config, domain}
-apps/* ──► @gobing-ai/ts-{utils, infra, runtime, db}          (semver)
-apps/cli ─► @gobing-ai/ts-{ai-runner, rule-engine,            (semver)
-                           dual-workflow-engine, llm-jsonl-importer}
+apps/cli ────► packages/{app, config, domain}
+               + @gobing-ai/ts-{utils, infra, runtime, ai-runner,        (semver)
+                                rule-engine, dual-workflow-engine, llm-jsonl-importer}
+apps/server ─► packages/{config, contracts} + @gobing-ai/ts-{infra, runtime}
+               (gains packages/app — never direct DB — when the planning layer
+                lands, per ADR-021.b)
+apps/web ────► packages/contracts (types via oRPC client only)
+packages/app ───► packages/domain + the engine packages
+packages/domain ► @gobing-ai/ts-db (sole importer — §8.1)
 ```
 
 | Layer | Owns |
@@ -69,23 +79,28 @@ Phase 1 is single-process: the CLI owns the work and is the writer of record (AD
 flowchart TD
     User([User]) -->|spur <command>| CLI
     subgraph Process["apps/cli (Bun)"]
-        CLI[Arg dispatch] --> Ctx[CliContext<br/>config · fs · db]
-        CLI --> AR[ts-ai-runner]
-        CLI --> RE[ts-rule-engine]
-        CLI --> WF[ts-dual-workflow-engine]
-        CLI --> HI[ts-llm-jsonl-importer]
-        CLI --> AN[analytics consumer]
-        Ctx --> DB[(SQLite via ts-db)]
-        AR -->|subprocess| Agent[[Coding agent CLI]]
+        CLI[commander dispatch] --> Ctx[CliContext<br/>config · fs · lazy migrated DB]
+        CLI --> APP[packages/app services<br/>Agent · History · Rule · Team · Workflow]
+        APP --> AR[ts-ai-runner]
+        APP --> RE[ts-rule-engine]
+        APP --> WF[ts-dual-workflow-engine]
+        APP --> HI[ts-llm-jsonl-importer]
+        APP --> DOM[packages/domain<br/>DAOs · analytics · migrations]
+        DOM --> DB[(SQLite via ts-db)]
+        RE -. persistence adapter .-> DB
+        WF -. persistence adapter .-> DB
         HI --> DB
-        AN --> DB
-        WF --> DB
+        AR -->|subprocess| Agent[[Coding agent CLI]]
     end
     JSONL[(Agent JSONL files)] -.read.-> HI
 ```
 
-The server/web tier is a separate, read-oriented inspection surface (Phase 4). The server
-bootstrap splits by runtime (ADR-019):
+The CLI never calls an engine around the service layer (ADR-021); engines reach SQLite only
+through persistence adapters constructed from `packages/domain`.
+
+The server/web tier is today a thin read-oriented slice (health vertical, Phase 4 expansion);
+its real shape — including the planning-layer board — is the pending server/web design task
+(ADR-021.b). The server bootstrap splits by runtime (ADR-019):
 
 - **Bun entry (`index.ts`)** → `runNodeApplication` (`@gobing-ai/ts-infra/application-node`):
   YAML config loading, file log sink, owned DB adapter, `Bun.serve` started inside `start(appRt)`.
@@ -96,25 +111,17 @@ Both entries share `src/bootstrap.ts` (`createApp`, `serverBootstrapConfig`) —
 factory and bootstrap config block are runtime-agnostic.
 ## 3. CLI Architecture (`apps/cli`)
 
-```
-src/
-  index.ts          Entry — builds one commander Command, registers all nouns, parseAsync (ADR-014)
-  context.ts        CliContext: cwd, env, fs, output, setExitCode, lazy migrated DB adapter
-  config.ts         CLI constants (config dir/file, db file, labels)
-  output.ts         Human/JSON output sink
-  commands/         init · status · migrate · agent · history · rule · workflow · message · team
-  git-context.ts    Inline git status helper
-```
+No file inventory here — that rots (99 §6.4 lesson); boundaries only:
 
-Commander (`commander` + `@commander-js/extra-typings`) owns option parsing, subcommand dispatch,
-and `--help` rendering (ADR-014); the former hand-rolled `args.ts` parser is gone.
-
-- **Commands** parse flags, call a package API, format output, return an exit code. No business logic.
-- **DAOs and migrations** live in `packages/domain` (`dao/`: workspace, run, phase-run, transition-run,
-  workflow-state, artifact, rule-run, rule-eval-run; `migrations.ts` composes domain + engine package
-  schema SQL). DAOs use the adapter's prepared-statement API. `analytics/` (history cost analytics)
-  also lives in `packages/domain`.
-- **Context** lazily builds and migrates the SQLite adapter on first DB access.
+- **Dispatch:** one commander `Command`; each noun registers via
+  `registerXxxCommand(program, context)` (ADR-014). Commander owns parsing, subcommand dispatch,
+  and `--help` rendering.
+- **Commands** parse flags, call a `packages/app` service, format output, return an exit code —
+  no business logic in the app (ADR-021).
+- **CliContext** carries cwd/env/fs/output/`setExitCode` and lazily builds + migrates the SQLite
+  adapter on first DB access.
+- **DAOs, migrations, analytics** live in `packages/domain` (`dao/`, `migrations.ts` composing
+  domain + engine schema SQL, `analytics/`). DAOs use the adapter's prepared-statement API.
 
 ## 4. Type Seam — oRPC (ADR-005)
 
@@ -131,11 +138,11 @@ never enter `packages/contracts`.
 ## 5. Constraint Rules (`ts-rule-engine`, `spur rule`)
 
 A constraint rule declares an id, severity, target paths, an evaluator, options, and a message.
-`RuleEngine.evaluate(rules, cwd)` returns findings; the CLI owns exit-code policy (`--fail-on`).
-`--verbose` streams per-rule progress to stderr with execution time (e.g. `✓ passed - 0.12s`),
-surfaced by the application-service `RuleService.evaluateVerbose()`. Presets compose via
-`loadPresetRules`; ad-hoc files via `loadRuleFile`. Formatters (text/json) are host-registered.
-Rules are configuration — adding one edits YAML, not code.
+`RuleEngine.evaluate(rules, cwd)` returns findings; `RuleService` (packages/app) mediates; the
+CLI owns exit-code policy. Presets compose via `loadPresetRules`; ad-hoc files via `loadRuleFile`;
+formatters are host-registered. Runs persist through the engine's `RulePersistenceAdapter`
+(Spur's `DbRulePersistenceAdapter` over ts-db), powering `spur rule trace`. Rules are
+configuration — adding one edits YAML, not code. Flags and surface: `04 §1.1`.
 ## 6. Workflows (`ts-dual-workflow-engine`, `spur workflow`)
 
 Two execution models behind one host (ADR-009):
@@ -145,8 +152,10 @@ Two execution models behind one host (ADR-009):
 - **Transition-flow** — DAG with conditional branching for multi-phase pipelines.
 
 Definitions are YAML (Zod-validated, variable interpolation). Persistence is via a SQLite adapter
-(`DbWorkflowPersistenceAdapter`) over ts-db; in-memory for tests. The CLI's `WorkflowService` wires
-the host + persistence and exposes validate/run/list.
+(`DbWorkflowPersistenceAdapter`) over ts-db; in-memory for tests. `WorkflowService` (packages/app)
+wires the host + persistence and exposes validate/run/list; persisted runs power
+`spur workflow trace`. The planning layer's task/feature lifecycles run as workflow definitions
+on this engine (§12.2) — its first long-lived, externally-triggered consumer (ADR-022).
 
 ## 7. History Import & Analytics (`ts-llm-jsonl-importer`, `spur history`)
 
@@ -160,23 +169,26 @@ discover files → resume from (source, source_file) checkpoint → read line-by
 ```
 
 Sources: pi, claude, codex, gemini, opencode, antigravity, openclaw. Adding a source = one
-`SourceDefinition` variant; the pipeline never changes. **Analytics** (`apps/cli/src/analytics`) reads
-the ETL tables, estimates tokens/cost per model, and aggregates by source/model/day — a domain
-consumer, not part of the generic importer.
+`SourceDefinition` variant; the pipeline never changes. **Analytics**
+(`packages/domain/src/analytics`) reads the ETL tables, estimates tokens/cost per model, and
+aggregates by source/model/day — a domain consumer, not part of the generic importer.
 
 ## 8. Data & Storage (ADR-007/008)
 
 | Location | Purpose |
 |----------|---------|
-| `.spur/` | Project config (`config.json`), local rule/workflow definitions |
-| SQLite DB (`DATABASE_URL` or `.spur/spur.db`) | CLI domain tables + history ETL/ledger/checkpoint + workflow tables |
+| `.spur/` | Project config `config.yaml` (ADR-017), local rule/workflow definitions, team agent specs (`agents/`) |
+| `~/.config/spur/` | Global config layer, seeded from bundled assets; resolution is bundled > global > local (ADR-015) |
+| SQLite DB (`DATABASE_URL` or `.spur/spur.db`) | CLI domain tables + history ETL/ledger/checkpoint + workflow/rule run history + inbox |
 | Agent JSONL files | Canonical raw history (never copied into the DB) |
+| Task/feature markdown *(planned — ADR-020)* | Planning SSOT; the DB holds only derived data (§12.1) |
 | `logs/` | Process and observer logs |
 
-Schema is composed from package-owned SQL and applied through the `__spur_cli_migrations` journal.
-Tables: `workspaces`, `runs`, `phase_runs`, `transition_runs`, `workflow_states`, `artifacts`,
-`history_import_ledger`, `history_import_checkpoint`, `history_etl_<source>`, plus the workflow
-engine's tables.
+Schema is composed from package-owned SQL and applied through the `__spur_cli_migrations` journal
+(`0000` foundation + incremental `_spur_cli_`-marked migrations). Tables: `workspaces`, `runs`,
+`phase_runs`, `transition_runs`, `workflow_states`, `artifacts`, `history_import_ledger`,
+`history_import_checkpoint`, `history_etl_<source>`, `inbox_messages`, `rule_runs`,
+`rule_eval_runs`, plus the workflow engine's tables.
 
 ### 8.1 Persistence boundary (ADR-011)
 
@@ -210,6 +222,8 @@ model, so table/DDL/Zod drift is structurally impossible. Five rules, enforced b
 | Old migrations reactivated | Inert under `_legacy_reference/`; loader filters `_spur_cli_` marker |
 | Engine MVP gaps mistaken for parity | Roadmap Phase 3 tracks the depth restore explicitly |
 | History raw bloat / parse errors | Raw stays in files; only validated ETL persisted (ADR-008) |
+| Lifecycle-on-workflow blocked by engine gaps (long-lived runs, pause/continue, HITL) | Stage-D ts-libs gap tasks gate the dependent waves (ADR-022); upstream-first — no local FSM fallback |
+| Legacy board writes corrupt normalized task corpora during the rd3 migration | Freeze legacy `tasks server` read-only at the A17 cutover; the spur board lands in the same batch (triage doc) |
 
 ## 11. Plugin Substrate (ADR-012, amended 2026-06-09)
 
@@ -252,6 +266,9 @@ mechanisms (ADR-020/023), not a separate CLI noun.
 - The task/feature domain is **Spur-local** (ADR-006 division: it is Spur's own domain glue, not a
   reusable engine). The generic Gherkin-subset validator is the exception — it is upstreamed to
   ts-libs.
+- **Default package home (ADR-021):** task/feature services — including the write service — join
+  `packages/app`; frontmatter schemas, file I/O, and derived-data DAOs join `packages/domain`.
+  Creating a new local package requires a recorded decision; no package sprawl by default.
 
 ### 12.2 Write service & lifecycle (ADR-021/022)
 

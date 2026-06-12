@@ -207,9 +207,9 @@ If a check fails, fix the root cause. **Never** bypass with `--no-verify`, `--fo
 
 ## Database / migrations
 
-- Each domain package owns its schema SQL; the CLI composes them into `CLI_SCHEMA_SQL`
-  (`apps/cli/src/db/migrations.ts`): CLI domain tables + `HISTORY_IMPORT_SCHEMA_SQL` +
-  `WORKFLOW_ENGINE_SCHEMA_SQL`.
+- Each domain package owns its schema SQL; `packages/domain/src/migrations.ts` composes them into
+  `CLI_SCHEMA_SQL`: CLI domain tables + `HISTORY_IMPORT_SCHEMA_SQL` + `WORKFLOW_ENGINE_SCHEMA_SQL`
+  (+ incremental `_spur_cli_` migrations, e.g. team inbox, rule history).
 - The CLI migrator only applies top-level `drizzle/*.sql` files containing the `_spur_cli_` marker.
 - History keeps raw data in files (no `history_raw_*` tables); the DB holds only validated ETL rows,
   an import ledger, and per-file checkpoints.
