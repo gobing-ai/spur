@@ -19,6 +19,10 @@ symptom in a derived one.
 
 **Conflict rule:** lower number wins. `00_ADR` is binding and overrides all others on *decisions*;
 `01_PRD` is authoritative on *scope*. On conflict, fix the authoritative doc and flag the drift.
+`docs/99_PROJECT_CONSTITUTION.md` is authoritative on *process* — how these files are
+maintained (edit rules, sync triggers, drift audits, writing rules). It holds no project content,
+so the two axes never collide. Read it before editing any doc below. Each numbered doc carries
+its contract as YAML frontmatter (constitution §4.3).
 
 | Doc | Owns the question | Authority | Read / edit when |
 |-----|-------------------|-----------|------------------|
@@ -28,6 +32,8 @@ symptom in a derived one.
 | `docs/03_ARCHITECTURE.md` | **HOW** — module boundaries, data flow, runtime model, invariants, the *rationale* behind a decision | Derived (ADR wins) | Read before cross-module/seam/schema work; edit when boundaries or mechanisms change |
 | `docs/04_DESIGN.md` | **SURFACE** — concrete shapes: every CLI command, flag, config key, env var, table, DTO | Derived | Read/edit when changing a command, flag, env var, or schema |
 | `docs/05_FEATURES.md` | **STATUS** — feature decomposition + state (✅ done / 🔶 partial / ⏳ planned / 💤 deferred) | Derived | Read to find a feature's state; edit when a feature's status changes |
+| `docs/99_PROJECT_CONSTITUTION.md` | **PROCESS** — how the files above are maintained: edit rules, same-commit sync triggers, drift audits, lessons | **Authoritative on process** | Read before editing any doc above; lessons machine-appendable per its §8 |
+| `AGENTS.md` (this file) | **ENTRY** — stack, commands, gates, conventions + this doc map | Derived (from 99 + 00/01/04) | Read first every session; factual blocks regenerated from code, never from memory |
 
 **Routing — put each fact in its owning doc, link from the rest:**
 
@@ -47,17 +53,21 @@ Bun + TypeScript + Biome monorepo on **Bun workspaces (no Turborepo)**. Layout:
 
 ```
 apps/
-  cli/          # Spur CLI — primary surface; arg dispatch + domain commands (@gobing-ai/spur)
+  cli/          # Spur CLI — primary surface; commander dispatch (ADR-014) + domain commands (@gobing-ai/spur)
   server/       # Hono on Bun.serve / Cloudflare Worker; oRPC OpenAPI handler (@gobing-ai/spur-server)
   web/          # Astro + Cloudflare adapter; typed oRPC OpenAPI client (@gobing-ai/spur-web)
 packages/
+  app/          # Application services (AgentService, RuleService, WorkflowService, TeamService, …) (@gobing-ai/spur-app)
   contracts/    # oRPC transport contracts ONLY — health/DTOs, no domain types (@gobing-ai/spur-contracts)
   config/       # zod config schema + env parsing (@gobing-ai/spur-config)
+  domain/       # Spur-domain DAOs + schema + analytics; sole ts-db/drizzle consumer (@gobing-ai/spur-domain)
 tooling/
   typescript/   # shared tsconfig presets (base/server/react) — from ts-base
 drizzle/        # 0000_spur_cli_foundation.sql (active) + _legacy_reference/ (old schema, inert)
 docs/           # 00_ADR.md (authoritative) + 01-05 product docs
 ```
+
+Apps are thin transport wrappers; functionality lives in `packages/app` (ADR-021).
 
 Domain engines do **not** live in this repo. They are external `@gobing-ai/ts-*` packages consumed
 from the separate `~/xprojects/ts-libs/` repository:
@@ -129,28 +139,45 @@ Bun. Run with `bun run apps/cli/src/index.ts <command>` during development.
 
 ## CLI surface
 
-Supported commands (the harness loop). `init`, `agent`, `history`, `rule`, `workflow` are the
-committed product surface; `status` and `migrate` are supporting utilities.
+Supported commands (the harness loop). `init`, `agent`, `history`, `rule`, `workflow`, `message`,
+`team` are the committed product surface (ADR-010 as amended); `status` and `migrate` are
+supporting utilities.
 
 ```
-spur init       [--name <name>] [--json]
-spur agent      run <prompt> [--agent <name>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--json]
-spur agent      list [--json]
+spur init       [--name <name>] [--minimal] [--force] [--json]
+spur agent      run <prompt> [--agent <name>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--drain] [--json]
+spur agent      list [--specs] [--json]
 spur agent      doctor [agent] [--json]
+spur agent      create|edit|delete <id> ...   # agent spec YAML under .spur/agents/
 spur history    import --source <source> [--file <path>|--root <path>] [--mode <mode>] [--json]
 spur history    analyze [--since <iso-date>] [--json]
 spur history    report [--json]  # TODO marker; implementation deferred
 spur rule       run [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <severity>] [--stop-on-first [<severity>]] [--verbose] [--json]
 spur rule       validate [--file <path>|--preset <name>|<path>] [--json]
 spur rule       list [--preset <name>] [--json]
+spur rule       trace [run-id] [--preset <name>] [--status <s>] [--since <iso-date>] [--last <n>] [--json]
 spur workflow   validate <workflow.yaml> [--json]
 spur workflow   run <workflow.yaml> [--run-id <id>] [--json]
 spur workflow   list [--json]
+spur workflow   trace [run-id] [--workflow <name>] [--status <s>] [--since <iso-date>] [--last <n>] [--json]
+spur message    send <body> --to <id> [--from <id>] [--json]
+spur message    inbox --agent <id> [--json]
+spur message    reply <msg-id> <body> [--json]
+spur team       assign <task-id> <agent-id> [--json]
+spur team       status [--json]
+spur team       start|stop                    # Phase-4 stubs
 spur status     [path] [--json]
 spur migrate    [--json]
 ```
 
 Every command supports `--json` for machine consumption.
+
+> **Planned expansion (ADR-020–023).** The planning layer migrated from `cc-agents/rd3` —
+> `spur task` and `spur feature` — is accepted but not yet built; the spec pipeline ships as a
+> `plugins/sp` fat skill, and the board/launcher awaits the server/web design task. Scope and
+> per-item dispositions: `docs/plans/2026-06-10-rd3-migration-feature-list.md`; mechanism:
+> `docs/03_ARCHITECTURE.md §12`. Those commands join the list above (and `04_DESIGN.md`, same
+> commit) as they land. Do not invoke them as if they exist.
 
 ## Verification gate (all must pass before "done")
 

@@ -1,14 +1,21 @@
+---
+doc: 05_FEATURES
+owns: STATUS — feature decomposition + state (✅ / 🔶 / ⏳ / 💤)
+authority: derived
+version: 1.1.1
+derived_from: [01_PRD, 02_ROADMAP, 04_DESIGN]
+owner: Robin Min
+updated_at: 2026-06-12
+read_before: citing or changing a feature's state
+edit_rules: 99 §6.6
+sync: [T4]
+---
+
 # 05 Features — Spur
 
-**Version:** 1.0.0
-**Status:** Active
-**Derived from:** `docs/01_PRD.md`, `docs/02_ROADMAP.md`, `docs/04_DESIGN.md`
-**Last Updated:** 2026-06-03
-**Owner:** Robin Min
-
 Feature decomposition for Spur. Each leaf is a single deliverable mappable to one `tasks` WBS item
-with a clear acceptance check. Status reflects the current codebase. When this conflicts with
-`docs/00_ADR.md`, the ADR wins.
+with a clear acceptance check. Status reflects the current codebase — verify against code before
+relying on a row (99 §6.6).
 
 Legend: ✅ done · 🔶 partial (MVP, depth pending) · ⏳ planned · 💤 deferred (needs design).
 
@@ -18,8 +25,8 @@ Legend: ✅ done · 🔶 partial (MVP, depth pending) · ⏳ planned · 💤 def
 |---------|--------|-----------|
 | Bun-workspace monorepo, no Turborepo | ✅ | `bun run --filter '*'` orchestrates; no `turbo.json` |
 | ts-base tooling (Biome, Lefthook, tsconfig presets) | ✅ | `bun run lint` gate green |
-| ts-libs infra deps via semver | ✅ | `ts-db/infra/runtime/utils` at `^0.2.3` |
-| Extracted engines published + semver-pinned | ⏳ | replace `link:` with `^x.y.z`; clean-clone build works |
+| ts-libs infra deps via semver | ✅ | all `@gobing-ai/ts-*` via root catalog at `^0.3.16` |
+| Extracted engines published + semver-pinned | ✅ | no `link:` remnants; clean-clone build works |
 | oRPC type seam (contracts, implement, generated OpenAPI) | ✅ | health vertical slice; drift is a compile error |
 | Package-owned schema + CLI migrator | ✅ | `spur migrate` creates full schema; legacy migrations inert |
 
@@ -27,8 +34,8 @@ Legend: ✅ done · 🔶 partial (MVP, depth pending) · ⏳ planned · 💤 def
 
 | Feature | Status | Acceptance |
 |---------|--------|-----------|
-| Arg dispatch + help/version | ✅ | `dispatch()` routes all commands; `--json` everywhere |
-| `spur init` scaffold | ✅ | writes `.spur/config.json` and records config artifact |
+| Commander dispatch + help/version (ADR-014) | ✅ | one `Command` registers all nouns; `--json` everywhere |
+| `spur init` scaffold | ✅ | writes `.spur/config.yaml` (ADR-017); seeds global config + local `.spur/` |
 | `spur status [path]` | ✅ | reports config/package/git context and optional path metadata |
 | `spur migrate` | ✅ | applies CLI-owned schema via isolated journal |
 | Exit-code + `--json` schema contracts hardened | 🔶 | stabilize across all commands (Phase 1) |
@@ -49,6 +56,7 @@ Legend: ✅ done · 🔶 partial (MVP, depth pending) · ⏳ planned · 💤 def
 | `spur rule run` (preset/file/rule, `--fail-on`) | ✅ | evaluates rules, returns findings + exit code |
 | Built-in evaluators: regex/rg, path/file-exist, forbidden-import, exit-code, secrets-scanner, agent-detection | ✅ | covered by ts-libs tests |
 | Text + JSON formatters | ✅ | host-registered |
+| `spur rule trace [run-id]` (persisted run history) | ✅ | engine persistence (`rule_runs`/`rule_eval_runs`, ts-rule-engine ≥0.3.15); filters `--preset/--status/--since/--last` |
 | Advanced evaluators: import-boundary, test-location, tsdoc-export, coverage-gate, ast-grep, schema-artifact | 🔶 | restore to parity (Phase 3) |
 | Fixers + SARIF output | ⏳ | Phase 3 |
 | Self-host the quality gate (`spur rule run` as CI check) | ⏳ | Phase 1 |
@@ -60,6 +68,7 @@ Legend: ✅ done · 🔶 partial (MVP, depth pending) · ⏳ planned · 💤 def
 | `spur workflow validate` (YAML + Zod) | ✅ | rejects invalid definitions |
 | `spur workflow run` (FSM driver + persistence) | ✅ | runs to terminal state; persists run |
 | `spur workflow list` | ✅ | lists persisted runs |
+| `spur workflow trace [run-id]` (run history + timeline) | ✅ | filters `--workflow/--status/--since/--last`; per-run detail on id |
 | State-machine + transition-flow modes | 🔶 | both present; gates/parallel/decision depth pending |
 | Gates as transition predicates, iteration bounding, resume | ⏳ | Phase 3 |
 | Built-in actions (shell, check, find-changed-files, find-unit-gaps) | 🔶 | core present; expand in Phase 3 |
@@ -85,7 +94,7 @@ Legend: ✅ done · 🔶 partial (MVP, depth pending) · ⏳ planned · 💤 def
 | `TeamService` (app layer) over `TeamOrchestrator`/`MessageService` | ✅ | send/inbox/reply, specs, status, assign; 100% covered |
 | `spur message send\|inbox\|reply` | ✅ | durable queue; reply threads to original sender via `in_reply_to` |
 | `spur agent create\|edit\|delete` + `list --specs` | ✅ | spec YAML under `.spur/agents/`; id validation; duplicate guard |
-| `spur agent run --purpose/--tags/--system-prompt/--task/--drain` | ✅ | identity flags → `PromptOptions`; `--drain` folds inbox into prompt |
+| `spur agent run --drain` + spec-sourced identity | ✅ | identity (purpose/tags/system-prompt) comes from the `.spur/agents/<id>.yaml` spec via `agent create` flags; `--drain` folds inbox into prompt. Run-level identity flags were folded into specs — corrected 2026-06-12 after code verification |
 | `spur team assign\|status` | ✅ | `assign` sets task `assignee:`; `status` lists specs (stopped in Phase 1-3) |
 | `.spur/agents/` scaffold + `spur status` reporting | ✅ | `spur init` seeds `.gitkeep`; status lists spec ids |
 | `spur team start\|stop` daemon | 💤 | Phase 4 stubs ship; persistent orchestrator + live stdin deferred |
@@ -101,7 +110,25 @@ Legend: ✅ done · 🔶 partial (MVP, depth pending) · ⏳ planned · 💤 def
 | Read-only run/history/analytics procedures | ⏳ | Phase 4 |
 | Inspection dashboards | ⏳ | Phase 4 |
 
-## 9. Deferred (needs design before build)
+## 9. Planning Layer (rd3 migration — ADR-020–023, Roadmap Phase 1.5)
+
+Decomposition and per-item dispositions live in
+`docs/plans/2026-06-10-rd3-migration-feature-list.md`; rows here track headline status only.
+
+| Feature | Status | Acceptance |
+|---------|--------|-----------|
+| Collective design stage (schemas, lifecycle design, server/web design task, skill contract) | ⏳ | `04_DESIGN.md` sections + ts-libs gap tasks exist before wave implementation |
+| Task management (`spur task` CRUD/WBS/sections/check/migrate) | ⏳ | agents drive the two hot paths across the 7 corpora; check validates schema + matrix |
+| Variant templates + Section-Status-Matrix + format rules | ⏳ | warning-first enforcement; hard core (AC/Solution/Review formats) gates |
+| Shared BDD validator (Gherkin subset + checklist + coverage) | ⏳ | one implementation behind task check, feature check, pipeline output |
+| Feature management (`spur feature` over `docs/features/`) | ⏳ | INDEX + task-links regenerate; `feature-id` is the single traceability edge |
+| Lifecycle on `spur workflow` (ADR-022) + write service in `packages/app` (ADR-021) | ⏳ | frontmatter status is SSOT; engine persistence derived; one lock domain; upstream engine gaps closed in ts-libs |
+| Local board + launcher | 💤 | settled by the Stage-D server/web design task (ADR-021 consequence b) |
+| Spec-driven pipeline (sp planning fat skill) | ⏳ | description → feature file with Gherkin AC → linked tasks, every LLM output CLI-validated |
+| Task-standard workflow + HITL continue + result writer | ⏳ | `spur workflow run task-standard --wbs <n>`; continue resumes a paused run |
+| `plugins/sp` Fat Skills + thin command/subagent wrappers (ADR-023) | ⏳ | skills are SSOT; commands/subagents wrap skills; ADR-016-filtered command set |
+
+## 10. Deferred (needs design before build)
 
 | Feature | Why deferred |
 |---------|--------------|
@@ -109,3 +136,4 @@ Legend: ✅ done · 🔶 partial (MVP, depth pending) · ⏳ planned · 💤 def
 | Rich `spur inspect <run-id>` (timeline/events/gates) | Depends on Phase 2 run model |
 | Plugin **substrate** (SDK, discovery, registries, trust ladder) | 🔶 Partial — ADR-012 amended; mechanism `03 §11`, shapes `04 §6`. Shipped now means ts-infra lifecycle core only. Spur-side SDK, discovery/loader/CLI, server route seam, registries, and trust ladder are removed/deferred until a real plugin consumer exists. |
 | Remote/cooperation transport | Out of scope until a concrete need surfaces |
+| rd3-migration deferred set (`spur inspect`, meta-tooling, research/context, platform adapters, web beyond the board, auto-trigger) | 💤 Deferred by triage — see `docs/plans/2026-06-10-rd3-migration-feature-list.md` |

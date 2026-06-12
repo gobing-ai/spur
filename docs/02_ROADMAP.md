@@ -1,11 +1,19 @@
+---
+doc: 02_ROADMAP
+owns: WHEN — phases, current vs deferred, sequencing
+authority: derived
+version: 1.1.1
+derived_from: [01_PRD, 00_ADR]
+owner: Robin Min
+updated_at: 2026-06-12
+read_before: placing work in a phase
+edit_rules: 99 §6.3
+sync: [T5, T6]
+---
+
 # 02 Roadmap — Spur
 
-**Version:** 1.0.0
-**Derived from:** `docs/01_PRD.md` v1.0.0, `docs/00_ADR.md`
-**Last Updated:** 2026-06-03
-**Owner:** Robin Min
-
-Phases gate on the previous one. When this document conflicts with `docs/00_ADR.md`, the ADR wins.
+Phases gate on the previous one.
 
 ## Phase 0 — Re-Foundation _(done)_
 
@@ -39,6 +47,26 @@ Make the harness robust and clean before adding surface.
 
 **Exit:** clean-clone build works; CLI self-hosts its own gate; history/coverage paths covered.
 
+## Phase 1.5 — Planning Layer (rd3 migration) _(next)_
+
+Migrate the task/feature domain from `cc-agents/plugins/rd3` per ADR-020–023. Scope,
+per-item dispositions, and full wave contents live in
+`docs/plans/2026-06-10-rd3-migration-feature-list.md` §Batch sequencing — this phase tracks stage
+status only. Per ADR-023(3), Stage D designs everything collectively before the waves implement.
+
+- [ ] **Stage D — Collective design** (gates all waves): `04` schemas, lifecycle-on-workflow
+  design + upstream ts-libs gap tasks, server/web design task (ADR-021.b), planning-skill contract.
+- [ ] **Wave 0 — Foundation** (schema, BDD validator, locking, lifecycle definitions, migrate tool)
+- [ ] **Wave 1 — Task CLI** (`spur task`)
+- [ ] **Wave 2 — Feature CLI** (`spur feature`)
+- [ ] **Wave 3 — Board** per Stage-D design; **A17 cutover gate** — the operator is never boardless
+- [ ] **Wave 4 — Pipeline + execution** (planning skill, task-standard workflow, HITL continue)
+- [ ] **Wave 5 — sp wrappers** (ADR-016-filtered)
+- [ ] **Wave 6 — cc-agents cleanup** (each item gated on its verified replacement)
+
+**Exit:** operator daily-drives the spur board; agents drive `spur task` across the 7 corpora;
+legacy `plugins/rd3` executable surface frozen.
+
 ## Phase 2 — Agent Execution & Run Model
 
 Turn detection into execution with a captured run model.
@@ -46,7 +74,9 @@ Turn detection into execution with a captured run model.
 - [~] `spur agent run <task>` — single-shot execution via `AiRunner` shipped early (incl. team-mode
   identity/drain flags, pending verification); artifact capture into the run model still pending.
 - [ ] Run model: persist runs, phases, events, artifacts through the workflow engine's persistence.
-- [ ] `spur inspect <run-id>` — run timeline, events, gates, artifacts.
+- [~] Run inspection — partially delivered as `spur workflow trace [run-id]` and
+  `spur rule trace [run-id]` (engine-persisted run history, tasks 0038/0040); events/gates/artifact
+  depth still pending the run model.
 - [ ] Redaction at the persistence boundary (secrets/PII never reach the store).
 
 **Exit:** an agent run is executed, captured, and inspectable locally.

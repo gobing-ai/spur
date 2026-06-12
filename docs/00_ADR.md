@@ -1,14 +1,22 @@
+---
+doc: 00_ADR
+owns: WHY — cross-cutting decisions, one-line reasons
+authority: authoritative
+version: 1.0.0
+owner: Robin Min
+updated_at: 2026-06-12
+read_before: any structural change; before diverging from a decision
+edit_rules: 99 §6.1
+sync: [T1, T2]
+---
+
 # 00 ADR — Spur
 
-**Status:** Authoritative · **Last Updated:** 2026-06-06 · **Owner:** Robin Min
-
 The single source of truth for Spur's cross-cutting **decisions**. Each `ADR-NNN` records *what was
-decided* and *the one-line reason* — the mechanism, rationale-in-depth, and consequences live in
-`03_ARCHITECTURE.md` (or concrete shapes in `04_DESIGN.md`), reached via the `Detail:` pointer.
-
-Rules: entries are append-only and never renumbered (cross-references depend on the number). When
-another doc conflicts with an entry here, this file wins — flag the drift. Supersede a decision with
-a new dated entry that names the one it replaces. There is no `06_DECISIONS.md`.
+decided* and *the one-line reason*; mechanism and consequences live in `03`/`04` via the `Detail:`
+pointer. Entry format and maintenance rules: `99 §6.1` (append-only; dated amendments and
+superseding entries only; gaps stubbed, never reused; the template binds new entries — historical
+entries are not restructured). There is no `06_DECISIONS.md`.
 
 ---
 
@@ -22,6 +30,11 @@ exists here; apps depend only on `@gobing-ai/ts-*` packages plus two thin local 
 (`contracts`, `config`).
 
 **Why.** Extracting the old code as-is would carry its accumulated debt forward.
+
+**Amendment (2026-06-11) — package inventory drifted.** "Two thin local packages" is stale: the
+repo owns four (`app`, `contracts`, `config`, `domain`). The greenfield decision stands; the
+current inventory lives in `03 §1`, and the apps-are-wrappers principle it implies is canonized by
+ADR-021.
 
 **Detail:** `03 §1 Topology`.
 
@@ -160,6 +173,13 @@ are the default store. Every command supports `--json`. Committed product comman
 are deferred until their need and design are re-confirmed — not ported speculatively.
 
 **Why.** Spur is a single-machine developer tool with no network requirement in the Phase-1 core loop.
+
+**Amendment (2026-06-11) — shipped surface drifted past this entry.** Team-mode commands
+(`spur message send|inbox|reply`, `spur team assign|status|start|stop`,
+`spur agent create|edit|delete`) and the trace surfaces (`spur rule trace`,
+`spur workflow trace`) shipped without updating this decision; they are hereby recorded as
+committed surface. The planning layer extends the set further per ADR-020. The read-oriented
+server/web clause stands until the server/web design task (see ADR-021 consequence b) refines it.
 
 **Detail:** `03 §2 Runtime Model`; command surface in `04 §1 CLI Surface`.
 
@@ -399,6 +419,16 @@ split (JSON marker + YAML config) was an inconsistency that needed reconciliatio
 
 ---
 
+## ADR-018: (number never allocated)
+
+**Status:** Skipped · **Date:** recorded 2026-06-11
+
+The sequence jumped from 017 to 019 (ADRs 015–018 were allocated in the ts-libs repo during the
+same period and the number was burned by confusion between the two sequences). Recorded so the
+gap is audit-clean. Do not reuse.
+
+---
+
 ## ADR-019: Server Bootstrap Splits Portable/Worker vs Node/Bun by Runtime
 
 **Status:** Accepted · **Date:** 2026-06-09
@@ -418,3 +448,104 @@ lifecycle eliminates duplication with the CLI, gives the server structured loggi
 and keeps the Worker bundle free of `node:*` imports by design.
 
 **Detail:** bootstrap wiring in `03 §2 Runtime model`; bootstrap subpath split in `04 §5`.
+
+---
+
+## ADR-020: Planning Layer Joins the Committed Surface (`spur task` / `spur feature`)
+
+**Status:** Accepted (design) · **Date:** 2026-06-11
+
+**Decision.** Extend the committed command set (ADR-010, as amended) with two nouns migrated from
+`cc-agents/plugins/rd3`: `spur task` (markdown task CRUD, WBS allocation, section editing,
+lifecycle, validation) and `spur feature` (`docs/features/FT-*.md` CRUD, INDEX generation, BDD
+acceptance criteria, traceability). **Markdown files are the single source of truth** — SQLite
+holds only derived, rehydratable data — mirroring ADR-008. Domain logic is Spur-local in
+`packages/` per ADR-021 (it is Spur's own domain glue, not a generic engine per the ADR-006
+division); the generic Gherkin-subset validator is upstreamed to ts-libs. Two deliberate
+non-additions: the spec pipeline (description → BDD AC → decomposed tasks) is **not a CLI noun** —
+it is a fat skill in `plugins/sp` (ADR-016/ADR-023) driving `spur agent run` plus the deterministic
+verbs, with CLI validation gating every LLM output before write; and the board launcher
+(`spur serve` or otherwise) is **not decided here** — it belongs to the server/web design task
+(ADR-021, consequence b). ADR-010's reconfirmation clause is satisfied by the 2026-06-10
+evidence-based review.
+
+**Why.** The rd3 task/feature stack is the most-used harness component, and its executable logic
+belongs in Spur, not in a Claude Code plugin tree with no shared foundation.
+
+**Detail:** mechanism and invariants in `03 §12 Planning Layer`; scope rows in `01_PRD §5.1`;
+per-item dispositions in `docs/plans/2026-06-10-rd3-migration-feature-list.md`; command and schema
+shapes land in `04_DESIGN.md` in the same commits the commands ship.
+
+---
+
+## ADR-021: Functionality Lives in `packages/app`; Apps Are Transport Wrappers
+
+**Status:** Accepted · **Date:** 2026-06-11
+
+**Decision.** Every app (`apps/cli`, `apps/server`, `apps/web`) is a thin transport wrapper; real
+functionality — application services, write paths, domain orchestration — lives in `packages/app`
+(over `packages/domain` DAOs and the ts-libs engines). This canonizes the existing CLI-only
+constraint (`03 §1.1` rule 4) repo-wide. Two consequences: **(a)** the planning layer's write
+service lives in `packages/app`, so CLI commands and any future server routes mutate through the
+same service — one validated write path and one lock domain **by construction**, never by policy
+(the legacy rd3 CLI/HTTP dual-lock file corruption becomes structurally impossible); **(b)** the
+server/web reset — what real surface each app exposes once the planning layer gives them content —
+is a **separate design task**, deliberately not decided here; until it lands, server/web remain
+the thin read-oriented slice of ADR-010, and the board launcher question is settled there.
+Amends ADR-001's stale package inventory (four local packages: app, contracts, config, domain).
+
+**Why.** Centralizing functionality once is what makes N transports additive instead of divergent.
+
+**Detail:** `03 §12.2` (write service); `03 §1 Topology`.
+
+---
+
+## ADR-022: Task & Feature Lifecycle Runs on `spur workflow`
+
+**Status:** Accepted (design) · **Date:** 2026-06-11
+
+**Decision.** Task and feature status lifecycles are workflow definitions executed through
+`spur workflow` (`@gobing-ai/ts-dual-workflow-engine`) — not a hand-rolled FSM or transition table
+inside the task domain. Lifecycle definitions are YAML under `./config/workflows` (ADR-015 home);
+gates (e.g. `spur task check` before Testing) are workflow guards; customization rides the
+engine's EventBus pub/sub seam (`on_transition` / `on_guard_fail` / `on_complete`) — balancing
+state mutation against maximal reuse of existing engine functionality. The planning layer is
+thereby the engine's **first demanding first-party consumer**: capability gaps (long-lived,
+externally-triggered lifecycles; pause/continue; HITL approval) are closed **upstream** per the
+shared-library evolution rule, never by re-implementing locally. One invariant: the markdown
+file's frontmatter `status` remains the single source of truth; engine persistence is derived and
+rehydratable from the files (no second authority).
+
+**Why.** Building a lifecycle engine beside an owned workflow engine would duplicate the exact
+capability the engine exists to provide — and being its first user is what pushes it to mature.
+
+**Detail:** `03 §12.2–12.3`; upstream gaps tracked as ts-libs tasks before the dependent waves.
+
+---
+
+## ADR-023: rd3 Migration — Dividing Line, Fat Skills, Design Collectively / Implement in Phases
+
+**Status:** Accepted · **Date:** 2026-06-11
+
+**Decision.** Three rules govern the migration.
+**(1) Dividing line:** code that executes, validates, stores, or coordinates moves into Spur
+(`apps/`, `packages/`, ts-libs). Already replaced — never migrate: `rd3:orchestration-v2`,
+`rd3:verification-chain`, `rd3:run-acp` (→ `spur agent run` is the single LLM execution surface).
+**(2) Fat Skills, thin others:** agent-facing behavior centralizes in `plugins/sp` **skills**,
+which are the SSOT and may be arbitrarily rich — slash commands and subagents are thin wrappers
+*of skills* (extending ADR-016). Rationale: every supported coding agent understands skills, while
+command/subagent support varies — cross-agent portability forces centralization there. Skills
+delegate deterministic execution to CLI verbs where they exist, but are **not** limited to CLI
+wrapping.
+**(3) Working model:** all work — architecture adjustments and features, listed or not — is
+planned and **designed collectively first**, then **implemented in phases**. This supersedes the
+2026-06-10 "minimal structural change only" premise: the evidence review already demands redesign
+(schema, templates, write path, lifecycle), so porting first and re-foundationing later would pay
+the migration cost twice. Deferral of the meta-tooling/research/context groups stands — they stay
+live in cc-agents until the core stabilizes, so deferring them breaks nothing.
+
+**Why.** The dividing line keeps scope refutable item-by-item; Fat Skills keeps one SSOT across
+seven agents; collective design prevents mechanically porting models the data already rejected.
+
+**Detail:** triage in `docs/plans/2026-06-10-rd3-migration-feature-list.md`; phase placement in
+`02 §Phase 1.5`.

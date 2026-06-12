@@ -1,14 +1,20 @@
+---
+doc: 04_DESIGN
+owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
+authority: derived
+version: 1.0.1
+derived_from: [03_ARCHITECTURE, codebase]
+owner: Robin Min
+updated_at: 2026-06-12
+read_before: changing a command, flag, env var, or schema
+edit_rules: 99 §6.5
+sync: [T3]
+---
+
 # 04 Design — Spur
 
-**Version:** 1.0.0
-**Status:** Active
-**Derived from:** `docs/03_ARCHITECTURE.md`, current codebase
-**Last Updated:** 2026-06-06
-**Owner:** Robin Min
-
 The external, user-facing design surface: every CLI command, the config schema, and the persisted
-data shapes. Feature-internal design lives in code. When this conflicts with `docs/00_ADR.md`, the
-ADR wins.
+data shapes. Feature-internal design lives in code.
 
 ## 1. CLI Surface
 
@@ -60,18 +66,18 @@ project. Re-running is blocked (exit 1) unless `--force` is given, preventing a 
 clobbering a configured project. `--json` emits
 `{ ok, project, config, created[], skipped[], globalConfigSeeded }`.
 
-#### `spur agent run <prompt> [--agent <name>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--purpose <text>] [--tags <a,b>] [--system-prompt <text>] [--task <id>] [--drain] [--json]`
+#### `spur agent run <prompt> [--agent <name>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--drain] [--json]`
 Execute a prompt or slash command via a coding agent. `--agent` (default `auto`) selects the first
 usable Tier-1 agent; `current` reads `SPUR_AGENT` env var; explicit name resolves directly.
 `--continue` resumes the previous session. `--mode text|json` (default `text`) passes output format
 to the agent CLI. `--cwd` sets the working directory. `--json` emits a machine-readable envelope
 (`{ exitCode: number|null, stdout, stderr, signal?, durationMs }`). Slash commands like
 `/plugin:command` are translated per-agent (claude pass-through, codex `$`, pi `/skill:`).
-Team-mode identity flags map into the agent's identity preamble: `--purpose`, `--tags` (comma-list),
-`--system-prompt`, `--task <id>`. `--drain` resolves the addressed `--agent <id>` as an **agent spec
-id** (a different namespace from the coding-agent type), folds that spec's pending inbox messages into
-the prompt, and rewrites `--agent` to the spec's underlying type before dispatch (Phase 1-3 has no
-live stdin, so prepending is how deferred messages reach the agent).
+Team identity (purpose, tags, system prompt) is sourced from the agent **spec** (`agent create`
+flags below), not from `run` flags. `--drain` resolves the addressed `--agent <id>` as an **agent
+spec id** (a different namespace from the coding-agent type), folds that spec's pending inbox
+messages into the prompt, and rewrites `--agent` to the spec's underlying type before dispatch
+(Phase 1-3 has no live stdin, so prepending is how deferred messages reach the agent).
 Exit 0 on success, 1 on agent-not-found, 2 on invalid arguments, 3 on agent execution failure.
 
 #### `spur agent list [--json] [--specs]`
@@ -131,9 +137,9 @@ clear the exit code (the operator re-runs to confirm green). `--verbose` streams
 execution time to stderr (e.g. `✓ passed - 0.12s`). Rule roots resolve highest-priority-first:
 `SPUR_RULES_PATH`, local `.spur/rules`, the user-global `~/.config/spur/rules`, then the generic demo
 rules bundled with `ts-rule-engine` as a fallback so a preset's categories resolve before `spur init`
-seeds the global layer. A run that resolves **zero rules** exits 1 (fail-loud: a gate that checks nothing is
-not a pass). Setting `SPUR_GLOBAL_RULES_DIR` overrides the global root and suppresses the bundled
-fallback for a hermetic run. Backed by `ts-rule-engine`.
+seeds the global layer. A run that resolves **zero rules** exits 1. Setting `SPUR_GLOBAL_RULES_DIR`
+overrides the global root and suppresses the bundled fallback for a hermetic run. Backed by
+`ts-rule-engine`.
 
 #### `spur rule validate [--file <path>|--preset <name>|<path>] [--json]` · `spur rule list [--preset <name>] [--json]` · `spur rule trace [run-id] [--preset <name>] [--status <s>] [--since <date>] [--last <n>] [--json]`
 - `validate` — load and normalize a rule file or preset without evaluating it.
@@ -146,9 +152,7 @@ fallback for a hermetic run. Backed by `ts-rule-engine`.
   execution order with finding counts, duration, and status. `--json` returns structured DTOs.
   Runs are persisted inline by `spur rule run` when a DB is available (direct writes from the
   `ts-rule-engine` `RulePersistenceAdapter`; Spur writes via `DbRulePersistenceAdapter`).
-- `help` / `--help` — print the command-scoped rule usage, including subcommands, options, examples,
-  and exit codes. `spur help rule` is equivalent.
-Backed by `ts-rule-engine`.
+Backed by `ts-rule-engine`. Help dispatch per §1.0.
 
 #### `spur workflow validate <workflow.yaml> [--json] [--no-schema]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--json]` · `spur workflow list [--json]` · `spur workflow trace [run-id] [--workflow <name>] [--status <s>] [--since <date>] [--last <n>] [--json]`
 - `validate <file>` — load + Zod-validate a workflow definition.
@@ -185,11 +189,7 @@ stabilize before the report implementation is designed.
 |---------|----------|
 | `spur status [path] [--json]` | Project health: config present, package.json present, git context, team agent spec ids found under `.spur/agents/`; optional path metadata (size, isFile, isDirectory). |
 | `spur migrate [--json]` | Temporary helper: apply CLI-owned schema migrations; reports `{ ok, applied }`. |
-| `spur help` / `spur version` | Usage / version. |
-
-Per ADR-013, every top-level command module exports its own `helpText()` usage renderer. The
-dispatcher imports those renderers with aliases and registers them for `spur <command> --help`,
-`spur <command> help`, and `spur help <command>`; global help remains a compact command index.
+| `spur --help` / `spur --version` | Commander-rendered usage / binary version (ADR-014). |
 
 ## 2. Configuration
 

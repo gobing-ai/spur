@@ -1,14 +1,20 @@
+---
+doc: 03_ARCHITECTURE
+owns: HOW — module boundaries, data flow, runtime model, invariants
+authority: derived
+version: 1.1.1
+derived_from: [01_PRD, 00_ADR]
+owner: Robin Min
+updated_at: 2026-06-12
+read_before: cross-module, seam, or schema work
+edit_rules: 99 §6.4
+sync: [T1]
+---
+
 # 03 Architecture — Spur
 
-**Version:** 1.0.0
-**Status:** Canonical
-**Derived from:** `docs/01_PRD.md`, `docs/00_ADR.md`
-**Last Updated:** 2026-06-04
-**Owner:** Robin Min
-
 This document describes the **current** architecture of Spur. It specifies module boundaries
-and invariants, not schemas or signatures (those live in code). When it conflicts with
-`docs/00_ADR.md`, the ADR wins.
+and invariants, not schemas or signatures (those live in code).
 
 ## 1. Topology
 
@@ -92,14 +98,16 @@ factory and bootstrap config block are runtime-agnostic.
 
 ```
 src/
-  index.ts          Entry + dispatch (command → handler)
-  args.ts           Minimal flag/positional parser
-  context.ts        CliContext: cwd, env, fs, output, lazy migrated DB adapter
+  index.ts          Entry — builds one commander Command, registers all nouns, parseAsync (ADR-014)
+  context.ts        CliContext: cwd, env, fs, output, setExitCode, lazy migrated DB adapter
   config.ts         CLI constants (config dir/file, db file, labels)
   output.ts         Human/JSON output sink
-  commands/         init · status · migrate · rule · workflow · agent · history
+  commands/         init · status · migrate · agent · history · rule · workflow · message · team
   git-context.ts    Inline git status helper
 ```
+
+Commander (`commander` + `@commander-js/extra-typings`) owns option parsing, subcommand dispatch,
+and `--help` rendering (ADR-014); the former hand-rolled `args.ts` parser is gone.
 
 - **Commands** parse flags, call a package API, format output, return an exit code. No business logic.
 - **DAOs and migrations** live in `packages/domain` (`dao/`: workspace, run, phase-run, transition-run,
@@ -197,45 +205,110 @@ model, so table/DDL/Zod drift is structurally impossible. Five rules, enforced b
 
 | Risk | Mitigation |
 |------|------------|
-| Repo can't build from clean clone (engines on `link:`) | Phase 1 gate: publish + pin semver (ADR-004 open item) |
 | Contract/handler drift | `implement(contract)` makes it a compile error |
 | Schema drift across engines | Each package owns its schema SQL; CLI composes (ADR-007) |
 | Old migrations reactivated | Inert under `_legacy_reference/`; loader filters `_spur_cli_` marker |
 | Engine MVP gaps mistaken for parity | Roadmap Phase 3 tracks the depth restore explicitly |
 | History raw bloat / parse errors | Raw stays in files; only validated ETL persisted (ADR-008) |
 
-## 11. Plugin Substrate (Amended — ADR-012 2026-06-09)
+## 11. Plugin Substrate (ADR-012, amended 2026-06-09)
 
-> **Amendment (2026-06-09):** The standalone SDK is deleted; the bare lifecycle core (`Plugin` +
-> `PluginHost`) lives upstream in `@gobing-ai/ts-infra` (shipped in `0.3.6`). Capability
-> registries, trust ladder, and manifest-driven discovery are **deferred** — re-addable later
-> on top of the ts-infra `Plugin` interface when a real plugin consumer exists.
-> `05_FEATURES` marks the substrate `🔶`; remaining slices 5d–5f stay forward design.
+The lifecycle extension seam lives upstream in `@gobing-ai/ts-infra` (≥0.3.6): `Plugin`
+(lifecycle-only — `onLoad`/`onStart`/`onStop`/`onUnload` + `failFast`) and `PluginHost`
+(register; fail-fast load, fail-soft start/stop/unload in reverse registration order), driven
+natively by `runApplication`/`runNodeApplication` via `plugins`/`pluginHost` options. ts-infra
+registers its own core services (logger, telemetry, scheduler, user-callback) as built-in
+plugins; Spur consumes the lifecycle and does not re-plugin-ize core services. When plugins are
+registered, `startAll()` runs before command dispatch.
 
-The plugin mechanism is the project's **lifecycle extension seam**, upstreamed into ts-infra so
-every `runApplication`/`runNodeApplication` consumer shares the same plugin lifecycle. It sits
-**below** most capability code, on the startup hot path.
+Deferred/removed until a real plugin consumer exists (shapes in `04 §6`):
 
-- **Core in ts-infra.** `Plugin` (lifecycle-only: `onLoad`/`onStart`/`onStop`/`onUnload` +
-  `failFast`) and `PluginHost` (register, lifecycle fan-out with fail-fast load, fail-soft
-  start/stop/unload in reverse registration order) are imported from
-  `@gobing-ai/ts-infra/application`. The `runApplication` / `runNodeApplication` bootstrap
-  drives the plugin lifecycle natively via `plugins`/`pluginHost` options.
-- **Two-class loading (deferred).** The loader's fail-fast/fail-soft split by origin was part
-  of the deleted SDK. When plugins are re-added, `failFast` on the `Plugin` interface provides
-  the same mechanism: set `failFast: true` on critical plugins to abort bootstrap on failure.
-- **Built-ins are pre-registered, not special-cased.** ts-infra registers its own core services
-  (logger, telemetry, scheduler, user-callback) as internal built-in plugins on the PluginHost
-  lifecycle. Spur consumes the lifecycle; it does not re-plugin-ize core services.
-- **Trust ladder (deferred).** The four-tier model (`bundled` > `curated` > `local` >
-  `untrusted`) is removed with the SDK; re-addable as registration-time gating on the ts-infra
-  `Plugin` interface when plugins return.
-- **Harness registry (deferred — Phase 5d).** Tracked in task 0015 (status `Blocked`); requires
-  upstream `AiRunner` injection before reactivation.
-- **Explicit startup ordering.** When plugins are registered, `startAll()` runs before command
-  dispatch so primitives are available the moment any dependent code runs.
-- **Server route seam (removed).** `apps/server/src/plugins.ts` (`mountPluginRoutes`,
-  `collectPluginOpenApiPaths`, `ApiRegistry`) is deleted; no real consumer existed.
-- **Event seam (removed).** The Spur-side `EventRegistry` wrapping the typed `EventBus` was part
-  of the SDK; the `PluginHost`'s `events` field (a raw `EventBus<EventMap>`) is the direct seam
-  for plugins that need it.
+- Spur-side SDK, manifest discovery, capability registries, and the four-tier trust ladder —
+  removed with the SDK; re-addable on the ts-infra `Plugin` interface (`failFast: true` already
+  covers critical-plugin abort).
+- Server route seam (`apps/server/src/plugins.ts`) and the Spur `EventRegistry` — removed; the
+  `PluginHost`'s raw `EventBus` is the direct event seam.
+- Harness registry (Phase 5d) — blocked on upstream `AiRunner` shim injection; task 0015
+  (`Blocked`).
+
+## 12. Planning Layer (accepted design — ADR-020–023; not yet built)
+
+The task/feature domain migrated from `cc-agents/plugins/rd3`. This section records the mechanism
+and invariants the implementation must satisfy; per-item scope lives in
+`docs/plans/2026-06-10-rd3-migration-feature-list.md`, concrete command/schema shapes land in
+`04_DESIGN.md` as commands ship. The spec pipeline is a `plugins/sp` fat skill over these
+mechanisms (ADR-020/023), not a separate CLI noun.
+
+### 12.1 Markdown as the single source of truth
+
+- **Tasks** live in configured folders (e.g. `docs/tasks/`), **features** in
+  `docs/features/FT-<NNN>_<name>.md` — YAML frontmatter + structured markdown body, both
+  Zod-validated with a `schema_version` key. Parse-validate-serialize replaces all regex
+  read-modify-write.
+- **The DB holds only derived data** (lifecycle events, run links, caches) — mirroring ADR-008's
+  raw-stays-in-files principle. Deleting the DB loses no planning state.
+- **Generated artifacts** (`kanban.md`, `docs/features/INDEX.md`) are outputs of `refresh`
+  commands, never hand-edited, never inputs.
+- The task/feature domain is **Spur-local** (ADR-006 division: it is Spur's own domain glue, not a
+  reusable engine). The generic Gherkin-subset validator is the exception — it is upstreamed to
+  ts-libs.
+
+### 12.2 Write service & lifecycle (ADR-021/022)
+
+One write service in `packages/app` serves every transport; lifecycle transitions run through
+`spur workflow`:
+
+```
+spur task/feature <verb> ──┐
+                           ├──► write service (packages/app) ──► markdown file
+future server routes ──────┘         │
+                                     ├─► per-WBS lock + create-lock (one domain)
+                                     ├─► lifecycle = spur workflow definition
+                                     │     (config/workflows/*; guards = task check;
+                                     │      EventBus seam for extensions)
+                                     └─► transition → append `## History` + event
+```
+
+Invariants:
+
+1. No mutation path bypasses the write service — the legacy CLI/server dual-lock race is
+   structurally impossible (a consequence of ADR-021, not a policy).
+2. Status lifecycles are `spur workflow` definitions (ADR-022). The frontmatter `status` is the
+   single source of truth; engine persistence is derived and rehydratable from the files.
+3. Engine gaps for long-lived, externally-triggered lifecycles (pause/continue, HITL) are closed
+   upstream in `ts-dual-workflow-engine` — never re-implemented locally.
+4. Customization attaches via the engine's EventBus pub/sub seam (`on_transition`,
+   `on_guard_fail`, `on_complete`), not engine forks; SSE/board and (later) the scheduler are
+   subscribers on the same seam.
+
+### 12.3 BDD traceability chain
+
+```
+feature ## Acceptance Criteria (Gherkin / checklist)
+   ▲ validated by shared BDD validator
+   │
+   feature-id frontmatter (single edge — the entire integration surface)
+   │
+task ## Acceptance Criteria (subset coverage)
+   ▲ validated by `spur task check`: edge exists · AC covered · orphan warnings
+```
+
+- One shared BDD validator (Gherkin-subset parser + checklist parser + coverage check; AST aligned
+  with `@cucumber/gherkin` types, no runtime dependency on it) behind `task check`, `feature
+  check`, and pipeline output validation.
+- Section-Status-Matrix + per-section format rules are **config** (`./config`, ADR-015 pattern),
+  enforced warning-first; only the small core (AC format, Solution `file:line` citation, Review
+  P1–P4 table) hard-gates. Tightening follows compliance data, not aspiration.
+
+### 12.4 Boundaries
+
+- `apps/cli` task/feature commands stay transport wrappers (ADR-021) over `packages/app`
+  services.
+- Task DTOs for any future board cross the oRPC seam via `packages/contracts` (ADR-005) — domain
+  types never leak into contracts. The server/web shape itself is a separate design task
+  (ADR-021 consequence b).
+- `plugins/sp` centralizes agent-facing behavior in **skills** (Fat Skills — ADR-023); slash
+  commands and subagents are thin wrappers of skills. Skills delegate deterministic execution to
+  CLI verbs where they exist, but are not limited to CLI wrapping.
+- Cross-cutting needs reuse the owning ts-libs package (`ts-utils` output/errors, `ts-runtime`
+  FileSystem, `.spur/config.yaml` via ADR-017) — no parallel local re-implementations.
