@@ -1,0 +1,213 @@
+/**
+ * Planning-layer frontmatter schemas and canonical status enums.
+ *
+ * Authority: `docs/design/rd3-migration-design.md` §2.1 (task field table),
+ * §2.2 (feature field table), §2.3 (status enums + lifecycle graphs), plus the
+ * binding decisions DD-01 (lowercase canonical statuses with case/alias-tolerant
+ * input only), DD-02 (`profile` single key, `preset` collapsed), DD-03
+ * (`schema_version` literal `1`), DD-07 (snake_case keys, `feature_id`),
+ * DD-10 (no `folder`, no `description == name` default), DD-13 (`verifying`
+ * in `FeatureStatus`), DD-14 (feature ID regex `^[A-Z][1-9]*$`, no
+ * `parent_id` field).
+ *
+ * The exported schemas are the parse-validate-serialize SSOT for the
+ * planning layer (A18). Storage values are always lowercase canonical;
+ * legacy aliases are accepted on input only — never persisted.
+ */
+import { z } from 'zod';
+
+/** Canonical task statuses (lowercase). Lowercase-only on output. */
+export const TASK_STATUSES = ['backlog', 'todo', 'wip', 'testing', 'blocked', 'done', 'cancelled'] as const;
+
+/** Canonical feature statuses (lowercase). Lowercase-only on output. */
+export const FEATURE_STATUSES = ['backlog', 'active', 'verifying', 'blocked', 'done', 'cancelled'] as const;
+
+/** Type alias for the canonical task status vocabulary. */
+export type TaskStatus = (typeof TASK_STATUSES)[number];
+
+/** Type alias for the canonical feature status vocabulary. */
+export type FeatureStatus = (typeof FEATURE_STATUSES)[number];
+
+/** Priority scale shared by tasks and features. */
+export const PRIORITIES = ['P0', 'P1', 'P2', 'P3'] as const;
+
+/** Type alias for the canonical priority vocabulary. */
+export type Priority = (typeof PRIORITIES)[number];
+
+/** Orchestration profile enum (DD-02: `profile` is the single key). */
+export const PROFILES = [
+    'simple',
+    'standard',
+    'complex',
+    'research',
+    'refine',
+    'plan',
+    'unit',
+    'review',
+    'docs',
+] as const;
+
+/** Type alias for the canonical profile vocabulary. */
+export type Profile = (typeof PROFILES)[number];
+
+/** Task `type` enum — `task` is the default; `brainstorm` retained for corpus compat. */
+export const TASK_TYPES = ['task', 'brainstorm'] as const;
+
+/** Type alias for the canonical task `type` vocabulary. */
+export type TaskType = (typeof TASK_TYPES)[number];
+
+/**
+ * Feature ID regex per DD-14: position-encoding hierarchical letter+digit.
+ * Matches a single letter optionally followed by one or more digits
+ * (length encodes depth, ≤9 children per node).
+ */
+export const FEATURE_ID_PATTERN = /^[A-Z][1-9]*$/;
+
+/**
+ * Legacy alias map preserved as input-only normalization. Lowercase canonical
+ * outputs are always the resolved values; aliases never persist.
+ */
+const TASK_STATUS_ALIASES: Readonly<Record<string, TaskStatus>> = {
+    completed: 'done',
+    complete: 'done',
+    'in-progress': 'wip',
+    'in progress': 'wip',
+    in_progress: 'wip',
+    dropped: 'cancelled',
+    cancel: 'cancelled',
+    canceled: 'cancelled',
+    new: 'backlog',
+    pending: 'backlog',
+    blocked: 'blocked',
+    wip: 'wip',
+    testing: 'testing',
+    done: 'done',
+    cancelled: 'cancelled',
+    backlog: 'backlog',
+    todo: 'todo',
+};
+
+const FEATURE_STATUS_ALIASES: Readonly<Record<string, FeatureStatus>> = {
+    completed: 'done',
+    complete: 'done',
+    'in-progress': 'active',
+    'in progress': 'active',
+    in_progress: 'active',
+    dropped: 'cancelled',
+    cancel: 'cancelled',
+    canceled: 'cancelled',
+    new: 'backlog',
+    pending: 'backlog',
+    wip: 'active',
+    in_review: 'verifying',
+    'in-review': 'verifying',
+    review: 'verifying',
+    blocked: 'blocked',
+    done: 'done',
+    cancelled: 'cancelled',
+    backlog: 'backlog',
+    active: 'active',
+    verifying: 'verifying',
+};
+
+/**
+ * Normalize a raw task-status string (case-insensitive, alias-tolerant) to
+ * its lowercase canonical form. Throws on values outside the combined alias
+ * map so callers can surface the allowed set in the error.
+ */
+export function normalizeTaskStatus(raw: string): TaskStatus {
+    const key = raw.trim().toLowerCase();
+    const resolved = TASK_STATUS_ALIASES[key];
+    if (resolved === undefined) {
+        throw new Error(`Unknown task status: ${JSON.stringify(raw)} (allowed: ${TASK_STATUSES.join(', ')})`);
+    }
+    return resolved;
+}
+
+/**
+ * Normalize a raw feature-status string (case-insensitive, alias-tolerant) to
+ * its lowercase canonical form. Throws on values outside the combined alias
+ * map so callers can surface the allowed set in the error.
+ */
+export function normalizeFeatureStatus(raw: string): FeatureStatus {
+    const key = raw.trim().toLowerCase();
+    const resolved = FEATURE_STATUS_ALIASES[key];
+    if (resolved === undefined) {
+        throw new Error(`Unknown feature status: ${JSON.stringify(raw)} (allowed: ${FEATURE_STATUSES.join(', ')})`);
+    }
+    return resolved;
+}
+
+const statusEnum = (values: readonly [TaskStatus, ...TaskStatus[]]) =>
+    z.enum(values).transform((value) => value as TaskStatus);
+
+const featureStatusEnum = (values: readonly [FeatureStatus, ...FeatureStatus[]]) =>
+    z.enum(values).transform((value) => value as FeatureStatus);
+
+const isoDateString = z
+    .string()
+    .min(1)
+    .refine((value) => !Number.isNaN(Date.parse(value)), {
+        message: 'must be an ISO 8601 timestamp',
+    });
+
+const featureId = z
+    .string()
+    .regex(FEATURE_ID_PATTERN, {
+        message: 'feature id must match ^[A-Z][1-9]*$ (DD-14)',
+    })
+    .nullable()
+    .optional();
+
+const wbsString = z
+    .string()
+    .regex(/^\d{4}$/, { message: 'parent_wbs must be a 4-digit WBS string' })
+    .nullable()
+    .optional();
+
+/**
+ * Frontmatter schema for a task file. Mirrors the design field table in
+ * `rd3-migration-design.md` §2.1 exactly. No `impl_progress`/`folder`/`preset`
+ * keys (A17 strips them).
+ */
+export const taskFrontmatterSchema = z.object({
+    schema_version: z.literal(1),
+    name: z.string().min(1),
+    description: z.string().optional(),
+    status: statusEnum(TASK_STATUSES as unknown as [TaskStatus, ...TaskStatus[]]),
+    type: z
+        .enum(TASK_TYPES as unknown as [TaskType, ...TaskType[]])
+        .optional()
+        .default('task'),
+    profile: z.enum(PROFILES as unknown as [Profile, ...Profile[]]).optional(),
+    feature_id: featureId,
+    parent_wbs: wbsString,
+    priority: z.enum(PRIORITIES as unknown as [Priority, ...Priority[]]).optional(),
+    tags: z.array(z.string()).optional(),
+    dependencies: z.array(z.string()).optional(),
+    created_at: isoDateString,
+    updated_at: isoDateString,
+});
+
+/**
+ * Frontmatter schema for a feature file. Mirrors the design field table in
+ * `rd3-migration-design.md` §2.2 exactly. No `parent_id` field (DD-14).
+ */
+export const featureFrontmatterSchema = z.object({
+    schema_version: z.literal(1),
+    id: z.string().regex(FEATURE_ID_PATTERN, {
+        message: 'feature id must match ^[A-Z][1-9]*$ (DD-14)',
+    }),
+    name: z.string().min(1),
+    status: featureStatusEnum(FEATURE_STATUSES as unknown as [FeatureStatus, ...FeatureStatus[]]),
+    priority: z.enum(PRIORITIES as unknown as [Priority, ...Priority[]]),
+    tags: z.array(z.string()).optional(),
+    created_at: isoDateString,
+    updated_at: isoDateString,
+});
+
+/** Inferred TypeScript shape of a parsed task frontmatter. */
+export type TaskFrontmatter = z.infer<typeof taskFrontmatterSchema>;
+
+/** Inferred TypeScript shape of a parsed feature frontmatter. */
+export type FeatureFrontmatter = z.infer<typeof featureFrontmatterSchema>;

@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.1.0
+version: 1.2.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-06-12
+updated_at: 2026-06-13
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3]
@@ -391,7 +391,63 @@ shipped (`05 §9` tracks status).
 |------------|----------|---------------------------|
 | 7.1 `spur task` commands | Verbs, flags, exit codes — CRUD, WBS, `--section --from-file`, list/kanban, check, batch-create, resolve, migrate | triage doc Group A |
 | 7.2 `spur feature` commands | Verbs/flags — CRUD, INDEX refresh, task-links, check, goal derivation | triage doc Group B + the feature-file design spec (`cc-agents/docs/plans/2026-06-10-rd3-tasks-operator-feedback.md`) |
-| 7.3 Frontmatter schemas | Zod field tables for task + feature files incl. `schema_version`, `parent_wbs`, `feature-id`, status enums | same design spec + triage A18/X02 |
+| 7.3 Frontmatter schemas | Zod field tables for task + feature files incl. `schema_version`, `parent_wbs`, `feature-id`, status enums | same design spec + triage A18/X02 | `packages/domain/src/planning/schema.ts`; `taskFrontmatterSchema`, `featureFrontmatterSchema`, `TaskStatus`, `FeatureStatus` (DD-01/02/03/07/10/13/14). |
 | 7.4 Section-Status-Matrix + format rules | Config file shapes under `./config` (ADR-015); warning-first enforcement core | triage A13/A14; `03 §12.3` |
 | 7.5 Lifecycle workflow definitions | `config/workflows/` task/feature lifecycle YAML shapes + guard wiring | ADR-022; `03 §12.2` |
 | 7.6 Task DTOs | oRPC contract shapes for the board | server/web design task (ADR-021.b) |
+
+### 7.3.1 Task frontmatter — `taskFrontmatterSchema`
+
+Mirrors `docs/design/rd3-migration-design.md` §2.1. Exported by
+`@gobing-ai/spur-domain` from `packages/domain/src/planning/schema.ts`.
+
+| Field           | Zod type | Req | Notes |
+|-----------------|----------|-----|-------|
+| `schema_version`| `z.literal(1)` | ✔ | Strictness gate; future evolution (DD-03). |
+| `name`          | `z.string().min(1)` | ✔ | Title; used in slug. |
+| `description`   | `z.string().optional()` | — | No `description == name` default (DD-10). |
+| `status`        | `z.enum(TASK_STATUSES)` (transform → lowercase) | ✔ | See §7.3.3; aliases accepted on input only. |
+| `type`          | `z.enum(['task','brainstorm']).default('task')` | — | `brainstorm` retained for corpus compat. |
+| `profile`       | `z.enum(PROFILES).optional()` | — | Single key (DD-02); legacy `preset` collapsed. |
+| `feature_id`    | `z.string().regex(/^[A-Z][1-9]*$/).nullable().optional()` | — | Single traceability edge (DD-07). |
+| `parent_wbs`    | `z.string().regex(/^\d{4}$/).nullable().optional()` | — | Single sub-task convention (X02). |
+| `priority`      | `z.enum(['P0','P1','P2','P3']).optional()` | — | Aligned with the feature priority scale. |
+| `tags`          | `z.array(z.string()).optional()` | — | Free-form filtering. |
+| `dependencies`  | `z.array(z.string()).optional()` | — | Soft WBS refs; `check` warns on dangling. |
+| `created_at`    | ISO 8601 string | ✔ | Write-service-owned. |
+| `updated_at`    | ISO 8601 string | ✔ | Written **only** by the write service. |
+
+Removed from the legacy schema (A17): `impl_progress` (frozen-state problem), `folder` (derivable from
+file location), `preset` (collapsed into `profile`).
+
+### 7.3.2 Feature frontmatter — `featureFrontmatterSchema`
+
+Mirrors `docs/design/rd3-migration-design.md` §2.2. No `parent_id` field (DD-14): the parent is derived
+by dropping the last character of `id`.
+
+| Field           | Zod type | Req | Notes |
+|-----------------|----------|-----|-------|
+| `schema_version`| `z.literal(1)` | ✔ | Same evolution mechanism as tasks. |
+| `id`            | `z.string().regex(/^[A-Z][1-9]*$/)` | ✔ | Position-encoding hierarchical ID (DD-14). |
+| `name`          | `z.string().min(1)` | ✔ | |
+| `status`        | `z.enum(FEATURE_STATUSES)` (transform → lowercase) | ✔ | See §7.3.3; `verifying` is canonical. |
+| `priority`      | `z.enum(['P0','P1','P2','P3'])` | ✔ | The P0 feature in `active`/`verifying` is the project goal (B09). |
+| `tags`          | `z.array(z.string()).optional()` | — | |
+| `created_at`    | ISO 8601 string | ✔ | Write-service-owned. |
+| `updated_at`    | ISO 8601 string | ✔ | Write-service-owned. |
+
+### 7.3.3 Canonical status vocabularies
+
+Lowercase canonical values (DD-01); display layers capitalize. Input is case-insensitive and
+alias-tolerant. The legacy alias map is preserved as input normalization — never as storage.
+
+| Domain    | Canonical values |
+|-----------|------------------|
+| `TaskStatus`    | `backlog · todo · wip · testing · blocked · done · cancelled` |
+| `FeatureStatus` | `backlog · active · verifying · blocked · done · cancelled` (DD-13) |
+
+Input normalization (excerpt, full map lives in `normalizeTaskStatus` / `normalizeFeatureStatus`):
+`completed → done`, `in-progress / in_progress / in progress → wip (task) or active (feature)`,
+`dropped / canceled / cancel → cancelled`, `review / in-review / in_review → verifying` (feature only),
+`pending / new → backlog`, mixed case accepted via `.trim().toLowerCase()`. Storage is always the
+lowercase canonical form; aliases never persist.
