@@ -9,6 +9,7 @@ export const runsTable = defineTable('runs', {
     mode: text('mode'),
     status: text('status').notNull(),
     agent: text('agent'),
+    externalKey: text('external_key'),
     startedAt: integer('started_at').notNull(),
     completedAt: integer('completed_at'),
     metadataJson: text('metadata_json').notNull().default('{}'),
