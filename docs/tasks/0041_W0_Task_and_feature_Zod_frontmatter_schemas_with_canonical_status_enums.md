@@ -1,9 +1,9 @@
 ---
 name: "W0: Task and feature Zod frontmatter schemas with canonical status enums"
 description: "W0: Task and feature Zod frontmatter schemas with canonical status enums"
-status: WIP
+status: Done
 created_at: 2026-06-13T01:08:18.979Z
-updated_at: 2026-06-13T16:51:36.391Z
+updated_at: 2026-06-13T17:01:39.395Z
 folder: docs/tasks
 type: task
 feature-id: F1
@@ -26,10 +26,10 @@ Design: docs/design/rd3-migration-design.md §2.1–2.3, DD-01/02/03/07/10. The 
 
 ### Requirements
 
-R1. taskFrontmatterSchema + featureFrontmatterSchema in packages/domain per the design field tables (schema_version literal 1, feature_id, parent_wbs; no impl_progress/folder/preset).
-R2. Lowercase TaskStatus/FeatureStatus unions (incl. feature `verifying`) with case/alias-tolerant input normalization (legacy alias map preserved as input-only).
-R3. Round-trip property tests: parse→serialize lossless; per-file coverage ≥90%.
-R4. Same-commit 04_DESIGN §7.3 sync.
+R1. taskFrontmatterSchema + featureFrontmatterSchema in packages/domain per the design field tables (schema_version literal 1, feature_id, parent_wbs; no impl_progress/folder/preset). → **MET** | Evidence: `packages/domain/src/planning/schema.ts:173 taskFrontmatterSchema`, `:196 featureFrontmatterSchema`; `schema_version: z.literal(1)` (`:174`,`:197`); `feature_id` (`:183`), `parent_wbs` (`:184`); no impl_progress/folder/preset keys. Test `tests/planning-schema.test.ts:41`.
+R2. Lowercase TaskStatus/FeatureStatus unions (incl. feature `verifying`) with case/alias-tolerant input normalization (legacy alias map preserved as input-only). → **MET** | Evidence: `TASK_STATUSES`/`FEATURE_STATUSES` (`schema.ts:20`,`:23`) lowercase incl. `verifying`; `normalizeTaskStatus`/`normalizeFeatureStatus` (`:118`,`:132`) trim+lowercase+alias map (`:70`,`:90`); aliases absent from output enums. Tests `:146`,`:172`.
+R3. Round-trip property tests: parse→serialize lossless; per-file coverage ≥90%. → **MET** | Evidence: `tests/planning-schema.test.ts:195 'round-trip property'` (task + feature lossless); measured per-file coverage 100% funcs / 100% lines (≥90%).
+R4. Same-commit 04_DESIGN §7.3 sync. → **MET** | Evidence: `docs/04_DESIGN.md:394-439` §7.3 field tables, committed in `e9bf3f5` with the schema source.
 
 
 ### Q&A
@@ -75,13 +75,19 @@ values are always lowercase canon; aliases never persist.
 
 Stage 4 SECU review of the W0 frontmatter schema slice.
 
-| Severity | File | Finding | Recommendation |
-|----------|------|---------|----------------|
-| P3 | `packages/domain/src/planning/schema.ts:142,145` | The `z.enum(...).transform((value) => value as TaskStatus)` wrapper is a redundant cast — zod 4 already narrows the inferred type to the literal union. | Leave as-is: the explicit type alias keeps the public API stable and is exercised by the round-trip test. No change required. |
+**Re-verification (dev-verify --force --fix all):** 2026-06-13 — Phase 7 SECU + Phase 8 traceability.
 
-**Verdict:** PASS.
+| Severity | File | Finding | Resolution |
+|----------|------|---------|------------|
+| P3 | `packages/domain/src/planning/schema.ts:141-145` | `z.enum(...).transform((value) => value as TaskStatus)` helpers (`statusEnum`/`featureStatusEnum`) were a redundant cast — `z.infer` of the plain enum is type-identical (verified: `AssertEq<A,B>=true` compiles, tsc clean, runtime parse identical). | **FIXED** — removed the two transform helpers; call sites use `z.enum(...)` directly. Inferred type and parse behavior unchanged; 27/27 tests still pass, coverage 100%/100%. |
+| P4 | `packages/domain/src/planning/schema.ts:147-152` | `isoDateString` validates via `Date.parse`, which is lenient (accepts `"2026"`, RFC-2822). The field tables specify ISO 8601. | **SKIPPED (intentional)** — DD-06 ships permissive; corpus timestamps are machine-generated. Tighten only if `check --json` telemetry shows malformed dates. Not a defect. |
 
-Evidence: 27/27 new unit tests pass; domain `bun run typecheck` clean; root `bun run lint` clean across all 7 workspaces; per-file coverage on `src/planning/schema.ts` is 100% (lines + funcs), exceeding the ≥90% requirement; `04_DESIGN.md §7.3` synced in the same commit with the Zod field tables.
+**Verdict:** PASS — no P1/P2 findings; all 4 requirements MET; gate clean; coverage 100%/100%.
+
+Evidence: `bun test tests/planning-schema.test.ts` → 27 pass / 0 fail; per-file coverage on `src/planning/schema.ts` 100% funcs / 100% lines (≥90% target); root `bun run lint` (biome + typecheck across all 7 workspaces) clean.
+
+**Fix-pass 2026-06-13:** 1 fixed (P3 dead-code removal), 0 failed, 1 skipped (P4 DD-06 design decision). Gate re-run green after the fix.
+
 
 ### Testing
 
