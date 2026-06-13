@@ -224,6 +224,54 @@ describe('RuleService.evaluate()', () => {
         expect(output.messages.at(-1)).toBe('1 error across 1 rule.');
     });
 
+    test('verbose renders findings inline under the failing rule, not deferred to the end', async () => {
+        const cwd = await createTempProject();
+        const output = createCapturedOutput();
+        const file = join(cwd, '.spur', 'rules', 'two-rules.yaml');
+        await mkdir(dirname(file), { recursive: true });
+        await writeFile(
+            file,
+            [
+                'rules:',
+                '  - id: first-fail',
+                '    description: fails with a finding',
+                '    severity: warning',
+                '    evaluator:',
+                '      type: path',
+                '      config:',
+                '        paths:',
+                '          - does-not-exist.txt',
+                '  - id: second-pass',
+                '    description: passes cleanly',
+                '    evaluator:',
+                '      type: path',
+                '      config:',
+                '        paths:',
+                '          - package.json',
+            ].join('\n'),
+        );
+
+        await new RuleService(makeContext(cwd, output)).evaluate({
+            preset: 'recommended-pre-check',
+            failOn: 'error',
+            file,
+            json: false,
+            verbose: true,
+            color: noColor(),
+        });
+
+        const progress = output.errors.join('\n');
+        const failIdx = progress.indexOf('first-fail');
+        const findingIdx = progress.indexOf('Required path missing');
+        const secondIdx = progress.indexOf('second-pass');
+
+        // The finding detail must appear AFTER the first-fail progress line
+        // and BEFORE the second-pass progress line — not deferred to the end.
+        expect(failIdx).toBeGreaterThan(-1);
+        expect(findingIdx).toBeGreaterThan(failIdx);
+        expect(secondIdx).toBeGreaterThan(findingIdx);
+    });
+
     test('verbose reports a misconfigured rule distinctly from a violation', async () => {
         const cwd = await createTempProject();
         const output = createCapturedOutput();
