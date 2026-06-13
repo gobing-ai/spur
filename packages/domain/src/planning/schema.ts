@@ -138,12 +138,6 @@ export function normalizeFeatureStatus(raw: string): FeatureStatus {
     return resolved;
 }
 
-const statusEnum = (values: readonly [TaskStatus, ...TaskStatus[]]) =>
-    z.enum(values).transform((value) => value as TaskStatus);
-
-const featureStatusEnum = (values: readonly [FeatureStatus, ...FeatureStatus[]]) =>
-    z.enum(values).transform((value) => value as FeatureStatus);
-
 const isoDateString = z
     .string()
     .min(1)
@@ -174,7 +168,7 @@ export const taskFrontmatterSchema = z.object({
     schema_version: z.literal(1),
     name: z.string().min(1),
     description: z.string().optional(),
-    status: statusEnum(TASK_STATUSES as unknown as [TaskStatus, ...TaskStatus[]]),
+    status: z.enum(TASK_STATUSES as unknown as [TaskStatus, ...TaskStatus[]]),
     type: z
         .enum(TASK_TYPES as unknown as [TaskType, ...TaskType[]])
         .optional()
@@ -199,7 +193,7 @@ export const featureFrontmatterSchema = z.object({
         message: 'feature id must match ^[A-Z][1-9]*$ (DD-14)',
     }),
     name: z.string().min(1),
-    status: featureStatusEnum(FEATURE_STATUSES as unknown as [FeatureStatus, ...FeatureStatus[]]),
+    status: z.enum(FEATURE_STATUSES as unknown as [FeatureStatus, ...FeatureStatus[]]),
     priority: z.enum(PRIORITIES as unknown as [Priority, ...Priority[]]),
     tags: z.array(z.string()).optional(),
     created_at: isoDateString,
