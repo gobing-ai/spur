@@ -462,11 +462,6 @@ export class RuleService {
         const enabledCount = enabledRules.length;
         const totalCount = rules.length;
 
-        // Track evaluation order so we can emit detail lines for failing rules
-        // after the aggregate result is available.
-        const evalOrder: string[] = [];
-        const pendingDetails = new Map<string, number>(); // ruleId → durationMs
-
         const events = new EventBus<RuleEngineEvents>();
         const engine = new RuleEngine({ ...engineOptions, events });
 
@@ -484,7 +479,6 @@ export class RuleService {
         }
 
         events.on('rule.eval.start', ({ ruleId, index, total }) => {
-            evalOrder.push(ruleId);
             // Shift index past the disabled rules so counter is continuous across all rules.
             const shifted = index + disabledRules.length;
             const counter = color.dim(`[${shifted}/${total + disabledRules.length}]`);
@@ -493,13 +487,18 @@ export class RuleService {
             this.context.output.error(`${color.dim('▶')} ${counter} ${ruleId} ${type}`);
         });
 
-        events.on('rule.eval.done', ({ ruleId, findings, durationMs }) => {
+        events.on('rule.eval.done', ({ findings, durationMs, details }) => {
             const elapsed = (durationMs / 1000).toFixed(2);
             if (findings === 0) {
                 this.context.output.error(`  ${color.green('✓ passed')} - ${elapsed}s`);
             } else {
-                // Outcome requires severity breakdown from aggregate result — defer.
-                pendingDetails.set(ruleId, durationMs);
+                // `details` carries the actual finding objects, so outcome + detail
+                // lines render inline under the rule's progress line — not deferred
+                // to a batch after all rules finish.
+                this.context.output.error(`  ${this.verboseOutcome(details, color)} - ${elapsed}s`);
+                for (const line of this.verboseFindingLines(details, color)) {
+                    this.context.output.error(line);
+                }
             }
         });
 
@@ -511,17 +510,6 @@ export class RuleService {
             fixMode !== 'none'
                 ? await engine.evaluateWithFixes([...rules], this.context.cwd, fixMode, stopOnFirst)
                 : await engine.evaluate([...rules], this.context.cwd, stopOnFirst);
-
-        // Emit outcome + detail lines for rules that had findings (deferred from rule.eval.done).
-        for (const ruleId of evalOrder) {
-            if (!pendingDetails.has(ruleId)) continue;
-            const ruleFindings = result.findings.filter((f) => f.ruleId === ruleId);
-            const elapsed = ((pendingDetails.get(ruleId) ?? 0) / 1000).toFixed(2);
-            this.context.output.error(`  ${this.verboseOutcome(ruleFindings, color)} - ${elapsed}s`);
-            for (const line of this.verboseFindingLines(ruleFindings, color)) {
-                this.context.output.error(line);
-            }
-        }
 
         // When stopOnFirst short-circuits, emit the stop message.
         if (
