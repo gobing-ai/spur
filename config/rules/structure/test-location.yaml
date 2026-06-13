@@ -38,6 +38,7 @@ rules:
       - "**/*.d.ts"
       - "**/types.ts"
       - "**/schema/**"
+      - "**/schema.ts"
       - "**/migrations.ts"
       - "**/db.ts"
       - "**/node_modules/**"
