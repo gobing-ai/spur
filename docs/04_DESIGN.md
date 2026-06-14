@@ -396,8 +396,33 @@ shipped (`05 §9` tracks status).
 | 7.5 Lifecycle workflow definitions | `config/workflows/` task/feature lifecycle YAML shapes + guard wiring | ADR-022; `03 §12.2` |
 | 7.6 Task DTOs | oRPC contract shapes for the board | server/web design task (ADR-021.b) |
 
-### 7.3.1 Task frontmatter — `taskFrontmatterSchema`
+### 7.1 `spur task` commands
 
+Core CRUD and utility verbs. Every subcommand supports `--json` (ADR-010 invariant).
+Source: delivery §1.1, design §10.
+
+| Command | Flags | Exit | Notes |
+|---------|-------|------|-------|
+| `spur task` | — (noun help) | 0 | Lists subcommands if no subcommand given. |
+| `spur task create <title>` | `--feature <id>` `--parent <wbs>` `--folder <path>` `--json` | 0/1 | Race-safe WBS allocation; `--feature` enables B09 Goal→Background derivation. |
+| `spur task show <wbs>` | `--folder <path>` `--json` | 0/1 | Frontmatter is a top-level field in `--json` output. |
+| `spur task update <wbs> <status>` | `--section <name> --from-file <path>` `--folder <path>` `--json` | 0/1/2 | Status transition runs lifecycle guard; `--section` reads body from file. |
+| `spur task list` | `--status <s>` `--phase <p>` `--parent <wbs>` `--folder <path>` `--json` | 0/1 | `--phase` is a legacy alias for `--status`. |
+| `spur task resolve <file-path>` | `--folder <path>` `--json` | 0/1 | Maps a path to owning task (WBS + file). Returns 1 if no match. |
+
+**Exit codes:** 0 success, 1 error, 2 invalid usage. Follows the design §10 `api-response` envelope
+for `--json` output (`{ ok, data? }`).
+
+**Future verbs** (stub entries, implemented in later waves):
+
+| Command | Status |
+|---------|--------|
+| `spur task refresh` | Reserved (A06) — regenerate `kanban.md`. |
+| `spur task check [<wbs>]` | Reserved (A07/A13/A14/C04) — Section-Status-Matrix validation. |
+| `spur task batch-create --file <json>` | Reserved (A08/C03) — LLM decomposition ingest. |
+| `spur task migrate` | Reserved (A17) — one-time corpus normalization pass. |
+
+### 7.3.1 Task frontmatter — `taskFrontmatterSchema`
 Mirrors `docs/design/rd3-migration-design.md` §2.1. Exported by
 `@gobing-ai/spur-domain` from `packages/domain/src/planning/schema.ts`.
 
