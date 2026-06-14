@@ -409,6 +409,7 @@ Source: delivery §1.1, design §10.
 | `spur task update <wbs> <status>` | `--section <name> --from-file <path>` `--folder <path>` `--json` | 0/1/2 | Status transition runs lifecycle guard; `--section` reads body from file. |
 | `spur task list` | `--status <s>` `--phase <p>` `--parent <wbs>` `--folder <path>` `--json` | 0/1 | `--phase` is a legacy alias for `--status`. |
 | `spur task resolve <file-path>` | `--folder <path>` `--json` | 0/1 | Maps a path to owning task (WBS + file). Returns 1 if no match. |
+| `spur task check [<wbs>]` | `--strict` `--folder <path>` `--json` | 0/1 | Four-layer validation (§3). Validates all tasks when `<wbs>` omitted; `--strict` elevates warnings to failures. Matrix loaded from `config/tasks/section-matrix.yaml`. |
 
 **Exit codes:** 0 success, 1 error, 2 invalid usage. Follows the design §10 `api-response` envelope
 for `--json` output (`{ ok, data? }`).
@@ -418,7 +419,6 @@ for `--json` output (`{ ok, data? }`).
 | Command | Status |
 |---------|--------|
 | `spur task refresh` | Reserved (A06) — regenerate `kanban.md`. |
-| `spur task check [<wbs>]` | Reserved (A07/A13/A14/C04) — Section-Status-Matrix validation. |
 | `spur task batch-create --file <json>` | Reserved (A08/C03) — LLM decomposition ingest. |
 | `spur task migrate` | Reserved (A17) — one-time corpus normalization pass. |
 
