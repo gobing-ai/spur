@@ -44,7 +44,7 @@ export function createCliContext(options: {
 }): CliContext {
     const cwd = resolve(options.cwd ?? process.cwd());
     const env = options.env ?? process.env;
-    const fs = createNodeFileSystem();
+    const fs = createNodeFileSystem(cwd);
     setFileSystem(new NodeFileSystem());
 
     // When runNodeApplication injects an eager DB adapter, use it directly (R4).
