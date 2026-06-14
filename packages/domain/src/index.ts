@@ -10,5 +10,6 @@ export {
     INBOX_MESSAGES_SCHEMA_SQL,
     loadSqlMigrations,
 } from './migrations';
+export * from './planning/markdown-document';
 export * from './planning/schema';
 export { DOMAIN_SCHEMA_SQL } from './schema';
