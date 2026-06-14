@@ -12,6 +12,7 @@ import { registerMessageCommand } from './commands/message';
 import { registerMigrateCommand } from './commands/migrate';
 import { registerRuleCommand } from './commands/rule';
 import { registerStatusCommand } from './commands/status';
+import { registerTaskCommand } from './commands/task';
 import { registerTeamCommand } from './commands/team';
 import { registerWorkflowCommand } from './commands/workflow';
 import { CLI_CONFIG } from './config';
@@ -21,7 +22,6 @@ import { type SpurAppConfig, SpurAppConfigSchema } from './config/schema';
 import { createCliContext, createMigratedDbAdapter } from './context';
 import { errorMessage } from './errors';
 import { type CommandOutput, consoleOutput } from './output';
-/** Options for programmatic CLI execution in tests. */
 export interface MainOptions {
     cwd?: string;
     env?: Record<string, string | undefined>;
@@ -118,6 +118,7 @@ async function runCommandDispatch(
     registerRuleCommand(program, context);
     registerStatusCommand(program, context);
     registerTeamCommand(program, context);
+    registerTaskCommand(program, context);
     registerWorkflowCommand(program, context);
 
     try {
