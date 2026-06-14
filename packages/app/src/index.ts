@@ -56,6 +56,8 @@ export {
     type RuleValidateServiceResult as RuleValidateResult,
     type RuleValidateServiceResult,
 } from './services/rule-service';
+export type { TaskServiceContext, TaskShowResult, TaskSummary } from './services/task-service';
+export { TaskService } from './services/task-service';
 export type {
     AgentSpecInput,
     InboxEntry,
