@@ -451,3 +451,32 @@ Input normalization (excerpt, full map lives in `normalizeTaskStatus` / `normali
 `dropped / canceled / cancel → cancelled`, `review / in-review / in_review → verifying` (feature only),
 `pending / new → backlog`, mixed case accepted via `.trim().toLowerCase()`. Storage is always the
 lowercase canonical form; aliases never persist.
+
+
+### 7.5 Lifecycle workflow definitions
+
+Source: `config/workflows/task-lifecycle.yaml`, `config/workflows/feature-lifecycle.yaml`.
+Authority: ADR-022 (lifecycles are engine configuration — no local FSM); design §2.3 (graphs +
+guard placements), §5.1 (skeleton). Both are `kind: state-machine` definitions validated against
+the engine schema shipped by the CLI, referenced as
+`@gobing-ai/spur/schemas/state-machine-workflow.schema.json` (the schema file lives at
+`apps/cli/schemas/state-machine-workflow.schema.json` and is exported via the package's
+`./schemas/*` map).
+
+| File | States (§2.3) | Initial | Terminal | Guards |
+|------|---------------|---------|----------|--------|
+| `task-lifecycle.yaml` | `backlog · todo · wip · testing · blocked · done · cancelled` | `backlog` | `[cancelled]` | `wip→testing`: `spur task check <wbs>`; `testing→done`: `spur task check <wbs> --strict-core` |
+| `feature-lifecycle.yaml` | `backlog · active · verifying · blocked · done · cancelled` (DD-13) | `backlog` | `[cancelled]` | `active→verifying`: `spur feature check <id>`; `verifying→done`: `spur feature check <id> --strict` |
+
+Guard commands reference the check verbs (tasks: 0051, features: 0057) — structural validation
+passes today, behavioral wiring activates as the verbs ship. Unconditional transitions use the
+engine's `always` guard (externally-driven via `requestTransition`, not auto-advance). `done` is
+re-enterable (reopen, warned); `cancelled` is truly terminal (no outgoing transitions).
+
+**Drift prevention:** `packages/domain/tests/planning/lifecycle-drift.test.ts` parses both YAMLs
+and asserts state sets == the `TASK_STATUSES` / `FEATURE_STATUSES` unions from `schema.ts`. The
+YAML files and the 0041 enums can never drift silently.
+
+Validate: `spur workflow validate config/workflows/task-lifecycle.yaml` — full JSON-Schema
+validation resolves the `@gobing-ai/spur` workspace package and passes (no `--no-schema`
+needed). `feature-dev.yaml` uses the same resolvable ref.
