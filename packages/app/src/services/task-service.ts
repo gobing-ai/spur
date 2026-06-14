@@ -11,6 +11,7 @@ import type { EntityRef, PlanningWriteService, WriteResult } from './planning-wr
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
+/** Dependencies injected into TaskService. */
 export interface TaskServiceContext {
     fs: FileSystem;
     writeService: PlanningWriteService;
@@ -32,13 +33,14 @@ export interface TaskSummary {
     frontmatter: Record<string, unknown>;
 }
 
+/** Show result: task summary + full markdown content. */
 export interface TaskShowResult extends TaskSummary {
     /** The full markdown content. */
     content: string;
 }
-
 // ─── TaskService ────────────────────────────────────────────────────────
 
+/** Core task verbs over PlanningWriteService and direct corpus reads. */
 export class TaskService {
     private readonly ctx: TaskServiceContext;
     private readonly writeService: PlanningWriteService;
@@ -80,12 +82,13 @@ export class TaskService {
         }
 
         // Build content from canonical template
+        const now = new Date().toISOString();
         const frontmatter = [
             'schema_version: 1',
             `name: "${params.title}"`,
             `status: ${params.status ?? 'backlog'}`,
-            `created_at: ${new Date().toISOString()}`,
-            `updated_at: ${new Date().toISOString()}`,
+            `created_at: ${now}`,
+            `updated_at: ${now}`,
             params.featureId !== undefined ? `feature_id: ${params.featureId}` : null,
             params.parentWbs !== undefined ? `parent_wbs: "${params.parentWbs}"` : null,
         ]
