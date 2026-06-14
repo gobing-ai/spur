@@ -22,6 +22,7 @@ import { type SpurAppConfig, SpurAppConfigSchema } from './config/schema';
 import { createCliContext, createMigratedDbAdapter } from './context';
 import { errorMessage } from './errors';
 import { type CommandOutput, consoleOutput } from './output';
+/** Options for programmatic CLI execution in tests. */
 export interface MainOptions {
     cwd?: string;
     env?: Record<string, string | undefined>;
