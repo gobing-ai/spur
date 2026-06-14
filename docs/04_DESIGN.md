@@ -530,10 +530,16 @@ the engine schema shipped by the CLI, referenced as
 | `task-lifecycle.yaml` | `backlog · todo · wip · testing · blocked · done · cancelled` | `backlog` | `[cancelled]` | `wip→testing`: `spur task check <wbs>`; `testing→done`: `spur task check <wbs> --strict-core` |
 | `feature-lifecycle.yaml` | `backlog · active · verifying · blocked · done · cancelled` (DD-13) | `backlog` | `[cancelled]` | `active→verifying`: `spur feature check <id>`; `verifying→done`: `spur feature check <id> --strict` |
 
-Guard commands reference the check verbs (tasks: 0051, features: 0057) — structural validation
-passes today, behavioral wiring activates as the verbs ship. Unconditional transitions use the
-engine's `always` guard (externally-driven via `requestTransition`, not auto-advance). `done` is
-re-enterable (reopen, warned); `cancelled` is truly terminal (no outgoing transitions).
+Guard commands reference the check verbs (tasks: 0051/0057). The engine integration is **live**:
+`spur task update <wbs> <status>` (0055) and `spur feature update <id> <status>` (0059) drive these
+graphs through the dual-workflow engine via `LifecycleAdapter` / `FeatureLifecycleAdapter`
+(create-or-attach a durable run keyed `task:<wbs>` / `feature:<id>`, file-wins re-seed per DD-04,
+then `requestTransition` — a denied guard aborts the write with its report). The feature
+`active→verifying` guard is non-blocking (warns when linked tasks aren't all done/cancelled, DD-13);
+`verifying→done` is blocking (`feature check --strict`); `verifying→active` is rework (mandatory
+History entry). Unconditional transitions use the engine's `always` guard (externally-driven via
+`requestTransition`, not auto-advance). `done` is re-enterable (reopen, warned); `cancelled` is
+truly terminal (no outgoing transitions).
 
 **Drift prevention:** `packages/domain/tests/planning/lifecycle-drift.test.ts` parses both YAMLs
 and asserts state sets == the `TASK_STATUSES` / `FEATURE_STATUSES` unions from `schema.ts`. The

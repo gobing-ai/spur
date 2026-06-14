@@ -153,7 +153,7 @@ export class FeatureCheckService {
         }
 
         // ── L4: Traceability — incoming feature_id edges + orphan scenarios ──
-        await this.runL4(doc, featureId, options?.tasksDir, findings);
+        await this.runL4(doc, featureId, status, options?.tasksDir, findings);
 
         return this.buildResult(featureId, status, findings, strict);
     }
@@ -424,6 +424,7 @@ export class FeatureCheckService {
     private async runL4(
         doc: MarkdownDocument,
         featureId: string,
+        status: string,
         tasksDir: string | undefined,
         findings: CheckFeatureFindings[],
     ): Promise<void> {
@@ -433,6 +434,7 @@ export class FeatureCheckService {
         // feature's "edges" are the tasks pointing at it. Verify those tasks
         // resolve (file exists + parses) and count them for orphan-scenario detection.
         let linkedTasks = 0;
+        const incompleteTasks: string[] = [];
         try {
             const entries = await this.fs.readDir(tasksDir);
             for (const entry of entries) {
@@ -442,7 +444,12 @@ export class FeatureCheckService {
                     const taskDoc = MarkdownDocument.parse(raw, 'task');
                     const tfm = taskDoc.frontmatterData ?? {};
                     const tfid = (tfm.feature_id as string | undefined) ?? (tfm['feature-id'] as string | undefined);
-                    if (tfid === featureId) linkedTasks += 1;
+                    if (tfid !== featureId) continue;
+                    linkedTasks += 1;
+                    const tStatus = (tfm.status as string | undefined) ?? 'backlog';
+                    if (tStatus !== 'done' && tStatus !== 'cancelled') {
+                        incompleteTasks.push(entry.match(/^(\d{4})_/)?.[1] ?? entry);
+                    }
                 } catch {
                     // A task that references this feature but fails to parse is a
                     // dangling edge — surface it as a traceability warning.
@@ -469,6 +476,19 @@ export class FeatureCheckService {
                 severity: 'warning',
                 section: 'Acceptance Criteria',
                 message: `Feature "${featureId}" has acceptance scenarios but no linked task (orphan scenarios)`,
+            });
+        }
+
+        // DD-13 verifying-readiness: a feature in (or entering) `verifying` should
+        // have all its linked tasks done/cancelled. This is a WARNING (non-blocking)
+        // — it surfaces through the `active→verifying` guard (`spur feature check`,
+        // exit 0 on warnings) so the operator is warned but not stopped (R2/0059).
+        if (status === 'verifying' && incompleteTasks.length > 0) {
+            findings.push({
+                layer: 'L4',
+                severity: 'warning',
+                section: '',
+                message: `Feature "${featureId}" is verifying but ${incompleteTasks.length} linked task(s) are not done/cancelled: ${incompleteTasks.join(', ')}`,
             });
         }
     }

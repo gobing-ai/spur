@@ -1,5 +1,14 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
-import { FeatureCheckService, FeatureService, PlanningWriteService } from '@gobing-ai/spur-app';
+import {
+    FeatureCheckService,
+    FeatureLifecycleAdapter,
+    FeatureService,
+    PlanningWriteService,
+} from '@gobing-ai/spur-app';
+import { bundledConfigRoot } from '@gobing-ai/spur-config';
+import { TaskRunLinkDao } from '@gobing-ai/spur-domain';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
 
@@ -219,6 +228,30 @@ function write(context: CliContext, json: boolean | undefined, result: unknown, 
 function makeService(context: CliContext, folderOverride?: string): FeatureService {
     const featuresDir = folderOverride ?? context.fs.resolve('docs', 'features');
     const tasksDir = context.fs.resolve('docs', 'tasks');
-    const writeService = new PlanningWriteService({ fs: context.fs });
+    const lifecycle = makeFeatureLifecycleAdapter(context);
+    const writeService = new PlanningWriteService({
+        fs: context.fs,
+        ...(lifecycle ? { lifecycle } : {}),
+    });
     return new FeatureService({ fs: context.fs, writeService, featuresDir, tasksDir });
+}
+
+/**
+ * Build the engine-backed feature lifecycle port (0059). Status transitions then
+ * go through the `feature-lifecycle` state-machine with real guard enforcement
+ * (`spur feature check` / `--strict`) and file-wins rehydration (DD-04). Returns
+ * `undefined` when the bundled workflow YAML is unreachable (e.g. a `--compile`
+ * single binary) — `PlanningWriteService` then falls back to the schema-only port.
+ */
+function makeFeatureLifecycleAdapter(context: CliContext): FeatureLifecycleAdapter | undefined {
+    const root = bundledConfigRoot();
+    if (root === null) return undefined;
+    const workflowPath = join(root, 'workflows', 'feature-lifecycle.yaml');
+    if (!existsSync(workflowPath)) return undefined;
+    return new FeatureLifecycleAdapter({
+        getDb: () => context.getDb(),
+        taskRunLinkDao: (db) => new TaskRunLinkDao(db),
+        workflowPath,
+        cwd: context.cwd,
+    });
 }

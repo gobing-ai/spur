@@ -108,4 +108,8 @@ export { HitlSelectActionRunner } from './workflow/actions/hitl-select';
 export { RuleCheckActionRunner } from './workflow/actions/rule-check';
 // Workflow built-in action runners
 export { registerSpurBuiltins, type SpurWorkflowBuiltinsOptions } from './workflow/builtins';
+export {
+    FeatureLifecycleAdapter,
+    type FeatureLifecycleAdapterOptions,
+} from './workflow/feature-lifecycle-adapter';
 export { LifecycleAdapter, type LifecycleAdapterOptions } from './workflow/lifecycle-adapter';

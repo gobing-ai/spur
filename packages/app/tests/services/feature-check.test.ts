@@ -594,6 +594,136 @@ describe('FeatureCheckService', () => {
         expect(orphan[0]?.severity).toBe('warning');
     });
 
+    test('L4 (DD-13): a verifying feature with incomplete linked tasks warns (non-blocking)', async () => {
+        const featureDir = mkdtempSync(join(tmpdir(), 'spur-fc-verifying-feat-'));
+        const tasksDir = mkdtempSync(join(tmpdir(), 'spur-fc-verifying-tasks-'));
+        const fp = join(featureDir, 'A_verifying.md');
+        writeFileSync(
+            fp,
+            [
+                '---',
+                'schema_version: 1',
+                'id: "A"',
+                'name: "Verifying"',
+                'status: verifying',
+                'priority: P1',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# A: Verifying',
+                '',
+                '## Goal',
+                '',
+                'g',
+                '',
+                '## Scope',
+                '',
+                'In scope: x',
+                '',
+                '## Acceptance Criteria',
+                '',
+                '- [ ] R1: does the thing',
+            ].join('\n'),
+        );
+        // A linked task that is still in-progress (not done/cancelled).
+        writeFileSync(
+            join(tasksDir, '0001_wip.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'name: "WIP task"',
+                'status: wip',
+                'feature_id: A',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '## 0001. WIP task',
+            ].join('\n'),
+        );
+        const svc = new FeatureCheckService(createNodeFileSystem());
+        const result = await svc.check(fp, 'A', { featuresDir: featureDir, tasksDir });
+        rmSync(featureDir, { recursive: true, force: true });
+        rmSync(tasksDir, { recursive: true, force: true });
+        const warn = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('not done/cancelled'));
+        expect(warn).toHaveLength(1);
+        expect(warn[0]?.severity).toBe('warning'); // non-blocking
+        expect(result.pass).toBe(true); // a warning does not fail the gate
+    });
+
+    test('L4 (DD-13): a verifying feature with ALL linked tasks done/cancelled — clean entry, no warning', async () => {
+        const featureDir = mkdtempSync(join(tmpdir(), 'spur-fc-clean-feat-'));
+        const tasksDir = mkdtempSync(join(tmpdir(), 'spur-fc-clean-tasks-'));
+        const fp = join(featureDir, 'A_clean.md');
+        writeFileSync(
+            fp,
+            [
+                '---',
+                'schema_version: 1',
+                'id: "A"',
+                'name: "Clean"',
+                'status: verifying',
+                'priority: P1',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# A: Clean',
+                '',
+                '## Goal',
+                '',
+                'g',
+                '',
+                '## Scope',
+                '',
+                'In scope: x',
+                '',
+                '## Acceptance Criteria',
+                '',
+                '- [x] R1: done',
+            ].join('\n'),
+        );
+        // Two linked tasks, both complete (done + cancelled) — verifying is ready.
+        writeFileSync(
+            join(tasksDir, '0001_done.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'name: "Done task"',
+                'status: done',
+                'feature_id: A',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '## 0001. Done task',
+            ].join('\n'),
+        );
+        writeFileSync(
+            join(tasksDir, '0002_cancelled.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'name: "Cancelled task"',
+                'status: cancelled',
+                'feature_id: A',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '## 0002. Cancelled task',
+            ].join('\n'),
+        );
+        const svc = new FeatureCheckService(createNodeFileSystem());
+        const result = await svc.check(fp, 'A', { featuresDir: featureDir, tasksDir });
+        rmSync(featureDir, { recursive: true, force: true });
+        rmSync(tasksDir, { recursive: true, force: true });
+        // Clean entry: no verifying-readiness warning, no orphan warning (tasks exist).
+        expect(result.findings.filter((f) => f.message.includes('not done/cancelled'))).toHaveLength(0);
+        expect(result.findings.filter((f) => f.message.includes('orphan'))).toHaveLength(0);
+    });
+
     test('L4: no orphan warning when a task links the feature via feature_id', async () => {
         const featureDir = mkdtempSync(join(tmpdir(), 'spur-fc-linked-feat-'));
         const tasksDir = mkdtempSync(join(tmpdir(), 'spur-fc-linked-tasks-'));
