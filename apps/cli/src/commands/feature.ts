@@ -126,6 +126,32 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
             }
         });
 
+    // ── refresh ──
+    feature
+        .command('refresh')
+        .summary('Regenerate INDEX.md (ID-encoded tree) and repopulate each feature ## Tasks region.')
+        .option('--folder <path>', 'Custom features folder')
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (options) => {
+            const svc = makeService(context, options.folder);
+            try {
+                const result = await svc.refresh();
+                if (options.json) {
+                    const featuresDir = options.folder ?? context.fs.resolve('docs', 'features');
+                    context.output.write(
+                        toJson({ index_path: `${featuresDir}/INDEX.md`, tasksUpdated: result.tasksUpdated }),
+                    );
+                } else {
+                    context.output.write(
+                        `INDEX.md regenerated (${result.index.split('\n').length} lines); ${result.tasksUpdated} feature Tasks region(s) updated`,
+                    );
+                }
+            } catch (err) {
+                context.output.error(String(err));
+                context.setExitCode(1);
+            }
+        });
+
     // ── check ──
     feature
         .command('check')

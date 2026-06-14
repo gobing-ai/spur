@@ -219,6 +219,26 @@ describe('spur feature CLI', () => {
         expect(output.messages.join('')).toMatch(/PASS|FAIL/);
     });
 
+    test('refresh regenerates INDEX.md and reports tasksUpdated (--json)', async () => {
+        await main(['feature', 'create', 'Refreshable Group'], { cwd, output: createCapturedOutput() });
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'refresh', '--json'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lastMessage(output));
+        expect(parsed.index_path).toMatch(/INDEX\.md$/);
+        expect(typeof parsed.tasksUpdated).toBe('number');
+        // INDEX.md exists with the tree header.
+        const index = await Bun.file(`${cwd}/docs/features/INDEX.md`).text();
+        expect(index).toContain('# Feature Index');
+    });
+
+    test('refresh prints a human summary (non-JSON)', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'refresh'], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(lastMessage(output)).toContain('INDEX.md regenerated');
+    });
+
     test('check with no id validates all features in the folder (--json)', async () => {
         // Exercises the validate-all branch (no <id>): every feature file is checked.
         const output = createCapturedOutput();
