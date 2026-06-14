@@ -460,4 +460,158 @@ describe('TaskCheckService', () => {
         const warnings = result.findings.filter((f) => f.severity === 'warning');
         expect(warnings).toHaveLength(0);
     });
+
+    // ── L4: AC coverage (R1, DD-09) ──────────────────────────────────────
+
+    /** A task with `## ... Acceptance Criteria` Gherkin and a feature_id. */
+    function taskWithAc(featureId: string, scenarios: string[]): string {
+        const ac = [
+            '```gherkin',
+            'Feature: T',
+            '',
+            ...scenarios.flatMap((s) => [`  Scenario: ${s}`, '    Given x']),
+            '```',
+        ];
+        return [
+            '---',
+            'schema_version: 1',
+            'name: "AC task"',
+            'status: backlog',
+            `feature_id: ${featureId}`,
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. AC task',
+            '',
+            '### Background',
+            '',
+            'text',
+            '',
+            '### Acceptance Criteria',
+            '',
+            ...ac,
+        ].join('\n');
+    }
+
+    /** A feature file with Gherkin AC scenarios. */
+    function featureWithAc(id: string, scenarios: string[]): string {
+        const ac = [
+            '```gherkin',
+            `Feature: ${id}`,
+            '',
+            ...scenarios.flatMap((s) => [`  Scenario: ${s}`, '    Given x']),
+            '```',
+        ];
+        return [
+            '---',
+            'schema_version: 1',
+            `id: ${id}`,
+            `name: "Feature ${id}"`,
+            'status: active',
+            'priority: P1',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            `# ${id}: Feature ${id}`,
+            '',
+            '## Acceptance Criteria',
+            '',
+            ...ac,
+        ].join('\n');
+    }
+
+    test('R1: task scenario NOT in the feature AC warns (subset rule, DD-09)', async () => {
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: taskWithAc('F1', ['rogue scenario']),
+            features: { F1: featureWithAc('F1', ['the real scenario']) },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const cov = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('subset rule'));
+        expect(cov).toHaveLength(1);
+        expect(cov[0]?.severity).toBe('warning'); // default warning (C04)
+    });
+
+    test('R1: task scenario covered by the feature AC produces no coverage warning', async () => {
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: taskWithAc('F1', ['shared scenario']),
+            features: { F1: featureWithAc('F1', ['shared scenario', 'another']) },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        expect(result.findings.filter((f) => f.message.includes('subset rule'))).toHaveLength(0);
+    });
+
+    test('R1: partial coverage — only the uncovered task scenario warns, not the covered one', async () => {
+        const { fs, path, cleanup } = seedEnv({
+            // Task has two scenarios; "alpha" matches the feature, "zeta" does not.
+            taskContent: taskWithAc('F1', ['alpha', 'zeta']),
+            features: { F1: featureWithAc('F1', ['alpha', 'omega']) },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const cov = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('subset rule'));
+        expect(cov).toHaveLength(1); // exactly one — the covered "alpha" is NOT flagged
+        expect(cov[0]?.message).toContain('"zeta"');
+    });
+
+    test('R1: coverage match is title-normalized (R-id prefix + case ignored)', async () => {
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: taskWithAc('F1', ['R1: Logs In']),
+            features: { F1: featureWithAc('F1', ['logs in']) },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        // "R1: Logs In" normalizes to "logs in" → matches → no warning.
+        expect(result.findings.filter((f) => f.message.includes('subset rule'))).toHaveLength(0);
+    });
+
+    /** A task whose AC is a checklist (Tier-2), not Gherkin. */
+    function taskWithChecklist(featureId: string, items: string[]): string {
+        return [
+            '---',
+            'schema_version: 1',
+            'name: "Checklist task"',
+            'status: backlog',
+            `feature_id: ${featureId}`,
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Checklist task',
+            '',
+            '### Background',
+            '',
+            'text',
+            '',
+            '### Acceptance Criteria',
+            '',
+            ...items.map((i) => `- [ ] ${i}`),
+        ].join('\n');
+    }
+
+    test('R1: checklist-tier task AC covers feature scenarios by item text (DD-09)', async () => {
+        const { fs, path, cleanup } = seedEnv({
+            // Checklist item "logs in" matches the feature scenario "Logs In" (normalized).
+            taskContent: taskWithChecklist('F1', ['R1: Logs In']),
+            features: { F1: featureWithAc('F1', ['logs in']) },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        expect(result.findings.filter((f) => f.message.includes('subset rule'))).toHaveLength(0);
+    });
+
+    test('R1: checklist item with no matching feature scenario warns (subset rule)', async () => {
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: taskWithChecklist('F1', ['something the feature never specified']),
+            features: { F1: featureWithAc('F1', ['the only real scenario']) },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const cov = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('subset rule'));
+        expect(cov.length).toBeGreaterThan(0);
+        expect(cov.every((f) => f.severity === 'warning')).toBe(true);
+    });
 });

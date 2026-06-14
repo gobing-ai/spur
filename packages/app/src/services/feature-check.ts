@@ -8,28 +8,14 @@
  */
 
 import {
+    checkAcCoverage,
     featureFrontmatterSchema,
     MarkdownDocument,
     parseChecklist,
+    stripAcFence,
     validateAcceptanceCriteria,
 } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
-
-/**
- * Strip a single fenced code block wrapper (```gherkin … ```) from an AC body.
- * The feature template (0054) and the corpus wrap Gherkin in a fence; the BDD
- * validator parses raw Gherkin, so the fence lines must be removed first or they
- * surface as spurious "Unrecognized syntax" warnings.
- */
-function stripCodeFence(body: string): string {
-    const lines = body.split('\n');
-    const out: string[] = [];
-    for (const line of lines) {
-        if (/^\s*```/.test(line)) continue;
-        out.push(line);
-    }
-    return out.join('\n');
-}
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -257,7 +243,7 @@ export class FeatureCheckService {
         // fence the template/corpus wrap Gherkin in before validating.
         const rawAc = doc.getSection('Acceptance Criteria');
         if (rawAc !== null && rawAc.trim().length > 0) {
-            const acBody = stripCodeFence(rawAc);
+            const acBody = stripAcFence(rawAc);
 
             // Checklist tier: `- [ ]`/`- [x]` items and no Gherkin keyword.
             const checklist = parseChecklist(acBody);
@@ -435,6 +421,7 @@ export class FeatureCheckService {
         // resolve (file exists + parses) and count them for orphan-scenario detection.
         let linkedTasks = 0;
         const incompleteTasks: string[] = [];
+        const linkedTaskAc: string[] = [];
         try {
             const entries = await this.fs.readDir(tasksDir);
             for (const entry of entries) {
@@ -450,6 +437,8 @@ export class FeatureCheckService {
                     if (tStatus !== 'done' && tStatus !== 'cancelled') {
                         incompleteTasks.push(entry.match(/^(\d{4})_/)?.[1] ?? entry);
                     }
+                    const tac = stripAcFence(taskDoc.getSection('Acceptance Criteria') ?? '');
+                    if (tac.trim().length > 0) linkedTaskAc.push(tac);
                 } catch {
                     // A task that references this feature but fails to parse is a
                     // dangling edge — surface it as a traceability warning.
@@ -468,8 +457,8 @@ export class FeatureCheckService {
 
         // Orphan-scenario warning: AC scenarios exist but no task references this
         // feature, so the acceptance work is untraced (DD-07 expects >=1 owner).
-        const acBody = doc.getSection('Acceptance Criteria');
-        const hasScenarios = acBody !== null && /^\s*Scenario:/m.test(acBody);
+        const acBody = stripAcFence(doc.getSection('Acceptance Criteria') ?? '');
+        const hasScenarios = /^\s*Scenario:/m.test(acBody);
         if (hasScenarios && linkedTasks === 0) {
             findings.push({
                 layer: 'L4',
@@ -477,6 +466,31 @@ export class FeatureCheckService {
                 section: 'Acceptance Criteria',
                 message: `Feature "${featureId}" has acceptance scenarios but no linked task (orphan scenarios)`,
             });
+        } else if (hasScenarios && linkedTaskAc.length > 0) {
+            // R2 coverage-based orphans (DD-09): feature scenarios covered by no
+            // linked task's AC — warnings only (a feature legitimately precedes
+            // full decomposition). A feature scenario is orphaned only when NO
+            // linked task covers it. `checkAcCoverage(featureAc, taskAc).orphans`
+            // = scenarios not covered by THAT task; the intersection across all
+            // tasks = scenarios covered by none. (Concatenating multiple `Feature:`
+            // blocks would only parse the first, so check per-task.)
+            // Start with all feature scenarios as orphans, then remove any covered
+            // by at least one task (set difference accumulated across tasks).
+            let stillOrphan = new Set(checkAcCoverage(acBody, '').orphans);
+            for (const taskAc of linkedTaskAc) {
+                if (stillOrphan.size === 0) break;
+                const orphanedByThisTask = new Set(checkAcCoverage(acBody, taskAc).orphans);
+                // A scenario covered by THIS task drops out of the orphan set.
+                stillOrphan = new Set([...stillOrphan].filter((o) => orphanedByThisTask.has(o)));
+            }
+            for (const orphan of stillOrphan) {
+                findings.push({
+                    layer: 'L4',
+                    severity: 'warning',
+                    section: 'Acceptance Criteria',
+                    message: `Feature scenario "${orphan}" is not covered by any linked task (DD-09)`,
+                });
+            }
         }
 
         // DD-13 verifying-readiness: a feature in (or entering) `verifying` should

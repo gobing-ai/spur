@@ -12,6 +12,8 @@ export { parseChecklist } from './checklist';
 export type { CoverageResult } from './coverage';
 // Coverage — DD-09 normalized-title coverage matching
 export { checkAcCoverage, normalizeTitle } from './coverage';
+// Fence — strip the ```gherkin wrapper before validating/coverage-matching AC
+export { stripAcFence } from './fence';
 export type { ParsedFeature, ParsedScenario, ParsedStep } from './parser';
 // Parser — Gherkin-subset AST
 export { parseFeature } from './parser';

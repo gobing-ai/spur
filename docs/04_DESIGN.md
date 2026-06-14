@@ -429,7 +429,7 @@ Source: delivery §1.1, design §10.
 | `spur task refresh` | `--folder <path>` `--json` | 0/1 | Regenerate `kanban.md` — pure function, deterministic ordering (A06). |
 | `spur task batch-create --file <json>` | `--folder <path>` `--json` | 0/1 | Create many tasks from validated JSON — all-or-nothing; validated against `apps/cli/schemas/task-batch.schema.json` (A08/C03). |
 | `spur task resolve <file-path>` | `--folder <path>` `--json` | 0/1 | Maps a path to owning task (WBS + file). Returns 1 if no match. Strategies: direct match, filename WBS parse, walk-up (A10). |
-| `spur task check [<wbs>]` | `--strict` `--folder <path>` `--json` | 0/1 | Four-layer validation (§3). Validates all tasks when `<wbs>` omitted; `--strict` elevates warnings to failures. Matrix loaded from `config/tasks/section-matrix.yaml`. |
+| `spur task check [<wbs>]` | `--strict` `--folder <path>` `--json` | 0/1 | Four-layer validation (§3). L4 traceability: `feature_id`/`parent_wbs`/`dependencies` edge resolution + **AC coverage** (DD-09: task scenarios must be a subset of the linked feature's AC by normalized title — warnings by default). Validates all tasks when `<wbs>` omitted; `--strict` elevates warnings. Matrix loaded from `config/tasks/section-matrix.yaml`. |
 
 **Exit codes:** 0 success, 1 error, 2 invalid usage. Follows the design §10 `api-response` envelope
 for `--json` output (`{ ok, data? }`).
@@ -452,7 +452,7 @@ Every subcommand supports `--json` (ADR-010 invariant). Source: delivery §1.2, 
 | `spur feature show <id>` | `--folder <path>` `--json` | 0/1 | Returns the feature summary + content; 1 if not found. |
 | `spur feature update <id> [status]` | `--field <key> --value <v>` `--folder <path>` `--json` | 0/1/2 | `<status>` runs the lifecycle transition (guarded, §7.5); `--field/--value` sets a scalar frontmatter field. 2 if `--field` given without `--value`. |
 | `spur feature list` | `--status <s>` `--priority <p>` `--folder <path>` `--json` | 0/1 | Lists features sorted by ID; optional status/priority filters. |
-| `spur feature check [<id>]` | `--strict` `--folder <path>` `--json` | 0/1 | Four-layer validation (§3): L1 schema, L2 section-matrix, L3 BDD AC (shared 0043 module) + one-active-P0-goal over {active,verifying} + ≤9-children (DD-14, corpus-derived), L4 incoming `feature_id` edges + orphan-scenario warnings. Validates all features when `<id>` omitted; `--strict` elevates warnings. |
+| `spur feature check [<id>]` | `--strict` `--folder <path>` `--json` | 0/1 | Four-layer validation (§3): L1 schema, L2 section-matrix, L3 BDD AC (shared 0043 module) + one-active-P0-goal over {active,verifying} + ≤9-children (DD-14, corpus-derived), L4 incoming `feature_id` edges + orphan-scenario warnings + **AC coverage** (DD-09: feature scenarios covered by no linked task = warnings) + verifying-readiness (linked tasks not done/cancelled). Validates all features when `<id>` omitted; `--strict` elevates warnings. |
 | `spur feature refresh` | `--folder <path>` `--json` | 0/1 | Regenerate `INDEX.md` (deterministic ID-encoded tree, per-node status badge + relative link, §4.3) and repopulate each feature's `## Tasks` auto-gen marker region from task `feature_id` edges. Only the marker region is rewritten; the rest of the feature file and all task files are byte-preserved. |
 
 ID rules (DD-14): valid IDs match `^[A-Z][1-9]*$`. The `## Tasks` auto-gen markers are

@@ -8,7 +8,13 @@
  */
 
 import { dirname, join } from 'node:path';
-import { MarkdownDocument, taskFrontmatterSchema } from '@gobing-ai/spur-domain';
+import {
+    checkAcCoverage,
+    MarkdownDocument,
+    parseChecklist,
+    stripAcFence,
+    taskFrontmatterSchema,
+} from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -87,10 +93,10 @@ export class TaskCheckService {
 
         // ── L3: Format rules (warning-first, 3 hard-core) ──
         this.runL3(doc, findings);
-        // ── L4: Traceability — feature_id edges, parent_wbs, dependencies
+        // ── L4: Traceability — feature_id edges, parent_wbs, dependencies, AC coverage
         const tasksDir = dirname(filePath);
         const featuresDir = join(dirname(tasksDir), 'features');
-        await this.runL4(fm, findings, featuresDir, tasksDir);
+        await this.runL4(doc, fm, findings, featuresDir, tasksDir);
 
         return this.buildResult(wbs, status, findings, strict);
     }
@@ -259,8 +265,9 @@ export class TaskCheckService {
         }
     }
 
-    // ── L4: Traceability — feature_id edges, parent_wbs, dependencies ──
+    // ── L4: Traceability — feature_id edges, parent_wbs, dependencies, AC coverage ──
     private async runL4(
+        doc: MarkdownDocument,
         fm: Record<string, unknown>,
         findings: CheckFindings[],
         featuresDir: string,
@@ -291,6 +298,8 @@ export class TaskCheckService {
                         message: `Feature "${featureId}" is ${featureStatus} — remove or re-parent this task`,
                     });
                 }
+                // ── AC coverage (R1, DD-09): task AC ⊆ linked feature AC ──
+                await this.checkAcCoverage(doc, featurePath, featureId, findings);
             }
         } else {
             findings.push({
@@ -349,6 +358,42 @@ export class TaskCheckService {
             // Directory doesn't exist or can't be read
         }
         return null;
+    }
+
+    /**
+     * AC coverage (L4, DD-09): every task scenario must map to a feature scenario
+     * by normalized title (subset rule). Uncovered task scenarios are warnings by
+     * default (C04: errors only if the hard core elevates; `--strict` does that).
+     * Uses the shared 0043 `checkAcCoverage` — never a private matcher.
+     */
+    private async checkAcCoverage(
+        taskDoc: MarkdownDocument,
+        featurePath: string,
+        featureId: string,
+        findings: CheckFindings[],
+    ): Promise<void> {
+        const taskAc = stripAcFence(taskDoc.getSection('Acceptance Criteria') ?? '');
+        if (taskAc.trim().length === 0) return; // no task AC → nothing to cover
+
+        let featureAc: string;
+        try {
+            const raw = await this.fs.readFile(featurePath);
+            featureAc = stripAcFence(MarkdownDocument.parse(raw, 'feature').getSection('Acceptance Criteria') ?? '');
+        } catch {
+            return; // feature unreadable — the edge warning above already covered it
+        }
+        if (featureAc.trim().length === 0) return;
+
+        const taskChecklist = parseChecklist(taskAc);
+        const result = checkAcCoverage(featureAc, taskAc, taskChecklist);
+        for (const scenario of result.uncovered) {
+            findings.push({
+                layer: 'L4',
+                severity: 'warning',
+                section: 'Acceptance Criteria',
+                message: `Task scenario "${scenario}" is not in feature "${featureId}"'s AC (DD-09 subset rule)`,
+            });
+        }
     }
 
     /** Read the status from a feature file's frontmatter. */

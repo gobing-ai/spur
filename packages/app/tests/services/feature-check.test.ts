@@ -724,6 +724,70 @@ describe('FeatureCheckService', () => {
         expect(result.findings.filter((f) => f.message.includes('orphan'))).toHaveLength(0);
     });
 
+    test('R2 (DD-09): a feature scenario covered by no linked task is a coverage orphan warning', async () => {
+        const featureDir = mkdtempSync(join(tmpdir(), 'spur-fc-cov-feat-'));
+        const tasksDir = mkdtempSync(join(tmpdir(), 'spur-fc-cov-tasks-'));
+        const fenced = (lines: string[]) => ['```gherkin', ...lines, '```'];
+        writeFileSync(
+            join(featureDir, 'A_cov.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'id: "A"',
+                'name: "Cov"',
+                'status: active',
+                'priority: P1',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# A: Cov',
+                '',
+                '## Goal',
+                '',
+                'g',
+                '',
+                '## Scope',
+                '',
+                'In scope: x',
+                '',
+                '## Acceptance Criteria',
+                '',
+                ...fenced(['Feature: A', '', '  Scenario: alpha', '    Given x', '  Scenario: beta', '    Given y']),
+            ].join('\n'),
+        );
+        // One linked task covers only "alpha" → "beta" is a coverage orphan.
+        writeFileSync(
+            join(tasksDir, '0001_a.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'name: "covers alpha"',
+                'status: backlog',
+                'feature_id: A',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '## 0001. covers alpha',
+                '',
+                '### Acceptance Criteria',
+                '',
+                ...fenced(['Feature: T', '', '  Scenario: alpha', '    Given x']),
+            ].join('\n'),
+        );
+        const svc = new FeatureCheckService(createNodeFileSystem());
+        const result = await svc.check(join(featureDir, 'A_cov.md'), 'A', { featuresDir: featureDir, tasksDir });
+        rmSync(featureDir, { recursive: true, force: true });
+        rmSync(tasksDir, { recursive: true, force: true });
+        const cov = result.findings.filter(
+            (f) => f.layer === 'L4' && f.message.includes('not covered by any linked task'),
+        );
+        expect(cov).toHaveLength(1);
+        expect(cov[0]?.message).toContain('beta');
+        expect(cov[0]?.severity).toBe('warning'); // orphans are warnings, never errors (DD-09)
+    });
+
     test('L4: no orphan warning when a task links the feature via feature_id', async () => {
         const featureDir = mkdtempSync(join(tmpdir(), 'spur-fc-linked-feat-'));
         const tasksDir = mkdtempSync(join(tmpdir(), 'spur-fc-linked-tasks-'));
