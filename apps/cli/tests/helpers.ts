@@ -29,3 +29,48 @@ export function createCapturedOutput(): CapturedOutput {
         },
     };
 }
+
+/** Result of a subprocess CLI invocation. */
+export interface CliResult {
+    /** Process exit code. `null` when the process was killed by a signal. */
+    code: number | null;
+    /** stdout captured as a UTF-8 string. */
+    stdout: string;
+    /** stderr captured as a UTF-8 string. */
+    stderr: string;
+    /** Parsed JSON object when stdout is valid JSON, otherwise `undefined`. */
+    json?: unknown;
+}
+
+/**
+ * Run the Spur CLI as a subprocess (verb-level integration, R4).
+ *
+ * Spawns `bun run apps/cli/src/index.ts` so the test exercises the real entry
+ * point, argument parsing, and process lifecycle. When `--json` is present in
+ * `args` and stdout parses as JSON, the parsed object is returned as
+ * `result.json`.
+ *
+ * For most command tests, prefer the in-process `main()` helper — it is
+ * faster and already covers dispatch. Use `runCli` when subprocess isolation
+ * or real process exit codes are required.
+ */
+export async function runCli(args: string[], cwd?: string): Promise<CliResult> {
+    const entryPath = join(import.meta.dir, '..', 'src', 'index.ts');
+    const proc = Bun.spawn({
+        cmd: ['bun', 'run', entryPath, ...args],
+        cwd,
+        stdout: 'pipe',
+        stderr: 'pipe',
+    });
+    const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
+    const code = await proc.exited;
+    const result: CliResult = { code, stdout, stderr };
+    if (args.includes('--json')) {
+        try {
+            result.json = JSON.parse(stdout);
+        } catch {
+            // stdout was not valid JSON despite --json — leave json undefined.
+        }
+    }
+    return result;
+}

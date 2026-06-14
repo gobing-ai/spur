@@ -4,7 +4,8 @@
     "type": "module",
     "private": true,
     "exports": {
-        ".": "./src/index.ts"
+        ".": "./src/index.ts",
+        "./tests/helpers": "./tests/helpers.ts"
     },
     "scripts": {
         "build": "bun build src/index.ts --outdir dist --target bun",
