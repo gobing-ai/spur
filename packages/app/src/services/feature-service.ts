@@ -61,13 +61,36 @@ export class FeatureService {
         return /^[A-Z][1-9]*$/.test(id);
     }
 
-    /** Create a new feature file via PlanningWriteService. */
+    /**
+     * Create a new feature file via PlanningWriteService.
+     *
+     * ID allocation runs **inside the create-lock** (R1, DD-14): the directory
+     * scan that picks the next child digit / free group letter and the file
+     * write are one atomic critical section, so concurrent creates cannot
+     * allocate the same ID and clobber each other.
+     */
     async create(name: string, parentId?: string): Promise<WriteResult> {
-        const id = await this.allocateId(parentId ?? null);
-        const slug = this.slugify(name);
-        const ref = this.makeRef(id, slug);
-        const content = this.templateContent(id, name);
-        return this.ctx.writeService.create(ref, content);
+        return this.ctx.writeService.createAllocated(this.ctx.featuresDir, async () => {
+            const id = await this.allocateId(parentId ?? null);
+            const slug = this.slugify(name);
+            return { ref: this.makeRef(id, slug), content: this.templateContent(id, name) };
+        });
+    }
+
+    /**
+     * Update a feature's scalar frontmatter field (e.g. `priority`) via the
+     * shared write path (R2). Status changes go through {@link transition} so
+     * the lifecycle guard runs; this is for non-lifecycle fields.
+     */
+    async update(id: string, key: string, value: string): Promise<WriteResult> {
+        const ref = await this.refFor(id);
+        return this.ctx.writeService.updateFrontmatter(ref, key, value);
+    }
+
+    /** Transition a feature to a new lifecycle status via the shared write path (R2). */
+    async transition(id: string, toStatus: string): Promise<WriteResult> {
+        const ref = await this.refFor(id);
+        return this.ctx.writeService.transition(ref, toStatus, this.ctx.actor ?? 'system');
     }
 
     /** List features. */
@@ -147,6 +170,23 @@ export class FeatureService {
 
     private resolveFeaturePath(id: string, slug: string): string {
         return `${this.ctx.featuresDir}/${id}_${slug}.md`;
+    }
+
+    /** Resolve a feature ID to its `EntityRef` by scanning the corpus. Throws if not found. */
+    private async refFor(id: string): Promise<EntityRef> {
+        const names = await this.ctx.fs.readDir(this.ctx.featuresDir);
+        for (const name of names) {
+            const match = name.match(FEATURE_FILE_RE);
+            if (match?.[1] === id) {
+                return {
+                    kind: 'feature',
+                    id,
+                    filePath: `${this.ctx.featuresDir}/${name}`,
+                    folder: this.ctx.featuresDir,
+                };
+            }
+        }
+        throw new Error(`Feature ${id} not found in ${this.ctx.featuresDir}`);
     }
 
     private slugify(name: string): string {

@@ -199,6 +199,33 @@ export class PlanningWriteService {
     }
 
     /**
+     * Create a new entity with **race-safe ID allocation**.
+     *
+     * Acquires the folder's create-lock FIRST, then runs `allocate` inside it —
+     * so the directory scan that picks the next free WBS / feature ID and the
+     * file write are a single atomic critical section. Two concurrent creates
+     * therefore cannot allocate the same id and clobber each other (the create
+     * lock's documented job, design §4.2). The allocator returns the resolved
+     * `ref` and the templated `content`.
+     *
+     * @param folder   Directory the entity is allocated in (the lock scope).
+     * @param allocate Callback run inside the create-lock; returns `{ ref, content }`.
+     */
+    async createAllocated(
+        folder: string,
+        allocate: () => Promise<{ ref: EntityRef; content: string }>,
+    ): Promise<WriteResult> {
+        const lock = acquireCreateLock(folder, this.fs);
+        try {
+            const { ref, content } = await allocate();
+            // Lock already held — run the pipeline steps without re-acquiring it.
+            return await this.runSteps(ref, { kind: 'create', content });
+        } finally {
+            lock.release();
+        }
+    }
+
+    /**
      * Replace the body of a named section in an existing file.
      *
      * @param ref         Entity reference — file must exist.

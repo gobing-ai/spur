@@ -26,6 +26,12 @@ export type {
 } from './services/feature-check';
 export { DEFAULT_FEATURE_MATRIX, FeatureCheckService } from './services/feature-check';
 export type {
+    FeatureServiceContext,
+    FeatureShowResult,
+    FeatureSummary,
+} from './services/feature-service';
+export { FeatureService } from './services/feature-service';
+export type {
     HistoryAnalyzeResult,
     HistoryImportResult,
     HistoryServiceContext,

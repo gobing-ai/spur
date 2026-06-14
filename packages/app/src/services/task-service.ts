@@ -68,67 +68,74 @@ export class TaskService {
         status?: string;
         actor?: string;
     }): Promise<WriteResult> {
-        const wbs = await this.allocateWbs();
-        const slug = this.slugify(params.title);
-        const filePath = this.resolveTaskPath(wbs, slug);
         const folder = this.ctx.tasksDir;
 
+        // Feature-derived Background is independent of the allocated WBS, so it
+        // can be computed before the lock to keep the critical section short.
         let background = '';
         if (params.featureId !== undefined) {
             background = await this.deriveBackground(params.featureId);
         }
 
-        const now = new Date().toISOString();
-        const frontmatter = [
-            'schema_version: 1',
-            `name: "${params.title}"`,
-            `status: ${params.status ?? 'backlog'}`,
-            `created_at: ${now}`,
-            `updated_at: ${now}`,
-            params.featureId !== undefined ? `feature_id: ${params.featureId}` : null,
-            params.parentWbs !== undefined ? `parent_wbs: "${params.parentWbs}"` : null,
-        ]
-            .filter(Boolean)
-            .join('\n');
+        // WBS allocation + write run inside the create-lock so concurrent
+        // creates cannot allocate the same number and clobber each other.
+        return this.writeService.createAllocated(folder, async () => {
+            const wbs = await this.allocateWbs();
+            const slug = this.slugify(params.title);
+            const filePath = this.resolveTaskPath(wbs, slug);
 
-        const content = [
-            '---',
-            frontmatter,
-            '---',
-            '',
-            `## ${wbs}. ${params.title}`,
-            '',
-            '### Background',
-            '',
-            background !== '' ? `${background}\n` : '',
-            '### Requirements',
-            '',
-            '',
-            '### Q&A',
-            '',
-            '',
-            '### Design',
-            '',
-            '',
-            '### Solution',
-            '',
-            '',
-            '### Plan',
-            '',
-            '',
-            '### Review',
-            '',
-            '',
-            '### Testing',
-            '',
-            '',
-            '### History',
-            '',
-            '',
-        ].join('\n');
+            const now = new Date().toISOString();
+            const frontmatter = [
+                'schema_version: 1',
+                `name: "${params.title}"`,
+                `status: ${params.status ?? 'backlog'}`,
+                `created_at: ${now}`,
+                `updated_at: ${now}`,
+                params.featureId !== undefined ? `feature_id: ${params.featureId}` : null,
+                params.parentWbs !== undefined ? `parent_wbs: "${params.parentWbs}"` : null,
+            ]
+                .filter(Boolean)
+                .join('\n');
 
-        const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder };
-        return this.writeService.create(ref, content);
+            const content = [
+                '---',
+                frontmatter,
+                '---',
+                '',
+                `## ${wbs}. ${params.title}`,
+                '',
+                '### Background',
+                '',
+                background !== '' ? `${background}\n` : '',
+                '### Requirements',
+                '',
+                '',
+                '### Q&A',
+                '',
+                '',
+                '### Design',
+                '',
+                '',
+                '### Solution',
+                '',
+                '',
+                '### Plan',
+                '',
+                '',
+                '### Review',
+                '',
+                '',
+                '### Testing',
+                '',
+                '',
+                '### History',
+                '',
+                '',
+            ].join('\n');
+
+            const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder };
+            return { ref, content };
+        });
     }
 
     // ── show ──
@@ -208,71 +215,76 @@ export class TaskService {
     }
 
     private async createBatchItem(item: TaskBatchItem): Promise<WriteResult> {
-        const wbs = await this.allocateWbs();
-        const slug = this.slugify(item.name);
-        const filePath = this.resolveTaskPath(wbs, slug);
         const folder = this.ctx.tasksDir;
 
+        // Feature-derived Background is WBS-independent — compute before the lock.
         let background = item.background ?? '';
         if (!background && item.feature_id !== undefined && item.feature_id !== null) {
             background = await this.deriveBackground(item.feature_id);
         }
 
-        const now = new Date().toISOString();
-        const fmLines = [
-            'schema_version: 1',
-            `name: "${item.name}"`,
-            'status: backlog',
-            `created_at: ${now}`,
-            `updated_at: ${now}`,
-            item.feature_id !== undefined ? `feature_id: ${item.feature_id}` : null,
-            item.parent_wbs !== undefined ? `parent_wbs: "${item.parent_wbs}"` : null,
-            item.priority !== undefined ? `priority: ${item.priority}` : null,
-            item.tags !== undefined && item.tags.length > 0
-                ? `tags: [${item.tags.map((t) => `"${t}"`).join(', ')}]`
-                : null,
-        ]
-            .filter(Boolean)
-            .join('\n');
+        // Allocate + write inside the create-lock (race-safe WBS allocation).
+        return this.writeService.createAllocated(folder, async () => {
+            const wbs = await this.allocateWbs();
+            const slug = this.slugify(item.name);
+            const filePath = this.resolveTaskPath(wbs, slug);
 
-        const content = [
-            '---',
-            fmLines,
-            '---',
-            '',
-            `## ${wbs}. ${item.name}`,
-            '',
-            '### Background',
-            '',
-            background !== '' ? `${background}\n` : '',
-            '### Requirements',
-            '',
-            item.requirements ? `${item.requirements}\n` : '',
-            '### Q&A',
-            '',
-            '',
-            '### Design',
-            '',
-            '',
-            '### Solution',
-            '',
-            '',
-            '### Plan',
-            '',
-            '',
-            '### Review',
-            '',
-            '',
-            '### Testing',
-            '',
-            '',
-            '### History',
-            '',
-            '',
-        ].join('\n');
+            const now = new Date().toISOString();
+            const fmLines = [
+                'schema_version: 1',
+                `name: "${item.name}"`,
+                'status: backlog',
+                `created_at: ${now}`,
+                `updated_at: ${now}`,
+                item.feature_id !== undefined ? `feature_id: ${item.feature_id}` : null,
+                item.parent_wbs !== undefined ? `parent_wbs: "${item.parent_wbs}"` : null,
+                item.priority !== undefined ? `priority: ${item.priority}` : null,
+                item.tags !== undefined && item.tags.length > 0
+                    ? `tags: [${item.tags.map((t) => `"${t}"`).join(', ')}]`
+                    : null,
+            ]
+                .filter(Boolean)
+                .join('\n');
 
-        const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder };
-        return this.writeService.create(ref, content);
+            const content = [
+                '---',
+                fmLines,
+                '---',
+                '',
+                `## ${wbs}. ${item.name}`,
+                '',
+                '### Background',
+                '',
+                background !== '' ? `${background}\n` : '',
+                '### Requirements',
+                '',
+                item.requirements ? `${item.requirements}\n` : '',
+                '### Q&A',
+                '',
+                '',
+                '### Design',
+                '',
+                '',
+                '### Solution',
+                '',
+                '',
+                '### Plan',
+                '',
+                '',
+                '### Review',
+                '',
+                '',
+                '### Testing',
+                '',
+                '',
+                '### History',
+                '',
+                '',
+            ].join('\n');
+
+            const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder };
+            return { ref, content };
+        });
     }
 
     // ── refresh ──

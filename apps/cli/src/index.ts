@@ -6,6 +6,7 @@ import { runNodeApplication } from '@gobing-ai/ts-infra/application-node';
 import figlet from 'figlet';
 import standard from 'figlet/fonts/Standard';
 import { registerAgentCommand } from './commands/agent';
+import { registerFeatureCommand } from './commands/feature';
 import { registerHistoryCommand } from './commands/history';
 import { registerInitCommand } from './commands/init';
 import { registerMessageCommand } from './commands/message';
@@ -112,6 +113,7 @@ async function runCommandDispatch(
 
     // Register every noun command group — UNCHANGED (R3).
     registerAgentCommand(program, context);
+    registerFeatureCommand(program, context);
     registerHistoryCommand(program, context);
     registerInitCommand(program, context);
     registerMessageCommand(program, context);

@@ -96,6 +96,99 @@ describe('FeatureService', () => {
         });
     });
 
+    describe('update', () => {
+        test('sets a scalar frontmatter field via the write path', async () => {
+            const created = await svc.create('Updatable Feature');
+            const result = await svc.update(created.ref.id, 'priority', 'P0');
+            expect(result.ref.id).toBe(created.ref.id);
+            const shown = await svc.show(created.ref.id);
+            expect(shown?.frontmatter.priority).toBe('P0');
+        });
+
+        test('update throws for an unknown feature ID', async () => {
+            await expect(svc.update('ZZZZZ', 'priority', 'P0')).rejects.toThrow(/not found/);
+        });
+    });
+
+    describe('create allocation is race-safe (R1, DD-14)', () => {
+        test('sequential child creates allocate distinct digits (A1, A2, A3)', async () => {
+            const fs = createNodeFileSystem(root);
+            const dir = join(root, 'seq-features');
+            await fs.ensureDir(dir);
+            const seqSvc = new FeatureService({
+                fs,
+                featuresDir: dir,
+                tasksDir,
+                writeService: new PlanningWriteService({ fs }),
+            });
+            const parent = await seqSvc.create('Seq Parent'); // → 'A'
+            const c1 = await seqSvc.create('Child 1', parent.ref.id);
+            const c2 = await seqSvc.create('Child 2', parent.ref.id);
+            const c3 = await seqSvc.create('Child 3', parent.ref.id);
+            expect([c1.ref.id, c2.ref.id, c3.ref.id]).toEqual([
+                `${parent.ref.id}1`,
+                `${parent.ref.id}2`,
+                `${parent.ref.id}3`,
+            ]);
+        });
+
+        test('depth-3 allocation: A1 → A11, A12 (length = depth, parent = drop last char)', async () => {
+            const fs = createNodeFileSystem(root);
+            const dir = join(root, 'deep-features');
+            await fs.ensureDir(dir);
+            const deepSvc = new FeatureService({
+                fs,
+                featuresDir: dir,
+                tasksDir,
+                writeService: new PlanningWriteService({ fs }),
+            });
+            const a = await deepSvc.create('Group'); // → 'A'
+            const a1 = await deepSvc.create('Child', a.ref.id); // → 'A1'
+            const a11 = await deepSvc.create('Grandchild 1', a1.ref.id); // → 'A11'
+            const a12 = await deepSvc.create('Grandchild 2', a1.ref.id); // → 'A12'
+            expect(a1.ref.id).toBe(`${a.ref.id}1`);
+            expect(a11.ref.id).toBe(`${a1.ref.id}1`);
+            expect(a12.ref.id).toBe(`${a1.ref.id}2`);
+            expect(deepSvc.depthOf(a11.ref.id)).toBe(3);
+            expect(deepSvc.parentOf(a11.ref.id)).toBe(a1.ref.id);
+        });
+
+        test('concurrent creates never produce duplicate IDs — the loser fails loudly, not silently', async () => {
+            // The create-lock makes allocation+write one critical section. Under
+            // concurrency the lock holder wins; contenders throw a lock error
+            // (fail-loud) rather than allocating the same ID and clobbering.
+            const fs = createNodeFileSystem(root);
+            const dir = join(root, 'race-features');
+            await fs.ensureDir(dir);
+            const raceSvc = new FeatureService({
+                fs,
+                featuresDir: dir,
+                tasksDir,
+                writeService: new PlanningWriteService({ fs }),
+            });
+            const parent = await raceSvc.create('Race Parent'); // → 'A'
+            const settled = await Promise.allSettled([
+                raceSvc.create('Child 1', parent.ref.id),
+                raceSvc.create('Child 2', parent.ref.id),
+                raceSvc.create('Child 3', parent.ref.id),
+            ]);
+            const succeeded = settled
+                .filter(
+                    (s): s is PromiseFulfilledResult<Awaited<ReturnType<typeof raceSvc.create>>> =>
+                        s.status === 'fulfilled',
+                )
+                .map((s) => s.value.ref.id);
+            // Invariant: every successful create has a distinct ID (no clobbering).
+            expect(new Set(succeeded).size).toBe(succeeded.length);
+            for (const id of succeeded) {
+                expect(id).toMatch(new RegExp(`^${parent.ref.id}[1-9]$`));
+            }
+            // And the corpus on disk has no duplicate child IDs either.
+            const onDisk = (await raceSvc.list()).map((f) => f.id).filter((id) => id.length === 2);
+            expect(new Set(onDisk).size).toBe(onDisk.length);
+        });
+    });
+
     describe('refresh', () => {
         test('returns index and tasksUpdated', async () => {
             const result = await svc.refresh();

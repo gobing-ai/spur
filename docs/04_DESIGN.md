@@ -438,6 +438,24 @@ for `--json` output (`{ ok, data? }`).
 
 | `spur task migrate` | Reserved (A17) — one-time corpus normalization pass. |
 
+### 7.2 `spur feature` commands
+
+Core feature verbs over `PlanningWriteService` (same write path as tasks). Features use
+position-encoding hierarchical IDs (DD-14): single-letter top-level groups, children append one
+digit 1–9 per level; ID length = depth; parent = drop the last character; **no `parent_id` field**.
+Every subcommand supports `--json` (ADR-010 invariant). Source: delivery §1.2, design §2.2/§2.4.
+
+| Command | Flags | Exit | Notes |
+|---------|-------|------|-------|
+| `spur feature` | — (noun help) | 0 | Lists subcommands if no subcommand given. |
+| `spur feature create <name>` | `--parent <id>` `--folder <path>` `--json` | 0/1 | ID allocated under the create-lock (R1): `--parent` → next free child digit 1–9; no parent → next free group letter A–Z. |
+| `spur feature show <id>` | `--folder <path>` `--json` | 0/1 | Returns the feature summary + content; 1 if not found. |
+| `spur feature update <id> [status]` | `--field <key> --value <v>` `--folder <path>` `--json` | 0/1/2 | `<status>` runs the lifecycle transition (guarded, §7.5); `--field/--value` sets a scalar frontmatter field. 2 if `--field` given without `--value`. |
+| `spur feature list` | `--status <s>` `--priority <p>` `--folder <path>` `--json` | 0/1 | Lists features sorted by ID; optional status/priority filters. |
+
+ID rules (DD-14): valid IDs match `^[A-Z][1-9]*$`. `refresh` (INDEX + task-links, 0058) and `move`
+(cascade-rename, 0061) join this table as they land.
+
 ### 7.3.1 Task frontmatter — `taskFrontmatterSchema`
 Mirrors `docs/design/rd3-migration-design.md` §2.1. Exported by
 `@gobing-ai/spur-domain` from `packages/domain/src/planning/schema.ts`.

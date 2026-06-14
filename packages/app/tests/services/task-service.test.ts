@@ -251,12 +251,17 @@ describe('TaskService', () => {
             const isolateFs = createNodeFileSystem(root);
             await isolateFs.ensureDir(dir);
 
+            // batchCreate allocates+writes via createAllocated (race-safe, inside the
+            // create-lock), so inject the failure there — on the 2nd item's write.
             class FailOnSecondCreate extends PlanningWriteService {
                 private calls = 0;
-                override async create(ref: Parameters<PlanningWriteService['create']>[0], content: string) {
+                override async createAllocated(
+                    folder: string,
+                    allocate: Parameters<PlanningWriteService['createAllocated']>[1],
+                ) {
                     this.calls += 1;
                     if (this.calls === 2) throw new Error('simulated write failure on item 2');
-                    return super.create(ref, content);
+                    return super.createAllocated(folder, allocate);
                 }
             }
             const writeService = new FailOnSecondCreate({ fs: isolateFs });
