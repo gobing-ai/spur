@@ -135,6 +135,38 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
             }
         });
 
+    // ── move ──
+    feature
+        .command('move')
+        .summary('Move a feature to a new parent — cascade rename of the subtree (DD-14).')
+        .argument('<id>', 'Feature ID to move')
+        .option('--parent <id>', 'New parent feature ID (omit to move to a top-level group)')
+        .option('--dry-run', 'Show the old→new ID map + affected tasks without writing')
+        .option('--folder <path>', 'Custom features folder')
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (id, options) => {
+            const svc = makeService(context, options.folder);
+            try {
+                const result = await svc.move(id, options.parent ?? null, { dryRun: options.dryRun === true });
+                if (options.json) {
+                    context.output.write(toJson(result));
+                } else if (result.dryRun) {
+                    context.output.write(`Dry run — ${result.movedCount} feature(s) would be re-IDed:`);
+                    for (const [oldId, newId] of Object.entries(result.mapping)) {
+                        context.output.write(`  ${oldId} → ${newId}`);
+                    }
+                    context.output.write(`  ${result.tasksUpdated.length} task edge(s) would be updated`);
+                } else {
+                    context.output.write(
+                        `Moved ${result.movedCount} feature(s); ${result.tasksUpdated.length} task edge(s) updated`,
+                    );
+                }
+            } catch (err) {
+                context.output.error(String(err));
+                context.setExitCode(1);
+            }
+        });
+
     // ── refresh ──
     feature
         .command('refresh')

@@ -93,6 +93,7 @@ Two new nouns (ADR-020) plus one new verb on an existing noun. Every command sup
 | `spur feature list [--status <s>] [--priority <p>] [--json]` | Filterable feature listing; same explicit-`--json` and filter-correctness requirements as `task list`. | B02 A16 |
 | `spur feature refresh` | Regenerate `INDEX.md` (see §2 for the tree-view shape) and auto-populate feature `## Tasks` sections. Task files are never touched. | B03 B04 B06 |
 | `spur feature check [<id>]` | Feature validation: Gherkin AC check, traceability, "one active goal" enforcement. | B08 B09 C04 |
+| `spur feature move <id> --parent <id> [--dry-run]` | Cascade rename for hierarchy changes — the ID encodes position, so a move re-IDs the node + all descendants, renames files, updates every task `feature_id` edge, and appends History; validate-before-write + best-effort rollback; `--dry-run` reports the old→new map with zero writes (design §2.4, DD-14). | B01 |
 
 > **No `delete` verb** — same reasoning as tasks. Consequence: the feature lifecycle gains a
 > `cancelled` terminal status, and a `verifying` acceptance status (design DD-13) — B07's enum

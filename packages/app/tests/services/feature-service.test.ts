@@ -330,10 +330,153 @@ describe('FeatureService', () => {
         });
     });
 
-    describe('move', () => {
-        test('returns movedCount', async () => {
-            const result = await svc.move('A', 'B');
-            expect(result).toHaveProperty('movedCount');
+    describe('move — cascade rename (R1/R2/R3, DD-14)', () => {
+        // Isolated corpus: A, A1 (child), A11 (grandchild), B + a task linked to A1.
+        async function seedMoveCorpus(): Promise<{
+            svc: FeatureService;
+            featuresDir: string;
+            tasksDir: string;
+            fs: ReturnType<typeof createNodeFileSystem>;
+            cleanup(): void;
+        }> {
+            const r = mkdtempSync(join(tmpdir(), 'spur-fs-move-'));
+            const fdir = join(r, 'features');
+            const tdir = join(r, 'tasks');
+            const fs = createNodeFileSystem(r);
+            await fs.ensureDir(fdir);
+            await fs.ensureDir(tdir);
+            const write = new PlanningWriteService({ fs });
+            const s = new FeatureService({ fs, featuresDir: fdir, tasksDir: tdir, writeService: write });
+            await s.create('Foundation'); // A
+            await s.create('Sub', 'A'); // A1
+            await s.create('Deep', 'A1'); // A11
+            await s.create('Other'); // B
+            await new TaskService({ fs, tasksDir: tdir, writeService: write }).create({
+                title: 'impl sub',
+                featureId: 'A1',
+            });
+            return {
+                svc: s,
+                featuresDir: fdir,
+                tasksDir: tdir,
+                fs,
+                cleanup: () => rmSync(r, { recursive: true, force: true }),
+            };
+        }
+
+        test('R1: cascades the subtree (A1→B1, A11→B11); files renamed, others untouched', async () => {
+            const { svc: s, featuresDir, fs, cleanup } = await seedMoveCorpus();
+            const result = await s.move('A1', 'B');
+            expect(result.movedCount).toBe(2);
+            expect(result.mapping).toEqual({ A1: 'B1', A11: 'B11' });
+            // New files exist, old gone; A and B untouched.
+            expect(await fs.exists(join(featuresDir, 'B1_sub.md'))).toBe(true);
+            expect(await fs.exists(join(featuresDir, 'B11_deep.md'))).toBe(true);
+            expect(await fs.exists(join(featuresDir, 'A1_sub.md'))).toBe(false);
+            expect(await fs.exists(join(featuresDir, 'A11_deep.md'))).toBe(false);
+            expect(await fs.exists(join(featuresDir, 'A_foundation.md'))).toBe(true);
+            // The moved file's id frontmatter is rewritten + a move History line appended.
+            const b1 = await fs.readFile(join(featuresDir, 'B1_sub.md'));
+            expect(b1).toContain('id: "B1"');
+            expect(b1).toContain('moved A1 → B1');
+            cleanup();
+        });
+
+        test('R2: every linked task feature_id edge is updated', async () => {
+            const { svc: s, tasksDir, fs, cleanup } = await seedMoveCorpus();
+            const result = await s.move('A1', 'B');
+            expect(result.tasksUpdated).toEqual(['0001']);
+            const task = await fs.readFile(join(tasksDir, '0001_impl-sub.md'));
+            expect(task).toContain('feature_id: B1');
+            cleanup();
+        });
+
+        test('R3: --dry-run reports the plan with ZERO writes', async () => {
+            const { svc: s, featuresDir, tasksDir, fs, cleanup } = await seedMoveCorpus();
+            const result = await s.move('A1', 'B', { dryRun: true });
+            expect(result.dryRun).toBe(true);
+            expect(result.mapping).toEqual({ A1: 'B1', A11: 'B11' });
+            expect(result.tasksUpdated).toEqual(['0001']);
+            // Nothing changed on disk.
+            expect(await fs.exists(join(featuresDir, 'A1_sub.md'))).toBe(true);
+            expect(await fs.exists(join(featuresDir, 'B1_sub.md'))).toBe(false);
+            expect(await fs.readFile(join(tasksDir, '0001_impl-sub.md'))).toContain('feature_id: A1');
+            cleanup();
+        });
+
+        test('R1: rejects moving a feature into its own subtree', async () => {
+            const { svc: s, cleanup } = await seedMoveCorpus();
+            await expect(s.move('A', 'A1')).rejects.toThrow(/into itself or its own subtree/);
+            cleanup();
+        });
+
+        test('R1: allocation skips taken sibling digits (B1 taken → A1 moves to B2)', async () => {
+            const { svc: s, featuresDir, fs, cleanup } = await seedMoveCorpus();
+            await s.create('Occupant', 'B'); // B1 now taken
+            const result = await s.move('A1', 'B');
+            // A1 maps to the next FREE digit under B (B1 taken → B2); cascade ok.
+            expect(result.mapping.A1).toBe('B2');
+            expect(result.mapping.A11).toBe('B21');
+            expect(await fs.exists(join(featuresDir, 'B2_sub.md'))).toBe(true);
+            cleanup();
+        });
+
+        test('R3: a mid-cascade write failure rolls back (best-effort) — originals restored', async () => {
+            const { svc: _s, featuresDir, tasksDir, fs: realFs, cleanup } = await seedMoveCorpus();
+            // Wrap fs so the SECOND real feature-file write (the B11 grandchild) throws,
+            // after B1 was already written — exercising the rollback path.
+            let featureWrites = 0;
+            const failingFs = {
+                ...realFs,
+                writeFile: async (p: string, c: string) => {
+                    // atomicWriteAsync writes a temp file in the features dir; count those.
+                    if (p.startsWith(featuresDir) && p.includes('.tmp')) {
+                        featureWrites += 1;
+                        if (featureWrites === 2) throw new Error('injected mid-cascade failure');
+                    }
+                    return realFs.writeFile(p, c);
+                },
+            } as ReturnType<typeof createNodeFileSystem>;
+            const s = new FeatureService({
+                fs: failingFs,
+                featuresDir,
+                tasksDir,
+                writeService: new PlanningWriteService({ fs: failingFs }),
+            });
+            await expect(s.move('A1', 'B')).rejects.toThrow(/rolled back/);
+            // Best-effort rollback: the first-written B1 is removed, originals restored.
+            expect(await realFs.exists(join(featuresDir, 'B1_sub.md'))).toBe(false);
+            expect(await realFs.exists(join(featuresDir, 'A1_sub.md'))).toBe(true);
+            expect(await realFs.exists(join(featuresDir, 'A11_deep.md'))).toBe(true);
+            cleanup();
+        });
+
+        test('R3: a genuine deep-id collision is rejected before ANY write', async () => {
+            // Set up so the cascade WOULD map a grandchild onto an existing id:
+            // B1 is free (so A1→B1, A11→B11), but B11 already exists → collision.
+            const { svc: s, featuresDir, fs, cleanup } = await seedMoveCorpus();
+            // Hand-seed a stray B11 (occupies the grandchild target) without taking B1.
+            writeFileSync(
+                join(featuresDir, 'B11_stray.md'),
+                [
+                    '---',
+                    'schema_version: 1',
+                    'id: "B11"',
+                    'name: "Stray"',
+                    'status: backlog',
+                    'priority: P2',
+                    'created_at: 2026-06-14T00:00:00.000Z',
+                    'updated_at: 2026-06-14T00:00:00.000Z',
+                    '---',
+                    '',
+                    '# B11: Stray',
+                ].join('\n'),
+            );
+            await expect(s.move('A1', 'B')).rejects.toThrow(/collision/);
+            // Zero writes: A1/A11 still in place, no B1 created.
+            expect(await fs.exists(join(featuresDir, 'A1_sub.md'))).toBe(true);
+            expect(await fs.exists(join(featuresDir, 'B1_sub.md'))).toBe(false);
+            cleanup();
         });
     });
 });

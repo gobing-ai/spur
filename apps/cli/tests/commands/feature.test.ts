@@ -232,6 +232,70 @@ describe('spur feature CLI', () => {
         expect(index).toContain('# Feature Index');
     });
 
+    test('move --dry-run reports the old→new map without writing (--json)', async () => {
+        // Build an isolated source (with a child) + a target group.
+        const aOut = createCapturedOutput();
+        await main(['feature', 'create', 'MV Source'], { cwd, output: aOut });
+        const sourceId = createdId(aOut);
+        await main(['feature', 'create', 'MV Sub', '--parent', sourceId], { cwd, output: createCapturedOutput() });
+        const tOut = createCapturedOutput();
+        await main(['feature', 'create', 'MV Target'], { cwd, output: tOut });
+        const targetId = createdId(tOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'move', sourceId, '--parent', targetId, '--dry-run', '--json'], {
+            cwd,
+            output,
+        });
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lastMessage(output));
+        expect(parsed.dryRun).toBe(true);
+        expect(parsed.movedCount).toBeGreaterThanOrEqual(2); // source + its child
+        expect(parsed.mapping[sourceId]).toMatch(new RegExp(`^${targetId}[1-9]$`));
+    });
+
+    test('move applies the cascade and prints a human summary (non-JSON)', async () => {
+        const aOut = createCapturedOutput();
+        await main(['feature', 'create', 'MV2 Source'], { cwd, output: aOut });
+        const sourceId = createdId(aOut);
+        await main(['feature', 'create', 'MV2 Sub', '--parent', sourceId], { cwd, output: createCapturedOutput() });
+        const tOut = createCapturedOutput();
+        await main(['feature', 'create', 'MV2 Target'], { cwd, output: tOut });
+        const targetId = createdId(tOut);
+
+        // Dry-run first (human output branch), then apply (human output branch).
+        const dryOut = createCapturedOutput();
+        expect(
+            await main(['feature', 'move', sourceId, '--parent', targetId, '--dry-run'], { cwd, output: dryOut }),
+        ).toBe(0);
+        expect(dryOut.messages.join('')).toContain('Dry run');
+        expect(dryOut.messages.join('')).toContain(`${sourceId} →`);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'move', sourceId, '--parent', targetId], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(lastMessage(output)).toMatch(/Moved \d+ feature\(s\)/);
+        // The source file no longer exists under its old ID.
+        const list = createCapturedOutput();
+        await main(['feature', 'list', '--json'], { cwd, output: list });
+        const ids = JSON.parse(lastMessage(list)).map((f: { id: string }) => f.id);
+        expect(ids).not.toContain(sourceId);
+    });
+
+    test('move into own subtree exits 1', async () => {
+        const aOut = createCapturedOutput();
+        await main(['feature', 'create', 'MV3 Source'], { cwd, output: aOut });
+        const sourceId = createdId(aOut);
+        const childOut = createCapturedOutput();
+        await main(['feature', 'create', 'MV3 Sub', '--parent', sourceId], { cwd, output: childOut });
+        const childId = createdId(childOut);
+        const exitCode = await main(['feature', 'move', sourceId, '--parent', childId], {
+            cwd,
+            output: createCapturedOutput(),
+        });
+        expect(exitCode).toBe(1);
+    });
+
     test('refresh prints a human summary (non-JSON)', async () => {
         const output = createCapturedOutput();
         const exitCode = await main(['feature', 'refresh'], { cwd, output });

@@ -6,7 +6,7 @@
  * Parent is derived by dropping the last character.
  */
 
-import { atomicWriteAsync, MarkdownDocument } from '@gobing-ai/spur-domain';
+import { acquireCreateLock, atomicWriteAsync, MarkdownDocument } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import type { EntityRef, PlanningWriteService, WriteResult } from './planning-write-service';
 
@@ -254,9 +254,177 @@ export class FeatureService {
         return byFeature;
     }
 
-    /** Move a feature to a new parent (cascade rename). */
-    async move(_id: string, _newParentId?: string): Promise<{ movedCount: number }> {
-        return { movedCount: 0 };
+    /**
+     * Move a feature to a new parent — a CASCADE RENAME (design §2.4, DD-14).
+     *
+     * Because the ID encodes position, a move re-IDs the node AND every descendant,
+     * renames their files, rewrites each `id` frontmatter + heading, updates every
+     * task `feature_id` edge, and appends a History entry on all touched files.
+     *
+     * Atomicity (R3): the full old→new plan is validated BEFORE any write (collision
+     * / ≤9-children / not-into-own-subtree). The apply phase tracks every created
+     * and deleted path and rolls back best-effort on a mid-cascade failure.
+     *
+     * @param id          The feature to move.
+     * @param newParentId New parent ID, or `null`/undefined to move to a top-level group letter.
+     * @param opts.dryRun When true, returns the plan + affected tasks with ZERO writes.
+     */
+    async move(
+        id: string,
+        newParentId?: string | null,
+        opts?: { dryRun?: boolean },
+    ): Promise<{ movedCount: number; mapping: Record<string, string>; tasksUpdated: string[]; dryRun: boolean }> {
+        if (!this.isValidId(id)) throw new Error(`Invalid feature id: ${id}`);
+        const parent = newParentId ?? null;
+        if (parent !== null && !this.isValidId(parent)) throw new Error(`Invalid parent id: ${parent}`);
+        if (parent !== null && (parent === id || parent.startsWith(id))) {
+            throw new Error(`Cannot move feature "${id}" into itself or its own subtree (target "${parent}")`);
+        }
+
+        // ── Lock domain (R3): the create-lock serializes feature-ID allocation,
+        // so a concurrent create/move cannot allocate a colliding target id or
+        // interleave with this cascade. Allocation + collision-check + apply are
+        // one critical section. ──
+        const lock = acquireCreateLock(this.ctx.featuresDir, this.ctx.fs);
+        try {
+            // ── Build the old→new ID map for the node + all descendants ──
+            const all = await this.list();
+            const byId = new Map(all.map((f) => [f.id, f]));
+            if (!byId.has(id)) throw new Error(`Feature ${id} not found`);
+
+            const newRootId = await this.allocateId(parent); // next free digit/letter, ≤9 enforced
+            const subtree = all.filter((f) => f.id === id || f.id.startsWith(id)).map((f) => f.id);
+            const mapping: Record<string, string> = {};
+            for (const oldId of subtree) {
+                mapping[oldId] = newRootId + oldId.slice(id.length); // preserve relative suffix
+            }
+
+            // Collision guard: no mapped id may collide with an existing id outside the subtree.
+            const movedSet = new Set(subtree);
+            for (const newId of Object.values(mapping)) {
+                if (byId.has(newId) && !movedSet.has(newId)) {
+                    throw new Error(`Move collision: target id "${newId}" already exists`);
+                }
+            }
+
+            // Affected tasks: any task whose feature_id is in the moved subtree.
+            const affectedTasks = await this.tasksWithFeatureIds(new Set(subtree));
+
+            if (opts?.dryRun === true) {
+                return {
+                    movedCount: subtree.length,
+                    mapping,
+                    tasksUpdated: affectedTasks.map((t) => t.wbs),
+                    dryRun: true,
+                };
+            }
+
+            return await this.applyMove(all, movedSet, mapping, affectedTasks, subtree.length);
+        } finally {
+            lock.release();
+        }
+    }
+
+    /** Execute the validated move plan (best-effort atomic). Called inside the create-lock. */
+    private async applyMove(
+        all: FeatureSummary[],
+        movedSet: Set<string>,
+        mapping: Record<string, string>,
+        affectedTasks: Array<{ wbs: string; path: string; featureId: string }>,
+        movedCount: number,
+    ): Promise<{ movedCount: number; mapping: Record<string, string>; tasksUpdated: string[]; dryRun: boolean }> {
+        const now = new Date().toISOString();
+        const created: string[] = [];
+        const removed: Array<{ path: string; content: string }> = [];
+        try {
+            // 1) Rename + rewrite each feature file in the subtree.
+            for (const f of all.filter((x) => movedSet.has(x.id))) {
+                const newId = mapping[f.id];
+                if (newId === undefined) continue;
+                const raw = await this.ctx.fs.readFile(f.filePath);
+                const doc = MarkdownDocument.parse(raw, 'feature');
+                doc.setFrontmatterField('id', `"${newId}"`);
+                doc.setFrontmatterField('updated_at', now);
+                appendFeatureHistory(doc, now, `moved ${f.id} → ${newId}`);
+                const slug = basename(f.filePath)
+                    .replace(/^[A-Z][1-9]*_/, '')
+                    .replace(/\.md$/, '');
+                const newPath = `${this.ctx.featuresDir}/${newId}_${slug}.md`;
+                removed.push({ path: f.filePath, content: raw });
+                await atomicWriteAsync(newPath, doc.serialize(), newId, this.ctx.fs, this.ctx.projectName ?? 'spur');
+                created.push(newPath);
+                if (newPath !== f.filePath) await this.ctx.fs.deleteFile(f.filePath);
+            }
+
+            // 2) Update every task feature_id edge in the moved subtree.
+            for (const task of affectedTasks) {
+                const newFid = mapping[task.featureId];
+                if (newFid === undefined) continue;
+                const raw = await this.ctx.fs.readFile(task.path);
+                const doc = MarkdownDocument.parse(raw, 'task');
+                doc.setFrontmatterField('feature_id', newFid);
+                doc.setFrontmatterField('updated_at', now);
+                removed.push({ path: task.path, content: raw });
+                await atomicWriteAsync(
+                    task.path,
+                    doc.serialize(),
+                    task.wbs,
+                    this.ctx.fs,
+                    this.ctx.projectName ?? 'spur',
+                );
+            }
+        } catch (err) {
+            // Best-effort rollback: drop created files, restore originals.
+            for (const p of created) {
+                try {
+                    await this.ctx.fs.deleteFile(p);
+                } catch {
+                    /* best-effort */
+                }
+            }
+            for (const { path, content } of removed) {
+                try {
+                    await atomicWriteAsync(path, content, 'rollback', this.ctx.fs, this.ctx.projectName ?? 'spur');
+                } catch {
+                    /* best-effort */
+                }
+            }
+            throw new Error(
+                `Feature move failed and was rolled back: ${err instanceof Error ? err.message : String(err)}`,
+            );
+        }
+
+        return { movedCount, mapping, tasksUpdated: affectedTasks.map((t) => t.wbs), dryRun: false };
+    }
+
+    /** Find tasks whose `feature_id` is in the given set. */
+    private async tasksWithFeatureIds(
+        ids: Set<string>,
+    ): Promise<Array<{ wbs: string; path: string; featureId: string }>> {
+        const out: Array<{ wbs: string; path: string; featureId: string }> = [];
+        let names: string[];
+        try {
+            names = await this.ctx.fs.readDir(this.ctx.tasksDir);
+        } catch {
+            return out;
+        }
+        for (const name of names) {
+            if (!/^\d{4}_.+\.md$/.test(name)) continue;
+            const wbs = name.match(/^(\d{4})_/)?.[1];
+            if (!wbs) continue;
+            try {
+                const raw = await this.ctx.fs.readFile(`${this.ctx.tasksDir}/${name}`);
+                const fm = MarkdownDocument.parse(raw, 'task').frontmatterData ?? {};
+                const fid = (fm.feature_id as string | undefined) ?? (fm['feature-id'] as string | undefined);
+                if (fid !== undefined && ids.has(fid)) {
+                    out.push({ wbs, path: `${this.ctx.tasksDir}/${name}`, featureId: fid });
+                }
+            } catch {
+                // skip unparseable
+            }
+        }
+        out.sort((a, b) => a.wbs.localeCompare(b.wbs));
+        return out;
     }
 
     // ─── Private helpers ────────────────────────────────────────────────
@@ -433,6 +601,19 @@ function isLastChild(id: string, sorted: IndexNode[], _ids: Set<string>): boolea
 function basename(filePath: string): string {
     const parts = filePath.split('/');
     return parts.at(-1) ?? filePath;
+}
+
+/**
+ * Append a `## History` bullet line to a feature doc (DD-14 move audit trail).
+ * Mirrors the write-service bullet format: `- {ISO-ts} {note} (system)`. Creates
+ * the section body if `## History` exists but is empty.
+ */
+function appendFeatureHistory(doc: MarkdownDocument, timestamp: string, note: string): void {
+    if (!doc.hasSection('History')) return; // no History section → nothing to append to
+    const existing = doc.getSection('History') ?? '';
+    const line = `- ${timestamp} ${note} (system)`;
+    const updated = existing.trim().length > 0 ? `${existing.trimEnd()}\n${line}\n` : `\n${line}\n`;
+    doc.replaceSection('History', updated);
 }
 
 /** Render the `## Tasks` table content (between the auto-gen markers). */
