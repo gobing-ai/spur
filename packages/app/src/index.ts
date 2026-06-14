@@ -23,6 +23,20 @@ export type {
     HistoryServiceContext,
 } from './services/history-service';
 export { HistoryService } from './services/history-service';
+export type {
+    CapturingEmitter,
+    EntityRef,
+    EventEmitter,
+    LifecyclePort,
+    NoopEventEmitter,
+    PlanningEvent,
+    PlanningEventName,
+    PlanningWriteServiceOptions,
+    SchemaLifecyclePort,
+    TransitionResult,
+    WriteResult,
+} from './services/planning-write-service';
+export { PlanningWriteService } from './services/planning-write-service';
 export { type PluginListEntry, PluginService } from './services/plugin-service';
 export {
     type Colorize,
