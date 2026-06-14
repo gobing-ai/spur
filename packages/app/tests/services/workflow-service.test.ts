@@ -332,4 +332,86 @@ describe('WorkflowAppService', () => {
             await rm(dir, { recursive: true, force: true });
         });
     });
+
+    describe('continue — HITL resume (0063, E3)', () => {
+        // A workflow that PAUSES at `gate` (E3) so there is a paused run to resume.
+        const PAUSING_YAML = `name: pauser-svc
+kind: state-machine
+initialState: start
+states:
+  - id: start
+    onEnter:
+      - kind: note
+        options:
+          message: go
+  - id: gate
+    pause: true
+  - id: done
+transitions:
+  - from: start
+    to: gate
+    guard: { kind: always }
+  - from: gate
+    to: done
+    guard: { kind: always }
+terminalStates:
+  - done
+`;
+
+        /** Seed a project with the pausing workflow under `.spur/workflows/` (so name→file resolves). */
+        async function seedPausing(): Promise<{ svc: WorkflowAppService; dir: string }> {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-continue-'));
+            const wfDir = join(dir, '.spur', 'workflows');
+            await mkdir(wfDir, { recursive: true });
+            await writeFile(join(wfDir, 'pauser.yaml'), PAUSING_YAML);
+            return { svc: new WorkflowAppService(makeCtx(dir)), dir };
+        }
+
+        test('R1: run pauses at the gate, latestPausedRun discovers it, continuePaused resumes to done', async () => {
+            const { svc, dir } = await seedPausing();
+            const runResult = await svc.run(join(dir, '.spur', 'workflows', 'pauser.yaml'), { runId: 'p1' });
+            expect(runResult.status).toBe('paused');
+            expect(runResult.finalState).toBe('gate');
+
+            const latest = await svc.latestPausedRun();
+            expect(latest?.runId).toBe('p1');
+            expect(latest?.workflowName).toBe('pauser-svc');
+
+            const resumed = await svc.continuePaused('p1');
+            expect(resumed.status).toBe('done');
+            expect(resumed.finalState).toBe('done');
+
+            // No longer paused after resume.
+            expect(await svc.latestPausedRun()).toBeNull();
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('R1: latestPausedRun returns null when nothing is paused', async () => {
+            const { svc, dir } = await seedPausing();
+            expect(await svc.latestPausedRun()).toBeNull();
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('R1: with MULTIPLE paused runs, latestPausedRun discovers the most-recent (ordering)', async () => {
+            const { svc, dir } = await seedPausing();
+            const wf = join(dir, '.spur', 'workflows', 'pauser.yaml');
+            await svc.run(wf, { runId: 'older' }); // paused first
+            await new Promise((r) => setTimeout(r, 10)); // ensure a distinct updated_at
+            await svc.run(wf, { runId: 'newer' }); // paused second → most recent
+            const latest = await svc.latestPausedRun();
+            expect(latest?.runId).toBe('newer'); // most-recent-first, not 'older'
+            // Resuming 'newer' leaves 'older' still paused → discovery now returns 'older'.
+            await svc.continuePaused('newer');
+            expect((await svc.latestPausedRun())?.runId).toBe('older');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('continuePaused on a non-paused / unknown run is a clear error', async () => {
+            const { svc, dir } = await seedPausing();
+            await expect(svc.continuePaused('no-such-run')).rejects.toThrow(
+                /not paused|does not exist|nothing to continue/i,
+            );
+            await rm(dir, { recursive: true, force: true });
+        });
+    });
 });

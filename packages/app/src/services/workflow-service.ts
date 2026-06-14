@@ -46,6 +46,13 @@ export interface WorkflowRunOptions {
     dryRun?: boolean;
 }
 
+/** A paused run discovered for `spur workflow continue` (E3). */
+export interface PausedRun {
+    runId: string;
+    workflowName: string;
+    startedAt: string;
+}
+
 /** A single entry in a workflow file listing. */
 export interface WorkflowListEntry {
     name: string;
@@ -180,6 +187,63 @@ export class WorkflowAppService {
             await new RunDao(db).stampMetadata(runId, { dryRun: true });
         }
         return result as WorkflowRunResult;
+    }
+
+    /**
+     * Discover the most-recent paused run (E3), or `null` if none are paused.
+     * Used by `spur workflow continue` with no run-id to find the run to resume.
+     */
+    async latestPausedRun(): Promise<PausedRun | null> {
+        const svc = await this.createEngineService();
+        const paused = await svc.listPausedRuns({ limit: 1 });
+        const first = paused[0];
+        if (first === undefined) return null;
+        return { runId: first.id, workflowName: first.workflow_name, startedAt: first.started_at };
+    }
+
+    /**
+     * Resume a paused run (HITL continue, design §6 / D04). Works for both
+     * lifecycle and pipeline runs. The run's `workflow_name` is resolved back to
+     * its YAML definition (scanning the workflow search paths) so the engine can
+     * resume from where it paused. Throws a clear error if the run is missing or
+     * not paused.
+     *
+     * @param runId The run to resume.
+     */
+    async continuePaused(runId: string): Promise<WorkflowRunResult> {
+        const svc = await this.createEngineService();
+        const run = await svc.listPausedRuns();
+        const target = run.find((r) => r.id === runId);
+        if (target === undefined) {
+            throw new Error(`Run "${runId}" is not paused (or does not exist) — nothing to continue.`);
+        }
+        const workflow = await this.resolveWorkflowDefByName(target.workflow_name);
+        if (workflow === null) {
+            throw new Error(
+                `Cannot resume run "${runId}": workflow definition "${target.workflow_name}" not found in the workflow search paths.`,
+            );
+        }
+        const result = await svc.resumeRun(workflow, runId, { workdir: this.ctx.cwd });
+        return result as WorkflowRunResult;
+    }
+
+    /** Resolve a workflow definition by its `name` field, scanning the search paths. */
+    private async resolveWorkflowDefByName(name: string): Promise<WorkflowDef | null> {
+        const listing = await this.list();
+        const entry = listing.entries.find((e) => e.name === name && e.valid);
+        if (entry === undefined) return null;
+        // `entry.path` is display-relative to its layer root; re-resolve from the layer.
+        for (const layer of listing.layers) {
+            const abs = resolve(layer.path, entry.path);
+            if (await fileExists(abs)) {
+                try {
+                    return await loadWorkflowDef(abs, { validateSchema: false });
+                } catch {
+                    // try the next layer
+                }
+            }
+        }
+        return null;
     }
 
     /**

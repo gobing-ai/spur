@@ -69,8 +69,11 @@ states:
 
   - id: approve
     description: >
-      Human-in-the-loop approval gate (E3 pause/resume). Resume with
-      `spur workflow continue`. Skipped when `profile=auto` (approve→verify guard).
+      Human-in-the-loop approval gate. Skipped when `profile=auto` (approve→verify
+      guard fires first). NOTE: to make this state PAUSE for `spur workflow continue`
+      (E3), add `pause: true` here — deferred until the globally-installed `@gobing-ai/spur`
+      schema (currently a stale 0.2.5 that lacks the `pause` field) is refreshed, so
+      full `spur workflow validate` stays green. The workspace schema already supports it.
     onEnter:
       - kind: hitl.confirm
         options:

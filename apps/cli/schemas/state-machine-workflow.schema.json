@@ -35,6 +35,10 @@
                 "properties": {
                     "id": { "type": "string", "minLength": 1 },
                     "description": { "type": "string" },
+                    "pause": {
+                        "type": "boolean",
+                        "description": "When true, the engine pauses the run at this state for HITL (E3); resume with `spur workflow continue`."
+                    },
                     "onEnter": { "type": "array", "items": { "$ref": "#/$defs/action" } },
                     "onExit": { "type": "array", "items": { "$ref": "#/$defs/action" } }
                 }

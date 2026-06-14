@@ -176,6 +176,93 @@ describe('workflow command (main)', () => {
         expect(exitCode).toBe(1);
     });
 
+    // ── continue (HITL resume, 0063) ──
+    const PAUSING_WORKFLOW_YAML = `name: cli-pauser
+kind: state-machine
+initialState: start
+states:
+  - id: start
+  - id: gate
+    pause: true
+  - id: done
+transitions:
+  - from: start
+    to: gate
+    guard: { kind: always }
+  - from: gate
+    to: done
+    guard: { kind: always }
+terminalStates:
+  - done
+`;
+
+    test('continue with no paused run returns 1', async () => {
+        const dir = await createTempProject();
+        const errors: string[] = [];
+        const exitCode = await main(['workflow', 'continue', '--yes'], {
+            output: { write: () => {}, error: (m) => errors.push(m) },
+            cwd: dir,
+            dbUrl: join(dir, 'spur.db'),
+        });
+        expect(exitCode).toBe(1);
+        expect(errors.some((e) => e.includes('No paused'))).toBe(true);
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('continue --yes discovers the latest paused run and resumes it to done', async () => {
+        const dir = await createTempProject();
+        const wfDir = join(dir, '.spur', 'workflows');
+        await mkdir(wfDir, { recursive: true });
+        await writeFile(join(wfDir, 'pauser.yaml'), PAUSING_WORKFLOW_YAML);
+        const dbUrl = join(dir, 'spur.db');
+
+        // Run it → pauses at gate.
+        const runOut = createCapturedOutput();
+        const runExit = await main(['workflow', 'run', '--run-id', 'cli-p1', join(wfDir, 'pauser.yaml'), '--json'], {
+            output: runOut,
+            cwd: dir,
+            dbUrl,
+        });
+        expect(runExit).toBe(1); // paused != done → exit 1
+        expect(JSON.parse(runOut.messages.at(-1) ?? '{}').status).toBe('paused');
+
+        // Continue --yes → resume to done → exit 0.
+        const contOut = createCapturedOutput();
+        const contExit = await main(['workflow', 'continue', '--yes', '--json'], { output: contOut, cwd: dir, dbUrl });
+        expect(contExit).toBe(0);
+        expect(JSON.parse(contOut.messages.at(-1) ?? '{}').status).toBe('done');
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('continue <run-id> resumes a specific paused run', async () => {
+        const dir = await createTempProject();
+        const wfDir = join(dir, '.spur', 'workflows');
+        await mkdir(wfDir, { recursive: true });
+        await writeFile(join(wfDir, 'pauser.yaml'), PAUSING_WORKFLOW_YAML);
+        const dbUrl = join(dir, 'spur.db');
+        await main(['workflow', 'run', '--run-id', 'cli-p2', join(wfDir, 'pauser.yaml'), '--json'], {
+            output: nullOutput(),
+            cwd: dir,
+            dbUrl,
+        });
+        const out = createCapturedOutput();
+        const exitCode = await main(['workflow', 'continue', 'cli-p2', '--json'], { output: out, cwd: dir, dbUrl });
+        expect(exitCode).toBe(0);
+        expect(JSON.parse(out.messages.at(-1) ?? '{}').status).toBe('done');
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('continue of a non-paused run returns 1', async () => {
+        const dir = await createTempProject();
+        const exitCode = await main(['workflow', 'continue', 'ghost-run', '--json'], {
+            output: nullOutput(),
+            cwd: dir,
+            dbUrl: join(dir, 'spur.db'),
+        });
+        expect(exitCode).toBe(1);
+        await rm(dir, { recursive: true, force: true });
+    });
+
     test('run subcommand formats a completed workflow in plain mode', async () => {
         const dir = await createTempProject();
         const workflowFile = join(dir, 'workflow.yaml');

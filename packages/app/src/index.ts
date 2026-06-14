@@ -87,6 +87,7 @@ export type {
 } from './services/team-service';
 export { TeamService } from './services/team-service';
 export type {
+    PausedRun,
     TimelineEvent,
     WorkflowAppServiceContext,
     WorkflowListEntry,

@@ -112,6 +112,52 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         });
 
     workflow
+        .command('continue')
+        .description('Resume a paused (HITL) workflow run. Omit run-id to resume the most recent paused run.')
+        .argument('[run-id]', 'Run ID to resume (default: the most recent paused run)')
+        .option('--yes', 'Resume without prompting for confirmation')
+        .option('--json', 'Output machine-readable JSON where supported')
+        .action(async (runId, options) => {
+            const json = options.json === true;
+            const svc = makeSvc(json);
+            try {
+                let targetId = runId;
+                if (targetId === undefined) {
+                    // Discover the most recent paused run (E3).
+                    const latest = await svc.latestPausedRun();
+                    if (latest === null) {
+                        context.output.error('No paused workflow run to continue.');
+                        context.setExitCode(1);
+                        return;
+                    }
+                    targetId = latest.runId;
+                    // Confirm unless --yes (or a non-interactive responder auto-accepts).
+                    if (options.yes !== true) {
+                        const answer = await context.hitlResponder(json).respond({
+                            kind: 'confirm',
+                            prompt: `Resume paused run ${latest.runId} (${latest.workflowName})?`,
+                            runId: latest.runId,
+                            node: 'continue',
+                        });
+                        if (answer.value !== 'yes') {
+                            context.output.error(`Aborted — run ${latest.runId} not resumed.`);
+                            context.setExitCode(1);
+                            return;
+                        }
+                    }
+                }
+                const result = await svc.continuePaused(targetId);
+                context.output.write(
+                    json ? toJson(result) : `workflow ${result.status}: ${result.workflowName} -> ${result.finalState}`,
+                );
+                context.setExitCode(result.status === 'done' ? 0 : 1);
+            } catch (err) {
+                context.output.error(String(err));
+                context.setExitCode(1);
+            }
+        });
+
+    workflow
         .command('list')
         .description('List available workflow YAML files.')
         .option('--json', 'Output machine-readable JSON where supported')

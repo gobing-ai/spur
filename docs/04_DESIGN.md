@@ -154,13 +154,18 @@ overrides the global root and suppresses the bundled fallback for a hermetic run
   `ts-rule-engine` `RulePersistenceAdapter`; Spur writes via `DbRulePersistenceAdapter`).
 Backed by `ts-rule-engine`. Help dispatch per §1.0.
 
-#### `spur workflow validate <workflow.yaml> [--json] [--no-schema]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--json]` · `spur workflow list [--json]` · `spur workflow trace [run-id] [--workflow <name>] [--status <s>] [--since <date>] [--last <n>] [--json]`
+#### `spur workflow validate <workflow.yaml> [--json] [--no-schema]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--json]` · `spur workflow continue [run-id] [--yes] [--json]` · `spur workflow list [--json]` · `spur workflow trace [run-id] [--workflow <name>] [--status <s>] [--since <date>] [--last <n>] [--json]`
 - `validate <file>` — load + Zod-validate a workflow definition.
 - `run <file> [--run-id <id>] [--vars <json>] [--dry-run]` — execute; prints `<status>: <name> -> <finalState>`;
   exit 1 unless `done`. `--vars` takes a JSON object of per-run variable overrides
   (e.g. `--vars '{"taskId":"0042"}'`), merged over the workflow's `vars` for `${vars.*}` resolution.
   `--dry-run` validates the definition and walks the transition graph without executing actions
   — useful for verifying workflow structure before committing side effects.
+- `continue [run-id] [--yes]` — resume a paused (HITL) run (E3, design §6 / D04). Omit `run-id` to
+  discover the most-recent paused run and confirm (skipped with `--yes`). Resolves the run's
+  `workflow_name` back to its YAML, then `resumeRun`. Works for both lifecycle and pipeline runs;
+  exit 1 if no paused run, the run isn't paused, or it doesn't resolve to `done`. (A state pauses when
+  it declares `pause: true`; the workspace schema supports `pause`.)
 - `list` — list available workflow YAML files across project (`.spur/workflows/`) and global
   (`~/.config/spur/workflows/`) layers, grouped by source.
 - `trace` — query persisted workflow run history. No argument: list recent runs (default last 20,
