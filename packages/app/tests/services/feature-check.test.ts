@@ -1,0 +1,586 @@
+import { describe, expect, test } from 'bun:test';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { FeatureCheckService } from '../../src/services/feature-check';
+
+function seedFile(content: string): { fs: ReturnType<typeof createNodeFileSystem>; path: string; cleanup(): void } {
+    const dir = mkdtempSync(join(tmpdir(), 'spur-feature-check-'));
+    const filePath = join(dir, 'A_feature.md');
+    writeFileSync(filePath, content);
+    return {
+        fs: createNodeFileSystem(),
+        path: filePath,
+        cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    };
+}
+
+function seedFeaturesDir(files: Record<string, string>): {
+    fs: ReturnType<typeof createNodeFileSystem>;
+    dir: string;
+    cleanup(): void;
+} {
+    const dir = mkdtempSync(join(tmpdir(), 'spur-feature-check-dir-'));
+    for (const [name, content] of Object.entries(files)) {
+        writeFileSync(join(dir, name), content);
+    }
+    return {
+        fs: createNodeFileSystem(),
+        dir,
+        cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    };
+}
+
+describe('FeatureCheckService', () => {
+    // ── L1: Schema validation ────────────────────────────────────────────
+
+    test('L1: schema validation passes for valid feature frontmatter', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'id: "A"',
+            'name: "Valid Feature"',
+            'status: backlog',
+            'priority: P1',
+            'created_at: 2026-06-14T00:00:00.000Z',
+            'updated_at: 2026-06-14T00:00:00.000Z',
+            '---',
+            '',
+            '# A: Valid Feature',
+            '',
+            '## Goal',
+            '',
+            'Build a feature check system.',
+            '',
+            '## Scope',
+            '',
+            'In scope: validation',
+            'Out of scope: deployment',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new FeatureCheckService(fs);
+        const result = await svc.check(path, 'A');
+        cleanup();
+
+        expect(result.pass).toBe(true);
+        expect(result.findings.filter((f) => f.layer === 'L1' && f.severity === 'error')).toHaveLength(0);
+    });
+
+    test('L1: schema validation catches missing required field', async () => {
+        const content = ['---', 'status: backlog', '---', '', '# A: Bad feature'].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new FeatureCheckService(fs);
+        const result = await svc.check(path, 'A');
+        cleanup();
+
+        const l1Errors = result.findings.filter((f) => f.layer === 'L1' && f.severity === 'error');
+        expect(l1Errors.length).toBeGreaterThan(0);
+        expect(result.pass).toBe(false);
+    });
+
+    test('L1: schema rejects invalid feature ID format', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'id: "invalid-id"',
+            'name: "Bad ID"',
+            'status: backlog',
+            'priority: P2',
+            'created_at: 2026-06-14T00:00:00.000Z',
+            'updated_at: 2026-06-14T00:00:00.000Z',
+            '---',
+            '',
+            '# invalid-id: Bad ID',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new FeatureCheckService(fs);
+        const result = await svc.check(path, 'invalid-id');
+        cleanup();
+
+        const l1Errors = result.findings.filter((f) => f.layer === 'L1' && f.severity === 'error');
+        expect(l1Errors.length).toBeGreaterThan(0);
+        expect(result.pass).toBe(false);
+    });
+
+    test('L1: markdown parse failure produces error', async () => {
+        const { fs, path, cleanup } = seedFile('not valid yaml ---');
+        const svc = new FeatureCheckService(fs);
+        const result = await svc.check(path, 'A');
+        cleanup();
+
+        // No frontmatter means schema validation fails
+        expect(result.pass).toBe(false);
+    });
+
+    // ── L2: Section presence ─────────────────────────────────────────────
+
+    test('L2: active status requires Goal, Scope, Acceptance Criteria', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'id: "B"',
+            'name: "Active Feature"',
+            'status: active',
+            'priority: P1',
+            'created_at: 2026-06-14T00:00:00.000Z',
+            'updated_at: 2026-06-14T00:00:00.000Z',
+            '---',
+            '',
+            '# B: Active Feature',
+            '',
+            '## Goal',
+            '',
+            'The goal.',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new FeatureCheckService(fs);
+        const result = await svc.check(path, 'B');
+        cleanup();
+
+        const l2Errors = result.findings.filter((f) => f.layer === 'L2' && f.severity === 'error');
+        // active has gate:true, so missing Scope and Acceptance Criteria are errors
+        expect(l2Errors.length).toBeGreaterThan(0);
+        expect(result.pass).toBe(false);
+        expect(result.missingSections).toContain('Scope');
+        expect(result.missingSections).toContain('Acceptance Criteria');
+    });
+
+    test('L2: backlog status has no required sections', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'id: "C"',
+            'name: "Backlog Feature"',
+            'status: backlog',
+            'priority: P3',
+            'created_at: 2026-06-14T00:00:00.000Z',
+            'updated_at: 2026-06-14T00:00:00.000Z',
+            '---',
+            '',
+            '# C: Backlog Feature',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new FeatureCheckService(fs);
+        const result = await svc.check(path, 'C');
+        cleanup();
+
+        const l2Errors = result.findings.filter((f) => f.layer === 'L2' && f.severity === 'error');
+        expect(l2Errors).toHaveLength(0);
+        expect(result.pass).toBe(true);
+    });
+
+    test('L2: cancelled status requires Notes', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'id: "D"',
+            'name: "Cancelled Feature"',
+            'status: cancelled',
+            'priority: P2',
+            'created_at: 2026-06-14T00:00:00.000Z',
+            'updated_at: 2026-06-14T00:00:00.000Z',
+            '---',
+            '',
+            '# D: Cancelled Feature',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new FeatureCheckService(fs);
+        const result = await svc.check(path, 'D');
+        cleanup();
+
+        // cancelled has no gate:true, so missing Notes is a warning, not error
+        const l2Warnings = result.findings.filter(
+            (f) => f.layer === 'L2' && f.severity === 'warning' && f.section === 'Notes',
+        );
+        expect(l2Warnings.length).toBeGreaterThan(0);
+        // Should still pass since it's a warning
+        expect(result.pass).toBe(true);
+    });
+
+    // ── L3: Format rules ─────────────────────────────────────────────────
+
+    test('L3: validates BDD Acceptance Criteria syntax', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'id: "E"',
+            'name: "BDD Feature"',
+            'status: verifying',
+            'priority: P1',
+            'created_at: 2026-06-14T00:00:00.000Z',
+            'updated_at: 2026-06-14T00:00:00.000Z',
+            '---',
+            '',
+            '# E: BDD Feature',
+            '',
+            '## Goal',
+            '',
+            'Test BDD validation.',
+            '',
+            '## Scope',
+            '',
+            'In scope: AC validation.',
+            '',
+            '## Acceptance Criteria',
+            '',
+            'Feature: Login',
+            '',
+            '  Scenario: Successful login',
+            '    Given a registered user',
+            '    When they enter valid credentials',
+            '    Then they are logged in',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new FeatureCheckService(fs);
+        const result = await svc.check(path, 'E');
+        cleanup();
+
+        // BDD valid — no L3 errors from AC
+        const l3Errors = result.findings.filter((f) => f.layer === 'L3' && f.severity === 'error');
+        expect(l3Errors).toHaveLength(0);
+    });
+
+    test('L3: detects invalid BDD syntax in Acceptance Criteria', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'id: "F"',
+            'name: "Bad BDD"',
+            'status: active',
+            'priority: P2',
+            'created_at: 2026-06-14T00:00:00.000Z',
+            'updated_at: 2026-06-14T00:00:00.000Z',
+            '---',
+            '',
+            '# F: Bad BDD',
+            '',
+            '## Goal',
+            '',
+            'Test bad BDD.',
+            '',
+            '## Scope',
+            '',
+            'In scope: BDD errors.',
+            '',
+            '## Acceptance Criteria',
+            '',
+            'Scenario: Missing feature keyword',
+            '  Given something',
+            '  When something',
+            '  Then something',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new FeatureCheckService(fs);
+        const result = await svc.check(path, 'F');
+        cleanup();
+
+        // BDD invalid — should have errors
+        const l3Errors = result.findings.filter(
+            (f) => f.layer === 'L3' && f.severity === 'error' && f.section === 'Acceptance Criteria',
+        );
+        expect(l3Errors.length).toBeGreaterThan(0);
+    });
+
+    test('L3: warns when Scope lacks in/out delineation', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'id: "G"',
+            'name: "Vague Scope"',
+            'status: active',
+            'priority: P3',
+            'created_at: 2026-06-14T00:00:00.000Z',
+            'updated_at: 2026-06-14T00:00:00.000Z',
+            '---',
+            '',
+            '# G: Vague Scope',
+            '',
+            '## Goal',
+            '',
+            'Test scope.',
+            '',
+            '## Scope',
+            '',
+            'This is just free-form text with no in-scope markers.',
+            '',
+            '## Acceptance Criteria',
+            '',
+            'Feature: Test',
+            '',
+            '  Scenario: Placeholder',
+            '    Given nothing',
+            '    When nothing',
+            '    Then nothing',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new FeatureCheckService(fs);
+        const result = await svc.check(path, 'G');
+        cleanup();
+
+        const scopeWarning = result.findings.filter(
+            (f) => f.layer === 'L3' && f.severity === 'warning' && f.section === 'Scope',
+        );
+        expect(scopeWarning.length).toBeGreaterThan(0);
+    });
+
+    // ── L3: One-active-goal ──────────────────────────────────────────────
+
+    test('L3: one-active-goal detects conflicting P0 active/verifying features', async () => {
+        const files: Record<string, string> = {
+            'A_first.md': [
+                '---',
+                'schema_version: 1',
+                'id: "A"',
+                'name: "First P0"',
+                'status: active',
+                'priority: P0',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# A: First P0',
+            ].join('\n'),
+            'B_second.md': [
+                '---',
+                'schema_version: 1',
+                'id: "B"',
+                'name: "Second P0"',
+                'status: active',
+                'priority: P0',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# B: Second P0',
+            ].join('\n'),
+        };
+
+        const { fs, dir, cleanup } = seedFeaturesDir(files);
+        const svc = new FeatureCheckService(fs);
+
+        // Check the second feature — should detect conflict with first
+        const result = await svc.check(`${dir}/B_second.md`, 'B', {
+            featuresDir: dir,
+        });
+        cleanup();
+
+        const goalErrors = result.findings.filter((f) => f.message.includes('One-active-goal'));
+        expect(goalErrors.length).toBe(1);
+        expect(goalErrors[0]?.severity).toBe('error');
+        expect(result.pass).toBe(false);
+    });
+
+    test('L3: one-active-goal passes when only one P0 active feature', async () => {
+        const files: Record<string, string> = {
+            'A_solo.md': [
+                '---',
+                'schema_version: 1',
+                'id: "A"',
+                'name: "Solo P0"',
+                'status: active',
+                'priority: P0',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# A: Solo P0',
+            ].join('\n'),
+        };
+
+        const { fs, dir, cleanup } = seedFeaturesDir(files);
+        const svc = new FeatureCheckService(fs);
+
+        const result = await svc.check(`${dir}/A_solo.md`, 'A', {
+            featuresDir: dir,
+        });
+        cleanup();
+
+        const goalErrors = result.findings.filter((f) => f.message.includes('One-active-goal'));
+        expect(goalErrors).toHaveLength(0);
+    });
+
+    test('L3: one-active-goal not triggered for non-P0 features', async () => {
+        const files: Record<string, string> = {
+            'A_p0_active.md': [
+                '---',
+                'schema_version: 1',
+                'id: "A"',
+                'name: "Only P0"',
+                'status: active',
+                'priority: P0',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# A: Only P0',
+            ].join('\n'),
+            'B_p1_active.md': [
+                '---',
+                'schema_version: 1',
+                'id: "B"',
+                'name: "P1 Feature"',
+                'status: active',
+                'priority: P1',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# B: P1 Feature',
+            ].join('\n'),
+        };
+
+        const { fs, dir, cleanup } = seedFeaturesDir(files);
+        const svc = new FeatureCheckService(fs);
+
+        // Check P1 feature — should not trigger one-active-goal
+        const result = await svc.check(`${dir}/B_p1_active.md`, 'B', {
+            featuresDir: dir,
+        });
+        cleanup();
+
+        const goalErrors = result.findings.filter((f) => f.message.includes('One-active-goal'));
+        expect(goalErrors).toHaveLength(0);
+    });
+
+    test('L3: one-active-goal counts verifying as active for P0 rule', async () => {
+        const files: Record<string, string> = {
+            'A_active.md': [
+                '---',
+                'schema_version: 1',
+                'id: "A"',
+                'name: "Active P0"',
+                'status: active',
+                'priority: P0',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# A: Active P0',
+            ].join('\n'),
+            'B_verifying.md': [
+                '---',
+                'schema_version: 1',
+                'id: "B"',
+                'name: "Verifying P0"',
+                'status: verifying',
+                'priority: P0',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# B: Verifying P0',
+            ].join('\n'),
+        };
+
+        const { fs, dir, cleanup } = seedFeaturesDir(files);
+        const svc = new FeatureCheckService(fs);
+
+        // Check verifying P0 — should detect conflict with active P0
+        const result = await svc.check(`${dir}/B_verifying.md`, 'B', {
+            featuresDir: dir,
+        });
+        cleanup();
+
+        const goalErrors = result.findings.filter((f) => f.message.includes('One-active-goal'));
+        expect(goalErrors.length).toBe(1);
+    });
+
+    // ── Strict mode ──────────────────────────────────────────────────────
+
+    test('--strict elevates warnings to errors', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'id: "H"',
+            'name: "Strict Feature"',
+            'status: blocked',
+            'priority: P1',
+            'created_at: 2026-06-14T00:00:00.000Z',
+            'updated_at: 2026-06-14T00:00:00.000Z',
+            '---',
+            '',
+            '# H: Strict Feature',
+            '',
+            '## Goal',
+            '',
+            'Goal text.',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new FeatureCheckService(fs);
+        const result = await svc.check(path, 'H', { strict: true });
+        cleanup();
+
+        // blocked requires Goal + Notes; missing Notes is warning in non-strict
+        // In strict mode, all warnings become errors, so we should have at least one error
+        const l2Findings = result.findings.filter((f) => f.layer === 'L2');
+        expect(l2Findings.every((f) => f.severity === 'error')).toBe(true);
+        // In strict, pass should be false since warnings were elevated
+        expect(result.pass).toBe(false);
+    });
+
+    // ── resolveMatrixEntry ───────────────────────────────────────────────
+
+    test('resolveMatrixEntry falls back to standard variant', () => {
+        const svc = new FeatureCheckService(createNodeFileSystem());
+        const entry = svc.resolveMatrixEntry('nonexistent', 'backlog');
+        expect(entry).toBeTruthy();
+        // backlog has no required sections
+        expect(entry?.required).toHaveLength(0);
+    });
+
+    test('resolveMatrixEntry returns undefined for unknown status', () => {
+        const svc = new FeatureCheckService(createNodeFileSystem());
+        const entry = svc.resolveMatrixEntry('standard', 'nonexistent-status');
+        expect(entry).toBeUndefined();
+    });
+
+    // ── Custom matrix ────────────────────────────────────────────────────
+
+    test('accepts custom matrix in constructor', async () => {
+        const customMatrix = {
+            variants: {
+                standard: {
+                    backlog: {
+                        required: ['Goal', 'Notes'],
+                        gate: true,
+                    },
+                },
+            },
+        };
+
+        const content = [
+            '---',
+            'schema_version: 1',
+            'id: "I"',
+            'name: "Custom Matrix"',
+            'status: backlog',
+            'priority: P3',
+            'created_at: 2026-06-14T00:00:00.000Z',
+            'updated_at: 2026-06-14T00:00:00.000Z',
+            '---',
+            '',
+            '# I: Custom Matrix',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new FeatureCheckService(fs, customMatrix);
+        const result = await svc.check(path, 'I');
+        cleanup();
+
+        const l2Errors = result.findings.filter((f) => f.layer === 'L2' && f.severity === 'error');
+        expect(l2Errors.length).toBeGreaterThan(0);
+        expect(result.missingSections).toContain('Goal');
+        expect(result.missingSections).toContain('Notes');
+    });
+});

@@ -13,9 +13,6 @@ import {
 
 describe('db migrations', () => {
     describe('CLI_SCHEMA_SQL', () => {
-        // DDL for the domain tables is generated from the defineTable definitions
-        // (quoted identifiers), so match the table name with optional quotes
-        // rather than the exact hand-written format.
         const hasCreateTable = (table: string): boolean =>
             new RegExp(`CREATE TABLE IF NOT EXISTS "?${table}"?`).test(CLI_SCHEMA_SQL);
 
@@ -51,20 +48,23 @@ describe('db migrations', () => {
             expect(hasCreateTable('rule_runs')).toBe(true);
             expect(hasCreateTable('rule_eval_runs')).toBe(true);
         });
+
+        test('contains planning_events and task_run_links tables', () => {
+            expect(hasCreateTable('planning_events')).toBe(true);
+            expect(hasCreateTable('task_run_links')).toBe(true);
+        });
     });
 
     describe('CLI_MIGRATIONS', () => {
-        test('has foundation, team-inbox, and rule-history migrations', () => {
-            expect(CLI_MIGRATIONS).toHaveLength(3);
+        test('has foundation, team-inbox, rule-history, and planning migrations', () => {
+            expect(CLI_MIGRATIONS).toHaveLength(4);
             expect(CLI_MIGRATIONS[0]?.id).toBe('0000_spur_cli_foundation');
             expect(CLI_MIGRATIONS[1]?.id).toBe('0001_spur_cli_team_inbox');
             expect(CLI_MIGRATIONS[2]?.id).toBe('0002_spur_cli_rule_history');
+            expect(CLI_MIGRATIONS[3]?.id).toBe('0003_spur_cli_planning');
         });
 
         test('every migration id carries the folder-load filename marker', () => {
-            // loadSqlMigrations filters drizzle/*.sql by CLI_MIGRATION_FILE_MARKER;
-            // an embedded id without the marker means its folder twin is silently
-            // skipped by `spur migrate` (the original 0001_spur_team_inbox bug).
             for (const migration of CLI_MIGRATIONS) {
                 expect(migration.id).toContain(CLI_MIGRATION_FILE_MARKER);
             }
@@ -84,10 +84,6 @@ describe('db migrations', () => {
         });
 
         test('existing DB that already applied 0000 gains rule tables via 0002', async () => {
-            // Simulate a database migrated before task 0040: the journal marks
-            // 0000/0001 applied, but the foundation SQL it ran had no rule tables.
-            // Without the incremental 0002 step, `rule trace` would silently
-            // return empty forever on such databases.
             const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(adapter, [
                 { id: '0000_spur_cli_foundation', sql: 'CREATE TABLE IF NOT EXISTS workspaces (id TEXT);' },
@@ -95,7 +91,7 @@ describe('db migrations', () => {
             ]);
 
             const applied = await applyCliMigrations(adapter);
-            expect(applied).toBe(1);
+            expect(applied).toBe(2);
             await adapter.run(
                 `INSERT INTO rule_runs (id, source_kind, status, started_at, created_at, updated_at)
                  VALUES ('r1', 'preset', 'done', datetime('now'), datetime('now'), datetime('now'))`,
@@ -106,9 +102,6 @@ describe('db migrations', () => {
         });
 
         test('DB journaled under the legacy 0001_spur_team_inbox id upgrades safely', async () => {
-            // The inbox migration was renamed to carry the marker; old DBs hold
-            // the legacy id. The renamed migration re-applies (idempotent DDL)
-            // and the inbox table stays usable — no duplicate-table failure.
             const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(adapter, [
                 { id: '0000_spur_cli_foundation', sql: CLI_SCHEMA_SQL },
@@ -116,7 +109,7 @@ describe('db migrations', () => {
             ]);
 
             const applied = await applyCliMigrations(adapter);
-            expect(applied).toBe(2); // renamed inbox migration + rule history
+            expect(applied).toBe(3); // renamed inbox migration + rule history + planning
             await adapter.run(
                 'INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
                 'm1',
@@ -167,7 +160,6 @@ describe('db migrations', () => {
         test('tables are usable after migration', async () => {
             const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(adapter);
-            // Should not throw
             await adapter.run(
                 'INSERT INTO workspaces (id, name, root, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
                 'ws1',
@@ -197,7 +189,6 @@ describe('db migrations', () => {
                 'planner',
             );
             expect(rows).toHaveLength(1);
-            // status defaults to 'queued' per the package schema.
             expect(rows[0]?.status).toBe('queued');
             adapter.close();
         });
@@ -218,7 +209,6 @@ describe('db migrations', () => {
                 join(dir, '0001_spur_cli_test.sql'),
                 'CREATE TABLE IF NOT EXISTS test_t (id TEXT PRIMARY KEY);',
             );
-            // Non-marker file should be ignored
             await writeFile(join(dir, '0002_other.sql'), 'CREATE TABLE IF NOT EXISTS ignored (id TEXT);');
 
             const migrations = await loadSqlMigrations(dir);

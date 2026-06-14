@@ -301,4 +301,120 @@ describe('spur task CLI', () => {
         expect(exitCode).toBe(1);
         expect(output.errors.at(-1)).toContain('not found');
     });
+
+    // ── refresh ──
+    test('refresh regenerates kanban.md and exits 0', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'refresh'], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(output.messages.join('')).toContain('kanban.md regenerated');
+    });
+
+    test('refresh --json returns kanban path', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'refresh', '--json'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lastMessage(output));
+        expect(parsed.kanban_path).toContain('kanban.md');
+    });
+
+    test('refresh --folder uses custom folder', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'refresh', '--folder', join(cwd, 'docs', 'tasks')], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(output.messages.join('')).toContain('kanban.md regenerated');
+    });
+
+    test('refresh with bad folder exits 1', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'refresh', '--folder', join(cwd, 'nonexistent')], { cwd, output });
+        expect(exitCode).toBe(1);
+    });
+
+    // ── batch-create ──
+    test('batch-create creates tasks from a valid JSON file and exits 0', async () => {
+        const batchFile = join(cwd, 'batch.json');
+        await Bun.write(batchFile, JSON.stringify([{ name: 'Batch task 1' }, { name: 'Batch task 2' }]));
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'batch-create', '--file', batchFile], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(output.messages.join('')).toContain('Created 2 task(s)');
+    });
+
+    test('batch-create --json returns structured output', async () => {
+        const batchFile = join(cwd, 'batch-json.json');
+        await Bun.write(batchFile, JSON.stringify([{ name: 'JSON batch' }]));
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'batch-create', '--file', batchFile, '--json'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lastMessage(output));
+        expect(parsed.created).toBe(1);
+        expect(parsed.wbs.length).toBe(1);
+    });
+
+    test('batch-create with invalid JSON exits 1', async () => {
+        const batchFile = join(cwd, 'bad-batch.json');
+        await Bun.write(batchFile, 'not json');
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'batch-create', '--file', batchFile], { cwd, output });
+        expect(exitCode).toBe(1);
+        expect(output.errors.join('')).toContain('not valid JSON');
+    });
+
+    test('batch-create with empty array exits 1', async () => {
+        const batchFile = join(cwd, 'empty-batch.json');
+        await Bun.write(batchFile, '[]');
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'batch-create', '--file', batchFile], { cwd, output });
+        expect(exitCode).toBe(1);
+        expect(output.errors.join('')).toContain('validation failed');
+    });
+
+    test('batch-create with missing file exits 1', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'batch-create', '--file', '/nonexistent/batch.json'], { cwd, output });
+        expect(exitCode).toBe(1);
+    });
+
+    // ── update --json ──
+    test('update status --json returns structured output', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'JSON transition'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'update', wbs, 'todo', '--json'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lastMessage(output));
+        expect(parsed.ref.id).toBe(wbs);
+        expect(parsed.fromStatus).toBe('backlog');
+        expect(parsed.toStatus).toBe('todo');
+    });
+
+    test('update --section --from-file --json returns structured output', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'Section JSON'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+        const bodyFile = join(cwd, 'body-json.md');
+        await Bun.write(bodyFile, 'JSON section body.\n');
+
+        const output = createCapturedOutput();
+        const exitCode = await main(
+            ['task', 'update', wbs, '--section', 'Solution', '--from-file', bodyFile, '--json'],
+            { cwd, output },
+        );
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lastMessage(output));
+        expect(parsed.ref.id).toBe(wbs);
+    });
+
+    test('check with bad folder exits 1', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'check', '0001', '--folder', join(cwd, 'nonexistent')], { cwd, output });
+        expect(exitCode).toBe(1);
+    });
 });

@@ -61,19 +61,35 @@ export function listBundledConfigFiles(): string[] {
     return walk(root, '').sort();
 }
 
-/** Recursively collect YAML/JSON files under `dir`, returning paths relative to the walk origin. */
-function walk(dir: string, relPrefix: string): string[] {
+/** Recursively collect files under `dir` matching `filter`, returning paths relative to the walk origin. */
+function walk(dir: string, relPrefix: string, filter: RegExp = /\.(ya?ml|json)$/i): string[] {
     const acc: string[] = [];
     for (const entry of readdirSync(dir)) {
         const abs = join(dir, entry);
         const rel = relPrefix.length > 0 ? `${relPrefix}/${entry}` : entry;
         if (statSync(abs).isDirectory()) {
-            acc.push(...walk(abs, rel));
-        } else if (/\.(ya?ml|json)$/i.test(entry)) {
+            acc.push(...walk(abs, rel, filter));
+        } else if (filter.test(entry)) {
             acc.push(rel);
         }
     }
     return acc;
+}
+
+/**
+ * List the relative paths of every bundled template file (`.md` under `config/templates/`),
+ * each as a `/`-joined path relative to {@link bundledConfigRoot}.
+ *
+ * Intended for `spur init` to copy task templates, feature templates, and BDD
+ * snippets into `.spur/config/templates/`. Returns an empty array when no
+ * bundled directory is present.
+ */
+export function listBundledTemplateFiles(): string[] {
+    const root = bundledConfigRoot();
+    if (root === null) return [];
+    const templatesDir = join(root, 'templates');
+    if (!existsSync(templatesDir) || !statSync(templatesDir).isDirectory()) return [];
+    return walk(templatesDir, 'templates', /\.md$/i).sort();
 }
 
 /**

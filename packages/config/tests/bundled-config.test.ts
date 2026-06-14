@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { bundledConfigRoot, listBundledConfigFiles, resetBundledConfigCache } from '../src';
+import { bundledConfigRoot, listBundledConfigFiles, listBundledTemplateFiles, resetBundledConfigCache } from '../src';
 
 describe('bundled-config', () => {
     test('bundledConfigRoot resolves to the repo-root config/ directory in dev', () => {
@@ -31,5 +31,32 @@ describe('bundled-config', () => {
         resetBundledConfigCache();
         const second = bundledConfigRoot();
         expect(first).toBe(second);
+    });
+
+    test('listBundledTemplateFiles includes task template markdown files', () => {
+        const files = listBundledTemplateFiles();
+        expect(files.length).toBeGreaterThan(0);
+        // Task templates created in task 0054
+        expect(files).toContain('templates/task/default.md');
+        expect(files).toContain('templates/task/feature-impl.md');
+        expect(files).toContain('templates/task/issue.md');
+        expect(files).toContain('templates/task/review.md');
+        expect(files).toContain('templates/task/meta.md');
+        // Feature template
+        expect(files).toContain('templates/feature/default.md');
+        // BDD templates
+        expect(files).toContain('templates/bdd/gherkin.md');
+        expect(files).toContain('templates/bdd/checklist.md');
+    });
+
+    test('listBundledTemplateFiles excludes non-markdown entries', () => {
+        const files = listBundledTemplateFiles();
+        expect(files.every((f) => /\.md$/i.test(f))).toBe(true);
+    });
+
+    test('listBundledTemplateFiles returns sorted paths', () => {
+        const files = listBundledTemplateFiles();
+        const sorted = [...files].sort();
+        expect(files).toEqual(sorted);
     });
 });

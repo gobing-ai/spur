@@ -44,7 +44,7 @@ describe('TaskService', () => {
         });
 
         test('creates with parent_wbs in frontmatter', async () => {
-            const result = await svc.create({ title: 'Sub-task', parentWbs: '0042' });
+            const result = await svc.create({ title: 'Sub task', parentWbs: '0042' });
 
             const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
             const raw = await fs.readFile(result.ref.filePath);
@@ -53,7 +53,7 @@ describe('TaskService', () => {
         });
 
         test('defaults status to backlog', async () => {
-            const result = await svc.create({ title: 'Def status' });
+            const result = await svc.create({ title: 'Default status' });
 
             const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
             const raw = await fs.readFile(result.ref.filePath);
@@ -129,6 +129,232 @@ describe('TaskService', () => {
         test('returns null for unknown path', async () => {
             const result = await svc.resolve('/nonexistent/task.md');
             expect(result).toBeNull();
+        });
+
+        test('resolves a task by filename WBS parse', async () => {
+            const created = await svc.create({ title: 'Resolve by name' });
+            const wbs = created.ref.id;
+
+            // Resolve using just the filename (no full path)
+            const filename = `${wbs}_resolve-by-name.md`;
+            const result = await svc.resolve(`/some/other/path/${filename}`);
+
+            expect(result).not.toBeNull();
+            expect(result?.wbs).toBe(wbs);
+        });
+
+        test('returns null for path outside tasksDir without WBS pattern', async () => {
+            const result = await svc.resolve('/completely/unrelated/file.ts');
+            expect(result).toBeNull();
+        });
+    });
+
+    describe('batchCreate', () => {
+        test('creates multiple tasks from a valid JSON file', async () => {
+            const batchFile = `${tasksDir}/batch.json`;
+            const json = JSON.stringify([
+                { name: 'Batch task 1', priority: 'P0' },
+                { name: 'Batch task 2', feature_id: 'A' },
+                { name: 'Batch task 3', parent_wbs: '0042', tags: ['rd3-migration'] },
+            ]);
+            const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
+            await fs.writeFile(batchFile, json);
+
+            const results = await svc.batchCreate(batchFile);
+
+            expect(results).toHaveLength(3);
+            for (const r of results) {
+                expect(r.ref.id).toMatch(/^\d{4}$/);
+                expect(await fs.exists(r.ref.filePath)).toBe(true);
+            }
+        });
+
+        test('rolls back all tasks on partial failure', async () => {
+            // Use a fresh temp dir to avoid pollution from shared beforeAll state
+            const root = mkdtempSync(join(tmpdir(), 'spur-task-svc-rb-'));
+            const dir = join(root, 'tasks');
+            const isolateFs = createNodeFileSystem(root);
+            await isolateFs.ensureDir(dir);
+            const writeService = new PlanningWriteService({ fs: isolateFs });
+            const isolateSvc = new TaskService({ fs: isolateFs, tasksDir: dir, writeService });
+
+            try {
+                const batchFile = join(dir, 'batch-rollback.json');
+                const json = JSON.stringify([{ name: 'Good task' }, { background: 'no name here' }]);
+                await isolateFs.writeFile(batchFile, json);
+
+                await expect(isolateSvc.batchCreate(batchFile)).rejects.toThrow('batch validation failed');
+
+                // Verify no task files were created
+                const entries = await isolateFs.readDir(dir);
+                const taskFiles = entries.filter((e) => /^\d{4}_.+\.md$/.test(e));
+                expect(taskFiles).toHaveLength(0);
+            } finally {
+                rmSync(root, { recursive: true, force: true });
+            }
+        });
+
+        test('rejects invalid JSON', async () => {
+            const batchFile = `${tasksDir}/bad.json`;
+            const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
+            await fs.writeFile(batchFile, 'not json');
+
+            await expect(svc.batchCreate(batchFile)).rejects.toThrow('not valid JSON');
+        });
+
+        test('rejects empty batch array', async () => {
+            const batchFile = `${tasksDir}/empty.json`;
+            const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
+            await fs.writeFile(batchFile, '[]');
+
+            await expect(svc.batchCreate(batchFile)).rejects.toThrow('batch validation failed');
+        });
+
+        test('writes background and requirements sections from batch items', async () => {
+            // Use a fresh temp dir for isolation
+            const root = mkdtempSync(join(tmpdir(), 'spur-task-svc-sec-'));
+            const dir = join(root, 'tasks');
+            const isolateFs = createNodeFileSystem(root);
+            await isolateFs.ensureDir(dir);
+            const writeService = new PlanningWriteService({ fs: isolateFs });
+            const isolateSvc = new TaskService({ fs: isolateFs, tasksDir: dir, writeService });
+
+            try {
+                const batchFile = join(dir, 'batch-sections.json');
+                const json = JSON.stringify([
+                    {
+                        name: 'Sectioned task',
+                        background: 'Custom background text.',
+                        requirements: 'R1. Must do X.\nR2. Must not do Y.',
+                    },
+                ]);
+                await isolateFs.writeFile(batchFile, json);
+
+                const results = await isolateSvc.batchCreate(batchFile);
+                expect(results).toHaveLength(1);
+
+                const first = results[0];
+                if (!first) throw new Error('Expected at least one result');
+                const raw = await isolateFs.readFile(first.ref.filePath);
+                expect(raw).toContain('R1. Must do X.');
+            } finally {
+                rmSync(root, { recursive: true, force: true });
+            }
+        });
+
+        test('rolls back files already written when a later item fails mid-batch (R2)', async () => {
+            // Failure here is NOT a schema violation (those abort before any write).
+            // A write that throws on the 2nd item must leave zero files on disk —
+            // exercising the post-write rollback path, not the pre-write guard.
+            const root = mkdtempSync(join(tmpdir(), 'spur-task-svc-midfail-'));
+            const dir = join(root, 'tasks');
+            const isolateFs = createNodeFileSystem(root);
+            await isolateFs.ensureDir(dir);
+
+            class FailOnSecondCreate extends PlanningWriteService {
+                private calls = 0;
+                override async create(ref: Parameters<PlanningWriteService['create']>[0], content: string) {
+                    this.calls += 1;
+                    if (this.calls === 2) throw new Error('simulated write failure on item 2');
+                    return super.create(ref, content);
+                }
+            }
+            const writeService = new FailOnSecondCreate({ fs: isolateFs });
+            const isolateSvc = new TaskService({ fs: isolateFs, tasksDir: dir, writeService });
+
+            try {
+                const batchFile = join(dir, 'batch-midfail.json');
+                await isolateFs.writeFile(batchFile, JSON.stringify([{ name: 'First ok' }, { name: 'Second fails' }]));
+
+                await expect(isolateSvc.batchCreate(batchFile)).rejects.toThrow('simulated write failure');
+
+                // The first item was written then must be rolled back — zero task files remain.
+                const taskFiles = (await isolateFs.readDir(dir)).filter((e) => /^\d{4}_.+\.md$/.test(e));
+                expect(taskFiles).toHaveLength(0);
+            } finally {
+                rmSync(root, { recursive: true, force: true });
+            }
+        });
+    });
+
+    describe('refresh', () => {
+        test('generates kanban.md with status headers', async () => {
+            const root = mkdtempSync(join(tmpdir(), 'spur-task-svc-ref-'));
+            const dir = join(root, 'tasks');
+            const isolateFs = createNodeFileSystem(root);
+            await isolateFs.ensureDir(dir);
+            const writeService = new PlanningWriteService({ fs: isolateFs });
+            const isolateSvc = new TaskService({ fs: isolateFs, tasksDir: dir, writeService });
+
+            try {
+                await isolateSvc.create({ title: 'Backlog item', status: 'backlog' });
+                await isolateSvc.create({ title: 'In progress', status: 'wip' });
+                await isolateSvc.create({ title: 'Done item', status: 'done' });
+
+                const kanban = await isolateSvc.refresh();
+
+                expect(kanban).toContain('# Kanban');
+                expect(kanban).toContain('Auto-generated by');
+                expect(kanban).toContain('## Backlog');
+                expect(kanban).toContain('## Wip');
+                expect(kanban).toContain('## Done');
+            } finally {
+                rmSync(root, { recursive: true, force: true });
+            }
+        });
+
+        test('groups tasks under parent_wbs', async () => {
+            const root = mkdtempSync(join(tmpdir(), 'spur-task-svc-grp-'));
+            const dir = join(root, 'tasks');
+            const isolateFs = createNodeFileSystem(root);
+            await isolateFs.ensureDir(dir);
+            const writeService = new PlanningWriteService({ fs: isolateFs });
+            const isolateSvc = new TaskService({ fs: isolateFs, tasksDir: dir, writeService });
+
+            try {
+                const parent = await isolateSvc.create({ title: 'Parent task' });
+                const parentWbs = parent.ref.id;
+                await isolateSvc.create({ title: 'Child 1', parentWbs, status: 'wip' });
+                await isolateSvc.create({ title: 'Child 2', parentWbs, status: 'wip' });
+
+                const kanban = await isolateSvc.refresh();
+
+                expect(kanban).toContain(`**${parentWbs}**`);
+                // Children should be indented under the parent
+                expect(kanban).toContain('  - [');
+            } finally {
+                rmSync(root, { recursive: true, force: true });
+            }
+        });
+
+        test('deterministic ordering: same corpus produces identical output', async () => {
+            const root = mkdtempSync(join(tmpdir(), 'spur-task-svc-det-'));
+            const dir = join(root, 'tasks');
+            const isolateFs = createNodeFileSystem(root);
+            await isolateFs.ensureDir(dir);
+            const writeService = new PlanningWriteService({ fs: isolateFs });
+            const isolateSvc = new TaskService({ fs: isolateFs, tasksDir: dir, writeService });
+
+            try {
+                await isolateSvc.create({ title: 'Alpha', status: 'backlog' });
+                await isolateSvc.create({ title: 'Beta', status: 'backlog' });
+
+                const kanban1 = await isolateSvc.refresh();
+                const kanban2 = await isolateSvc.refresh();
+
+                expect(kanban1).toBe(kanban2);
+            } finally {
+                rmSync(root, { recursive: true, force: true });
+            }
+        });
+
+        test('kanban.md file is written to tasksDir', async () => {
+            await svc.create({ title: 'Kanban file test' });
+            await svc.refresh();
+
+            const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
+            const kanbanPath = `${tasksDir}/kanban.md`;
+            expect(await fs.exists(kanbanPath)).toBe(true);
         });
     });
 });

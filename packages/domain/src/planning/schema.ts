@@ -205,3 +205,43 @@ export type TaskFrontmatter = z.infer<typeof taskFrontmatterSchema>;
 
 /** Inferred TypeScript shape of a parsed feature frontmatter. */
 export type FeatureFrontmatter = z.infer<typeof featureFrontmatterSchema>;
+
+// ─── Task batch input ────────────────────────────────────────────────────
+
+/** Template variant names for task batch creation. */
+export const TASK_TEMPLATES = ['feature-impl', 'issue', 'review', 'meta'] as const;
+
+/** Type alias for the canonical template vocabulary. */
+export type TaskTemplate = (typeof TASK_TEMPLATES)[number];
+
+/**
+ * A single task item in a batch-create payload.
+ *
+ * `.strict()` rejects unknown keys so a malformed LLM payload fails the gate
+ * rather than having stray fields silently dropped — matching the
+ * `additionalProperties: false` contract in `apps/cli/schemas/task-batch.schema.json`.
+ * This Zod schema is the runtime source of truth; the JSON schema is an editor aid.
+ */
+export const taskBatchItemSchema = z
+    .object({
+        name: z.string().min(1, 'name is required'),
+        background: z.string().optional(),
+        requirements: z.string().optional(),
+        feature_id: featureId,
+        parent_wbs: wbsString,
+        priority: z.enum(PRIORITIES).optional(),
+        tags: z.array(z.string()).optional(),
+        template: z.enum(TASK_TEMPLATES).optional(),
+    })
+    .strict();
+
+/** Inferred TypeScript shape of a single batch item. */
+export type TaskBatchItem = z.infer<typeof taskBatchItemSchema>;
+
+/**
+ * Batch create payload — the LLM→CLI decomposition gate.
+ *
+ * Validated as an array of taskBatchItemSchema objects. All-or-nothing:
+ * any validation failure means nothing is written (design §12.2).
+ */
+export const taskBatchSchema = z.array(taskBatchItemSchema).min(1, 'batch must contain at least one task');

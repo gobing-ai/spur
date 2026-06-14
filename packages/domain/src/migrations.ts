@@ -4,7 +4,7 @@ import type { DbAdapter } from '@gobing-ai/ts-db';
 import { WORKFLOW_ENGINE_SCHEMA_SQL } from '@gobing-ai/ts-dual-workflow-engine';
 import { HISTORY_IMPORT_SCHEMA_SQL } from '@gobing-ai/ts-llm-jsonl-importer';
 import { RULE_ENGINE_SCHEMA_SQL } from '@gobing-ai/ts-rule-engine';
-import { DOMAIN_SCHEMA_SQL } from './schema';
+import { DOMAIN_SCHEMA_SQL, PLANNING_SCHEMA_SQL } from './schema';
 
 /** Embedded CLI migration used when no migration folder is available. */
 export interface CliMigration {
@@ -40,6 +40,8 @@ CREATE INDEX IF NOT EXISTS idx_inbox_messages_to_status ON inbox_messages (to_id
 export const CLI_SCHEMA_SQL = `
 ${DOMAIN_SCHEMA_SQL}
 
+${PLANNING_SCHEMA_SQL}
+
 ${HISTORY_IMPORT_SCHEMA_SQL}
 
 ${WORKFLOW_ENGINE_SCHEMA_SQL}
@@ -54,7 +56,8 @@ ${INBOX_MESSAGES_SCHEMA_SQL}
  * fresh database with the full current schema (inbox included); `0001` is the
  * incremental step that adds `inbox_messages` to databases created before team
  * mode; `0002` adds the rule-engine run history tables (`rule_runs`,
- * `rule_eval_runs`) to databases created before task 0040. All are idempotent
+ * `rule_eval_runs`) to databases created before task 0040; `0003` adds the
+ * planning event ledger (`planning_events`, `task_run_links`). All are idempotent
  * (`CREATE TABLE IF NOT EXISTS`), so applying them in sequence is safe
  * regardless of the database's age.
  */
@@ -65,6 +68,7 @@ export const CLI_MIGRATIONS: CliMigration[] = [
     // under the old id re-apply the idempotent DDL once and move on.
     { id: '0001_spur_cli_team_inbox', sql: INBOX_MESSAGES_SCHEMA_SQL },
     { id: '0002_spur_cli_rule_history', sql: RULE_ENGINE_SCHEMA_SQL },
+    { id: '0003_spur_cli_planning', sql: PLANNING_SCHEMA_SQL },
 ];
 
 /** Filename marker for regenerated CLI-owned migrations. */

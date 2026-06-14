@@ -13,5 +13,6 @@ export {
 } from './migrations';
 export * from './planning/locks';
 export * from './planning/markdown-document';
+export * from './planning/rebuild-events';
 export * from './planning/schema';
 export { DOMAIN_SCHEMA_SQL } from './schema';

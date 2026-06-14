@@ -5,7 +5,7 @@
  * PlanningWriteService. WBS allocation is race-safe under the create-lock.
  */
 
-import { MarkdownDocument } from '@gobing-ai/spur-domain';
+import { MarkdownDocument, TASK_STATUSES, type TaskBatchItem, taskBatchSchema } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import type { EntityRef, PlanningWriteService, WriteResult } from './planning-write-service';
 
@@ -38,6 +38,15 @@ export interface TaskShowResult extends TaskSummary {
     /** The full markdown content. */
     content: string;
 }
+
+/** Filter options for the list verb. */
+export interface TaskListFilters {
+    status?: string;
+    parentWbs?: string;
+    /** Legacy alias: 'phase' maps to status filter for backward compat. */
+    phase?: string;
+}
+
 // ─── TaskService ────────────────────────────────────────────────────────
 
 /** Core task verbs over PlanningWriteService and direct corpus reads. */
@@ -52,22 +61,11 @@ export class TaskService {
 
     // ── create ──
 
-    /**
-     * Create a new task with race-safe WBS allocation and Goal→Background derivation.
-     *
-     * Allocates the next 4-digit WBS for the tasksDir, derives Background from the
-     * active P0 feature's `## Goal` section, and delegates the write to
-     * PlanningWriteService.create.
-     */
     async create(params: {
         title: string;
-        /** Feature ID for traceability and Goal→Background derivation. */
         featureId?: string;
-        /** Parent WBS for sub-task grouping. */
         parentWbs?: string;
-        /** Custom status (default: backlog). */
         status?: string;
-        /** Actor for the history line. */
         actor?: string;
     }): Promise<WriteResult> {
         const wbs = await this.allocateWbs();
@@ -75,13 +73,11 @@ export class TaskService {
         const filePath = this.resolveTaskPath(wbs, slug);
         const folder = this.ctx.tasksDir;
 
-        // Derive Background from the active P0 feature (B09)
         let background = '';
         if (params.featureId !== undefined) {
             background = await this.deriveBackground(params.featureId);
         }
 
-        // Build content from canonical template
         const now = new Date().toISOString();
         const frontmatter = [
             'schema_version: 1',
@@ -137,11 +133,6 @@ export class TaskService {
 
     // ── show ──
 
-    /**
-     * Read and parse a task file, returning frontmatter + content.
-     *
-     * Read-only — never acquires a lock.
-     */
     async show(wbs: string): Promise<TaskShowResult> {
         const filePath = await this.resolveTaskFile(wbs);
         const raw = await this.ctx.fs.readFile(filePath);
@@ -160,12 +151,6 @@ export class TaskService {
 
     // ── update (status transition) ──
 
-    /**
-     * Transition a task to a new lifecycle status.
-     *
-     * Delegates to PlanningWriteService.transition, which runs the 9-step
-     * pipeline including lifecycle guard validation.
-     */
     async updateStatus(wbs: string, toStatus: string, actor?: string): Promise<WriteResult> {
         const filePath = await this.resolveTaskFile(wbs);
         const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: this.ctx.tasksDir };
@@ -174,9 +159,6 @@ export class TaskService {
 
     // ── update (section from file) ──
 
-    /**
-     * Replace a task section body from a file (dominant agent write pattern, A03).
-     */
     async updateSection(wbs: string, sectionName: string, sourceFile: string): Promise<WriteResult> {
         const filePath = await this.resolveTaskFile(wbs);
         const body = await this.ctx.fs.readFile(sourceFile);
@@ -184,27 +166,212 @@ export class TaskService {
         return this.writeService.updateSection(ref, sectionName, body);
     }
 
+    // ── batch-create ──
+
+    async batchCreate(jsonPath: string): Promise<WriteResult[]> {
+        const raw = await this.ctx.fs.readFile(jsonPath);
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(raw);
+        } catch {
+            throw new Error('batch file is not valid JSON');
+        }
+
+        const result = taskBatchSchema.safeParse(parsed);
+        if (!result.success) {
+            const issues = result.error.issues.map((i) => `  [${i.path.join('.')}] ${i.message}`).join('\n');
+            throw new Error(`batch validation failed:\n${issues}`);
+        }
+
+        const items: TaskBatchItem[] = result.data;
+        const writeResults: WriteResult[] = [];
+        const createdRefs: EntityRef[] = [];
+
+        try {
+            for (const item of items) {
+                const wr = await this.createBatchItem(item);
+                writeResults.push(wr);
+                createdRefs.push(wr.ref);
+            }
+        } catch (err) {
+            for (const ref of createdRefs) {
+                try {
+                    await this.ctx.fs.deleteFile(ref.filePath);
+                } catch {
+                    // best-effort cleanup
+                }
+            }
+            throw err;
+        }
+
+        return writeResults;
+    }
+
+    private async createBatchItem(item: TaskBatchItem): Promise<WriteResult> {
+        const wbs = await this.allocateWbs();
+        const slug = this.slugify(item.name);
+        const filePath = this.resolveTaskPath(wbs, slug);
+        const folder = this.ctx.tasksDir;
+
+        let background = item.background ?? '';
+        if (!background && item.feature_id !== undefined && item.feature_id !== null) {
+            background = await this.deriveBackground(item.feature_id);
+        }
+
+        const now = new Date().toISOString();
+        const fmLines = [
+            'schema_version: 1',
+            `name: "${item.name}"`,
+            'status: backlog',
+            `created_at: ${now}`,
+            `updated_at: ${now}`,
+            item.feature_id !== undefined ? `feature_id: ${item.feature_id}` : null,
+            item.parent_wbs !== undefined ? `parent_wbs: "${item.parent_wbs}"` : null,
+            item.priority !== undefined ? `priority: ${item.priority}` : null,
+            item.tags !== undefined && item.tags.length > 0
+                ? `tags: [${item.tags.map((t) => `"${t}"`).join(', ')}]`
+                : null,
+        ]
+            .filter(Boolean)
+            .join('\n');
+
+        const content = [
+            '---',
+            fmLines,
+            '---',
+            '',
+            `## ${wbs}. ${item.name}`,
+            '',
+            '### Background',
+            '',
+            background !== '' ? `${background}\n` : '',
+            '### Requirements',
+            '',
+            item.requirements ? `${item.requirements}\n` : '',
+            '### Q&A',
+            '',
+            '',
+            '### Design',
+            '',
+            '',
+            '### Solution',
+            '',
+            '',
+            '### Plan',
+            '',
+            '',
+            '### Review',
+            '',
+            '',
+            '### Testing',
+            '',
+            '',
+            '### History',
+            '',
+            '',
+        ].join('\n');
+
+        const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder };
+        return this.writeService.create(ref, content);
+    }
+
+    // ── refresh ──
+
+    async refresh(): Promise<string> {
+        const tasks = await this.list();
+        const kanban = this.renderKanban(tasks);
+        const kanbanPath = `${this.ctx.tasksDir}/kanban.md`;
+        await this.ctx.fs.writeFile(kanbanPath, kanban);
+        return kanban;
+    }
+
+    private renderKanban(tasks: TaskSummary[]): string {
+        const statusOrder: Record<string, number> = {};
+        TASK_STATUSES.forEach((s, i) => {
+            statusOrder[s] = i;
+        });
+
+        const byStatus = new Map<string, TaskSummary[]>();
+        for (const t of tasks) {
+            const status = t.status in statusOrder ? t.status : 'backlog';
+            const group = byStatus.get(status);
+            if (group) {
+                group.push(t);
+            } else {
+                byStatus.set(status, [t]);
+            }
+        }
+
+        const sortedStatuses = [...byStatus.keys()].sort((a, b) => {
+            const oa = statusOrder[a] ?? 99;
+            const ob = statusOrder[b] ?? 99;
+            return oa - ob;
+        });
+
+        const lines: string[] = ['# Kanban', '', '> Auto-generated by `spur task refresh`. Do not edit.', ''];
+
+        for (const status of sortedStatuses) {
+            const group = byStatus.get(status);
+            if (!group || group.length === 0) continue;
+
+            const displayStatus = status.charAt(0).toUpperCase() + status.slice(1);
+            lines.push(`## ${displayStatus}`, '');
+
+            const unparented: TaskSummary[] = [];
+            const byParent = new Map<string, TaskSummary[]>();
+            for (const t of group) {
+                const parentWbs = t.frontmatter.parent_wbs as string | undefined;
+                if (parentWbs) {
+                    const pg = byParent.get(parentWbs);
+                    if (pg) {
+                        pg.push(t);
+                    } else {
+                        byParent.set(parentWbs, [t]);
+                    }
+                } else {
+                    unparented.push(t);
+                }
+            }
+
+            for (const t of unparented.sort((a, b) => a.wbs.localeCompare(b.wbs))) {
+                const name = t.frontmatter.name ?? t.name;
+                lines.push(`- [${t.wbs}](${this.relativePath(t.filePath)}) ${name}`);
+            }
+
+            const sortedParents = [...byParent.keys()].sort();
+            for (const parentWbs of sortedParents) {
+                const children = byParent.get(parentWbs);
+                if (!children) continue;
+                lines.push(`- **${parentWbs}**`);
+                for (const t of children.sort((a, b) => a.wbs.localeCompare(b.wbs))) {
+                    const name = t.frontmatter.name ?? t.name;
+                    lines.push(`  - [${t.wbs}](${this.relativePath(t.filePath)}) ${name}`);
+                }
+            }
+
+            lines.push('');
+        }
+
+        return lines.join('\n');
+    }
+
+    private relativePath(filePath: string): string {
+        const prefix = this.ctx.tasksDir;
+        if (filePath.startsWith(prefix)) {
+            return filePath.slice(prefix.length).replace(/^\//, '');
+        }
+        return filePath;
+    }
+
     // ── list ──
 
-    /**
-     * List tasks with optional filtering by status, phase, or parent WBS.
-     *
-     * Scans the tasksDir for `NNNN_*.md` files, parses frontmatter, and applies filters.
-     * Read-only — never acquires a lock.
-     */
-    async list(filters?: {
-        status?: string;
-        parentWbs?: string;
-        /** Legacy alias: 'phase' maps to status filter for backward compat. */
-        phase?: string;
-    }): Promise<TaskSummary[]> {
+    async list(filters?: TaskListFilters): Promise<TaskSummary[]> {
         const entries = await this.ctx.fs.readDir(this.ctx.tasksDir);
         const tasks: TaskSummary[] = [];
 
         for (const name of entries) {
             const [, wbs] = /^(\d{4})_.+\.md$/.exec(name) ?? [];
             if (!wbs) continue;
-            // Resolve actual path since we don't know the slug
             const actualName = await this.findTaskFileName(wbs);
             if (!actualName) continue;
             const actualPath = this.resolveTaskPath(wbs, actualName.replace(/^\d{4}_/, '').replace(/\.md$/, ''));
@@ -215,10 +382,9 @@ export class TaskService {
                 const status = (fm.status as string) ?? '';
                 const parentWbs = (fm.parent_wbs as string | null) ?? undefined;
 
-                // Apply filters
                 if (filters?.status !== undefined && filters.status !== status) continue;
                 if (filters?.parentWbs !== undefined && filters.parentWbs !== parentWbs) continue;
-                if (filters?.phase !== undefined && filters.phase !== status) continue; // legacy alias
+                if (filters?.phase !== undefined && filters.phase !== status) continue;
 
                 tasks.push({
                     wbs,
@@ -236,15 +402,7 @@ export class TaskService {
 
     // ── resolve ──
 
-    /**
-     * Map a file path to its owning task WBS + file.
-     *
-     * Scans all task files for one with a matching frontmatter `id` or whose
-     * file path is the given path. If the path is a non-task file, walks up
-     * to find the nearest owning task (for write-guard hook usage, A10).
-     */
     async resolve(filePath: string): Promise<{ wbs: string; filePath: string } | null> {
-        // Direct match: filePath is exactly a task file
         const entries = await this.ctx.fs.readDir(this.ctx.tasksDir);
         for (const name of entries) {
             const [, wbs, slug] = /^(\d{4})_(.+)\.md$/.exec(name) ?? [];
@@ -254,12 +412,27 @@ export class TaskService {
                 return { wbs, filePath: taskPath };
             }
         }
+
+        // Strategy 2: parse a WBS out of the basename and resolve it in the corpus.
+        const basename = filePath.split('/').pop() ?? '';
+        const capturedWbs = /^(\d{4})_.+\.md$/.exec(basename)?.[1];
+        if (capturedWbs) {
+            try {
+                const taskPath = await this.resolveTaskFile(capturedWbs);
+                return { wbs: capturedWbs, filePath: taskPath };
+            } catch {
+                // basename looked like a task file but no such WBS exists — fall through.
+            }
+        }
+
+        // A non-task path has no owning task in the current design (no task→file
+        // mapping yet; walk-up to a nearest owner arrives with the write-guard
+        // hook, task 0067). Until then, report no match.
         return null;
     }
 
     // ── Private helpers ──
 
-    /** Allocate the next 4-digit WBS by scanning existing task files. */
     private async allocateWbs(): Promise<string> {
         const entries = await this.ctx.fs.readDir(this.ctx.tasksDir);
         let max = 0;
@@ -273,7 +446,6 @@ export class TaskService {
         return String(max + 1).padStart(4, '0');
     }
 
-    /** Resolve a WBS to its file path by globbing the folder. */
     private async resolveTaskFile(wbs: string): Promise<string> {
         const fileName = await this.findTaskFileName(wbs);
         if (!fileName) throw new Error(`Task ${wbs} not found in ${this.ctx.tasksDir}`);
@@ -281,7 +453,6 @@ export class TaskService {
         return this.resolveTaskPath(wbs, slug);
     }
 
-    /** Find the file name for a WBS by globbing. */
     private async findTaskFileName(wbs: string): Promise<string | null> {
         const entries = await this.ctx.fs.readDir(this.ctx.tasksDir);
         for (const name of entries) {
@@ -290,14 +461,13 @@ export class TaskService {
         return null;
     }
 
-    /** Derive Background from the active P0 feature's Goal section (B09). */
     private async deriveBackground(featureId: string): Promise<string> {
         const featuresDir = this.ctx.tasksDir.replace(/\/tasks$/, '/features');
         let entries: string[] = [];
         try {
             entries = await this.ctx.fs.readDir(featuresDir);
         } catch {
-            return ''; // no features directory
+            return '';
         }
         for (const name of entries) {
             if (!name.match(/^[A-Z][1-9]*_.+\.md$/)) continue;
@@ -311,7 +481,9 @@ export class TaskService {
                 if (!['active', 'verifying'].includes(fm.status as string)) continue;
                 const goal = doc.getSection('Goal') ?? '';
                 return goal.trim();
-            } catch {}
+            } catch {
+                // Skip an unparseable feature file — Background derivation is best-effort.
+            }
         }
         return '';
     }

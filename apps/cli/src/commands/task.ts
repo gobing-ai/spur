@@ -132,6 +132,50 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 context.setExitCode(1);
             }
         });
+    // ── refresh ──
+    task.command('refresh')
+        .summary('Regenerate kanban.md from the task corpus (pure function, deterministic).')
+        .option('--folder <path>', 'Custom tasks folder')
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (options) => {
+            const svc = makeService(context, options.folder);
+            try {
+                const kanban = await svc.refresh();
+                if (options.json) {
+                    context.output.write(toJson({ kanban_path: `${options.folder ?? 'docs/tasks'}/kanban.md` }));
+                } else {
+                    context.output.write(`kanban.md regenerated (${kanban.split('\n').length} lines)`);
+                }
+            } catch (err) {
+                context.output.error(String(err));
+                context.setExitCode(1);
+            }
+        });
+
+    // ── batch-create ──
+    task.command('batch-create')
+        .summary('Create many tasks from a validated JSON file — all-or-nothing (LLM→CLI gate).')
+        .requiredOption('--file <path>', 'Path to the batch JSON file validated against task-batch.schema.json')
+        .option('--folder <path>', 'Custom tasks folder')
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (options) => {
+            const svc = makeService(context, options.folder);
+            try {
+                const results = await svc.batchCreate(options.file);
+                if (options.json) {
+                    const ids = results.map((r) => r.ref.id);
+                    context.output.write(toJson({ created: results.length, wbs: ids }));
+                } else {
+                    context.output.write(`Created ${results.length} task(s)`);
+                    for (const r of results) {
+                        context.output.write(`  ${r.ref.id}  ${r.ref.filePath}`);
+                    }
+                }
+            } catch (err) {
+                context.output.error(String(err));
+                context.setExitCode(1);
+            }
+        });
 
     // ── check ──
     task.command('check')

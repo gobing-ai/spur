@@ -7,7 +7,7 @@ import { workspacesTable } from './workspaces';
 
 export { artifacts, artifactsTable } from './artifacts';
 export { phaseRuns, phaseRunsTable } from './phase-runs';
-export { runs, runsTable } from './runs';
+export { PLANNING_SCHEMA_SQL, planningEvents, planningEventsTable, taskRunLinks, taskRunLinksTable } from './planning';
 export { transitionRuns, transitionRunsTable } from './transition-runs';
 export { workflowStates, workflowStatesTable } from './workflow-states';
 export { workspaces, workspacesTable } from './workspaces';

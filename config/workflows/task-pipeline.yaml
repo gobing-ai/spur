@@ -1,0 +1,40 @@
+# Task execution pipeline — one run per execution attempt of a task.
+# Design §6 — kind: state-machine, steps are agent.run / rule.check / shell gates.
+# HITL approve step pauses via engine E3; resumes with `spur workflow continue`.
+#
+# This is a stub seeded by `spur init`. Replace with your project's pipeline.
+
+"$schema": "@gobing-ai/ts-dual-workflow-engine/schemas/state-machine-workflow.schema.json"
+kind: state-machine
+name: task-pipeline
+description: "Standard task execution pipeline"
+initialState: precheck
+terminalStates: [done, blocked-report]
+states:
+  - name: precheck
+    description: "Run L1-L4 checks before starting work"
+  - name: implement
+    description: "Agent-driven implementation"
+  - name: test
+    description: "Test execution and coverage"
+  - name: review
+    description: "SECU code review"
+  - name: approve
+    description: "Human-in-the-loop approval gate"
+  - name: verify
+    description: "Functional verification (BDD + traceability)"
+  - name: record
+    description: "Write results back to the task file"
+  - name: done
+    description: "Pipeline complete"
+  - name: blocked-report
+    description: "Precheck failures reported"
+transitions:
+  - { from: precheck, to: implement }
+  - { from: implement, to: test }
+  - { from: test, to: review }
+  - { from: review, to: approve }
+  - { from: approve, to: verify }
+  - { from: verify, to: record }
+  - { from: record, to: done }
+  - { from: precheck, to: blocked-report }

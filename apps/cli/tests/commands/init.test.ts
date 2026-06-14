@@ -28,9 +28,25 @@ describe('init command', () => {
         expect(existsSync(join(cwd, '.spur', 'config.yaml'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'rules', 'recommended-pre-check.yaml'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'rules', 'recommended-post-check.yaml'))).toBe(true);
-        expect(existsSync(join(cwd, '.spur', 'workflows', 'basic.yaml'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'config', 'workflows', 'basic.yaml'))).toBe(true);
         // Team-mode agent specs directory is tracked via .gitkeep.
         expect(existsSync(join(cwd, '.spur', 'agents', '.gitkeep'))).toBe(true);
+
+        // Templates are copied under .spur/config/templates/
+        expect(existsSync(join(cwd, '.spur', 'config', 'templates', 'task', 'default.md'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'config', 'templates', 'task', 'feature-impl.md'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'config', 'templates', 'task', 'issue.md'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'config', 'templates', 'task', 'review.md'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'config', 'templates', 'task', 'meta.md'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'config', 'templates', 'feature', 'default.md'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'config', 'templates', 'bdd', 'gherkin.md'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'config', 'templates', 'bdd', 'checklist.md'))).toBe(true);
+        // Section matrix under .spur/config/tasks/
+        expect(existsSync(join(cwd, '.spur', 'config', 'tasks', 'section-matrix.yaml'))).toBe(true);
+        // Lifecycle + pipeline workflows under .spur/config/workflows/
+        expect(existsSync(join(cwd, '.spur', 'config', 'workflows', 'task-lifecycle.yaml'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'config', 'workflows', 'feature-lifecycle.yaml'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'config', 'workflows', 'task-pipeline.yaml'))).toBe(true);
     });
 
     test('seeds the global rules directory from the bundled presets', async () => {
@@ -41,10 +57,6 @@ describe('init command', () => {
 
         // Bundled ts-rule-engine categories land in the isolated global root so any
         // project's `rule run --preset recommended-pre-check` resolves a real ruleset.
-        // ts-rule-engine 0.3.3 ships the generic `example.yaml` preset plus the
-        // category demo rules; the spur-specific recommended/spur-dev presets were
-        // removed from the engine (ts-libs task 0022, ADR-015) and now live in Spur's
-        // own ./config (seeded below via seedGlobalConfig).
         expect(existsSync(join(globalDir, 'example.yaml'))).toBe(true);
         expect(existsSync(join(globalDir, 'quality', 'tsdoc-exports.yaml'))).toBe(true);
         expect(existsSync(join(globalDir, 'quality', 'coverage-gate.yaml'))).toBe(true);
@@ -52,6 +64,10 @@ describe('init command', () => {
         expect(existsSync(join(globalDir, 'rules', 'recommended-pre-check.yaml'))).toBe(true);
         expect(existsSync(join(globalDir, 'rules', 'recommended-post-check.yaml'))).toBe(true);
         expect(existsSync(join(globalDir, 'workflows', 'basic.yaml'))).toBe(true);
+        expect(existsSync(join(globalDir, 'workflows', 'task-lifecycle.yaml'))).toBe(true);
+        expect(existsSync(join(globalDir, 'workflows', 'feature-lifecycle.yaml'))).toBe(true);
+        expect(existsSync(join(globalDir, 'workflows', 'task-pipeline.yaml'))).toBe(true);
+        expect(existsSync(join(globalDir, 'tasks', 'section-matrix.yaml'))).toBe(true);
         // The bundled example is seeded under its canonical name, never verbatim:
         // a fresh install gets a working ~/.config/spur/config.yaml automatically.
         expect(existsSync(join(globalDir, 'config.yaml'))).toBe(true);

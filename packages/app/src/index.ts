@@ -18,11 +18,20 @@ export type {
 } from './services/corpus-migrator';
 export { CorpusMigrator } from './services/corpus-migrator';
 export type {
+    CheckFeatureFindings,
+    CheckFeatureResult,
+    CheckFeatureSeverity,
+    FeatureMatrixEntry,
+    FeatureSectionMatrix,
+} from './services/feature-check';
+export { DEFAULT_FEATURE_MATRIX, FeatureCheckService } from './services/feature-check';
+export type {
     HistoryAnalyzeResult,
     HistoryImportResult,
     HistoryServiceContext,
 } from './services/history-service';
 export { HistoryService } from './services/history-service';
+export { BusPlanningEventEmitter, type PlanningEventMap } from './services/planning-events';
 export type {
     CapturingEmitter,
     EntityRef,
@@ -93,3 +102,4 @@ export { HitlSelectActionRunner } from './workflow/actions/hitl-select';
 export { RuleCheckActionRunner } from './workflow/actions/rule-check';
 // Workflow built-in action runners
 export { registerSpurBuiltins, type SpurWorkflowBuiltinsOptions } from './workflow/builtins';
+export { LifecycleAdapter, type LifecycleAdapterOptions } from './workflow/lifecycle-adapter';

@@ -202,7 +202,10 @@ Two top-level concerns:
   `spur-cli` and (future) `spur-server`. Keys map 1:1 to ts-infra's `LoggingOptions` /
   `TelemetryOptions` / `DatabaseOptions` / `SchedulerOptions`.
 - **Spur app section** — everything except `bootstrap:`, validated by a local zod schema
-  (`spurAppConfigSchema`). Keys are agent/rules/workflows/redaction/version/name.
+  (`spurAppConfigSchema`). Keys are agent/rules/workflows/redaction/version/name, plus the
+  planning-layer `tasks:`/`features:` blocks (§9): `tasks.folders` (path → `{baseCounter, label?}`),
+  `tasks.active`, `features.dir`. Zod (`@gobing-ai/spur-config` `tasksConfigSchema`/`featuresConfigSchema`)
+  is the SSOT; `apps/cli/schemas/spur-config.schema.json` mirrors it for editor/CI validation.
 
 ```yaml
 version: "1"
@@ -233,6 +236,12 @@ workflows:
     - .spur/workflows/
 redaction:
   enabled: false
+tasks:
+  folders:
+    docs/tasks: { baseCounter: 0, label: Core }   # legacy folders/base_counter absorbed
+  active: docs/tasks                               # default folder for `spur task create`
+features:
+  dir: docs/features
 ```
 
 `${ENV_VAR}` interpolation works via `ts-runtime` `interpolateTree` (used inside
@@ -264,6 +273,15 @@ config/
   workflows/
     basic.yaml                      # canonical implement → check → fix loop
     feature-dev.yaml                # agent-driven feature loop with pre/test/post gates
+    task-lifecycle.yaml             # task status state-machine (ADR-022)
+    feature-lifecycle.yaml          # feature status state-machine (ADR-022)
+    task-pipeline.yaml              # task execution pipeline with guards
+  tasks/
+    section-matrix.yaml             # Section-Status-Matrix for `spur task check` (§7.4)
+  templates/                        # task/feature/bdd body templates (§8); CLI never hardcodes body content (DD-11)
+    task/{default,feature-impl,issue,review,meta}.md
+    feature/default.md
+    bdd/{gherkin,checklist}.md
   plugins/
     .gitkeep                        # home for future bundled plugins (ADR-012)
 ```
@@ -408,7 +426,9 @@ Source: delivery §1.1, design §10.
 | `spur task show <wbs>` | `--folder <path>` `--json` | 0/1 | Frontmatter is a top-level field in `--json` output. |
 | `spur task update <wbs> <status>` | `--section <name> --from-file <path>` `--folder <path>` `--json` | 0/1/2 | Status transition runs lifecycle guard; `--section` reads body from file. |
 | `spur task list` | `--status <s>` `--phase <p>` `--parent <wbs>` `--folder <path>` `--json` | 0/1 | `--phase` is a legacy alias for `--status`. |
-| `spur task resolve <file-path>` | `--folder <path>` `--json` | 0/1 | Maps a path to owning task (WBS + file). Returns 1 if no match. |
+| `spur task refresh` | `--folder <path>` `--json` | 0/1 | Regenerate `kanban.md` — pure function, deterministic ordering (A06). |
+| `spur task batch-create --file <json>` | `--folder <path>` `--json` | 0/1 | Create many tasks from validated JSON — all-or-nothing; validated against `apps/cli/schemas/task-batch.schema.json` (A08/C03). |
+| `spur task resolve <file-path>` | `--folder <path>` `--json` | 0/1 | Maps a path to owning task (WBS + file). Returns 1 if no match. Strategies: direct match, filename WBS parse, walk-up (A10). |
 | `spur task check [<wbs>]` | `--strict` `--folder <path>` `--json` | 0/1 | Four-layer validation (§3). Validates all tasks when `<wbs>` omitted; `--strict` elevates warnings to failures. Matrix loaded from `config/tasks/section-matrix.yaml`. |
 
 **Exit codes:** 0 success, 1 error, 2 invalid usage. Follows the design §10 `api-response` envelope
@@ -416,10 +436,6 @@ for `--json` output (`{ ok, data? }`).
 
 **Future verbs** (stub entries, implemented in later waves):
 
-| Command | Status |
-|---------|--------|
-| `spur task refresh` | Reserved (A06) — regenerate `kanban.md`. |
-| `spur task batch-create --file <json>` | Reserved (A08/C03) — LLM decomposition ingest. |
 | `spur task migrate` | Reserved (A17) — one-time corpus normalization pass. |
 
 ### 7.3.1 Task frontmatter — `taskFrontmatterSchema`

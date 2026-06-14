@@ -7,6 +7,7 @@
  * L4: Traceability (warning-first).
  */
 
+import { dirname, join } from 'node:path';
 import { MarkdownDocument, taskFrontmatterSchema } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 
@@ -86,9 +87,10 @@ export class TaskCheckService {
 
         // ── L3: Format rules (warning-first, 3 hard-core) ──
         this.runL3(doc, findings);
-
-        // ── L4: Traceability (warning-first) — light version
-        this.runL4(fm, entry, findings);
+        // ── L4: Traceability — feature_id edges, parent_wbs, dependencies
+        const tasksDir = dirname(filePath);
+        const featuresDir = join(dirname(tasksDir), 'features');
+        await this.runL4(fm, findings, featuresDir, tasksDir);
 
         return this.buildResult(wbs, status, findings, strict);
     }
@@ -257,28 +259,123 @@ export class TaskCheckService {
         }
     }
 
-    // ── L4: Traceability (light) ──
-    private runL4(fm: Record<string, unknown>, _entry: MatrixEntry | undefined, findings: CheckFindings[]): void {
-        // Check feature_id is present (warning)
-        if (!fm.feature_id) {
-            return; // feature_id is optional — no finding required
-        }
-
-        // Check dependencies list for dangling refs (warning)
+    // ── L4: Traceability — feature_id edges, parent_wbs, dependencies ──
+    private async runL4(
+        fm: Record<string, unknown>,
+        findings: CheckFindings[],
+        featuresDir: string,
+        tasksDir: string,
+    ): Promise<void> {
+        // Resolve feature_id from either snake_case or legacy kebab-case key.
+        const featureId = (fm.feature_id as string | undefined) ?? (fm['feature-id'] as string | undefined);
+        const parentWbs = (fm.parent_wbs as string | undefined) ?? (fm['parent-wbs'] as string | undefined);
         const deps = fm.dependencies as string[] | undefined;
-        if (deps && deps.length > 0) {
+
+        // ── feature_id edge ──
+        if (featureId && featureId.length > 0) {
+            const featurePath = await this.findFeatureFile(featuresDir, featureId);
+            if (featurePath === null) {
+                findings.push({
+                    layer: 'L4',
+                    severity: 'warning',
+                    section: '',
+                    message: `Feature "${featureId}" not found in ${featuresDir}`,
+                });
+            } else {
+                const featureStatus = await this.readFeatureStatus(featurePath);
+                if (featureStatus === 'done' || featureStatus === 'cancelled') {
+                    findings.push({
+                        layer: 'L4',
+                        severity: 'error',
+                        section: '',
+                        message: `Feature "${featureId}" is ${featureStatus} — remove or re-parent this task`,
+                    });
+                }
+            }
+        } else {
             findings.push({
                 layer: 'L4',
                 severity: 'warning',
                 section: '',
-                message: `Dependencies: ${deps.join(', ')} — validate target existence`,
+                message: 'Missing feature_id — every task should reference a feature (one direction, DD-07)',
             });
         }
 
-        // Check parent_wbs is present (warning for orphans without parent)
-        if (!fm.parent_wbs) {
-            // Not a finding — parent_wbs is optional
+        // ── parent_wbs edge ──
+        if (parentWbs && parentWbs.length > 0) {
+            const parentPath = await this.findTaskFile(tasksDir, parentWbs);
+            if (parentPath === null) {
+                findings.push({
+                    layer: 'L4',
+                    severity: 'warning',
+                    section: '',
+                    message: `Parent task ${parentWbs} not found in ${tasksDir}`,
+                });
+            }
         }
+
+        // ── dependency edges ──
+        if (deps && deps.length > 0) {
+            for (const dep of deps) {
+                // Dependencies can be WBS numbers ("0001") or WBS+name strings ("0001: some desc")
+                const wbsMatch = /^(\d{4})/.exec(dep.trim());
+                if (wbsMatch) {
+                    const depWbs = wbsMatch[1];
+                    if (!depWbs) continue;
+                    const depPath = await this.findTaskFile(tasksDir, depWbs);
+                    if (depPath === null) {
+                        findings.push({
+                            layer: 'L4',
+                            severity: 'warning',
+                            section: '',
+                            message: `Dependency "${dep}" not found in ${tasksDir}`,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    /** Find a feature file by ID (filename prefix match: `{id}_`). */
+    private async findFeatureFile(featuresDir: string, id: string): Promise<string | null> {
+        try {
+            const entries = await this.fs.readDir(featuresDir);
+            for (const name of entries) {
+                if (name.startsWith(`${id}_`) && name.endsWith('.md')) {
+                    return `${featuresDir}/${name}`;
+                }
+            }
+        } catch {
+            // Directory doesn't exist or can't be read
+        }
+        return null;
+    }
+
+    /** Read the status from a feature file's frontmatter. */
+    private async readFeatureStatus(featurePath: string): Promise<string | null> {
+        try {
+            const raw = await this.fs.readFile(featurePath);
+            const doc = MarkdownDocument.parse(raw, 'feature');
+            const fm = doc.frontmatterData ?? {};
+            return (fm.status as string) ?? null;
+        } catch {
+            return null;
+        }
+    }
+
+    /** Find a task file by WBS number (filename prefix match: `{wbs}_`). */
+    private async findTaskFile(tasksDir: string, wbs: string): Promise<string | null> {
+        try {
+            const entries = await this.fs.readDir(tasksDir);
+            for (const name of entries) {
+                if (name.startsWith(`${wbs}_`) && name.endsWith('.md')) {
+                    return `${tasksDir}/${name}`;
+                }
+            }
+        } catch {
+            // Directory doesn't exist or can't be read
+        }
+        return null;
     }
 
     private buildResult(wbs: string, status: string, findings: CheckFindings[], strict?: boolean): CheckResult {

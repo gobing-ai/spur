@@ -135,6 +135,44 @@
                     "description": "Enable sensitive-data redaction in CLI output."
                 }
             }
+        },
+        "tasks": {
+            "type": "object",
+            "description": "Task-folder registration (design §9). Absorbs the legacy docs/.tasks/config.json folders + base_counter concepts. Mirrors @gobing-ai/spur-config tasksConfigSchema (Zod is SSOT).",
+            "properties": {
+                "folders": {
+                    "type": "object",
+                    "description": "Map of task-folder path → folder config.",
+                    "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                            "baseCounter": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "description": "WBS base counter for new tasks in this folder. Default 0."
+                            },
+                            "label": {
+                                "type": "string",
+                                "description": "Human-readable folder label."
+                            }
+                        }
+                    }
+                },
+                "active": {
+                    "type": "string",
+                    "description": "Default folder for `spur task create`. Default: docs/tasks."
+                }
+            }
+        },
+        "features": {
+            "type": "object",
+            "description": "Feature directory location (design §9). Mirrors @gobing-ai/spur-config featuresConfigSchema (Zod is SSOT).",
+            "properties": {
+                "dir": {
+                    "type": "string",
+                    "description": "Feature files directory. Default: docs/features."
+                }
+            }
         }
     }
 }
