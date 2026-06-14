@@ -452,6 +452,7 @@ Every subcommand supports `--json` (ADR-010 invariant). Source: delivery §1.2, 
 | `spur feature show <id>` | `--folder <path>` `--json` | 0/1 | Returns the feature summary + content; 1 if not found. |
 | `spur feature update <id> [status]` | `--field <key> --value <v>` `--folder <path>` `--json` | 0/1/2 | `<status>` runs the lifecycle transition (guarded, §7.5); `--field/--value` sets a scalar frontmatter field. 2 if `--field` given without `--value`. |
 | `spur feature list` | `--status <s>` `--priority <p>` `--folder <path>` `--json` | 0/1 | Lists features sorted by ID; optional status/priority filters. |
+| `spur feature check [<id>]` | `--strict` `--folder <path>` `--json` | 0/1 | Four-layer validation (§3): L1 schema, L2 section-matrix, L3 BDD AC (shared 0043 module) + one-active-P0-goal over {active,verifying} + ≤9-children (DD-14, corpus-derived), L4 incoming `feature_id` edges + orphan-scenario warnings. Validates all features when `<id>` omitted; `--strict` elevates warnings. |
 
 ID rules (DD-14): valid IDs match `^[A-Z][1-9]*$`. `refresh` (INDEX + task-links, 0058) and `move`
 (cascade-rename, 0061) join this table as they land.

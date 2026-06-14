@@ -188,4 +188,46 @@ describe('spur feature CLI', () => {
         const exitCode = await main(['feature', 'update', id], { cwd, output: createCapturedOutput() });
         expect(exitCode).toBe(2);
     });
+
+    test('check validates a feature and returns a per-feature result (--json)', async () => {
+        const cOut = createCapturedOutput();
+        await main(['feature', 'create', 'Checkable'], { cwd, output: cOut });
+        const id = createdId(cOut);
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'check', id, '--json'], { cwd, output });
+        // A freshly-created backlog feature has no required sections → passes.
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lastMessage(output));
+        expect(Array.isArray(parsed)).toBe(true);
+        expect(parsed[0].id).toBe(id);
+        expect(parsed[0]).toHaveProperty('findings');
+        expect(parsed[0]).toHaveProperty('pass');
+    });
+
+    test('check unknown ID exits 1', async () => {
+        const exitCode = await main(['feature', 'check', 'ZZZZZ'], { cwd, output: createCapturedOutput() });
+        expect(exitCode).toBe(1);
+    });
+
+    test('check prints human PASS/FAIL lines (non-JSON)', async () => {
+        const cOut = createCapturedOutput();
+        await main(['feature', 'create', 'Human Check'], { cwd, output: cOut });
+        const id = createdId(cOut);
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'check', id], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(output.messages.join('')).toMatch(/PASS|FAIL/);
+    });
+
+    test('check with no id validates all features in the folder (--json)', async () => {
+        // Exercises the validate-all branch (no <id>): every feature file is checked.
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'check', '--json'], { cwd, output });
+        // Some earlier-created features may be active without required sections → may FAIL;
+        // assert the result is a populated array regardless of pass/fail.
+        const parsed = JSON.parse(lastMessage(output));
+        expect(Array.isArray(parsed)).toBe(true);
+        expect(parsed.length).toBeGreaterThan(1);
+        expect(exitCode === 0 || exitCode === 1).toBe(true);
+    });
 });

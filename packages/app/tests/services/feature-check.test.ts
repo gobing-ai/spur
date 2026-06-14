@@ -495,6 +495,269 @@ describe('FeatureCheckService', () => {
         expect(goalErrors.length).toBe(1);
     });
 
+    // ── L3: Children-limit (DD-14, corpus-derived) ───────────────────────
+
+    function featureFile(id: string): string {
+        return [
+            '---',
+            'schema_version: 1',
+            `id: "${id}"`,
+            `name: "Feature ${id}"`,
+            'status: backlog',
+            'priority: P2',
+            'created_at: 2026-06-14T00:00:00.000Z',
+            'updated_at: 2026-06-14T00:00:00.000Z',
+            '---',
+            '',
+            `# ${id}: Feature ${id}`,
+        ].join('\n');
+    }
+
+    test('L3: children count is corpus-derived, at the 9-boundary, and excludes non-children', async () => {
+        // A's 9 direct children (A1..A9, all length-2) + an unrelated group B with its
+        // own child B1 (must NOT count toward A). 9 children = at the DD-14 limit → no warning.
+        const files: Record<string, string> = { 'A_parent.md': featureFile('A') };
+        for (let d = 1; d <= 9; d++) files[`A${d}_child.md`] = featureFile(`A${d}`);
+        files['B_unrelated.md'] = featureFile('B');
+        files['B1_unrelated_child.md'] = featureFile('B1');
+        const { fs, dir, cleanup } = seedFeaturesDir(files);
+        const svc = new FeatureCheckService(fs);
+        const result = await svc.check(`${dir}/A_parent.md`, 'A', { featuresDir: dir });
+        cleanup();
+        expect(result.findings.filter((f) => f.message.includes('children'))).toHaveLength(0);
+    });
+
+    test('L3: children-limit warning fires on a corrupt corpus (duplicate child IDs)', async () => {
+        // DD-14's single [1-9] digit caps a node at 9 distinct direct children, so a clean
+        // corpus can never exceed 9 — the allocation path enforces that (0056). The check is
+        // defense-in-depth: it must still flag a *corrupt* corpus where duplicate files claim
+        // the same child IDs (e.g. a bad merge), counting 10 length-2 children of A.
+        const files: Record<string, string> = { 'A_parent.md': featureFile('A') };
+        for (let d = 1; d <= 9; d++) files[`A${d}_child.md`] = featureFile(`A${d}`);
+        // Tenth length-2 child of A via a duplicate-id file (corruption the check detects).
+        files['A1_dup.md'] = featureFile('A1');
+        const { fs, dir, cleanup } = seedFeaturesDir(files);
+        const svc = new FeatureCheckService(fs);
+        const result = await svc.check(`${dir}/A_parent.md`, 'A', { featuresDir: dir });
+        cleanup();
+        const childWarn = result.findings.filter((f) => f.layer === 'L3' && f.message.includes('children'));
+        expect(childWarn).toHaveLength(1);
+        expect(childWarn[0]?.message).toContain('split the parent');
+    });
+
+    // ── L4: Traceability — incoming feature_id edges + orphan scenarios ───
+
+    test('L4: orphan-scenario warning when AC has scenarios but no linked task', async () => {
+        const featureDir = mkdtempSync(join(tmpdir(), 'spur-fc-orphan-feat-'));
+        const tasksDir = mkdtempSync(join(tmpdir(), 'spur-fc-orphan-tasks-'));
+        const fp = join(featureDir, 'A_orphan.md');
+        writeFileSync(
+            fp,
+            [
+                '---',
+                'schema_version: 1',
+                'id: "A"',
+                'name: "Orphan"',
+                'status: active',
+                'priority: P1',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# A: Orphan',
+                '',
+                '## Goal',
+                '',
+                'g',
+                '',
+                '## Scope',
+                '',
+                'In scope: x',
+                '',
+                '## Acceptance Criteria',
+                '',
+                'Feature: Orphan',
+                '',
+                '  Scenario: Untraced',
+                '    Given x',
+                '    When y',
+                '    Then z',
+            ].join('\n'),
+        );
+        const fs = createNodeFileSystem();
+        const svc = new FeatureCheckService(fs);
+        const result = await svc.check(fp, 'A', { featuresDir: featureDir, tasksDir });
+        rmSync(featureDir, { recursive: true, force: true });
+        rmSync(tasksDir, { recursive: true, force: true });
+        const orphan = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('orphan'));
+        expect(orphan).toHaveLength(1);
+        expect(orphan[0]?.severity).toBe('warning');
+    });
+
+    test('L4: no orphan warning when a task links the feature via feature_id', async () => {
+        const featureDir = mkdtempSync(join(tmpdir(), 'spur-fc-linked-feat-'));
+        const tasksDir = mkdtempSync(join(tmpdir(), 'spur-fc-linked-tasks-'));
+        const fp = join(featureDir, 'A_linked.md');
+        writeFileSync(
+            fp,
+            [
+                '---',
+                'schema_version: 1',
+                'id: "A"',
+                'name: "Linked"',
+                'status: active',
+                'priority: P1',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# A: Linked',
+                '',
+                '## Goal',
+                '',
+                'g',
+                '',
+                '## Scope',
+                '',
+                'In scope: x',
+                '',
+                '## Acceptance Criteria',
+                '',
+                'Feature: Linked',
+                '',
+                '  Scenario: Traced',
+                '    Given x',
+                '    When y',
+                '    Then z',
+            ].join('\n'),
+        );
+        writeFileSync(
+            join(tasksDir, '0001_impl.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'name: "Impl A"',
+                'status: backlog',
+                'feature_id: A',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '## 0001. Impl A',
+            ].join('\n'),
+        );
+        const fs = createNodeFileSystem();
+        const svc = new FeatureCheckService(fs);
+        const result = await svc.check(fp, 'A', { featuresDir: featureDir, tasksDir });
+        rmSync(featureDir, { recursive: true, force: true });
+        rmSync(tasksDir, { recursive: true, force: true });
+        expect(result.findings.filter((f) => f.message.includes('orphan'))).toHaveLength(0);
+    });
+
+    // ── Dogfood: the real docs/features corpus (B08 two-tier AC) ─────────
+
+    test('dogfood: every feature in the real corpus parses without L1 errors', async () => {
+        // The hand-authored docs/features/ corpus is the must-accept fixture: the
+        // check must PARSE every feature (no L1 schema/markdown errors) and handle
+        // both Gherkin (fenced) and checklist AC. (A check may still report L2/L3
+        // findings — e.g. an active group feature missing AC — that is correct output.)
+        const repoRoot = join(import.meta.dir, '..', '..', '..', '..');
+        const featuresDir = join(repoRoot, 'docs', 'features');
+        const fs = createNodeFileSystem();
+        const svc = new FeatureCheckService(fs);
+        const entries = await fs.readDir(featuresDir);
+        const featureFiles = entries.filter((n) => /^[A-Z][1-9]*_.+\.md$/.test(n));
+        expect(featureFiles.length).toBeGreaterThan(0);
+
+        for (const name of featureFiles) {
+            const id = name.match(/^([A-Z][1-9]*)_/)?.[1];
+            if (!id) continue;
+            const result = await svc.check(join(featuresDir, name), id, { featuresDir });
+            const l1Errors = result.findings.filter((f) => f.layer === 'L1');
+            expect(l1Errors).toHaveLength(0); // corpus must parse + schema-validate
+            // No spurious "```gherkin" fence warnings (the fence-strip fix).
+            const fenceWarnings = result.findings.filter((f) => f.message.includes('```'));
+            expect(fenceWarnings).toHaveLength(0);
+        }
+    });
+
+    test('two-tier AC: a fenced Gherkin block validates without fence warnings', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'id: "A"',
+            'name: "Fenced"',
+            'status: active',
+            'priority: P1',
+            'created_at: 2026-06-14T00:00:00.000Z',
+            'updated_at: 2026-06-14T00:00:00.000Z',
+            '---',
+            '',
+            '# A: Fenced',
+            '',
+            '## Goal',
+            '',
+            'g',
+            '',
+            '## Scope',
+            '',
+            'In scope: x',
+            '',
+            '## Acceptance Criteria',
+            '',
+            '```gherkin',
+            'Feature: Fenced',
+            '',
+            '  Scenario: Works',
+            '    Given x',
+            '    When y',
+            '    Then z',
+            '```',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new FeatureCheckService(fs);
+        const result = await svc.check(path, 'A');
+        cleanup();
+        expect(result.findings.filter((f) => f.message.includes('```'))).toHaveLength(0);
+        expect(result.findings.filter((f) => f.layer === 'L3' && f.severity === 'error')).toHaveLength(0);
+    });
+
+    test('two-tier AC: a checklist AC validates (no "No Feature declaration" error)', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'id: "A"',
+            'name: "Checklist AC"',
+            'status: active',
+            'priority: P1',
+            'created_at: 2026-06-14T00:00:00.000Z',
+            'updated_at: 2026-06-14T00:00:00.000Z',
+            '---',
+            '',
+            '# A: Checklist AC',
+            '',
+            '## Goal',
+            '',
+            'g',
+            '',
+            '## Scope',
+            '',
+            'In scope: x',
+            '',
+            '## Acceptance Criteria',
+            '',
+            '- [ ] R1: the feature does the thing',
+            '- [x] R2: the other thing is done',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new FeatureCheckService(fs);
+        const result = await svc.check(path, 'A');
+        cleanup();
+        // Checklist tier — no Gherkin "No Feature declaration" hard error.
+        expect(result.findings.filter((f) => f.message.includes('No Feature declaration'))).toHaveLength(0);
+        expect(result.findings.filter((f) => f.layer === 'L3' && f.severity === 'error')).toHaveLength(0);
+    });
+
     // ── Strict mode ──────────────────────────────────────────────────────
 
     test('--strict elevates warnings to errors', async () => {

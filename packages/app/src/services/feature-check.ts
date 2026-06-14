@@ -7,8 +7,29 @@
  * L4: Traceability (warning-first, feature_id edge validation).
  */
 
-import { featureFrontmatterSchema, MarkdownDocument, validateAcceptanceCriteria } from '@gobing-ai/spur-domain';
+import {
+    featureFrontmatterSchema,
+    MarkdownDocument,
+    parseChecklist,
+    validateAcceptanceCriteria,
+} from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+
+/**
+ * Strip a single fenced code block wrapper (```gherkin … ```) from an AC body.
+ * The feature template (0054) and the corpus wrap Gherkin in a fence; the BDD
+ * validator parses raw Gherkin, so the fence lines must be removed first or they
+ * surface as spurious "Unrecognized syntax" warnings.
+ */
+function stripCodeFence(body: string): string {
+    const lines = body.split('\n');
+    const out: string[] = [];
+    for (const line of lines) {
+        if (/^\s*```/.test(line)) continue;
+        out.push(line);
+    }
+    return out.join('\n');
+}
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -62,21 +83,26 @@ export const DEFAULT_FEATURE_MATRIX: FeatureSectionMatrix = {
             },
             active: {
                 required: ['Goal', 'Scope', 'Acceptance Criteria'],
+                optional: ['Tasks', 'Notes', 'History'],
                 gate: true,
             },
             verifying: {
                 required: ['Goal', 'Scope', 'Acceptance Criteria'],
+                optional: ['Tasks', 'Notes', 'History'],
                 gate: true,
             },
             blocked: {
                 required: ['Goal', 'Notes'],
+                optional: ['Scope', 'Acceptance Criteria', 'Tasks', 'History'],
             },
             done: {
                 required: ['Goal', 'Scope', 'Acceptance Criteria', 'Tasks'],
+                optional: ['Notes', 'History'],
                 gate: true,
             },
             cancelled: {
                 required: ['Notes'],
+                optional: ['Goal', 'Scope', 'Acceptance Criteria', 'Tasks', 'History'],
             },
         },
     },
@@ -98,7 +124,7 @@ export class FeatureCheckService {
     async check(
         filePath: string,
         featureId: string,
-        options?: { strict?: boolean; featuresDir?: string },
+        options?: { strict?: boolean; featuresDir?: string; tasksDir?: string },
     ): Promise<CheckFeatureResult> {
         const strict = options?.strict === true;
         const raw = await this.fs.readFile(filePath);
@@ -120,13 +146,14 @@ export class FeatureCheckService {
         // ── L3: Format rules — BDD AC validation + structural rules ──
         this.runL3(doc, findings);
 
-        // ── L3: One-active-goal — at most one P0 feature in {active, verifying} ──
+        // ── L3: One-active-goal + children-limit (corpus-derived) ──
         if (options?.featuresDir) {
             await this.checkOneActiveGoal(fm, featureId, options.featuresDir, findings);
+            await this.checkChildrenLimit(featureId, options.featuresDir, findings);
         }
 
-        // ── L4: Traceability (warning-first) ──
-        this.runL4(fm, featureId, findings);
+        // ── L4: Traceability — incoming feature_id edges + orphan scenarios ──
+        await this.runL4(doc, featureId, options?.tasksDir, findings);
 
         return this.buildResult(featureId, status, findings, strict);
     }
@@ -225,9 +252,32 @@ export class FeatureCheckService {
 
     // ── L3: Format rules ──
     private runL3(doc: MarkdownDocument, findings: CheckFeatureFindings[]): void {
-        // Acceptance Criteria: BDD validation (hard core)
-        const acBody = doc.getSection('Acceptance Criteria');
-        if (acBody !== null && acBody.trim().length > 0) {
+        // Acceptance Criteria: two-tier AC (B08) — Gherkin OR checklist, via the
+        // shared BDD module (never a private parser). Strip the markdown code
+        // fence the template/corpus wrap Gherkin in before validating.
+        const rawAc = doc.getSection('Acceptance Criteria');
+        if (rawAc !== null && rawAc.trim().length > 0) {
+            const acBody = stripCodeFence(rawAc);
+
+            // Checklist tier: `- [ ]`/`- [x]` items and no Gherkin keyword.
+            const checklist = parseChecklist(acBody);
+            const looksGherkin = /^\s*(Feature:|Scenario:|Scenario Outline:)/m.test(acBody);
+
+            if (checklist.length > 0 && !looksGherkin) {
+                // Tier-2 checklist AC: require at least one non-empty item.
+                const emptyItems = checklist.filter((c) => c.text.length === 0);
+                for (const item of emptyItems) {
+                    findings.push({
+                        layer: 'L3',
+                        severity: 'warning',
+                        section: 'Acceptance Criteria',
+                        line: item.line,
+                        message: 'Checklist item has no text',
+                    });
+                }
+                return;
+            }
+
             const bddResult = validateAcceptanceCriteria(acBody);
 
             for (const err of bddResult.errors) {
@@ -335,20 +385,90 @@ export class FeatureCheckService {
         }
     }
 
-    // ── L4: Traceability ──
-    private runL4(fm: Record<string, unknown>, _featureId: string, findings: CheckFeatureFindings[]): void {
-        // Feature-level traceability is light: features don't reference tasks directly
-        // (tasks reference features via feature_id). The inverse lookup is done in task-check's L4.
-        // Here we validate the feature's own edges if present.
+    // ── L3: Children-limit — <=9 children per node (DD-14, corpus-derived) ──
+    private async checkChildrenLimit(
+        featureId: string,
+        featuresDir: string,
+        findings: CheckFeatureFindings[],
+    ): Promise<void> {
+        // Children count is DERIVED from the corpus, not stored in frontmatter: a
+        // child's ID is this node's ID + exactly one more digit (DD-14, parent =
+        // drop last char). Overflow is a "split the parent" signal, reported as a
+        // finding — never engineered around.
+        let children = 0;
+        try {
+            const entries = await this.fs.readDir(featuresDir);
+            const childLength = featureId.length + 1;
+            for (const entry of entries) {
+                const match = /^([A-Z][1-9]*)_/.exec(entry);
+                const otherId = match?.[1];
+                if (otherId && otherId.length === childLength && otherId.startsWith(featureId)) {
+                    children += 1;
+                }
+            }
+        } catch {
+            // Directory unreadable — skip the children-limit check.
+            return;
+        }
+        if (children > 9) {
+            findings.push({
+                layer: 'L3',
+                severity: 'warning',
+                section: '',
+                message: `Feature "${featureId}" has ${children} children; DD-14 limit is <=9 per node — split the parent`,
+            });
+        }
+    }
 
-        // Check for children count (>9 warning — DD-14 limit)
-        const childrenCount = fm._childrenCount as number | undefined;
-        if (childrenCount !== undefined && childrenCount > 9) {
+    // ── L4: Traceability — incoming feature_id edges + orphan scenarios ──
+    private async runL4(
+        doc: MarkdownDocument,
+        featureId: string,
+        tasksDir: string | undefined,
+        findings: CheckFeatureFindings[],
+    ): Promise<void> {
+        if (tasksDir === undefined) return;
+
+        // Tasks reference features via `feature_id` (one direction, DD-07). A
+        // feature's "edges" are the tasks pointing at it. Verify those tasks
+        // resolve (file exists + parses) and count them for orphan-scenario detection.
+        let linkedTasks = 0;
+        try {
+            const entries = await this.fs.readDir(tasksDir);
+            for (const entry of entries) {
+                if (!/^\d{4}_.+\.md$/.test(entry)) continue;
+                try {
+                    const raw = await this.fs.readFile(`${tasksDir}/${entry}`);
+                    const taskDoc = MarkdownDocument.parse(raw, 'task');
+                    const tfm = taskDoc.frontmatterData ?? {};
+                    const tfid = (tfm.feature_id as string | undefined) ?? (tfm['feature-id'] as string | undefined);
+                    if (tfid === featureId) linkedTasks += 1;
+                } catch {
+                    // A task that references this feature but fails to parse is a
+                    // dangling edge — surface it as a traceability warning.
+                    findings.push({
+                        layer: 'L4',
+                        severity: 'warning',
+                        section: '',
+                        message: `Linked task file "${entry}" failed to parse — dangling feature_id edge`,
+                    });
+                }
+            }
+        } catch {
+            // Tasks directory unreadable — skip incoming-edge resolution.
+            return;
+        }
+
+        // Orphan-scenario warning: AC scenarios exist but no task references this
+        // feature, so the acceptance work is untraced (DD-07 expects >=1 owner).
+        const acBody = doc.getSection('Acceptance Criteria');
+        const hasScenarios = acBody !== null && /^\s*Scenario:/m.test(acBody);
+        if (hasScenarios && linkedTasks === 0) {
             findings.push({
                 layer: 'L4',
                 severity: 'warning',
-                section: '',
-                message: `Feature has ${childrenCount} children; DD-14 limit is ≤9 per parent node`,
+                section: 'Acceptance Criteria',
+                message: `Feature "${featureId}" has acceptance scenarios but no linked task (orphan scenarios)`,
             });
         }
     }

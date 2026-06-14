@@ -1,5 +1,5 @@
 import type { Command } from '@commander-js/extra-typings';
-import { FeatureService, PlanningWriteService } from '@gobing-ai/spur-app';
+import { FeatureCheckService, FeatureService, PlanningWriteService } from '@gobing-ai/spur-app';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
 
@@ -120,6 +120,60 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                         context.output.write(`${f.id.padEnd(4)}  ${f.status.padEnd(9)}  ${f.priority}  ${f.name}`);
                     }
                 }
+            } catch (err) {
+                context.output.error(String(err));
+                context.setExitCode(1);
+            }
+        });
+
+    // ── check ──
+    feature
+        .command('check')
+        .summary('Validate feature file(s) through the four-layer check (design §3).')
+        .argument('[id]', 'Feature ID (validates all features in the folder when omitted)')
+        .option('--strict', 'Elevate warnings to failures')
+        .option('--folder <path>', 'Custom features folder')
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (id, options) => {
+            const featuresDir = options.folder ?? context.fs.resolve('docs', 'features');
+            const tasksDir = context.fs.resolve('docs', 'tasks');
+            const svc = new FeatureCheckService(context.fs);
+            const json = options.json === true;
+            const strict = options.strict === true;
+            try {
+                const entries = await context.fs.readDir(featuresDir);
+                const ids: string[] = id
+                    ? [id]
+                    : entries
+                          .map((n) => n.match(/^([A-Z][1-9]*)_.+\.md$/)?.[1])
+                          .filter((n): n is string => n !== undefined);
+
+                const results = [];
+                for (const fid of ids) {
+                    const fileName = entries.find((n) => n.match(new RegExp(`^${fid}_.+\\.md$`)));
+                    if (!fileName) {
+                        context.output.error(`Feature ${fid} not found`);
+                        context.setExitCode(1);
+                        continue;
+                    }
+                    const result = await svc.check(`${featuresDir}/${fileName}`, fid, {
+                        strict,
+                        featuresDir,
+                        tasksDir,
+                    });
+                    results.push(result);
+                    if (!json) {
+                        context.output.write(`\n${result.id} (${result.status}): ${result.pass ? 'PASS' : 'FAIL'}`);
+                        for (const f of result.findings) {
+                            const tag = f.severity === 'error' ? 'ERR' : 'WARN';
+                            context.output.write(`  [${tag}] ${f.layer} ${f.section}: ${f.message}`);
+                        }
+                    }
+                }
+                if (json) {
+                    context.output.write(toJson(results));
+                }
+                if (results.some((r) => !r.pass)) context.setExitCode(1);
             } catch (err) {
                 context.output.error(String(err));
                 context.setExitCode(1);
