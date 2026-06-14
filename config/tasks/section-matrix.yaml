@@ -1,0 +1,56 @@
+# Section-Status-Matrix: which sections are required/optional/forbidden per task status.
+# Design §3.2 — evaluated CLI-side only. Ships permissive; tightened by compliance data.
+#
+# Each variant maps status → { required, optional, forbidden } section lists.
+# Sections reference the canonical section vocabulary (§2.1).
+# `gate: true` on a status makes L2 violations hard errors (not warnings).
+
+variants:
+  # Standard task template
+  standard:
+    backlog:
+      required: [Background]
+      forbidden: [Solution, Review, Testing]
+    todo:
+      required: [Background, Requirements, Acceptance Criteria]
+      optional: [Q&A, Design]
+    wip:
+      required: [Background, Acceptance Criteria, Plan]
+      optional: [Design, Q&A]
+      forbidden: [Review]
+    testing:
+      required: [Solution, Testing]
+      optional: [Background]
+      forbidden: [Review]
+    done:
+      required: [Solution, Testing, Review]
+      gate: true
+    blocked:
+      required: [Background]
+      optional: [Plan, Solution, Notes]
+    cancelled:
+      required: []
+      optional: [Background]
+
+  # Brainstorm template (minimal)
+  brainstorm:
+    backlog:
+      required: [Background]
+      forbidden: [Solution, Review, Testing]
+    todo:
+      required: [Background]
+      optional: [Q&A]
+    wip:
+      required: [Background, Plan]
+      optional: [Q&A, Design]
+      forbidden: [Review]
+    testing:
+      required: [Background, Solution]
+      optional: [Testing]
+      forbidden: [Review]
+    done:
+      required: [Background, Solution]
+    blocked:
+      required: [Background]
+    cancelled:
+      required: []

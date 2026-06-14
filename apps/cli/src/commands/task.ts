@@ -1,5 +1,9 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
-import { PlanningWriteService, TaskService } from '@gobing-ai/spur-app';
+import { PlanningWriteService, type SectionMatrix, TaskCheckService, TaskService } from '@gobing-ai/spur-app';
+import { bundledConfigRoot } from '@gobing-ai/spur-config';
+import { parse as parseYaml } from 'yaml';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
 
@@ -129,6 +133,61 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             }
         });
 
+    // ── check ──
+    task.command('check')
+        .summary('Validate a task file through the four-layer check (design §3).')
+        .argument('[wbs]', 'Task WBS number (validates all tasks in the folder when omitted)')
+        .option('--strict', 'Elevate warnings to failures')
+        .option('--folder <path>', 'Custom tasks folder')
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (wbs, options) => {
+            const svc = makeCheckService(context);
+            const json = options.json === true;
+            const strict = options.strict === true;
+            try {
+                const tasksDir = options.folder ?? context.fs.resolve('docs', 'tasks');
+                const entries = await context.fs.readDir(tasksDir);
+                const wbsPattern: string[] = wbs
+                    ? [wbs]
+                    : entries
+                          .filter((n) => /^\d{4}_.+\.md$/.test(n))
+                          .map((n) => n.match(/^(\d{4})_/)?.[1])
+                          .filter((n): n is string => n !== undefined);
+
+                const results = [];
+                for (const w of wbsPattern) {
+                    const fileName = entries.find((n) => n.startsWith(`${w}_`) && n.endsWith('.md'));
+                    if (!fileName) {
+                        context.output.error(`Task ${w} not found`);
+                        context.setExitCode(1);
+                        continue;
+                    }
+                    const result = await svc.check(`${tasksDir}/${fileName}`, w, { strict });
+                    results.push(result);
+
+                    if (!json) {
+                        context.output.write(`\n${result.wbs} (${result.status}): ${result.pass ? 'PASS' : 'FAIL'}`);
+                        for (const f of result.findings) {
+                            const tag = f.severity === 'error' ? 'ERR' : 'WARN';
+                            context.output.write(`  [${tag}] ${f.layer} ${f.section}: ${f.message}`);
+                        }
+                        if (result.missingSections.length > 0) {
+                            context.output.write(`  Missing: ${result.missingSections.join(', ')}`);
+                        }
+                    }
+                }
+
+                if (json) {
+                    context.output.write(toJson(results));
+                }
+
+                const hasError = results.some((r) => !r.pass);
+                if (hasError) context.setExitCode(1);
+            } catch (err) {
+                context.output.error(String(err));
+                context.setExitCode(1);
+            }
+        });
     // ── resolve ──
     task.command('resolve')
         .summary('Resolve a file path to its owning task WBS.')
@@ -161,3 +220,36 @@ function makeService(context: CliContext, folderOverride?: string): TaskService 
     const writeService = new PlanningWriteService({ fs: context.fs });
     return new TaskService({ fs: context.fs, tasksDir, writeService });
 }
+
+function makeCheckService(context: CliContext): TaskCheckService {
+    return new TaskCheckService(context.fs, loadSectionMatrix());
+}
+
+/**
+ * Load the Section-Status-Matrix (design §3.2, R2). Reads the bundled
+ * `config/tasks/section-matrix.yaml` — the single source of truth, so tightening
+ * the matrix is a config edit, not a code change. Falls back to a minimal
+ * permissive built-in only when the bundled file is unreachable (e.g. a
+ * `bun build --compile` single binary with no sibling files).
+ */
+function loadSectionMatrix(): SectionMatrix {
+    const root = bundledConfigRoot();
+    if (root !== null) {
+        const matrixPath = join(root, 'tasks', 'section-matrix.yaml');
+        if (existsSync(matrixPath)) {
+            const parsed = parseYaml(readFileSync(matrixPath, 'utf8')) as SectionMatrix | undefined;
+            if (parsed?.variants !== undefined) return parsed;
+        }
+    }
+    return FALLBACK_MATRIX;
+}
+
+/** Minimal permissive matrix used only when the bundled YAML is unreachable. */
+const FALLBACK_MATRIX: SectionMatrix = {
+    variants: {
+        standard: {
+            backlog: { required: ['Background'], forbidden: ['Solution', 'Review', 'Testing'] },
+            done: { required: ['Solution', 'Testing', 'Review'], gate: true },
+        },
+    },
+};

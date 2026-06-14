@@ -1,0 +1,44 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://gobing.ai/spur/schemas/section-matrix.schema.json",
+    "title": "Section-Status-Matrix Schema",
+    "description": "Validates config/tasks/section-matrix.yaml — which sections are required/optional/forbidden per task status. Design §3.2.",
+    "type": "object",
+    "required": ["variants"],
+    "additionalProperties": false,
+    "properties": {
+        "variants": {
+            "type": "object",
+            "additionalProperties": false,
+            "patternProperties": {
+                "^[a-z][a-z0-9-]*$": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "patternProperties": {
+                        "^(backlog|todo|wip|testing|blocked|done|cancelled)$": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "required": {
+                                    "type": "array",
+                                    "items": { "type": "string" }
+                                },
+                                "optional": {
+                                    "type": "array",
+                                    "items": { "type": "string" }
+                                },
+                                "forbidden": {
+                                    "type": "array",
+                                    "items": { "type": "string" }
+                                },
+                                "gate": {
+                                    "type": "boolean"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

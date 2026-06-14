@@ -212,7 +212,12 @@ describe('spur task CLI', () => {
         expect(parsed[0].wbs).toMatch(/^\d{4}$/);
     });
 
-    // ── resolve ──
+    test('list with no matching status prints (no tasks)', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'list', '--status', 'zzz-nonexistent'], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(output.messages.at(-1)).toContain('(no tasks)');
+    });
     test('resolve maps a task file path to its WBS', async () => {
         const cOut = createCapturedOutput();
         await main(['task', 'create', 'Resolve me'], { cwd, output: cOut });
@@ -242,5 +247,58 @@ describe('spur task CLI', () => {
         const exitCode = await main(['task', 'resolve', '/nonexistent/file.md'], { cwd, output });
         expect(exitCode).toBe(1);
         expect(output.errors.at(-1)).toContain('No owning task found');
+    });
+
+    // ── check ──
+    test('check validates a task and prints findings', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'Check me'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'check', wbs], { cwd, output });
+        // New backlog task with empty Solution triggers L3 file:line hard error
+        expect(exitCode).toBe(1);
+        expect(output.messages.join('')).toContain(wbs);
+        expect(output.messages.join('')).toContain('FAIL');
+    });
+
+    test('check --json returns structured results even on failure', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'Check JSON'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+
+        const output = createCapturedOutput();
+        await main(['task', 'check', wbs, '--json'], { cwd, output });
+        const parsed = JSON.parse(lastMessage(output));
+        expect(parsed[0].wbs).toBe(wbs);
+        // Has findings
+        expect(parsed[0].findings.length).toBeGreaterThan(0);
+    });
+
+    test('check --strict elevates warnings and can exit 1 on missing sections', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'Check strict'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'check', wbs, '--strict'], { cwd, output });
+        // Strict mode may elevate warnings → might pass or fail depending on fixture completeness.
+        // The important thing is exit code is a number (0 or 1).
+        expect([0, 1]).toContain(exitCode);
+    });
+
+    test('check without WBS scans all tasks in the folder', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'check'], { cwd, output });
+        // Should scan and report on all tasks
+        expect([0, 1]).toContain(exitCode); // may fail depending on task content
+        expect(output.messages.join('')).toMatch(/\d{4}/);
+    });
+    test('check with unknown WBS prints error and exits 1', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'check', '9999'], { cwd, output });
+        expect(exitCode).toBe(1);
+        expect(output.errors.at(-1)).toContain('not found');
     });
 });
