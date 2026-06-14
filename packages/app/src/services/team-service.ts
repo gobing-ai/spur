@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { type DbAdapter, InboxMessageDao } from '@gobing-ai/spur-domain';
+import { type DbAdapter, InboxMessageDao, MarkdownDocument } from '@gobing-ai/spur-domain';
 import {
     type AgentSpec,
     buildIdentityPreamble,
@@ -201,7 +201,9 @@ export class TeamService {
         }
         const fs = getFs();
         const source = await fs.readFile(path);
-        await fs.writeFile(path, setFrontmatterField(source, 'assignee', agentId));
+        const doc = MarkdownDocument.parse(source, 'task');
+        doc.setFrontmatterField('assignee', agentId);
+        await fs.writeFile(path, doc.serialize());
     }
 
     // -------------------------------------------------------------------------
@@ -292,29 +294,4 @@ export class TeamService {
         const match = entries.find((entry) => entry.startsWith(prefix) && entry.endsWith('.md'));
         return match === undefined ? null : join(tasksDir, match);
     }
-}
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Set or replace a scalar field in a markdown file's leading YAML frontmatter.
- * If the field exists it is replaced in place; otherwise it is appended to the
- * end of the frontmatter block. Files without frontmatter get one prepended.
- */
-function setFrontmatterField(source: string, key: string, value: string): string {
-    const line = `${key}: ${value}`;
-    const fence = /^---\n([\s\S]*?)\n---/;
-    const matched = fence.exec(source);
-    if (matched === null) {
-        return `---\n${line}\n---\n\n${source}`;
-    }
-    const body = matched[1] ?? '';
-    const keyLine = new RegExp(`^${key}:.*$`, 'm');
-    // Use function replacers so `$`-sequences in the frontmatter body (e.g. a cost
-    // figure like `$1.00` or a literal `$&`) are written verbatim, not interpreted
-    // as `String.prototype.replace` special replacement patterns.
-    const nextBody = keyLine.test(body) ? body.replace(keyLine, () => line) : `${body}\n${line}`;
-    return source.replace(fence, () => `---\n${nextBody}\n---`);
 }
