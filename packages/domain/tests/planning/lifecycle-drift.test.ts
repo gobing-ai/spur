@@ -119,3 +119,77 @@ describe('lifecycle workflow drift prevention (task 0046 R3)', () => {
         });
     });
 });
+
+/** Extended shape for the task-pipeline assertions (onEnter actions + guards). */
+interface PipelineDef {
+    kind?: string;
+    name: string;
+    initialState: string;
+    terminalStates?: string[];
+    vars?: Record<string, unknown>;
+    states: { id: string; onEnter?: { kind: string; options?: Record<string, unknown> }[] }[];
+    transitions: { from: string; to: string; guard?: { kind: string; options?: Record<string, unknown> } }[];
+}
+
+describe('task-pipeline.yaml structure (task 0062)', () => {
+    const yaml = loadLifecycleYaml('config/workflows/task-pipeline.yaml') as unknown as PipelineDef;
+    const stateIds = yaml.states.map((s) => s.id);
+
+    test('R1: the design §6 pipeline states are present, vars.wbs declared', () => {
+        for (const s of ['precheck', 'implement', 'test', 'review', 'approve', 'verify', 'record', 'done']) {
+            expect(stateIds).toContain(s);
+        }
+        expect(yaml.vars).toHaveProperty('wbs');
+        expect(yaml.initialState).toBe('precheck');
+    });
+
+    test('R1: precheck→implement is guarded by `spur task check`, with a fail fall-through', () => {
+        const toImpl = yaml.transitions.find((t) => t.from === 'precheck' && t.to === 'implement');
+        expect(toImpl?.guard?.kind).toBe('shell');
+        expect(String(toImpl?.guard?.options?.command)).toContain('spur task check');
+        // The fail path (always-guard) MUST come AFTER the shell guard (fall-through order).
+        const idxPass = yaml.transitions.findIndex((t) => t.from === 'precheck' && t.to === 'implement');
+        const idxFail = yaml.transitions.findIndex((t) => t.from === 'precheck' && t.to === 'failed');
+        expect(idxFail).toBeGreaterThan(idxPass);
+        expect(yaml.transitions[idxFail]?.guard?.kind).toBe('always');
+    });
+
+    test('R2: record writes via `spur task update --section` (never a direct file write)', () => {
+        const record = yaml.states.find((s) => s.id === 'record');
+        const cmds = (record?.onEnter ?? []).map((a) => String(a.options?.command ?? ''));
+        expect(cmds.some((c) => c.includes('task update') && c.includes('--section Testing'))).toBe(true);
+        expect(cmds.some((c) => c.includes('task update') && c.includes('--section Review'))).toBe(true);
+    });
+
+    test('R3: status transitions go through the normal verb (`spur task update <wbs> <status>`)', () => {
+        const allCmds = yaml.states
+            .flatMap((s) => s.onEnter ?? [])
+            .filter((a) => a.kind === 'shell')
+            .map((a) => String(a.options?.command ?? ''));
+        expect(allCmds.some((c) => /task update \$\{vars\.wbs\} wip/.test(c))).toBe(true);
+        expect(allCmds.some((c) => /task update \$\{vars\.wbs\} testing/.test(c))).toBe(true);
+        expect(allCmds.some((c) => /task update \$\{vars\.wbs\} done/.test(c))).toBe(true);
+    });
+
+    test('R4: approve is a HITL gate (hitl.confirm)', () => {
+        const approve = yaml.states.find((s) => s.id === 'approve');
+        expect((approve?.onEnter ?? []).some((a) => a.kind === 'hitl.confirm')).toBe(true);
+    });
+
+    test('uses the resolvable @gobing-ai/spur schema ref (not the dead engine ref)', () => {
+        const text = require('node:fs').readFileSync(
+            require('node:path').join(REPO_ROOT, 'config/workflows/task-pipeline.yaml'),
+            'utf-8',
+        ) as string;
+        expect(text).toContain('@gobing-ai/spur/schemas/state-machine-workflow.schema.json');
+        expect(text).not.toContain('@gobing-ai/ts-dual-workflow-engine/schemas');
+    });
+
+    test('every transition endpoint is a declared state', () => {
+        const ids = new Set(stateIds);
+        for (const t of yaml.transitions) {
+            expect(ids.has(t.from)).toBe(true);
+            expect(ids.has(t.to)).toBe(true);
+        }
+    });
+});

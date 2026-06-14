@@ -550,3 +550,14 @@ YAML files and the 0041 enums can never drift silently.
 Validate: `spur workflow validate config/workflows/task-lifecycle.yaml` — full JSON-Schema
 validation resolves the `@gobing-ai/spur` workspace package and passes (no `--no-schema`
 needed). `feature-dev.yaml` uses the same resolvable ref.
+
+**Task execution pipeline** — `config/workflows/task-pipeline.yaml` (design §6, ADR-022
+"orchestration is configuration": YAML over the existing engine, zero engine code). `kind:
+state-machine`, `vars: { wbs, profile }`, shape `precheck → implement → test → review → approve(HITL)
+→ verify → record → done` (precheck failure short-circuits to `failed`). Invariants: it never touches
+files directly — `precheck` is a `spur task check <wbs>` shell guard; `implement/test/review/verify` are
+`agent.run` steps carrying `sp:dev-*` inputs; status moves use the normal `spur task update <wbs>
+<status>` verb (so the 0055 lifecycle guards apply); `record` writes `## Testing`/`## Review` only via
+`spur task update --section`; `approve` is a `hitl.confirm` gate skippable with `--var profile=auto`.
+**Follow-up:** `task_run_links` linkage (kind=pipeline, R4) needs a small `WorkflowService` run-start hook
+— there is no link-writing CLI verb to call from a shell step, so it can't live in pure YAML.

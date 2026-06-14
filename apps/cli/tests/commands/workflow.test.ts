@@ -50,6 +50,32 @@ describe('workflow command (main)', () => {
         expect(exitCode).toBe(1);
     });
 
+    // Bundled workflow YAMLs must validate with FULL JSON-Schema resolution (no
+    // --no-schema). This catches a dead `$schema` ref (e.g. pointing at a package
+    // that ships no schemas dir) — the 0062 task-pipeline regression.
+    const REPO_ROOT = join(import.meta.dir, '..', '..', '..', '..');
+    for (const wf of [
+        'task-pipeline.yaml',
+        'task-lifecycle.yaml',
+        'feature-lifecycle.yaml',
+        'feature-dev.yaml',
+        'basic.yaml',
+    ]) {
+        test(`bundled config/workflows/${wf} validates (schema resolves)`, async () => {
+            const output = createCapturedOutput();
+            const exitCode = await main(
+                ['workflow', 'validate', join(REPO_ROOT, 'config', 'workflows', wf), '--json'],
+                {
+                    output,
+                    dbUrl: ':memory:',
+                },
+            );
+            expect(exitCode).toBe(0);
+            const parsed = JSON.parse(output.messages.at(-1) ?? '{}');
+            expect(parsed.valid).toBe(true);
+        });
+    }
+
     test('no subcommand prints usage and returns 1', async () => {
         const exitCode = await main(['workflow'], { output: nullOutput() });
         expect(exitCode).toBe(1);

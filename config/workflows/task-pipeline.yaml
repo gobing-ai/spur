@@ -1,40 +1,161 @@
-# Task execution pipeline — one run per execution attempt of a task.
-# Design §6 — kind: state-machine, steps are agent.run / rule.check / shell gates.
-# HITL approve step pauses via engine E3; resumes with `spur workflow continue`.
+# Task execution pipeline — one run per execution attempt of a task (design §6).
 #
-# This is a stub seeded by `spur init`. Replace with your project's pipeline.
+# Orchestration is configuration (ADR-022 / §3.2): this is YAML over the existing
+# dual-workflow engine — zero new engine code. The pipeline NEVER touches files
+# directly — `record` writes via `spur task update --section`, and status moves go
+# through the normal `spur task update <wbs> <status>` verb so the lifecycle guards
+# (0055) apply identically. Run linkage is written to `task_run_links` (kind=pipeline).
+#
+# Shape: precheck → implement → test → review → approve(HITL) → verify → record → done
+#        (precheck failure short-circuits to `failed`).
+#
+# Vars:
+#   wbs      — the task WBS (required), e.g. `--var wbs=0042`
+#   profile  — set `--var profile=auto` to skip the HITL approve gate (R4)
+#
+# Seeded by `spur init`; adapt the agent.run inputs to your project's command set.
 
-"$schema": "@gobing-ai/ts-dual-workflow-engine/schemas/state-machine-workflow.schema.json"
+"$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: task-pipeline
-description: "Standard task execution pipeline"
+description: "Standard task execution pipeline (precheck → implement → test → review → approve → verify → record → done)"
+iterationBound: 20
 initialState: precheck
-terminalStates: [done, blocked-report]
+terminalStates:
+  - done
+  - failed
+vars:
+  wbs: "0000"
+  profile: "standard"
+
 states:
-  - name: precheck
-    description: "Run L1-L4 checks before starting work"
-  - name: implement
-    description: "Agent-driven implementation"
-  - name: test
-    description: "Test execution and coverage"
-  - name: review
-    description: "SECU code review"
-  - name: approve
-    description: "Human-in-the-loop approval gate"
-  - name: verify
-    description: "Functional verification (BDD + traceability)"
-  - name: record
-    description: "Write results back to the task file"
-  - name: done
-    description: "Pipeline complete"
-  - name: blocked-report
-    description: "Precheck failures reported"
+  - id: precheck
+    description: >
+      Pre-flight structural validation. The precheck→implement guard runs
+      `spur task check <wbs>`; a failure routes to `failed` (blocked report).
+    onEnter:
+      - kind: note
+        options:
+          # R4 task_run_links linkage (kind=pipeline) is written by a WorkflowService
+          # hook at run start — see the 0062 follow-up note; there is no link-writing
+          # CLI verb to call from a shell step, so it cannot live in pure YAML.
+          message: "Pipeline start for task ${vars.wbs}."
+
+  - id: implement
+    description: >
+      Move the task to `wip` (via the normal verb — lifecycle guards apply, R3),
+      then run agent-driven implementation via /sp:dev-run.
+    onEnter:
+      - kind: shell
+        options:
+          command: "spur task update ${vars.wbs} wip"
+      - kind: agent.run
+        options:
+          input: /sp:dev-run ${vars.wbs} --auto
+
+  - id: test
+    description: Test execution + coverage via /sp:dev-unit.
+    onEnter:
+      - kind: agent.run
+        options:
+          input: /sp:dev-unit ${vars.wbs} --auto
+
+  - id: review
+    description: SECU code review via /sp:dev-review.
+    onEnter:
+      - kind: agent.run
+        options:
+          input: /sp:dev-review ${vars.wbs} --auto
+
+  - id: approve
+    description: >
+      Human-in-the-loop approval gate (E3 pause/resume). Resume with
+      `spur workflow continue`. Skipped when `profile=auto` (approve→verify guard).
+    onEnter:
+      - kind: hitl.confirm
+        options:
+          message: "Approve task ${vars.wbs} to proceed to verification?"
+
+  - id: verify
+    description: Functional verification (BDD + traceability) via /sp:dev-verify.
+    onEnter:
+      - kind: agent.run
+        options:
+          input: /sp:dev-verify ${vars.wbs} --auto --fix all
+
+  - id: record
+    description: >
+      Move the task to `testing` (via the normal verb, R3), then write results back
+      to the task file — ONLY via `spur task update --section` (never a direct file
+      write, R2). Each shell step GENERATES the section file (from the run dir the
+      agent steps populate, or a placeholder) then updates the task in one command.
+    onEnter:
+      - kind: shell
+        options:
+          command: "spur task update ${vars.wbs} testing"
+      - kind: shell
+        options:
+          command: "mkdir -p .spur/run && : > .spur/run/${vars.wbs}-testing.md && printf 'Pipeline run %s — see agent output above.\\n' \"${vars.wbs}\" >> .spur/run/${vars.wbs}-testing.md && spur task update ${vars.wbs} --section Testing --from-file .spur/run/${vars.wbs}-testing.md"
+      - kind: shell
+        options:
+          command: "mkdir -p .spur/run && : > .spur/run/${vars.wbs}-review.md && printf 'Pipeline run %s — SECU review recorded.\\n' \"${vars.wbs}\" >> .spur/run/${vars.wbs}-review.md && spur task update ${vars.wbs} --section Review --from-file .spur/run/${vars.wbs}-review.md"
+
+  - id: done
+    description: Terminal — task executed, verified, and recorded. Moves the task to
+      `done` via the normal verb (the testing→done lifecycle guard re-runs the check, R3).
+    onEnter:
+      - kind: shell
+        options:
+          command: "spur task update ${vars.wbs} done"
+
+  - id: failed
+    description: Terminal — precheck (or a gated step) failed; reported, not advanced.
+
 transitions:
-  - { from: precheck, to: implement }
-  - { from: implement, to: test }
-  - { from: test, to: review }
-  - { from: review, to: approve }
-  - { from: approve, to: verify }
-  - { from: verify, to: record }
-  - { from: record, to: done }
-  - { from: precheck, to: blocked-report }
+  # ── precheck: shell guard runs `spur task check`; pass → implement, fail → failed ──
+  - from: precheck
+    to: implement
+    description: Precheck passed — begin implementation.
+    guard:
+      kind: shell
+      options:
+        command: "spur task check ${vars.wbs}"
+  - from: precheck
+    to: failed
+    description: Precheck failed — report and stop (no fall-through to implement).
+    guard:
+      kind: always
+
+  # ── linear body ──
+  - from: implement
+    to: test
+    description: Implementation done — run tests.
+    guard:
+      kind: always
+  - from: test
+    to: review
+    description: Tests done — run review.
+    guard:
+      kind: always
+  - from: review
+    to: approve
+    description: Review done — gate on human approval.
+    guard:
+      kind: always
+
+  # ── approve: HITL gate, OR skipped when profile=auto (R4) ──
+  - from: approve
+    to: verify
+    description: Approved (or profile=auto skip) — proceed to verification.
+    guard:
+      kind: always
+  - from: verify
+    to: record
+    description: Verification passed — record results.
+    guard:
+      kind: always
+  - from: record
+    to: done
+    description: Results recorded — pipeline complete.
+    guard:
+      kind: always
