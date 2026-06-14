@@ -1,4 +1,5 @@
 export * from './analytics';
+export * from './bdd';
 export * from './dao';
 export { type CreateDomainDbOptions, createMigratedDb, type DbAdapter } from './db';
 export {
