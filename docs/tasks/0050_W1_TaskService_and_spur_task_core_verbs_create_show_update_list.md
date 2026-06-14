@@ -62,10 +62,10 @@ mirror the existing rule/workflow command-file pattern in `apps/cli`.
 ### Plan
 
 - [x] Pre-flight: `tasks check 0050` → valid
-- [ ] TaskService: create (WBS alloc + write service), show (parse frontmatter), update (status via lifecycle / section via write service), list (glob + filter by status/parent), resolve (path→WBS)
-- [ ] CLI `spur task`: create/show/update/list commands following rule/workflow command pattern
-- [ ] Integration tests via `runCli` on temp projects: golden-path + failure + --json envelope
-- [ ] Update `04_DESIGN.md §7.1` verb/flag/exit-code tables per delivery §1.1
+- [x] TaskService: create (WBS alloc + write service), show (parse frontmatter), update (status via lifecycle / section via write service), list (glob + filter by status/parent), resolve (path→WBS)
+- [x] CLI `spur task`: create/show/update/list commands following rule/workflow command pattern
+- [x] Integration tests via `main()` on temp projects: golden-path + failure + --json envelope (19 tests; added during 2026-06-13 re-verification)
+- [x] Update `04_DESIGN.md §7.1` verb/flag/exit-code tables per delivery §1.1
 ### Review
 
 **SECU verdict: PASS**
@@ -99,6 +99,24 @@ create/show/list/resolve golden paths + edge cases.
 | R3: list with filters | ✅ | `list` method, tested with status/parent/phase filters |
 | R4: show with frontmatter | ✅ | `show` parses MarkdownDocument, returns `frontmatter` field |
 | R5: exit codes + X05 | ✅ | 0/1/2 in CLI; `04_DESIGN.md §7.1` verb/flag/exit tables written |
+
+---
+
+#### Re-verification — 2026-06-13 (`/rd3:dev-verify 0050 --force --fix all`)
+
+**Initial verdict: PARTIAL** → **after fix-pass: PASS.** P1: 0, P2: 2 (both fixed), P3: 0, P4: 1 (fixed).
+
+The original "PASS" was self-reported with the CLI integration test **empty (0 bytes)** — the verb surface (`task.ts`, 164 lines) had **zero coverage** despite Solution §3 and the Testing section claiming `runCli` golden-path + `--json` + exit-code tests. Writing that test surfaced a latent source bug.
+
+| # | Finding | Dim | Location | P | Disposition |
+|---|---------|-----|----------|---|-------------|
+| 1 | **Empty CLI integration test** — claimed but 0-byte; `apps/cli/src/commands/task.ts` untested | Correctness/Testability | `apps/cli/tests/commands/task.test.ts` | P2 | **FIXED** — wrote 19 integration tests via in-process `main()`: every verb golden path, `--json` envelope, exit codes 0/1/2 |
+| 2 | **`--cwd` silently ignored** — `createCliContext` built `createNodeFileSystem()` with no base dir, so `context.fs.resolve('docs','tasks')` always resolved against `process.cwd()`. `spur task` (the only command using `context.fs` for paths) ignored `--cwd`/test cwd. Surfaced by finding #1's test (`ENOENT … apps/cli/docs/tasks`). | Correctness | `apps/cli/src/context.ts:47` | P2 | **FIXED** — `createNodeFileSystem(cwd)`; full repo suite confirms no regression in other commands |
+| 3 | Double clock read — `created_at`/`updated_at` called `new Date().toISOString()` twice (1ms skew possible on creation) | Correctness | `task-service.ts:87-88` | P4 | **FIXED** — single `now` constant |
+
+**Fix-pass 2026-06-13:** 3 fixed, 0 failed, 0 skipped. Gate after fixes: `bun run lint` clean (224 files, all 7 workspaces typecheck, zero warnings); `bun run test` **893/893** pass; `test-cf` 1/1; `build` all workspaces. Task CLI suite: 19/19.
+
+**Note:** R1–R4 were genuinely MET pre-fix (unit-tested). R5's exit-code/`--json` claims are now actually covered. The `--cwd` bug (finding #2) was real and shipping — it affected any `spur task` invocation outside the project root.
 
 
 ### Testing
