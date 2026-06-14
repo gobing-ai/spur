@@ -10,6 +10,14 @@ export type {
 } from './services/agent-service';
 export { AgentService } from './services/agent-service';
 export type {
+    CorpusMigratorOptions,
+    FileReport,
+    MigrateOptions,
+    MigrationFlag,
+    MigrationReport,
+} from './services/corpus-migrator';
+export { CorpusMigrator } from './services/corpus-migrator';
+export type {
     HistoryAnalyzeResult,
     HistoryImportResult,
     HistoryServiceContext,
