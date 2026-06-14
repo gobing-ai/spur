@@ -1,8 +1,15 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
-import { PlanningWriteService, type SectionMatrix, TaskCheckService, TaskService } from '@gobing-ai/spur-app';
+import {
+    LifecycleAdapter,
+    PlanningWriteService,
+    type SectionMatrix,
+    TaskCheckService,
+    TaskService,
+} from '@gobing-ai/spur-app';
 import { bundledConfigRoot } from '@gobing-ai/spur-config';
+import { TaskRunLinkDao } from '@gobing-ai/spur-domain';
 import { parse as parseYaml } from 'yaml';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
@@ -261,8 +268,33 @@ export function registerTaskCommand(program: Command, context: CliContext): void
 
 function makeService(context: CliContext, folderOverride?: string): TaskService {
     const tasksDir = folderOverride ?? context.fs.resolve('docs', 'tasks');
-    const writeService = new PlanningWriteService({ fs: context.fs });
+    const lifecycle = makeLifecycleAdapter(context);
+    const writeService = new PlanningWriteService({
+        fs: context.fs,
+        ...(lifecycle ? { lifecycle } : {}),
+    });
     return new TaskService({ fs: context.fs, tasksDir, writeService });
+}
+
+/**
+ * Build the engine-backed lifecycle port (0055). Status transitions then go
+ * through the `task-lifecycle` state-machine with real guard enforcement
+ * (`spur task check`) and file-wins rehydration (DD-04). Returns `undefined`
+ * when the bundled workflow YAML is unreachable (e.g. a `--compile` single
+ * binary with no sibling config) — `PlanningWriteService` then falls back to
+ * the schema-only port.
+ */
+function makeLifecycleAdapter(context: CliContext): LifecycleAdapter | undefined {
+    const root = bundledConfigRoot();
+    if (root === null) return undefined;
+    const workflowPath = join(root, 'workflows', 'task-lifecycle.yaml');
+    if (!existsSync(workflowPath)) return undefined;
+    return new LifecycleAdapter({
+        getDb: () => context.getDb(),
+        taskRunLinkDao: (db) => new TaskRunLinkDao(db),
+        workflowPath,
+        cwd: context.cwd,
+    });
 }
 
 function makeCheckService(context: CliContext): TaskCheckService {
