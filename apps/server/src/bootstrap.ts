@@ -1,6 +1,8 @@
 import type { ApplicationRuntime, LoggingOptions } from '@gobing-ai/ts-infra/application';
+import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { OpenAPIHandler } from '@orpc/openapi/fetch';
 import { Hono } from 'hono';
+import type { ServerContext } from './context';
 import { mountMiddleware } from './middleware/pipeline';
 import { generateOpenApiSpec } from './openapi';
 import { router } from './router';
@@ -8,12 +10,10 @@ import { router } from './router';
 const handler = new OpenAPIHandler(router);
 
 // Declare Hono context variables so c.set() / c.get() type-check.
-// `ctx` (ServerContext) is wired in task 0073; `requestId` is set by the
-// requestId middleware.
 declare module 'hono' {
     interface ContextVariableMap {
         rt: ApplicationRuntime;
-        ctx: undefined; // typed placeholder until ServerContext lands (0073)
+        ctx: ServerContext;
         requestId: string;
     }
 }
@@ -30,7 +30,7 @@ export function serverBootstrapConfig(env: Record<string, string | undefined>): 
     const isTest = env.NODE_ENV === 'test';
     return {
         logging: {
-            enabled: !isTest, // mute JSON log leakage in tests (parity with spur)
+            enabled: !isTest,
             level: (env.SPUR_LOG_LEVEL as LoggingOptions['level']) ?? 'info',
         },
         telemetry: { enabled: false },
@@ -47,11 +47,13 @@ const startedAt = Date.now();
  *
  * When an `ApplicationRuntime` is provided, its `logger` and `events` are
  * threaded through the middleware pipeline and into the oRPC handler context.
+ * A `ServerContext` is built and injected into `c.var.ctx`.
  *
  * The no-arg form (no runtime) works stand-alone — used in tests that don't
- * spin up a full application bootstrap.
+ * spin up a full application bootstrap. ServerContext is passed via opts.ctx
+ * (Bun path) or omitted (CF path — no @gobing-ai/spur-app transitives).
  */
-export function createApp(appRt?: ApplicationRuntime): Hono {
+export function createApp(appRt?: ApplicationRuntime, opts?: { fs?: FileSystem; ctx?: ServerContext }): Hono {
     const app = new Hono();
 
     // ── Cross-cutting middleware (design §2.2 — order is load-bearing) ──
@@ -61,7 +63,10 @@ export function createApp(appRt?: ApplicationRuntime): Hono {
 
     app.get('/openapi.json', async (c) => c.json(await generateOpenApiSpec({})));
 
-    // ── Health endpoints (before oRPC wildcard mount so they win on /api/health) ──
+    // ── ServerContext (Bun path only via opts.ctx; CF passes nothing) ──
+    const ctx: ServerContext | undefined = opts?.ctx;
+
+    // ── Health endpoints (before oRPC wildcard mount) ──
     app.get('/api/health', (c) => {
         const uptime = (Date.now() - startedAt) / 1000;
         const memory = process.memoryUsage();
@@ -73,12 +78,25 @@ export function createApp(appRt?: ApplicationRuntime): Hono {
         });
     });
 
-    // Readiness stub — DB probe lands in 0073 once ServerContext.getDb() exists.
-    // Returns 200 with a deferred flag; 0073 replaces with a real database probe → 200 / 503.
-    app.get('/api/health/ready', (c) => c.json({ status: 'ok', db: 'deferred' }));
+    // Readiness probe — calls getDb() then SELECT 1; 200 when up, 503 when unreachable.
+    app.get('/api/health/ready', async (c) => {
+        if (!ctx) {
+            return c.json({ status: 'error', db: 'unavailable' }, 503);
+        }
+        try {
+            const db = await ctx.getDb();
+            await db.queryFirst<{ one: number }>('SELECT 1 AS one');
+            return c.json({ status: 'ok', db: 'connected' });
+        } catch {
+            return c.json({ status: 'error', db: 'unreachable' }, 503);
+        }
+    });
 
     // ── oRPC handler for /api/* (after explicit routes above) ──
     app.use('/api/*', async (c, next) => {
+        if (ctx) {
+            c.set('ctx', ctx);
+        }
         const { matched, response } = await handler.handle(c.req.raw, {
             prefix: '/api',
             context: appRt ? { logger: appRt.logger, events: appRt.events, db: appRt.db } : {},

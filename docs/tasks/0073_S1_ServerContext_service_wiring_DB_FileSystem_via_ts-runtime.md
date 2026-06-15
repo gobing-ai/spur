@@ -1,21 +1,13 @@
 ---
+schema_version: 1
 name: "S1: ServerContext service wiring + DB/FileSystem via ts-runtime"
-description: "S1: ServerContext service wiring + DB/FileSystem via ts-runtime"
-status: Backlog
+status: wip
+type: task
+feature_id: S1
+priority: P1
+tags: ["server-side-adjustment","wave-S0","group-S"]
 created_at: 2026-06-15T16:01:22.500Z
 updated_at: 2026-06-15T16:01:22.500Z
-folder: docs/tasks
-type: task
-feature-id: S1
-priority: P1
-estimated_hours: 8
-tags: ["server-side-adjustment","wave-S0","group-S"]
-impl_progress:
-  planning: pending
-  design: pending
-  implementation: pending
-  review: pending
-  testing: pending
 ---
 
 ## 0073. "S1: ServerContext service wiring + DB/FileSystem via ts-runtime"
@@ -167,4 +159,6 @@ in 0074), domain module handlers (0078), contracts (0077).
 
 ### References
 
+
+### History
 

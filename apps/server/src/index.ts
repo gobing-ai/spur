@@ -18,7 +18,11 @@ if (isEntrypoint) {
     await runNodeApplication({
         config: serverBootstrapConfig(env),
         async start(appRt: ApplicationRuntime) {
-            const app = createApp(appRt);
+            const { createNodeFileSystem } = await import('@gobing-ai/ts-runtime');
+            const { createServerContext } = await import('./context');
+            const fs = createNodeFileSystem(process.cwd());
+            const ctx = createServerContext(appRt, { cwd: process.cwd(), fs });
+            const app = createApp(appRt, { fs, ctx });
 
             const server = Bun.serve({
                 fetch: app.fetch,

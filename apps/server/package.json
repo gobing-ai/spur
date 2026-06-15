@@ -15,7 +15,8 @@
     "dependencies": {
         "@gobing-ai/spur-config": "workspace:*",
         "@gobing-ai/spur-contracts": "workspace:*",
-        "@gobing-ai/ts-db": "catalog:",
+        "@gobing-ai/spur-app": "workspace:*",
+        "@gobing-ai/spur-domain": "workspace:*",
         "@gobing-ai/ts-infra": "catalog:",
         "@gobing-ai/ts-runtime": "catalog:",
         "@orpc/openapi": "catalog:",

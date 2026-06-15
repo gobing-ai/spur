@@ -81,12 +81,26 @@ describe('health endpoints', () => {
         expect(typeof body.memory_heap_mb).toBe('number');
     });
 
-    test('GET /api/health/ready returns deferred readiness', async () => {
+    test('GET /api/health/ready returns 503 without ServerContext', async () => {
         const res = await createApp().request('/api/health/ready');
+        expect(res.status).toBe(503);
+        const body = (await res.json()) as Record<string, unknown>;
+        expect(body.status).toBe('error');
+        expect(body.db).toBe('unavailable');
+    });
+
+    test('GET /api/health/ready returns 200 connected when DB is available', async () => {
+        const appRt = mockRuntime();
+        const { createNodeFileSystem } = await import('@gobing-ai/ts-runtime');
+        const { createServerContext } = await import('../../src/context');
+        const fs = createNodeFileSystem('/tmp/test');
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs });
+        const app = createApp(appRt, { fs, ctx });
+        const res = await app.request('/api/health/ready');
         expect(res.status).toBe(200);
         const body = (await res.json()) as Record<string, unknown>;
         expect(body.status).toBe('ok');
-        expect(body.db).toBe('deferred');
+        expect(body.db).toBe('connected');
     });
 
     test('root redirects to /api/health', async () => {

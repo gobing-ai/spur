@@ -1,7 +1,13 @@
 export * from './analytics';
 export * from './bdd';
 export * from './dao';
-export { type CreateDomainDbOptions, createMigratedDb, type DbAdapter } from './db';
+export {
+    type CreateDomainDbOptions,
+    createMigratedDb,
+    createMigratedDbViaRuntime,
+    type DatabaseConfig,
+    type DbAdapter,
+} from './db';
 export {
     applyCliMigrations,
     CLI_MIGRATION_FILE_MARKER,
