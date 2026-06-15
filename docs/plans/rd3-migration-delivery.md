@@ -103,7 +103,7 @@ Two new nouns (ADR-020) plus one new verb on an existing noun. Every command sup
 
 | Command | Status | What it's for | Items |
 |---|---|---|---|
-| `spur task info <file-path>` · `spur feature info <file-path>` | TBD | Path → frontmatter-only JSON in **one** call, for machine/API integration. `resolve` + `show --json` composes the same capability in two calls; the case that earns the verb is the write-guard hook (one subprocess spawn instead of two). Decide when the hook contract is designed. | — |
+| `spur task info <file-path>` · `spur feature info <file-path>` | **rejected (0067)** | Path → frontmatter-only JSON in one call. The only proposed consumer was the write-guard hook, but the hook (0067) is **ownership-only**: it needs `spur task resolve` (path → owned?) and nothing from frontmatter, so a one-call `info` shape collapses no subprocesses. `resolve` already answers the hook's whole question; no `info` verb earns its surface. Revisit only if a future machine/API consumer needs path→frontmatter in one call. | — |
 
 ### 1.4 Existing nouns — additions / hardening
 
@@ -313,7 +313,7 @@ The final subset (0065, ADR-016 test applied per candidate — all 12 passed; ve
 
 | Hook | Status | What it's for | Items |
 |---|---|---|---|
-| `task-write-guard` (`plugins/sp/hooks/task-write-guard.ts`) | proposed | PreToolUse write-guard: maps the edited file to its task via `spur task resolve` (or the TBD `task info`, §1.3), validates via `spur task check` — the hook holds **no logic**, only delegation. | F04 A10 A07 |
+| `task-write-guard` (`plugins/sp/hooks/task-write-guard.ts`) | shipped (0067) | PreToolUse (`Write\|Edit`) **ownership guard**: denies a raw write to a path that `spur task resolve` reports as task-owned, steering the agent to the `spur task` CLI. Pure delegation — the hook holds **no logic** (R3). `SPUR_WRITE_GUARD=off` is the escape hatch. Check-gating (`spur task check` on the post-edit state) is deferred until the corpus is migrated to the DD-07 schema — today `check` rejects 100% of the rd3-authored corpus, so gating on it would block every legitimate edit (0067 decision). | F04 A10 A07 |
 
 ---
 

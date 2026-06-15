@@ -547,10 +547,13 @@ to.
   the delivery doc §7.3; final subset = ADR-016 test at implementation of Wave 3).
 - `sp:expert-dev` / `sp:expert-tasks` / `sp:expert-features`: thin subagent wrappers of the
   skills, for isolated-context runs.
-- `task-write-guard` hook (PreToolUse): file path → `spur task resolve` → if owned by a task,
-  `spur task check` the post-edit state; deny with the findings report on hard failure. Pure
-  delegation; an env toggle (`SPUR_WRITE_GUARD=off`) is the escape hatch. Resolve/`info` call
-  count is an open TBD (delivery doc §1.3) settled when the hook is built.
+- `task-write-guard` hook (PreToolUse): file path → `spur task resolve` → if owned by a task, deny
+  the raw write and steer to the `spur task` CLI. Pure delegation; an env toggle
+  (`SPUR_WRITE_GUARD=off`) is the escape hatch. **Shipped ownership-only (0067):** the post-edit
+  `spur task check` gate is deferred until the corpus is migrated to the DD-07 schema — today
+  `check` rejects every rd3-authored task file, so gating on it would block all legitimate edits.
+  The resolve/`info` call-count TBD (delivery §1.3) is settled: ownership needs only `resolve`, so
+  no `info` verb is added.
 
 ### 12.4 Prompt-skill dispositions
 
@@ -634,7 +637,7 @@ Reviewable, numbered; silence = accepted with the doc.
 
 | Tag | Items |
 |---|---|
-| TBD | `spur task info` / `spur feature info` (decide with the write-guard hook, W3) |
+| Rejected | `spur task info` / `spur feature info` — decided against at 0067: the write-guard hook (their only proposed consumer) is ownership-only and needs just `spur task resolve`, so a one-call frontmatter verb collapses no subprocesses (delivery §1.3) |
 | Held | `@gobing-ai/spur-testing` workspace · review/verification prompt wrappers (drop-or-rewrite later) · `plan-*` command names |
 | Postponed | HTTP API · SSE endpoint · board UI · oRPC planning contracts · board launcher (X03) — all behind the server/web design task; §4–§7 designs already provide their attachment points (write service, event ledger) |
 | Out of scope | Cross-agent plugin conversion/adapter tooling (F05–F11, M11 `spur plugin convert`) — the operator builds it as an **independent tool** outside Spur (decision 2026-06-12); Spur's `plugins/sp` stays Claude-Code-shaped until that tool exists |

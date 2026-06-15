@@ -1,0 +1,17 @@
+{
+    "description": "Spur (sp) plugin hooks — task corpus write protection.",
+    "hooks": {
+        "PreToolUse": [
+            {
+                "matcher": "Write|Edit",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "bun ${CLAUDE_PLUGIN_ROOT}/hooks/task-write-guard.ts",
+                        "timeout": 10
+                    }
+                ]
+            }
+        ]
+    }
+}

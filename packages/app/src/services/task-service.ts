@@ -437,9 +437,9 @@ export class TaskService {
             }
         }
 
-        // A non-task path has no owning task in the current design (no task→file
-        // mapping yet; walk-up to a nearest owner arrives with the write-guard
-        // hook, task 0067). Until then, report no match.
+        // A non-task path has no owning task: ownership is "the path IS a task file"
+        // (the write-guard hook, 0067, guards on exactly this — it did not add
+        // walk-up-to-nearest-owner, which stays out of scope). Report no match.
         return null;
     }
 
