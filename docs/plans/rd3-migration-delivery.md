@@ -289,12 +289,16 @@ Operator direction (2026-06-12): the daily command surface continues the **`dev-
 `rd3:dev-*` — muscle-memory continuity — all thin wrappers of `sp:spur-dev`. The exact subset is
 the Stage-D ADR-016 decision test (expect few, not the legacy 42). Candidates, by usage:
 
+The final subset (0065, ADR-016 test applied per candidate — all 12 passed; verdict table in task 0065
+`## Review`). All are thin `Skill()` wrappers of `sp:spur-dev`, except `dev-docs` → `sp:doc-evolve`.
+
 | Command | Status | What it's for | Items |
 |---|---|---|---|
-| `sp:dev-plan` | proposed | Spec-pipeline entry: description → feature + decomposed tasks. | C01 C03 F03 |
-| `sp:dev-run` | proposed | Run one task through `task-pipeline.yaml`. | D01 F03 |
-| `sp:dev-unit` · `sp:dev-review` · `sp:dev-verify` | proposed | Test / review / verify entry points of the work loop. | F03 |
-| `sp:dev-new-task` · `sp:dev-fixall` · `sp:dev-gitmsg` · `sp:dev-docs` · `sp:dev-changelog` · `sp:dev-handover` · `sp:dev-refine` | proposed | The rest of the daily family — each passes or fails the ADR-016 test individually at Stage D. | F03 I06 |
+| `sp:dev-plan` | shipped | Spec-pipeline entry: description → feature + decomposed tasks. | C01 C03 F03 |
+| `sp:dev-run` | shipped | Run one task through `task-pipeline.yaml`. | D01 F03 |
+| `sp:dev-unit` · `sp:dev-review` · `sp:dev-verify` | shipped | Test / review / verify entry points of the work loop. | F03 |
+| `sp:dev-new-task` · `sp:dev-fixall` · `sp:dev-gitmsg` · `sp:dev-changelog` · `sp:dev-handover` · `sp:dev-refine` | shipped | The rest of the daily family — all wrap `sp:spur-dev`. | F03 I06 |
+| `sp:dev-docs` | shipped (inert) | Doc evolution — passes ADR-016, but its backing skill `sp:doc-evolve` is not yet built; the command is inert until then. | I15 |
 | `sp:plan-feature` / `sp:plan-decompose` / `sp:task-run` | **held** | Superseded by the dev-* family above (operator decision 2026-06-12); kept here only so the names aren't accidentally reused for something else. | — |
 
 ### 7.4 Subagents (thin wrappers of §7.1 skills)
