@@ -268,8 +268,8 @@ per design: as many skills as the work has natural seams, no more (operator clar
 | Skill | Status | What it's for | Items |
 |---|---|---|---|
 | `sp:spur-dev` | fixed (operator-selected 2026-06-12) | **The fat daily-workflow umbrella skill** backing the whole `sp:dev-*` command family. Its planning half is the spec pipeline (C01–C03): description → feature file with BDD AC → CLI-validated task decomposition. Its execution half drives the work loop: run a task through `task-pipeline.yaml`, review, verify. Delegates every deterministic step to CLI verbs. Split later only when size actually hurts. | C01 C02 C03 D01 F01 |
-| `sp:spur-tasks` | proposed | Reference companion for `spur task`: when/how agents drive the verbs, section-editing workflow, check-before-write discipline. | F01 |
-| `sp:spur-features` | proposed | Reference companion for `spur feature`: feature authoring, AC conventions, traceability habits. | F01 |
+| `sp:spur-tasks` | shipped (0066) | Reference companion for `spur task`: when/how agents drive the verbs, section-editing workflow (`update --section --from-file`), check-before-write discipline (the `check --json` readiness matrix). Delegates all orchestration to `sp:spur-dev`. | F01 |
+| `sp:spur-features` | shipped (0066) | Reference companion for `spur feature`: feature authoring, hierarchical IDs (DD-14), AC conventions (R-numbering → scenarios, `@core`/`@edge`), traceability habits (L4 edges). Delegates all orchestration to `sp:spur-dev`. | F01 |
 
 Existing `sp:spur-rules` / `sp:spur-workflows` are untouched.
 
@@ -305,9 +305,9 @@ The final subset (0065, ADR-016 test applied per candidate — all 12 passed; ve
 
 | Subagent | Status | What it's for | Items |
 |---|---|---|---|
-| `sp:expert-dev` | proposed | Isolated-context runs of the full dev workflow (wraps `sp:spur-dev`; replaces the earlier `expert-plan` proposal). | F02 |
-| `sp:expert-tasks` | proposed | Isolated-context multi-step task-management work. | F02 |
-| `sp:expert-features` | proposed | Same, feature side. | F02 |
+| `sp:expert-dev` | shipped (0065) | Isolated-context runs of the full dev workflow (wraps `sp:spur-dev`; replaces the earlier `expert-plan` proposal). | F02 |
+| `sp:expert-tasks` | shipped (0065; skill landed 0066) | Isolated-context multi-step task-management work (wraps `sp:spur-tasks`). | F02 |
+| `sp:expert-features` | shipped (0065; skill landed 0066) | Same, feature side (wraps `sp:spur-features`). | F02 |
 
 ### 7.5 Hooks
 
