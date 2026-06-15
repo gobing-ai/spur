@@ -67,6 +67,11 @@ clobbering a configured project. `--json` emits
 `{ ok, project, config, created[], skipped[], globalConfigSeeded }`.
 
 #### `spur agent run <prompt> [--agent <name>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--drain] [--json]`
+**The single LLM execution surface.** Every model invocation in Spur routes through this verb — sp
+skills that generate prose (AC, decompositions, reviews), workflow `agent.run` actions, and team-mode
+runs all call `spur agent run`; Spur owns no other path that reaches a model (it is not a BYOK LLM
+platform — ADR/PRD). This keeps agent resolution, auth, slash-command translation, and team identity in
+one place, and is the seam where a future remote/SSE execution channel attaches without touching callers.
 Execute a prompt or slash command via a coding agent. `--agent` (default `auto`) selects the first
 usable Tier-1 agent; `current` reads `SPUR_AGENT` env var; explicit name resolves directly.
 `--continue` resumes the previous session. `--mode text|json` (default `text`) passes output format

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { TeamService } from '@gobing-ai/spur-app';
 import type { DoctorResult } from '@gobing-ai/ts-ai-runner';
 import { NodeFileSystem, setFileSystem } from '@gobing-ai/ts-runtime';
 import { main } from '../../src';
@@ -259,15 +260,21 @@ describe('spur agent run --drain', () => {
     }
 
     test('folds pending messages into the prompt and maps spec id to type', async () => {
-        const { ctx, cwd, out, cleanup } = await makeCtx();
+        const { ctx, cleanup } = await makeCtx();
         try {
-            // A planner spec whose type is a valid runner agent name, plus a pending message.
-            await main(['agent', 'create', 'planner', '--type', 'claude'], { cwd, output: out, dbUrl: ':memory:' });
-            await main(['message', 'send', '--to', 'planner', 'drain', 'me'], { cwd, output: out, dbUrl: ':memory:' });
+            // Seed the spec + a pending message through the SAME ctx so they live in
+            // the one cached :memory: DB that `--drain` reads (driving the flow via
+            // main() opens a fresh DB per call, so drain would never see the message —
+            // the whole point of team-mode is that the drained message reaches the runner).
+            const team = new TeamService(ctx);
+            await team.createAgentSpec({ id: 'planner', type: 'claude' });
+            await team.sendMessage('operator', 'planner', 'remember to drain me');
 
             let receivedInput = '';
+            let receivedAgent: unknown;
             const fakeRunner = {
-                runPromptCommand: async (_agent: unknown, opts: { input?: string }) => {
+                runPromptCommand: async (agent: unknown, opts: { input?: string }) => {
+                    receivedAgent = agent;
                     receivedInput = opts.input ?? '';
                     return { exitCode: 0, stdout: '', stderr: '', durationMs: 1 };
                 },
@@ -280,10 +287,13 @@ describe('spur agent run --drain', () => {
                 doctorRunner: fakeDoctor() as MockDoctor,
             } as unknown as AgentRunDeps);
             expect(code).toBe(0);
-            // Drain relies on the same DB context; when called via main() the
-            // per-call :memory: DBs are isolated, so drain won't find the pending
-            // message. The prompt itself still reaches the runner.
+            // End-to-end team-mode: the pending message body is folded into the prompt
+            // ahead of the operator's instruction, and the spec id 'planner' was mapped
+            // to its runner type 'claude' so resolution succeeded.
+            expect(receivedInput).toContain('remember to drain me');
             expect(receivedInput).toContain('do work');
+            expect(receivedInput.indexOf('remember to drain me')).toBeLessThan(receivedInput.indexOf('do work'));
+            expect(receivedAgent).toBe('claude');
         } finally {
             await cleanup();
         }
