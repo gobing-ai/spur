@@ -35,3 +35,13 @@ export async function createMigratedDbViaRuntime(config: DatabaseConfig): Promis
 
 export type { DbAdapter } from '@gobing-ai/ts-db';
 export type { DatabaseConfig } from '@gobing-ai/ts-runtime';
+
+/** Simple DB liveness probe — returns true when the adapter responds to a trivial query. */
+export async function dbHealthCheck(db: DbAdapter): Promise<boolean> {
+    try {
+        await db.queryFirst<{ one: number }>('SELECT 1 AS one');
+        return true;
+    } catch {
+        return false;
+    }
+}

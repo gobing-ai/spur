@@ -7,6 +7,7 @@ export {
     createMigratedDbViaRuntime,
     type DatabaseConfig,
     type DbAdapter,
+    dbHealthCheck,
 } from './db';
 export {
     applyCliMigrations,
