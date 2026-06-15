@@ -199,7 +199,7 @@ Every command supports `--json` for machine consumption.
 ## Verification gate (all must pass before "done")
 
 1. `bun run lint` clean — Biome and per-workspace `tsc --noEmit`.
-2. `bun run test` passes; no test skipped, `.skip`'d, or commented out to go green.
+2. `bun run test` passes (workspace tests + `plugins/sp` tests); no test skipped, `.skip`'d, or commented out to go green.
 3. `bun run test-cf` passes (server Workers runtime).
 4. `bun run build` succeeds across all workspaces.
 5. `git status` shows only intentional changes.
@@ -209,7 +209,7 @@ If a check fails, fix the root cause. **Never** bypass with `--no-verify`, `--fo
 
 ## Testing
 
-- Tests live in `tests/` next to the code (`<workspace>/tests/**/*.test.ts`), using `bun:test`.
+- Tests live in `tests/` next to the code (`<workspace>/tests/**/*.test.ts`), using `bun:test`. `plugins/sp` tests run in the same gate via the chained `test` script.
 - Coverage target is **per file line >= 90% and function >= 90% in aggregate** (`bunfig.toml`).
 - DAOs test against in-memory SQLite (`:memory:`); inject a fresh adapter per test.
 - Names describe behavior under a condition; assertions tie to the requirement, not the implementation.
