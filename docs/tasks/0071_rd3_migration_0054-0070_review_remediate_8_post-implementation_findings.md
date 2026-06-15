@@ -294,10 +294,15 @@ Per-finding checklist with file paths + the exact verification step. `[ ]` = not
 - [ ] Update `AGENTS.md` Verification-gate + Testing sections to state plugin tests are in the gate
 - [ ] Verify: `bun run test` count rises ~1266 → ~1424, 0 fail; `task-write-guard.test.ts` (7) + skill tests (151) included; coverage thresholds hold
 
-**R6 — de-link catalog (Medium / S)**
-- [ ] Confirm upstream `ts-libs` `ts-infra` + `ts-rule-engine` published ≥0.3.17 (the version the links validate). If NOT published yet → BLOCKED: record blocking version, leave link, add tracked note
-- [ ] If published: change `package.json:35,37` `link:` → `"^0.3.17"`; `bun install`
-- [ ] Verify: `node_modules/@gobing-ai/{ts-infra,ts-rule-engine}` no longer symlinks to the global store; lockfile updated; full gate green
+**R6 — de-link catalog (Medium / S) — BLOCKED: unreleased `details` field on `rule.eval.done`**
+- [x] Confirm upstream `ts-libs` `ts-infra` + `ts-rule-engine` published ≥0.3.17 → **YES, both at 0.3.17**
+- [~] De-link → **REVERTED**. Published `0.3.17` lacks `details: ConstraintFinding[]` on the
+  `rule.eval.done` event type (`packages/app/src/services/rule-service.ts:490` destructures it).
+  The local `~/xprojects/ts-libs/packages/rule-engine/src/events.ts` has the field (added after
+  the 0.3.17 publish); the published tarball does not. De-linking regresses `tsc --noEmit`:
+  `error TS2339: Property 'details' does not exist`. Links restored; lint green again.
+- [ ] **Trigger to de-link:** publish `@gobing-ai/ts-rule-engine` ≥ next version with the `details`
+  field on `rule.eval.done`, then flip `package.json:35,37` `link:` → `"^0.3.17"` and run the full gate.
 
 **R7 — spur task migrate surface annotation (Low / S, doc-only)**
 - [ ] Confirm `docs/04_DESIGN.md:449` "Reserved (A17)" is unambiguous; confirm `CLAUDE.md`/`AGENTS.md` "Planned expansion" note covers `task migrate`

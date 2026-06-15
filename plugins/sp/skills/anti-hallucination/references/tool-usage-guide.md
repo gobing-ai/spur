@@ -86,7 +86,7 @@ Why this works:
 **Task**: Verify whether a symbol exists in the current repository
 
 ```bash
-rg -n "useDeferredValue" plugins/rd3
+rg -n "useDeferredValue" plugins/sp
 ```
 
 Why this works:
