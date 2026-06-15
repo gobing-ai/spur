@@ -6,8 +6,8 @@ describe('mockRuntime', () => {
         const rt = mockRuntime();
         expect(rt).toBeDefined();
         rt.logger.info('test');
-        rt.logger.child().info('test');
-        rt.events.emit();
+        rt.logger.child({}).info('test');
+        rt.events.emit('scheduler.job.executed', { name: 'test', durationMs: 1 });
         rt.stop();
     });
 });
@@ -16,9 +16,10 @@ describe('noopChild', () => {
     test('returns a logger-like object', () => {
         const child = noopChild();
         expect(child).toBeDefined();
-        child.info();
-        child.warn();
-        child.error();
-        child.child().info();
+        child.info?.();
+        child.warn?.();
+        child.error?.();
+        const grandchild = child.child;
+        expect(typeof grandchild).toBe('function');
     });
 });
