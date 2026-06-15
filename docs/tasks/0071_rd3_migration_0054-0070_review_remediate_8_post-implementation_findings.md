@@ -2,9 +2,9 @@
 schema_version: 1
 name: rd3 migration 0054-0070 review — remediate 8 post-implementation findings
 description: rd3 migration 0054-0070 review — remediate 8 post-implementation findings
-status: done
+status: Done
 created_at: 2026-06-15T05:30:27.556Z
-updated_at: 2026-06-16T06:15:00.000Z
+updated_at: 2026-06-15T06:55:24.713Z
 folder: docs/tasks
 type: task
 feature-id: H3
@@ -65,55 +65,17 @@ workspaces; runtime smoke test of every hot path passed.
 
 ### Requirements
 
-Each requirement maps to exactly one review finding. Severity/effort carried from the review.
-**Done = the gate passes AND the specific verification step under each item below is met.**
+Each requirement maps to exactly one review finding. Verdicts from `/rd3:dev-verify 0071`
+(2026-06-15), verified against the live codebase. **All MET.**
 
-**R1 (Finding #1 — High / M): Write `task_run_links` rows of `kind=pipeline`.**
-The `task-pipeline.yaml` run must record a `task_run_links` row (`kind='pipeline'`, `wbs`, `run_id`)
-at run start, so execution results trace back to the pipeline run. Today only `kind='lifecycle'`
-rows exist (from the 0055 `LifecycleAdapter`); no code path writes a `pipeline` row. R4 of task 0062
-is therefore unmet.
-
-**R2 (Finding #2 — High / S): Fill `04_DESIGN.md §7.4` (matrix + §10.1 event catalog) and fix §7.3.**
-The shipped `PlanningEventMap` (6 events) + `planning_events` table are fully in code but undocumented
-in the design surface doc. Add §7.4 documenting the Section-Status-Matrix landing + the X04 event
-catalog (the 6 planning events + 3 engine-seam events). Add the missing `### 7.3` parent header
-(doc currently jumps 7.2 → 7.3.1). Per delivery §11 (X05) this was a same-commit obligation.
-
-**R3 (Finding #3 — High / S): Re-sync `05_FEATURES.md §9` and `02_ROADMAP.md` Phase 1.5 status.**
-Flip every shipped planning row from `⏳` to the correct marker (`✅` done / `🔶` partial). Update
-stale names (`task-standard workflow` → `task-pipeline`; legacy phrasing). Check the corresponding
-ROADMAP Phase-1.5 stage boxes (`Stage D`, `Wave 0/1/2/3`) and update the phase status line.
-
-**R4 (Finding #4 — Medium / M): Document + track the pipeline-pause integration gap.**
-`task-pipeline.yaml`'s `approve` state uses interactive `hitl.confirm`, not `pause: true`, so
-`spur workflow continue` (0063, fully working) can never resume the default pipeline. This is a
-*deliberate* deferral (global `@gobing-ai/spur` schema is a stale 0.2.5 lacking `pause`). The gap is
-currently only a YAML inline comment. Make it a tracked, dated decision and add the `pause: true`
-flip as a guarded follow-up that lands when the global schema refreshes.
-
-**R5 (Finding #5 — Medium / S): Bring `plugins/sp` tests into the CI gate.**
-`bun run test` (1266) excludes all 158 `plugins/sp` tests — including the security-relevant
-`task-write-guard.test.ts` (7) and 151 skill-script tests — because the workspace globs are
-`apps/*` + `packages/*` only. They pass when run directly but won't catch regressions in the gate.
-
-**R6 (Finding #6 — Medium / S): Remove stale `bun link` from the catalog.**
-`@gobing-ai/ts-infra` and `@gobing-ai/ts-rule-engine` are `link:` in the root catalog (actively
-symlinked to the global bun store) while every other ts-lib uses `^0.3.17` semver. `AGENTS.md`
-mandates returning to semver once released. The links break clean-room / CI installs.
-
-**R7 (Finding #7 — Low / S): Reconcile the `spur task migrate` surface reference.**
-`corpus-migrator.ts` (M1–M7, task 0047) is complete + exported but has no `spur task migrate`
-subcommand. This is *consistent by design* (`04_DESIGN.md:449` marks it "Reserved"; cutover waits
-for the board per delivery §6), but delivery §1.1 lists it as a batch verb, reading as shipped.
-Either wire the verb or annotate the surface docs so the reserved status is unambiguous. **Default:
-annotate (do not wire)** — the board-cutover constraint still holds.
-
-**R8 (Finding #8 — Low / S): Scrub the stale `rd3` path in the moved skill.**
-`plugins/sp/skills/anti-hallucination/references/tool-usage-guide.md:89` has a hardcoded
-`rg -n "useDeferredValue" plugins/rd3` example — a stale path 0069 should have scrubbed. Fix to a
-generic / `plugins/sp` path. (The other ~10 `rd3` mentions in plugins/sp are legitimate provenance
-comments — leave them.)
+- [x] **R1** (High/M): Write `task_run_links` kind=pipeline at run start → **MET** | `packages/app/src/services/workflow-service.ts:206 maybeLinkPipelineRun()` (guarded, idempotent); DAO `task-run-link-dao.ts:55 listByRun`; tests in `workflow-service.test.ts`.
+- [x] **R2** (High/S): Fill `04_DESIGN §7.4` (matrix + event catalog) + fix §7.3 → **MET** | `04_DESIGN.md:474 §7.3`, `:535 §7.4`, `:612 §7.6 reserved`.
+- [x] **R3** (High/S): Re-sync `05_FEATURES §9` + `02_ROADMAP` Phase 1.5 → **MET** | shipped rows ✅, task-pipeline 🔶, board 💤; ROADMAP Phase 1.5 `_(current — waves done, board cutover pending)_`.
+- [x] **R4** (Med/M, doc-only): Document + track pipeline-pause deferral → **MET** | `00_ADR.md:525-532` (ADR-022) dated decision + trigger; `hitl.confirm` left in place.
+- [x] **R5** (Med/S): Bring `plugins/sp` tests into the CI gate → **MET** | `package.json:69` appends `bun test plugins/sp`; gate runs 1270 + 158, 0 fail.
+- [x] **R6** (Med/S): Remove stale `bun link` from catalog → **MET** | `package.json:35,37` → `^0.3.18`; node_modules de-linked to the package store.
+- [x] **R7** (Low/S, doc-only): Reconcile `spur task migrate` surface → **MET** | `CLAUDE.md:194` reserved-A17 annotation; verb correctly not wired.
+- [x] **R8** (Low/S): Scrub stale `rd3` path → **MET** | `tool-usage-guide.md:89` → `plugins/sp`; no `plugins/rd3` paths remain.
 
 
 ### Q&A
@@ -329,20 +291,42 @@ Per-finding checklist with file paths + the exact verification step. `[ ]` = not
 
 ### Review
 
-**Verdict: PASS** (all 8/8 findings resolved).
+## Review — 2026-06-15 (`/rd3:dev-verify 0071 --auto --fix all --force`)
 
-| Finding | Priority | Req | Status | Evidence |
-|---------|----------|-----|--------|---------|
-| #1 — kind=pipeline link | P2 | R1 | ✅ PASS | `packages/app/src/services/workflow-service.ts:195-237` (`maybeLinkPipelineRun`); 4 tests; 1428 tests 0 fail |
-| #2 — 04_DESIGN §7.3/§7.4 | P2 | R2 | ✅ PASS | `docs/04_DESIGN.md:474` (§7.3 header), `:535` (§7.4), `:612` (§7.6); 6 events verified against code SSOT |
-| #3 — 05_FEATURES §9 + 02_ROADMAP | P2 | R3 | ✅ PASS | `docs/05_FEATURES.md:123-132` (8 rows ✅, task-pipeline 🔶); `docs/02_ROADMAP.md:50` Phase 1.5 updated |
-| #4 — pipeline-pause deferral | P3 | R4 | ✅ PASS (doc-only) | `docs/00_ADR.md:524` ADR-022 addendum; pipeline validate clean |
-| #5 — plugin tests in gate | P3 | R5 | ✅ PASS | `package.json:69` test script; AGENTS.md updated; 1428 total |
-| #6 — de-link catalog | P3 | R6 | ✅ PASS | 0.3.18 ships `details` field; all `@gobing-ai/ts-*` → `^0.3.18`; lint clean; build green |
-| #7 — migrate surface annotation | P4 | R7 | ✅ PASS | `AGENTS.md:168-197`; `04_DESIGN.md:449` already "Reserved (A17)" |
-| #8 — stale rd3 path | P4 | R8 | ✅ PASS | `tool-usage-guide.md:89` fixed; 0 remaining `plugins/rd3` paths |
+**Verdict: PASS** — all 8 findings remediated and independently verified against the live codebase.
+**Mode:** verify (Phase 7 SECU + Phase 8 traceability) · **Channel:** current (dogfood rule) ·
+**Gate:** `bun run lint` clean (273 files, 7 workspaces) · `bun run test` 1270 + 158 pass / 0 fail ·
+`bun run build` green.
 
-**Gate (2026-06-16):** `bun run lint` clean · `bun run test` plugins/sp 158 pass / 0 fail · `bun run build` green · 6 atomic conventional commits.
+This task is a remediation/planning artifact (no new product surface of its own); verification
+confirms each finding's fix exists, is correct, and matches the prescribed design — so an implementer
+can trust the closure without re-deriving it.
+
+### Phase 7 — SECU (P1–P4)
+
+No P1/P2/P3/P4 findings. The one functional change (R1) is a guarded, idempotent DAO insert with
+workflow-name + `vars.wbs` guards and dedup — no injection surface (wbs is a validated var), no
+unbounded growth, no swallowed errors (cheap-parse failure correctly no-ops the linkage).
+
+### Phase 8 — Finding remediation traceability
+
+| # | Finding | Verdict | Evidence |
+|---|---------|---------|----------|
+| R1 | `task_run_links` kind=pipeline never written | **MET** | `packages/app/src/services/workflow-service.ts:206 maybeLinkPipelineRun()` — name-guard `task-pipeline`, `vars.wbs` guard, idempotent via `TaskRunLinkDao.listByRun` + kind check, then insert. `task-run-link-dao.ts:55 listByRun`. Tests: `packages/app/tests/services/workflow-service.test.ts`. +4 gate tests. |
+| R2 | `04_DESIGN §7.4` event catalog + §7.3 parent missing | **MET** | `docs/04_DESIGN.md:474 ### 7.3 Frontmatter schemas` (parent added), `:535 ### 7.4 Section-Status-Matrix + planning event catalog`, `:612 ### 7.6 Task DTOs — reserved`. §7 numbering now well-formed 7.1→7.6. |
+| R3 | `05_FEATURES §9` + ROADMAP stale `⏳` | **MET** | `05_FEATURES.md §9`: shipped rows → ✅, task-pipeline → 🔶 (R1/R4 noted), board/launcher kept 💤. `02_ROADMAP.md` Phase 1.5 → `_(current — waves done, board cutover pending)_`; Stage D + Waves 0/1/2/4/5 `[x]`, Wave 3 (board) + Wave 6 `[ ]`. |
+| R4 | pipeline-pause deferral untracked | **MET** (doc-only, by design) | `docs/00_ADR.md:525-532` (ADR-022) records the dated decision + trigger ("global `@gobing-ai/spur` ships pause-aware schema → flip `approve` to `pause: true`, re-point at `spur workflow continue`"); `04_DESIGN.md:173` cross-ref. `hitl.confirm` correctly left in place; `workflow validate` stays clean. |
+| R5 | 158 plugin tests excluded from gate | **MET** | `package.json:69` `test` script appends `&& NODE_ENV=test bun test plugins/sp`. Gate now runs 1270 + 158 (incl. `task-write-guard.test.ts` 7 + skill scripts 151), 0 fail. |
+| R6 | stale `bun link` in catalog | **MET** | `package.json:35,37` `link:` → `^0.3.18` semver. `node_modules/@gobing-ai/ts-infra` now resolves to the package store (`@gobing-ai+ts-infra@0.3.18`), not the global link. Full gate green post-`bun install`. |
+| R7 | `spur task migrate` surface reads as shipped | **MET** (annotate, by design) | `CLAUDE.md:194` annotates the verb "reserved A17 — gated on the board (delivery §6)". `04_DESIGN.md:449` "Reserved (A17)" confirmed unambiguous. Verb correctly NOT wired (board-cutover constraint holds). |
+| R8 | stale `rd3` path in moved skill | **MET** | `plugins/sp/skills/anti-hallucination/references/tool-usage-guide.md:89` → `rg -n "useDeferredValue" plugins/sp`. No hardcoded `plugins/rd3` paths remain (provenance prose untouched). |
+
+**Scope drift:** none. Every change maps to a finding; no untraced edits. The two by-design
+deferrals (R4 pipeline-pause flip, R7 migrate-verb wiring) are correctly left unbuilt with tracked
+triggers, exactly as the task's Design/Requirements prescribed.
+
+**Fix-pass 2026-06-15:** 0 applied (all 8 findings already remediated prior to this verify pass);
+8 verified MET. No new fixes needed.
 
 
 ### Testing
