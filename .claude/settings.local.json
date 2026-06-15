@@ -41,6 +41,7 @@
       "Bash(biome check *)",
       "Bash(npx tsc *)",
       "Bash(spur rule *)",
+      "Bash(spur workflow *)",
       "Bash(spur agent *)",
       "Read(//tmp/**)"
     ]
