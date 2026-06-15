@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { secureHeaders } from 'hono/secure-headers';
 import { createApp } from '../../src/bootstrap';
 import { globalErrorHandler } from '../../src/middleware/error-handler';
-import { mountMiddleware } from '../../src/middleware/pipeline';
+import { mountMiddleware, trimOrigins } from '../../src/middleware/pipeline';
 import { requestId } from '../../src/middleware/request-id';
 import { mockRuntime } from './helpers';
 
@@ -161,5 +161,23 @@ describe('pipeline integration', () => {
         } finally {
             process.env.NODE_ENV = prevEnv;
         }
+    });
+});
+
+describe('trimOrigins helper', () => {
+    test('splits comma-separated origins and trims whitespace', () => {
+        expect(trimOrigins('a, b, c')).toEqual(['a', 'b', 'c']);
+    });
+
+    test('returns single entry without comma', () => {
+        expect(trimOrigins('example.com')).toEqual(['example.com']);
+    });
+
+    test('filters empty entries', () => {
+        expect(trimOrigins('a,, b')).toEqual(['a', 'b']);
+    });
+
+    test('handles trailing/leading whitespace', () => {
+        expect(trimOrigins('  a , b  ')).toEqual(['a', 'b']);
     });
 });

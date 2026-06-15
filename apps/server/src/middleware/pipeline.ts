@@ -24,11 +24,14 @@ import { requestLogger } from './request-logger';
  * 7. `compress`       — gzip/deflate for JSON responses
  * 8. `contextInjector`— sets `c.var.rt` (ServerContext lands in 0073)
  */
+export const trimOrigins = (origins: string): string[] =>
+    origins
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+
 export function mountMiddleware(app: Hono, appRt?: ApplicationRuntime): void {
-    const corsOrigins =
-        process.env.SPUR_CORS_ORIGINS?.split(',')
-            .map((s) => s.trim())
-            .filter(Boolean) ?? [];
+    const corsOrigins = process.env.SPUR_CORS_ORIGINS ? trimOrigins(process.env.SPUR_CORS_ORIGINS) : [];
 
     app.use('*', secureHeaders());
     app.use('*', cors({ origin: corsOrigins.length > 0 ? corsOrigins : '*' }));
