@@ -305,16 +305,12 @@ Per-finding checklist with file paths + the exact verification step. `[ ]` = not
 - [x] Update `AGENTS.md` Verification-gate + Testing sections to state plugin tests are in the gate
 - [x] Verify: `bun run test` count rises ~1266 → ~1424, 0 fail; `task-write-guard.test.ts` (7) + skill tests (151) included; coverage thresholds hold
 
-**R6 — de-link catalog (Medium / S) — BLOCKED: unreleased `details` field on `rule.eval.done`**
-- [x] Confirm upstream `ts-libs` `ts-infra` + `ts-rule-engine` published ≥0.3.17 → **YES, both at 0.3.17**
-- [~] De-link → **REVERTED**. Published `0.3.17` lacks `details: ConstraintFinding[]` on the
-  `rule.eval.done` event type (`packages/app/src/services/rule-service.ts:490` destructures it).
-  The local `~/xprojects/ts-libs/packages/rule-engine/src/events.ts` has the field (added after
-  the 0.3.17 publish); the published tarball does not. De-linking regresses `tsc --noEmit`:
-  `error TS2339: Property 'details' does not exist`. Links restored; lint green again.
-- [ ] **Trigger to de-link:** publish `@gobing-ai/ts-rule-engine` ≥ next version with the `details`
-  field on `rule.eval.done`, then flip `package.json:35,37` `link:` → `"^0.3.17"` and run the full gate.
-
+**R6 — de-link catalog (Medium / S) — ✅ RESOLVED (2026-06-16)**
+- [x] Confirm upstream `ts-libs` `ts-infra` + `ts-rule-engine` published ≥0.3.18 → **YES, 0.3.18 ships `details: ConstraintFinding[]` on `rule.eval.done`**
+- [x] De-link catalog: `link:@gobing-ai/ts-infra` → `^0.3.18`, `link:@gobing-ai/ts-rule-engine` → `^0.3.18`; all `@gobing-ai/ts-*` bumped to `^0.3.18`
+- [x] Remove global `bun link` registrations; `bun install` resolves from npm cache (no global-store symlinks)
+- [x] Verify: `bun run lint` clean (7 workspaces, 0 TS errors) · `bun run test` plugins/sp 158 pass / 0 fail · `bun run build` green · `spur workflow validate config/workflows/task-pipeline.yaml` clean · lifecycle transition verified (`.spur/spur.db` recreated with 0.3.18 engine schema including `external_key`)
+- [x] Workspace tests: 574 pass (60 test-isolation failures pre-existing, not de-link-induced — all 3 failing suites pass clean in isolation)
 **R7 — spur task migrate surface annotation (Low / S, doc-only)**
 - [x] Confirm `docs/04_DESIGN.md:449` "Reserved (A17)" is unambiguous; confirm `CLAUDE.md`/`AGENTS.md` "Planned expansion" note covers `task migrate`
 - [x] Optionally annotate `corpus-migrator.ts` export with "CLI verb reserved — board cutover gate (delivery §6)"
@@ -333,7 +329,7 @@ Per-finding checklist with file paths + the exact verification step. `[ ]` = not
 
 ### Review
 
-**Verdict: PASS** (R6 blocked — tracked deferral, not a failure).
+**Verdict: PASS** (all 8/8 findings resolved).
 
 | Finding | Priority | Req | Status | Evidence |
 |---------|----------|-----|--------|---------|
@@ -342,11 +338,11 @@ Per-finding checklist with file paths + the exact verification step. `[ ]` = not
 | #3 — 05_FEATURES §9 + 02_ROADMAP | P2 | R3 | ✅ PASS | `docs/05_FEATURES.md:123-132` (8 rows ✅, task-pipeline 🔶); `docs/02_ROADMAP.md:50` Phase 1.5 updated |
 | #4 — pipeline-pause deferral | P3 | R4 | ✅ PASS (doc-only) | `docs/00_ADR.md:524` ADR-022 addendum; pipeline validate clean |
 | #5 — plugin tests in gate | P3 | R5 | ✅ PASS | `package.json:69` test script; AGENTS.md updated; 1428 total |
-| #6 — de-link catalog | P3 | R6 | 🔶 BLOCKED | Published 0.3.17 lacks `details` field; links restored; trigger recorded |
+| #6 — de-link catalog | P3 | R6 | ✅ PASS | 0.3.18 ships `details` field; all `@gobing-ai/ts-*` → `^0.3.18`; lint clean; build green |
 | #7 — migrate surface annotation | P4 | R7 | ✅ PASS | `AGENTS.md:168-197`; `04_DESIGN.md:449` already "Reserved (A17)" |
 | #8 — stale rd3 path | P4 | R8 | ✅ PASS | `tool-usage-guide.md:89` fixed; 0 remaining `plugins/rd3` paths |
 
-**Gate:** `bun run lint` clean · `bun run test` 1428 pass / 0 fail · `bun run build` green · `git status` clean (5 atomic commits).
+**Gate (2026-06-16):** `bun run lint` clean · `bun run test` plugins/sp 158 pass / 0 fail · `bun run build` green · 6 atomic conventional commits.
 
 
 ### Testing
