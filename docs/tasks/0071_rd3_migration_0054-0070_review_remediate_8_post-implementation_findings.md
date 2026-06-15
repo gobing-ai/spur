@@ -263,36 +263,36 @@ with the tracked-deferrals (R4, R7) documented throughout.
 Per-finding checklist with file paths + the exact verification step. `[ ]` = not started.
 
 **R1 — task_run_links kind=pipeline (High / M)**
-- [ ] Confirm `TaskRunLinkDao` has (or add) a lookup to dedupe by `run_id` — `packages/domain/src/dao/task-run-link-dao.ts`
-- [ ] Add a run-start linkage in `packages/app/src/services/workflow-service.ts`: when workflow name == `task-pipeline` and `vars.wbs` present → insert `{ id: createId('trl'), wbs, run_id, kind: 'pipeline', created_at }` (mirror `lifecycle-adapter.ts:87-95`); idempotent on re-run
-- [ ] Keep the existing `kind=lifecycle` rows additive (do not remove)
-- [ ] Tests (`packages/app/tests/services/workflow-service.test.ts` or new): a `task-pipeline` run writes exactly one `kind=pipeline` row; a re-run with same run_id does not duplicate; a non-pipeline workflow writes none
-- [ ] Verify E2E: `spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"NNNN","profile":"auto"}'` then assert the `pipeline` row exists
-- [ ] Flip `05_FEATURES §9` task-pipeline row toward ✅ for the linkage portion
+- [x] Confirm `TaskRunLinkDao` has (or add) a lookup to dedupe by `run_id` — `packages/domain/src/dao/task-run-link-dao.ts`
+- [x] Add a run-start linkage in `packages/app/src/services/workflow-service.ts`: when workflow name == `task-pipeline` and `vars.wbs` present → insert `{ id: createId('trl'), wbs, run_id, kind: 'pipeline', created_at }` (mirror `lifecycle-adapter.ts:87-95`); idempotent on re-run
+- [x] Keep the existing `kind=lifecycle` rows additive (do not remove)
+- [x] Tests (`packages/app/tests/services/workflow-service.test.ts` or new): a `task-pipeline` run writes exactly one `kind=pipeline` row; a re-run with same run_id does not duplicate; a non-pipeline workflow writes none
+- [x] Verify E2E: `spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"NNNN","profile":"auto"}'` then assert the `pipeline` row exists
+- [x] Flip `05_FEATURES §9` task-pipeline row toward ✅ for the linkage portion
 
 **R2 — 04_DESIGN §7.3/§7.4 (High / S)**
-- [ ] Insert `### 7.3 Frontmatter schemas` parent header above 7.3.1
-- [ ] Add `### 7.4` — Section-Status-Matrix landing (point at `config/tasks/section-matrix.yaml` + `apps/cli/schemas/section-matrix.schema.json`; warning-first + hard-core summary)
-- [ ] Add the X04 event catalog to §7.4: 6 planning events (copy "fired when" from delivery §10.1) + 3 engine-seam events; note all emitted by `PlanningWriteService` → persisted to `planning_events`. Cross-check names against `planning-write-service.ts` `PlanningEventName` (SSOT)
-- [ ] §7.6 DTOs: leave a one-line "reserved (server/web design task)" note; author no shapes
-- [ ] Verify: `rg "task.created|feature.transitioned" docs/04_DESIGN.md` hits; §7 headers are well-formed (7.1→7.2→7.3→7.3.x→7.4→7.5)
+- [x] Insert `### 7.3 Frontmatter schemas` parent header above 7.3.1
+- [x] Add `### 7.4` — Section-Status-Matrix landing (point at `config/tasks/section-matrix.yaml` + `apps/cli/schemas/section-matrix.schema.json`; warning-first + hard-core summary)
+- [x] Add the X04 event catalog to §7.4: 6 planning events (copy "fired when" from delivery §10.1) + 3 engine-seam events; note all emitted by `PlanningWriteService` → persisted to `planning_events`. Cross-check names against `planning-write-service.ts` `PlanningEventName` (SSOT)
+- [x] §7.6 DTOs: leave a one-line "reserved (server/web design task)" note; author no shapes
+- [x] Verify: `rg "task.created|feature.transitioned" docs/04_DESIGN.md` hits; §7 headers are well-formed (7.1→7.2→7.3→7.3.x→7.4→7.5)
 
 **R3 — 05_FEATURES §9 + 02_ROADMAP Phase 1.5 (High / S)**
-- [ ] Flip §9 shipped rows ⏳→✅ (task mgmt, templates+matrix, BDD validator, feature mgmt, lifecycle+write-service, spec pipeline, plugins/sp, collective-design) per Design R3 list
-- [ ] Mark task-pipeline row 🔶 (pause + kind=pipeline pending) and rename "task-standard" → "task-pipeline"
-- [ ] Keep board/launcher + deferred-set rows 💤 (do NOT flip)
-- [ ] 02_ROADMAP: check Stage D + Wave 0/1/2/3 boxes; update phase status line precisely (waves done, board cutover pending — not "phase complete")
-- [ ] Verify: no shipped feature still reads ⏳; names match delivery §13
+- [x] Flip §9 shipped rows ⏳→✅ (task mgmt, templates+matrix, BDD validator, feature mgmt, lifecycle+write-service, spec pipeline, plugins/sp, collective-design) per Design R3 list
+- [x] Mark task-pipeline row 🔶 (pause + kind=pipeline pending) and rename "task-standard" → "task-pipeline"
+- [x] Keep board/launcher + deferred-set rows 💤 (do NOT flip)
+- [x] 02_ROADMAP: check Stage D + Wave 0/1/2/3 boxes; update phase status line precisely (waves done, board cutover pending — not "phase complete")
+- [x] Verify: no shipped feature still reads ⏳; names match delivery §13
 
 **R4 — pipeline-pause deferral, documented (Medium / M, doc-only)**
-- [ ] Record the deferral as a dated decision (ADR note in `docs/00_ADR.md` under ADR-022, or a delivery-doc/design note) with the trigger: "flip `approve` → `pause: true` + re-point HITL gate at `spur workflow continue` when global `@gobing-ai/spur` ships the `pause`-aware schema"
-- [ ] Keep the working `hitl.confirm` gate in `task-pipeline.yaml`; do NOT add `pause: true` now
-- [ ] Verify: `spur workflow validate config/workflows/task-pipeline.yaml` still clean
+- [x] Record the deferral as a dated decision (ADR note in `docs/00_ADR.md` under ADR-022, or a delivery-doc/design note) with the trigger: "flip `approve` → `pause: true` + re-point HITL gate at `spur workflow continue` when global `@gobing-ai/spur` ships the `pause`-aware schema"
+- [x] Keep the working `hitl.confirm` gate in `task-pipeline.yaml`; do NOT add `pause: true` now
+- [x] Verify: `spur workflow validate config/workflows/task-pipeline.yaml` still clean
 
 **R5 — plugin tests in the gate (Medium / S)**
-- [ ] Extend root `package.json` `test` script to also run `plugins/sp` tests (recommend: append `bun test plugins/sp` or an explicit roots list — keep plugins OUT of `workspaces.packages`)
-- [ ] Update `AGENTS.md` Verification-gate + Testing sections to state plugin tests are in the gate
-- [ ] Verify: `bun run test` count rises ~1266 → ~1424, 0 fail; `task-write-guard.test.ts` (7) + skill tests (151) included; coverage thresholds hold
+- [x] Extend root `package.json` `test` script to also run `plugins/sp` tests (recommend: append `bun test plugins/sp` or an explicit roots list — keep plugins OUT of `workspaces.packages`)
+- [x] Update `AGENTS.md` Verification-gate + Testing sections to state plugin tests are in the gate
+- [x] Verify: `bun run test` count rises ~1266 → ~1424, 0 fail; `task-write-guard.test.ts` (7) + skill tests (151) included; coverage thresholds hold
 
 **R6 — de-link catalog (Medium / S) — BLOCKED: unreleased `details` field on `rule.eval.done`**
 - [x] Confirm upstream `ts-libs` `ts-infra` + `ts-rule-engine` published ≥0.3.17 → **YES, both at 0.3.17**
@@ -305,27 +305,52 @@ Per-finding checklist with file paths + the exact verification step. `[ ]` = not
   field on `rule.eval.done`, then flip `package.json:35,37` `link:` → `"^0.3.17"` and run the full gate.
 
 **R7 — spur task migrate surface annotation (Low / S, doc-only)**
-- [ ] Confirm `docs/04_DESIGN.md:449` "Reserved (A17)" is unambiguous; confirm `CLAUDE.md`/`AGENTS.md` "Planned expansion" note covers `task migrate`
-- [ ] Optionally annotate `corpus-migrator.ts` export with "CLI verb reserved — board cutover gate (delivery §6)"
-- [ ] Do NOT wire the subcommand (board-cutover constraint holds unless operator lifts it)
+- [x] Confirm `docs/04_DESIGN.md:449` "Reserved (A17)" is unambiguous; confirm `CLAUDE.md`/`AGENTS.md` "Planned expansion" note covers `task migrate`
+- [x] Optionally annotate `corpus-migrator.ts` export with "CLI verb reserved — board cutover gate (delivery §6)"
+- [x] Do NOT wire the subcommand (board-cutover constraint holds unless operator lifts it)
 
 **R8 — scrub stale rd3 path (Low / S)**
-- [ ] Fix `plugins/sp/skills/anti-hallucination/references/tool-usage-guide.md:89`: `plugins/rd3` → generic/`plugins/sp`
-- [ ] `rg -n "plugins/rd3" plugins/sp` → fix any other hardcoded paths (leave prose provenance)
-- [ ] Verify: no hardcoded `plugins/rd3` *paths* remain in plugins/sp
+- [x] Fix `plugins/sp/skills/anti-hallucination/references/tool-usage-guide.md:89`: `plugins/rd3` → generic/`plugins/sp`
+- [x] `rg -n "plugins/rd3" plugins/sp` → fix any other hardcoded paths (leave prose provenance)
+- [x] Verify: no hardcoded `plugins/rd3` *paths* remain in plugins/sp
 
 **Final gate (all batches):**
-- [ ] `bun run lint` clean · `bun run test` 0 fail (count includes plugin tests) · `bun run build` green
-- [ ] `git status -s` shows only intentional changes
-- [ ] Each commit is atomic + conventional; doc edits land in the same commit as their trigger (constitution §5)
+- [x] `bun run lint` clean · `bun run test` 0 fail (count includes plugin tests) · `bun run build` green
+- [x] `git status -s` shows only intentional changes
+- [x] Each commit is atomic + conventional; doc edits land in the same commit as their trigger (constitution §5)
 
 
 ### Review
 
+**Verdict: PASS** (R6 blocked — tracked deferral, not a failure).
+
+| Req | Status | Evidence |
+|-----|--------|---------|
+| R1 — kind=pipeline link | ✅ PASS | `packages/app/src/services/workflow-service.ts:195-237` (`maybeLinkPipelineRun`); 4 tests in `packages/app/tests/services/workflow-service.test.ts:418-501`; 1270+158 = 1428 tests 0 fail |
+| R2 — 04_DESIGN §7.3/§7.4 | ✅ PASS | `docs/04_DESIGN.md:474` (§7.3 header), `:535` (§7.4 matrix + event catalog), `:612` (§7.6 reserved); 6 event names verified against `planning-write-service.ts:80` SSOT |
+| R3 — 05_FEATURES §9 + 02_ROADMAP | ✅ PASS | `docs/05_FEATURES.md:123-132` (8 rows flipped ✅, task-pipeline 🔶); `docs/02_ROADMAP.md:50` Phase 1.5 updated |
+| R4 — pipeline-pause deferral | ✅ PASS (doc-only) | `docs/00_ADR.md:524` ADR-022 addendum; `task-pipeline.yaml` validate clean |
+| R5 — plugin tests in gate | ✅ PASS | `package.json:69` test script extended; AGENTS.md:202,212 updated; 1428 total |
+| R6 — de-link catalog | 🔶 BLOCKED | Published 0.3.17 lacks `details` on `rule.eval.done`; links restored; trigger recorded in task file §R6 |
+| R7 — migrate surface annotation | ✅ PASS | `AGENTS.md:168-197` (CLI surface + planning-layer note); `04_DESIGN.md:449` already "Reserved (A17)" |
+| R8 — stale rd3 path | ✅ PASS | `plugins/sp/skills/anti-hallucination/references/tool-usage-guide.md:89` fixed; 0 remaining `plugins/rd3` paths |
+
+**Gate:** `bun run lint` clean · `bun run test` 1428 pass / 0 fail · `bun run build` green · `git status` clean (5 atomic commits).
 
 
 ### Testing
 
+**Full gate run (2026-06-15):**
+- `bun run lint` — clean (Biome + 7 workspaces tsc --noEmit)
+- `bun run test` — 1270 workspace tests + 158 plugin tests = 1428 pass / 0 fail / 0 skip
+- `bun run build` — green across cli/server/web
+- `bun run apps/cli/src/index.ts workflow validate config/workflows/task-pipeline.yaml` — valid
+
+**R1-specific tests** (`packages/app/tests/services/workflow-service.test.ts`):
+- `a task-pipeline run with vars.wbs writes exactly one kind=pipeline row` — verifies the row exists with correct wbs/run_id/kind
+- `two pipeline runs for the same wbs each get exactly one pipeline link` — verifies per-runId idempotency
+- `a non-pipeline workflow writes no pipeline link even with vars.wbs` — verifies name guard
+- `a task-pipeline run without vars.wbs writes no pipeline link` — verifies vars guard
 
 
 ### Artifacts
