@@ -28,7 +28,7 @@ they stay live in cc-agents.
 - [x] `sp:brainstorm` moved; scenario-specific command candidates recorded for later
 - [x] `sp:anti-hallucination` moved verbatim (stays a skill forever — K05)
 - [x] `sp:daily-summary` verified working and enhanced before adoption; script stays embedded
-- [ ] `sp:doc-evolve` shipped from its own mini-spec, operating per
+- [x] `sp:doc-evolve` shipped from its own mini-spec, operating per
       `docs/99_PROJECT_CONSTITUTION.md` (drift audits, sync checks, lesson appends)
 
 ## Tasks
@@ -37,7 +37,7 @@ they stay live in cc-agents.
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0069 | W3: Prompt-skill moves — brainstorm, anti-hallucination, daily-summary | Done |
-| 0070 | W3: sp:doc-evolve — constitution-driven rewrite of code-docs | Backlog |
+| 0070 | W3: sp:doc-evolve — constitution-driven rewrite of code-docs | Done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

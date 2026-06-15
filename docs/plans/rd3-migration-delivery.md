@@ -278,7 +278,7 @@ Existing `sp:spur-rules` / `sp:spur-workflows` are untouched.
 | Skill | Status | What it's for | Items |
 |---|---|---|---|
 | `sp:brainstorm` | shipped (0069, move) | Ideation protocol delegating to `spur agent run` (CLI verb rejected — C06). Moved + namespace-rewritten; research/synthesis re-pointed at `spur agent run`, task creation at `sp:spur-dev`/`sp:spur-tasks`. **Planned enhancement (recorded in the skill's Notes):** scenario-specific slash commands (`brainstorm-arch`/`-fix`/`-feature`/`-stack`/`-refactor`) — candidate list captured, none shipped yet; names + ADR-016 test at a later batch. | I05 |
-| `sp:doc-evolve` | proposed (full rewrite of `rd3:code-docs`) | **Self-evolution driver for the project key files**: maintains and enhances `docs/00–05`, `AGENTS.md`, and friends per `docs/99_PROJECT_CONSTITUTION.md` (edit rules, sync triggers, drift audits). Not a port — a constitution-native rewrite. | I15 |
+| `sp:doc-evolve` | shipped (0070, full rewrite of `rd3:code-docs`) | **Self-evolution driver for the project key files**: maintains and enhances `docs/00–05`, `AGENTS.md`, and friends per `docs/99_PROJECT_CONSTITUTION.md` (edit rules, sync triggers, drift audits). Constitution-native rewrite, not a port — 4 operations (drift-audit→§7, sync-check→§5/T1–T8, contract-verify→§4.3, lesson-append→§8), deterministic detection + LLM judgment. First drift-audit run found real T3 drift (task/feature surface). | I15 |
 | `sp:daily-summary` | shipped (0069, verify + enhance) | Daily summary generator. Moved + verified end-to-end (`--help` + dry-run produce a summary; degrades gracefully when `ccusage` is absent); 56 tests green. Enhancement: a self-contained embedded `scripts/logger.ts` (no CLI extraction, no monorepo coupling — I16). | I16 |
 | `sp:anti-hallucination` | shipped (0069, move) | How-to-think protocol; stays a skill forever (package rejected — K05). Moved with its scripts + 95 tests; carries a self-contained `scripts/logger.ts` so the wrappers/validators run in the sp plugin (the only change needed to make the "verbatim" move actually pass — rd3-relative logger import + hardcoded `plugins/rd3/` paths fixed). | K05 |
 | `code-review` / `code-verification` / `code-improvement` / `functional-review` wrappers | **held** | Drop-or-rewrite-on-new-infrastructure, decided later; they stay live in cc-agents meanwhile (extends the K01–K04 deferral to the prompt wrappers too — they do **not** move in this batch). | I10 K1–K4 |
@@ -298,7 +298,7 @@ The final subset (0065, ADR-016 test applied per candidate — all 12 passed; ve
 | `sp:dev-run` | shipped | Run one task through `task-pipeline.yaml`. | D01 F03 |
 | `sp:dev-unit` · `sp:dev-review` · `sp:dev-verify` | shipped | Test / review / verify entry points of the work loop. | F03 |
 | `sp:dev-new-task` · `sp:dev-fixall` · `sp:dev-gitmsg` · `sp:dev-changelog` · `sp:dev-handover` · `sp:dev-refine` | shipped | The rest of the daily family — all wrap `sp:spur-dev`. | F03 I06 |
-| `sp:dev-docs` | shipped (inert) | Doc evolution — passes ADR-016, but its backing skill `sp:doc-evolve` is not yet built; the command is inert until then. | I15 |
+| `sp:dev-docs` | shipped | Doc evolution — passes ADR-016; backing skill `sp:doc-evolve` shipped (0070), so the command is now live. | I15 |
 | `sp:plan-feature` / `sp:plan-decompose` / `sp:task-run` | **held** | Superseded by the dev-* family above (operator decision 2026-06-12); kept here only so the names aren't accidentally reused for something else. | — |
 
 ### 7.4 Subagents (thin wrappers of §7.1 skills)
