@@ -1,16 +1,20 @@
 import type { ApplicationRuntime, LoggingOptions } from '@gobing-ai/ts-infra/application';
 import { OpenAPIHandler } from '@orpc/openapi/fetch';
 import { Hono } from 'hono';
-import { secureHeaders } from 'hono/secure-headers';
+import { mountMiddleware } from './middleware/pipeline';
 import { generateOpenApiSpec } from './openapi';
 import { router } from './router';
 
 const handler = new OpenAPIHandler(router);
 
-// Declare the 'rt' Hono context variable so c.set('rt', appRt) / c.get('rt') type-checks.
+// Declare Hono context variables so c.set() / c.get() type-check.
+// `ctx` (ServerContext) is wired in task 0073; `requestId` is set by the
+// requestId middleware.
 declare module 'hono' {
     interface ContextVariableMap {
         rt: ApplicationRuntime;
+        ctx: undefined; // typed placeholder until ServerContext lands (0073)
+        requestId: string;
     }
 }
 
@@ -34,32 +38,47 @@ export function serverBootstrapConfig(env: Record<string, string | undefined>): 
     };
 }
 
+/** Server start timestamp for uptime calculation. */
+const startedAt = Date.now();
+
 /**
- * Create the Hono app that mounts oRPC OpenAPI procedures and docs endpoints.
+ * Create the Hono app that mounts the middleware pipeline, health endpoints,
+ * oRPC OpenAPI procedures, and docs endpoints.
  *
- * When an `ApplicationRuntime` is provided, its `logger` and `events` are threaded
- * into the Hono context and the oRPC handler `context` for use by downstream
- * middleware / procedures.
+ * When an `ApplicationRuntime` is provided, its `logger` and `events` are
+ * threaded through the middleware pipeline and into the oRPC handler context.
  *
- * The no-arg form (no runtime) works stand-alone — used in tests that don't spin
- * up a full application bootstrap.
+ * The no-arg form (no runtime) works stand-alone — used in tests that don't
+ * spin up a full application bootstrap.
  */
 export function createApp(appRt?: ApplicationRuntime): Hono {
     const app = new Hono();
 
-    app.use('*', secureHeaders());
+    // ── Cross-cutting middleware (design §2.2 — order is load-bearing) ──
+    mountMiddleware(app, appRt);
 
     app.get('/', (c) => c.redirect('/api/health'));
 
     app.get('/openapi.json', async (c) => c.json(await generateOpenApiSpec({})));
 
-    app.use('/api/*', async (c, next) => {
-        // Thread runtime services into the Hono context so downstream middleware
-        // and procedures can access them via c.get('rt').
-        if (appRt) {
-            c.set('rt', appRt);
-        }
+    // ── Health endpoints (before oRPC wildcard mount so they win on /api/health) ──
+    app.get('/api/health', (c) => {
+        const uptime = (Date.now() - startedAt) / 1000;
+        const memory = process.memoryUsage();
+        return c.json({
+            status: 'ok',
+            uptime_seconds: Math.round(uptime),
+            memory_rss_mb: Math.round((memory.rss / 1_048_576) * 100) / 100,
+            memory_heap_mb: Math.round((memory.heapUsed / 1_048_576) * 100) / 100,
+        });
+    });
 
+    // Readiness stub — DB probe lands in 0073 once ServerContext.getDb() exists.
+    // Returns 200 with a deferred flag; 0073 replaces with a real DB SELECT 1 → 200 / 503.
+    app.get('/api/health/ready', (c) => c.json({ status: 'ok', db: 'deferred' }));
+
+    // ── oRPC handler for /api/* (after explicit routes above) ──
+    app.use('/api/*', async (c, next) => {
         const { matched, response } = await handler.handle(c.req.raw, {
             prefix: '/api',
             context: appRt ? { logger: appRt.logger, events: appRt.events, db: appRt.db } : {},

@@ -1,21 +1,20 @@
 import { describe, expect, test } from 'bun:test';
-import type { HealthResponse } from '@gobing-ai/spur-contracts';
 import type { ApplicationRuntime } from '@gobing-ai/ts-infra/application';
 import { createApp, generateOpenApiSpec } from '../src';
 import worker from '../src/worker';
 
 describe('server app', () => {
-    test('serves the oRPC health procedure through the Hono adapter', async () => {
+    test('serves the liveness health endpoint through the Hono adapter', async () => {
         const response = await createApp().request('/api/health');
-        const body = (await response.json()) as HealthResponse;
+        const body = (await response.json()) as Record<string, unknown>;
 
         expect(response.status).toBe(200);
         expect(body).toMatchObject({
             status: 'ok',
-            service: 'spur',
-            version: '0.0.0',
         });
-        expect(typeof body.timestamp).toBe('string');
+        expect(typeof body.uptime_seconds).toBe('number');
+        expect(typeof body.memory_rss_mb).toBe('number');
+        expect(typeof body.memory_heap_mb).toBe('number');
     });
 
     test('derives OpenAPI from the oRPC contract', async () => {

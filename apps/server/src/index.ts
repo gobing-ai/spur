@@ -18,10 +18,24 @@ if (isEntrypoint) {
     await runNodeApplication({
         config: serverBootstrapConfig(env),
         async start(appRt: ApplicationRuntime) {
-            Bun.serve({
-                fetch: createApp(appRt).fetch,
+            const app = createApp(appRt);
+
+            const server = Bun.serve({
+                fetch: app.fetch,
                 port: config.server.port,
             });
+
+            const shutdown = async (signal: string) => {
+                appRt.logger.info('Shutting down server', { signal });
+                server.stop(true); // drain in-flight requests
+                await appRt.stop('shutdown'); // close DB, flush logs
+                process.exit(0);
+            };
+
+            process.on('SIGINT', () => void shutdown('SIGINT'));
+            process.on('SIGTERM', () => void shutdown('SIGTERM'));
+
+            appRt.logger.info('Server started', { port: config.server.port });
         },
     });
 }

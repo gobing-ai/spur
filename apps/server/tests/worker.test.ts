@@ -15,7 +15,6 @@ describe('worker entrypoint', () => {
         const body = (await response.json()) as Record<string, unknown>;
         expect(body).toMatchObject({
             status: 'ok',
-            service: 'spur',
         });
     });
 });
