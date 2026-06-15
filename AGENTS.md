@@ -140,8 +140,8 @@ Bun. Run with `bun run apps/cli/src/index.ts <command>` during development.
 ## CLI surface
 
 Supported commands (the harness loop). `init`, `agent`, `history`, `rule`, `workflow`, `message`,
-`team` are the committed product surface (ADR-010 as amended); `status` and `migrate` are
-supporting utilities.
+`team`, `task`, `feature` are the committed product surface (ADR-010 as amended); `status` and
+`migrate` are supporting utilities.
 
 ```
 spur init       [--name <name>] [--minimal] [--force] [--json]
@@ -164,20 +164,37 @@ spur message    send <body> --to <id> [--from <id>] [--json]
 spur message    inbox --agent <id> [--json]
 spur message    reply <msg-id> <body> [--json]
 spur team       assign <task-id> <agent-id> [--json]
-spur team       status [--json]
 spur team       start|stop                    # Phase-4 stubs
+spur task       create <title> [--feature <id>] [--parent <wbs>] [--json]
+spur task       show <wbs> [--json]
+spur task       update <wbs> <status> [--section <name> --from-file <path>] [--json]
+spur task       list [--status <s>] [--json]
+spur task       refresh [--json]
+spur task       batch-create --file <json> [--json]
+spur task       resolve <file-path> [--json]
+spur task       check [<wbs>] [--strict] [--json]
+spur task       migrate                         # Reserved (A17) — board-cutover gate; not yet wired
+spur feature    create <name> [--parent <id>] [--json]
+spur feature    show <id> [--json]
+spur feature    update <id> [status] [--field <k> --value <v>] [--json]
+spur feature    list [--status <s>] [--json]
+spur feature    check [<id>] [--strict] [--json]
+spur feature    refresh [--json]
+spur feature    move <id> [--parent <id>] [--dry-run] [--json]
 spur status     [path] [--json]
 spur migrate    [--json]
 ```
 
 Every command supports `--json` for machine consumption.
 
-> **Planned expansion (ADR-020–023).** The planning layer migrated from `cc-agents/rd3` —
-> `spur task` and `spur feature` — is accepted but not yet built; the spec pipeline ships as a
-> `plugins/sp` fat skill, and the board/launcher awaits the server/web design task. Scope and
-> per-item dispositions: `docs/plans/2026-06-10-rd3-migration-feature-list.md`; mechanism:
-> `docs/03_ARCHITECTURE.md §12`. Those commands join the list above (and `04_DESIGN.md`, same
-> commit) as they land. Do not invoke them as if they exist.
+> **Planning layer (ADR-020–023).** The planning layer migrated from `cc-agents/rd3` — `spur task`
+> and `spur feature` — shipped in Roadmap Phase 1.5 (Waves 0–2 + 4–5 done; `04_DESIGN.md §7` filled).
+> The spec pipeline ships as a `plugins/sp` fat skill (`sp:spur-dev`). Two slices remain deferred:
+> the **local board + launcher** (postponed behind the server/web design task, ADR-021.b), and the
+> **`spur task migrate`** verb (reserved A17 — one-time corpus normalization gated on the board
+> cutover, `04_DESIGN.md §7.1`; the `corpus-migrator` service is complete but the CLI verb is not
+> wired). Scope and per-item dispositions: `docs/plans/2026-06-10-rd3-migration-feature-list.md`;
+> mechanism: `docs/03_ARCHITECTURE.md §12`. Status tracking: `docs/05_FEATURES.md §9`.
 
 ## Verification gate (all must pass before "done")
 

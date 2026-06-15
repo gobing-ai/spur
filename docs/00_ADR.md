@@ -521,7 +521,16 @@ capability the engine exists to provide — and being its first user is what pus
 
 **Detail:** `03 §12.2–12.3`; upstream gaps tracked as ts-libs tasks before the dependent waves.
 
----
+**Addendum (2026-06-15): Pipeline-pause integration deferred.** The `task-pipeline.yaml` approve
+gate uses `hitl.confirm` (interactive), not `pause: true`. The workspace schema
+(`apps/cli/schemas/state-machine-workflow.schema.json:38`) already supports `pause: true`, and
+`spur workflow continue` + `WorkflowService.continuePaused` are shipped and tested (task 0063). The
+blocker is that a user's **globally installed** `@gobing-ai/spur` may be a stale version whose
+bundled schema lacks `pause` — adding `pause: true` to the shipped `task-pipeline.yaml` now would
+make `spur workflow validate` fail for those users. **Trigger to flip:** when the global
+`@gobing-ai/spur` package is refreshed to ship the `pause`-aware schema, change the `approve` state
+to `pause: true` and re-point the pipeline's HITL gate at `spur workflow continue`. Until then,
+the working `hitl.confirm` gate stays in place. Task 0071 R4 tracks this.
 
 ## ADR-023: rd3 Migration — Dividing Line, Fat Skills, Design Collectively / Implement in Phases
 

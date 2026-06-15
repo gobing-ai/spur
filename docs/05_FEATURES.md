@@ -120,16 +120,16 @@ Decomposition and per-item dispositions live in
 
 | Feature | Status | Acceptance |
 |---------|--------|-----------|
-| Collective design stage (schemas, lifecycle design, server/web design task, skill contract) | ⏳ | fills the reserved `04 §7.1–7.6` landing zone + ts-libs gap tasks filed, before wave implementation |
-| Task management (`spur task` CRUD/WBS/sections/check/migrate) | ⏳ | agents drive the two hot paths across the 7 corpora; check validates schema + matrix |
-| Variant templates + Section-Status-Matrix + format rules | ⏳ | warning-first enforcement; hard core (AC/Solution/Review formats) gates |
-| Shared BDD validator (Gherkin subset + checklist + coverage) | ⏳ | one implementation behind task check, feature check, pipeline output |
-| Feature management (`spur feature` over `docs/features/`) | ⏳ | INDEX + task-links regenerate; `feature-id` is the single traceability edge |
-| Lifecycle on `spur workflow` (ADR-022) + write service in `packages/app` (ADR-021) | ⏳ | frontmatter status is SSOT; engine persistence derived; one lock domain; upstream engine gaps closed in ts-libs |
+| Collective design stage (schemas, lifecycle design, server/web design task, skill contract) | ✅ | Stage D done; `04 §7.1–7.6` filled; waves implemented |
+| Task management (`spur task` CRUD/WBS/sections/check) | ✅ | agents drive the two hot paths across the 7 corpora; check validates schema + matrix. `migrate` verb reserved (board-cutover gate, delivery §6) |
+| Variant templates + Section-Status-Matrix + format rules | ✅ | warning-first enforcement; hard core (AC/Solution/Review formats) gates |
+| Shared BDD validator (Gherkin subset + checklist + coverage) | ✅ | one implementation behind task check, feature check, pipeline output |
+| Feature management (`spur feature` over `docs/features/`) | ✅ | INDEX + task-links regenerate; `feature-id` is the single traceability edge |
+| Lifecycle on `spur workflow` (ADR-022) + write service in `packages/app` (ADR-021) | ✅ | frontmatter status is SSOT; engine persistence derived; one lock domain; upstream engine gaps closed in ts-libs |
 | Local board + launcher | 💤 | settled by the Stage-D server/web design task (ADR-021 consequence b) |
-| Spec-driven pipeline (sp planning fat skill) | ⏳ | description → feature file with Gherkin AC → linked tasks, every LLM output CLI-validated |
-| Task-standard workflow + HITL continue + result writer | ⏳ | `spur workflow run task-standard --wbs <n>`; continue resumes a paused run |
-| `plugins/sp` Fat Skills + thin command/subagent wrappers (ADR-023) | ⏳ | skills are SSOT; commands/subagents wrap skills; ADR-016-filtered command set |
+| Spec-driven pipeline (sp planning fat skill / `sp:spur-dev`) | ✅ | description → feature file with Gherkin AC → linked tasks, every LLM output CLI-validated |
+| Task-pipeline workflow + HITL continue + result writer | 🔶 | `spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"NNNN"}'`; `continue` resumes a paused run; pipeline-pause integration deferred (task 0071 R4); `task_run_links` kind=pipeline pending (task 0071 R1) |
+| `plugins/sp` Fat Skills + thin command/subagent wrappers (ADR-023) | ✅ | skills are SSOT; commands/subagents wrap skills; ADR-016-filtered command set |
 
 ## 10. Deferred (needs design before build)
 

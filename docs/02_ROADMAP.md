@@ -47,21 +47,22 @@ Make the harness robust and clean before adding surface.
 
 **Exit:** clean-clone build works; CLI self-hosts its own gate; history/coverage paths covered.
 
-## Phase 1.5 — Planning Layer (rd3 migration) _(next)_
+## Phase 1.5 — Planning Layer (rd3 migration) _(current — waves done, board cutover pending)_
 
 Migrate the task/feature domain from `cc-agents/plugins/rd3` per ADR-020–023. Scope,
 per-item dispositions, and full wave contents live in
 `docs/plans/2026-06-10-rd3-migration-feature-list.md` §Batch sequencing — this phase tracks stage
 status only. Per ADR-023(3), Stage D designs everything collectively before the waves implement.
 
-- [ ] **Stage D — Collective design** (gates all waves): `04` schemas, lifecycle-on-workflow
+- [x] **Stage D — Collective design** (gates all waves): `04` schemas, lifecycle-on-workflow
   design + upstream ts-libs gap tasks, server/web design task (ADR-021.b), planning-skill contract.
-- [ ] **Wave 0 — Foundation** (schema, BDD validator, locking, lifecycle definitions, migrate tool)
-- [ ] **Wave 1 — Task CLI** (`spur task`)
-- [ ] **Wave 2 — Feature CLI** (`spur feature`)
+- [x] **Wave 0 — Foundation** (schema, BDD validator, locking, lifecycle definitions, migrate tool)
+- [x] **Wave 1 — Task CLI** (`spur task`)
+- [x] **Wave 2 — Feature CLI** (`spur feature`)
 - [ ] **Wave 3 — Board** per Stage-D design; **A17 cutover gate** — the operator is never boardless
-- [ ] **Wave 4 — Pipeline + execution** (planning skill, task-standard workflow, HITL continue)
-- [ ] **Wave 5 — sp wrappers** (ADR-016-filtered)
+      (postponed behind the server/web design task; task/feature CRUD + lifecycle + pipeline work)
+- [x] **Wave 4 — Pipeline + execution** (planning skill, task-pipeline workflow, HITL continue)
+- [x] **Wave 5 — sp wrappers** (ADR-016-filtered)
 - [ ] **Wave 6 — cc-agents cleanup** (each item gated on its verified replacement)
 
 **Exit:** operator daily-drives the spur board; agents drive `spur task` across the 7 corpora;

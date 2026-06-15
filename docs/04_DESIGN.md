@@ -471,6 +471,12 @@ ID rules (DD-14): valid IDs match `^[A-Z][1-9]*$`. The `## Tasks` auto-gen marke
 `MarkdownDocument.replaceMarkerRegion`). The full `spur feature` surface (create/show/update/list/check/
 refresh/move) is now live.
 
+### 7.3 Frontmatter schemas
+
+Task and feature files share a `schema_version: 1` strictness gate (DD-03) and are written only
+through `PlanningWriteService` (§7.5). Canonical field tables below; authority is the Zod schemas
+in `packages/domain/src/planning/schema.ts` (`taskFrontmatterSchema`, `featureFrontmatterSchema`).
+
 ### 7.3.1 Task frontmatter — `taskFrontmatterSchema`
 Mirrors `docs/design/rd3-migration-design.md` §2.1. Exported by
 `@gobing-ai/spur-domain` from `packages/domain/src/planning/schema.ts`.
@@ -526,6 +532,37 @@ Input normalization (excerpt, full map lives in `normalizeTaskStatus` / `normali
 `pending / new → backlog`, mixed case accepted via `.trim().toLowerCase()`. Storage is always the
 lowercase canonical form; aliases never persist.
 
+### 7.4 Section-Status-Matrix + planning event catalog
+
+**Section-Status-Matrix.** Source: `config/tasks/section-matrix.yaml` (schema:
+`apps/cli/schemas/section-matrix.schema.json`). Each variant maps a status →
+{ required, optional, forbidden } section lists, evaluated by `spur task check` / `spur feature check`
+(the L2 layer, design §3.2). Ships permissive (warning-first); the hard-gate core is the `done`
+status (Solution + Testing + Review required, `gate: true`) plus the AC/Solution/Review format rules.
+Authority for matrix semantics: design §3 (the L2 layer), delivery §3.2.
+
+**Planning event catalog (X04).** The six planning events on `PlanningEventMap` + three engine-seam
+events. All planning events are emitted by `PlanningWriteService` (design §7) and persisted to the
+`planning_events` table (append-only ledger, rehydratable from `## History`). SSOT for the names is
+the code: `packages/app/src/services/planning-write-service.ts` (`PlanningEventName` union) and
+`packages/app/src/services/planning-events.ts` (`PlanningEventMap`). Document, never invent.
+
+| Event | Fired when |
+|---|---|
+| `task.created` | A task file is created (including each item of a `batch-create`). |
+| `task.updated` | Any non-status write to a task (section edit, frontmatter change). |
+| `task.transitioned` | A task status change completes through the lifecycle workflow (includes cancellation). |
+| `feature.created` | A feature file is created. |
+| `feature.updated` | Any non-status write to a feature. |
+| `feature.transitioned` | A feature status change completes (includes cancellation). |
+
+Engine-seam events (from `ts-dual-workflow-engine`, per lifecycle/pipeline run — ADR-022):
+
+| Event | Fired when |
+|---|---|
+| `on_transition` | A workflow run moves between states — the seam planning events derive from. |
+| `on_guard_fail` | A guard (e.g. `spur task check` pre-gate) blocks a transition. |
+| `on_complete` | A workflow run reaches its terminal state. |
 
 ### 7.5 Lifecycle workflow definitions
 
@@ -571,3 +608,9 @@ files directly — `precheck` is a `spur task check <wbs>` shell guard; `impleme
 `spur task update --section`; `approve` is a `hitl.confirm` gate skippable with `--vars '{"profile":"auto"}'`.
 **Follow-up:** `task_run_links` linkage (kind=pipeline, R4) needs a small `WorkflowService` run-start hook
 — there is no link-writing CLI verb to call from a shell step, so it can't live in pure YAML.
+
+### 7.6 Task DTOs — reserved
+
+oRPC contract shapes (`TaskDto`, `FeatureDto`, `PlanningEventDto`) land with the server/web design
+task (ADR-021.b, delivery §5.3). They are not authored here — domain types stay in their owning
+packages; transport DTOs belong in `packages/contracts` when built.
