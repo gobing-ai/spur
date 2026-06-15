@@ -74,7 +74,7 @@ export function createApp(appRt?: ApplicationRuntime): Hono {
     });
 
     // Readiness stub — DB probe lands in 0073 once ServerContext.getDb() exists.
-    // Returns 200 with a deferred flag; 0073 replaces with a real DB SELECT 1 → 200 / 503.
+    // Returns 200 with a deferred flag; 0073 replaces with a real database probe → 200 / 503.
     app.get('/api/health/ready', (c) => c.json({ status: 'ok', db: 'deferred' }));
 
     // ── oRPC handler for /api/* (after explicit routes above) ──
