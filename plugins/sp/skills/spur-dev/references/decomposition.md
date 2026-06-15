@@ -13,17 +13,26 @@ passes.
 
 ## The batch schema
 
-`apps/cli/schemas/task-batch.schema.json` defines the JSON shape. Key fields per task:
+`apps/cli/schemas/task-batch.schema.json` (runtime SSOT: the Zod `taskBatchSchema` in
+`@gobing-ai/spur-domain`) defines the JSON shape. **The top level is a JSON ARRAY of task items —
+NOT an object with a `tasks` key.** Each item is `.strict()`: any field not in the table below is
+rejected, and a single rejected item fails the whole batch (all-or-nothing).
 
 | Field | Required | Notes |
 |-------|----------|-------|
 | `name` | yes | Task title; used in slug generation. |
 | `template` | no | Template variant (`feature-impl`, `issue`, `review`, `meta`); defaults to `default`. |
 | `feature_id` | no | Links the task to a feature — the single traceability edge. |
-| `parent_wbs` | no | For sub-tasks; references the parent's WBS. |
+| `parent_wbs` | no | For sub-tasks; references the parent's WBS (quoted 4-digit string, e.g. `"0042"`). |
 | `priority` | no | `P0`–`P3`; align with feature priority. |
-| `dependencies` | no | WBS refs of tasks this one depends on. |
-| `sections` | no | Pre-filled section content per the template variant's section matrix. |
+| `tags` | no | String tags. |
+| `background` | no | Pre-filled `## Background` body (the scenario→task mapping note goes here). |
+| `requirements` | no | Pre-filled `## Requirements` body. |
+
+> There is **no** generic `sections` field and **no** `dependencies` field in the batch item — the
+> Zod schema is strict and rejects both. Use `background`/`requirements` for content, and record
+> ordering in `background` prose (the WBS-level `dependencies` frontmatter is set later, not at batch
+> create).
 
 ## Template-variant selection
 
@@ -57,8 +66,8 @@ Edge-case scenarios may map to tasks or be deferred. Record deferrals explicitly
 
 - **Granularity:** one task = what a single agent can complete in one session. Split tasks
   that describe two independent subsystems.
-- **Ordering:** tasks with no dependencies come first. Use `dependencies` for soft ordering;
-  the pipeline respects the dependency graph.
+- **Ordering:** tasks with no dependencies come first. Note ordering in each task's `background`
+  prose at batch time; set the WBS-level `dependencies` frontmatter after creation if needed.
 - **Parallelism:** mark independent tasks with the same priority — the pipeline can fan out.
 - **Testing:** every `feature-impl` task should produce tests. Do not create separate "write
   tests" tasks — testing is part of implementation.
@@ -67,31 +76,25 @@ Edge-case scenarios may map to tasks or be deferred. Record deferrals explicitly
 
 ## Batch JSON example
 
+The payload is a top-level JSON **array** (no `tasks` wrapper):
+
 ```json
-{
-  "tasks": [
-    {
-      "name": "Implement task creation endpoint",
-      "template": "feature-impl",
-      "feature_id": "A1",
-      "priority": "P0",
-      "dependencies": [],
-      "sections": {
-        "Background": "Implements: R1 — User can create a task with required fields"
-      }
-    },
-    {
-      "name": "Implement task listing endpoint",
-      "template": "feature-impl",
-      "feature_id": "A1",
-      "priority": "P1",
-      "dependencies": ["0042"],
-      "sections": {
-        "Background": "Implements: R2 — User can list tasks filtered by status"
-      }
-    }
-  ]
-}
+[
+  {
+    "name": "Implement task creation endpoint",
+    "template": "feature-impl",
+    "feature_id": "A1",
+    "priority": "P0",
+    "background": "Implements: R1 — User can create a task with required fields"
+  },
+  {
+    "name": "Implement task listing endpoint",
+    "template": "feature-impl",
+    "feature_id": "A1",
+    "priority": "P1",
+    "background": "Implements: R2 — User can list tasks filtered by status (runs after the create endpoint)"
+  }
+]
 ```
 
 ## Common schema violations
@@ -102,5 +105,5 @@ Edge-case scenarios may map to tasks or be deferred. Record deferrals explicitly
 | `template` value not in the enum | Use one of: `default`, `feature-impl`, `issue`, `review`, `meta`. |
 | `feature_id` references a non-existent feature | Run `spur feature list --json` to confirm the ID exists. |
 | `priority` not `P0`–`P3` | Use the canonical priority scale. |
-| Section content for a section the variant's matrix does not allow | Check the variant's matrix; remove the extra section. |
-| WBS range collision | A prior batch or manual create already claimed the WBS range — use a different base or offset. |
+| Unknown field (e.g. `sections`, `dependencies`, `tasks` wrapper) | The item schema is strict — use only the documented fields; the payload is a bare array. |
+| `parent_wbs` as a number (`0042`) | Quote it: `"0042"` — leading-zero numerics fail the 4-digit string schema. |

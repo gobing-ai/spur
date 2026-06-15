@@ -78,7 +78,8 @@ Then generate **BDD acceptance criteria** in the `## Acceptance Criteria` sectio
 Gherkin template. Conventions:
 
 - **R-numbered scenarios:** each scenario carries an `R1, R2, …` prefix in its title for
-  cheap traceability (`feature check` matches by R-number to requirements).
+  cheap, human-readable traceability. (Coverage matching is by **normalized scenario title** —
+  the R-prefix is stripped before matching — so keep the title text stable, not just the number.)
 - **Two AC tiers:** core scenarios (the must-pass gate) and edge-case scenarios (advisory
   warnings — the permissive start, per DD-06). Mark edge-case scenarios explicitly.
 - **Scenario-title mapping:** the scenario title is the identity key for traceability edges
@@ -109,13 +110,15 @@ With a clean feature, decompose into tasks:
 1. Read the feature's scenarios (the AC).
 2. For each scenario, design one or more tasks that implement it — each task maps to at
    least one scenario by title.
-3. Produce a **task-batch JSON** document conforming to `task-batch.schema.json`.
+3. Produce a **task-batch JSON** document conforming to `task-batch.schema.json` — a top-level
+   JSON **array** of strict task items (no `tasks` wrapper, only documented fields).
 
 Decomposition heuristics:
 - **One task = one atomic unit of work** a single agent can complete.
 - **Scenario coverage:** every core scenario maps to ≥1 task; edge-case scenarios may map
   or be deferred.
-- **Dependencies:** record `parent_wbs` for sub-tasks; soft `dependencies` for ordering.
+- **Sub-tasks:** record `parent_wbs` (quoted, e.g. `"0042"`) for sub-tasks; note ordering in
+  `background` prose (the item schema has no `dependencies` field).
 - **Template variants:** choose `feature-impl` for implementation tasks (pulls Goal →
   Background from the linked feature, per B09).
 
@@ -147,7 +150,7 @@ feature's `## Tasks` block on next `spur feature refresh`.
 
 ```
 pick task (spur task list --json)
-  → spur workflow run config/workflows/task-pipeline.yaml --var wbs=<wbs>
+  → spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"<wbs>"}'
   → on HITL pause: surface to operator → spur workflow continue [run-id] [--yes]
 ```
 
@@ -168,7 +171,7 @@ backlog tasks. Use `--json` for machine consumption; sort client-side by priorit
 ### Step 2: Pipeline run
 
 ```bash
-spur workflow run config/workflows/task-pipeline.yaml --var wbs=<wbs> --json
+spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"<wbs>"}' --json
 ```
 
 The pipeline (`kind: state-machine`) runs the work loop:
@@ -199,9 +202,9 @@ After a completed task, decide next action:
 
 ### Skipping HITL
 
-Setting the pipeline profile to `--auto` (a `--var` choice, not a YAML fork) skips the
-`approve` HITL gate — use for low-risk, well-understood tasks where operator review adds
-no value.
+Passing `--vars '{"profile":"auto"}'` to `spur workflow run` (a var choice, not a YAML fork) skips
+the `approve` HITL gate — use for low-risk, well-understood tasks where operator review adds no value.
+(Combine with `wbs` in one object: `--vars '{"wbs":"0042","profile":"auto"}'`.)
 
 ---
 

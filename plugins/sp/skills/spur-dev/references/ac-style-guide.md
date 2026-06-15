@@ -27,17 +27,21 @@ Rules:
 - **One R-number = one scenario.** Never split a requirement across multiple scenarios
   under the same R-number; never merge two requirements into one scenario.
 
-## Two AC tiers
+## Two AC tiers (authoring convention)
 
-### Core tier (must-pass gate)
+A planning convention (DD-06 "permissive start"), not a `spur feature check` feature today —
+the validator currently checks all scenarios uniformly (Gherkin syntax + traceability). Tag
+scenarios so decomposition and future tiered gating can tell them apart:
 
-Scenarios that `spur feature check` gates on. Every core scenario must:
+### Core tier (the work that must ship)
+
+Every core scenario should:
 
 - Be testable (given-when-then with concrete values).
 - Cover a committed scope item from the feature's `## Scope (in)`.
 - Map to at least one task in decomposition.
 
-Mark core scenarios with `[core]` in a comment or tag:
+Tag core scenarios `@core`:
 
 ```gherkin
 @core
@@ -46,21 +50,17 @@ Scenario: R1 — User can create a task with required fields
 
 ### Edge-case tier (advisory)
 
-Scenarios that `spur feature check` warns on but does not gate. Edge-case scenarios:
-
-- Cover error paths, boundary values, and degraded modes.
-- May be deferred to a later iteration.
-- Are not required to map to a task in the initial decomposition.
-
-Mark edge-case scenarios with `[edge]`:
+Edge-case scenarios cover error paths, boundary values, and degraded modes; may be deferred and
+need not map to a task in the initial decomposition. Tag them `@edge`:
 
 ```gherkin
 @edge
 Scenario: R5 — Task creation handles 10,000-character title gracefully
 ```
 
-The permissive start (DD-06): the initial matrix gates only the core tier. Edge-case
-scenarios that prove important in practice are promoted to core in a later iteration.
+DD-06 permissive start: treat only the core tier as must-ship initially; promote edge cases that
+prove important in a later iteration. (When tiered gating lands in `spur feature check`, these tags
+become the gate input — the CLI stays the validator; this guide stays the convention.)
 
 ## Scenario-title stability
 

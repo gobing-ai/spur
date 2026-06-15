@@ -9,9 +9,9 @@
 # Shape: precheck → implement → test → review → approve(HITL) → verify → record → done
 #        (precheck failure short-circuits to `failed`).
 #
-# Vars:
-#   wbs      — the task WBS (required), e.g. `--var wbs=0042`
-#   profile  — set `--var profile=auto` to skip the HITL approve gate (R4)
+# Vars (passed as a JSON object via `--vars`):
+#   wbs      — the task WBS (required), e.g. `--vars '{"wbs":"0042"}'`
+#   profile  — set `--vars '{"profile":"auto"}'` to skip the HITL approve gate (R4)
 #
 # Seeded by `spur init`; adapt the agent.run inputs to your project's command set.
 
