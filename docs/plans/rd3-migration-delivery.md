@@ -277,10 +277,10 @@ Existing `sp:spur-rules` / `sp:spur-workflows` are untouched.
 
 | Skill | Status | What it's for | Items |
 |---|---|---|---|
-| `sp:brainstorm` | proposed (move + enhance) | Ideation protocol delegating to `spur agent run` (CLI verb rejected — C06). **Planned enhancement:** today's skill is too generic — it gains a set of scenario-specific slash commands with targeted customization; command names at Stage D. | I05 |
+| `sp:brainstorm` | shipped (0069, move) | Ideation protocol delegating to `spur agent run` (CLI verb rejected — C06). Moved + namespace-rewritten; research/synthesis re-pointed at `spur agent run`, task creation at `sp:spur-dev`/`sp:spur-tasks`. **Planned enhancement (recorded in the skill's Notes):** scenario-specific slash commands (`brainstorm-arch`/`-fix`/`-feature`/`-stack`/`-refactor`) — candidate list captured, none shipped yet; names + ADR-016 test at a later batch. | I05 |
 | `sp:doc-evolve` | proposed (full rewrite of `rd3:code-docs`) | **Self-evolution driver for the project key files**: maintains and enhances `docs/00–05`, `AGENTS.md`, and friends per `docs/99_PROJECT_CONSTITUTION.md` (edit rules, sync triggers, drift audits). Not a port — a constitution-native rewrite. | I15 |
-| `sp:daily-summary` | proposed (verify + enhance) | Daily summary generator — built but never adopted; **verify and enhance before first use**. Its script stays embedded in the skill (no CLI extraction). | I16 |
-| `sp:anti-hallucination` | proposed (move-only) | How-to-think protocol; stays a skill forever (package rejected — K05). | K05 |
+| `sp:daily-summary` | shipped (0069, verify + enhance) | Daily summary generator. Moved + verified end-to-end (`--help` + dry-run produce a summary; degrades gracefully when `ccusage` is absent); 56 tests green. Enhancement: a self-contained embedded `scripts/logger.ts` (no CLI extraction, no monorepo coupling — I16). | I16 |
+| `sp:anti-hallucination` | shipped (0069, move) | How-to-think protocol; stays a skill forever (package rejected — K05). Moved with its scripts + 95 tests; carries a self-contained `scripts/logger.ts` so the wrappers/validators run in the sp plugin (the only change needed to make the "verbatim" move actually pass — rd3-relative logger import + hardcoded `plugins/rd3/` paths fixed). | K05 |
 | `code-review` / `code-verification` / `code-improvement` / `functional-review` wrappers | **held** | Drop-or-rewrite-on-new-infrastructure, decided later; they stay live in cc-agents meanwhile (extends the K01–K04 deferral to the prompt wrappers too — they do **not** move in this batch). | I10 K1–K4 |
 
 ### 7.3 Slash commands — the `sp:dev-*` family

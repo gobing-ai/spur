@@ -1,0 +1,13 @@
+name: daily-summary
+description: Generate daily summary reports from AI coding agent usage data, git
+  history, and user annotations. Orchestrates ccusage CLI and git commands to
+  produce structured markdown summaries.
+version: 1.0.0
+icon: 📊
+category: debugging
+tags:
+  - summary
+  - daily
+  - analytics
+  - reporting
+  - engineering-core

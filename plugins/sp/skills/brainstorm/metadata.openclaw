@@ -1,0 +1,7 @@
+name: brainstorm
+description: "Structured ideation workflow for generating solution options with
+  trade-offs, confidence scoring, and delegation to research and task creation
+  skills. Triggers: brainstorm ideas, explore solutions, consider options,
+  research approaches, multiple solution options with trade-offs."
+version: 1.0.0
+emoji: 🛠️
