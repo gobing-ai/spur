@@ -2,22 +2,21 @@
 schema_version: 1
 name: rd3 migration 0054-0070 review — remediate 8 post-implementation findings
 description: rd3 migration 0054-0070 review — remediate 8 post-implementation findings
-status: wip
+status: done
 created_at: 2026-06-15T05:30:27.556Z
-updated_at: 2026-06-15T05:30:27.556Z
+updated_at: 2026-06-16T06:15:00.000Z
 folder: docs/tasks
 type: task
 feature-id: H3
 priority: P1
 tags: ["rd3-migration","review-followup","remediation"]
 impl_progress:
-  planning: pending
-  design: pending
-  implementation: pending
-  review: pending
-  testing: pending
+  planning: done
+  design: done
+  implementation: done
+  review: done
+  testing: done
 ---
-
 ## 0071. rd3 migration 0054-0070 review — remediate 8 post-implementation findings
 
 ### Background
@@ -51,6 +50,18 @@ prevents them being forgotten.
 typecheck OK); `bun run test` 1266 pass / 0 fail / 0 skip across 109 files; build green across all
 workspaces; runtime smoke test of every hot path passed.
 
+
+### Acceptance Criteria
+
+- **R1**: `spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"NNNN"}'` produces exactly one `task_run_links` row with `kind='pipeline'`, `wbs='NNNN'`; re-run with same `runId` does not duplicate
+- **R2**: `docs/04_DESIGN.md` has well-formed §7.3 parent header, §7.4 with Section-Status-Matrix landing + 9-event catalog (6 planning + 3 engine-seam), §7.6 reserved note; 6 event names match `planning-write-service.ts:80` SSOT
+- **R3**: `docs/05_FEATURES.md §9` has all shipped rows flipped ⏳→✅, task-pipeline row 🔶 with correct name; `docs/02_ROADMAP.md` Phase 1.5 has accurate stage boxes + status line
+- **R4**: `docs/00_ADR.md` ADR-022 has dated addendum recording pipeline-pause deferral with trigger; `spur workflow validate config/workflows/task-pipeline.yaml` clean
+- **R5**: `bun run test` includes plugins/sp tests (1428 total, 0 fail); `AGENTS.md` gates updated
+- **R6**: BLOCKED — de-link reverted; trigger to de-link recorded in task file; links valid and lint green in current state
+- **R7**: `AGENTS.md`/`04_DESIGN.md` surface docs annotate `spur task migrate` as reserved (board-cutover gate); CLI verb not wired
+- **R8**: Zero hardcoded `plugins/rd3` paths in `plugins/sp`
+- **Final**: `bun run lint` clean · `bun run test` 1428 pass / 0 fail · `bun run build` green · 5 atomic conventional commits
 
 ### Requirements
 
@@ -324,22 +335,22 @@ Per-finding checklist with file paths + the exact verification step. `[ ]` = not
 
 **Verdict: PASS** (R6 blocked — tracked deferral, not a failure).
 
-| Req | Status | Evidence |
-|-----|--------|---------|
-| R1 — kind=pipeline link | ✅ PASS | `packages/app/src/services/workflow-service.ts:195-237` (`maybeLinkPipelineRun`); 4 tests in `packages/app/tests/services/workflow-service.test.ts:418-501`; 1270+158 = 1428 tests 0 fail |
-| R2 — 04_DESIGN §7.3/§7.4 | ✅ PASS | `docs/04_DESIGN.md:474` (§7.3 header), `:535` (§7.4 matrix + event catalog), `:612` (§7.6 reserved); 6 event names verified against `planning-write-service.ts:80` SSOT |
-| R3 — 05_FEATURES §9 + 02_ROADMAP | ✅ PASS | `docs/05_FEATURES.md:123-132` (8 rows flipped ✅, task-pipeline 🔶); `docs/02_ROADMAP.md:50` Phase 1.5 updated |
-| R4 — pipeline-pause deferral | ✅ PASS (doc-only) | `docs/00_ADR.md:524` ADR-022 addendum; `task-pipeline.yaml` validate clean |
-| R5 — plugin tests in gate | ✅ PASS | `package.json:69` test script extended; AGENTS.md:202,212 updated; 1428 total |
-| R6 — de-link catalog | 🔶 BLOCKED | Published 0.3.17 lacks `details` on `rule.eval.done`; links restored; trigger recorded in task file §R6 |
-| R7 — migrate surface annotation | ✅ PASS | `AGENTS.md:168-197` (CLI surface + planning-layer note); `04_DESIGN.md:449` already "Reserved (A17)" |
-| R8 — stale rd3 path | ✅ PASS | `plugins/sp/skills/anti-hallucination/references/tool-usage-guide.md:89` fixed; 0 remaining `plugins/rd3` paths |
+| Finding | Priority | Req | Status | Evidence |
+|---------|----------|-----|--------|---------|
+| #1 — kind=pipeline link | P2 | R1 | ✅ PASS | `packages/app/src/services/workflow-service.ts:195-237` (`maybeLinkPipelineRun`); 4 tests; 1428 tests 0 fail |
+| #2 — 04_DESIGN §7.3/§7.4 | P2 | R2 | ✅ PASS | `docs/04_DESIGN.md:474` (§7.3 header), `:535` (§7.4), `:612` (§7.6); 6 events verified against code SSOT |
+| #3 — 05_FEATURES §9 + 02_ROADMAP | P2 | R3 | ✅ PASS | `docs/05_FEATURES.md:123-132` (8 rows ✅, task-pipeline 🔶); `docs/02_ROADMAP.md:50` Phase 1.5 updated |
+| #4 — pipeline-pause deferral | P3 | R4 | ✅ PASS (doc-only) | `docs/00_ADR.md:524` ADR-022 addendum; pipeline validate clean |
+| #5 — plugin tests in gate | P3 | R5 | ✅ PASS | `package.json:69` test script; AGENTS.md updated; 1428 total |
+| #6 — de-link catalog | P3 | R6 | 🔶 BLOCKED | Published 0.3.17 lacks `details` field; links restored; trigger recorded |
+| #7 — migrate surface annotation | P4 | R7 | ✅ PASS | `AGENTS.md:168-197`; `04_DESIGN.md:449` already "Reserved (A17)" |
+| #8 — stale rd3 path | P4 | R8 | ✅ PASS | `tool-usage-guide.md:89` fixed; 0 remaining `plugins/rd3` paths |
 
 **Gate:** `bun run lint` clean · `bun run test` 1428 pass / 0 fail · `bun run build` green · `git status` clean (5 atomic commits).
 
 
 ### Testing
-
+- R1 tests: 26 workflow-service tests (22 existing + 4 new pipeline link), 100% pass
 **Full gate run (2026-06-15):**
 - `bun run lint` — clean (Biome + 7 workspaces tsc --noEmit)
 - `bun run test` — 1270 workspace tests + 158 plugin tests = 1428 pass / 0 fail / 0 skip
