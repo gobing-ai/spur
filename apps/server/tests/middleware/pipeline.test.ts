@@ -95,9 +95,37 @@ describe('health endpoints', () => {
         expect(res.headers.get('location')).toBe('/api/health');
     });
 
-    test('health endpoint includes CORS headers', async () => {
-        const res = await createApp().request('/api/health');
-        expect(res.headers.get('access-control-allow-origin')).toBeDefined();
+    test('CORS default is same-origin: a foreign Origin is NOT echoed (R2)', async () => {
+        // Default (no SPUR_CORS_ORIGINS) must not blanket-allow cross-origin.
+        const prev = process.env.SPUR_CORS_ORIGINS;
+        delete process.env.SPUR_CORS_ORIGINS;
+        try {
+            const res = await createApp().request('/api/health', {
+                headers: { origin: 'https://evil.example.com' },
+            });
+            // Same-origin default → no Access-Control-Allow-Origin for a foreign origin,
+            // and never a wildcard.
+            const acao = res.headers.get('access-control-allow-origin');
+            expect(acao).not.toBe('*');
+            expect(acao).not.toBe('https://evil.example.com');
+        } finally {
+            if (prev === undefined) delete process.env.SPUR_CORS_ORIGINS;
+            else process.env.SPUR_CORS_ORIGINS = prev;
+        }
+    });
+
+    test('CORS echoes an explicitly allowlisted origin (SPUR_CORS_ORIGINS)', async () => {
+        const prev = process.env.SPUR_CORS_ORIGINS;
+        process.env.SPUR_CORS_ORIGINS = 'https://board.example.com, https://ops.example.com';
+        try {
+            const res = await createApp().request('/api/health', {
+                headers: { origin: 'https://board.example.com' },
+            });
+            expect(res.headers.get('access-control-allow-origin')).toBe('https://board.example.com');
+        } finally {
+            if (prev === undefined) delete process.env.SPUR_CORS_ORIGINS;
+            else process.env.SPUR_CORS_ORIGINS = prev;
+        }
     });
 
     test('health endpoint includes security headers', async () => {

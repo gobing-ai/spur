@@ -113,81 +113,87 @@ Middleware pipeline implemented per design §2.2 fixed order (invariant #7):
 Tests: `apps/server/tests/middleware.test.ts` — 21 new tests (requestId, requestLogger, errorHandler/onError, contextInjector, mountMiddleware order, health endpoints, bodyLimit, pipeline integration). Existing tests updated for new health shape. `tests/cf/worker-runtime.cf.ts` updated.
 ### Plan
 
-- [ ] Create `apps/server/src/middleware/` with one file per concern (request-id, request-logger, error-handler, context-injector) + `pipeline.ts` exporting `mountMiddleware(app)` in the fixed order.
-- [ ] `cors`: read allowed origins from env (e.g. `SPUR_CORS_ORIGINS`), default same-origin; use `hono/cors`.
-- [ ] `requestId`: UUID v4 into `c.set('requestId', id)`; confirm `hono/request-id` vs custom against hono@4.12.23.
-- [ ] `bodyLimit`: `hono/body-limit`, default 1 MiB (configurable later via server config).
-- [ ] `requestLogger`: structured log via `appRt.logger` (method/path/status/duration/requestId); wraps the downstream handler so it sees the final status.
-- [ ] `errorHandler`: global try/catch -> ts-utils api-response error envelope; no stack in prod (`NODE_ENV`); include `requestId`.
-- [ ] `compress`: `hono/compress`.
-- [ ] Extend `ContextVariableMap` with `requestId: string` (keep existing `rt`; `ctx` added in 0073).
-- [ ] `bootstrap.ts createApp`: replace the bare `secureHeaders()` with `mountMiddleware(app)`; keep `/`, `/openapi.json`, `/api/*` mounts.
-- [ ] `GET /api/health` (liveness: uptime + memory). `GET /api/health/ready` slot (DB `SELECT 1` probe finished with 0073's `getDb`; mark the seam in both tasks).
-- [ ] `index.ts`: capture the `Bun.serve` handle; add SIGINT/SIGTERM `shutdown(signal)` -> `server.stop(true)` -> `await appRt.stop('shutdown')` -> exit; verify `appRt.stop` signature.
-- [ ] Tests: each middleware sets its context var / header; oversized body -> rejected pre-parse; error -> envelope with requestId, no stack in prod; `/health` 200 with uptime+memory; pipeline order asserted; existing `app.test.ts` + `bootstrap.test.ts` + `test-cf` stay green.
-- [ ] Gate: `bun run lint` + `bun run test` + `bun run test-cf` + `bun run build`; coverage >=90% on new middleware files.
-- [ ] Cross-task seam note: `/health/ready` DB probe completes in 0073; `contextInjector` sets `ctx` in 0073; error->status table is 0077.
+
+- [x] Create `apps/server/src/middleware/` with one file per concern (request-id, request-logger, error-handler, context-injector) + `pipeline.ts` exporting `mountMiddleware(app)` in the fixed order.
+- [x] `cors`: read allowed origins from env (e.g. `SPUR_CORS_ORIGINS`), default same-origin; use `hono/cors`.
+- [x] `requestId`: UUID v4 into `c.set('requestId', id)`; confirm `hono/request-id` vs custom against hono@4.12.23.
+- [x] `bodyLimit`: `hono/body-limit`, default 1 MiB (configurable later via server config).
+- [x] `requestLogger`: structured log via `appRt.logger` (method/path/status/duration/requestId); wraps the downstream handler so it sees the final status.
+- [x] `errorHandler`: global try/catch -> ts-utils api-response error envelope; no stack in prod (`NODE_ENV`); include `requestId`.
+- [x] `compress`: `hono/compress`.
+- [x] Extend `ContextVariableMap` with `requestId: string` (keep existing `rt`; `ctx` added in 0073).
+- [x] `bootstrap.ts createApp`: replace the bare `secureHeaders()` with `mountMiddleware(app)`; keep `/`, `/openapi.json`, `/api/*` mounts.
+- [x] `GET /api/health` (liveness: uptime + memory). `GET /api/health/ready` slot (DB `SELECT 1` probe finished with 0073's `getDb`; mark the seam in both tasks).
+- [x] `index.ts`: capture the `Bun.serve` handle; add SIGINT/SIGTERM `shutdown(signal)` -> `server.stop(true)` -> `await appRt.stop('shutdown')` -> exit; verify `appRt.stop` signature.
+- [x] Tests: each middleware sets its context var / header; oversized body -> rejected pre-parse; error -> envelope with requestId, no stack in prod; `/health` 200 with uptime+memory; pipeline order asserted; existing `app.test.ts` + `bootstrap.test.ts` + `test-cf` stay green.
+- [x] Gate: `bun run lint` + `bun run test` + `bun run test-cf` + `bun run build`; coverage >=90% on new middleware files.
+- [x] Cross-task seam note: `/health/ready` DB probe completes in 0073; `contextInjector` sets `ctx` in 0073; error->status table is 0077.
 
 
 ### Review
-### Review
+**dev-verify verdict: PASS** (Phase 7 SECU + Phase 8 traceability, `--fix all --force`, verified 2026-06-15 by claude-code).
 
-**SECU verdict: PASS**
+Task 0072 was implemented (commit `21b4eb4` + 5 follow-up fixes) and shipped `status: done`. Re-verified under `--force`. Full implementation present: `apps/server/src/middleware/{pipeline,request-id,request-logger,error-handler,context-injector}.ts` + `bootstrap.ts` health endpoints + `index.ts` graceful shutdown; 7 server/middleware test files.
 
-**S — Security:**
-- `secureHeaders()` applies security headers (X-Content-Type-Options: nosniff, etc.) to all responses including errors (first in pipeline)
-- `errorHandler` suppresses error stack traces in production (`NODE_ENV === 'production'`), returns opaque "Internal server error"
-- CORS configurable via `SPUR_CORS_ORIGINS` env var; defaults to allow-all for development
-- `bodyLimit(1MiB)` prevents oversized body DoS before oRPC Zod parse
-- No secrets hardcoded in any file; no new env reads beyond `SPUR_CORS_ORIGINS`
+**Phase 8 — Requirements traceability (11/11 addressed):**
 
-**E — Error handling / Correctness:**
-- Middleware registered in the load-bearing order (invariant #7): secureHeaders → cors → requestId → bodyLimit → requestLogger → onError → compress → contextInjector
-- `errorHandler` implemented as `app.onError()` per Hono v4 semantics (Hono compose catches throws before middleware `await next()` can reject — verified via debugging)
-- `errorHandler` respects Hono `HTTPException.status` codes (bodyLimit 413 preserved, not collapsed to 500)
-- `requestId` injected before logger/errorHandler so correlation works for all error responses
-- SIGINT/SIGTERM graceful shutdown: `server.stop(true)` drains in-flight → `appRt.stop('shutdown')` closes DB/flushes logs → `process.exit(0)`
-- No middleware leaks mutable state between requests
+| Req | Verdict | Evidence |
+|---|---|---|
+| R1 ordered pipeline | ✅ MET | `pipeline.ts:38-49` secureHeaders→cors→requestId→bodyLimit→requestLogger→onError→compress→contextInjector. errorHandler is `app.onError()` (Hono v4 compose-level catch) not inline — correct, documented `error-handler.ts:18-22`. |
+| R2 CORS configurable, default same-origin | ✅ MET (after fix) | `pipeline.ts:51` reads `SPUR_CORS_ORIGINS`. **Was `'*'` default (SECU-1) — FIXED to same-origin (empty allowlist).** |
+| R3 requestId UUID v4 | ✅ MET | `request-id.ts:14` `crypto.randomUUID()`; threaded to logs + errors. |
+| R4 bodyLimit 1 MiB pre-parse | ✅ MET | `pipeline.ts:41` `bodyLimit({maxSize:1_048_576})` before oRPC mount; tested (413 on oversized). |
+| R5 structured logger | ✅ MET | `request-logger.ts:19-25` method/path/status/duration_ms/requestId. |
+| R6 error envelope, no prod stack, requestId | ✅ MET | `error-handler.ts:26-39` ts-utils `errorResponse`; prod gates message+stack; includes requestId; respects `HTTPException.status`. |
+| R7 compress | ✅ MET | `pipeline.ts:46`. |
+| R8 shutdown handle + signals | ✅ MET (code) / ⚠️ untested | `index.ts:23-36` handle capture, SIGINT/SIGTERM → `server.stop(true)` → `appRt.stop('shutdown')` → exit. `index.ts` entrypoint block is 0% coverage (entrypoint guard, not exercised under `bun test`) — see Finding 2. |
+| R9 health split | 🔶 PARTIAL (by-design deferral) | `bootstrap.ts:65-78` `/api/health` liveness (uptime+memory) ✅; `/api/health/ready` returns `{db:'deferred'}` — DB `SELECT 1` deferred to 0073 (`ServerContext.getDb()` does not exist yet). Documented cross-task seam in the task Plan. See Finding 3. |
+| R10 ContextVariableMap + requestId | ✅ MET | `bootstrap.ts:13-19`. |
+| R11 gates green, ≥90% | ✅ MET | lint clean (7 workspaces typecheck); server 45 pass/0 fail; test-cf pass; middleware files 100% line+func. |
 
-**C — Consistency / Architecture:**
-- `mountMiddleware(app, appRt)` follows existing Spur pattern (one function wires the pipeline, like `registerXxxCommand(program, context)`)
-- Hono built-ins used where available: `hono/cors`, `hono/body-limit`, `hono/compress`, `hono/secure-headers`
-- `ContextVariableMap` extended cleanly with `requestId: string` + `ctx: undefined` (placeholder for 0073)
-- Health split (liveness `/api/health` + readiness `/api/health/ready` stub) per design §2.2
-- Worker entry (`worker.ts`) unchanged — Cloudflare Workers are stateless, no shutdown needed
-- Cross-task seams documented: `/ready` DB probe → 0073; `ctx` ServerContext → 0073; error→status table → 0077
-- No `if (isCloudflare)` branches in app code — platform divergence lives in `ts-runtime` (design §2.1.1)
+**Phase 7 — SECU:**
+- **S:** SECU-1 (CORS wildcard default) found + fixed. No secrets, no injection surface, error stacks gated on non-prod. `bodyLimit` defends pre-parse.
+- **C:** Pipeline order sound; health routes registered before `/api/*` wildcard so they win; error-handler respects framework status codes.
+- **U:** requestId correlation across logs + error envelopes.
+- **E:** No issues.
 
-**U — Usability:**
-- Health endpoints return structured JSON with consistent field naming (`uptime_seconds`, `memory_rss_mb`, `memory_heap_mb`)
-- Error envelope follows ts-utils `ApiErrorEnvelope` contract (`{ code, message, result, data, details? }`)
-- Structured logs include `requestId` for distributed request tracing
-- `requestId` threaded into error responses for support debugging
+**Gate (post-fix):** `bun run lint` clean · server `bun test` 45 pass / 0 fail · `pipeline.ts`/`error-handler.ts`/`request-id.ts`/`request-logger.ts`/`context-injector.ts` 100% line+func · `bun run test-cf` pass.
+
 
 ### Findings
 
 | # | Finding | Dim | Location | P | Disposition |
 |---|---------|-----|----------|---|-------------|
-| 1 | Hono v4 catches errors at compose level — `try/catch` middleware pattern doesn't work for global error handling | Correctness | `middleware/error-handler.ts` | P1 | **FIXED** — switched to `app.onError(globalErrorHandler)` per Hono v4 API |
-| 2 | Lifecycle shell guard `${vars.wbs}` not substituted before shell exec (engine bug) | Process | `task-lifecycle.yaml` guard | P3 | **NOTED** — worked around by manual status transition; engine bug filed |
-| 3 | CF worker-runtime test had stale health response assertion | Correctness | `tests/cf/worker-runtime.cf.ts` | P2 | **FIXED** — updated to match new liveness shape |
+| 1 | CORS default was `origin: '*'` (blanket-allow every origin), contradicting R2's stated "default same-origin for production". Low real-world risk for the single-operator local board, but a latent exposure if the Worker is ever shared, and a requirement mismatch. The existing test `health endpoint includes CORS headers` asserted only `toBeDefined()` on the header — vacuous (`headers.get()` returns `null`, which passes `toBeDefined()`), so it did not catch the wildcard. | Security (S) | `pipeline.ts:38` (cors origin), `pipeline.test.ts:98` (weak assertion) | P2 | **FIXED 2026-06-15** — default changed to same-origin (`cors({ origin: corsOrigins })` with empty allowlist → no foreign origin echoed, never `*`). Replaced the vacuous test with two real ones: a foreign Origin is NOT echoed (and never `*`), and an allowlisted `SPUR_CORS_ORIGINS` origin IS echoed. `pipeline.ts` still 100% coverage; gate green. |
+| 2 | `apps/server/src/index.ts` graceful-shutdown block (R8) is at 0% line coverage — the `if (import.meta.main)` entrypoint guard is never executed under `bun test`, so the SIGINT/SIGTERM → `server.stop(true)` → `appRt.stop('shutdown')` path is unverified by automated tests. The code is correct on inspection. | Correctness (C) | `index.ts:14-41` | P3 | **ACCEPTED (not fixed)** — standard entrypoint-guard limitation; the shutdown logic is trivial and inspection-verified. A future hardening could extract `startServer()` (planned in task 0076) and unit-test the shutdown handler in isolation; defer to 0076 which already extracts that seam. |
+| 3 | R9 `/api/health/ready` returns `{ db: 'deferred' }` rather than a real DB `SELECT 1` → 200/503. This is a DELIBERATE cross-task deferral: `ServerContext.getDb()` does not exist until task 0073, and the task Plan explicitly marks "/health/ready DB probe completes in 0073" as a seam. Not a defect. | Correctness (C) | `bootstrap.ts:76-78` | P3 | **ACCEPTED (by design)** — tracked: task 0073 replaces the stub with the real DB probe. The stub is correct for the current wave (Worker path has no DB until D1 anyway). |
 
-No remaining P1/P2.
-
-**Gate:** lint clean · test 1291 pass / 0 fail · test-cf 1 pass · build OK · 21 new middleware tests · existing tests stay green
+No remaining P1/P2. Findings 2 and 3 are accepted deferrals tracked to tasks 0076 / 0073 respectively.
 
 
 ### Testing
 
-- Command: `bun run --filter @gobing-ai/spur-server test`
-- Scope: all middleware (requestId, requestLogger, errorHandler/onError, contextInjector, pipeline order), health endpoints (liveness, readiness, redirect, CORS, security headers), bodyLimit (oversized rejection, within-limit pass-through), pipeline integration (OpenAPI, not-found, error response), graceful shutdown (code review only — Bun.serve handle capture is unit-testable via process mock but not in current test suite)
-- Result: 38 pass / 0 fail (server workspace); 1291 pass / 0 fail (all workspaces); test-cf 1 pass / 0 fail
-- Coverage: existing thresholds hold; new middleware files each have dedicated tests
-- Evidence: `apps/server/tests/middleware.test.ts` (21 tests), `apps/server/tests/app.test.ts` (updated), `apps/server/tests/bootstrap.test.ts` (passes), `apps/server/tests/worker.test.ts` (updated), `apps/server/tests/cf/worker-runtime.cf.ts` (updated)
-- Gate: lint clean · typecheck clean · test 1291/0 · test-cf 1/0 · build: CLI + server + web OK
+**Verified 2026-06-15 (dev-verify, post-fix).**
 
-| Type | Path | Agent | Date |
-| ---- | ---- | ----- | ---- |
+- Command: `bun --cwd apps/server test --coverage` · `bun run test` · `bun run test-cf` · `bun run lint`
+- Scope: all 5 middleware (requestId, requestLogger, errorHandler/onError, contextInjector, pipeline
+  order) · health endpoints (liveness uptime+memory, readiness deferred-stub, root redirect, CORS
+  same-origin default, security headers) · bodyLimit (oversized→413, within-limit pass) · pipeline
+  integration (OpenAPI served, not-found 404 JSON, requestId on error responses) · CORS R2 (foreign
+  origin NOT echoed / never `*`; allowlisted `SPUR_CORS_ORIGINS` origin echoed) · graceful shutdown
+  (code-review only — `index.ts` entrypoint guard, Finding 2).
+- Result: **server 45 pass / 0 fail**; all workspaces **1298 pass / 0 fail**; plugins/sp **158 pass /
+  0 fail**; **test-cf 1 pass / 0 fail**.
+- Coverage: `pipeline.ts` / `error-handler.ts` / `request-id.ts` / `request-logger.ts` /
+  `context-injector.ts` all **100% line + function**; `bootstrap.ts` 100% line / 97.83% func. Coverage
+  gate: PASS. (`index.ts` entrypoint block uncovered — Finding 2, accepted, deferred to 0076.)
+- Evidence (real file layout — tests are split per concern, not a single `middleware.test.ts`):
+  `apps/server/tests/middleware/{pipeline,request-id,request-logger,error-handler,context-injector,helpers}.test.ts`,
+  `apps/server/tests/{app,bootstrap,openapi,router,worker,worker-retry}.test.ts`,
+  `apps/server/tests/*.cf.ts` (Workers runtime via vitest).
+- Gate: `bun run lint` clean (7 workspaces typecheck) · `bun run test` 1298/0 + 158/0 ·
+  `bun run test-cf` 1/0 · `bun run build` (CLI + server + web) OK.
+
 
 ### References
 
