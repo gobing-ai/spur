@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import type { DbAdapter } from '@gobing-ai/ts-db';
 import { dbHealthCheck } from '../src/db';
 
