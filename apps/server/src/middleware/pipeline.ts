@@ -9,6 +9,13 @@ import { globalErrorHandler } from './error-handler';
 import { requestId } from './request-id';
 import { requestLogger } from './request-logger';
 
+/** Parse a comma-separated CORS origins string into a trimmed, non-empty string array. */
+export const trimOrigins = (origins: string): string[] =>
+    origins
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+
 /**
  * Mount the cross-cutting middleware pipeline on a Hono app in the
  * load-bearing order defined by design §2.2.
@@ -20,16 +27,10 @@ import { requestLogger } from './request-logger';
  * 3. `requestId`      — UUID v4 into `c.var.requestId`
  * 4. `bodyLimit`      — reject oversized bodies before oRPC parse (default 1 MiB)
  * 5. `requestLogger`  — structured log: method/path/status/duration/requestId
- * 6. `errorHandler`   — global catch → ts-utils error envelope
+ * 6. `errorHandler`   — registered as app.onError() (Hono v4 catches at compose level)
  * 7. `compress`       — gzip/deflate for JSON responses
  * 8. `contextInjector`— sets `c.var.rt` (ServerContext lands in 0073)
  */
-export const trimOrigins = (origins: string): string[] =>
-    origins
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
-
 export function mountMiddleware(app: Hono, appRt?: ApplicationRuntime): void {
     const corsOrigins = process.env.SPUR_CORS_ORIGINS ? trimOrigins(process.env.SPUR_CORS_ORIGINS) : [];
 
