@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createMigratedDb } from '@gobing-ai/spur-domain';
+import { createMigratedDb, TaskRunLinkDao } from '@gobing-ai/spur-domain';
 import type { AgentService } from '../../src/services/agent-service';
 import type { RuleService } from '../../src/services/rule-service';
 import { WorkflowAppService } from '../../src/services/workflow-service';
@@ -411,6 +411,91 @@ terminalStates:
             await expect(svc.continuePaused('no-such-run')).rejects.toThrow(
                 /not paused|does not exist|nothing to continue/i,
             );
+            await rm(dir, { recursive: true, force: true });
+        });
+    });
+
+    describe('run — pipeline link (R1, task 0071)', () => {
+        const PIPELINE_YAML = `name: task-pipeline
+kind: state-machine
+initialState: start
+states:
+  - id: start
+  - id: done
+transitions:
+  - from: start
+    to: done
+terminalStates:
+  - done
+`;
+
+        test('a task-pipeline run with vars.wbs writes exactly one kind=pipeline row', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-pipeline-link-'));
+            const path = join(dir, 'task-pipeline.yaml');
+            await writeFile(path, PIPELINE_YAML);
+
+            const ctx = makeCtx(dir);
+            const svc = new WorkflowAppService(ctx);
+            await svc.run(path, { runId: 'pipe-1', vars: { wbs: '0042' } });
+
+            const db = await ctx.getDb();
+            const dao = new TaskRunLinkDao(db);
+            const rows = await dao.listByRun('pipe-1', 10);
+            expect(rows.length).toBe(1);
+            expect(rows[0]?.kind).toBe('pipeline');
+            expect(rows[0]?.wbs).toBe('0042');
+            expect(rows[0]?.run_id).toBe('pipe-1');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('two pipeline runs for the same wbs each get exactly one pipeline link', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-pipeline-multi-'));
+            const path = join(dir, 'task-pipeline.yaml');
+            await writeFile(path, PIPELINE_YAML);
+
+            const ctx = makeCtx(dir);
+            const svc = new WorkflowAppService(ctx);
+            await svc.run(path, { runId: 'pipe-a', vars: { wbs: '0042' } });
+            await svc.run(path, { runId: 'pipe-b', vars: { wbs: '0042' } });
+
+            const db = await ctx.getDb();
+            const dao = new TaskRunLinkDao(db);
+            const linksA = (await dao.listByRun('pipe-a', 10)).filter((r) => r.kind === 'pipeline');
+            const linksB = (await dao.listByRun('pipe-b', 10)).filter((r) => r.kind === 'pipeline');
+            expect(linksA.length).toBe(1);
+            expect(linksB.length).toBe(1);
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('a non-pipeline workflow writes no pipeline link even with vars.wbs', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-no-link-'));
+            const path = join(dir, 'test.yaml');
+            await writeFile(path, MINIMAL_WORKFLOW_YAML);
+
+            const ctx = makeCtx(dir);
+            const svc = new WorkflowAppService(ctx);
+            await svc.run(path, { runId: 'no-link-1', vars: { wbs: '0042' } });
+
+            const db = await ctx.getDb();
+            const dao = new TaskRunLinkDao(db);
+            const rows = (await dao.listByRun('no-link-1', 10)).filter((r) => r.kind === 'pipeline');
+            expect(rows.length).toBe(0);
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('a task-pipeline run without vars.wbs writes no pipeline link', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-no-wbs-'));
+            const path = join(dir, 'task-pipeline.yaml');
+            await writeFile(path, PIPELINE_YAML);
+
+            const ctx = makeCtx(dir);
+            const svc = new WorkflowAppService(ctx);
+            await svc.run(path, { runId: 'no-wbs-1' });
+
+            const db = await ctx.getDb();
+            const dao = new TaskRunLinkDao(db);
+            const rows = (await dao.listByRun('no-wbs-1', 10)).filter((r) => r.kind === 'pipeline');
+            expect(rows.length).toBe(0);
             await rm(dir, { recursive: true, force: true });
         });
     });

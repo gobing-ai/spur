@@ -4,7 +4,7 @@ import { access, readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
-import { ActionRunDao, PhaseRunDao, RunDao, TransitionRunDao } from '@gobing-ai/spur-domain';
+import { ActionRunDao, createId, PhaseRunDao, RunDao, TaskRunLinkDao, TransitionRunDao } from '@gobing-ai/spur-domain';
 
 import {
     createDefaultWorkflowEngineHost,
@@ -20,6 +20,12 @@ import type { HostAllowlist, HttpRequester } from '../workflow/actions/http-requ
 import { registerSpurBuiltins } from '../workflow/builtins';
 import type { AgentService } from './agent-service';
 import type { RuleService } from './rule-service';
+
+/** Workflow name that triggers a pipeline run-link (matches `config/workflows/task-pipeline.yaml`). */
+const TASK_PIPELINE_WORKFLOW = 'task-pipeline';
+
+/** Link kind for pipeline runs in `task_run_links` (additive to `kind='lifecycle'`). */
+const PIPELINE_LINK_KIND = 'pipeline';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -186,7 +192,44 @@ export class WorkflowAppService {
             const db = await this.ctx.getDb();
             await new RunDao(db).stampMetadata(runId, { dryRun: true });
         }
+        // R1 (task 0071): record a kind='pipeline' task_run_links row when a
+        // task-pipeline run carries vars.wbs — links execution results back to
+        // the task. Idempotent: a re-run with the same runId does not duplicate.
+        await this.maybeLinkPipelineRun(file, runId, opts);
         return result as WorkflowRunResult;
+    }
+
+    /**
+     * If the workflow is `task-pipeline` and `vars.wbs` is present, insert a
+     * `kind='pipeline'` row into `task_run_links`. Idempotent per runId.
+     */
+    private async maybeLinkPipelineRun(file: string, runId: string, opts: WorkflowRunOptions): Promise<void> {
+        const wbs = opts.vars?.wbs;
+        if (wbs === undefined || wbs === '') return;
+
+        // Load the def to check the workflow name (cheap YAML parse).
+        let workflowName: string | undefined;
+        try {
+            const def = await loadWorkflowDef(resolve(this.ctx.cwd, file));
+            workflowName = def.name;
+        } catch {
+            return; // Not a runnable workflow file — nothing to link.
+        }
+        if (workflowName !== TASK_PIPELINE_WORKFLOW) return;
+
+        const db = await this.ctx.getDb();
+        const dao = new TaskRunLinkDao(db);
+        // Idempotency: skip if a pipeline link already exists for this runId.
+        const existing = await dao.listByRun(runId, 10);
+        if (existing.some((row) => row.kind === PIPELINE_LINK_KIND)) return;
+
+        await dao.insert({
+            id: createId('trl'),
+            wbs,
+            run_id: runId,
+            kind: PIPELINE_LINK_KIND,
+            created_at: new Date().toISOString(),
+        });
     }
 
     /**
