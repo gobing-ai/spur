@@ -1,4 +1,5 @@
 import type { DbAdapter } from '@gobing-ai/ts-db';
+import type { JobQueue, QueueConsumer, QueueConsumerConfig } from '@gobing-ai/ts-infra';
 import type { DatabaseConfig } from '@gobing-ai/ts-runtime';
 import { applyCliMigrations } from './migrations';
 
@@ -54,3 +55,46 @@ export async function dbHealthCheck(db: DbAdapter): Promise<boolean> {
         return false;
     }
 }
+
+/**
+ * Build a `DBJobQueue` producer over the migrated `queue_jobs` table.
+ *
+ * The ts-db `QueueJobDao` + ts-infra `DBJobQueue` are imported LAZILY (and the
+ * ts-infra value lives on the `/job-queue-db` subpath, not the root barrel) so a
+ * Cloudflare Workers bundle that imports this module's pure helpers never drags
+ * Bun-native ts-db onto the module-init path. `events` is an optional
+ * `EventBus<QueueEvents>` for `queue.job.*` lifecycle telemetry.
+ *
+ * @returns a `JobQueue<T>` (`enqueue`/`enqueueBatch`/`stats`).
+ */
+export async function createJobQueue<T = unknown>(db: DbAdapter, events?: unknown): Promise<JobQueue<T>> {
+    const { DBJobQueue } = await import('@gobing-ai/ts-infra/job-queue-db');
+    const { QueueJobDao } = await import('@gobing-ai/ts-db');
+    return new DBJobQueue<T>(new QueueJobDao(db), events as never);
+}
+
+/**
+ * A `QueueConsumer` that also exposes `processOnce()` — the synchronous
+ * single-batch drain on `DBQueueConsumer`, used by schedulers, manual drains,
+ * and deterministic tests. (The base `QueueConsumer` interface omits it.)
+ */
+export type ServerQueueConsumer<T = unknown> = QueueConsumer<T> & {
+    processOnce(): Promise<number>;
+};
+
+/**
+ * Build a `DBQueueConsumer` over the migrated `queue_jobs` table. The caller
+ * registers handlers, then `start()`s it (Bun entry only — a stateless Worker
+ * enqueues but does not consume). Same lazy-import discipline as
+ * {@link createJobQueue}.
+ */
+export async function createQueueConsumer<T = unknown>(
+    db: DbAdapter,
+    config?: QueueConsumerConfig,
+): Promise<ServerQueueConsumer<T>> {
+    const { DBQueueConsumer } = await import('@gobing-ai/ts-infra/job-queue-db');
+    const { QueueJobDao } = await import('@gobing-ai/ts-db');
+    return new DBQueueConsumer<T>(new QueueJobDao(db), config) as ServerQueueConsumer<T>;
+}
+
+export type { JobQueue, QueueConsumer, QueueConsumerConfig } from '@gobing-ai/ts-infra';

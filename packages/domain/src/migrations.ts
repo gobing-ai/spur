@@ -36,6 +36,33 @@ CREATE TABLE IF NOT EXISTS inbox_messages (
 CREATE INDEX IF NOT EXISTS idx_inbox_messages_to_status ON inbox_messages (to_id, status);
 `;
 
+/**
+ * DDL for the `queue_jobs` table owned by `@gobing-ai/ts-db` (`QueueJobDao`, backing
+ * `@gobing-ai/ts-infra` `DBJobQueue`/`DBQueueConsumer`). ts-db ships the Drizzle table +
+ * embedded migrations but no SQL constant, so the DDL is mirrored here and kept
+ * byte-compatible with ts-db's embedded migrations `0000_init` + `0001` (ready index) +
+ * `0002` (`expires_at`). Column types and the `(status, next_retry_at, created_at)`
+ * ready-lookup index must match the package or the DAO's claim query breaks.
+ */
+export const QUEUE_JOBS_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS queue_jobs (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    max_retries INTEGER NOT NULL DEFAULT 3,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    next_retry_at INTEGER,
+    last_error TEXT,
+    processing_at INTEGER,
+    expires_at INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS queue_jobs_ready_idx ON queue_jobs (status, next_retry_at, created_at);
+`;
+
 /** SQL that creates the Spur CLI-owned domain tables plus package-owned tables. */
 export const CLI_SCHEMA_SQL = `
 ${DOMAIN_SCHEMA_SQL}
@@ -49,6 +76,8 @@ ${WORKFLOW_ENGINE_SCHEMA_SQL}
 ${RULE_ENGINE_SCHEMA_SQL}
 
 ${INBOX_MESSAGES_SCHEMA_SQL}
+
+${QUEUE_JOBS_SCHEMA_SQL}
 `;
 
 /**
@@ -57,9 +86,10 @@ ${INBOX_MESSAGES_SCHEMA_SQL}
  * incremental step that adds `inbox_messages` to databases created before team
  * mode; `0002` adds the rule-engine run history tables (`rule_runs`,
  * `rule_eval_runs`) to databases created before task 0040; `0003` adds the
- * planning event ledger (`planning_events`, `task_run_links`). All are idempotent
- * (`CREATE TABLE IF NOT EXISTS`), so applying them in sequence is safe
- * regardless of the database's age.
+ * planning event ledger (`planning_events`, `task_run_links`); `0004` adds the
+ * `queue_jobs` table (`@gobing-ai/ts-infra` `DBJobQueue`/`DBQueueConsumer`, task 0074).
+ * All are idempotent (`CREATE TABLE IF NOT EXISTS`), so applying them in sequence is
+ * safe regardless of the database's age.
  */
 export const CLI_MIGRATIONS: CliMigration[] = [
     { id: '0000_spur_cli_foundation', sql: CLI_SCHEMA_SQL },
@@ -69,6 +99,7 @@ export const CLI_MIGRATIONS: CliMigration[] = [
     { id: '0001_spur_cli_team_inbox', sql: INBOX_MESSAGES_SCHEMA_SQL },
     { id: '0002_spur_cli_rule_history', sql: RULE_ENGINE_SCHEMA_SQL },
     { id: '0003_spur_cli_planning', sql: PLANNING_SCHEMA_SQL },
+    { id: '0004_spur_cli_queue_jobs', sql: QUEUE_JOBS_SCHEMA_SQL },
 ];
 
 /** Filename marker for regenerated CLI-owned migrations. */

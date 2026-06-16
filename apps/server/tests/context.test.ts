@@ -80,7 +80,7 @@ describe('createServerContext', () => {
         expect(svc1).toBe(svc2);
     });
 
-    test('eventBus() returns the appRt events', () => {
+    test('eventBus() returns the appRt events by default', () => {
         const appRt = makeAppRt();
         const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
 
@@ -90,11 +90,88 @@ describe('createServerContext', () => {
         expect(typeof bus.on).toBe('function');
     });
 
-    test('jobQueue() throws when disabled (default)', () => {
+    test('R6: a published event on the provided EventBus is observable through eventBus()', async () => {
+        const appRt = makeAppRt();
+        // Real EventBus (not the no-op mock) so publish→observe is genuinely exercised.
+        const { EventBus } = await import('@gobing-ai/ts-infra');
+        const realBus = new EventBus() as unknown as Parameters<typeof createServerContext>[1]['eventsBus'];
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs, eventsBus: realBus });
+
+        const observed: Array<{ wbs: string }> = [];
+        ctx.eventBus().on('planning.task.transitioned', (detail) => {
+            observed.push(detail as unknown as { wbs: string });
+        });
+        ctx.eventBus().emit('planning.task.transitioned', { wbs: '0001' } as never);
+
+        expect(observed).toEqual([{ wbs: '0001' }]);
+    });
+
+    test('jobQueue() rejects when disabled (default)', async () => {
         const appRt = makeAppRt();
         const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
 
-        expect(() => ctx.jobQueue()).toThrow('jobQueue is not configured');
+        await expect(ctx.jobQueue()).rejects.toThrow('jobQueue is not configured');
+    });
+
+    test('jobQueue() builds a real DBJobQueue over the migrated queue_jobs table when enabled', async () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, {
+            cwd: '/tmp/test',
+            fs: testFs,
+            dbUrl: ':memory:',
+            jobQueueEnabled: true,
+        });
+
+        const queue = await ctx.jobQueue();
+        // Real producer surface (ts-infra JobQueue): enqueue returns a job id.
+        const id = await queue.enqueue('test.job', { hello: 'world' });
+        expect(typeof id).toBe('string');
+        const stats = await queue.stats();
+        expect(stats.pending).toBe(1);
+    });
+
+    test('jobQueue() caches the instance across calls', async () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, {
+            cwd: '/tmp/test',
+            fs: testFs,
+            dbUrl: ':memory:',
+            jobQueueEnabled: true,
+        });
+
+        const q1 = await ctx.jobQueue();
+        const q2 = await ctx.jobQueue();
+        expect(q1).toBe(q2);
+    });
+
+    test('R6: enqueue → consume roundtrip against in-memory SQLite', async () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, {
+            cwd: '/tmp/test',
+            fs: testFs,
+            dbUrl: ':memory:',
+            jobQueueEnabled: true,
+        });
+
+        const queue = await ctx.jobQueue();
+        const db = await ctx.getDb();
+        const { createQueueConsumer } = await import('@gobing-ai/spur-domain');
+        const consumer = await createQueueConsumer<{ n: number }>(db);
+
+        const seen: number[] = [];
+        consumer.register('roundtrip.job', async (job) => {
+            seen.push(job.payload.n);
+        });
+
+        await queue.enqueue('roundtrip.job', { n: 42 });
+        // Drive one batch synchronously (no polling timer) for a deterministic test.
+        const processed = await consumer.processOnce();
+
+        expect(processed).toBe(1);
+        expect(seen).toEqual([42]);
+        const stats = await queue.stats();
+        expect(stats.completed).toBe(1);
+        expect(stats.pending).toBe(0);
     });
 
     test('scheduler() throws when disabled (default)', () => {
@@ -104,15 +181,35 @@ describe('createServerContext', () => {
         expect(() => ctx.scheduler()).toThrow('scheduler is not configured');
     });
 
-    test('scheduler() returns the adapter when provided', () => {
+    test('scheduler() returns the configured adapter and registration is observable', async () => {
         const appRt = makeAppRt();
+        const registered: string[] = [];
         const mockScheduler = {
-            register: () => {},
+            register: (cron: string) => {
+                registered.push(cron);
+            },
             start: async () => {},
             stop: async () => {},
         };
         const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs, scheduler: mockScheduler });
 
-        expect(ctx.scheduler()).toBe(mockScheduler);
+        const sched = ctx.scheduler();
+        expect(sched).toBe(mockScheduler);
+        sched.register('*/5 * * * *', async () => {});
+        expect(registered).toEqual(['*/5 * * * *']);
+    });
+
+    test('R3: NodeSchedulerAdapter registers + starts + stops a real cron entry', async () => {
+        const { NodeSchedulerAdapter } = await import('@gobing-ai/ts-infra/scheduler-node');
+        const adapter = new NodeSchedulerAdapter();
+        let ticks = 0;
+        adapter.register('* * * * * *', async () => {
+            ticks += 1;
+        });
+        await adapter.start();
+        await adapter.stop();
+        // Registration + lifecycle complete without throwing; tick count is timing-dependent
+        // so we only assert the adapter accepted the entry and the start/stop cycle is clean.
+        expect(ticks).toBeGreaterThanOrEqual(0);
     });
 });

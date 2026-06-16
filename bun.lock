@@ -141,6 +141,7 @@
       "dependencies": {
         "@gobing-ai/ts-db": "catalog:",
         "@gobing-ai/ts-dual-workflow-engine": "catalog:",
+        "@gobing-ai/ts-infra": "catalog:",
         "@gobing-ai/ts-llm-jsonl-importer": "catalog:",
         "@gobing-ai/ts-rule-engine": "catalog:",
         "@gobing-ai/ts-runtime": "catalog:",

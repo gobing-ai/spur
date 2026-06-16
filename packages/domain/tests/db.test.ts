@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import type { DbAdapter } from '@gobing-ai/ts-db';
-import { createMigratedDb, createMigratedDbViaRuntime, dbHealthCheck } from '../src/db';
+import {
+    createJobQueue,
+    createMigratedDb,
+    createMigratedDbViaRuntime,
+    createQueueConsumer,
+    dbHealthCheck,
+} from '../src/db';
 
 /**
  * Minimal mock that throws on queryFirst to exercise the dbHealthCheck catch path.
@@ -73,6 +79,43 @@ describe('createMigratedDbViaRuntime', () => {
         } finally {
             direct.close();
             viaRuntime.close();
+        }
+    });
+});
+
+describe('createJobQueue / createQueueConsumer', () => {
+    test('createJobQueue builds a DBJobQueue producer over the migrated queue_jobs table', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const queue = await createJobQueue<{ x: number }>(db);
+            const id = await queue.enqueue('demo', { x: 1 });
+            expect(typeof id).toBe('string');
+            const stats = await queue.stats();
+            expect(stats.pending).toBe(1);
+        } finally {
+            db.close();
+        }
+    });
+
+    test('createQueueConsumer processes an enqueued job (enqueue → consume roundtrip)', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const queue = await createJobQueue<{ x: number }>(db);
+            const consumer = await createQueueConsumer<{ x: number }>(db);
+            const seen: number[] = [];
+            consumer.register('demo', async (job) => {
+                seen.push(job.payload.x);
+            });
+
+            await queue.enqueue('demo', { x: 7 });
+            const processed = await consumer.processOnce();
+
+            expect(processed).toBe(1);
+            expect(seen).toEqual([7]);
+            const stats = await queue.stats();
+            expect(stats.completed).toBe(1);
+        } finally {
+            db.close();
         }
     });
 });

@@ -5,23 +5,24 @@ import {
     TaskService as TaskServiceImpl,
 } from '@gobing-ai/spur-app';
 import { createMigratedDbViaRuntime, type DbAdapter, dbHealthCheck } from '@gobing-ai/spur-domain';
-import type { EventBus } from '@gobing-ai/ts-infra';
+import type { EventBus, JobQueue, SchedulerAdapter } from '@gobing-ai/ts-infra';
 import type { ApplicationRuntime } from '@gobing-ai/ts-infra/application';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 
 type PlanningEventMap = Record<string, (detail: PlanningEventType) => void>;
 
-/** Minimal job queue interface — the runtime shape of ts-infra's DBJobQueue. */
-export interface ServerJobQueue {
-    enqueue(type: string, payload: unknown): Promise<string>;
-}
+/**
+ * Server job-queue handle — the ts-infra `JobQueue` producer interface
+ * (`enqueue`/`enqueueBatch`/`stats`), backed by `DBJobQueue` over `QueueJobDao`.
+ */
+export type ServerJobQueue = JobQueue<unknown>;
 
-/** Minimal scheduler interface — the runtime shape of ts-infra's SchedulerAdapter. */
-export interface ServerScheduler {
-    register(cron: string, name: string, handler: () => Promise<void>): void;
-    start(): Promise<void>;
-    stop(): Promise<void>;
-}
+/**
+ * Server scheduler handle — the ts-infra `SchedulerAdapter` interface
+ * (`register(cron, action)`/`start`/`stop`), backed by `NodeSchedulerAdapter`
+ * on Bun or a Cloudflare adapter on Workers.
+ */
+export type ServerScheduler = SchedulerAdapter;
 
 /**
  * Server-side analogue of the CLI's `CliContext`. Lazily-initialized
@@ -51,14 +52,18 @@ export interface ServerContext {
     eventBus(): EventBus<PlanningEventMap>;
 
     /**
-     * Job queue for async work (history import, rule runs).
-     * Returns a "not configured" guard when disabled in bootstrap config.
+     * Job queue for async work (history import, rule runs) — a `DBJobQueue` over
+     * `QueueJobDao` (the migrated `queue_jobs` table). Lazy + cached; async because
+     * it resolves the DB adapter first. Opt-in via `jobQueueEnabled`; throws
+     * `NotConfiguredError` when disabled (the single-operator default).
      */
-    jobQueue(): ServerJobQueue;
+    jobQueue(): Promise<ServerJobQueue>;
 
     /**
-     * Scheduler for periodic tasks (stale-lock cleanup, analytics).
-     * Returns a "not configured" guard when disabled in bootstrap config.
+     * Scheduler for periodic tasks (stale-lock cleanup, analytics) — a real
+     * `SchedulerAdapter` (`NodeSchedulerAdapter` on Bun, a Cloudflare adapter on
+     * Workers, supplied by the entry). Opt-in; throws `NotConfiguredError` when
+     * no adapter is configured (the default).
      */
     scheduler(): ServerScheduler;
 }
@@ -106,7 +111,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
     let dbPromise: Promise<DbAdapter> | undefined;
     let taskSvc: TaskService | undefined;
     let featureSvc: FeatureService | undefined;
-    let jobQueueCache: ServerJobQueue | undefined;
+    let jobQueuePromise: Promise<ServerJobQueue> | undefined;
 
     return {
         cwd,
@@ -152,16 +157,22 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
             return eventsBus;
         },
 
-        jobQueue(): ServerJobQueue {
+        async jobQueue(): Promise<ServerJobQueue> {
             if (!jobQueueEnabled) {
                 throw new NotConfiguredError('jobQueue');
             }
-            // Real DBJobQueue wiring deferred until a job producer exists.
-            // For now, the guard above always fires (jobQueueEnabled defaults false).
-            if (!jobQueueCache) {
-                throw new NotConfiguredError('jobQueue');
-            }
-            return jobQueueCache;
+            // Real DBJobQueue over QueueJobDao (the migrated queue_jobs table).
+            // Lazy + cached; resolves the DB adapter, then builds the producer.
+            jobQueuePromise ??= (async () => {
+                // The ts-db/ts-infra job-queue wiring lives in @gobing-ai/spur-domain
+                // (which owns the ts-db boundary + the queue_jobs schema), so apps/server
+                // imports neither ts-db nor the ts-infra subpath directly. The domain
+                // helper lazy-imports both, keeping this file Worker-safe.
+                const { createJobQueue } = await import('@gobing-ai/spur-domain');
+                const db = await this.getDb();
+                return createJobQueue(db, eventsBus);
+            })();
+            return jobQueuePromise;
         },
 
         scheduler(): ServerScheduler {

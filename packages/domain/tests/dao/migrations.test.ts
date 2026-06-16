@@ -56,12 +56,17 @@ describe('db migrations', () => {
     });
 
     describe('CLI_MIGRATIONS', () => {
-        test('has foundation, team-inbox, rule-history, and planning migrations', () => {
-            expect(CLI_MIGRATIONS).toHaveLength(4);
+        test('has foundation, team-inbox, rule-history, planning, and queue-jobs migrations', () => {
+            expect(CLI_MIGRATIONS).toHaveLength(5);
             expect(CLI_MIGRATIONS[0]?.id).toBe('0000_spur_cli_foundation');
             expect(CLI_MIGRATIONS[1]?.id).toBe('0001_spur_cli_team_inbox');
             expect(CLI_MIGRATIONS[2]?.id).toBe('0002_spur_cli_rule_history');
             expect(CLI_MIGRATIONS[3]?.id).toBe('0003_spur_cli_planning');
+            expect(CLI_MIGRATIONS[4]?.id).toBe('0004_spur_cli_queue_jobs');
+        });
+
+        test('queue-jobs migration creates queue_jobs', () => {
+            expect(CLI_MIGRATIONS[4]?.sql).toContain('CREATE TABLE IF NOT EXISTS queue_jobs');
         });
 
         test('every migration id carries the folder-load filename marker', () => {
@@ -83,21 +88,33 @@ describe('db migrations', () => {
             expect(CLI_MIGRATIONS[2]?.sql).toContain('CREATE TABLE IF NOT EXISTS rule_eval_runs');
         });
 
-        test('existing DB that already applied 0000 gains rule tables via 0002', async () => {
+        test('existing DB that already applied 0000/0001 gains rule, planning, and queue tables', async () => {
             const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(adapter, [
                 { id: '0000_spur_cli_foundation', sql: 'CREATE TABLE IF NOT EXISTS workspaces (id TEXT);' },
                 { id: '0001_spur_cli_team_inbox', sql: 'CREATE TABLE IF NOT EXISTS inbox_messages (id TEXT);' },
             ]);
 
+            // 0002 rule-history + 0003 planning + 0004 queue-jobs applied on top.
             const applied = await applyCliMigrations(adapter);
-            expect(applied).toBe(2);
+            expect(applied).toBe(3);
             await adapter.run(
                 `INSERT INTO rule_runs (id, source_kind, status, started_at, created_at, updated_at)
                  VALUES ('r1', 'preset', 'done', datetime('now'), datetime('now'), datetime('now'))`,
             );
             const rows = await adapter.queryAll('SELECT id FROM rule_runs');
             expect(rows).toHaveLength(1);
+            // queue_jobs (0004) is now present and writable.
+            await adapter.run(
+                'INSERT INTO queue_jobs (id, type, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+                'j1',
+                'test.job',
+                '{}',
+                Date.now(),
+                Date.now(),
+            );
+            const jobs = await adapter.queryAll('SELECT id FROM queue_jobs');
+            expect(jobs).toHaveLength(1);
             adapter.close();
         });
 
@@ -109,7 +126,7 @@ describe('db migrations', () => {
             ]);
 
             const applied = await applyCliMigrations(adapter);
-            expect(applied).toBe(3); // renamed inbox migration + rule history + planning
+            expect(applied).toBe(4); // renamed inbox migration + rule history + planning + queue-jobs
             await adapter.run(
                 'INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
                 'm1',
