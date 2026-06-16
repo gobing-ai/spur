@@ -1,16 +1,6 @@
 ---
-import { createApiClient } from '../lib/rpc-client';
-
-const _health:
-    | {
-          status: 'ok';
-          timestamp: string;
-          service: 'spur';
-          version: string;
-      }
-    | undefined = await createApiClient()
-    .health()
-    .catch(() => undefined);
+import SmokeIsland from '../components/SmokeIsland';
+import '../styles/global.css';
 ---
 
 <!doctype html>
@@ -19,30 +9,8 @@ const _health:
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Spur</title>
-        <link rel="stylesheet" href="/src/styles/global.css" />
     </head>
     <body>
-        <main>
-            <section class="status-band">
-                <div>
-                    <p class="eyebrow">Spur</p>
-                    <h1>Control Plane</h1>
-                </div>
-                <dl>
-                    <div>
-                        <dt>API</dt>
-                        <dd>{_health?.status ?? 'offline'}</dd>
-                    </div>
-                    <div>
-                        <dt>Version</dt>
-                        <dd>{_health?.version ?? '-'}</dd>
-                    </div>
-                    <div>
-                        <dt>Checked</dt>
-                        <dd>{_health?.timestamp ?? '-'}</dd>
-                    </div>
-                </dl>
-            </section>
-        </main>
+        <SmokeIsland client:only="react" />
     </body>
 </html>

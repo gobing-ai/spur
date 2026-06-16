@@ -9,15 +9,22 @@
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
-        "@astrojs/cloudflare": "13.6.0",
-        "@gobing-ai/spur-contracts": "workspace:*",
+        "@astrojs/react": "5.0.7",
         "@orpc/client": "catalog:",
         "@orpc/contract": "catalog:",
         "@orpc/openapi-client": "catalog:",
-        "astro": "6.4.2"
+        "astro": "6.4.2",
+        "daisyui": "5.0.29",
+        "react": "19.2.1",
+        "react-dom": "19.2.1",
+        "react-router": "7.11.0",
+        "tailwindcss": "4.1.17"
     },
     "devDependencies": {
+        "@tailwindcss/vite": "4.1.17",
         "@types/bun": "catalog:",
+        "@types/react": "19.2.2",
+        "@types/react-dom": "19.2.2",
         "typescript": "catalog:"
     }
 }
