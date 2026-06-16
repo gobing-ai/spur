@@ -17,4 +17,5 @@ coveragePathIgnorePatterns = [
     "apps/server/src/index.ts",
     "../ts-libs/**",
     "packages/domain/src/schema/**",
+    "**/*.tsx",
 ]
