@@ -16,12 +16,13 @@ describe('config', () => {
             buildConfigFromEnv({
                 DATABASE_URL: 'file:local.db',
                 PORT: '4321',
+                HOST: '0.0.0.0',
                 SPUR_LOG_LEVEL: 'debug',
                 SPUR_TELEMETRY_ENABLED: 'true',
             }),
         ).toEqual({
             database: { url: 'file:local.db' },
-            server: { port: 4321, host: 'localhost', openBrowser: true, webDistPath: null },
+            server: { port: 4321, host: '0.0.0.0', openBrowser: true, webDistPath: null },
             telemetry: { enabled: true },
             logging: { level: 'debug' },
         });

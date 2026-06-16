@@ -68,6 +68,39 @@ describe('registerServeCommand', () => {
         expect(payload.pid).toBe(process.pid);
     });
 
+    test('--port flag overrides the PORT env var (flag > env precedence)', async () => {
+        const { ctx, writes } = makeCtx();
+        const { action } = captureServe(ctx);
+
+        const prevPort = process.env.PORT;
+        process.env.PORT = '8080';
+        try {
+            // Flag set to 9090 while env says 8080 — flag must win.
+            await action({ port: 9090, host: 'localhost', json: true });
+            const payload = JSON.parse(writes.at(-1) ?? '{}');
+            expect(payload.port).toBe(9090);
+        } finally {
+            if (prevPort === undefined) delete process.env.PORT;
+            else process.env.PORT = prevPort;
+        }
+    });
+
+    test('falls back to the PORT env var when no --port flag is given (env > default)', async () => {
+        const { ctx, writes } = makeCtx();
+        const { action } = captureServe(ctx);
+
+        const prevPort = process.env.PORT;
+        process.env.PORT = '8080';
+        try {
+            await action({ host: 'localhost', json: true });
+            const payload = JSON.parse(writes.at(-1) ?? '{}');
+            expect(payload.port).toBe(8080);
+        } finally {
+            if (prevPort === undefined) delete process.env.PORT;
+            else process.env.PORT = prevPort;
+        }
+    });
+
     test('surfaces a startup error as a clean exit 1', async () => {
         const { ctx, errors, exit } = makeCtx();
         const { action } = captureServe(ctx);

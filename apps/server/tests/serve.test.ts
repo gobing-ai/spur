@@ -126,6 +126,23 @@ describe('startServer', () => {
         expect(openedUrl).toBe('http://localhost:4100/board');
     });
 
+    test('does not open the browser when openBrowser is false (--no-open)', async () => {
+        origServe = Bun.serve;
+        Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
+
+        let opened = false;
+        await startServer(
+            { port: 4200, host: 'localhost', openBrowser: false },
+            makeDeps({
+                openUrl: async () => {
+                    opened = true;
+                },
+            }),
+        );
+
+        expect(opened).toBe(false);
+    });
+
     test('scheduler branch and signal handlers covered via injected deps', async () => {
         origServe = Bun.serve;
         origExit = process.exit;
