@@ -4,6 +4,7 @@ import { OpenAPIHandler } from '@orpc/openapi/fetch';
 import { Hono } from 'hono';
 import type { ServerContext } from './context';
 import { mountMiddleware } from './middleware/pipeline';
+import { registerModules } from './modules/registry';
 import { generateOpenApiSpec } from './openapi';
 import { router } from './router';
 
@@ -42,9 +43,6 @@ export function serverBootstrapConfig(env: Record<string, string | undefined>): 
     };
 }
 
-/** Server start timestamp for uptime calculation. */
-const startedAt = Date.now();
-
 /**
  * Create the Hono app that mounts the middleware pipeline, health endpoints,
  * oRPC OpenAPI procedures, and docs endpoints.
@@ -70,29 +68,8 @@ export function createApp(appRt?: ApplicationRuntime, opts?: { fs?: FileSystem; 
     // ── ServerContext (Bun path only via opts.ctx; CF passes nothing) ──
     const ctx: ServerContext | undefined = opts?.ctx;
 
-    // ── Health endpoints (before oRPC wildcard mount) ──
-    app.get('/api/health', (c) => {
-        const uptime = (Date.now() - startedAt) / 1000;
-        const memory = process.memoryUsage();
-        return c.json({
-            status: 'ok',
-            uptime_seconds: Math.round(uptime),
-            memory_rss_mb: Math.round((memory.rss / 1_048_576) * 100) / 100,
-            memory_heap_mb: Math.round((memory.heapUsed / 1_048_576) * 100) / 100,
-        });
-    });
-
-    // Readiness probe — calls getDb() then a liveness query; 200 when up, 503 when unreachable.
-    app.get('/api/health/ready', async (c) => {
-        if (!ctx) {
-            return c.json({ status: 'error', db: 'unavailable' }, 503);
-        }
-        const ok = await ctx.checkDbHealth();
-        if (ok) {
-            return c.json({ status: 'ok', db: 'connected' });
-        }
-        return c.json({ status: 'error', db: 'unreachable' }, 503);
-    });
+    // ── Mount built-in server modules (health, future task/feature/…) ──
+    registerModules(app, ctx);
 
     // ── oRPC handler for /api/* (after explicit routes above) ──
     app.use('/api/*', async (c, next) => {

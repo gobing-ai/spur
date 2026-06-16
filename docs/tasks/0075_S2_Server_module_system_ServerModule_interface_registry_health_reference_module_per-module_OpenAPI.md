@@ -1,21 +1,13 @@
 ---
-name: "S2: Server module system — ServerModule interface, registry, health reference module, per-module OpenAPI"
-description: "S2: Server module system — ServerModule interface, registry, health reference module, per-module OpenAPI"
-status: Backlog
+schema_version: 1
+name: "S2: Server module system — ServerModule, registry, health reference module"
+status: done
+type: task
+feature_id: S2
+priority: P1
+tags: ["server-side-adjustment","wave-S0","group-S"]
 created_at: 2026-06-15T16:01:46.303Z
 updated_at: 2026-06-15T16:01:46.303Z
-folder: docs/tasks
-type: task
-feature-id: S2
-priority: P1
-estimated_hours: 8
-tags: ["server-side-adjustment","wave-S0","group-S"]
-impl_progress:
-  planning: pending
-  design: pending
-  implementation: pending
-  review: pending
-  testing: pending
 ---
 
 ## 0075. "S2: Server module system — ServerModule interface, registry, health reference module, per-module OpenAPI"
