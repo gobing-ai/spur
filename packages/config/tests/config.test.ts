@@ -5,7 +5,7 @@ describe('config', () => {
     test('builds defaults for a development scaffold', () => {
         expect(configSchema.parse({})).toEqual({
             database: { url: ':memory:' },
-            server: { port: 3000 },
+            server: { port: 3000, host: 'localhost', openBrowser: true, webDistPath: null },
             telemetry: { enabled: false },
             logging: { level: 'info' },
         });
@@ -21,7 +21,7 @@ describe('config', () => {
             }),
         ).toEqual({
             database: { url: 'file:local.db' },
-            server: { port: 4321 },
+            server: { port: 4321, host: 'localhost', openBrowser: true, webDistPath: null },
             telemetry: { enabled: true },
             logging: { level: 'debug' },
         });

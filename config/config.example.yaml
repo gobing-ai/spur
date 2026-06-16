@@ -28,6 +28,12 @@ bootstrap:
   scheduler:
     enabled: false # CLI is run-once; no scheduler
 
+# ── Server runtime (env-backed: PORT / HOST override; consumed by spur serve) ──
+server:
+  port: 3000          # env: PORT
+  host: localhost     # env: HOST
+  openBrowser: true   # spur serve only; skip with --no-open
+  webDistPath: null   # S5 local static asset path
 # ── Spur app section (validated by a local zod schema — UNCHANGED keys) ──
 agent:
   default: pi

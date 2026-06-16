@@ -198,6 +198,7 @@ stabilize before the report implementation is designed.
 | Command | Behavior |
 |---------|----------|
 | `spur status [path] [--json]` | Project health: config present, package.json present, git context, team agent spec ids found under `.spur/agents/`; optional path metadata (size, isFile, isDirectory). |
+| `spur serve [--port <n>] [--host <addr>] [--no-open] [--cwd <path>] [--json]` | Start the web server (local fallback). Options: `--port` (env PORT, default 3000), `--host` (env HOST, default localhost), `--no-open` skip browser, `--json` print {port,url,pid}. |
 | `spur migrate [--json]` | Temporary helper: apply CLI-owned schema migrations; reports `{ ok, applied }`. |
 | `spur --help` / `spur --version` | Commander-rendered usage / binary version (ADR-014). |
 
@@ -264,6 +265,9 @@ Env-derived config (`ln(env)`), consumed by both the CLI context and the server 
 |-----|---------|---------|
 | `database.url` | `DATABASE_URL` | `:memory:` |
 | `server.port` | `PORT` | `3000` |
+| `server.host` | `HOST` | `localhost` |
+| `server.openBrowser` | — | `true` (spur serve only) |
+| `server.webDistPath` | — | `null` (S5 local static path) |
 | `telemetry.enabled` | `SPUR_TELEMETRY_ENABLED` | `false` |
 | `telemetry.endpoint` | `SPUR_TELEMETRY_ENDPOINT` | — |
 | `logging.level` | `SPUR_LOG_LEVEL` | `info` (debug\|info\|warn\|error) |

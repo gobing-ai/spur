@@ -12,6 +12,7 @@ export { renderTemplate } from './template-renderer';
 export const SPUR_ENV_VARS = {
     nodeEnv: 'NODE_ENV',
     port: 'PORT',
+    host: 'HOST',
     publicApiUrl: 'PUBLIC_API_URL',
     databaseUrl: 'DATABASE_URL',
 } as const;
@@ -83,8 +84,11 @@ export const configSchema = z.object({
     server: z
         .object({
             port: z.coerce.number().int().positive().default(3000),
+            host: z.string().default('localhost'),
+            openBrowser: z.boolean().default(true),
+            webDistPath: z.string().nullable().default(null),
         })
-        .default({ port: 3000 }),
+        .default({ port: 3000, host: 'localhost', openBrowser: true, webDistPath: null }),
     telemetry: z
         .object({
             enabled: z.boolean().default(false),
@@ -120,6 +124,7 @@ export function buildConfigFromEnv(env: Record<string, string | undefined> = pro
         },
         server: {
             port: env[SPUR_ENV_VARS.port],
+            host: env[SPUR_ENV_VARS.host],
         },
         telemetry: {
             enabled: parseEnvBoolean(env.SPUR_TELEMETRY_ENABLED),

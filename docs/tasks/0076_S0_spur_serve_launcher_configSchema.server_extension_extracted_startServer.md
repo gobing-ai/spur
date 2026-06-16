@@ -1,21 +1,13 @@
 ---
-name: "S0: spur serve launcher + configSchema.server extension + extracted startServer"
-description: "S0: spur serve launcher + configSchema.server extension + extracted startServer"
-status: Backlog
+schema_version: 1
+name: "S0: spur serve launcher + configSchema.server extension + startServer"
+status: done
+type: task
+feature_id: S0
+priority: P1
+tags: ["server-side-adjustment","wave-S0","group-S"]
 created_at: 2026-06-15T16:01:46.325Z
 updated_at: 2026-06-15T16:01:46.325Z
-folder: docs/tasks
-type: task
-feature-id: S0
-priority: P1
-estimated_hours: 6
-tags: ["server-side-adjustment","wave-S0","group-S"]
-impl_progress:
-  planning: pending
-  design: pending
-  implementation: pending
-  review: pending
-  testing: pending
 ---
 
 ## 0076. "S0: spur serve launcher + configSchema.server extension + extracted startServer"
