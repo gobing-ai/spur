@@ -26,6 +26,8 @@ export function serverBootstrapConfig(env: Record<string, string | undefined>): 
     logging: LoggingOptions;
     telemetry: { enabled: boolean };
     events: { enabled: boolean };
+    jobqueue: { enabled: boolean };
+    scheduler: { enabled: boolean };
 } {
     const isTest = env.NODE_ENV === 'test';
     return {
@@ -35,6 +37,8 @@ export function serverBootstrapConfig(env: Record<string, string | undefined>): 
         },
         telemetry: { enabled: false },
         events: { enabled: true },
+        jobqueue: { enabled: false },
+        scheduler: { enabled: false },
     };
 }
 

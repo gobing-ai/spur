@@ -89,4 +89,30 @@ describe('createServerContext', () => {
         expect(typeof bus.emit).toBe('function');
         expect(typeof bus.on).toBe('function');
     });
+
+    test('jobQueue() throws when disabled (default)', () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
+
+        expect(() => ctx.jobQueue()).toThrow('jobQueue is not configured');
+    });
+
+    test('scheduler() throws when disabled (default)', () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
+
+        expect(() => ctx.scheduler()).toThrow('scheduler is not configured');
+    });
+
+    test('scheduler() returns the adapter when provided', () => {
+        const appRt = makeAppRt();
+        const mockScheduler = {
+            register: () => {},
+            start: async () => {},
+            stop: async () => {},
+        };
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs, scheduler: mockScheduler });
+
+        expect(ctx.scheduler()).toBe(mockScheduler);
+    });
 });

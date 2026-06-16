@@ -1,21 +1,13 @@
 ---
+schema_version: 1
 name: "S1: EventBus + JobQueue + Scheduler infrastructure wiring into ServerContext"
-description: "S1: EventBus + JobQueue + Scheduler infrastructure wiring into ServerContext"
-status: Backlog
+status: done
+type: task
+feature_id: S1
+priority: P1
+tags: ["server-side-adjustment","wave-S0","group-S"]
 created_at: 2026-06-15T16:01:22.520Z
 updated_at: 2026-06-15T16:01:22.520Z
-folder: docs/tasks
-type: task
-feature-id: S1
-priority: P1
-estimated_hours: 7
-tags: ["server-side-adjustment","wave-S0","group-S"]
-impl_progress:
-  planning: pending
-  design: pending
-  implementation: pending
-  review: pending
-  testing: pending
 ---
 
 ## 0074. "S1: EventBus + JobQueue + Scheduler infrastructure wiring into ServerContext"

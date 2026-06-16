@@ -11,6 +11,18 @@ import type { FileSystem } from '@gobing-ai/ts-runtime';
 
 type PlanningEventMap = Record<string, (detail: PlanningEventType) => void>;
 
+/** Minimal job queue interface — the runtime shape of ts-infra's DBJobQueue. */
+export interface ServerJobQueue {
+    enqueue(type: string, payload: unknown): Promise<string>;
+}
+
+/** Minimal scheduler interface — the runtime shape of ts-infra's SchedulerAdapter. */
+export interface ServerScheduler {
+    register(cron: string, name: string, handler: () => Promise<void>): void;
+    start(): Promise<void>;
+    stop(): Promise<void>;
+}
+
 /**
  * Server-side analogue of the CLI's `CliContext`. Lazily-initialized
  * service accessors built from the ApplicationRuntime's db/events/logger,
@@ -26,13 +38,7 @@ export interface ServerContext {
     /** Lazy, cached migrated DbAdapter. May throw D1NotConfiguredError on CF. */
     getDb(): Promise<DbAdapter>;
 
-    /**
-     * Readiness probe: resolve the DB then run a trivial liveness query.
-     * Returns false if the adapter is unreachable or throws (e.g. D1 not
-     * configured). Lives here (Bun-path-only context) so `bootstrap.ts` — which
-     * also loads on Cloudflare Workers — never imports the domain barrel (which
-     * statically pulls `node:fs`, crashing the Worker isolate).
-     */
+    /** Readiness probe: resolve the DB then run a trivial liveness query. */
     checkDbHealth(): Promise<boolean>;
 
     /** Lazy, cached TaskService (planning layer). */
@@ -41,17 +47,42 @@ export interface ServerContext {
     /** Lazy, cached FeatureService (planning layer). */
     featureService(): FeatureService;
 
-    /** EventBus accessor — body wired in 0074; returns appRt.events for now. */
+    /** EventBus<PlanningEventMap> — pub/sub seam for SSE (S6) and planning events. */
     eventBus(): EventBus<PlanningEventMap>;
+
+    /**
+     * Job queue for async work (history import, rule runs).
+     * Returns a "not configured" guard when disabled in bootstrap config.
+     */
+    jobQueue(): ServerJobQueue;
+
+    /**
+     * Scheduler for periodic tasks (stale-lock cleanup, analytics).
+     * Returns a "not configured" guard when disabled in bootstrap config.
+     */
+    scheduler(): ServerScheduler;
 }
 
 /** Options for `createServerContext`. */
 export interface CreateServerContextOptions {
     cwd: string;
-    /** Required on Bun; optional on CF (where ctx is never built). */
     fs: FileSystem;
     webDistPath?: string;
     dbUrl?: string;
+    /** Pre-built EventBus from bootstrapper. Defaults to appRt.events. */
+    eventsBus?: EventBus<PlanningEventMap>;
+    /** Pre-built SchedulerAdapter from bootstrapper. */
+    scheduler?: ServerScheduler;
+    /** When true, jobQueue() returns a "not configured" stub. Default true. */
+    jobQueueEnabled?: boolean;
+}
+
+/** Error thrown when a disabled facility accessor is called. */
+class NotConfiguredError extends Error {
+    constructor(facility: string) {
+        super(`${facility} is not configured — enable it in the bootstrap/server config`);
+        this.name = 'NotConfiguredError';
+    }
 }
 
 /**
@@ -60,19 +91,22 @@ export interface CreateServerContextOptions {
  * Services are lazy-initialized on first accessor call and cached per
  * process/isolate — same pattern as CliContext.
  *
- * The `fs` parameter is required — the caller (bootstrap.ts) obtains it
- * from ts-runtime via dynamic import to avoid platform-detection code
- * loading at module-init time in the Cloudflare Workers path.
+ * The `fs` parameter is required — the caller (bootstrap.ts or index.ts)
+ * obtains it from ts-runtime via dynamic import to avoid platform-detection
+ * code loading at module-init time in the Cloudflare Workers path.
  */
 export function createServerContext(appRt: ApplicationRuntime, options: CreateServerContextOptions): ServerContext {
     const cwd = options.cwd;
     const fs = options.fs;
     const dbUrl = options.dbUrl ?? ':memory:';
+    const eventsBus = options.eventsBus ?? (appRt.events as unknown as EventBus<PlanningEventMap>);
+    const jobQueueEnabled = options.jobQueueEnabled ?? false;
 
     // ── Lazy caches ──
     let dbPromise: Promise<DbAdapter> | undefined;
     let taskSvc: TaskService | undefined;
     let featureSvc: FeatureService | undefined;
+    let jobQueueCache: ServerJobQueue | undefined;
 
     return {
         cwd,
@@ -85,12 +119,8 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
         },
 
         async checkDbHealth(): Promise<boolean> {
-            try {
-                const db = await this.getDb();
-                return await dbHealthCheck(db);
-            } catch {
-                return false;
-            }
+            const db = await this.getDb();
+            return dbHealthCheck(db);
         },
 
         taskService(): TaskService {
@@ -119,7 +149,26 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
         },
 
         eventBus(): EventBus<PlanningEventMap> {
-            return appRt.events as unknown as EventBus<PlanningEventMap>;
+            return eventsBus;
+        },
+
+        jobQueue(): ServerJobQueue {
+            if (!jobQueueEnabled) {
+                throw new NotConfiguredError('jobQueue');
+            }
+            // Real DBJobQueue wiring deferred until a job producer exists.
+            // For now, the guard above always fires (jobQueueEnabled defaults false).
+            if (!jobQueueCache) {
+                throw new NotConfiguredError('jobQueue');
+            }
+            return jobQueueCache;
+        },
+
+        scheduler(): ServerScheduler {
+            if (options.scheduler) {
+                return options.scheduler;
+            }
+            throw new NotConfiguredError('scheduler');
         },
     };
 }
