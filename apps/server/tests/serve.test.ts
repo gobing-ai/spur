@@ -1,5 +1,68 @@
-import { afterEach, describe, expect, mock, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import type { ApplicationRuntime, ApplicationStopReason } from '@gobing-ai/ts-infra/application';
+import type { FileSystem } from '@gobing-ai/ts-runtime';
+import { defaultDeps, type StartServerDeps, startServer } from '../src/serve';
+
+/** Build a fake ApplicationRuntime; `log` collects logger.info calls when provided. */
+function fakeRuntime(log?: { msg: string; data?: Record<string, unknown> }[]): ApplicationRuntime {
+    return {
+        config: {},
+        logger: {
+            info: (msg: string, data?: Record<string, unknown>) => log?.push({ msg, data }),
+            warn: () => {},
+            error: () => {},
+            debug: () => {},
+        },
+        events: { emit: () => {}, on: () => {}, off: () => {} },
+        db: undefined,
+        stop: async (_reason: ApplicationStopReason) => {},
+    } as unknown as ApplicationRuntime;
+}
+
+/** A no-op FileSystem fake — startServer threads it into the context only. */
+const fakeFs = {
+    exists: async () => false,
+    readDir: async () => [],
+    writeFile: async () => {},
+    readFile: async () => '',
+    stat: async () => null,
+    ensureDir: async () => {},
+} as unknown as FileSystem;
+
+/** Healthy fetch handler standing in for a real Hono app. */
+function fakeApp() {
+    return {
+        fetch: (_req: Request) =>
+            new Response(JSON.stringify({ status: 'ok', uptime_seconds: 0, memory_rss_mb: 0, memory_heap_mb: 0 }), {
+                status: 200,
+                headers: { 'content-type': 'application/json' },
+            }),
+    };
+}
+
+/** Build a StartServerDeps with sensible fakes; override per test. */
+function makeDeps(overrides: Partial<StartServerDeps> = {}): StartServerDeps {
+    return {
+        serverBootstrapConfig: () => ({
+            logging: { enabled: false, level: 'info' as const },
+            telemetry: { enabled: false },
+            events: { enabled: true },
+            jobqueue: { enabled: false },
+            scheduler: { enabled: false },
+        }),
+        runNodeApplication: (async (opts: { config: unknown; start: (rt: ApplicationRuntime) => Promise<void> }) => {
+            const rt = fakeRuntime();
+            await opts.start(rt);
+            return rt;
+        }) as unknown as StartServerDeps['runNodeApplication'],
+        createApp: (() => fakeApp()) as unknown as StartServerDeps['createApp'],
+        createNodeFileSystem: () => fakeFs,
+        createServerContext: (() => ({}) as never) as unknown as StartServerDeps['createServerContext'],
+        createScheduler: async () => ({ start: async () => {}, stop: async () => {}, register: () => {} }) as never,
+        openUrl: async () => {},
+        ...overrides,
+    };
+}
 
 describe('startServer', () => {
     let origServe: typeof Bun.serve;
@@ -7,14 +70,12 @@ describe('startServer', () => {
     let origOn: typeof process.on;
 
     afterEach(() => {
-        mock.restore();
         if (origServe) Bun.serve = origServe;
         if (origExit) process.exit = origExit;
         if (origOn) process.on = origOn;
     });
 
-    test('exports as a function', async () => {
-        const { startServer } = await import('../src/serve');
+    test('exports as a function', () => {
         expect(typeof startServer).toBe('function');
     });
 
@@ -23,35 +84,23 @@ describe('startServer', () => {
         expect(opts.port).toBe(3000);
     });
 
+    test('defaultDeps.createScheduler lazily builds a real NodeSchedulerAdapter', async () => {
+        const scheduler = await defaultDeps.createScheduler();
+        expect(typeof scheduler.start).toBe('function');
+        expect(typeof scheduler.stop).toBe('function');
+        expect(typeof scheduler.register).toBe('function');
+    });
+
     test('start callback wires Bun.serve and serves health', async () => {
         origServe = Bun.serve;
 
         let capturedFetch: ((req: Request) => Response | Promise<Response>) | undefined;
-
-        Bun.serve = ((opts: {
-            fetch: (req: Request) => Response | Promise<Response>;
-            port?: number;
-            hostname?: string;
-        }) => {
+        Bun.serve = ((opts: { fetch: (req: Request) => Response | Promise<Response> }) => {
             capturedFetch = opts.fetch;
             return { stop: () => {}, ref: () => {}, unref: () => {} };
         }) as unknown as typeof Bun.serve;
 
-        mock.module('@gobing-ai/ts-infra/application-node', () => ({
-            runNodeApplication: async (opts: { config: unknown; start: (rt: ApplicationRuntime) => Promise<void> }) => {
-                const mockRt = {
-                    config: {},
-                    logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
-                    events: { emit: () => {}, on: () => {}, off: () => {} },
-                    db: undefined,
-                    stop: async (_reason: ApplicationStopReason) => {},
-                } as unknown as ApplicationRuntime;
-                await opts.start(mockRt);
-            },
-        }));
-
-        const { startServer } = await import('../src/serve');
-        await startServer({ port: 4000, host: '0.0.0.0', openBrowser: false });
+        await startServer({ port: 4000, host: '0.0.0.0', openBrowser: false }, makeDeps());
 
         if (!capturedFetch) throw new Error('capturedFetch not set');
         const res = await capturedFetch(new Request('http://0.0.0.0:4000/api/health'));
@@ -60,7 +109,24 @@ describe('startServer', () => {
         expect(body.status).toBe('ok');
     });
 
-    test('scheduler branch and signal handlers covered via mock', async () => {
+    test('opens the browser when openBrowser is true', async () => {
+        origServe = Bun.serve;
+        Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
+
+        let openedUrl: string | undefined;
+        await startServer(
+            { port: 4100, host: 'localhost', openBrowser: true },
+            makeDeps({
+                openUrl: async (url: string) => {
+                    openedUrl = url;
+                },
+            }),
+        );
+
+        expect(openedUrl).toBe('http://localhost:4100/board');
+    });
+
+    test('scheduler branch and signal handlers covered via injected deps', async () => {
         origServe = Bun.serve;
         origExit = process.exit;
         origOn = process.on;
@@ -87,14 +153,7 @@ describe('startServer', () => {
             expect(code).toBe(0);
         }) as typeof process.exit;
 
-        mock.module('../src/bootstrap', () => ({
-            createApp: (_rt: unknown, _opts?: { fs?: unknown; ctx?: unknown }) => ({
-                fetch: (_req: Request) =>
-                    new Response(
-                        JSON.stringify({ status: 'ok', uptime_seconds: 0, memory_rss_mb: 0, memory_heap_mb: 0 }),
-                        { status: 200, headers: { 'content-type': 'application/json' } },
-                    ),
-            }),
+        const deps = makeDeps({
             serverBootstrapConfig: () => ({
                 logging: { enabled: false, level: 'info' as const },
                 telemetry: { enabled: false },
@@ -102,52 +161,27 @@ describe('startServer', () => {
                 jobqueue: { enabled: false },
                 scheduler: { enabled: true },
             }),
-        }));
-
-        mock.module('@gobing-ai/ts-infra/scheduler-node', () => ({
-            NodeSchedulerAdapter: class {
-                async start() {
-                    schedulerStarted = true;
-                }
-                async stop() {
-                    schedulerStopped = true;
-                }
-                register() {}
-            },
-        }));
-
-        mock.module('@gobing-ai/ts-infra/application-node', () => ({
-            runNodeApplication: async (opts: { config: unknown; start: (rt: ApplicationRuntime) => Promise<void> }) => {
-                const mockRt = {
-                    config: {},
-                    logger: {
-                        info: (msg: string, data?: Record<string, unknown>) => logMessages.push({ msg, data }),
-                        warn: () => {},
-                        error: () => {},
-                        debug: () => {},
+            runNodeApplication: (async (opts: {
+                config: unknown;
+                start: (rt: ApplicationRuntime) => Promise<void>;
+            }) => {
+                const rt = fakeRuntime(logMessages);
+                await opts.start(rt);
+                return rt;
+            }) as unknown as StartServerDeps['runNodeApplication'],
+            createScheduler: async () =>
+                ({
+                    start: async () => {
+                        schedulerStarted = true;
                     },
-                    events: { emit: () => {}, on: () => {}, off: () => {} },
-                    db: undefined,
-                    stop: async (_reason: ApplicationStopReason) => {},
-                } as unknown as ApplicationRuntime;
-                await opts.start(mockRt);
-            },
-        }));
+                    stop: async () => {
+                        schedulerStopped = true;
+                    },
+                    register: () => {},
+                }) as never,
+        });
 
-        mock.module('@gobing-ai/ts-runtime', () => ({
-            createNodeFileSystem: (_cwd: string) => ({
-                exists: async () => false,
-                readDir: async () => [],
-                writeFile: async () => {},
-                readFile: async () => '',
-                stat: async () => null,
-                mkdir: async () => {},
-            }),
-            loadRuntimeFactory: async () => ({}),
-        }));
-
-        const { startServer } = await import('../src/serve');
-        await startServer({ port: 5000, host: '127.0.0.1', openBrowser: false });
+        await startServer({ port: 5000, host: '127.0.0.1', openBrowser: false }, deps);
 
         expect(schedulerStarted).toBe(true);
 
