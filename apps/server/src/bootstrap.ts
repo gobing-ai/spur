@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import type { ApplicationRuntime, LoggingOptions } from '@gobing-ai/ts-infra/application';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { OpenAPIHandler } from '@orpc/openapi/fetch';
@@ -8,10 +9,6 @@ import { registerModules } from './modules/registry';
 import { generateOpenApiSpec } from './openapi';
 import { createRouter } from './router';
 
-// OpenAPIHandler is created per-app (not at module level) because the router
-// is now a factory that bakes in ServerContext-bound handlers.
-
-// Declare Hono context variables so c.set() / c.get() type-check.
 declare module 'hono' {
     interface ContextVariableMap {
         rt: ApplicationRuntime;
@@ -20,7 +17,6 @@ declare module 'hono' {
     }
 }
 
-// Re-export types for consumers that need the portable ApplicationRuntime shape.
 export type { ApplicationRuntime, LoggingOptions };
 
 /** Shared bootstrap configuration for the portable `runApplication` block. */
@@ -33,65 +29,82 @@ export function serverBootstrapConfig(env: Record<string, string | undefined>): 
 } {
     const isTest = env.NODE_ENV === 'test';
     return {
-        logging: {
-            enabled: !isTest,
-            level: (env.SPUR_LOG_LEVEL as LoggingOptions['level']) ?? 'info',
-        },
+        logging: { enabled: !isTest, level: (env.SPUR_LOG_LEVEL as LoggingOptions['level']) ?? 'info' },
         telemetry: { enabled: false },
         events: { enabled: true },
         jobqueue: { enabled: false },
         scheduler: { enabled: false },
     };
 }
-
 /**
- * Create the Hono app that mounts the middleware pipeline, health endpoints,
- * oRPC OpenAPI procedures, and docs endpoints.
+ * Create the Hono app that mounts middleware, oRPC API, static assets, and SPA fallback.
  *
- * When an `ApplicationRuntime` is provided, its `logger` and `events` are
- * threaded through the middleware pipeline and into the oRPC handler context.
- * A `ServerContext` is built and injected into `c.var.ctx`.
- *
- * The no-arg form (no runtime) works stand-alone — used in tests that don't
- * spin up a full application bootstrap. ServerContext is passed via opts.ctx
- * (Bun path) or omitted (CF path — no @gobing-ai/spur-app transitives).
+ * Stand-alone (no appRt): redirects / → /api/health.
+ * With webDistPath: serves static files from webDistPath, with SPA fallback to index.html.
  */
 export function createApp(appRt?: ApplicationRuntime, opts?: { fs?: FileSystem; ctx?: ServerContext }): Hono {
     const app = new Hono();
-
-    // ── Cross-cutting middleware (design §2.2 — order is load-bearing) ──
     mountMiddleware(app, appRt);
-
-    app.get('/', (c) => c.redirect('/api/health'));
-
     app.get('/openapi.json', async (c) => c.json(await generateOpenApiSpec({})));
-
-    // ── ServerContext (Bun path only via opts.ctx; CF passes nothing) ──
     const ctx: ServerContext | undefined = opts?.ctx;
+    const webDistPath = ctx?.webDistPath;
 
-    // ── Mount built-in server modules (health, future task/feature/…) ──
     registerModules(app, ctx);
 
-    // ── oRPC handler for /api/* (after explicit routes above) ──
+    // ── oRPC handler for /api/* ──
     const router = createRouter(ctx);
     const oapiHandler = new OpenAPIHandler(router);
     app.use('/api/*', async (c, next) => {
-        if (ctx) {
-            c.set('ctx', ctx);
-        }
+        if (ctx) c.set('ctx', ctx);
         const { matched, response } = await oapiHandler.handle(c.req.raw, {
             prefix: '/api',
             context: appRt ? { logger: appRt.logger, events: appRt.events, db: appRt.db } : {},
         });
-
-        if (matched) {
-            return c.newResponse(response.body, response);
-        }
-
+        if (matched) return c.newResponse(response.body, response);
         return next();
     });
 
-    app.notFound((c) => c.json({ error: 'Not Found' }, 404));
+    // ── Static asset serving + SPA fallback (local Bun only) ──
+    if (webDistPath) {
+        // Static file serving: try exact file match BEFORE other handlers
+        app.use('*', async (c, next) => {
+            const pathname = c.req.path === '/' ? '/index.html' : c.req.path;
+            try {
+                const file = Bun.file(join(webDistPath, pathname));
+                if (await file.exists()) {
+                    // Bun.file().type resolves the MIME from the extension — covers
+                    // js/css/svg/woff2/png/ico, not just html/json. Browsers reject
+                    // ES modules served without a JS content-type, so this matters
+                    // for the real Vite board build (W5).
+                    const headers = new Headers({ 'content-type': file.type });
+                    return new Response(file.stream(), { headers });
+                }
+            } catch {
+                // file error — let next handlers try
+            }
+            await next();
+        });
+        // SPA fallback + /api 404: runs only when nothing matched (including static file check above)
+        app.notFound(async (c) => {
+            if (c.req.path.startsWith('/api')) {
+                return c.json({ error: 'Not Found' }, 404);
+            }
+            try {
+                const indexFile = Bun.file(join(webDistPath, 'index.html'));
+                if (await indexFile.exists()) {
+                    return new Response(indexFile.stream(), {
+                        headers: { 'content-type': 'text/html; charset=utf-8' },
+                    });
+                }
+            } catch {
+                // index.html missing — fall through
+            }
+            return c.json({ error: 'Not Found' }, 404);
+        });
+    } else {
+        app.get('/', (c) => c.redirect('/api/health'));
+        app.notFound((c) => c.json({ error: 'Not Found' }, 404));
+    }
 
     return app;
 }

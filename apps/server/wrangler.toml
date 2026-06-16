@@ -1,3 +1,7 @@
 name = "spur-server"
 main = "src/worker.ts"
 compatibility_date = "2026-05-30"
+
+[assets]
+directory = "../web/dist"
+not_found_handling = "single-page-application"
