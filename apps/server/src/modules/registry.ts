@@ -22,8 +22,8 @@ const builtins: ServerModule[] = [healthModule];
  * aborts startup with a clear `Failed to mount server module '<name>'`
  * message — the server never serves a half-mounted API.
  */
-export function registerModules(app: Hono, ctx: ServerContext | undefined): void {
-    for (const mod of builtins) {
+export function registerModules(app: Hono, ctx: ServerContext | undefined, modules: ServerModule[] = builtins): void {
+    for (const mod of modules) {
         try {
             mod.mount(app, ctx);
         } catch (err) {

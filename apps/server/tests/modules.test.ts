@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
 import { createApp } from '../src/bootstrap';
 import { healthModule } from '../src/modules/health';
+import { registerModules } from '../src/modules/registry';
 import type { ServerModule } from '../src/modules/types';
 
 describe('healthModule', () => {
@@ -37,7 +38,7 @@ describe('registerModules', () => {
         expect(res.status).toBe(200);
     });
 
-    test('fails fast on a broken module', () => {
+    test('fails fast on a broken module via registerModules', () => {
         const brokenModule: ServerModule = {
             name: 'broken',
             mount() {
@@ -46,10 +47,9 @@ describe('registerModules', () => {
         };
 
         const app = new Hono();
-        // Hijack: we test the fail-fast logic directly by creating a minimal app
         expect(() => {
-            brokenModule.mount(app, undefined);
-        }).toThrow('boom');
+            registerModules(app, undefined, [brokenModule]);
+        }).toThrow("Failed to mount server module 'broken': Error: boom");
     });
 
     test('routes via createApp work after registration', async () => {
