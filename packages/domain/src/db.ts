@@ -1,4 +1,4 @@
-import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
+import type { DbAdapter } from '@gobing-ai/ts-db';
 import type { DatabaseConfig } from '@gobing-ai/ts-runtime';
 import { applyCliMigrations } from './migrations';
 
@@ -8,8 +8,17 @@ export interface CreateDomainDbOptions {
     url: string;
 }
 
-/** Create a bun-sqlite adapter and apply the Spur CLI-owned schema. */
+/**
+ * Create a bun-sqlite adapter and apply the Spur CLI-owned schema.
+ *
+ * `@gobing-ai/ts-db` (Bun SQLite, a native module) is imported LAZILY so that
+ * importing this module's pure helpers (e.g. {@link dbHealthCheck}) from a
+ * Cloudflare Workers bundle does NOT drag Bun-native code into the isolate at
+ * module-init time (which crashes the Worker). The native dep loads only when a
+ * Bun adapter is actually constructed — never on the Workers path.
+ */
 export async function createMigratedDb(options: CreateDomainDbOptions): Promise<DbAdapter> {
+    const { createDbAdapter } = await import('@gobing-ai/ts-db');
     const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: options.url });
     await applyCliMigrations(adapter);
     return adapter;

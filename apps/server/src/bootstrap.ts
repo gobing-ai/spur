@@ -1,4 +1,3 @@
-import { dbHealthCheck } from '@gobing-ai/spur-domain';
 import type { ApplicationRuntime, LoggingOptions } from '@gobing-ai/ts-infra/application';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { OpenAPIHandler } from '@orpc/openapi/fetch';
@@ -84,16 +83,11 @@ export function createApp(appRt?: ApplicationRuntime, opts?: { fs?: FileSystem; 
         if (!ctx) {
             return c.json({ status: 'error', db: 'unavailable' }, 503);
         }
-        try {
-            const db = await ctx.getDb();
-            const ok = await dbHealthCheck(db);
-            if (ok) {
-                return c.json({ status: 'ok', db: 'connected' });
-            }
-            return c.json({ status: 'error', db: 'unreachable' }, 503);
-        } catch {
-            return c.json({ status: 'error', db: 'unreachable' }, 503);
+        const ok = await ctx.checkDbHealth();
+        if (ok) {
+            return c.json({ status: 'ok', db: 'connected' });
         }
+        return c.json({ status: 'error', db: 'unreachable' }, 503);
     });
 
     // ── oRPC handler for /api/* (after explicit routes above) ──

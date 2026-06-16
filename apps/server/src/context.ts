@@ -4,7 +4,7 @@ import {
     PlanningWriteService as PlanningWriteServiceImpl,
     TaskService as TaskServiceImpl,
 } from '@gobing-ai/spur-app';
-import { createMigratedDbViaRuntime, type DbAdapter } from '@gobing-ai/spur-domain';
+import { createMigratedDbViaRuntime, type DbAdapter, dbHealthCheck } from '@gobing-ai/spur-domain';
 import type { EventBus } from '@gobing-ai/ts-infra';
 import type { ApplicationRuntime } from '@gobing-ai/ts-infra/application';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
@@ -25,6 +25,15 @@ export interface ServerContext {
 
     /** Lazy, cached migrated DbAdapter. May throw D1NotConfiguredError on CF. */
     getDb(): Promise<DbAdapter>;
+
+    /**
+     * Readiness probe: resolve the DB then run a trivial liveness query.
+     * Returns false if the adapter is unreachable or throws (e.g. D1 not
+     * configured). Lives here (Bun-path-only context) so `bootstrap.ts` — which
+     * also loads on Cloudflare Workers — never imports the domain barrel (which
+     * statically pulls `node:fs`, crashing the Worker isolate).
+     */
+    checkDbHealth(): Promise<boolean>;
 
     /** Lazy, cached TaskService (planning layer). */
     taskService(): TaskService;
@@ -73,6 +82,15 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
         async getDb(): Promise<DbAdapter> {
             dbPromise ??= createMigratedDbViaRuntime({ url: dbUrl });
             return dbPromise;
+        },
+
+        async checkDbHealth(): Promise<boolean> {
+            try {
+                const db = await this.getDb();
+                return await dbHealthCheck(db);
+            } catch {
+                return false;
+            }
         },
 
         taskService(): TaskService {

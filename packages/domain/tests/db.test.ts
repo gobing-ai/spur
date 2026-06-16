@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { DbAdapter } from '@gobing-ai/ts-db';
-import { dbHealthCheck } from '../src/db';
+import { createMigratedDb, createMigratedDbViaRuntime, dbHealthCheck } from '../src/db';
 
 /**
  * Minimal mock that throws on queryFirst to exercise the dbHealthCheck catch path.
@@ -31,5 +31,48 @@ describe('dbHealthCheck', () => {
         const db = mockDb(true);
         const result = await dbHealthCheck(db);
         expect(result).toBe(false);
+    });
+});
+
+describe('createMigratedDbViaRuntime', () => {
+    // Exercises the R3 deliverable end-to-end on the node-bun runtime factory:
+    // loadRuntimeFactory() -> factory.createDbAdapter() -> applyCliMigrations().
+    // Uses :memory: so a real Bun SQLite adapter is created + migrated, proving
+    // the platform-selected path works (not just the structural type assignment).
+    test('creates a platform-selected, migrated adapter on the Bun runtime', async () => {
+        const db = await createMigratedDbViaRuntime({ url: ':memory:' });
+        try {
+            // The adapter is connected and responds to a trivial query.
+            expect(await dbHealthCheck(db)).toBe(true);
+            // Migrations applied: a CLI-owned table exists and is queryable.
+            // (queryAll on a known migrated table returns rows, not a "no such table" throw.)
+            const rows = await db.queryAll<{ name: string }>(
+                "SELECT name FROM sqlite_master WHERE type='table' LIMIT 1",
+            );
+            expect(Array.isArray(rows)).toBe(true);
+            expect(rows.length).toBeGreaterThan(0);
+        } finally {
+            db.close();
+        }
+    });
+
+    test('parity: createMigratedDb (Bun-direct) and via-runtime both migrate the same schema', async () => {
+        const direct = await createMigratedDb({ url: ':memory:' });
+        const viaRuntime = await createMigratedDbViaRuntime({ url: ':memory:' });
+        try {
+            const tablesOf = async (db: DbAdapter): Promise<Set<string>> => {
+                const rows = await db.queryAll<{ name: string }>(
+                    "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
+                );
+                return new Set(rows.map((r) => r.name));
+            };
+            const a = await tablesOf(direct);
+            const b = await tablesOf(viaRuntime);
+            // Both paths apply the identical CLI schema → identical table set.
+            expect([...b]).toEqual([...a]);
+        } finally {
+            direct.close();
+            viaRuntime.close();
+        }
     });
 });
