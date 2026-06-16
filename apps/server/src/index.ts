@@ -15,8 +15,6 @@ if (import.meta.main) {
         port: config.server.port,
         host: config.server.host,
         openBrowser: false,
-        cwd: process.cwd(),
-        json: false,
     });
 }
 

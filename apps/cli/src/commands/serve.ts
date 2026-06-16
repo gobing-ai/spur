@@ -1,4 +1,3 @@
-import { join } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import { buildConfigFromEnv } from '@gobing-ai/spur-config';
 import { startServer } from '@gobing-ai/spur-server';
@@ -22,8 +21,6 @@ export function registerServeCommand(program: Command, context: CliContext): voi
 
                 const port = options.port ?? config.server.port;
                 const host = options.host ?? config.server.host;
-                const cwd = options.cwd ?? context.cwd;
-
                 if (options.json) {
                     context.output.write(toJson({ port, url: `http://${host}:${port}`, pid: process.pid }));
                     return;
@@ -35,8 +32,6 @@ export function registerServeCommand(program: Command, context: CliContext): voi
                     port,
                     host,
                     openBrowser: options.open ?? true,
-                    cwd: join(cwd),
-                    json: false,
                 });
             } catch (err) {
                 context.output.error(err instanceof Error ? err.message : String(err));

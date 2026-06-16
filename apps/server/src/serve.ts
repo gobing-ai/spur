@@ -10,8 +10,6 @@ export interface StartServerOptions {
     port: number;
     host: string;
     openBrowser: boolean;
-    cwd: string;
-    json: boolean;
 }
 
 /**
@@ -29,7 +27,7 @@ export async function startServer(options: StartServerOptions): Promise<void> {
     await runNodeApplication({
         config: bootConfig,
         async start(appRt: ApplicationRuntime) {
-            const fs = createNodeFileSystem(options.cwd);
+            const fs = createNodeFileSystem(process.cwd());
 
             // Platform-specific — scheduler-node doesn't exist on CF Workers.
             let scheduler: ServerScheduler | undefined;
@@ -39,7 +37,7 @@ export async function startServer(options: StartServerOptions): Promise<void> {
             }
 
             const ctx: ServerContext = createServerContext(appRt, {
-                cwd: options.cwd,
+                cwd: process.cwd(),
                 fs,
                 jobQueueEnabled: bootConfig.jobqueue.enabled,
                 scheduler,
@@ -70,11 +68,6 @@ export async function startServer(options: StartServerOptions): Promise<void> {
             process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
             const url = `http://${options.host}:${options.port}`;
-
-            if (options.json) {
-                console.log(JSON.stringify({ port: options.port, url, pid: process.pid }));
-                return;
-            }
 
             appRt.logger.info('Server started', { port: options.port, host: options.host });
 
