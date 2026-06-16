@@ -1,19 +1,22 @@
 import type { Hono } from 'hono';
 import type { ServerContext } from '../context';
+import { featureModule } from './feature';
 import { healthModule } from './health';
+import { taskModule } from './task';
 import type { ServerModule } from './types';
 
 /**
  * Built-in modules registered in deterministic order.
  *
- * Health comes first (reference module). 0078 adds taskModule
- * and featureModule into this array.
+ * Health comes first (reference module). Task and feature modules are
+ * registered for discovery + testability; their actual oRPC procedure
+ * wiring lives in the global router (router.ts).
  *
  * Order is load-bearing for the route-resolution timeline
  * (explicit routes before wildcard mounts), but modules are
  * self-contained — no module depends on another being mounted first.
  */
-const builtins: ServerModule[] = [healthModule];
+const builtins: ServerModule[] = [healthModule, taskModule, featureModule];
 
 /**
  * Mount every built-in module on the Hono app.

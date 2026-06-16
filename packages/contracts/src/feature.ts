@@ -15,7 +15,9 @@ export const featureSummarySchema = z.object({
     status: z.enum(FEATURE_STATUSES),
     priority: z.enum(PRIORITIES).optional(),
     parentId: featureIdSchema.nullable().optional(),
-    wbsCount: z.number().int().nonnegative(),
+    // Optional: FeatureService.list does not yet compute a per-feature task
+    // count (no cheap corpus source). Populated once an aggregation provides it.
+    wbsCount: z.number().int().nonnegative().optional(),
 });
 
 /** Feature list response: `{ ok: true, data: FeatureSummary[] }`. */

@@ -32,3 +32,6 @@ export const contract = {
 
 /** Type-level alias for the public Spur oRPC contract. */
 export type SpurContract = typeof contract;
+export { featureCreateInputSchema, featureListResponseSchema, featureShowResponseSchema } from './feature';
+// ─── Re-exported DTO schemas for handler return-type inference ───
+export { taskCreateInputSchema, taskListResponseSchema, taskShowResponseSchema } from './task';

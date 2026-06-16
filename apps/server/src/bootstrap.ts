@@ -6,9 +6,10 @@ import type { ServerContext } from './context';
 import { mountMiddleware } from './middleware/pipeline';
 import { registerModules } from './modules/registry';
 import { generateOpenApiSpec } from './openapi';
-import { router } from './router';
+import { createRouter } from './router';
 
-const handler = new OpenAPIHandler(router);
+// OpenAPIHandler is created per-app (not at module level) because the router
+// is now a factory that bakes in ServerContext-bound handlers.
 
 // Declare Hono context variables so c.set() / c.get() type-check.
 declare module 'hono' {
@@ -72,11 +73,13 @@ export function createApp(appRt?: ApplicationRuntime, opts?: { fs?: FileSystem; 
     registerModules(app, ctx);
 
     // ── oRPC handler for /api/* (after explicit routes above) ──
+    const router = createRouter(ctx);
+    const oapiHandler = new OpenAPIHandler(router);
     app.use('/api/*', async (c, next) => {
         if (ctx) {
             c.set('ctx', ctx);
         }
-        const { matched, response } = await handler.handle(c.req.raw, {
+        const { matched, response } = await oapiHandler.handle(c.req.raw, {
             prefix: '/api',
             context: appRt ? { logger: appRt.logger, events: appRt.events, db: appRt.db } : {},
         });

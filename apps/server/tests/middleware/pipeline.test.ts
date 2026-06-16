@@ -61,8 +61,9 @@ describe('mountMiddleware', () => {
             const res = await app.request('/fail');
             expect(res.status).toBe(500);
             const body = (await res.json()) as Record<string, unknown>;
-            expect(body.code).toBe(500);
-            expect(body.result).toBe('error');
+            expect(body.ok).toBe(false);
+            expect(body.error).toBeDefined();
+            expect((body.error as Record<string, unknown>).code).toBe('INTERNAL_ERROR');
         } finally {
             process.env.NODE_ENV = prevEnv;
         }
@@ -198,8 +199,10 @@ describe('pipeline integration', () => {
         try {
             const res = await app.request('/fail');
             const body = (await res.json()) as Record<string, unknown>;
-            expect(body.details).toBeDefined();
-            expect((body.details as Record<string, unknown>)?.requestId).toBeDefined();
+            expect(body.error).toBeDefined();
+            expect(
+                ((body.error as Record<string, unknown>).details as Record<string, unknown>)?.requestId,
+            ).toBeDefined();
         } finally {
             process.env.NODE_ENV = prevEnv;
         }

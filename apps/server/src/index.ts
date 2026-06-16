@@ -4,7 +4,7 @@ import { startServer } from './serve';
 export { createApp } from './bootstrap';
 export { generateOpenApiSpec } from './openapi';
 export type { AppRouter } from './router';
-export { router } from './router';
+export { createRouter } from './router';
 export type { StartServerOptions } from './serve';
 export { startServer } from './serve';
 export { default as worker } from './worker';
