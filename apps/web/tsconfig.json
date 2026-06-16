@@ -6,5 +6,5 @@
         "jsx": "react-jsx",
         "jsxImportSource": "react"
     },
-    "include": ["src/**/*.ts", "src/**/*.tsx", "tests/**/*.ts", "astro.config.mjs", "env.d.ts"]
+    "include": ["src/**/*.ts", "src/**/*.tsx", "tests/**/*.ts", "tests/**/*.tsx", "astro.config.mjs", "env.d.ts"]
 }

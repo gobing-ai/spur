@@ -42,6 +42,7 @@
             "@orpc/openapi": "1.14.4",
             "@orpc/openapi-client": "1.14.4",
             "@orpc/server": "1.14.4",
+            "@orpc/shared": "1.14.4",
             "@orpc/zod": "1.14.4",
             "@commander-js/extra-typings": "^14.0.0",
             "@types/bun": "1.3.14",

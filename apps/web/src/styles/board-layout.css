@@ -1,0 +1,44 @@
+:root {
+    --sidebar-w: 240px;
+    --rightpanel-w: 320px;
+    --sidebar-handle-w: 4px;
+    --rightpanel-handle-w: 4px;
+}
+
+/*
+ * 5-column grid: the two 4px columns are the ResizeHandle cells (design §3.3 specifies a thin
+ * handle between columns). Collapse drives the same `--sidebar-w` / `--rightpanel-w` vars that
+ * BoardLayout sets on resize, so the var stays authoritative in every state.
+ */
+.board-layout {
+    display: grid;
+    grid-template-columns: var(--sidebar-w) var(--sidebar-handle-w) 1fr var(--rightpanel-handle-w) var(--rightpanel-w);
+    grid-template-rows: 100vh;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.board-layout[data-sidebar-collapsed="true"] {
+    --sidebar-w: 48px;
+    --sidebar-handle-w: 0px;
+}
+
+.board-layout[data-rightpanel-collapsed="true"] {
+    --rightpanel-w: 0px;
+    --rightpanel-handle-w: 0px;
+}
+
+/* Responsive: md — sidebar to icon bar */
+@media (max-width: 1023px) {
+    .board-layout {
+        --sidebar-w: 48px;
+        --sidebar-handle-w: 0px;
+    }
+}
+
+/* Responsive: <md — single column */
+@media (max-width: 767px) {
+    .board-layout {
+        grid-template-columns: 1fr;
+    }
+}

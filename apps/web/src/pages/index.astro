@@ -1,6 +1,6 @@
 ---
-import SmokeIsland from '../components/SmokeIsland';
-import '../styles/global.css';
+import '../styles/board-layout.css';
+import BoardLayout from '../components/BoardLayout';
 ---
 
 <!doctype html>
@@ -11,6 +11,6 @@ import '../styles/global.css';
         <title>Spur</title>
     </head>
     <body>
-        <SmokeIsland client:only="react" />
+        <BoardLayout client:load />
     </body>
 </html>

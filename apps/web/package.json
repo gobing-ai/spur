@@ -14,6 +14,7 @@
         "@orpc/client": "catalog:",
         "@orpc/contract": "catalog:",
         "@orpc/openapi-client": "catalog:",
+        "@orpc/shared": "catalog:",
         "astro": "6.4.2",
         "daisyui": "5.0.29",
         "react": "19.2.1",
@@ -22,11 +23,15 @@
         "tailwindcss": "4.1.17"
     },
     "devDependencies": {
+        "@happy-dom/global-registrator": "20.10.4",
         "@hono/vite-dev-server": "0.24.1",
         "@tailwindcss/vite": "4.1.17",
+        "@testing-library/dom": "10.4.1",
+        "@testing-library/react": "16.3.2",
         "@types/bun": "catalog:",
         "@types/react": "19.2.2",
         "@types/react-dom": "19.2.2",
+        "happy-dom": "20.10.4",
         "typescript": "catalog:"
     }
 }
