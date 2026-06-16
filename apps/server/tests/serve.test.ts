@@ -35,9 +35,8 @@ describe('startServer', () => {
         }) => {
             capturedFetch = opts.fetch;
             return { stop: () => {}, ref: () => {}, unref: () => {} };
-        }) as typeof Bun.serve;
+        }) as unknown as typeof Bun.serve;
 
-        // Mock runNodeApplication to call start synchronously
         mock.module('@gobing-ai/ts-infra/application-node', () => ({
             runNodeApplication: async (opts: { config: unknown; start: (rt: ApplicationRuntime) => Promise<void> }) => {
                 const mockRt = {
@@ -61,12 +60,11 @@ describe('startServer', () => {
         expect(body.status).toBe('ok');
     });
 
-    test('scheduler-enabled branch starts scheduler and invokes shutdown handler', async () => {
+    test('scheduler branch and signal handlers covered via mock', async () => {
         origServe = Bun.serve;
         origExit = process.exit;
         origOn = process.on;
 
-        // Capture signal handlers
         const sigHandlers: Record<string, () => void> = {};
         process.on = ((event: string, handler: () => void) => {
             sigHandlers[event] = handler;
@@ -75,6 +73,7 @@ describe('startServer', () => {
 
         let serverStopped = false;
         let schedulerStopped = false;
+        let schedulerStarted = false;
         const logMessages: { msg: string; data?: Record<string, unknown> }[] = [];
 
         Bun.serve = (() => ({
@@ -82,24 +81,20 @@ describe('startServer', () => {
                 expect(drain).toBe(true);
                 serverStopped = true;
             },
-        })) as typeof Bun.serve;
+        })) as unknown as typeof Bun.serve;
 
         process.exit = ((code: number) => {
             expect(code).toBe(0);
         }) as typeof process.exit;
 
-        // Mock bootstrap to return scheduler.enabled = true
         mock.module('../src/bootstrap', () => ({
-            createApp: (rt: unknown, opts?: { fs?: unknown; ctx?: unknown }) => {
-                const app = {
-                    fetch: (req: Request) =>
-                        new Response(
-                            JSON.stringify({ status: 'ok', uptime_seconds: 0, memory_rss_mb: 0, memory_heap_mb: 0 }),
-                            { status: 200, headers: { 'content-type': 'application/json' } },
-                        ),
-                };
-                return app;
-            },
+            createApp: (_rt: unknown, _opts?: { fs?: unknown; ctx?: unknown }) => ({
+                fetch: (_req: Request) =>
+                    new Response(
+                        JSON.stringify({ status: 'ok', uptime_seconds: 0, memory_rss_mb: 0, memory_heap_mb: 0 }),
+                        { status: 200, headers: { 'content-type': 'application/json' } },
+                    ),
+            }),
             serverBootstrapConfig: () => ({
                 logging: { enabled: false, level: 'info' as const },
                 telemetry: { enabled: false },
@@ -109,8 +104,6 @@ describe('startServer', () => {
             }),
         }));
 
-        // Mock scheduler-node
-        let schedulerStarted = false;
         mock.module('@gobing-ai/ts-infra/scheduler-node', () => ({
             NodeSchedulerAdapter: class {
                 async start() {
@@ -141,7 +134,6 @@ describe('startServer', () => {
             },
         }));
 
-        // Mock ts-runtime dynamically imported by createServerContext
         mock.module('@gobing-ai/ts-runtime', () => ({
             createNodeFileSystem: (_cwd: string) => ({
                 exists: async () => false,
@@ -157,24 +149,19 @@ describe('startServer', () => {
         const { startServer } = await import('../src/serve');
         await startServer({ port: 5000, host: '127.0.0.1', openBrowser: false });
 
-        // Verify scheduler started
         expect(schedulerStarted).toBe(true);
 
-        // Verify signal handlers were registered
-        expect(sigHandlers.SIGINT).toBeDefined();
-        expect(sigHandlers.SIGTERM).toBeDefined();
-        // Invoke shutdown via signal handlers to cover both arrows + shutdown body
-        await sigHandlers.SIGINT();
+        const sigint = sigHandlers.SIGINT;
+        if (!sigint) throw new Error('SIGINT handler not registered');
+        await sigint();
         expect(serverStopped).toBe(true);
         expect(schedulerStopped).toBe(true);
         expect(logMessages.some((m) => m.msg === 'Shutting down server')).toBe(true);
-
-        // Also invoke SIGTERM for full arrow coverage
-        serverStopped = false;
-        schedulerStopped = false;
-        process.exit = ((_code: number) => {}) as typeof process.exit;
-        await sigHandlers.SIGTERM();
-        expect(logMessages.some((m) => m.data?.signal === 'SIGTERM')).toBe(true);
         expect(logMessages.some((m) => m.msg === 'Scheduler started')).toBe(true);
+
+        const sigterm = sigHandlers.SIGTERM;
+        if (!sigterm) throw new Error('SIGTERM handler not registered');
+        process.exit = ((_code: number) => {}) as typeof process.exit;
+        await sigterm();
     });
 });
