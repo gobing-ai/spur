@@ -50,9 +50,9 @@ function createLockPath(folder: string): string {
     return join(folder, '.create.lock');
 }
 
-function parseLockContent(raw: string): LockMetadata {
-    // Lock file format: `pid:ts` — a single line.
-    const match = raw.match(/^(\d+):(\d+)$/);
+function parseLockContent(raw: string | Buffer): LockMetadata {
+    const str = typeof raw === 'string' ? raw : raw.toString();
+    const match = str.match(/^(\d+):(\d+)$/);
     if (!match) {
         // Malformed lock — treat as stale so it gets broken.
         return { pid: 0, ts: 0 };
