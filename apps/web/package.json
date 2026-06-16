@@ -10,6 +10,7 @@
     },
     "dependencies": {
         "@astrojs/react": "5.0.7",
+        "@gobing-ai/spur-contracts": "workspace:*",
         "@orpc/client": "catalog:",
         "@orpc/contract": "catalog:",
         "@orpc/openapi-client": "catalog:",
@@ -21,6 +22,7 @@
         "tailwindcss": "4.1.17"
     },
     "devDependencies": {
+        "@hono/vite-dev-server": "0.24.1",
         "@tailwindcss/vite": "4.1.17",
         "@types/bun": "catalog:",
         "@types/react": "19.2.2",

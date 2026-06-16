@@ -54,7 +54,7 @@
     "scripts": {
         "prepare": "lefthook install",
         "tree": "tree . -a -I 'node_modules|.git|.coverage|vendors|.tmp'",
-        "dev": "bun run --filter '*' dev",
+        "dev": "bun run --filter '@gobing-ai/spur-web' dev",
         "clean": "rm -rf dist && find apps packages -type d -name dist -prune -exec rm -rf {} + && mkdir -p dist",
         "build": "bun run clean && bun run --filter '@gobing-ai/spur' build && bun run --filter '@gobing-ai/spur-server' build && bun run --filter '@gobing-ai/spur-web' build",
         "typecheck": "bun run --filter '*' typecheck",

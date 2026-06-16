@@ -7,7 +7,8 @@
     },
     "scripts": {
         "build": "bun build src/index.ts --compile --outfile ../../dist/server/spur-server",
-        "dev": "bun --hot run src/index.ts",
+        "build:cf": "vite build",
+        "dev": "vite",
         "test": "bun test tests --preload ./tests/setup.ts",
         "test-cf": "vitest run --config vitest.cf.config.ts",
         "typecheck": "tsc --noEmit"
@@ -26,8 +27,11 @@
     },
     "devDependencies": {
         "@cloudflare/vitest-pool-workers": "0.16.10",
+        "@hono/vite-build": "1.11.1",
+        "@hono/vite-dev-server": "0.24.1",
         "@types/bun": "catalog:",
         "typescript": "catalog:",
+        "vite": "7.3.3",
         "vitest": "4.1.7",
         "wrangler": "4.95.0"
     }
