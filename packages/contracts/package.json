@@ -12,6 +12,7 @@
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
+        "@gobing-ai/spur-domain": "workspace:0.1.0",
         "@orpc/contract": "catalog:",
         "zod": "catalog:"
     },

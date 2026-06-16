@@ -41,5 +41,7 @@ rules:
       - "**/schema.ts"
       - "**/migrations.ts"
       - "**/db.ts"
+      ## To avoid to add unit test for these entity declaration in contract
+      - "packages/contracts/src/**"
       - "**/node_modules/**"
       - "**/tests/**"

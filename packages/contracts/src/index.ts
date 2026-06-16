@@ -1,5 +1,8 @@
 import { oc } from '@orpc/contract';
 import { z } from 'zod';
+import { featureContract } from './feature';
+import { planningEventContract } from './planning-event';
+import { taskContract } from './task';
 
 /** Application health payload returned by the public health procedure. */
 export const healthResponseSchema = z.object({
@@ -22,6 +25,9 @@ export const contract = {
             tags: ['system'],
         })
         .output(healthResponseSchema),
+    task: { ...taskContract },
+    feature: { ...featureContract },
+    ...planningEventContract,
 };
 
 /** Type-level alias for the public Spur oRPC contract. */

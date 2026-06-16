@@ -5,6 +5,7 @@
     "private": true,
     "exports": {
         ".": "./src/index.ts",
+        "./schema": "./src/planning/schema.ts",
         "./tests/helpers": "./tests/helpers.ts"
     },
     "scripts": {
