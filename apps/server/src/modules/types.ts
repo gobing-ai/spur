@@ -5,7 +5,7 @@ import type { ServerContext } from '../context';
  * Standard contract for adding a new API domain to the server.
  *
  * Mirrors `apps/cli`'s `register<Noun>Command(program, context)` pattern.
- * Each module contributed its oRPC router sub-tree into the merged global
+ * Each module contributes its oRPC router sub-tree into the merged global
  * handler — one oRPC dispatch, one contract merge, one OpenAPI document.
  *
  * @see design §2.4

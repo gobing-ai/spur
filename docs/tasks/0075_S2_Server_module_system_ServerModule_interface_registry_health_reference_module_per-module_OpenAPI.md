@@ -19,7 +19,15 @@ Establish the ServerModule interface — the standard contract for adding a new 
 
 ### Requirements
 
-R1: ServerModule interface in apps/server/src/modules/types.ts: { readonly name: string; mount(app: Hono, ctx: ServerContext | undefined): void; readonly middleware?: MiddlewareHandler[] }. R2: registry.ts — builtins array in deterministic order (health first); registerModules(app, ctx) iterates and mounts; built-ins are FAIL-FAST (a broken built-in aborts startup with 'Failed to mount server module <name>'). R3: createApp calls registerModules(app, ctx) after the shared middleware pipeline + oRPC handler mount. R4: health migrated to a healthModule ServerModule as the reference implementation (proves the registry pattern; health contract stays in the global contract). R5: per-module OpenAPI — generateOpenApiSpec merges all mounted modules' contract sub-trees automatically; GET /openapi.json reflects every mounted module with no manual path maintenance (assert in tests, extends the existing app.test.ts pattern). R6: Module isolation (invariant #8): a module's mount() mounts ONLY its own routes; never modifies another module's routes or the shared pipeline. R7: Tests: a test ServerModule registers and its routes are reachable; health module serves via the interface; OpenAPI includes registered module paths; a throwing built-in aborts startup. Coverage >=90%. Module manifest YAML (design §6) is RESERVED, not implemented this round.
+## Requirements
+
+- [x] **R1**: ServerModule interface `{ name; mount(app, ctx); middleware? }` → **MET** | Evidence: `apps/server/src/modules/types.ts:13` + `tests/modules/types.test.ts:5`
+- [x] **R2**: `builtins` (health first) + fail-fast `registerModules` → **MET** | Evidence: `apps/server/src/modules/registry.ts:16,25` + `tests/modules/registry.test.ts:14` (asserts exact `Failed to mount server module '<name>'` message)
+- [x] **R3**: `createApp` calls `registerModules` after pipeline + before `/api/*` → **MET** | Evidence: `apps/server/src/bootstrap.ts:71`
+- [x] **R4**: health migrated to `healthModule`; contract stays global → **MET** | Evidence: `apps/server/src/modules/health/index.ts:16` + `packages/contracts/src/index.ts:17`
+- [x] **R5**: per-module OpenAPI auto-merge; `/openapi.json` reflects modules → **MET** | Evidence: `apps/server/src/openapi.ts:13` + `tests/app.test.ts:20` (asserts `/health` path)
+- [x] **R6**: module isolation (invariant #8) → **MET** | Evidence: `health/index.ts:19` mounts only own routes; no module writes the shared pipeline
+- [x] **R7**: tests (custom module reachable, health via interface, OpenAPI paths, throwing built-in aborts, ≥90% cov) → **MET** | Evidence: `tests/modules/*.test.ts`; coverage registry 100%/100%, health 100%/96%
 
 
 ### Q&A
@@ -107,6 +115,36 @@ system (W2/0083 — different interface).
 
 ### Review
 
+## Review — 2026-06-15
+
+**Status:** 1 finding (P4 only)
+**Scope:** apps/server/src/modules/{types,registry,health/index}.ts + bootstrap.ts seam
+**Mode:** verify (Phase 7 SECU + Phase 8 traceability)
+**Channel:** inline (current)
+**Gate:** `bun run lint` → pass · 29 module/app/context tests pass · coverage: registry 100%/100%, health 100%/96%
+**Verdict:** PASS
+
+### P1 — Blockers
+| # | Title | Dimension | Location | Recommendation |
+|---|-------|-----------|----------|----------------|
+| — | none | — | — | — |
+
+### P2 — Warnings
+| # | Title | Dimension | Location | Recommendation |
+|---|-------|-----------|----------|----------------|
+| — | none | — | — | — |
+
+### P3 — Info
+| # | Title | Dimension | Location | Recommendation |
+|---|-------|-----------|----------|----------------|
+| — | none | — | — | — |
+
+### P4 — Suggestions
+| # | Title | Dimension | Location | Recommendation |
+|---|-------|-----------|----------|----------------|
+| 1 | JSDoc tense typo ("contributed" → "contributes") | Usability | apps/server/src/modules/types.ts:8 | Present tense for module-behavior description |
+
+**Fix-pass 2026-06-15:** 1 fixed (P4 doc typo at types.ts:8), 0 failed, 0 skipped. Gate re-run clean.
 
 
 ### Testing
