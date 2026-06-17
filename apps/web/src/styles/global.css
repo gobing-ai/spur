@@ -2,6 +2,7 @@
 @plugin "daisyui";
 
 @theme {
+    /* Spur identity palette */
     --color-spur-bg: #0f1117;
     --color-spur-surface: #1a1d27;
     --color-spur-accent: #6366f1;
@@ -9,4 +10,27 @@
     --color-spur-text: #e2e8f0;
     --color-spur-text-muted: #94a3b8;
     --color-spur-border: #334155;
+
+    /* Semantic colors — align with daisyUI badge/alert tokens */
+    --color-spur-success: #22c55e;
+    --color-spur-warning: #f59e0b;
+    --color-spur-error: #ef4444;
+    --color-spur-info: #3b82f6;
+
+    /* Typography */
+    --font-family-spur: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+    /* Border radius */
+    --radius-spur: 0.5rem;
+}
+
+/* Light-theme overrides for Spur custom tokens */
+[data-theme="light"] {
+    --color-spur-bg: #ffffff;
+    --color-spur-surface: #f8fafc;
+    --color-spur-accent: #4f46e5;
+    --color-spur-accent-hover: #6366f1;
+    --color-spur-text: #0f172a;
+    --color-spur-text-muted: #64748b;
+    --color-spur-border: #e2e8f0;
 }

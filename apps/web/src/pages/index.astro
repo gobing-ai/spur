@@ -1,5 +1,6 @@
 ---
 import BoardApp from '../components/BoardApp';
+import '../styles/global.css';
 import '../styles/board-layout.css';
 ---
 
@@ -9,6 +10,14 @@ import '../styles/board-layout.css';
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Spur Board</title>
+        <script>
+            // Apply theme before first paint to prevent FOUC
+            (function () {
+                var stored = localStorage.getItem('spur-theme');
+                var theme = stored || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme', theme);
+            })();
+        </script>
     </head>
     <body>
         <BoardApp client:only="react" />

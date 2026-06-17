@@ -36,9 +36,86 @@
     }
 }
 
-/* Responsive: <md — single column */
+/* Responsive: <md — single column with drawer + bottom sheet overlays */
 @media (max-width: 767px) {
     .board-layout {
         grid-template-columns: 1fr;
+        position: relative;
+    }
+
+    /* Hide resize handles on mobile */
+    .resize-handle {
+        display: none;
+    }
+
+    /* Sidebar becomes a slide-in drawer overlay */
+    .board-layout > aside:first-of-type {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        transform: translateX(-100%);
+        transition: transform 200ms ease-out;
+        max-width: 280px;
+        pointer-events: none;
+    }
+
+    .board-layout[data-mobile-sidebar-open="true"] > aside:first-of-type {
+        transform: translateX(0);
+        pointer-events: auto;
+    }
+
+    /* Sidebar backdrop */
+    .board-layout[data-mobile-sidebar-open="true"]::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        z-index: 49;
+        background: rgba(0, 0, 0, 0.4);
+    }
+
+    /* Right panel becomes a bottom sheet overlay */
+    .board-layout > aside:last-of-type {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 50;
+        max-height: 60vh;
+        transform: translateY(100%);
+        transition: transform 250ms ease-out;
+        pointer-events: none;
+        border-radius: 1rem 1rem 0 0;
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+    }
+
+    .board-layout[data-mobile-panel-open="true"] > aside:last-of-type {
+        transform: translateY(0);
+        pointer-events: auto;
+    }
+
+    /* Bottom sheet backdrop */
+    .board-layout[data-mobile-panel-open="true"]::after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        z-index: 49;
+        background: rgba(0, 0, 0, 0.4);
+    }
+}
+
+/* Mobile bar — only visible <md; sits at top of MainWorkspace */
+.mobile-bar {
+    display: none;
+}
+
+@media (max-width: 767px) {
+    .mobile-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.5rem 0.75rem;
+        background: var(--color-spur-surface);
+        border-bottom: 1px solid var(--color-spur-border);
+        flex-shrink: 0;
     }
 }

@@ -2,11 +2,10 @@
 
 ## [Unreleased]
 
-### Changed
-
-- **Server bootstrap standardized on `ts-infra`** (ADR-019) — `spur-server` now bootstraps through `@gobing-ai/ts-infra` using a runtime-aware split: `runNodeApplication` for the Bun entry (`src/index.ts`) and portable `runApplication` behind a lazy singleton for the Cloudflare Workers entry (`src/worker.ts`). Shared config and Hono app factory extracted to `src/bootstrap.ts`. `createApp` accepts an optional `ApplicationRuntime` to thread `logger`/`events`/`db` into Hono context and oRPC handler `context`.
-
 ### Added
+
+- **Web design system + theming + responsive (W4/0085)** — design tokens via Tailwind `@theme` (Spur identity palette, semantic colors, typography), dark mode toggle with daisyUI theme switching, localStorage persistence, and `prefers-color-scheme` first-load respect. Mobile responsive: left sidebar → slide-in drawer, right panel → bottom sheet on viewports <768px. FOUC-prevention inline script in `index.astro`.
+
 
 - **HITL workflow actions and responders** — three human-in-the-loop action runners (`hitl.confirm`, `hitl.select`, `hitl.input`) plus CLI (`ClackHitlResponder`) and non-interactive (`DefaultHitlResponder`) responders. Answers flow back via engine `setVars` so guards can branch on user input. Responder selected per `isatty(1)`: interactive `@clack/prompts` when attached to a terminal, configured defaults in CI/headless. Wired through `SpurWorkflowBuiltinsOptions`, `WorkflowAppServiceContext`, and `CliContext` with the same injection pattern as `agent.run`/`rule.check`. Engine catalog bumped to `^0.3.10` for `HitlResponder` contract.
 

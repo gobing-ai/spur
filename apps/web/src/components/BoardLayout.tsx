@@ -13,6 +13,8 @@ export const ActiveModuleContext = createContext<WebModule | undefined>(undefine
 
 export default function BoardLayout() {
     const [state, setState] = useState(() => loadLayoutState());
+    const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+    const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
     const location = useLocation();
 
     // Resolve active module from the current route segment
@@ -65,25 +67,81 @@ export default function BoardLayout() {
         [save],
     );
 
+    const closeMobile = useCallback(() => {
+        setMobileSidebarOpen(false);
+        setMobilePanelOpen(false);
+    }, []);
+
+    const onBackdropKeyDown = useCallback(
+        (e: React.KeyboardEvent) => {
+            if (e.key === 'Escape') closeMobile();
+        },
+        [closeMobile],
+    );
+
     const RightPanelContent = activeModule?.rightPanelComponent;
 
-    return (
-        <div
-            className="board-layout"
-            data-sidebar-collapsed={String(state.sidebarCollapsed)}
-            data-rightpanel-collapsed={String(state.rightPanelCollapsed)}
-        >
-            <ActiveModuleContext.Provider value={activeModule}>
-                <LeftSidebar collapsed={state.sidebarCollapsed} onToggle={toggleSidebar} />
-                <ResizeHandle targetVar="--sidebar-w" onResizeEnd={onSidebarResize} />
-                <MainWorkspace>
-                    <Outlet />
-                </MainWorkspace>
-                <ResizeHandle targetVar="--rightpanel-w" onResizeEnd={onRightPanelResize} />
-                <RightPanel collapsed={state.rightPanelCollapsed} onToggle={toggleRightPanel}>
-                    {RightPanelContent ? <RightPanelContent /> : null}
-                </RightPanel>
-            </ActiveModuleContext.Provider>
+    const mobileHeader = (
+        <div className="mobile-bar">
+            <button
+                type="button"
+                onClick={() => setMobileSidebarOpen(true)}
+                className="btn btn-ghost btn-sm text-spur-text"
+                aria-label="Open navigation"
+            >
+                ☰
+            </button>
+            <span className="text-sm font-semibold text-spur-text">{activeModule?.name ?? 'Spur'}</span>
+            <button
+                type="button"
+                onClick={() => setMobilePanelOpen(true)}
+                className="btn btn-ghost btn-sm text-spur-text"
+                aria-label="Open panel"
+            >
+                ◧
+            </button>
         </div>
+    );
+
+    const showBackdrop = mobileSidebarOpen || mobilePanelOpen;
+
+    return (
+        <>
+            {showBackdrop && (
+                <div
+                    className="fixed inset-0 z-40 bg-black/50 md:hidden"
+                    onClick={closeMobile}
+                    onKeyDown={onBackdropKeyDown}
+                    aria-hidden="true"
+                />
+            )}
+            <div
+                className="board-layout"
+                data-sidebar-collapsed={String(state.sidebarCollapsed)}
+                data-rightpanel-collapsed={String(state.rightPanelCollapsed)}
+                data-mobile-sidebar-open={String(mobileSidebarOpen)}
+                data-mobile-panel-open={String(mobilePanelOpen)}
+            >
+                <ActiveModuleContext.Provider value={activeModule}>
+                    <LeftSidebar
+                        collapsed={state.sidebarCollapsed}
+                        onToggle={toggleSidebar}
+                        onMobileClose={closeMobile}
+                    />
+                    <ResizeHandle targetVar="--sidebar-w" onResizeEnd={onSidebarResize} />
+                    <MainWorkspace mobileHeader={mobileHeader}>
+                        <Outlet />
+                    </MainWorkspace>
+                    <ResizeHandle targetVar="--rightpanel-w" onResizeEnd={onRightPanelResize} />
+                    <RightPanel
+                        collapsed={state.rightPanelCollapsed}
+                        onToggle={toggleRightPanel}
+                        onMobileClose={closeMobile}
+                    >
+                        {RightPanelContent ? <RightPanelContent /> : null}
+                    </RightPanel>
+                </ActiveModuleContext.Provider>
+            </div>
+        </>
     );
 }
