@@ -13,10 +13,10 @@ describe('registry', () => {
     });
 
     test('getModule returns correct module by id', () => {
-        const mod = getModule('board');
+        const mod = getModule('tasks');
         expect(mod).toBeDefined();
-        expect(mod?.id).toBe('board');
-        expect(mod?.name).toBe('Board');
+        expect(mod?.id).toBe('tasks');
+        expect(mod?.name).toBe('Tasks');
     });
 
     test('getModule returns undefined for unknown id', () => {

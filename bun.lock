@@ -86,6 +86,7 @@
       "dependencies": {
         "@astrojs/react": "5.0.7",
         "@gobing-ai/spur-contracts": "workspace:*",
+        "@gobing-ai/spur-domain": "workspace:*",
         "@orpc/client": "catalog:",
         "@orpc/contract": "catalog:",
         "@orpc/openapi-client": "catalog:",

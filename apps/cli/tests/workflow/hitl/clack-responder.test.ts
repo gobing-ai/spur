@@ -1,25 +1,26 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
+import * as prompts from '@clack/prompts';
+import { ClackHitlResponder } from '../../../src/workflow/hitl/clack-responder';
 
-// Mock @clack/prompts so the responder's respond() switch can be exercised without a TTY.
-// `select`/`text` return whatever the current mock yields; `isCancel` flags the cancel sentinel.
 const CANCEL = Symbol('clack:cancel');
-let selectResult: unknown = 'yes';
-let textResult: unknown = 'typed';
-
-mock.module('@clack/prompts', () => ({
-    select: mock(async () => selectResult),
-    text: mock(async () => textResult),
-    isCancel: (v: unknown) => v === CANCEL,
-}));
-
-// Import AFTER the mock is registered so the responder binds to the mocked module.
-const { ClackHitlResponder } = await import('../../../src/workflow/hitl/clack-responder');
+let selectResult: string | symbol = 'yes';
+let textResult: string | symbol | undefined = 'typed';
 
 function req(kind: 'confirm' | 'select' | 'input', options?: string[]) {
     return { kind, prompt: 'q', runId: 'r', node: 'n', ...(options ? { options } : {}) } as const;
 }
 
 describe('ClackHitlResponder', () => {
+    beforeEach(() => {
+        spyOn(prompts, 'select').mockImplementation((async () => selectResult) as typeof prompts.select);
+        spyOn(prompts, 'text').mockImplementation((async () => textResult) as typeof prompts.text);
+        spyOn(prompts, 'isCancel').mockImplementation(((v: unknown) => v === CANCEL) as typeof prompts.isCancel);
+    });
+
+    afterEach(() => {
+        mock.restore();
+    });
+
     test('constructs and exposes respond()', () => {
         const r = new ClackHitlResponder();
         expect(typeof r.respond).toBe('function');
