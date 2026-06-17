@@ -1,6 +1,6 @@
 ---
+import BoardApp from '../components/BoardApp';
 import '../styles/board-layout.css';
-import BoardLayout from '../components/BoardLayout';
 ---
 
 <!doctype html>
@@ -8,9 +8,9 @@ import BoardLayout from '../components/BoardLayout';
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Spur</title>
+        <title>Spur Board</title>
     </head>
     <body>
-        <BoardLayout client:load />
+        <BoardApp client:only="react" />
     </body>
 </html>

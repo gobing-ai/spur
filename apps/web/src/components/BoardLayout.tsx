@@ -1,12 +1,25 @@
-import { useCallback, useLayoutEffect, useState } from 'react';
+import { createContext, useCallback, useLayoutEffect, useState } from 'react';
+import { Outlet, useLocation } from 'react-router';
 import { loadLayoutState, saveLayoutState } from '../lib/layout-state';
+import { getModule } from '../modules/registry';
+import type { WebModule } from '../modules/types';
 import LeftSidebar from './LeftSidebar';
 import MainWorkspace from './MainWorkspace';
 import ResizeHandle from './ResizeHandle';
 import RightPanel from './RightPanel';
 
+/** Context for the right-panel to render the active module's contribution. */
+export const ActiveModuleContext = createContext<WebModule | undefined>(undefined);
+
 export default function BoardLayout() {
     const [state, setState] = useState(() => loadLayoutState());
+    const location = useLocation();
+
+    // Resolve active module from the current route segment
+    const activeModule = (() => {
+        const seg = location.pathname.split('/').pop();
+        return getModule(seg ?? '');
+    })();
 
     useLayoutEffect(() => {
         const root = document.documentElement;
@@ -14,9 +27,7 @@ export default function BoardLayout() {
         root.style.setProperty('--rightpanel-w', `${state.rightPanelWidth}px`);
     }, [state.sidebarWidth, state.rightPanelWidth]);
 
-    const save = useCallback((s: typeof state) => {
-        saveLayoutState(s);
-    }, []);
+    const save = useCallback((s: typeof state) => saveLayoutState(s), []);
 
     const toggleSidebar = useCallback(() => {
         setState((prev) => {
@@ -35,26 +46,26 @@ export default function BoardLayout() {
     }, [save]);
 
     const onSidebarResize = useCallback(
-        (px: number) => {
+        (px: number) =>
             setState((prev) => {
                 const next = { ...prev, sidebarWidth: px };
                 save(next);
                 return next;
-            });
-        },
+            }),
         [save],
     );
 
     const onRightPanelResize = useCallback(
-        (px: number) => {
+        (px: number) =>
             setState((prev) => {
                 const next = { ...prev, rightPanelWidth: px };
                 save(next);
                 return next;
-            });
-        },
+            }),
         [save],
     );
+
+    const RightPanelContent = activeModule?.rightPanelComponent;
 
     return (
         <div
@@ -62,20 +73,17 @@ export default function BoardLayout() {
             data-sidebar-collapsed={String(state.sidebarCollapsed)}
             data-rightpanel-collapsed={String(state.rightPanelCollapsed)}
         >
-            <LeftSidebar collapsed={state.sidebarCollapsed} onToggle={toggleSidebar}>
-                {/* Nav items wired in 0083 */}
-            </LeftSidebar>
-            <ResizeHandle targetVar="--sidebar-w" onResizeEnd={onSidebarResize} />
-            <MainWorkspace>
-                {/* React Router <Outlet/> wired in 0083 */}
-                <div className="flex items-center justify-center h-full text-spur-text-muted text-sm">
-                    Select a module from the sidebar
-                </div>
-            </MainWorkspace>
-            <ResizeHandle targetVar="--rightpanel-w" onResizeEnd={onRightPanelResize} />
-            <RightPanel collapsed={state.rightPanelCollapsed} onToggle={toggleRightPanel}>
-                {/* Context panel content wired in later tasks */}
-            </RightPanel>
+            <ActiveModuleContext.Provider value={activeModule}>
+                <LeftSidebar collapsed={state.sidebarCollapsed} onToggle={toggleSidebar} />
+                <ResizeHandle targetVar="--sidebar-w" onResizeEnd={onSidebarResize} />
+                <MainWorkspace>
+                    <Outlet />
+                </MainWorkspace>
+                <ResizeHandle targetVar="--rightpanel-w" onResizeEnd={onRightPanelResize} />
+                <RightPanel collapsed={state.rightPanelCollapsed} onToggle={toggleRightPanel}>
+                    {RightPanelContent ? <RightPanelContent /> : null}
+                </RightPanel>
+            </ActiveModuleContext.Provider>
         </div>
     );
 }

@@ -144,3 +144,5 @@ docs/.ftree/
 .pi-lens/
 !.env.example
 .wolf/
+/apps/web/coverage
+/apps/web/.coverage

@@ -47,6 +47,7 @@ export default function ResizeHandle({ targetVar, onResizeEnd, direction = 'hori
     const isHorizontal = direction === 'horizontal';
     return (
         <hr
+            data-testid={`resize-handle-${isHorizontal ? 'h' : 'v'}`}
             aria-orientation={isHorizontal ? 'vertical' : 'horizontal'}
             aria-label={isHorizontal ? 'Resize sidebar' : 'Resize panel'}
             tabIndex={0}

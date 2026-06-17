@@ -1,12 +1,12 @@
-import type { ReactNode } from 'react';
+import { NavLink } from 'react-router';
+import { modules } from '../modules/registry';
 
 interface Props {
     collapsed: boolean;
     onToggle: () => void;
-    children?: ReactNode;
 }
 
-export default function LeftSidebar({ collapsed, onToggle, children }: Props) {
+export default function LeftSidebar({ collapsed, onToggle }: Props) {
     return (
         <aside className="flex flex-col bg-spur-surface border-r border-spur-border overflow-hidden">
             <div className="flex items-center justify-between p-3 border-b border-spur-border shrink-0">
@@ -20,12 +20,25 @@ export default function LeftSidebar({ collapsed, onToggle, children }: Props) {
                     {collapsed ? '▶' : '◀'}
                 </button>
             </div>
-            {!collapsed && <nav className="flex-1 overflow-y-auto p-2">{children}</nav>}
-            {collapsed && (
-                <div className="flex flex-col items-center gap-2 py-3">
-                    <span className="text-xs text-spur-text-muted">Nav</span>
-                </div>
-            )}
+            <nav className="flex-1 overflow-y-auto">
+                {modules.map((mod) => (
+                    <NavLink
+                        key={mod.id}
+                        to={`/board/${mod.route}`}
+                        className={({ isActive }) =>
+                            `flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
+                                isActive
+                                    ? 'bg-spur-accent/20 text-spur-accent'
+                                    : 'text-spur-text-muted hover:text-spur-text hover:bg-spur-border/30'
+                            } ${collapsed ? 'justify-center py-3' : ''}`
+                        }
+                        title={collapsed ? mod.name : undefined}
+                    >
+                        <span className="text-lg">{mod.icon}</span>
+                        {!collapsed && <span>{mod.sidebarLabel ?? mod.name}</span>}
+                    </NavLink>
+                ))}
+            </nav>
         </aside>
     );
 }
