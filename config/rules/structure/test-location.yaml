@@ -32,16 +32,20 @@ rules:
         requireCorrespondingTest: true
     include:
       - "packages/**/src/**/*.ts"
+      - "packages/**/src/**/*.tsx"
       - "apps/**/src/**/*.ts"
+      - "apps/**/src/**/*.tsx"
+
     exclude:
       - "**/index.ts"
+      - "**/*.tsx"
       - "**/*.d.ts"
       - "**/types.ts"
       - "**/schema/**"
       - "**/schema.ts"
       - "**/migrations.ts"
       - "**/db.ts"
-      ## To avoid to add unit test for these entity declaration in contract
+      ## Entity declarations — contracts are transport DTOs tested by the single contract.test.ts
       - "packages/contracts/src/**"
       - "**/node_modules/**"
       - "**/tests/**"
