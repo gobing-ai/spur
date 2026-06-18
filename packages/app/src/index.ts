@@ -4,6 +4,7 @@
 export type { RuleEvalRunRow, RuleRunRow } from '@gobing-ai/spur-domain';
 export type {
     AgentResolveResult,
+    AgentRunCaptureResult,
     AgentRunDeps,
     AgentServiceContext,
     AgentServiceOutput,
@@ -105,7 +106,11 @@ export { FileExistsActionRunner } from './workflow/actions/file-exists';
 export { FileReadActionRunner } from './workflow/actions/file-read';
 export { HitlConfirmActionRunner } from './workflow/actions/hitl-confirm';
 export { HitlInputActionRunner } from './workflow/actions/hitl-input';
-export { HitlSelectActionRunner } from './workflow/actions/hitl-select';
+export {
+    ResponseValidateActionRunner,
+    type ResponseValidateEngine,
+    type ResponseValidateResult,
+} from './workflow/actions/response-validate';
 export { RuleCheckActionRunner } from './workflow/actions/rule-check';
 // Workflow built-in action runners
 export { registerSpurBuiltins, type SpurWorkflowBuiltinsOptions } from './workflow/builtins';

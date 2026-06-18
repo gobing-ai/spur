@@ -110,3 +110,63 @@ describe('AgentRunActionRunner', () => {
         expect(capturedFlags.cwd).toBe('/fallback');
     });
 });
+
+describe('AgentRunActionRunner capture mode', () => {
+    test('capture:true calls runCapture and returns answer in data', async () => {
+        const svc = {
+            runCapture: async () => ({ exitCode: 0, answer: 'the agent answer' }),
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ input: 'hello', capture: true }, makeCtx());
+        expect(result.ok).toBe(true);
+        expect(result.data).toEqual({ exitCode: 0, agent: '<default>', answer: 'the agent answer' });
+    });
+
+    test('capture:true with non-zero exit → ok:false with error', async () => {
+        const svc = {
+            runCapture: async () => ({ exitCode: 3, answer: 'partial' }),
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ input: 'hello', capture: true }, makeCtx());
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('exited with code 3');
+        expect(result.data).toEqual({ exitCode: 3, agent: '<default>', answer: 'partial' });
+    });
+
+    test('capture:false (default) calls run, not runCapture', async () => {
+        let runCalled = false;
+        let runCaptureCalled = false;
+        const svc = {
+            run: async () => {
+                runCalled = true;
+                return 0;
+            },
+            runCapture: async () => {
+                runCaptureCalled = true;
+                return { exitCode: 0, answer: '' };
+            },
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        await runner.execute({ input: 'hello' }, makeCtx());
+        expect(runCalled).toBe(true);
+        expect(runCaptureCalled).toBe(false);
+    });
+
+    test('capture:true sets session latch on success', async () => {
+        const svc = {
+            runCapture: async () => ({ exitCode: 0, answer: 'ok' }),
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ input: 'hello', capture: true }, makeCtx());
+        expect(result.setVars).toEqual({ __agentSession: 'open' });
+    });
+
+    test('capture:true does not set session latch on failure', async () => {
+        const svc = {
+            runCapture: async () => ({ exitCode: 3, answer: '' }),
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ input: 'hello', capture: true }, makeCtx());
+        expect(result.setVars).toBeUndefined();
+    });
+});

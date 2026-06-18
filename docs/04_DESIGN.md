@@ -618,3 +618,17 @@ files directly — `precheck` is a `spur task check <wbs>` shell guard; `impleme
 oRPC contract shapes (`TaskDto`, `FeatureDto`, `PlanningEventDto`) land with the server/web design
 task (ADR-021.b, delivery §5.3). They are not authored here — domain types stay in their owning
 packages; transport DTOs belong in `packages/contracts` when built.
+
+### 7.7 Workflow action primitives for anti-hallucination (ADR-024)
+
+Two primitives back the anti-hallucination migration (superskill task 0041):
+
+| Primitive | Surface | Description |
+|---|---|---|
+| `AgentService.runCapture` | `packages/app/src/services/agent-service.ts` | Opt-in capture path: returns `{ exitCode, answer }` without streaming or diagnostics. Uses buffered output mode. |
+| `agent.run` `capture: true` | `packages/app/src/workflow/actions/agent-run.ts` | When `capture: true`, switches to `runCapture` and surfaces `data.answer` for downstream steps. Default (no `capture`) path is unchanged. |
+| `response.validate` action | `packages/app/src/workflow/actions/response-validate.ts` | Reads `text` from options, calls injected `ResponseValidateEngine.validate()`, maps `{ ok, reason, issues }` to `ActionResult`. Engine injected via `SpurWorkflowBuiltinsOptions.responseValidateEngine` in `builtins.ts`. |
+
+**Engine seam:** `ResponseValidateEngine` interface (`{ validate(text: string): { ok, reason, issues? } }`) is the contract. The concrete engine is owned by superskill 0041; until published, a thin adapter over `plugins/sp/skills/anti-hallucination/scripts/ah_guard.ts` is wired by the caller.
+
+**Retry/deny pattern:** transition-flow spike (`packages/app/tests/fixtures/anti-hallucination-spike.yaml`) confirms `validate → ok:done | fail:generate(bounded) | exhausted:denied` is expressible. `iterationBound` caps retries; a proper retry-count guard (checking `vars.__retryCount`) is future work (R3.1).

@@ -9,6 +9,7 @@ import { HitlConfirmActionRunner } from './actions/hitl-confirm';
 import { HitlInputActionRunner } from './actions/hitl-input';
 import { HitlSelectActionRunner } from './actions/hitl-select';
 import { type HostAllowlist, HttpRequestActionRunner, type HttpRequester } from './actions/http-request';
+import { ResponseValidateActionRunner, type ResponseValidateEngine } from './actions/response-validate';
 import { RuleCheckActionRunner } from './actions/rule-check';
 /** Dependencies injected into spur-specific built-in action runners. */
 export interface SpurWorkflowBuiltinsOptions {
@@ -18,6 +19,7 @@ export interface SpurWorkflowBuiltinsOptions {
     fileSystem?: FileSystem;
     httpRequester?: HttpRequester;
     hostAllowlist?: HostAllowlist;
+    responseValidateEngine?: ResponseValidateEngine;
 }
 
 /** Register all spur-specific built-in action runners on a workflow host. */
@@ -35,5 +37,8 @@ export function registerSpurBuiltins(host: WorkflowEngineHost, options: SpurWork
             new HttpRequestActionRunner(options.httpRequester, options.hostAllowlist ?? new Set()),
             'builtin',
         );
+    }
+    if (options.responseValidateEngine) {
+        host.registerAction(new ResponseValidateActionRunner(options.responseValidateEngine), 'builtin');
     }
 }

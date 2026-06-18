@@ -29,6 +29,11 @@ export interface AgentRunDeps {
 
 /** Result from resolving the agent name. */
 export type AgentResolveResult = { ok: true; agent: AgentName } | { ok: false; exitCode: number; message: string };
+/** Result from {@link AgentService.runCapture} — exit code + captured answer text. */
+export interface AgentRunCaptureResult {
+    exitCode: number;
+    answer: string;
+}
 
 /** Output sink injected into AgentService. */
 export interface AgentServiceOutput {
@@ -122,11 +127,66 @@ export class AgentService {
         flags: Record<string, string | boolean>,
         deps?: AgentRunDeps,
     ): Promise<number> {
+        const outcome = await this.executeRun(prompt, flags, deps, false);
+        if (!outcome.ok) {
+            this.ctx.output.error(outcome.message);
+            return outcome.exitCode;
+        }
+        const result = outcome.result;
+        const jsonOutput = booleanFlag(flags, 'json');
+        this.handleRunOutput(result, jsonOutput);
+        if (result.exitCode === 0) return 0;
+        if (result.signal !== undefined) {
+            this.ctx.output.error(`Agent terminated by signal: ${result.signal}`);
+            return 3;
+        }
+        this.ctx.output.error(`Agent exited with code ${result.exitCode ?? 'null'}`);
+        return 3;
+    }
+
+    // -------------------------------------------------------------------------
+    // Public: runCapture
+    // -------------------------------------------------------------------------
+
+    /**
+     * Execute an agent prompt and return the captured answer text.
+     * Like {@link run} but suppresses all output (diagnostics, streaming,
+     * error messages) and returns the agent's stdout as `answer`.
+     * Uses buffered output mode to ensure the answer is captured.
+     */
+    async runCapture(
+        prompt: string | undefined,
+        flags: Record<string, string | boolean>,
+        deps?: AgentRunDeps,
+    ): Promise<AgentRunCaptureResult> {
+        const outcome = await this.executeRun(prompt, flags, deps, true);
+        if (!outcome.ok) {
+            return { exitCode: outcome.exitCode, answer: '' };
+        }
+        const result = outcome.result;
+        const exitCode = result.exitCode === 0 ? 0 : 3;
+        return { exitCode, answer: result.stdout };
+    }
+
+    // -------------------------------------------------------------------------
+    // Private: executeRun (shared by run and runCapture)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Core execution logic shared by {@link run} and {@link runCapture}.
+     * When `silent` is true, suppresses all output and forces buffered mode
+     * to ensure stdout is captured in the returned AgentRunResult.
+     */
+    private async executeRun(
+        prompt: string | undefined,
+        flags: Record<string, string | boolean>,
+        deps: AgentRunDeps | undefined,
+        silent: boolean,
+    ): Promise<{ ok: true; result: AgentRunResult } | { ok: false; exitCode: number; message: string }> {
         // validate --mode
         const mode = stringFlag(flags, 'mode', 'text');
         if (mode !== 'text' && mode !== 'json') {
-            this.ctx.output.error(`Invalid mode: ${mode} (must be text or json)`);
-            return 2;
+            return { ok: false, exitCode: 2, message: `Invalid mode: ${mode} (must be text or json)` };
         }
 
         // validate --cwd
@@ -134,24 +194,21 @@ export class AgentService {
         if (cwd !== '') {
             const cwdStat = await this.statCwd(cwd);
             if (!cwdStat) {
-                this.ctx.output.error(`Invalid --cwd: ${cwd} does not exist`);
-                return 2;
+                return { ok: false, exitCode: 2, message: `Invalid --cwd: ${cwd} does not exist` };
             }
             if (!cwdStat.isDirectory()) {
-                this.ctx.output.error(`Invalid --cwd: ${cwd} is not a directory`);
-                return 2;
+                return { ok: false, exitCode: 2, message: `Invalid --cwd: ${cwd} is not a directory` };
             }
         }
 
         // require prompt (except codex --continue)
         const continueFlag = booleanFlag(flags, 'continue');
         if (prompt === undefined && !continueFlag) {
-            this.ctx.output.error('Prompt is required');
-            return 2;
+            return { ok: false, exitCode: 2, message: 'Prompt is required' };
         }
 
-        // determine output mode before executor construction
-        const jsonOutput = booleanFlag(flags, 'json');
+        // determine output mode — silent forces buffered (captures stdout)
+        const jsonOutput = silent || booleanFlag(flags, 'json');
         const outputPolicy: OutputPolicy = jsonOutput ? { mode: 'buffered' } : { mode: 'stream', isTTY: isatty(1) };
 
         // deps or defaults
@@ -164,12 +221,11 @@ export class AgentService {
         // resolve agent
         const resolved = await this.resolveAgent(flags, doctorRunner);
         if (!resolved.ok) {
-            this.ctx.output.error(resolved.message);
-            return resolved.exitCode;
+            return { ok: false, exitCode: resolved.exitCode, message: resolved.message };
         }
         const agent = resolved.agent;
 
-        // Tier-2 warning
+        // Tier-2 warning (suppressed in json/silent mode)
         if (!jsonOutput && TIER2_AGENTS.has(agent)) {
             this.ctx.output.error(`Warning: ${agent} is a Tier-2 agent (TUI/gateway only)`);
         }
@@ -198,7 +254,7 @@ export class AgentService {
             ...(taskId !== undefined ? { taskId } : {}),
         };
 
-        // dispatch diagnostics (suppressed in --json)
+        // dispatch diagnostics (suppressed in json/silent mode)
         try {
             const shim = getAgentShim(agent);
             const shimCommand = shim.getPromptCommand(promptOptions);
@@ -209,8 +265,7 @@ export class AgentService {
                 );
             }
         } catch (error) {
-            this.ctx.output.error(error instanceof Error ? error.message : String(error));
-            return 2;
+            return { ok: false, exitCode: 2, message: error instanceof Error ? error.message : String(error) };
         }
 
         // dispatch
@@ -218,21 +273,10 @@ export class AgentService {
         try {
             result = await runner.runPromptCommand(agent, promptOptions, { cwd: cwd || undefined });
         } catch (error) {
-            this.ctx.output.error(error instanceof Error ? error.message : String(error));
-            return 2;
+            return { ok: false, exitCode: 2, message: error instanceof Error ? error.message : String(error) };
         }
 
-        // output handling
-        this.handleRunOutput(result, jsonOutput);
-
-        // exit codes
-        if (result.exitCode === 0) return 0;
-        if (result.signal !== undefined) {
-            this.ctx.output.error(`Agent terminated by signal: ${result.signal}`);
-            return 3;
-        }
-        this.ctx.output.error(`Agent exited with code ${result.exitCode ?? 'null'}`);
-        return 3;
+        return { ok: true, result };
     }
 
     // -------------------------------------------------------------------------

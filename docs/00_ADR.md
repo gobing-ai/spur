@@ -558,3 +558,13 @@ seven agents; collective design prevents mechanically porting models the data al
 
 **Detail:** triage in `docs/plans/2026-06-10-rd3-migration-feature-list.md`; phase placement in
 `02 §Phase 1.5`.
+
+## ADR-024: Anti-Hallucination Guard Engine Leaves Spur; Spur Adds `response.validate` Action and Answer Capture
+
+**Date:** 2026-06-18.
+
+**Decision.** The anti-hallucination guard engine (verification protocol, source-citation checks, confidence-level enforcement) is owned by the `superskill` repo (task 0041), not Spur. Spur provides two workflow primitives that 0041's re-developed launchers consume: (1) `AgentService.runCapture` — an opt-in capture path that returns `{ exitCode, answer }` without streaming or diagnostics; (2) `response.validate` — a workflow action that accepts a `ResponseValidateEngine` via constructor DI (same pattern as `rule.check`) and maps `{ ok, reason, issues }` to `ActionResult`. The engine is injected in `builtins.ts` via `SpurWorkflowBuiltinsOptions.responseValidateEngine`; until superskill 0041 publishes the engine package, the caller wires a thin adapter over the existing `plugins/sp/skills/anti-hallucination/scripts/ah_guard.ts`.
+
+**Why.** The guard protocol is agentic answer-verification, not a dev-workflow — it belongs in superskill by charter. Spur's role is to provide the workflow primitives (capture + validate action) that the superskill workflow YAML assembles. This keeps the boundary explicit: Spur owns the harness plumbing, superskill owns the verification logic.
+
+**Detail:** `agent.run` action gains a `capture: true` option that switches to `runCapture` and surfaces `data.answer`. The `response.validate` action reads `text` from options (templated from prior step data, e.g. `{{ steps.generate.answer }}`). A transition-flow spike (`packages/app/tests/fixtures/anti-hallucination-spike.yaml`) confirms the engine can express validate → retry → deny with `iterationBound` as the backstop; a proper retry-count guard is future work (R3.1).

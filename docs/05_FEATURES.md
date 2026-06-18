@@ -75,6 +75,7 @@ Legend: ✅ done · 🔶 partial (MVP, depth pending) · ⏳ planned · 💤 def
 | Guards as transition predicates + iteration bounding | ✅ | guards live in shipped workflows (`basic.yaml`, `feature-dev.yaml`); `iterationBound` counts all transitions — corrected 2026-06-12 (was ⏳) |
 | Parallel/decision nodes, resume from last successful phase | ⏳ | Phase 3; pause/continue + HITL arrive with the ADR-022 upstream work |
 | Built-in actions (shell, note, check, http.request, find-changed-files, find-unit-gaps) | 🔶 | core present (`http.request` rides ts-infra `APIClient`); no `agent`/`slash` action kind yet — LLM steps delegate to `spur agent run` via shell |
+| `agent.run` `capture: true` option + `response.validate` action | ✅ | `runCapture` returns `{ exitCode, answer }`; `agent.run` surfaces `data.answer` when `capture: true`; `response.validate` injects guard engine via DI; spike workflow validates retry/deny pattern (ADR-024) |
 
 ## 6. History (`ts-llm-jsonl-importer` + analytics consumer)
 

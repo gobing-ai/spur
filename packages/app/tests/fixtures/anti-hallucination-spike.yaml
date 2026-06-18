@@ -1,0 +1,47 @@
+# Anti-hallucination workflow spike (task 0087 R3).
+#
+# Pattern: generate → validate → ok:done | fail:generate(bounded) | exhausted:denied
+#
+# The retry edge (validate → generate) is unguarded and taken whenever
+# action-ok fails. The iterationBound (10) caps total transitions; exceeding
+# it fails the run. A proper bounded-retry guard (checking a retry counter
+# in vars) requires either a custom Spur guard or an engine enhancement (R3.1).
+# For the spike, iterationBound is the backstop.
+#
+# Once superskill 0041 owns the real workflow, it can add a var-based guard:
+#   - validate action sets setVars: { __retryCount: N+1 } on failure
+#   - retry edge guard: kind: "var-lt", options: { var: "__retryCount", max: 3 }
+#   - denied edge: unguarded fallback (must be last)
+kind: transition-flow
+name: anti-hallucination-spike
+version: "0.1.0"
+initialNode: generate
+terminalNodes: [done, denied]
+iterationBound: 10
+nodes:
+  - id: generate
+    action:
+      kind: agent.run
+      options:
+        input: "Answer the user's question with verified sources."
+        capture: true
+  - id: validate
+    action:
+      kind: response.validate
+      options:
+        text: "{{ steps.generate.answer }}"
+  - id: done
+  - id: denied
+edges:
+  - from: generate
+    to: validate
+  - from: validate
+    to: done
+    condition:
+      kind: action-ok
+  - from: validate
+    to: generate
+    description: "retry when validation fails (bounded by iterationBound)"
+  - from: validate
+    to: denied
+    description: "exhausted retries (unreachable until a retry-count guard is added)"

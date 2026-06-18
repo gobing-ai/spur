@@ -920,6 +920,105 @@ describe('AgentService.run --cwd flag', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Tests: AgentService.runCapture
+// ---------------------------------------------------------------------------
+
+describe('AgentService.runCapture', () => {
+    test('returns exitCode 0 and answer text on success', async () => {
+        const svc = makeService();
+        const { deps } = mockDeps(makeRunResult({ stdout: 'the agent answer' }));
+        const result = await svc.runCapture('hello', { agent: 'pi' }, deps);
+        expect(result.exitCode).toBe(0);
+        expect(result.answer).toBe('the agent answer');
+    });
+
+    test('returns exitCode 3 on non-zero agent exit', async () => {
+        const svc = makeService();
+        const { deps } = mockDeps(makeRunResult({ exitCode: 1, stdout: 'partial output' }));
+        const result = await svc.runCapture('hello', { agent: 'pi' }, deps);
+        expect(result.exitCode).toBe(3);
+        expect(result.answer).toBe('partial output');
+    });
+
+    test('returns exitCode 3 on signal termination', async () => {
+        const svc = makeService();
+        const { deps } = mockDeps(makeRunResult({ exitCode: null, signal: 'SIGTERM', stdout: '' }));
+        const result = await svc.runCapture('hello', { agent: 'pi' }, deps);
+        expect(result.exitCode).toBe(3);
+        expect(result.answer).toBe('');
+    });
+
+    test('returns exitCode 2 on validation error (missing prompt)', async () => {
+        const svc = makeService();
+        const result = await svc.runCapture(undefined, {});
+        expect(result.exitCode).toBe(2);
+        expect(result.answer).toBe('');
+    });
+
+    test('returns exitCode 2 on invalid mode', async () => {
+        const svc = makeService();
+        const result = await svc.runCapture('hello', { mode: 'xml' });
+        expect(result.exitCode).toBe(2);
+        expect(result.answer).toBe('');
+    });
+
+    test('suppresses all output — no diagnostics, no errors', async () => {
+        const { lines, errors, output } = captureOutput();
+        const svc = makeService({}, output);
+        const { deps } = mockDeps(makeRunResult({ stdout: 'answer' }));
+        await svc.runCapture('hello', { agent: 'pi' }, deps);
+        expect(lines.length).toBe(0);
+        expect(errors.length).toBe(0);
+    });
+
+    test('suppresses Tier-2 warning even without --json', async () => {
+        const { errors, output } = captureOutput();
+        const svc = makeService({}, output);
+        const runResult = makeRunResult();
+        const runner = {
+            runPromptCommand: mock(() => Promise.resolve(runResult)),
+        } as unknown as AgentRunDeps['runner'];
+        const detector = {
+            detectOne: mock(() =>
+                Promise.resolve({
+                    name: 'antigravity',
+                    installed: true,
+                    version: '2.0.0',
+                    channels: [],
+                    error: null,
+                }),
+            ),
+        } as unknown as AgentRunDeps['detector'];
+        const doctorRunner = {
+            runOne: mock(() =>
+                Promise.resolve({
+                    agent: 'antigravity',
+                    installed: true,
+                    version: '2.0.0',
+                    authenticated: true,
+                    usable: true,
+                    tier: 2 as const,
+                    channels: [],
+                    error: null,
+                }),
+            ),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        const deps: AgentRunDeps = { runner, detector, doctorRunner };
+        await svc.runCapture('hello', { agent: 'antigravity' }, deps);
+        expect(errors.some((e) => e.includes('Tier-2 agent'))).toBe(false);
+    });
+
+    test('uses buffered output policy (captured stdout returned)', async () => {
+        const svc = makeService();
+        const { deps, runner } = mockDeps(makeRunResult({ stdout: 'captured via buffered mode' }));
+        const result = await svc.runCapture('hello', { agent: 'pi' }, deps);
+        expect(result.answer).toBe('captured via buffered mode');
+        // Verify runner was called (dispatch happened)
+        expect(runner.runPromptCommand).toHaveBeenCalledTimes(1);
+    });
+});
+
+// ---------------------------------------------------------------------------
 // Tests: AgentService.resolve
 // ---------------------------------------------------------------------------
 

@@ -15,6 +15,9 @@ const KIND = 'agent.run';
  * - `cwd` (string): working directory; defaults to context.workdir.
  * - `continue` (boolean): explicit continue flag. When unset, the session latch
  *   (`vars.__agentSession`) auto-determines continue-on/open-new.
+ * - `capture` (boolean): when true, use `AgentService.runCapture` to capture the
+ *   agent's stdout. The answer text is returned in `data.answer` for downstream
+ *   steps (e.g. `response.validate`). Output is buffered, not streamed.
  *
  * Session latch (Q8): the first executed agent.run opens a session (continue: false);
  * subsequent ones inherit it (continue: true). On success, sets `__agentSession: "open"`.
@@ -60,13 +63,26 @@ export class AgentRunActionRunner implements ActionRunner {
         if (cwd !== '') flags.cwd = cwd as string;
         if (continueFlag !== undefined) flags.continue = continueFlag;
 
-        const exitCode = await this.agentService.run(input, flags);
+        const capture = asOptionalBoolean(options.capture);
+        const agentLabel = agent ?? '<default>';
 
+        if (capture) {
+            const { exitCode, answer } = await this.agentService.runCapture(input, flags);
+            const ok = exitCode === 0;
+            return {
+                ok,
+                data: { exitCode, agent: agentLabel, answer },
+                error: ok ? undefined : `agent.run (${agentLabel}) exited with code ${exitCode}`,
+                setVars: ok ? { __agentSession: 'open' } : undefined,
+            };
+        }
+
+        const exitCode = await this.agentService.run(input, flags);
         const ok = exitCode === 0;
         return {
             ok,
-            data: { exitCode, agent: agent ?? '<default>' },
-            error: ok ? undefined : `agent.run (${agent ?? 'default'}) exited with code ${exitCode}`,
+            data: { exitCode, agent: agentLabel },
+            error: ok ? undefined : `agent.run (${agentLabel}) exited with code ${exitCode}`,
             // Latch: mark the session open after the first successful agent.run so later
             // steps auto-continue (Q8). Requires engine setVars (F1, ≥0.3.9).
             setVars: ok ? { __agentSession: 'open' } : undefined,
