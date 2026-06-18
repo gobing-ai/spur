@@ -3,9 +3,9 @@ name: Project Constitution
 doc: 99_PROJECT_CONSTITUTION
 owns: PROCESS — how the key files are maintained
 authority: authoritative-on-process
-version: 1.2.0
+version: 1.3.0
 created_at: 2026-05-31T17:30:43.643Z
-updated_at: 2026-06-12T00:00:00.000Z
+updated_at: 2026-06-18T00:00:00.000Z
 ---
 
 # Project Constitution — How to Organize the Project
@@ -77,8 +77,8 @@ Each project's `AGENTS.md` embeds an instantiated copy of this table (§4.4). A 
 | `docs/01_PRD.md` | **WHAT** — product vision, users, scope (in / out / deferred) | **Authoritative on scope** | Read before adding a command/feature; edit when scope changes |
 | `docs/02_ROADMAP.md` | **WHEN** — phases, current vs deferred, sequencing | Derived | Read to place work in a phase; edit when phase status changes |
 | `docs/03_ARCHITECTURE.md` | **HOW** — module boundaries, data flow, runtime model, invariants, rationale-in-depth | Derived (ADR wins) | Read before cross-module/seam/schema work; edit when boundaries or mechanisms change |
-| `docs/04_DESIGN.md` | **SURFACE** — concrete shapes: every CLI command, flag, config key, env var, table, DTO | Derived | Read/edit when changing a command, flag, env var, or schema — same commit |
-| `docs/05_FEATURES.md` | **STATUS** — feature decomposition + state (✅ done / 🔶 partial / ⏳ planned / 💤 deferred) | Derived | Read to find a feature's state; edit when a feature's status changes |
+| `docs/04_DESIGN.md` | **SURFACE** — concrete shapes: every CLI command, flag, config key, env var, table, DTO; **index over `docs/design/<slug>.md`** (§4.5) | Derived | Read/edit when changing a command, flag, env var, or schema — same commit |
+| `docs/05_FEATURES.md` | **STATUS** — feature decomposition + state (✅ done / 🔶 partial / ⏳ planned / 💤 deferred); **index over `docs/features/<id>_<slug>.md`** (§4.5) | Derived | Read to find a feature's state; edit when a feature's status changes |
 | `docs/99_PROJECT_CONSTITUTION.md` | **PROCESS** — how the files above are maintained | **Authoritative on process** | Read before editing any doc above; edit per §6.8 |
 | `AGENTS.md` (repo root) | **ENTRY** — how agents work in this repo: stack, commands, gates, conventions + the instantiated doc map | Derived (from 99 + 00/01/04) | Read first every session; regenerate factual blocks from code (§6.7) |
 
@@ -95,8 +95,10 @@ Each project's `AGENTS.md` embeds an instantiated copy of this table (§4.4). A 
 |----------|---------|-------|
 | `docs/plans/YYYY-MM-DD-<topic>.md` | Dated working documents: research, triage, design discussions, decision records-in-progress | They **record**, they do not **govern**. Once concluded, immutable except dated correction sections. Decisions they reach must be promoted into `00`–`05` to take effect |
 | `docs/tasks/` | Task files | Tool-owned (§3). Never edited with raw file writes |
-| `docs/features/` | Feature files | Tool-owned (§3). Same rule |
 | other `docs/` folders | Optional scratch (analysis, refactor notes, ...) | Nothing in the authority chain may depend on them |
+
+`docs/design/` and `docs/features/` are **not** scratch — they are the satellite layers of `04` and
+`05` and are governed by §4.5.
 
 ### 4.3 Standard frontmatter (the doc's machine-readable contract)
 
@@ -142,6 +144,36 @@ Rules:
 - `AGENTS.md` may **add** project facts; it may never **contradict** the numbered docs. On
   contradiction, the numbered doc wins — fix `AGENTS.md`.
 
+### 4.5 Index + satellite docs (`04`/`05` and their folders)
+
+Two derived docs are **index pages** over a folder of per-item **satellite** files. The index holds
+the headline rows + pointers; each satellite holds one item's detail. This keeps the index readable
+(loaded every session) while detail scales without bloating it.
+
+| Index doc | Satellite folder | Satellite file name | Satellite ownership |
+|-----------|------------------|---------------------|---------------------|
+| `docs/04_DESIGN.md` | `docs/design/` | `docs/design/<slug>.md` | Hand-maintained derived doc (§6.5) |
+| `docs/05_FEATURES.md` | `docs/features/` | `docs/features/<feature-id>_<slug>.md` | **Tool-owned** (§3 — `spur feature`/`ftree`); satellites *and* the index region are written by the tool, never by raw file writes |
+
+Rules (both axes):
+
+1. **The index is the single entry point.** A reader starts at `04`/`05`; every satellite is
+   reachable from exactly one index row. A satellite with no index row, or an index row with no
+   satellite, is drift (§7 audit).
+2. **One item per satellite.** `<slug>` (design) / `<feature-id>_<slug>` (features) is the grep
+   anchor (§6.0 rule 6) — stable once chosen; renaming is a rename of the file *and* its index row in
+   the same change.
+3. **Detail lives only in the satellite; the index carries pointer + status only.** The index never
+   restates a satellite's body (§6.0 rule 2). For `05`, a row is `<id> <status> <name> → pointer`;
+   for `04`, an index row names the surface area and points at its `docs/design/<slug>.md`.
+4. **The index is regenerable for `05`** (tool-written) and **hand-curated for `04`** — but in both
+   cases the satellite is the source of truth and the index is derived from it. Never edit `05`'s
+   generated index region by hand; never let a `04` index row diverge from its satellite.
+5. **Edit order is fixed (§5 T9): detail first, then index.** Write/update the satellite, then update
+   the index row — in the **same change**. Updating the index before the detail exists creates a
+   pointer to nothing; the reverse leaves the detail unindexed. For tool-owned features, "update the
+   index" is running the tool's refresh (e.g. `spur feature refresh`), not a manual edit.
+
 ## 5. Sync triggers — same-commit obligations
 
 The root cause of stale key files is *unsynchronized success*: code ships, docs don't hear about
@@ -158,6 +190,7 @@ names the docs that must be touched **in the same commit / same change**:
 | T6 | Scope added / cut / deferred | `01`; placement in `02` |
 | T7 | The doc map or process changes | this file → re-sync `AGENTS.md` (§4.4) → propagate to sibling projects |
 | T8 | A multi-wave batch is planned | schedule "doc sync" as an **explicit work item** — same-commit discipline does not survive on memory alone |
+| T9 | A design or feature item is added/changed | the satellite **first** (`docs/design/<slug>.md` or `docs/features/<id>_<slug>.md`), **then** its index row in `04`/`05` — same change (§4.5 rule 5) |
 
 ## 6. Edit principles per file
 
@@ -254,27 +287,47 @@ Entry template:
    descriptions in the same change — stale module lists survive multiple releases unnoticed.
 5. On conflict with `00`: the ADR wins; fix here and flag.
 
-### 6.5 `docs/04_DESIGN.md`
+### 6.5 `docs/04_DESIGN.md` + `docs/design/<slug>.md`
+
+`04` is the **index page** over the `docs/design/` satellites (§4.5). The index carries the surface
+map + pointers; each `docs/design/<slug>.md` holds one surface area's detailed design.
 
 1. **Same-commit rule:** any change to a command, flag, config key, env var, table, or DTO
-   updates `04` in that commit (§5). In batch planning, doc sync is an explicit scheduled item.
-2. Prefer **generated** artifacts over hand-maintained ones (e.g. OpenAPI from the contract);
+   updates `04` (and its satellite) in that commit (§5 T3/T9). In batch planning, doc sync is an
+   explicit scheduled item.
+2. **Detail-first edit order (§4.5 rule 5 / T9):** write or update the `docs/design/<slug>.md`
+   satellite first, then update its `04` index row — never the reverse. A new surface area gets a
+   new satellite + a new index row in the same change.
+3. Prefer **generated** artifacts over hand-maintained ones (e.g. OpenAPI from the contract);
    never hand-write what can be derived — and never let a derivable artifact be edited by hand.
-3. Shapes only. Rationale lives in `00`/`03`. **Behavioral notes are shapes** ("resolving zero
+4. Shapes only. Rationale lives in `00`/`03`. **Behavioral notes are shapes** ("resolving zero
    rules exits 1" — keep); justifications are not ("...because a silent gate is the worst
-   failure mode" — cut, or point to `00`/`03`).
-4. Command signatures are **transcribed from the code registrations**, never from memory or from
+   failure mode" — cut, or point to `00`/`03`). This applies to satellites too — they hold
+   *detailed shapes*, not rationale.
+5. Command signatures are **transcribed from the code registrations**, never from memory or from
    an older doc revision — a signature is a factual block in the §6.7 sense.
+6. The index never restates a satellite's body (§6.0 rule 2): an `04` row names the surface area,
+   its status, and points at `docs/design/<slug>.md`. `<slug>` is a stable grep anchor (§6.0 rule 6).
 
-### 6.6 `docs/05_FEATURES.md`
+### 6.6 `docs/05_FEATURES.md` + `docs/features/<feature-id>_<slug>.md`
 
-1. One row per deliverable, each with a concrete **acceptance** check, status from the legend
-   (✅ done · 🔶 partial · ⏳ planned · 💤 deferred).
-2. The row changes in the **same change** that ships or re-scopes the feature.
-3. **Never trust a row you have not verified.** Before citing or building on a status, check it
+`05` is the **index page** over the `docs/features/` satellites (§4.5). Both the satellites and `05`'s
+generated index region are **tool-owned** (§3 — `spur feature`/`ftree`): edit through the tool, never
+with raw file writes.
+
+1. One index row per deliverable, each with a concrete **acceptance** check, status from the legend
+   (✅ done · 🔶 partial · ⏳ planned · 💤 deferred), and a pointer to its
+   `docs/features/<feature-id>_<slug>.md` satellite.
+2. The satellite + its index row change in the **same change** that ships or re-scopes the feature
+   (§5 T4/T9).
+3. **Detail-first edit order (§4.5 rule 5 / T9):** update the feature satellite first (via the tool),
+   then refresh the index (e.g. `spur feature refresh`) — never hand-edit the generated index region,
+   and never update the index ahead of the detail.
+4. **Never trust a row you have not verified.** Before citing or building on a status, check it
    against code — status rows rot silently in both directions (done-but-⏳ and ⏳-but-claimed).
-4. `05` keeps headline rows + pointers; detailed decomposition lives in plans docs or
-   tool-owned feature files.
+5. `05` keeps headline rows + pointers; the full decomposition lives in the satellite files.
+   `<feature-id>` is the stable grep anchor (§6.0 rule 6); renaming is a tool operation, not a raw
+   edit.
 
 ### 6.7 `AGENTS.md`
 
@@ -320,6 +373,9 @@ audit:
 - [ ] Check `02`'s current phase bullets name things that actually exist (no dead names).
 - [ ] Check `03`'s module descriptions against the real file tree of each app/package.
 - [ ] Confirm `04` covers every command/flag/config/schema that exists.
+- [ ] For `04`/`05` (§4.5): every index row points to an existing satellite, and every satellite
+      (`docs/design/<slug>.md`, `docs/features/<id>_<slug>.md`) has exactly one index row — no orphan
+      satellites, no dangling pointers.
 - [ ] Confirm `AGENTS.md`'s doc map matches §4.1 of this file.
 - [ ] Confirm each doc's frontmatter matches its §4.1 row and its `updated_at` is plausible
       against recent commits (§4.3).
@@ -417,6 +473,13 @@ if it recurs, a new rule in §6.
 - [2026-06-11] spur-new: The command-surface block was missing 11 shipped verbs across 4 nouns;
   it had been edited from memory. Regenerate factual blocks from code registrations, never from
   recall (§6.7 rule 1).
+
+### Lessons for this file (`99`)
+
+- [2026-06-18] spur-new: The index+satellite pattern (§4.5, §6.5/§6.6, T9) was added to Spur's copy
+  only. **Outstanding propagation (§6.8 rule 3):** apply the same §4.5/§4.1/§5-T9/§6.5/§6.6/§7 changes
+  to sibling projects' constitutions (superskill, ts-libs) so the one-constitution-N-copies invariant
+  (§1) holds — until then, Spur's copy is ahead, not forked.
 
 ## 9. Bootstrapping a new project
 
