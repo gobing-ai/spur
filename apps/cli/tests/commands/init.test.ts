@@ -97,6 +97,23 @@ describe('init command', () => {
         expect(await main(['init', '--force'], options)).toBe(0);
     });
 
+    test('refused re-init leaves the existing config untouched', async () => {
+        const cwd = await createTempProject();
+        const { options } = await isolatedOptions(cwd);
+        const configPath = join(cwd, '.spur', 'config.yaml');
+
+        expect(await main(['init', '--name', 'original'], options)).toBe(0);
+        const before = await Bun.file(configPath).text();
+
+        // The guard must halt the whole scaffold — not just set exit 1 and then
+        // overwrite the config it just refused to clobber (regression guard).
+        expect(await main(['init', '--name', 'clobbered'], options)).toBe(1);
+        const after = await Bun.file(configPath).text();
+
+        expect(after).toBe(before);
+        expect(after).toContain('name: original');
+    });
+
     test('--json reports created files and the global seed count', async () => {
         const cwd = await createTempProject();
         const messages: string[] = [];

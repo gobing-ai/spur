@@ -113,7 +113,7 @@ describe('globalErrorHandler', () => {
         expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
-    test('Hono HTTPException preserves status', async () => {
+    test('Hono HTTPException preserves status; unmapped status → INTERNAL_ERROR', async () => {
         const a = app();
         a.get('/test', () => {
             throw new (class extends Error {
@@ -122,6 +122,23 @@ describe('globalErrorHandler', () => {
         });
         const res = await a.request('/test');
         expect(res.status).toBe(413);
+        // 413 has no matching ApiErrorCode in the closed enum — falls back to INTERNAL_ERROR.
+        const body = await json(res);
+        expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    test('Hono HTTPException with a mapped status uses the matching code, not INTERNAL_ERROR', async () => {
+        const a = app();
+        a.get('/test', () => {
+            throw new (class extends Error {
+                status = 404;
+            })('No such route');
+        });
+        const res = await a.request('/test');
+        expect(res.status).toBe(404);
+        // The envelope code must agree with the status (regression: was always INTERNAL_ERROR).
+        const body = await json(res);
+        expect(body.error.code).toBe('NOT_FOUND');
     });
 
     test('error response includes requestId when available', async () => {

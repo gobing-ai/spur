@@ -13,6 +13,27 @@ function errorEnvelope(code: string, message: string, details?: unknown) {
 }
 
 /**
+ * Map an HTTP status to the closest `ApiErrorCode` (the closed 6-code enum has no
+ * generic 4xx code), so a Hono `HTTPException` envelope's `code` agrees with its
+ * status instead of always reading `INTERNAL_ERROR`. Statuses without a matching
+ * code fall back to `INTERNAL_ERROR`.
+ */
+function apiCodeForStatus(status: number): string {
+    switch (status) {
+        case 404:
+            return 'NOT_FOUND';
+        case 409:
+            return 'CONFLICT';
+        case 422:
+            return 'VALIDATION_FAILED';
+        case 503:
+            return 'LOCK_TIMEOUT';
+        default:
+            return 'INTERNAL_ERROR';
+    }
+}
+
+/**
  * Global error handler for Hono `app.onError()`.
  *
  * Catches unhandled throws in handlers and maps them to the contract
@@ -47,7 +68,7 @@ export const globalErrorHandler: ErrorHandler = (err, c) => {
             : err instanceof Error
               ? { stack: err.stack, requestId }
               : { raw: String(err), requestId };
-        return c.json(errorEnvelope('INTERNAL_ERROR', msg, details), status as never);
+        return c.json(errorEnvelope(apiCodeForStatus(status), msg, details), status as never);
     }
 
     const message = err instanceof Error ? err.message : String(err);

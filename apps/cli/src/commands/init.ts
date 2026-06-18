@@ -139,6 +139,7 @@ export function registerInitCommand(program: Command, context: CliContext): void
                         : message,
                 );
                 context.setExitCode(1);
+                return;
             }
 
             const result: ScaffoldResult = { created: [], skipped: [] };
