@@ -480,6 +480,14 @@ if it recurs, a new rule in §6.
   only. **Outstanding propagation (§6.8 rule 3):** apply the same §4.5/§4.1/§5-T9/§6.5/§6.6/§7 changes
   to sibling projects' constitutions (superskill, ts-libs) so the one-constitution-N-copies invariant
   (§1) holds — until then, Spur's copy is ahead, not forked.
+- [2026-06-18] spur-new: First §4.5 audit found `04`/`05` had orphan satellites (no index rows) and a
+  competing tool-generated `features/INDEX.md`. Fixed by adding index sections that point at the
+  satellites; `05` points at the tool's `INDEX.md` (tool keeps owning it). **§4.5 rule 2 caveat
+  learned:** existing satellite filenames are load-bearing grep anchors referenced across *tool-owned
+  tasks* and *immutable plans* — renaming them to bare `<slug>.md` would strand those backward
+  pointers (which raw edits may not touch). Index existing files under their current names; apply the
+  `<slug>.md` convention to **new** satellites only. Retroactive renames need a tool-driven migration,
+  not raw rewrites.
 
 ## 9. Bootstrapping a new project
 

@@ -2,19 +2,36 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.2.0
+version: 1.3.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-06-13
+updated_at: 2026-06-18
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
-sync: [T3]
+sync: [T3, T9]
 ---
 
 # 04 Design — Spur
 
 The external, user-facing design surface: every CLI command, the config schema, and the persisted
 data shapes. Feature-internal design lives in code.
+
+This doc is the **index** over the `docs/design/` satellites (constitution §4.5): the surface spec
+below is the entry point; deep per-area design lives in the satellite files. Edit order is
+detail-first then index (§4.5 rule 5 / T9).
+
+## 0. Design satellites (`docs/design/`)
+
+| Satellite | Area | Status |
+|-----------|------|--------|
+| [`rd3-migration-design.md`](design/rd3-migration-design.md) | Planning layer (`spur task`/`spur feature`) — schemas, lifecycle, corpus migration (ADR-020–023) | finalized; surface in §1.x / §7 |
+| [`server-side-adjustment-design.md`](design/server-side-adjustment-design.md) | Server/Web slice — ServerContext, EventBus/JobQueue/Scheduler wiring, oRPC surface | design (in progress) |
+| [`server-side-adjustment-feature-finalized.md`](design/server-side-adjustment-feature-finalized.md) | Server/Web — finalized feature decisions for the above | finalized |
+| [`spur-team-mode-design.md`](design/spur-team-mode-design.md) | Team mode — agent specs, inbox, `TeamService` | design |
+
+> Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
+> history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See
+> constitution §8 lesson (2026-06-18).
 
 ## 1. CLI Surface
 
