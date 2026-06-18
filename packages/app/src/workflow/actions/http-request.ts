@@ -100,7 +100,9 @@ function redactHeaders(message: string): string {
  * - Rejects URLs with embedded credentials.
  * - Blocks private/loopback/link-local hosts unless explicitly allowed.
  * - Never logs or emits request headers (auth tokens).
- * - Redirects default to `manual`.
+ * - Rejects `redirect: 'follow'` — auto-following escapes the allowlist /
+ *   private-host gate, which only validates the initial URL (SSRF guard).
+ *   Callers re-issue the request per hop so every host is re-validated.
  *
  * Options:
  * - `url` (string, required): the target URL, may contain `${vars.*}` templates.
@@ -110,7 +112,8 @@ function redactHeaders(message: string): string {
  * - `failOnStatus` (number[]): status codes that should be treated as failure.
  * - `timeoutMs` (number, default 30000, max 120000): request timeout.
  * - `maxResponseBytes` (number, default 1048576): max response body size.
- * - `redirect` ('follow'|'error'|'manual', default 'manual'): redirect policy.
+ * - `redirect` ('error'|'manual', default 'manual'): redirect policy. 'follow'
+ *   is rejected — it would bypass the per-hop host gate (SSRF).
  * - `bodyVar` (string): export response body to this var.
  * - `statusVar` (string): export status code (as string) to this var.
  * - `headersVar` (string): export response headers (as JSON string) to this var.
@@ -194,6 +197,17 @@ export class HttpRequestActionRunner implements ActionRunner {
 
         if (parsed.username || parsed.password) {
             return { ok: false, error: `http.request: URLs with embedded credentials are not allowed` };
+        }
+
+        // --- Redirect gate (SSRF) ---
+        // Auto-following redirects would let a redirect to a private/internal
+        // host bypass the gates below, which only see the initial URL. Reject
+        // 'follow'; callers re-issue per hop so every host is re-validated.
+        if (redirect === 'follow') {
+            return {
+                ok: false,
+                error: `http.request: redirect:'follow' is not allowed — use 'manual' (default) or 'error' and re-issue the request per hop so each host is re-validated`,
+            };
         }
 
         // --- Allowlist gate ---

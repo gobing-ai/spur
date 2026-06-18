@@ -426,12 +426,24 @@ describe('HttpRequestActionRunner', () => {
         expect(fake.calls[0]?.opts).toHaveProperty('redirect', 'manual');
     });
 
-    test('redirect option is passed through', async () => {
+    test("redirect:'error' is passed through", async () => {
         const { runner, fake } = newRunner();
         fake.nextResponse = makeResponse(200, 'ok');
 
-        await runner.execute({ url: 'https://api.example.com/data', redirect: 'follow' }, makeContext());
+        await runner.execute({ url: 'https://api.example.com/data', redirect: 'error' }, makeContext());
 
-        expect(fake.calls[0]?.opts).toHaveProperty('redirect', 'follow');
+        expect(fake.calls[0]?.opts).toHaveProperty('redirect', 'error');
+    });
+
+    test("redirect:'follow' is rejected (SSRF: would bypass per-hop host gate)", async () => {
+        const { runner, fake } = newRunner();
+        fake.nextResponse = makeResponse(200, 'ok');
+
+        const result = await runner.execute({ url: 'https://api.example.com/data', redirect: 'follow' }, makeContext());
+
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain("redirect:'follow' is not allowed");
+        // The request must never be issued when 'follow' is requested.
+        expect(fake.calls.length).toBe(0);
     });
 });

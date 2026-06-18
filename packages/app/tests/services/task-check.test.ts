@@ -248,6 +248,191 @@ describe('TaskCheckService', () => {
         expect(reviewErrors.length).toBeGreaterThan(0);
         expect(reviewErrors[0]?.severity).toBe('error');
     });
+    test('L3: Requirements without R-numbering warns', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Req test"',
+            'status: backlog',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Req test',
+            '',
+            '### Background',
+            '',
+            'text',
+            '',
+            '### Requirements',
+            '',
+            'The system shall do X.',
+            'The system shall do Y.',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+
+        const reqWarnings = result.findings.filter(
+            (f) => f.layer === 'L3' && f.section === 'Requirements' && f.severity === 'warning',
+        );
+        expect(reqWarnings.length).toBeGreaterThan(0);
+        expect(reqWarnings[0]?.message).toContain('R-numbered');
+    });
+
+    test('L3: Requirements with proper R-numbering produces no warning', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Req ok"',
+            'status: backlog',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Req ok',
+            '',
+            '### Background',
+            '',
+            'text',
+            '',
+            '### Requirements',
+            '',
+            'R1. The system shall do X.',
+            'R2. The system shall do Y.',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+
+        const reqWarnings = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Requirements');
+        expect(reqWarnings).toHaveLength(0);
+    });
+
+    test('L3: Testing without coverage claim warns', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Test no cov"',
+            'status: backlog',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Test no cov',
+            '',
+            '### Background',
+            '',
+            'text',
+            '',
+            '### Testing',
+            '',
+            'We ran the tests and they passed.',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+
+        const testWarnings = result.findings.filter(
+            (f) => f.layer === 'L3' && f.section === 'Testing' && f.severity === 'warning',
+        );
+        expect(testWarnings.length).toBeGreaterThan(0);
+        expect(testWarnings[0]?.message).toContain('coverage');
+    });
+
+    test('L3: Testing with N/A coverage produces no warning', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Test na"',
+            'status: backlog',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Test na',
+            '',
+            '### Background',
+            '',
+            'text',
+            '',
+            '### Testing',
+            '',
+            'N/A',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+
+        const testWarnings = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Testing');
+        expect(testWarnings).toHaveLength(0);
+    });
+
+    test('L3: Plan as free-form prose warns', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Plan prose"',
+            'status: backlog',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Plan prose',
+            '',
+            '### Background',
+            '',
+            'text',
+            '',
+            '### Plan',
+            '',
+            'First we will do X. Then we will do Y. Finally we will do Z.',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+
+        const planWarnings = result.findings.filter(
+            (f) => f.layer === 'L3' && f.section === 'Plan' && f.severity === 'warning',
+        );
+        expect(planWarnings.length).toBeGreaterThan(0);
+        expect(planWarnings[0]?.message).toContain('checklist');
+    });
+
+    test('L3: Plan as ordered checklist produces no warning', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Plan list"',
+            'status: backlog',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Plan list',
+            '',
+            '### Background',
+            '',
+            'text',
+            '',
+            '### Plan',
+            '',
+            '1. Do X',
+            '2. Do Y',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+
+        const planWarnings = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Plan');
+        expect(planWarnings).toHaveLength(0);
+    });
 
     test('resolveMatrixEntry falls back to standard variant', () => {
         const svc = new TaskCheckService(createNodeFileSystem(), matrix);

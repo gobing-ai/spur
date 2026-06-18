@@ -725,14 +725,13 @@ export class RuleService {
         const candidates = new Set<string>();
         for (const layer of await this.existingRuleSourceLayers()) {
             const entries = await this.context.fs.readDir(layer.path);
-            for (const entry of entries) {
-                const match = entry.match(/^([\w-]+)\.(?:ya?ml|json)$/i);
-                if (match === null) continue;
-                const name = match[1] ?? '';
-                if (name.length === 0) continue;
-                const stat = await this.context.fs.stat(join(layer.path, entry));
-                if (stat?.isFile()) candidates.add(name);
-            }
+            const named = entries
+                .map((entry) => ({ entry, name: entry.match(/^([\w-]+)\.(?:ya?ml|json)$/i)?.[1] ?? '' }))
+                .filter(({ name }) => name.length > 0);
+            const stats = await Promise.all(named.map(({ entry }) => this.context.fs.stat(join(layer.path, entry))));
+            named.forEach(({ name }, i) => {
+                if (stats[i]?.isFile()) candidates.add(name);
+            });
         }
         const names: string[] = [];
         const roots = this.ruleRoots();

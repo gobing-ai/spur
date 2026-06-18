@@ -16,22 +16,26 @@ import {
     validateAcceptanceCriteria,
 } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+import {
+    type CheckFindings,
+    type MatrixEntry,
+    PlanningCheckService,
+    type SectionMatrix,
+    type Severity,
+} from './planning-check-base';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
-/** Finding severity level. `error` blocks the check gate; `warning` is advisory. */
-export type CheckFeatureSeverity = 'error' | 'warning';
-
-/** A single validation finding from one of the four check layers. */
-export interface CheckFeatureFindings {
-    /** Layer the finding belongs to (L1–L4). */
-    layer: 'L1' | 'L2' | 'L3' | 'L4';
-    severity: CheckFeatureSeverity;
-    /** Section name or empty string for document-level findings. */
-    section: string;
-    line?: number;
-    message: string;
-}
+// Feature-check keeps its historical type names as aliases over the shared
+// scaffold types (the shapes are identical across task and feature checks).
+/** Finding severity level for feature checks (`error` blocks the gate; `warning` is advisory). */
+export type CheckFeatureSeverity = Severity;
+/** A single validation finding from a feature check layer (L1–L4). */
+export type CheckFeatureFindings = CheckFindings;
+/** Section-Status-Matrix config shape for feature checks (design §3.2). */
+export type FeatureSectionMatrix = SectionMatrix;
+/** Per-status matrix entry defining required/optional/forbidden feature sections. */
+export type FeatureMatrixEntry = MatrixEntry;
 
 /** Result of a `spur feature check` validation run. */
 export interface CheckFeatureResult {
@@ -44,19 +48,6 @@ export interface CheckFeatureResult {
     missingSections: string[];
     /** Whether the check passed (no hard errors). */
     pass: boolean;
-}
-
-/** Section-Status-Matrix config shape. */
-export interface FeatureSectionMatrix {
-    variants: Record<string, Record<string, FeatureMatrixEntry>>;
-}
-
-/** Per-status matrix entry defining required/optional/forbidden sections. */
-export interface FeatureMatrixEntry {
-    required?: string[];
-    optional?: string[];
-    forbidden?: string[];
-    gate?: boolean;
 }
 
 /** Default feature section matrix — matches the canonical section vocabulary. */
@@ -97,13 +88,15 @@ export const DEFAULT_FEATURE_MATRIX: FeatureSectionMatrix = {
 // ─── FeatureCheckService ────────────────────────────────────────────────
 
 /** Four-layer feature validator. L1 schema → L2 matrix → L3 format → L4 traceability. */
-export class FeatureCheckService {
-    private readonly fs: FileSystem;
-    private readonly matrix: FeatureSectionMatrix;
-
+export class FeatureCheckService extends PlanningCheckService {
     constructor(fs: FileSystem, matrix?: FeatureSectionMatrix) {
-        this.fs = fs;
-        this.matrix = matrix ?? DEFAULT_FEATURE_MATRIX;
+        super({
+            fs,
+            matrix: matrix ?? DEFAULT_FEATURE_MATRIX,
+            docKind: 'feature',
+            frontmatterSchema: featureFrontmatterSchema,
+            parse: (raw, kind) => MarkdownDocument.parse(raw, kind),
+        });
     }
 
     /** Run the four-layer validation against a feature file. */
@@ -119,7 +112,7 @@ export class FeatureCheckService {
         // ── L1: Schema validation (hard) ──
         const doc = this.runL1(raw, featureId, findings);
         if (doc === null) {
-            return this.buildResult(featureId, '', findings, strict);
+            return { id: featureId, ...this.summarizeWithStatus('', findings, strict) };
         }
 
         const fm = doc.frontmatterData ?? {};
@@ -141,99 +134,7 @@ export class FeatureCheckService {
         // ── L4: Traceability — incoming feature_id edges + orphan scenarios ──
         await this.runL4(doc, featureId, status, options?.tasksDir, findings);
 
-        return this.buildResult(featureId, status, findings, strict);
-    }
-
-    /** Resolve the matrix entry for a variant + status. Falls back to `standard` variant. */
-    resolveMatrixEntry(variant: string, status: string): FeatureMatrixEntry | undefined {
-        const v = this.matrix.variants[variant] ?? this.matrix.variants.standard;
-        return v?.[status];
-    }
-
-    // ── L1: Zod schema ──
-    private runL1(raw: string, featureId: string, findings: CheckFeatureFindings[]): MarkdownDocument | null {
-        let doc: MarkdownDocument;
-        try {
-            doc = MarkdownDocument.parse(raw, 'feature');
-        } catch (err) {
-            findings.push({
-                layer: 'L1',
-                severity: 'error',
-                section: '',
-                message: `Markdown parse failed for feature ${featureId}: ${String(err)}`,
-            });
-            return null;
-        }
-
-        const fm = doc.frontmatterData ?? {};
-        const result = featureFrontmatterSchema.safeParse(fm);
-        if (!result.success) {
-            for (const issue of result.error.issues) {
-                findings.push({
-                    layer: 'L1',
-                    severity: 'error',
-                    section: '',
-                    message: `Schema: ${issue.path.join('.')}: ${issue.message}`,
-                });
-            }
-        }
-        return doc;
-    }
-
-    // ── L2: Section presence ──
-    private runL2(
-        doc: MarkdownDocument,
-        entry: FeatureMatrixEntry | undefined,
-        findings: CheckFeatureFindings[],
-    ): void {
-        if (!entry) return;
-
-        const sectionNames: string[] = doc.sectionNames;
-        const present: Record<string, true> = {};
-        for (const name of sectionNames) {
-            present[name] = true;
-        }
-
-        // Check required
-        for (const sect of entry.required ?? []) {
-            if (!present[sect]) {
-                const severity = entry.gate === true ? 'error' : 'warning';
-                findings.push({
-                    layer: 'L2',
-                    severity,
-                    section: sect,
-                    message: `Missing required section "${sect}"${entry.gate ? ' (gate: true)' : ''}`,
-                });
-            }
-        }
-
-        // Check forbidden
-        for (const sect of entry.forbidden ?? []) {
-            if (present[sect]) {
-                findings.push({
-                    layer: 'L2',
-                    severity: 'warning',
-                    section: sect,
-                    message: `Section "${sect}" is forbidden for the current status`,
-                });
-            }
-        }
-
-        // Check allowed vocabulary (closed-world)
-        const allowed: Record<string, true> = {};
-        for (const sect of entry.required ?? []) allowed[sect] = true;
-        for (const sect of entry.optional ?? []) allowed[sect] = true;
-        for (const sect of entry.forbidden ?? []) allowed[sect] = true;
-        for (const sect of sectionNames) {
-            if (!allowed[sect]) {
-                findings.push({
-                    layer: 'L2',
-                    severity: 'warning',
-                    section: sect,
-                    message: `Section "${sect}" is not allowed in this variant/status`,
-                });
-            }
-        }
+        return { id: featureId, ...this.summarizeWithStatus(status, findings, strict) };
     }
 
     // ── L3: Format rules ──
@@ -505,44 +406,5 @@ export class FeatureCheckService {
                 message: `Feature "${featureId}" is verifying but ${incompleteTasks.length} linked task(s) are not done/cancelled: ${incompleteTasks.join(', ')}`,
             });
         }
-    }
-
-    private buildResult(
-        featureId: string,
-        status: string,
-        findings: CheckFeatureFindings[],
-        strict?: boolean,
-    ): CheckFeatureResult {
-        // Elevate warnings to errors when --strict is set
-        if (strict) {
-            for (const f of findings) {
-                if (f.severity === 'warning') f.severity = 'error';
-            }
-        }
-        let hasError = false;
-        for (const f of findings) {
-            if (f.severity === 'error') {
-                hasError = true;
-                break;
-            }
-        }
-        const requiredSections: string[] = [];
-        const missingSections: string[] = [];
-
-        for (const f of findings) {
-            if (f.layer === 'L2' && f.section && f.message.startsWith('Missing required')) {
-                requiredSections.push(f.section);
-                missingSections.push(f.section);
-            }
-        }
-
-        return {
-            id: featureId,
-            status,
-            findings,
-            requiredSections,
-            missingSections,
-            pass: !hasError,
-        };
     }
 }

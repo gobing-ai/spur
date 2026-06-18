@@ -1,5 +1,6 @@
 import { oc } from '@orpc/contract';
 import { z } from 'zod';
+import { apiSuccessSchema } from './shared';
 
 /**
  * SSE frame DTO — one event payload yielded by the async iterator.
@@ -8,15 +9,14 @@ import { z } from 'zod';
  * installed @orpc/server version when implementing the SSE handler. The
  * per-frame DTO (planningEventEnvelopeSchema) is stable either way.
  */
-export const planningEventEnvelopeSchema = z.object({
-    ok: z.literal(true),
-    data: z.object({
+export const planningEventEnvelopeSchema = apiSuccessSchema(
+    z.object({
         eventName: z.string(),
         occurredAt: z.string().datetime(),
         actor: z.string().nullable().optional(),
         payload: z.record(z.string(), z.unknown()),
     }),
-});
+);
 
 /**
  * Planning event SSE contract — CONTRACT ONLY, no handler.

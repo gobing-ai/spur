@@ -1,6 +1,7 @@
 import { FEATURE_ID_PATTERN, FEATURE_STATUSES, PRIORITIES } from '@gobing-ai/spur-domain/schema';
 import { oc } from '@orpc/contract';
 import { z } from 'zod';
+import { apiSuccessSchema } from './shared';
 
 // ─── DTOs ───────────────────────────────────────────────────────────────────
 
@@ -21,15 +22,11 @@ export const featureSummarySchema = z.object({
 });
 
 /** Feature list response: `{ ok: true, data: FeatureSummary[] }`. */
-export const featureListResponseSchema = z.object({
-    ok: z.literal(true),
-    data: z.array(featureSummarySchema),
-});
+export const featureListResponseSchema = apiSuccessSchema(z.array(featureSummarySchema));
 
 /** Feature detail response. */
-export const featureShowResponseSchema = z.object({
-    ok: z.literal(true),
-    data: z.object({
+export const featureShowResponseSchema = apiSuccessSchema(
+    z.object({
         id: featureIdSchema,
         name: z.string(),
         status: z.enum(FEATURE_STATUSES),
@@ -37,7 +34,7 @@ export const featureShowResponseSchema = z.object({
         content: z.string(),
         filePath: z.string(),
     }),
-});
+);
 
 /** Show-feature path-param input (required for oRPC OpenAPI compact mode). */
 export const featureShowInputSchema = z.object({
@@ -51,13 +48,12 @@ export const featureCreateInputSchema = z.object({
 });
 
 /** Create-feature response: `{ ok: true, data: { id, filePath } }`. */
-export const featureCreateResponseSchema = z.object({
-    ok: z.literal(true),
-    data: z.object({
+export const featureCreateResponseSchema = apiSuccessSchema(
+    z.object({
         id: z.string(),
         filePath: z.string(),
     }),
-});
+);
 
 /** Transition-feature input (id from path param is required for oRPC OpenAPI compact mode). */
 export const featureTransitionInputSchema = z.object({
@@ -67,13 +63,12 @@ export const featureTransitionInputSchema = z.object({
 });
 
 /** Transition-feature response. */
-export const featureTransitionResponseSchema = z.object({
-    ok: z.literal(true),
-    data: z.object({
+export const featureTransitionResponseSchema = apiSuccessSchema(
+    z.object({
         id: z.string(),
         status: z.enum(FEATURE_STATUSES),
     }),
-});
+);
 
 // ─── Contract ───────────────────────────────────────────────────────────────
 /** oRPC contract for the feature domain — list, show, create, transition, refresh. */
@@ -125,11 +120,10 @@ export const featureContract = {
             tags: ['feature'],
         })
         .output(
-            z.object({
-                ok: z.literal(true),
-                data: z.object({
+            apiSuccessSchema(
+                z.object({
                     rebuilt: z.number().int().nonnegative(),
                 }),
-            }),
+            ),
         ),
 };

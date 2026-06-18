@@ -16,22 +16,17 @@ import {
     taskFrontmatterSchema,
 } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+import {
+    type CheckFindings,
+    type MatrixEntry,
+    PlanningCheckService,
+    type SectionMatrix,
+    type Severity,
+} from './planning-check-base';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
-/** Finding severity level. `error` blocks the check gate; `warning` is advisory. */
-export type Severity = 'error' | 'warning';
-
-/** A single validation finding from one of the four check layers. */
-export interface CheckFindings {
-    /** Layer the finding belongs to (L1–L4 per design §3). */
-    layer: 'L1' | 'L2' | 'L3' | 'L4';
-    severity: Severity;
-    /** Section name or empty string for document-level findings. */
-    section: string;
-    line?: number;
-    message: string;
-}
+export type { CheckFindings, MatrixEntry, SectionMatrix, Severity };
 
 /** Result of a `spur task check` validation run. */
 export interface CheckResult {
@@ -46,29 +41,18 @@ export interface CheckResult {
     pass: boolean;
 }
 
-/** Section-Status-Matrix config shape (design §3.2). */
-export interface SectionMatrix {
-    variants: Record<string, Record<string, MatrixEntry>>;
-}
-
-/** Per-status matrix entry defining required/optional/forbidden sections. */
-export interface MatrixEntry {
-    required?: string[];
-    optional?: string[];
-    forbidden?: string[];
-    gate?: boolean;
-}
-
 // ─── TaskCheckService ───────────────────────────────────────────────────
 
 /** Four-layer task validator (design §3). L1 schema → L2 matrix → L3 format → L4 traceability. */
-export class TaskCheckService {
-    private readonly fs: FileSystem;
-    private readonly matrix: SectionMatrix;
-
+export class TaskCheckService extends PlanningCheckService {
     constructor(fs: FileSystem, matrix: SectionMatrix) {
-        this.fs = fs;
-        this.matrix = matrix;
+        super({
+            fs,
+            matrix,
+            docKind: 'task',
+            frontmatterSchema: taskFrontmatterSchema,
+            parse: (raw, kind) => MarkdownDocument.parse(raw, kind),
+        });
     }
 
     /** Run the four-layer validation against a task file. */
@@ -80,7 +64,7 @@ export class TaskCheckService {
         // ── L1: Schema validation (hard) ──
         const doc = this.runL1(raw, wbs, findings);
         if (doc === null) {
-            return this.buildResult(wbs, '', findings, strict);
+            return { wbs, ...this.summarizeWithStatus('', findings, strict) };
         }
 
         const fm = doc.frontmatterData ?? {};
@@ -98,89 +82,7 @@ export class TaskCheckService {
         const featuresDir = join(dirname(tasksDir), 'features');
         await this.runL4(doc, fm, findings, featuresDir, tasksDir);
 
-        return this.buildResult(wbs, status, findings, strict);
-    }
-
-    /** Resolve the matrix entry for a variant + status. Falls back to `standard` variant. */
-    resolveMatrixEntry(variant: string, status: string): MatrixEntry | undefined {
-        const v = this.matrix.variants[variant] ?? this.matrix.variants.standard;
-        return v?.[status];
-    }
-
-    // ── L1: Zod schema ──
-    private runL1(raw: string, wbs: string, findings: CheckFindings[]): MarkdownDocument | null {
-        let doc: MarkdownDocument;
-        try {
-            doc = MarkdownDocument.parse(raw, 'task');
-        } catch (err) {
-            findings.push({
-                layer: 'L1',
-                severity: 'error',
-                section: '',
-                message: `Markdown parse failed for task ${wbs}: ${String(err)}`,
-            });
-            return null;
-        }
-
-        const fm = doc.frontmatterData ?? {};
-        const result = taskFrontmatterSchema.safeParse(fm);
-        if (!result.success) {
-            for (const issue of result.error.issues) {
-                findings.push({
-                    layer: 'L1',
-                    severity: 'error',
-                    section: '',
-                    message: `Schema: ${issue.path.join('.')}: ${issue.message}`,
-                });
-            }
-        }
-        return doc;
-    }
-
-    // ── L2: Section presence ──
-    private runL2(doc: MarkdownDocument, entry: MatrixEntry | undefined, findings: CheckFindings[]): void {
-        if (!entry) return;
-
-        const sectionNames: string[] = doc.sectionNames;
-        const present = new Set(sectionNames);
-
-        // Check required
-        for (const sect of entry.required ?? []) {
-            if (!present.has(sect)) {
-                const severity = entry.gate === true ? 'error' : 'warning';
-                findings.push({
-                    layer: 'L2',
-                    severity,
-                    section: sect,
-                    message: `Missing required section "${sect}"${entry.gate ? ' (gate: true)' : ''}`,
-                });
-            }
-        }
-
-        // Check forbidden
-        for (const sect of entry.forbidden ?? []) {
-            if (present.has(sect)) {
-                findings.push({
-                    layer: 'L2',
-                    severity: 'warning',
-                    section: sect,
-                    message: `Section "${sect}" is forbidden for the current status`,
-                });
-            }
-        }
-
-        // Check allowed vocabulary (closed-world, DD-08)
-        const allowed = new Set([...(entry.required ?? []), ...(entry.optional ?? []), ...(entry.forbidden ?? [])]);
-        for (const sect of present) {
-            if (!allowed.has(sect)) {
-                findings.push({
-                    layer: 'L2',
-                    severity: 'warning',
-                    section: sect,
-                    message: `Section "${sect}" is not allowed in this variant/status`,
-                });
-            }
-        }
+        return { wbs, ...this.summarizeWithStatus(status, findings, strict) };
     }
 
     // ── L3: Format rules ──
@@ -421,39 +323,5 @@ export class TaskCheckService {
             // Directory doesn't exist or can't be read
         }
         return null;
-    }
-
-    private buildResult(wbs: string, status: string, findings: CheckFindings[], strict?: boolean): CheckResult {
-        // Elevate warnings to errors when --strict is set
-        if (strict) {
-            for (const f of findings) {
-                if (f.severity === 'warning') f.severity = 'error';
-            }
-        }
-        let hasError = false;
-        for (const f of findings) {
-            if (f.severity === 'error') {
-                hasError = true;
-                break;
-            }
-        }
-        const requiredSections: string[] = [];
-        const missingSections: string[] = [];
-
-        for (const f of findings) {
-            if (f.layer === 'L2' && f.section && f.message.startsWith('Missing required')) {
-                requiredSections.push(f.section);
-                missingSections.push(f.section);
-            }
-        }
-
-        return {
-            wbs,
-            status,
-            findings,
-            requiredSections,
-            missingSections,
-            pass: !hasError,
-        };
     }
 }

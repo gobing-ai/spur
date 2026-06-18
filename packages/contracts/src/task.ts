@@ -1,6 +1,7 @@
 import { PRIORITIES, TASK_STATUSES } from '@gobing-ai/spur-domain/schema';
 import { oc } from '@orpc/contract';
 import { z } from 'zod';
+import { apiSuccessSchema } from './shared';
 
 // ─── DTOs ───────────────────────────────────────────────────────────────────
 
@@ -20,15 +21,11 @@ export const taskSummarySchema = z.object({
 });
 
 /** Task list response: `{ ok: true, data: TaskSummary[] }`. */
-export const taskListResponseSchema = z.object({
-    ok: z.literal(true),
-    data: z.array(taskSummarySchema),
-});
+export const taskListResponseSchema = apiSuccessSchema(z.array(taskSummarySchema));
 
 /** Task detail response. */
-export const taskShowResponseSchema = z.object({
-    ok: z.literal(true),
-    data: z.object({
+export const taskShowResponseSchema = apiSuccessSchema(
+    z.object({
         wbs: z.string(),
         name: z.string(),
         status: z.enum(TASK_STATUSES),
@@ -36,7 +33,7 @@ export const taskShowResponseSchema = z.object({
         content: z.string(),
         filePath: z.string(),
     }),
-});
+);
 
 /** Show-task path-param input (required for oRPC OpenAPI compact mode). */
 export const taskShowInputSchema = z.object({
@@ -55,13 +52,12 @@ export const taskCreateInputSchema = z.object({
 });
 
 /** Create-task response: `{ ok: true, data: { wbs, filePath } }`. */
-export const taskCreateResponseSchema = z.object({
-    ok: z.literal(true),
-    data: z.object({
+export const taskCreateResponseSchema = apiSuccessSchema(
+    z.object({
         wbs: z.string(),
         filePath: z.string(),
     }),
-});
+);
 
 /** Transition-task input. */
 export const taskTransitionInputSchema = z.object({
@@ -71,13 +67,12 @@ export const taskTransitionInputSchema = z.object({
 });
 
 /** Transition-task response. */
-export const taskTransitionResponseSchema = z.object({
-    ok: z.literal(true),
-    data: z.object({
+export const taskTransitionResponseSchema = apiSuccessSchema(
+    z.object({
         wbs: z.string(),
         status: z.enum(TASK_STATUSES),
     }),
-});
+);
 
 /** oRPC contract for the task domain — list, show, create, transition. */
 export const taskContract = {
