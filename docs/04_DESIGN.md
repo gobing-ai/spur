@@ -307,12 +307,14 @@ config/
     task-lifecycle.yaml             # task status state-machine (ADR-022)
     feature-lifecycle.yaml          # feature status state-machine (ADR-022)
     task-pipeline.yaml              # task execution pipeline with guards
+    planning-pipeline.yaml          # front-half planning pipeline (task 0088); companions sp:spur-plan
   tasks/
     section-matrix.yaml             # Section-Status-Matrix for `spur task check` (§7.4)
-  templates/                        # task/feature/bdd body templates (§8); CLI never hardcodes body content (DD-11)
+  templates/                        # task/feature/bdd/docs body templates (§8); CLI never hardcodes body content (DD-11)
     task/{default,feature-impl,issue,review,meta}.md
     feature/default.md
     bdd/{gherkin,checklist}.md
+    docs/{99_PROJECT_CONSTITUTION,00_ADR,01_PRD,02_ROADMAP,03_ARCHITECTURE,04_DESIGN,05_FEATURES}.md  # doc stubs (task 0088)
   plugins/
     .gitkeep                        # home for future bundled plugins (ADR-012)
 ```
@@ -324,7 +326,7 @@ config/
 | Build (`build:bundle`) | Copy `./config` → `apps/cli/dist/config`; shipped via the package `files` array. |
 | Install (`bun install -g`) | `dist/config` ships inside the package — no `postinstall` (unreliable for global installs). |
 | First run / `spur init` | `seedGlobalConfig()` copies `dist/config/{rules,workflows}` → `~/.config/spur/` (never overwrites). |
-| `spur init` scaffold | Per the `scaffold-manifest.ts` list, copy resolved defaults → `.spur/` unless present or `--force`. |
+| `spur init` scaffold | Per the `scaffold-manifest.ts` list, copy resolved defaults → `.spur/` (and `docs/` stubs — task 0088) unless present. `docs/` entries are `preserve`-marked: never overwritten, even with `--force`. |
 | Runtime resolution | `bundled` (`dist/config` + ts-rule-engine demo rules) > global (`~/.config/spur`) > local (`.spur`). |
 
 **Ownership split.** `@gobing-ai/ts-rule-engine` ships only generic demo rules (one per builtin
@@ -630,6 +632,16 @@ files directly — `precheck` is a `spur task check <wbs>` shell guard; `impleme
 **Follow-up:** `task_run_links` linkage (kind=pipeline, R4) needs a small `WorkflowService` run-start hook
 — there is no link-writing CLI verb to call from a shell step, so it can't live in pure YAML.
 
+**Planning pipeline** — `config/workflows/planning-pipeline.yaml` (task 0088; design §6). Front-half
+of the dev workflow: `phasing(HITL) → feature-id → design-gen → design-approval(HITL) → handoff`.
+`kind: state-machine`, `vars: { slug, profile, feature }`, same engine as `task-pipeline.yaml`
+(ADR-022 — zero new engine code). Companions the `sp:spur-plan` skill (how-to-think for the
+non-deterministic steps: phasing judgment, feature-ID derivation, design-doc authoring). HITL gates
+use `hitl.confirm`, skippable with `--vars '{"profile":"auto"}'` (Q4). Doc-write discipline (Q3):
+auto-writes derived docs (`docs/design/*`, `docs/features/*`); **stages** `02_ROADMAP`/`04_DESIGN`
+index edits to `docs/plans/` for human commit. Every authoritative-doc touch invokes `sp:doc-evolve`
+(§5 sync triggers). Terminal at `handoff` (drafted feature list → `sp:spur-dev` steps 7–12) or
+`cancelled`. Validates against the workspace state-machine schema.
 ### 7.6 Task DTOs — reserved
 
 oRPC contract shapes (`TaskDto`, `FeatureDto`, `PlanningEventDto`) land with the server/web design

@@ -190,9 +190,19 @@ export function registerInitCommand(program: Command, context: CliContext): void
                     for (const entry of SCAFFOLD_MANIFEST) {
                         const sourcePath = join(configRoot, entry.source);
                         if (!(await context.fs.exists(sourcePath))) continue;
-                        const targetPath = join(context.cwd, CLI_CONFIG.configDir, entry.target);
+                        // root-scoped entries (docs/) resolve against the project root, not .spur/
+                        const baseDir = entry.root === true ? context.cwd : join(context.cwd, CLI_CONFIG.configDir);
+                        const targetPath = join(baseDir, entry.target);
                         await context.fs.ensureDir(join(targetPath, '..'));
-                        await writeIfNew(context, targetPath, await context.fs.readFile(sourcePath), force, result);
+                        // preserve-marked entries are never overwritten, even with --force
+                        const entryForce = entry.preserve === true ? false : force;
+                        await writeIfNew(
+                            context,
+                            targetPath,
+                            await context.fs.readFile(sourcePath),
+                            entryForce,
+                            result,
+                        );
                     }
                 }
             }

@@ -302,8 +302,11 @@ CLI does.
 - [references/ac-style-guide.md](references/ac-style-guide.md) — BDD scenario authoring:
   R-numbering, the two AC tiers, scenario-title stability, Gherkin template usage.
 - `config/workflows/task-pipeline.yaml` — the execution pipeline definition.
+- **`sp:spur-plan`** — the front-half planning pipeline (steps 3–6: phasing → feature-ID →
+  design-doc → approval). `sp:spur-dev` picks up at the handoff seam (the drafted feature list
+  produced by `sp:spur-plan`); the full 1→12 chain is documented there.
+- `config/workflows/planning-pipeline.yaml` — the front-half state machine.
 - `config/templates/bdd/gherkin.md` — the BDD scenario template.
-- `apps/cli/schemas/task-batch.schema.json` — the decomposition gate schema.
 
 ---
 

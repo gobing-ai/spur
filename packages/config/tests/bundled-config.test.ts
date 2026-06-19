@@ -18,6 +18,8 @@ describe('bundled-config', () => {
         expect(files).toContain('rules/recommended-post-check.yaml');
         // Workflow extracted in task 0024.
         expect(files).toContain('workflows/basic.yaml');
+        expect(files).toContain('workflows/task-pipeline.yaml');
+        expect(files).toContain('workflows/planning-pipeline.yaml');
     });
 
     test('listBundledConfigFiles excludes non-YAML/JSON entries', () => {
@@ -41,12 +43,15 @@ describe('bundled-config', () => {
         expect(files).toContain('templates/task/feature-impl.md');
         expect(files).toContain('templates/task/issue.md');
         expect(files).toContain('templates/task/review.md');
-        expect(files).toContain('templates/task/meta.md');
         // Feature template
         expect(files).toContain('templates/feature/default.md');
         // BDD templates
         expect(files).toContain('templates/bdd/gherkin.md');
         expect(files).toContain('templates/bdd/checklist.md');
+        // Docs scaffolds (task 0088 — R1)
+        expect(files).toContain('templates/docs/99_PROJECT_CONSTITUTION.md');
+        expect(files).toContain('templates/docs/00_ADR.md');
+        expect(files).toContain('templates/docs/05_FEATURES.md');
     });
 
     test('listBundledTemplateFiles excludes non-markdown entries', () => {

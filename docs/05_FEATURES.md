@@ -146,6 +146,7 @@ Decomposition and per-item dispositions live in
 | Local board + launcher | 💤 | settled by the Stage-D server/web design task (ADR-021 consequence b) |
 | Spec-driven pipeline (sp planning fat skill / `sp:spur-dev`) | ✅ | description → feature file with Gherkin AC → linked tasks, every LLM output CLI-validated |
 | Task-pipeline workflow + HITL continue + result writer | 🔶 | `spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"NNNN"}'`; `continue` resumes a paused run; pipeline-pause integration deferred (task 0071 R4); `task_run_links` kind=pipeline pending (task 0071 R1) |
+| Front-half planning pipeline + docs scaffold (task 0088) | ✅ | `spur init` scaffolds `docs/` stubs (preserve-marked, never clobbered); `/sp:spur-init` command customizes fresh project; `sp:spur-plan` skill + `planning-pipeline.yaml` (phasing → feature-ID → design-gen → approval → handoff); validates against workspace schema; hands off to `sp:spur-dev` |
 | `plugins/sp` Fat Skills + thin command/subagent wrappers (ADR-023) | ✅ | skills are SSOT; commands/subagents wrap skills; ADR-016-filtered command set |
 
 ## 10. Deferred (needs design before build)

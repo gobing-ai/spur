@@ -12,8 +12,23 @@
 export interface ScaffoldEntry {
     /** Path relative to the bundled config root (e.g. `rules/recommended-pre-check.yaml`). */
     source: string;
-    /** Path relative to the project `.spur/` directory (e.g. `rules/recommended-pre-check.yaml`). */
+    /**
+     * Path relative to the scaffold root. Defaults to the project `.spur/` directory; when
+     * {@link ScaffoldEntry.root} is `true`, resolves against the project root instead (e.g.
+     * `docs/` scaffolds). This lets the manifest carry both `.spur/` and project-root targets.
+     */
     target: string;
+    /**
+     * When `true`, resolve {@link target} against the project root (not `.spur/`). Used for
+     * docs scaffolds that belong at `<cwd>/docs/` rather than `<cwd>/.spur/`.
+     */
+    root?: boolean;
+    /**
+     * When `true`, the target is never overwritten — not even with `--force`. Use for
+     * user-customizable content (e.g. `docs/`) that must survive a re-init. `writeIfNew`
+     * is called with `force=false` for this entry regardless of the CLI flag.
+     */
+    preserve?: boolean;
 }
 
 /**
@@ -31,6 +46,8 @@ export const SCAFFOLD_MANIFEST: readonly ScaffoldEntry[] = [
     { source: 'workflows/feature-lifecycle.yaml', target: 'config/workflows/feature-lifecycle.yaml' },
     { source: 'workflows/feature-dev.yaml', target: 'config/workflows/feature-dev.yaml' },
     { source: 'workflows/task-pipeline.yaml', target: 'config/workflows/task-pipeline.yaml' },
+    // Planning pipeline — front-half (task 0088); companions the sp:spur-plan skill
+    { source: 'workflows/planning-pipeline.yaml', target: 'config/workflows/planning-pipeline.yaml' },
     // Section matrix under .spur/config/tasks/
     { source: 'tasks/section-matrix.yaml', target: 'config/tasks/section-matrix.yaml' },
     // Task templates under .spur/config/templates/task/
@@ -44,4 +61,28 @@ export const SCAFFOLD_MANIFEST: readonly ScaffoldEntry[] = [
     // BDD snippets under .spur/config/templates/bdd/
     { source: 'templates/bdd/gherkin.md', target: 'config/templates/bdd/gherkin.md' },
     { source: 'templates/bdd/checklist.md', target: 'config/templates/bdd/checklist.md' },
+    // Docs scaffolds at the project root (R1 — task 0088): constitution + numbered doc stubs.
+    // Idempotent / never-overwrite (preserve) — a customized live doc is never clobbered, even
+    // by `spur init --force`. Only `docs/` copies are preserved; the `.spur/config/templates/docs/`
+    // copies below are regular templates and follow the normal --force behavior.
+    {
+        source: 'templates/docs/99_PROJECT_CONSTITUTION.md',
+        target: 'docs/99_PROJECT_CONSTITUTION.md',
+        root: true,
+        preserve: true,
+    },
+    { source: 'templates/docs/00_ADR.md', target: 'docs/00_ADR.md', root: true, preserve: true },
+    { source: 'templates/docs/01_PRD.md', target: 'docs/01_PRD.md', root: true, preserve: true },
+    { source: 'templates/docs/02_ROADMAP.md', target: 'docs/02_ROADMAP.md', root: true, preserve: true },
+    { source: 'templates/docs/03_ARCHITECTURE.md', target: 'docs/03_ARCHITECTURE.md', root: true, preserve: true },
+    { source: 'templates/docs/04_DESIGN.md', target: 'docs/04_DESIGN.md', root: true, preserve: true },
+    { source: 'templates/docs/05_FEATURES.md', target: 'docs/05_FEATURES.md', root: true, preserve: true },
+    // Doc templates under .spur/config/templates/docs/ (referenced by sp:doc-evolve and sp:spur-init)
+    { source: 'templates/docs/99_PROJECT_CONSTITUTION.md', target: 'config/templates/docs/99_PROJECT_CONSTITUTION.md' },
+    { source: 'templates/docs/00_ADR.md', target: 'config/templates/docs/00_ADR.md' },
+    { source: 'templates/docs/01_PRD.md', target: 'config/templates/docs/01_PRD.md' },
+    { source: 'templates/docs/02_ROADMAP.md', target: 'config/templates/docs/02_ROADMAP.md' },
+    { source: 'templates/docs/03_ARCHITECTURE.md', target: 'config/templates/docs/03_ARCHITECTURE.md' },
+    { source: 'templates/docs/04_DESIGN.md', target: 'config/templates/docs/04_DESIGN.md' },
+    { source: 'templates/docs/05_FEATURES.md', target: 'config/templates/docs/05_FEATURES.md' },
 ] as const;

@@ -12,6 +12,7 @@ describe('scaffold-manifest', () => {
         expect(sources).toContain('workflows/task-lifecycle.yaml');
         expect(sources).toContain('workflows/feature-lifecycle.yaml');
         expect(sources).toContain('workflows/task-pipeline.yaml');
+        expect(sources).toContain('workflows/planning-pipeline.yaml');
         // Section matrix
         expect(sources).toContain('tasks/section-matrix.yaml');
         // Task templates
@@ -25,6 +26,10 @@ describe('scaffold-manifest', () => {
         // BDD snippets
         expect(sources).toContain('templates/bdd/gherkin.md');
         expect(sources).toContain('templates/bdd/checklist.md');
+        // Docs scaffolds (task 0088 — R1)
+        expect(sources).toContain('templates/docs/99_PROJECT_CONSTITUTION.md');
+        expect(sources).toContain('templates/docs/00_ADR.md');
+        expect(sources).toContain('templates/docs/05_FEATURES.md');
     });
 
     test('every entry has a non-empty source and target', () => {
@@ -34,7 +39,24 @@ describe('scaffold-manifest', () => {
         }
     });
 
-    test('has exactly 16 entries', () => {
-        expect(SCAFFOLD_MANIFEST.length).toBe(16);
+    test('has the expected entry count (updated when adding scaffolds)', () => {
+        // 16 original + 1 planning-pipeline + 7 docs (root) + 7 docs templates = 31
+        expect(SCAFFOLD_MANIFEST.length).toBe(31);
+    });
+
+    test('docs entries are root-scoped and preserve-marked (R1 — task 0088)', () => {
+        const docsEntries = SCAFFOLD_MANIFEST.filter((e) => e.target.startsWith('docs/'));
+        expect(docsEntries.length).toBe(7);
+        for (const entry of docsEntries) {
+            expect(entry.root).toBe(true);
+            expect(entry.preserve).toBe(true);
+        }
+    });
+
+    test('non-docs entries are not root-scoped (target .spur/)', () => {
+        const nonDocs = SCAFFOLD_MANIFEST.filter((e) => !e.target.startsWith('docs/'));
+        for (const entry of nonDocs) {
+            expect(entry.root).not.toBe(true);
+        }
     });
 });

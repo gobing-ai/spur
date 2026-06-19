@@ -112,5 +112,52 @@ describe('spur init template copy', () => {
         expect(existsSync(join(wfDir, 'task-lifecycle.yaml'))).toBe(true);
         expect(existsSync(join(wfDir, 'feature-lifecycle.yaml'))).toBe(true);
         expect(existsSync(join(wfDir, 'task-pipeline.yaml'))).toBe(true);
+        expect(existsSync(join(wfDir, 'planning-pipeline.yaml'))).toBe(true);
+    });
+
+    test('docs scaffolds are copied to project-root docs/ (R1 — task 0088)', async () => {
+        const cwd = await createTempProject();
+        const { options } = await isolatedOptions(cwd);
+
+        expect(await main(['init'], options)).toBe(0);
+
+        const docsDir = join(cwd, 'docs');
+        expect(existsSync(join(docsDir, '99_PROJECT_CONSTITUTION.md'))).toBe(true);
+        expect(existsSync(join(docsDir, '00_ADR.md'))).toBe(true);
+        expect(existsSync(join(docsDir, '01_PRD.md'))).toBe(true);
+        expect(existsSync(join(docsDir, '02_ROADMAP.md'))).toBe(true);
+        expect(existsSync(join(docsDir, '03_ARCHITECTURE.md'))).toBe(true);
+        expect(existsSync(join(docsDir, '04_DESIGN.md'))).toBe(true);
+        expect(existsSync(join(docsDir, '05_FEATURES.md'))).toBe(true);
+    });
+
+    test('docs scaffolds are preserved even under --force (R1 — never clobber customized docs)', async () => {
+        const cwd = await createTempProject();
+        const { options } = await isolatedOptions(cwd);
+
+        // First init scaffolds the docs
+        expect(await main(['init'], options)).toBe(0);
+
+        // Customize one doc
+        const prdPath = join(cwd, 'docs', '01_PRD.md');
+        writeFileSync(prdPath, 'CUSTOM CONTENT — must survive re-init');
+
+        // Re-init with --force must NOT overwrite the customized doc (preserve: true)
+        expect(await main(['init', '--force'], options)).toBe(0);
+
+        const content = readFileSync(prdPath, 'utf-8');
+        expect(content).toBe('CUSTOM CONTENT — must survive re-init');
+    });
+
+    test('doc templates are also copied to .spur/config/templates/docs/', async () => {
+        const cwd = await createTempProject();
+        const { options } = await isolatedOptions(cwd);
+
+        expect(await main(['init'], options)).toBe(0);
+
+        const tmplDir = join(cwd, '.spur', 'config', 'templates', 'docs');
+        expect(existsSync(join(tmplDir, '99_PROJECT_CONSTITUTION.md'))).toBe(true);
+        expect(existsSync(join(tmplDir, '00_ADR.md'))).toBe(true);
+        expect(existsSync(join(tmplDir, '05_FEATURES.md'))).toBe(true);
     });
 });
