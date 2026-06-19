@@ -15,6 +15,7 @@ if (import.meta.main) {
         port: config.server.port,
         host: config.server.host,
         openBrowser: false,
+        webDistPath: config.server.webDistPath,
     });
 }
 

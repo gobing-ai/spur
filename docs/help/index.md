@@ -1,0 +1,129 @@
+# Spur Help Documentation
+
+---
+
+### What's Spur?
+
+Spur is a **local-first harness engineering toolkit** for mainstream coding agents (Claude Code,
+Codex, Gemini CLI, Antigravity, pi, OpenCode, OpenClaw). It wraps agents you already have installed
+and authenticated, adding execution discipline, constraint checking, workflow orchestration, task &
+feature management, history analytics, and team coordination.
+
+It is **not** a coding agent and **not** a BYOK LLM platform. Spur owns no model-reaching path other
+than `spur agent run` (delegated to the installed agent).
+
+### How to install Spur?
+
+**Prerequisites:** Bun ≥ 1.3.14 on PATH; at least one supported coding agent installed.
+
+```bash
+# From source
+git clone <repo> && cd spur-new && bun install
+bun run apps/cli/src/index.ts --help
+
+# From npm
+npm i -g @gobing-ai/spur-cli
+spur --help
+
+# Standalone binary (Bun-less machines)
+curl -fsSL https://<release-host>/install.sh | bash
+```
+
+Verify: `spur --version` → `0.2.5`; `spur agent doctor` checks every detected agent.
+
+### CLI Surface
+
+12 command groups, every command supports `--json`:
+
+| Command | Purpose |
+|---|---|
+| `spur init` | Scaffold a local Spur project (`.spur/`) |
+| `spur status` | Show project, Git, and optional path status |
+| `spur agent` | Run and inspect supported coding agents |
+| `spur rule` | Manage constraint rules and presets |
+| `spur workflow` | Validate and execute workflow YAML files |
+| `spur task` | Manage tasks (WBS-numbered, markdown-backed) |
+| `spur feature` | Manage features (hierarchical IDs) |
+| `spur history` | Import and analyze coding-agent history |
+| `spur message` | Send and inspect durable inter-agent messages |
+| `spur team` | Coordinate team agent assignments and status |
+| `spur serve` | Start the Spur web server (local fallback) |
+| `spur migrate` | Apply CLI-owned schema migrations |
+
+### Architecture Diagram
+
+```mermaid
+graph TB
+    subgraph "Spur CLI (apps/cli)"
+        CLI[spur command dispatch]
+    end
+
+    subgraph "Application Services (packages/app)"
+        AgentSvc[AgentService]
+        RuleSvc[RuleService]
+        WorkflowSvc[WorkflowService]
+        TaskSvc[TaskService]
+        FeatureSvc[FeatureService]
+        HistorySvc[HistoryService]
+        TeamSvc[TeamService]
+    end
+
+    subgraph "Domain (packages/domain)"
+        DB[SQLite DB<br/>spur.db]
+        Migrations[Schema migrations]
+        PlanningDAOs[Planning DAOs]
+    end
+
+    subgraph "External Engines (@gobing-ai/ts-*)"
+        AiRunner[ts-ai-runner<br/>AgentDetector, AiRunner]
+        RuleEngine[ts-rule-engine<br/>RuleEngine, presets]
+        WorkflowEngine[ts-dual-workflow-engine<br/>FSM + transition-flow]
+        JsonlImporter[ts-llm-jsonl-importer]
+    end
+
+    subgraph "Coding Agents"
+        Claude[Claude Code]
+        Codex[Codex]
+        Gemini[Gemini CLI]
+        Others[pi, OpenCode,<br/>Antigravity, OpenClaw]
+    end
+
+    CLI --> AgentSvc & RuleSvc & WorkflowSvc & TaskSvc & FeatureSvc & HistorySvc & TeamSvc
+    AgentSvc --> AiRunner --> Claude & Codex & Gemini & Others
+    RuleSvc --> RuleEngine
+    WorkflowSvc --> WorkflowEngine
+    HistorySvc --> JsonlImporter
+    TaskSvc & FeatureSvc --> PlanningDAOs --> DB
+    Migrations --> DB
+```
+
+### The Details of These Commands
+
+**Complete guide:**
+➡️ **[How to Use Spur for Daily Software Development](./how_to_use_spur_for_daily_software_development.md)**
+— initialization, every command with flags, the daily development loop
+(plan → implement → check → fix → verify → close), JSON output, configuration, and known limitations.
+
+**Per-command reference:**
+
+| Command | Reference |
+|---|---|
+| `spur init` | [cmd_init.md](./cmd_init.md) |
+| `spur agent` | [cmd_agent.md](./cmd_agent.md) |
+| `spur rule` | [cmd_rule.md](./cmd_rule.md) |
+| `spur workflow` | [cmd_workflow.md](./cmd_workflow.md) |
+| `spur task` | [cmd_task.md](./cmd_task.md) |
+| `spur feature` | [cmd_feature.md](./cmd_feature.md) |
+| `spur message` | [cmd_message.md](./cmd_message.md) |
+| `spur serve` | [cmd_serve.md](./cmd_serve.md) |
+
+### References
+
+- `docs/00_ADR.md` — **WHY** decisions are made (authoritative)
+- `docs/01_PRD.md` — **WHAT** the product is (scope, authoritative)
+- `docs/02_ROADMAP.md` — **WHEN** phases land
+- `docs/03_ARCHITECTURE.md` — **HOW** it's built (module boundaries, data flow)
+- `docs/04_DESIGN.md` — **SURFACE** (every CLI command, flag, config key, env var)
+- `docs/05_FEATURES.md` — **STATUS** (feature decomposition + state)
+- `docs/99_PROJECT_CONSTITUTION.md` — **PROCESS** (how docs are maintained)
+- `AGENTS.md` — agent entry point (stack, commands, gates, conventions)

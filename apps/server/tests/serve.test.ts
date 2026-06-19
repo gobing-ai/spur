@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { ApplicationRuntime, ApplicationStopReason } from '@gobing-ai/ts-infra/application';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+import type { CreateServerContextOptions } from '../src/context';
 import { defaultDeps, type StartServerDeps, startServer } from '../src/serve';
 
 /** Build a fake ApplicationRuntime; `log` collects logger.info calls when provided. */
@@ -80,7 +84,7 @@ describe('startServer', () => {
     });
 
     test('StartServerOptions shape validates at type level', () => {
-        const opts = { port: 3000, host: 'localhost', openBrowser: false } as const;
+        const opts = { port: 3000, host: 'localhost', openBrowser: false, keepAlive: false } as const;
         expect(opts.port).toBe(3000);
     });
 
@@ -100,7 +104,7 @@ describe('startServer', () => {
             return { stop: () => {}, ref: () => {}, unref: () => {} };
         }) as unknown as typeof Bun.serve;
 
-        await startServer({ port: 4000, host: '0.0.0.0', openBrowser: false }, makeDeps());
+        await startServer({ port: 4000, host: '0.0.0.0', openBrowser: false, keepAlive: false }, makeDeps());
 
         if (!capturedFetch) throw new Error('capturedFetch not set');
         const res = await capturedFetch(new Request('http://0.0.0.0:4000/api/health'));
@@ -115,7 +119,7 @@ describe('startServer', () => {
 
         let openedUrl: string | undefined;
         await startServer(
-            { port: 4100, host: 'localhost', openBrowser: true },
+            { port: 4100, host: 'localhost', openBrowser: true, keepAlive: false },
             makeDeps({
                 openUrl: async (url: string) => {
                     openedUrl = url;
@@ -126,13 +130,34 @@ describe('startServer', () => {
         expect(openedUrl).toBe('http://localhost:4100/board');
     });
 
+    test('passes resolved webDistPath into ServerContext for static board serving', async () => {
+        origServe = Bun.serve;
+        Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
+
+        const webDistPath = mkdtempSync(join(tmpdir(), 'spur-web-dist-'));
+        writeFileSync(join(webDistPath, 'index.html'), '<html>board</html>');
+
+        let capturedOptions: CreateServerContextOptions | undefined;
+        await startServer(
+            { port: 4300, host: 'localhost', openBrowser: false, webDistPath, keepAlive: false },
+            makeDeps({
+                createServerContext: ((_rt: ApplicationRuntime, options: CreateServerContextOptions) => {
+                    capturedOptions = options;
+                    return {};
+                }) as unknown as StartServerDeps['createServerContext'],
+            }),
+        );
+
+        expect(capturedOptions?.webDistPath).toBe(webDistPath);
+    });
+
     test('does not open the browser when openBrowser is false (--no-open)', async () => {
         origServe = Bun.serve;
         Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
 
         let opened = false;
         await startServer(
-            { port: 4200, host: 'localhost', openBrowser: false },
+            { port: 4200, host: 'localhost', openBrowser: false, keepAlive: false },
             makeDeps({
                 openUrl: async () => {
                     opened = true;
@@ -198,7 +223,7 @@ describe('startServer', () => {
                 }) as never,
         });
 
-        await startServer({ port: 5000, host: '127.0.0.1', openBrowser: false }, deps);
+        await startServer({ port: 5000, host: '127.0.0.1', openBrowser: false, keepAlive: false }, deps);
 
         expect(schedulerStarted).toBe(true);
 

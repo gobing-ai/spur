@@ -69,15 +69,15 @@ states:
 
   - id: approve
     description: >
-      Human-in-the-loop approval gate. Skipped when `profile=auto` (approve→verify
-      guard fires first). NOTE: to make this state PAUSE for `spur workflow continue`
+      Human-in-the-loop approval gate. Under `profile=auto` this state is never entered
+      (review routes around it straight to verify). NOTE: to make this state PAUSE for `spur workflow continue`
       (E3), add `pause: true` here — deferred until the globally-installed `@gobing-ai/spur`
       schema (currently a stale 0.2.5 that lacks the `pause` field) is refreshed, so
       full `spur workflow validate` stays green. The workspace schema already supports it.
     onEnter:
       - kind: hitl.confirm
         options:
-          message: "Approve task ${vars.wbs} to proceed to verification?"
+          prompt: "Approve task ${vars.wbs} to proceed to verification?"
 
   - id: verify
     description: Functional verification (BDD + traceability) via /sp:dev-verify.
@@ -140,16 +140,28 @@ transitions:
     description: Tests done — run review.
     guard:
       kind: always
+  # ── review → approve, OR skip the HITL gate entirely when profile=auto (R4) ──
+  # Declaration order matters: the auto-skip guard is tried FIRST, so under
+  # profile=auto the run routes straight to verify and never ENTERS approve
+  # (whose onEnter hitl.confirm would otherwise block). Otherwise fall through
+  # to approve for the human gate.
+  - from: review
+    to: verify
+    description: profile=auto — skip the human approval gate, go straight to verify.
+    guard:
+      kind: shell
+      options:
+        command: 'test "${vars.profile}" = auto'
   - from: review
     to: approve
     description: Review done — gate on human approval.
     guard:
       kind: always
 
-  # ── approve: HITL gate, OR skipped when profile=auto (R4) ──
+  # ── approve: HITL gate (reached only when profile != auto) ──
   - from: approve
     to: verify
-    description: Approved (or profile=auto skip) — proceed to verification.
+    description: Approved — proceed to verification.
     guard:
       kind: always
   - from: verify

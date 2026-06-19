@@ -5,6 +5,7 @@ import type { TaskSummary } from './types';
 const POLL_INTERVAL_MS = 5_000;
 
 type ListFn = (query?: Record<string, unknown>) => Promise<{ data: unknown }>;
+const defaultListTasks: ListFn = (query) => api.task.list(query);
 
 /** Pure refresh factory — exported for unit testing without mocking the oRPC client. */
 export function createRefresh(
@@ -33,7 +34,7 @@ export function createRefresh(
  *
  * Accepts an optional `listFn` for dependency injection in tests.
  */
-export function useTasks(listFn: ListFn = api.task.list) {
+export function useTasks(listFn: ListFn = defaultListTasks) {
     const [tasks, setTasks] = useState<TaskSummary[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<Error | null>(null);

@@ -6,10 +6,14 @@ import { OpenAPILink } from '@orpc/openapi-client/fetch';
 import { onError } from '@orpc/shared';
 
 /** Resolve the public API URL for browser, SSR, and test contexts. */
-export function resolveApiUrl(envUrl = import.meta.env.PUBLIC_API_URL): string {
+export function resolveApiUrl(
+    envUrl = import.meta.env.PUBLIC_API_URL,
+    origin = globalThis.location?.origin,
+    isDev = import.meta.env.DEV,
+): string {
     if (envUrl) return envUrl;
-    if (import.meta.env.DEV) return 'http://localhost:3000/api';
-    return '/api';
+    if (isDev) return 'http://localhost:3000/api';
+    return origin ? new URL('/api', origin).toString() : 'http://localhost:3000/api';
 }
 
 /**

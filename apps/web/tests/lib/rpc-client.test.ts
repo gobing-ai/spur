@@ -16,6 +16,10 @@ describe('rpc client', () => {
         expect(url).toBe('https://example.com/api');
     });
 
+    test('resolveApiUrl returns absolute same-origin URL in production browser context', () => {
+        expect(resolveApiUrl(undefined, 'http://localhost:3000', false)).toBe('http://localhost:3000/api');
+    });
+
     test('api is a typed client with health method', () => {
         expect(api).toBeDefined();
         expect(typeof (api as Record<string, unknown>).health).toBe('function');

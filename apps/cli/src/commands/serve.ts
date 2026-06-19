@@ -32,9 +32,13 @@ export function registerServeCommand(program: Command, context: CliContext): voi
                     port,
                     host,
                     openBrowser: options.open ?? true,
+                    webDistPath: config.server.webDistPath,
                 });
             } catch (err) {
                 context.output.error(err instanceof Error ? err.message : String(err));
+                if (context.env?.SPUR_DEBUG === '1' && err instanceof Error && err.stack) {
+                    context.output.error(err.stack);
+                }
                 context.setExitCode(1);
             }
         });

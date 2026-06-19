@@ -21,6 +21,13 @@ export interface CreateDomainDbOptions {
 export async function createMigratedDb(options: CreateDomainDbOptions): Promise<DbAdapter> {
     const { createDbAdapter } = await import('@gobing-ai/ts-db');
     const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: options.url });
+    // Set a busy timeout so concurrent spur processes (or a stale WAL lock) retry
+    // briefly instead of throwing SQLITE_BUSY immediately. The upstream
+    // BunSqliteAdapter defaults omit busy_timeout, which makes parallel CLI
+    // invocations against the same project DB fail non-deterministically.
+    // (Run via exec because the typed pragmas option only accepts journalMode/
+    // synchronous/foreignKeys — the runtime constructor only applies those three.)
+    await adapter.exec('PRAGMA busy_timeout = 5000');
     await applyCliMigrations(adapter);
     return adapter;
 }

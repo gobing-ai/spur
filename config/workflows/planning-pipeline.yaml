@@ -26,7 +26,7 @@ kind: state-machine
 name: planning-pipeline
 description: "Front-half planning pipeline (phasing → feature-ID → design-gen → design-approval → handoff)"
 iterationBound: 20
-initialState: phasing
+initialState: start
 terminalStates:
   - handoff
   - cancelled
@@ -36,15 +36,22 @@ vars:
   feature: ""
 
 states:
+  - id: start
+    description: >
+      Entry pass-through. Routes to the phasing HITL gate (interactive) or straight to
+      feature-id (profile=auto), so the phasing onEnter hitl.confirm only fires when a
+      human is in the loop. No actions — a pure routing node.
+
   - id: phasing
     description: >
       Decide whether this requirement needs a new phase in 02_ROADMAP. The HITL gate asks
       the operator; if a new phase is needed, the edit is STAGED to docs/plans/ (never
-      auto-written — Q3). Skipped when profile=auto (guard to feature-id fires first).
+      auto-written — Q3). Under profile=auto this state is never entered (start routes
+      around it straight to feature-id).
     onEnter:
       - kind: hitl.confirm
         options:
-          message: "Does this requirement need a new phase in 02_ROADMAP? (Stage the edit if yes.)"
+          prompt: "Does this requirement need a new phase in 02_ROADMAP? (Stage the edit if yes.)"
 
   - id: feature-id
     description: >
@@ -71,11 +78,12 @@ states:
   - id: design-approval
     description: >
       HITL gate — the highest-leverage gate in the pipeline. Loop until the operator
-      approves the design doc. Skipped when profile=auto (guard to handoff fires first).
+      approves the design doc. Under profile=auto this state is never entered (design-gen
+      routes around it straight to handoff).
     onEnter:
       - kind: hitl.confirm
         options:
-          message: "Approve the design doc at docs/design/${vars.slug}.md? (Loop back to design-gen for revisions.)"
+          prompt: "Approve the design doc at docs/design/${vars.slug}.md? (Loop back to design-gen for revisions.)"
 
   - id: handoff
     description: >
@@ -87,7 +95,24 @@ states:
     description: Terminal — planning abandoned by the operator.
 
 transitions:
-  # ── phasing: HITL gate, OR skipped when profile=auto ──
+  # ── start: route AROUND the phasing HITL gate when profile=auto ──
+  # Auto-skip guard tried FIRST: under profile=auto the run goes straight to
+  # feature-id and never ENTERS phasing (whose onEnter hitl.confirm would block).
+  # Otherwise fall through to phasing for the human gate.
+  - from: start
+    to: feature-id
+    description: profile=auto — skip the phasing HITL gate.
+    guard:
+      kind: shell
+      options:
+        command: 'test "${vars.profile}" = auto'
+  - from: start
+    to: phasing
+    description: Interactive — enter the phasing HITL gate.
+    guard:
+      kind: always
+
+  # ── phasing: HITL gate (reached only when profile != auto) ──
   - from: phasing
     to: feature-id
     description: Phasing decided — proceed to feature-ID derivation.
@@ -105,16 +130,27 @@ transitions:
     description: Feature ID derived — generate the design doc.
     guard:
       kind: always
+
+  # ── design-gen → design-approval, OR skip the HITL gate when profile=auto ──
+  # Auto-skip guard tried FIRST: under profile=auto, route straight to handoff
+  # without entering design-approval (whose onEnter hitl.confirm would block).
+  - from: design-gen
+    to: handoff
+    description: profile=auto — skip the design-approval HITL gate, hand off directly.
+    guard:
+      kind: shell
+      options:
+        command: 'test "${vars.profile}" = auto'
   - from: design-gen
     to: design-approval
     description: Design doc drafted — gate on human approval.
     guard:
       kind: always
 
-  # ── design-approval: HITL gate, OR skipped when profile=auto ──
+  # ── design-approval: HITL gate (reached only when profile != auto) ──
   - from: design-approval
     to: handoff
-    description: Design approved (or profile=auto skip) — hand off to sp:spur-dev.
+    description: Design approved — hand off to sp:spur-dev.
     guard:
       kind: always
   - from: design-approval

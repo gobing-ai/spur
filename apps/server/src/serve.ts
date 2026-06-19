@@ -1,3 +1,4 @@
+import { dirname, isAbsolute, join } from 'node:path';
 import type { ApplicationRuntime, ApplicationStopReason } from '@gobing-ai/ts-infra/application';
 import { runNodeApplication } from '@gobing-ai/ts-infra/application-node';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
@@ -11,6 +12,8 @@ export interface StartServerOptions {
     port: number;
     host: string;
     openBrowser: boolean;
+    webDistPath?: string | null;
+    keepAlive?: boolean;
 }
 
 /**
@@ -43,6 +46,25 @@ export const defaultDeps: StartServerDeps = {
     openUrl,
 };
 
+async function resolveWebDistPath(configuredPath: string | null | undefined): Promise<string | undefined> {
+    const candidates =
+        configuredPath && configuredPath.trim() !== ''
+            ? [isAbsolute(configuredPath) ? configuredPath : join(process.cwd(), configuredPath)]
+            : [
+                  join(process.cwd(), 'dist/web'),
+                  join(dirname(process.execPath), '../web'),
+                  join(import.meta.dir, '../../../dist/web'),
+              ];
+
+    for (const candidate of candidates) {
+        if (await Bun.file(join(candidate, 'index.html')).exists()) {
+            return candidate;
+        }
+    }
+
+    return undefined;
+}
+
 /**
  * Single entry point for the `spur serve` launcher — shared by both the
  * standalone entry and the CLI `spur serve` command.
@@ -71,6 +93,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
             const ctx: ServerContext = deps.createServerContext(appRt, {
                 cwd: process.cwd(),
                 fs,
+                webDistPath: await resolveWebDistPath(options.webDistPath),
                 jobQueueEnabled: bootConfig.jobqueue.enabled,
                 scheduler,
             });
@@ -105,6 +128,10 @@ export async function startServer(options: StartServerOptions, deps: StartServer
 
             if (options.openBrowser) {
                 await deps.openUrl(`${url}/board`);
+            }
+
+            if (options.keepAlive !== false) {
+                await new Promise<void>(() => {});
             }
         },
     });
