@@ -4,6 +4,7 @@
       "Skill(rd3:brainstorm)",
       "Skill(rd3:task-decomposition)",
       "Skill(sp:rule-refine)",
+
       "WebFetch(domain:hono.dev)",
       "WebFetch(domain:www.npmjs.com)",
       "WebFetch(domain:orm.drizzle.team)",
@@ -11,6 +12,7 @@
       "WebFetch(domain:logtape.org)",
       "WebFetch(domain:mael.dev)",
       "WebFetch(domain:developers.cloudflare.com)",
+
       "Bash(bun run:*)",
       "Bash(bun test:*)",
       "Bash(bun add:*)",
@@ -24,10 +26,12 @@
       "Bash(bunx biome:*)",
       "Bash(bunx tsc *)",
       "Bash(npx biome *)",
+      "Bash(npx tsc *)",
+      "Bash(npm view *)",
+
       "Bash(echo:*)",
       "Bash(grep export:*)",
       "Bash(dist/cli:*)",
-      "Bash(npm view *)",
       "Bash(rtk ls *)",
       "Bash(rtk cat *)",
       "Bash(rtk find *)",
@@ -39,19 +43,10 @@
       "Bash(sg:*)",
       "Bash(grep *)",
       "Bash(biome check *)",
-      "Bash(npx tsc *)",
       "Bash(spur rule *)",
       "Bash(spur workflow *)",
       "Bash(spur agent *)",
-      "Read(//tmp/**)",
-      "Read(//Users/robin/projects/cc-agents/plugins/rd3/skills/task-decomposition/**)",
-      "Bash(bun --cwd packages/domain -e 'import pkg from \"zod/package.json\" assert {type:\"json\"}; console.log\\(\"zod\", pkg.version\\)')",
-      "Bash(bun --cwd packages/domain -e 'import {z} from \"zod\"; console.log\\(typeof z.partialRecord\\)')",
-      "Bash(cp config/tasks/section-matrix.yaml /tmp/section-matrix.yaml.bak)",
-      "Bash(sed -i '' 's/required: \\\\[Background\\\\]/required: [Backgrund]/' config/tasks/section-matrix.yaml)",
-      "Bash(rm -f docs/tasks/0101_*.md)",
-      "Bash(perl -0pi -e 's/\\(^  standard:\\\\n    \\)backlog:/$1backlogg:/m' config/tasks/section-matrix.yaml)",
-      "Bash(default)"
+      "Read(//tmp/**)"
     ]
   }
 }
