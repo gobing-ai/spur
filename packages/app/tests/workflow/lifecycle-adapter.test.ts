@@ -3,7 +3,11 @@ import { resolve } from 'node:path';
 import { applyCliMigrations, type DbAdapter, TaskRunLinkDao } from '@gobing-ai/spur-domain';
 import { createDbAdapter } from '@gobing-ai/ts-db';
 import type { EntityRef } from '../../src/services/planning-write-service';
-import { LifecycleAdapter, type LifecycleAdapterOptions } from '../../src/workflow/lifecycle-adapter';
+import {
+    LifecycleAdapter,
+    type LifecycleAdapterOptions,
+    TASK_LIFECYCLE_PROFILE,
+} from '../../src/workflow/lifecycle-adapter';
 
 // The real task-lifecycle state-machine the adapter drives (repo-root config).
 const WORKFLOW_PATH = resolve(import.meta.dir, '../../../../config/workflows/task-lifecycle.yaml');
@@ -19,6 +23,7 @@ async function makeAdapter(): Promise<{ adapter: LifecycleAdapter; db: DbAdapter
     const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
     await applyCliMigrations(db);
     const opts: LifecycleAdapterOptions = {
+        profile: TASK_LIFECYCLE_PROFILE,
         getDb: async () => db,
         taskRunLinkDao: (adapter) => new TaskRunLinkDao(adapter),
         workflowPath: WORKFLOW_PATH,

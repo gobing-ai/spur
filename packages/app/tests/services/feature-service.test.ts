@@ -111,6 +111,25 @@ describe('FeatureService', () => {
         });
     });
 
+    describe('transition — actor attribution', () => {
+        // Why: the API caller's identity must reach the History audit line, not be
+        // silently replaced by 'system'. A regression here (dropping the actor arg)
+        // would make every feature transition look system-initiated.
+        test('per-call actor is recorded in the History line', async () => {
+            const created = await svc.create('Attributed Feature');
+            await svc.transition(created.ref.id, 'active', 'alice@example.com');
+            const shown = await svc.show(created.ref.id);
+            expect(shown?.content).toMatch(/backlog → active \(alice@example\.com\)/);
+        });
+
+        test('falls back to "system" when no actor is given', async () => {
+            const created = await svc.create('Unattributed Feature');
+            await svc.transition(created.ref.id, 'active');
+            const shown = await svc.show(created.ref.id);
+            expect(shown?.content).toMatch(/backlog → active \(system\)/);
+        });
+    });
+
     describe('create allocation is race-safe (R1, DD-14)', () => {
         test('sequential child creates allocate distinct digits (A1, A2, A3)', async () => {
             const fs = createNodeFileSystem(root);

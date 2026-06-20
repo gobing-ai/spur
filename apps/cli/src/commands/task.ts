@@ -2,17 +2,18 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import {
-    LifecycleAdapter,
     PlanningWriteService,
     type SectionMatrix,
+    TASK_LIFECYCLE_PROFILE,
     TaskCheckService,
     TaskService,
 } from '@gobing-ai/spur-app';
 import { bundledConfigRoot } from '@gobing-ai/spur-config';
-import { extractTemplateBodies, TASK_VARIANTS, TaskRunLinkDao, type TaskSection } from '@gobing-ai/spur-domain';
+import { extractTemplateBodies, TASK_VARIANTS, type TaskSection } from '@gobing-ai/spur-domain';
 import { loadSpurConfig } from '../config/loader';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
+import { makeLifecycleAdapter } from '../workflow/make-lifecycle-adapter';
 
 /** Register the `spur task` command and its subcommands on the CLI program. */
 export function registerTaskCommand(program: Command, context: CliContext): void {
@@ -277,7 +278,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
 
 async function makeService(context: CliContext, folderOverride?: string): Promise<TaskService> {
     const tasksDir = folderOverride ?? context.fs.resolve('docs', 'tasks');
-    const lifecycle = makeLifecycleAdapter(context);
+    const lifecycle = makeLifecycleAdapter(context, TASK_LIFECYCLE_PROFILE);
     const writeService = new PlanningWriteService({
         fs: context.fs,
         ...(lifecycle ? { lifecycle } : {}),
@@ -313,27 +314,6 @@ function loadTemplateBodies(variant: string): Partial<Record<TaskSection, string
     }
     templateBodiesCache.set(variant, bodies);
     return bodies;
-}
-
-/**
- * Build the engine-backed lifecycle port (0055). Status transitions then go
- * through the `task-lifecycle` state-machine with real guard enforcement
- * (`spur task check`) and file-wins rehydration (DD-04). Returns `undefined`
- * when the bundled workflow YAML is unreachable (e.g. a `--compile` single
- * binary with no sibling config) — `PlanningWriteService` then falls back to
- * the schema-only port.
- */
-function makeLifecycleAdapter(context: CliContext): LifecycleAdapter | undefined {
-    const root = bundledConfigRoot();
-    if (root === null) return undefined;
-    const workflowPath = join(root, 'workflows', 'task-lifecycle.yaml');
-    if (!existsSync(workflowPath)) return undefined;
-    return new LifecycleAdapter({
-        getDb: () => context.getDb(),
-        taskRunLinkDao: (db) => new TaskRunLinkDao(db),
-        workflowPath,
-        cwd: context.cwd,
-    });
 }
 
 async function makeCheckService(context: CliContext): Promise<TaskCheckService> {

@@ -4,9 +4,10 @@ import { applyCliMigrations, type DbAdapter, TaskRunLinkDao } from '@gobing-ai/s
 import { createDbAdapter } from '@gobing-ai/ts-db';
 import type { EntityRef } from '../../src/services/planning-write-service';
 import {
-    FeatureLifecycleAdapter,
-    type FeatureLifecycleAdapterOptions,
-} from '../../src/workflow/feature-lifecycle-adapter';
+    FEATURE_LIFECYCLE_PROFILE,
+    LifecycleAdapter,
+    type LifecycleAdapterOptions,
+} from '../../src/workflow/lifecycle-adapter';
 
 // The real feature-lifecycle state-machine the adapter drives (repo-root config).
 const WORKFLOW_PATH = resolve(import.meta.dir, '../../../../config/workflows/feature-lifecycle.yaml');
@@ -18,16 +19,17 @@ const makeRef = (id: string): EntityRef => ({
     folder: '/features',
 });
 
-async function makeAdapter(): Promise<{ adapter: FeatureLifecycleAdapter; db: DbAdapter }> {
+async function makeAdapter(): Promise<{ adapter: LifecycleAdapter; db: DbAdapter }> {
     const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
     await applyCliMigrations(db);
-    const opts: FeatureLifecycleAdapterOptions = {
+    const opts: LifecycleAdapterOptions = {
+        profile: FEATURE_LIFECYCLE_PROFILE,
         getDb: async () => db,
         taskRunLinkDao: (adapter) => new TaskRunLinkDao(adapter),
         workflowPath: WORKFLOW_PATH,
         cwd: process.cwd(),
     };
-    return { adapter: new FeatureLifecycleAdapter(opts), db };
+    return { adapter: new LifecycleAdapter(opts), db };
 }
 
 describe('FeatureLifecycleAdapter (engine integration)', () => {

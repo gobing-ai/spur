@@ -94,10 +94,15 @@ export class FeatureService {
         return this.ctx.writeService.updateFrontmatter(ref, key, value);
     }
 
-    /** Transition a feature to a new lifecycle status via the shared write path (R2). */
-    async transition(id: string, toStatus: string): Promise<WriteResult> {
+    /**
+     * Transition a feature to a new lifecycle status via the shared write path (R2).
+     * The per-call `actor` (e.g. the API caller) takes precedence over the context
+     * actor so the History entry attributes the change correctly; mirrors
+     * `TaskService.updateStatus`.
+     */
+    async transition(id: string, toStatus: string, actor?: string): Promise<WriteResult> {
         const ref = await this.refFor(id);
-        return this.ctx.writeService.transition(ref, toStatus, this.ctx.actor ?? 'system');
+        return this.ctx.writeService.transition(ref, toStatus, actor ?? this.ctx.actor ?? 'system');
     }
 
     /** List features. */

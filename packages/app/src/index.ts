@@ -115,7 +115,9 @@ export { RuleCheckActionRunner } from './workflow/actions/rule-check';
 // Workflow built-in action runners
 export { registerSpurBuiltins, type SpurWorkflowBuiltinsOptions } from './workflow/builtins';
 export {
-    FeatureLifecycleAdapter,
-    type FeatureLifecycleAdapterOptions,
-} from './workflow/feature-lifecycle-adapter';
-export { LifecycleAdapter, type LifecycleAdapterOptions } from './workflow/lifecycle-adapter';
+    FEATURE_LIFECYCLE_PROFILE,
+    LifecycleAdapter,
+    type LifecycleAdapterOptions,
+    type LifecycleProfile,
+    TASK_LIFECYCLE_PROFILE,
+} from './workflow/lifecycle-adapter';

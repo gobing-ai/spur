@@ -61,7 +61,7 @@ export function createFeatureHandlers(ctx: ServerContext) {
         }),
 
         transition: os.feature.transition.handler(async ({ input }) => {
-            await ctx.featureService().transition(input.id, input.toStatus);
+            await ctx.featureService().transition(input.id, input.toStatus, input.actor);
             return { ok: true as const, data: { id: input.id, status: input.toStatus } };
         }),
 
