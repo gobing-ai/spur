@@ -24,7 +24,7 @@ metadata:
     - ideate
     - output
 see_also:
-  - sp:anti-hallucination
+  - cc:anti-hallucination
   - sp:spur-tasks
 ---
 
@@ -36,7 +36,7 @@ Generate solution options with trade-offs, recommendations, and confidence scori
 - **`sp:brainstorm`** = Ideation: generate approaches with trade-offs
 - **research** = verify and synthesize information (delegate via `spur agent run`)
 - **`sp:spur-dev`** = Task creation: structured task breakdown (planning half)
-- **`sp:anti-hallucination`** = Verification: source-first claim validation
+- **`cc:anti-hallucination`** = Verification: source-first claim validation
 
 ## Overview
 
@@ -73,7 +73,7 @@ Activate sp:brainstorm when:
 **NOT for:**
 - Pure research (use `spur agent run` for research instead)
 - Task creation without ideation (use `sp:spur-dev` instead)
-- Fact-checking or verification only (use `sp:anti-hallucination` instead)
+- Fact-checking or verification only (use `cc:anti-hallucination` instead)
 - Task file operations (use `sp:spur-tasks` instead)
 
 ## Core Principles
@@ -104,7 +104,7 @@ Use `AskUserQuestion` for ambiguous or insufficient input:
 Don't implement research directly. Delegate to specialized skills:
 
 ```
-For verification → sp:anti-hallucination
+For verification → cc:anti-hallucination
 For synthesis → `spur agent run`
 ```
 
@@ -175,7 +175,7 @@ Bash: spur task batch-create decomposition.json   # bare JSON array (see sp:spur
 
 **Research delegation:**
 ```
-1. Invoke sp:anti-hallucination for verification protocol
+1. Invoke cc:anti-hallucination for verification protocol
 2. Use `spur agent run` for research + synthesis
 3. Generate approaches based on verified information
 ```
@@ -228,7 +228,7 @@ docs/plans/YYYY-MM-DD-<topic>-brainstorm.md
 
 | Research Need | Delegate To | Notes |
 |--------------|-------------|-------|
-| Verification protocol | `sp:anti-hallucination` | Source-first validation |
+| Verification protocol | `cc:anti-hallucination` | Source-first validation |
 | Information synthesis | `spur agent run` | Multi-source consolidation |
 | Task breakdown | `sp:spur-dev` | Structured tasks |
 | Task file creation | `sp:spur-tasks` | WBS assignment, kanban |
@@ -245,7 +245,7 @@ docs/plans/YYYY-MM-DD-<topic>-brainstorm.md
 
 ## Anti-Hallucination Integration
 
-sp:brainstorm delegates verification to sp:anti-hallucination:
+sp:brainstorm delegates verification to cc:anti-hallucination:
 
 **Protocol:**
 1. **CHECK** — Does this claim need verification?
@@ -320,4 +320,4 @@ intent into a reliable sequence, not bare forwarders).
 
 ---
 
-**Remember:** Ideation ≠ Research. Generate approaches with trade-offs. Delegate verification to `sp:anti-hallucination`. Delegate synthesis/research to `spur agent run`. Delegate task creation to `sp:spur-dev`.
+**Remember:** Ideation ≠ Research. Generate approaches with trade-offs. Delegate verification to `cc:anti-hallucination`. Delegate synthesis/research to `spur agent run`. Delegate task creation to `sp:spur-dev`.

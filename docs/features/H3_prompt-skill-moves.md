@@ -26,7 +26,7 @@ they stay live in cc-agents.
 ## Acceptance Criteria
 
 - [x] `sp:brainstorm` moved; scenario-specific command candidates recorded for later
-- [x] `sp:anti-hallucination` moved verbatim (stays a skill forever — K05)
+- [x] `sp:anti-hallucination` moved verbatim (was "stays a skill forever — K05"; **superseded 2026-06-20** — migrated to the `superskill` repo as `cc:anti-hallucination` per task 0041 + ADR-024 amendment; the in-repo copy was removed)
 - [x] `sp:daily-summary` verified working and enhanced before adoption; script stays embedded
 - [x] `sp:doc-evolve` shipped from its own mini-spec, operating per
       `docs/99_PROJECT_CONSTITUTION.md` (drift audits, sync checks, lesson appends)
@@ -38,6 +38,7 @@ they stay live in cc-agents.
 | --- | ---- | ------ |
 | 0069 | W3: Prompt-skill moves — brainstorm, anti-hallucination, daily-summary | Done |
 | 0070 | W3: sp:doc-evolve — constitution-driven rewrite of code-docs | Done |
+| 0071 | rd3 migration 0054-0070 review — remediate 8 post-implementation findings | Done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
