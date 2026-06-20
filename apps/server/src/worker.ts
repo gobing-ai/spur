@@ -1,5 +1,6 @@
 import type { ApplicationRuntime, InfraEvents } from '@gobing-ai/ts-infra/application';
 import { runApplication } from '@gobing-ai/ts-infra/application';
+import type { Hono } from 'hono';
 import { createApp, serverBootstrapConfig } from './bootstrap';
 
 type AppRuntime = ApplicationRuntime<unknown, InfraEvents>;
@@ -11,13 +12,15 @@ const defaultBootstrap: BootstrapFn = (env) =>
     runApplication({
         config: serverBootstrapConfig(env),
         async start(_appRt: ApplicationRuntime) {
-            // No server-level side effects needed — the app is created on
-            // each request via createApp(appRt) in the fetch handler.
+            // No server-level side effects — the app is created lazily on
+            // first request and cached for the isolate's lifetime.
         },
     });
 
 /** Cached bootstrap promise — initialized lazily on first request. */
 let rtPromise: Promise<AppRuntime> | undefined;
+
+let cachedApp: Hono | undefined;
 
 /**
  * Lazily bootstrap the application once per isolate and cache the promise.
@@ -39,15 +42,19 @@ export function getRuntime(
     return rtPromise;
 }
 
-/** Reset the cached runtime. Test-only seam for isolating singleton state. */
+/** Reset the cached runtime and app. Test-only seam for isolating singleton state. */
 export function resetRuntime(): void {
     rtPromise = undefined;
+    cachedApp = undefined;
 }
 
 /** Cloudflare Worker fetch entrypoint for the server app. */
 export default {
     async fetch(request: Request, env?: Record<string, string | undefined>) {
         const appRt = await getRuntime(env ?? {});
-        return createApp(appRt).fetch(request, env);
+        if (!cachedApp) {
+            cachedApp = createApp(appRt);
+        }
+        return cachedApp.fetch(request, env);
     },
 };

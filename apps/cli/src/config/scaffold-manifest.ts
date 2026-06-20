@@ -51,7 +51,7 @@ export const SCAFFOLD_MANIFEST: readonly ScaffoldEntry[] = [
     // Section matrix under .spur/config/tasks/
     { source: 'tasks/section-matrix.yaml', target: 'config/tasks/section-matrix.yaml' },
     // Task templates under .spur/config/templates/task/
-    { source: 'templates/task/default.md', target: 'config/templates/task/default.md' },
+    { source: 'templates/task/standard.md', target: 'config/templates/task/standard.md' },
     { source: 'templates/task/feature-impl.md', target: 'config/templates/task/feature-impl.md' },
     { source: 'templates/task/issue.md', target: 'config/templates/task/issue.md' },
     { source: 'templates/task/review.md', target: 'config/templates/task/review.md' },

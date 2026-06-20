@@ -26,7 +26,7 @@ describe('spur init template copy', () => {
         expect(await main(['init'], options)).toBe(0);
 
         const base = join(cwd, '.spur', 'config', 'templates');
-        expect(existsSync(join(base, 'task', 'default.md'))).toBe(true);
+        expect(existsSync(join(base, 'task', 'standard.md'))).toBe(true);
         expect(existsSync(join(base, 'task', 'feature-impl.md'))).toBe(true);
         expect(existsSync(join(base, 'task', 'issue.md'))).toBe(true);
         expect(existsSync(join(base, 'task', 'review.md'))).toBe(true);
@@ -40,7 +40,7 @@ describe('spur init template copy', () => {
         const dir = await mkdtemp(join(tmpdir(), 'spur-init-test-'));
         const bundledTaskDir = join(process.cwd(), 'config', 'templates', 'task');
         expect(existsSync(bundledTaskDir)).toBe(true);
-        expect(existsSync(join(bundledTaskDir, 'default.md'))).toBe(true);
+        expect(existsSync(join(bundledTaskDir, 'standard.md'))).toBe(true);
         expect(existsSync(join(bundledTaskDir, 'feature-impl.md'))).toBe(true);
         expect(existsSync(join(bundledTaskDir, 'issue.md'))).toBe(true);
         expect(existsSync(join(bundledTaskDir, 'review.md'))).toBe(true);
@@ -49,10 +49,10 @@ describe('spur init template copy', () => {
     });
 
     test('template files have valid frontmatter', () => {
-        const defaultContent = readFileSync('config/templates/task/default.md', 'utf-8');
-        expect(defaultContent).toContain('schema_version: 1');
-        expect(defaultContent).toContain('status: backlog');
-        expect(defaultContent).toContain('{{ NAME }}');
+        const standardContent = readFileSync('config/templates/task/standard.md', 'utf-8');
+        expect(standardContent).toContain('schema_version: 1');
+        expect(standardContent).toContain('status: backlog');
+        expect(standardContent).toContain('{{ NAME }}');
     });
 
     test('feature template has the canonical Tasks auto-gen marker region', () => {
@@ -70,7 +70,7 @@ describe('spur init template copy', () => {
 
         // First init — templates are created.
         expect(await main(['init'], options)).toBe(0);
-        const tmplPath = join(cwd, '.spur', 'config', 'templates', 'task', 'default.md');
+        const tmplPath = join(cwd, '.spur', 'config', 'templates', 'task', 'standard.md');
         expect(existsSync(tmplPath)).toBe(true);
 
         // Modify the template in-place to add a marker.

@@ -29,4 +29,5 @@ export * from './planning/locks';
 export * from './planning/markdown-document';
 export * from './planning/rebuild-events';
 export * from './planning/schema';
+export * from './planning/task-skeleton';
 export { DOMAIN_SCHEMA_SQL } from './schema';

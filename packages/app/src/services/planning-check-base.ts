@@ -19,6 +19,14 @@ import type { z } from 'zod';
 
 // ─── Shared types ─────────────────────────────────────────────────────────
 
+/**
+ * Sections allowed at every status without being declared in the matrix:
+ * `History` (machine-appended transition log) and `References` are structural
+ * and present throughout a file's lifecycle, so the closed-world check never
+ * flags them. (`Notes` covered for feature parity.)
+ */
+const UNIVERSAL_SECTIONS = ['History', 'References', 'Notes'] as const;
+
 /** Finding severity level. `error` blocks the check gate; `warning` is advisory. */
 export type Severity = 'error' | 'warning';
 
@@ -155,7 +163,15 @@ export abstract class PlanningCheckService {
         }
 
         // Closed-world vocabulary (DD-08): every present section must be declared.
-        const allowed = new Set([...(entry.required ?? []), ...(entry.optional ?? []), ...(entry.forbidden ?? [])]);
+        // `History` (machine-appended transition log) and `References` are
+        // structural and present in every file at every status, so they are
+        // universally allowed rather than re-declared in each status row.
+        const allowed = new Set([
+            ...(entry.required ?? []),
+            ...(entry.optional ?? []),
+            ...(entry.forbidden ?? []),
+            ...UNIVERSAL_SECTIONS,
+        ]);
         for (const sect of present) {
             if (!allowed.has(sect)) {
                 findings.push({

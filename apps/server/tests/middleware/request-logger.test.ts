@@ -6,7 +6,7 @@ import { requestLogger } from '../../src/middleware/request-logger';
 import { mockRuntime } from './helpers';
 
 describe('requestLogger middleware', () => {
-    test('logs method, path, status, duration, requestId', async () => {
+    test('logs method, path, status, duration, requestId at debug for 2xx', async () => {
         const logCalls: { msg: string; data?: Record<string, unknown> }[] = [];
         const appRt = mockRuntime(logCalls);
 
@@ -22,12 +22,13 @@ describe('requestLogger middleware', () => {
             method: 'GET',
             path: '/test',
             status: 200,
+            _level: 'debug',
         });
         expect(typeof logCalls[0]?.data?.duration_ms).toBe('number');
         expect(logCalls[0]?.data?.requestId).toMatch(/^[0-9a-f]{8}-/);
     });
 
-    test('captures error status codes from onError', async () => {
+    test('logs 5xx at warn and captures error status from onError', async () => {
         const logCalls: { msg: string; data?: Record<string, unknown> }[] = [];
         const appRt = mockRuntime(logCalls);
 
@@ -35,12 +36,12 @@ describe('requestLogger middleware', () => {
         app.use('*', requestId());
         app.use('*', requestLogger(appRt));
         app.onError(globalErrorHandler);
-        app.get('/fail', () => {
+        app.get('/fail', (_c) => {
             throw new Error('boom');
         });
 
         await app.request('/fail');
         expect(logCalls.length).toBe(1);
-        expect(logCalls[0]?.data?.status).toBe(500);
+        expect(logCalls[0]?.data).toMatchObject({ status: 500, _level: 'warn' });
     });
 });

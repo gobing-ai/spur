@@ -84,7 +84,7 @@ describe('PlanningCheckService.resolveMatrixEntry', () => {
         expect(entry).toEqual({ required: ['Background'], optional: ['Notes'], forbidden: ['Solution'] });
     });
 
-    test('falls back to standard variant when the requested variant is missing', () => {
+    test('falls back to the standard variant when the requested variant is missing', () => {
         const svc = new TestCheckService(simpleMatrix);
         const entry = svc.resolveMatrixEntry('nonexistent', 'backlog');
         expect(entry?.required).toEqual(['Background']);
@@ -94,7 +94,7 @@ describe('PlanningCheckService.resolveMatrixEntry', () => {
         const svc = new TestCheckService(simpleMatrix);
         // 'custom' variant has 'backlog' but not 'done'. The ?? fallback only
         // triggers when the variant itself is absent — it does NOT cross over
-        // to standard's status entries. So custom.done → undefined.
+        // to the standard variant's status entries. So custom.done → undefined.
         const entry = svc.resolveMatrixEntry('custom', 'done');
         expect(entry).toBeUndefined();
     });

@@ -16,7 +16,7 @@ describe('scaffold-manifest', () => {
         // Section matrix
         expect(sources).toContain('tasks/section-matrix.yaml');
         // Task templates
-        expect(sources).toContain('templates/task/default.md');
+        expect(sources).toContain('templates/task/standard.md');
         expect(sources).toContain('templates/task/feature-impl.md');
         expect(sources).toContain('templates/task/issue.md');
         expect(sources).toContain('templates/task/review.md');

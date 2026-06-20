@@ -5,14 +5,21 @@ import type { JsonifiedClient } from '@orpc/openapi-client';
 import { OpenAPILink } from '@orpc/openapi-client/fetch';
 import { onError } from '@orpc/shared';
 
-/** Resolve the public API URL for browser, SSR, and test contexts. */
+/**
+ * Resolve the public API URL for browser, SSR, and test contexts.
+ *
+ * In both dev and production the API is served same-origin: the unified dev
+ * server (W5/0081) serves the Hono API in-process via @hono/vite-dev-server
+ * on the same port as the board (4321); production serves it from the same
+ * origin via Hono serveStatic or Cloudflare Workers. Set PUBLIC_API_URL to
+ * override (e.g. when running the standalone server on a separate port).
+ */
 export function resolveApiUrl(
     envUrl = import.meta.env.PUBLIC_API_URL,
     origin = globalThis.location?.origin,
-    isDev = import.meta.env.DEV,
+    _isDev = import.meta.env.DEV,
 ): string {
     if (envUrl) return envUrl;
-    if (isDev) return 'http://localhost:3000/api';
     return origin ? new URL('/api', origin).toString() : 'http://localhost:3000/api';
 }
 

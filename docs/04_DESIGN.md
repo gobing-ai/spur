@@ -455,7 +455,7 @@ Source: delivery §1.1, design §10.
 | Command | Flags | Exit | Notes |
 |---------|-------|------|-------|
 | `spur task` | — (noun help) | 0 | Lists subcommands if no subcommand given. |
-| `spur task create <title>` | `--feature <id>` `--parent <wbs>` `--folder <path>` `--json` | 0/1 | Race-safe WBS allocation; `--feature` enables B09 Goal→Background derivation. |
+| `spur task create <title>` | `--feature <id>` `--parent <wbs>` `--template <variant>` `--folder <path>` `--json` | 0/1/2 | Race-safe WBS allocation; `--feature` enables B09 Goal→Background derivation; `--template` selects a section-matrix variant (`standard·feature-impl·issue·review·meta·brainstorm`; default `feature-impl` when `--feature`, else `standard`); unknown variant → exit 2. |
 | `spur task show <wbs>` | `--folder <path>` `--json` | 0/1 | Frontmatter is a top-level field in `--json` output. |
 | `spur task update <wbs> <status>` | `--section <name> --from-file <path>` `--folder <path>` `--json` | 0/1/2 | Status transition runs lifecycle guard; `--section` reads body from file. |
 | `spur task list` | `--status <s>` `--phase <p>` `--parent <wbs>` `--folder <path>` `--json` | 0/1 | `--phase` is a legacy alias for `--status`. |
@@ -558,11 +558,35 @@ lowercase canonical form; aliases never persist.
 ### 7.4 Section-Status-Matrix + planning event catalog
 
 **Section-Status-Matrix.** Source: `config/tasks/section-matrix.yaml` (schema:
-`apps/cli/schemas/section-matrix.schema.json`). Each variant maps a status →
-{ required, optional, forbidden } section lists, evaluated by `spur task check` / `spur feature check`
-(the L2 layer, design §3.2). Ships permissive (warning-first); the hard-gate core is the `done`
-status (Solution + Testing + Review required, `gate: true`) plus the AC/Solution/Review format rules.
-Authority for matrix semantics: design §3 (the L2 layer), delivery §3.2.
+`apps/cli/schemas/section-matrix.schema.json`). The YAML declares a root `$schema` ref and is loaded
++ validated by the standard `loadStructuredConfig` path (`loadSpurConfig` in
+`apps/cli/src/config/loader.ts`, with the schema embedded for `--compile` binaries) — a typo'd section
+name or status key fails loud at load instead of becoming a dead rule. (The Zod `sectionMatrixSchema`
+in domain remains the typed contract + unit-test surface.) Each **template variant**
+(`standard·feature-impl·issue·review·meta·brainstorm` — the unified
+`TASK_VARIANTS` axis selected by a task's `template:` frontmatter, defaulting to `standard`) maps a
+status → { required, optional, forbidden } section lists, evaluated by `spur task check` /
+`spur feature check` (the L2 layer, design §3.2). `spur task check` resolves the variant from
+`fm.template ?? 'standard'` (not `type`). Ships permissive (warning-first); the hard-gate core is the
+`done` status (Solution + Testing + Review required, `gate: true`) plus the AC/Solution/Review format
+rules. Authority for matrix semantics: design §3 (the L2 layer), delivery §3.2.
+
+**Matrix-driven creation (single producer).** The same matrix drives which sections a *new* task
+file carries, **per variant**. `spur task create` / `batch-create` render the body via the canonical
+`buildTaskSkeleton` (`packages/domain/src/planning/task-skeleton.ts`) from the matrix entry for the
+chosen variant + creation status — there is no second, inline section list in `task-service.ts` (the
+removed drift that shipped empty `Requirements`/`Q&A` headings). Per-variant section **bodies** (e.g.
+`review`'s `#### Review Findings` input table under Background) come from the scaffold template files
+(`config/templates/task/<variant>.md`), extracted by `extractTemplateBodies` and merged under the
+task-specific bodies (Background/Requirements) — so variant boilerplate is **data, never hardcoded**.
+Each remaining unfilled section gets an invisible HTML guidance comment (skipped by the L3 format
+rules via `isPlaceholderBody`). **Creation status (§2.3 semantics):** a spec'd task (a `--feature`
+link, or a batch item with `background`/`requirements`) is created at **`todo`** ("ready to execute"
+— the HITL review gate, so Acceptance Criteria + Design + Plan are present); a bare capture is created
+at **`backlog`** ("still preparing" — Background only). `Solution` is the implementation change-map
+and first appears at `wip`; the L3 `file:line` rule only fires once it has real content.
+`History`/`References`/`Notes` are universally allowed by the closed-world check (structural, present
+throughout the lifecycle).
 
 **Planning event catalog (X04).** The six planning events on `PlanningEventMap` + three engine-seam
 events. All planning events are emitted by `PlanningWriteService` (design §7) and persisted to the

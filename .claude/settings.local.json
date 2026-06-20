@@ -43,7 +43,15 @@
       "Bash(spur rule *)",
       "Bash(spur workflow *)",
       "Bash(spur agent *)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Read(//Users/robin/projects/cc-agents/plugins/rd3/skills/task-decomposition/**)",
+      "Bash(bun --cwd packages/domain -e 'import pkg from \"zod/package.json\" assert {type:\"json\"}; console.log\\(\"zod\", pkg.version\\)')",
+      "Bash(bun --cwd packages/domain -e 'import {z} from \"zod\"; console.log\\(typeof z.partialRecord\\)')",
+      "Bash(cp config/tasks/section-matrix.yaml /tmp/section-matrix.yaml.bak)",
+      "Bash(sed -i '' 's/required: \\\\[Background\\\\]/required: [Backgrund]/' config/tasks/section-matrix.yaml)",
+      "Bash(rm -f docs/tasks/0101_*.md)",
+      "Bash(perl -0pi -e 's/\\(^  standard:\\\\n    \\)backlog:/$1backlogg:/m' config/tasks/section-matrix.yaml)",
+      "Bash(default)"
     ]
   }
 }

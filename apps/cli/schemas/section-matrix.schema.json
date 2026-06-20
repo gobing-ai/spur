@@ -2,42 +2,66 @@
     "$schema": "http://json-schema.org/draft-07/schema#",
     "$id": "https://gobing.ai/spur/schemas/section-matrix.schema.json",
     "title": "Section-Status-Matrix Schema",
-    "description": "Validates config/tasks/section-matrix.yaml — which sections are required/optional/forbidden per task status. Design §3.2.",
+    "description": "Validates config/tasks/section-matrix.yaml — which sections are required/optional/forbidden per task status. Design §3.2. Authored for ts-runtime's loadStructuredConfig validator (supports properties/required/additionalProperties + $defs/$ref/enum; NOT patternProperties/uniqueItems).",
     "type": "object",
     "required": ["variants"],
     "additionalProperties": false,
     "properties": {
+        "$schema": {
+            "type": "string",
+            "description": "JSON Schema ref this file validates against (loadStructuredConfig reads it)."
+        },
         "variants": {
             "type": "object",
+            "description": "Map of template variant → per-status matrix. Variant names are extensible (user-defined variants allowed); each value is a variant.",
+            "additionalProperties": { "$ref": "#/$defs/variant" }
+        }
+    },
+    "$defs": {
+        "section": {
+            "enum": [
+                "Background",
+                "Requirements",
+                "Acceptance Criteria",
+                "Q&A",
+                "Design",
+                "Plan",
+                "Solution",
+                "Root Cause",
+                "Testing",
+                "Review",
+                "References",
+                "Notes",
+                "History"
+            ],
+            "description": "Canonical task section vocabulary (DD-08). Any other value is a typo."
+        },
+        "sectionList": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/section" }
+        },
+        "entry": {
+            "type": "object",
             "additionalProperties": false,
-            "patternProperties": {
-                "^[a-z][a-z0-9-]*$": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "patternProperties": {
-                        "^(backlog|todo|wip|testing|blocked|done|cancelled)$": {
-                            "type": "object",
-                            "additionalProperties": false,
-                            "properties": {
-                                "required": {
-                                    "type": "array",
-                                    "items": { "type": "string" }
-                                },
-                                "optional": {
-                                    "type": "array",
-                                    "items": { "type": "string" }
-                                },
-                                "forbidden": {
-                                    "type": "array",
-                                    "items": { "type": "string" }
-                                },
-                                "gate": {
-                                    "type": "boolean"
-                                }
-                            }
-                        }
-                    }
-                }
+            "properties": {
+                "required": { "$ref": "#/$defs/sectionList" },
+                "optional": { "$ref": "#/$defs/sectionList" },
+                "forbidden": { "$ref": "#/$defs/sectionList" },
+                "gate": { "type": "boolean" }
+            }
+        },
+        "variant": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "A variant may declare any subset of the 7 canonical statuses (enumerated below); an unknown status key is rejected.",
+            "properties": {
+                "backlog": { "$ref": "#/$defs/entry" },
+                "todo": { "$ref": "#/$defs/entry" },
+                "wip": { "$ref": "#/$defs/entry" },
+                "testing": { "$ref": "#/$defs/entry" },
+                "blocked": { "$ref": "#/$defs/entry" },
+                "done": { "$ref": "#/$defs/entry" },
+                "cancelled": { "$ref": "#/$defs/entry" }
             }
         }
     }

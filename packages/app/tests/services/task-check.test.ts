@@ -311,6 +311,92 @@ describe('TaskCheckService', () => {
         expect(reqWarnings).toHaveLength(0);
     });
 
+    test('L3: bulletized R-numbered Requirements produce no warning', async () => {
+        // WHY: the producer bulletizes R-items ("- R1. …"); the R-numbering check
+        // must accept the list-bullet prefix, else a correctly-formatted file warns.
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Bullet reqs"',
+            'status: backlog',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Bullet reqs',
+            '',
+            '### Background',
+            '',
+            'text',
+            '',
+            '### Requirements',
+            '',
+            '- R1. The system shall do X.',
+            '- R2. The system shall do Y.',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+        const reqWarnings = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Requirements');
+        expect(reqWarnings).toHaveLength(0);
+    });
+
+    test('L3: a guidance-placeholder Solution does NOT trigger the file:line error', async () => {
+        // WHY: a not-yet-implemented task (Solution = guidance comment only) must
+        // pass — forcing a file:line citation before implementation is the original
+        // dogfood bug that failed every freshly-created task.
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Placeholder sol"',
+            'status: wip',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Placeholder sol',
+            '',
+            '### Solution',
+            '',
+            '<!-- Change map — HOW/WHERE. A file:line table … -->',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+        const solErrors = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Solution');
+        expect(solErrors).toHaveLength(0);
+    });
+
+    test('L3: a real Solution body without a file:line citation still errors', async () => {
+        // WHY: once Solution carries actual prose it must cite where the change is —
+        // the placeholder skip must not weaken the rule for authored content.
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Uncited sol"',
+            'status: wip',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Uncited sol',
+            '',
+            '### Solution',
+            '',
+            'Refactored the parser to handle the new case.',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+        const solErrors = result.findings.filter(
+            (f) => f.layer === 'L3' && f.section === 'Solution' && f.severity === 'error',
+        );
+        expect(solErrors.length).toBeGreaterThan(0);
+    });
+
     test('L3: Testing without coverage claim warns', async () => {
         const content = [
             '---',
@@ -434,7 +520,7 @@ describe('TaskCheckService', () => {
         expect(planWarnings).toHaveLength(0);
     });
 
-    test('resolveMatrixEntry falls back to standard variant', () => {
+    test('resolveMatrixEntry falls back to the standard variant', () => {
         const svc = new TaskCheckService(createNodeFileSystem(), matrix);
         const entry = svc.resolveMatrixEntry('nonexistent', 'backlog');
         expect(entry).toBeTruthy();

@@ -39,7 +39,7 @@ describe('bundled-config', () => {
         const files = listBundledTemplateFiles();
         expect(files.length).toBeGreaterThan(0);
         // Task templates created in task 0054
-        expect(files).toContain('templates/task/default.md');
+        expect(files).toContain('templates/task/standard.md');
         expect(files).toContain('templates/task/feature-impl.md');
         expect(files).toContain('templates/task/issue.md');
         expect(files).toContain('templates/task/review.md');

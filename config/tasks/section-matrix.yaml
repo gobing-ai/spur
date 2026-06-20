@@ -1,22 +1,31 @@
 # Section-Status-Matrix: which sections are required/optional/forbidden per task status.
 # Design §3.2 — evaluated CLI-side only. Ships permissive; tightened by compliance data.
 #
-# Each variant maps status → { required, optional, forbidden } section lists.
-# Sections reference the canonical section vocabulary (§2.1).
-# `gate: true` on a status makes L2 violations hard errors (not warnings).
+# Each VARIANT (the unified template axis — TASK_VARIANTS) maps status →
+# { required, optional, forbidden } section lists. Sections reference the canonical
+# section vocabulary (§2.1). `gate: true` on a status makes L2 violations hard errors.
+#
+# The variant is selected by a task's `template:` frontmatter (default: `standard`).
+# It drives BOTH validation (`spur task check`) AND creation (`buildTaskSkeleton`).
+$schema: "@gobing-ai/spur/schemas/section-matrix.schema.json"
 
 variants:
-  # Standard task template
+  # Workhorse general-purpose task.
   standard:
     backlog:
       required: [Background]
       forbidden: [Solution, Review, Testing]
+    # todo = "ready to execute" (§2.3): fully specified and HITL-reviewable.
+    # Design + Plan + Acceptance Criteria are required so a task can be reviewed
+    # and approved before any code is written. Solution stays forbidden — it is
+    # the implementation change-map (file:line), authored at wip/testing.
     todo:
-      required: [Background, Requirements, Acceptance Criteria]
-      optional: [Q&A, Design]
+      required: [Background, Acceptance Criteria, Design, Plan]
+      optional: [Q&A, Requirements]
+      forbidden: [Solution, Review, Testing]
     wip:
-      required: [Background, Acceptance Criteria, Plan]
-      optional: [Design, Q&A]
+      required: [Background, Acceptance Criteria, Design, Plan]
+      optional: [Q&A, Requirements, Solution]
       forbidden: [Review]
     testing:
       required: [Solution, Testing]
@@ -27,12 +36,117 @@ variants:
       gate: true
     blocked:
       required: [Background]
-      optional: [Plan, Solution, Notes]
+      optional: [Plan, Solution]
     cancelled:
       required: []
       optional: [Background]
 
-  # Brainstorm template (minimal)
+  # Feature implementation — AC pre-seeded from the linked feature's scenarios.
+  feature-impl:
+    backlog:
+      required: [Background]
+      forbidden: [Solution, Review, Testing]
+    todo:
+      required: [Background, Acceptance Criteria, Design, Plan]
+      optional: [Q&A, Requirements]
+      forbidden: [Solution, Review, Testing]
+    wip:
+      required: [Background, Acceptance Criteria, Design, Plan]
+      optional: [Q&A, Requirements, Solution]
+      forbidden: [Review]
+    testing:
+      required: [Solution, Testing]
+      optional: [Background]
+      forbidden: [Review]
+    done:
+      required: [Solution, Testing, Review]
+      gate: true
+    blocked:
+      required: [Background]
+      optional: [Plan, Solution]
+    cancelled:
+      required: []
+      optional: [Background]
+
+  # Bug / issue report — repro in Background, verified Root Cause, then fix.
+  issue:
+    backlog:
+      required: [Background]
+      forbidden: [Solution, Review]
+    todo:
+      required: [Background, Root Cause, Plan]
+      optional: [Acceptance Criteria, Design, Q&A]
+      forbidden: [Solution, Review]
+    wip:
+      required: [Background, Root Cause, Plan]
+      optional: [Design, Solution, Q&A]
+      forbidden: [Review]
+    testing:
+      required: [Root Cause, Solution, Testing]
+      optional: [Background]
+      forbidden: [Review]
+    done:
+      required: [Root Cause, Solution, Testing, Review]
+      gate: true
+    blocked:
+      required: [Background]
+      optional: [Root Cause, Plan]
+    cancelled:
+      required: []
+      optional: [Background]
+
+  # Code-review result task — the deliverable is the P1–P4 findings table.
+  review:
+    backlog:
+      required: [Background]
+      forbidden: [Testing]
+    todo:
+      required: [Background, Plan]
+      optional: [Q&A]
+      forbidden: [Testing]
+    wip:
+      required: [Background, Review]
+      optional: [Plan, Q&A]
+    testing:
+      required: [Background, Review]
+      optional: [Plan]
+    done:
+      required: [Background, Review]
+      gate: true
+    blocked:
+      required: [Background]
+      optional: [Plan, Review]
+    cancelled:
+      required: []
+      optional: [Background]
+
+  # Process / docs / chore — lightweight: Background + Plan, no Solution/AC gate.
+  meta:
+    backlog:
+      required: [Background]
+      forbidden: [Review]
+    todo:
+      required: [Background, Plan]
+      optional: [Q&A, Design]
+      forbidden: [Review]
+    wip:
+      required: [Background, Plan]
+      optional: [Q&A, Design, Solution]
+      forbidden: [Review]
+    testing:
+      required: [Background, Plan]
+      optional: [Solution, Testing]
+    done:
+      required: [Background, Plan]
+      optional: [Solution, Testing, Review]
+    blocked:
+      required: [Background]
+      optional: [Plan]
+    cancelled:
+      required: []
+      optional: [Background]
+
+  # Brainstorm template (minimal idea capture).
   brainstorm:
     backlog:
       required: [Background]

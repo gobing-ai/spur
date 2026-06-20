@@ -10,6 +10,7 @@
 import { dirname, join } from 'node:path';
 import {
     checkAcCoverage,
+    DEFAULT_TASK_VARIANT,
     MarkdownDocument,
     parseChecklist,
     stripAcFence,
@@ -41,6 +42,20 @@ export interface CheckResult {
     pass: boolean;
 }
 
+/**
+ * A section body is a placeholder when, after stripping HTML guidance comments
+ * (`<!-- … -->`) and blockquote `> TBD`-style markers, nothing substantive
+ * remains. Used to skip format rules for sections not yet authored (e.g. an
+ * empty Solution at todo/wip before implementation).
+ */
+function isPlaceholderBody(body: string): boolean {
+    const stripped = body
+        .replace(/<!--[\s\S]*?-->/g, '')
+        .replace(/^\s*>\s*TBD\s*$/gim, '')
+        .trim();
+    return stripped.length === 0;
+}
+
 // ─── TaskCheckService ───────────────────────────────────────────────────
 
 /** Four-layer task validator (design §3). L1 schema → L2 matrix → L3 format → L4 traceability. */
@@ -69,7 +84,10 @@ export class TaskCheckService extends PlanningCheckService {
 
         const fm = doc.frontmatterData ?? {};
         const status = (fm.status as string) ?? 'backlog';
-        const variant = (fm.type as string) ?? 'standard';
+        // The template variant is the unified section-layout axis (§3.2); `template`
+        // frontmatter selects it, defaulting to `default`. (`type` is the orthogonal
+        // task/brainstorm corpus-compat field, not the matrix key.)
+        const variant = (fm.template as string) ?? DEFAULT_TASK_VARIANT;
         const entry = this.resolveMatrixEntry(variant, status);
 
         // ── L2: Section presence (warning-first, gate:true hard) ──
@@ -87,16 +105,17 @@ export class TaskCheckService extends PlanningCheckService {
 
     // ── L3: Format rules ──
     private runL3(doc: MarkdownDocument, findings: CheckFindings[]): void {
-        // Requirements: R-numbering (warning, only when section exists)
+        // Requirements: R-numbering (warning, only when section has real content)
         const reqBody = doc.getSection('Requirements');
-        if (reqBody !== null && reqBody.trim().length > 0) {
+        if (reqBody !== null && !isPlaceholderBody(reqBody)) {
             const rLines = reqBody.trim().split('\n');
             let numbered = 0;
             let allLines = 0;
             for (const l of rLines) {
                 if (l.trim().length > 0) {
                     allLines++;
-                    if (/^\s*R\d+\.?\s/.test(l)) numbered++;
+                    // Accept an optional list-bullet prefix: "- R1. …" / "* R1. …" / "R1. …".
+                    if (/^\s*[-*]?\s*R\d+\.?\s/.test(l)) numbered++;
                 }
             }
             if (numbered === 0 || numbered < allLines * 0.5) {
@@ -109,9 +128,12 @@ export class TaskCheckService extends PlanningCheckService {
             }
         }
 
-        // Solution: ≥1 file:line citation (hard core)
+        // Solution: ≥1 file:line citation (hard core). Only meaningful once the
+        // section has real content — an empty heading or guidance-comment-only
+        // placeholder (present at todo/wip before implementation) is skipped, so
+        // a not-yet-implemented task is not forced to cite lines that don't exist.
         const solBody = doc.getSection('Solution');
-        if (solBody !== null) {
+        if (solBody !== null && !isPlaceholderBody(solBody)) {
             const hasFileLine = /`[^`]+?:\d+(-\d+)?`/.test(solBody) || /[^\s`]\.\w+:\d+/.test(solBody);
             if (!hasFileLine) {
                 findings.push({
@@ -125,7 +147,7 @@ export class TaskCheckService extends PlanningCheckService {
 
         // Review: P1–P4 findings table (hard core)
         const revBody = doc.getSection('Review');
-        if (revBody !== null && revBody.trim().length > 0) {
+        if (revBody !== null && !isPlaceholderBody(revBody)) {
             const hasPColumn = /P[1-4]/.test(revBody);
             if (!hasPColumn) {
                 findings.push({
@@ -139,7 +161,7 @@ export class TaskCheckService extends PlanningCheckService {
 
         // Testing: results + coverage claim or N/A (warning)
         const testBody = doc.getSection('Testing');
-        if (testBody !== null && testBody.trim().length > 0) {
+        if (testBody !== null && !isPlaceholderBody(testBody)) {
             const hasCoverage = /coverage|≥\d+%|\d+\.\d+%|N\/A/i.test(testBody);
             if (!hasCoverage) {
                 findings.push({
@@ -153,7 +175,7 @@ export class TaskCheckService extends PlanningCheckService {
 
         // Plan: ordered checklist or table, not free-form prose (warning)
         const planBody = doc.getSection('Plan');
-        if (planBody !== null && planBody.trim().length > 0) {
+        if (planBody !== null && !isPlaceholderBody(planBody)) {
             const isList = /^\s*[-*]\s|^\s*\d+\.\s/.test(planBody.trimStart());
             const isTable = /\|/.test(planBody);
             if (!isList && !isTable) {

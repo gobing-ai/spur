@@ -213,6 +213,7 @@ describe('FeatureService', () => {
             await new TaskService({ fs, tasksDir: tdir, writeService: write }).create({
                 title: 'Impl foundation',
                 featureId: 'A',
+                status: 'backlog',
             });
             return {
                 svc: s,

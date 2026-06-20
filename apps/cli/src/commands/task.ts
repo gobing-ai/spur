@@ -9,8 +9,8 @@ import {
     TaskService,
 } from '@gobing-ai/spur-app';
 import { bundledConfigRoot } from '@gobing-ai/spur-config';
-import { TaskRunLinkDao } from '@gobing-ai/spur-domain';
-import { parse as parseYaml } from 'yaml';
+import { extractTemplateBodies, TASK_VARIANTS, TaskRunLinkDao, type TaskSection } from '@gobing-ai/spur-domain';
+import { loadSpurConfig } from '../config/loader';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
 
@@ -24,15 +24,24 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .argument('<title>', 'Task title')
         .option('--feature <id>', 'Feature ID for traceability and Goal→Background derivation')
         .option('--parent <wbs>', 'Parent WBS for sub-task grouping')
+        .option('--template <variant>', `Template variant (${TASK_VARIANTS.join('|')})`)
         .option('--folder <path>', 'Custom tasks folder')
         .option('--json', 'Output machine-readable JSON')
         .action(async (title, options) => {
-            const svc = makeService(context, options.folder);
+            if (options.template !== undefined && !(TASK_VARIANTS as readonly string[]).includes(options.template)) {
+                context.output.error(
+                    `Unknown template variant "${options.template}". Valid: ${TASK_VARIANTS.join(', ')}`,
+                );
+                context.setExitCode(2);
+                return;
+            }
+            const svc = await makeService(context, options.folder);
             try {
                 const result = await svc.create({
                     title,
                     featureId: options.feature,
                     parentWbs: options.parent,
+                    template: options.template,
                 });
                 if (options.json) {
                     context.output.write(toJson(result));
@@ -52,7 +61,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option('--folder <path>', 'Custom tasks folder')
         .option('--json', 'Output machine-readable JSON')
         .action(async (wbs, options) => {
-            const svc = makeService(context, options.folder);
+            const svc = await makeService(context, options.folder);
             try {
                 const result = await svc.show(wbs);
                 if (options.json) {
@@ -77,7 +86,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option('--folder <path>', 'Custom tasks folder')
         .option('--json', 'Output machine-readable JSON')
         .action(async (wbs, status, options) => {
-            const svc = makeService(context, options.folder);
+            const svc = await makeService(context, options.folder);
             try {
                 if (options.section !== undefined) {
                     if (options.fromFile === undefined) {
@@ -117,7 +126,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option('--folder <path>', 'Custom tasks folder')
         .option('--json', 'Output machine-readable JSON')
         .action(async (options) => {
-            const svc = makeService(context, options.folder);
+            const svc = await makeService(context, options.folder);
             try {
                 const tasks = await svc.list({
                     status: options.status,
@@ -145,7 +154,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option('--folder <path>', 'Custom tasks folder')
         .option('--json', 'Output machine-readable JSON')
         .action(async (options) => {
-            const svc = makeService(context, options.folder);
+            const svc = await makeService(context, options.folder);
             try {
                 const kanban = await svc.refresh();
                 if (options.json) {
@@ -166,7 +175,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option('--folder <path>', 'Custom tasks folder')
         .option('--json', 'Output machine-readable JSON')
         .action(async (options) => {
-            const svc = makeService(context, options.folder);
+            const svc = await makeService(context, options.folder);
             try {
                 const results = await svc.batchCreate(options.file);
                 if (options.json) {
@@ -192,7 +201,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option('--folder <path>', 'Custom tasks folder')
         .option('--json', 'Output machine-readable JSON')
         .action(async (wbs, options) => {
-            const svc = makeCheckService(context);
+            const svc = await makeCheckService(context);
             const json = options.json === true;
             const strict = options.strict === true;
             try {
@@ -246,7 +255,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option('--folder <path>', 'Custom tasks folder')
         .option('--json', 'Output machine-readable JSON')
         .action(async (filePath, options) => {
-            const svc = makeService(context, options.folder);
+            const svc = await makeService(context, options.folder);
             try {
                 const result = await svc.resolve(filePath);
                 if (result) {
@@ -266,14 +275,44 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         });
 }
 
-function makeService(context: CliContext, folderOverride?: string): TaskService {
+async function makeService(context: CliContext, folderOverride?: string): Promise<TaskService> {
     const tasksDir = folderOverride ?? context.fs.resolve('docs', 'tasks');
     const lifecycle = makeLifecycleAdapter(context);
     const writeService = new PlanningWriteService({
         fs: context.fs,
         ...(lifecycle ? { lifecycle } : {}),
     });
-    return new TaskService({ fs: context.fs, tasksDir, writeService });
+    return new TaskService({
+        fs: context.fs,
+        tasksDir,
+        writeService,
+        sectionMatrix: await loadSectionMatrix(),
+        resolveTemplateBodies: loadTemplateBodies,
+    });
+}
+
+/** Cache of per-variant template bodies (read once per process from bundled config). */
+const templateBodiesCache = new Map<string, Partial<Record<TaskSection, string>>>();
+
+/**
+ * Read a variant's scaffold template (`config/templates/task/<variant>.md`) and
+ * extract its per-section bodies (e.g. `review`'s P1–P4 table). Returns `{}` when
+ * the file is unreachable (e.g. `--compile` binary) — creation then falls back to
+ * matrix + guidance only. Results are cached per process.
+ */
+function loadTemplateBodies(variant: string): Partial<Record<TaskSection, string>> {
+    const cached = templateBodiesCache.get(variant);
+    if (cached !== undefined) return cached;
+    let bodies: Partial<Record<TaskSection, string>> = {};
+    const root = bundledConfigRoot();
+    if (root !== null) {
+        const templatePath = join(root, 'templates', 'task', `${variant}.md`);
+        if (existsSync(templatePath)) {
+            bodies = extractTemplateBodies(readFileSync(templatePath, 'utf8'));
+        }
+    }
+    templateBodiesCache.set(variant, bodies);
+    return bodies;
 }
 
 /**
@@ -297,24 +336,28 @@ function makeLifecycleAdapter(context: CliContext): LifecycleAdapter | undefined
     });
 }
 
-function makeCheckService(context: CliContext): TaskCheckService {
-    return new TaskCheckService(context.fs, loadSectionMatrix());
+async function makeCheckService(context: CliContext): Promise<TaskCheckService> {
+    return new TaskCheckService(context.fs, await loadSectionMatrix());
 }
 
 /**
  * Load the Section-Status-Matrix (design §3.2, R2). Reads the bundled
  * `config/tasks/section-matrix.yaml` — the single source of truth, so tightening
- * the matrix is a config edit, not a code change. Falls back to a minimal
- * permissive built-in only when the bundled file is unreachable (e.g. a
- * `bun build --compile` single binary with no sibling files).
+ * the matrix is a config edit, not a code change. Loaded via the standard
+ * `loadSpurConfig` path (`loadStructuredConfig`): the YAML's root `$schema` ref
+ * selects the embedded section-matrix JSON schema, which validates the shape and
+ * section vocabulary so a typo'd section name or status key fails loud at load
+ * instead of silently becoming a dead rule. Falls back to a minimal permissive
+ * built-in only when the bundled file is unreachable (e.g. a `bun build --compile`
+ * single binary).
  */
-function loadSectionMatrix(): SectionMatrix {
+async function loadSectionMatrix(): Promise<SectionMatrix> {
     const root = bundledConfigRoot();
     if (root !== null) {
         const matrixPath = join(root, 'tasks', 'section-matrix.yaml');
         if (existsSync(matrixPath)) {
-            const parsed = parseYaml(readFileSync(matrixPath, 'utf8')) as SectionMatrix | undefined;
-            if (parsed?.variants !== undefined) return parsed;
+            const data = await loadSpurConfig(matrixPath, { validateSchema: true });
+            return data as unknown as SectionMatrix;
         }
     }
     return FALLBACK_MATRIX;

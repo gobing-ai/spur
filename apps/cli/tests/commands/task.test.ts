@@ -103,6 +103,38 @@ describe('spur task CLI', () => {
         expect(content).toContain('parent_wbs: "0042"');
     });
 
+    test('create --template writes the variant to frontmatter', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'create', 'Issue task', '--template', 'issue'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const content = await Bun.file(createdPath(output)).text();
+        expect(content).toContain('template: issue');
+    });
+
+    test('create --template rejects an unknown variant with exit 2', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'create', 'Bad variant', '--template', 'nope'], { cwd, output });
+        expect(exitCode).toBe(2);
+        expect(output.errors.join('')).toContain('Unknown template variant');
+    });
+
+    test('create --template review seeds Review Findings as input under Background', async () => {
+        // WHY: a review task logs the code-review findings as INPUT (under Background's
+        // `#### Review Findings`) to be fixed; the `### Review` section is reserved for the
+        // post-fix reflection and is NOT emitted at backlog creation.
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'create', 'Fix review', '--template', 'review'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const content = await Bun.file(createdPath(output)).text();
+        expect(content).toContain('template: review');
+        expect(content).toContain('#### Review Findings');
+        expect(content).toMatch(/Severity\s+\|\s+File\s+\|\s+Finding/);
+        // The `### Review` section (post-fix reflection) is deferred to wip+ — not present at
+        // backlog creation. Use a line-anchored regex so `#### Review Findings` (a sub-heading
+        // under Background) is not mistaken for the `### Review` section.
+        expect(content).not.toMatch(/\n### Review\n/);
+    });
+
     // ── show ──
     test('show prints task content', async () => {
         const cOut = createCapturedOutput();
@@ -250,17 +282,19 @@ describe('spur task CLI', () => {
     });
 
     // ── check ──
-    test('check validates a task and prints findings', async () => {
+    test('check validates a freshly-created backlog task as PASS', async () => {
+        // WHY: a bare new task is created at backlog with only Background (no empty
+        // Solution heading), so it passes the gate cleanly. This is the dogfood fix
+        // — previously every new task FAILed on a spurious L3 file:line error.
         const cOut = createCapturedOutput();
         await main(['task', 'create', 'Check me'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
         const output = createCapturedOutput();
         const exitCode = await main(['task', 'check', wbs], { cwd, output });
-        // New backlog task with empty Solution triggers L3 file:line hard error
-        expect(exitCode).toBe(1);
+        expect(exitCode).toBe(0);
         expect(output.messages.join('')).toContain(wbs);
-        expect(output.messages.join('')).toContain('FAIL');
+        expect(output.messages.join('')).toContain('PASS');
     });
 
     test('check --json returns structured results even on failure', async () => {

@@ -29,7 +29,7 @@ export interface ParsedFrontmatter {
  * Canonical task body sections (DD-08). Templates select from this vocabulary;
  * no template or agent may invent synonym sections.
  */
-const TASK_CANONICAL_SECTIONS = [
+export const TASK_CANONICAL_SECTIONS = [
     'Background',
     'Requirements',
     'Acceptance Criteria',
@@ -258,19 +258,53 @@ export class MarkdownDocument {
     }
 
     /**
-     * Replace the body of a named section.
+     * Replace the body of a named section, **upserting** it when absent.
+     *
+     * The progressive-section lifecycle means a task gains sections as it moves
+     * through statuses (e.g. `Solution` first appears at `wip`). Writing a section
+     * that the file does not yet carry inserts it at its canonical position rather
+     * than failing — so an agent can fill `Solution` without a separate "add
+     * section" step. Existing sections are untouched (losslessness preserved).
      *
      * @param name - canonical section name (validated against the domain vocabulary)
      * @param body - new body text (everything that should follow the heading line)
-     * @throws if the section name is not canonical or doesn't exist in the document
+     * @throws if the section name is not canonical
      */
     replaceSection(name: string, body: string): void {
         this.validateSectionName(name);
         const section = this.findSection(name);
-        if (section === undefined) {
-            throw new Error(`Section "${name}" does not exist in this document.`);
+        if (section !== undefined) {
+            section.modifiedText = `${section.headingLine}\n${body}`;
+            return;
         }
-        section.modifiedText = `${section.headingLine}\n${body}`;
+        this.insertSection(name, body);
+    }
+
+    /**
+     * Insert a brand-new canonical section at its position in the canonical order,
+     * relative to the sections already present. Appends a trailing blank line so
+     * the following section keeps its spacing.
+     */
+    private insertSection(name: string, body: string): void {
+        const level = HEADING_LEVELS[this._domain];
+        const headingLine = `${'#'.repeat(level)} ${name}`;
+        const canonicalIndex = this.canonicalSections.indexOf(name);
+        const newSection: Section = {
+            name,
+            headingLine,
+            originalText: '',
+            modifiedText: `${headingLine}\n\n${body.trimEnd()}\n\n`,
+        };
+        // Find the first existing section whose canonical rank is greater; insert before it.
+        let at = this._sections.length;
+        for (let i = 0; i < this._sections.length; i++) {
+            const rank = this.canonicalSections.indexOf(this._sections[i]?.name ?? '');
+            if (rank > canonicalIndex) {
+                at = i;
+                break;
+            }
+        }
+        this._sections.splice(at, 0, newSection);
     }
 
     /**

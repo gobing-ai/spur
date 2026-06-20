@@ -57,6 +57,22 @@ export const TASK_TYPES = ['task', 'brainstorm'] as const;
 export type TaskType = (typeof TASK_TYPES)[number];
 
 /**
+ * Canonical task TEMPLATE VARIANT vocabulary — the single axis that selects a
+ * task's section layout (the `section-matrix.yaml` variant), its scaffold
+ * template file (`config/templates/task/<variant>.md`), and its `template:`
+ * frontmatter value. `standard` is the workhorse; `brainstorm` is the minimal
+ * idea-capture variant. SSOT: every consumer (matrix, template files, batch
+ * schema, frontmatter, `--template` CLI) reads from this list.
+ */
+export const TASK_VARIANTS = ['standard', 'feature-impl', 'issue', 'review', 'meta', 'brainstorm'] as const;
+
+/** Type alias for the canonical template-variant vocabulary. */
+export type TaskVariant = (typeof TASK_VARIANTS)[number];
+
+/** The default template variant when none is specified. */
+export const DEFAULT_TASK_VARIANT: TaskVariant = 'standard';
+
+/**
  * Feature ID regex per DD-14: position-encoding hierarchical letter+digit.
  * Matches a single letter optionally followed by one or more digits
  * (length encodes depth, ≤9 children per node).
@@ -173,6 +189,8 @@ export const taskFrontmatterSchema = z.object({
         .enum(TASK_TYPES as unknown as [TaskType, ...TaskType[]])
         .optional()
         .default('task'),
+    /** Template variant — selects the section layout / matrix variant (§3.2). */
+    template: z.enum(TASK_VARIANTS as unknown as [TaskVariant, ...TaskVariant[]]).optional(),
     profile: z.enum(PROFILES as unknown as [Profile, ...Profile[]]).optional(),
     feature_id: featureId,
     parent_wbs: wbsString,
@@ -208,11 +226,16 @@ export type FeatureFrontmatter = z.infer<typeof featureFrontmatterSchema>;
 
 // ─── Task batch input ────────────────────────────────────────────────────
 
-/** Template variant names for task batch creation. */
-export const TASK_TEMPLATES = ['feature-impl', 'issue', 'review', 'meta'] as const;
+/**
+ * Template variant names for task batch creation.
+ *
+ * @deprecated Use {@link TASK_VARIANTS} — the unified template-variant axis. This
+ * alias is retained for import compatibility and is now the same canonical set.
+ */
+export const TASK_TEMPLATES = TASK_VARIANTS;
 
 /** Type alias for the canonical template vocabulary. */
-export type TaskTemplate = (typeof TASK_TEMPLATES)[number];
+export type TaskTemplate = TaskVariant;
 
 /**
  * A single task item in a batch-create payload.
@@ -231,7 +254,7 @@ export const taskBatchItemSchema = z
         parent_wbs: wbsString,
         priority: z.enum(PRIORITIES).optional(),
         tags: z.array(z.string()).optional(),
-        template: z.enum(TASK_TEMPLATES).optional(),
+        template: z.enum(TASK_VARIANTS).optional(),
     })
     .strict();
 

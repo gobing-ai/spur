@@ -225,9 +225,22 @@ describe('MarkdownDocument', () => {
             expect(() => doc.replaceSection('Random', 'x')).toThrow('Unknown section');
         });
 
-        test('throws when replacing a canonical section absent from the file', () => {
+        test('upserts a canonical section absent from the file, in canonical order', () => {
+            // WHY: the progressive-section lifecycle adds sections as a task moves
+            // through statuses; writing an absent canonical section inserts it
+            // rather than failing, so an agent can fill e.g. Solution at wip.
             const doc = MarkdownDocument.parse(TASK_FILE, 'task');
-            expect(() => doc.replaceSection('Testing', 'x')).toThrow('does not exist');
+            expect(doc.hasSection('Testing')).toBe(false);
+            doc.replaceSection('Testing', 'All green.');
+            const out = doc.serialize();
+            expect(out).toContain('### Testing');
+            expect(out).toContain('All green.');
+            // Inserted in canonical order: Testing comes after Solution, before Review.
+            const order = ['Solution', 'Testing', 'Review'].map((s) => out.indexOf(`### ${s}`));
+            const present = order.filter((i) => i >= 0);
+            expect(present).toEqual([...present].sort((a, b) => a - b));
+            // Existing content preserved.
+            expect(out).toContain('Code goes here.');
         });
     });
 

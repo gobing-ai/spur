@@ -5,8 +5,17 @@
  * PlanningWriteService. WBS allocation is race-safe under the create-lock.
  */
 
-import { MarkdownDocument, TASK_STATUSES, type TaskBatchItem, taskBatchSchema } from '@gobing-ai/spur-domain';
+import {
+    buildTaskSkeleton,
+    DEFAULT_TASK_VARIANT,
+    MarkdownDocument,
+    TASK_STATUSES,
+    type TaskBatchItem,
+    type TaskSection,
+    taskBatchSchema,
+} from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+import type { SectionMatrix } from './planning-check-base';
 import type { EntityRef, PlanningWriteService, WriteResult } from './planning-write-service';
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -21,6 +30,19 @@ export interface TaskServiceContext {
     projectName?: string;
     /** Actor identifier for history lines (default: 'system'). */
     actor?: string;
+    /**
+     * Section-Status-Matrix (config/tasks/section-matrix.yaml). Drives which
+     * sections a newly created task carries for its creation status (§3.2).
+     * When absent, a built-in default is used so creation never hard-depends on
+     * a loadable matrix (e.g. a `--compile` single binary).
+     */
+    sectionMatrix?: SectionMatrix;
+    /**
+     * Resolve per-variant section-body overrides from the variant's template
+     * file (`config/templates/task/<variant>.md`). The caller (CLI) owns file
+     * reading; returning `{}` (or omitting this) means matrix + guidance only.
+     */
+    resolveTemplateBodies?: (variant: string) => Partial<Record<TaskSection, string>>;
 }
 
 /** Task summary returned by list/show. */
@@ -47,6 +69,35 @@ export interface TaskListFilters {
     phase?: string;
 }
 
+/**
+ * Built-in section sets per creation status, used only when no Section-Status-
+ * Matrix is injected (mirrors the shipped `config/tasks/section-matrix.yaml`
+ * standard variant — keep in sync). `History` is appended by the resolver.
+ */
+const DEFAULT_CREATION_SECTIONS: Record<string, string[]> = {
+    backlog: ['Background'],
+    todo: ['Background', 'Requirements', 'Acceptance Criteria', 'Q&A', 'Design', 'Plan'],
+};
+
+/**
+ * Normalize a Requirements body to a bulleted markdown list. R-numbered items
+ * written as one run-on paragraph (`R1. … R2. …`) become one `- Rn. …` line
+ * each, so they render as a clear list in a markdown viewer (dogfood issue #2).
+ * Already-bulleted or multi-line input is returned unchanged.
+ */
+function bulletizeRequirements(raw: string): string {
+    const text = raw.trim();
+    if (text === '') return text;
+    // Already a bullet/numbered list or multi-line — leave as authored.
+    if (/\n/.test(text) || /^\s*[-*]\s/.test(text)) return text;
+    const parts = text
+        .split(/(?=\bR\d+\.)/)
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0);
+    if (parts.length <= 1) return text;
+    return parts.map((p) => `- ${p}`).join('\n');
+}
+
 // ─── TaskService ────────────────────────────────────────────────────────
 
 /** Core task verbs over PlanningWriteService and direct corpus reads. */
@@ -59,6 +110,36 @@ export class TaskService {
         this.writeService = ctx.writeService;
     }
 
+    /**
+     * Resolve which sections a newly created task carries for `status`, from the
+     * injected Section-Status-Matrix (`required ∪ optional`, §3.2). Falls back to
+     * a built-in default when no matrix is available so creation never depends on
+     * a loadable config (e.g. a `--compile` single binary). `History` is always
+     * appended (the machine-owned transition log).
+     */
+    private sectionsForStatus(variant: string, status: string): string[] {
+        const matrix = this.ctx.sectionMatrix;
+        const entry = matrix?.variants[variant]?.[status] ?? matrix?.variants.standard?.[status];
+        if (entry !== undefined) {
+            return [...(entry.required ?? []), ...(entry.optional ?? []), 'History'];
+        }
+        const fallback = DEFAULT_CREATION_SECTIONS[status] ?? ['Background'];
+        return [...fallback, 'History'];
+    }
+
+    /**
+     * Merge per-variant template body overrides (e.g. `review`'s P1–P4 table)
+     * with task-specific bodies (Background, Requirements). Task-specific bodies
+     * win — the template supplies boilerplate, the task supplies real content.
+     */
+    private bodiesFor(
+        variant: string,
+        taskBodies: Partial<Record<TaskSection, string>>,
+    ): Partial<Record<TaskSection, string>> {
+        const templateBodies = this.ctx.resolveTemplateBodies?.(variant) ?? {};
+        return { ...templateBodies, ...taskBodies };
+    }
+
     // ── create ──
 
     async create(params: {
@@ -66,6 +147,7 @@ export class TaskService {
         featureId?: string;
         parentWbs?: string;
         status?: string;
+        template?: string;
         actor?: string;
     }): Promise<WriteResult> {
         const folder = this.ctx.tasksDir;
@@ -77,8 +159,17 @@ export class TaskService {
             background = await this.deriveBackground(params.featureId);
         }
 
+        // A feature link defaults the variant to `feature-impl`; otherwise `standard`.
+        // An explicit --template always wins.
+        const variant = params.template ?? (params.featureId !== undefined ? 'feature-impl' : DEFAULT_TASK_VARIANT);
+
         // WBS allocation + write run inside the create-lock so concurrent
         // creates cannot allocate the same number and clobber each other.
+        // A task created with a feature link signals intent-to-execute → 'todo'
+        // (the HITL-review stage); a bare capture stays 'backlog' (§2.3 semantics:
+        // backlog = still preparing, todo = ready to start). Explicit status wins.
+        const status = params.status ?? (params.featureId !== undefined ? 'todo' : 'backlog');
+
         return this.writeService.createAllocated(folder, async () => {
             const wbs = await this.allocateWbs();
             const slug = this.slugify(params.title);
@@ -88,7 +179,8 @@ export class TaskService {
             const frontmatter = [
                 'schema_version: 1',
                 `name: "${params.title}"`,
-                `status: ${params.status ?? 'backlog'}`,
+                `status: ${status}`,
+                `template: ${variant}`,
                 `created_at: ${now}`,
                 `updated_at: ${now}`,
                 params.featureId !== undefined ? `feature_id: ${params.featureId}` : null,
@@ -97,41 +189,13 @@ export class TaskService {
                 .filter(Boolean)
                 .join('\n');
 
-            const content = [
-                '---',
+            const content = buildTaskSkeleton({
+                wbs,
+                title: params.title,
                 frontmatter,
-                '---',
-                '',
-                `## ${wbs}. ${params.title}`,
-                '',
-                '### Background',
-                '',
-                background !== '' ? `${background}\n` : '',
-                '### Requirements',
-                '',
-                '',
-                '### Q&A',
-                '',
-                '',
-                '### Design',
-                '',
-                '',
-                '### Solution',
-                '',
-                '',
-                '### Plan',
-                '',
-                '',
-                '### Review',
-                '',
-                '',
-                '### Testing',
-                '',
-                '',
-                '### History',
-                '',
-                '',
-            ].join('\n');
+                sections: this.sectionsForStatus(variant, status),
+                bodies: this.bodiesFor(variant, background !== '' ? { Background: background } : {}),
+            });
 
             const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder };
             return { ref, content };
@@ -223,6 +287,16 @@ export class TaskService {
             background = await this.deriveBackground(item.feature_id);
         }
 
+        // A batch item with a real spec (background or requirements) is ready to
+        // execute → 'todo'; otherwise 'backlog' (§2.3 semantics).
+        const hasSpec = background !== '' || (item.requirements ?? '').trim() !== '';
+        const status = hasSpec ? 'todo' : 'backlog';
+
+        // Explicit item template wins; a feature link defaults to `feature-impl`, else `standard`.
+        const variant =
+            item.template ??
+            (item.feature_id !== undefined && item.feature_id !== null ? 'feature-impl' : DEFAULT_TASK_VARIANT);
+
         // Allocate + write inside the create-lock (race-safe WBS allocation).
         return this.writeService.createAllocated(folder, async () => {
             const wbs = await this.allocateWbs();
@@ -233,7 +307,8 @@ export class TaskService {
             const fmLines = [
                 'schema_version: 1',
                 `name: "${item.name}"`,
-                'status: backlog',
+                `status: ${status}`,
+                `template: ${variant}`,
                 `created_at: ${now}`,
                 `updated_at: ${now}`,
                 item.feature_id !== undefined ? `feature_id: ${item.feature_id}` : null,
@@ -246,41 +321,19 @@ export class TaskService {
                 .filter(Boolean)
                 .join('\n');
 
-            const content = [
-                '---',
-                fmLines,
-                '---',
-                '',
-                `## ${wbs}. ${item.name}`,
-                '',
-                '### Background',
-                '',
-                background !== '' ? `${background}\n` : '',
-                '### Requirements',
-                '',
-                item.requirements ? `${item.requirements}\n` : '',
-                '### Q&A',
-                '',
-                '',
-                '### Design',
-                '',
-                '',
-                '### Solution',
-                '',
-                '',
-                '### Plan',
-                '',
-                '',
-                '### Review',
-                '',
-                '',
-                '### Testing',
-                '',
-                '',
-                '### History',
-                '',
-                '',
-            ].join('\n');
+            const taskBodies: Partial<Record<TaskSection, string>> = {};
+            if (background !== '') taskBodies.Background = background;
+            if ((item.requirements ?? '').trim() !== '') {
+                taskBodies.Requirements = bulletizeRequirements(item.requirements ?? '');
+            }
+
+            const content = buildTaskSkeleton({
+                wbs,
+                title: item.name,
+                frontmatter: fmLines,
+                sections: this.sectionsForStatus(variant, status),
+                bodies: this.bodiesFor(variant, taskBodies),
+            });
 
             const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder };
             return { ref, content };

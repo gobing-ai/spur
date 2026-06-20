@@ -988,7 +988,7 @@ describe('FeatureCheckService', () => {
 
     // ── resolveMatrixEntry ───────────────────────────────────────────────
 
-    test('resolveMatrixEntry falls back to standard variant', () => {
+    test('resolveMatrixEntry falls back to the standard variant', () => {
         const svc = new FeatureCheckService(createNodeFileSystem());
         const entry = svc.resolveMatrixEntry('nonexistent', 'backlog');
         expect(entry).toBeTruthy();

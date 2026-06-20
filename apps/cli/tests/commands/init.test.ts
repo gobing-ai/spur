@@ -33,7 +33,7 @@ describe('init command', () => {
         expect(existsSync(join(cwd, '.spur', 'agents', '.gitkeep'))).toBe(true);
 
         // Templates are copied under .spur/config/templates/
-        expect(existsSync(join(cwd, '.spur', 'config', 'templates', 'task', 'default.md'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'config', 'templates', 'task', 'standard.md'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'config', 'templates', 'task', 'feature-impl.md'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'config', 'templates', 'task', 'issue.md'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'config', 'templates', 'task', 'review.md'))).toBe(true);

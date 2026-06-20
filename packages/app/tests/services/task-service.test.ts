@@ -52,13 +52,85 @@ describe('TaskService', () => {
             expect(doc.frontmatterData?.parent_wbs).toBe('0042');
         });
 
-        test('defaults status to backlog', async () => {
+        test('defaults a bare task to backlog (still preparing)', async () => {
+            // WHY: §2.3 semantics — a task with no spec is not yet executable.
             const result = await svc.create({ title: 'Default status' });
 
             const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
             const raw = await fs.readFile(result.ref.filePath);
             const doc = MarkdownDocument.parse(raw, 'task');
             expect(doc.frontmatterData?.status).toBe('backlog');
+        });
+
+        test('a bare task carries only Background + History (backlog section set)', async () => {
+            // WHY: a not-yet-prepared task should not ship empty Design/Solution
+            // headings that would trip the format gate (the original dogfood bug).
+            const result = await svc.create({ title: 'Bare sections' });
+            const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
+            const raw = await fs.readFile(result.ref.filePath);
+            expect(raw).toContain('### Background');
+            expect(raw).toContain('### History');
+            expect(raw).not.toContain('### Solution');
+            expect(raw).not.toContain('### Design');
+        });
+
+        test('a feature-spec task is created at todo with the HITL-review sections', async () => {
+            // WHY: §2.3 — a task with a real spec is ready to execute (todo), and
+            // todo is the HITL gate, so Design + Acceptance Criteria + Plan must be
+            // present (as guidance placeholders) for review before any code.
+            const result = await svc.create({ title: 'Spec task', featureId: 'A' });
+            const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
+            const raw = await fs.readFile(result.ref.filePath);
+            const doc = MarkdownDocument.parse(raw, 'task');
+            expect(doc.frontmatterData?.status).toBe('todo');
+            expect(raw).toContain('### Acceptance Criteria');
+            expect(raw).toContain('### Design');
+            expect(raw).toContain('### Plan');
+            // Solution is the implementation change-map — not present until wip.
+            expect(raw).not.toContain('### Solution');
+        });
+
+        test('writes the template variant to frontmatter; bare → standard, feature → feature-impl', async () => {
+            // WHY: `template` is the unified variant axis (§3.2) that drives both
+            // creation sections and `task check`; it must be persisted.
+            const bare = await svc.create({ title: 'Bare variant' });
+            const feat = await svc.create({ title: 'Feat variant', featureId: 'A' });
+            const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
+            const bareDoc = MarkdownDocument.parse(await fs.readFile(bare.ref.filePath), 'task');
+            const featDoc = MarkdownDocument.parse(await fs.readFile(feat.ref.filePath), 'task');
+            expect(bareDoc.frontmatterData?.template).toBe('standard');
+            expect(featDoc.frontmatterData?.template).toBe('feature-impl');
+        });
+
+        test('an explicit --template wins and injects the variant template body', async () => {
+            // WHY: per-variant boilerplate (review's P1–P4 table) is seeded from the
+            // resolveTemplateBodies hook, not hardcoded — and only where the section exists.
+            const root = mkdtempSync(join(tmpdir(), 'spur-task-svc-tpl-'));
+            const dir = join(root, 'tasks');
+            const isolateFs = createNodeFileSystem(root);
+            await isolateFs.ensureDir(dir);
+            const writeService = new PlanningWriteService({ fs: isolateFs });
+            const isolateSvc = new TaskService({
+                fs: isolateFs,
+                tasksDir: dir,
+                sectionMatrix: {
+                    variants: { review: { wip: { required: ['Background', 'Review'] } } },
+                },
+                resolveTemplateBodies: (variant) =>
+                    variant === 'review' ? { Review: '| Severity | File |\n| P1 | |' } : {},
+                writeService,
+            });
+            try {
+                // status wip so the review variant carries the Review section.
+                const result = await isolateSvc.create({ title: 'Review task', template: 'review', status: 'wip' });
+                const raw = await isolateFs.readFile(result.ref.filePath);
+                const doc = MarkdownDocument.parse(raw, 'task');
+                expect(doc.frontmatterData?.template).toBe('review');
+                expect(raw).toContain('### Review');
+                expect(raw).toContain('| P1');
+            } finally {
+                rmSync(root, { recursive: true, force: true });
+            }
         });
     });
 
@@ -237,6 +309,42 @@ describe('TaskService', () => {
                 if (!first) throw new Error('Expected at least one result');
                 const raw = await isolateFs.readFile(first.ref.filePath);
                 expect(raw).toContain('R1. Must do X.');
+            } finally {
+                rmSync(root, { recursive: true, force: true });
+            }
+        });
+
+        test('bulletizes a run-on R-numbered requirements paragraph into a list', async () => {
+            // WHY: dogfood issue #2 — a single-line "R1. … R2. … R3. …" must render
+            // as one bullet per requirement so it is legible in a markdown viewer.
+            const root = mkdtempSync(join(tmpdir(), 'spur-task-svc-bullet-'));
+            const dir = join(root, 'tasks');
+            const isolateFs = createNodeFileSystem(root);
+            await isolateFs.ensureDir(dir);
+            const writeService = new PlanningWriteService({ fs: isolateFs });
+            const isolateSvc = new TaskService({ fs: isolateFs, tasksDir: dir, writeService });
+
+            try {
+                const batchFile = join(dir, 'batch-bullet.json');
+                await isolateFs.writeFile(
+                    batchFile,
+                    JSON.stringify([
+                        {
+                            name: 'Run-on reqs',
+                            background: 'ctx',
+                            requirements: 'R1. First. R2. Second. R3. Third.',
+                        },
+                    ]),
+                );
+                const results = await isolateSvc.batchCreate(batchFile);
+                const first = results[0];
+                if (!first) throw new Error('Expected a result');
+                const raw = await isolateFs.readFile(first.ref.filePath);
+                expect(raw).toContain('- R1. First.');
+                expect(raw).toContain('- R2. Second.');
+                expect(raw).toContain('- R3. Third.');
+                // A specified batch item lands at todo (ready to execute).
+                expect(MarkdownDocument.parse(raw, 'task').frontmatterData?.status).toBe('todo');
             } finally {
                 rmSync(root, { recursive: true, force: true });
             }
