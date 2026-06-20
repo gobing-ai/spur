@@ -144,6 +144,28 @@ failures:
 Loop until the command exits 0 — then the batch is created and each task appears in the
 feature's `## Tasks` block on next `spur feature refresh`.
 
+### Step 6: Refine before execute (the spec-completion gate)
+
+`batch-create` lands a task at **`todo`** with its required sections (`Acceptance Criteria`,
+`Design`, `Plan`) **scaffolded as guidance comments only** — the batch item carries `background`
+and `requirements`, but it has no field for AC/Design/Plan, and `spur task check` gates on section
+*presence*, not human content. So a freshly batch-created `todo` task is **structurally ready but
+content-incomplete**: it passes `check` while its Design/Plan are still empty placeholders.
+
+Before a task enters the execution half, fill those sections via the **refine** operation
+(`/sp:dev-refine <wbs>`): read the task, elicit the missing AC/Design/Plan through targeted Q&A,
+and write each via `spur task update <wbs> --section <name> --from-file`. This is the only path
+that turns the `todo` HITL-review gate from a formality into a real one — a reviewer approves the
+*Design*, not an empty heading.
+
+**Do this just-in-time, per task, immediately before execution** — not in bulk at decomposition
+time. Design written against a stale snapshot of the codebase rots; design written right before
+`implement` reflects current reality. Refine `0042`, run `0042`; refine `0043`, run `0043`.
+
+> **Requirements formatting:** author R-items as a GitHub task-list checkbox — `- [ ] R1. <text>`
+> — so progress is trackable in the file. The L3 check accepts the `- [ ] Rn.` / `- Rn.` / `Rn.`
+> forms; keep the `Rn.` (period) token so the R-numbering rule recognizes it.
+
 ---
 
 ## Execution half
