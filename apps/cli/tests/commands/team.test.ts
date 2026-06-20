@@ -2,11 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { NodeFileSystem, setFileSystem } from '@gobing-ai/ts-runtime';
 import { main } from '../../src';
 import { type CapturedOutput, createCapturedOutput } from '../helpers';
-
-setFileSystem(new NodeFileSystem());
 
 async function makeCtx(): Promise<{
     cwd: string;

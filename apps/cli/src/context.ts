@@ -4,7 +4,7 @@ import { AgentService, RuleService } from '@gobing-ai/spur-app';
 import { buildConfigFromEnv } from '@gobing-ai/spur-config';
 import { createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
 import type { HitlResponder } from '@gobing-ai/ts-dual-workflow-engine';
-import { createNodeFileSystem, type FileSystem, NodeFileSystem, setFileSystem } from '@gobing-ai/ts-runtime';
+import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
 import { CLI_CONFIG } from './config';
 import type { CommandOutput } from './output';
 import { ClackHitlResponder } from './workflow/hitl/clack-responder';
@@ -45,7 +45,6 @@ export function createCliContext(options: {
     const cwd = resolve(options.cwd ?? process.cwd());
     const env = options.env ?? process.env;
     const fs = createNodeFileSystem(cwd);
-    setFileSystem(new NodeFileSystem());
 
     // When runNodeApplication injects an eager DB adapter, use it directly (R4).
     // Otherwise fall back to lazy creation for tests and the pre-bootstrap path.

@@ -59,11 +59,11 @@ async function writeIfNew(
  * from any project, independent of the bundled fallback. Returns files written.
  */
 async function seedGlobalRules(context: CliContext): Promise<number> {
-    const source = bundledRulesRoot();
+    const source = await bundledRulesRoot();
     if (source === null) return 0;
     const target = globalRulesRoot(context);
     let written = 0;
-    for (const relPath of listBundledRuleFiles()) {
+    for (const relPath of await listBundledRuleFiles()) {
         const destination = join(target, relPath);
         if (await context.fs.exists(destination)) continue;
         await context.fs.ensureDir(join(target, ...relPath.split('/').slice(0, -1)));

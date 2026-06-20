@@ -4,13 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { TeamService } from '@gobing-ai/spur-app';
 import type { DoctorResult } from '@gobing-ai/ts-ai-runner';
-import { NodeFileSystem, setFileSystem } from '@gobing-ai/ts-runtime';
+import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { main } from '../../src';
 import { type AgentRunDeps, runAgentRun } from '../../src/commands/agent';
 import { type CliContext, createCliContext } from '../../src/context';
 import { createCapturedOutput } from '../helpers';
-
-setFileSystem(new NodeFileSystem());
 
 async function makeCtx(env: Record<string, string | undefined> = {}): Promise<{
     ctx: CliContext;
@@ -121,7 +119,7 @@ describe('spur agent delete', () => {
             await main(['agent', 'create', 'coder', '--type', 'codex'], { cwd, output: out, dbUrl: ':memory:' });
             const code = await main(['agent', 'delete', 'coder', '--force'], { cwd, output: out, dbUrl: ':memory:' });
             expect(code).toBe(0);
-            const fs = new NodeFileSystem();
+            const fs = createNodeFileSystem();
             expect(await fs.exists(join(cwd, '.spur', 'agents', 'coder.yaml'))).toBe(false);
         } finally {
             await cleanup();

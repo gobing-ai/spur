@@ -3,14 +3,12 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
-import { NodeFileSystem, setFileSystem } from '@gobing-ai/ts-runtime';
+import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { TeamService, type TeamServiceContext } from '../../src/index';
 
 // ---------------------------------------------------------------------------
 // Harness
 // ---------------------------------------------------------------------------
-
-setFileSystem(new NodeFileSystem());
 
 function nullOutput() {
     return { write: () => {}, error: () => {} };
@@ -25,6 +23,7 @@ async function makeService(): Promise<{ svc: TeamService; cwd: string; db: DbAda
         env: {},
         output: nullOutput(),
         getDb: async () => db,
+        fs: createNodeFileSystem(cwd),
     };
     return {
         svc: new TeamService(ctx),
@@ -186,8 +185,8 @@ describe('TeamService agent specs', () => {
         try {
             await svc.createAgentSpec({ id: 'planner', type: 'claude-code' });
             await svc.deleteAgentSpec('planner');
-            expect(svc.listAgentSpecs()).toHaveLength(0);
-            const fs = new NodeFileSystem();
+            expect(await svc.listAgentSpecs()).toHaveLength(0);
+            const fs = createNodeFileSystem();
             expect(await fs.exists(join(cwd, '.spur', 'agents', 'planner.yaml'))).toBe(false);
         } finally {
             await cleanup();
@@ -208,10 +207,7 @@ describe('TeamService agent specs', () => {
         try {
             await svc.createAgentSpec({ id: 'planner', type: 'claude-code' });
             await svc.createAgentSpec({ id: 'coder', type: 'codex', purpose: 'write code' });
-            const specs = svc
-                .listAgentSpecs()
-                .map((s) => s.id)
-                .sort();
+            const specs = (await svc.listAgentSpecs()).map((s) => s.id).sort();
             expect(specs).toEqual(['coder', 'planner']);
         } finally {
             await cleanup();
@@ -228,7 +224,7 @@ describe('TeamService agent specs', () => {
                 workspace: cwd,
                 purpose: 'code',
             });
-            const preamble = svc.buildIdentity(coder);
+            const preamble = await svc.buildIdentity(coder);
             expect(preamble).toContain('coder');
             // planner is a same-workspace peer and should appear in the preamble.
             expect(preamble).toContain('planner');
@@ -261,7 +257,7 @@ describe('TeamService status & assignment', () => {
         const { svc, cwd, cleanup } = await makeService();
         try {
             const tasksDir = join(cwd, 'docs', 'tasks');
-            await new NodeFileSystem().mkdir(tasksDir);
+            await createNodeFileSystem().ensureDir(tasksDir);
             const taskPath = join(tasksDir, '0042_demo_task.md');
             await writeFile(taskPath, '---\nname: "Demo"\nstatus: Todo\n---\n\n## Body\n');
 
@@ -279,7 +275,7 @@ describe('TeamService status & assignment', () => {
         const { svc, cwd, cleanup } = await makeService();
         try {
             const tasksDir = join(cwd, 'docs', 'tasks');
-            await new NodeFileSystem().mkdir(tasksDir);
+            await createNodeFileSystem().ensureDir(tasksDir);
             const taskPath = join(tasksDir, '0042_demo_task.md');
             await writeFile(taskPath, '---\nname: "Demo"\nassignee: oldagent\n---\n\nbody\n');
 
@@ -307,7 +303,7 @@ describe('TeamService status & assignment', () => {
         const { svc, cwd, cleanup } = await makeService();
         try {
             const tasksDir = join(cwd, 'docs', 'tasks');
-            await new NodeFileSystem().mkdir(tasksDir);
+            await createNodeFileSystem().ensureDir(tasksDir);
             const taskPath = join(tasksDir, '0042_demo_task.md');
             await writeFile(taskPath, '---\nname: "Cost $1.00 and $& literal"\nstatus: Todo\n---\n\nbody\n');
 

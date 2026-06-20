@@ -661,7 +661,7 @@ describe('AgentService.run Tier-2 warning', () => {
         const detector = {
             detectOne: mock(() =>
                 Promise.resolve({
-                    name: 'antigravity',
+                    name: 'openclaw',
                     installed: true,
                     version: '2.0.0',
                     channels: [],
@@ -672,7 +672,7 @@ describe('AgentService.run Tier-2 warning', () => {
         const doctorRunner = {
             runOne: mock(() =>
                 Promise.resolve({
-                    agent: 'antigravity',
+                    agent: 'openclaw',
                     installed: true,
                     version: '2.0.0',
                     authenticated: true,
@@ -685,7 +685,7 @@ describe('AgentService.run Tier-2 warning', () => {
         } as unknown as AgentRunDeps['doctorRunner'];
 
         const deps: AgentRunDeps = { runner, detector, doctorRunner };
-        const exitCode = await svc.run('hello', { agent: 'antigravity' }, deps);
+        const exitCode = await svc.run('hello', { agent: 'openclaw' }, deps);
         expect(exitCode).toBe(0);
         expect(errors.some((e) => e.includes('Tier-2 agent'))).toBe(true);
     });
@@ -701,7 +701,7 @@ describe('AgentService.run Tier-2 warning', () => {
         const detector = {
             detectOne: mock(() =>
                 Promise.resolve({
-                    name: 'antigravity',
+                    name: 'openclaw',
                     installed: true,
                     version: '2.0.0',
                     channels: [],
@@ -712,7 +712,7 @@ describe('AgentService.run Tier-2 warning', () => {
         const doctorRunner = {
             runOne: mock(() =>
                 Promise.resolve({
-                    agent: 'antigravity',
+                    agent: 'openclaw',
                     installed: true,
                     version: '2.0.0',
                     authenticated: true,
@@ -725,7 +725,7 @@ describe('AgentService.run Tier-2 warning', () => {
         } as unknown as AgentRunDeps['doctorRunner'];
 
         const deps: AgentRunDeps = { runner, detector, doctorRunner };
-        const exitCode = await svc.run('hello', { agent: 'antigravity', json: true }, deps);
+        const exitCode = await svc.run('hello', { agent: 'openclaw', json: true }, deps);
         expect(exitCode).toBe(0);
         expect(errors.some((e) => e.includes('Tier-2 agent'))).toBe(false);
     });

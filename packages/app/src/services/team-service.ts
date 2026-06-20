@@ -9,7 +9,7 @@ import {
     TeamOrchestrator,
     validateAgentId,
 } from '@gobing-ai/ts-ai-runner';
-import { getFs } from '@gobing-ai/ts-runtime';
+import type { FileSystem } from '@gobing-ai/ts-runtime';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -27,6 +27,8 @@ export interface TeamServiceContext {
     env: Record<string, string | undefined>;
     output: TeamServiceOutput;
     getDb(): Promise<DbAdapter>;
+    /** Filesystem port for reading/writing task files. */
+    fs: FileSystem;
 }
 
 /** Result of enqueuing or threading a message. */
@@ -171,21 +173,23 @@ export class TeamService {
      */
     async getStatus(): Promise<TeamStatusResult> {
         const orchestrator = await this.orchestrator();
-        const specs = orchestrator.loadSpecs();
+        const specs = await orchestrator.loadSpecs();
         const running = orchestrator.getRunningAgents();
-        const agents = specs.map((spec) => {
-            const status = orchestrator.getAgentStatus(spec.id);
-            const pid = running.get(spec.id)?.getPid() ?? null;
-            return {
-                id: spec.id,
-                name: spec.name,
-                type: spec.type,
-                workspace: spec.workspace,
-                purpose: spec.purpose,
-                status,
-                ...(pid !== null ? { pid } : {}),
-            };
-        });
+        const agents = await Promise.all(
+            specs.map(async (spec) => {
+                const status = await orchestrator.getAgentStatus(spec.id);
+                const pid = running.get(spec.id)?.getPid() ?? null;
+                return {
+                    id: spec.id,
+                    name: spec.name,
+                    type: spec.type,
+                    workspace: spec.workspace,
+                    purpose: spec.purpose,
+                    status,
+                    ...(pid !== null ? { pid } : {}),
+                };
+            }),
+        );
         return { agents };
     }
 
@@ -199,7 +203,7 @@ export class TeamService {
         if (path === null) {
             throw new Error(`No task file found for id "${taskId}" under docs/tasks/`);
         }
-        const fs = getFs();
+        const fs = this.ctx.fs;
         const source = await fs.readFile(path);
         const doc = MarkdownDocument.parse(source, 'task');
         doc.setFrontmatterField('assignee', agentId);
@@ -216,7 +220,7 @@ export class TeamService {
      */
     async createAgentSpec(input: AgentSpecInput): Promise<AgentSpec> {
         validateAgentId(input.id);
-        const existing = loadAgentSpecs(this.configDir).find((spec) => spec.id === input.id);
+        const existing = (await loadAgentSpecs(this.configDir)).find((spec) => spec.id === input.id);
         if (existing !== undefined) {
             throw new Error(`Agent spec already exists: ${input.id}`);
         }
@@ -239,7 +243,7 @@ export class TeamService {
     /** Remove an agent spec file. */
     async deleteAgentSpec(id: string): Promise<void> {
         validateAgentId(id);
-        const existing = loadAgentSpecs(this.configDir).find((spec) => spec.id === id);
+        const existing = (await loadAgentSpecs(this.configDir)).find((spec) => spec.id === id);
         if (existing === undefined) {
             throw new Error(`No agent spec found: ${id}`);
         }
@@ -247,13 +251,13 @@ export class TeamService {
     }
 
     /** List the agent specs currently defined under `.spur/agents/`. */
-    listAgentSpecs(): AgentSpec[] {
+    async listAgentSpecs(): Promise<AgentSpec[]> {
         return loadAgentSpecs(this.configDir);
     }
 
     /** Build the identity preamble for an agent + its workspace peers. */
-    buildIdentity(spec: AgentSpec, taskId?: string, taskTitle?: string): string {
-        const peers = loadAgentSpecs(this.configDir)
+    async buildIdentity(spec: AgentSpec, taskId?: string, taskTitle?: string): Promise<string> {
+        const peers = (await loadAgentSpecs(this.configDir))
             .filter((peer) => peer.workspace === spec.workspace && peer.id !== spec.id)
             .map((peer) => ({ id: peer.id, type: peer.type, purpose: peer.purpose }));
         return buildIdentityPreamble({
@@ -282,7 +286,7 @@ export class TeamService {
     }
 
     private async resolveTaskFile(taskId: string): Promise<string | null> {
-        const fs = getFs();
+        const fs = this.ctx.fs;
         const tasksDir = join(this.ctx.cwd, 'docs', 'tasks');
         let entries: string[];
         try {

@@ -37,10 +37,13 @@ describe('CLI migrate and extracted domains', () => {
         expect(await main(['agent', 'list'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
         expect(output.messages.at(-1)).toContain('claude');
 
-        expect(await main(['agent', 'doctor', 'antigravity', '--json'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
-        expect(JSON.parse(output.messages.at(-1) ?? '{}').agents[0]).toMatchObject({ agent: 'antigravity', tier: 2 });
+        expect(await main(['agent', 'doctor', 'antigravity', '--json'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
+        expect(JSON.parse(output.messages.at(-1) ?? '{}').agents[0]).toMatchObject({
+            agent: 'antigravity-cli',
+            tier: 1,
+        });
 
-        expect(await main(['agent', 'doctor', 'antigravity'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
+        expect(await main(['agent', 'doctor', 'antigravity'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
         expect(output.messages.at(-1)).toContain('antigravity');
 
         expect(await main(['agent', 'missing'], { cwd, output, dbUrl: ':memory:' })).toBe(1);

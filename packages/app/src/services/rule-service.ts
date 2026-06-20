@@ -204,7 +204,7 @@ export class RuleService {
         const rules =
             file !== undefined
                 ? (await loadRuleFile(file)).rules
-                : await loadPresetRules(preset, { roots: this.ruleRoots() });
+                : await loadPresetRules(preset, { roots: await this.ruleRoots() });
         const selectedRule = rule;
         const filteredRules = selectedRule === undefined ? rules : rules.filter((r) => r.id === selectedRule);
 
@@ -226,7 +226,7 @@ export class RuleService {
                 selectedRule === undefined ? { cwd: this.context.cwd } : { cwd: this.context.cwd, rule: selectedRule },
             ),
         };
-        const engineOptions = { persistence, runId, runMeta };
+        const engineOptions = { persistence, runId, runMeta, fileSystem: this.context.fs };
         const engine = new RuleEngine(engineOptions);
 
         let result: RuleEngineResult;
@@ -249,7 +249,11 @@ export class RuleService {
         // Apply fixes when fixMode='auto' and fixes were collected.
         let applied: FixApplicationResult | undefined;
         if (fixMode === 'auto' && result.fixes.length > 0) {
-            applied = await new RuleEngine().applyFixes(this.context.cwd, result.fixes, dryRun);
+            applied = await new RuleEngine({ fileSystem: this.context.fs }).applyFixes(
+                this.context.cwd,
+                result.fixes,
+                dryRun,
+            );
             // The engine finalizes the run row before fixes are applied
             // (applied_fix_count=0, by contract); stamp the real applied count
             // once application completes. Dry runs record no applied writes.
@@ -330,7 +334,7 @@ export class RuleService {
                 ? (await loadRuleFile(source.value, validateSchema === undefined ? undefined : { validateSchema }))
                       .rules
                 : await loadPresetRules(source.value, {
-                      roots: this.ruleRoots(),
+                      roots: await this.ruleRoots(),
                       validateSchema,
                   });
 
@@ -370,7 +374,7 @@ export class RuleService {
             ruleCount: entries.length,
             rules: entries,
             mode: 'preset',
-            layers: this.ruleSourceLayers({ includeBundled: true }),
+            layers: await this.ruleSourceLayers({ includeBundled: true }),
             totalFiles: 0,
             categories: [],
             uncategorized: [],
@@ -408,11 +412,12 @@ export class RuleService {
 
     // ── Private helpers ────────────────────────────────────────────────
 
-    private ruleRoots(): string[] {
-        return this.ruleSourceLayers({ includeBundled: true }).map((layer) => layer.path);
+    private async ruleRoots(): Promise<string[]> {
+        const layers = await this.ruleSourceLayers({ includeBundled: true });
+        return layers.map((layer) => layer.path);
     }
 
-    private ruleSourceLayers(opts: { includeBundled: boolean }): RuleSourceLayer[] {
+    private async ruleSourceLayers(opts: { includeBundled: boolean }): Promise<RuleSourceLayer[]> {
         const { cwd, env } = this.context;
         const layers: RuleSourceLayer[] = [];
         const envValue = env.SPUR_RULES_PATH;
@@ -439,7 +444,7 @@ export class RuleService {
                 layers.push({ id: 'bundled-config', path: join(bundledConfig, 'rules'), priority: 15 });
             }
             // Generic demo rules from ts-rule-engine (categories: typescript, quality, structure).
-            const bundled = bundledRulesRoot();
+            const bundled = await bundledRulesRoot();
             if (bundled !== null) layers.push({ id: 'bundled', path: bundled, priority: 20 });
         }
         return layers;
@@ -463,7 +468,7 @@ export class RuleService {
         const totalCount = rules.length;
 
         const events = new EventBus<RuleEngineEvents>();
-        const engine = new RuleEngine({ ...engineOptions, events });
+        const engine = new RuleEngine({ ...engineOptions, events, fileSystem: this.context.fs });
 
         // Header: show total rule count (enabled + disabled).
         const noun = totalCount === 1 ? 'rule' : 'rules';
@@ -663,10 +668,10 @@ export class RuleService {
         }
 
         if (!(await this.presetFileExists(source.value))) {
-            return [`Preset "${source.value}" not found in any rules root (${this.ruleRoots().join(', ')})`];
+            return [`Preset "${source.value}" not found in any rules root (${(await this.ruleRoots()).join(', ')})`];
         }
         try {
-            await loadPresetRules(source.value, { roots: this.ruleRoots(), validateSchema });
+            await loadPresetRules(source.value, { roots: await this.ruleRoots(), validateSchema });
             return null;
         } catch (error) {
             return [this.errorText(error)];
@@ -676,7 +681,7 @@ export class RuleService {
     /** True when a `<name>.{yaml,yml,json}` preset file exists in any configured root. */
     private async presetFileExists(name: string): Promise<boolean> {
         const { fs } = this.context;
-        for (const root of this.ruleRoots()) {
+        for (const root of await this.ruleRoots()) {
             for (const ext of ['yaml', 'yml', 'json']) {
                 if (await fs.exists(join(root, `${name}.${ext}`))) return true;
             }
@@ -690,7 +695,7 @@ export class RuleService {
     }
 
     private async listPresetRules(preset: string): Promise<RuleListEntry[]> {
-        const rules = await loadPresetRules(preset, { roots: this.ruleRoots() });
+        const rules = await loadPresetRules(preset, { roots: await this.ruleRoots() });
         return rules
             .map((rule) => ({
                 id: rule.id,
@@ -734,7 +739,7 @@ export class RuleService {
             });
         }
         const names: string[] = [];
-        const roots = this.ruleRoots();
+        const roots = await this.ruleRoots();
         for (const name of candidates) {
             try {
                 await loadPresetRules(name, { roots });
@@ -800,7 +805,9 @@ export class RuleService {
 
     private async existingRuleSourceLayers(): Promise<RuleSourceLayer[]> {
         const layers: RuleSourceLayer[] = [];
-        for (const layer of this.ruleSourceLayers({ includeBundled: false }).sort((a, b) => a.priority - b.priority)) {
+        for (const layer of (await this.ruleSourceLayers({ includeBundled: false })).sort(
+            (a, b) => a.priority - b.priority,
+        )) {
             if (await this.context.fs.exists(layer.path)) layers.push(layer);
         }
         return layers;

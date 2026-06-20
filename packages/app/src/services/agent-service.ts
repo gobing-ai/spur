@@ -7,9 +7,9 @@ import {
     AiRunner,
     DoctorRunner,
     getAgentShim,
-    isAgentName,
     isClaudeStyleSlashCommand,
     type PromptOptions,
+    resolveAgentName,
     TIER1_PRIORITY,
     TIER2_AGENTS,
     translateSlashCommand,
@@ -311,14 +311,15 @@ export class AgentService {
     }
 
     private async resolveAgentExplicit(name: string, doctorRunner: DoctorRunner): Promise<AgentResolveResult> {
-        if (!isAgentName(name)) {
+        const canonical = resolveAgentName(name);
+        if (canonical === undefined) {
             return { ok: false, exitCode: 2, message: `Unknown agent: ${name}` };
         }
-        const result = await doctorRunner.runOne(name);
+        const result = await doctorRunner.runOne(canonical);
         if (!result.installed) {
-            return { ok: false, exitCode: 1, message: `Agent not installed: ${name}` };
+            return { ok: false, exitCode: 1, message: `Agent not installed: ${canonical}` };
         }
-        return { ok: true, agent: name };
+        return { ok: true, agent: canonical };
     }
 
     private async statCwd(cwd: string): Promise<Awaited<ReturnType<typeof stat>> | null> {

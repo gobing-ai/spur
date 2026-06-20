@@ -2,11 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { NodeFileSystem, setFileSystem } from '@gobing-ai/ts-runtime';
 import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
-
-setFileSystem(new NodeFileSystem());
 
 function nullOutput(): CommandOutput {
     return { write: () => {}, error: () => {} };

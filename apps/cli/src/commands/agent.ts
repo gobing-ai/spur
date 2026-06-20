@@ -113,7 +113,7 @@ async function runAgentList(
     if (!opts.specs) {
         return svc.list({ json: opts.json ?? false });
     }
-    const specs = new TeamService(context).listAgentSpecs();
+    const specs = await new TeamService(context).listAgentSpecs();
     if (opts.json) {
         context.output.write(
             toJson({
@@ -201,7 +201,7 @@ async function runAgentEdit(id: string | undefined, context: CliContext): Promis
         context.output.error('agent edit requires <id>');
         return 2;
     }
-    const spec = new TeamService(context).listAgentSpecs().find((entry) => entry.id === id);
+    const spec = (await new TeamService(context).listAgentSpecs()).find((entry) => entry.id === id);
     if (spec === undefined) {
         context.output.error(`No agent spec found: ${id}`);
         return 1;
@@ -280,7 +280,7 @@ async function drainIntoPrompt(
     }
 
     const team = new TeamService(context);
-    const spec = team.listAgentSpecs().find((entry) => entry.id === recipient);
+    const spec = (await team.listAgentSpecs()).find((entry) => entry.id === recipient);
     // Map spec id → coding-agent type so AgentService can resolve the runner.
     const flagsOut = spec === undefined ? flags : { ...flags, agent: spec.type };
 
