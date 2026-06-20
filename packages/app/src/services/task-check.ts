@@ -114,8 +114,9 @@ export class TaskCheckService extends PlanningCheckService {
             for (const l of rLines) {
                 if (l.trim().length > 0) {
                     allLines++;
-                    // Accept an optional list-bullet prefix: "- R1. …" / "* R1. …" / "R1. …".
-                    if (/^\s*[-*]?\s*R\d+\.?\s/.test(l)) numbered++;
+                    // Accept an optional list-bullet prefix and an optional task-list
+                    // checkbox: "- [ ] R1. …" / "- R1. …" / "* R1. …" / "R1. …".
+                    if (/^\s*[-*]?\s*(?:\[[ xX]\]\s*)?R\d+\.?\s/.test(l)) numbered++;
                 }
             }
             if (numbered === 0 || numbered < allLines * 0.5) {

@@ -342,6 +342,38 @@ describe('TaskCheckService', () => {
         expect(reqWarnings).toHaveLength(0);
     });
 
+    test('L3: checkbox-prefixed R-numbered Requirements produce no warning', async () => {
+        // WHY: todo tasks track requirements as GitHub task-list checkboxes
+        // ("- [ ] R1. …"); the R-numbering check must accept the checkbox between
+        // the bullet and the R-number, else a correctly-formatted todo task warns.
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Checkbox reqs"',
+            'status: backlog',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Checkbox reqs',
+            '',
+            '### Background',
+            '',
+            'text',
+            '',
+            '### Requirements',
+            '',
+            '- [ ] R1. The system shall do X.',
+            '- [x] R2. The system shall do Y.',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+        const reqWarnings = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Requirements');
+        expect(reqWarnings).toHaveLength(0);
+    });
+
     test('L3: a guidance-placeholder Solution does NOT trigger the file:line error', async () => {
         // WHY: a not-yet-implemented task (Solution = guidance comment only) must
         // pass — forcing a file:line citation before implementation is the original
