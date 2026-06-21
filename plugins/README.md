@@ -273,6 +273,215 @@ All planning entities (tasks and features) share a common lifecycle, managed by 
 
 The **workflow** and **rule** engines have their own lifecycles (author → validate → run → trace / refine), documented in their respective skills.
 
+## rd3 → `sp` / `cc` Migration Map
+
+The `sp` and `cc` plugins are the two destinations for the legacy
+`~/projects/cc-agents/plugins/rd3/` plugin. The dividing line (ADR-023):
+
+- **`sp` (Spur)** — *software-development* surface. Code that executes, validates, stores, or
+  coordinates moved into the Spur codebase (`apps/`, `packages/`, `@gobing-ai/ts-*`); the plugin
+  ships only **Fat Skills** (the SSOT for agent-facing behavior) plus thin command/subagent wrappers
+  that delegate to them. Every deterministic step is a `spur` CLI verb.
+- **`cc` (Core Component)** — *meta-agent* surface. The `cc-*` authoring lifecycle skills (scaffold
+  → validate → evaluate → refine → evolve for skills, commands, agents, hooks, main-agent configs)
+  plus fundamental agent skills that are not dev-workflow-specific (e.g. `anti-hallucination`).
+
+### Status legend
+
+| Mark | Meaning |
+|------|---------|
+| ✅ **Done** | Migrated to the destination plugin (possibly rebranded / consolidated) |
+| 🔀 **Absorbed** | Logic folded into a broader destination entity, not a 1:1 port |
+| ⏳ **Deferred** | Slated for a later migration batch; still live in `rd3` meanwhile |
+| ❌ **Rejected** | Explicitly not migrated (rationale in the triage doc) |
+| ➖ **N/A** | Was never an `rd3` entity (created fresh in the destination) |
+
+### Skills (rd3 → destination)
+
+The `sp` plugin consolidated **many rd3 skills into a few Fat Skills**: the planning, decomposition,
+review, and pipeline skills collapsed into `spur-dev` + `spur-plan`; the task/feature CLI companions
+became `spur-tasks` + `spur-features`. The `cc` plugin took the meta-agent authoring family and the
+verification guard.
+
+| rd3 skill | Destination | Status | Note |
+|-----------|-------------|--------|------|
+| `anti-hallucination` | `cc` | ✅ Done | Moved to `cc:anti-hallucination` v3.0.0; in-repo copy removed from `sp` (ADR-024, 2026-06-20) |
+| `cc-agents` | `cc` | ✅ Done | v3.0.0 — subagent lifecycle, 6 platforms |
+| `cc-commands` | `cc` | ✅ Done | v3.0.0 — slash command lifecycle |
+| `cc-hooks` | `cc` | ✅ Done | v3.0.0 — multi-agent hook system |
+| `cc-magents` | `cc` | ✅ Done | v5.0.0 — main-agent config, 15 platforms |
+| `cc-skills` | `cc` | ✅ Done | v3.0.0 — skill lifecycle |
+| `orchestration-v2` | `sp` | 🔀 Absorbed | Replaced by `@gobing-ai/ts-dual-workflow-engine` + `sp:spur-workflows` + `spur workflow run` (D02) |
+| `orchestration-v1` | — | ❌ Rejected | Deprecated; superseded by v2/engine (I07) |
+| `verification-chain` | `sp` | 🔀 Absorbed | Replaced as workflow guards via the engine (I12) |
+| `run-acp` | `sp` | 🔀 Absorbed | Replaced by `spur agent run` — single LLM execution surface (I13, M12) |
+| `task-runner` | `sp` | 🔀 Absorbed | Into `spur-dev` execution half + `task-pipeline.yaml` (D01) |
+| `feature-planning` | `sp` | 🔀 Absorbed | Prompt logic into the `spur-dev` planning half (I04); AC/decomposition gated by CLI |
+| `task-decomposition` | `sp` | 🔀 Absorbed | Into `spur-dev` decomposition step (C03); output contract replaced by the new schema |
+| `request-intake` | `sp` | 🔀 Absorbed | Into `spur-dev` intake step (C01) |
+| `bdd-workflow` | `sp` | 🔀 Absorbed | BDD validation logic → shared BDD validator (X01); AC generation → `spur-dev` (C02) |
+| `feature-tree` | `sp` | 🔀 Absorbed | Into `spur feature` verbs + `spur-features` skill (B-group); in-memory tree rejected (B10) |
+| `tasks` | `sp` | 🔀 Absorbed | Into `spur task` verbs + `spur-tasks` skill (A-group) |
+| `product-management` | `sp` | ⏳ Deferred | M05 — stays in `rd3` until core stabilizes |
+| `code-review-common` | `sp` | ⏳ Deferred | K01 — runs as `sp` skill + `spur agent run` meanwhile; extract post-stabilization |
+| `code-verification` | `sp` | ⏳ Deferred | K02 — same |
+| `code-improvement` | `sp` | ⏳ Deferred | K03 — same |
+| `functional-review` | `sp` | ⏳ Deferred | K04 — same |
+| `code-docs` | `sp` | 🔀 Absorbed | Prompt template → `sp:doc-evolve` (I10/I15) |
+| `dev-verification` | — | ❌ Rejected | Empty stub (I14) — deleted entirely |
+| `reverse-engineering` | `sp` | ⏳ Deferred | L04 — re-apply ADR-016 test at design time |
+| `deep-research` | `sp` | ⏳ Deferred | L02 — same |
+| `knowledge-extraction` | `sp` | ⏳ Deferred | L03 — same |
+| `indexed-context` | `sp` | ⏳ Deferred | L01 — design agent-agnostic shape later |
+| `sys-testing` | `sp` | ⏳ Deferred | K06 — consolidate with deferred `spur inspect` (N group) |
+| `advanced-testing` | `sp` | ⏳ Deferred | K07 — niche, after core |
+| `tdd-workflow` | `sp` | ⏳ Deferred | Prompt skill; extraction not on critical path |
+| `sys-debugging` | `sp` | ⏳ Deferred | M02 — re-apply ADR-016 test at design time |
+| `sys-developing` | `sp` | ⏳ Deferred | Prompt skill; same |
+| `code-implement-common` | `sp` | ⏳ Deferred | Prompt skill; same |
+| `backend-architect` | `sp` | ⏳ Deferred | Prompt skill; same |
+| `backend-design` | `sp` | ⏳ Deferred | Prompt skill; same |
+| `frontend-architect` | `sp` | ⏳ Deferred | Prompt skill; same |
+| `frontend-design` | `sp` | ⏳ Deferred | Prompt skill; same |
+| `ui-ux-design` | `sp` | ⏳ Deferred | Prompt skill; same |
+| `pl-typescript` | `sp` | ⏳ Deferred | Prompt skill; same |
+| `pl-python` | `sp` | ⏳ Deferred | Prompt skill; same |
+| `pl-golang` | `sp` | ⏳ Deferred | Prompt skill; same |
+| `pl-javascript` | `sp` | ⏳ Deferred | Prompt skill; same |
+| `cli-for-ai` | `sp` | ⏳ Deferred | M04 — prompt skill; same |
+| `token-saver` | `sp` | ⏳ Deferred | M03 — prompt skill; same |
+| `brainstorm` | `sp` | ✅ Done | Retained as `sp:brainstorm` (I05); CLI verb rejected (C06) |
+| `daily-summary` | `sp` | ✅ Done | Retained as `sp:daily-summary`; script stays embedded (I16) |
+| `transfer` | `sp` | ⏳ Deferred | M01 — prompt skill |
+| `handover` | `sp` | ⏳ Deferred | M01 — prompt skill |
+| `quick-grep` | `sp` | 🔀 Absorbed | rg-usage guidance stays a prompt skill; CLI wrapper rejected (L05) |
+| *— (new)* | `sp` | ➖ N/A | `doc-evolve` created fresh (constitution-native; no rd3 ancestor) |
+| *— (new)* | `sp` | ➖ N/A | `spur-dev`, `spur-plan`, `spur-tasks`, `spur-features`, `spur-rules`, `spur-workflows` created fresh as the Spur CLI companion surface |
+
+### Commands (rd3 → destination)
+
+rd3 shipped 46 commands. The `sp` plugin applied the ADR-016 decision test (a command is justified
+only when it converts non-deterministic intent into a reliable sequence the CLI cannot express) and
+kept a **much smaller set** (18). The `cc` plugin took the meta-agent authoring commands (17).
+
+| rd3 command | Destination | Status | Note |
+|-------------|-------------|--------|------|
+| `dev-plan` | `sp` | ✅ Done | Delegates to `sp:spur-dev` (plan operation) |
+| `dev-run` | `sp` | ✅ Done | Delegates to `sp:spur-dev` (run operation) |
+| `dev-new-task` | `sp` | ✅ Done | Delegates to `sp:spur-dev` (new-task) |
+| `dev-refine` | `sp` | ✅ Done | Delegates to `sp:spur-dev` (refine) |
+| `dev-review` | `sp` | ✅ Done | Delegates to `sp:spur-dev` (review) |
+| `dev-verify` | `sp` | ✅ Done | Delegates to `sp:spur-dev` (verify) |
+| `dev-unit` | `sp` | ✅ Done | Delegates to `sp:spur-dev` (unit) |
+| `dev-fixall` | `sp` | ✅ Done | Delegates to `sp:spur-dev` (fixall) |
+| `dev-gitmsg` | `sp` | ✅ Done | Delegates to `sp:spur-dev` (gitmsg) |
+| `dev-changelog` | `sp` | ✅ Done | Delegates to `sp:spur-dev` (changelog) |
+| `dev-handover` | `sp` | ✅ Done | Delegates to `sp:spur-dev` (handover) |
+| `dev-docs` | `sp` | ✅ Done | Delegates to `sp:doc-evolve` |
+| `dev-brainstorm` | `sp` | 🔀 Absorbed | Into `sp:brainstorm` skill directly (no separate command) |
+| `dev-daily-summary` | `sp` | 🔀 Absorbed | Into `sp:daily-summary` skill directly |
+| `dev-transfer` | `sp` | 🔀 Absorbed | Into `sp:spur-dev` (transfer operation) |
+| `dev-init` | `sp` | 🔀 Absorbed | Into `spur-init` command → `sp:doc-evolve` |
+| `dev-reverse` | `sp` | ⏳ Deferred | L04 — with the `reverse-engineering` skill |
+| `skill-add` | `cc` | ✅ Done | `cc` `skill-add` |
+| `skill-refine` | `cc` | ✅ Done | `cc` `skill-refine` |
+| `skill-evaluate` | `cc` | ✅ Done | `cc` `skill-evaluate` |
+| `skill-evolve` | `cc` | ✅ Done | `cc` `skill-evolve` |
+| `skill-migrate` | `cc` | ⏳ Deferred | M06 — not yet ported to `cc` |
+| `skill-package` | `cc` | ⏳ Deferred | M06 — not yet ported to `cc` |
+| `command-add` | `cc` | ✅ Done | `cc` `command-add` |
+| `command-refine` | `cc` | ✅ Done | `cc` `command-refine` |
+| `command-evaluate` | `cc` | ✅ Done | `cc` `command-evaluate` |
+| `command-evolve` | `cc` | ✅ Done | `cc` `command-evolve` |
+| `command-adapt` | `cc` | ⏳ Deferred | M07 — not yet ported to `cc` |
+| `agent-add` | `cc` | ✅ Done | `cc` `agent-add` |
+| `agent-refine` | `cc` | ✅ Done | `cc` `agent-refine` |
+| `agent-evaluate` | `cc` | ✅ Done | `cc` `agent-evaluate` |
+| `agent-evolve` | `cc` | ✅ Done | `cc` `agent-evolve` |
+| `agent-adapt` | `cc` | ⏳ Deferred | M08 — not yet ported to `cc` |
+| `hook-emit` | `cc` | ⏳ Deferred | M09 — not yet ported to `cc` |
+| `hook-list` | `cc` | ⏳ Deferred | M09 — not yet ported to `cc` |
+| `hook-setup` | `cc` | ⏳ Deferred | M09 — not yet ported to `cc` |
+| `hook-validate` | `cc` | ⏳ Deferred | M09 — not yet ported to `cc` |
+| `magent-add` | `cc` | ✅ Done | `cc` `magent-add` |
+| `magent-refine` | `cc` | ✅ Done | `cc` `magent-refine` |
+| `magent-evaluate` | `cc` | ✅ Done | `cc` `magent-evaluate` |
+| `magent-evolve` | `cc` | ✅ Done | `cc` `magent-evolve` |
+| `magent-adapt` | `cc` | ⏳ Deferred | M10 — not yet ported to `cc` |
+| `prd-run` | `sp` | ⏳ Deferred | M05 — with `product-management` skill |
+| `prd-init` | `sp` | ⏳ Deferred | M05 — same |
+| `prd-doc` | `sp` | ⏳ Deferred | M05 — same |
+| `prd-adjust` | `sp` | ⏳ Deferred | M05 — same |
+| *— (new)* | `sp` | ➖ N/A | `rule-add`, `rule-refine`, `rule-scan` (→ `sp:spur-rules`); `workflow-add`, `workflow-refine` (→ `sp:spur-workflows`); `spur-init` — created fresh for the Spur CLI surface |
+
+### Agents (rd3 → destination)
+
+rd3 shipped 13 agents. The `sp` plugin kept 5 (one per Fat Skill); `cc` kept 5 (one per authoring
+skill). The "super-*" orchestration agents were folded into skills/engine capabilities.
+
+| rd3 agent | Destination | Status | Note |
+|-----------|-------------|--------|------|
+| `expert-skill` | `cc` | ✅ Done | `cc` `expert-skill` |
+| `expert-command` | `cc` | ✅ Done | `cc` `expert-command` |
+| `expert-agent` | `cc` | ✅ Done | `cc` `expert-agent` |
+| `expert-hook` | `cc` | ✅ Done | `cc` `expert-hook` |
+| `expert-magent` | `cc` | ✅ Done | `cc` `expert-magent` |
+| `super-coder` | `sp` | 🔀 Absorbed | Into `sp:expert-dev` (execution half of `spur-dev`) |
+| `super-tester` | `sp` | 🔀 Absorbed | Into `sp:expert-dev` (execution half) |
+| `super-reviewer` | `sp` | 🔀 Absorbed | Into `sp:expert-dev` (verify/review operations) |
+| `super-pm` | `sp` | ⏳ Deferred | M05 — with `product-management` skill |
+| `super-brain` | `sp` | 🔀 Absorbed | Into `sp:brainstorm` skill + `sp:expert-dev` (plan half) |
+| `jon-snow` | `sp` | 🔀 Absorbed | Into `sp:expert-dev` (pipeline routing + full runs) |
+| `knowledge-seeker` | `sp` | ⏳ Deferred | With the L-group research skills |
+| `second-brain` | `sp` | ⏳ Deferred | L01 — with `indexed-context` |
+| *— (new)* | `sp` | ➖ N/A | `expert-dev`, `expert-tasks`, `expert-features`, `expert-rules`, `expert-workflows` — created fresh, one per Fat Skill |
+
+### Hooks (rd3 → destination)
+
+| rd3 hook | Destination | Status | Note |
+|----------|-------------|--------|------|
+| `hooks.json` (rd3 had hook definitions) | `cc` / `sp` | ✅ Done | `cc` ships the meta-agent hook authoring system (`cc-hooks`); `sp` ships the task-write-guard `PreToolUse` hook (F04) |
+
+### Scripts (rd3 → destination)
+
+rd3's executable scripts (`scripts/evolution-engine.ts` 53k, `logger.ts` 40k, `best-practice-fixes.ts`
+17k, `fs.ts` 12k, `markdown-frontmatter.ts`, etc.) are the **meta-tooling backbone** (H07–H13, M06–M10).
+They stay live in `rd3` until the core stabilizes; deferral breaks nothing.
+
+| rd3 script group | Destination | Status | Note |
+|------------------|-------------|--------|------|
+| `evolution-engine.ts` + contract | `cc` | ⏳ Deferred | H11 — largest shared dep; moves when M06–M10 move |
+| `logger.ts` | `cc` | ⏳ Deferred | H07 — meta-tooling backbone |
+| `best-practice-fixes.ts` | `cc` | ⏳ Deferred | H10 — same |
+| `fs.ts` | `sp` | 🔀 Absorbed | H12 — superseded by `@gobing-ai/ts-runtime` FileSystem |
+| `markdown-frontmatter.ts` | `sp` | 🔀 Absorbed | H01 — into the Spur-local frontmatter library |
+| `grading.ts` / `validation-findings.ts` | `cc` | ⏳ Deferred | H07/H08 — meta-tooling backbone |
+| `utils.ts` | `cc` | ⏳ Deferred | Meta-tooling backbone |
+| `acpx-query.ts` (35k) | — | ❌ Rejected | I17 — archive; `spur agent run` replaces ACP |
+
+### Summary scorecard
+
+| Surface | rd3 count | ✅ Done | 🔀 Absorbed | ⏳ Deferred | ❌ Rejected | Destination count |
+|---------|-----------|---------|-------------|------------|------------|------------------|
+| **Skills** | 50 | 8 | 12 | 28 | 2 | `sp` 9 · `cc` 6 |
+| **Commands** | 46 | 28 | 4 | 14 | 0 | `sp` 18 · `cc` 17 |
+| **Agents** | 13 | 5 | 5 | 3 | 0 | `sp` 5 · `cc` 5 |
+
+**Key consolidations:**
+
+- **12 rd3 skills absorbed into `sp` Fat Skills**: the planning/decomposition/review/pipeline family
+  folded into `spur-dev` + `spur-plan`; the task/feature CLI companions became `spur-tasks` +
+  `spur-features`; code-docs → `doc-evolve`; quick-grep stays a prompt skill.
+- **5 rd3 "super-*" agents → 1 in `sp`**: `expert-dev` absorbs the coder/tester/reviewer/brain/jon-snow
+  roles behind the two `spur-dev` halves.
+- **ADR-016 command pruning**: 46 rd3 commands → 18 in `sp` (only commands that convert
+  non-deterministic intent survived; pure CLI forwarders were rejected).
+- **Meta-agent family fully in `cc`**: the `cc-*` skills + their expert agents + the add/refine/
+  evaluate/evolve commands are all migrated; only the adapt/migrate/package/emit variants remain.
+
+**Authoritative triage source:** `docs/plans/2026-06-10-rd3-migration-feature-list.md` (140 items, A–N
+groups). Governing decisions: ADR-020–024 in `docs/00_ADR.md`.
+
 ---
 
 *This folder stores the original source for Claude Code plugins. Translation scripts adapt these entities for other coding agents. It is unrelated to `packages/plugin-sdk`.*
