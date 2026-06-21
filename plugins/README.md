@@ -482,6 +482,60 @@ They stay live in `rd3` until the core stabilizes; deferral breaks nothing.
 **Authoritative triage source:** `docs/plans/2026-06-10-rd3-migration-feature-list.md` (140 items, A–N
 groups). Governing decisions: ADR-020–024 in `docs/00_ADR.md`.
 
+### What's next for `sp`
+
+The committed batch (ADR-023 waves 0–5) has landed. Three workstreams remain, in priority order:
+
+1. **Wave 3 — Task Kanban board (active).** The F7 web-parity feature decomposed into tasks
+   0089–0098: restore `@dnd-kit` + `markdown-editor` deps (0089), task body write API (0090),
+   body render/edit (0091), metadata pane (0092), new-task panel (0093), action server surface
+   (0094), workflow action buttons (0095), dnd-kit migration (0096), SSE real-time sync (0097),
+   board UX polish (0098). Unblocks the **A17 cutover gate** — the operator is never boardless.
+
+2. **Wave 6 — `rd3` cleanup.** Each `I-group` removal is gated on its verified replacement.
+   The `rd3` plugin stays executable until every caller is confirmed on `sp`.
+
+3. **Deferred-skill extraction (later batches).** These run **today** as prompt skills driving
+   `spur agent run`; extraction is not on the critical path. Triage IDs map to the groups above:
+
+   | Batch | Skills (triage ID) | Shape when extracted |
+   |-------|--------------------|---------------------|
+   | Verification engine | code-review-common (K01), code-verification (K02), code-improvement (K03), functional-review (K04) | `spur review` / `spur verify` verbs behind the existing skills; deterministic checks via `ts-rule-engine` evaluators |
+   | Testing surface | sys-testing (K06), advanced-testing (K07) | Consolidate with the deferred `spur inspect` surface (N group) — one noun, adapter-based |
+   | Context & research | indexed-context (L01), deep-research (L02), knowledge-extraction (L03), reverse-engineering (L04) | Re-apply the ADR-016 test at design time — much is prompt work that stays in skills |
+   | Coordination | transfer/handover (M01), sys-debugging (M02), token-saver (M03), cli-for-ai (M04), product-management (M05) | Prompt skills; extract only if a deterministic verb survives the ADR-016 test |
+   | `spur inspect` | coverage/lint/typecheck/deps (N01–N05) | Adapter-based project-state interrogation; near-term needs covered by rule presets + workflow shell guards |
+
+   **Trigger for extraction:** the `sp` core is stable and a second consumer appears, *or* the
+   prompt-skill wrapper starts leaking behavior the CLI can enforce deterministically.
+
+### What's next for `cc`
+
+The six `cc-*` skills and their add/refine/evaluate/evolve commands shipped. Two workstreams remain:
+
+1. **Complete the authoring lifecycle.** The `adapt` / `migrate` / `package` / `emit` variants are
+   still in `rd3`:
+
+   | Family | Done in `cc` | Still in `rd3` (triage ID) |
+   |--------|--------------|----------------------------|
+   | skill | add, refine, evaluate, evolve | migrate (M06), package (M06) |
+   | command | add, refine, evaluate, evolve | adapt (M07) |
+   | agent | add, refine, evaluate, evolve | adapt (M08) |
+   | hook | *(none)* | emit, list, setup, validate (M09) — **entire hook CLI surface** |
+   | magent | add, refine, evaluate, evolve | adapt (M10) |
+
+   The **hook family** is the largest gap: `cc-hooks` skill exists but none of its four CLI verbs
+   have been ported. Porting them completes the hook authoring story.
+
+2. **Meta-tooling backbone (H07–H13).** The shared scripts — `evolution-engine.ts` (53 KB),
+   `logger.ts` (40 KB), `best-practice-fixes.ts` (17 KB), `grading.ts`, `validation-findings.ts`,
+   `utils.ts` — underpin M06–M10. They stay live in `rd3` until the core stabilizes; deferral
+   costs nothing because nothing breaks in the meantime. They move when their consuming commands
+   (the `adapt`/`migrate`/`package`/`emit` variants) move.
+
+   **Trigger for migration:** the `cc` authoring lifecycle is daily-driver stable and the operator
+   is ready to freeze `rd3` execution entirely.
+
 ---
 
 *This folder stores the original source for Claude Code plugins. Translation scripts adapt these entities for other coding agents. It is unrelated to `packages/plugin-sdk`.*
