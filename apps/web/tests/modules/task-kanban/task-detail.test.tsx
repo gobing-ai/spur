@@ -48,6 +48,8 @@ const DEFAULT_SHOW_DATA = {
 
 let showImpl: () => Promise<unknown> = async () => ({ data: { ...DEFAULT_SHOW_DATA } });
 let bodyImpl: () => Promise<unknown> = async () => ({ data: { wbs: '0001', filePath: 'a.md' } });
+let actionImpl: () => Promise<unknown> = async () => ({ data: { runId: 'r1', action: 'run', status: 'queued' } });
+let listImpl: () => Promise<unknown> = async () => ({ data: [] });
 
 mock.module('../../../src/lib/rpc-client', () => ({
     api: {
@@ -60,9 +62,20 @@ mock.module('../../../src/lib/rpc-client', () => ({
                 bodyCalls.push(input);
                 return bodyImpl();
             },
+            action: (input: { wbs: string; action: string }) => {
+                actionCalls.push(input);
+                return actionImpl();
+            },
+            list: () => {
+                listCalls.push(listCalls.length + 1);
+                return listImpl();
+            },
         },
     },
 }));
+
+const actionCalls: Array<{ wbs: string; action: string }> = [];
+const listCalls: number[] = [];
 
 import TaskDetail from '../../../src/modules/task-kanban/TaskDetail';
 
@@ -74,9 +87,13 @@ afterEach(() => {
     cleanup();
     showCalls.length = 0;
     bodyCalls.length = 0;
+    actionCalls.length = 0;
+    listCalls.length = 0;
     editorOnChange = null;
     showImpl = async () => ({ data: { ...DEFAULT_SHOW_DATA } });
     bodyImpl = async () => ({ data: { wbs: '0001', filePath: 'a.md' } });
+    actionImpl = async () => ({ data: { runId: 'r1', action: 'run', status: 'queued' } });
+    listImpl = async () => ({ data: [] });
 });
 
 const task: TaskSummary = {
@@ -330,5 +347,195 @@ describe('TaskDetail — metadata pane', () => {
         await waitFor(() => expect(getByText('Metadata')).toBeDefined());
 
         expect(getAllByText('(today)').length).toBeGreaterThanOrEqual(1);
+    });
+});
+
+// ── Action buttons (0095) ────────────────────────────────────────────────────
+
+describe('TaskDetail — workflow action buttons', () => {
+    test('R1 — renders action buttons for a todo status task', async () => {
+        const { getByLabelText } = renderDetail();
+        await waitFor(() => expect(getByLabelText('Edit body')).toBeDefined());
+
+        // todo → Plan, Run, Decompose
+        expect(getByLabelText('Plan')).toBeDefined();
+        expect(getByLabelText('Run')).toBeDefined();
+        expect(getByLabelText('Decompose')).toBeDefined();
+        // Refine, Verify, Evaluate should NOT appear for todo
+        expect(() => getByLabelText('Refine')).toThrow();
+        expect(() => getByLabelText('Verify')).toThrow();
+        expect(() => getByLabelText('Evaluate')).toThrow();
+    });
+
+    test('R1 — renders Refine/Plan for backlog status', async () => {
+        showImpl = async () => ({ data: { ...DEFAULT_SHOW_DATA, status: 'backlog' } });
+        const { getByLabelText } = render(<TaskDetail task={{ ...task, status: 'backlog' }} onTransition={() => {}} />);
+        await waitFor(() => expect(getByLabelText('Edit body')).toBeDefined());
+
+        expect(getByLabelText('Refine')).toBeDefined();
+        expect(getByLabelText('Plan')).toBeDefined();
+        expect(() => getByLabelText('Run')).toThrow();
+    });
+
+    test('R1 — renders Run/Verify/Evaluate for wip status', async () => {
+        showImpl = async () => ({ data: { ...DEFAULT_SHOW_DATA, status: 'wip' } });
+        const { getByLabelText } = render(<TaskDetail task={{ ...task, status: 'wip' }} onTransition={() => {}} />);
+        await waitFor(() => expect(getByLabelText('Edit body')).toBeDefined());
+
+        expect(getByLabelText('Run')).toBeDefined();
+        expect(getByLabelText('Verify')).toBeDefined();
+        expect(getByLabelText('Evaluate')).toBeDefined();
+        expect(() => getByLabelText('Plan')).toThrow();
+    });
+
+    test('R1 — renders Verify/Evaluate for testing status', async () => {
+        showImpl = async () => ({ data: { ...DEFAULT_SHOW_DATA, status: 'testing' } });
+        const { getByLabelText } = render(<TaskDetail task={{ ...task, status: 'testing' }} onTransition={() => {}} />);
+        await waitFor(() => expect(getByLabelText('Edit body')).toBeDefined());
+
+        expect(getByLabelText('Verify')).toBeDefined();
+        expect(getByLabelText('Evaluate')).toBeDefined();
+        expect(() => getByLabelText('Run')).toThrow();
+    });
+
+    test('R1 — renders Refine only for blocked status', async () => {
+        showImpl = async () => ({ data: { ...DEFAULT_SHOW_DATA, status: 'blocked' } });
+        const { getByLabelText } = render(<TaskDetail task={{ ...task, status: 'blocked' }} onTransition={() => {}} />);
+        await waitFor(() => expect(getByLabelText('Edit body')).toBeDefined());
+
+        expect(getByLabelText('Refine')).toBeDefined();
+        expect(() => getByLabelText('Plan')).toThrow();
+    });
+
+    test('R1 — renders no actions for done status', async () => {
+        showImpl = async () => ({ data: { ...DEFAULT_SHOW_DATA, status: 'done' } });
+        const { queryByText } = render(<TaskDetail task={{ ...task, status: 'done' }} onTransition={() => {}} />);
+        await waitFor(() => expect(queryByText('Body')).toBeDefined());
+
+        // "Actions" heading should not appear
+        expect(queryByText('Actions')).toBeNull();
+    });
+
+    test('R1 — renders no actions for cancelled status', async () => {
+        showImpl = async () => ({ data: { ...DEFAULT_SHOW_DATA, status: 'cancelled' } });
+        const { queryByText } = render(<TaskDetail task={{ ...task, status: 'cancelled' }} onTransition={() => {}} />);
+        await waitFor(() => expect(queryByText('Body')).toBeDefined());
+
+        expect(queryByText('Actions')).toBeNull();
+    });
+
+    test('R2 — clicking an action invokes the API and refreshes the list', async () => {
+        const { getByLabelText } = renderDetail();
+        await waitFor(() => expect(getByLabelText('Edit body')).toBeDefined());
+
+        fireEvent.click(getByLabelText('Run'));
+
+        await waitFor(() => {
+            expect(actionCalls.length).toBe(1);
+            expect(actionCalls[0]).toEqual({ wbs: '0001', action: 'run' });
+        });
+
+        // Refresh should have been triggered after success
+        await waitFor(() => {
+            expect(listCalls.length).toBeGreaterThanOrEqual(1);
+        });
+    });
+
+    test('R2 — surfaces action failure via api-error event', async () => {
+        actionImpl = async () => {
+            throw new Error('Action rejected');
+        };
+
+        const errors: string[] = [];
+        const handler = (e: Event) => {
+            errors.push((e as CustomEvent).detail.message);
+        };
+        window.addEventListener('api-error', handler);
+
+        const { getByLabelText } = renderDetail();
+        await waitFor(() => expect(getByLabelText('Edit body')).toBeDefined());
+
+        fireEvent.click(getByLabelText('Run'));
+
+        await waitFor(() => {
+            expect(errors.length).toBeGreaterThanOrEqual(1);
+            expect(errors[0]).toContain('Action rejected');
+        });
+
+        window.removeEventListener('api-error', handler);
+    });
+});
+
+// ── Cancel confirmation modal (0095) ─────────────────────────────────────────
+
+describe('TaskDetail — cancel confirmation modal', () => {
+    test('R4 — clicking cancelled status button shows the modal', async () => {
+        const { getByText, getByRole } = renderDetail();
+        await waitFor(() => expect(getByText('Edit')).toBeDefined());
+
+        // Click the "cancelled" status button
+        const cancelledBtn = getByRole('button', { name: 'cancelled' });
+        fireEvent.click(cancelledBtn);
+
+        // Modal should appear — the dialog role confirms it's rendered
+        expect(getByRole('dialog')).toBeDefined();
+        expect(getByRole('button', { name: 'Keep' })).toBeDefined();
+        expect(getByRole('button', { name: 'Cancel task' })).toBeDefined();
+    });
+
+    test('R4 — "Keep" dismisses the modal without firing transition', async () => {
+        const transitions: Array<{ wbs: string; status: string }> = [];
+        const { getByText, getByRole } = render(
+            <TaskDetail task={task} onTransition={(w, s) => transitions.push({ wbs: w, status: s })} />,
+        );
+        await waitFor(() => expect(getByText('Edit')).toBeDefined());
+
+        fireEvent.click(getByRole('button', { name: 'cancelled' }));
+        fireEvent.click(getByRole('button', { name: 'Keep' }));
+
+        // No transition should have fired
+        expect(transitions.length).toBe(0);
+    });
+
+    test('R4 — "Cancel task" fires the cancelled transition', async () => {
+        const transitions: Array<{ wbs: string; status: string }> = [];
+        const { getByText, getByRole } = render(
+            <TaskDetail task={task} onTransition={(w, s) => transitions.push({ wbs: w, status: s })} />,
+        );
+        await waitFor(() => expect(getByText('Edit')).toBeDefined());
+
+        fireEvent.click(getByRole('button', { name: 'cancelled' }));
+        fireEvent.click(getByRole('button', { name: 'Cancel task' }));
+
+        expect(transitions).toEqual([{ wbs: '0001', status: 'cancelled' }]);
+    });
+
+    test('R4 — clicking the backdrop dismisses the modal', async () => {
+        const transitions: Array<{ wbs: string; status: string }> = [];
+        const { getByText, getByRole } = render(
+            <TaskDetail task={task} onTransition={(w, s) => transitions.push({ wbs: w, status: s })} />,
+        );
+        await waitFor(() => expect(getByText('Edit')).toBeDefined());
+
+        fireEvent.click(getByRole('button', { name: 'cancelled' }));
+
+        // Click the backdrop (role=presentation div)
+        const backdrop = document.querySelector('[role="presentation"]');
+        expect(backdrop).not.toBeNull();
+        fireEvent.click(backdrop as HTMLElement);
+
+        expect(transitions.length).toBe(0);
+    });
+
+    test('R4 — non-cancelled status buttons fire immediately (no modal)', async () => {
+        const transitions: Array<{ wbs: string; status: string }> = [];
+        const { getByText, getByRole } = render(
+            <TaskDetail task={task} onTransition={(w, s) => transitions.push({ wbs: w, status: s })} />,
+        );
+        await waitFor(() => expect(getByText('Edit')).toBeDefined());
+
+        fireEvent.click(getByRole('button', { name: 'done' }));
+
+        expect(transitions).toEqual([{ wbs: '0001', status: 'done' }]);
     });
 });
