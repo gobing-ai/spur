@@ -125,7 +125,7 @@ export class MarkdownDocument {
     private readonly _domain: MarkdownDomain;
     private _frontmatterBlock: string;
     private _frontmatter: ParsedFrontmatter | null;
-    private readonly _preamble: string;
+    private _preamble: string;
     private readonly _sections: Section[];
 
     private constructor(
@@ -199,6 +199,14 @@ export class MarkdownDocument {
         return this._domain;
     }
 
+    /**
+     * Replace the body preamble — everything between the frontmatter block and
+     * the first `###` section heading. Sections and frontmatter are untouched.
+     * Used by body-write operations (e.g. PATCH /tasks/{wbs}/body).
+     */
+    replacePreamble(newBody: string): void {
+        this._preamble = newBody;
+    }
     /** Parsed frontmatter, or `null` if the file has no frontmatter. */
     get frontmatter(): ParsedFrontmatter | null {
         return this._frontmatter;

@@ -228,6 +228,23 @@ export class TaskService {
         return this.writeService.transition(ref, toStatus, actor ?? this.ctx.actor ?? 'system');
     }
 
+    // ── updateBody (body region write) ──
+
+    /**
+     * Replace the task's markdown body — everything between the frontmatter and
+     * the first `###` section heading. Frontmatter and named sections are untouched.
+     *
+     * `_actor` is accepted for transport parity with the contract's optional `actor`
+     * input but is not used: a body write has no status change, so it appends no
+     * `## History` line (history is gated on transitions) and there is nothing to
+     * attribute. Kept wired so a future audit-log of body edits needs no signature change.
+     */
+    async updateBody(wbs: string, body: string, _actor?: string): Promise<WriteResult> {
+        const filePath = await this.resolveTaskFile(wbs);
+        const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: this.ctx.tasksDir };
+        return this.writeService.updateBody(ref, body);
+    }
+
     // ── update (section from file) ──
 
     async updateSection(wbs: string, sectionName: string, sourceFile: string): Promise<WriteResult> {

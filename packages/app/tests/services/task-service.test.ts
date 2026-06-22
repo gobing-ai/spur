@@ -470,4 +470,41 @@ describe('TaskService', () => {
             expect(await fs.exists(kanbanPath)).toBe(true);
         });
     });
+
+    describe('updateBody', () => {
+        test('replaces the body region and preserves frontmatter + sections', async () => {
+            const created = await svc.create({ title: 'Body write test' });
+            const newBody = '## Updated body\n\nThis is the new preamble content.\n';
+
+            const result = await svc.updateBody(created.ref.id, newBody);
+            expect(result.ref.id).toBe(created.ref.id);
+
+            // Read back and verify
+            const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
+            const raw = await fs.readFile(created.ref.filePath);
+            const doc = MarkdownDocument.parse(raw, 'task');
+
+            // Frontmatter preserved
+            expect(doc.frontmatterData?.name).toBe('Body write test');
+            expect(doc.frontmatterData?.status).toBe('backlog');
+
+            // Preamble replaced
+            expect(raw).toContain('This is the new preamble content');
+
+            // Original sections preserved
+            expect(raw).toContain('### Background');
+            expect(raw).toContain('### History');
+        });
+
+        test('handles empty body', async () => {
+            const created = await svc.create({ title: 'Empty body test' });
+            const result = await svc.updateBody(created.ref.id, '');
+            expect(result.ref.id).toBe(created.ref.id);
+
+            const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
+            const raw = await fs.readFile(created.ref.filePath);
+            const doc = MarkdownDocument.parse(raw, 'task');
+            expect(doc.frontmatterData?.name).toBe('Empty body test');
+        });
+    });
 });

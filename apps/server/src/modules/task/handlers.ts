@@ -70,5 +70,10 @@ export function createTaskHandlers(ctx: ServerContext) {
             await ctx.taskService().updateStatus(input.wbs, input.toStatus, input.actor);
             return { ok: true as const, data: { wbs: input.wbs, status: input.toStatus } };
         }),
+
+        body: os.task.body.handler(async ({ input }) => {
+            const r = await ctx.taskService().updateBody(input.wbs, input.body, input.actor);
+            return { ok: true as const, data: { wbs: r.ref.id, filePath: r.ref.filePath } };
+        }),
     };
 }

@@ -34,4 +34,10 @@ export const contract = {
 export type SpurContract = typeof contract;
 export { featureCreateInputSchema, featureListResponseSchema, featureShowResponseSchema } from './feature';
 // ─── Re-exported DTO schemas for handler return-type inference ───
-export { taskCreateInputSchema, taskListResponseSchema, taskShowResponseSchema } from './task';
+export {
+    taskBodyUpdateInputSchema,
+    taskBodyUpdateResponseSchema,
+    taskCreateInputSchema,
+    taskListResponseSchema,
+    taskShowResponseSchema,
+} from './task';

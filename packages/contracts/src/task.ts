@@ -74,7 +74,22 @@ export const taskTransitionResponseSchema = apiSuccessSchema(
     }),
 );
 
-/** oRPC contract for the task domain — list, show, create, transition. */
+/** Body-update input (PATCH /tasks/{wbs}/body). */
+export const taskBodyUpdateInputSchema = z.object({
+    wbs: z.string().regex(/^\d{4}$/),
+    body: z.string(),
+    actor: z.string().optional(),
+});
+
+/** Body-update response: `{ ok: true, data: { wbs, filePath } }`. */
+export const taskBodyUpdateResponseSchema = apiSuccessSchema(
+    z.object({
+        wbs: z.string(),
+        filePath: z.string(),
+    }),
+);
+
+/** oRPC contract for the task domain — list, show, create, transition, body. */
 export const taskContract = {
     list: oc
         .route({
@@ -114,4 +129,14 @@ export const taskContract = {
         })
         .input(taskTransitionInputSchema)
         .output(taskTransitionResponseSchema),
+
+    body: oc
+        .route({
+            method: 'PATCH',
+            path: '/tasks/{wbs}/body',
+            summary: 'Update task body',
+            tags: ['task'],
+        })
+        .input(taskBodyUpdateInputSchema)
+        .output(taskBodyUpdateResponseSchema),
 };

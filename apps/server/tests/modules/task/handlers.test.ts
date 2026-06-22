@@ -21,6 +21,9 @@ describe('task handlers', () => {
                 updateStatus: async () => ({
                     ref: { id: '0001', filePath: '/test/0001.md', kind: 'task' as const, folder: '.' },
                 }),
+                updateBody: async () => ({
+                    ref: { id: '0001', filePath: '/test/0001.md', kind: 'task' as const, folder: '.' },
+                }),
                 ...overrides,
             }),
         } as unknown as ServerContext;
@@ -28,7 +31,7 @@ describe('task handlers', () => {
 
     test('returns expected route keys', () => {
         const handlers = createTaskHandlers(makeCtx());
-        expect(Object.keys(handlers).sort()).toEqual(['create', 'list', 'show', 'transition']);
+        expect(Object.keys(handlers).sort()).toEqual(['body', 'create', 'list', 'show', 'transition']);
     });
 
     test('list handler returns ok:true with data', async () => {
@@ -89,5 +92,16 @@ describe('task handlers', () => {
         expect(result.ok).toBe(true);
         expect(result.data.wbs).toBe('0001');
         expect(result.data.status).toBe('done');
+    });
+
+    test('body handler returns wbs and filePath', async () => {
+        const handlers = createTaskHandlers(makeCtx());
+        const fn = handlers.body['~orpc'].handler as unknown as (opts: {
+            input: { wbs: string; body: string; actor?: string };
+        }) => Promise<{ ok: boolean; data: { wbs: string; filePath: string } }>;
+        const result = await fn({ input: { wbs: '0001', body: '# New body', actor: 'robin' } });
+        expect(result.ok).toBe(true);
+        expect(result.data.wbs).toBe('0001');
+        expect(result.data.filePath).toBe('/test/0001.md');
     });
 });

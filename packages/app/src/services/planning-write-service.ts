@@ -139,7 +139,7 @@ export interface WriteResult {
 
 // ─── Internal mutation descriptor ───────────────────────────────────────
 
-type MutationKind = 'create' | 'updateSection' | 'updateFrontmatter' | 'transition';
+type MutationKind = 'create' | 'updateSection' | 'updateFrontmatter' | 'transition' | 'updateBody';
 
 interface MutationDescriptor {
     kind: MutationKind;
@@ -148,6 +148,8 @@ interface MutationDescriptor {
     /** For updateSection: the section name and new body. */
     sectionName?: string;
     sectionBody?: string;
+    /** For updateBody: the new preamble body text. */
+    body?: string;
     /** For updateFrontmatter/transition: the key and value. */
     fmKey?: string;
     fmValue?: string;
@@ -234,6 +236,18 @@ export class PlanningWriteService {
      */
     async updateSection(ref: EntityRef, sectionName: string, body: string): Promise<WriteResult> {
         return this.executePipeline(ref, { kind: 'updateSection', sectionName, sectionBody: body });
+    }
+
+    /**
+     * Replace the preamble body region of a file — everything between the
+     * frontmatter block and the first section heading. Frontmatter and named
+     * sections are untouched. Used by body-write operations (task body PATCH).
+     *
+     * @param ref  Entity reference — file must exist.
+     * @param body New preamble body text.
+     */
+    async updateBody(ref: EntityRef, body: string): Promise<WriteResult> {
+        return this.executePipeline(ref, { kind: 'updateBody', body });
     }
 
     /**
@@ -385,6 +399,11 @@ function applyMutation(doc: MarkdownDocument, mutation: MutationDescriptor): voi
         case 'updateSection':
             if (mutation.sectionName !== undefined && mutation.sectionBody !== undefined) {
                 doc.replaceSection(mutation.sectionName, mutation.sectionBody);
+            }
+            break;
+        case 'updateBody':
+            if (mutation.body !== undefined) {
+                doc.replacePreamble(mutation.body);
             }
             break;
         case 'updateFrontmatter':

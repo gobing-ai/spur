@@ -15,6 +15,8 @@ import {
 import { planningEventContract, planningEventEnvelopeSchema } from '../src/planning-event';
 import { apiErrorSchema, apiSuccessSchema, paginatedResponseSchema, paginationMetaSchema } from '../src/shared';
 import {
+    taskBodyUpdateInputSchema,
+    taskBodyUpdateResponseSchema,
     taskContract,
     taskCreateInputSchema,
     taskCreateResponseSchema,
@@ -113,6 +115,33 @@ describe('task contract routes', () => {
 
     test('transition route', () => {
         expect(routeOf(taskContract.transition)).toMatchObject({ method: 'PATCH', path: '/tasks/{wbs}/status' });
+    });
+
+    test('body route', () => {
+        expect(routeOf(taskContract.body)).toMatchObject({ method: 'PATCH', path: '/tasks/{wbs}/body' });
+    });
+
+    test('body input validates wbs and body', () => {
+        const result = taskBodyUpdateInputSchema.parse({ wbs: '0001', body: '# New body' });
+        expect(result.wbs).toBe('0001');
+        expect(result.body).toBe('# New body');
+    });
+
+    test('body input accepts optional actor', () => {
+        const result = taskBodyUpdateInputSchema.parse({ wbs: '0001', body: '# Body', actor: 'robin' });
+        expect(result.actor).toBe('robin');
+    });
+
+    test('body input rejects missing body', () => {
+        expect(() => taskBodyUpdateInputSchema.parse({ wbs: '0001' })).toThrow();
+    });
+
+    test('body response schema validates output', () => {
+        const result = taskBodyUpdateResponseSchema.parse({
+            ok: true,
+            data: { wbs: '0001', filePath: 'docs/tasks/0001_test.md' },
+        });
+        expect(result.data.filePath).toBe('docs/tasks/0001_test.md');
     });
 
     test('list response parses valid data', () => {
