@@ -43,7 +43,14 @@ interface TaskState {
 
 type Listener = () => void;
 
-class TaskStore {
+/**
+ * Ref-counted singleton task store with SSE stream + polling fallback.
+ *
+ * On first subscriber: opens an EventSource against `/api/events/planning`,
+ * starts a 5s polling interval as a safety net, and triggers an initial refresh.
+ * On last unsubscribe: closes the SSE connection and clears the interval.
+ */
+export class TaskStore {
     private state: TaskState = { tasks: [], loading: true, error: null, connected: false };
     private listeners: Listener[] = [];
     private interval: ReturnType<typeof setInterval> | undefined;
@@ -99,6 +106,19 @@ class TaskStore {
         this.emit();
     };
 
+    private handleSSEOpen = () => {
+        this.state = { ...this.state, connected: true };
+        this.emit();
+    };
+
+    private handleSSEMessage = () => {
+        void this.refresh();
+    };
+
+    private handleSSEError = () => {
+        this.state = { ...this.state, connected: false };
+        this.emit();
+    };
     private connectSSE(): void {
         if (this.eventSource) return;
         if (typeof EventSource === 'undefined') return;
@@ -106,23 +126,11 @@ class TaskStore {
         const es = new EventSource(SSE_URL);
         this.eventSource = es;
 
-        es.onopen = () => {
-            this.state = { ...this.state, connected: true };
-            this.emit();
-        };
+        es.onopen = this.handleSSEOpen;
 
-        es.onmessage = () => {
-            // Trigger a refresh on any planning event — the polling interval
-            // acts as the safety net if the stream is stale.
-            void this.refresh();
-        };
+        es.onmessage = this.handleSSEMessage;
 
-        es.onerror = () => {
-            this.state = { ...this.state, connected: false };
-            this.emit();
-            // EventSource auto-reconnects by default; polling keeps the board
-            // fresh during the gap per R3 fallback contract.
-        };
+        es.onerror = this.handleSSEError;
     }
 
     private disconnectSSE(): void {

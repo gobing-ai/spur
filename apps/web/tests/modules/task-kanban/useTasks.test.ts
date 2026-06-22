@@ -5,7 +5,7 @@ GlobalRegistrator.register();
 import { afterAll, describe, expect, test } from 'bun:test';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { TaskSummary } from '../../../src/modules/task-kanban/types';
-import { createRefresh, useTasks } from '../../../src/modules/task-kanban/useTasks';
+import { createRefresh, TaskStore, useTasks } from '../../../src/modules/task-kanban/useTasks';
 
 describe('createRefresh', () => {
     test('success: sets tasks and clears error', async () => {
@@ -116,5 +116,48 @@ describe('useTasks', () => {
         await waitFor(() => expect(result.current.loading).toBe(false));
         expect(result.current.connected).toBe(false);
         unmount();
+    });
+});
+
+describe('TaskStore SSE callbacks', () => {
+    test('handleSSEOpen sets connected=true and emits', () => {
+        const listFn = async () => ({ data: [] });
+        const store = new TaskStore(listFn);
+        const result = { notified: false };
+        store.subscribe(() => {
+            result.notified = true;
+        });
+        // biome-ignore lint/complexity/useLiteralKeys: access private method for testing
+        store['handleSSEOpen']();
+        expect(store.getState().connected).toBe(true);
+        expect(result.notified).toBe(true);
+    });
+
+    test('handleSSEMessage triggers refresh', async () => {
+        let called = false;
+        const listFn = async () => {
+            called = true;
+            return { data: [] };
+        };
+        const store = new TaskStore(listFn);
+        // biome-ignore lint/complexity/useLiteralKeys: access private method for testing
+        store['handleSSEMessage']();
+
+        // refresh is async; wait one microtick
+        await new Promise((r) => setTimeout(r, 10));
+        expect(called).toBe(true);
+    });
+
+    test('handleSSEError sets connected=false and emits', () => {
+        const listFn = async () => ({ data: [] });
+        const store = new TaskStore(listFn);
+        const result = { notified: false };
+        store.subscribe(() => {
+            result.notified = true;
+        });
+        // biome-ignore lint/complexity/useLiteralKeys: access private method for testing
+        store['handleSSEError']();
+        expect(store.getState().connected).toBe(false);
+        expect(result.notified).toBe(true);
     });
 });

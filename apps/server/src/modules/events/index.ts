@@ -4,15 +4,25 @@ import type { Hono } from 'hono';
 import type { ServerContext } from '../../context';
 import type { ServerModule } from '../types';
 
+/** SSE heartbeat keepalive — enqueues a comment frame unless the stream is closed. */
+export function sendKeepalive(
+    closed: { current: boolean },
+    controller: ReadableStreamDefaultController,
+    encoder: TextEncoder,
+): void {
+    if (closed.current) return;
+    try {
+        controller.enqueue(encoder.encode(': keepalive\n\n'));
+    } catch {
+        // Controller already closed.
+    }
+}
+
 /**
- * Events module — mounts the SSE `/api/events/planning` stream on the Hono app.
+ * Server module that mounts the SSE `/api/events/planning` stream.
  *
- * The stream is gated by ServerContext availability:
- * - Bun runtime (local dev/production): ServerContext is available → SSE active.
- * - Cloudflare Worker: ServerContext is undefined → module is a no-op,
- *   and the board falls back to 5s polling (R4 invariant).
- *
- * Design §5, ADR-019 runtime split.
+ * Gated by ServerContext: on Bun the stream is active; on Cloudflare Workers
+ * (ctx undefined) the module is a no-op and the board falls back to polling.
  */
 export const eventsModule: ServerModule = {
     name: 'events',
@@ -22,8 +32,7 @@ export const eventsModule: ServerModule = {
 
         app.get('/api/events/planning', (c) => {
             const bus: EventBus<Record<PlanningEventName, (event: unknown) => void>> = ctx.eventBus();
-
-            let closed = false;
+            const closed = { current: false };
             let heartbeatInterval: ReturnType<typeof setInterval> | undefined;
             const handlers = new Map<PlanningEventName, (event: unknown) => void>();
 
@@ -31,15 +40,7 @@ export const eventsModule: ServerModule = {
                 start(controller) {
                     const encoder = new TextEncoder();
 
-                    // Heartbeat keepalive every 15s
-                    heartbeatInterval = setInterval(() => {
-                        if (closed) return;
-                        try {
-                            controller.enqueue(encoder.encode(': keepalive\n\n'));
-                        } catch {
-                            // Controller already closed.
-                        }
-                    }, 15_000);
+                    heartbeatInterval = setInterval(sendKeepalive, 15_000, closed, controller, encoder);
 
                     const eventNames: PlanningEventName[] = [
                         'task.created',
@@ -52,7 +53,7 @@ export const eventsModule: ServerModule = {
 
                     for (const name of eventNames) {
                         const handler = (event: unknown) => {
-                            if (closed) return;
+                            if (closed.current) return;
                             const envelope = {
                                 eventName: name,
                                 occurredAt: new Date().toISOString(),
@@ -78,7 +79,7 @@ export const eventsModule: ServerModule = {
                 },
 
                 cancel() {
-                    closed = true;
+                    closed.current = true;
                     if (heartbeatInterval) clearInterval(heartbeatInterval);
                     for (const [name, handler] of handlers) {
                         bus.off(name, handler);
