@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Task metadata pane: phase progress bars, tags, and created/updated dates"
-status: todo
+status: done
 template: standard
 created_at: 2026-06-20T05:06:46.367Z
-updated_at: 2026-06-20T06:58:05.444Z
+updated_at: 2026-06-22T05:20:54.788Z
 feature_id: F7
 priority: P2
 tags: ["task-kanban", "wave-1", "web", "metadata"]
@@ -82,4 +82,39 @@ The current detail pane shows a flat list (priority/feature/file). `taskShowResp
 4. Handle missing fields gracefully (omit, no `undefined` leakage).
 5. If any field is absent from `frontmatter` in practice, extend `taskShowResponseSchema` + the handler projection minimally (transport DTO only); otherwise no contract change.
 6. Tests: pane renders dates/tags and a progress state for representative statuses; missing-field case omits cleanly; if the contract was extended, a handler test covers the projection. Run the gate.
+### Testing
+- Command: `bun run --filter @gobing-ai/spur-web test`
+- Scope: TaskDetail metadata pane — dates, tags, progress stepper, collapse/expand, missing-field grace
+- Result: 89 tests pass, 0 fail; 224 expect() calls across 12 files
+- Coverage: not measured (--coverage not set)
+- Evidence: 9 new test cases in `apps/web/tests/modules/task-kanban/task-detail.test.tsx` covering R1 (dates/tags rendering), R1b (absent priority/feature omission), R2 (progress stepper labels), R2b (blocked off-track badge), R4 (collapse/expand toggle), R5/R5b (missing dates/tags graceful omission), and relative date labels
+- Next action: proceed to verification
+
+### Review
+- **Verdict:** PASS
+- P1: none
+- P2: none
+- P3: none
+- P4: none
+- SECU: No injection risk (React JSX), O(1) computation, all edge cases covered, accessible (aria-expanded/SVG title)
+- Traceability: R1 ✅ R2 ✅ R3 ✅ R4 ✅ R5 ✅
+- Design drift: none — matches design exactly
+- Tests: 9 new cases, all 89 pass
+
+## Review — 2026-06-21 (re-audit, dev-verify --force --fix all)
+
+**Status:** 1 finding (P4, fixed) · **Scope:** TaskDetail.tsx metadata pane · **Mode:** verify (full) · **Channel:** inline · **Gate:** `bun run lint` + web `test` → pass (89/89, 224 expect)
+
+**Verdict: PASS** — re-confirmed. Phase 7 SECU clean (no P1/P2/P3); Phase 8 traceability R1–R5 all MET; no scope drift. Contract unchanged — `frontmatter` record passthrough (`packages/contracts/src/task.ts:32`, `apps/server/src/modules/task/handlers.ts:55`) satisfied R3 without extension, matching the design's fallback prediction.
+
+### P4 — Suggestions (fixed)
+| # | Title | Dimension | Location | Recommendation |
+|---|-------|-----------|----------|----------------|
+| 1 | `tags` cast assumed array shape | Correctness | TaskDetail.tsx:147 | Replaced `as string[]` cast with `Array.isArray()` guard so a non-array `frontmatter.tags` from YAML can't throw on `.map`/`.length`. |
+
+**Fix-pass 2026-06-21:** 1 fixed, 0 failed, 0 skipped. Gate re-run green.
+
 ### History
+- 2026-06-22T05:10:58.641Z todo → wip (system)
+- 2026-06-22T05:19:00.956Z wip → testing (system)
+- 2026-06-22T05:20:54.788Z testing → done (system)

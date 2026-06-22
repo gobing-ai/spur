@@ -18,12 +18,19 @@ type BodyMode = 'preview' | 'edit';
  * Inline editing (Save/Cancel) calls the body-write API (0090); a server denial reverts and
  * surfaces an error via the `api-error` CustomEvent (same surface as KanbanBoard).
  */
+const LIFECYCLE = ['backlog', 'todo', 'wip', 'testing', 'done'] as const;
+
+/** Off-track states that don't map to a lifecycle position. */
+const OFF_TRACK = new Set(['blocked', 'cancelled']);
+
 export default function TaskDetail({ task, onTransition }: Props) {
     const [serverBody, setServerBody] = useState('');
     const [draftBody, setDraftBody] = useState('');
     const [mode, setMode] = useState<BodyMode>('preview');
     const [loadingBody, setLoadingBody] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [frontmatter, setFrontmatter] = useState<Record<string, unknown>>({});
+    const [showMetadata, setShowMetadata] = useState(true);
 
     // R4: depends on wbs only — the 5s poll refreshes the list (new object refs)
     // but wbs is stable, so the editor is never clobbered by a poll.
@@ -42,9 +49,10 @@ export default function TaskDetail({ task, onTransition }: Props) {
             .show({ wbs })
             .then((res) => {
                 if (cancelled) return;
-                const content = res.data.content;
+                const { content, frontmatter: fm } = res.data;
                 setServerBody(content);
                 setDraftBody(content);
+                setFrontmatter(fm);
             })
             .catch((err: unknown) => {
                 if (cancelled) return;
@@ -103,6 +111,45 @@ export default function TaskDetail({ task, onTransition }: Props) {
         }
     };
 
+    const lifecycleIndex = (status: string): number => {
+        const idx = LIFECYCLE.indexOf(status as (typeof LIFECYCLE)[number]);
+        return idx >= 0 ? idx : -1;
+    };
+
+    const formatDate = (raw: unknown): string => {
+        if (!raw) return '';
+        try {
+            const d = new Date(raw as string);
+            if (Number.isNaN(d.getTime())) return '';
+            return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+        } catch {
+            return '';
+        }
+    };
+
+    const relativeDays = (raw: unknown): string => {
+        if (!raw) return '';
+        try {
+            const d = new Date(raw as string);
+            if (Number.isNaN(d.getTime())) return '';
+            const diff = Date.now() - d.getTime();
+            const days = Math.floor(diff / 86400000);
+            if (days === 0) return 'today';
+            if (days === 1) return 'yesterday';
+            if (days < 30) return `${days}d ago`;
+            if (days < 365) return `${Math.floor(days / 30)}mo ago`;
+            return `${Math.floor(days / 365)}y ago`;
+        } catch {
+            return '';
+        }
+    };
+
+    const tags = Array.isArray(frontmatter.tags) ? (frontmatter.tags as string[]) : [];
+    const created = formatDate(frontmatter.created_at);
+    const createdRel = relativeDays(frontmatter.created_at);
+    const updated = formatDate(frontmatter.updated_at);
+    const updatedRel = relativeDays(frontmatter.updated_at);
+    const statusIdx = lifecycleIndex(task.status);
     return (
         <div className="flex flex-col h-full">
             <div className="p-3 border-b border-spur-border shrink-0">
@@ -128,25 +175,118 @@ export default function TaskDetail({ task, onTransition }: Props) {
                 </div>
             </div>
 
-            <div className="p-3 border-b border-spur-border shrink-0">
-                <div className="space-y-2">
-                    {task.priority && (
+            {/* Metadata pane — collapsible */}
+            <div className="border-b border-spur-border shrink-0">
+                <button
+                    type="button"
+                    onClick={() => setShowMetadata((v) => !v)}
+                    className="flex items-center justify-between w-full p-3 text-xs font-semibold text-spur-text-muted uppercase tracking-wide hover:text-spur-text transition-colors"
+                    aria-expanded={showMetadata}
+                >
+                    <span>Metadata</span>
+                    <svg
+                        className={`w-3 h-3 transition-transform ${showMetadata ? 'rotate-180' : ''}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                    >
+                        <title>{showMetadata ? 'Collapse metadata' : 'Expand metadata'}</title>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                </button>
+                {showMetadata && (
+                    <div className="px-3 pb-3 space-y-3">
+                        {/* Phase progress */}
                         <div>
-                            <span className="text-xs text-spur-text-muted">Priority</span>
-                            <span className="badge badge-outline badge-xs ml-2">{task.priority}</span>
+                            <span className="text-xs text-spur-text-muted block mb-1.5">Progress</span>
+                            {OFF_TRACK.has(task.status) ? (
+                                <span className="badge badge-warning badge-xs">{task.status}</span>
+                            ) : (
+                                <div className="flex items-center gap-1">
+                                    {LIFECYCLE.map((phase, i) => {
+                                        const isDone = i <= statusIdx;
+                                        const isCurrent = i === statusIdx;
+                                        return (
+                                            <div key={phase} className="flex items-center gap-1 flex-1 last:flex-none">
+                                                <div
+                                                    className={`h-1.5 rounded-full flex-1 ${
+                                                        isDone ? 'bg-spur-accent' : 'bg-spur-border'
+                                                    } ${isCurrent ? 'ring-1 ring-spur-accent/50' : ''}`}
+                                                    title={phase}
+                                                />
+                                                {i < LIFECYCLE.length - 1 && (
+                                                    <span className="text-[10px] text-spur-text-muted w-0" />
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                            <div className="flex justify-between mt-0.5">
+                                {LIFECYCLE.map((phase) => (
+                                    <span key={phase} className="text-[10px] text-spur-text-muted">
+                                        {phase}
+                                    </span>
+                                ))}
+                            </div>
                         </div>
-                    )}
-                    {task.featureId && (
-                        <div>
-                            <span className="text-xs text-spur-text-muted">Feature</span>
-                            <span className="text-sm text-spur-text ml-2">{task.featureId}</span>
+
+                        {/* Dates */}
+                        {(created || updated) && (
+                            <div className="space-y-1.5">
+                                <span className="text-xs text-spur-text-muted block">Dates</span>
+                                {created && (
+                                    <div className="flex items-center gap-1.5 text-xs">
+                                        <span className="text-spur-text-muted w-14 shrink-0">Created</span>
+                                        <span className="text-spur-text">{created}</span>
+                                        <span className="text-spur-text-muted">({createdRel})</span>
+                                    </div>
+                                )}
+                                {updated && (
+                                    <div className="flex items-center gap-1.5 text-xs">
+                                        <span className="text-spur-text-muted w-14 shrink-0">Updated</span>
+                                        <span className="text-spur-text">{updated}</span>
+                                        <span className="text-spur-text-muted">({updatedRel})</span>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Tags */}
+                        {tags.length > 0 && (
+                            <div>
+                                <span className="text-xs text-spur-text-muted block mb-1.5">Tags</span>
+                                <div className="flex flex-wrap gap-1">
+                                    {tags.map((t) => (
+                                        <span key={t} className="badge badge-outline badge-xs text-spur-text-muted">
+                                            {t}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Priority / Feature / File */}
+                        <div className="space-y-1.5">
+                            {task.priority && (
+                                <div className="flex items-center gap-1.5 text-xs">
+                                    <span className="text-spur-text-muted w-14 shrink-0">Priority</span>
+                                    <span className="badge badge-outline badge-xs">{task.priority}</span>
+                                </div>
+                            )}
+                            {task.featureId && (
+                                <div className="flex items-center gap-1.5 text-xs">
+                                    <span className="text-spur-text-muted w-14 shrink-0">Feature</span>
+                                    <span className="text-spur-text">{task.featureId}</span>
+                                </div>
+                            )}
+                            <div className="flex items-center gap-1.5 text-xs">
+                                <span className="text-spur-text-muted w-14 shrink-0">File</span>
+                                <span className="text-spur-text font-mono truncate">{task.filePath}</span>
+                            </div>
                         </div>
-                    )}
-                    <div>
-                        <span className="text-xs text-spur-text-muted">File</span>
-                        <span className="text-xs text-spur-text ml-2 font-mono">{task.filePath}</span>
                     </div>
-                </div>
+                )}
             </div>
 
             <div className="flex-1 overflow-y-auto p-3" data-testid="task-body-section">

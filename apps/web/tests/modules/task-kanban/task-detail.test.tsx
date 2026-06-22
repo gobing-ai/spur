@@ -195,3 +195,140 @@ describe('TaskDetail — body rendering and inline editing', () => {
         await waitFor(() => expect(getByTestId('body-preview')).toBeDefined());
     });
 });
+
+// ── Metadata pane tests ─────────────────────────────────────────────────────
+
+describe('TaskDetail — metadata pane', () => {
+    test('R1 — renders created/updated dates and tags from frontmatter', async () => {
+        const created = new Date('2025-01-15T12:00:00Z').toISOString();
+        const updated = new Date('2025-06-01T08:30:00Z').toISOString();
+        showImpl = async () => ({
+            data: {
+                ...DEFAULT_SHOW_DATA,
+                frontmatter: { created_at: created, updated_at: updated, tags: ['api', 'frontend'] },
+            },
+        });
+
+        const { getByText } = renderDetail();
+
+        await waitFor(() => expect(getByText('Metadata')).toBeDefined());
+
+        // Dates render
+        expect(getByText('Jan 15, 2025')).toBeDefined();
+        expect(getByText('Jun 1, 2025')).toBeDefined();
+
+        // Tags render as badges
+        expect(getByText('api')).toBeDefined();
+        expect(getByText('frontend')).toBeDefined();
+
+        // Priority and feature from TaskSummary (not frontmatter) still render
+        expect(getByText('P1')).toBeDefined();
+        expect(getByText('W3')).toBeDefined();
+    });
+
+    test('R1b — priority and feature omit when absent on TaskSummary', async () => {
+        const noMetaTask: TaskSummary = { wbs: '0002', name: 'No meta', status: 'todo', filePath: 'b.md' };
+        const { queryByText } = render(<TaskDetail task={noMetaTask} onTransition={() => {}} />);
+
+        await waitFor(() => expect(queryByText('Metadata')).toBeDefined());
+
+        expect(queryByText('Priority')).toBeNull();
+        expect(queryByText('Feature')).toBeNull();
+        // File still renders
+        expect(queryByText('b.md')).toBeDefined();
+    });
+
+    test('R2 — progress stepper renders lifecycle phase labels', async () => {
+        const { getAllByText } = renderDetail();
+
+        await waitFor(() => expect(getAllByText('Metadata')[0]).toBeDefined());
+
+        // Each lifecycle label exists at least once (progress stepper + possibly status buttons)
+        expect(getAllByText('backlog').length).toBeGreaterThanOrEqual(1);
+        expect(getAllByText('todo').length).toBeGreaterThanOrEqual(1);
+        expect(getAllByText('wip').length).toBeGreaterThanOrEqual(1);
+        expect(getAllByText('testing').length).toBeGreaterThanOrEqual(1);
+        expect(getAllByText('done').length).toBeGreaterThanOrEqual(1);
+    });
+
+    test('R2b — blocked/cancelled render as off-track badge', async () => {
+        const { getAllByText, getByText } = render(
+            <TaskDetail task={{ ...task, status: 'blocked' }} onTransition={() => {}} />,
+        );
+
+        await waitFor(() => expect(getByText('Metadata')).toBeDefined());
+
+        // Off-track badge renders the status (getAllByText because status button also uses it)
+        expect(getAllByText('blocked').length).toBeGreaterThanOrEqual(1);
+    });
+
+    test('R4 — metadata pane toggles collapse/expand', async () => {
+        const { getByText, queryByText } = renderDetail();
+
+        await waitFor(() => expect(getByText('Metadata')).toBeDefined());
+
+        // Initially expanded: progress visible
+        expect(getByText('Progress')).toBeDefined();
+
+        // Click header to collapse
+        fireEvent.click(getByText('Metadata'));
+
+        // Progress label hidden (collapsed)
+        await waitFor(() => expect(queryByText('Progress')).toBeNull());
+
+        // Click again to expand
+        fireEvent.click(getByText('Metadata'));
+
+        await waitFor(() => expect(getByText('Progress')).toBeDefined());
+    });
+
+    test('R5 — missing dates and tags render gracefully (no undefined leakage)', async () => {
+        showImpl = async () => ({
+            data: { ...DEFAULT_SHOW_DATA, frontmatter: {} },
+        });
+
+        const { getByText, queryByText } = renderDetail();
+
+        await waitFor(() => expect(getByText('Metadata')).toBeDefined());
+
+        // Dates section omits when both fields absent
+        expect(queryByText('Dates')).toBeNull();
+        expect(queryByText('Created')).toBeNull();
+        expect(queryByText('Updated')).toBeNull();
+
+        // Tags section omits when array absent
+        expect(queryByText('Tags')).toBeNull();
+
+        // Progress and file always present
+        expect(getByText('Progress')).toBeDefined();
+        expect(getByText('P1')).toBeDefined();
+    });
+
+    test('R5b — empty tags array renders nothing', async () => {
+        showImpl = async () => ({
+            data: { ...DEFAULT_SHOW_DATA, frontmatter: { tags: [] } },
+        });
+
+        const { getByText, queryByText } = renderDetail();
+
+        await waitFor(() => expect(getByText('Metadata')).toBeDefined());
+
+        expect(queryByText('Tags')).toBeNull();
+    });
+
+    test('dates render with relative labels', async () => {
+        const today = new Date().toISOString();
+        showImpl = async () => ({
+            data: {
+                ...DEFAULT_SHOW_DATA,
+                frontmatter: { created_at: today, updated_at: today },
+            },
+        });
+
+        const { getByText, getAllByText } = renderDetail();
+
+        await waitFor(() => expect(getByText('Metadata')).toBeDefined());
+
+        expect(getAllByText('(today)').length).toBeGreaterThanOrEqual(1);
+    });
+});
