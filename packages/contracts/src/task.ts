@@ -89,6 +89,21 @@ export const taskBodyUpdateResponseSchema = apiSuccessSchema(
     }),
 );
 
+/** Action input (POST /tasks/{wbs}/actions). */
+export const taskActionInputSchema = z.object({
+    wbs: z.string().regex(/^\d{4}$/),
+    action: z.enum(['refine', 'plan', 'run', 'verify', 'decompose', 'evaluate']),
+});
+
+/** Action response: `{ ok: true, data: { runId, action, status } }`. */
+export const taskActionResponseSchema = apiSuccessSchema(
+    z.object({
+        runId: z.string(),
+        action: z.string(),
+        status: z.literal('queued'),
+    }),
+);
+
 /** oRPC contract for the task domain — list, show, create, transition, body. */
 export const taskContract = {
     list: oc
@@ -139,4 +154,14 @@ export const taskContract = {
         })
         .input(taskBodyUpdateInputSchema)
         .output(taskBodyUpdateResponseSchema),
+
+    action: oc
+        .route({
+            method: 'POST',
+            path: '/tasks/{wbs}/actions',
+            summary: 'Run a task action',
+            tags: ['task'],
+        })
+        .input(taskActionInputSchema)
+        .output(taskActionResponseSchema),
 };

@@ -74,7 +74,13 @@ export {
 } from './services/rule-service';
 export type { CheckFindings, CheckResult as TaskCheckResult, SectionMatrix } from './services/task-check';
 export { TaskCheckService } from './services/task-check';
-export type { TaskServiceContext, TaskShowResult, TaskSummary } from './services/task-service';
+export type {
+    TaskActionJob,
+    TaskActionResult,
+    TaskServiceContext,
+    TaskShowResult,
+    TaskSummary,
+} from './services/task-service';
 export { TaskService } from './services/task-service';
 export type {
     AgentSpecInput,

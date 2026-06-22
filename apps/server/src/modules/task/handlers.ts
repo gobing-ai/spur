@@ -75,5 +75,19 @@ export function createTaskHandlers(ctx: ServerContext) {
             const r = await ctx.taskService().updateBody(input.wbs, input.body, input.actor);
             return { ok: true as const, data: { wbs: r.ref.id, filePath: r.ref.filePath } };
         }),
+
+        action: os.task.action.handler(async ({ input }) => {
+            // R3: only `run` is wired end-to-end in this task; other actions
+            // are enumerated in the contract but return "not yet implemented".
+            if (input.action !== 'run') {
+                throw new NotFoundError(`Action "${input.action}" is not yet implemented. Supported: run`);
+            }
+            const jobQueue = await ctx.jobQueue();
+            const result = await ctx.taskService().fulfillAction(input.wbs, input.action, async (job) => {
+                const runId = await jobQueue.enqueue('task-action', job);
+                return runId;
+            });
+            return { ok: true as const, data: result };
+        }),
     };
 }

@@ -45,6 +45,19 @@ export interface TaskServiceContext {
     resolveTemplateBodies?: (variant: string) => Partial<Record<TaskSection, string>>;
 }
 
+/** Job payload enqueued for async task actions. */
+export interface TaskActionJob {
+    wbs: string;
+    action: string;
+}
+
+/** Result returned by fulfillAction when a job is enqueued. */
+export interface TaskActionResult {
+    runId: string;
+    action: string;
+    status: 'queued';
+}
+
 /** Task summary returned by list/show. */
 export interface TaskSummary {
     wbs: string;
@@ -243,6 +256,30 @@ export class TaskService {
         const filePath = await this.resolveTaskFile(wbs);
         const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: this.ctx.tasksDir };
         return this.writeService.updateBody(ref, body);
+    }
+
+    // ── fulfillAction ──
+
+    /**
+     * Enqueue a task action (run, verify, etc.) for async execution.
+     *
+     * The caller provides `enqueue` — a function that persists the job and
+     * returns the `runId`. The handler provides this via the server jobQueue;
+     * the service owns only the business validation (task exists, action is
+     * supported).
+     *
+     * @throws if the task file does not exist.
+     */
+    async fulfillAction(
+        wbs: string,
+        action: string,
+        enqueue: (job: TaskActionJob) => Promise<string>,
+    ): Promise<TaskActionResult> {
+        // Validate the task file exists (throws if not found).
+        await this.resolveTaskFile(wbs);
+
+        const runId = await enqueue({ wbs, action });
+        return { runId, action, status: 'queued' };
     }
 
     // ── update (section from file) ──

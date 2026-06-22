@@ -15,6 +15,8 @@ import {
 import { planningEventContract, planningEventEnvelopeSchema } from '../src/planning-event';
 import { apiErrorSchema, apiSuccessSchema, paginatedResponseSchema, paginationMetaSchema } from '../src/shared';
 import {
+    taskActionInputSchema,
+    taskActionResponseSchema,
     taskBodyUpdateInputSchema,
     taskBodyUpdateResponseSchema,
     taskContract,
@@ -213,6 +215,33 @@ describe('task contract routes', () => {
     test('wbs rejects non-4-digit values', () => {
         expect(() => taskTransitionInputSchema.parse({ wbs: '001', toStatus: 'done' })).toThrow();
         expect(() => taskTransitionInputSchema.parse({ wbs: '00001', toStatus: 'done' })).toThrow();
+    });
+
+    test('action route', () => {
+        expect(routeOf(taskContract.action)).toMatchObject({ method: 'POST', path: '/tasks/{wbs}/actions' });
+    });
+
+    test('action input validates wbs and supported action', () => {
+        const result = taskActionInputSchema.parse({ wbs: '0001', action: 'run' });
+        expect(result.wbs).toBe('0001');
+        expect(result.action).toBe('run');
+    });
+
+    test('action input rejects unsupported action', () => {
+        expect(() => taskActionInputSchema.parse({ wbs: '0001', action: 'unknown' })).toThrow();
+    });
+
+    test('action input rejects invalid wbs', () => {
+        expect(() => taskActionInputSchema.parse({ wbs: '001', action: 'run' })).toThrow();
+    });
+
+    test('action response schema validates output', () => {
+        const result = taskActionResponseSchema.parse({
+            ok: true,
+            data: { runId: 'abc-123', action: 'run', status: 'queued' },
+        });
+        expect(result.data.runId).toBe('abc-123');
+        expect(result.data.status).toBe('queued');
     });
 });
 

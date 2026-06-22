@@ -4,6 +4,7 @@ import { createTaskHandlers } from '../../../src/modules/task';
 
 describe('task handlers', () => {
     function makeCtx(overrides?: Record<string, unknown>) {
+        const enqueue = async (_type: string, _payload: unknown) => 'run-001';
         return {
             taskService: () => ({
                 list: async () => [{ wbs: '0001', name: 'Test', status: 'todo', filePath: '/test/0001.md' }],
@@ -24,14 +25,19 @@ describe('task handlers', () => {
                 updateBody: async () => ({
                     ref: { id: '0001', filePath: '/test/0001.md', kind: 'task' as const, folder: '.' },
                 }),
+                fulfillAction: async (wbs: string, action: string, fn: (job: unknown) => Promise<string>) => {
+                    const runId = await fn({ wbs, action });
+                    return { runId, action, status: 'queued' as const };
+                },
                 ...overrides,
             }),
+            jobQueue: async () => ({ enqueue }),
         } as unknown as ServerContext;
     }
 
     test('returns expected route keys', () => {
         const handlers = createTaskHandlers(makeCtx());
-        expect(Object.keys(handlers).sort()).toEqual(['body', 'create', 'list', 'show', 'transition']);
+        expect(Object.keys(handlers).sort()).toEqual(['action', 'body', 'create', 'list', 'show', 'transition']);
     });
 
     test('list handler returns ok:true with data', async () => {
@@ -103,5 +109,27 @@ describe('task handlers', () => {
         expect(result.ok).toBe(true);
         expect(result.data.wbs).toBe('0001');
         expect(result.data.filePath).toBe('/test/0001.md');
+    });
+
+    test('action handler enqueues run action and returns runId', async () => {
+        const handlers = createTaskHandlers(makeCtx());
+        const fn = handlers.action['~orpc'].handler as unknown as (opts: {
+            input: { wbs: string; action: string };
+        }) => Promise<{ ok: boolean; data: { runId: string; action: string; status: string } }>;
+        const result = await fn({ input: { wbs: '0001', action: 'run' } });
+        expect(result.ok).toBe(true);
+        expect(result.data.runId).toBe('run-001');
+        expect(result.data.action).toBe('run');
+        expect(result.data.status).toBe('queued');
+    });
+
+    test('action handler rejects unsupported action', async () => {
+        const handlers = createTaskHandlers(makeCtx());
+        const fn = handlers.action['~orpc'].handler as unknown as (opts: {
+            input: { wbs: string; action: string };
+        }) => Promise<unknown>;
+        await expect(fn({ input: { wbs: '0001', action: 'verify' } })).rejects.toThrow(
+            'Action "verify" is not yet implemented. Supported: run',
+        );
     });
 });

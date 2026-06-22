@@ -535,6 +535,13 @@ export const taskContract = {
 };
 ```
 
+> **Shipped additions beyond this original slice.** Two write verbs landed after this
+> proposal and are live in `packages/contracts/src/task.ts`: `body` (`PATCH /tasks/{wbs}/body`,
+> task 0090) and `action` (`POST /tasks/{wbs}/actions`, task 0094 — input enumerates
+> `refine|plan|run|verify|decompose|evaluate`; only `run` is wired end-to-end, enqueuing a
+> `task-pipeline.yaml` run via the server jobQueue and returning `{ runId, action, status: 'queued' }`).
+> The source contract is authoritative; this block records the route surface, not its exact schemas.
+
 **Feature contract (S4):** same pattern — `featureContract` with `list`, `show`, `create`,
 `transition`, `refresh` verbs over `FeatureService`.
 
