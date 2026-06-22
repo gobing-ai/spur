@@ -3,6 +3,26 @@ import MDEditor from '@uiw/react-md-editor';
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/rpc-client';
 import type { TaskSummary } from './types';
+import { useTasks } from './useTasks';
+
+/** Actions offered per task status. The server is the validation authority — this is UX only. */
+const STATUS_ACTIONS: Record<string, readonly string[]> = {
+    backlog: ['refine', 'plan'],
+    todo: ['plan', 'run', 'decompose'],
+    wip: ['run', 'verify', 'evaluate'],
+    testing: ['verify', 'evaluate'],
+    blocked: ['refine'],
+};
+
+/** Label for each action button. */
+const ACTION_LABELS: Record<string, string> = {
+    refine: 'Refine',
+    plan: 'Plan',
+    run: 'Run',
+    verify: 'Verify',
+    decompose: 'Decompose',
+    evaluate: 'Evaluate',
+};
 
 interface Props {
     /** Selected task, resolved by the container from the polled list (null when nothing is selected). */
@@ -31,6 +51,10 @@ export default function TaskDetail({ task, onTransition }: Props) {
     const [saving, setSaving] = useState(false);
     const [frontmatter, setFrontmatter] = useState<Record<string, unknown>>({});
     const [showMetadata, setShowMetadata] = useState(true);
+
+    const [actionLoading, setActionLoading] = useState<string | null>(null);
+    const [showCancelModal, setShowCancelModal] = useState(false);
+    const { setTasks } = useTasks();
 
     // R4: depends on wbs only — the 5s poll refreshes the list (new object refs)
     // but wbs is stable, so the editor is never clobbered by a poll.
@@ -111,6 +135,23 @@ export default function TaskDetail({ task, onTransition }: Props) {
         }
     };
 
+    const handleAction = async (action: string) => {
+        setActionLoading(action);
+        try {
+            await api.task.action({ wbs: task.wbs, action } as Parameters<typeof api.task.action>[0]);
+            // Trigger an immediate refresh so status/progress changes surface without waiting for the 5s poll.
+            const res = await api.task.list();
+            setTasks((res.data as unknown as TaskSummary[]) ?? []);
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'Action failed';
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('api-error', { detail: { message: msg } }));
+            }
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
     const lifecycleIndex = (status: string): number => {
         const idx = LIFECYCLE.indexOf(status as (typeof LIFECYCLE)[number]);
         return idx >= 0 ? idx : -1;
@@ -157,21 +198,51 @@ export default function TaskDetail({ task, onTransition }: Props) {
                 <p className="text-sm text-spur-text">{task.name}</p>
             </div>
 
+            {/* Workflow action buttons — contextual to task status */}
+            {(() => {
+                const allowed = STATUS_ACTIONS[task.status];
+                if (!allowed || allowed.length === 0) return null;
+                return (
+                    <div className="p-3 border-b border-spur-border shrink-0">
+                        <span className="text-xs font-semibold text-spur-text-muted uppercase tracking-wide mb-2 block">
+                            Actions
+                        </span>
+                        <div className="flex flex-wrap gap-1">
+                            {allowed.map((action) => (
+                                <button
+                                    key={action}
+                                    type="button"
+                                    onClick={() => handleAction(action)}
+                                    disabled={actionLoading === action}
+                                    className="btn btn-xs btn-accent"
+                                    aria-label={ACTION_LABELS[action]}
+                                >
+                                    {actionLoading === action ? '…' : ACTION_LABELS[action]}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                );
+            })()}
+
             <div className="p-3 border-b border-spur-border shrink-0">
                 <span className="text-xs font-semibold text-spur-text-muted uppercase tracking-wide mb-2 block">
                     Status
                 </span>
                 <div className="flex flex-wrap gap-1">
-                    {(TASK_STATUSES as readonly string[]).map((s: string) => (
-                        <button
-                            key={s}
-                            type="button"
-                            onClick={() => onTransition(task.wbs, s)}
-                            className={`btn btn-xs ${task.status === s ? 'btn-primary' : 'btn-ghost'}`}
-                        >
-                            {s}
-                        </button>
-                    ))}
+                    {(TASK_STATUSES as readonly string[]).map((s: string) => {
+                        const isCancelled = s === 'cancelled';
+                        return (
+                            <button
+                                key={s}
+                                type="button"
+                                onClick={() => (isCancelled ? setShowCancelModal(true) : onTransition(task.wbs, s))}
+                                className={`btn btn-xs ${task.status === s ? 'btn-primary' : 'btn-ghost'}`}
+                            >
+                                {s}
+                            </button>
+                        );
+                    })}
                 </div>
             </div>
 
@@ -342,6 +413,54 @@ export default function TaskDetail({ task, onTransition }: Props) {
                     </div>
                 )}
             </div>
+
+            {/* Cancel confirmation modal (R4) */}
+            {showCancelModal && (
+                // biome-ignore lint/a11y/noStaticElementInteractions: role=presentation with onClick is the standard modal backdrop pattern
+                <div
+                    role="presentation"
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+                    onClick={() => setShowCancelModal(false)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Escape') setShowCancelModal(false);
+                    }}
+                >
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="Confirm cancel task"
+                        className="bg-spur-surface border border-spur-border rounded-lg shadow-xl p-4 mx-4 max-w-xs w-full"
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Escape') setShowCancelModal(false);
+                        }}
+                    >
+                        <p className="text-sm text-spur-text mb-4">
+                            Cancel task <strong>{task.wbs}</strong>? This marks it as cancelled and cannot be undone
+                            from the board.
+                        </p>
+                        <div className="flex justify-end gap-2">
+                            <button
+                                type="button"
+                                className="btn btn-xs btn-ghost"
+                                onClick={() => setShowCancelModal(false)}
+                            >
+                                Keep
+                            </button>
+                            <button
+                                type="button"
+                                className="btn btn-xs btn-error"
+                                onClick={() => {
+                                    setShowCancelModal(false);
+                                    onTransition(task.wbs, 'cancelled');
+                                }}
+                            >
+                                Cancel task
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
