@@ -570,3 +570,38 @@ seven agents; collective design prevents mechanically porting models the data al
 **Why.** The guard protocol is agentic answer-verification, not a dev-workflow — it belongs in superskill by charter. Spur's role is to provide the workflow primitives (capture + validate action) that the superskill workflow YAML assembles. This keeps the boundary explicit: Spur owns the harness plumbing, superskill owns the verification logic.
 
 **Detail:** `agent.run` action gains a `capture: true` option that switches to `runCapture` and surfaces `data.answer`. The `response.validate` action reads `text` from options (templated from prior step data, e.g. `{{ steps.generate.answer }}`). A transition-flow spike (`packages/app/tests/fixtures/anti-hallucination-spike.yaml`) confirms the engine can express validate → retry → deny with `iterationBound` as the backstop; a proper retry-count guard is future work (R3.1).
+
+---
+
+## ADR-025: Web Interaction Libraries — dnd-kit for DnD, @uiw/react-md-editor for Markdown Editing
+
+**Date:** 2026-06-22.
+
+**Decision.** Adopt `@dnd-kit/core` + `@dnd-kit/sortable` as the drag-and-drop library and
+`@uiw/react-md-editor` as the markdown editor for the Spur web task-kanban board, both
+as apps/web-only package-private literals. Retain the Astro-island shell for the board.
+
+**Why.**
+(a) **Astro-island shell retained** — the current Astro + React Island architecture (ADR-002, ADR-005)
+is stable and fit for purpose; no framework migration is warranted.
+(b) **dnd-kit over @hello-pangea/dnd** — dnd-kit is the actively-maintained successor, is lighter, has
+first-class keyboard/accessibility sensors (`KeyboardSensor`, `PointerSensor`), and renders cleanly
+inside React islands without the `@hello-pangea/dnd` style-wrapper constraints. The HTML5 native DnD
+currently on the board lacks animation primitives, drop-zone feedback, and overlay support — the exact
+gaps that task 0096 (DnD polish) must close (gap-analysis §2: Drag & Drop = Medium).
+(c) **@uiw/react-md-editor for markdown editing** — the legacy board used this editor for inline task
+body editing (live/preview modes with Save/Cancel). The migrated board hides the task body entirely
+(gap-analysis §2: Inline Editing = High). Tasks 0091 (inline editing) and 0093 (new-task panel) depend
+on this editor being present. A heavier full WYSIWYG is overkill for task-body markdown.
+
+**Cross-link:** `docs/analysis/task-kanban-gap-analysis.md` §1 (Technical Stack) and §3.1 (Wave 0).
+
+**Right-panel collapse bug (R5 triage).** The legacy breakdown referenced a right-panel collapse bug.
+Tested against the current board: collapse/expand toggle, resize persistence (`localStorage`),
+and restore-on-mount all pass (`apps/web/tests/components/BoardLayout.test.tsx`). Gap-analysis §2
+rates Task Detail Layout parity as **None** — the legacy fixed-modal overlay was replaced by the
+native resizable 3-column layout, which has no reproducible collapse defect. No fix is scheduled.
+
+**Detail:** Dependency versions in `apps/web/package.json`; version-SSOT rule per `AGENTS.md`:
+these are apps/web-only → package-private literals; promote to root `workspaces.catalog` only if a
+sibling workspace later needs them.
