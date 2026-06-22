@@ -30,6 +30,26 @@ mock.module('../../../src/lib/rpc-client', () => ({
     },
 }));
 
+mock.module('@dnd-kit/core', () => ({
+    DndContext: ({ children }: { children: unknown }) => children,
+    DragOverlay: ({ children }: { children: unknown }) => children,
+    PointerSensor: class {},
+    KeyboardSensor: class {},
+    useSensor: (..._args: unknown[]) => ({}),
+    useDraggable: (_params: { id: string; data?: Record<string, unknown> }) => ({
+        attributes: {},
+        listeners: {},
+        setNodeRef: () => {},
+        transform: null,
+        isDragging: false,
+        active: null,
+    }),
+    useDroppable: (_params: { id: string }) => ({
+        setNodeRef: () => {},
+        isOver: false,
+    }),
+}));
+
 import KanbanColumn from '../../../src/modules/task-kanban/KanbanColumn';
 import TaskCard from '../../../src/modules/task-kanban/TaskCard';
 import TaskDetail from '../../../src/modules/task-kanban/TaskDetail';
@@ -67,46 +87,20 @@ describe('TaskCard', () => {
         fireEvent.click(getByText('Build the board'));
         expect(captured.wbs).toBe('0001');
     });
-
-    test('dragStart puts the WBS on the dataTransfer payload', () => {
-        const { container } = render(<TaskCard task={task()} onClick={() => {}} />);
-        const card = container.querySelector('[draggable="true"]') as HTMLElement;
-        let payload = '';
-        const dataTransfer = {
-            setData: (_: string, v: string) => {
-                payload = v;
-            },
-            effectAllowed: '',
-        };
-        fireEvent.dragStart(card, { dataTransfer });
-        expect(payload).toBe('0001');
-    });
 });
 
 describe('KanbanColumn', () => {
     test('shows the task count and an empty-state when no tasks', () => {
-        const { getByText } = render(
-            <KanbanColumn status="todo" label="todo" tasks={[]} onCardClick={() => {}} onDrop={() => {}} />,
-        );
+        const { getByText } = render(<KanbanColumn status="todo" label="todo" tasks={[]} onCardClick={() => {}} />);
         expect(getByText('No tasks')).toBeDefined();
         expect(getByText('0')).toBeDefined();
     });
 
-    test('drop reads the WBS off dataTransfer and reports it with the column status', () => {
-        const calls: Array<{ wbs: string; status: string }> = [];
-        const { container } = render(
-            <KanbanColumn
-                status="wip"
-                label="wip"
-                tasks={[task()]}
-                onCardClick={() => {}}
-                onDrop={(wbs, status) => calls.push({ wbs, status })}
-            />,
+    test('renders task cards for the given tasks', () => {
+        const { getByText } = render(
+            <KanbanColumn status="todo" label="todo" tasks={[task()]} onCardClick={() => {}} />,
         );
-        const column = container.querySelector('section') as HTMLElement;
-        const dataTransfer = { getData: () => '0001', dropEffect: '' };
-        fireEvent.drop(column, { dataTransfer });
-        expect(calls).toEqual([{ wbs: '0001', status: 'wip' }]);
+        expect(getByText('Build the board')).toBeDefined();
     });
 });
 

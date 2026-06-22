@@ -28,6 +28,45 @@ mock.module('../../../src/lib/rpc-client', () => ({
     },
 }));
 
+// Capture the onDragEnd callback so tests can simulate dnd-kit drops.
+let capturedOnDragEnd:
+    | ((event: { active: { id: string | number }; over: { id: string | number } | null }) => void)
+    | null = null;
+
+mock.module('@dnd-kit/core', () => ({
+    DndContext: ({
+        children,
+        onDragEnd,
+    }: {
+        children: unknown;
+        onDragEnd?: (event: { active: { id: string | number }; over: { id: string | number } | null }) => void;
+    }) => {
+        capturedOnDragEnd = onDragEnd ?? null;
+        return children;
+    },
+    DragOverlay: ({ children }: { children: unknown }) => children,
+    PointerSensor: class {},
+    KeyboardSensor: class {},
+    useSensor: (..._args: unknown[]) => ({}),
+    useSensors: (...s: unknown[]) => s,
+    useDraggable: () => ({
+        attributes: {},
+        listeners: {},
+        setNodeRef: () => {},
+        transform: null,
+        isDragging: false,
+        active: null,
+    }),
+    useDroppable: () => ({
+        setNodeRef: () => {},
+        isOver: false,
+    }),
+}));
+
+mock.module('@dnd-kit/utilities', () => ({
+    CSS: { Transform: { toString: () => '' } },
+}));
+
 const KanbanBoard = (await import('../../../src/modules/task-kanban/KanbanBoard')).default;
 const TaskFilters = (await import('../../../src/modules/task-kanban/TaskFilters')).default;
 
@@ -65,11 +104,15 @@ describe('KanbanBoard', () => {
         const { getByText, container } = renderBoard();
         await waitFor(() => expect(getByText('Alpha')).toBeDefined());
 
-        const doneCol = container.querySelector('[aria-label="done column"]') as HTMLElement;
-        const dataTransfer = { getData: () => '0001', dropEffect: '' };
-        fireEvent.drop(doneCol, { dataTransfer });
+        // Simulate dnd-kit onDragEnd: drag '0001' into the 'done' column.
+        expect(capturedOnDragEnd).not.toBeNull();
+        (capturedOnDragEnd as NonNullable<typeof capturedOnDragEnd>)({
+            active: { id: '0001' },
+            over: { id: 'done' },
+        });
 
         // Optimistic: Alpha appears under done immediately.
+        const doneCol = container.querySelector('[aria-label="done column"]') as HTMLElement;
         await waitFor(() => expect(doneCol.textContent).toContain('Alpha'));
         expect(transitionCalls).toEqual([{ wbs: '0001', toStatus: 'done' }]);
     });
@@ -81,11 +124,15 @@ describe('KanbanBoard', () => {
         const { getByText, container } = renderBoard();
         await waitFor(() => expect(getByText('Alpha')).toBeDefined());
 
-        const todoCol = container.querySelector('[aria-label="todo column"]') as HTMLElement;
-        const doneCol = container.querySelector('[aria-label="done column"]') as HTMLElement;
-        fireEvent.drop(doneCol, { dataTransfer: { getData: () => '0001', dropEffect: '' } });
+        expect(capturedOnDragEnd).not.toBeNull();
+        (capturedOnDragEnd as NonNullable<typeof capturedOnDragEnd>)({
+            active: { id: '0001' },
+            over: { id: 'done' },
+        });
 
         // After the rejection settles, Alpha is back in todo, gone from done.
+        const todoCol = container.querySelector('[aria-label="todo column"]') as HTMLElement;
+        const doneCol = container.querySelector('[aria-label="done column"]') as HTMLElement;
         await waitFor(() => expect(todoCol.textContent).toContain('Alpha'));
         expect(doneCol.textContent).not.toContain('Alpha');
     });

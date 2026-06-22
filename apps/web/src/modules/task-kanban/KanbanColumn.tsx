@@ -1,3 +1,4 @@
+import { useDroppable } from '@dnd-kit/core';
 import TaskCard from './TaskCard';
 import type { TaskSummary } from './types';
 
@@ -6,23 +7,21 @@ interface Props {
     label: string;
     tasks: TaskSummary[];
     onCardClick: (wbs: string) => void;
-    onDrop: (wbs: string, newStatus: string) => void;
 }
 
-export default function KanbanColumn({ status, label, tasks, onCardClick, onDrop }: Props) {
+export default function KanbanColumn({ status, label, tasks, onCardClick }: Props) {
+    const { setNodeRef, isOver } = useDroppable({
+        id: status,
+        data: { status },
+    });
+
     return (
         <section
+            ref={setNodeRef}
             aria-label={`${label} column`}
-            className="flex flex-col flex-shrink-0 w-64 bg-spur-surface rounded-lg border border-spur-border"
-            onDragOver={(e) => {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = 'move';
-            }}
-            onDrop={(e) => {
-                e.preventDefault();
-                const wbs = e.dataTransfer.getData('text/plain');
-                if (wbs) onDrop(wbs, status);
-            }}
+            className={`flex flex-col flex-shrink-0 w-64 rounded-lg border transition-colors duration-200 ${
+                isOver ? 'bg-spur-accent/10 border-spur-accent/40 shadow-lg' : 'bg-spur-surface border-spur-border'
+            }`}
         >
             <div className="flex items-center justify-between px-3 py-2 border-b border-spur-border shrink-0">
                 <span className="text-xs font-semibold text-spur-text uppercase tracking-wide">{label}</span>

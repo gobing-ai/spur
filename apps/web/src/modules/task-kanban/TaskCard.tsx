@@ -1,3 +1,5 @@
+import { useDraggable } from '@dnd-kit/core';
+import { CSS } from '@dnd-kit/utilities';
 import type { TaskSummary } from './types';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -17,17 +19,27 @@ interface Props {
 
 export default function TaskCard({ task, onClick }: Props) {
     const badgeClass = STATUS_COLORS[task.status] ?? 'badge-ghost';
+    const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+        id: task.wbs,
+        data: { task },
+    });
+
+    const style = transform
+        ? { transform: CSS.Transform.toString(transform), zIndex: isDragging ? 50 : undefined }
+        : undefined;
 
     return (
         <button
+            ref={setNodeRef}
             type="button"
-            draggable
-            className="card card-compact bg-base-200 shadow-sm cursor-pointer hover:shadow-md transition-shadow border border-spur-border w-full text-left"
+            style={style}
+            className={`card card-compact bg-base-200 shadow-sm cursor-pointer hover:shadow-md transition-shadow border border-spur-border w-full text-left ${
+                isDragging ? 'opacity-30' : ''
+            }`}
             onClick={() => onClick(task.wbs)}
-            onDragStart={(e) => {
-                e.dataTransfer.setData('text/plain', task.wbs);
-                e.dataTransfer.effectAllowed = 'move';
-            }}
+            {...listeners}
+            {...attributes}
+            aria-roledescription="draggable card"
         >
             <div className="card-body p-3 gap-1">
                 <div className="flex items-center justify-between gap-2">

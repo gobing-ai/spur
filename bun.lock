@@ -87,6 +87,7 @@
         "@astrojs/react": "5.0.7",
         "@dnd-kit/core": "6.3.1",
         "@dnd-kit/sortable": "10.0.0",
+        "@dnd-kit/utilities": "3.2.2",
         "@gobing-ai/spur-contracts": "workspace:*",
         "@gobing-ai/spur-domain": "workspace:*",
         "@orpc/client": "catalog:",

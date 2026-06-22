@@ -1,8 +1,10 @@
+import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { TASK_STATUSES } from '@gobing-ai/spur-domain/schema';
 import { useState } from 'react';
 import { api } from '../../lib/rpc-client';
 import KanbanColumn from './KanbanColumn';
 import NewTaskPanel from './NewTaskPanel';
+import TaskCard from './TaskCard';
 import TaskFilters from './TaskFilters';
 import type { TaskListFilters, TaskSummary } from './types';
 import { useTasks } from './useTasks';
@@ -17,11 +19,6 @@ interface Props {
     onFilterChange?: (key: 'status' | 'feature' | 'parent' | 'assignee', value: string | null) => void;
 }
 
-/**
- * Narrows the polled task list by the active filters. The `list` contract takes no query input
- * (filtering is not yet server-side — see task 0084 R6 contract-gap note), so filters apply client-side
- * against the already-polled rows. `assignee` is accepted in the URL but inert until TaskSummary carries it.
- */
 function applyFilters(tasks: TaskSummary[], filters?: TaskListFilters): TaskSummary[] {
     if (!filters) return tasks;
     return tasks.filter((t) => {
@@ -34,11 +31,16 @@ function applyFilters(tasks: TaskSummary[], filters?: TaskListFilters): TaskSumm
 
 export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: Props) {
     const { tasks, loading, error, setTasks } = useTasks();
-
     const [showNewPanel, setShowNewPanel] = useState(false);
+    const [activeDragId, setActiveDragId] = useState<string | null>(null);
+
+    const pointerSensor = useSensor(PointerSensor, {
+        activationConstraint: { distance: 5 },
+    });
+    const keyboardSensor = useSensor(KeyboardSensor);
+    const sensors = useSensors(pointerSensor, keyboardSensor);
 
     const handleCreated = async () => {
-        // Refresh the board so the new card appears without a full reload.
         try {
             const res = await api.task.list();
             setTasks((res.data as unknown as TaskSummary[]) ?? []);
@@ -49,17 +51,27 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
 
     const visible = applyFilters(tasks, filters);
     const tasksByStatus = (status: string): TaskSummary[] => visible.filter((t) => t.status === status);
+    const findCard = (wbs: string): TaskSummary | undefined => tasks.find((t) => t.wbs === wbs);
 
-    const handleDrop = (wbs: string, newStatus: string) => {
-        const card = tasks.find((t) => t.wbs === wbs);
+    const handleDragStart = (event: { active: { id: string | number } }) => {
+        setActiveDragId(String(event.active.id));
+    };
+
+    const handleDragEnd = (event: { active: { id: string | number }; over: { id: string | number } | null }) => {
+        setActiveDragId(null);
+
+        const { active, over } = event;
+        if (!over) return;
+
+        const wbs = String(active.id);
+        const newStatus = String(over.id);
+        const card = findCard(wbs);
         if (!card || card.status === newStatus) return;
 
         const previous = [...tasks];
-        // Optimistic update — move the card immediately.
         setTasks((prev) => prev.map((t) => (t.wbs === wbs ? { ...t, status: newStatus } : t)));
 
         api.task.transition({ wbs, toStatus: newStatus as TaskStatus }).catch((err: unknown) => {
-            // Revert on error (e.g. a 409 guard denial from the lifecycle).
             setTasks(previous);
             const msg = err instanceof Error ? err.message : 'Transition failed';
             if (typeof window !== 'undefined') {
@@ -88,34 +100,48 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
     }
 
     return (
-        <div className="flex flex-col h-full">
-            {/* Toolbar: filters + New Task button */}
-            <div className="flex items-center gap-2 px-4 pt-3 pb-1 shrink-0">
-                {onFilterChange && <TaskFilters filters={filters ?? {}} onChange={onFilterChange} />}
-                <div className="flex-1" />
-                <button type="button" className="btn btn-sm btn-primary" onClick={() => setShowNewPanel(true)}>
-                    + New Task
-                </button>
-            </div>
-            <div className="flex gap-3 overflow-x-auto h-full p-4">
-                {KANBAN_COLUMNS.map((status: string) => (
-                    <KanbanColumn
-                        key={status}
-                        status={status}
-                        label={status}
-                        tasks={tasksByStatus(status)}
-                        onCardClick={onSelectTask}
-                        onDrop={handleDrop}
-                    />
-                ))}
+        <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+            <div className="flex flex-col h-full">
+                <div className="flex items-center gap-2 px-4 pt-3 pb-1 shrink-0">
+                    {onFilterChange && <TaskFilters filters={filters ?? {}} onChange={onFilterChange} />}
+                    <div className="flex-1" />
+                    <button type="button" className="btn btn-sm btn-primary" onClick={() => setShowNewPanel(true)}>
+                        + New Task
+                    </button>
+                </div>
+                <div className="flex gap-3 overflow-x-auto h-full p-4">
+                    {KANBAN_COLUMNS.map((status: string) => (
+                        <KanbanColumn
+                            key={status}
+                            status={status}
+                            label={status}
+                            tasks={tasksByStatus(status)}
+                            onCardClick={onSelectTask}
+                        />
+                    ))}
+                </div>
+
+                <NewTaskPanel
+                    open={showNewPanel}
+                    onClose={() => setShowNewPanel(false)}
+                    onCreated={handleCreated}
+                    folder="docs/tasks"
+                />
             </div>
 
-            <NewTaskPanel
-                open={showNewPanel}
-                onClose={() => setShowNewPanel(false)}
-                onCreated={handleCreated}
-                folder="docs/tasks"
-            />
-        </div>
+            <DragOverlay dropAnimation={null}>
+                {activeDragId
+                    ? (() => {
+                          const card = findCard(activeDragId);
+                          if (!card) return null;
+                          return (
+                              <div className="opacity-90">
+                                  <TaskCard task={card} onClick={() => {}} />
+                              </div>
+                          );
+                      })()
+                    : null}
+            </DragOverlay>
+        </DndContext>
     );
 }
