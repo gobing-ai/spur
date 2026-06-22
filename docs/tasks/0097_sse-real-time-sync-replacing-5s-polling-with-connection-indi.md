@@ -4,7 +4,7 @@ name: "SSE real-time sync replacing 5s polling, with connection indicator"
 status: done
 template: standard
 created_at: 2026-06-20T05:06:46.369Z
-updated_at: 2026-06-22T07:24:44.323Z
+updated_at: 2026-06-22T17:10:53.446Z
 feature_id: F7
 priority: P2
 tags: ["task-kanban", "wave-3", "api", "sse", "realtime"]
@@ -125,6 +125,42 @@ The contract schema (`planningEventEnvelopeSchema`) and oRPC contract (`planning
 ### Review
 ## Review — 2026-06-22 (`/rd3-dev-run 0097 --auto --verify`)
 
+### P1 — Must Fix (0)
+
+None.
+
+### P2 — Should Fix (0)
+
+None.
+
+### P3 — Consider (1)
+
+| # | File | Finding |
+|---|------|---------|
+| 1 | `apps/server/src/modules/events/index.ts` | SSE stream coverage at 66.67% — the `ReadableStream` internals (heartbeat, event handler closure, cancel cleanup) require an integration test with a real EventBus. Not blocking; the raw Hono route tests cover the HTTP contract. |
+
+### P4 — Informational (2)
+
+| # | File | Finding |
+|---|------|---------|
+| 1 | `apps/web/src/modules/task-kanban/useTasks.ts` | SSE path (EventSource callbacks) not exercised in happy-dom test environment — 84.21% line coverage. The `typeof EventSource === 'undefined'` guard prevents breakage. |
+| 2 | `apps/web/src/modules/task-kanban/KanbanBoard.tsx` | Connection indicator uses inline Tailwind color classes (`bg-green-500`/`bg-red-500`). Consider design tokens if the indicator becomes a reusable component. |
+
+### Verdict: PASS
+
+---
+
+**Re-verify (`/rd3:dev-verify 0097 --force --fix all`) — 2026-06-22:** PASS confirmed by independent re-verification (full SECU + traceability, channel=current).
+
+- **Phase 7 SECU (focus=all):** 1 P3, 0 P1/P2/P4.
+  - Security — SSE is read-only GET, same-origin EventSource, EventBus-sourced; no new auth surface, no secrets, `actor: null` (no PII), payload JSON-serialized not interpolated. Clean.
+  - Efficiency — 15s heartbeat; `handleSSEMessage` does a full `refresh()` per event (payload deliberately ignored to keep one path) — board-sized data, documented tradeoff, not a finding. Clean.
+  - Correctness — `cancel()` clears heartbeat + unsubscribes all 6 bus handlers (verified by the cancel test asserting 6 `off` calls); `closed.current` guards enqueue-after-close; client `typeof EventSource === 'undefined'` SSR/test guard; ref-counted connect/disconnect; polling never removed (fallback invariant intact); SSE URL composes correctly (`/api` base + `/events/planning`). Clean.
+  - Usability — green/red dot + Live/Polling label, auto-connects. Clean.
+- **P3 — contract↔runtime envelope shape (info; manual-review verdict: working as designed, NO fix):** `planningEventEnvelopeSchema` (`packages/contracts/src/planning-event.ts:12`) declares the wrapped `{ ok: true, data: {...} }` form via `apiSuccessSchema`; the raw-Hono SSE route emits **bare** `{ eventName, occurredAt, actor, payload }` (`apps/server/src/modules/events/index.ts:57-64`). On closer review these are **two intentionally decoupled surfaces**, not a drift: the oRPC `stream` handler is a non-serving stub that throws (`apps/server/src/router.ts:34`, "SSE stream served by raw Hono route"), so the wrapped `.output()` schema is a typed placeholder consistent with every other DTO and is covered by 3 contract tests (`packages/contracts/tests/contract.test.ts:326-362`); the real transport is the raw-Hono bare frame, covered by its own server tests, which the client consumes by ignoring the body. Forcing alignment would either break the 3 passing contract tests + the package-wide `apiSuccessSchema` convention, or wrap a frame nothing reads — strictly worse. **Resolution: no change; the divergence is by design.**
+- **Phase 8 traceability:** 6/6 MET (R1–R5 + R6 reconnect edge), 0 unmet, 0 partial.
+- **Gate (this run):** `bun run lint` clean (Biome + 7 workspace typechecks); events + useTasks tests 19/19 pass; `test-cf` 1/1 pass (R4/R5 Worker-compat confirmed).
+- **`--fix all`:** no actionable fix. The lone finding is P3 (Info) → manual review per the P-classification table; the manual-review verdict is **working as designed** (decoupled oRPC-stub vs raw-Hono SSE surfaces), so no code change is applied. Verdict remains PASS.
 ### P1 — Must Fix (0)
 
 None.
