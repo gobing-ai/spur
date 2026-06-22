@@ -7,6 +7,7 @@ export interface TaskSummary {
     featureId?: string | null;
     parentWbs?: string | null;
     filePath: string;
+    updatedAt?: string;
 }
 
 /** Query filters mapped to the task list contract. `assignee` is client-side until the list contract grows it. */

@@ -5,6 +5,7 @@
  * PlanningWriteService. WBS allocation is race-safe under the create-lock.
  */
 
+import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import {
     buildTaskSkeleton,
     DEFAULT_TASK_VARIANT,
@@ -78,6 +79,7 @@ export interface TaskShowResult extends TaskSummary {
 export interface TaskListFilters {
     status?: string;
     parentWbs?: string;
+    folder?: string;
     /** Legacy alias: 'phase' maps to status filter for backward compat. */
     phase?: string;
 }
@@ -485,15 +487,17 @@ export class TaskService {
     // ── list ──
 
     async list(filters?: TaskListFilters): Promise<TaskSummary[]> {
-        const entries = await this.ctx.fs.readDir(this.ctx.tasksDir);
+        const dir = this.resolveListDir(filters?.folder);
+
+        const entries = await this.ctx.fs.readDir(dir);
         const tasks: TaskSummary[] = [];
 
         for (const name of entries) {
             const [, wbs] = /^(\d{4})_.+\.md$/.exec(name) ?? [];
             if (!wbs) continue;
-            const actualName = await this.findTaskFileName(wbs);
-            if (!actualName) continue;
-            const actualPath = this.resolveTaskPath(wbs, actualName.replace(/^\d{4}_/, '').replace(/\.md$/, ''));
+            // Read each file from the listed folder — not tasksDir — so a non-default
+            // `folder` lists and reads consistently from the same directory.
+            const actualPath = `${dir}/${name}`;
             try {
                 const raw = await this.ctx.fs.readFile(actualPath);
                 const doc = MarkdownDocument.parse(raw, 'task');
@@ -609,6 +613,25 @@ export class TaskService {
 
     private resolveTaskPath(wbs: string, slug: string): string {
         return `${this.ctx.tasksDir}/${wbs}_${slug}.md`;
+    }
+
+    /**
+     * Resolve the directory `list()` reads from. Defaults to `tasksDir`. A
+     * caller-supplied `folder` (web/CLI param) is constrained to the planning
+     * workspace — the parent of `tasksDir` (e.g. `docs/`, holding `tasks/` and
+     * `features/`). `..` traversal or absolute paths that escape that root are
+     * rejected, so an arbitrary `folder` over the wire cannot enumerate the host
+     * filesystem outside the workspace.
+     */
+    private resolveListDir(folder?: string): string {
+        if (folder === undefined) return this.ctx.tasksDir;
+        const root = resolve(dirname(this.ctx.tasksDir));
+        const candidate = resolve(root, folder);
+        const rel = relative(root, candidate);
+        if (rel.startsWith('..') || isAbsolute(rel)) {
+            throw new Error(`Invalid folder: ${folder} escapes the planning workspace`);
+        }
+        return folder;
     }
 
     private slugify(title: string): string {

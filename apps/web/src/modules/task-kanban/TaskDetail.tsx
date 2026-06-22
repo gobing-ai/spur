@@ -140,7 +140,7 @@ export default function TaskDetail({ task, onTransition }: Props) {
         try {
             await api.task.action({ wbs: task.wbs, action } as Parameters<typeof api.task.action>[0]);
             // Trigger an immediate refresh so status/progress changes surface without waiting for the 5s poll.
-            const res = await api.task.list();
+            const res = await api.task.list({});
             setTasks((res.data as unknown as TaskSummary[]) ?? []);
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Action failed';

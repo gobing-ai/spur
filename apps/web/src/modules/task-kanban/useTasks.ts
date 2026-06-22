@@ -1,12 +1,11 @@
-import { useRef, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { api, resolveApiUrl } from '../../lib/rpc-client';
 import type { TaskSummary } from './types';
 
 const POLL_INTERVAL_MS = 5_000;
 const SSE_URL = `${resolveApiUrl()}/events/planning`;
-
-type ListFn = (query?: Record<string, unknown>) => Promise<{ data: unknown }>;
-const defaultListTasks: ListFn = (query) => api.task.list(query);
+type ListFn = (query?: { folder?: string; status?: string; parent?: string }) => Promise<{ data: unknown }>;
+const defaultListTasks: ListFn = (query = {}) => api.task.list(query);
 
 /** Pure refresh factory — exported for unit testing without mocking the oRPC client. */
 export function createRefresh(
@@ -56,13 +55,24 @@ export class TaskStore {
     private interval: ReturnType<typeof setInterval> | undefined;
     private eventSource: EventSource | undefined;
     private refCount = 0;
-    private readonly listFn: ListFn;
+    private listFn: ListFn;
 
     constructor(listFn: ListFn = defaultListTasks) {
         this.listFn = listFn;
     }
 
     getState = (): TaskState => this.state;
+
+    /**
+     * Swap the list source (e.g. on folder change) without tearing down the SSE
+     * connection or polling interval, then refresh from the new source. Keeping
+     * the store stable avoids reconnect churn for an infrequent user action.
+     */
+    setListFn = (listFn: ListFn): void => {
+        if (listFn === this.listFn) return;
+        this.listFn = listFn;
+        void this.refresh();
+    };
 
     subscribe = (listener: Listener): (() => void) => {
         this.listeners.push(listener);
@@ -157,14 +167,25 @@ const sharedStore = new TaskStore();
  * and the store's `connected` flag reflects the stream state.
  *
  * Without a `listFn` argument, all callers share a single module-level store
- * (one polling interval + one SSE connection). Pass `listFn` for isolated test state.
+ * (one polling interval + one SSE connection). Pass `listFn` to use an isolated
+ * store that is recreated when `listFn` changes (e.g. for folder switching).
  */
 export function useTasks(listFn?: ListFn) {
+    // With a listFn, use a stable isolated store kept for the hook's lifetime and
+    // re-pointed via setListFn when listFn changes (e.g. folder switch) — this
+    // avoids tearing down the SSE/poll connection on every change. Without one,
+    // share the module-level store.
     const localStore = useRef<TaskStore | null>(null);
     if (listFn && !localStore.current) {
         localStore.current = new TaskStore(listFn);
     }
     const store = localStore.current ?? sharedStore;
+
+    useEffect(() => {
+        if (listFn && localStore.current) {
+            localStore.current.setListFn(listFn);
+        }
+    }, [listFn]);
 
     const state = useSyncExternalStore(store.subscribe, store.getState);
     return { ...state, setTasks: store.setTasks };

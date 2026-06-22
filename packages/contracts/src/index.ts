@@ -40,6 +40,7 @@ export {
     taskBodyUpdateInputSchema,
     taskBodyUpdateResponseSchema,
     taskCreateInputSchema,
+    taskListInputSchema,
     taskListResponseSchema,
     taskShowResponseSchema,
 } from './task';

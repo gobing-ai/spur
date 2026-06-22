@@ -18,10 +18,18 @@ export const taskSummarySchema = z.object({
         .nullable()
         .optional(),
     filePath: z.string(),
+    updatedAt: z.string().optional(),
 });
 
 /** Task list response: `{ ok: true, data: TaskSummary[] }`. */
 export const taskListResponseSchema = apiSuccessSchema(z.array(taskSummarySchema));
+
+/** Task list query input. */
+export const taskListInputSchema = z.object({
+    folder: z.string().optional(),
+    status: z.string().optional(),
+    parent: z.string().optional(),
+});
 
 /** Task detail response. */
 export const taskShowResponseSchema = apiSuccessSchema(
@@ -113,6 +121,7 @@ export const taskContract = {
             summary: 'List tasks',
             tags: ['task'],
         })
+        .input(taskListInputSchema)
         .output(taskListResponseSchema),
 
     show: oc

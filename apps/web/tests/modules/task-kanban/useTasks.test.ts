@@ -117,6 +117,22 @@ describe('useTasks', () => {
         expect(result.current.connected).toBe(false);
         unmount();
     });
+
+    test('changing listFn re-fetches from the new source without remounting the store', async () => {
+        // Folder switch: the store is kept (no SSE/poll teardown) and re-pointed
+        // at the new listFn, so the board reflects the newly chosen folder.
+        const folderA: TaskSummary[] = [{ wbs: '0001', name: 'A task', status: 'todo', filePath: '/a/0001.md' }];
+        const folderB: TaskSummary[] = [{ wbs: '0002', name: 'B task', status: 'todo', filePath: '/b/0002.md' }];
+        const listA = async () => ({ data: folderA });
+        const listB = async () => ({ data: folderB });
+
+        const { result, rerender, unmount } = renderHook(({ fn }) => useTasks(fn), { initialProps: { fn: listA } });
+        await waitFor(() => expect(result.current.tasks).toEqual(folderA));
+
+        rerender({ fn: listB });
+        await waitFor(() => expect(result.current.tasks).toEqual(folderB));
+        unmount();
+    });
 });
 
 describe('TaskStore SSE callbacks', () => {
@@ -159,5 +175,30 @@ describe('TaskStore SSE callbacks', () => {
         store['handleSSEError']();
         expect(store.getState().connected).toBe(false);
         expect(result.notified).toBe(true);
+    });
+
+    test('setListFn swaps the source and refreshes; same fn is a no-op', async () => {
+        const first: TaskSummary[] = [{ wbs: '0001', name: 'First', status: 'todo', filePath: '/f/0001.md' }];
+        const second: TaskSummary[] = [{ wbs: '0002', name: 'Second', status: 'todo', filePath: '/s/0002.md' }];
+        const listFirst = async () => ({ data: first });
+        const store = new TaskStore(listFirst);
+
+        let refreshCalls = 0;
+        const listSecond = async () => {
+            refreshCalls++;
+            return { data: second };
+        };
+        store.setListFn(listSecond);
+        // refresh is async; wait one microtick (matches the SSE-callback tests —
+        // this block runs after useTasks' afterAll has torn down the DOM, so no
+        // DOM-dependent waitFor here).
+        await new Promise((r) => setTimeout(r, 10));
+        expect(store.getState().tasks).toEqual(second);
+        expect(refreshCalls).toBe(1);
+
+        // Passing the identical fn must not trigger another refresh.
+        store.setListFn(listSecond);
+        await new Promise((r) => setTimeout(r, 10));
+        expect(refreshCalls).toBe(1);
     });
 });

@@ -1,6 +1,6 @@
 import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { TASK_STATUSES } from '@gobing-ai/spur-domain/schema';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { api } from '../../lib/rpc-client';
 import KanbanColumn from './KanbanColumn';
 import NewTaskPanel from './NewTaskPanel';
@@ -30,10 +30,13 @@ function applyFilters(tasks: TaskSummary[], filters?: TaskListFilters): TaskSumm
 }
 
 export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: Props) {
-    const { tasks, loading, error, connected, setTasks } = useTasks();
+    const [sortState, setSortState] = useState<Record<string, 'asc' | 'desc'>>({});
+    const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set());
+    const [folder, setFolder] = useState('docs/tasks');
+    const listWithFolder = useCallback(() => api.task.list({ folder }), [folder]);
+    const { tasks, loading, error, connected, setTasks } = useTasks(listWithFolder);
     const [showNewPanel, setShowNewPanel] = useState(false);
     const [activeDragId, setActiveDragId] = useState<string | null>(null);
-
     const pointerSensor = useSensor(PointerSensor, {
         activationConstraint: { distance: 5 },
     });
@@ -42,7 +45,7 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
 
     const handleCreated = async () => {
         try {
-            const res = await api.task.list();
+            const res = await listWithFolder();
             setTasks((res.data as unknown as TaskSummary[]) ?? []);
         } catch {
             // Poll will catch up on next interval.
@@ -50,7 +53,36 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
     };
 
     const visible = applyFilters(tasks, filters);
-    const tasksByStatus = (status: string): TaskSummary[] => visible.filter((t) => t.status === status);
+
+    const toggleSort = (status: string) => {
+        setSortState((prev) => {
+            const next = { ...prev };
+            if (prev[status] === 'asc') next[status] = 'desc';
+            else if (prev[status] === 'desc') delete next[status];
+            else next[status] = 'asc';
+            return next;
+        });
+    };
+
+    const toggleColumn = (status: string) => {
+        setHiddenColumns((prev) => {
+            const next = new Set(prev);
+            if (next.has(status)) next.delete(status);
+            else next.add(status);
+            return next;
+        });
+    };
+
+    const tasksByStatus = (status: string): TaskSummary[] => {
+        const cols = visible.filter((t) => t.status === status);
+        const dir = sortState[status];
+        if (!dir) return cols;
+        return [...cols].sort((a, b) => {
+            const cmp = a.wbs.localeCompare(b.wbs);
+            return dir === 'asc' ? cmp : -cmp;
+        });
+    };
+
     const findCard = (wbs: string): TaskSummary | undefined => tasks.find((t) => t.wbs === wbs);
 
     const handleDragStart = (event: { active: { id: string | number } }) => {
@@ -113,28 +145,51 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
                         />
                         <span className="text-xs text-spur-text-muted">{connected ? 'Live' : 'Polling'}</span>
                     </div>
+                    <span className="text-xs text-spur-text-muted">|</span>
+                    <select
+                        className="select select-xs select-ghost text-xs"
+                        value={folder}
+                        onChange={(e) => setFolder(e.target.value)}
+                        aria-label="Task folder"
+                    >
+                        <option value="docs/tasks">docs/tasks</option>
+                    </select>
+                    <span className="text-xs text-spur-text-muted">|</span>
+                    {KANBAN_COLUMNS.map((status) => (
+                        <label key={status} className="flex items-center gap-1 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                className="checkbox checkbox-xs"
+                                checked={!hiddenColumns.has(status)}
+                                onChange={() => toggleColumn(status)}
+                            />
+                            <span className="text-[10px] text-spur-text-muted">{status}</span>
+                        </label>
+                    ))}
+                    <span className="text-xs text-spur-text-muted">|</span>
                     <div className="flex-1" />
                     <button type="button" className="btn btn-sm btn-primary" onClick={() => setShowNewPanel(true)}>
                         + New Task
                     </button>
                 </div>
                 <div className="flex gap-3 overflow-x-auto h-full p-4">
-                    {KANBAN_COLUMNS.map((status: string) => (
+                    {KANBAN_COLUMNS.filter((s) => !hiddenColumns.has(s)).map((status: string) => (
                         <KanbanColumn
                             key={status}
                             status={status}
                             label={status}
                             tasks={tasksByStatus(status)}
                             onCardClick={onSelectTask}
+                            sortDir={sortState[status]}
+                            onSortToggle={() => toggleSort(status)}
                         />
                     ))}
                 </div>
-
                 <NewTaskPanel
                     open={showNewPanel}
                     onClose={() => setShowNewPanel(false)}
                     onCreated={handleCreated}
-                    folder="docs/tasks"
+                    folder={folder}
                 />
             </div>
 

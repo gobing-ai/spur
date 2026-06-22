@@ -187,6 +187,35 @@ describe('TaskService', () => {
             const wip = await svc.list({ phase: 'wip' });
             expect(wip.some((t) => t.name === 'Phase test')).toBe(true);
         });
+
+        test('lists from an alternate folder within the planning workspace', async () => {
+            // A sibling folder under the same root as tasksDir is a valid target —
+            // the multi-folder switcher must read tasks from the chosen directory.
+            const root = mkdtempSync(join(tmpdir(), 'spur-task-folder-'));
+            const fs = createNodeFileSystem(root);
+            await fs.ensureDir(join(root, 'tasks'));
+            await fs.ensureDir(join(root, 'archive'));
+            const altSvc = new TaskService({
+                fs,
+                tasksDir: join(root, 'tasks'),
+                writeService: new PlanningWriteService({ fs }),
+            });
+            await fs.writeFile(
+                join(root, 'archive', '0001_archived.md'),
+                '---\nname: "Archived task"\nstatus: done\n---\n\n## 0001. Archived task\n',
+            );
+
+            const tasks = await altSvc.list({ folder: join(root, 'archive') });
+
+            expect(tasks.map((t) => t.name)).toContain('Archived task');
+            rmSync(root, { recursive: true, force: true });
+        });
+
+        test('rejects a folder that escapes the planning workspace', async () => {
+            // An arbitrary folder over the wire must not enumerate the host
+            // filesystem outside the workspace (path-traversal guard).
+            await expect(svc.list({ folder: '../../../../etc' })).rejects.toThrow(/escapes the planning workspace/);
+        });
     });
 
     describe('resolve', () => {

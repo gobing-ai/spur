@@ -8,11 +8,12 @@ import type { ServerContext } from '../../context';
 const os = implement(contract);
 
 /** Map contract query params to TaskService filters; drop unmapped keys. */
-function toFilters(query?: Record<string, unknown>): { status?: string; parentWbs?: string } {
+function toFilters(query?: Record<string, unknown>): { status?: string; parentWbs?: string; folder?: string } {
     if (!query) return {};
-    const f: { status?: string; parentWbs?: string } = {};
+    const f: { status?: string; parentWbs?: string; folder?: string } = {};
     if (typeof query.status === 'string') f.status = query.status;
     if (typeof query.parent === 'string') f.parentWbs = query.parent;
+    if (typeof query.folder === 'string') f.folder = query.folder;
     return f;
 }
 
@@ -39,6 +40,7 @@ export function createTaskHandlers(ctx: ServerContext) {
                 name: t.name,
                 status: normalizeTaskStatus(t.status),
                 filePath: t.filePath,
+                updatedAt: t.frontmatter?.updated_at as string | undefined,
             }));
             return { ok: true as const, data };
         }),

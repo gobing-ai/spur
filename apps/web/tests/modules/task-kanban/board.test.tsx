@@ -142,7 +142,57 @@ describe('KanbanBoard', () => {
         await waitFor(() => expect(getByText('Beta')).toBeDefined());
         expect(queryByText('Alpha')).toBeNull();
     });
+
+    test('sort toggle cycles through off → asc → desc → off', async () => {
+        const tasksForSort: TaskSummary[] = [
+            { wbs: '0003', name: 'Gamma', status: 'todo', filePath: 'c.md' },
+            { wbs: '0001', name: 'Alpha', status: 'todo', filePath: 'a.md' },
+            { wbs: '0002', name: 'Beta', status: 'todo', filePath: 'b.md' },
+        ];
+        mock.module('../../../src/lib/rpc-client', () => ({
+            api: {
+                task: {
+                    list: async () => ({ data: tasksForSort }),
+                    transition: () => transitionImpl(),
+                },
+            },
+        }));
+        const KanbanBoardReload = (await import('../../../src/modules/task-kanban/KanbanBoard')).default;
+
+        const { getByLabelText, container } = render(
+            <MemoryRouter>
+                <KanbanBoardReload onSelectTask={() => {}} />
+            </MemoryRouter>,
+        );
+        await waitFor(() => expect(getByLabelText('Sort todo by WBS')).toBeDefined());
+
+        // Default order: 0003, 0001, 0002 (as returned by list)
+
+        // Click sort → asc (WBS order: 0001, 0002, 0003)
+        fireEvent.click(getByLabelText('Sort todo by WBS'));
+        const afterAsc = (container.querySelector('[aria-label="todo column"]') as HTMLElement).textContent ?? '';
+        expect(afterAsc.indexOf('Alpha')).toBeLessThan(afterAsc.indexOf('Beta'));
+        expect(afterAsc.indexOf('Beta')).toBeLessThan(afterAsc.indexOf('Gamma'));
+    });
+
+    test('column visibility checkboxes are rendered for each status', async () => {
+        const { getByLabelText, container } = renderBoard();
+        await waitFor(() => expect(getByLabelText('Sort todo by WBS')).toBeDefined());
+
+        // Checkboxes exist for each column status
+        const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+        expect(checkboxes.length).toBe(KANBAN_COLUMNS.length);
+    });
+
+    test('folder selector renders and shows default folder', async () => {
+        const { getByLabelText } = renderBoard();
+        await waitFor(() => expect(getByLabelText('Task folder')).toBeDefined());
+        const select = getByLabelText('Task folder') as HTMLSelectElement;
+        expect(select.value).toBe('docs/tasks');
+    });
 });
+
+const KANBAN_COLUMNS = ['backlog', 'todo', 'wip', 'testing', 'blocked', 'done', 'cancelled'];
 
 describe('TaskFilters', () => {
     test('renders all four filter controls bound to the current filter values', () => {

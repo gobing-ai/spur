@@ -87,6 +87,18 @@ describe('TaskCard', () => {
         fireEvent.click(getByText('Build the board'));
         expect(captured.wbs).toBe('0001');
     });
+
+    test('renders relative timestamp when updatedAt is provided', () => {
+        const t = task({ updatedAt: new Date(Date.now() - 120_000).toISOString() });
+        const { getByText } = render(<TaskCard task={t} onClick={() => {}} />);
+        expect(getByText('2m ago')).toBeDefined();
+    });
+
+    test('does not render timestamp when updatedAt is absent', () => {
+        const t = task();
+        const { container } = render(<TaskCard task={t} onClick={() => {}} />);
+        expect(container.textContent).not.toContain('ago');
+    });
 });
 
 describe('KanbanColumn', () => {
@@ -101,6 +113,60 @@ describe('KanbanColumn', () => {
             <KanbanColumn status="todo" label="todo" tasks={[task()]} onCardClick={() => {}} />,
         );
         expect(getByText('Build the board')).toBeDefined();
+    });
+
+    test('shows sort toggle with neutral icon when no sort is active', () => {
+        const { getByLabelText } = render(
+            <KanbanColumn status="todo" label="todo" tasks={[task()]} onCardClick={() => {}} onSortToggle={() => {}} />,
+        );
+        const btn = getByLabelText('Sort todo by WBS');
+        expect(btn).toBeDefined();
+        expect(btn.textContent).toBe('⇅');
+    });
+
+    test('shows descending arrow when sort is asc', () => {
+        const { getByLabelText } = render(
+            <KanbanColumn
+                status="todo"
+                label="todo"
+                tasks={[task()]}
+                onCardClick={() => {}}
+                sortDir="asc"
+                onSortToggle={() => {}}
+            />,
+        );
+        expect(getByLabelText('Sort todo by WBS').textContent).toBe('↓');
+    });
+
+    test('shows ascending arrow when sort is desc', () => {
+        const { getByLabelText } = render(
+            <KanbanColumn
+                status="todo"
+                label="todo"
+                tasks={[task()]}
+                onCardClick={() => {}}
+                sortDir="desc"
+                onSortToggle={() => {}}
+            />,
+        );
+        expect(getByLabelText('Sort todo by WBS').textContent).toBe('↑');
+    });
+
+    test('calls onSortToggle when sort button is clicked', () => {
+        let toggled = false;
+        const { getByLabelText } = render(
+            <KanbanColumn
+                status="todo"
+                label="todo"
+                tasks={[task()]}
+                onCardClick={() => {}}
+                onSortToggle={() => {
+                    toggled = true;
+                }}
+            />,
+        );
+        fireEvent.click(getByLabelText('Sort todo by WBS'));
+        expect(toggled).toBe(true);
     });
 });
 
