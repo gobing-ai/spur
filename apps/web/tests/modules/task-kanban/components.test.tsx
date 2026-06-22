@@ -2,14 +2,40 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator';
 
 GlobalRegistrator.register();
 
-import { afterAll, afterEach, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
 import { cleanup, fireEvent, render } from '@testing-library/react';
+import type { TaskSummary } from '../../../src/modules/task-kanban/types';
+
+// Prevent mock leakage from other test files: TaskDetail calls api.task.show on mount
+// and imports @uiw/react-md-editor (which has heavy scheduler usage in test environments).
+mock.module('@uiw/react-md-editor', () => ({
+    default: Object.assign(
+        function MockEditor() {
+            return null;
+        },
+        {
+            Markdown: function MockMarkdown() {
+                return null;
+            },
+        },
+    ),
+}));
+mock.module('../../../src/lib/rpc-client', () => ({
+    api: {
+        task: {
+            show: async () => ({
+                data: { content: '', wbs: '0001', name: 'Test', status: 'todo', frontmatter: {}, filePath: 'a.md' },
+            }),
+        },
+    },
+}));
+
 import KanbanColumn from '../../../src/modules/task-kanban/KanbanColumn';
 import TaskCard from '../../../src/modules/task-kanban/TaskCard';
 import TaskDetail from '../../../src/modules/task-kanban/TaskDetail';
-import type { TaskSummary } from '../../../src/modules/task-kanban/types';
 
 afterAll(async () => {
+    await new Promise((r) => setTimeout(r, 50));
     await GlobalRegistrator.unregister();
 });
 
