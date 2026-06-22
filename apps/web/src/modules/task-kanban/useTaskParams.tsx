@@ -1,19 +1,29 @@
 import { useMemo } from 'react';
-import { useSearchParams } from 'react-router';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import type { TaskListFilters } from './types';
 
 /**
- * Single source of truth for kanban view state held in the URL query string:
- * `?selected=<wbs>` drives the right-panel detail selection, and
- * `?status=&feature=&parent=&assignee=` drive the board filters (R6 — shareable URLs).
+ * Single source of truth for kanban view state held in the URL:
+ * - Path-based selection: `/board/tasks/0016` selects task 0016 (preferred for clean URLs)
+ * - Query-param fallback: `?selected=0016` also works (legacy compat)
+ * - Filters: `?status=&feature=&parent=&assignee=` drive the board filters (R6 — shareable URLs)
  *
  * Board and TaskDetail are sibling components under BoardLayout with no shared React
  * state, so the URL is the seam that links a card click to the detail panel.
  */
 export function useTaskParams() {
     const [params, setParams] = useSearchParams();
+    const location = useLocation();
+    const navigate = useNavigate();
 
-    const selected = params.get('selected');
+    // Derive selected WBS: path segment takes priority, then query param.
+    const selected = useMemo(() => {
+        const parts = location.pathname.split('/');
+        const tasksIdx = parts.indexOf('tasks');
+        const pathWbs = tasksIdx >= 0 ? parts[tasksIdx + 1] : undefined;
+        if (pathWbs && /^\d{4}$/.test(pathWbs)) return pathWbs;
+        return params.get('selected');
+    }, [location.pathname, params]);
 
     const filters = useMemo<TaskListFilters>(() => {
         const f: TaskListFilters = {};
@@ -29,15 +39,12 @@ export function useTaskParams() {
     }, [params]);
 
     const selectTask = (wbs: string | null) => {
-        setParams(
-            (prev) => {
-                const next = new URLSearchParams(prev);
-                if (wbs) next.set('selected', wbs);
-                else next.delete('selected');
-                return next;
-            },
-            { replace: true },
-        );
+        // Build the target path with existing filter query params preserved
+        const next = new URLSearchParams(params);
+        next.delete('selected'); // Always clean up the legacy query param
+        const qs = next.toString();
+        const basePath = wbs ? `/board/tasks/${wbs}` : '/board/tasks';
+        navigate(`${basePath}${qs ? `?${qs}` : ''}`, { replace: true });
     };
 
     const setFilter = (key: 'status' | 'feature' | 'parent' | 'assignee', value: string | null) => {

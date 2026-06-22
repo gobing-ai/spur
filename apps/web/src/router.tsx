@@ -7,10 +7,19 @@ export const routes = [
     {
         path: '/board',
         element: <BoardLayout />,
-        children: modules.map((mod) => ({
-            path: mod.route,
-            element: <mod.component />,
-        })),
+        children: modules.flatMap((mod) => [
+            {
+                path: mod.route,
+                element: <mod.component />,
+            },
+            // Wildcard child so sub-paths (e.g. /board/tasks/0016) resolve to the
+            // same module instead of 404ing. The actual selection is driven by the
+            // `?selected` query param or the path param — the component decides.
+            {
+                path: `${mod.route}/*`,
+                element: <mod.component />,
+            },
+        ]),
     },
     {
         path: '/',

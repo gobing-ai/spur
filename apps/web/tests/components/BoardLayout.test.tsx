@@ -151,12 +151,14 @@ describe('router + module wiring', () => {
         expect(active?.getAttribute('href')).toBe(`/board/${modules[0]?.route}`);
     });
 
-    test('the route tree maps one child route per module', () => {
+    test('the route tree maps two child routes per module (base + wildcard)', () => {
         const boardRoute = routes.find((r) => r.path === '/board');
-        expect(boardRoute?.children?.length).toBe(modules.length);
+        // Each module produces 2 children: `tasks` and `tasks/*`
+        expect(boardRoute?.children?.length).toBe(modules.length * 2);
         const childPaths = boardRoute?.children?.map((c) => c.path) ?? [];
         for (const mod of modules) {
             expect(childPaths).toContain(mod.route);
+            expect(childPaths).toContain(`${mod.route}/*`);
         }
     });
 });

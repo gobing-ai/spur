@@ -21,7 +21,7 @@ function wrapper(initialEntries: string[]) {
 }
 
 describe('useTaskParams', () => {
-    test('parses selection and filters out of the query string', () => {
+    test('parses selection from query string (legacy compat)', () => {
         const { result } = renderHook(() => useTaskParams(), {
             wrapper: wrapper(['/board/tasks?selected=0007&status=wip&feature=W3&parent=0001&assignee=robin']),
         });
@@ -34,7 +34,21 @@ describe('useTaskParams', () => {
         });
     });
 
-    test('selectTask writes ?selected and clears it on null', () => {
+    test('parses selection from path segment (/board/tasks/0016)', () => {
+        const { result } = renderHook(() => useTaskParams(), {
+            wrapper: wrapper(['/board/tasks/0016']),
+        });
+        expect(result.current.selected).toBe('0016');
+    });
+
+    test('path segment takes priority over query param', () => {
+        const { result } = renderHook(() => useTaskParams(), {
+            wrapper: wrapper(['/board/tasks/0042?selected=0007']),
+        });
+        expect(result.current.selected).toBe('0042');
+    });
+
+    test('selectTask navigates to path-based URL and clears on null', () => {
         const { result } = renderHook(() => useTaskParams(), { wrapper: wrapper(['/board/tasks']) });
         act(() => result.current.selectTask('0042'));
         expect(result.current.selected).toBe('0042');

@@ -18,8 +18,12 @@ export default function BoardLayout() {
     const location = useLocation();
 
     // Resolve active module from the current route segment
+    // Resolve module from the segment immediately after /board/, so both
+    // /board/tasks and /board/tasks/0016 resolve to the 'tasks' module.
     const activeModule = (() => {
-        const seg = location.pathname.split('/').pop();
+        const parts = location.pathname.split('/');
+        const boardIdx = parts.indexOf('board');
+        const seg = boardIdx >= 0 ? parts[boardIdx + 1] : undefined;
         return getModule(seg ?? '');
     })();
 
