@@ -37,9 +37,9 @@ describe('router', () => {
         expect(router.feature).toBeDefined();
     });
 
-    test('stream handler rejects with S6 placeholder', async () => {
+    test('stream handler rejects with events module placeholder', async () => {
         const router = createRouter();
         const handler = router.stream['~orpc'].handler as unknown as () => Promise<unknown>;
-        await expect(handler()).rejects.toThrow('SSE streaming not yet implemented (S6)');
+        await expect(handler()).rejects.toThrow('SSE stream served by raw Hono route (modules/events)');
     });
 });

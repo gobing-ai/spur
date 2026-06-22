@@ -30,7 +30,7 @@ function applyFilters(tasks: TaskSummary[], filters?: TaskListFilters): TaskSumm
 }
 
 export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: Props) {
-    const { tasks, loading, error, setTasks } = useTasks();
+    const { tasks, loading, error, connected, setTasks } = useTasks();
     const [showNewPanel, setShowNewPanel] = useState(false);
     const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
@@ -104,6 +104,15 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
             <div className="flex flex-col h-full">
                 <div className="flex items-center gap-2 px-4 pt-3 pb-1 shrink-0">
                     {onFilterChange && <TaskFilters filters={filters ?? {}} onChange={onFilterChange} />}
+                    <div
+                        className="flex items-center gap-1.5"
+                        title={connected ? 'Live updates active' : 'Polling (stream disconnected)'}
+                    >
+                        <span
+                            className={`inline-block w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`}
+                        />
+                        <span className="text-xs text-spur-text-muted">{connected ? 'Live' : 'Polling'}</span>
+                    </div>
                     <div className="flex-1" />
                     <button type="button" className="btn btn-sm btn-primary" onClick={() => setShowNewPanel(true)}>
                         + New Task

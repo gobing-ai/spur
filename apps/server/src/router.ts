@@ -32,7 +32,7 @@ export function createRouter(ctx?: ServerContext) {
         feature: createFeatureHandlers(ctx ?? stubCtx),
 
         stream: os.stream.handler(async () => {
-            throw new Error('SSE streaming not yet implemented (S6)');
+            throw new Error('SSE stream served by raw Hono route (modules/events)');
         }),
     };
 }

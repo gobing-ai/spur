@@ -102,4 +102,19 @@ describe('useTasks', () => {
         });
         expect(result.current.tasks[0]?.status).toBe('done');
     });
+
+    test('connected starts as false when EventSource is unavailable', () => {
+        const listFn = async () => ({ data: [] });
+        const { result } = renderHook(() => useTasks(listFn));
+        expect(result.current.connected).toBe(false);
+    });
+
+    test('connected is present in return value with custom listFn', async () => {
+        const items: TaskSummary[] = [{ wbs: '0001', name: 'Test', status: 'todo', filePath: '/t/0001.md' }];
+        const listFn = async () => ({ data: items });
+        const { result, unmount } = renderHook(() => useTasks(listFn));
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        expect(result.current.connected).toBe(false);
+        unmount();
+    });
 });
