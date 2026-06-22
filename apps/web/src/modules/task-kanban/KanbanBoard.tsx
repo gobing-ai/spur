@@ -1,6 +1,8 @@
 import { TASK_STATUSES } from '@gobing-ai/spur-domain/schema';
+import { useState } from 'react';
 import { api } from '../../lib/rpc-client';
 import KanbanColumn from './KanbanColumn';
+import NewTaskPanel from './NewTaskPanel';
 import TaskFilters from './TaskFilters';
 import type { TaskListFilters, TaskSummary } from './types';
 import { useTasks } from './useTasks';
@@ -32,6 +34,18 @@ function applyFilters(tasks: TaskSummary[], filters?: TaskListFilters): TaskSumm
 
 export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: Props) {
     const { tasks, loading, error, setTasks } = useTasks();
+
+    const [showNewPanel, setShowNewPanel] = useState(false);
+
+    const handleCreated = async () => {
+        // Refresh the board so the new card appears without a full reload.
+        try {
+            const res = await api.task.list();
+            setTasks((res.data as unknown as TaskSummary[]) ?? []);
+        } catch {
+            // Poll will catch up on next interval.
+        }
+    };
 
     const visible = applyFilters(tasks, filters);
     const tasksByStatus = (status: string): TaskSummary[] => visible.filter((t) => t.status === status);
@@ -75,7 +89,14 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
 
     return (
         <div className="flex flex-col h-full">
-            {onFilterChange && <TaskFilters filters={filters ?? {}} onChange={onFilterChange} />}
+            {/* Toolbar: filters + New Task button */}
+            <div className="flex items-center gap-2 px-4 pt-3 pb-1 shrink-0">
+                {onFilterChange && <TaskFilters filters={filters ?? {}} onChange={onFilterChange} />}
+                <div className="flex-1" />
+                <button type="button" className="btn btn-sm btn-primary" onClick={() => setShowNewPanel(true)}>
+                    + New Task
+                </button>
+            </div>
             <div className="flex gap-3 overflow-x-auto h-full p-4">
                 {KANBAN_COLUMNS.map((status: string) => (
                     <KanbanColumn
@@ -88,6 +109,13 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
                     />
                 ))}
             </div>
+
+            <NewTaskPanel
+                open={showNewPanel}
+                onClose={() => setShowNewPanel(false)}
+                onCreated={handleCreated}
+                folder="docs/tasks"
+            />
         </div>
     );
 }
