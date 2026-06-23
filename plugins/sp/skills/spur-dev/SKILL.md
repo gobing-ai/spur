@@ -196,6 +196,18 @@ code that satisfies the task. Read the task's `## Requirements`, `## Design`, an
 stages. Keeping implement single-purpose is what lets the pipeline (not the agent) own the
 loop: the agent implements, the workflow advances.
 
+### Section ownership — `## Solution`
+
+The implement step **owns** `## Solution` (the change-map). After writing code, before
+yielding, the implement agent authors the `## Solution` section — a markdown table listing
+each changed file with a `file:line` range and a one-line `what/why` summary — and writes it
+via `spur task update <wbs> --section Solution --from-file <tmp>`. Write **only when the
+section is bare** (absent, empty, or a known pipeline placeholder); never clobber a
+hand-authored change-map. The `replaceSection` upsert guarantees missing→add,
+present→replace, never duplicate. If the implement agent forgets, the pipeline's `record`
+step backfills a minimal change-map from `git diff --name-only` as a safety net.
+
+
 ### Step 1: Task selection
 
 ```bash

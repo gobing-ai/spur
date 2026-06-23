@@ -159,8 +159,25 @@ Verdict: PASS    (or PARTIAL / FAIL)
 `.spur/run/<wbs>-verify-answer.txt` (via `agent.run answerFile`), and a deterministic
 shell step derives the gate artifact `.spur/run/<wbs>-verdict.json` from it **plus** an
 independent `spur task check` — so the artifact is never left to the agent's discretion
-(R9; the agent reporting PASS in prose is necessary but not sufficient). **Standalone**
-(`/sp:dev-verify` outside the pipeline), write the artifact yourself:
+
+### Step 8b — Handoff to record (pipeline context)
+
+Under the pipeline (`task-pipeline.yaml`), the verify agent's output is captured to
+`.spur/run/<wbs>-verify-answer.txt` (via `agent.run answerFile`). The **record** step
+then transcribes this output into the task's `## Testing` and `## Review` sections:
+
+- **Testing** ← verdict from `.spur/run/<wbs>-verdict.json` + per-requirement table
+  from the answer file
+- **Review** ← SECU findings (P1–P4) extracted from the answer file
+
+The verify agent's output MUST include a per-requirement traceability table
+(`| Req | Status | Evidence |`) and a `### SECU Review` heading with ranked findings
+so the record step can extract them mechanically. The verdict artifact
+(`.spur/run/<wbs>-verdict.json`) is the gate signal; the answer file is the evidence
+the record step transcribes — keep both structures stable.
+
+(R9; the agent reporting PASS in prose is necessary but not sufficient).
+**Standalone** (`/sp:dev-verify` outside the pipeline), write the artifact yourself:
 
 ```bash
 mkdir -p .spur/run

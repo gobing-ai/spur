@@ -84,4 +84,45 @@ export class RunDao extends EntityDao<typeof runs, typeof runs.id> {
     stampMetadata(runId: string, metadata: Record<string, unknown>): Promise<void> {
         return this.adapter.run('UPDATE runs SET metadata_json = ? WHERE id = ?', JSON.stringify(metadata), runId);
     }
+
+    /**
+     * Find runs stuck in a non-terminal status (`running`/`pending`) that started
+     * before `cutoffIso`. These are orphans — a process was killed (timeout, crash,
+     * Ctrl-C) before the engine could finalize the run. Returns the rows; the caller
+     * decides whether to finalize them.
+     *
+     * Comparison is on `started_at`, which the engine writes as a TEXT ISO-8601 string
+     * (lexicographically ordered, so a string `<` is a chronological `<`). `updated_at`
+     * is deliberately not used — it is an INTEGER epoch on engine writes, so mixing it
+     * with the ISO cutoff would compare incompatible types. "Started long ago and still
+     * running" is the sound, type-safe staleness signal.
+     */
+    listStaleRuns(cutoffIso: string): Promise<Array<{ id: string; status: string; started_at: string }>> {
+        return this.adapter.queryAll(
+            `SELECT id, status, started_at
+             FROM runs
+             WHERE status IN ('running', 'pending')
+               AND started_at < ?1
+             ORDER BY started_at ASC`,
+            cutoffIso,
+        );
+    }
+
+    /**
+     * Mark a non-terminal run as `failed` with a completion timestamp and a reason
+     * stamped into metadata_json. Idempotent against already-terminal runs (the
+     * status guard in the WHERE clause prevents clobbering a `done`/`failed` run).
+     */
+    async finalizeStale(runId: string, reason: string): Promise<void> {
+        const nowIso = new Date().toISOString();
+        await this.adapter.run(
+            `UPDATE runs
+             SET status = 'failed', completed_at = ?1, updated_at = ?1,
+                 metadata_json = json_set(COALESCE(NULLIF(metadata_json, ''), '{}'), '$.staleReason', ?2)
+             WHERE id = ?3 AND status IN ('running', 'pending')`,
+            nowIso,
+            reason,
+            runId,
+        );
+    }
 }

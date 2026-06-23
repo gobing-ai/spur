@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { MarkdownDocument } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { PlanningWriteService } from '../../src/services/planning-write-service';
-import { type TaskActionJob, TaskService } from '../../src/services/task-service';
+import { sectionIsBare, type TaskActionJob, TaskService } from '../../src/services/task-service';
 
 let tasksDir: string;
 let svc: TaskService;
@@ -572,5 +572,43 @@ describe('TaskService', () => {
             expect(capturedJob?.channel).toBeUndefined();
             expect(capturedJob?.skipDeps).toBeUndefined();
         });
+    });
+});
+
+describe('sectionIsBare', () => {
+    const doc = (bodyText: string) =>
+        MarkdownDocument.parse(
+            `---\nschema_version: 1\nname: test\nstatus: wip\n---\n\n## 9999. Test\n\n${bodyText}`,
+            'task',
+        );
+
+    test('returns true when section is absent', () => {
+        const d = doc('');
+        expect(sectionIsBare(d, 'Solution')).toBe(true);
+    });
+
+    test('returns true when section body is empty whitespace', () => {
+        const d = doc('### Solution\n   \n### Plan\n');
+        expect(sectionIsBare(d, 'Solution')).toBe(true);
+    });
+
+    test('returns true for old pipeline placeholder', () => {
+        const d = doc('### Testing\nPipeline run 0042 — see agent output above.\n### Plan\n');
+        expect(sectionIsBare(d, 'Testing')).toBe(true);
+    });
+
+    test('returns false when section has real content', () => {
+        const d = doc('### Solution\n| File | Change |\n|------|--------|\n| x.ts | thing |\n\n### Plan\n');
+        expect(sectionIsBare(d, 'Solution')).toBe(false);
+    });
+
+    test('returns false for non-empty section with non-pipeline text', () => {
+        const d = doc('### Testing\n**Verdict: PASS** — 6/6 requirements MET\n\n### Review\n');
+        expect(sectionIsBare(d, 'Testing')).toBe(false);
+    });
+
+    test('returns true when section body is null (absent)', () => {
+        const d = doc('');
+        expect(sectionIsBare(d, 'Review')).toBe(true);
     });
 });

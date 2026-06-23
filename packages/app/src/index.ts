@@ -94,9 +94,11 @@ export type {
 } from './services/team-service';
 export { TeamService } from './services/team-service';
 export type {
+    CleanedRun,
     PausedRun,
     TimelineEvent,
     WorkflowAppServiceContext,
+    WorkflowCleanResult,
     WorkflowListEntry,
     WorkflowListResult,
     WorkflowRunResult,
