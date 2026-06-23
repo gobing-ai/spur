@@ -222,6 +222,22 @@ export class MarkdownDocument {
         return this._frontmatter?.data ?? null;
     }
 
+    /**
+     * Return the full body WITHOUT the leading YAML frontmatter block.
+     *
+     * Returns the preamble + all sections serialized in order — everything
+     * that follows the frontmatter fence. This is the content intended for
+     * preview/editing; frontmatter values surface separately via
+     * {@link frontmatterData}. In-body code fences are never touched.
+     */
+    get bodyWithoutFrontmatter(): string {
+        let result = this._preamble;
+        for (const section of this._sections) {
+            result += section.modifiedText ?? section.originalText;
+        }
+        return result;
+    }
+
     /** All section names present in the document (canonical and non-canonical). */
     get sectionNames(): string[] {
         return this._sections.map((s) => s.name);

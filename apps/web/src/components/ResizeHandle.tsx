@@ -4,9 +4,11 @@ interface Props {
     targetVar: string;
     onResizeEnd: (px: number) => void;
     direction?: 'horizontal' | 'vertical';
+    /** Negate the delta — use when the handle is on the left/top edge of a right/bottom-anchored panel. */
+    invert?: boolean;
 }
 
-export default function ResizeHandle({ targetVar, onResizeEnd, direction = 'horizontal' }: Props) {
+export default function ResizeHandle({ targetVar, onResizeEnd, direction = 'horizontal', invert = false }: Props) {
     const startRef = useRef<{ x: number; y: number; w: number } | null>(null);
 
     const onPointerDown = useCallback(
@@ -22,8 +24,9 @@ export default function ResizeHandle({ targetVar, onResizeEnd, direction = 'hori
 
             const onMove = (ev: PointerEvent) => {
                 if (!startRef.current) return;
-                const delta =
+                const rawDelta =
                     direction === 'horizontal' ? ev.clientX - startRef.current.x : ev.clientY - startRef.current.y;
+                const delta = invert ? -rawDelta : rawDelta;
                 const next = Math.max(0, startRef.current.w + delta);
                 root.style.setProperty(targetVar, `${next}px`);
             };
@@ -41,7 +44,7 @@ export default function ResizeHandle({ targetVar, onResizeEnd, direction = 'hori
             window.addEventListener('pointermove', onMove);
             window.addEventListener('pointerup', onUp, { once: true });
         },
-        [targetVar, onResizeEnd, direction],
+        [targetVar, onResizeEnd, direction, invert],
     );
 
     const isHorizontal = direction === 'horizontal';

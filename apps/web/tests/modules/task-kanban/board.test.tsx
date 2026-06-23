@@ -24,6 +24,17 @@ mock.module('../../../src/lib/rpc-client', () => ({
                 transitionCalls.push(input);
                 return transitionImpl();
             },
+            show: async () => ({
+                data: {
+                    wbs: '0001',
+                    name: 'Alpha',
+                    status: 'todo',
+                    frontmatter: {},
+                    content: '## Body',
+                    filePath: 'a.md',
+                },
+            }),
+            body: async () => ({ data: { wbs: '0001', filePath: 'a.md' } }),
             folders: async () => ({ data: [{ path: 'docs/tasks', label: 'Primary' }] }),
         },
     },
@@ -156,8 +167,20 @@ describe('KanbanBoard', () => {
                 task: {
                     list: async () => ({ data: tasksForSort }),
                     transition: () => transitionImpl(),
+                    show: async () => ({
+                        data: {
+                            wbs: '0001',
+                            name: 'Alpha',
+                            status: 'todo',
+                            frontmatter: {},
+                            content: '## Body',
+                            filePath: 'a.md',
+                        },
+                    }),
+                    body: async () => ({ data: { wbs: '0001', filePath: 'a.md' } }),
                 },
             },
+            resolveApiUrl: () => 'http://localhost:3000/api',
         }));
         const KanbanBoardReload = (await import('../../../src/modules/task-kanban/KanbanBoard')).default;
 
@@ -192,6 +215,122 @@ describe('KanbanBoard', () => {
         const select = getByLabelText('Task folder') as HTMLSelectElement;
         expect(select.value).toBe('docs/tasks');
     });
+});
+
+// ── 0100 R1: header right-cluster (spacer before toggle group) ──
+test('header spacer sits before the status toggle group so they cluster right', async () => {
+    const { getByText, container } = renderBoard();
+    await waitFor(() => expect(getByText('Alpha')).toBeDefined());
+
+    const header = container.querySelector('.flex.items-center.gap-2.px-4') as HTMLElement;
+    expect(header).toBeTruthy();
+    const children = Array.from(header.children);
+
+    // Find the flex-1 spacer
+    const spacerIdx = children.findIndex((el) => el.classList.contains('flex-1'));
+    expect(spacerIdx).toBeGreaterThan(0);
+
+    // Everything after the spacer should be the toggle group + New Task button
+    const afterSpacer = children.slice(spacerIdx + 1);
+    const afterText = afterSpacer.map((el) => el.textContent ?? '').join(' ');
+    expect(afterText).toContain('+ New Task');
+    // Toggle group checkboxes + New Task are all after the spacer
+    const hasToggleCheckboxes = afterSpacer.some((el) => el.querySelector('input[type="checkbox"]'));
+    expect(hasToggleCheckboxes).toBe(true);
+});
+
+// ── 0100 R2: right-docked detail panel ──
+test('detail panel is right-docked overlay with backdrop', async () => {
+    const { getByText, container } = renderBoard();
+    await waitFor(() => expect(getByText('Alpha')).toBeDefined());
+
+    // Click a card to open the detail
+    fireEvent.click(getByText('Alpha'));
+    await waitFor(() => expect(getByText('Task Detail')).toBeDefined());
+
+    // Verify backdrop
+    const backdrop = container.querySelector('[role="presentation"].fixed.inset-0');
+    expect(backdrop).toBeTruthy();
+
+    // Verify docked panel (dialog, fixed right-0)
+    const panel = container.querySelector('[role="dialog"][aria-label="Task detail"]');
+    expect(panel).toBeTruthy();
+    expect(panel?.className).toContain('right-0');
+    expect(panel?.className).toContain('h-full');
+    expect(panel?.className).not.toContain('items-center'); // not centered
+    expect(panel?.className).not.toContain('justify-center');
+});
+
+test('detail panel closes on backdrop click', async () => {
+    const { getByText, queryByText, container } = renderBoard();
+    await waitFor(() => expect(getByText('Alpha')).toBeDefined());
+
+    // Open detail
+    fireEvent.click(getByText('Alpha'));
+    await waitFor(() => expect(getByText('Task Detail')).toBeDefined());
+
+    // Close via backdrop click
+    const backdrop = container.querySelector('[role="presentation"].fixed.inset-0') as HTMLElement;
+    fireEvent.click(backdrop);
+    await waitFor(() => expect(queryByText('Task Detail')).toBeNull());
+});
+
+test('detail panel closes on Escape key', async () => {
+    const { getByText, queryByText, container } = renderBoard();
+    await waitFor(() => expect(getByText('Alpha')).toBeDefined());
+
+    // Open detail
+    fireEvent.click(getByText('Alpha'));
+    await waitFor(() => expect(getByText('Task Detail')).toBeDefined());
+
+    // Close via Escape
+    const backdrop = container.querySelector('[role="presentation"].fixed.inset-0') as HTMLElement;
+    fireEvent.keyDown(backdrop, { key: 'Escape' });
+    await waitFor(() => expect(queryByText('Task Detail')).toBeNull());
+});
+
+test('detail panel closes on ✕ button click', async () => {
+    const { getByText, queryByText, getByLabelText } = renderBoard();
+    await waitFor(() => expect(getByText('Alpha')).toBeDefined());
+
+    // Open detail
+    fireEvent.click(getByText('Alpha'));
+    await waitFor(() => expect(getByText('Task Detail')).toBeDefined());
+
+    // Close via ✕
+    fireEvent.click(getByLabelText('Close detail'));
+    await waitFor(() => expect(queryByText('Task Detail')).toBeNull());
+});
+
+test('clicking a second card updates the same panel without stacking', async () => {
+    const { getByText, container } = renderBoard();
+    await waitFor(() => expect(getByText('Alpha')).toBeDefined());
+
+    // Open detail for Alpha
+    fireEvent.click(getByText('Alpha'));
+    await waitFor(() => expect(getByText('Task Detail')).toBeDefined());
+
+    // Click Beta — panel should update, no stacking
+    fireEvent.click(getByText('Beta'));
+    // There should be exactly one dialog panel
+    const panels = container.querySelectorAll('[role="dialog"][aria-label="Task detail"]');
+    expect(panels.length).toBe(1);
+});
+
+// ── 0100 R3: resize handle ──
+test('docked panel has a resize handle on its left edge', async () => {
+    const { getByText, container } = renderBoard();
+    await waitFor(() => expect(getByText('Alpha')).toBeDefined());
+
+    // Open detail
+    fireEvent.click(getByText('Alpha'));
+    await waitFor(() => expect(getByText('Task Detail')).toBeDefined());
+
+    // Verify resize handle exists inside the docked panel
+    const panel = container.querySelector('[role="dialog"][aria-label="Task detail"]') as HTMLElement;
+    const handle = panel.querySelector('[data-testid="resize-handle-h"]');
+    expect(handle).toBeTruthy();
+    expect(handle?.getAttribute('aria-orientation')).toBe('vertical'); // horizontal resize → vertical orientation per aria spec
 });
 
 const KANBAN_COLUMNS = ['backlog', 'todo', 'wip', 'testing', 'blocked', 'done', 'cancelled'];

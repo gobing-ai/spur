@@ -233,7 +233,7 @@ export class TaskService {
             status: (fm.status as string) ?? '',
             filePath,
             frontmatter: fm as Record<string, unknown>,
-            content: raw,
+            content: doc.bodyWithoutFrontmatter,
         };
     }
 

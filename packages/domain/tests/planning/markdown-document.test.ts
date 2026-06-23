@@ -400,6 +400,75 @@ describe('MarkdownDocument', () => {
     });
 
     // -----------------------------------------------------------------------
+    // bodyWithoutFrontmatter (0100 R4 — strip frontmatter from body rendering)
+    // -----------------------------------------------------------------------
+
+    describe('bodyWithoutFrontmatter', () => {
+        test('returns the body without the YAML frontmatter block', () => {
+            const doc = MarkdownDocument.parse(TASK_FILE, 'task');
+            const body = doc.bodyWithoutFrontmatter;
+            expect(body).not.toContain('---');
+            expect(body).not.toContain('name: Implement X');
+            expect(body).not.toContain('status: wip');
+            expect(body).toContain('## 0050. Implement X');
+            expect(body).toContain('### Background');
+            expect(body).toContain('Some background text.');
+        });
+
+        test('returns full content when there is no frontmatter', () => {
+            const doc = MarkdownDocument.parse(TASK_NO_FM, 'task');
+            const body = doc.bodyWithoutFrontmatter;
+            expect(body).toBe(TASK_NO_FM);
+        });
+
+        test('does not strip in-body YAML code fences (regression)', () => {
+            const content = [
+                '---',
+                'name: Test',
+                '---',
+                '',
+                '## 0100. Test',
+                '',
+                '### Background',
+                '',
+                'Here is a config:',
+                '',
+                '```yaml',
+                'server:',
+                '  port: 8080',
+                '```',
+                '',
+                '### Plan',
+                '',
+                'Do the thing.',
+                '',
+            ].join('\n');
+            const doc = MarkdownDocument.parse(content, 'task');
+            const body = doc.bodyWithoutFrontmatter;
+            // The file's leading frontmatter is stripped...
+            expect(body).not.toContain('name: Test');
+            // ...but the in-body ```yaml fence is preserved.
+            expect(body).toContain('```yaml');
+            expect(body).toContain('server:');
+            expect(body).toContain('  port: 8080');
+        });
+
+        test('matches serialize output for a document with no frontmatter', () => {
+            const doc = MarkdownDocument.parse(TASK_NO_FM, 'task');
+            expect(doc.bodyWithoutFrontmatter).toBe(doc.serialize());
+        });
+
+        test('does not include frontmatter block even when modified', () => {
+            const doc = MarkdownDocument.parse(TASK_FILE, 'task');
+            doc.replaceSection('Solution', 'Updated solution.');
+            const body = doc.bodyWithoutFrontmatter;
+            expect(body).toContain('Updated solution.');
+            expect(body).not.toContain('---');
+            expect(body).not.toContain('name: Implement X');
+        });
+    });
+
+    // -----------------------------------------------------------------------
     // setFrontmatterField() (R4 — replaces regex frontmatter read-modify-write)
     // -----------------------------------------------------------------------
 

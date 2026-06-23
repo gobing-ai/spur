@@ -135,7 +135,7 @@ describe('TaskService', () => {
     });
 
     describe('show', () => {
-        test('returns parsed frontmatter and content', async () => {
+        test('returns parsed frontmatter and body-only content (frontmatter stripped)', async () => {
             const created = await svc.create({ title: 'Show task' });
             const result = await svc.show(created.ref.id);
 
@@ -143,6 +143,9 @@ describe('TaskService', () => {
             expect(result.name).toBe('Show task');
             expect(result.status).toBe('backlog');
             expect(result.content).toContain('Show task');
+            // R4 (0100): content must NOT include the raw YAML frontmatter block
+            expect(result.content).not.toContain('status: backlog');
+            expect(result.content).not.toMatch(/^---/m);
         });
 
         test('throws for non-existent WBS', async () => {

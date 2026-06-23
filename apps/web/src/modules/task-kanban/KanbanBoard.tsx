@@ -1,6 +1,7 @@
 import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { TASK_STATUSES, taskStatusIcon } from '@gobing-ai/spur-domain/schema';
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import ResizeHandle from '../../components/ResizeHandle';
 import { api } from '../../lib/rpc-client';
 import KanbanColumn from './KanbanColumn';
 import NewTaskPanel from './NewTaskPanel';
@@ -38,6 +39,7 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
         { path: 'docs/tasks', label: 'Primary' },
     ]);
     const [popupTaskWbs, setPopupTaskWbs] = useState<string | null>(null);
+    const [detailWidth, setDetailWidth] = useState(576); // ~36rem default
     const listWithFolder = useCallback(() => api.task.list({ folder }), [folder]);
     const { tasks, loading, error, connected, setTasks } = useTasks(listWithFolder);
     const [showNewPanel, setShowNewPanel] = useState(false);
@@ -55,6 +57,11 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
                 // Fallback to default folder list on error
             });
     }, []);
+
+    // Sync --detail-w CSS variable for the right-docked panel width (R3)
+    useEffect(() => {
+        document.documentElement.style.setProperty('--detail-w', `${detailWidth}px`);
+    }, [detailWidth]);
     const pointerSensor = useSensor(PointerSensor, {
         activationConstraint: { distance: 5 },
     });
@@ -177,6 +184,7 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
                         ))}
                     </select>
                     <span className="text-xs text-spur-text-muted">|</span>
+                    <div className="flex-1" />
                     {KANBAN_COLUMNS.map((status) => (
                         <label key={status} className="flex items-center gap-1 cursor-pointer">
                             <input
@@ -191,7 +199,6 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
                         </label>
                     ))}
                     <span className="text-xs text-spur-text-muted">|</span>
-                    <div className="flex-1" />
                     <button type="button" className="btn btn-sm btn-primary" onClick={() => setShowNewPanel(true)}>
                         + New Task
                     </button>
@@ -219,77 +226,88 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
                     folder={folder}
                 />
                 {popupTaskWbs && (
-                    // biome-ignore lint/a11y/noStaticElementInteractions: role=presentation with onClick is the standard modal backdrop pattern
-                    <div
-                        role="presentation"
-                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-                        onClick={() => setPopupTaskWbs(null)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Escape') setPopupTaskWbs(null);
-                        }}
-                    >
-                        {/* biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation on the dialog body is not an action */}
+                    <>
+                        {/* biome-ignore lint/a11y/noStaticElementInteractions: role=presentation with onClick is the standard backdrop pattern */}
+                        <div
+                            role="presentation"
+                            className="fixed inset-0 z-50 bg-black/40"
+                            onClick={() => setPopupTaskWbs(null)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Escape') setPopupTaskWbs(null);
+                            }}
+                        />
                         <div
                             role="dialog"
                             aria-modal="true"
                             aria-label="Task detail"
-                            className="bg-spur-surface border border-spur-border rounded-lg shadow-xl w-full max-w-3xl max-h-[85vh] mx-4 overflow-hidden flex flex-col"
-                            onClick={(e) => e.stopPropagation()}
+                            className="fixed top-0 right-0 h-full z-50 bg-spur-surface border-l border-spur-border shadow-2xl flex"
+                            style={{ width: 'var(--detail-w)', minWidth: '28rem', maxWidth: '80vw' }}
                         >
-                            <div className="flex items-center justify-between p-3 border-b border-spur-border shrink-0">
-                                <span className="text-sm font-semibold text-spur-text">Task Detail</span>
-                                <button
-                                    type="button"
-                                    className="btn btn-ghost btn-sm text-spur-text-muted"
-                                    onClick={() => setPopupTaskWbs(null)}
-                                    aria-label="Close detail"
-                                >
-                                    ✕
-                                </button>
-                            </div>
-                            <div className="flex-1 overflow-y-auto">
-                                {(() => {
-                                    const popupTask = tasks.find((t) => t.wbs === popupTaskWbs);
-                                    if (!popupTask) return null;
-                                    return (
-                                        <Suspense
-                                            fallback={
-                                                <div className="flex items-center justify-center h-32 text-spur-text-muted text-sm">
-                                                    Loading detail...
-                                                </div>
-                                            }
-                                        >
-                                            <TaskDetail
-                                                task={popupTask}
-                                                onTransition={(wbs, toStatus) => {
-                                                    setTasks((prev) =>
-                                                        prev.map((t) =>
-                                                            t.wbs === wbs ? { ...t, status: toStatus } : t,
-                                                        ),
-                                                    );
-                                                    api.task
-                                                        .transition({ wbs, toStatus: toStatus as TaskStatus })
-                                                        .catch((err: unknown) => {
-                                                            const msg =
-                                                                err instanceof Error
-                                                                    ? err.message
-                                                                    : 'Transition failed';
-                                                            if (typeof window !== 'undefined') {
-                                                                window.dispatchEvent(
-                                                                    new CustomEvent('api-error', {
-                                                                        detail: { message: msg },
-                                                                    }),
-                                                                );
-                                                            }
-                                                        });
-                                                }}
-                                            />
-                                        </Suspense>
-                                    );
-                                })()}
+                            <ResizeHandle
+                                targetVar="--detail-w"
+                                onResizeEnd={(px) => {
+                                    const clamped = Math.max(448, Math.min(px, window.innerWidth * 0.8));
+                                    setDetailWidth(clamped);
+                                }}
+                                direction="horizontal"
+                                invert
+                            />
+                            <div className="flex flex-col flex-1 overflow-hidden">
+                                <div className="flex items-center justify-between p-3 border-b border-spur-border shrink-0">
+                                    <span className="text-sm font-semibold text-spur-text">Task Detail</span>
+                                    <button
+                                        type="button"
+                                        className="btn btn-ghost btn-sm text-spur-text-muted"
+                                        onClick={() => setPopupTaskWbs(null)}
+                                        aria-label="Close detail"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                                <div className="flex-1 overflow-y-auto" data-testid="detail-body">
+                                    {(() => {
+                                        const popupTask = tasks.find((t) => t.wbs === popupTaskWbs);
+                                        if (!popupTask) return null;
+                                        return (
+                                            <Suspense
+                                                fallback={
+                                                    <div className="flex items-center justify-center h-32 text-spur-text-muted text-sm">
+                                                        Loading detail...
+                                                    </div>
+                                                }
+                                            >
+                                                <TaskDetail
+                                                    task={popupTask}
+                                                    onTransition={(wbs, toStatus) => {
+                                                        setTasks((prev) =>
+                                                            prev.map((t) =>
+                                                                t.wbs === wbs ? { ...t, status: toStatus } : t,
+                                                            ),
+                                                        );
+                                                        api.task
+                                                            .transition({ wbs, toStatus: toStatus as TaskStatus })
+                                                            .catch((err: unknown) => {
+                                                                const msg =
+                                                                    err instanceof Error
+                                                                        ? err.message
+                                                                        : 'Transition failed';
+                                                                if (typeof window !== 'undefined') {
+                                                                    window.dispatchEvent(
+                                                                        new CustomEvent('api-error', {
+                                                                            detail: { message: msg },
+                                                                        }),
+                                                                    );
+                                                                }
+                                                            });
+                                                    }}
+                                                />
+                                            </Suspense>
+                                        );
+                                    })()}
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    </>
                 )}
             </div>
 

@@ -34,3 +34,22 @@
     --color-spur-text-muted: #64748b;
     --color-spur-border: #e2e8f0;
 }
+
+/* ── Detail panel markdown code blocks (0100 R5) ── */
+[data-testid="detail-body"] .wmde-markdown pre {
+    background-color: var(--color-spur-bg);
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-spur);
+    border: 1px solid var(--color-spur-border);
+    overflow-x: auto;
+    font-size: 0.8125rem;
+}
+[data-testid="detail-body"] .wmde-markdown code {
+    font-family: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, monospace;
+    font-size: 0.8125rem;
+}
+[data-testid="detail-body"] .wmde-markdown pre > code {
+    background: none;
+    padding: 0;
+    border: none;
+}
