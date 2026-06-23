@@ -201,6 +201,9 @@ export class AgentService {
             }
         }
 
+        // extract --timeout
+        const timeoutMs = numberFlag(flags, 'timeout');
+
         // require prompt (except codex --continue)
         const continueFlag = booleanFlag(flags, 'continue');
         if (prompt === undefined && !continueFlag) {
@@ -271,7 +274,10 @@ export class AgentService {
         // dispatch
         let result: AgentRunResult;
         try {
-            result = await runner.runPromptCommand(agent, promptOptions, { cwd: cwd || undefined });
+            result = await runner.runPromptCommand(agent, promptOptions, {
+                cwd: cwd || undefined,
+                ...(timeoutMs !== undefined ? { timeout: timeoutMs } : {}),
+            });
         } catch (error) {
             return { ok: false, exitCode: 2, message: error instanceof Error ? error.message : String(error) };
         }
@@ -371,6 +377,12 @@ function stringFlag(flags: Record<string, string | boolean>, name: string, fallb
 
 function booleanFlag(flags: Record<string, string | boolean>, name: string): boolean {
     return flags[name] === true;
+}
+
+function numberFlag(flags: Record<string, string | boolean>, name: string): number | undefined {
+    const value = flags[name];
+    if (value === undefined) return undefined;
+    return typeof value === 'string' ? Number(value) : typeof value === 'number' ? value : undefined;
 }
 
 /** Parse the comma-separated `--tags` flag into trimmed, non-empty tags, or undefined when absent. */

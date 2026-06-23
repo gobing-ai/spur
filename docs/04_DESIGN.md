@@ -667,6 +667,13 @@ command *drives* this pipeline, so calling it inside recurses); `test` → `/sp:
 verdict blocks `done`. This is the spur-native replacement for rd3's default-on `--postflight-verify`.
 **Follow-up:** `task_run_links` linkage (kind=pipeline, R4) needs a small `WorkflowService` run-start hook
 — there is no link-writing CLI verb to call from a shell step, so it can't live in pure YAML.
+**Step timeout (ADR-026 amendment, 2026-06-23, task 0107):** each `agent.run` step carries a
+`timeoutMs: ${vars.stepTimeoutMs}` option (default `"600000"` — 10 min). On elapse the ts-libs
+`ProcessExecutor` kills the subprocess (never abandons it); the agent step exits non-zero
+→ `ok:false` → pipeline routes to `failed`. Overridable per run via
+`--vars '{"stepTimeoutMs":"120000"}'`. The `agent.run` action surface accepts `timeoutMs`
+(number parsed from the workflow option or CLI string flag `--timeout`), forwarded through
+`AgentService.executeRun` → `AiRunner.runPromptCommand` → `ProcessExecutor.run({ timeout })`.
 
 **Pipeline section-ownership model (ADR-026 amendment, 2026-06-23, task 0106):** every
 `done`-required section ([Solution, Testing, Review]) is owned by exactly one pipeline step:

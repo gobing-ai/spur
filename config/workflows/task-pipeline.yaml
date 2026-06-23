@@ -35,6 +35,10 @@ vars:
   # `--vars '{"agent":"claude"}'`. Pinned (not left to the AiRunner's <default>
   # selection) so a broken/misconfigured agent on the box can't silently capture the run.
   agent: "omp"
+  # Step-level timeout for agent.run steps in milliseconds. A timed-out agent
+  # subprocess is killed (not abandoned) and the step fails → pipeline routes to
+  # `failed`. Override per run with `--vars '{"stepTimeoutMs":120000}'`.
+  stepTimeoutMs: "600000"
 
 states:
   - id: precheck
@@ -63,6 +67,7 @@ states:
         options:
           agent: ${vars.agent}
           input: /sp:dev-implement ${vars.wbs} --auto
+          timeoutMs: ${vars.stepTimeoutMs}
 
   - id: test
     description: Test execution + coverage via /sp:dev-unit.
@@ -71,6 +76,7 @@ states:
         options:
           agent: ${vars.agent}
           input: /sp:dev-unit ${vars.wbs} --auto
+          timeoutMs: ${vars.stepTimeoutMs}
 
   - id: review
     description: SECU code review via /sp:dev-review.
@@ -79,6 +85,7 @@ states:
         options:
           agent: ${vars.agent}
           input: /sp:dev-review ${vars.wbs} --auto
+          timeoutMs: ${vars.stepTimeoutMs}
 
   - id: approve
     description: >
@@ -105,6 +112,7 @@ states:
         options:
           agent: ${vars.agent}
           input: /sp:dev-verify ${vars.wbs} --auto --fix all
+          timeoutMs: ${vars.stepTimeoutMs}
           answerFile: .spur/run/${vars.wbs}-verify-answer.txt
       - kind: shell
         options:
@@ -140,21 +148,44 @@ states:
         options:
           command: |
             mkdir -p .spur/run
-            printf '**SECU findings** (pipeline verify step)\n\n' > .spur/run/${vars.wbs}-review.md
-            awk '/^(### |## )? *(SECU |Security|Efficiency|Correctness|Usability)/,/^[[:space:]]*$/' ".spur/run/${vars.wbs}-verify-answer.txt" 2>/dev/null >> .spur/run/${vars.wbs}-review.md || true
-            printf '\nFull SECU review: `.spur/run/%s-verify-answer.txt`\n' "${vars.wbs}" >> .spur/run/${vars.wbs}-review.md
+            V=$(jq -r .verdict .spur/run/${vars.wbs}-verdict.json 2>/dev/null || echo UNKNOWN)
+            # The matrix requires a P1–P4 priority findings table. Emit the table header
+            # unconditionally; transcribe any verify SECU findings, else a no-findings row
+            # (a clean verify is a valid review outcome, not a missing table).
+            {
+              printf '**SECU findings** (pipeline verify step — verdict: %s)\n\n' "$V"
+              printf '| Priority | Dimension | Location | Finding |\n'
+              printf '|----------|-----------|----------|----------|\n'
+              # Pull any pipe-rows the verify agent emitted that start with a P-priority cell.
+              if grep -Eq '^\| *P[1-4]' ".spur/run/${vars.wbs}-verify-answer.txt" 2>/dev/null; then
+                grep -E '^\| *P[1-4]' ".spur/run/${vars.wbs}-verify-answer.txt"
+              else
+                printf '| P4 | — | — | No P1–P3 findings; verify verdict %s |\n' "$V"
+              fi
+              printf '\nFull SECU review: `.spur/run/%s-verify-answer.txt`\n' "${vars.wbs}"
+            } > .spur/run/${vars.wbs}-review.md
             ${vars.spurBin} task update ${vars.wbs} --section Review --from-file .spur/run/${vars.wbs}-review.md
       - kind: shell
         options:
           command: |
-            if ! (${vars.spurBin} task show ${vars.wbs} --json 2>/dev/null | jq -r .content | sed -n '/^### Solution/,/^### /p' | sed '1d;/^### /q' | grep -q '[^[:space:]]'); then
+            if ! (${vars.spurBin} task show ${vars.wbs} --json 2>/dev/null | jq -r .content | sed -n '/^### Solution/,/^### /p' | sed '1d;/^### /q' | grep -q ':[0-9]'); then
               mkdir -p .spur/run
               {
-                printf 'Change-map (auto-generated — implement step did not record a Solution)\n\n'
-                printf '| File |\n|------|\n'
-                git diff --name-only HEAD -- '*.ts' '*.tsx' '*.js' 2>/dev/null | sed 's/^/| `/' | sed 's/$/` |/'
+                printf 'Change-map (auto-generated — implement step did not record a Solution).\n'
+                printf 'Each entry cites the first changed line per file (`file:line`).\n\n'
+                printf '| Change (`file:line`) |\n|----------------------|\n'
+                # `git diff -U0` emits `@@ -old +new,count @@` hunk headers; pair each
+                # with its file to produce a real `file:line` citation the matrix requires.
+                git diff -U0 HEAD -- '*.ts' '*.tsx' '*.js' 2>/dev/null | awk '
+                  /^\+\+\+ b\// { f = substr($0, 7) }
+                  /^@@/ { split($3, a, ","); ln = a[1]; sub(/^\+/, "", ln); if (f != "") print "| `" f ":" ln "` |" }
+                ' | sort -u
                 true
               } > .spur/run/${vars.wbs}-solution.md
+              # Fallback: if no hunks parsed (e.g. only deletions), at least cite changed files at :1.
+              if ! grep -q ':[0-9]' .spur/run/${vars.wbs}-solution.md; then
+                git diff --name-only HEAD -- '*.ts' '*.tsx' '*.js' 2>/dev/null | sed 's#^#| `#; s#$#:1` |#' >> .spur/run/${vars.wbs}-solution.md
+              fi
               ${vars.spurBin} task update ${vars.wbs} --section Solution --from-file .spur/run/${vars.wbs}-solution.md
             fi
 
