@@ -12,6 +12,9 @@ export default defineConfig({
     output: 'static',
     integrations: [react()],
     vite: {
+        resolve: {
+            alias: { '@': '/src' },
+        },
         plugins: [
             tailwindcss(),
             honoDevServer({
