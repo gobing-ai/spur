@@ -4,7 +4,8 @@
     "compilerOptions": {
         "types": ["bun"],
         "jsx": "react-jsx",
-        "jsxImportSource": "react"
+        "jsxImportSource": "react",
+        "paths": { "@/*": ["./src/*"] }
     },
     "include": ["src/**/*.ts", "src/**/*.tsx", "tests/**/*.ts", "tests/**/*.tsx", "astro.config.mjs", "env.d.ts"]
 }
