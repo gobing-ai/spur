@@ -1,6 +1,7 @@
 import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { TASK_STATUSES, taskStatusIcon } from '@gobing-ai/spur-domain/schema';
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { Button } from '@/ui';
 import ResizeHandle from '../../components/ResizeHandle';
 import { api } from '../../lib/rpc-client';
 import KanbanColumn from './KanbanColumn';
@@ -229,9 +230,9 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
                         </label>
                     ))}
                     <span className="text-xs text-spur-text-muted">|</span>
-                    <button type="button" className="btn btn-sm btn-primary" onClick={() => setShowNewPanel(true)}>
+                    <Button variant="primary" size="sm" onClick={() => setShowNewPanel(true)}>
                         + New Task
-                    </button>
+                    </Button>
                 </div>
                 <div className="flex gap-3 overflow-x-auto h-full p-4">
                     {KANBAN_COLUMNS.filter((s) => !hiddenColumns.has(s)).map((status: string) => (

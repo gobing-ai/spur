@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button } from '@/ui';
 
 export default function SmokeIsland() {
     const [count, setCount] = useState(0);
@@ -10,11 +11,11 @@ export default function SmokeIsland() {
                 W1 stack migration — Astro static + React 19 + Tailwind v4 + daisyUI 5
             </p>
             <div className="flex gap-4 items-center">
-                <button type="button" className="btn btn-primary" onClick={() => setCount((c) => c + 1)}>
+                <Button variant="primary" onClick={() => setCount((c) => c + 1)}>
                     Clicked {count} times
-                </button>
-                <span className="btn btn-ghost">daisyUI btn-ghost</span>
-                <span className="btn btn-outline">daisyUI btn-outline</span>
+                </Button>
+                <Button variant="ghost">daisyUI btn-ghost</Button>
+                <Button variant="outline">daisyUI btn-outline</Button>
             </div>
         </div>
     );

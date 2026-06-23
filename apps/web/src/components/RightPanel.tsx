@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Button } from '@/ui';
 
 interface Props {
     collapsed: boolean;
@@ -20,23 +21,25 @@ export default function RightPanel({ collapsed, onToggle, onMobileClose, childre
                 {!collapsed && <span className="text-sm font-semibold text-spur-text">Context</span>}
                 <div className="flex items-center gap-1">
                     {onMobileClose && (
-                        <button
-                            type="button"
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-spur-text-muted md:hidden"
                             onClick={onMobileClose}
-                            className="btn btn-ghost btn-sm text-spur-text-muted md:hidden"
                             aria-label="Close panel"
                         >
                             ✕
-                        </button>
+                        </Button>
                     )}
-                    <button
-                        type="button"
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-spur-text-muted hidden md:inline-flex"
                         onClick={onToggle}
-                        className="btn btn-ghost btn-sm text-spur-text-muted hidden md:inline-flex"
                         aria-label={collapsed ? 'Expand panel' : 'Collapse panel'}
                     >
                         {collapsed ? '◀' : '▶'}
-                    </button>
+                    </Button>
                 </div>
             </div>
             {!collapsed && <div className="flex-1 overflow-y-auto p-3">{children}</div>}

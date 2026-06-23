@@ -1,5 +1,6 @@
 import { createContext, useCallback, useLayoutEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router';
+import { Button } from '@/ui';
 import { loadLayoutState, saveLayoutState } from '../lib/layout-state';
 import { getModule } from '../modules/registry';
 import type { WebModule } from '../modules/types';
@@ -87,23 +88,25 @@ export default function BoardLayout() {
 
     const mobileHeader = (
         <div className="mobile-bar">
-            <button
-                type="button"
+            <Button
+                variant="ghost"
+                size="sm"
+                className="text-spur-text"
                 onClick={() => setMobileSidebarOpen(true)}
-                className="btn btn-ghost btn-sm text-spur-text"
                 aria-label="Open navigation"
             >
                 ☰
-            </button>
+            </Button>
             <span className="text-sm font-semibold text-spur-text">{activeModule?.name ?? 'Spur'}</span>
-            <button
-                type="button"
+            <Button
+                variant="ghost"
+                size="sm"
+                className="text-spur-text"
                 onClick={() => setMobilePanelOpen(true)}
-                className="btn btn-ghost btn-sm text-spur-text"
                 aria-label="Open panel"
             >
                 ◧
-            </button>
+            </Button>
         </div>
     );
 

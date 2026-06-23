@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router';
+import { Button } from '@/ui';
 import { modules } from '../modules/registry';
 import ThemeToggle from './ThemeToggle';
 
@@ -15,23 +16,25 @@ export default function LeftSidebar({ collapsed, onToggle, onMobileClose }: Prop
                 <div className="flex items-center gap-1">
                     {!collapsed && <ThemeToggle />}
                     {onMobileClose && (
-                        <button
-                            type="button"
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-spur-text-muted md:hidden"
                             onClick={onMobileClose}
-                            className="btn btn-ghost btn-sm text-spur-text-muted md:hidden"
                             aria-label="Close navigation"
                         >
                             ✕
-                        </button>
+                        </Button>
                     )}
-                    <button
-                        type="button"
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-spur-text-muted hidden md:inline-flex"
                         onClick={onToggle}
-                        className="btn btn-ghost btn-sm text-spur-text-muted hidden md:inline-flex"
                         aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                     >
                         {collapsed ? '▶' : '◀'}
-                    </button>
+                    </Button>
                 </div>
             </div>
             <nav className="flex-1 overflow-y-auto">

@@ -1,5 +1,6 @@
 import { useDroppable } from '@dnd-kit/core';
 import { taskStatusIcon } from '@gobing-ai/spur-domain/schema';
+import { Button } from '@/ui';
 import TaskCard from './TaskCard';
 import type { TaskSummary } from './types';
 
@@ -32,15 +33,16 @@ export default function KanbanColumn({ status, label, tasks, onCardClick, sortDi
                 <div className="flex items-center gap-1">
                     <span className="badge badge-sm badge-ghost">{tasks.length}</span>
                     {onSortToggle && (
-                        <button
-                            type="button"
-                            className="btn btn-ghost btn-xs px-1"
+                        <Button
+                            variant="ghost"
+                            size="xs"
+                            className="px-1"
                             onClick={onSortToggle}
                             aria-label={`Sort ${label} by WBS`}
                             title={`Sort ${label}: ${sortDir === 'asc' ? 'WBS ↓' : sortDir === 'desc' ? 'WBS ↑' : 'none'}`}
                         >
                             {sortDir === 'asc' ? '↓' : sortDir === 'desc' ? '↑' : '⇅'}
-                        </button>
+                        </Button>
                     )}
                 </div>
             </div>
