@@ -126,68 +126,14 @@ states:
 
   - id: record
     description: >
-      Move the task to `testing` (via the normal verb, R3), then write results back
-      to the task file — ONLY via `spur task update --section` (never a direct file
-      write, R2). Testing/Review are derived from the verify output (answer file +
-      verdict JSON), not placeholder strings. Solution is backfilled from git diff
-      as a safety net when the implement step did not record a change-map.
+      Record pipeline results into the task file via `spur task record` —
+      Testing/Review from the verdict, Solution backfilled from git diff as a
+      safety net, optional transition to testing. A single verb replaces the
+      previous ~50 lines of embedded shell (0108; ADR-022).
     onEnter:
       - kind: shell
         options:
-          command: "${vars.spurBin} task update ${vars.wbs} testing"
-      - kind: shell
-        options:
-          command: |
-            mkdir -p .spur/run
-            V=$(jq -r .verdict .spur/run/${vars.wbs}-verdict.json 2>/dev/null || echo UNKNOWN)
-            printf '**Pipeline verify results**\n\n- Verdict: %s (from `.spur/run/%s-verdict.json`)\n\n' "$V" "${vars.wbs}" > .spur/run/${vars.wbs}-testing.md
-            awk '/^[|] Req[|]/,/^[[:space:]]*$/' ".spur/run/${vars.wbs}-verify-answer.txt" 2>/dev/null >> .spur/run/${vars.wbs}-testing.md || true
-            printf '\nFull per-requirement trace: `.spur/run/%s-verify-answer.txt`\n' "${vars.wbs}" >> .spur/run/${vars.wbs}-testing.md
-            ${vars.spurBin} task update ${vars.wbs} --section Testing --from-file .spur/run/${vars.wbs}-testing.md
-      - kind: shell
-        options:
-          command: |
-            mkdir -p .spur/run
-            V=$(jq -r .verdict .spur/run/${vars.wbs}-verdict.json 2>/dev/null || echo UNKNOWN)
-            # The matrix requires a P1–P4 priority findings table. Emit the table header
-            # unconditionally; transcribe any verify SECU findings, else a no-findings row
-            # (a clean verify is a valid review outcome, not a missing table).
-            {
-              printf '**SECU findings** (pipeline verify step — verdict: %s)\n\n' "$V"
-              printf '| Priority | Dimension | Location | Finding |\n'
-              printf '|----------|-----------|----------|----------|\n'
-              # Pull any pipe-rows the verify agent emitted that start with a P-priority cell.
-              if grep -Eq '^\| *P[1-4]' ".spur/run/${vars.wbs}-verify-answer.txt" 2>/dev/null; then
-                grep -E '^\| *P[1-4]' ".spur/run/${vars.wbs}-verify-answer.txt"
-              else
-                printf '| P4 | — | — | No P1–P3 findings; verify verdict %s |\n' "$V"
-              fi
-              printf '\nFull SECU review: `.spur/run/%s-verify-answer.txt`\n' "${vars.wbs}"
-            } > .spur/run/${vars.wbs}-review.md
-            ${vars.spurBin} task update ${vars.wbs} --section Review --from-file .spur/run/${vars.wbs}-review.md
-      - kind: shell
-        options:
-          command: |
-            if ! (${vars.spurBin} task show ${vars.wbs} --json 2>/dev/null | jq -r .content | sed -n '/^### Solution/,/^### /p' | sed '1d;/^### /q' | grep -q ':[0-9]'); then
-              mkdir -p .spur/run
-              {
-                printf 'Change-map (auto-generated — implement step did not record a Solution).\n'
-                printf 'Each entry cites the first changed line per file (`file:line`).\n\n'
-                printf '| Change (`file:line`) |\n|----------------------|\n'
-                # `git diff -U0` emits `@@ -old +new,count @@` hunk headers; pair each
-                # with its file to produce a real `file:line` citation the matrix requires.
-                git diff -U0 HEAD -- '*.ts' '*.tsx' '*.js' 2>/dev/null | awk '
-                  /^\+\+\+ b\// { f = substr($0, 7) }
-                  /^@@/ { split($3, a, ","); ln = a[1]; sub(/^\+/, "", ln); if (f != "") print "| `" f ":" ln "` |" }
-                ' | sort -u
-                true
-              } > .spur/run/${vars.wbs}-solution.md
-              # Fallback: if no hunks parsed (e.g. only deletions), at least cite changed files at :1.
-              if ! grep -q ':[0-9]' .spur/run/${vars.wbs}-solution.md; then
-                git diff --name-only HEAD -- '*.ts' '*.tsx' '*.js' 2>/dev/null | sed 's#^#| `#; s#$#:1` |#' >> .spur/run/${vars.wbs}-solution.md
-              fi
-              ${vars.spurBin} task update ${vars.wbs} --section Solution --from-file .spur/run/${vars.wbs}-solution.md
-            fi
+          command: "${vars.spurBin} task record ${vars.wbs} --solution-from-diff --transition testing"
 
   - id: done
     description: >

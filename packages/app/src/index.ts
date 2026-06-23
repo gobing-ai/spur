@@ -75,6 +75,20 @@ export {
 export type { CheckFindings, CheckResult as TaskCheckResult, SectionMatrix } from './services/task-check';
 export { TaskCheckService } from './services/task-check';
 export type {
+    RecordOptions,
+    RecordResult,
+    VerdictCheck,
+    VerdictRequirement,
+    VerifyVerdict,
+} from './services/task-record';
+export {
+    parseVerdict,
+    readVerdict,
+    renderReview,
+    renderSolutionFromDiff,
+    renderTesting,
+} from './services/task-record';
+export type {
     TaskActionJob,
     TaskActionResult,
     TaskServiceContext,

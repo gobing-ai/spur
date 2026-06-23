@@ -173,6 +173,7 @@ spur task       refresh [--json]
 spur task       batch-create --file <json> [--json]
 spur task       resolve <file-path> [--json]
 spur task       check [<wbs>] [--strict] [--json]
+spur task       record <wbs> [--verdict-file <path>] [--solution-from-diff] [--transition <status>] [--json]
 spur task       migrate                         # Reserved (A17) — board-cutover gate; not yet wired
 spur feature    create <name> [--parent <id>] [--json]
 spur feature    show <id> [--json]

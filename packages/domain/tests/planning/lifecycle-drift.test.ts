@@ -159,11 +159,19 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
         expect(String(yaml.transitions[idxFail]?.guard?.options?.command)).toMatch(/^!\s/);
     });
 
-    test('R2: record writes via `spur task update --section` (never a direct file write)', () => {
+    test('R2: record writes via `spur task record` (single verb, not inline shell)', () => {
         const record = yaml.states.find((s) => s.id === 'record');
         const cmds = (record?.onEnter ?? []).map((a) => String(a.options?.command ?? ''));
-        expect(cmds.some((c) => c.includes('task update') && c.includes('--section Testing'))).toBe(true);
-        expect(cmds.some((c) => c.includes('task update') && c.includes('--section Review'))).toBe(true);
+        // The record state now has ONE shell step calling `spur task record ...`
+        expect(record?.onEnter ?? []).toHaveLength(1);
+        expect(
+            cmds.some(
+                (c) =>
+                    c.includes('task record') &&
+                    c.includes('--solution-from-diff') &&
+                    c.includes('--transition testing'),
+            ),
+        ).toBe(true);
     });
 
     test('R3: status transitions go through the normal verb (`spur task update <wbs> <status>`)', () => {
@@ -172,7 +180,11 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
             .filter((a) => a.kind === 'shell')
             .map((a) => String(a.options?.command ?? ''));
         expect(allCmds.some((c) => /task update \$\{vars\.wbs\} wip/.test(c))).toBe(true);
-        expect(allCmds.some((c) => /task update \$\{vars\.wbs\} testing/.test(c))).toBe(true);
+        // The testing transition is now inside `task record --transition testing` (a single verb),
+        // not a separate shell step. Record owns the transition; the gate guard still verifies.
+        expect(allCmds.some((c) => /task record \$\{vars\.wbs\}/.test(c) && c.includes('--transition testing'))).toBe(
+            true,
+        );
         expect(allCmds.some((c) => /task update \$\{vars\.wbs\} done/.test(c))).toBe(true);
     });
 
