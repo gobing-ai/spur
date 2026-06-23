@@ -1,5 +1,6 @@
 import { TASK_VARIANTS, type TaskVariant } from '@gobing-ai/spur-domain/schema';
 import { useState } from 'react';
+import { Button } from '@/ui';
 import { api } from '../../lib/rpc-client';
 
 interface Props {
@@ -103,15 +104,16 @@ export default function NewTaskPanel({ open, onClose, onCreated, folder }: Props
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-spur-border shrink-0">
                     <h2 className="text-sm font-semibold text-spur-text">New Task</h2>
-                    <button
-                        type="button"
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-spur-text-muted"
                         onClick={handleClose}
-                        className="btn btn-ghost btn-sm text-spur-text-muted"
                         aria-label="Close"
                         disabled={submitting}
                     >
                         ✕
-                    </button>
+                    </Button>
                 </div>
 
                 {/* Body */}
@@ -213,22 +215,18 @@ export default function NewTaskPanel({ open, onClose, onCreated, folder }: Props
 
                 {/* Footer */}
                 <div className="flex items-center justify-end gap-2 p-4 border-t border-spur-border shrink-0">
-                    <button
-                        type="button"
-                        className="btn btn-sm btn-ghost text-spur-text-muted"
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-spur-text-muted"
                         onClick={handleClose}
                         disabled={submitting}
                     >
                         Cancel
-                    </button>
-                    <button
-                        type="button"
-                        className="btn btn-sm btn-primary"
-                        onClick={handleSubmit}
-                        disabled={submitting}
-                    >
+                    </Button>
+                    <Button variant="primary" size="sm" onClick={handleSubmit} disabled={submitting}>
                         {submitting ? 'Creating…' : 'Create Task'}
-                    </button>
+                    </Button>
                 </div>
             </div>
         </>

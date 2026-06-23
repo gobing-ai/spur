@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Button } from '@/ui';
 import { resolveTheme, type Theme, toggleTheme } from '../lib/theme';
 
 /** A toggle button that switches between daisyUI light/dark themes. */
@@ -30,13 +31,14 @@ export default function ThemeToggle() {
     const onClick = useCallback(() => setTheme(toggleTheme), []);
 
     return (
-        <button
-            type="button"
+        <Button
+            variant="ghost"
+            size="sm"
             onClick={onClick}
-            className="btn btn-ghost btn-sm text-spur-text-muted"
+            className="text-spur-text-muted"
             aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
         >
             {theme === 'dark' ? '☀️' : '🌙'}
-        </button>
+        </Button>
     );
 }

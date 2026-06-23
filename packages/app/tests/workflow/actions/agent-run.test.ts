@@ -1,4 +1,7 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { ActionRunContext } from '@gobing-ai/ts-dual-workflow-engine';
 import type { AgentService } from '../../../src/services/agent-service';
 import { AgentRunActionRunner } from '../../../src/workflow/actions/agent-run';
@@ -168,5 +171,43 @@ describe('AgentRunActionRunner capture mode', () => {
         const runner = new AgentRunActionRunner(svc);
         const result = await runner.execute({ input: 'hello', capture: true }, makeCtx());
         expect(result.setVars).toBeUndefined();
+    });
+});
+
+describe('AgentRunActionRunner answerFile', () => {
+    let dir: string;
+    afterEach(() => {
+        if (dir) rmSync(dir, { recursive: true, force: true });
+    });
+
+    // answerFile is the deterministic transport for the agent's answer to a downstream
+    // shell step (the engine propagates setVars, not result.data) — e.g. the verify
+    // step's verdict artifact. Setting it must imply capture and persist the answer.
+    test('persists the captured answer to an absolute answerFile and implies capture', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
+        const file = join(dir, 'answer.txt');
+        let runCalled = false;
+        const svc = {
+            run: async () => {
+                runCalled = true;
+                return 0;
+            },
+            runCapture: async () => ({ exitCode: 0, answer: 'Verdict: PASS' }),
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ input: 'verify', answerFile: file }, makeCtx());
+        expect(result.ok).toBe(true);
+        expect(runCalled).toBe(false); // answerFile forced capture path, not plain run
+        expect(readFileSync(file, 'utf8')).toBe('Verdict: PASS');
+    });
+
+    test('resolves a relative answerFile against cwd and creates parent dirs', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
+        const svc = {
+            runCapture: async () => ({ exitCode: 0, answer: 'FAIL' }),
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        await runner.execute({ input: 'verify', answerFile: 'nested/out.txt', cwd: dir }, makeCtx());
+        expect(readFileSync(join(dir, 'nested', 'out.txt'), 'utf8')).toBe('FAIL');
     });
 });

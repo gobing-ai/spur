@@ -4,6 +4,7 @@ import { LifecycleAdapter, type LifecycleProfile } from '@gobing-ai/spur-app';
 import { bundledConfigRoot } from '@gobing-ai/spur-config';
 import { TaskRunLinkDao } from '@gobing-ai/spur-domain';
 import type { CliContext } from '../context';
+import { resolveSpurBin } from './resolve-spur-bin';
 
 /**
  * Build the engine-backed lifecycle port (0055) for a given profile. Status
@@ -22,10 +23,9 @@ export function makeLifecycleAdapter(context: CliContext, profile: LifecycleProf
     const workflowPath = join(root, 'workflows', `${profile.workflowName}.yaml`);
     if (!existsSync(workflowPath)) return undefined;
     // Resolve the spur binary to avoid PATH ambiguity — the `spur` on PATH may be
-    // a different version (or compiled without `task`/`feature` commands). Using
-    // the project's own Bun entry point ensures guard commands (`spur task check`,
-    // `spur feature check`) always invoke the correct binary.
-    const spurBin = `${process.execPath} run ${join(context.cwd, 'apps', 'cli', 'src', 'index.ts')}`;
+    // a different version (or compiled without `task`/`feature` commands). Shared
+    // with the `workflow run` path so both resolve the binary identically.
+    const spurBin = resolveSpurBin();
     return new LifecycleAdapter({
         profile,
         getDb: () => context.getDb(),

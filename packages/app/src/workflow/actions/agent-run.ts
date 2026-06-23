@@ -1,3 +1,5 @@
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, isAbsolute, join } from 'node:path';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import type { AgentService } from '../../services/agent-service';
 
@@ -63,12 +65,22 @@ export class AgentRunActionRunner implements ActionRunner {
         if (cwd !== '') flags.cwd = cwd as string;
         if (continueFlag !== undefined) flags.continue = continueFlag;
 
-        const capture = asOptionalBoolean(options.capture);
+        // `answerFile` implies capture: persist the agent's answer to a file a
+        // downstream shell step can read (the engine only propagates setVars, not
+        // result.data, so a file is the deterministic transport for the answer —
+        // e.g. the verify step writing its PASS/FAIL verdict artifact).
+        const answerFile = asOptionalString(options.answerFile);
+        const capture = asOptionalBoolean(options.capture) || answerFile !== undefined;
         const agentLabel = agent ?? '<default>';
 
         if (capture) {
             const { exitCode, answer } = await this.agentService.runCapture(input, flags);
             const ok = exitCode === 0;
+            if (answerFile !== undefined) {
+                const target = isAbsolute(answerFile) ? answerFile : join(cwd, answerFile);
+                await mkdir(dirname(target), { recursive: true });
+                await writeFile(target, answer, 'utf8');
+            }
             return {
                 ok,
                 data: { exitCode, agent: agentLabel, answer },

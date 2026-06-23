@@ -1,5 +1,6 @@
 import { taskStatusIcon } from '@gobing-ai/spur-domain/schema';
 import MDEditor from '@uiw/react-md-editor';
+import { Button } from '@/ui';
 // Base theme for the markdown preview/editor (.wmde-markdown) + bundled Prism
 // token colors. Without this import code blocks render unstyled (0101 #4).
 import '@uiw/react-md-editor/markdown-editor.css';
@@ -256,36 +257,37 @@ export default function TaskDetail({ task, onTransition, onClose }: Props) {
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-1 shrink-0">
                     {(STATUS_ACTIONS[task.status] ?? []).map((action) => (
-                        <button
+                        <Button
                             key={action}
-                            type="button"
+                            variant="accent"
+                            size="xs"
                             onClick={() => handleAction(action)}
                             disabled={actionLoading === action}
-                            className="btn btn-xs btn-accent"
                             aria-label={ACTION_LABELS[action]}
                         >
                             {actionLoading === action ? '…' : ACTION_LABELS[action]}
-                        </button>
+                        </Button>
                     ))}
                     {task.status !== 'cancelled' && task.status !== 'done' && (
-                        <button
-                            type="button"
+                        <Button
+                            variant="error"
+                            size="xs"
                             onClick={() => setShowCancelModal(true)}
-                            className="btn btn-xs btn-error btn-outline"
                             data-testid="header-cancel"
                         >
                             Cancel
-                        </button>
+                        </Button>
                     )}
                     {onClose && (
-                        <button
-                            type="button"
+                        <Button
+                            variant="ghost"
+                            size="xs"
+                            className="text-spur-text-muted"
                             onClick={onClose}
-                            className="btn btn-ghost btn-xs text-spur-text-muted"
                             aria-label="Close detail"
                         >
                             ✕
-                        </button>
+                        </Button>
                     )}
                 </div>
             </div>
@@ -452,35 +454,35 @@ export default function TaskDetail({ task, onTransition, onClose }: Props) {
                     <span className="text-xs font-semibold text-spur-text-muted uppercase tracking-wide">Body</span>
                     <div className="flex gap-1">
                         {mode === 'preview' ? (
-                            <button
-                                type="button"
-                                className="btn btn-xs btn-ghost"
+                            <Button
+                                variant="ghost"
+                                size="xs"
                                 onClick={handleEdit}
                                 disabled={loadingBody}
                                 aria-label="Edit body"
                             >
                                 Edit
-                            </button>
+                            </Button>
                         ) : (
                             <>
-                                <button
-                                    type="button"
-                                    className="btn btn-xs btn-primary"
+                                <Button
+                                    variant="primary"
+                                    size="xs"
                                     onClick={handleSave}
                                     disabled={saving}
                                     aria-label="Save body"
                                 >
                                     {saving ? 'Saving…' : 'Save'}
-                                </button>
-                                <button
-                                    type="button"
-                                    className="btn btn-xs btn-ghost"
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="xs"
                                     onClick={handleCancel}
                                     disabled={saving}
                                     aria-label="Cancel edit"
                                 >
                                     Cancel
-                                </button>
+                                </Button>
                             </>
                         )}
                     </div>
@@ -532,23 +534,19 @@ export default function TaskDetail({ task, onTransition, onClose }: Props) {
                             from the board.
                         </p>
                         <div className="flex justify-end gap-2">
-                            <button
-                                type="button"
-                                className="btn btn-xs btn-ghost"
-                                onClick={() => setShowCancelModal(false)}
-                            >
+                            <Button variant="ghost" size="xs" onClick={() => setShowCancelModal(false)}>
                                 Keep
-                            </button>
-                            <button
-                                type="button"
-                                className="btn btn-xs btn-error"
+                            </Button>
+                            <Button
+                                variant="error"
+                                size="xs"
                                 onClick={() => {
                                     setShowCancelModal(false);
                                     onTransition(task.wbs, 'cancelled');
                                 }}
                             >
                                 Cancel task
-                            </button>
+                            </Button>
                         </div>
                     </div>
                 </div>
@@ -599,12 +597,12 @@ export default function TaskDetail({ task, onTransition, onClose }: Props) {
                             </label>
                         </div>
                         <div className="flex justify-end gap-2 mt-4">
-                            <button type="button" className="btn btn-xs btn-ghost" onClick={() => setActionModal(null)}>
+                            <Button variant="ghost" size="xs" onClick={() => setActionModal(null)}>
                                 Cancel
-                            </button>
-                            <button type="button" className="btn btn-xs btn-primary" onClick={dispatchAction}>
+                            </Button>
+                            <Button variant="primary" size="xs" onClick={dispatchAction}>
                                 {actionLoading === actionModal ? 'Dispatching…' : 'Dispatch'}
-                            </button>
+                            </Button>
                         </div>
                     </div>
                 </div>

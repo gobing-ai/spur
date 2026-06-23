@@ -49,3 +49,5 @@ rules:
       - "packages/contracts/src/**"
       - "**/node_modules/**"
       - "**/tests/**"
+      ## pure re-export for UI components
+      - "apps/web/src/ui.ts"
