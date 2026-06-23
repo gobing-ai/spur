@@ -210,6 +210,28 @@ describe('task handlers', () => {
         expect(task?.type).toBe('task');
     });
 
+    test('list handler passes through non-enum priority values (high/medium/low) unchanged', async () => {
+        // The corpus mixes P0–P3 with high/medium/low; the handler must not drop the latter.
+        const handlers = createTaskHandlers(
+            makeCtx({
+                list: async () => [
+                    {
+                        wbs: '0002',
+                        name: 'Legacy priority',
+                        status: 'todo',
+                        filePath: '/test/0002.md',
+                        frontmatter: { priority: 'high' },
+                    },
+                ],
+            }),
+        );
+        const fn = handlers.list['~orpc'].handler as unknown as (
+            opts: Record<string, unknown>,
+        ) => Promise<{ ok: boolean; data: Array<Record<string, unknown>> }>;
+        const result = await fn({});
+        expect(result.data[0]?.priority).toBe('high');
+    });
+
     test('create handler passes template to taskService', async () => {
         let capturedParams: Record<string, unknown> | undefined;
         const handlers = createTaskHandlers(

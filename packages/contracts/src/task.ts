@@ -1,4 +1,4 @@
-import { PRIORITIES, TASK_STATUSES, TASK_TYPES, TASK_VARIANTS } from '@gobing-ai/spur-domain/schema';
+import { TASK_STATUSES, TASK_TYPES, TASK_VARIANTS } from '@gobing-ai/spur-domain/schema';
 import { oc } from '@orpc/contract';
 import { z } from 'zod';
 import { apiSuccessSchema } from './shared';
@@ -10,7 +10,8 @@ export const taskSummarySchema = z.object({
     wbs: z.string().regex(/^\d{4}$/),
     name: z.string().min(1),
     status: z.enum(TASK_STATUSES),
-    priority: z.enum(PRIORITIES).optional(),
+    // Free-form: the corpus mixes P0–P3 with high/medium/low; pass the raw value through.
+    priority: z.string().optional(),
     featureId: z.string().nullable().optional(),
     parentWbs: z
         .string()

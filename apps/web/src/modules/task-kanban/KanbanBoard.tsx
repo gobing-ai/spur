@@ -39,7 +39,10 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
         { path: 'docs/tasks', label: 'Primary' },
     ]);
     const [popupTaskWbs, setPopupTaskWbs] = useState<string | null>(null);
-    const [detailWidth, setDetailWidth] = useState(576); // ~36rem default
+    // Default ~3× the old 576px (1728px), clamped to 80vw so it never overflows the viewport.
+    const [detailWidth, setDetailWidth] = useState(() =>
+        typeof window !== 'undefined' ? Math.min(1728, window.innerWidth * 0.8) : 1728,
+    );
     const listWithFolder = useCallback(() => api.task.list({ folder }), [folder]);
     const { tasks, loading, error, connected, setTasks } = useTasks(listWithFolder);
     const [showNewPanel, setShowNewPanel] = useState(false);
@@ -62,6 +65,17 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
     useEffect(() => {
         document.documentElement.style.setProperty('--detail-w', `${detailWidth}px`);
     }, [detailWidth]);
+
+    // Close the docked detail panel on Escape. A window listener is used because the
+    // backdrop <div> never holds focus, so its onKeyDown would not fire.
+    useEffect(() => {
+        if (!popupTaskWbs) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setPopupTaskWbs(null);
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [popupTaskWbs]);
     const pointerSensor = useSensor(PointerSensor, {
         activationConstraint: { distance: 5 },
     });
@@ -100,8 +114,9 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
 
     const tasksByStatus = (status: string): TaskSummary[] => {
         const cols = visible.filter((t) => t.status === status);
-        const dir = sortState[status];
-        if (!dir) return cols;
+        // Default to descending WBS so the newest tasks surface at the top of each lane;
+        // the per-column toggle still overrides with an explicit asc/desc.
+        const dir = sortState[status] ?? 'desc';
         return [...cols].sort((a, b) => {
             const cmp = a.wbs.localeCompare(b.wbs);
             return dir === 'asc' ? cmp : -cmp;
@@ -232,38 +247,24 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
                             role="presentation"
                             className="fixed inset-0 z-50 bg-black/40"
                             onClick={() => setPopupTaskWbs(null)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Escape') setPopupTaskWbs(null);
-                            }}
                         />
                         <div
                             role="dialog"
                             aria-modal="true"
                             aria-label="Task detail"
                             className="fixed top-0 right-0 h-full z-50 bg-spur-surface border-l border-spur-border shadow-2xl flex"
-                            style={{ width: 'var(--detail-w)', minWidth: '28rem', maxWidth: '80vw' }}
+                            style={{ width: 'var(--detail-w)', minWidth: '36rem', maxWidth: '80vw' }}
                         >
                             <ResizeHandle
                                 targetVar="--detail-w"
                                 onResizeEnd={(px) => {
-                                    const clamped = Math.max(448, Math.min(px, window.innerWidth * 0.8));
+                                    const clamped = Math.max(576, Math.min(px, window.innerWidth * 0.8));
                                     setDetailWidth(clamped);
                                 }}
                                 direction="horizontal"
                                 invert
                             />
                             <div className="flex flex-col flex-1 overflow-hidden">
-                                <div className="flex items-center justify-between p-3 border-b border-spur-border shrink-0">
-                                    <span className="text-sm font-semibold text-spur-text">Task Detail</span>
-                                    <button
-                                        type="button"
-                                        className="btn btn-ghost btn-sm text-spur-text-muted"
-                                        onClick={() => setPopupTaskWbs(null)}
-                                        aria-label="Close detail"
-                                    >
-                                        ✕
-                                    </button>
-                                </div>
                                 <div className="flex-1 overflow-y-auto" data-testid="detail-body">
                                     {(() => {
                                         const popupTask = tasks.find((t) => t.wbs === popupTaskWbs);
@@ -278,6 +279,7 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
                                             >
                                                 <TaskDetail
                                                     task={popupTask}
+                                                    onClose={() => setPopupTaskWbs(null)}
                                                     onTransition={(wbs, toStatus) => {
                                                         setTasks((prev) =>
                                                             prev.map((t) =>

@@ -84,6 +84,10 @@ const KanbanBoard = (await import('../../../src/modules/task-kanban/KanbanBoard'
 const TaskFilters = (await import('../../../src/modules/task-kanban/TaskFilters')).default;
 
 afterAll(async () => {
+    // Let any pending React scheduler callback (from the lazy TaskDetail/MarkdownBody
+    // mounted by the panel tests) drain before window is torn down — otherwise a
+    // post-teardown scheduler task references window.event and throws.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     await GlobalRegistrator.unregister();
 });
 
@@ -191,13 +195,45 @@ describe('KanbanBoard', () => {
         );
         await waitFor(() => expect(getByLabelText('Sort todo by WBS')).toBeDefined());
 
-        // Default order: 0003, 0001, 0002 (as returned by list)
+        // Default order is descending WBS: Gamma(0003), Beta(0002), Alpha(0001)
 
         // Click sort → asc (WBS order: 0001, 0002, 0003)
         fireEvent.click(getByLabelText('Sort todo by WBS'));
         const afterAsc = (container.querySelector('[aria-label="todo column"]') as HTMLElement).textContent ?? '';
         expect(afterAsc.indexOf('Alpha')).toBeLessThan(afterAsc.indexOf('Beta'));
         expect(afterAsc.indexOf('Beta')).toBeLessThan(afterAsc.indexOf('Gamma'));
+    });
+
+    test('lane defaults to descending WBS order (newest first) without any sort toggle', async () => {
+        const tasksForOrder: TaskSummary[] = [
+            { wbs: '0001', name: 'Alpha', status: 'todo', filePath: 'a.md' },
+            { wbs: '0003', name: 'Gamma', status: 'todo', filePath: 'c.md' },
+            { wbs: '0002', name: 'Beta', status: 'todo', filePath: 'b.md' },
+        ];
+        mock.module('../../../src/lib/rpc-client', () => ({
+            api: {
+                task: {
+                    list: async () => ({ data: tasksForOrder }),
+                    transition: () => transitionImpl(),
+                    show: async () => ({ data: { ...tasksForOrder[0], frontmatter: {}, content: '## Body' } }),
+                    body: async () => ({ data: { wbs: '0001', filePath: 'a.md' } }),
+                },
+            },
+            resolveApiUrl: () => 'http://localhost:3000/api',
+        }));
+        const KanbanBoardReload = (await import('../../../src/modules/task-kanban/KanbanBoard')).default;
+
+        const { container, getByText } = render(
+            <MemoryRouter>
+                <KanbanBoardReload onSelectTask={() => {}} />
+            </MemoryRouter>,
+        );
+        await waitFor(() => expect(getByText('Gamma')).toBeDefined());
+
+        // No sort toggle clicked → descending WBS: Gamma(0003) → Beta(0002) → Alpha(0001).
+        const lane = (container.querySelector('[aria-label="todo column"]') as HTMLElement).textContent ?? '';
+        expect(lane.indexOf('Gamma')).toBeLessThan(lane.indexOf('Beta'));
+        expect(lane.indexOf('Beta')).toBeLessThan(lane.indexOf('Alpha'));
     });
 
     test('column visibility checkboxes are rendered for each status', async () => {
@@ -241,12 +277,12 @@ test('header spacer sits before the status toggle group so they cluster right', 
 
 // ── 0100 R2: right-docked detail panel ──
 test('detail panel is right-docked overlay with backdrop', async () => {
-    const { getByText, container } = renderBoard();
+    const { getByText, getByLabelText, container } = renderBoard();
     await waitFor(() => expect(getByText('Alpha')).toBeDefined());
 
     // Click a card to open the detail
     fireEvent.click(getByText('Alpha'));
-    await waitFor(() => expect(getByText('Task Detail')).toBeDefined());
+    await waitFor(() => expect(getByLabelText('Close detail')).toBeDefined());
 
     // Verify backdrop
     const backdrop = container.querySelector('[role="presentation"].fixed.inset-0');
@@ -262,53 +298,53 @@ test('detail panel is right-docked overlay with backdrop', async () => {
 });
 
 test('detail panel closes on backdrop click', async () => {
-    const { getByText, queryByText, container } = renderBoard();
+    const { getByText, getByLabelText, queryByLabelText, container } = renderBoard();
     await waitFor(() => expect(getByText('Alpha')).toBeDefined());
 
     // Open detail
     fireEvent.click(getByText('Alpha'));
-    await waitFor(() => expect(getByText('Task Detail')).toBeDefined());
+    await waitFor(() => expect(getByLabelText('Close detail')).toBeDefined());
 
     // Close via backdrop click
     const backdrop = container.querySelector('[role="presentation"].fixed.inset-0') as HTMLElement;
     fireEvent.click(backdrop);
-    await waitFor(() => expect(queryByText('Task Detail')).toBeNull());
+    await waitFor(() => expect(queryByLabelText('Close detail')).toBeNull());
 });
 
-test('detail panel closes on Escape key', async () => {
-    const { getByText, queryByText, container } = renderBoard();
+test('detail panel closes on Escape key from anywhere (global listener)', async () => {
+    const { getByText, getByLabelText, queryByLabelText } = renderBoard();
     await waitFor(() => expect(getByText('Alpha')).toBeDefined());
 
     // Open detail
     fireEvent.click(getByText('Alpha'));
-    await waitFor(() => expect(getByText('Task Detail')).toBeDefined());
+    await waitFor(() => expect(getByLabelText('Close detail')).toBeDefined());
 
-    // Close via Escape
-    const backdrop = container.querySelector('[role="presentation"].fixed.inset-0') as HTMLElement;
-    fireEvent.keyDown(backdrop, { key: 'Escape' });
-    await waitFor(() => expect(queryByText('Task Detail')).toBeNull());
+    // Escape dispatched on document.body (not a focused backdrop) must still close it —
+    // proves the window-level keydown listener, not a div-scoped handler.
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    await waitFor(() => expect(queryByLabelText('Close detail')).toBeNull());
 });
 
 test('detail panel closes on ✕ button click', async () => {
-    const { getByText, queryByText, getByLabelText } = renderBoard();
+    const { getByText, getByLabelText, queryByLabelText } = renderBoard();
     await waitFor(() => expect(getByText('Alpha')).toBeDefined());
 
     // Open detail
     fireEvent.click(getByText('Alpha'));
-    await waitFor(() => expect(getByText('Task Detail')).toBeDefined());
+    await waitFor(() => expect(getByLabelText('Close detail')).toBeDefined());
 
     // Close via ✕
     fireEvent.click(getByLabelText('Close detail'));
-    await waitFor(() => expect(queryByText('Task Detail')).toBeNull());
+    await waitFor(() => expect(queryByLabelText('Close detail')).toBeNull());
 });
 
 test('clicking a second card updates the same panel without stacking', async () => {
-    const { getByText, container } = renderBoard();
+    const { getByText, getByLabelText, container } = renderBoard();
     await waitFor(() => expect(getByText('Alpha')).toBeDefined());
 
     // Open detail for Alpha
     fireEvent.click(getByText('Alpha'));
-    await waitFor(() => expect(getByText('Task Detail')).toBeDefined());
+    await waitFor(() => expect(getByLabelText('Close detail')).toBeDefined());
 
     // Click Beta — panel should update, no stacking
     fireEvent.click(getByText('Beta'));
@@ -319,12 +355,12 @@ test('clicking a second card updates the same panel without stacking', async () 
 
 // ── 0100 R3: resize handle ──
 test('docked panel has a resize handle on its left edge', async () => {
-    const { getByText, container } = renderBoard();
+    const { getByText, getByLabelText, container } = renderBoard();
     await waitFor(() => expect(getByText('Alpha')).toBeDefined());
 
     // Open detail
     fireEvent.click(getByText('Alpha'));
-    await waitFor(() => expect(getByText('Task Detail')).toBeDefined());
+    await waitFor(() => expect(getByLabelText('Close detail')).toBeDefined());
 
     // Verify resize handle exists inside the docked panel
     const panel = container.querySelector('[role="dialog"][aria-label="Task detail"]') as HTMLElement;

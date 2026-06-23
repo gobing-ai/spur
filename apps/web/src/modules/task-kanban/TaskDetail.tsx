@@ -1,7 +1,11 @@
-import { TASK_STATUSES } from '@gobing-ai/spur-domain/schema';
+import { taskStatusIcon } from '@gobing-ai/spur-domain/schema';
 import MDEditor from '@uiw/react-md-editor';
+// Base theme for the markdown preview/editor (.wmde-markdown) + bundled Prism
+// token colors. Without this import code blocks render unstyled (0101 #4).
+import '@uiw/react-md-editor/markdown-editor.css';
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/rpc-client';
+import MarkdownBody from './MarkdownBody';
 import type { TaskSummary } from './types';
 import { useTasks } from './useTasks';
 
@@ -28,6 +32,8 @@ interface Props {
     /** Selected task, resolved by the container from the polled list (null when nothing is selected). */
     task: TaskSummary | null;
     onTransition: (wbs: string, toStatus: string) => void;
+    /** Dismiss the docked panel. Rendered as the ✕ in this component's header. */
+    onClose?: () => void;
 }
 
 type BodyMode = 'preview' | 'edit';
@@ -43,14 +49,15 @@ const LIFECYCLE = ['backlog', 'todo', 'wip', 'testing', 'done'] as const;
 /** Off-track states that don't map to a lifecycle position. */
 const OFF_TRACK = new Set(['blocked', 'cancelled']);
 
-export default function TaskDetail({ task, onTransition }: Props) {
+export default function TaskDetail({ task, onTransition, onClose }: Props) {
     const [serverBody, setServerBody] = useState('');
     const [draftBody, setDraftBody] = useState('');
     const [mode, setMode] = useState<BodyMode>('preview');
     const [loadingBody, setLoadingBody] = useState(false);
     const [saving, setSaving] = useState(false);
     const [frontmatter, setFrontmatter] = useState<Record<string, unknown>>({});
-    const [showMetadata, setShowMetadata] = useState(true);
+    // Folded by default — matches the legacy detail panel (0101 #2).
+    const [showMetadata, setShowMetadata] = useState(false);
 
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [showCancelModal, setShowCancelModal] = useState(false);
@@ -213,56 +220,73 @@ export default function TaskDetail({ task, onTransition }: Props) {
     };
     return (
         <div className="flex flex-col h-full">
-            <div className="p-3 border-b border-spur-border shrink-0">
-                <h3 className="text-sm font-semibold text-spur-text mb-1">{task.wbs}</h3>
-                <p className="text-sm text-spur-text">{task.name}</p>
-            </div>
-
-            {/* Workflow action buttons — contextual to task status */}
-            {(() => {
-                const allowed = STATUS_ACTIONS[task.status];
-                if (!allowed || allowed.length === 0) return null;
-                return (
-                    <div className="p-3 border-b border-spur-border shrink-0">
-                        <span className="text-xs font-semibold text-spur-text-muted uppercase tracking-wide mb-2 block">
-                            Actions
+            {/* Header — title, status pill, and contextual action buttons (legacy parity) */}
+            <div className="flex items-start justify-between gap-3 p-3 border-b border-spur-border shrink-0">
+                <div className="flex flex-col gap-1 overflow-hidden">
+                    <h3 className="text-sm font-semibold text-spur-text truncate">
+                        {task.wbs} — {task.name}
+                    </h3>
+                    {/* Status pill + key frontmatter chips (Tags / Priority / Feature) */}
+                    <div className="flex flex-wrap items-center gap-1" data-testid="header-chips">
+                        <span
+                            className="px-2 py-0.5 rounded-full border border-spur-border text-xs text-spur-text-muted"
+                            data-testid="status-pill"
+                        >
+                            {taskStatusIcon(task.status)} {task.status}
                         </span>
-                        <div className="flex flex-wrap gap-1">
-                            {allowed.map((action) => (
-                                <button
-                                    key={action}
-                                    type="button"
-                                    onClick={() => handleAction(action)}
-                                    disabled={actionLoading === action}
-                                    className="btn btn-xs btn-accent"
-                                    aria-label={ACTION_LABELS[action]}
-                                >
-                                    {actionLoading === action ? '…' : ACTION_LABELS[action]}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                );
-            })()}
-
-            <div className="p-3 border-b border-spur-border shrink-0">
-                <span className="text-xs font-semibold text-spur-text-muted uppercase tracking-wide mb-2 block">
-                    Status
-                </span>
-                <div className="flex flex-wrap gap-1">
-                    {(TASK_STATUSES as readonly string[]).map((s: string) => {
-                        const isCancelled = s === 'cancelled';
-                        return (
-                            <button
-                                key={s}
-                                type="button"
-                                onClick={() => (isCancelled ? setShowCancelModal(true) : onTransition(task.wbs, s))}
-                                className={`btn btn-xs ${task.status === s ? 'btn-primary' : 'btn-ghost'}`}
+                        {task.priority && (
+                            <span className="px-2 py-0.5 rounded-full bg-spur-accent/15 text-xs text-spur-accent">
+                                {task.priority}
+                            </span>
+                        )}
+                        {task.featureId && (
+                            <span className="px-2 py-0.5 rounded-full bg-spur-info/15 text-xs text-spur-info">
+                                {task.featureId}
+                            </span>
+                        )}
+                        {tags.map((t) => (
+                            <span
+                                key={t}
+                                className="px-2 py-0.5 rounded-full border border-spur-border text-xs text-spur-text-muted"
                             >
-                                {s}
-                            </button>
-                        );
-                    })}
+                                {t}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+                <div className="flex flex-wrap items-center justify-end gap-1 shrink-0">
+                    {(STATUS_ACTIONS[task.status] ?? []).map((action) => (
+                        <button
+                            key={action}
+                            type="button"
+                            onClick={() => handleAction(action)}
+                            disabled={actionLoading === action}
+                            className="btn btn-xs btn-accent"
+                            aria-label={ACTION_LABELS[action]}
+                        >
+                            {actionLoading === action ? '…' : ACTION_LABELS[action]}
+                        </button>
+                    ))}
+                    {task.status !== 'cancelled' && task.status !== 'done' && (
+                        <button
+                            type="button"
+                            onClick={() => setShowCancelModal(true)}
+                            className="btn btn-xs btn-error btn-outline"
+                            data-testid="header-cancel"
+                        >
+                            Cancel
+                        </button>
+                    )}
+                    {onClose && (
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="btn btn-ghost btn-xs text-spur-text-muted"
+                            aria-label="Close detail"
+                        >
+                            ✕
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -287,6 +311,13 @@ export default function TaskDetail({ task, onTransition }: Props) {
                 </button>
                 {showMetadata && (
                     <div className="px-3 pb-3 space-y-3">
+                        {/* Status — plaintext with its icon (read-only here) */}
+                        <div>
+                            <span className="text-xs text-spur-text-muted block mb-1.5">Status</span>
+                            <span className="text-sm text-spur-text" data-testid="metadata-status">
+                                {taskStatusIcon(task.status)} {task.status}
+                            </span>
+                        </div>
                         {/* Phase progress */}
                         <div>
                             <span className="text-xs text-spur-text-muted block mb-1.5">Progress</span>
@@ -416,8 +447,8 @@ export default function TaskDetail({ task, onTransition }: Props) {
                 )}
             </div>
 
-            <div className="flex-1 overflow-y-auto p-3" data-testid="task-body-section">
-                <div className="flex items-center justify-between mb-2">
+            <div className="flex-1 flex flex-col overflow-hidden p-3" data-testid="task-body-section">
+                <div className="flex items-center justify-between mb-2 shrink-0">
                     <span className="text-xs font-semibold text-spur-text-muted uppercase tracking-wide">Body</span>
                     <div className="flex gap-1">
                         {mode === 'preview' ? (
@@ -460,12 +491,17 @@ export default function TaskDetail({ task, onTransition }: Props) {
                         Loading body…
                     </div>
                 ) : mode === 'edit' ? (
-                    <div data-testid="body-editor">
-                        <MDEditor value={draftBody} onChange={(val) => setDraftBody(val ?? '')} height={400} />
+                    <div className="flex-1 min-h-0" data-testid="body-editor">
+                        <MDEditor
+                            value={draftBody}
+                            onChange={(val) => setDraftBody(val ?? '')}
+                            height="100%"
+                            data-color-mode="light"
+                        />
                     </div>
                 ) : (
-                    <div data-testid="body-preview">
-                        <MDEditor.Markdown source={serverBody} />
+                    <div className="flex-1 overflow-y-auto" data-testid="body-preview">
+                        <MarkdownBody source={serverBody} />
                     </div>
                 )}
             </div>

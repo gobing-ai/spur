@@ -678,7 +678,7 @@ wire shape. Domain types stay in `@gobing-ai/spur-domain`; transport DTOs belong
 
 | DTO | Key fields | Notes |
 |---|---|---|
-| `taskSummarySchema` | `wbs, name, status, priority?, featureId?, parentWbs?, type?, filePath, updatedAt?` | List response. `type` and `priority` are extracted from frontmatter by the server handler. |
+| `taskSummarySchema` | `wbs, name, status, priority?, featureId?, parentWbs?, type?, filePath, updatedAt?` | List response. `type` and `priority` are extracted from frontmatter by the server handler. `priority` is a free-form `z.string()` (not the `PRIORITIES` enum) because the corpus mixes `P0–P3` with `high/medium/low`; the raw value is passed through. |
 | `taskCreateInputSchema` | `title, featureId?, parentWbs?, folder?, template?` | `template` selects a `TASK_VARIANTS` scaffold (R8); defaults to `standard` or `feature-impl` (when `featureId` set). |
 | `taskActionInputSchema` | `wbs, action, channel?, skipDeps?` | `action` ∈ `refine\|plan\|run\|verify\|decompose\|evaluate`. `channel` selects the agent channel; `skipDeps` bypasses dependency checks (R9). |
 | `taskFolderSchema` | `path, label?` | Folder entry from `docs/.tasks/config.jsonc` (R6). |

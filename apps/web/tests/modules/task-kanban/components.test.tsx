@@ -199,13 +199,13 @@ describe('TaskDetail', () => {
         expect(getByText('Select a task to view details')).toBeDefined();
     });
 
-    test('renders the selected task and fires onTransition on a status button', () => {
-        const calls: Array<{ wbs: string; status: string }> = [];
-        const { getByText, getByRole } = render(
-            <TaskDetail task={task()} onTransition={(w, s) => calls.push({ wbs: w, status: s })} />,
-        );
-        expect(getByText('Build the board')).toBeDefined();
-        fireEvent.click(getByRole('button', { name: 'done' }));
-        expect(calls).toEqual([{ wbs: '0001', status: 'done' }]);
+    test('renders the selected task with its title and a plaintext status pill', () => {
+        const { getByText, getByTestId } = render(<TaskDetail task={task()} onTransition={() => {}} />);
+        // Header title combines wbs + name.
+        expect(getByText(/Build the board/)).toBeDefined();
+        // Status is shown as a plaintext pill (with icon), not a dropdown.
+        const pill = getByTestId('status-pill');
+        expect(pill.tagName).not.toBe('SELECT');
+        expect(pill.textContent).toContain('todo');
     });
 });

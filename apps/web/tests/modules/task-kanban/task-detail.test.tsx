@@ -109,6 +109,11 @@ function renderDetail() {
     return render(<TaskDetail task={task} onTransition={() => {}} />);
 }
 
+/** Expand the metadata pane (folded by default since 0101 #2) so its fields render. */
+function expandMetadata(getByText: (text: string) => HTMLElement): void {
+    fireEvent.click(getByText('Metadata'));
+}
+
 /** Set the editor draft by calling the mock's onChange callback, wrapped in act(). */
 function setDraft(value: string): void {
     act(() => {
@@ -226,28 +231,30 @@ describe('TaskDetail — metadata pane', () => {
             },
         });
 
-        const { getByText } = renderDetail();
+        const { getByText, getAllByText } = renderDetail();
 
         await waitFor(() => expect(getByText('Metadata')).toBeDefined());
+        expandMetadata(getByText);
 
-        // Dates render
+        // Dates render (metadata pane only)
         expect(getByText('Jan 15, 2025')).toBeDefined();
         expect(getByText('Jun 1, 2025')).toBeDefined();
 
-        // Tags render as badges
-        expect(getByText('api')).toBeDefined();
-        expect(getByText('frontend')).toBeDefined();
+        // Tags render — now in both the header chips and the metadata pane.
+        expect(getAllByText('api').length).toBeGreaterThanOrEqual(1);
+        expect(getAllByText('frontend').length).toBeGreaterThanOrEqual(1);
 
-        // Priority and feature from TaskSummary (not frontmatter) still render
-        expect(getByText('P1')).toBeDefined();
-        expect(getByText('W3')).toBeDefined();
+        // Priority and feature from TaskSummary — header chip + metadata.
+        expect(getAllByText('P1').length).toBeGreaterThanOrEqual(1);
+        expect(getAllByText('W3').length).toBeGreaterThanOrEqual(1);
     });
 
     test('R1b — priority and feature omit when absent on TaskSummary', async () => {
         const noMetaTask: TaskSummary = { wbs: '0002', name: 'No meta', status: 'todo', filePath: 'b.md' };
-        const { queryByText } = render(<TaskDetail task={noMetaTask} onTransition={() => {}} />);
+        const { getByText, queryByText } = render(<TaskDetail task={noMetaTask} onTransition={() => {}} />);
 
         await waitFor(() => expect(queryByText('Metadata')).toBeDefined());
+        expandMetadata(getByText);
 
         expect(queryByText('Priority')).toBeNull();
         expect(queryByText('Feature')).toBeNull();
@@ -256,11 +263,12 @@ describe('TaskDetail — metadata pane', () => {
     });
 
     test('R2 — progress stepper renders lifecycle phase labels', async () => {
-        const { getAllByText } = renderDetail();
+        const { getByText, getAllByText } = renderDetail();
 
         await waitFor(() => expect(getAllByText('Metadata')[0]).toBeDefined());
+        expandMetadata(getByText);
 
-        // Each lifecycle label exists at least once (progress stepper + possibly status buttons)
+        // Each lifecycle label exists at least once (progress stepper + status dropdown options)
         expect(getAllByText('backlog').length).toBeGreaterThanOrEqual(1);
         expect(getAllByText('todo').length).toBeGreaterThanOrEqual(1);
         expect(getAllByText('wip').length).toBeGreaterThanOrEqual(1);
@@ -274,29 +282,27 @@ describe('TaskDetail — metadata pane', () => {
         );
 
         await waitFor(() => expect(getByText('Metadata')).toBeDefined());
+        expandMetadata(getByText);
 
-        // Off-track badge renders the status (getAllByText because status button also uses it)
+        // Off-track badge renders the status (getAllByText: header pill + badge + dropdown all use it)
         expect(getAllByText('blocked').length).toBeGreaterThanOrEqual(1);
     });
 
-    test('R4 — metadata pane toggles collapse/expand', async () => {
+    test('R4 — metadata pane toggles collapse/expand (folded by default)', async () => {
         const { getByText, queryByText } = renderDetail();
 
         await waitFor(() => expect(getByText('Metadata')).toBeDefined());
 
-        // Initially expanded: progress visible
-        expect(getByText('Progress')).toBeDefined();
+        // Folded by default: progress not rendered
+        expect(queryByText('Progress')).toBeNull();
 
-        // Click header to collapse
+        // Click header to expand
         fireEvent.click(getByText('Metadata'));
-
-        // Progress label hidden (collapsed)
-        await waitFor(() => expect(queryByText('Progress')).toBeNull());
-
-        // Click again to expand
-        fireEvent.click(getByText('Metadata'));
-
         await waitFor(() => expect(getByText('Progress')).toBeDefined());
+
+        // Click again to collapse
+        fireEvent.click(getByText('Metadata'));
+        await waitFor(() => expect(queryByText('Progress')).toBeNull());
     });
 
     test('R5 — missing dates and tags render gracefully (no undefined leakage)', async () => {
@@ -304,9 +310,10 @@ describe('TaskDetail — metadata pane', () => {
             data: { ...DEFAULT_SHOW_DATA, frontmatter: {} },
         });
 
-        const { getByText, queryByText } = renderDetail();
+        const { getByText, getAllByText, queryByText } = renderDetail();
 
         await waitFor(() => expect(getByText('Metadata')).toBeDefined());
+        expandMetadata(getByText);
 
         // Dates section omits when both fields absent
         expect(queryByText('Dates')).toBeNull();
@@ -318,7 +325,8 @@ describe('TaskDetail — metadata pane', () => {
 
         // Progress and file always present
         expect(getByText('Progress')).toBeDefined();
-        expect(getByText('P1')).toBeDefined();
+        // P1 appears in the header chip and the metadata pane.
+        expect(getAllByText('P1').length).toBeGreaterThanOrEqual(1);
     });
 
     test('R5b — empty tags array renders nothing', async () => {
@@ -329,6 +337,7 @@ describe('TaskDetail — metadata pane', () => {
         const { getByText, queryByText } = renderDetail();
 
         await waitFor(() => expect(getByText('Metadata')).toBeDefined());
+        expandMetadata(getByText);
 
         expect(queryByText('Tags')).toBeNull();
     });
@@ -345,6 +354,7 @@ describe('TaskDetail — metadata pane', () => {
         const { getByText, getAllByText } = renderDetail();
 
         await waitFor(() => expect(getByText('Metadata')).toBeDefined());
+        expandMetadata(getByText);
 
         expect(getAllByText('(today)').length).toBeGreaterThanOrEqual(1);
     });
@@ -477,13 +487,12 @@ describe('TaskDetail — workflow action buttons', () => {
 // ── Cancel confirmation modal (0095) ─────────────────────────────────────────
 
 describe('TaskDetail — cancel confirmation modal', () => {
-    test('R4 — clicking cancelled status button shows the modal', async () => {
-        const { getByText, getByRole } = renderDetail();
+    test('R4 — clicking the header Cancel button shows the modal', async () => {
+        const { getByText, getByRole, getByTestId } = renderDetail();
         await waitFor(() => expect(getByText('Edit')).toBeDefined());
 
-        // Click the "cancelled" status button
-        const cancelledBtn = getByRole('button', { name: 'cancelled' });
-        fireEvent.click(cancelledBtn);
+        // The header Cancel button opens the confirm modal.
+        fireEvent.click(getByTestId('header-cancel'));
 
         // Modal should appear — the dialog role confirms it's rendered
         expect(getByRole('dialog')).toBeDefined();
@@ -493,12 +502,12 @@ describe('TaskDetail — cancel confirmation modal', () => {
 
     test('R4 — "Keep" dismisses the modal without firing transition', async () => {
         const transitions: Array<{ wbs: string; status: string }> = [];
-        const { getByText, getByRole } = render(
+        const { getByText, getByRole, getByTestId } = render(
             <TaskDetail task={task} onTransition={(w, s) => transitions.push({ wbs: w, status: s })} />,
         );
         await waitFor(() => expect(getByText('Edit')).toBeDefined());
 
-        fireEvent.click(getByRole('button', { name: 'cancelled' }));
+        fireEvent.click(getByTestId('header-cancel'));
         fireEvent.click(getByRole('button', { name: 'Keep' }));
 
         // No transition should have fired
@@ -507,12 +516,12 @@ describe('TaskDetail — cancel confirmation modal', () => {
 
     test('R4 — "Cancel task" fires the cancelled transition', async () => {
         const transitions: Array<{ wbs: string; status: string }> = [];
-        const { getByText, getByRole } = render(
+        const { getByText, getByRole, getByTestId } = render(
             <TaskDetail task={task} onTransition={(w, s) => transitions.push({ wbs: w, status: s })} />,
         );
         await waitFor(() => expect(getByText('Edit')).toBeDefined());
 
-        fireEvent.click(getByRole('button', { name: 'cancelled' }));
+        fireEvent.click(getByTestId('header-cancel'));
         fireEvent.click(getByRole('button', { name: 'Cancel task' }));
 
         expect(transitions).toEqual([{ wbs: '0001', status: 'cancelled' }]);
@@ -520,12 +529,12 @@ describe('TaskDetail — cancel confirmation modal', () => {
 
     test('R4 — clicking the backdrop dismisses the modal', async () => {
         const transitions: Array<{ wbs: string; status: string }> = [];
-        const { getByText, getByRole } = render(
+        const { getByText, getByTestId } = render(
             <TaskDetail task={task} onTransition={(w, s) => transitions.push({ wbs: w, status: s })} />,
         );
         await waitFor(() => expect(getByText('Edit')).toBeDefined());
 
-        fireEvent.click(getByRole('button', { name: 'cancelled' }));
+        fireEvent.click(getByTestId('header-cancel'));
 
         // Click the backdrop (role=presentation div)
         const backdrop = document.querySelector('[role="presentation"]');
@@ -534,17 +543,77 @@ describe('TaskDetail — cancel confirmation modal', () => {
 
         expect(transitions.length).toBe(0);
     });
+});
 
-    test('R4 — non-cancelled status buttons fire immediately (no modal)', async () => {
-        const transitions: Array<{ wbs: string; status: string }> = [];
-        const { getByText, getByRole } = render(
-            <TaskDetail task={task} onTransition={(w, s) => transitions.push({ wbs: w, status: s })} />,
+// ── Status display (0101 — plaintext header pill + plaintext metadata field) ──
+
+describe('TaskDetail — header title & close', () => {
+    test('header shows the real task title (wbs + name), not a fixed "Task Detail" label', async () => {
+        const { getByText, queryByText } = renderDetail();
+        await waitFor(() => expect(getByText('Edit')).toBeDefined());
+
+        // The real task title renders; the old fixed "Task Detail" bar is gone.
+        expect(getByText(/0001 — Build the board/)).toBeDefined();
+        expect(queryByText('Task Detail')).toBeNull();
+    });
+
+    test('the ✕ close button fires onClose', async () => {
+        let closed = false;
+        const { getByText, getByLabelText } = render(
+            <TaskDetail task={task} onTransition={() => {}} onClose={() => (closed = true)} />,
         );
         await waitFor(() => expect(getByText('Edit')).toBeDefined());
 
-        fireEvent.click(getByRole('button', { name: 'done' }));
+        fireEvent.click(getByLabelText('Close detail'));
+        expect(closed).toBe(true);
+    });
 
-        expect(transitions).toEqual([{ wbs: '0001', status: 'done' }]);
+    test('omits the close button when no onClose is provided', async () => {
+        const { getByText, queryByLabelText } = renderDetail();
+        await waitFor(() => expect(getByText('Edit')).toBeDefined());
+        expect(queryByLabelText('Close detail')).toBeNull();
+    });
+});
+
+describe('TaskDetail — status display', () => {
+    test('header shows the status as a plaintext pill with its icon (not a dropdown)', async () => {
+        const { getByText, getByTestId } = renderDetail();
+        await waitFor(() => expect(getByText('Edit')).toBeDefined());
+
+        // The header pill renders the current status as text, not a <select>.
+        const pill = getByTestId('status-pill');
+        expect(pill.tagName).not.toBe('SELECT');
+        expect(pill.textContent).toContain('todo');
+    });
+
+    test('metadata pane shows the status as plaintext (with icon), not a dropdown', async () => {
+        const { getByText, getByTestId, queryByLabelText } = renderDetail();
+        await waitFor(() => expect(getByText('Edit')).toBeDefined());
+
+        fireEvent.click(getByText('Metadata'));
+        // No status <select> anywhere — status is read-only plaintext now.
+        expect(queryByLabelText('Task status')).toBeNull();
+
+        const metaStatus = getByTestId('metadata-status');
+        expect(metaStatus.tagName).not.toBe('SELECT');
+        expect(metaStatus.textContent).toContain('todo');
+    });
+
+    test('header chips show priority, feature, and tags alongside the status pill', async () => {
+        showImpl = async () => ({
+            data: { ...DEFAULT_SHOW_DATA, frontmatter: { tags: ['api', 'frontend'] } },
+        });
+
+        const { getByText, getByTestId } = renderDetail();
+        await waitFor(() => expect(getByText('Edit')).toBeDefined());
+
+        const chips = getByTestId('header-chips');
+        // task fixture: priority 'P1', featureId 'W3'.
+        expect(chips.textContent).toContain('P1');
+        expect(chips.textContent).toContain('W3');
+        // Tags come from frontmatter once the body loads.
+        await waitFor(() => expect(chips.textContent).toContain('api'));
+        expect(chips.textContent).toContain('frontend');
     });
 });
 
@@ -600,6 +669,7 @@ describe('TaskDetail — implementation progress (R10)', () => {
 
         const { getByText } = renderDetail();
         await waitFor(() => expect(getByText('Metadata')).toBeDefined());
+        expandMetadata(getByText);
 
         expect(getByText('Est. Hours')).toBeDefined();
         expect(getByText('8h')).toBeDefined();
@@ -621,10 +691,11 @@ describe('TaskDetail — implementation progress (R10)', () => {
             },
         });
 
-        const { getAllByText } = renderDetail();
+        const { getByText, getAllByText } = renderDetail();
         await waitFor(() => expect(getAllByText('Metadata')[0]).toBeDefined());
+        expandMetadata(getByText);
 
-        // All five phase labels render (testing also appears as a status button, so getAllByText)
+        // All five phase labels render (testing also appears in the status dropdown, so getAllByText)
         expect(getAllByText('planning').length).toBeGreaterThanOrEqual(1);
         expect(getAllByText('design').length).toBeGreaterThanOrEqual(1);
         expect(getAllByText('implementation').length).toBeGreaterThanOrEqual(1);
@@ -645,9 +716,10 @@ describe('TaskDetail — implementation progress (R10)', () => {
 
         const { getByText, getAllByText } = renderDetail();
         await waitFor(() => expect(getByText('Metadata')).toBeDefined());
+        expandMetadata(getByText);
 
         // The fallback lifecycle bar renders phase labels (backlog, todo, wip, testing, done)
-        // These also appear as status buttons, so use getAllByText
+        // These also appear in the status dropdown, so use getAllByText
         expect(getAllByText('backlog').length).toBeGreaterThanOrEqual(1);
         expect(getAllByText('todo').length).toBeGreaterThanOrEqual(1);
         expect(getAllByText('wip').length).toBeGreaterThanOrEqual(1);

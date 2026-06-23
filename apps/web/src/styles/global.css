@@ -35,21 +35,52 @@
     --color-spur-border: #e2e8f0;
 }
 
-/* ── Detail panel markdown code blocks (0100 R5) ── */
-[data-testid="detail-body"] .wmde-markdown pre {
-    background-color: var(--color-spur-bg);
-    padding: 0.75rem 1rem;
-    border-radius: var(--radius-spur);
-    border: 1px solid var(--color-spur-border);
-    overflow-x: auto;
-    font-size: 0.8125rem;
-}
+/* ── Detail panel markdown (0100/0101) ──
+   The body renders in the normal/light theme (data-color-mode="light" in
+   MarkdownBody.tsx). Only fenced code blocks get a dark treatment below. */
 [data-testid="detail-body"] .wmde-markdown code {
     font-family: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, monospace;
     font-size: 0.8125rem;
 }
-[data-testid="detail-body"] .wmde-markdown pre > code {
-    background: none;
-    padding: 0;
-    border: none;
+
+/* Dark code blocks only — give every fenced `pre` the dark GitHub canvas and pin the
+   prettylights syntax variables to their dark values, so the tokens stay readable on
+   the dark background while the rest of the body stays light. */
+[data-testid="detail-body"] .wmde-markdown pre {
+    background-color: #0d1117;
+    color: #c9d1d9;
+    border: 1px solid #30363d;
+    border-radius: var(--radius-spur);
+    --color-prettylights-syntax-comment: #8b949e;
+    --color-prettylights-syntax-constant: #79c0ff;
+    --color-prettylights-syntax-entity: #d2a8ff;
+    --color-prettylights-syntax-storage-modifier-import: #c9d1d9;
+    --color-prettylights-syntax-entity-tag: #7ee787;
+    --color-prettylights-syntax-keyword: #ff7b72;
+    --color-prettylights-syntax-string: #a5d6ff;
+    --color-prettylights-syntax-variable: #ffa657;
+    --color-prettylights-syntax-string-regexp: #7ee787;
+    --color-prettylights-syntax-markup-list: #f2cc60;
+    --color-prettylights-syntax-markup-heading: #1f6feb;
+    --color-prettylights-syntax-markup-bold: #c9d1d9;
+    --color-prettylights-syntax-markup-italic: #c9d1d9;
+    --color-prettylights-syntax-constant-other-reference-link: #a5d6ff;
+}
+/* The fenced code text itself inherits the dark canvas foreground. */
+[data-testid="detail-body"] .wmde-markdown pre code {
+    color: #c9d1d9;
+    background: transparent;
+}
+
+/* Inline code (single backtick) — emphasize in red, like the legacy panel, so the
+   author's highlighted terms stand out. Scoped to NOT touch fenced code blocks
+   (`pre code`), whose tokens keep the syntax-highlight palette. */
+[data-testid="detail-body"] .wmde-markdown :not(pre) > code {
+    color: var(--color-spur-error);
+    background-color: rgba(239, 68, 68, 0.1);
+}
+
+[data-testid="detail-body"] .wmde-markdown .mermaid-diagram svg {
+    max-width: 100%;
+    height: auto;
 }
