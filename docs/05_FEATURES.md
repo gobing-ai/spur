@@ -92,6 +92,7 @@ curated narrative view; the ID tree is the authoritative satellite roster.
 | Parallel/decision nodes, resume from last successful phase | ⏳ | Phase 3; pause/continue + HITL arrive with the ADR-022 upstream work |
 | Built-in actions (shell, note, check, http.request, find-changed-files, find-unit-gaps) | 🔶 | core present (`http.request` rides ts-infra `APIClient`); no `agent`/`slash` action kind yet — LLM steps delegate to `spur agent run` via shell |
 | `agent.run` `capture: true` option + `response.validate` action | ✅ | `runCapture` returns `{ exitCode, answer }`; `agent.run` surfaces `data.answer` when `capture: true`; `response.validate` injects guard engine via DI; spike workflow validates retry/deny pattern (ADR-024) |
+| `agent.run` `timeoutMs` option + `stepTimeoutMs` pipeline var | ✅ | timeout forwarded via `AgentService.executeRun` → `AiRunner.runPromptCommand` → `ProcessExecutor.run({ timeout })`; kills subprocess on elapse (never orphans); step fails → `failed`; per-run override via `--vars '{"stepTimeoutMs":"120000"}'`; default 600000ms (10 min) |
 
 ## 6. History (`ts-llm-jsonl-importer` + analytics consumer)
 

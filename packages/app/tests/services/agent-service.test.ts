@@ -920,6 +920,30 @@ describe('AgentService.run --cwd flag', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Tests: AgentService.run — --timeout flag propagation
+// ---------------------------------------------------------------------------
+
+describe('AgentService.run --timeout flag', () => {
+    test('--timeout propagates to AgentRunOptions', async () => {
+        const svc = makeService();
+        const { deps, runner } = mockDeps();
+        await svc.run('hello', { agent: 'pi', timeout: '30000' }, deps);
+
+        const callArgs = runner.runPromptCommand.mock.calls[0] as [string, unknown, { cwd?: string; timeout?: number }];
+        expect(callArgs[2].timeout).toBe(30000);
+    });
+
+    test('timeout absent when flag not set', async () => {
+        const svc = makeService();
+        const { deps, runner } = mockDeps();
+        await svc.run('hello', { agent: 'pi' }, deps);
+
+        const callArgs = runner.runPromptCommand.mock.calls[0] as [string, unknown, { cwd?: string; timeout?: number }];
+        expect(callArgs[2].timeout).toBeUndefined();
+    });
+});
+
+// ---------------------------------------------------------------------------
 // Tests: AgentService.runCapture
 // ---------------------------------------------------------------------------
 

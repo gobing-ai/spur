@@ -20,6 +20,10 @@ const KIND = 'agent.run';
  * - `capture` (boolean): when true, use `AgentService.runCapture` to capture the
  *   agent's stdout. The answer text is returned in `data.answer` for downstream
  *   steps (e.g. `response.validate`). Output is buffered, not streamed.
+ * - `timeoutMs` (number): subprocess timeout in milliseconds. Forwarded via
+ *   `AgentRunOptions.timeout` to `ProcessExecutor.run`, which kills the child
+ *   on elapse. On timeout, the agent step exits non-zero → `ok:false` → pipeline
+ *   routes to `failed`. Absent by default (no timeout).
  *
  * Session latch (Q8): the first executed agent.run opens a session (continue: false);
  * subsequent ones inherit it (continue: true). On success, sets `__agentSession: "open"`.
@@ -63,6 +67,15 @@ export class AgentRunActionRunner implements ActionRunner {
         if (model !== undefined) flags.model = model;
         flags.mode = mode as string;
         if (cwd !== '') flags.cwd = cwd as string;
+
+        const timeoutMs = asOptionalNumber(options.timeoutMs);
+        if (timeoutMs !== undefined && timeoutMs <= 0) {
+            return {
+                ok: false,
+                error: 'agent.run: timeoutMs must be > 0',
+            };
+        }
+        if (timeoutMs !== undefined) flags.timeout = String(timeoutMs);
         if (continueFlag !== undefined) flags.continue = continueFlag;
 
         // `answerFile` implies capture: persist the agent's answer to a file a
@@ -112,5 +125,15 @@ function asOptionalBoolean(value: unknown): boolean | undefined {
     if (typeof value === 'boolean') return value;
     if (value === 'true') return true;
     if (value === 'false') return false;
+    return undefined;
+}
+
+function asOptionalNumber(value: unknown): number | undefined {
+    if (value === undefined || value === null) return undefined;
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') {
+        const n = Number(value);
+        return Number.isNaN(n) ? undefined : n;
+    }
     return undefined;
 }

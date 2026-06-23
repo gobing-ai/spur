@@ -211,3 +211,83 @@ describe('AgentRunActionRunner answerFile', () => {
         expect(readFileSync(join(dir, 'nested', 'out.txt'), 'utf8')).toBe('FAIL');
     });
 });
+
+// ---------------------------------------------------------------------------
+// Tests: AgentRunActionRunner timeoutMs
+// ---------------------------------------------------------------------------
+
+describe('AgentRunActionRunner timeoutMs', () => {
+    test('timeoutMs option sets flags.timeout on run', async () => {
+        let capturedFlags: Record<string, string | boolean> = {};
+        const svc = {
+            run: async (_input: string | undefined, flags: Record<string, string | boolean>) => {
+                capturedFlags = flags;
+                return 0;
+            },
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        await runner.execute({ input: 'test', timeoutMs: 30000 }, makeCtx());
+        expect(capturedFlags.timeout).toBe('30000');
+    });
+
+    test('timeoutMs absent when option not set', async () => {
+        let capturedFlags: Record<string, string | boolean> = {};
+        const svc = {
+            run: async (_input: string | undefined, flags: Record<string, string | boolean>) => {
+                capturedFlags = flags;
+                return 0;
+            },
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        await runner.execute({ input: 'test' }, makeCtx());
+        expect(capturedFlags.timeout).toBeUndefined();
+    });
+
+    test('timeoutMs + non-zero capture exit → ok:false with timeout error', async () => {
+        const svc = {
+            runCapture: async () => ({ exitCode: 137, answer: '' }),
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ input: 'test', capture: true, timeoutMs: 30000 }, makeCtx());
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('exited with code 137');
+    });
+
+    test('timeoutMs + non-zero plain run exit → ok:false with timeout error', async () => {
+        const svc = {
+            run: async () => 1,
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ input: 'test', timeoutMs: 30000 }, makeCtx());
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('exited with code 1');
+    });
+
+    test('timeoutMs: 0 returns ok:false with validation error', async () => {
+        const runner = new AgentRunActionRunner({} as unknown as AgentService);
+        const result = await runner.execute({ input: 'test', timeoutMs: 0 }, makeCtx());
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('timeoutMs must be > 0');
+    });
+
+    test('timeoutMs: negative returns ok:false with validation error', async () => {
+        const runner = new AgentRunActionRunner({} as unknown as AgentService);
+        const result = await runner.execute({ input: 'test', timeoutMs: -100 }, makeCtx());
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('timeoutMs must be > 0');
+    });
+
+    test('timeoutMs: non-numeric string → flags.timeout absent (silent no-op)', async () => {
+        let capturedFlags: Record<string, string | boolean> = {};
+        const svc = {
+            run: async (_input: string | undefined, flags: Record<string, string | boolean>) => {
+                capturedFlags = flags;
+                return 0;
+            },
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ input: 'test', timeoutMs: 'abc' } as Record<string, unknown>, makeCtx());
+        expect(result.ok).toBe(true);
+        expect(capturedFlags.timeout).toBeUndefined();
+    });
+});
