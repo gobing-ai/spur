@@ -1,3 +1,4 @@
+import { TASK_VARIANTS, type TaskVariant } from '@gobing-ai/spur-domain/schema';
 import { useState } from 'react';
 import { api } from '../../lib/rpc-client';
 
@@ -18,6 +19,7 @@ export default function NewTaskPanel({ open, onClose, onCreated, folder }: Props
     const [name, setName] = useState('');
     const [background, setBackground] = useState('');
     const [requirements, setRequirements] = useState('');
+    const [template, setTemplate] = useState<TaskVariant>('standard');
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
     const [nameTouched, setNameTouched] = useState(false);
@@ -29,6 +31,7 @@ export default function NewTaskPanel({ open, onClose, onCreated, folder }: Props
         setName('');
         setBackground('');
         setRequirements('');
+        setTemplate('standard');
         setError('');
         setNameTouched(false);
         onClose();
@@ -43,7 +46,7 @@ export default function NewTaskPanel({ open, onClose, onCreated, folder }: Props
         setError('');
 
         try {
-            const res = await api.task.create({ title: trimmed, folder });
+            const res = await api.task.create({ title: trimmed, folder, template });
             const wbs = res.data.wbs;
 
             // If Background or Requirements were entered, seed the body via bodyUpdate
@@ -137,6 +140,29 @@ export default function NewTaskPanel({ open, onClose, onCreated, folder }: Props
                             disabled={submitting}
                         />
                         {nameError && <p className="text-xs text-spur-error mt-1">{nameError}</p>}
+                    </div>
+
+                    {/* Template */}
+                    <div>
+                        <label
+                            htmlFor="new-task-template"
+                            className="text-xs font-semibold text-spur-text-muted uppercase tracking-wide block mb-1.5"
+                        >
+                            Template
+                        </label>
+                        <select
+                            id="new-task-template"
+                            className="select select-bordered select-sm w-full bg-spur-bg text-spur-text"
+                            value={template}
+                            onChange={(e) => setTemplate(e.target.value as TaskVariant)}
+                            disabled={submitting}
+                        >
+                            {(TASK_VARIANTS as readonly string[]).map((v) => (
+                                <option key={v} value={v}>
+                                    {v}
+                                </option>
+                            ))}
+                        </select>
                     </div>
 
                     {/* Background */}

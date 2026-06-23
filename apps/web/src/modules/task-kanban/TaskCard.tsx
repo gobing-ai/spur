@@ -3,16 +3,6 @@ import { CSS } from '@dnd-kit/utilities';
 import { useEffect, useState } from 'react';
 import type { TaskSummary } from './types';
 
-const STATUS_COLORS: Record<string, string> = {
-    backlog: 'badge-neutral',
-    todo: 'badge-info',
-    wip: 'badge-warning',
-    testing: 'badge-accent',
-    blocked: 'badge-error',
-    done: 'badge-success',
-    cancelled: 'badge-ghost',
-};
-
 const RELATIVE_REFRESH_MS = 60_000;
 
 function relativeTime(iso: string, now: number): string {
@@ -35,7 +25,6 @@ interface Props {
     onClick: (wbs: string) => void;
 }
 export default function TaskCard({ task, onClick }: Props) {
-    const badgeClass = STATUS_COLORS[task.status] ?? 'badge-ghost';
     const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
         id: task.wbs,
         data: { task },
@@ -67,10 +56,12 @@ export default function TaskCard({ task, onClick }: Props) {
             <div className="card-body p-3 gap-1">
                 <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-mono text-spur-text-muted">{task.wbs}</span>
-                    <span className={`badge badge-xs ${badgeClass}`}>{task.status}</span>
                 </div>
                 <p className="text-sm font-medium text-spur-text leading-snug">{task.name}</p>
                 <div className="flex gap-1 flex-wrap items-center">
+                    {task.type && task.type !== 'task' && (
+                        <span className="badge badge-outline badge-xs">{task.type}</span>
+                    )}
                     {task.priority && <span className="badge badge-outline badge-xs">{task.priority}</span>}
                     {task.featureId && <span className="badge badge-outline badge-xs">{task.featureId}</span>}
                     {task.updatedAt && (

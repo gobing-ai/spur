@@ -9,7 +9,7 @@ import {
     TaskService,
 } from '@gobing-ai/spur-app';
 import { bundledConfigRoot } from '@gobing-ai/spur-config';
-import { extractTemplateBodies, TASK_VARIANTS, type TaskSection } from '@gobing-ai/spur-domain';
+import { extractTemplateBodies, TASK_VARIANTS, type TaskSection, taskStatusIcon } from '@gobing-ai/spur-domain';
 import { loadSpurConfig } from '../config/loader';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
@@ -69,7 +69,9 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     const { frontmatter, ...rest } = result;
                     context.output.write(toJson({ ...rest, frontmatter }));
                 } else {
-                    context.output.write(result.content);
+                    context.output.write(
+                        `${taskStatusIcon(result.status)} ${result.status.toUpperCase()} — ${result.wbs}\n\n${result.content}`,
+                    );
                 }
             } catch (err) {
                 context.output.error(String(err));
@@ -141,7 +143,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         context.output.write('(no tasks)');
                     }
                     for (const t of tasks) {
-                        context.output.write(`${t.wbs}  ${t.status.padEnd(9)}  ${t.name}`);
+                        context.output.write(`${t.wbs}  ${taskStatusIcon(t.status)} ${t.status.padEnd(9)}  ${t.name}`);
                     }
                 }
             } catch (err) {

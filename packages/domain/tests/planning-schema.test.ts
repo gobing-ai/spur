@@ -1,13 +1,17 @@
 import { describe, expect, test } from 'bun:test';
 import {
+    FEATURE_STATUS_ICONS,
     FEATURE_STATUSES,
     featureFrontmatterSchema,
+    featureStatusIcon,
     normalizeFeatureStatus,
     normalizeTaskStatus,
     PRIORITIES,
     PROFILES,
+    TASK_STATUS_ICONS,
     TASK_STATUSES,
     taskFrontmatterSchema,
+    taskStatusIcon,
 } from '../src/index';
 
 const ISO = '2026-06-13T00:00:00.000Z';
@@ -243,5 +247,42 @@ describe('vocabulary exports', () => {
             'review',
             'docs',
         ]);
+    });
+});
+
+describe('status icon maps', () => {
+    test('TASK_STATUS_ICONS has an entry for every status in TASK_STATUSES', () => {
+        for (const status of TASK_STATUSES) {
+            expect(TASK_STATUS_ICONS[status]).toBeDefined();
+        }
+    });
+
+    test('TASK_STATUS_ICONS values are non-empty strings (emojis)', () => {
+        for (const status of TASK_STATUSES) {
+            expect(typeof TASK_STATUS_ICONS[status]).toBe('string');
+            expect(TASK_STATUS_ICONS[status].length).toBeGreaterThan(0);
+        }
+    });
+
+    test('taskStatusIcon returns the mapped emoji for a known status', () => {
+        expect(taskStatusIcon('todo')).toBe(TASK_STATUS_ICONS.todo);
+    });
+
+    test('taskStatusIcon returns empty string for unknown status', () => {
+        expect(taskStatusIcon('unknown')).toBe('');
+    });
+
+    test('FEATURE_STATUS_ICONS has an entry for every status in FEATURE_STATUSES', () => {
+        for (const status of FEATURE_STATUSES) {
+            expect(FEATURE_STATUS_ICONS[status]).toBeDefined();
+        }
+    });
+
+    test('featureStatusIcon returns the mapped emoji for a known status', () => {
+        expect(featureStatusIcon('active')).toBe(FEATURE_STATUS_ICONS.active);
+    });
+
+    test('featureStatusIcon returns empty string for unknown status', () => {
+        expect(featureStatusIcon('unknown')).toBe('');
     });
 });

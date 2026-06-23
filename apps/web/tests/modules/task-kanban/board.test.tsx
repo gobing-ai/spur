@@ -24,8 +24,10 @@ mock.module('../../../src/lib/rpc-client', () => ({
                 transitionCalls.push(input);
                 return transitionImpl();
             },
+            folders: async () => ({ data: [{ path: 'docs/tasks', label: 'Primary' }] }),
         },
     },
+    resolveApiUrl: () => 'http://localhost:3000/api',
 }));
 
 // Capture the onDragEnd callback so tests can simulate dnd-kit drops.
@@ -195,32 +197,14 @@ describe('KanbanBoard', () => {
 const KANBAN_COLUMNS = ['backlog', 'todo', 'wip', 'testing', 'blocked', 'done', 'cancelled'];
 
 describe('TaskFilters', () => {
-    test('renders all four filter controls bound to the current filter values', () => {
-        const { getByLabelText } = render(
-            <TaskFilters
-                filters={{ status: 'wip', featureId: 'W3', parentWbs: '0001', assignee: 'robin' }}
-                onChange={() => {}}
-            />,
+    test('renders feature/parent/assignee filter controls (R3 — no status dropdown)', () => {
+        const { getByLabelText, queryByLabelText } = render(
+            <TaskFilters filters={{ featureId: 'W3', parentWbs: '0001', assignee: 'robin' }} onChange={() => {}} />,
         );
-        expect((getByLabelText('Filter by status') as HTMLSelectElement).value).toBe('wip');
+        // R3: status <select> removed
+        expect(queryByLabelText('Filter by status')).toBeNull();
         expect((getByLabelText('Filter by feature') as HTMLInputElement).value).toBe('W3');
         expect((getByLabelText('Filter by parent WBS') as HTMLInputElement).value).toBe('0001');
         expect((getByLabelText('Filter by assignee') as HTMLInputElement).value).toBe('robin');
-    });
-
-    test('selecting a status reports the key and value', () => {
-        const calls: Array<[string, string | null]> = [];
-        const { getByLabelText } = render(<TaskFilters filters={{}} onChange={(k, v) => calls.push([k, v])} />);
-        fireEvent.change(getByLabelText('Filter by status'), { target: { value: 'done' } });
-        expect(calls).toContainEqual(['status', 'done']);
-    });
-
-    test('selecting the empty status option reports null', () => {
-        const calls: Array<[string, string | null]> = [];
-        const { getByLabelText } = render(
-            <TaskFilters filters={{ status: 'wip' }} onChange={(k, v) => calls.push([k, v])} />,
-        );
-        fireEvent.change(getByLabelText('Filter by status'), { target: { value: '' } });
-        expect(calls).toContainEqual(['status', null]);
     });
 });

@@ -1,4 +1,4 @@
-import { PRIORITIES, TASK_STATUSES } from '@gobing-ai/spur-domain/schema';
+import { PRIORITIES, TASK_STATUSES, TASK_TYPES, TASK_VARIANTS } from '@gobing-ai/spur-domain/schema';
 import { oc } from '@orpc/contract';
 import { z } from 'zod';
 import { apiSuccessSchema } from './shared';
@@ -17,6 +17,7 @@ export const taskSummarySchema = z.object({
         .regex(/^\d{4}$/)
         .nullable()
         .optional(),
+    type: z.enum(TASK_TYPES).optional(),
     filePath: z.string(),
     updatedAt: z.string().optional(),
 });
@@ -57,6 +58,7 @@ export const taskCreateInputSchema = z.object({
         .regex(/^\d{4}$/)
         .optional(),
     folder: z.string().optional(),
+    template: z.enum(TASK_VARIANTS).optional(),
 });
 
 /** Create-task response: `{ ok: true, data: { wbs, filePath } }`. */
@@ -101,6 +103,8 @@ export const taskBodyUpdateResponseSchema = apiSuccessSchema(
 export const taskActionInputSchema = z.object({
     wbs: z.string().regex(/^\d{4}$/),
     action: z.enum(['refine', 'plan', 'run', 'verify', 'decompose', 'evaluate']),
+    channel: z.string().optional(),
+    skipDeps: z.boolean().optional(),
 });
 
 /** Action response: `{ ok: true, data: { runId, action, status } }`. */
@@ -111,6 +115,15 @@ export const taskActionResponseSchema = apiSuccessSchema(
         status: z.literal('queued'),
     }),
 );
+
+/** Task folder entry — a configured task folder from docs/.tasks/config.jsonc. */
+export const taskFolderSchema = z.object({
+    path: z.string(),
+    label: z.string().optional(),
+});
+
+/** Folders response: `{ ok: true, data: TaskFolder[] }`. */
+export const taskFoldersResponseSchema = apiSuccessSchema(z.array(taskFolderSchema));
 
 /** oRPC contract for the task domain — list, show, create, transition, body. */
 export const taskContract = {
@@ -124,6 +137,14 @@ export const taskContract = {
         .input(taskListInputSchema)
         .output(taskListResponseSchema),
 
+    folders: oc
+        .route({
+            method: 'GET',
+            path: '/tasks/folders',
+            summary: 'List configured task folders',
+            tags: ['task'],
+        })
+        .output(taskFoldersResponseSchema),
     show: oc
         .route({
             method: 'GET',

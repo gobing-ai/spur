@@ -27,6 +27,36 @@ export type TaskStatus = (typeof TASK_STATUSES)[number];
 
 /** Type alias for the canonical feature status vocabulary. */
 export type FeatureStatus = (typeof FEATURE_STATUSES)[number];
+/** Canonical task status→emoji map (presentation-only; never persisted — DD-01). */
+export const TASK_STATUS_ICONS: Record<TaskStatus, string> = {
+    backlog: '📋',
+    todo: '🔲',
+    wip: '🚧',
+    testing: '🧪',
+    blocked: '🚫',
+    done: '✅',
+    cancelled: '⛔',
+};
+
+/** Canonical feature status→emoji map (presentation-only; never persisted — DD-01). */
+export const FEATURE_STATUS_ICONS: Record<FeatureStatus, string> = {
+    backlog: '📋',
+    active: '🔄',
+    verifying: '🧪',
+    blocked: '🚫',
+    done: '✅',
+    cancelled: '⛔',
+};
+
+/** Get the emoji icon for a task status (presentation-only). Returns '' for unknown. */
+export function taskStatusIcon(status: string): string {
+    return (TASK_STATUS_ICONS as Record<string, string>)[status] ?? '';
+}
+
+/** Get the emoji icon for a feature status (presentation-only). Returns '' for unknown. */
+export function featureStatusIcon(status: string): string {
+    return (FEATURE_STATUS_ICONS as Record<string, string>)[status] ?? '';
+}
 
 /** Priority scale shared by tasks and features. */
 export const PRIORITIES = ['P0', 'P1', 'P2', 'P3'] as const;

@@ -50,6 +50,8 @@ export interface TaskServiceContext {
 export interface TaskActionJob {
     wbs: string;
     action: string;
+    channel?: string;
+    skipDeps?: boolean;
 }
 
 /** Result returned by fulfillAction when a job is enqueued. */
@@ -276,11 +278,12 @@ export class TaskService {
         wbs: string,
         action: string,
         enqueue: (job: TaskActionJob) => Promise<string>,
+        options?: { channel?: string; skipDeps?: boolean },
     ): Promise<TaskActionResult> {
         // Validate the task file exists (throws if not found).
         await this.resolveTaskFile(wbs);
 
-        const runId = await enqueue({ wbs, action });
+        const runId = await enqueue({ wbs, action, channel: options?.channel, skipDeps: options?.skipDeps });
         return { runId, action, status: 'queued' };
     }
 

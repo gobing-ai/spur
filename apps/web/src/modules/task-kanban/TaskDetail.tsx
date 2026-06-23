@@ -54,6 +54,9 @@ export default function TaskDetail({ task, onTransition }: Props) {
 
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [showCancelModal, setShowCancelModal] = useState(false);
+    const [actionModal, setActionModal] = useState<string | null>(null);
+    const [selectedChannel, setSelectedChannel] = useState<string>('claude');
+    const [skipDeps, setSkipDeps] = useState(false);
     const { setTasks } = useTasks();
 
     // R4: depends on wbs only — the 5s poll refreshes the list (new object refs)
@@ -134,12 +137,21 @@ export default function TaskDetail({ task, onTransition }: Props) {
             setSaving(false);
         }
     };
+    const handleAction = (action: string) => {
+        setActionModal(action);
+    };
 
-    const handleAction = async (action: string) => {
-        setActionLoading(action);
+    const dispatchAction = async () => {
+        if (!actionModal || !task) return;
+        setActionLoading(actionModal);
+        setActionModal(null);
         try {
-            await api.task.action({ wbs: task.wbs, action } as Parameters<typeof api.task.action>[0]);
-            // Trigger an immediate refresh so status/progress changes surface without waiting for the 5s poll.
+            await api.task.action({
+                wbs: task.wbs,
+                action: actionModal as Parameters<typeof api.task.action>[0]['action'],
+                channel: selectedChannel,
+                skipDeps,
+            } as Parameters<typeof api.task.action>[0]);
             const res = await api.task.list({});
             setTasks((res.data as unknown as TaskSummary[]) ?? []);
         } catch (err: unknown) {
@@ -191,6 +203,14 @@ export default function TaskDetail({ task, onTransition }: Props) {
     const updated = formatDate(frontmatter.updated_at);
     const updatedRel = relativeDays(frontmatter.updated_at);
     const statusIdx = lifecycleIndex(task.status);
+    const estimatedHours = frontmatter.estimated_hours as number | undefined;
+    const implProgress = frontmatter.impl_progress as Record<string, string> | undefined;
+    const IMPL_PHASES = ['planning', 'design', 'implementation', 'review', 'testing'] as const;
+    const implProgressColor = (state: string): string => {
+        if (state === 'done') return 'bg-green-500';
+        if (state === 'in_progress') return 'bg-amber-500';
+        return 'bg-gray-400';
+    };
     return (
         <div className="flex flex-col h-full">
             <div className="p-3 border-b border-spur-border shrink-0">
@@ -270,7 +290,36 @@ export default function TaskDetail({ task, onTransition }: Props) {
                         {/* Phase progress */}
                         <div>
                             <span className="text-xs text-spur-text-muted block mb-1.5">Progress</span>
-                            {OFF_TRACK.has(task.status) ? (
+                            {implProgress ? (
+                                <div className="space-y-1">
+                                    {IMPL_PHASES.map((phase) => {
+                                        const state = implProgress[phase] ?? 'pending';
+                                        return (
+                                            <div key={phase} className="flex items-center gap-2">
+                                                <span className="text-[10px] text-spur-text-muted w-20 shrink-0">
+                                                    {phase}
+                                                </span>
+                                                <div className="flex-1 h-1.5 rounded-full bg-spur-border overflow-hidden">
+                                                    <div
+                                                        className={`h-full rounded-full ${implProgressColor(state)}`}
+                                                        style={{
+                                                            width:
+                                                                state === 'done'
+                                                                    ? '100%'
+                                                                    : state === 'in_progress'
+                                                                      ? '50%'
+                                                                      : '0%',
+                                                        }}
+                                                    />
+                                                </div>
+                                                <span className="text-[10px] text-spur-text-muted w-16 shrink-0">
+                                                    {state}
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ) : OFF_TRACK.has(task.status) ? (
                                 <span className="badge badge-warning badge-xs">{task.status}</span>
                             ) : (
                                 <div className="flex items-center gap-1">
@@ -293,15 +342,16 @@ export default function TaskDetail({ task, onTransition }: Props) {
                                     })}
                                 </div>
                             )}
-                            <div className="flex justify-between mt-0.5">
-                                {LIFECYCLE.map((phase) => (
-                                    <span key={phase} className="text-[10px] text-spur-text-muted">
-                                        {phase}
-                                    </span>
-                                ))}
-                            </div>
+                            {!implProgress && (
+                                <div className="flex justify-between mt-0.5">
+                                    {LIFECYCLE.map((phase) => (
+                                        <span key={phase} className="text-[10px] text-spur-text-muted">
+                                            {phase}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
                         </div>
-
                         {/* Dates */}
                         {(created || updated) && (
                             <div className="space-y-1.5">
@@ -343,6 +393,12 @@ export default function TaskDetail({ task, onTransition }: Props) {
                                 <div className="flex items-center gap-1.5 text-xs">
                                     <span className="text-spur-text-muted w-14 shrink-0">Priority</span>
                                     <span className="badge badge-outline badge-xs">{task.priority}</span>
+                                </div>
+                            )}
+                            {estimatedHours !== undefined && (
+                                <div className="flex items-center gap-1.5 text-xs">
+                                    <span className="text-spur-text-muted w-14 shrink-0">Est. Hours</span>
+                                    <span className="text-spur-text">{estimatedHours}h</span>
                                 </div>
                             )}
                             {task.featureId && (
@@ -456,6 +512,62 @@ export default function TaskDetail({ task, onTransition }: Props) {
                                 }}
                             >
                                 Cancel task
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Channel selection modal (R9) */}
+            {actionModal && task && (
+                // biome-ignore lint/a11y/noStaticElementInteractions: role=presentation with onClick is the standard modal backdrop pattern
+                <div
+                    role="presentation"
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+                    onClick={() => setActionModal(null)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Escape') setActionModal(null);
+                    }}
+                >
+                    {/* biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation on the dialog body is not an action */}
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={`Configure ${actionModal} action`}
+                        className="bg-spur-surface border border-spur-border rounded-lg shadow-xl p-4 mx-4 max-w-sm w-full"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <h4 className="text-sm font-semibold text-spur-text mb-3">
+                            {ACTION_LABELS[actionModal] ?? actionModal} — Select Channel
+                        </h4>
+                        <div className="space-y-3">
+                            <select
+                                className="select select-bordered select-sm w-full bg-spur-bg text-spur-text"
+                                value={selectedChannel}
+                                onChange={(e) => setSelectedChannel(e.target.value)}
+                            >
+                                {['claude', 'codex', 'pi', 'opencode', 'antigravity', 'openclaw'].map((ch) => (
+                                    <option key={ch} value={ch}>
+                                        {ch}
+                                    </option>
+                                ))}
+                            </select>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    className="checkbox checkbox-xs"
+                                    checked={skipDeps}
+                                    onChange={(e) => setSkipDeps(e.target.checked)}
+                                />
+                                <span className="text-xs text-spur-text">Skip dependencies</span>
+                            </label>
+                        </div>
+                        <div className="flex justify-end gap-2 mt-4">
+                            <button type="button" className="btn btn-xs btn-ghost" onClick={() => setActionModal(null)}>
+                                Cancel
+                            </button>
+                            <button type="button" className="btn btn-xs btn-primary" onClick={dispatchAction}>
+                                {actionLoading === actionModal ? 'Dispatching…' : 'Dispatch'}
                             </button>
                         </div>
                     </div>

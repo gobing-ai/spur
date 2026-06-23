@@ -62,7 +62,7 @@ mock.module('../../../src/lib/rpc-client', () => ({
                 bodyCalls.push(input);
                 return bodyImpl();
             },
-            action: (input: { wbs: string; action: string }) => {
+            action: (input: { wbs: string; action: string; channel?: string; skipDeps?: boolean }) => {
                 actionCalls.push(input);
                 return actionImpl();
             },
@@ -74,7 +74,7 @@ mock.module('../../../src/lib/rpc-client', () => ({
     },
 }));
 
-const actionCalls: Array<{ wbs: string; action: string }> = [];
+const actionCalls: Array<{ wbs: string; action: string; channel?: string; skipDeps?: boolean }> = [];
 const listCalls: number[] = [];
 
 import TaskDetail from '../../../src/modules/task-kanban/TaskDetail';
@@ -424,15 +424,20 @@ describe('TaskDetail — workflow action buttons', () => {
         expect(queryByText('Actions')).toBeNull();
     });
 
-    test('R2 — clicking an action invokes the API and refreshes the list', async () => {
-        const { getByLabelText } = renderDetail();
+    test('R2 — clicking an action opens modal; Dispatch invokes the API and refreshes the list', async () => {
+        const { getByLabelText, getByText } = renderDetail();
         await waitFor(() => expect(getByLabelText('Edit body')).toBeDefined());
 
+        // R9: clicking Run opens the channel selection modal (not a direct API call)
         fireEvent.click(getByLabelText('Run'));
+        await waitFor(() => expect(getByText('Dispatch')).toBeDefined());
+
+        // Clicking Dispatch sends the action
+        fireEvent.click(getByText('Dispatch'));
 
         await waitFor(() => {
             expect(actionCalls.length).toBe(1);
-            expect(actionCalls[0]).toEqual({ wbs: '0001', action: 'run' });
+            expect(actionCalls[0]).toEqual(expect.objectContaining({ wbs: '0001', action: 'run', channel: 'claude' }));
         });
 
         // Refresh should have been triggered after success
@@ -441,7 +446,7 @@ describe('TaskDetail — workflow action buttons', () => {
         });
     });
 
-    test('R2 — surfaces action failure via api-error event', async () => {
+    test('R2 — surfaces action failure via api-error event (after Dispatch)', async () => {
         actionImpl = async () => {
             throw new Error('Action rejected');
         };
@@ -452,10 +457,13 @@ describe('TaskDetail — workflow action buttons', () => {
         };
         window.addEventListener('api-error', handler);
 
-        const { getByLabelText } = renderDetail();
+        const { getByLabelText, getByText } = renderDetail();
         await waitFor(() => expect(getByLabelText('Edit body')).toBeDefined());
 
+        // R9: clicking Run opens the modal; Dispatch triggers the actual API call
         fireEvent.click(getByLabelText('Run'));
+        await waitFor(() => expect(getByText('Dispatch')).toBeDefined());
+        fireEvent.click(getByText('Dispatch'));
 
         await waitFor(() => {
             expect(errors.length).toBeGreaterThanOrEqual(1);
@@ -537,5 +545,113 @@ describe('TaskDetail — cancel confirmation modal', () => {
         fireEvent.click(getByRole('button', { name: 'done' }));
 
         expect(transitions).toEqual([{ wbs: '0001', status: 'done' }]);
+    });
+});
+
+// ── Channel selection modal (R9) ─────────────────────────────────────────────
+
+describe('TaskDetail — channel selection modal (R9)', () => {
+    test('R9 — clicking action button opens channel selection modal', async () => {
+        const { getByLabelText, getByText } = renderDetail();
+        await waitFor(() => expect(getByLabelText('Edit body')).toBeDefined());
+
+        // todo status has 'plan' action — clicking it opens the channel modal
+        fireEvent.click(getByLabelText('Plan'));
+
+        // Modal appears with "Select Channel" heading
+        await waitFor(() => expect(getByText(/Select Channel/)).toBeDefined());
+        // Channel select and skip-deps checkbox are present
+        expect(getByText('Skip dependencies')).toBeDefined();
+        expect(getByText('Dispatch')).toBeDefined();
+    });
+
+    test('R9 — dispatch sends channel and skipDeps', async () => {
+        const { getByLabelText, getByText } = renderDetail();
+        await waitFor(() => expect(getByLabelText('Edit body')).toBeDefined());
+
+        // Open the modal via Plan action
+        fireEvent.click(getByLabelText('Plan'));
+        await waitFor(() => expect(getByText('Dispatch')).toBeDefined());
+
+        // Click Dispatch — default channel is 'claude', skipDeps defaults to false
+        fireEvent.click(getByText('Dispatch'));
+
+        await waitFor(() => {
+            expect(actionCalls.length).toBe(1);
+        });
+        expect(actionCalls[0]).toEqual(
+            expect.objectContaining({
+                wbs: '0001',
+                action: 'plan',
+                channel: 'claude',
+                skipDeps: false,
+            }),
+        );
+    });
+});
+
+// ── Implementation progress and estimated hours (R10) ────────────────────────
+
+describe('TaskDetail — implementation progress (R10)', () => {
+    test('R10 — renders estimated_hours when present in frontmatter', async () => {
+        showImpl = async () => ({
+            data: { ...DEFAULT_SHOW_DATA, frontmatter: { estimated_hours: 8 } },
+        });
+
+        const { getByText } = renderDetail();
+        await waitFor(() => expect(getByText('Metadata')).toBeDefined());
+
+        expect(getByText('Est. Hours')).toBeDefined();
+        expect(getByText('8h')).toBeDefined();
+    });
+
+    test('R10 — renders impl_progress bars when present', async () => {
+        showImpl = async () => ({
+            data: {
+                ...DEFAULT_SHOW_DATA,
+                frontmatter: {
+                    impl_progress: {
+                        planning: 'done',
+                        design: 'in_progress',
+                        implementation: 'pending',
+                        review: 'pending',
+                        testing: 'pending',
+                    },
+                },
+            },
+        });
+
+        const { getAllByText } = renderDetail();
+        await waitFor(() => expect(getAllByText('Metadata')[0]).toBeDefined());
+
+        // All five phase labels render (testing also appears as a status button, so getAllByText)
+        expect(getAllByText('planning').length).toBeGreaterThanOrEqual(1);
+        expect(getAllByText('design').length).toBeGreaterThanOrEqual(1);
+        expect(getAllByText('implementation').length).toBeGreaterThanOrEqual(1);
+        expect(getAllByText('review').length).toBeGreaterThanOrEqual(1);
+        expect(getAllByText('testing').length).toBeGreaterThanOrEqual(1);
+
+        // Phase states render alongside — done also appears as a status button
+        expect(getAllByText('done').length).toBeGreaterThanOrEqual(1);
+        expect(getAllByText('in_progress').length).toBeGreaterThanOrEqual(1);
+        expect(getAllByText('pending').length).toBeGreaterThanOrEqual(3);
+    });
+
+    test('R10 — falls back to lifecycle bar when impl_progress absent', async () => {
+        // With empty frontmatter (no impl_progress), the synthetic lifecycle bar renders
+        showImpl = async () => ({
+            data: { ...DEFAULT_SHOW_DATA, frontmatter: {} },
+        });
+
+        const { getByText, getAllByText } = renderDetail();
+        await waitFor(() => expect(getByText('Metadata')).toBeDefined());
+
+        // The fallback lifecycle bar renders phase labels (backlog, todo, wip, testing, done)
+        // These also appear as status buttons, so use getAllByText
+        expect(getAllByText('backlog').length).toBeGreaterThanOrEqual(1);
+        expect(getAllByText('todo').length).toBeGreaterThanOrEqual(1);
+        expect(getAllByText('wip').length).toBeGreaterThanOrEqual(1);
+        expect(getAllByText('testing').length).toBeGreaterThanOrEqual(1);
+        expect(getAllByText('done').length).toBeGreaterThanOrEqual(1);
     });
 });

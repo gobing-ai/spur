@@ -555,6 +555,11 @@ Input normalization (excerpt, full map lives in `normalizeTaskStatus` / `normali
 `pending / new → backlog`, mixed case accepted via `.trim().toLowerCase()`. Storage is always the
 lowercase canonical form; aliases never persist.
 
+**Status icon SSOT (R1).** `TASK_STATUS_ICONS` and `FEATURE_STATUS_ICONS` in
+`packages/domain/src/planning/schema.ts` map each canonical status to a presentation emoji.
+Consumed by the board toggle group, swimlane headers, and CLI `spur task show`/`list` output.
+Storage values stay lowercase canonical (DD-01); the icon is presentation-only and never persisted.
+
 ### 7.4 Section-Status-Matrix + planning event catalog
 
 **Section-Status-Matrix.** Source: `config/tasks/section-matrix.yaml` (schema:
@@ -666,11 +671,17 @@ auto-writes derived docs (`docs/design/*`, `docs/features/*`); **stages** `02_RO
 index edits to `docs/plans/` for human commit. Every authoritative-doc touch invokes `sp:doc-evolve`
 (§5 sync triggers). Terminal at `handoff` (drafted feature list → `sp:spur-dev` steps 7–12) or
 `cancelled`. Validates against the workspace state-machine schema.
-### 7.6 Task DTOs — reserved
+### 7.6 Task DTOs (oRPC contract)
 
-oRPC contract shapes (`TaskDto`, `FeatureDto`, `PlanningEventDto`) land with the server/web design
-task (ADR-021.b, delivery §5.3). They are not authored here — domain types stay in their owning
-packages; transport DTOs belong in `packages/contracts` when built.
+Transport DTOs live in `packages/contracts/src/task.ts` and are the single source of truth for the
+wire shape. Domain types stay in `@gobing-ai/spur-domain`; transport DTOs belong in `packages/contracts`.
+
+| DTO | Key fields | Notes |
+|---|---|---|
+| `taskSummarySchema` | `wbs, name, status, priority?, featureId?, parentWbs?, type?, filePath, updatedAt?` | List response. `type` and `priority` are extracted from frontmatter by the server handler. |
+| `taskCreateInputSchema` | `title, featureId?, parentWbs?, folder?, template?` | `template` selects a `TASK_VARIANTS` scaffold (R8); defaults to `standard` or `feature-impl` (when `featureId` set). |
+| `taskActionInputSchema` | `wbs, action, channel?, skipDeps?` | `action` ∈ `refine\|plan\|run\|verify\|decompose\|evaluate`. `channel` selects the agent channel; `skipDeps` bypasses dependency checks (R9). |
+| `taskFolderSchema` | `path, label?` | Folder entry from `docs/.tasks/config.jsonc` (R6). |
 
 ### 7.7 Workflow action primitives for anti-hallucination (ADR-024)
 

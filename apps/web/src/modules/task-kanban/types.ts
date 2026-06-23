@@ -4,6 +4,7 @@ export interface TaskSummary {
     name: string;
     status: string;
     priority?: string;
+    type?: string;
     featureId?: string | null;
     parentWbs?: string | null;
     filePath: string;

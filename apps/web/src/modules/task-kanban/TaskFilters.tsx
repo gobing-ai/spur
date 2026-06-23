@@ -1,4 +1,3 @@
-import { TASK_STATUSES } from '@gobing-ai/spur-domain/schema';
 import type { TaskListFilters } from './types';
 
 interface Props {
@@ -6,23 +5,10 @@ interface Props {
     onChange: (key: 'status' | 'feature' | 'parent' | 'assignee', value: string | null) => void;
 }
 
-/** Board filter bar (R6) — status / feature / parent-WBS / assignee, all reflected in URL query params. */
+/** Board filter bar — feature / parent-WBS / assignee. Status is controlled by the lane toggle group. */
 export default function TaskFilters({ filters, onChange }: Props) {
     return (
         <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-spur-border">
-            <select
-                aria-label="Filter by status"
-                className="select select-xs select-bordered"
-                value={filters.status ?? ''}
-                onChange={(e) => onChange('status', e.target.value || null)}
-            >
-                <option value="">All statuses</option>
-                {(TASK_STATUSES as readonly string[]).map((s) => (
-                    <option key={s} value={s}>
-                        {s}
-                    </option>
-                ))}
-            </select>
             <input
                 aria-label="Filter by feature"
                 type="text"

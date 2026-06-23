@@ -7,7 +7,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react';
 import NewTaskPanel from '../../../src/modules/task-kanban/NewTaskPanel';
 
 // ── api stub ────────────────────────────────────────────────────────────────
-const createCalls: Array<{ title: string; folder?: string }> = [];
+const createCalls: Array<{ title: string; folder?: string; template?: string }> = [];
 const bodyCalls: Array<{ wbs: string; body: string }> = [];
 
 let createImpl: () => Promise<unknown> = async () => ({ data: { wbs: '0009', filePath: 'a.md' } });
@@ -16,7 +16,7 @@ let bodyImpl: () => Promise<unknown> = async () => ({ data: { wbs: '0009', fileP
 mock.module('../../../src/lib/rpc-client', () => ({
     api: {
         task: {
-            create: (input: { title: string; folder?: string }) => {
+            create: (input: { title: string; folder?: string; template?: string }) => {
                 createCalls.push(input);
                 return createImpl();
             },
@@ -191,5 +191,24 @@ describe('NewTaskPanel', () => {
 
         const btn = getByText('Create Task') as HTMLButtonElement;
         expect(btn.disabled).toBe(false);
+    });
+
+    test('R8 — renders template select with all variants', () => {
+        const { container } = renderPanel();
+
+        // The template select has id 'new-task-template' and renders all 6 TASK_VARIANTS
+        const select = container.querySelector('#new-task-template') as HTMLSelectElement | null;
+        expect(select).not.toBeNull();
+        expect(select).toBeDefined();
+
+        const options = Array.from(select?.querySelectorAll('option') ?? []).map((o) => o.value);
+        expect(options).toEqual(['standard', 'feature-impl', 'issue', 'review', 'meta', 'brainstorm']);
+    });
+
+    test('R8 — template select defaults to standard variant', () => {
+        const { container } = renderPanel();
+
+        const select = container.querySelector('#new-task-template') as HTMLSelectElement;
+        expect(select.value).toBe('standard');
     });
 });

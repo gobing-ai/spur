@@ -72,13 +72,27 @@ const task = (over: Partial<TaskSummary> = {}): TaskSummary => ({
 });
 
 describe('TaskCard', () => {
-    test('renders WBS, name, status badge, and priority/feature badges', () => {
-        const { getByText } = render(<TaskCard task={task()} onClick={() => {}} />);
+    test('renders WBS, name, and priority/feature badges (no status badge)', () => {
+        const { getByText, queryByText } = render(<TaskCard task={task()} onClick={() => {}} />);
         expect(getByText('0001')).toBeDefined();
         expect(getByText('Build the board')).toBeDefined();
-        expect(getByText('todo')).toBeDefined();
+        // R7: status badge removed from cards — only type/priority/feature chips remain
+        expect(queryByText('todo')).toBeNull();
         expect(getByText('P1')).toBeDefined();
         expect(getByText('W3')).toBeDefined();
+    });
+
+    test('R7 — renders type chip when type is not task', () => {
+        const { getByText } = render(<TaskCard task={task({ type: 'issue' })} onClick={() => {}} />);
+        expect(getByText('issue')).toBeDefined();
+    });
+
+    test('R7 — does not render status badge text on card', () => {
+        const { container } = render(<TaskCard task={task()} onClick={() => {}} />);
+        // The card renders wbs, name, priority, feature — but never the raw status word as a badge
+        const badges = container.querySelectorAll('.badge');
+        const badgeTexts = Array.from(badges).map((b) => b.textContent);
+        expect(badgeTexts).not.toContain('todo');
     });
 
     test('clicking the card reports the WBS so the detail panel can open', () => {
@@ -108,6 +122,15 @@ describe('KanbanColumn', () => {
         expect(getByText('0')).toBeDefined();
     });
 
+    test('R7 — column header shows status icon and label', () => {
+        // KanbanColumn renders taskStatusIcon(status) before the label — verify both the emoji and label appear
+        const { container } = render(<KanbanColumn status="todo" label="todo" tasks={[]} onCardClick={() => {}} />);
+        // The header span contains the icon (🔲 for todo) followed by the label text
+        const header = container.querySelector('span.text-xs.font-semibold');
+        expect(header).not.toBeNull();
+        expect(header?.textContent).toContain('🔲');
+        expect(header?.textContent).toContain('todo');
+    });
     test('renders task cards for the given tasks', () => {
         const { getByText } = render(
             <KanbanColumn status="todo" label="todo" tasks={[task()]} onCardClick={() => {}} />,

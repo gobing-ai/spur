@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { MarkdownDocument } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { PlanningWriteService } from '../../src/services/planning-write-service';
-import { TaskService } from '../../src/services/task-service';
+import { type TaskActionJob, TaskService } from '../../src/services/task-service';
 
 let tasksDir: string;
 let svc: TaskService;
@@ -534,6 +534,40 @@ describe('TaskService', () => {
             const raw = await fs.readFile(created.ref.filePath);
             const doc = MarkdownDocument.parse(raw, 'task');
             expect(doc.frontmatterData?.name).toBe('Empty body test');
+        });
+    });
+    describe('fulfillAction', () => {
+        test('passes channel and skipDeps to enqueue job', async () => {
+            const created = await svc.create({ title: 'Action task' });
+            const wbs = created.ref.id;
+            let capturedJob: TaskActionJob | undefined;
+            const result = await svc.fulfillAction(
+                wbs,
+                'run',
+                async (job) => {
+                    capturedJob = job;
+                    return 'run-042';
+                },
+                { channel: 'codex', skipDeps: true },
+            );
+            expect(result.runId).toBe('run-042');
+            expect(result.action).toBe('run');
+            expect(result.status).toBe('queued');
+            expect(capturedJob?.channel).toBe('codex');
+            expect(capturedJob?.skipDeps).toBe(true);
+        });
+
+        test('works without options (backward compat)', async () => {
+            const created = await svc.create({ title: 'Compat task' });
+            const wbs = created.ref.id;
+            let capturedJob: TaskActionJob | undefined;
+            const result = await svc.fulfillAction(wbs, 'run', async (job) => {
+                capturedJob = job;
+                return 'run-043';
+            });
+            expect(result.runId).toBe('run-043');
+            expect(capturedJob?.channel).toBeUndefined();
+            expect(capturedJob?.skipDeps).toBeUndefined();
         });
     });
 });

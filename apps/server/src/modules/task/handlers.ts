@@ -1,6 +1,7 @@
+import { join } from 'node:path';
 import type { WriteResult } from '@gobing-ai/spur-app';
 import { contract } from '@gobing-ai/spur-contracts';
-import { normalizeTaskStatus } from '@gobing-ai/spur-domain/schema';
+import { normalizeTaskStatus, PRIORITIES, TASK_TYPES } from '@gobing-ai/spur-domain/schema';
 import { NotFoundError } from '@gobing-ai/ts-utils';
 import { implement } from '@orpc/server';
 import type { ServerContext } from '../../context';
@@ -35,13 +36,24 @@ export function createTaskHandlers(ctx: ServerContext) {
         list: os.task.list.handler(async ({ input }) => {
             const filters = toFilters(input as Record<string, unknown> | undefined);
             const tasks = await ctx.taskService().list(filters);
-            const data = tasks.map((t) => ({
-                wbs: t.wbs,
-                name: t.name,
-                status: normalizeTaskStatus(t.status),
-                filePath: t.filePath,
-                updatedAt: t.frontmatter?.updated_at as string | undefined,
-            }));
+            const data = tasks.map((t) => {
+                const fm = t.frontmatter ?? {};
+                return {
+                    wbs: t.wbs,
+                    name: t.name,
+                    status: normalizeTaskStatus(t.status),
+                    priority: (PRIORITIES as readonly string[]).includes(fm.priority as string)
+                        ? (fm.priority as (typeof PRIORITIES)[number])
+                        : undefined,
+                    featureId: (fm.feature_id as string | null) ?? undefined,
+                    parentWbs: (fm.parent_wbs as string | null) ?? undefined,
+                    type: (TASK_TYPES as readonly string[]).includes(fm.type as string)
+                        ? (fm.type as (typeof TASK_TYPES)[number])
+                        : undefined,
+                    filePath: t.filePath,
+                    updatedAt: fm.updated_at as string | undefined,
+                };
+            });
             return { ok: true as const, data };
         }),
 
@@ -62,9 +74,12 @@ export function createTaskHandlers(ctx: ServerContext) {
         }),
 
         create: os.task.create.handler(async ({ input }) => {
-            const r = await ctx
-                .taskService()
-                .create({ title: input.title, featureId: input.featureId, parentWbs: input.parentWbs });
+            const r = await ctx.taskService().create({
+                title: input.title,
+                featureId: input.featureId,
+                parentWbs: input.parentWbs,
+                template: input.template,
+            });
             return { ok: true as const, data: createResponseShape(r) };
         }),
 
@@ -79,17 +94,37 @@ export function createTaskHandlers(ctx: ServerContext) {
         }),
 
         action: os.task.action.handler(async ({ input }) => {
-            // R3: only `run` is wired end-to-end in this task; other actions
-            // are enumerated in the contract but return "not yet implemented".
-            if (input.action !== 'run') {
-                throw new NotFoundError(`Action "${input.action}" is not yet implemented. Supported: run`);
-            }
             const jobQueue = await ctx.jobQueue();
-            const result = await ctx.taskService().fulfillAction(input.wbs, input.action, async (job) => {
-                const runId = await jobQueue.enqueue('task-action', job);
-                return runId;
-            });
+            const result = await ctx.taskService().fulfillAction(
+                input.wbs,
+                input.action,
+                async (job) => {
+                    const runId = await jobQueue.enqueue('task-action', job);
+                    return runId;
+                },
+                { channel: input.channel, skipDeps: input.skipDeps },
+            );
             return { ok: true as const, data: result };
+        }),
+
+        folders: os.task.folders.handler(async () => {
+            const configPath = join(ctx.cwd, 'docs/.tasks/config.jsonc');
+            let raw: string;
+            try {
+                raw = await ctx.fs.readFile(configPath);
+            } catch {
+                return { ok: true as const, data: [{ path: 'docs/tasks', label: 'Primary' }] };
+            }
+            const stripped = raw.replace(/^\s*\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+            const parsed = JSON.parse(stripped) as {
+                folders?: Record<string, { label?: string }>;
+            };
+            const folders = parsed.folders ?? {};
+            const data = Object.entries(folders).map(([path, cfg]) => ({
+                path,
+                label: cfg.label,
+            }));
+            return { ok: true as const, data };
         }),
     };
 }
