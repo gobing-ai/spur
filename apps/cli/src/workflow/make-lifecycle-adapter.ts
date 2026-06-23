@@ -25,7 +25,7 @@ export function makeLifecycleAdapter(context: CliContext, profile: LifecycleProf
     // Resolve the spur binary to avoid PATH ambiguity — the `spur` on PATH may be
     // a different version (or compiled without `task`/`feature` commands). Shared
     // with the `workflow run` path so both resolve the binary identically.
-    const spurBin = resolveSpurBin(context.cwd);
+    const spurBin = resolveSpurBin();
     return new LifecycleAdapter({
         profile,
         getDb: () => context.getDb(),

@@ -1,9 +1,15 @@
-import { existsSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename } from 'node:path';
+
+/** The launch handles resolution depends on — injectable so the logic is unit-testable. */
+export interface SpurBinLaunch {
+    /** The executable running the process (`process.execPath`). */
+    execPath: string;
+    /** The entry module the runtime is executing (`Bun.main` / `process.argv[1]`). */
+    mainModule: string | undefined;
+}
 
 /**
- * Resolve a PATH-independent invocation of the spur CLI for shell guards/actions
- * inside workflows (`spur task check`, the verdict-gate `jq`, etc.).
+ * Pure resolution of a PATH-independent spur invocation from the launch handles.
  *
  * Why this exists: workflow shell guards run via execa-spawned `/bin/sh -c`, whose
  * environment does not reliably carry the user's PATH (so a bare `spur` resolves to
@@ -11,23 +17,34 @@ import { basename, join } from 'node:path';
  * version or a binary compiled without the `task`/`feature` commands. Injecting an
  * absolute invocation removes both ambiguities.
  *
- * Resolution hinges on **what `process.execPath` actually is**, not on whether the
- * source tree is present (the dev entry exists on disk even when a compiled binary
- * runs from the project root):
- * - **Bun runtime (dev/source run):** `execPath` is `bun`; invoke the working-tree
- *   entry through it (`<bun> run <cwd>/apps/cli/src/index.ts`) so guards run the exact
- *   source CLI. Only taken when that entry exists.
- * - **Compiled / installed binary:** `execPath` is the spur executable itself, which
- *   has no `run` subcommand — invoke it directly (`<execPath> task check …`).
+ * The resolution must hold across the three ways spur runs — the prior
+ * "does the source entry exist on disk" heuristic silently broke the most common one
+ * (global install) — so it keys off **how the process was launched**:
+ *
+ * | Launch mode                              | `execPath`           | invocation emitted        |
+ * | ---------------------------------------- | -------------------- | ------------------------- |
+ * | `bun install -g @gobing-ai/spur` (prod)  | the Bun/Node runtime | `<runtime> <mainModule>`  |
+ * | `bun run apps/cli/src/index.ts` (dev)    | the Bun/Node runtime | `<runtime> <mainModule>`  |
+ * | compiled single-file binary (`dist/cli`) | the spur executable  | `<execPath>` (it is spur) |
+ *
+ * For the runtime modes, `mainModule` is the actual entry the runtime executes
+ * (`spur.js` when installed, `apps/cli/src/index.ts` in dev), so `<runtime> <mainModule>`
+ * re-invokes the *same* spur regardless of CWD or PATH. A compiled binary has no separate
+ * runtime: `execPath` is the spur executable itself and handles `task check …` directly.
  */
-export function resolveSpurBin(cwd: string): string {
-    const execName = basename(process.execPath).toLowerCase();
-    const isBunRuntime = execName === 'bun' || execName === 'bun.exe';
-    if (isBunRuntime) {
-        const devEntry = join(cwd, 'apps', 'cli', 'src', 'index.ts');
-        if (existsSync(devEntry)) {
-            return `${process.execPath} run ${devEntry}`;
-        }
+export function resolveSpurBinFrom(launch: SpurBinLaunch): string {
+    const runtime = basename(launch.execPath)
+        .toLowerCase()
+        .replace(/\.exe$/, '');
+    const isJsRuntime = runtime === 'bun' || runtime === 'node';
+    if (isJsRuntime && launch.mainModule) {
+        return `${launch.execPath} ${launch.mainModule}`;
     }
-    return process.execPath;
+    return launch.execPath;
+}
+
+/** Resolve the spur invocation from the live process handles. */
+export function resolveSpurBin(): string {
+    const mainModule = typeof Bun !== 'undefined' ? Bun.main : process.argv[1];
+    return resolveSpurBinFrom({ execPath: process.execPath, mainModule });
 }

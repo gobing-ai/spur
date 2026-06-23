@@ -127,3 +127,15 @@ export {
     type LifecycleProfile,
     TASK_LIFECYCLE_PROFILE,
 } from './workflow/lifecycle-adapter';
+// Workflow observability — per-step event stream for the board / live consumers
+export {
+    ObservableWorkflowAdapter,
+    type WorkflowActionFinishedEvent,
+    type WorkflowActionStartedEvent,
+    type WorkflowObservabilityBus,
+    type WorkflowObservabilityEventMap,
+    type WorkflowPhaseEvent,
+    type WorkflowRunFinalizedEvent,
+    type WorkflowRunStartedEvent,
+    type WorkflowTransitionEvent,
+} from './workflow/observability';

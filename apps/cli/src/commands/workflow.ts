@@ -103,7 +103,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             // binary inside the execa-spawned subprocess, whose env may lack PATH.
             // User-supplied --vars win on conflict (spread last is intentional here:
             // spurBin is a default, overridable only if a caller deliberately sets it).
-            const vars = { spurBin: resolveSpurBin(context.cwd), ...parseVars(options.vars) };
+            const vars = { spurBin: resolveSpurBin(), ...parseVars(options.vars) };
             const result = await makeSvc(options.json).run(file, {
                 runId: options.runId || undefined,
                 vars,

@@ -14,10 +14,12 @@ import {
     type HitlResponder,
     loadWorkflowDef,
     type WorkflowDef,
+    type WorkflowPersistenceAdapter,
 } from '@gobing-ai/ts-dual-workflow-engine';
 import { parseYamlObject } from '@gobing-ai/ts-runtime';
 import type { HostAllowlist, HttpRequester } from '../workflow/actions/http-request';
 import { registerSpurBuiltins } from '../workflow/builtins';
+import { ObservableWorkflowAdapter, type WorkflowObservabilityBus } from '../workflow/observability';
 import type { AgentService } from './agent-service';
 import type { RuleService } from './rule-service';
 
@@ -135,6 +137,12 @@ export interface WorkflowAppServiceContext {
     hitlResponder(): HitlResponder;
     httpRequester?(): HttpRequester;
     hostAllowlist?(): HostAllowlist;
+    /**
+     * Optional observability bus. When provided, per-step lifecycle hooks are
+     * mirrored onto it (run/phase/transition/action events) for live consumers
+     * such as the board. Persistence is unaffected whether or not it is present.
+     */
+    observabilityBus?(): WorkflowObservabilityBus;
 }
 
 // ---------------------------------------------------------------------------
@@ -422,7 +430,10 @@ export class WorkflowAppService {
             httpRequester: this.ctx.httpRequester?.(),
             hostAllowlist: this.ctx.hostAllowlist?.(),
         });
-        return new EngineWorkflowService(host, new DbWorkflowPersistenceAdapter(await this.ctx.getDb()));
+        const persistence: WorkflowPersistenceAdapter = new DbWorkflowPersistenceAdapter(await this.ctx.getDb());
+        const bus = this.ctx.observabilityBus?.();
+        const adapter = bus ? new ObservableWorkflowAdapter(persistence, bus) : persistence;
+        return new EngineWorkflowService(host, adapter);
     }
 }
 

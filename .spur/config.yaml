@@ -29,7 +29,7 @@ bootstrap:
 
 # ── Spur app section (validated by a local zod schema — UNCHANGED keys) ──
 agent:
-  default: pi
+  default: omp
 
 rules:
   paths:
