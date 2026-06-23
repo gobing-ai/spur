@@ -44,7 +44,8 @@
       "Bash(spur workflow *)",
       "Bash(spur agent *)",
       "Read(//tmp/**)",
-      "Bash(spur task *)"
+      "Bash(spur task *)",
+      "Bash(sqlite3 .spur/spur.db *)"
     ]
   }
 }

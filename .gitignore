@@ -147,6 +147,7 @@ docs/.ftree/
 .ant-colony/
 !.env.example
 /.spur/run
+/.rulesync
 
 /apps/web/coverage
 /apps/web/.coverage
