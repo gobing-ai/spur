@@ -4,15 +4,17 @@ name: task-lifecycle
 description: >
   Task lifecycle FSM (design §2.3, §5.1). States are the canonical TaskStatus
   vocabulary (DD-01); transitions encode the §2.3 graph; guards invoke
-  `spur task check` at the wip→testing and testing→done placements. `done` is
-  re-enterable (reopen with a warning); `cancelled` is terminal. Guard commands
-  reference the check verb (0051) — structural validation passes today, behavioral
-  wiring activates as the verb ships. Unconditional transitions use the `always`
-  guard (externally-driven via `requestTransition`, not auto-advance).
+  `${vars.spurBin} task check` at the wip→testing and testing→done placements.
+  `done` is re-enterable (reopen with a warning); `cancelled` is terminal.
+  Guard commands reference the check verb (0051) — structural validation passes
+  today, behavioral wiring activates as the verb ships. Unconditional transitions
+  use the `always` guard (externally-driven via `requestTransition`, not
+  auto-advance).
 initialState: backlog
 terminalStates:
   - cancelled
 vars:
+  spurBin: 'spur'
   wbs: '0000'
 
 states:
@@ -49,14 +51,14 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'spur task check ${vars.wbs}'
+        command: '${vars.spurBin} task check ${vars.wbs}'
   - from: testing
     to: done
     description: Testing passed — task complete
     guard:
       kind: shell
       options:
-        command: 'spur task check ${vars.wbs} --strict-core'
+        command: '${vars.spurBin} task check ${vars.wbs} --strict-core'
 
   # Reopen: done → wip (warned, mandatory History entry)
   - from: done
