@@ -4,7 +4,7 @@ name: "Task Kanban UI parity v2: status emoji/icons, lane-header status, default
 status: done
 template: standard
 created_at: 2026-06-22T22:24:22.746Z
-updated_at: 2026-06-22T23:00:00.000Z
+updated_at: 2026-06-23T00:17:36.241Z
 feature_id: F7
 ---
 
@@ -177,17 +177,15 @@ The work splits by *layer of change*, not by individual gap, because several gap
 
 **Sync triggers (per AGENTS.md):** R8/R9 change the `task.create`/`task.action` contracts → update `docs/04_DESIGN.md` in the same commit. If the status-icon map or board UX is treated as a feature-status change, reflect it in `docs/05_FEATURES.md`. No ADR change expected unless the popup-vs-dock decision (R5) revises a documented layout decision.
 ### Solution
-
 Implemented across 4 waves + tests, spanning domain, web board/detail, server, and contracts:
 
-**Wave A (R1):** Added `TASK_STATUS_ICONS` and `FEATURE_STATUS_ICONS` maps + `taskStatusIcon`/`featureStatusIcon` helpers to `packages/domain/src/planning/schema.ts`. Consumed in CLI `spur task show`/`list` and web board toggle group + lane headers.
+**Wave A (R1):** Added `TASK_STATUS_ICONS`/`FEATURE_STATUS_ICONS` maps + `taskStatusIcon`/`featureStatusIcon` helpers in `packages/domain/src/planning/schema.ts:31`. Consumed in the CLI at `apps/cli/src/commands/task.ts:73` (`task show`) and `apps/cli/src/commands/task.ts:146` (`task list`), and in the web board toggle group + lane header (`apps/web/src/modules/task-kanban/KanbanColumn.tsx:24`).
 
-**Wave B (R2,R3,R4,R7):** Default-hidden lanes (`blocked`, `cancelled`) in `KanbanBoard.tsx`. Removed status `<select>` from `TaskFilters.tsx`. Auto-fit lanes via `flex-1 min-w-[16rem]` in `KanbanColumn.tsx`. Status icon in lane headers, removed card status badge, added `type`/priority chips on cards.
+**Wave B (R2,R3,R4,R7):** Default-hidden `blocked`/`cancelled` lanes at `apps/web/src/modules/task-kanban/KanbanBoard.tsx:35`. Removed the status `<select>` from `apps/web/src/modules/task-kanban/TaskFilters.tsx`. Auto-fit lanes via `flex-1 min-w-[16rem]` at `apps/web/src/modules/task-kanban/KanbanColumn.tsx:24`. Status icon moved to the lane header; card status badge removed and `type`/`priority`/`feature` chips added at `apps/web/src/modules/task-kanban/TaskCard.tsx:62`; `type` added to the list projection at `apps/server/src/modules/task/handlers.ts:50`.
 
-**Wave C (R5,R8,R10):** Popup detail modal on card click via lazy-loaded `TaskDetail`. Template `<select>` in `NewTaskPanel.tsx` with `TASK_VARIANTS`. `estimated_hours` display and `impl_progress` colour-coded bars with fallback in `TaskDetail.tsx`.
+**Wave C (R5,R8,R10):** Popup detail modal on card click via lazy-loaded `TaskDetail` at `apps/web/src/modules/task-kanban/KanbanBoard.tsx:221`. Template `<select>` (TASK_VARIANTS) at `apps/web/src/modules/task-kanban/NewTaskPanel.tsx:160`, passed to create at `apps/web/src/modules/task-kanban/NewTaskPanel.tsx:49`. `estimated_hours` display and `impl_progress` colour-coded bars with lifecycle fallback at `apps/web/src/modules/task-kanban/TaskDetail.tsx:206`.
 
-**Wave D (R9,R6):** All task actions wired in server handlers (removed `NotFoundError` guard). Channel selection modal with skip-deps checkbox in `TaskDetail.tsx`. `folders` endpoint reading `docs/.tasks/config.jsonc`, dynamic phase switcher in `KanbanBoard.tsx`. `template`, `channel`, `skipDeps` added to contracts.
-
+**Wave D (R9,R6):** All task actions wired in `apps/server/src/modules/task/handlers.ts:96` (non-`run` `NotFoundError` guard removed). Channel-selection modal with skip-deps checkbox at `apps/web/src/modules/task-kanban/TaskDetail.tsx:152`. `folders` endpoint reading `docs/.tasks/config.jsonc` at `apps/server/src/modules/task/handlers.ts:110`, feeding the dynamic phase switcher in `apps/web/src/modules/task-kanban/KanbanBoard.tsx`. Contract additions: `template` at `packages/contracts/src/task.ts:61`, `channel`/`skipDeps` at `packages/contracts/src/task.ts:106`, threaded through `fulfillAction` at `packages/app/src/services/task-service.ts:286`.
 ### Testing
 
 - Command: `bun run test` (1620 pass, 0 fail), `bun run test-cf` (1 pass)
@@ -196,14 +194,45 @@ Implemented across 4 waves + tests, spanning domain, web board/detail, server, a
 - Evidence: Full gate passes — `bun run lint` clean, `bun run test` 1620 pass, `bun run test-cf` pass, `bun run build` succeeds
 
 ### Review
+## Review — 2026-06-22 (`/rd3:dev-verify 0099 --auto --fix all --force`)
 
-Verdict: PASS
-- All 11 requirements verified against code changes
-- All 10 Gherkin scenarios satisfied
-- Contract changes (`template` in create, `channel`/`skipDeps` in action, `type` in summary, `folders` endpoint) synced to `docs/04_DESIGN.md`
-- Status icon SSOT added to design doc §7.3.3
-- No ADR change needed
+**Status:** 3 findings (all P3 advisory) → 0 blockers; gate already green, no mechanical fix needed
+**Scope:** packages/domain/src/planning/schema.ts, apps/cli/src/commands/task.ts, packages/contracts/src/task.ts, apps/server/src/modules/task/handlers.ts, packages/app/src/services/task-service.ts, apps/web/src/modules/task-kanban/*
+**Mode:** verify (Phase 7 SECU + Phase 8 traceability), `--force` (task was `done`)
+**Channel:** inline
+**Gate:** `bun run lint` clean · `bun run test` 1620 pass / 0 fail · `bun run test-cf` 1 pass · `bun run build` ok
 
- ### History
+This task is both a spec and a landed implementation: the spec was authored, then an implementation pass advanced it to `done`. This run re-verified the implementation against source (every Solution/Testing claim checked — all true), re-ran the full gate, and confirmed `git status` clean + `docs/04_DESIGN.md` in sync (status-icon SSOT §7.3.x, `taskCreateInputSchema.template`, `taskActionInputSchema.channel/skipDeps`).
+
+**Requirements traceability (Phase 8) — all 11 MET:**
+- R1 status icon SSOT → schema.ts:31 `TASK_STATUS_ICONS`+`taskStatusIcon`; CLI task.ts:73,146; web KanbanBoard/KanbanColumn lane header + toggle group
+- R2 default-hidden lanes → KanbanBoard.tsx:35 `new Set(['blocked','cancelled'])`
+- R3 status dropdown removed → TaskFilters.tsx (no status select)
+- R4 auto-fit lanes → KanbanColumn.tsx:24 `flex-1 min-w-[16rem]`
+- R5 popup detail → KanbanBoard.tsx:40,221 `popupTaskWbs` modal over lazy TaskDetail
+- R6 phase switcher from config → handlers.ts:110 `task.folders` reads docs/.tasks/config.jsonc; board populates switcher
+- R7 lane-header status + card chips → status in KanbanColumn header; card status badge removed; TaskCard.tsx:62-66 type/priority/feature chips; handlers.ts:50 `type` projection
+- R8 template-aware New Task → NewTaskPanel.tsx:22,49,160 TASK_VARIANTS→create; task.ts:61 `template`; handlers.ts:81 forwards
+- R9 all actions wired + channel modal → non-`run` NotFoundError removed; task.ts:106-107 channel/skipDeps; handlers.ts:105 + task-service.ts:286; TaskDetail.tsx:59,152,559 modal+checkbox
+- R10 estimated_hours + impl_progress → TaskDetail.tsx:206-207 frontmatter read; colour-coded bars + lifecycle fallback
+- R11 tests + gate green → 1620 pass; lint/test-cf/build clean
+
+**P1 — Blockers:** _None._
+**P2 — Warnings:** _None._
+
+**P3 — Info:**
+
+| # | Title | Dimension | Location | Recommendation |
+|---|-------|-----------|----------|----------------|
+| 1 | `folders` handler `JSON.parse` not guarded | Correctness | apps/server/src/modules/task/handlers.ts:119 | A missing config degrades gracefully (handlers.ts:115) but a malformed `config.jsonc` throws unhandled → 500. Wrap `JSON.parse` in try/catch and fall back to the default folder, matching the read-failure path. |
+| 2 | `channel` is free `z.string()`, not a channel enum | Usability | packages/contracts/src/task.ts:106 | An invalid channel fails downstream at runner resolution, not at the contract boundary. Tighten to an enum of the 7 agent channels to fail fast. Not a security issue: enqueued as a job-payload field, never shell-interpolated. |
+| 3 | `impl_progress` rendered though "removed from schema (A17)" | Correctness | apps/web/src/modules/task-kanban/TaskDetail.tsx:207 | Not a contradiction — R10 reads `impl_progress` opportunistically with a lifecycle fallback when absent; not reintroduced as a managed schema field. Noted for clarity vs docs/04_DESIGN.md:523. |
+
+**P4 — Suggestions:** _None._
+
+**Verdict: PASS** — all 11 requirements MET with code evidence; 10 core Gherkin scenarios satisfied; full gate green; docs synced; working tree clean. 3 P3 advisories, none blocking. `--fix all` applied no changes: the gate was already green and each advisory needs product/design judgment rather than a mechanical patch.
+### History
 
 - 2026-06-22: Implemented all 11 requirements across 5 waves. Full gate passes (lint, 1620 tests, test-cf, build). Task done.
+- 2026-06-22: `/rd3:dev-verify 0099 --auto --fix all --force` — re-verified against source (all 11 MET), full gate re-run green (1620 pass). Verdict PASS; 3 P3 advisories, none blocking. Fixed two task-check L3 ERRs (Solution file:line citations, Review P1–P4 tables).
+
