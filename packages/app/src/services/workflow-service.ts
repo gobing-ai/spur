@@ -61,6 +61,22 @@ export interface PausedRun {
     startedAt: string;
 }
 
+/** A stale run finalized by `spur workflow clean`. */
+export interface CleanedRun {
+    runId: string;
+    startedAt: string;
+}
+
+/** Result of `spur workflow clean` — orphaned non-terminal runs finalized as `failed`. */
+export interface WorkflowCleanResult {
+    /** Minutes-stale threshold applied. */
+    olderThanMinutes: number;
+    /** Whether this was a dry run (no writes). */
+    dryRun: boolean;
+    /** The runs that were (or would be) finalized. */
+    cleaned: CleanedRun[];
+}
+
 /** A single entry in a workflow file listing. */
 export interface WorkflowListEntry {
     name: string;
@@ -250,6 +266,33 @@ export class WorkflowAppService {
         const first = paused[0];
         if (first === undefined) return null;
         return { runId: first.id, workflowName: first.workflow_name, startedAt: first.started_at };
+    }
+
+    /**
+     * Finalize orphaned runs — those stuck in `running`/`pending` past the staleness
+     * threshold because the executing process was killed (timeout, crash, Ctrl-C)
+     * before the engine could finalize them. Without this, such runs linger forever
+     * and pollute `spur workflow trace`. Marks each as `failed` with a stamped reason.
+     *
+     * @param olderThanMinutes A run is stale if it started more than this many minutes
+     *   ago and is still non-terminal. Default 30.
+     * @param dryRun When true, report what would be cleaned without writing.
+     */
+    async clean(olderThanMinutes = 30, dryRun = false): Promise<WorkflowCleanResult> {
+        const db = await this.ctx.getDb();
+        const dao = new RunDao(db);
+        const cutoffIso = new Date(Date.now() - olderThanMinutes * 60_000).toISOString();
+        const stale = await dao.listStaleRuns(cutoffIso);
+        if (!dryRun) {
+            for (const run of stale) {
+                await dao.finalizeStale(run.id, `stale: non-terminal > ${olderThanMinutes}m (spur workflow clean)`);
+            }
+        }
+        return {
+            olderThanMinutes,
+            dryRun,
+            cleaned: stale.map((r) => ({ runId: r.id, startedAt: r.started_at })),
+        };
     }
 
     /**

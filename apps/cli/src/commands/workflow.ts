@@ -164,6 +164,35 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         });
 
     workflow
+        .command('clean')
+        .description('Finalize orphaned runs stuck in running/pending past a staleness threshold (mark as failed).')
+        .option('--older-than <minutes>', 'Staleness threshold in minutes', '30')
+        .option('--dry-run', 'List what would be cleaned without writing')
+        .option('--json', 'Output machine-readable JSON where supported')
+        .action(async (options) => {
+            const minutes = Number.parseInt(options.olderThan ?? '30', 10);
+            if (!Number.isFinite(minutes) || minutes < 0) {
+                context.output.error(`Invalid --older-than value: ${options.olderThan}`);
+                context.setExitCode(2);
+                return;
+            }
+            const result = await makeSvc(options.json).clean(minutes, options.dryRun === true);
+            if (options.json) {
+                context.output.write(toJson(result));
+            } else {
+                const verb = result.dryRun ? 'Would finalize' : 'Finalized';
+                if (result.cleaned.length === 0) {
+                    context.output.write(`No stale runs older than ${minutes}m.`);
+                } else {
+                    context.output.write(
+                        `${verb} ${result.cleaned.length} stale run(s) (>${minutes}m):\n` +
+                            result.cleaned.map((r) => `  ${r.runId} (started ${r.startedAt})`).join('\n'),
+                    );
+                }
+            }
+        });
+
+    workflow
         .command('list')
         .description('List available workflow YAML files.')
         .option('--json', 'Output machine-readable JSON where supported')

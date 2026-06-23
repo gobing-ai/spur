@@ -499,4 +499,50 @@ terminalStates:
             await rm(dir, { recursive: true, force: true });
         });
     });
+
+    describe('clean (orphaned-run finalization)', () => {
+        async function seedRun(
+            db: Awaited<ReturnType<ReturnType<typeof makeCtx>['getDb']>>,
+            id: string,
+            status: string,
+            startedAtIso: string,
+        ) {
+            await db.run(
+                `INSERT INTO runs (id, workflow_name, mode, status, started_at, metadata_json, created_at, updated_at)
+                 VALUES (?, 'task-pipeline', 'state-machine', ?, ?, '{}', 0, 0)`,
+                id,
+                status,
+                startedAtIso,
+            );
+        }
+
+        test('finalizes stale non-terminal runs as failed, leaving recent and terminal runs intact', async () => {
+            const ctx = makeCtx();
+            const db = await ctx.getDb();
+            await seedRun(db, 'run_stale', 'running', '2026-06-01T00:00:00.000Z');
+            await seedRun(db, 'run_done', 'done', '2026-06-01T00:00:00.000Z');
+            await seedRun(db, 'run_fresh', 'running', new Date().toISOString());
+
+            const result = await new WorkflowAppService(ctx).clean(30, false);
+
+            expect(result.cleaned.map((r) => r.runId)).toEqual(['run_stale']);
+            const stale = await db.queryFirst<{ status: string }>('SELECT status FROM runs WHERE id = ?', 'run_stale');
+            const fresh = await db.queryFirst<{ status: string }>('SELECT status FROM runs WHERE id = ?', 'run_fresh');
+            expect(stale?.status).toBe('failed');
+            expect(fresh?.status).toBe('running'); // too recent — untouched
+        });
+
+        test('dry-run reports stale runs without finalizing them', async () => {
+            const ctx = makeCtx();
+            const db = await ctx.getDb();
+            await seedRun(db, 'run_dry', 'running', '2026-06-01T00:00:00.000Z');
+
+            const result = await new WorkflowAppService(ctx).clean(30, true);
+
+            expect(result.dryRun).toBe(true);
+            expect(result.cleaned.map((r) => r.runId)).toEqual(['run_dry']);
+            const row = await db.queryFirst<{ status: string }>('SELECT status FROM runs WHERE id = ?', 'run_dry');
+            expect(row?.status).toBe('running'); // dry-run wrote nothing
+        });
+    });
 });
