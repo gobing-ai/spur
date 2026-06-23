@@ -27,6 +27,14 @@ terminalStates:
 vars:
   wbs: "0000"
   profile: "standard"
+  # PATH-independent spur invocation for shell guards/actions. The CLI overrides this
+  # at run start (resolveSpurBin); the literal default is a safe fallback so direct/dry
+  # runs and `workflow validate` resolve the template. (See AGENTS.md / ADR-026.)
+  spurBin: "spur"
+  # Agent the pipeline's agent.run steps invoke. Override per run with
+  # `--vars '{"agent":"claude"}'`. Pinned (not left to the AiRunner's <default>
+  # selection) so a broken/misconfigured agent on the box can't silently capture the run.
+  agent: "omp"
 
 states:
   - id: precheck
@@ -44,20 +52,24 @@ states:
   - id: implement
     description: >
       Move the task to `wip` (via the normal verb — lifecycle guards apply, R3),
-      then run agent-driven implementation via /sp:dev-run.
+      then run agent-driven implementation via /sp:dev-implement. NOTE: this step
+      must NOT call /sp:dev-run — that command DRIVES this pipeline, so calling it
+      here recurses. /sp:dev-implement is the single-step implement entry.
     onEnter:
       - kind: shell
         options:
-          command: "spur task update ${vars.wbs} wip"
+          command: "${vars.spurBin} task update ${vars.wbs} wip"
       - kind: agent.run
         options:
-          input: /sp:dev-run ${vars.wbs} --auto
+          agent: ${vars.agent}
+          input: /sp:dev-implement ${vars.wbs} --auto
 
   - id: test
     description: Test execution + coverage via /sp:dev-unit.
     onEnter:
       - kind: agent.run
         options:
+          agent: ${vars.agent}
           input: /sp:dev-unit ${vars.wbs} --auto
 
   - id: review
@@ -65,6 +77,7 @@ states:
     onEnter:
       - kind: agent.run
         options:
+          agent: ${vars.agent}
           input: /sp:dev-review ${vars.wbs} --auto
 
   - id: approve
@@ -80,11 +93,28 @@ states:
           prompt: "Approve task ${vars.wbs} to proceed to verification?"
 
   - id: verify
-    description: Functional verification (BDD + traceability) via /sp:dev-verify.
+    description: >
+      Functional verification (BDD + traceability) via /sp:dev-verify. The agent's
+      captured answer is written to `.spur/run/<wbs>-verify-answer.txt`; a deterministic
+      shell step then derives the verdict and writes the gate artifact
+      `.spur/run/<wbs>-verdict.json` (so the completion gate reads a real verdict, not
+      agent discretion — R9). The verdict is PASS only if the agent both reported PASS
+      AND `spur task check` passes; otherwise FAIL.
     onEnter:
       - kind: agent.run
         options:
+          agent: ${vars.agent}
           input: /sp:dev-verify ${vars.wbs} --auto --fix all
+          answerFile: .spur/run/${vars.wbs}-verify-answer.txt
+      - kind: shell
+        options:
+          command: >
+            mkdir -p .spur/run &&
+            if ${vars.spurBin} task check ${vars.wbs} >/dev/null 2>&1 &&
+               grep -Eqi 'verdict[^A-Za-z]*pass|^[[:space:]]*pass\b|✅' ".spur/run/${vars.wbs}-verify-answer.txt" 2>/dev/null;
+            then V=PASS; else V=FAIL; fi;
+            printf '{"wbs":"%s","verdict":"%s","source":"pipeline-verify-step"}\n' "${vars.wbs}" "$V"
+            > ".spur/run/${vars.wbs}-verdict.json"
 
   - id: record
     description: >
@@ -95,13 +125,13 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: "spur task update ${vars.wbs} testing"
+          command: "${vars.spurBin} task update ${vars.wbs} testing"
       - kind: shell
         options:
-          command: "mkdir -p .spur/run && : > .spur/run/${vars.wbs}-testing.md && printf 'Pipeline run %s — see agent output above.\\n' \"${vars.wbs}\" >> .spur/run/${vars.wbs}-testing.md && spur task update ${vars.wbs} --section Testing --from-file .spur/run/${vars.wbs}-testing.md"
+          command: "mkdir -p .spur/run && : > .spur/run/${vars.wbs}-testing.md && printf 'Pipeline run %s — see agent output above.\\n' \"${vars.wbs}\" >> .spur/run/${vars.wbs}-testing.md && ${vars.spurBin} task update ${vars.wbs} --section Testing --from-file .spur/run/${vars.wbs}-testing.md"
       - kind: shell
         options:
-          command: "mkdir -p .spur/run && : > .spur/run/${vars.wbs}-review.md && printf 'Pipeline run %s — SECU review recorded.\\n' \"${vars.wbs}\" >> .spur/run/${vars.wbs}-review.md && spur task update ${vars.wbs} --section Review --from-file .spur/run/${vars.wbs}-review.md"
+          command: "mkdir -p .spur/run && : > .spur/run/${vars.wbs}-review.md && printf 'Pipeline run %s — SECU review recorded.\\n' \"${vars.wbs}\" >> .spur/run/${vars.wbs}-review.md && ${vars.spurBin} task update ${vars.wbs} --section Review --from-file .spur/run/${vars.wbs}-review.md"
 
   - id: done
     description: Terminal — task executed, verified, and recorded. Moves the task to
@@ -109,7 +139,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: "spur task update ${vars.wbs} done"
+          command: "${vars.spurBin} task update ${vars.wbs} done"
 
   - id: failed
     description: Terminal — precheck (or a gated step) failed; reported, not advanced.
@@ -122,14 +152,14 @@ transitions:
     guard:
       kind: shell
       options:
-        command: "spur task check ${vars.wbs}"
+        command: "${vars.spurBin} task check ${vars.wbs}"
   - from: precheck
     to: failed
     description: Precheck failed — report and stop (no fall-through to implement).
     guard:
       kind: shell
       options:
-        command: '! spur task check ${vars.wbs}'
+        command: '! ${vars.spurBin} task check ${vars.wbs}'
 
   # ── linear body ──
   - from: implement
@@ -166,11 +196,25 @@ transitions:
     description: Approved — proceed to verification.
     guard:
       kind: always
+  # ── completion gate (the YAML-native replacement for rd3's default-on --postflight-verify) ──
+  # The verify step (/sp:dev-verify → sp:code-verification) emits .spur/run/<wbs>-verdict.json.
+  # Only a `verdict: PASS` clears the gate to `record → done`; any non-PASS (PARTIAL/FAIL),
+  # a missing file, or malformed JSON routes to `failed`. Declaration order matters: the PASS
+  # guard is tried FIRST, so a PASS run records-and-dones; otherwise it falls through to failed.
   - from: verify
     to: record
-    description: Verification passed — record results.
+    description: Verification verdict is PASS — record results and proceed to done.
     guard:
-      kind: always
+      kind: shell
+      options:
+        command: 'test "$(jq -r .verdict .spur/run/${vars.wbs}-verdict.json 2>/dev/null)" = PASS'
+  - from: verify
+    to: failed
+    description: Verification verdict is not PASS (PARTIAL/FAIL/missing) — block before done.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(jq -r .verdict .spur/run/${vars.wbs}-verdict.json 2>/dev/null)" != PASS'
   - from: record
     to: done
     description: Results recorded — pipeline complete.

@@ -605,3 +605,29 @@ native resizable 3-column layout, which has no reproducible collapse defect. No 
 **Detail:** Dependency versions in `apps/web/package.json`; version-SSOT rule per `AGENTS.md`:
 these are apps/web-only → package-private literals; promote to root `workspaces.catalog` only if a
 sibling workspace later needs them.
+
+---
+
+## ADR-026: Verification Is a Companion Skill; the Pipeline Completion Gate Is a Workflow Guard
+
+**Date:** 2026-06-23.
+
+**Decision.** (a) Verify/review logic lives in a `sp:code-verification` companion skill (not the
+`sp:spur-dev` umbrella), backing `/sp:dev-verify` and `/sp:dev-review`. (b) The pipeline gates
+`verify → record` on a shell guard reading `.spur/run/<wbs>-verdict.json`: `verdict: PASS` clears to
+`done`, any non-PASS routes to `failed`. (c) The `implement` step calls `/sp:dev-implement`, never
+`/sp:dev-run` (which *drives* the pipeline).
+
+**Why.** (a) Verification is a distinct concern from planning — keep it out of the fat skill (mirrors
+rd3 `task-runner`↔`code-verification`). (b) `spur task check` validates section *presence*, not
+content, so a FAIL must block `done` via an explicit verdict artifact — the spur-native replacement
+for rd3's `--postflight-verify`. (c) The loop is `task-pipeline.yaml`, not a ported `task-runner`
+(ADR-022); `implement` calling `/sp:dev-run` recursed, letting agents skip test/review/verify.
+Trigger: dogfood finding, task 0105 — the `sp` migration ported the command shells but dropped the
+backing skills.
+
+**Relates:** extends ADR-022, ADR-023. Resolves SECU-backronym drift to rd3-canonical
+S/E/C/U (was "Security/Error-handling/Conventions/Untested-paths" in `dev-review.md`).
+
+**Detail:** `03`/`04_DESIGN.md §7.5`; verdict shape in
+`plugins/sp/skills/code-verification/references/verdict-schema.md`; status in `05_FEATURES.md §9`.

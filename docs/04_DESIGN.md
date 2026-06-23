@@ -658,6 +658,13 @@ files directly — `precheck` is a `spur task check <wbs>` shell guard; `impleme
 `agent.run` steps carrying `sp:dev-*` inputs; status moves use the normal `spur task update <wbs>
 <status>` verb (so the 0055 lifecycle guards apply); `record` writes `## Testing`/`## Review` only via
 `spur task update --section`; `approve` is a `hitl.confirm` gate skippable with `--vars '{"profile":"auto"}'`.
+**Step→command mapping (ADR-026):** `implement` → `/sp:dev-implement` (NOT `/sp:dev-run` — that
+command *drives* this pipeline, so calling it inside recurses); `test` → `/sp:dev-unit`; `review` →
+`/sp:dev-review` (→ `sp:code-verification` review mode); `verify` → `/sp:dev-verify` (→
+`sp:code-verification` verify mode). **Completion gate (ADR-026):** the `verify` step emits
+`.spur/run/<wbs>-verdict.json`; the `verify → record` transition is a shell guard asserting
+`jq -r .verdict … = PASS`, with a sibling `verify → failed` on the negation — so a PARTIAL/FAIL/missing
+verdict blocks `done`. This is the spur-native replacement for rd3's default-on `--postflight-verify`.
 **Follow-up:** `task_run_links` linkage (kind=pipeline, R4) needs a small `WorkflowService` run-start hook
 — there is no link-writing CLI verb to call from a shell step, so it can't live in pure YAML.
 

@@ -148,6 +148,7 @@ Decomposition and per-item dispositions live in
 | Task-pipeline workflow + HITL continue + result writer | 🔶 | `spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"NNNN"}'`; `continue` resumes a paused run; pipeline-pause integration deferred (task 0071 R4); `task_run_links` kind=pipeline pending (task 0071 R1) |
 | Front-half planning pipeline + docs scaffold (task 0088) | ✅ | `spur init` scaffolds `docs/` stubs (preserve-marked, never clobbered); `/sp:spur-init` command customizes fresh project; `sp:spur-plan` skill + `planning-pipeline.yaml` (phasing → feature-ID → design-gen → approval → handoff); validates against workspace schema; hands off to `sp:spur-dev` |
 | `plugins/sp` Fat Skills + thin command/subagent wrappers (ADR-023) | ✅ | skills are SSOT; commands/subagents wrap skills; ADR-016-filtered command set |
+| Verifier skill + pipeline completion gate (ADR-026, task 0105) | 🔶 | `sp:code-verification` (verify + review modes) backs `/sp:dev-verify` / `/sp:dev-review`; emits `.spur/run/<wbs>-verdict.json`; `task-pipeline.yaml` gates `verify → record` on `verdict==PASS` (else `→ failed`); `implement` step split to `/sp:dev-implement` (de-recurses `/sp:dev-run`). Done: skill + commands + gate + workflow-validate/lint green, gate logic proven. Pending: live end-to-end dogfood run on 0101 (R5) |
 
 ## 10. Deferred (needs design before build)
 

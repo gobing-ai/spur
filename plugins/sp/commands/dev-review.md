@@ -1,45 +1,47 @@
 ---
-description: Review code for a task — SECU framework review across security, error-handling, conventions, and untested paths
-argument-hint: "<wbs> [--focus <lens>]"
+description: Review code for a task — SECU framework review across Security, Efficiency, Correctness, and Usability
+argument-hint: "<wbs> [--focus <lens>] [--fix <none|blockers-first|all>]"
 allowed-tools: ["Bash", "Read", "Write", "Skill"]
 ---
 
 # Dev Review
 
-Wraps the **sp:spur-dev** skill (execution half — review phase).
+Wraps the **sp:code-verification** skill (review mode).
 
-Review code changes for a task using the SECU framework (Security, Error-handling,
-Conventions, Untested paths). The review phase of the execution pipeline: analyze the
-diff, produce ranked findings, and feed them into the pipeline's fix loop.
+Review code changes for a task using the SECU framework (**S**ecurity, **E**fficiency,
+**C**orrectness, **U**sability). Analyzes the task's diff, produces severity-ranked findings, and
+writes them to the task's `## Review` section. Source-oriented: unlike `/sp:dev-verify`, it runs the
+SECU review only — no requirements-traceability verdict and no pipeline gate artifact.
 
 ## When to use
 
-- A task's implementation is complete and needs review.
-- A focused security or architecture audit of task changes.
+- A task's implementation is complete and needs a focused quality/security audit.
 - The operator says "review this" or "check the code."
+- You want SECU findings without the full verify verdict (use `/sp:dev-verify` for that).
 
 ## Arguments
 
 | Argument | Description | Default |
 |----------|-------------|---------|
 | `wbs` | Task WBS number (required, positional) | (required) |
-| `--focus <lens>` | Review lens: `security`, `architecture`, `conventions`, or `all` | `all` |
+| `--focus <lens>` | SECU dimensions: `all`, `security`, `efficiency`, `correctness`, `usability`, or comma-separated | `all` |
+| `--fix <strategy>` | Post-review repair: `none`, `blockers-first`, `all` | `none` |
 
 ## Behavior
 
-Thin wrapper: diff scope, SECU analysis, findings ranking, and reporting are all owned by
-the skill.
+Thin wrapper: diff scope, SECU analysis, findings ranking, and write-back are all owned by the
+skill.
 
 ## Implementation
 
-Delegates to **sp:spur-dev** skill:
+Delegates to **sp:code-verification** skill (review mode):
 
 ```
-Skill(skill="sp:spur-dev", args="review $ARGUMENTS")
+Skill(skill="sp:code-verification", args="review $ARGUMENTS")
 ```
 
 ## Platform Notes
 
 - **Claude Code:** native — `Skill()` delegation and `$ARGUMENTS` work directly.
 - **Other platforms:** `Skill()` and `$ARGUMENTS` are Claude-specific. Invoke the
-  `sp:spur-dev` skill's `review` operation directly.
+  `sp:code-verification` skill's review mode directly.

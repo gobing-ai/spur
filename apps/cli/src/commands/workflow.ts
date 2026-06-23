@@ -11,6 +11,7 @@ import { resolveConfigFile } from '../config/resolver';
 import { SpurAppConfigSchema } from '../config/schema';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
+import { resolveSpurBin } from '../workflow/resolve-spur-bin';
 
 /**
  * Parse the `--vars` flag into a string→string map, or `undefined` when absent.
@@ -97,7 +98,12 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .option('--dry-run', 'Validate and walk transitions without executing actions')
         .option('--json', 'Output machine-readable JSON where supported')
         .action(async (file, options) => {
-            const vars = parseVars(options.vars);
+            // Inject a PATH-independent spur invocation so workflow shell guards
+            // (e.g. `${vars.spurBin} task check ${vars.wbs}`) resolve the correct
+            // binary inside the execa-spawned subprocess, whose env may lack PATH.
+            // User-supplied --vars win on conflict (spread last is intentional here:
+            // spurBin is a default, overridable only if a caller deliberately sets it).
+            const vars = { spurBin: resolveSpurBin(context.cwd), ...parseVars(options.vars) };
             const result = await makeSvc(options.json).run(file, {
                 runId: options.runId || undefined,
                 vars,
