@@ -451,4 +451,45 @@ describe('spur task CLI', () => {
         const exitCode = await main(['task', 'check', '0001', '--folder', join(cwd, 'nonexistent')], { cwd, output });
         expect(exitCode).toBe(1);
     });
+
+    // ── record ──
+
+    test('record with non-existent WBS exits 1 and prints error', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'record', '9999', '--json'], { cwd, output });
+        // Non-existent task → error path (catch block line 226-229)
+        expect(exitCode).toBe(1);
+        expect(output.errors.length).toBeGreaterThan(0);
+    });
+
+    test('record --json returns structured result', async () => {
+        const out = createCapturedOutput();
+        await main(['task', 'create', 'Record JSON test'], { cwd, output: out });
+        const wbs = createdWbs(out);
+        // Create a minimal verdict so record has something to write.
+        const verdictPath = join(cwd, '.spur', 'run', `${wbs}-verdict.json`);
+        await mkdir(join(cwd, '.spur', 'run'), { recursive: true });
+        await Bun.write(verdictPath, JSON.stringify({ wbs, verdict: 'PASS', requirements: [], checks: [] }));
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'record', wbs, '--verdict-file', verdictPath, '--json'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lastMessage(output));
+        expect(parsed.testingWritten).toBe(true);
+        expect(parsed.reviewWritten).toBe(true);
+    });
+
+    test('record (human output) prints summary of written sections', async () => {
+        const out = createCapturedOutput();
+        await main(['task', 'create', 'Record human test'], { cwd, output: out });
+        const wbs = createdWbs(out);
+        const verdictPath = join(cwd, '.spur', 'run', `${wbs}-verdict.json`);
+        await mkdir(join(cwd, '.spur', 'run'), { recursive: true });
+        await Bun.write(verdictPath, JSON.stringify({ wbs, verdict: 'PASS', requirements: [], checks: [] }));
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'record', wbs, '--verdict-file', verdictPath], { cwd, output });
+        expect(exitCode).toBe(0);
+        const summary = output.messages.join(' ');
+        expect(summary).toContain('Testing written');
+        expect(summary).toContain('Review written');
+    });
 });

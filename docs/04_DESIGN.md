@@ -463,6 +463,7 @@ Source: delivery §1.1, design §10.
 | `spur task batch-create --file <json>` | `--folder <path>` `--json` | 0/1 | Create many tasks from validated JSON — all-or-nothing; validated against `apps/cli/schemas/task-batch.schema.json` (A08/C03). |
 | `spur task resolve <file-path>` | `--folder <path>` `--json` | 0/1 | Maps a path to owning task (WBS + file). Returns 1 if no match. Strategies: direct match, filename WBS parse, walk-up (A10). |
 | `spur task check [<wbs>]` | `--strict` `--folder <path>` `--json` | 0/1 | Four-layer validation (§3). L4 traceability: `feature_id`/`parent_wbs`/`dependencies` edge resolution + **AC coverage** (DD-09: task scenarios must be a subset of the linked feature's AC by normalized title — warnings by default). Validates all tasks when `<wbs>` omitted; `--strict` elevates warnings. Matrix loaded from `config/tasks/section-matrix.yaml`. |
+| `spur task record <wbs>` | `--verdict-file <path>` `--solution-from-diff` `--transition <status>` `--folder <path>` `--json` | 0/1 | Write Testing/Review from verify verdict; optional Solution backfill from `git diff` and status transition. Never transitions to `done` — the gate stays in the workflow (0108). |
 
 **Exit codes:** 0 success, 1 error, 2 invalid usage. Follows the design §10 `api-response` envelope
 for `--json` output (`{ ok, data? }`).
@@ -656,7 +657,7 @@ state-machine`, `vars: { wbs, profile }`, shape `precheck → implement → test
 → verify → record → done` (precheck failure short-circuits to `failed`). Invariants: it never touches
 files directly — `precheck` is a `spur task check <wbs>` shell guard; `implement/test/review/verify` are
 `agent.run` steps carrying `sp:dev-*` inputs; status moves use the normal `spur task update <wbs>
-<status>` verb (so the 0055 lifecycle guards apply); `record` writes `## Testing`/`## Review` only via
+`spur task record` (0108); `approve` is a `hitl.confirm` gate skippable with `--vars '{"profile":"auto"}'`.
 `spur task update --section`; `approve` is a `hitl.confirm` gate skippable with `--vars '{"profile":"auto"}'`.
 **Step→command mapping (ADR-026):** `implement` → `/sp:dev-implement` (NOT `/sp:dev-run` — that
 command *drives* this pipeline, so calling it inside recurses); `test` → `/sp:dev-unit`; `review` →

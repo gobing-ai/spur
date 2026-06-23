@@ -196,6 +196,39 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             }
         });
 
+    // ── record ──
+    task.command('record')
+        .summary('Record pipeline results into the task file — Testing, Review, and optional Solution backfill.')
+        .argument('<wbs>', 'Task WBS number')
+        .option('--verdict-file <path>', 'Path to verdict JSON (default: .spur/run/<wbs>-verdict.json)')
+        .option('--solution-from-diff', 'Backfill Solution from git diff when bare')
+        .option('--transition <status>', 'Optional lifecycle transition (e.g. testing)')
+        .option('--folder <path>', 'Custom tasks folder')
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (wbs, options) => {
+            const svc = await makeService(context, options.folder);
+            try {
+                const result = await svc.record(wbs, {
+                    verdictFile: options.verdictFile,
+                    solutionFromDiff: options.solutionFromDiff === true,
+                    transition: options.transition,
+                });
+                if (options.json) {
+                    context.output.write(toJson(result));
+                } else {
+                    const parts: string[] = [];
+                    if (result.testingWritten) parts.push('Testing written');
+                    if (result.reviewWritten) parts.push('Review written');
+                    if (result.solutionBackfilled) parts.push('Solution backfilled');
+                    if (result.transitionedTo) parts.push(`${wbs} → ${result.transitionedTo}`);
+                    context.output.write(parts.join(', ') || 'no changes');
+                }
+            } catch (err) {
+                context.output.error(String(err));
+                context.setExitCode(1);
+            }
+        });
+
     // ── check ──
     task.command('check')
         .summary('Validate a task file through the four-layer check (design §3).')
