@@ -13,6 +13,9 @@ import { useTasks } from './useTasks';
 const TaskDetail = lazy(() => import('./TaskDetail'));
 const KANBAN_COLUMNS = TASK_STATUSES;
 
+/** localStorage key for the user's last-set detail-panel width (px). */
+const DETAIL_WIDTH_KEY = 'spur:detail-width';
+
 type TaskStatus = (typeof TASK_STATUSES)[number];
 
 interface Props {
@@ -40,9 +43,21 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
     ]);
     const [popupTaskWbs, setPopupTaskWbs] = useState<string | null>(null);
     // Default ~3× the old 576px (1728px), clamped to 80vw so it never overflows the viewport.
-    const [detailWidth, setDetailWidth] = useState(() =>
-        typeof window !== 'undefined' ? Math.min(1728, window.innerWidth * 0.8) : 1728,
-    );
+    // A user-resized width persists to localStorage and takes priority next time; a missing or
+    // unparseable stored value falls back to the computed default.
+    const [detailWidth, setDetailWidth] = useState(() => {
+        const fallback = typeof window !== 'undefined' ? Math.min(1728, window.innerWidth * 0.8) : 1728;
+        if (typeof window === 'undefined') return fallback;
+        try {
+            const stored = Number.parseFloat(window.localStorage.getItem(DETAIL_WIDTH_KEY) ?? '');
+            if (Number.isFinite(stored) && stored > 0) {
+                return Math.min(stored, window.innerWidth * 0.8);
+            }
+        } catch {
+            // localStorage unavailable (private mode / disabled) — use the fallback.
+        }
+        return fallback;
+    });
     const listWithFolder = useCallback(() => api.task.list({ folder }), [folder]);
     const { tasks, loading, error, connected, setTasks } = useTasks(listWithFolder);
     const [showNewPanel, setShowNewPanel] = useState(false);
@@ -260,6 +275,11 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
                                 onResizeEnd={(px) => {
                                     const clamped = Math.max(576, Math.min(px, window.innerWidth * 0.8));
                                     setDetailWidth(clamped);
+                                    try {
+                                        window.localStorage.setItem(DETAIL_WIDTH_KEY, String(clamped));
+                                    } catch {
+                                        // localStorage unavailable — width still applies for this session.
+                                    }
                                 }}
                                 direction="horizontal"
                                 invert

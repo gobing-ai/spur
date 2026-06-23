@@ -35,10 +35,44 @@ export const eventsModule: ServerModule = {
             const closed = { current: false };
             let heartbeatInterval: ReturnType<typeof setInterval> | undefined;
             const handlers = new Map<PlanningEventName, (event: unknown) => void>();
+            // Fires when the client disconnects (tab close, navigation, EventSource recycle).
+            const signal = c.req.raw.signal;
+
+            // Idempotent teardown shared by every exit path (client abort, consumer cancel).
+            // Detaches bus subscriptions, stops the heartbeat, and removes the abort listener.
+            // `closeController` is wired in start() since the controller only exists there.
+            let closeController: () => void = () => {};
+            const teardown = () => {
+                if (closed.current) return;
+                closed.current = true;
+                if (heartbeatInterval) clearInterval(heartbeatInterval);
+                for (const [name, handler] of handlers) {
+                    bus.off(name, handler);
+                }
+                signal.removeEventListener('abort', teardown);
+                closeController();
+            };
 
             const stream = new ReadableStream({
                 start(controller) {
                     const encoder = new TextEncoder();
+
+                    // Close the stream cleanly so the chunked response is terminated properly —
+                    // this is what fixes ERR_INCOMPLETE_CHUNKED_ENCODING when the client goes away.
+                    closeController = () => {
+                        try {
+                            controller.close();
+                        } catch {
+                            // Already closed.
+                        }
+                    };
+
+                    // Client already gone before we started — tear down immediately.
+                    if (signal.aborted) {
+                        teardown();
+                        return;
+                    }
+                    signal.addEventListener('abort', teardown);
 
                     heartbeatInterval = setInterval(sendKeepalive, 15_000, closed, controller, encoder);
 
@@ -79,18 +113,19 @@ export const eventsModule: ServerModule = {
                 },
 
                 cancel() {
-                    closed.current = true;
-                    if (heartbeatInterval) clearInterval(heartbeatInterval);
-                    for (const [name, handler] of handlers) {
-                        bus.off(name, handler);
-                    }
+                    // Consumer-initiated cancel (e.g. reader.cancel()). The controller is already
+                    // closing, so teardown only needs to detach subscriptions and the heartbeat.
+                    closeController = () => {};
+                    teardown();
                 },
             });
 
+            // No explicit `Connection` header — it is a hop-by-hop header the runtime
+            // controls; setting it on a Bun chunked stream interferes with clean
+            // finalization and surfaces as ERR_INCOMPLETE_CHUNKED_ENCODING on reconnect.
             return c.newResponse(stream, 200, {
                 'Content-Type': 'text/event-stream',
                 'Cache-Control': 'no-cache',
-                Connection: 'keep-alive',
             });
         });
     },

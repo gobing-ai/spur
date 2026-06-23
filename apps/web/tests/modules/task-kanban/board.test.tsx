@@ -369,6 +369,36 @@ test('docked panel has a resize handle on its left edge', async () => {
     expect(handle?.getAttribute('aria-orientation')).toBe('vertical'); // horizontal resize → vertical orientation per aria spec
 });
 
+// ── detail-panel width persistence (localStorage) ──
+test('a previously stored detail width is applied as the panel width on mount', async () => {
+    // 700px is below the test viewport's 80vw clamp, so it applies verbatim.
+    window.localStorage.setItem('spur:detail-width', '700');
+    try {
+        const { getByText } = renderBoard();
+        await waitFor(() => expect(getByText('Alpha')).toBeDefined());
+
+        // The stored width is synced to the --detail-w CSS variable that drives the panel width.
+        await waitFor(() => expect(document.documentElement.style.getPropertyValue('--detail-w')).toBe('700px'));
+    } finally {
+        window.localStorage.removeItem('spur:detail-width');
+    }
+});
+
+test('an invalid stored detail width falls back to the computed default', async () => {
+    window.localStorage.setItem('spur:detail-width', 'not-a-number');
+    try {
+        const { getByText } = renderBoard();
+        await waitFor(() => expect(getByText('Alpha')).toBeDefined());
+
+        // Falls back: --detail-w is set to a positive px value, not the garbage string.
+        const applied = document.documentElement.style.getPropertyValue('--detail-w');
+        expect(applied).toMatch(/^\d+(\.\d+)?px$/);
+        expect(applied).not.toBe('not-a-numberpx');
+    } finally {
+        window.localStorage.removeItem('spur:detail-width');
+    }
+});
+
 const KANBAN_COLUMNS = ['backlog', 'todo', 'wip', 'testing', 'blocked', 'done', 'cancelled'];
 
 describe('TaskFilters', () => {

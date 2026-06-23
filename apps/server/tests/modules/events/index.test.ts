@@ -35,7 +35,9 @@ describe('eventsModule', () => {
         expect(res.status).toBe(200);
         expect(res.headers.get('Content-Type')).toBe('text/event-stream');
         expect(res.headers.get('Cache-Control')).toBe('no-cache');
-        expect(res.headers.get('Connection')).toBe('keep-alive');
+        // No explicit Connection header — the runtime owns this hop-by-hop header; setting
+        // it caused ERR_INCOMPLETE_CHUNKED_ENCODING on Bun stream finalization.
+        expect(res.headers.get('Connection')).toBeNull();
     });
 
     test('SSE stream sends initial connected event', async () => {
@@ -149,6 +151,67 @@ describe('eventsModule', () => {
             'task.transitioned',
             'task.updated',
         ]);
+    });
+
+    test('client disconnect (request abort) tears down subscriptions and closes the stream', async () => {
+        const app = new Hono();
+        const handlers = new Map<string, Array<(event: unknown) => void>>();
+        const offCalls: Array<{ name: string }> = [];
+
+        const ctx = {
+            eventBus: () => ({
+                on: (name: string, handler: (event: unknown) => void) => {
+                    if (!handlers.has(name)) handlers.set(name, []);
+                    (handlers.get(name) as Array<(event: unknown) => void>).push(handler);
+                },
+                off: (name: string) => {
+                    offCalls.push({ name });
+                },
+            }),
+        } as unknown as ServerContext;
+
+        eventsModule.mount(app, ctx);
+
+        // Drive the request with an AbortController so we can simulate the client leaving.
+        const controller = new AbortController();
+        const req = new Request('http://localhost/api/events/planning', { signal: controller.signal });
+        const res = await app.fetch(req);
+        const reader = (res.body as ReadableStream<Uint8Array>).getReader();
+
+        // Consume the connected event so the stream is live, then abort (client disconnect).
+        await reader.read();
+        controller.abort();
+
+        // The stream closes cleanly (no error), and all 6 subscriptions are detached.
+        const { done } = await reader.read();
+        expect(done).toBe(true);
+        expect(offCalls.length).toBe(6);
+    });
+
+    test('does not double-tear-down when both abort and cancel fire', async () => {
+        const app = new Hono();
+        const offCalls: Array<{ name: string }> = [];
+        const ctx = {
+            eventBus: () => ({
+                on: () => {},
+                off: (name: string) => {
+                    offCalls.push({ name });
+                },
+            }),
+        } as unknown as ServerContext;
+
+        eventsModule.mount(app, ctx);
+
+        const controller = new AbortController();
+        const req = new Request('http://localhost/api/events/planning', { signal: controller.signal });
+        const res = await app.fetch(req);
+        const reader = (res.body as ReadableStream<Uint8Array>).getReader();
+        await reader.read();
+
+        // Abort then cancel — teardown is idempotent, so off() fires exactly 6 times total.
+        controller.abort();
+        await reader.cancel();
+        expect(offCalls.length).toBe(6);
     });
 });
 
