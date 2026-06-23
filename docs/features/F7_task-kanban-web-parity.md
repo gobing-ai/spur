@@ -23,11 +23,52 @@ updated_at: 2026-06-20T05:06:06.394Z
 ```gherkin
 Feature: Task Kanban web parity
 
-  Scenario: Basic acceptance
-    Given a precondition
-    When an action
-    Then an expected outcome
+  Scenario: Board renders with columns for each task status
+    Given the task kanban web module is loaded
+    When the board renders
+    Then a column exists for each canonical task status (backlog, todo, wip, testing, blocked, done, cancelled)
+
+  Scenario: Task cards show WBS, name, and status
+    Given a task exists in the corpus
+    When the board loads task data
+    Then each card displays the task's WBS number, name, and status badge
+
+  Scenario: Drag-and-drop moves a task between status columns
+    Given a task card is in the "todo" column
+    When the user drags the card to the "wip" column
+    Then the task's status transitions to "wip" via the server API
+
+  Scenario: New task creation from the board
+    Given the "New Task" button is clicked
+    When the slide-out panel is filled and submitted
+    Then a new task is created and appears on the board
+
+  Scenario: Task detail panel opens on card click
+    Given a task card is clicked
+    When the detail panel loads
+    Then the task's full frontmatter and body are displayed
+
+  Scenario: SSE real-time sync updates the board without polling
+    Given the board is connected via SSE
+    When another client changes a task's status
+    Then the board updates the card position without a page refresh
+
+  Scenario: Task body is editable inline
+    Given a task detail panel is open
+    When the user edits the markdown body and saves
+    Then the PATCH /tasks/{wbs}/body endpoint persists the change
+
+  Scenario: Board is responsive for mobile and desktop
+    Given the board is viewed on a mobile-width viewport
+    When the layout adjusts
+    Then the sidebar collapses and columns remain usable
+
+  Scenario: Dark mode renders correctly
+    Given the user's system preference is dark mode
+    When the board renders
+    Then daisyUI components use the dark theme
 ```
+
 
 ## Tasks
 

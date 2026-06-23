@@ -28,6 +28,7 @@ async function makeAdapter(): Promise<{ adapter: LifecycleAdapter; db: DbAdapter
         taskRunLinkDao: (adapter) => new TaskRunLinkDao(adapter),
         workflowPath: WORKFLOW_PATH,
         cwd: process.cwd(),
+        spurBin: 'spur',
     };
     return { adapter: new LifecycleAdapter(opts), db };
 }

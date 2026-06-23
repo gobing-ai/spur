@@ -147,11 +147,14 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
         const toImpl = yaml.transitions.find((t) => t.from === 'precheck' && t.to === 'implement');
         expect(toImpl?.guard?.kind).toBe('shell');
         expect(String(toImpl?.guard?.options?.command)).toContain('spur task check');
-        // The fail path (always-guard) MUST come AFTER the shell guard (fall-through order).
+        // The fail path uses an inverted shell guard (ADR fix: `always` bypasses the
+        // shell guard because "always" matches regardless of order; `! spur task check`
+        // inverts the exit code so only one of the two guards passes at a time).
         const idxPass = yaml.transitions.findIndex((t) => t.from === 'precheck' && t.to === 'implement');
         const idxFail = yaml.transitions.findIndex((t) => t.from === 'precheck' && t.to === 'failed');
         expect(idxFail).toBeGreaterThan(idxPass);
-        expect(yaml.transitions[idxFail]?.guard?.kind).toBe('always');
+        expect(yaml.transitions[idxFail]?.guard?.kind).toBe('shell');
+        expect(String(yaml.transitions[idxFail]?.guard?.options?.command)).toContain('! spur task check');
     });
 
     test('R2: record writes via `spur task update --section` (never a direct file write)', () => {

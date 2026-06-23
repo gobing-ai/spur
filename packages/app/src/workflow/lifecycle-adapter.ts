@@ -65,6 +65,10 @@ export interface LifecycleAdapterOptions {
     workflowPath: string;
     /** Working directory passed to shell guards (e.g. `spur task check`). */
     cwd: string;
+    /** Resolved path to the spur CLI binary that shell guards invoke.
+     *  Injected so guards bypass PATH ambiguity (the `spur` on PATH may be
+     *  a different version or compiled without the `task`/`feature` commands). */
+    spurBin: string;
 }
 
 /**
@@ -158,7 +162,10 @@ export class LifecycleAdapter implements LifecyclePort {
 
     /** Bind the run's guard var (e.g. `wbs`/`featureId`) so shell guards target this entity. */
     private bindGuardVar(workflow: StateMachineWorkflowDef, id: string): StateMachineWorkflowDef {
-        return { ...workflow, vars: { ...workflow.vars, [this.opts.profile.varKey]: id } };
+        return {
+            ...workflow,
+            vars: { ...workflow.vars, [this.opts.profile.varKey]: id, spurBin: this.opts.spurBin },
+        };
     }
 
     /** Compose a human-readable guard report from the engine denial. */

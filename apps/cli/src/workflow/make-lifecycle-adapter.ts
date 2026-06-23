@@ -21,11 +21,17 @@ export function makeLifecycleAdapter(context: CliContext, profile: LifecycleProf
     if (root === null) return undefined;
     const workflowPath = join(root, 'workflows', `${profile.workflowName}.yaml`);
     if (!existsSync(workflowPath)) return undefined;
+    // Resolve the spur binary to avoid PATH ambiguity — the `spur` on PATH may be
+    // a different version (or compiled without `task`/`feature` commands). Using
+    // the project's own Bun entry point ensures guard commands (`spur task check`,
+    // `spur feature check`) always invoke the correct binary.
+    const spurBin = `${process.execPath} run ${join(context.cwd, 'apps', 'cli', 'src', 'index.ts')}`;
     return new LifecycleAdapter({
         profile,
         getDb: () => context.getDb(),
         taskRunLinkDao: (db) => new TaskRunLinkDao(db),
         workflowPath,
         cwd: context.cwd,
+        spurBin,
     });
 }
