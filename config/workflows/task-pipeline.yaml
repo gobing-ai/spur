@@ -127,7 +127,9 @@ transitions:
     to: failed
     description: Precheck failed — report and stop (no fall-through to implement).
     guard:
-      kind: always
+      kind: shell
+      options:
+        command: '! spur task check ${vars.wbs}'
 
   # ── linear body ──
   - from: implement
