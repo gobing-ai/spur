@@ -115,6 +115,27 @@ function bulletizeRequirements(raw: string): string {
     return parts.map((p) => `- ${p}`).join('\n');
 }
 
+// ─── Section bareness — used by pipeline steps to decide when to write ──
+
+/**
+ * Returns `true` if a named section is absent, empty/whitespace-only, or a
+ * known pipeline placeholder (the old `printf 'Pipeline run …'` stub).
+ *
+ * Used by the implement step (write `Solution` only when bare, never clobber
+ * a hand-authored change-map) and the record step (backfill `Solution` safety-net,
+ * skip `Testing`/`Review` if verify already populated them).
+ */
+export function sectionIsBare(doc: MarkdownDocument, name: string): boolean {
+    if (!doc.hasSection(name)) return true;
+    const body = doc.getSection(name);
+    if (body === null) return true;
+    const trimmed = body.trim();
+    if (trimmed === '') return true;
+    // Old pipeline placeholder: "Pipeline run <wbs> — …"
+    if (/^Pipeline run \d{4}\b/.test(trimmed)) return true;
+    return false;
+}
+
 // ─── TaskService ────────────────────────────────────────────────────────
 
 /** Core task verbs over PlanningWriteService and direct corpus reads. */

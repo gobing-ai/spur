@@ -30,8 +30,30 @@ one implement stage inside it. Keeping them distinct breaks the recursion where 
 ## Behavior
 
 Thin wrapper: reading the task spec, writing code per the Design/Plan, and following the plan
-checklist are owned by the skill. Does not run tests, review, or verify — those are separate
-pipeline steps (`/sp:dev-unit`, `/sp:dev-review`, `/sp:dev-verify`).
+
+## Section ownership — `## Solution`
+
+The implement step **owns** `## Solution` (the change-map). After writing code, before
+yielding, the implement agent MUST:
+
+1. Author the `## Solution` section — a markdown table listing each changed file with
+   a `file:line` range and a one-line `what/why` summary. This is the durable record of
+   what the implementation changed.
+2. Write it via the pipeline-sanctioned path:
+   ```bash
+   spur task update <wbs> --section Solution --from-file /tmp/<wbs>-solution.md
+   ```
+3. Write **only when the section is bare** — do not clobber a hand-authored change-map.
+   Check with `spur task show <wbs> --json` and inspect `## Solution`; skip if it already
+   has real content.
+
+The `replaceSection` upsert semantic means missing sections are created, existing sections
+are replaced — so the agent never needs to check existence, only bareness.
+
+If the implement agent forgets to write `## Solution`, the pipeline's `record` step
+backfills a minimal change-map from `git diff --name-only` as a safety net — but the
+implement agent is the **primary author** because it knows *why* each file changed,
+not just *that* it changed.
 
 ## Implementation
 

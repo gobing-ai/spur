@@ -4,7 +4,7 @@ name: "UI seam scaffolding + Button wrapper pilot (apps/web)"
 status: done
 template: feature-impl
 created_at: 2026-06-23T06:04:57.962Z
-updated_at: 2026-06-23T19:20:23.116Z
+updated_at: 2026-06-23T20:47:04.605Z
 feature_id: F7
 priority: P1
 tags: ["web", "ui", "daisyui", "refactor"]
@@ -114,8 +114,38 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 - [x] 5. Run `bun run lint && bun run build` — must pass
 - [x] 6. Screenshot verification of rendered UI
 - [x] 7. Run `bun run test` — existing tests must pass unmodified
+### Solution
+
+### Implementation change-map
+
+| File | Change |
+|------|--------|
+| `apps/web/src/components/ui/Button.tsx` | Created Button wrapper — typed props (variant, size, loading, asChild, className passthrough), daisyUI class assembly, JSDoc authoring conventions |
+| `apps/web/src/ui.ts` | Barrel re-export: `export { Button, type ButtonProps } from './components/ui/Button'` |
+| `apps/web/tests/components/ui/button.test.tsx` | 12 behavioral RTL tests covering variant, size, loading, className passthrough, asChild |
+| `apps/web/src/components/SmokeIsland.tsx` | btn→Button refactor |
+| `apps/web/src/components/RightPanel.tsx` | btn→Button refactor |
+| `apps/web/src/components/BoardLayout.tsx` | btn→Button refactor |
+| `apps/web/src/components/ThemeToggle.tsx` | btn→Button refactor |
+| `apps/web/src/components/LeftSidebar.tsx` | btn→Button refactor |
+| `apps/web/src/components/KanbanBoard.tsx` | btn→Button refactor |
+| `apps/web/src/components/TaskDetail.tsx` | btn→Button refactor |
+| `apps/web/src/components/NewTaskPanel.tsx` | btn→Button refactor |
+| `apps/web/src/components/KanbanColumn.tsx` | btn→Button refactor |
+
 ### Testing
-Pipeline run 0101 — see agent output above.
+**Verdict: PASS** — 6/6 requirements MET (re-verification 2026-06-23, `--force` on `done` task).
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 components/ui/ dir | ✅ MET | `apps/web/src/components/ui/Button.tsx` |
+| R2 typed Button props | ✅ MET | variant/size/loading/asChild + className passthrough (15 prop refs) |
+| R3 ui.ts barrel | ✅ MET | `export { Button, type ButtonProps } from './components/ui/Button'` |
+| R4 zero raw btn leaks | ✅ MET | `rg className="…btn…"` outside Button.tsx → 0 matches |
+| R5 render verified | ✅ MET | 12 RTL/unit tests cover all 8 AC scenarios |
+| R6 JSDoc conventions | ✅ MET | wrapper-authoring conventions documented in Button.tsx JSDoc |
+
+Gates: web typecheck PASS, biome PASS, `Button.test.tsx` 12 pass / 0 fail.
 ### AC scenario verification
 
 | # | Scenario | Verdict | Evidence |
@@ -143,9 +173,14 @@ Pipeline run 0101 — see agent output above.
 - `git status` → only intentional changes (Button.tsx, button.test.tsx, the 9 refactored component files, ui.ts).
 
 ### Review
+**SECU re-review (2026-06-23) — no blockers.**
 
-Pipeline run 0101 — SECU review recorded.
+- **Security:** no secrets, no injection surface (pure presentational component). ✅
+- **Efficiency:** className assembled once per render via array filter+join; trivial. ✅
+- **Correctness:** `asChild` falls back to `<button>` for non-element children; `loading` disables the button. Edge cases covered by tests. ✅
+- **Usability:** typed props mirror daisyUI vocabulary; className passthrough documented as layout-only. ✅
 
+P3 (advisory): `asChild` does not apply `loading`/`disabled` button-only behavior to the child element — documented in JSDoc, acceptable for the wrapper's scope.
 ### History
 - 2026-06-23T15:33:19.601Z todo → wip (system)
 - 2026-06-23T19:20:22.869Z wip → testing (system)

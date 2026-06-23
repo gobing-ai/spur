@@ -668,6 +668,26 @@ verdict blocks `done`. This is the spur-native replacement for rd3's default-on 
 **Follow-up:** `task_run_links` linkage (kind=pipeline, R4) needs a small `WorkflowService` run-start hook
 — there is no link-writing CLI verb to call from a shell step, so it can't live in pure YAML.
 
+**Pipeline section-ownership model (ADR-026 amendment, 2026-06-23, task 0106):** every
+`done`-required section ([Solution, Testing, Review]) is owned by exactly one pipeline step:
+
+| Required section | Owning step | When |
+|------------------|-------------|------|
+| `Solution` (change-map) | `/sp:dev-implement` | After writing code — the implement agent authors a markdown table of changed files with `file:line` + `what/why`. Idempotent (upsert via `replaceSection`); writes only when the section is bare (absent, empty, or a placeholder). |
+| `Testing` (verdict table) | `record` | Post-verify — transcribes the per-requirement verdict + evidence from `.spur/run/<wbs>-verify-answer.txt` and `.spur/run/<wbs>-verdict.json`. |
+| `Review` (P1–P4 findings) | `record` | Post-verify — transcribes SECU findings from the verify output. |
+
+The `record` step provides a **Solution safety-net**: if the implement step didn't write
+`## Solution`, `record` backfills a minimal change-map from `git diff --name-only`. A
+`sectionIsBare` predicate (in `packages/app/src/services/task-service.ts`) detects absent,
+empty/whitespace, or placeholder sections — the single reusable mechanism behind all three
+writes.
+
+**Done gate:** the `record → done` transition runs a shell guard `spur task check <wbs>`
+with a `record → failed` sibling on negation — mirroring the `verify → record` verdict gate
+exactly. The guard passes because every required section was guaranteed upstream; a genuinely
+non-compliant task routes to `failed` instead of a silent bad `done`.
+
 **Planning pipeline** — `config/workflows/planning-pipeline.yaml` (task 0088; design §6). Front-half
 of the dev workflow: `phasing(HITL) → feature-id → design-gen → design-approval(HITL) → handoff`.
 `kind: state-machine`, `vars: { slug, profile, feature }`, same engine as `task-pipeline.yaml`

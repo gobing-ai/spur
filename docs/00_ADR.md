@@ -631,3 +631,14 @@ S/E/C/U (was "Security/Error-handling/Conventions/Untested-paths" in `dev-review
 
 **Detail:** `03`/`04_DESIGN.md §7.5`; verdict shape in
 `plugins/sp/skills/code-verification/references/verdict-schema.md`; status in `05_FEATURES.md §9`.
+
+**Amendment (2026-06-23) — done-gate + section-ownership (task 0106).** The `record → done`
+transition gate mirrors the `verify → record` verdict gate: a shell guard asserting `spur task check`
+(exit 0) with a `record → failed` sibling on negation — so `done` is certified only when the
+section-status matrix passes. Every `done`-required section ([Solution, Testing, Review]) is owned by
+a single pipeline step that has the knowledge to write it: implement owns `Solution` (change-map),
+record transcribes `Testing`/`Review` from the verify output. Section writes are idempotent (upsert)
+with a `sectionIsBare` detection predicate (absent, empty/whitespace, placeholder). A bare `Solution`
+is safety-net-backfilled from `git diff`. Trigger: dogfood finding, task 0106 — task 0101 reached
+`done` while FAILING its own `spur task check`. Relates: extends ADR-026; matches the verify→record
+guard pattern exactly.

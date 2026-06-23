@@ -120,26 +120,56 @@ states:
     description: >
       Move the task to `testing` (via the normal verb, R3), then write results back
       to the task file — ONLY via `spur task update --section` (never a direct file
-      write, R2). Each shell step GENERATES the section file (from the run dir the
-      agent steps populate, or a placeholder) then updates the task in one command.
+      write, R2). Testing/Review are derived from the verify output (answer file +
+      verdict JSON), not placeholder strings. Solution is backfilled from git diff
+      as a safety net when the implement step did not record a change-map.
     onEnter:
       - kind: shell
         options:
           command: "${vars.spurBin} task update ${vars.wbs} testing"
       - kind: shell
         options:
-          command: "mkdir -p .spur/run && : > .spur/run/${vars.wbs}-testing.md && printf 'Pipeline run %s — see agent output above.\\n' \"${vars.wbs}\" >> .spur/run/${vars.wbs}-testing.md && ${vars.spurBin} task update ${vars.wbs} --section Testing --from-file .spur/run/${vars.wbs}-testing.md"
+          command: |
+            mkdir -p .spur/run
+            V=$(jq -r .verdict .spur/run/${vars.wbs}-verdict.json 2>/dev/null || echo UNKNOWN)
+            printf '**Pipeline verify results**\n\n- Verdict: %s (from `.spur/run/%s-verdict.json`)\n\n' "$V" "${vars.wbs}" > .spur/run/${vars.wbs}-testing.md
+            awk '/^[|] Req[|]/,/^[[:space:]]*$/' ".spur/run/${vars.wbs}-verify-answer.txt" 2>/dev/null >> .spur/run/${vars.wbs}-testing.md || true
+            printf '\nFull per-requirement trace: `.spur/run/%s-verify-answer.txt`\n' "${vars.wbs}" >> .spur/run/${vars.wbs}-testing.md
+            ${vars.spurBin} task update ${vars.wbs} --section Testing --from-file .spur/run/${vars.wbs}-testing.md
       - kind: shell
         options:
-          command: "mkdir -p .spur/run && : > .spur/run/${vars.wbs}-review.md && printf 'Pipeline run %s — SECU review recorded.\\n' \"${vars.wbs}\" >> .spur/run/${vars.wbs}-review.md && ${vars.spurBin} task update ${vars.wbs} --section Review --from-file .spur/run/${vars.wbs}-review.md"
+          command: |
+            mkdir -p .spur/run
+            printf '**SECU findings** (pipeline verify step)\n\n' > .spur/run/${vars.wbs}-review.md
+            awk '/^(### |## )? *(SECU |Security|Efficiency|Correctness|Usability)/,/^[[:space:]]*$/' ".spur/run/${vars.wbs}-verify-answer.txt" 2>/dev/null >> .spur/run/${vars.wbs}-review.md || true
+            printf '\nFull SECU review: `.spur/run/%s-verify-answer.txt`\n' "${vars.wbs}" >> .spur/run/${vars.wbs}-review.md
+            ${vars.spurBin} task update ${vars.wbs} --section Review --from-file .spur/run/${vars.wbs}-review.md
+      - kind: shell
+        options:
+          command: |
+            if ! (${vars.spurBin} task show ${vars.wbs} --json 2>/dev/null | jq -r .content | sed -n '/^### Solution/,/^### /p' | sed '1d;/^### /q' | grep -q '[^[:space:]]'); then
+              mkdir -p .spur/run
+              {
+                printf 'Change-map (auto-generated — implement step did not record a Solution)\n\n'
+                printf '| File |\n|------|\n'
+                git diff --name-only HEAD -- '*.ts' '*.tsx' '*.js' 2>/dev/null | sed 's/^/| `/' | sed 's/$/` |/'
+                true
+              } > .spur/run/${vars.wbs}-solution.md
+              ${vars.spurBin} task update ${vars.wbs} --section Solution --from-file .spur/run/${vars.wbs}-solution.md
+            fi
 
   - id: done
-    description: Terminal — task executed, verified, and recorded. Moves the task to
-      `done` via the normal verb (the testing→done lifecycle guard re-runs the check, R3).
+    description: >
+      Terminal — task executed, verified, and recorded. The `record → done`
+      guard runs `spur task check` before certifying; a genuinely non-compliant
+      task routes to `failed` instead of a silent bad `done`.
     onEnter:
       - kind: shell
         options:
           command: "${vars.spurBin} task update ${vars.wbs} done"
+      - kind: note
+        options:
+          message: "Pipeline complete for task ${vars.wbs} (done gate cleared)."
 
   - id: failed
     description: Terminal — precheck (or a gated step) failed; reported, not advanced.
@@ -197,10 +227,9 @@ transitions:
     guard:
       kind: always
   # ── completion gate (the YAML-native replacement for rd3's default-on --postflight-verify) ──
-  # The verify step (/sp:dev-verify → sp:code-verification) emits .spur/run/<wbs>-verdict.json.
-  # Only a `verdict: PASS` clears the gate to `record → done`; any non-PASS (PARTIAL/FAIL),
-  # a missing file, or malformed JSON routes to `failed`. Declaration order matters: the PASS
-  # guard is tried FIRST, so a PASS run records-and-dones; otherwise it falls through to failed.
+  # The verify step emits .spur/run/<wbs>-verdict.json. Only `verdict: PASS` clears
+  # the gate to `record`; any non-PASS (PARTIAL/FAIL), a missing file, or malformed
+  # JSON routes to `failed`. Declaration order: PASS guard tried FIRST.
   - from: verify
     to: record
     description: Verification verdict is PASS — record results and proceed to done.
@@ -215,8 +244,22 @@ transitions:
       kind: shell
       options:
         command: 'test "$(jq -r .verdict .spur/run/${vars.wbs}-verdict.json 2>/dev/null)" != PASS'
+  # ── done gate: record → done/failed gated on `spur task check` (ADR-026 amendment 2026-06-23) ──
+  # The record step guarantees every done-required section ([Solution, Testing, Review])
+  # has real content (each owned by its pipeline step). This guard is defense-in-depth —
+  # it certifies the matrix before done; a genuinely non-compliant task routes to failed.
+  # Declaration order: pass guard first.
   - from: record
     to: done
-    description: Results recorded — pipeline complete.
+    description: Task check passed — certify done.
     guard:
-      kind: always
+      kind: shell
+      options:
+        command: "${vars.spurBin} task check ${vars.wbs}"
+  - from: record
+    to: failed
+    description: Task check failed — block before done; investigate missing sections.
+    guard:
+      kind: shell
+      options:
+        command: '! ${vars.spurBin} task check ${vars.wbs}'
