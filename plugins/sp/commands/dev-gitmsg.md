@@ -1,6 +1,6 @@
 ---
-description: Generate a conventional commit message from staged changes
-argument-hint: "[--scope <path>]"
+description: Generate a conventional commit message from staged changes, optionally commit
+argument-hint: "[--commit] [--scope <path>]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
@@ -9,8 +9,8 @@ allowed-tools: ["Bash", "Read", "Skill"]
 Implements an inline procedure — see [dev-operations.md](../skills/spur-dev/references/dev-operations.md#10-gitmsg) for the authoritative reference.
 
 Read staged changes and generate a conventional commit message: `type(scope): summary` with
-an optional body listing key changes. The skill reads the diff and produces the message;
-this command is the thin entry point.
+an optional body listing key changes. By default, prints the message **and** a ready-to-copy
+`git commit -m "..."` command line. Pass `--commit` to execute the commit directly.
 
 ## When to use
 
@@ -22,6 +22,7 @@ this command is the thin entry point.
 | Argument | Description | Default |
 |----------|-------------|---------|
 | `--scope <path>` | Limit diff analysis to a path | (all staged changes) |
+| `--commit` | Execute `git commit` with the generated message. Without this flag, the command is read-only — prints the message for manual review. | off |
 
 ## Behavior
 
@@ -32,7 +33,13 @@ Inline procedure (no skill delegation):
 3. Determine the commit type from the dominant change: `feat` (new functionality), `fix` (bug fix), `refactor` (restructuring), `docs` (documentation only), `chore` (build/config/tooling), `perf`, `test`, `style`.
 4. Determine the scope from the affected module/package (e.g. `cli`, `domain`, `server`, `web`, `app`). Use `--scope` if given.
 5. Generate the message: `<type>(<scope>): <summary>` with an optional body (bullet list of key changes, only if the diff is non-obvious). Summary: imperative mood, ≤72 chars, lowercase first word, no period.
-6. Print the message to stdout — never run `git commit`.
+6. **Always** print the full copy-paste-ready command line:
+   ```
+   git commit -m "<subject>
+   
+   <body>"
+   ```
+   Then, if `--commit` is set, execute it via `Bash`. Without `--commit`, stop after printing — the user reviews and copies.
 
 ## Implementation
 
