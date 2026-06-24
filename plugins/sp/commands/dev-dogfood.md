@@ -34,6 +34,7 @@ everything that was done, broke, was fixed, and should be improved.
 | `--max-retry <n>` | Fix attempts per failed step. **`0` = observe-only**: monitor and report, never mutate the repo. | `2` |
 | `--save` | Write the report to `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md`. | off |
 | `--task` | File the findings as a review-template task via `spur task create --template review`. | off |
+| `--full` | Include **all** severity findings (P1–P4) in the report and `--task` output. Default filters to P1+P2 only — actionable items. | off |
 
 `--save` and `--task` are independent and composable. With neither, the report is printed only.
 
@@ -92,8 +93,9 @@ Assemble the comprehensive report from the ledger. Required sections:
 4. **Issues** — two groups:
    - **Fixed** — issue, root cause, and the fix applied (file + change).
    - **Unresolved** — issue, diagnosis, everything tried, why it still fails.
-5. **Findings** — improvement opportunities (not run-blocking), each with **severity** (`P1`/`P2`)
-   and **estimated effort** (e.g. S/M/L or hours).
+5. **Findings** — improvement opportunities (not run-blocking), each with **severity** (`P1`–`P4`)
+   and **estimated effort** (e.g. S/M/L or hours). By default, only **P1 and P2** findings are
+   listed (actionable items). Pass `--full` to include P3/P4 (observations, nice-to-haves).
 
 > **Token cost is an estimate.** A slash command cannot read its own exact token meter. Derive a
 > heuristic from tool-call count + transcript size + wall-clock and **label it `~estimate`**. Never
@@ -124,12 +126,13 @@ No skill delegation yet (fat-file exception). Execute the four phases above dire
 
 Parse them per the Arguments table above:
 - `testee` (positional, required): the skill / slash command / CLI invocation to exercise.
-  Everything before the first dev-dogfood flag (`--max-retry`, `--save`, `--task`) is the testee.
-  If the testee itself contains flags (e.g. `/sp:dev-run 0110 --auto`), quote it so its flags
-  are not mistaken for dev-dogfood's. Strip surrounding quotes after extracting.
+  Everything before the first dev-dogfood flag (`--max-retry`, `--save`, `--task`, `--full`)
+  is the testee. If the testee itself contains flags (e.g. `/sp:dev-run 0110 --auto`), quote
+  it so its flags are not mistaken for dev-dogfood's. Strip surrounding quotes after extracting.
 - `--max-retry <n>` (default `2`): fix attempts per failed step. `0` = observe-only.
 - `--save`: write the report to `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md`.
 - `--task`: file findings as a review-template task via `spur task create --template review`.
+- `--full`: include all severity findings (P1–P4) in the report and task. Default: P1+P2 only.
 
 The auto-fix loop is the deliberate reason this command holds `Edit`/`Write` in `allowed-tools`,
 unlike the read-mostly `/sp:dev-verify` and `/sp:dev-review` wrappers — `--max-retry 0` is the
