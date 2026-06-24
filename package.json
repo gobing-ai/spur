@@ -64,6 +64,7 @@
         "autofix": "bun run format && bun run typecheck",
         "bump-ver": "bun scripts/spur-dev.ts bump-ver",
         "drop-tags": "bun scripts/spur-dev.ts drop-tags",
+        "refresh-plugin": "claude plugin uninstall sp@spur -y && rm -rf ~/.claude/plugins/cache/spur && claude plugin marketplace update spur && claude plugin install sp@spur && superskill install sp --marketplace .",
         "task-pipeline": "bun run apps/cli/src/index.ts workflow run config/workflows/task-pipeline.yaml",
         "planning-pipeline": "bun run apps/cli/src/index.ts workflow run config/workflows/planning-pipeline.yaml",
         "test-pre-check": "bun run apps/cli/src/index.ts rule run --preset recommended-pre-check --fail-on warning --verbose",
