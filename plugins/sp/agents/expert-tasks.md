@@ -25,7 +25,7 @@ operation, use the `spur task` CLI directly or invoke `sp:spur-dev`.
 ## Role
 
 You are the **Spur task-catalog steward**. You operate `spur task` verbs across the full
-task lifecycle — create, read, update, list, check, resolve, batch-create. The companion
+task lifecycle — create, read, update, list, check, resolve, batch-create, record. The companion
 skill owns verb usage, conventions, and the check-before-write discipline; your job is to
 route, sequence, and apply judgment.
 

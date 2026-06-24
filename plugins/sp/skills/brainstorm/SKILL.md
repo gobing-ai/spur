@@ -150,7 +150,7 @@ When user confirms approach, delegate task creation:
 Skill("sp:spur-dev", args: "convert <approach> to tasks")
 
 // Then use sp:spur-tasks for file creation
-Bash: spur task batch-create decomposition.json   # bare JSON array (see sp:spur-tasks)
+Bash: spur task batch-create --file decomposition.json   # bare JSON array (see sp:spur-tasks)
 ```
 
 ## Workflow

@@ -1,6 +1,6 @@
 ---
 name: task-verbs
-description: Per-verb flag detail, JSON shapes, and exit codes for spur task.
+description: Per-verb flag detail, template variants, verdict + check JSON shapes, and exit codes for spur task.
 see_also:
   - spur-tasks
 ---
@@ -9,7 +9,10 @@ see_also:
 
 Ground truth for every `spur task` verb. The CLI is the source of behavior; this reference mirrors
 it so you don't have to read the command source. If a flag isn't listed here, it doesn't exist —
-don't assume one.
+don't assume one. Authority for surface + semantics: `docs/04_DESIGN.md §7.1`.
+
+**Exit codes (all verbs):** `0` success, `1` error, `2` invalid usage. `--json` follows the
+`api-response` envelope (`{ ok, data? }`).
 
 ## `create <title>`
 
@@ -18,37 +21,49 @@ blocking retry).
 
 | Flag | Effect |
 | ---- | ------ |
-| `--feature <id>` | Records `feature-id` in frontmatter; derives `Background` from the feature's `Goal` (L4 edge). |
+| `--feature <id>` | Records `feature_id` in frontmatter; derives `Background` from the feature's `Goal` (L4 edge). |
 | `--parent <wbs>` | Groups under a parent WBS for sub-task decomposition. |
+| `--template <variant>` | Selects the section-matrix variant for the new file. |
 | `--folder <path>` | Target a non-default tasks folder. |
 | `--json` | Emit `{ ref: { id, filePath } }`. |
 
-There is **no `--template` flag.** A single create uses the default template. Per-task template
-selection is a `batch-create` item field only.
+**Template variants** (`TASK_VARIANTS`): `standard`, `feature-impl`, `issue`, `review`, `meta`,
+`brainstorm`. The variant chooses which sections the new file carries (via the Section-Status-Matrix)
+and its scaffold body. **Default:** `feature-impl` when `--feature` is given, else `standard`. An
+unknown variant is exit `2`.
+
+**Creation status** follows the matrix: a spec'd task (a `--feature` link, or a batch item with
+`background`/`requirements`) is created at **`todo`** ("ready to execute"); a bare capture is created
+at **`backlog`** ("still preparing"). `Solution` first appears at `wip`.
 
 ## `show <wbs>` / `list`
 
-- `show <wbs>` prints one task's frontmatter + body (`--json` for structured).
+- `show <wbs>` prints one task's frontmatter + body. With `--json`, frontmatter is a top-level field.
 - `list` filters: `--status <s>` (or legacy `--phase <p>`), `--parent <wbs>`. `--json` emits an
   array.
 
-## `update <wbs> [status] | --section <name> --from-file <path>`
+## `update <wbs> [status] | --section <name> --from-file <path> | --feature/--priority`
 
-Dual-mode and mutually exclusive:
+Multi-mode. Status and `--section` are **mutually exclusive**; `--feature`/`--priority` set a
+frontmatter scalar.
 
 - **Status** (positional): legal transition over `backlog → todo → wip → testing → blocked → done →
-  cancelled`. `done` is guarded — refuses when the `Plan` section is empty.
+  cancelled`. Two transitions run a `check` guard (§7.5): `wip→testing` → `spur task check <wbs>`;
+  `testing→done` → `spur task check <wbs> --strict-core`. A failing gate blocks the transition.
 - **Section** (`--section` **requires** `--from-file`): replaces the entire named section body from
   the file. No inline-body flag. Section names: `Background`, `Acceptance Criteria`, `Plan`,
   `Solution`, `Testing`, `Review`, `References`, `History`.
+- **Frontmatter** (`--feature <id>`, `--priority <p>`): sets the scalar frontmatter field on an
+  existing task — the only post-create path, allow-listed to `feature_id` / `parent_wbs` / `priority`.
 
 Exit code `2` when neither mode's required args are supplied (e.g. `--section` without `--from-file`,
-or no status and no `--section`).
+or no status and no `--section`/frontmatter flag).
 
-## `batch-create <file>`
+## `batch-create --file <path>`
 
-Create many tasks from a JSON file. The file is a **bare top-level array** (not wrapped in an
-object). Each item is `.strict()` — unknown keys are rejected:
+Create many tasks from a JSON file passed via **`--file <path>`** (not a positional). The file is a
+**bare top-level array** (not wrapped in an object). Each item is `.strict()` — unknown keys are
+rejected, and creation is **all-or-nothing**:
 
 ```json
 [
@@ -65,19 +80,56 @@ object). Each item is `.strict()` — unknown keys are rejected:
 ]
 ```
 
-Valid `template` values: `feature-impl`, `issue`, `review`, `meta`. `priority`: `P0`–`P3`. Only
-`name` is required. The schema lives at `apps/cli/schemas/task-batch.schema.json`; the
-decomposition heuristics that produce this array live in `sp:spur-dev`.
+Valid `template` values match `TASK_VARIANTS`: `standard`, `feature-impl`, `issue`, `review`, `meta`,
+`brainstorm`. `priority`: `P0`–`P3`. Only `name` is required. An item with `background`/`requirements`
+is created at `todo`; a bare item at `backlog`. The schema lives at
+`apps/cli/schemas/task-batch.schema.json`; the decomposition heuristics that produce this array live
+in `sp:spur-dev`.
 
-## `refresh`
+## `record <wbs>`
 
-Rebuild the tasks INDEX from the files on disk. **Files win** — never writes a task file from the
-index. Run after hand-edits or when the index looks stale.
+Write `Testing` + `Review` from a verify verdict, with optional `Solution` backfill and a lifecycle
+transition. Collapses the pipeline's record step to one call.
+
+| Flag | Effect |
+| ---- | ------ |
+| `--verdict-file <path>` | Verdict JSON (default `.spur/run/<wbs>-verdict.json`). |
+| `--solution-from-diff` | Backfill `Solution` from `git diff -U0` **only when Solution is bare**. |
+| `--transition <status>` | Optional lifecycle transition after writing. **Never `done`.** |
+
+**Verdict shape** (`.spur/run/<wbs>-verdict.json`):
+
+```json
+{
+  "wbs": "0040",
+  "verdict": "PASS",
+  "requirements": [{ "id": "AC-1", "status": "MET", "evidence": "…" }],
+  "checks": [{ "name": "SECU", "status": "P3", "evidence": "…" }]
+}
+```
+
+- `verdict`: `PASS` | `PARTIAL` | `FAIL` | `UNKNOWN`. A missing/malformed/empty file degrades to
+  `UNKNOWN` (empty arrays) — `record` never throws.
+- `requirements[]` → the `Testing` per-requirement table. `checks[]` → the `Review` P1–P4 findings
+  table. With no requirements/checks, each renders exactly one "none recorded" row (a clean verify is
+  a valid outcome; the matrix requires a table, not an empty section).
+- `--solution-from-diff` parses `+++ b/<path>` + `@@ +new @@` hunk headers into sorted, unique
+  `` `file:line` `` rows; falls back to `--name-only` at `:1` when there are no hunk lines.
 
 ## `check [wbs]`
 
-The four-layer validator (design §3). Bare = whole corpus; with a WBS = one task. `--strict`
-elevates warnings to failures.
+The four-layer validator (design §3): L1 frontmatter, L2 section-matrix, L3 structure/format, L4
+traceability. Bare = whole corpus; with a WBS = one task. The matrix is loaded from
+`config/tasks/section-matrix.yaml`.
+
+- **`--strict`** elevates *all* warnings to failures.
+- **`--strict-core`** is the `testing→done` gate variant: fails only on **hard-core errors** —
+  Solution `file:line`, Review P1–P4, and `gate:true` required-section misses — *without* the blanket
+  warning elevation.
+
+**L4 traceability** resolves `feature_id` / `parent_wbs` / `dependencies` edges and checks **AC
+coverage** (DD-09): a task's scenarios must be a subset of its linked feature's AC by normalized
+title — orphans warn by default.
 
 `--json` emits an array of per-task results:
 
@@ -96,12 +148,25 @@ elevates warnings to failures.
 ```
 
 - `severity`: `error` | `warning` (under `--strict`, warnings count as failures).
-- `layer`: which check layer raised it (frontmatter / sections / structure / L4 traceability).
+- `layer`: which check layer raised it (`L1` frontmatter / `L2` sections / `L3` structure / `L4`
+  traceability).
 - `pass`: per-task verdict. Process exit code is `1` if **any** task fails.
 
 Parse this matrix to answer readiness questions — don't re-implement the checks in prose.
 
-## `resolve <wbs>`
+## `refresh`
 
-Decides a task's `resolve_info` — the HITL resume hook the pipeline reads when a paused run needs a
-human decision recorded. `--json` for structured output.
+Regenerate `kanban.md` from the files on disk — a pure, deterministic function (A06): same corpus →
+same board ordering, every time. **Files win** — never writes a task file from the board. Run after
+hand-edits or when the board looks stale.
+
+## `resolve <file-path>`
+
+Map a file path to its **owning task** — returns the WBS + task file. Strategies, in order: direct
+task-file match, filename WBS parse, then walk-up the directory tree (A10). Returns exit `1` if no
+task owns the path. `--json` for structured output.
+
+## Reserved
+
+- `spur task migrate` — reserved (A17): one-time corpus normalization pass, gated on the board
+  cutover. Not yet wired.

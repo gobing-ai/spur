@@ -238,7 +238,8 @@ the run:
 - **On guard failure** (`precheck`): the task's check findings block progress — fix the
   task first.
 - **On completion** (`done`): the pipeline's `record` step has already written results into
-  the task's `## Testing` and `## Review` sections via `spur task update --section`.
+  the task's `## Testing` and `## Review` sections via `spur task record <wbs>` (verdict →
+  matrix-compliant tables; never transitions to `done` — the gate stays in the workflow).
 
 ### Step 3: Continue
 
@@ -269,6 +270,7 @@ Never edit a task or feature file directly. Every mutation goes through:
 | Create a task | `spur task create` |
 | Change status | `spur task update <wbs> <status>` |
 | Edit a section | `spur task update <wbs> --section <name> --from-file <path>` |
+| Record verify results | `spur task record <wbs> [--solution-from-diff] [--transition <status>]` |
 | Create a feature | `spur feature create` |
 | Batch create tasks | `spur task batch-create --file <json>` |
 

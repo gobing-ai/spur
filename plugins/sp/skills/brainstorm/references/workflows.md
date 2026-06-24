@@ -215,7 +215,7 @@ When user confirms approach, delegate to sp:spur-dev:
 Skill("sp:spur-dev", args: "convert <recommended_approach> to tasks")
 
 // Receive structured JSON output, then create tasks via sp:spur-tasks
-Bash: spur task batch-create decomposition.json   # bare JSON array (see sp:spur-tasks)
+Bash: spur task batch-create --file decomposition.json   # bare JSON array (see sp:spur-tasks)
 ```
 
 ### Task Extraction Criteria

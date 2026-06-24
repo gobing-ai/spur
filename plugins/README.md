@@ -19,7 +19,7 @@ plugins/sp/
 │   ├── spur-features/               # Companion reference for `spur feature` verbs (v1.0)
 │   ├── spur-plan/                   # Front-half planning pipeline, steps 3–6 (v1.0.0)
 │   ├── spur-rules/                  # Constraint-rule gate lifecycle (v2.0)
-│   ├── spur-tasks/                  # Companion reference for `spur task` verbs (v1.0)
+│   ├── spur-tasks/                  # Companion reference for `spur task` verbs (v1.1)
 │   └── spur-workflows/              # Dual-mode workflow engine lifecycle (v1.0)
 ├── commands/                        # Slash command definitions (18)
 ├── agents/                          # Expert subagent definitions (5)
@@ -40,7 +40,7 @@ plugins/sp/
 |-------|---------|-----------|--------|
 | `spur-dev` | 1.0 | claude-code, codex, antigravity, opencode, openclaw | The fat daily-workflow umbrella — drives the full planning-to-execution pipeline: intake → feature create → AC generation → decomposition → batch-create → pipeline run → HITL gating |
 | `spur-plan` | 1.0.0 | claude-code, codex, antigravity, opencode, openclaw | Front-half planning pipeline (steps 3–6) — phasing, feature-ID derivation, design-doc generation; hands off to `spur-dev` (steps 7–12) |
-| `spur-tasks` | 1.0 | claude-code, codex, antigravity, opencode, openclaw | Companion reference for `spur task` CLI verbs — create, update, batch-create, check, resolve, refresh |
+| `spur-tasks` | 1.1 | claude-code, codex, antigravity, opencode, openclaw | Companion reference for `spur task` CLI verbs — create (template variants), update, batch-create, record, check, resolve, refresh |
 | `spur-features` | 1.0 | claude-code, codex, antigravity, opencode, openclaw | Companion reference for `spur feature` CLI verbs — create, show, update, list, move, refresh, check |
 | `spur-rules` | 2.0 | claude-code, codex, antigravity, opencode, openclaw | Constraint-rule gate lifecycle — run presets, author rules, fine-tune severity/glob/exemptions, validate files, extend the engine (`@gobing-ai/ts-rule-engine`) |
 | `spur-workflows` | 1.0 | claude-code, codex, antigravity, opencode, openclaw | Dual-mode workflow engine lifecycle — choose state-machine vs transition-flow, author YAML, validate, run, trace, refine (`@gobing-ai/ts-dual-workflow-engine`) |
@@ -269,6 +269,7 @@ All planning entities (tasks and features) share a common lifecycle, managed by 
 | **create** | `spur task create` / `batch-create` | `spur feature create` | Structural validation (WBS race-safe, ID hierarchical) |
 | **check** | `spur task check` | `spur feature check` | 4-layer readiness matrix (schema, sections, traceability, AC) |
 | **update** | `spur task update <wbs> [status]` | `spur feature update <id> [status]` | Lifecycle transition or scalar field set |
+| **record** | `spur task record <wbs>` | — | Write Testing/Review from a verify verdict; optional Solution backfill (never transitions to `done`) |
 | **refresh** | `spur task refresh` | `spur feature refresh` | Index + feature-tree roll-up regeneration |
 
 The **workflow** and **rule** engines have their own lifecycles (author → validate → run → trace / refine), documented in their respective skills.
