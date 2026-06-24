@@ -45,7 +45,8 @@
       "Bash(spur agent *)",
       "Read(//tmp/**)",
       "Bash(spur task *)",
-      "Bash(sqlite3 .spur/spur.db *)"
+      "Bash(sqlite3 .spur/spur.db *)",
+      "Skill(sp:dev-run)"
     ]
   }
 }
