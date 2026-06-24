@@ -6,9 +6,10 @@ import {
     type SectionMatrix,
     TASK_LIFECYCLE_PROFILE,
     TaskCheckService,
+    type TaskFoldersConfig,
     TaskService,
 } from '@gobing-ai/spur-app';
-import { bundledConfigRoot } from '@gobing-ai/spur-config';
+import { bundledConfigRoot, spurConfigSchema, tasksConfigSchema } from '@gobing-ai/spur-config';
 import { extractTemplateBodies, TASK_VARIANTS, type TaskSection, taskStatusIcon } from '@gobing-ai/spur-domain';
 import { loadSpurConfig } from '../config/loader';
 import type { CliContext } from '../context';
@@ -330,9 +331,48 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             }
         });
 }
+const DEFAULT_TASKS_DIR = 'docs/tasks';
+
+/** Default folders config used when `.spur/config.yaml` has no `tasks:` block. */
+const DEFAULT_FOLDERS_CONFIG: TaskFoldersConfig = {
+    active_folder: DEFAULT_TASKS_DIR,
+    folders: { [DEFAULT_TASKS_DIR]: { base_counter: 0 } },
+};
+
+/**
+ * Load task-folder configuration from the `tasks:` block in `.spur/config.yaml`
+ * (the single project-config surface — ADR-017). Returns sensible defaults when
+ * the file is absent, the `tasks:` block is missing, or the config is malformed.
+ *
+ * Maps the root-schema's camelCase keys (`active`, `baseCounter`) to the
+ * snake_case shape {@link TaskFoldersConfig} consumes (`active_folder`, `base_counter`).
+ */
+async function loadTaskFoldersConfig(projectRoot: string): Promise<TaskFoldersConfig> {
+    const configPath = join(projectRoot, '.spur', 'config.yaml');
+    try {
+        if (!existsSync(configPath)) return DEFAULT_FOLDERS_CONFIG;
+        const spurConfig = spurConfigSchema.parse(
+            await loadSpurConfig(configPath, { validateSchema: process.env.NODE_ENV !== 'test' }),
+        );
+        if (!spurConfig.tasks) return DEFAULT_FOLDERS_CONFIG;
+        const tasks = tasksConfigSchema.parse(spurConfig.tasks);
+        const folders: Record<string, { base_counter: number; label?: string }> = {};
+        for (const [path, fc] of Object.entries(tasks.folders)) {
+            folders[path] = { base_counter: fc.baseCounter, label: fc.label };
+        }
+        return {
+            active_folder: tasks.active,
+            folders: Object.keys(folders).length > 0 ? folders : DEFAULT_FOLDERS_CONFIG.folders,
+        };
+    } catch {
+        /* malformed config — use defaults */
+    }
+    return DEFAULT_FOLDERS_CONFIG;
+}
 
 async function makeService(context: CliContext, folderOverride?: string): Promise<TaskService> {
-    const tasksDir = folderOverride ?? context.fs.resolve('docs', 'tasks');
+    const foldersConfig = await loadTaskFoldersConfig(context.cwd);
+    const tasksDir = folderOverride ?? context.fs.resolve(foldersConfig.active_folder);
     const lifecycle = makeLifecycleAdapter(context, TASK_LIFECYCLE_PROFILE);
     const writeService = new PlanningWriteService({
         fs: context.fs,
@@ -342,8 +382,9 @@ async function makeService(context: CliContext, folderOverride?: string): Promis
         fs: context.fs,
         tasksDir,
         writeService,
-        sectionMatrix: await loadSectionMatrix(),
-        resolveTemplateBodies: loadTemplateBodies,
+        sectionMatrix: await loadSectionMatrix(context.cwd),
+        resolveTemplateBodies: (variant: string) => loadTemplateBodies(context.cwd, variant),
+        foldersConfig,
     });
 }
 
@@ -351,42 +392,55 @@ async function makeService(context: CliContext, folderOverride?: string): Promis
 const templateBodiesCache = new Map<string, Partial<Record<TaskSection, string>>>();
 
 /**
- * Read a variant's scaffold template (`config/templates/task/<variant>.md`) and
- * extract its per-section bodies (e.g. `review`'s P1–P4 table). Returns `{}` when
- * the file is unreachable (e.g. `--compile` binary) — creation then falls back to
+ * Read a variant's scaffold template and extract its per-section bodies
+ * (e.g. `review`'s P1–P4 table). Resolution order:
+ *   1. `.spur/tasks/templates/<variant>.md` (project-local, seeded by `spur init`)
+ *   2. `config/templates/task/<variant>.md` (bundled fallback)
+ * Returns `{}` when neither source is reachable — creation then falls back to
  * matrix + guidance only. Results are cached per process.
  */
-function loadTemplateBodies(variant: string): Partial<Record<TaskSection, string>> {
+function loadTemplateBodies(projectRoot: string, variant: string): Partial<Record<TaskSection, string>> {
     const cached = templateBodiesCache.get(variant);
     if (cached !== undefined) return cached;
     let bodies: Partial<Record<TaskSection, string>> = {};
-    const root = bundledConfigRoot();
-    if (root !== null) {
-        const templatePath = join(root, 'templates', 'task', `${variant}.md`);
-        if (existsSync(templatePath)) {
-            bodies = extractTemplateBodies(readFileSync(templatePath, 'utf8'));
+
+    // 1. Project-local: .spur/tasks/templates/<variant>.md
+    const localPath = join(projectRoot, '.spur', 'tasks', 'templates', `${variant}.md`);
+    if (existsSync(localPath)) {
+        bodies = extractTemplateBodies(readFileSync(localPath, 'utf8'));
+    } else {
+        // 2. Bundled fallback: config/templates/task/<variant>.md
+        const root = bundledConfigRoot();
+        if (root !== null) {
+            const templatePath = join(root, 'templates', 'task', `${variant}.md`);
+            if (existsSync(templatePath)) {
+                bodies = extractTemplateBodies(readFileSync(templatePath, 'utf8'));
+            }
         }
     }
+
     templateBodiesCache.set(variant, bodies);
     return bodies;
 }
 
 async function makeCheckService(context: CliContext): Promise<TaskCheckService> {
-    return new TaskCheckService(context.fs, await loadSectionMatrix());
+    return new TaskCheckService(context.fs, await loadSectionMatrix(context.cwd));
 }
-
 /**
- * Load the Section-Status-Matrix (design §3.2, R2). Reads the bundled
- * `config/tasks/section-matrix.yaml` — the single source of truth, so tightening
- * the matrix is a config edit, not a code change. Loaded via the standard
- * `loadSpurConfig` path (`loadStructuredConfig`): the YAML's root `$schema` ref
- * selects the embedded section-matrix JSON schema, which validates the shape and
- * section vocabulary so a typo'd section name or status key fails loud at load
- * instead of silently becoming a dead rule. Falls back to a minimal permissive
- * built-in only when the bundled file is unreachable (e.g. a `bun build --compile`
- * single binary).
+ * Load the Section-Status-Matrix (design §3.2, R2). Resolution order:
+ *   1. `.spur/tasks/section-matrix.yaml` (project-local, seeded by `spur init`)
+ *   2. `config/tasks/section-matrix.yaml` (bundled fallback)
+ * Falls back to a minimal permissive built-in only when both sources are
+ * unreachable (e.g. a `bun build --compile` single binary with no project-local seed).
  */
-async function loadSectionMatrix(): Promise<SectionMatrix> {
+async function loadSectionMatrix(projectRoot: string): Promise<SectionMatrix> {
+    // 1. Project-local: .spur/tasks/section-matrix.yaml
+    const localPath = join(projectRoot, '.spur', 'tasks', 'section-matrix.yaml');
+    if (existsSync(localPath)) {
+        const data = await loadSpurConfig(localPath, { validateSchema: true });
+        return data as unknown as SectionMatrix;
+    }
+    // 2. Bundled fallback: config/tasks/section-matrix.yaml
     const root = bundledConfigRoot();
     if (root !== null) {
         const matrixPath = join(root, 'tasks', 'section-matrix.yaml');

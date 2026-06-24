@@ -32,17 +32,17 @@ describe('init command', () => {
         // Team-mode agent specs directory is tracked via .gitkeep.
         expect(existsSync(join(cwd, '.spur', 'agents', '.gitkeep'))).toBe(true);
 
-        // Templates are copied under .spur/config/templates/
-        expect(existsSync(join(cwd, '.spur', 'config', 'templates', 'task', 'standard.md'))).toBe(true);
-        expect(existsSync(join(cwd, '.spur', 'config', 'templates', 'task', 'feature-impl.md'))).toBe(true);
-        expect(existsSync(join(cwd, '.spur', 'config', 'templates', 'task', 'issue.md'))).toBe(true);
-        expect(existsSync(join(cwd, '.spur', 'config', 'templates', 'task', 'review.md'))).toBe(true);
-        expect(existsSync(join(cwd, '.spur', 'config', 'templates', 'task', 'meta.md'))).toBe(true);
+        // Task templates under .spur/tasks/templates/
+        expect(existsSync(join(cwd, '.spur', 'tasks', 'templates', 'standard.md'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'tasks', 'templates', 'feature-impl.md'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'tasks', 'templates', 'issue.md'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'tasks', 'templates', 'review.md'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'tasks', 'templates', 'meta.md'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'config', 'templates', 'feature', 'default.md'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'config', 'templates', 'bdd', 'gherkin.md'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'config', 'templates', 'bdd', 'checklist.md'))).toBe(true);
-        // Section matrix under .spur/config/tasks/
-        expect(existsSync(join(cwd, '.spur', 'config', 'tasks', 'section-matrix.yaml'))).toBe(true);
+        // Section matrix under .spur/tasks/
+        expect(existsSync(join(cwd, '.spur', 'tasks', 'section-matrix.yaml'))).toBe(true);
         // Lifecycle + pipeline workflows under .spur/config/workflows/
         expect(existsSync(join(cwd, '.spur', 'config', 'workflows', 'task-lifecycle.yaml'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'config', 'workflows', 'feature-lifecycle.yaml'))).toBe(true);

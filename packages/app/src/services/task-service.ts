@@ -30,29 +30,50 @@ import {
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
+/** Per-folder configuration for WBS allocation (mirrors rd3:tasks folders config). */
+export interface FolderConfig {
+    /** Floor for WBS allocation in this folder (default: 0). */
+    base_counter: number;
+    /** Human-readable label (e.g. "Phase 1"). */
+    label?: string;
+}
+
+/** Task-folder configuration sourced from the `tasks:` block in `.spur/config.yaml` (ADR-017). */
+export interface TaskFoldersConfig {
+    /** Default folder for task I/O when not overridden by --folder flag. */
+    active_folder: string;
+    /** Map of folder path → per-folder WBS seed. */
+    folders: Record<string, FolderConfig>;
+}
+
 /** Dependencies injected into TaskService. */
 export interface TaskServiceContext {
     fs: FileSystem;
     writeService: PlanningWriteService;
-    /** Tasks folder path. */
+    /** Tasks folder path (default: active_folder from config, or 'docs/tasks'). */
     tasksDir: string;
     /** Project name for atomic writes. */
     projectName?: string;
     /** Actor identifier for history lines (default: 'system'). */
     actor?: string;
     /**
-     * Section-Status-Matrix (config/tasks/section-matrix.yaml). Drives which
-     * sections a newly created task carries for its creation status (§3.2).
-     * When absent, a built-in default is used so creation never hard-depends on
-     * a loadable matrix (e.g. a `--compile` single binary).
+     * Section-Status-Matrix. Drives which sections a newly created task carries
+     * for its creation status (§3.2). When absent, a built-in default is used so
+     * creation never hard-depends on a loadable matrix.
      */
     sectionMatrix?: SectionMatrix;
     /**
      * Resolve per-variant section-body overrides from the variant's template
-     * file (`config/templates/task/<variant>.md`). The caller (CLI) owns file
-     * reading; returning `{}` (or omitting this) means matrix + guidance only.
+     * file. The caller (CLI) owns file reading; returning `{}` (or omitting
+     * this) means matrix + guidance only.
      */
     resolveTemplateBodies?: (variant: string) => Partial<Record<TaskSection, string>>;
+    /**
+     * Multi-folder configuration for WBS allocation. When absent, only
+     * `tasksDir` is scanned. Mirrors the old rd3:tasks `config.jsonc` folders
+     * model (global WBS uniqueness across all folders).
+     */
+    foldersConfig?: TaskFoldersConfig;
 }
 
 /** Job payload enqueued for async task actions. */
@@ -529,11 +550,20 @@ export class TaskService {
     // ── refresh ──
 
     async refresh(): Promise<string> {
-        const tasks = await this.list();
-        const kanban = this.renderKanban(tasks);
-        const kanbanPath = `${this.ctx.tasksDir}/kanban.md`;
-        await this.ctx.fs.writeFile(kanbanPath, kanban);
-        return kanban;
+        // Regenerate kanban for every configured folder (global multi-folder model),
+        // falling back to the active `tasksDir` when no folders config is present.
+        const folders = this.ctx.foldersConfig
+            ? [...new Set([this.ctx.tasksDir, ...Object.keys(this.ctx.foldersConfig.folders)])]
+            : [this.ctx.tasksDir];
+
+        let activeKanban = '';
+        for (const folder of folders) {
+            const tasks = await this.list({ folder });
+            const kanban = this.renderKanban(tasks);
+            await this.ctx.fs.writeFile(`${folder}/kanban.md`, kanban);
+            if (folder === this.ctx.tasksDir) activeKanban = kanban;
+        }
+        return activeKanban;
     }
 
     private renderKanban(tasks: TaskSummary[]): string {
@@ -678,22 +708,31 @@ export class TaskService {
             }
         }
 
-        // A non-task path has no owning task: ownership is "the path IS a task file"
-        // (the write-guard hook, 0067, guards on exactly this — it did not add
-        // walk-up-to-nearest-owner, which stays out of scope). Report no match.
         return null;
     }
 
-    // ── Private helpers ──
-
     private async allocateWbs(): Promise<string> {
-        const entries = await this.ctx.fs.readDir(this.ctx.tasksDir);
+        // Scan ALL configured folders for global WBS uniqueness (rd3:tasks model).
+        // Falls back to tasksDir-only when foldersConfig is absent.
         let max = 0;
-        for (const name of entries) {
-            const [, digits] = /^(\d{4})_.*\.md$/.exec(name) ?? [];
-            if (digits) {
-                const n = parseInt(digits, 10);
-                if (n > max) max = n;
+        const dirs = this.ctx.foldersConfig
+            ? [...new Set([this.ctx.tasksDir, ...Object.keys(this.ctx.foldersConfig.folders)])]
+            : [this.ctx.tasksDir];
+
+        for (const dir of dirs) {
+            const baseCounter = this.ctx.foldersConfig?.folders[dir]?.base_counter ?? 0;
+            if (baseCounter > max) max = baseCounter;
+            try {
+                const entries = await this.ctx.fs.readDir(dir);
+                for (const name of entries) {
+                    const [, digits] = /^(\d{4})_.*\.md$/.exec(name) ?? [];
+                    if (digits) {
+                        const n = parseInt(digits, 10);
+                        if (n > max) max = n;
+                    }
+                }
+            } catch {
+                /* folder may not exist yet */
             }
         }
         return String(max + 1).padStart(4, '0');

@@ -41,3 +41,11 @@ workflows:
 
 redaction:
   enabled: false
+
+# ── Tasks configuration (design §9 — absorbed from docs/.tasks/config.jsonc) ──
+tasks:
+  active: docs/tasks
+  folders:
+    docs/tasks:
+      baseCounter: 0
+      label: Primary

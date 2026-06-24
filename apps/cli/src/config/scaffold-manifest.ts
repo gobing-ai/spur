@@ -48,14 +48,14 @@ export const SCAFFOLD_MANIFEST: readonly ScaffoldEntry[] = [
     { source: 'workflows/task-pipeline.yaml', target: 'config/workflows/task-pipeline.yaml' },
     // Planning pipeline — front-half (task 0088); companions the sp:spur-plan skill
     { source: 'workflows/planning-pipeline.yaml', target: 'config/workflows/planning-pipeline.yaml' },
-    // Section matrix under .spur/config/tasks/
-    { source: 'tasks/section-matrix.yaml', target: 'config/tasks/section-matrix.yaml' },
-    // Task templates under .spur/config/templates/task/
-    { source: 'templates/task/standard.md', target: 'config/templates/task/standard.md' },
-    { source: 'templates/task/feature-impl.md', target: 'config/templates/task/feature-impl.md' },
-    { source: 'templates/task/issue.md', target: 'config/templates/task/issue.md' },
-    { source: 'templates/task/review.md', target: 'config/templates/task/review.md' },
-    { source: 'templates/task/meta.md', target: 'config/templates/task/meta.md' },
+    // Section matrix under .spur/tasks/
+    { source: 'tasks/section-matrix.yaml', target: 'tasks/section-matrix.yaml' },
+    // Task templates under .spur/tasks/templates/
+    { source: 'templates/task/standard.md', target: 'tasks/templates/standard.md' },
+    { source: 'templates/task/feature-impl.md', target: 'tasks/templates/feature-impl.md' },
+    { source: 'templates/task/issue.md', target: 'tasks/templates/issue.md' },
+    { source: 'templates/task/review.md', target: 'tasks/templates/review.md' },
+    { source: 'templates/task/meta.md', target: 'tasks/templates/meta.md' },
     // Feature templates under .spur/config/templates/feature/
     { source: 'templates/feature/default.md', target: 'config/templates/feature/default.md' },
     // BDD snippets under .spur/config/templates/bdd/

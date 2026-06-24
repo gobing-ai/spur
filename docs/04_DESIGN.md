@@ -446,6 +446,7 @@ shipped (`05 §9` tracks status).
 | 7.4 Section-Status-Matrix + format rules | Config file shapes under `./config` (ADR-015); warning-first enforcement core | triage A13/A14; `03 §12.3` |
 | 7.5 Lifecycle workflow definitions | `config/workflows/` task/feature lifecycle YAML shapes + guard wiring | ADR-022; `03 §12.2` |
 | 7.6 Task DTOs | oRPC contract shapes for the board | server/web design task (ADR-021.b) |
+| 7.8 `sp:dev-*` command operations | Dev-* operation map (13 ops: 8 `Skill()`-backed + 5 inline) | `plugins/sp/skills/spur-dev/references/dev-operations.md` |
 
 ### 7.1 `spur task` commands
 
@@ -731,3 +732,19 @@ Two primitives back the anti-hallucination migration (superskill task 0041):
 **Engine seam:** `ResponseValidateEngine` interface (`{ validate(text: string): { ok, reason, issues? } }`) is the contract. The concrete engine is owned by superskill 0041 and provided by the externally-installed `cc:anti-hallucination` skill; the caller wires a thin adapter over its surface. The in-repo copy (`plugins/sp/skills/anti-hallucination/`) was removed once the migration completed (ADR-024 amendment, 2026-06-20); the seam itself is DI-only and unchanged.
 
 **Retry/deny pattern:** transition-flow spike (`packages/app/tests/fixtures/anti-hallucination-spike.yaml`) confirms `validate → ok:done | fail:generate(bounded) | exhausted:denied` is expressible. `iterationBound` caps retries; a proper retry-count guard (checking `vars.__retryCount`) is future work (R3.1).
+
+### 7.8 `sp:dev-*` command operations
+
+The `sp:dev-*` commands back onto three skills (`sp:spur-dev`, `sp:code-verification`,
+`sp:doc-evolve`) or define their procedure inline. The authoritative reference for all 13 operations —
+purpose, inputs, backing, behavior contract — is
+[`plugins/sp/skills/spur-dev/references/dev-operations.md`](../plugins/sp/skills/spur-dev/references/dev-operations.md).
+
+| Pattern | Operations | Backing |
+|---------|-----------|---------|
+| `Skill()` delegation | implement, unit, review, verify, run, refine, plan, docs | `sp:spur-dev`, `sp:code-verification`, `sp:doc-evolve` |
+| Inline procedure | changelog, gitmsg, fixall, handover, new-task | git CLI + `spur` CLI + agent reasoning |
+
+**Pipeline step→command mapping (ADR-026):** `implement` → `/sp:dev-implement`, `test` → `/sp:dev-unit`,
+`review` → `/sp:dev-review`, `verify` → `/sp:dev-verify` (§7.5). The remaining commands are
+operator-invoked, not pipeline-driven.

@@ -89,8 +89,10 @@ export {
     renderTesting,
 } from './services/task-record';
 export type {
+    FolderConfig,
     TaskActionJob,
     TaskActionResult,
+    TaskFoldersConfig,
     TaskServiceContext,
     TaskShowResult,
     TaskSummary,

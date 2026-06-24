@@ -501,6 +501,43 @@ describe('TaskService', () => {
             const kanbanPath = `${tasksDir}/kanban.md`;
             expect(await fs.exists(kanbanPath)).toBe(true);
         });
+
+        test('regenerates a kanban.md in every configured folder (R13 multi-folder)', async () => {
+            const root = mkdtempSync(join(tmpdir(), 'spur-task-svc-multi-'));
+            const primary = join(root, 'tasks');
+            const archive = join(root, 'archive');
+            const isolateFs = createNodeFileSystem(root);
+            await isolateFs.ensureDir(primary);
+            await isolateFs.ensureDir(archive);
+            const writeService = new PlanningWriteService({ fs: isolateFs });
+            // Active folder is `primary`; both folders are declared in foldersConfig.
+            const isolateSvc = new TaskService({
+                fs: isolateFs,
+                tasksDir: primary,
+                writeService,
+                foldersConfig: {
+                    active_folder: primary,
+                    folders: {
+                        [primary]: { base_counter: 0 },
+                        [archive]: { base_counter: 0 },
+                    },
+                },
+            });
+
+            try {
+                await isolateSvc.create({ title: 'Primary task', status: 'backlog' });
+
+                const kanban = await isolateSvc.refresh();
+
+                // Both folders get a kanban.md, not just the active one.
+                expect(await isolateFs.exists(`${primary}/kanban.md`)).toBe(true);
+                expect(await isolateFs.exists(`${archive}/kanban.md`)).toBe(true);
+                // Return value is the active folder's kanban.
+                expect(kanban).toContain('# Kanban');
+            } finally {
+                rmSync(root, { recursive: true, force: true });
+            }
+        });
     });
 
     describe('updateBody', () => {

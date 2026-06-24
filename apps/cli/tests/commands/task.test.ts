@@ -492,4 +492,39 @@ describe('spur task CLI', () => {
         expect(summary).toContain('Testing written');
         expect(summary).toContain('Review written');
     });
+
+    describe('.spur/config.yaml tasks: block (R9 multi-folder)', () => {
+        test('tasks.active from root config directs task create to that folder', async () => {
+            // Isolated cwd so the config does not leak into the suite's shared cwd.
+            const isoCwd = join(import.meta.dir, '..', `.tmp-task-cfg-${Date.now()}`);
+            await mkdir(join(isoCwd, 'docs', 'archive'), { recursive: true });
+            await mkdir(join(isoCwd, '.spur'), { recursive: true });
+            // The tasks: block under the single .spur/config.yaml surface (ADR-017).
+            // CamelCase keys match the root spurConfigSchema / tasksConfigSchema.
+            await Bun.write(
+                join(isoCwd, '.spur', 'config.yaml'),
+                'version: "1"\nname: test\n' +
+                    'tasks:\n' +
+                    '  active: docs/archive\n' +
+                    '  folders:\n' +
+                    '    docs/archive:\n' +
+                    '      baseCounter: 0\n' +
+                    '      label: Archive\n',
+            );
+
+            try {
+                const output = createCapturedOutput();
+                const exitCode = await main(['task', 'create', 'Archived task'], { cwd: isoCwd, output });
+                expect(exitCode).toBe(0);
+                // The created file must land under the YAML-configured active_folder, not docs/tasks.
+                const path = createdPath(output);
+                expect(path).toContain('docs/archive');
+                // The printed path is rooted at isoCwd; resolve relative-or-absolute against it.
+                const filePath = path.startsWith('/') ? path : join(isoCwd, path);
+                expect(await Bun.file(filePath).exists()).toBe(true);
+            } finally {
+                rmSync(isoCwd, { recursive: true, force: true });
+            }
+        });
+    });
 });

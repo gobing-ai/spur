@@ -2,11 +2,11 @@ import { existsSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 /**
- * Directory name holding the default config assets bundled with the CLI.
- * Lives at the repo root (sibling to `apps/`), shipped inside `dist/config/`
- * by the build:bundle step.
+ * Directory names to search for bundled config assets, tried at each filesystem
+ * level. `config` is the repo-root layout; `spur-cli/config` is the npm package
+ * layout produced by the `build:bundle` script.
  */
-const BUNDLED_CONFIG_DIR = 'config';
+const BUNDLED_CONFIG_DIRS = ['config', 'spur-cli/config'];
 
 /** Memoized result so the upward filesystem walk runs at most once per process. */
 let cachedRoot: string | null | undefined;
@@ -14,30 +14,29 @@ let cachedRoot: string | null | undefined;
 /**
  * Resolve the absolute path to the default config tree bundled with the CLI.
  *
- * The directory ships preset YAML files (`rules/`, `workflows/`, `plugins/`)
- * that `spur init` seeds into `~/.config/spur/` on first run. Resolution walks
- * up from this module's compiled location (under `dist/` at runtime, under
- * `src/` in tests) until it finds the bundled `config/` directory. Returns
- * `null` if the directory is absent (e.g. `bun build --compile` produces a
- * single binary with no sibling files).
+ * Walks up from this module's location, trying each of {@link BUNDLED_CONFIG_DIRS}
+ * at each level, until it finds one containing `rules/` + `workflows/`. This
+ * handles the two runtimes that ship a sibling `config/` tree:
+ *   - source: `bun run apps/cli/src/index.ts` → finds repo-root `config/`
+ *   - npm package: `spur.js` + `spur-cli/config/` → finds `spur-cli/config/`
+ *
+ * Returns `null` when no matching directory is reachable. NOTE: a `bun build
+ * --compile` single binary has no sibling filesystem, so this returns `null`
+ * there — callers fall back to their built-in defaults. Embedding config into the
+ * compiled binary (0117 R6) is not yet implemented; `--asset name=path` is not a
+ * valid Bun flag, and asset embedding requires importing the files so Bun bundles
+ * them, plus reading them back via `Bun.embeddedFiles` at runtime.
  */
 export function bundledConfigRoot(): string | null {
     if (cachedRoot !== undefined) return cachedRoot;
     let dir = import.meta.dirname;
-    // Walk to filesystem root at most; the config dir is a few levels up.
     while (true) {
-        const candidate = join(dir, BUNDLED_CONFIG_DIR);
-        if (
-            existsSync(candidate) &&
-            statSync(candidate).isDirectory() &&
-            // Distinguish the repo-root config/ from any coincidentally named dir
-            // (e.g. this file's own parent directory) by checking for the expected
-            // subdirectories created in task 0024.
-            existsSync(join(candidate, 'rules')) &&
-            existsSync(join(candidate, 'workflows'))
-        ) {
-            cachedRoot = candidate;
-            return cachedRoot;
+        for (const name of BUNDLED_CONFIG_DIRS) {
+            const candidate = join(dir, name);
+            if (isBundledConfigDir(candidate)) {
+                cachedRoot = candidate;
+                return cachedRoot;
+            }
         }
         const parent = dirname(dir);
         if (parent === dir) break;
@@ -45,6 +44,16 @@ export function bundledConfigRoot(): string | null {
     }
     cachedRoot = null;
     return cachedRoot;
+}
+
+/** Check that a candidate dir exists and contains the expected subdirectories. */
+function isBundledConfigDir(candidate: string): boolean {
+    return (
+        existsSync(candidate) &&
+        statSync(candidate).isDirectory() &&
+        existsSync(join(candidate, 'rules')) &&
+        existsSync(join(candidate, 'workflows'))
+    );
 }
 
 /**

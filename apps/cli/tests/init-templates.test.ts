@@ -19,21 +19,24 @@ async function isolatedOptions(cwd: string) {
 }
 
 describe('spur init template copy', () => {
-    test('templates are copied to .spur/config/templates/', async () => {
+    test('templates are copied to .spur/tasks/templates/ and .spur/config/templates/', async () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
         expect(await main(['init'], options)).toBe(0);
 
-        const base = join(cwd, '.spur', 'config', 'templates');
-        expect(existsSync(join(base, 'task', 'standard.md'))).toBe(true);
-        expect(existsSync(join(base, 'task', 'feature-impl.md'))).toBe(true);
-        expect(existsSync(join(base, 'task', 'issue.md'))).toBe(true);
-        expect(existsSync(join(base, 'task', 'review.md'))).toBe(true);
-        expect(existsSync(join(base, 'task', 'meta.md'))).toBe(true);
-        expect(existsSync(join(base, 'feature', 'default.md'))).toBe(true);
-        expect(existsSync(join(base, 'bdd', 'gherkin.md'))).toBe(true);
-        expect(existsSync(join(base, 'bdd', 'checklist.md'))).toBe(true);
+        // Task templates under .spur/tasks/templates/
+        const tasksBase = join(cwd, '.spur', 'tasks', 'templates');
+        expect(existsSync(join(tasksBase, 'standard.md'))).toBe(true);
+        expect(existsSync(join(tasksBase, 'feature-impl.md'))).toBe(true);
+        expect(existsSync(join(tasksBase, 'issue.md'))).toBe(true);
+        expect(existsSync(join(tasksBase, 'review.md'))).toBe(true);
+        expect(existsSync(join(tasksBase, 'meta.md'))).toBe(true);
+        // Feature and BDD templates still under .spur/config/templates/
+        const configBase = join(cwd, '.spur', 'config', 'templates');
+        expect(existsSync(join(configBase, 'feature', 'default.md'))).toBe(true);
+        expect(existsSync(join(configBase, 'bdd', 'gherkin.md'))).toBe(true);
+        expect(existsSync(join(configBase, 'bdd', 'checklist.md'))).toBe(true);
     });
 
     test('bundled template files exist at source', async () => {
@@ -70,7 +73,7 @@ describe('spur init template copy', () => {
 
         // First init — templates are created.
         expect(await main(['init'], options)).toBe(0);
-        const tmplPath = join(cwd, '.spur', 'config', 'templates', 'task', 'standard.md');
+        const tmplPath = join(cwd, '.spur', 'tasks', 'templates', 'standard.md');
         expect(existsSync(tmplPath)).toBe(true);
 
         // Modify the template in-place to add a marker.
@@ -90,13 +93,13 @@ describe('spur init template copy', () => {
         expect(forced).not.toContain(marker);
     });
 
-    test('section-matrix.yaml is copied to .spur/config/tasks/', async () => {
+    test('section-matrix.yaml is copied to .spur/tasks/', async () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
         expect(await main(['init'], options)).toBe(0);
 
-        const matrixPath = join(cwd, '.spur', 'config', 'tasks', 'section-matrix.yaml');
+        const matrixPath = join(cwd, '.spur', 'tasks', 'section-matrix.yaml');
         expect(existsSync(matrixPath)).toBe(true);
         const content = readFileSync(matrixPath, 'utf-8');
         expect(content).toContain('variants:');
