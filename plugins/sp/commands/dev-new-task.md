@@ -6,7 +6,7 @@ allowed-tools: ["Bash", "Read", "Write", "Skill"]
 
 # Dev New Task
 
-Wraps the **sp:spur-dev** skill (task creation).
+Implements an inline procedure — see [dev-operations.md](../skills/spur-dev/references/dev-operations.md#13-new-task) for the authoritative reference.
 
 Create a single task file from a description. Intake Q&A for scope, then `spur task create`
 with the appropriate template variant and feature linkage. For batch task creation from a
@@ -29,19 +29,23 @@ decomposed feature, use `dev-plan` instead.
 
 ## Behavior
 
-Thin wrapper: intake, template selection, and `spur task create` invocation are all owned
-by the skill.
+Inline procedure (no skill delegation):
+
+1. **Intake:** clarify the task scope with the operator:
+   - What is the task trying to accomplish? (Refine the description if vague.)
+   - Which feature does it belong to? (Use `--feature` if given; ask if not.)
+   - What template variant fits? (Use `--template` if given; default to `feature-impl` when `--feature` is set, `default` otherwise.)
+   - Is this a sub-task? (Use `--parent` if given; ask if the description implies nesting.)
+2. **Create:** run `spur task create "<title>" --feature <id> --template <variant> --parent <wbs> --json` (omit `--feature`/`--parent` if not applicable).
+3. **Report:** print the new task's WBS and file path.
+
+For batch task creation from a decomposed feature, use `dev-plan` instead.
 
 ## Implementation
 
-Delegates to **sp:spur-dev** skill:
-
-```
-Skill(skill="sp:spur-dev", args="new-task $ARGUMENTS")
-```
+Implements the inline procedure defined in [dev-operations.md](../skills/spur-dev/references/dev-operations.md#13-new-task). No `Skill()` delegation.
 
 ## Platform Notes
 
-- **Claude Code:** native — `Skill()` delegation and `$ARGUMENTS` work directly.
-- **Other platforms:** `Skill()` and `$ARGUMENTS` are Claude-specific. Invoke the
-  `sp:spur-dev` skill's `new-task` operation directly.
+- **Claude Code:** native — `$ARGUMENTS` substitution, `Bash`/`Read`/`Write` tools work directly.
+- **Other platforms:** `$ARGUMENTS` is Claude-specific. Run the `spur` CLI commands manually per the procedure above.

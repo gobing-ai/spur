@@ -6,7 +6,7 @@ allowed-tools: ["Bash", "Read", "Write", "Skill"]
 
 # Dev Fixall
 
-Wraps the **sp:spur-dev** skill (fix cycle).
+Implements an inline procedure — see [dev-operations.md](../skills/spur-dev/references/dev-operations.md#11-fixall) for the authoritative reference.
 
 Run the full fix cycle: lint → typecheck → test, collecting all failures, then fix each
 systematically. Re-runs the gates after each fix batch. Stops when all three gates are
@@ -26,19 +26,22 @@ green.
 
 ## Behavior
 
-Thin wrapper: error collection, categorization, fix application, and re-run loop are all
-owned by the skill.
+Inline procedure (no skill delegation):
+
+1. Run `bun run lint` (add `-- <path>` if `--scope` is given). Collect all errors. If clean, skip to step 4.
+2. **Lint fix loop:** for each error, diagnose root cause, apply the smallest fix. Re-run `bun run lint` after each batch. Loop until green.
+3. Run `bun run test`. Collect all failures. If green, done.
+4. **Test fix loop:** for each failure, diagnose (test bug vs implementation bug), apply the fix, re-run the failing test. Loop until all pass.
+5. Final verification: `bun run lint && bun run test` — confirm both green simultaneously.
+6. Report: list what was fixed (file + one-line summary). If any error could not be resolved, report explicitly — do not suppress.
+
+Never bypass with `--no-verify`, `--force`, or new suppressions. Never skip or `.skip` a test to go green. Fix the root cause.
 
 ## Implementation
 
-Delegates to **sp:spur-dev** skill:
-
-```
-Skill(skill="sp:spur-dev", args="fixall $ARGUMENTS")
-```
+Implements the inline procedure defined in [dev-operations.md](../skills/spur-dev/references/dev-operations.md#11-fixall). No `Skill()` delegation.
 
 ## Platform Notes
 
-- **Claude Code:** native — `Skill()` delegation and `$ARGUMENTS` work directly.
-- **Other platforms:** `Skill()` and `$ARGUMENTS` are Claude-specific. Invoke the
-  `sp:spur-dev` skill's `fixall` operation directly.
+- **Claude Code:** native — `$ARGUMENTS` substitution, `Bash`/`Edit`/`Write` tools work directly.
+- **Other platforms:** `$ARGUMENTS` is Claude-specific. Run the lint/test commands and fixes manually per the procedure above.

@@ -111,22 +111,36 @@ Assemble the comprehensive report from the ledger. Required sections:
 
   Then write the **Issues (Unresolved)** and **Findings** into the task's `#### Review Findings`
   table — one row per item, `Severity` = `P1`/`P2`, with `File` / `Finding` / `Recommendation`
-  filled. Use `spur task update <wbs> --section "Review Findings" --from-file <path>` for the table
-  body. The resulting task feeds straight into `/sp:dev-run` for the fix pass.
+  filled. The `#### Review Findings` heading is a sub-section within `### Background`, so use
+  `spur task update <wbs> --section "Background" --from-file <path>` with a body that starts with
+  the `#### Review Findings` heading followed by the table. The resulting task feeds straight
+  into `/sp:dev-run` for the fix pass.
 
 ## Implementation
 
-No skill delegation yet (fat-file exception). Execute the four phases above directly. The auto-fix
-loop is the deliberate reason this command holds `Edit`/`Write` in `allowed-tools`, unlike the
-read-mostly `/sp:dev-verify` and `/sp:dev-review` wrappers — `--max-retry 0` is the safe,
-non-mutating inspection path.
+No skill delegation yet (fat-file exception). Execute the four phases above directly.
+
+**Arguments received:** `$ARGUMENTS`
+
+Parse them per the Arguments table above:
+- `testee` (positional, required): the skill / slash command / CLI invocation to exercise.
+  Everything before the first dev-dogfood flag (`--max-retry`, `--save`, `--task`) is the testee.
+  If the testee itself contains flags (e.g. `/sp:dev-run 0110 --auto`), quote it so its flags
+  are not mistaken for dev-dogfood's. Strip surrounding quotes after extracting.
+- `--max-retry <n>` (default `2`): fix attempts per failed step. `0` = observe-only.
+- `--save`: write the report to `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md`.
+- `--task`: file findings as a review-template task via `spur task create --template review`.
+
+The auto-fix loop is the deliberate reason this command holds `Edit`/`Write` in `allowed-tools`,
+unlike the read-mostly `/sp:dev-verify` and `/sp:dev-review` wrappers — `--max-retry 0` is the
+safe, non-mutating inspection path.
 
 ## Platform Notes
 
-- **Claude Code:** native — `$ARGUMENTS`, `Skill()`, and the `Edit`/`Write`/`Bash` toolset work
-  directly.
-- **Other platforms:** `$ARGUMENTS` and `Skill()` are Claude-specific. Run the four-phase protocol
-  manually and invoke the `spur` CLI directly for the `--task` sink.
+- **Claude Code:** native — argument substitution, `Skill()`, and the `Edit`/`Write`/`Bash` toolset
+  work directly.
+- **Other platforms:** argument substitution and `Skill()` are Claude-specific. Run the four-phase
+  protocol manually and invoke the `spur` CLI directly for the `--task` sink.
 
 ## See Also
 

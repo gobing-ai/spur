@@ -6,7 +6,7 @@ allowed-tools: ["Bash", "Read", "Write", "Skill"]
 
 # Dev Handover
 
-Wraps the **sp:spur-dev** skill (handover generation).
+Implements an inline procedure — see [dev-operations.md](../skills/spur-dev/references/dev-operations.md#12-handover) for the authoritative reference.
 
 When blocked on a task, generate a structured handover document capturing: the goal,
 progress so far, the blocker (what is stuck and why), approaches tried and rejected, and
@@ -27,19 +27,26 @@ handover file.
 
 ## Behavior
 
-Thin wrapper: context gathering, blocker documentation, and handover formatting are all
-owned by the skill.
+Inline procedure (no skill delegation):
+
+1. Identify the current task context: read the active task via `spur task list --status wip --json`. If a WBS is known, use it; otherwise work from the current conversation.
+2. Gather context:
+   - **Goal:** from the task's `## Background` / `## Requirements`.
+   - **Progress:** from `## Solution`, `## Testing`, `## Review` sections and the conversation.
+   - **Blocker:** the `"<blocker description>"` argument.
+   - **Rejected approaches:** what was tried and why it failed (from the conversation + prior handover).
+   - **Next steps:** concrete actions for the next agent.
+3. Format as a markdown document with sections: Goal, Progress, Blocker, Rejected Approaches, Next Steps.
+4. Write the document:
+   - If a task context exists, write to the task's `## Notes` via `spur task update <wbs> --section Notes --from-file <path>`.
+   - Otherwise, write to `docs/handover/<YYYY-MM-DD>-<slug>.md` (create `docs/handover/` if absent).
+5. Print the path to the handover document.
 
 ## Implementation
 
-Delegates to **sp:spur-dev** skill:
-
-```
-Skill(skill="sp:spur-dev", args="handover $ARGUMENTS")
-```
+Implements the inline procedure defined in [dev-operations.md](../skills/spur-dev/references/dev-operations.md#12-handover). No `Skill()` delegation.
 
 ## Platform Notes
 
-- **Claude Code:** native — `Skill()` delegation and `$ARGUMENTS` work directly.
-- **Other platforms:** `Skill()` and `$ARGUMENTS` are Claude-specific. Invoke the
-  `sp:spur-dev` skill's `handover` operation directly.
+- **Claude Code:** native — `$ARGUMENTS` substitution, `Bash`/`Read`/`Write` tools work directly.
+- **Other platforms:** `$ARGUMENTS` is Claude-specific. Run the `spur` CLI and doc generation manually per the procedure above.
