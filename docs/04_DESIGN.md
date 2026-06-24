@@ -457,12 +457,12 @@ Source: delivery §1.1, design §10.
 | `spur task` | — (noun help) | 0 | Lists subcommands if no subcommand given. |
 | `spur task create <title>` | `--feature <id>` `--parent <wbs>` `--template <variant>` `--folder <path>` `--json` | 0/1/2 | Race-safe WBS allocation; `--feature` enables B09 Goal→Background derivation; `--template` selects a section-matrix variant (`standard·feature-impl·issue·review·meta·brainstorm`; default `feature-impl` when `--feature`, else `standard`); unknown variant → exit 2. |
 | `spur task show <wbs>` | `--folder <path>` `--json` | 0/1 | Frontmatter is a top-level field in `--json` output. |
-| `spur task update <wbs> <status>` | `--section <name> --from-file <path>` `--folder <path>` `--json` | 0/1/2 | Status transition runs lifecycle guard; `--section` reads body from file. |
+| `spur task update <wbs> <status>` | `--section <name> --from-file <path>` `--feature <id>` `--priority <p>` `--folder <path>` `--json` | 0/1/2 | Status transition runs lifecycle guard; `--section` reads body from file; `--feature`/`--priority` set the scalar frontmatter field on an existing task (the only post-create path, allow-listed to `feature_id`/`parent_wbs`/`priority`). |
 | `spur task list` | `--status <s>` `--phase <p>` `--parent <wbs>` `--folder <path>` `--json` | 0/1 | `--phase` is a legacy alias for `--status`. |
 | `spur task refresh` | `--folder <path>` `--json` | 0/1 | Regenerate `kanban.md` — pure function, deterministic ordering (A06). |
 | `spur task batch-create --file <json>` | `--folder <path>` `--json` | 0/1 | Create many tasks from validated JSON — all-or-nothing; validated against `apps/cli/schemas/task-batch.schema.json` (A08/C03). |
 | `spur task resolve <file-path>` | `--folder <path>` `--json` | 0/1 | Maps a path to owning task (WBS + file). Returns 1 if no match. Strategies: direct match, filename WBS parse, walk-up (A10). |
-| `spur task check [<wbs>]` | `--strict` `--folder <path>` `--json` | 0/1 | Four-layer validation (§3). L4 traceability: `feature_id`/`parent_wbs`/`dependencies` edge resolution + **AC coverage** (DD-09: task scenarios must be a subset of the linked feature's AC by normalized title — warnings by default). Validates all tasks when `<wbs>` omitted; `--strict` elevates warnings. Matrix loaded from `config/tasks/section-matrix.yaml`. |
+| `spur task check [<wbs>]` | `--strict` `--strict-core` `--folder <path>` `--json` | 0/1 | Four-layer validation (§3). L4 traceability: `feature_id`/`parent_wbs`/`dependencies` edge resolution + **AC coverage** (DD-09: task scenarios must be a subset of the linked feature's AC by normalized title — warnings by default). Validates all tasks when `<wbs>` omitted; `--strict` elevates ALL warnings; `--strict-core` is the `testing→done` gate variant (fails only on hard-core errors — Solution `file:line`, Review P1–P4, and `gate:true` required-section misses — without the blanket elevation). Matrix loaded from `config/tasks/section-matrix.yaml`. |
 | `spur task record <wbs>` | `--verdict-file <path>` `--solution-from-diff` `--transition <status>` `--folder <path>` `--json` | 0/1 | Write Testing/Review from verify verdict; optional Solution backfill from `git diff` and status transition. Never transitions to `done` — the gate stays in the workflow (0108). |
 
 **Exit codes:** 0 success, 1 error, 2 invalid usage. Follows the design §10 `api-response` envelope
@@ -535,7 +535,7 @@ by dropping the last character of `id`.
 | `id`            | `z.string().regex(/^[A-Z][1-9]*$/)` | ✔ | Position-encoding hierarchical ID (DD-14). |
 | `name`          | `z.string().min(1)` | ✔ | |
 | `status`        | `z.enum(FEATURE_STATUSES)` (transform → lowercase) | ✔ | See §7.3.3; `verifying` is canonical. |
-| `priority`      | `z.enum(['P0','P1','P2','P3'])` | ✔ | The P0 feature in `active`/`verifying` is the project goal (B09). |
+| `priority`      | `z.enum(['P0','P1','P2','P3']).optional()` | — | Optional for parity with tasks; consumers default a missing value to `P2`. The P0 feature in `active`/`verifying` is the project goal (B09). |
 | `tags`          | `z.array(z.string()).optional()` | — | |
 | `created_at`    | ISO 8601 string | ✔ | Write-service-owned. |
 | `updated_at`    | ISO 8601 string | ✔ | Write-service-owned. |

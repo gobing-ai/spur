@@ -136,12 +136,12 @@ describe('featureFrontmatterSchema', () => {
         expect(featureFrontmatterSchema.parse({ ...baseFeatureFrontmatter, id: 'A123' }).id).toBe('A123');
     });
 
-    test('requires priority', () => {
+    test('tolerates a missing priority (optional, parity with tasks)', () => {
         const result = featureFrontmatterSchema.safeParse({ ...baseFeatureFrontmatter, priority: undefined });
-        expect(result.success).toBe(false);
+        expect(result.success).toBe(true);
     });
 
-    test('rejects unknown priorities', () => {
+    test('rejects unknown priorities even though the field is optional', () => {
         const result = featureFrontmatterSchema.safeParse({ ...baseFeatureFrontmatter, priority: 'P9' as never });
         expect(result.success).toBe(false);
     });

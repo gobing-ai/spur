@@ -86,6 +86,8 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .argument('[status]', 'New status (for lifecycle transition)')
         .option('--section <name>', 'Section name to replace')
         .option('--from-file <path>', 'File to read section body from (requires --section)')
+        .option('--feature <id>', 'Set the feature_id frontmatter field (traceability edge)')
+        .option('--priority <p>', 'Set the priority frontmatter field (P0–P3)')
         .option('--folder <path>', 'Custom tasks folder')
         .option('--json', 'Output machine-readable JSON')
         .action(async (wbs, status, options) => {
@@ -101,7 +103,19 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     if (options.json) {
                         context.output.write(toJson(result));
                     } else {
+                        for (const warning of result.warnings ?? []) {
+                            context.output.error(warning);
+                        }
                         context.output.write(`Updated section '${options.section}' in task ${result.ref.id}`);
+                    }
+                } else if (options.feature !== undefined || options.priority !== undefined) {
+                    const key = options.feature !== undefined ? 'feature_id' : 'priority';
+                    const value = options.feature ?? options.priority ?? '';
+                    const result = await svc.updateField(wbs, key, value);
+                    if (options.json) {
+                        context.output.write(toJson(result));
+                    } else {
+                        context.output.write(`Set ${key}=${value} on task ${result.ref.id}`);
                     }
                 } else if (status !== undefined) {
                     const result = await svc.updateStatus(wbs, status);
@@ -111,7 +125,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         context.output.write(`${result.ref.id}: ${result.fromStatus} → ${result.toStatus}`);
                     }
                 } else {
-                    context.output.error('Either <status> or --section/--from-file is required');
+                    context.output.error('Either <status>, --section/--from-file, or --feature/--priority is required');
                     context.setExitCode(2);
                 }
             } catch (err) {
@@ -233,12 +247,18 @@ export function registerTaskCommand(program: Command, context: CliContext): void
     task.command('check')
         .summary('Validate a task file through the four-layer check (design §3).')
         .argument('[wbs]', 'Task WBS number (validates all tasks in the folder when omitted)')
-        .option('--strict', 'Elevate warnings to failures')
+        .option('--strict', 'Elevate ALL warnings to failures')
+        .option('--strict-core', 'Gate variant: fail only on hard-core errors (the testing→done guard)')
         .option('--folder <path>', 'Custom tasks folder')
         .option('--json', 'Output machine-readable JSON')
         .action(async (wbs, options) => {
             const svc = await makeCheckService(context);
             const json = options.json === true;
+            // `--strict` elevates every advisory; `--strict-core` is the done-gate
+            // variant — the hard-core L3 rules (Solution file:line, Review P1–P4)
+            // and gate:true required-section misses are already errors, so it runs
+            // the default severity computation (no blanket elevation). The flag
+            // exists so the testing→done lifecycle guard has a real, stable verb.
             const strict = options.strict === true;
             try {
                 const tasksDir = options.folder ?? context.fs.resolve('docs', 'tasks');

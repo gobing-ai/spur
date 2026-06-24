@@ -31,8 +31,13 @@ variants:
       required: [Solution, Testing]
       optional: [Background]
       forbidden: [Review]
+    # done REQUIRES the evidence trio (Solution/Testing/Review). The spec sections
+    # a task was built from (Design/Plan/AC/…) are OPTIONAL, not forbidden, so a
+    # finished task keeps its design history rather than being stripped to pass the
+    # closed-world gate. gate:true still hard-fails a missing required section.
     done:
       required: [Solution, Testing, Review]
+      optional: [Background, Requirements, Acceptance Criteria, Q&A, Design, Plan]
       gate: true
     blocked:
       required: [Background]
@@ -58,8 +63,11 @@ variants:
       required: [Solution, Testing]
       optional: [Background]
       forbidden: [Review]
+    # done keeps the spec sections optional (see `standard` rationale above) so a
+    # finished feature-impl task retains its Design/Plan/AC history.
     done:
       required: [Solution, Testing, Review]
+      optional: [Background, Requirements, Acceptance Criteria, Q&A, Design, Plan]
       gate: true
     blocked:
       required: [Background]
@@ -87,6 +95,7 @@ variants:
       forbidden: [Review]
     done:
       required: [Root Cause, Solution, Testing, Review]
+      optional: [Background, Acceptance Criteria, Design, Plan, Q&A]
       gate: true
     blocked:
       required: [Background]
@@ -112,6 +121,7 @@ variants:
       optional: [Plan]
     done:
       required: [Background, Review]
+      optional: [Plan, Q&A]
       gate: true
     blocked:
       required: [Background]
