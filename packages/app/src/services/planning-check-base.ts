@@ -13,19 +13,15 @@
  * orchestration stay in the subclasses, which differ entirely in those bodies.
  */
 
-import type { MarkdownDocument } from '@gobing-ai/spur-domain';
+import { type MarkdownDocument, UNIVERSAL_SECTIONS } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import type { z } from 'zod';
 
 // ─── Shared types ─────────────────────────────────────────────────────────
 
-/**
- * Sections allowed at every status without being declared in the matrix:
- * `History` (machine-appended transition log) and `References` are structural
- * and present throughout a file's lifecycle, so the closed-world check never
- * flags them. (`Notes` covered for feature parity.)
- */
-const UNIVERSAL_SECTIONS = ['History', 'References', 'Notes'] as const;
+// `UNIVERSAL_SECTIONS` (the closed-world relaxation: History/References/Notes)
+// is imported from `@gobing-ai/spur-domain` — domain owns the section vocabulary
+// so the write pipeline's R3 guard and this check share one definition.
 
 /** Finding severity level. `error` blocks the check gate; `warning` is advisory. */
 export type Severity = 'error' | 'warning';
