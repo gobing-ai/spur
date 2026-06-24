@@ -283,6 +283,19 @@ The dominant agent write pattern (hot path 2):
 This is the only sanctioned path for LLM-generated content to enter the corpus. The CLI
 validates the section against the status-section matrix before writing.
 
+**Body-only format** (avoids the corruption class fixed in task 0115):
+
+- **Body-only:** the temp file is the section *body* only — no `## SectionName` heading line.
+  The CLI adds the canonical heading (`### SectionName` for tasks). If the temp file starts with
+  a heading matching the section name the CLI strips it, but write body-only from the start.
+- **No same-level sub-headings:** never use `###` sub-headings inside a task section body (e.g.
+  `### AC1 — …`). They sit at the canonical section level and would become phantom sections on
+  re-parse; the CLI now strips them with a stderr warning, but write clean. Use bullet lists,
+  tables, or `**bold**` labels for sub-structure instead.
+- **Never suppress stderr:** run `spur task update` without `2>/dev/null`. Stderr carries the
+  diagnostic (including the strip warnings above); suppressing it turns a fixable error into a
+  silent exit-1 that wastes a round-trip.
+
 ### The section-status matrix
 
 `spur task check <wbs> --json` returns the required and optional sections for the task's
@@ -294,6 +307,9 @@ current status. Agents ask "what does this task need now?" with zero tokens by r
 Before editing any task file, run `spur task check <wbs>` to see what sections exist, what
 is missing, and what format rules apply. The check is the single validation surface:
 frontmatter schema, section-status matrix, section format rules, feature traceability.
+
+After writing a section, run `spur task check <wbs>` again to confirm the write introduced no
+structural issues (phantom sections, matrix violations) before moving on.
 
 ---
 

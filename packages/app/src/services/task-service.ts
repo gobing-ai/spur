@@ -124,6 +124,26 @@ function bulletizeRequirements(raw: string): string {
     return parts.map((p) => `- ${p}`).join('\n');
 }
 
+/**
+ * Strip a redundant leading section header from `--from-file` body content (R1, task 0115).
+ *
+ * Agents naturally write a full section (`## Acceptance Criteria\n\n- [ ] AC1 …`) to the
+ * temp file, but `--section` already names the section and the CLI supplies the canonical
+ * heading. A leading heading line whose text matches `sectionName` (any level `#`–`######`,
+ * case-insensitive) is therefore a duplicate — strip it and the blank lines that follow so
+ * the body handed to `replaceSection` starts at the first real content line (no triple-newline
+ * gap, no visual duplicate header). A heading that does NOT match the section name is left
+ * alone — `replaceSection`'s same-level strip (R2) handles any phantom risk.
+ */
+function stripLeadingSectionHeader(body: string, sectionName: string): string {
+    const match = body.match(/^(\s*)#{1,6}\s+(.+?)\s*(?:\n|$)/);
+    if (match === null) return body;
+    const headingText = (match[2] ?? '').trim();
+    if (headingText.toLowerCase() !== sectionName.trim().toLowerCase()) return body;
+    // Remove the heading line plus any leading whitespace and the blank lines after it.
+    return body.slice(match[0].length).replace(/^\n+/, '');
+}
+
 // ─── Section bareness — used by pipeline steps to decide when to write ──
 
 /**
@@ -275,6 +295,25 @@ export class TaskService {
         return this.writeService.transition(ref, toStatus, actor ?? this.ctx.actor ?? 'system');
     }
 
+    // ── updateField (scalar frontmatter write) ──
+
+    /**
+     * Set a scalar frontmatter field on an existing task (e.g. `feature_id`,
+     * `priority`). Closes the gap where these could only be set at `create` time.
+     * The field allow-list keeps the surface narrow — status goes through the
+     * lifecycle-guarded `updateStatus`, not here. The L1 schema still validates
+     * the value after the write (e.g. an unknown priority is rejected).
+     */
+    async updateField(wbs: string, key: string, value: string): Promise<WriteResult> {
+        const allowed = new Set(['feature_id', 'parent_wbs', 'priority']);
+        if (!allowed.has(key)) {
+            throw new Error(`Field "${key}" is not settable via update; allowed: ${[...allowed].join(', ')}.`);
+        }
+        const filePath = await this.resolveTaskFile(wbs);
+        const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: this.ctx.tasksDir };
+        return this.writeService.updateFrontmatter(ref, key, value);
+    }
+
     // ── updateBody (body region write) ──
 
     /**
@@ -321,7 +360,8 @@ export class TaskService {
 
     async updateSection(wbs: string, sectionName: string, sourceFile: string): Promise<WriteResult> {
         const filePath = await this.resolveTaskFile(wbs);
-        const body = await this.ctx.fs.readFile(sourceFile);
+        const raw = await this.ctx.fs.readFile(sourceFile);
+        const body = stripLeadingSectionHeader(raw, sectionName);
         const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: this.ctx.tasksDir };
         return this.writeService.updateSection(ref, sectionName, body);
     }

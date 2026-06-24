@@ -5,11 +5,13 @@ import { join } from 'node:path';
 import { MarkdownDocument } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import {
+    assertNoNewPhantomSections,
     CapturingEmitter,
     type EntityRef,
     type LifecyclePort,
     NoopEventEmitter,
     PlanningWriteService,
+    phantomSections,
     SchemaLifecyclePort,
     type TransitionResult,
 } from '../../src/services/planning-write-service';
@@ -76,7 +78,7 @@ function makeFeatureContent(status = 'backlog'): string {
         'updated_at: 2026-06-13T00:00:00.000Z',
         '---',
         '',
-        '## A. Test feature',
+        '# A: Test feature',
         '',
         '## Goal',
         '',
@@ -241,6 +243,105 @@ describe('PlanningWriteService', () => {
             const updated = doc.frontmatterData?.updated_at as string;
             // Should differ from the original 2026-06-13 baseline
             expect(updated).not.toBe('2026-06-13T00:00:00.000Z');
+        });
+    });
+
+    describe('phantom-section guard (R3)', () => {
+        // A task file that already carries a non-canonical section on disk
+        // (`### Bogus Phantom`) — simulates corruption from a PRIOR write.
+        function makeTaskContentWithPhantom(): string {
+            return makeTaskContent().replace(
+                '### Solution\n',
+                '### Bogus Phantom\n\nLeaked content.\n\n### Solution\n',
+            );
+        }
+
+        test('guard aborts on a NEW phantom but tolerates a pre-existing one (unit)', () => {
+            // Pre-existing phantom in `before` → tolerated (no throw).
+            const docPre = MarkdownDocument.parse(makeTaskContentWithPhantom(), 'task');
+            const beforePre = new Set(phantomSections(docPre, 'task'));
+            expect(beforePre.has('Bogus Phantom')).toBe(true);
+            expect(() => assertNoNewPhantomSections(docPre, 'task', beforePre)).not.toThrow();
+
+            // A phantom NOT in `before` → rejected. Start from a clean baseline,
+            // then parse a corrupted doc whose phantom was absent before.
+            const cleanBefore = new Set(phantomSections(MarkdownDocument.parse(makeTaskContent(), 'task'), 'task'));
+            expect(cleanBefore.size).toBe(0);
+            expect(() => assertNoNewPhantomSections(docPre, 'task', cleanBefore)).toThrow(/non-canonical section/);
+        });
+
+        test('does NOT abort a mutation on a file with a PRE-EXISTING phantom (stays editable)', async () => {
+            const fs = makeFs();
+            const svc = new PlanningWriteService({ fs });
+            const ref = makeTaskRef();
+            await fs.writeFile(ref.filePath, makeTaskContentWithPhantom());
+
+            // A prior agent already corrupted the file; an unrelated edit must still
+            // succeed — `spur task check` is what surfaces the phantom for cleanup,
+            // not the write guard. (Regression: R3 used to block ~15 corpus tasks.)
+            const result = await svc.updateFrontmatter(ref, 'priority', 'P1');
+            expect(result.eventName).toBe('task.updated');
+            const after = await readBack(ref);
+            expect(after).toContain('priority: P1');
+            // The pre-existing phantom is preserved (untouched), not silently dropped.
+            expect(after).toContain('### Bogus Phantom');
+        });
+
+        test('does NOT abort a valid section update', async () => {
+            const fs = makeFs();
+            const svc = new PlanningWriteService({ fs });
+            const ref = makeTaskRef();
+            await fs.writeFile(ref.filePath, makeTaskContent());
+
+            const result = await svc.updateSection(ref, 'Solution', 'Clean body.\n');
+            expect(result.eventName).toBe('task.updated');
+        });
+
+        test('does NOT abort for record-function bodies (**bold** + tables)', async () => {
+            const fs = makeFs();
+            const svc = new PlanningWriteService({ fs });
+            const ref = makeTaskRef();
+            await fs.writeFile(ref.filePath, makeTaskContent());
+
+            const recordBody = '**Verdict:** PASS\n\n| Requirement | Status |\n|---|---|\n| R1 | pass |\n';
+            const result = await svc.updateSection(ref, 'Testing', recordBody);
+            expect(result.eventName).toBe('task.updated');
+            const written = await readBack(ref);
+            expect(written).toContain('**Verdict:** PASS');
+        });
+
+        test('strips a same-level heading from a section body before the guard runs (R2+R3)', async () => {
+            const fs = makeFs();
+            const svc = new PlanningWriteService({ fs });
+            const ref = makeTaskRef();
+            await fs.writeFile(ref.filePath, makeTaskContent());
+
+            // R2 strips the `### Phantom` line so R3 never sees a phantom section.
+            const result = await svc.updateSection(ref, 'Solution', 'Body.\n### Phantom\nMore.\n');
+            expect(result.eventName).toBe('task.updated');
+            const doc = MarkdownDocument.parse(await readBack(ref), 'task');
+            expect(doc.sectionNames).not.toContain('Phantom');
+        });
+
+        test('surfaces stripped headings as result.warnings (output-seam path, no console)', async () => {
+            const fs = makeFs();
+            const svc = new PlanningWriteService({ fs });
+            const ref = makeTaskRef();
+            await fs.writeFile(ref.filePath, makeTaskContent());
+
+            const result = await svc.updateSection(ref, 'Solution', 'Body.\n### Phantom\nMore.\n');
+            expect(result.warnings).toHaveLength(1);
+            expect(result.warnings?.[0]).toContain('### Phantom');
+        });
+
+        test('omits warnings when nothing was stripped', async () => {
+            const fs = makeFs();
+            const svc = new PlanningWriteService({ fs });
+            const ref = makeTaskRef();
+            await fs.writeFile(ref.filePath, makeTaskContent());
+
+            const result = await svc.updateSection(ref, 'Solution', 'Clean body.\n');
+            expect(result.warnings).toBeUndefined();
         });
     });
 

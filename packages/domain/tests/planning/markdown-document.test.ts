@@ -521,4 +521,85 @@ describe('MarkdownDocument', () => {
             expect(out.slice(out.indexOf('## 0050.'))).toBe(bodyBefore);
         });
     });
+    // -----------------------------------------------------------------------
+    // replaceSection() / insertSection() — same-level heading stripping (R2)
+    // -----------------------------------------------------------------------
+
+    describe('replaceSection() — same-level heading stripping (R2)', () => {
+        test('strips a ### Sub-heading body line so re-parse has no phantom section', () => {
+            const doc = MarkdownDocument.parse(TASK_FILE, 'task');
+            doc.replaceSection('Background', 'Real content.\n### Sub-heading\nMore content.');
+            const out = doc.serialize();
+
+            // Re-parse: no phantom "Sub-heading" section.
+            const reparsed = MarkdownDocument.parse(out, 'task');
+            expect(reparsed.sectionNames).not.toContain('Sub-heading');
+            expect(reparsed.sectionNames).toEqual(doc.sectionNames);
+            // The stripped line's text does not survive as a heading.
+            expect(out).not.toContain('### Sub-heading');
+            // Real content is preserved.
+            expect(reparsed.getSection('Background')).toContain('Real content.');
+            expect(reparsed.getSection('Background')).toContain('More content.');
+        });
+
+        test('records each stripped same-level heading on strippedHeadings', () => {
+            const doc = MarkdownDocument.parse(TASK_FILE, 'task');
+            doc.replaceSection('Background', 'Text.\n### Phantom1\n### Phantom2\nMore.');
+            expect(doc.strippedHeadings).toHaveLength(2);
+            expect(doc.strippedHeadings[0]).toContain('Phantom1');
+            expect(doc.strippedHeadings[1]).toContain('Phantom2');
+        });
+
+        test('does NOT strip ### inside a fenced code block', () => {
+            const doc = MarkdownDocument.parse(TASK_FILE, 'task');
+            const body = 'Intro.\n\n```ts\n### Not a heading\nconst x = 1;\n```\n\nOutro.';
+            doc.replaceSection('Background', body);
+            const out = doc.serialize();
+
+            // Re-parse: no phantom section.
+            const reparsed = MarkdownDocument.parse(out, 'task');
+            expect(reparsed.sectionNames).not.toContain('Not a heading');
+            // The ### line IS preserved verbatim inside the code block.
+            expect(out).toContain('### Not a heading');
+        });
+
+        test('does NOT alter body with only **bold** / table content (record-function pattern)', () => {
+            const doc = MarkdownDocument.parse(TASK_FILE, 'task');
+            const body = '**Verdict:** PASS\n\n| File | Lines |\n|---|---|\n| a.ts | 42 |\n';
+            doc.replaceSection('Solution', body);
+            const out = doc.serialize();
+
+            const reparsed = MarkdownDocument.parse(out, 'task');
+            // No phantom sections.
+            expect(reparsed.sectionNames).toEqual(doc.sectionNames);
+            // Bold and table preserved verbatim.
+            expect(reparsed.getSection('Solution')).toContain('**Verdict:** PASS');
+            expect(reparsed.getSection('Solution')).toContain('| a.ts | 42 |');
+        });
+
+        test('insertSection (upsert path) also strips same-level headings', () => {
+            // WHY: replaceSection delegates to insertSection when the section is absent,
+            // so the upsert path must also strip.
+            const doc = MarkdownDocument.parse(TASK_FILE, 'task');
+            expect(doc.hasSection('Testing')).toBe(false);
+            doc.replaceSection('Testing', 'Coverage.\n### Phantom\nDone.');
+            const out = doc.serialize();
+
+            const reparsed = MarkdownDocument.parse(out, 'task');
+            expect(reparsed.sectionNames).not.toContain('Phantom');
+            expect(reparsed.getSection('Testing')).toContain('Coverage.');
+            expect(reparsed.getSection('Testing')).toContain('Done.');
+        });
+
+        test('feature domain strips ## level headings (not ###)', () => {
+            const doc = MarkdownDocument.parse(FEATURE_FILE, 'feature');
+            doc.replaceSection('Goal', 'Real goal.\n## Phantom Section\nMore goal.');
+            const out = doc.serialize();
+
+            const reparsed = MarkdownDocument.parse(out, 'feature');
+            expect(reparsed.sectionNames).not.toContain('Phantom Section');
+            expect(reparsed.getSection('Goal')).toContain('Real goal.');
+            expect(reparsed.getSection('Goal')).toContain('More goal.');
+        });
+    });
 });

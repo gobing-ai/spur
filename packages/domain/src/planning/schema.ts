@@ -242,7 +242,9 @@ export const featureFrontmatterSchema = z.object({
     }),
     name: z.string().min(1),
     status: z.enum(FEATURE_STATUSES as unknown as [FeatureStatus, ...FeatureStatus[]]),
-    priority: z.enum(PRIORITIES as unknown as [Priority, ...Priority[]]),
+    // Optional for parity with tasks (consumers already default a missing
+    // priority to P2); a feature without a priority is valid, not corrupt.
+    priority: z.enum(PRIORITIES as unknown as [Priority, ...Priority[]]).optional(),
     tags: z.array(z.string()).optional(),
     created_at: isoDateString,
     updated_at: isoDateString,

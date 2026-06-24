@@ -15,10 +15,13 @@ import {
     acquireCreateLock,
     acquireEntityLock,
     atomicWriteAsync,
+    FEATURE_CANONICAL_SECTIONS,
     featureFrontmatterSchema,
     MarkdownDocument,
     type MarkdownDomain,
+    TASK_CANONICAL_SECTIONS,
     taskFrontmatterSchema,
+    UNIVERSAL_SECTIONS,
 } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 
@@ -135,6 +138,12 @@ export interface WriteResult {
     readonly fromStatus?: string;
     /** New status (for transitions); `undefined` for non-transition writes. */
     readonly toStatus?: string;
+    /**
+     * Non-fatal advisories from the mutation (R2): same-level heading lines that
+     * were stripped from a section body. The CLI surfaces these via the output
+     * seam; empty/omitted when nothing was stripped.
+     */
+    readonly warnings?: string[];
 }
 
 // ─── Internal mutation descriptor ───────────────────────────────────────
@@ -316,8 +325,25 @@ export class PlanningWriteService {
         // Track status for lifecycle + history + event
         const currentStatus = (doc.frontmatterData?.status as string | undefined) ?? '';
 
+        // Snapshot pre-existing non-canonical sections BEFORE mutating, so the
+        // R3 guard blocks only phantoms THIS write introduces — never a file that
+        // a prior agent already corrupted (those are a corpus-cleanup concern that
+        // `spur task check` surfaces, not the write guard's job; aborting on them
+        // would make an already-corrupted task un-editable through the CLI).
+        const phantomsBefore = new Set(phantomSections(doc, domain));
+
         // ── Step 3: apply mutation ──
         applyMutation(doc, mutation);
+
+        // ── Step 3.5: phantom-section guard (R3, task 0115) ──
+        // Defense-in-depth against structural corruption: a mutation must not
+        // INTRODUCE a section name outside the canonical ∪ universal vocabulary.
+        // R2 strips same-level headings inside `replaceSection`, so a section
+        // write can no longer introduce a phantom — but other paths (`updateBody`/
+        // `replacePreamble`) are not covered there, so the guard runs for every
+        // mutation. The vocabulary is imported from the domain (single source of
+        // truth, shared with `PlanningCheckService.runL2`).
+        assertNoNewPhantomSections(doc, domain, phantomsBefore);
 
         // ── Step 4: validate (L1/L2 — Zod schema) ──
         const fm = doc.frontmatterData ?? {};
@@ -379,16 +405,55 @@ export class PlanningWriteService {
         };
         await this.emitter.emit(event);
 
+        const warnings = doc.strippedHeadings.map(
+            (line) =>
+                `Stripped same-level heading from section body (would become a phantom section): "${line}". ` +
+                'Use bullet lists, tables, or **bold** labels for sub-structure instead.',
+        );
+
         return {
             ref,
             eventName,
             ...(fromStatus !== undefined ? { fromStatus } : {}),
             ...(toStatus !== undefined ? { toStatus } : {}),
+            ...(warnings.length > 0 ? { warnings } : {}),
         };
     }
 }
 
 // ─── Private helpers ────────────────────────────────────────────────────
+
+/**
+ * Section names in the document outside the domain's canonical ∪ universal
+ * vocabulary (`History`/`References`/`Notes`). A non-canonical name means a
+ * same-level heading leaked into a section body and became a phantom section
+ * on re-parse.
+ */
+export function phantomSections(doc: MarkdownDocument, domain: MarkdownDomain): string[] {
+    const canonical = domain === 'task' ? TASK_CANONICAL_SECTIONS : FEATURE_CANONICAL_SECTIONS;
+    const allowed = new Set<string>([...canonical, ...UNIVERSAL_SECTIONS]);
+    return doc.sectionNames.filter((name) => !allowed.has(name));
+}
+
+/**
+ * Phantom-section guard (step 3.5, R3 / task 0115).
+ *
+ * Aborts the write only when THIS mutation introduces a phantom section not in
+ * `before` — pre-existing phantoms (a prior agent's corruption) are tolerated so
+ * an already-broken task stays editable through the CLI; `spur task check` is the
+ * surface that flags them for cleanup. A newly-introduced phantom aborts before
+ * the atomic write, so the file is never persisted in a freshly-corrupted state
+ * (zero partial writes).
+ */
+export function assertNoNewPhantomSections(doc: MarkdownDocument, domain: MarkdownDomain, before: Set<string>): void {
+    const introduced = phantomSections(doc, domain).filter((name) => !before.has(name));
+    if (introduced.length > 0) {
+        throw new Error(
+            `Write would introduce non-canonical section(s): ${introduced.map((n) => `"${n}"`).join(', ')}. ` +
+                'These come from same-level headings in a section body — strip them or use bullet lists instead.',
+        );
+    }
+}
 
 /** Apply a mutation descriptor to a parsed MarkdownDocument (step 3). */
 function applyMutation(doc: MarkdownDocument, mutation: MutationDescriptor): void {

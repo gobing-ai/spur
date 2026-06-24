@@ -48,7 +48,21 @@ export const TASK_CANONICAL_SECTIONS = [
  * Canonical feature body sections. `## Tasks` is the auto-gen marker region
  * (the only machine-owned region in any SSOT file).
  */
-const FEATURE_CANONICAL_SECTIONS = ['Goal', 'Scope', 'Acceptance Criteria', 'Tasks', 'Notes', 'History'] as const;
+export const FEATURE_CANONICAL_SECTIONS = [
+    'Goal',
+    'Scope',
+    'Acceptance Criteria',
+    'Tasks',
+    'Notes',
+    'History',
+] as const;
+
+/**
+ * Sections allowed at every status without being declared in the matrix
+ * (the closed-world relaxation, design §3.2). Domain owns this vocabulary;
+ * the app layer imports it — no second inline definition.
+ */
+export const UNIVERSAL_SECTIONS = ['History', 'References', 'Notes'] as const;
 
 /** Section heading level per domain: tasks use `###`, features use `##`. */
 const HEADING_LEVELS: Record<MarkdownDomain, number> = { task: 3, feature: 2 };
@@ -127,6 +141,8 @@ export class MarkdownDocument {
     private _frontmatter: ParsedFrontmatter | null;
     private _preamble: string;
     private readonly _sections: Section[];
+    /** Same-level heading lines stripped from section bodies during this doc's mutations (R2). */
+    private readonly _strippedHeadings: string[] = [];
 
     private constructor(
         domain: MarkdownDomain,
@@ -243,6 +259,16 @@ export class MarkdownDocument {
         return this._sections.map((s) => s.name);
     }
 
+    /**
+     * Same-level heading lines stripped from section bodies during mutations (R2).
+     * Empty unless a `replaceSection`/`insertSection` body carried `###`/`##` lines.
+     * The I/O boundary (CLI output seam) surfaces these as warnings; the document
+     * layer stays pure and never writes to a console itself.
+     */
+    get strippedHeadings(): readonly string[] {
+        return this._strippedHeadings;
+    }
+
     private get canonicalSections(): readonly string[] {
         return this._domain === 'task' ? TASK_CANONICAL_SECTIONS : FEATURE_CANONICAL_SECTIONS;
     }
@@ -296,12 +322,56 @@ export class MarkdownDocument {
      */
     replaceSection(name: string, body: string): void {
         this.validateSectionName(name);
+        const cleaned = this.stripSameLevelHeadings(body);
         const section = this.findSection(name);
         if (section !== undefined) {
-            section.modifiedText = `${section.headingLine}\n${body}`;
+            // Guarantee a trailing newline so the next section heading stays at
+            // line-start; otherwise a body without one (or one whose final line
+            // was a stripped same-level heading) fuses with the following
+            // section's heading and swallows it on re-parse.
+            const withTrailer = cleaned.endsWith('\n') ? cleaned : `${cleaned}\n`;
+            section.modifiedText = `${section.headingLine}\n${withTrailer}`;
             return;
         }
-        this.insertSection(name, body);
+        this.insertSection(name, cleaned);
+    }
+
+    /**
+     * Strip same-level headings from a section body (self-heal, R2 / task 0115).
+     *
+     * A section body must never contain lines at the domain's heading level
+     * (`###` for tasks, `##` for features) outside fenced code blocks — on
+     * re-parse {@link findHeadings} would treat them as new sections, producing
+     * phantom entries that fail the closed-world L2 check. Rather than throw on
+     * the write hot path (which would force an agent regenerate+retry), this
+     * removes the offending lines and warns, so the write self-heals.
+     *
+     * Code-fence state is tracked exactly as in {@link findHeadings}, so a
+     * heading-shaped line inside a ``` block is content, not a heading, and is
+     * preserved verbatim.
+     *
+     * Stripped lines are recorded on {@link strippedHeadings} so a caller at the
+     * I/O boundary (the CLI output seam) can surface them — the document layer is
+     * pure and never writes to a console/stderr itself.
+     */
+    private stripSameLevelHeadings(body: string): string {
+        const prefix = `${'#'.repeat(HEADING_LEVELS[this._domain])} `;
+        const lines = body.split('\n');
+        const kept: string[] = [];
+        let inCodeBlock = false;
+        for (const line of lines) {
+            if (line.startsWith('```')) {
+                inCodeBlock = !inCodeBlock;
+                kept.push(line);
+                continue;
+            }
+            if (!inCodeBlock && line.startsWith(prefix)) {
+                this._strippedHeadings.push(line);
+                continue;
+            }
+            kept.push(line);
+        }
+        return kept.join('\n');
     }
 
     /**

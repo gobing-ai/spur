@@ -539,6 +539,85 @@ describe('TaskService', () => {
             expect(doc.frontmatterData?.name).toBe('Empty body test');
         });
     });
+
+    describe('updateSection — leading-header strip (R1)', () => {
+        const root = () => tasksDir.replace('/tasks', '');
+
+        async function writeSource(name: string, content: string): Promise<string> {
+            const fs = createNodeFileSystem(root());
+            const path = join(tasksDir, `${name}.tmp.md`);
+            await fs.writeFile(path, content);
+            return path;
+        }
+
+        test('strips a leading ## SectionName header + trailing blanks (no duplicate, no triple newline)', async () => {
+            const created = await svc.create({ title: 'R1 h2 strip' });
+            const src = await writeSource('r1-h2', '## Background\n\nReal background content.\n');
+            await svc.updateSection(created.ref.id, 'Background', src);
+
+            const fs = createNodeFileSystem(root());
+            const raw = await fs.readFile(created.ref.filePath);
+            // Only the canonical ### heading remains — the ## duplicate is gone.
+            // (Match a `##`-level heading at line start, not the `###` substring.)
+            expect(raw).not.toMatch(/^## Background$/m);
+            expect(raw).toContain('### Background');
+            expect(raw).toContain('Real background content.');
+            // No triple-newline gap between heading and first content line.
+            expect(raw).not.toMatch(/### Background\n\n\n/);
+        });
+
+        test('strips a leading ### SectionName header matching the section name (same-level)', async () => {
+            const created = await svc.create({ title: 'R1 h3 strip' });
+            const src = await writeSource('r1-h3', '### Background\n\nContent after same-level header.\n');
+            await svc.updateSection(created.ref.id, 'Background', src);
+
+            const fs = createNodeFileSystem(root());
+            const raw = await fs.readFile(created.ref.filePath);
+            const doc = MarkdownDocument.parse(raw, 'task');
+            // No phantom section, and the duplicate heading is not doubled.
+            expect(doc.sectionNames.filter((s) => s === 'Background')).toHaveLength(1);
+            expect(raw).toContain('Content after same-level header.');
+        });
+
+        test('does NOT strip a leading heading that does not match the section name', async () => {
+            const created = await svc.create({ title: 'R1 no-match' });
+            // A non-matching heading at a DIFFERENT level than the section level
+            // is not a phantom risk (R2 only strips same-level) and must survive.
+            const src = await writeSource('r1-nomatch', '#### Subsection\n\nBody text.\n');
+            await svc.updateSection(created.ref.id, 'Background', src);
+
+            const fs = createNodeFileSystem(root());
+            const raw = await fs.readFile(created.ref.filePath);
+            expect(raw).toContain('#### Subsection');
+            expect(raw).toContain('Body text.');
+        });
+    });
+
+    describe('updateField — scalar frontmatter write', () => {
+        test('sets feature_id on an existing task', async () => {
+            const created = await svc.create({ title: 'feature link test' });
+            await svc.updateField(created.ref.id, 'feature_id', 'H2');
+
+            const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
+            const doc = MarkdownDocument.parse(await fs.readFile(created.ref.filePath), 'task');
+            expect(doc.frontmatterData?.feature_id).toBe('H2');
+        });
+
+        test('sets priority on an existing task', async () => {
+            const created = await svc.create({ title: 'priority set test' });
+            await svc.updateField(created.ref.id, 'priority', 'P1');
+
+            const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
+            const doc = MarkdownDocument.parse(await fs.readFile(created.ref.filePath), 'task');
+            expect(doc.frontmatterData?.priority).toBe('P1');
+        });
+
+        test('rejects a non-allow-listed field (e.g. status)', async () => {
+            const created = await svc.create({ title: 'bad field test' });
+            await expect(svc.updateField(created.ref.id, 'status', 'done')).rejects.toThrow(/not settable/);
+        });
+    });
+
     describe('fulfillAction', () => {
         test('passes channel and skipDeps to enqueue job', async () => {
             const created = await svc.create({ title: 'Action task' });
