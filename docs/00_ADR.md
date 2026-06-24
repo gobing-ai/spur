@@ -615,7 +615,7 @@ sibling workspace later needs them.
 **Decision.** (a) Verify/review logic lives in a `sp:code-verification` companion skill (not the
 `sp:spur-dev` umbrella), backing `/sp:dev-verify` and `/sp:dev-review`. (b) The pipeline gates
 `verify → record` on a shell guard reading `.spur/run/<wbs>-verdict.json`: `verdict: PASS` clears to
-`done`, any non-PASS routes to `failed`. (c) The `implement` step calls `/sp:dev-implement`, never
+`done`, any non-PASS routes to `failed`. (c) The `implement` step calls `/sp:dev-run --mode implement`, never
 `/sp:dev-run` (which *drives* the pipeline).
 
 **Why.** (a) Verification is a distinct concern from planning — keep it out of the fat skill (mirrors

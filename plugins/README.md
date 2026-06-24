@@ -64,11 +64,10 @@ There are **18 commands**, organized by the CLI surface they wrap:
 
 | Prefix | Count | Delegates To | Purpose |
 |--------|-------|-------------|---------|
-| `dev-*` | 11 | `sp:spur-dev` (10), `sp:doc-evolve` (1) | The dev-workflow surface — `dev-plan`, `dev-run`, `dev-new-task`, `dev-refine`, `dev-review`, `dev-verify`, `dev-unit`, `dev-fixall`, `dev-gitmsg`, `dev-changelog`, `dev-handover` |
+| `dev-*` | 11 | `sp:spur-dev` (9), `sp:code-verification` (2) | The dev-workflow surface — `dev-plan`, `dev-run`, `dev-new-task`, `dev-refine`, `dev-review`, `dev-verify`, `dev-unit`, `dev-fixall`, `dev-gitmsg`, `dev-changelog`, `dev-handover` |
 | `rule-*` | 3 | `sp:spur-rules` | The rule surface — `rule-add`, `rule-refine`, `rule-scan` |
 | `workflow-*` | 2 | `sp:spur-workflows` | The workflow surface — `workflow-add`, `workflow-refine` |
 | `spur-init` | 1 | `sp:doc-evolve` | Project bootstrap (`spur init`) with doc-evolve integration |
-| `dev-docs` | 1 | `sp:doc-evolve` | Document drift audit and sync |
 
 Each command file contains:
 - YAML frontmatter (`description`, `argument-hint`, `allowed-tools`)
@@ -378,7 +377,6 @@ kept a **much smaller set** (18). The `cc` plugin took the meta-agent authoring 
 | `dev-gitmsg` | `sp` | ✅ Done | Delegates to `sp:spur-dev` (gitmsg) |
 | `dev-changelog` | `sp` | ✅ Done | Delegates to `sp:spur-dev` (changelog) |
 | `dev-handover` | `sp` | ✅ Done | Delegates to `sp:spur-dev` (handover) |
-| `dev-docs` | `sp` | ✅ Done | Delegates to `sp:doc-evolve` |
 | `dev-brainstorm` | `sp` | 🔀 Absorbed | Into `sp:brainstorm` skill directly (no separate command) |
 | `dev-daily-summary` | `sp` | 🔀 Absorbed | Into `sp:daily-summary` skill directly |
 | `dev-transfer` | `sp` | 🔀 Absorbed | Into `sp:spur-dev` (transfer operation) |

@@ -56,9 +56,10 @@ states:
   - id: implement
     description: >
       Move the task to `wip` (via the normal verb — lifecycle guards apply, R3),
-      then run agent-driven implementation via /sp:dev-implement. NOTE: this step
-      must NOT call /sp:dev-run — that command DRIVES this pipeline, so calling it
-      here recurses. /sp:dev-implement is the single-step implement entry.
+      then run agent-driven implementation via /sp:dev-run --mode implement.
+      NOTE: this step must NOT call /sp:dev-run in full mode (the default) —
+      that command DRIVES this pipeline, so calling it here recurses.
+      --mode implement is the single-step implement entry.
     onEnter:
       - kind: shell
         options:
@@ -66,7 +67,7 @@ states:
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: /sp:dev-implement ${vars.wbs} --auto
+          input: /sp:dev-run --mode implement ${vars.wbs} --auto
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: test

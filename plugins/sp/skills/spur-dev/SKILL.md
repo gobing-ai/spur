@@ -181,20 +181,21 @@ pipeline drives the work; the skill interprets results, surfaces HITL gates, and
 next steps.
 
 > **`/sp:dev-run` drives the pipeline — it is NEVER a pipeline step.** The command
-> `/sp:dev-run <wbs>` means "run this whole pipeline." The pipeline's internal stages call
-> *different* commands — `/sp:dev-implement`, `/sp:dev-unit`, `/sp:dev-review`,
-> `/sp:dev-verify` — never `/sp:dev-run` itself. Calling `/sp:dev-run` from inside the
-> `implement` step would recurse into another full pipeline run. The `implement` step is
-> the **implement operation** (below); the verify step is `sp:code-verification`.
+> `/sp:dev-run <wbs>` means "run this whole pipeline" (default `--mode full`). The pipeline's
+> internal stages call `/sp:dev-run --mode implement`, `/sp:dev-unit`, `/sp:dev-review`,
+> `/sp:dev-verify` — never `/sp:dev-run` in full mode. Calling `/sp:dev-run --mode full` from
+> inside the `implement` step would recurse into another full pipeline run. The `implement`
+> step is the **implement operation** (below); the verify step is `sp:code-verification`.
 
 ### The implement operation (the pipeline's implement step)
 
-`/sp:dev-implement <wbs>` (the `implement` pipeline stage) does exactly one thing: write the
-code that satisfies the task. Read the task's `## Requirements`, `## Design`, and `## Plan`
-(`spur task show <wbs> --json`), implement against them, and work the plan checklist. It does
-**not** run tests, review, or verify — those are the separate `test` / `review` / `verify`
-stages. Keeping implement single-purpose is what lets the pipeline (not the agent) own the
-loop: the agent implements, the workflow advances.
+`/sp:dev-run --mode implement <wbs>` (the `implement` pipeline stage) does exactly one thing:
+write the code that satisfies the task. Read the task's `## Requirements`, `## Design`, and
+`## Plan` (`spur task show <wbs> --json`), implement against them, and work the plan checklist.
+It does **not** run tests, review, or verify — those are the separate `test` / `review` /
+`verify` stages. Keeping implement single-purpose is what lets the pipeline (not the agent)
+own the loop: the agent implements, the workflow advances. Consolidated into `dev-run` as
+`--mode implement`; formerly `/sp:dev-implement`.
 
 ### Section ownership — `## Solution`
 

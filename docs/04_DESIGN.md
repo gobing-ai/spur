@@ -660,8 +660,8 @@ files directly — `precheck` is a `spur task check <wbs>` shell guard; `impleme
 `agent.run` steps carrying `sp:dev-*` inputs; status moves use the normal `spur task update <wbs>
 `spur task record` (0108); `approve` is a `hitl.confirm` gate skippable with `--vars '{"profile":"auto"}'`.
 `spur task update --section`; `approve` is a `hitl.confirm` gate skippable with `--vars '{"profile":"auto"}'`.
-**Step→command mapping (ADR-026):** `implement` → `/sp:dev-implement` (NOT `/sp:dev-run` — that
-command *drives* this pipeline, so calling it inside recurses); `test` → `/sp:dev-unit`; `review` →
+**Step→command mapping (ADR-026):** `implement` → `/sp:dev-run --mode implement` (NOT `/sp:dev-run --mode full` — that
+would drive this pipeline, so calling it in full mode inside recurses); `test` → `/sp:dev-unit`; `review` →
 `/sp:dev-review` (→ `sp:code-verification` review mode); `verify` → `/sp:dev-verify` (→
 `sp:code-verification` verify mode). **Completion gate (ADR-026):** the `verify` step emits
 `.spur/run/<wbs>-verdict.json`; the `verify → record` transition is a shell guard asserting
@@ -682,7 +682,7 @@ verdict blocks `done`. This is the spur-native replacement for rd3's default-on 
 
 | Required section | Owning step | When |
 |------------------|-------------|------|
-| `Solution` (change-map) | `/sp:dev-implement` | After writing code — the implement agent authors a markdown table of changed files with `file:line` + `what/why`. Idempotent (upsert via `replaceSection`); writes only when the section is bare (absent, empty, or a placeholder). |
+| `Solution` (change-map) | `/sp:dev-run --mode implement` | After writing code — the implement agent authors a markdown table of changed files with `file:line` + `what/why`. Idempotent (upsert via `replaceSection`); writes only when the section is bare (absent, empty, or a placeholder). |
 | `Testing` (verdict table) | `record` | Post-verify — transcribes the per-requirement verdict + evidence from `.spur/run/<wbs>-verify-answer.txt` and `.spur/run/<wbs>-verdict.json`. |
 | `Review` (P1–P4 findings) | `record` | Post-verify — transcribes SECU findings from the verify output. |
 
@@ -745,6 +745,6 @@ purpose, inputs, backing, behavior contract — is
 | `Skill()` delegation | implement, unit, review, verify, run, refine, plan, docs | `sp:spur-dev`, `sp:code-verification`, `sp:doc-evolve` |
 | Inline procedure | changelog, gitmsg, fixall, handover, new-task | git CLI + `spur` CLI + agent reasoning |
 
-**Pipeline step→command mapping (ADR-026):** `implement` → `/sp:dev-implement`, `test` → `/sp:dev-unit`,
+**Pipeline step→command mapping (ADR-026):** `implement` → `/sp:dev-run --mode implement`, `test` → `/sp:dev-unit`,
 `review` → `/sp:dev-review`, `verify` → `/sp:dev-verify` (§7.5). The remaining commands are
 operator-invoked, not pipeline-driven.

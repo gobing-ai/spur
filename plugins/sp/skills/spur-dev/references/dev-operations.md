@@ -1,6 +1,6 @@
 ---
 name: dev-operations
-description: Unified reference for all 13 dev-* operations — purpose, inputs, backing (skill/CLI/inline), and behavior contract. The single source of truth for what each `/sp:dev-*` command does.
+description: Unified reference for all 11 dev-* operations — purpose, inputs, backing (skill/CLI/inline), and behavior contract. The single source of truth for what each `/sp:dev-*` command does.
 see_also:
   - spur-dev
 ---
@@ -15,13 +15,13 @@ table is the index; the per-operation sections below are the detail.
 
 | Pattern | Meaning | Commands |
 |---------|---------|----------|
-| `Skill()` | Delegates to a backing skill via `Skill(skill="<skill>", args="<op> $ARGUMENTS")`. The skill owns the procedure; the command is a thin entry point. | implement, unit, review, verify, run, refine, plan, docs |
+| `Skill()` | Delegates to a backing skill via `Skill(skill="<skill>", args="<op> $ARGUMENTS")`. The skill owns the procedure; the command is a thin entry point. | implement, unit, review, verify, run, refine, plan |
 | `inline` | The procedure is defined directly in the command file. No `Skill()` delegation — the command carries its own steps. | changelog, gitmsg, fixall, handover, new-task |
 
-The 8 `Skill()` commands back onto three skills: `sp:spur-dev` (planning + execution workflow),
-`sp:code-verification` (SECU review + traceability), and `sp:doc-evolve` (documentation sync). The
-5 `inline` commands cover git tooling and operational utilities that have no natural skill home —
-creating a skill for each would be scope creep for one-liner procedures.
+The 7 `Skill()` commands back onto two skills: `sp:spur-dev` (planning + execution workflow) and
+`sp:code-verification` (SECU review + traceability). The 5 `inline` commands cover git tooling and
+operational utilities that have no natural skill home — creating a skill for each would be scope
+creep for one-liner procedures.
 
 > **`dev-dogfood`** is not in this table. It is a sanctioned fat-file exception that carries its full
 > 4-phase protocol inline and does not map to a dev-* operation. See its command file for details.
@@ -30,19 +30,17 @@ creating a skill for each would be scope creep for one-liner procedures.
 
 | # | Operation | Command | Backing | Skill / Verb | Arg-hint |
 |---|-----------|---------|---------|--------------|----------|
-| 1 | implement | `dev-implement` | `Skill()` | `sp:spur-dev` (`implement`) | `<wbs> [--auto]` |
-| 2 | unit | `dev-unit` | `Skill()` | `sp:spur-dev` (`unit`) | `<wbs> [--coverage <pct>]` |
-| 3 | review | `dev-review` | `Skill()` | `sp:code-verification` (`review`) | `<wbs> [--focus <lens>] [--fix <none\|blockers-first\|all>]` |
-| 4 | verify | `dev-verify` | `Skill()` | `sp:code-verification` (`verify`) | `<wbs> [--fix ...] [--focus <lens>] [--bdd] [--auto] [--force]` |
-| 5 | run | `dev-run` | `Skill()` | `sp:spur-dev` (`run`) | `<wbs> [--auto]` |
-| 6 | refine | `dev-refine` | `Skill()` | `sp:spur-dev` (`refine`) | `<wbs>` |
-| 7 | plan | `dev-plan` | `Skill()` | `sp:spur-dev` (`plan`) | `"<description>" [--feature <id>] [--parent <feature-id>]` |
-| 8 | docs | `dev-docs` | `Skill()` | `sp:doc-evolve` (`sync`) | `[--scope <doc>] [--since <ref>]` |
-| 9 | changelog | `dev-changelog` | `inline` | git log + conventional-commit grouping | `[--from <ref>] [--to <ref>] [--format <style>]` |
-| 10 | gitmsg | `dev-gitmsg` | `inline` | git diff + conventional commit | `[--scope <path>]` |
-| 11 | fixall | `dev-fixall` | `inline` | lint + test fix loop | `[--scope <path>]` |
-| 12 | handover | `dev-handover` | `inline` | structured doc generation | `"<blocker description>"` |
-| 13 | new-task | `dev-new-task` | `inline` | `spur task create` + intake | `"<description>" [--feature <id>] [--template <variant>] [--parent <wbs>]` |
+| 1 | unit | `dev-unit` | `Skill()` | `sp:spur-dev` (`unit`) | `<wbs> [--coverage <pct>]` |
+| 2 | review | `dev-review` | `Skill()` | `sp:code-verification` (`review`) | `<wbs> [--focus <lens>] [--fix <none\|blockers-first\|all>]` |
+| 3 | verify | `dev-verify` | `Skill()` | `sp:code-verification` (`verify`) | `<wbs> [--fix ...] [--focus <lens>] [--bdd] [--auto] [--force]` |
+| 4 | run | `dev-run` | `Skill()` | `sp:spur-dev` (`run` / `implement`) | `<wbs> [--mode <full\|implement>] [--auto]` |
+| 5 | refine | `dev-refine` | `Skill()` | `sp:spur-dev` (`refine`) | `<wbs>` |
+| 6 | plan | `dev-plan` | `Skill()` | `sp:spur-dev` (`plan`) | `"<description>" [--feature <id>] [--parent <feature-id>]` |
+| 7 | changelog | `dev-changelog` | `inline` | git log + conventional-commit grouping | `[--from <ref>] [--to <ref>] [--format <style>]` |
+| 8 | gitmsg | `dev-gitmsg` | `inline` | git diff + conventional commit | `[--commit] [--scope <path>]` |
+| 9 | fixall | `dev-fixall` | `inline` | lint + test fix loop | `[--scope <path>]` |
+| 10 | handover | `dev-handover` | `inline` | structured doc generation | `"<blocker description>"` |
+| 11 | new-task | `dev-new-task` | `inline` | `spur task create` + intake | `"<description>" [--feature <id>] [--template <variant>] [--parent <wbs>]` |
 
 ---
 
@@ -52,15 +50,7 @@ These delegate to a backing skill via `Skill()`. The command file is a thin wrap
 owns the full procedure. The command's `## Implementation` section contains the `Skill()` call and
 must not be changed without updating the backing skill.
 
-### 1. implement
-
-- **Purpose:** Write the code that satisfies a task's `## Requirements` / `## Design` / `## Plan`.
-- **Inputs:** `<wbs>` (required) — the task to implement. `--auto` skips confirmations.
-- **Backing:** `sp:spur-dev` skill, `implement` operation.
-- **Behavior:** Read the task spec → write code per the Design/Plan → follow the plan steps → author the `## Solution` change-map section (file:line + what/why per changed file) via `spur task update <wbs> --section Solution --from-file`. This is the implement step the pipeline calls; it is NOT the pipeline driver (`/sp:dev-run` drives the pipeline).
-- **Delegation:** `Skill(skill="sp:spur-dev", args="implement $ARGUMENTS")`
-
-### 2. unit
+### 1. unit
 
 - **Purpose:** Extend or generate tests for a task until the coverage target is met.
 - **Inputs:** `<wbs>` (required). `--coverage <pct>` overrides the default target.
@@ -68,7 +58,7 @@ must not be changed without updating the backing skill.
 - **Behavior:** Read the task's implementation → identify untested paths → write targeted tests → run `bun test --coverage` → iterate until the per-file line/function coverage target (≥90%) is met.
 - **Delegation:** `Skill(skill="sp:spur-dev", args="unit $ARGUMENTS")`
 
-### 3. review
+### 2. review
 
 - **Purpose:** SECU-framework code review of a task's diff — Security, Efficiency, Correctness, Usability.
 - **Inputs:** `<wbs>` (required). `--focus <lens>` narrows to one SECU dimension. `--fix <none|blockers-first|all>` controls auto-fix.
@@ -76,7 +66,7 @@ must not be changed without updating the backing skill.
 - **Behavior:** Detect the diff scope → run SECU analysis → rank findings P1–P4 → write findings to the task's `## Review` section. With `--fix`, applies fixes for the selected severity tier.
 - **Delegation:** `Skill(skill="sp:code-verification", args="review $ARGUMENTS")`
 
-### 4. verify
+### 3. verify
 
 - **Purpose:** Requirements traceability — verify a task's implementation against its acceptance criteria, producing a PASS/PARTIAL/FAIL verdict with per-requirement evidence.
 - **Inputs:** `<wbs>` (required). `--fix`, `--focus`, `--bdd`, `--auto`, `--force` modulate the verify pass.
@@ -84,15 +74,17 @@ must not be changed without updating the backing skill.
 - **Behavior:** Status guard → change-scope detection → requirements traceability → SECU review → verdict aggregation → findings write-back → verdict-artifact emission → optional `--fix` pass. The verdict gates the pipeline's `done` transition.
 - **Delegation:** `Skill(skill="sp:code-verification", args="verify $ARGUMENTS")`
 
-### 5. run
+### 4. run
 
-- **Purpose:** Run a task through the full execution pipeline: precheck → implement → test → review → approve(HITL) → verify → record → done.
-- **Inputs:** `<wbs>` (required). `--auto` skips the HITL approve gate.
-- **Backing:** `sp:spur-dev` skill, `run` operation.
-- **Behavior:** Invokes `spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"<wbs>"}'` (with `profile: auto` when `--auto`). Monitors the run; on HITL pause surfaces to the operator; on `done` the pipeline's `record` step has written `## Testing` and `## Review`.
-- **Delegation:** `Skill(skill="sp:spur-dev", args="run $ARGUMENTS")`
+- **Purpose:** Run a task through the execution pipeline (full) or execute a single pipeline step (implement).
+- **Inputs:** `<wbs>` (required). `--mode <full|implement>` selects the execution mode. `--auto` skips the HITL approve gate / confirmations.
+- **Backing:** `sp:spur-dev` skill — `run` operation for full pipeline, `implement` operation for the implement step.
+- **Modes:**
+  - **`full`** (default): Drive the full pipeline — precheck → implement → test → review → approve(HITL) → verify → record → done. Invokes `spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"<wbs>"}'` (with `profile: auto` when `--auto`). Monitors the run; on HITL pause surfaces to the operator.
+  - **`implement`**: Execute only the implement step. Read the task's `## Requirements` / `## Design` / `## Plan`, write the code that satisfies them, author the `## Solution` change-map section (file:line + what/why per changed file) via `spur task update <wbs> --section Solution --from-file`. This is the implement step the pipeline calls — it is NOT the pipeline driver.
+- **Delegation:** `Skill(skill="sp:spur-dev", args="run $ARGUMENTS")` for full mode; `Skill(skill="sp:spur-dev", args="implement $ARGUMENTS")` for implement mode.
 
-### 6. refine
+### 5. refine
 
 - **Purpose:** Refine a task's requirements via structured Q&A — clarify scope, elicit missing details, tighten acceptance criteria before execution.
 - **Inputs:** `<wbs>` (required).
@@ -100,21 +92,13 @@ must not be changed without updating the backing skill.
 - **Behavior:** Read the task → elicit missing AC/Design/Plan through targeted Q&A → write each via `spur task update <wbs> --section <name> --from-file`. Done just-in-time, per task, immediately before execution.
 - **Delegation:** `Skill(skill="sp:spur-dev", args="refine $ARGUMENTS")`
 
-### 7. plan
+### 6. plan
 
 - **Purpose:** Plan a feature from a description — intake → feature create → AC generation → feature check gate → decomposition → batch-create.
 - **Inputs:** `"<description>"` (required). `--feature <id>` links to an existing feature. `--parent <feature-id>` nests under a parent.
 - **Backing:** `sp:spur-dev` skill, `plan` operation.
 - **Behavior:** Clarify scope → `spur feature create` → author BDD AC → `spur feature check` gate → decompose into task-batch JSON → `spur task batch-create` gate.
 - **Delegation:** `Skill(skill="sp:spur-dev", args="plan $ARGUMENTS")`
-
-### 8. docs
-
-- **Purpose:** Refresh project documentation after implementation — update ADR, architecture, design, feature docs per the constitution's sync rules.
-- **Inputs:** `--scope <doc>` limits to one doc (`04`, `05`, `02`, `all`). `--since <ref>` diffs against a git ref for change detection.
-- **Backing:** `sp:doc-evolve` skill, `sync` operation.
-- **Behavior:** Drift detection → sync checks → documentation edits per the constitution's edit rules. Updates `04_DESIGN.md` surface shapes, `05_FEATURES.md` status rows, `02_ROADMAP.md` phase markers.
-- **Delegation:** `Skill(skill="sp:doc-evolve", args="sync $ARGUMENTS")`
 
 ---
 
@@ -123,7 +107,7 @@ must not be changed without updating the backing skill.
 These define their procedure directly in the command file. No `Skill()` delegation — the command
 is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent reasoning.
 
-### 9. changelog
+### 7. changelog
 
 - **Purpose:** Generate a structured changelog from git commits between two refs.
 - **Inputs:** `--from <ref>` (default: last tag), `--to <ref>` (default: `HEAD`), `--format <style>` (default: `keepachangelog`).
@@ -139,7 +123,7 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
   6. Print the changelog to stdout. If the operator wants it in `CHANGELOG.md`, they redirect or paste.
 - **Invariants:** Never mutates `CHANGELOG.md` directly — the command outputs to stdout. The operator decides where it lands.
 
-### 10. gitmsg
+### 8. gitmsg
 
 - **Purpose:** Generate a conventional commit message from staged changes.
 - **Inputs:** `--scope <path>` (default: all staged changes) — limits diff analysis to a path.
@@ -167,7 +151,7 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
   6. Print the message to stdout. The operator copies it into `git commit -m`.
 - **Invariants:** Never runs `git commit` — the command generates the message only. The operator commits.
 
-### 11. fixall
+### 9. fixall
 
 - **Purpose:** Fix all lint, type, and test errors systematically across the working tree.
 - **Inputs:** `--scope <path>` (default: entire working tree) — limits fixes to a file or directory.
@@ -183,7 +167,7 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
   8. Report: list what was fixed (file + one-line summary per fix). If any error could not be resolved, report it explicitly — do not suppress.
 - **Invariants:** Never bypass with `--no-verify`, `--force`, or new `biome-ignore`/`eslint-disable` suppressions. Never skip or `.skip` a test to make the suite green. Fix the root cause, not the symptom.
 
-### 12. handover
+### 10. handover
 
 - **Purpose:** Generate a structured handover document when blocked — captures goal, progress, blocker, rejected approaches, and next steps.
 - **Inputs:** `"<blocker description>"` (required, positional) — what is blocking progress.
@@ -221,7 +205,7 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
   5. Print the path to the handover document.
 - **Invariants:** The handover is honest — rejected approaches are recorded so the next agent doesn't retry them. The blocker is specific, not "it doesn't work."
 
-### 13. new-task
+### 11. new-task
 
 - **Purpose:** Create a single task file from a description via intake Q&A and `spur task create`.
 - **Inputs:** `"<description>"` (required, positional). `--feature <id>` links the task to a feature. `--template <variant>` selects the task template (`default`, `feature-impl`, `issue`, `review`, `meta`). `--parent <wbs>` creates a sub-task.
