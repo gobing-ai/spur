@@ -76,6 +76,6 @@ Phase 1 runs `spur init` directly (Bash). Phase 2 delegates to `sp:doc-evolve` f
 ## See also
 
 - **sp:doc-evolve** — constitution-driven doc refresh; enforces §5 sync triggers on every doc touch.
-- **sp:spur-plan** — front-half planning pipeline (design-doc generation, feature-ID derivation);
-  the natural next step after a project is initialized.
+- **sp:spur-plan** — thin YAML front-end for the planning pipeline; kept for future development.
+- **sp:spur-dev** — the SSOT for all dev-* operations; the natural next skill after initialization.
 - **sp:spur-dev** — back-half execution pipeline (feature create → task pipeline → done).

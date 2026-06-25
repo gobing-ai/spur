@@ -215,6 +215,17 @@ hand-authored change-map. The `replaceSection` upsert guarantees missing→add,
 present→replace, never duplicate. If the implement agent forgets, the pipeline's `record`
 step backfills a minimal change-map from `git diff --name-only` as a safety net.
 
+### The unit operation (the pipeline's test step)
+
+`/sp:dev-unit <target> --auto` (the `test` pipeline stage) extends or generates tests
+until per-file line and function coverage reach the target (≥90% default). It does exactly
+one thing: write tests. It does **not** implement, review, or verify — those are separate
+stages. Read the task's implementation → identify untested paths → write targeted tests →
+run `bun test --coverage` → iterate until the coverage target is met.
+
+The `unit` operation is invoked via `Skill(skill="sp:spur-dev", args="unit $ARGUMENTS")`.
+It accepts a `<target>` (WBS number, file path, or glob) and an optional `--coverage <pct>`.
+
 
 ### Step 1: Task selection
 
@@ -378,9 +389,7 @@ CLI does.
 - [references/ac-style-guide.md](references/ac-style-guide.md) — BDD scenario authoring:
   R-numbering, the two AC tiers, scenario-title stability, Gherkin template usage.
 - `config/workflows/task-pipeline.yaml` — the execution pipeline definition.
-- **`sp:spur-plan`** — the front-half planning pipeline (steps 3–6: phasing → feature-ID →
-  design-doc → approval). `sp:spur-dev` picks up at the handoff seam (the drafted feature list
-  produced by `sp:spur-plan`); the full 1→12 chain is documented there.
+- **`sp:spur-plan`** — thin YAML front-end for the planning pipeline (`config/workflows/planning-pipeline.yaml`). The SSOT narrative for all dev-* operations lives here in sp:spur-dev.
 - `config/workflows/planning-pipeline.yaml` — the front-half state machine.
 - `config/templates/bdd/gherkin.md` — the BDD scenario template.
 
@@ -392,8 +401,9 @@ CLI does.
 
 `spur` CLI via the Bash tool. The `sp:dev-*` slash commands are the primary entry points;
 invoke the skill directly via `Skill(skill="sp:spur-dev", args="plan <description>")` for
-the planning half, or `args="run <wbs>"` for execution. Use `spur agent run` for isolated
-LLM invocations within pipeline steps.
+planning, `args="run <wbs>"` for execution, `args="unit <target>"` for test generation,
+or `args="refine <wbs>"` for task refinement. Use `spur agent run` for isolated LLM
+invocations within pipeline steps.
 
 ### Codex / OpenClaw / OpenCode / Antigravity
 

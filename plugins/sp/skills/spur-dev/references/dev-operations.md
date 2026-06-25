@@ -101,7 +101,7 @@ must not be changed without updating the backing skill.
 - **Behavior:** Clarify scope → `spur feature create` → author BDD AC → `spur feature check` gate → decompose into task-batch JSON → `spur task batch-create` gate.
 - **Delegation:** `Skill(skill="sp:spur-dev", args="plan $ARGUMENTS")`
 
-### 12. docs
+### 7. docs
 
 - **Purpose:** Evolve project documentation — update ADR, PRD, ARCHITECTURE, DESIGN, FEATURES docs per the constitution's edit rules.
 - **Inputs:** `"<change description>"` (required).

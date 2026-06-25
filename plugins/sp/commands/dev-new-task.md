@@ -1,12 +1,12 @@
 ---
 description: Create a new task from a description — single-task creation via spur task create
 argument-hint: "\"<description>\" [--feature <id>] [--template <variant>] [--parent <wbs>]"
-allowed-tools: ["Bash", "Read", "Write", "Skill"]
+allowed-tools: ["Bash", "Read", "Write"]
 ---
 
 # Dev New Task
 
-Implements an inline procedure — see [dev-operations.md](../skills/spur-dev/references/dev-operations.md#13-new-task) for the authoritative reference.
+Implements an inline procedure — see [dev-operations.md](../skills/spur-dev/references/dev-operations.md#12-new-task) for the authoritative reference.
 
 Create a single task file from a description. Intake Q&A for scope, then `spur task create`
 with the appropriate template variant and feature linkage. For batch task creation from a
@@ -43,7 +43,7 @@ For batch task creation from a decomposed feature, use `dev-plan` instead.
 
 ## Implementation
 
-Implements the inline procedure defined in [dev-operations.md](../skills/spur-dev/references/dev-operations.md#13-new-task). No `Skill()` delegation.
+Implements the inline procedure defined in [dev-operations.md](../skills/spur-dev/references/dev-operations.md#12-new-task). No `Skill()` delegation.
 
 **Arguments received:** `$ARGUMENTS`. Parse per the Arguments table above.
 

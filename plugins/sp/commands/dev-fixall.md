@@ -1,12 +1,12 @@
 ---
 description: Fix all lint, type, and test errors systematically across the working tree
 argument-hint: "[<validation-command>] [--max-retry <n>] [--scope <path>]"
-allowed-tools: ["Bash", "Read", "Write", "Edit", "Grep", "Glob", "Skill"]
+allowed-tools: ["Bash", "Read", "Write", "Edit", "Grep", "Glob"]
 ---
 
 # Dev Fixall
 
-Implements an inline procedure — see [dev-operations.md](../skills/spur-dev/references/dev-operations.md#11-fixall) for the authoritative reference.
+Implements an inline procedure — see [dev-operations.md](../skills/spur-dev/references/dev-operations.md#10-fixall) for the authoritative reference.
 
 Systematically resolve all validation errors (lint, typecheck, tests) using a deterministic workflow with root cause analysis.
 
@@ -141,7 +141,7 @@ constructor() {}
 
 ## Implementation
 
-Implements the inline procedure defined in [dev-operations.md](../skills/spur-dev/references/dev-operations.md#11-fixall). No `Skill()` delegation.
+Implements the inline procedure defined in [dev-operations.md](../skills/spur-dev/references/dev-operations.md#10-fixall). No `Skill()` delegation.
 
 **Arguments received:** `$ARGUMENTS`. Parse per the Arguments table above.
 

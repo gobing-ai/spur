@@ -1,12 +1,12 @@
 ---
 description: Generate a structured handover document when blocked — captures goal, progress, blocker, rejected approaches, and next steps
 argument-hint: "\"<blocker description>\""
-allowed-tools: ["Bash", "Read", "Write", "Skill"]
+allowed-tools: ["Bash", "Read", "Write"]
 ---
 
 # Dev Handover
 
-Implements an inline procedure — see [dev-operations.md](../skills/spur-dev/references/dev-operations.md#12-handover) for the authoritative reference.
+Implements an inline procedure — see [dev-operations.md](../skills/spur-dev/references/dev-operations.md#11-handover) for the authoritative reference.
 
 When blocked on a task, generate a structured handover document capturing: the goal,
 progress so far, the blocker (what is stuck and why), approaches tried and rejected, and
@@ -44,7 +44,7 @@ Inline procedure (no skill delegation):
 
 ## Implementation
 
-Implements the inline procedure defined in [dev-operations.md](../skills/spur-dev/references/dev-operations.md#12-handover). No `Skill()` delegation.
+Implements the inline procedure defined in [dev-operations.md](../skills/spur-dev/references/dev-operations.md#11-handover). No `Skill()` delegation.
 
 **Arguments received:** `$ARGUMENTS`. Parse per the Arguments table above.
 

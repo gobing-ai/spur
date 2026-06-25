@@ -1,12 +1,12 @@
 ---
 description: Generate changelog from git commits
 argument-hint: "[output-file] [--since <tag|commit>] [--until <tag|commit>] [--version <version>]"
-allowed-tools: ["Bash", "Read", "Write", "Skill"]
+allowed-tools: ["Bash", "Read", "Write"]
 ---
 
 # Dev Changelog
 
-Implements an inline procedure — see [dev-operations.md](../skills/spur-dev/references/dev-operations.md#9-changelog) for the authoritative reference.
+Implements an inline procedure — see [dev-operations.md](../skills/spur-dev/references/dev-operations.md#8-changelog) for the authoritative reference.
 
 Generate concise, user-friendly changelogs from git commits. Translates technical commits into customer-facing release notes.
 
@@ -92,7 +92,7 @@ If no `output-file` is given, append to `CHANGELOG.md`. If the file doesn't exis
 
 ## Implementation
 
-Implements the inline procedure defined in [dev-operations.md](../skills/spur-dev/references/dev-operations.md#9-changelog). No `Skill()` delegation.
+Implements the inline procedure defined in [dev-operations.md](../skills/spur-dev/references/dev-operations.md#8-changelog). No `Skill()` delegation.
 
 **Arguments received:** `$ARGUMENTS`. Parse per the Arguments table above.
 

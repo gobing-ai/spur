@@ -1,12 +1,12 @@
 ---
 description: Generate a conventional commit message from staged changes, optionally commit
 argument-hint: "[--commit] [--scope <path>]"
-allowed-tools: ["Bash", "Read", "Skill"]
+allowed-tools: ["Bash", "Read"]
 ---
 
 # Dev Gitmsg
 
-Implements an inline procedure — see [dev-operations.md](../skills/spur-dev/references/dev-operations.md#10-gitmsg) for the authoritative reference.
+Implements an inline procedure — see [dev-operations.md](../skills/spur-dev/references/dev-operations.md#9-gitmsg) for the authoritative reference.
 
 Read staged changes and generate a conventional commit message: `type(scope): summary` with
 an optional body listing key changes. By default, prints the message **and** a ready-to-copy
@@ -43,7 +43,7 @@ Inline procedure (no skill delegation):
 
 ## Implementation
 
-Implements the inline procedure defined in [dev-operations.md](../skills/spur-dev/references/dev-operations.md#10-gitmsg). No `Skill()` delegation.
+Implements the inline procedure defined in [dev-operations.md](../skills/spur-dev/references/dev-operations.md#9-gitmsg). No `Skill()` delegation.
 
 **Arguments received:** `$ARGUMENTS`. Parse per the Arguments table above.
 

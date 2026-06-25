@@ -10,6 +10,7 @@ metadata:
     - reviewer
     - inversion
   operations:
+    - customize
     - drift-audit
     - sync-check
     - contract-verify
@@ -55,6 +56,20 @@ Split every operation into a **deterministic detection** half and a **judgment**
 
 Never assert "the docs are in sync" from reading alone — run the detection commands and show their
 output. A zero-finding audit must be backed by the commands that produced zero.
+
+## customize
+
+**Purpose:** Customize a freshly-initialized Spur project's doc templates to match the
+project's actual stack and scope. Invoked by `sp:spur-init` after scaffolding.
+
+**Procedure:**
+1. Read the project's `package.json`, `tsconfig.json`, `biome.json`, and any existing config.
+2. Read each doc in `docs/00`–`05` and `AGENTS.md` for template markers (`{{ NAME }}`,
+   `{{ STACK }}`, `{{ DESCRIPTION }}`, etc.).
+3. Replace template markers with project-specific values derived from the config files.
+4. Update `AGENTS.md` with the detected stack, commands, and conventions.
+
+**Done when:** all template markers are replaced and `bun run lint` passes.
 
 ## drift-audit (§7)
 

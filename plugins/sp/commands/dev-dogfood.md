@@ -1,7 +1,7 @@
 ---
 description: Dogfood an agent skill/command/CLI — drive it end-to-end with bounded auto-fix, self-monitor, and emit a comprehensive report
-argument-hint: "<testee> [--max-retry <n>] [--save] [--task]"
-allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill", "Grep", "Glob"]
+argument-hint: "<testee> [--max-retry <n>] [--save] [--task] [--full]"
+allowed-tools: ["Bash", "Read", "Write", "Edit", "Grep", "Glob"]
 ---
 
 # Dev Dogfood
