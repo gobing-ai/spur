@@ -73,7 +73,9 @@ The JSON carries `{ wbs, name, status, filePath, content, frontmatter }`. Parse 
 - `## Requirements` — the R-items (the traceability targets).
 - `## Acceptance Criteria` — the Gherkin scenarios (the BDD targets, if `--bdd`).
 
-Flags: `--auto` (no confirmations), `--force` (bypass the terminal-status guard), `--fix
+Flags: `--agent <name|inherit|auto>` (agent override — passed through from the thin wrapper;
+`inherit` = pipeline default, `auto` = resolve from current runtime, `<name>` = explicit),
+`--auto` (no confirmations), `--force` (bypass the terminal-status guard), `--fix
 <none|blockers-first|all>` (post-verdict repair), `--focus <all|security|efficiency|correctness|usability>`
 (SECU dimensions), `--bdd` (scenario check), `--next` (on PASS, auto-transition `testing → done`;
 on PARTIAL/FAIL, stop).
@@ -220,6 +222,10 @@ summary.
 The source-oriented path: SECU review of a task's diff without the full traceability verdict. Runs
 Steps 3 + 5 + 8 (Review section only) — no verdict artifact, no `done` gate. Use for a focused
 quality/security audit of changes when the full verify isn't wanted.
+
+**Agent override:** The `--agent <name|inherit|auto>` flag (passed through from the thin wrapper
+via `$ARGUMENTS`) controls which agent executes the review. `inherit` = pipeline default,
+`auto` = resolve from current runtime, `<name>` = explicit override.
 
 ---
 

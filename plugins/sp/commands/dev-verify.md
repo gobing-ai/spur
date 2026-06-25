@@ -1,6 +1,6 @@
 ---
 description: Verify a task against its requirements — traceability check producing a PASS/PARTIAL/FAIL verdict with per-requirement evidence
-argument-hint: "<wbs> [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next]"
+argument-hint: "<wbs> [--agent <name|inherit|auto>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next]"
 allowed-tools: ["Bash", "Read", "Write", "Skill"]
 ---
 
@@ -24,6 +24,7 @@ the verdict artifact (`.spur/run/<wbs>-verdict.json`) is emitted for the pipelin
 | Argument | Description | Default |
 |----------|-------------|---------|
 | `wbs` | Task WBS number (required, positional) | (required) |
+| `--agent <name\|inherit\|auto>` | Agent override: `<name>` = explicit agent, `inherit` = pipeline default, `auto` = resolve current agent | inherit |
 | `--fix <strategy>` | Post-verdict repair: `none`, `blockers-first` (UNMET only), `all` (UNMET + PARTIAL + major findings) | `none` |
 | `--focus <lens>` | SECU dimensions: `all`, `security`, `efficiency`, `correctness`, `usability`, or comma-separated | `all` |
 | `--bdd` | Map `## Acceptance Criteria` scenarios to tests and fold into the verdict | off |
@@ -36,6 +37,12 @@ the verdict artifact (`.spur/run/<wbs>-verdict.json`) is emitted for the pipelin
 Thin wrapper: status guard, change-scope detection, requirements traceability, SECU review, verdict
 aggregation, findings write-back, verdict-artifact emission, and the optional `--fix` pass are all
 owned by the skill.
+
+### Agent override
+
+`--agent` controls which agent executes the verification. Passed through `$ARGUMENTS` to the backing
+`sp:code-verification` skill. Semantics: `<name>` = explicit agent, `inherit` = pipeline default,
+`auto` = resolve from current runtime.
 
 ## `--next` chain
 
@@ -50,7 +57,7 @@ When the verdict is PARTIAL or FAIL: stop — surface the verdict, leave task at
 
 ## Implementation
 
-Delegates to **sp:code-verification** skill (verify mode):
+Delegates to **sp:code-verification** skill (verify mode). `$ARGUMENTS` passes all flags including `--agent` through verbatim:
 
 ```
 Skill(skill="sp:code-verification", args="verify $ARGUMENTS")

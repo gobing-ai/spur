@@ -61,7 +61,7 @@ Thin wrapper: task reading, gap analysis, Q&A, and section updates are all owned
 4. **Synthesize** → Update Background, Requirements, and Constraints sections via `spur task update --section`.
 5. **Profile** → Auto-set template/preset based on scope and complexity.
 6. **`--next` chain** → If refine succeeds (task check passes):
-   - Transition: `spur task update <wbs> todo`
+   - Transition: `spur task update <wbs> todo --no-lifecycle`
    - Invoke: `/sp:dev-run --mode implement <wbs> --next --auto` (auto-forwarding `--auto` since refine was auto)
    - On failure: stop — surface the error, leave task at current status, do NOT invoke dev-run
 

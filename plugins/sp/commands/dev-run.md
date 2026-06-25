@@ -1,6 +1,6 @@
 ---
 description: Run a task — full pipeline (precheck→implement→test→review→approve→verify→record→done) or single-step (implement)
-argument-hint: "<wbs> [--mode <full|implement>] [--auto] [--next]"
+argument-hint: "<wbs> [--mode <full|implement>] [--agent <name|inherit|auto>] [--auto] [--next]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 ---
 
@@ -29,6 +29,7 @@ Pick a task and run it. Two modes:
 |----------|-------------|---------|
 | `wbs` | Task WBS number (required, positional) | (required) |
 | `--mode <full\|implement>` | `full` drives the complete pipeline; `implement` does only the implement step | `full` |
+| `--agent <name\|inherit\|auto>` | Agent override: `<name>` = explicit agent, `inherit` = pipeline default, `auto` = resolve current agent | (none — pipeline `vars.agent` default) |
 | `--auto` | Skip the HITL approval gate (full mode) or skip confirmations (implement mode) | off |
 | `--next` | On success, auto-transition to `testing` and invoke `/sp:dev-verify <wbs> --next`. For `--mode implement` only — ignored in full mode. | off |
 
@@ -36,6 +37,19 @@ Pick a task and run it. Two modes:
 
 Thin wrapper: mode selection routes to the correct `sp:spur-dev` operation. Task selection,
 pipeline invocation, HITL surfacing, and continuation logic are all owned by the skill.
+
+### Agent override
+
+`--agent` controls which agent executes the pipeline steps:
+
+| Value | Behavior |
+|-------|----------|
+| `<name>` | Explicit agent name — threaded to `vars.agent` (full mode) or the backing `Skill()` call (implement mode) |
+| `inherit` | Use the pipeline's configured default (`vars.agent = "omp"`). Same as omitting the flag. |
+| `auto` | Resolve the current runtime to its canonical agent name (claude-code, codex, openclaw, opencode, antigravity, pi) |
+
+In full mode, `--agent <value>` is merged into the `--vars` JSON passed to `spur workflow run`. In
+implement mode, it is passed through `$ARGUMENTS` to the backing skill.`
 
 ## Section ownership — `--mode implement`
 
@@ -54,7 +68,7 @@ writing code, before yielding, the implement agent MUST:
 
 When `--next` is set and implementation succeeds:
 
-1. Transition: `spur task update <wbs> testing`
+1. Transition: `spur task update <wbs> testing --no-lifecycle`
 2. Invoke: `/sp:dev-verify <wbs> --next --auto` (auto-forwarding `--auto` if it was set)
 3. On failure: stop — surface the error, leave task at current status, do NOT invoke dev-verify
 
@@ -62,7 +76,7 @@ When `--next` is set and implementation succeeds:
 
 ## Implementation
 
-Delegates to **sp:spur-dev** skill:
+Delegates to **sp:spur-dev** skill. `$ARGUMENTS` passes all flags including `--agent` through verbatim:
 
 - **full mode:** `Skill(skill="sp:spur-dev", args="run $ARGUMENTS")`
 - **implement mode:** `Skill(skill="sp:spur-dev", args="implement $ARGUMENTS")`

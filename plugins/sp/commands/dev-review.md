@@ -1,6 +1,6 @@
 ---
 description: Review code for a task — SECU framework review across Security, Efficiency, Correctness, and Usability
-argument-hint: "<wbs> [--focus <lens>] [--fix <none|blockers-first|all>]"
+argument-hint: "<wbs> [--agent <name|inherit|auto>] [--focus <lens>] [--fix <none|blockers-first|all>]"
 allowed-tools: ["Bash", "Read", "Write", "Skill"]
 ---
 
@@ -24,6 +24,7 @@ SECU review only — no requirements-traceability verdict and no pipeline gate a
 | Argument | Description | Default |
 |----------|-------------|---------|
 | `wbs` | Task WBS number (required, positional) | (required) |
+| `--agent <name\|inherit\|auto>` | Agent override: `<name>` = explicit agent, `inherit` = pipeline default, `auto` = resolve current agent | inherit |
 | `--focus <lens>` | SECU dimensions: `all`, `security`, `efficiency`, `correctness`, `usability`, or comma-separated | `all` |
 | `--fix <strategy>` | Post-review repair: `none`, `blockers-first`, `all` | `none` |
 
@@ -32,9 +33,15 @@ SECU review only — no requirements-traceability verdict and no pipeline gate a
 Thin wrapper: diff scope, SECU analysis, findings ranking, and write-back are all owned by the
 skill.
 
+### Agent override
+
+`--agent` controls which agent executes the review. Passed through `$ARGUMENTS` to the backing
+`sp:code-verification` skill. Semantics: `<name>` = explicit agent, `inherit` = pipeline default,
+`auto` = resolve from current runtime.
+
 ## Implementation
 
-Delegates to **sp:code-verification** skill (review mode):
+Delegates to **sp:code-verification** skill (review mode). `$ARGUMENTS` passes all flags including `--agent` through verbatim:
 
 ```
 Skill(skill="sp:code-verification", args="review $ARGUMENTS")

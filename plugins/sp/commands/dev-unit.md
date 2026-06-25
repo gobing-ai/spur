@@ -1,6 +1,6 @@
 ---
 description: Generate or extend tests until the unit target is met
-argument-hint: "<target> [--coverage <n>] [--channel <current|claude-code|codex|openclaw|opencode|antigravity|pi>] [--auto]"
+argument-hint: "<target> [--coverage <n>] [--agent <name|inherit|auto>] [--auto]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 ---
 
@@ -25,7 +25,7 @@ This command is **standalone**. It does not delegate to the orchestration pipeli
 |----------|----------|-------------|
 | `target` | Yes | WBS task number, task file path, source file path, or file pattern |
 | `--coverage <n>` | No | Override the default focused coverage target. Default: `90` |
-| `--channel <name>` | No | Optional execution channel override. Default: run in the current agent |
+| `--agent <name\|inherit\|auto>` | No | Agent override: `<name>` = explicit agent, `inherit` = default (current agent), `auto` = resolve current agent |
 | `--auto` | No | Skip confirmations where the delegated workflow supports it |
 
 ## Target Resolution
@@ -38,31 +38,36 @@ This command is **standalone**. It does not delegate to the orchestration pipeli
 | Ends with `.md` and is a task file | Task file path | Task-scoped testing workflow |
 | Any other string | Treat as task ref first | Task-scoped testing workflow |
 
-## Execution Channel
+## Agent Override
 
-`--channel` is optional.
+`--agent` is optional.
 
 Default behavior:
 - run in the **current agent**
-- do not delegate externally unless `--channel` is explicitly provided
+- do not delegate externally unless `--agent` is explicitly provided
 
 Supported values:
 
 | Value | Meaning |
 |-------|---------|
-| `current` | Run in the current agent and workspace |
-| `claude-code`, `codex`, `openclaw`, `opencode`, `antigravity`, `pi` | Delegate through the cross-agent channel |
+| `inherit` | Run in the current agent (pipeline default) |
+| `claude-code`, `codex`, `openclaw`, `opencode`, `antigravity`, `pi` | Delegate to the named agent |
+| `auto` | Resolve the current runtime to its canonical agent name |
 
-### Channel Alias Normalization
+### Agent Alias Normalization
 
-| Slash command value | ACP agent |
-|---------------------|-----------|
-| `claude-code` | `claude` |
-| `codex` | `codex` |
-| `openclaw` | `openclaw` |
-| `opencode` | `opencode` |
-| `antigravity` | `antigravity` |
-| `pi` | `pi` |
+When `--agent` is passed to the backing `sp:spur-dev` skill, the value is normalized:
+
+| `--agent` value | Canonical agent |
+|-----------------|-----------------|
+| `inherit` | (current agent — no delegation) |
+| `auto` | Resolved from current runtime |
+| `claude-code` | claude |
+| `codex` | codex |
+| `openclaw` | openclaw |
+| `opencode` | opencode |
+| `antigravity` | antigravity |
+| `pi` | pi |
 
 ## Workflow A: File-Focused Unit Testing
 
@@ -262,12 +267,12 @@ Preferred escalation:
 /sp:dev-unit 0266
 
 # Task-scoped: delegated testing
-/sp:dev-unit 0266 --coverage 95 --channel codex --auto
+/sp:dev-unit 0266 --coverage 95 --agent codex --auto
 ```
 
 ## Implementation
 
-Delegates to **sp:spur-dev** skill (unit operation):
+Delegates to **sp:spur-dev** skill (unit operation). `$ARGUMENTS` passes all flags including `--agent` through verbatim:
 
 ```
 Skill(skill="sp:spur-dev", args="unit $ARGUMENTS")

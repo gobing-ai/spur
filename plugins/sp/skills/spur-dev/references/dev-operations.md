@@ -19,7 +19,8 @@ table is the index; the per-operation sections below are the detail.
 | `inline` | The procedure is defined directly in the command file. No `Skill()` delegation — the command carries its own steps. | changelog, gitmsg, fixall, handover, new-task |
 
 The 7 `Skill()` commands back onto two skills: `sp:spur-dev` (planning + execution workflow) and
-`sp:code-verification` (SECU review + traceability). The 5 `inline` commands cover git tooling and
+`sp:code-verification` (SECU review + traceability). One additional `Skill()` command (`dev-brainstorm`)
+backs onto `sp:brainstorm` (structured ideation). The 5 `inline` commands cover git tooling and
 operational utilities that have no natural skill home — creating a skill for each would be scope
 creep for one-liner procedures.
 
@@ -30,18 +31,19 @@ creep for one-liner procedures.
 
 | # | Operation | Command | Backing | Skill / Verb | Arg-hint |
 |---|-----------|---------|---------|--------------|----------|
-| 1 | unit | `dev-unit` | `Skill()` | `sp:spur-dev` (`unit`) | `<wbs> [--coverage <pct>]` |
-| 2 | review | `dev-review` | `Skill()` | `sp:code-verification` (`review`) | `<wbs> [--focus <lens>] [--fix <none\|blockers-first\|all>]` |
-| 3 | verify | `dev-verify` | `Skill()` | `sp:code-verification` (`verify`) | `<wbs> [--fix ...] [--focus <lens>] [--bdd] [--auto] [--force]` |
-| 4 | run | `dev-run` | `Skill()` | `sp:spur-dev` (`run` / `implement`) | `<wbs> [--mode <full\|implement>] [--auto]` |
+| 1 | unit | `dev-unit` | `Skill()` | `sp:spur-dev` (`unit`) | `<wbs> [--coverage <pct>] [--agent <name\|inherit\|auto>]` |
+| 2 | review | `dev-review` | `Skill()` | `sp:code-verification` (`review`) | `<wbs> [--agent <name\|inherit\|auto>] [--focus <lens>] [--fix <none\|blockers-first\|all>]` |
+| 3 | verify | `dev-verify` | `Skill()` | `sp:code-verification` (`verify`) | `<wbs> [--agent <name\|inherit\|auto>] [--fix ...] [--focus <lens>] [--bdd] [--auto] [--force]` |
+| 4 | run | `dev-run` | `Skill()` | `sp:spur-dev` (`run` / `implement`) | `<wbs> [--mode <full\|implement>] [--agent <name\|inherit\|auto>] [--auto]` |
 | 5 | refine | `dev-refine` | `Skill()` | `sp:spur-dev` (`refine`) | `<wbs>` |
 | 6 | plan | `dev-plan` | `Skill()` | `sp:spur-dev` (`plan`) | `"<description>" [--feature <id>] [--parent <feature-id>]` |
 | 7 | docs | *(no thin wrapper)* | `Skill()` | `sp:doc-evolve` | `"<change description>"` |
-| 8 | changelog | `dev-changelog` | `inline` | git log + conventional-commit grouping | `[--from <ref>] [--to <ref>] [--format <style>]` |
+| 8 | changelog | `dev-changelog` | `inline` | git log + conventional-commit grouping | `[--since <ref>] [--until <ref>] [--version <ver>]` |
 | 9 | gitmsg | `dev-gitmsg` | `inline` | git diff + conventional commit | `[--commit] [--scope <path>]` |
 | 10 | fixall | `dev-fixall` | `inline` | lint + test fix loop | `[--scope <path>]` |
 | 11 | handover | `dev-handover` | `inline` | structured doc generation | `"<blocker description>"` |
 | 12 | new-task | `dev-new-task` | `inline` | `spur task create` + intake | `"<description>" [--feature <id>] [--template <variant>] [--parent <wbs>]` |
+| 13 | brainstorm | `dev-brainstorm` | `Skill()` | `sp:brainstorm` (`dev-brainstorm`) | `"<topic>" [--depth <basic\|detailed\|comprehensive>] [--options <n>] [--skip-discovery]` |
 
 ---
 
@@ -54,7 +56,7 @@ must not be changed without updating the backing skill.
 ### 1. unit
 
 - **Purpose:** Extend or generate tests for a task until the coverage target is met.
-- **Inputs:** `<wbs>` (required). `--coverage <pct>` overrides the default target.
+- **Inputs:** `<wbs>` (required). `--coverage <pct>` overrides the default target. `--agent <name|inherit|auto>` controls which agent executes the tests.
 - **Backing:** `sp:spur-dev` skill, `unit` operation.
 - **Behavior:** Read the task's implementation → identify untested paths → write targeted tests → run `bun test --coverage` → iterate until the per-file line/function coverage target (≥90%) is met.
 - **Delegation:** `Skill(skill="sp:spur-dev", args="unit $ARGUMENTS")`
@@ -62,7 +64,7 @@ must not be changed without updating the backing skill.
 ### 2. review
 
 - **Purpose:** SECU-framework code review of a task's diff — Security, Efficiency, Correctness, Usability.
-- **Inputs:** `<wbs>` (required). `--focus <lens>` narrows to one SECU dimension. `--fix <none|blockers-first|all>` controls auto-fix.
+- **Inputs:** `<wbs>` (required). `--agent <name|inherit|auto>` controls which agent executes the review. `--focus <lens>` narrows to one SECU dimension. `--fix <none|blockers-first|all>` controls auto-fix.
 - **Backing:** `sp:code-verification` skill, `review` mode.
 - **Behavior:** Detect the diff scope → run SECU analysis → rank findings P1–P4 → write findings to the task's `## Review` section. With `--fix`, applies fixes for the selected severity tier.
 - **Delegation:** `Skill(skill="sp:code-verification", args="review $ARGUMENTS")`
@@ -70,7 +72,7 @@ must not be changed without updating the backing skill.
 ### 3. verify
 
 - **Purpose:** Requirements traceability — verify a task's implementation against its acceptance criteria, producing a PASS/PARTIAL/FAIL verdict with per-requirement evidence.
-- **Inputs:** `<wbs>` (required). `--fix`, `--focus`, `--bdd`, `--auto`, `--force` modulate the verify pass. `--next`: on PASS verdict, auto-transition `testing → done` (terminal — no further command in chain). On PARTIAL/FAIL, stop.
+- **Inputs:** `<wbs>` (required). `--agent <name|inherit|auto>` controls which agent executes the verification. `--fix`, `--focus`, `--bdd`, `--auto`, `--force` modulate the verify pass. `--next`: on PASS verdict, auto-transition `testing → done` (terminal — no further command in chain). On PARTIAL/FAIL, stop.
 - **Backing:** `sp:code-verification` skill, `verify` mode.
 - **Behavior:** Status guard → change-scope detection → requirements traceability → SECU review → verdict aggregation → findings write-back → verdict-artifact emission → optional `--fix` pass. The verdict gates the pipeline's `done` transition. With `--next`: PASS → transition to `done`; PARTIAL/FAIL → stop and surface verdict.
 - **Delegation:** `Skill(skill="sp:code-verification", args="verify $ARGUMENTS")`
@@ -78,7 +80,7 @@ must not be changed without updating the backing skill.
 ### 4. run
 
 - **Purpose:** Run a task through the execution pipeline (full) or execute a single pipeline step (implement).
-- **Inputs:** `<wbs>` (required). `--mode <full|implement>` selects the execution mode. `--auto` skips the HITL approve gate / confirmations. `--next`: on success, auto-transition to `testing` and invoke `/sp:dev-verify <wbs> --next --auto` (implement mode only — ignored in full mode).
+- **Inputs:** `<wbs>` (required). `--mode <full|implement>` selects the execution mode. `--agent <name|inherit|auto>` controls which agent executes the pipeline steps (merged into `vars.agent` for full mode, passed through `$ARGUMENTS` for implement mode). `--auto` skips the HITL approve gate / confirmations. `--next`: on success, auto-transition to `testing` and invoke `/sp:dev-verify <wbs> --next --auto` (implement mode only — ignored in full mode).
 - **Backing:** `sp:spur-dev` skill — `run` operation for full pipeline, `implement` operation for the implement step.
 - **Modes:**
   - **`full`** (default): Drive the full pipeline — precheck → implement → test → review → approve(HITL) → verify → record → done. Invokes `spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"<wbs>"}'` (with `profile: auto` when `--auto`). Monitors the run; on HITL pause surfaces to the operator. `--next` is a no-op in this mode.
@@ -109,6 +111,14 @@ must not be changed without updating the backing skill.
 - **Behavior:** Read the affected doc → apply the constitution's edit rules (single-source-of-truth, cross-reference updates, same-commit sync triggers) → write via the correct tool.
 - **Delegation:** `Skill(skill="sp:doc-evolve", args="$ARGUMENTS")` (no thin command wrapper)
 
+### 13. brainstorm
+
+- **Purpose:** Interactive solution design — heuristic discovery interview (grilling) followed by structured ideation with trade-offs and confidence scoring.
+- **Inputs:** `"<topic>"` (required). `--depth <basic|detailed|comprehensive>` controls how deep to walk the decision tree. `--options <n>` sets the number of solution approaches (default 3). `--skip-discovery` skips the grilling interview and goes straight to ideation.
+- **Backing:** `sp:brainstorm` skill, `dev-brainstorm` operation.
+- **Behavior:** Two-phase protocol. Phase 1 (inline): walk the decision tree one question at a time, each with a recommended answer, exploring the codebase before asking the user. Phase 2 (delegated): pass the resolved decision tree to `sp:brainstorm` for structured ideation — each approach includes description, trade-offs, implementation notes, confidence level, and decision trace.
+- **Delegation:** `Skill(skill="sp:brainstorm", args="dev-brainstorm --context <decision-tree> --options <n>")`
+
 ---
 
 ## Inline operations
@@ -119,11 +129,11 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
 ### 8. changelog
 
 - **Purpose:** Generate a structured changelog from git commits between two refs.
-- **Inputs:** `--from <ref>` (default: last tag), `--to <ref>` (default: `HEAD`), `--format <style>` (default: `keepachangelog`).
+- **Inputs:** `--since <ref>` (default: last tag), `--until <ref>` (default: `HEAD`), `--version <ver>` (default: auto-detect from latest tag).
 - **Backing:** `inline` — git log + conventional-commit grouping.
 - **Behavior:**
-  1. Resolve `--from`: if not given, use the most recent tag (`git describe --tags --abbrev=0`). If no tags exist, use the repo root commit.
-  2. Run `git log --oneline <from>..<to>` (apply `--scope` if given to limit to a path: `git log --oneline <from>..<to> -- <path>`).
+  1. Resolve `--since`: if not given, use the most recent tag (`git describe --tags --abbrev=0`). If no tags exist, use the repo root commit.
+  2. Run `git log --oneline <since>..<until>`.
   3. Parse each commit's conventional-commit prefix (`feat`, `fix`, `refactor`, `docs`, `chore`, `perf`, `test`, `style`, `ci`, `build`). Commits without a recognized prefix go under `Other`.
   4. Group commits by type. Within each group, list one bullet per commit: `- <summary> (<short-hash>)`.
   5. Format as markdown:

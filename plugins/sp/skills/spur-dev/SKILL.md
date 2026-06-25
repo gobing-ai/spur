@@ -204,6 +204,10 @@ It does **not** run tests, review, or verify — those are the separate `test` /
 own the loop: the agent implements, the workflow advances. Consolidated into `dev-run` as
 `--mode implement`; formerly `/sp:dev-implement`.
 
+**Agent override:** The `--agent <name|inherit|auto>` flag (passed through from the thin wrapper
+via `$ARGUMENTS`) controls which agent executes the implementation. `inherit` = pipeline default
+(current agent), `auto` = resolve from current runtime, `<name>` = explicit override.
+
 ### Section ownership — `## Solution`
 
 The implement step **owns** `## Solution` (the change-map). After writing code, before
@@ -224,7 +228,9 @@ stages. Read the task's implementation → identify untested paths → write tar
 run `bun test --coverage` → iterate until the coverage target is met.
 
 The `unit` operation is invoked via `Skill(skill="sp:spur-dev", args="unit $ARGUMENTS")`.
-It accepts a `<target>` (WBS number, file path, or glob) and an optional `--coverage <pct>`.
+It accepts a `<target>` (WBS number, file path, or glob), an optional `--coverage <pct>`,
+and an optional `--agent <name|inherit|auto>` for agent selection (`inherit` = current agent,
+`auto` = resolve from runtime, `<name>` = explicit).
 
 
 ### Step 1: Task selection
@@ -242,6 +248,12 @@ backlog tasks. Use `--json` for machine consumption; sort client-side by priorit
 ```bash
 spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"<wbs>"}' --json
 ```
+
+When `--agent <value>` is set (passed through from the thin wrapper), merge it into the vars:
+`--vars '{"wbs":"<wbs>","agent":"<value>"}'`. The pipeline YAML already reads `${vars.agent}`
+for every `agent.run` step — no YAML changes needed. `--agent auto` resolves the current runtime
+to its canonical agent name before merging; `--agent inherit` or omitting the flag keeps the
+pipeline's default (`vars.agent = "omp"`).
 
 The pipeline (`kind: state-machine`) runs the work loop:
 
