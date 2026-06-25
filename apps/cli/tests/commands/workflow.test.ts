@@ -558,4 +558,136 @@ terminalStates:
         const hasBrokenEntry = output.messages.some((m) => m.includes('❌') && m.includes('<unnamed>'));
         expect(hasBrokenEntry).toBe(true);
     });
+
+    // ── async run (--async flag, 0116) ──
+
+    test('run --async prints started message with run ID and exits 0', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'workflow.yaml');
+        await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
+        const output = createCapturedOutput();
+
+        const exitCode = await main(['workflow', 'run', '--async', workflowFile], {
+            output,
+            cwd: dir,
+            dbUrl: ':memory:',
+        });
+
+        expect(exitCode).toBe(0);
+        expect(output.messages[0] ?? '').toMatch(/^Started async run:/);
+        expect(output.messages[0] ?? '').toMatch(/Monitor with: spur workflow trace/);
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('run --async --json returns structured result with runId', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'workflow.yaml');
+        await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
+        const output = createCapturedOutput();
+
+        const exitCode = await main(['workflow', 'run', '--async', '--json', workflowFile], {
+            output,
+            cwd: dir,
+            dbUrl: ':memory:',
+        });
+
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(output.messages[0] ?? '{}');
+        expect(parsed).toMatchObject({ status: 'started', workflowName: workflowFile });
+        expect(parsed).toHaveProperty('runId');
+        expect(typeof parsed.runId).toBe('string');
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('run --async --vars forwards vars to the spawned command', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'workflow.yaml');
+        await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
+        const output = createCapturedOutput();
+
+        // --vars are forwarded to Bun.spawn cmd; we verify the parent exits
+        // cleanly (the child process is detached and may fail, but the parent
+        // doesn't wait for it).
+        const exitCode = await main(['workflow', 'run', '--async', '--vars', '{"wbs":"0116"}', workflowFile], {
+            output,
+            cwd: dir,
+            dbUrl: ':memory:',
+        });
+
+        expect(exitCode).toBe(0);
+        expect(output.messages[0] ?? '').toMatch(/^Started async run:/);
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('run --async --dry-run forwards dry-run to the spawned command', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'workflow.yaml');
+        await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
+        const output = createCapturedOutput();
+
+        const exitCode = await main(['workflow', 'run', '--async', '--dry-run', workflowFile], {
+            output,
+            cwd: dir,
+            dbUrl: ':memory:',
+        });
+
+        expect(exitCode).toBe(0);
+        expect(output.messages[0] ?? '').toMatch(/^Started async run:/);
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('run --async --run-id uses the given run ID', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'workflow.yaml');
+        await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
+        const output = createCapturedOutput();
+
+        const exitCode = await main(['workflow', 'run', '--async', '--run-id', 'async-custom-id', workflowFile], {
+            output,
+            cwd: dir,
+            dbUrl: ':memory:',
+        });
+
+        expect(exitCode).toBe(0);
+        expect(output.messages[0] ?? '').toContain('async-custom-id');
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    // ── clean --force (0116) ──
+
+    test('clean --force reports no stale runs on empty DB', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['workflow', 'clean', '--force'], { output, dbUrl: ':memory:' });
+        expect(exitCode).toBe(0);
+        // --force sets minutes=0, so the message has no age qualifier
+        expect(output.messages).toContain('No stale runs.');
+    });
+
+    test('clean --force --dry-run works on empty DB', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['workflow', 'clean', '--force', '--dry-run'], { output, dbUrl: ':memory:' });
+        expect(exitCode).toBe(0);
+        expect(output.messages).toContain('No stale runs.');
+    });
+
+    test('clean --force --json works on empty DB', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['workflow', 'clean', '--force', '--json'], { output, dbUrl: ':memory:' });
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(output.messages[0] ?? '{}');
+        expect(parsed).toHaveProperty('cleaned');
+        expect(parsed.olderThanMinutes).toBe(0);
+    });
+
+    test('clean --force overrides --older-than', async () => {
+        const output = createCapturedOutput();
+        // --force overrides --older-than: minutes=0 regardless
+        const exitCode = await main(['workflow', 'clean', '--force', '--older-than', '999'], {
+            output,
+            dbUrl: ':memory:',
+        });
+        expect(exitCode).toBe(0);
+        // Uses --force message (no age qualifier), not "older than 999m"
+        expect(output.messages).toContain('No stale runs.');
+    });
 });

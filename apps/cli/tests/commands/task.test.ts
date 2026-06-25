@@ -118,10 +118,30 @@ describe('spur task CLI', () => {
         expect(output.errors.join('')).toContain('Unknown template variant');
     });
 
+    test('create --template meta uses the meta template', async () => {
+        // First access of 'meta' variant exercises bundled fallback + cache miss paths
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'create', 'Meta task', '--template', 'meta'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const content = await Bun.file(createdPath(output)).text();
+        expect(content).toContain('template: meta');
+    });
+
+    test('create --template brainstorm falls back to legacy path when no template file', async () => {
+        // 'brainstorm' is a valid variant but has no template file — exercises
+        // loadTemplateContent miss cache path (templateMissSet.add)
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'create', 'Brainstorm task', '--template', 'brainstorm'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const content = await Bun.file(createdPath(output)).text();
+        expect(content).toContain('Brainstorm task');
+    });
+
     test('create --template review seeds Review Findings as input under Background', async () => {
         // WHY: a review task logs the code-review findings as INPUT (under Background's
-        // `#### Review Findings`) to be fixed; the `### Review` section is reserved for the
-        // post-fix reflection and is NOT emitted at backlog creation.
+        // `#### Review Findings`) to be fixed; the `### Review` section is reserved for
+        // post-fix reflection. With template-as-skeleton rendering, ALL template sections
+        // appear at creation (including `### Review` with its guidance text).
         const output = createCapturedOutput();
         const exitCode = await main(['task', 'create', 'Fix review', '--template', 'review'], { cwd, output });
         expect(exitCode).toBe(0);
@@ -129,10 +149,7 @@ describe('spur task CLI', () => {
         expect(content).toContain('template: review');
         expect(content).toContain('#### Review Findings');
         expect(content).toMatch(/Severity\s+\|\s+File\s+\|\s+Finding/);
-        // The `### Review` section (post-fix reflection) is deferred to wip+ — not present at
-        // backlog creation. Use a line-anchored regex so `#### Review Findings` (a sub-heading
-        // under Background) is not mistaken for the `### Review` section.
-        expect(content).not.toMatch(/\n### Review\n/);
+        expect(content).toMatch(/\n### Review\n/);
     });
 
     // ── show ──
@@ -446,6 +463,68 @@ describe('spur task CLI', () => {
         expect(parsed.ref.id).toBe(wbs);
     });
 
+    test('update --feature sets feature_id on task', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'Feature update'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'update', wbs, '--feature', 'B'], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(output.messages[0] ?? '').toContain('Set feature_id=B');
+        // Verify it stuck
+        const content = await Bun.file(join(cwd, 'docs', 'tasks', `${wbs}_feature-update.md`)).text();
+        expect(content).toContain('feature_id: B');
+    });
+
+    test('update --priority sets priority on task', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'Priority update'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'update', wbs, '--priority', 'P0'], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(output.messages[0] ?? '').toContain('Set priority=P0');
+    });
+
+    test('update --feature --json returns structured output', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'Feature JSON'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'update', wbs, '--feature', 'C', '--json'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lastMessage(output));
+        expect(parsed.ref.id).toBe(wbs);
+    });
+
+    test('update with non-existent wbs exits 1 and prints error (update catch)', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'update', '9999', 'todo'], { cwd, output });
+        // Non-existent task triggers the update catch block (lines 136-137)
+        expect(exitCode).toBe(1);
+        expect(output.errors.length).toBeGreaterThan(0);
+    });
+
+    test('update --section --from-file with non-json output handles warnings', async () => {
+        // Create a task with a section that triggers warnings on write (e.g. Review at backlog)
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'Warning test'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+        const bodyFile = join(cwd, 'body-warn.md');
+        await Bun.write(bodyFile, 'Some review text.\n');
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'update', wbs, '--section', 'Review', '--from-file', bodyFile], {
+            cwd,
+            output,
+        });
+        // Update should succeed (exit 0); warnings go to error channel (line 112)
+        expect(exitCode).toBe(0);
+    });
+
     test('check with bad folder exits 1', async () => {
         const output = createCapturedOutput();
         const exitCode = await main(['task', 'check', '0001', '--folder', join(cwd, 'nonexistent')], { cwd, output });
@@ -526,5 +605,53 @@ describe('spur task CLI', () => {
                 rmSync(isoCwd, { recursive: true, force: true });
             }
         });
+    });
+
+    // ── path ──
+    test('path prints absolute file path and exits 0', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'Path test'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'path', wbs], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(output.messages[0] ?? '').toContain(`/${wbs}_`);
+        expect(output.messages[0] ?? '').toContain('docs/tasks');
+    });
+
+    test('path --json returns structured output', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'Path JSON test'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'path', wbs, '--json'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lastMessage(output));
+        expect(parsed.wbs).toBe(wbs);
+        expect(parsed.filePath).toContain(`/${wbs}_`);
+    });
+
+    test('path with non-existent wbs exits 1', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'path', '9999'], { cwd, output });
+        expect(exitCode).toBe(1);
+        expect(output.errors.some((e) => e.includes('not found'))).toBe(true);
+    });
+
+    // ── config error resilience (covers loadTaskFoldersConfig catch, line 397) ──
+    test('create with malformed config falls back to defaults', async () => {
+        const dir = join(cwd, 'malformed-cfg');
+        await mkdir(dir, { recursive: true });
+        await mkdir(join(dir, 'docs', 'tasks'), { recursive: true });
+        await mkdir(join(dir, '.spur'), { recursive: true });
+        // Write a YAML file that fails to parse (trailing colon is invalid)
+        await Bun.write(join(dir, '.spur', 'config.yaml'), 'tasks:\n  active:\n');
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'create', 'Malformed cfg task'], { cwd: dir, output });
+        expect(exitCode).toBe(0); // falls back to defaults, still creates task
+        rmSync(dir, { recursive: true, force: true });
     });
 });
