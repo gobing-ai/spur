@@ -26,10 +26,11 @@ everything that was done, broke, was fixed, and should be improved.
 - Producing a structured findings report (and optionally a fix task) from a real run, instead of
   re-typing the same dogfood instructions every session.
 
-> ⚠️ **Repo mutation warning.** Non-observe mode (`--max-retry` > 0, or the default `2`) applies
-> `Edit`/`Write` fixes directly to the working tree. For a first run against an unfamiliar testee
-> or when you only want findings, use **`--max-retry 0`** (observe-only) — it monitors and reports
-> without mutating the repo. You can always re-run with fixes enabled after reviewing the report.
+> ⚠️ **Repo mutation warning.** By default (`--max-retry 2`), this command applies `Edit`/`Write`
+> fixes directly to the working tree. **For a first run against any unfamiliar testee, always use
+> `--max-retry 0` (observe-only)** — it monitors and reports without mutating the repo. Review the
+> findings, then re-run with `--max-retry 2` (or higher) to apply fixes. This is the safe default for
+> testing commands like `/sp:dev-run` that can modify files across the working tree.
 
 ## Arguments
 

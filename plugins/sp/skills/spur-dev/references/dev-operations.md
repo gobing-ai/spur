@@ -1,6 +1,6 @@
 ---
 name: dev-operations
-description: Unified reference for all 11 dev-* operations — purpose, inputs, backing (skill/CLI/inline), and behavior contract. The single source of truth for what each `/sp:dev-*` command does.
+description: Unified reference for all 12 dev-* operations — purpose, inputs, backing (skill/CLI/inline), and behavior contract. The single source of truth for what each `/sp:dev-*` command does. (`implement` is covered as a sub-mode of run, #4.)
 see_also:
   - spur-dev
 ---
@@ -36,11 +36,12 @@ creep for one-liner procedures.
 | 4 | run | `dev-run` | `Skill()` | `sp:spur-dev` (`run` / `implement`) | `<wbs> [--mode <full\|implement>] [--auto]` |
 | 5 | refine | `dev-refine` | `Skill()` | `sp:spur-dev` (`refine`) | `<wbs>` |
 | 6 | plan | `dev-plan` | `Skill()` | `sp:spur-dev` (`plan`) | `"<description>" [--feature <id>] [--parent <feature-id>]` |
-| 7 | changelog | `dev-changelog` | `inline` | git log + conventional-commit grouping | `[--from <ref>] [--to <ref>] [--format <style>]` |
-| 8 | gitmsg | `dev-gitmsg` | `inline` | git diff + conventional commit | `[--commit] [--scope <path>]` |
-| 9 | fixall | `dev-fixall` | `inline` | lint + test fix loop | `[--scope <path>]` |
-| 10 | handover | `dev-handover` | `inline` | structured doc generation | `"<blocker description>"` |
-| 11 | new-task | `dev-new-task` | `inline` | `spur task create` + intake | `"<description>" [--feature <id>] [--template <variant>] [--parent <wbs>]` |
+| 7 | docs | *(no thin wrapper)* | `Skill()` | `sp:doc-evolve` | `"<change description>"` |
+| 8 | changelog | `dev-changelog` | `inline` | git log + conventional-commit grouping | `[--from <ref>] [--to <ref>] [--format <style>]` |
+| 9 | gitmsg | `dev-gitmsg` | `inline` | git diff + conventional commit | `[--commit] [--scope <path>]` |
+| 10 | fixall | `dev-fixall` | `inline` | lint + test fix loop | `[--scope <path>]` |
+| 11 | handover | `dev-handover` | `inline` | structured doc generation | `"<blocker description>"` |
+| 12 | new-task | `dev-new-task` | `inline` | `spur task create` + intake | `"<description>" [--feature <id>] [--template <variant>] [--parent <wbs>]` |
 
 ---
 
@@ -100,6 +101,14 @@ must not be changed without updating the backing skill.
 - **Behavior:** Clarify scope → `spur feature create` → author BDD AC → `spur feature check` gate → decompose into task-batch JSON → `spur task batch-create` gate.
 - **Delegation:** `Skill(skill="sp:spur-dev", args="plan $ARGUMENTS")`
 
+### 12. docs
+
+- **Purpose:** Evolve project documentation — update ADR, PRD, ARCHITECTURE, DESIGN, FEATURES docs per the constitution's edit rules.
+- **Inputs:** `"<change description>"` (required).
+- **Backing:** `sp:doc-evolve` skill — no thin `dev-docs` command wrapper exists (the skill is invoked directly or via the operator).
+- **Behavior:** Read the affected doc → apply the constitution's edit rules (single-source-of-truth, cross-reference updates, same-commit sync triggers) → write via the correct tool.
+- **Delegation:** `Skill(skill="sp:doc-evolve", args="$ARGUMENTS")` (no thin command wrapper)
+
 ---
 
 ## Inline operations
@@ -107,7 +116,7 @@ must not be changed without updating the backing skill.
 These define their procedure directly in the command file. No `Skill()` delegation — the command
 is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent reasoning.
 
-### 7. changelog
+### 8. changelog
 
 - **Purpose:** Generate a structured changelog from git commits between two refs.
 - **Inputs:** `--from <ref>` (default: last tag), `--to <ref>` (default: `HEAD`), `--format <style>` (default: `keepachangelog`).
@@ -123,7 +132,7 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
   6. Print the changelog to stdout. If the operator wants it in `CHANGELOG.md`, they redirect or paste.
 - **Invariants:** Never mutates `CHANGELOG.md` directly — the command outputs to stdout. The operator decides where it lands.
 
-### 8. gitmsg
+### 9. gitmsg
 
 - **Purpose:** Generate a conventional commit message from staged changes.
 - **Inputs:** `--scope <path>` (default: all staged changes) — limits diff analysis to a path.
@@ -151,7 +160,7 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
   6. Print the message to stdout. The operator copies it into `git commit -m`.
 - **Invariants:** Never runs `git commit` — the command generates the message only. The operator commits.
 
-### 9. fixall
+### 10. fixall
 
 - **Purpose:** Fix all lint, type, and test errors systematically across the working tree.
 - **Inputs:** `--scope <path>` (default: entire working tree) — limits fixes to a file or directory.
@@ -167,7 +176,7 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
   8. Report: list what was fixed (file + one-line summary per fix). If any error could not be resolved, report it explicitly — do not suppress.
 - **Invariants:** Never bypass with `--no-verify`, `--force`, or new `biome-ignore`/`eslint-disable` suppressions. Never skip or `.skip` a test to make the suite green. Fix the root cause, not the symptom.
 
-### 10. handover
+### 11. handover
 
 - **Purpose:** Generate a structured handover document when blocked — captures goal, progress, blocker, rejected approaches, and next steps.
 - **Inputs:** `"<blocker description>"` (required, positional) — what is blocking progress.
@@ -205,7 +214,7 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
   5. Print the path to the handover document.
 - **Invariants:** The handover is honest — rejected approaches are recorded so the next agent doesn't retry them. The blocker is specific, not "it doesn't work."
 
-### 11. new-task
+### 12. new-task
 
 - **Purpose:** Create a single task file from a description via intake Q&A and `spur task create`.
 - **Inputs:** `"<description>"` (required, positional). `--feature <id>` links the task to a feature. `--template <variant>` selects the task template (`default`, `feature-impl`, `issue`, `review`, `meta`). `--parent <wbs>` creates a sub-task.

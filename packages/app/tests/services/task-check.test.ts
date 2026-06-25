@@ -227,12 +227,20 @@ describe('TaskCheckService', () => {
             '---',
             'schema_version: 1',
             'name: "Review test"',
-            'status: backlog',
+            'status: done',
             'created_at: 2026-06-13T00:00:00.000Z',
             'updated_at: 2026-06-13T00:00:00.000Z',
             '---',
             '',
             '## 0001. Review test',
+            '',
+            '### Solution',
+            '',
+            'Fixed `src/foo.ts:10-15` — added validation.',
+            '',
+            '### Testing',
+            '',
+            'Coverage: 95%.',
             '',
             '### Review',
             '',
@@ -247,6 +255,35 @@ describe('TaskCheckService', () => {
         const reviewErrors = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Review');
         expect(reviewErrors.length).toBeGreaterThan(0);
         expect(reviewErrors[0]?.severity).toBe('error');
+    });
+    test('L3: Review at backlog (forbidden) does not trigger P1-P4 check', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Review scaffold"',
+            'status: backlog',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Review scaffold',
+            '',
+            '### Background',
+            '',
+            'Task context.',
+            '',
+            '### Review',
+            '',
+            'Post-implementation reflection — scaffolding, no P1-P4 table yet.',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+
+        const reviewErrors = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Review');
+        expect(reviewErrors.length).toBe(0); // L3 should not fire — Review is forbidden at backlog
     });
     test('L3: Requirements without R-numbering warns', async () => {
         const content = [

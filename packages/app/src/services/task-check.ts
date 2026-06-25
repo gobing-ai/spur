@@ -94,7 +94,7 @@ export class TaskCheckService extends PlanningCheckService {
         this.runL2(doc, entry, findings);
 
         // ── L3: Format rules (warning-first, 3 hard-core) ──
-        this.runL3(doc, findings);
+        this.runL3(doc, entry, findings);
         // ── L4: Traceability — feature_id edges, parent_wbs, dependencies, AC coverage
         const tasksDir = dirname(filePath);
         const featuresDir = join(dirname(tasksDir), 'features');
@@ -104,7 +104,7 @@ export class TaskCheckService extends PlanningCheckService {
     }
 
     // ── L3: Format rules ──
-    private runL3(doc: MarkdownDocument, findings: CheckFindings[]): void {
+    private runL3(doc: MarkdownDocument, entry: MatrixEntry | undefined, findings: CheckFindings[]): void {
         // Requirements: R-numbering (warning, only when section has real content)
         const reqBody = doc.getSection('Requirements');
         if (reqBody !== null && !isPlaceholderBody(reqBody)) {
@@ -146,9 +146,13 @@ export class TaskCheckService extends PlanningCheckService {
             }
         }
 
-        // Review: P1–P4 findings table (hard core)
+        // Review: P1–P4 findings table (hard core). Only fires when Review is
+        // *allowed* at the current status (required or optional) — a forward-reference
+        // scaffold at a status where Review is forbidden/absent is not forced to have
+        // a populated table (L2 already flags the section itself).
         const revBody = doc.getSection('Review');
-        if (revBody !== null && !isPlaceholderBody(revBody)) {
+        const revAllowed = (entry?.required ?? []).includes('Review') || (entry?.optional ?? []).includes('Review');
+        if (revBody !== null && !isPlaceholderBody(revBody) && revAllowed) {
             const hasPColumn = /P[1-4]/.test(revBody);
             if (!hasPColumn) {
                 findings.push({

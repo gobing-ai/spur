@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Unified dev-* operations reference + repoint ghost commands"
-status: wip
+status: testing
 template: feature-impl
 created_at: 2026-06-24T03:52:29.293Z
-updated_at: 2026-06-24T16:29:31.881Z
+updated_at: 2026-06-25T04:39:17.723Z
 feature_id: H2
 parent_wbs: "0109"
 priority: P1
@@ -91,21 +91,30 @@ Invariants: (1) no dev-* command delegates to an undefined sp:spur-dev operation
 10. Smoke-test: invoke each previously-ghost command and confirm defined behavior (no "operation not found", no improvisation).
 
 ### Solution
+| File:line | What / Why |
+|-----------|-------------|
+| `plugins/sp/skills/spur-dev/references/dev-operations.md:1-251` | New: unified reference for all 13 dev-* operations with operation map table + per-operation detail sections. SSOT per R1/AC1. |
+| `plugins/sp/commands/dev-changelog.md:9,29-49` | Replaced ghost `Skill()` delegation with inline git-log+conventional-commit-grouping procedure + dev-operations.md link. R2/AC2/AC3. |
+| `plugins/sp/commands/dev-gitmsg.md:9,26-44` | Replaced ghost `Skill()` delegation with inline git-diff+conventional-commit procedure + dev-operations.md link. R2/AC2/AC3. |
+| `plugins/sp/commands/dev-fixall.md:9,27-47` | Replaced ghost `Skill()` delegation with inline lint+test fix-loop procedure + dev-operations.md link. R2/AC2/AC3. |
+| `plugins/sp/commands/dev-handover.md:9,28-52` | Replaced ghost `Skill()` delegation with inline structured-doc-generation procedure + dev-operations.md link. R2/AC2/AC3. |
+| `plugins/sp/commands/dev-new-task.md:9,30-51` | Replaced ghost `Skill()` delegation with inline `spur task create`+intake procedure + dev-operations.md link. R2/AC2/AC3. |
+| `docs/04_DESIGN.md:449,736-750` | Added §7.8 dev-* operation map subsection + table row pointing to dev-operations.md. R4/AC8. |
 
-| File | Lines | What / Why |
-|------|-------|------------|
-| `plugins/sp/skills/spur-dev/references/dev-operations.md` | 1–251 (new) | Unified reference for all 13 dev-* operations: operation map table + per-operation detail sections (purpose, inputs, backing, behavior contract). Single source of truth — R1/AC1. |
-| `plugins/sp/commands/dev-changelog.md` | 9, 29–49 | Replaced `Skill(skill="sp:spur-dev", args="changelog $ARGUMENTS")` ghost delegation with inline git-log+grouping procedure + dev-operations.md link. R2/AC2/AC3. |
-| `plugins/sp/commands/dev-gitmsg.md` | 9, 26–44 | Replaced `Skill()` ghost delegation with inline git-diff+conventional-commit procedure + dev-operations.md link. R2/AC2/AC3. |
-| `plugins/sp/commands/dev-fixall.md` | 9, 27–47 | Replaced `Skill()` ghost delegation with inline lint+test fix-loop procedure + dev-operations.md link. R2/AC2/AC3. |
-| `plugins/sp/commands/dev-handover.md` | 9, 28–52 | Replaced `Skill()` ghost delegation with inline structured-doc-generation procedure + dev-operations.md link. R2/AC2/AC3. |
-| `plugins/sp/commands/dev-new-task.md` | 9, 30–51 | Replaced `Skill()` ghost delegation with inline `spur task create`+intake procedure + dev-operations.md link. R2/AC2/AC3. |
-| `docs/04_DESIGN.md` | 449 (table row), 736–750 (§7.8) | Added §7.8 dev-* operation map subsection + table row pointing to dev-operations.md. R4/AC8. |
+**Not changed (by design):** 8 `Skill()`-backed commands (implement, unit, review, verify, run, refine, plan, docs) — AC4 invariant. `dev-dogfood.md` — pre-existing work not authored by this task.
+### Testing
 
-**Not changed (by design):**
-- The 8 `Skill()`-backed commands (implement, unit, review, verify, run, refine, plan, docs) — AC4 invariant, delegation unchanged.
-- `dev-dogfood.md` — pre-existing working-tree change not authored by this task; left as-is.
-- AGENTS.md — sp plugin command surface (dev-* commands) not mentioned; no pointer needed per Design.
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1: dev-operations.md with all dev-* operations | **PARTIAL** | 11 of 13 AC-listed operations documented. `implement` covered as sub-mode of run (#4). `docs` operation missing — no entry. |
+| R2: 5 ghost commands repointed to real backing | **MET** | All 5 (changelog, gitmsg, fixall, handover, new-task) have inline procedures + dev-operations.md links. Zero ghost `Skill()` delegations remain. |
+| R3: Real flags in arg-hints | **MET** | changelog: `--since/--until/--version`; gitmsg: `--commit/--scope`; fixall: `<validation-command>/--max-retry/--scope`; handover: `<blocker description>`; new-task: `<description>/--feature/--template/--parent` |
+| R4: `bun run lint` exits 0 | **MET** | `bun run lint` clean — Biome + 7 workspace typecheck all pass |
+
+Coverage: 99.07% lines, 99.54% funcs.
+
+**Verdict: PARTIAL** — R1 is partial (docs operation missing from dev-operations.md). R2-R4 all MET.
 
 ### History
 - 2026-06-24T16:15:18.902Z todo → wip (system)
+- 2026-06-25T04:38:36.135Z wip → testing (system)
