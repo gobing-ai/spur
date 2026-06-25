@@ -48,9 +48,13 @@ export const FEATURE_STATUS_ICONS: Record<FeatureStatus, string> = {
     cancelled: '⛔',
 };
 
-/** Get the emoji icon for a task status (presentation-only). Returns '' for unknown. */
+/** Get the emoji icon for a task status (presentation-only). Normalizes legacy statuses so old rd3 tasks display correctly. */
 export function taskStatusIcon(status: string): string {
-    return (TASK_STATUS_ICONS as Record<string, string>)[status] ?? '';
+    try {
+        return (TASK_STATUS_ICONS as Record<string, string>)[normalizeTaskStatus(status)] ?? '';
+    } catch {
+        return '';
+    }
 }
 
 /** Get the emoji icon for a feature status (presentation-only). Returns '' for unknown. */
@@ -80,8 +84,12 @@ export const PROFILES = [
 /** Type alias for the canonical profile vocabulary. */
 export type Profile = (typeof PROFILES)[number];
 
-/** Task `type` enum — `task` is the default; `brainstorm` retained for corpus compat. */
-export const TASK_TYPES = ['task', 'brainstorm'] as const;
+/**
+ * Task `type` enum — the work-item kind. Mirrors the template variants so
+ * every template carries a `type` that matches its section layout. `task`
+ * is the catch-all default; `brainstorm` is the only non-task kind.
+ */
+export const TASK_TYPES = ['task', 'issue', 'review', 'meta', 'brainstorm'] as const;
 
 /** Type alias for the canonical task `type` vocabulary. */
 export type TaskType = (typeof TASK_TYPES)[number];
@@ -214,7 +222,21 @@ export const taskFrontmatterSchema = z.object({
     schema_version: z.literal(1),
     name: z.string().min(1),
     description: z.string().optional(),
-    status: z.enum(TASK_STATUSES as unknown as [TaskStatus, ...TaskStatus[]]),
+    status: z.preprocess(
+        (val) => {
+            // Normalize legacy PascalCase & alias statuses (old rd3 tasks) to
+            // canonical lowercase so existing task files remain readable.
+            if (typeof val === 'string') {
+                try {
+                    return normalizeTaskStatus(val);
+                } catch {
+                    // Unrecognized — pass through so Zod emits a clear error
+                }
+            }
+            return val;
+        },
+        z.enum(TASK_STATUSES as unknown as [TaskStatus, ...TaskStatus[]]),
+    ),
     type: z
         .enum(TASK_TYPES as unknown as [TaskType, ...TaskType[]])
         .optional()

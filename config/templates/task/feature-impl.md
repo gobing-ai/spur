@@ -5,7 +5,7 @@ description: ""
 status: backlog
 type: task
 profile: standard
-feature_id: "{{ FEATURE_ID }}"
+feature_id: null
 parent_wbs: null
 priority: P2
 tags: []

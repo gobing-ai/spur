@@ -89,10 +89,14 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option('--from-file <path>', 'File to read section body from (requires --section)')
         .option('--feature <id>', 'Set the feature_id frontmatter field (traceability edge)')
         .option('--priority <p>', 'Set the priority frontmatter field (P0–P3)')
+        .option(
+            '--no-lifecycle',
+            'Suppress lifecycle workflow run creation (use during pipeline runs to avoid orphaned lifecycle runs)',
+        )
         .option('--folder <path>', 'Custom tasks folder')
         .option('--json', 'Output machine-readable JSON')
         .action(async (wbs, status, options) => {
-            const svc = await makeService(context, options.folder);
+            const svc = await makeService(context, options.folder, options.lifecycle === false);
             try {
                 if (options.section !== undefined) {
                     if (options.fromFile === undefined) {
@@ -330,6 +334,32 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 context.setExitCode(1);
             }
         });
+
+    // ── path ──
+    task.command('path')
+        .summary('Resolve a WBS to its absolute task file path.')
+        .argument('<wbs>', 'Task WBS number')
+        .option('--folder <path>', 'Custom tasks folder')
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (wbs, options) => {
+            const svc = await makeService(context, options.folder);
+            try {
+                const filePath = await svc.getFilePath(wbs);
+                if (filePath !== null) {
+                    if (options.json) {
+                        context.output.write(toJson({ wbs, filePath }));
+                    } else {
+                        context.output.write(filePath);
+                    }
+                } else {
+                    context.output.error(`Task ${wbs} not found`);
+                    context.setExitCode(1);
+                }
+            } catch (err) {
+                context.output.error(String(err));
+                context.setExitCode(1);
+            }
+        });
 }
 const DEFAULT_TASKS_DIR = 'docs/tasks';
 
@@ -370,10 +400,10 @@ async function loadTaskFoldersConfig(projectRoot: string): Promise<TaskFoldersCo
     return DEFAULT_FOLDERS_CONFIG;
 }
 
-async function makeService(context: CliContext, folderOverride?: string): Promise<TaskService> {
+async function makeService(context: CliContext, folderOverride?: string, noLifecycle = false): Promise<TaskService> {
     const foldersConfig = await loadTaskFoldersConfig(context.cwd);
     const tasksDir = folderOverride ?? context.fs.resolve(foldersConfig.active_folder);
-    const lifecycle = makeLifecycleAdapter(context, TASK_LIFECYCLE_PROFILE);
+    const lifecycle = noLifecycle ? undefined : makeLifecycleAdapter(context, TASK_LIFECYCLE_PROFILE);
     const writeService = new PlanningWriteService({
         fs: context.fs,
         ...(lifecycle ? { lifecycle } : {}),
@@ -383,9 +413,52 @@ async function makeService(context: CliContext, folderOverride?: string): Promis
         tasksDir,
         writeService,
         sectionMatrix: await loadSectionMatrix(context.cwd),
+        resolveTemplate: (variant: string) => loadTemplateContent(context.cwd, variant),
         resolveTemplateBodies: (variant: string) => loadTemplateBodies(context.cwd, variant),
         foldersConfig,
     });
+}
+
+/** Cache of per-variant raw template content (read once per process). */
+const templateContentCache = new Map<string, string>();
+/** Variants we've already checked and confirmed have no template file. */
+const templateMissSet = new Set<string>();
+
+/**
+ * Read a variant's template file and return its raw markdown content.
+ * Resolution order:
+ *   1. `.spur/tasks/templates/<variant>.md` (project-local, seeded by `spur init`)
+ *   2. `config/templates/task/<variant>.md` (bundled fallback)
+ * Returns the raw file content (with `{{ PLACEHOLDERS }}` intact) so
+ * `renderTaskTemplate` can substitute real values. Returns `undefined`
+ * when no template file is found — callers fall back to the legacy
+ * `buildTaskSkeleton` path.
+ */
+function loadTemplateContent(projectRoot: string, variant: string): string | undefined {
+    if (templateContentCache.has(variant)) return templateContentCache.get(variant);
+    if (templateMissSet.has(variant)) return undefined;
+
+    // 1. Project-local
+    const localPath = join(projectRoot, '.spur', 'tasks', 'templates', `${variant}.md`);
+    if (existsSync(localPath)) {
+        const content = readFileSync(localPath, 'utf8');
+        templateContentCache.set(variant, content);
+        return content;
+    }
+
+    // 2. Bundled fallback
+    const root = bundledConfigRoot();
+    if (root !== null) {
+        const templatePath = join(root, 'templates', 'task', `${variant}.md`);
+        if (existsSync(templatePath)) {
+            const content = readFileSync(templatePath, 'utf8');
+            templateContentCache.set(variant, content);
+            return content;
+        }
+    }
+
+    templateMissSet.add(variant);
+    return undefined;
 }
 
 /** Cache of per-variant template bodies (read once per process from bundled config). */

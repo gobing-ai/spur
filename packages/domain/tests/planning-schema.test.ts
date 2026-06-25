@@ -68,8 +68,15 @@ describe('taskFrontmatterSchema', () => {
         expect(result.success).toBe(false);
     });
 
-    test('rejects unknown status values', () => {
+    test('normalizes known alias status values', () => {
+        // 'pending' is a known alias → 'backlog'
         const result = taskFrontmatterSchema.safeParse({ ...baseTaskFrontmatter, status: 'pending' });
+        expect(result.success).toBe(true);
+        if (result.success) expect(result.data.status).toBe('backlog');
+    });
+
+    test('rejects truly unknown status values', () => {
+        const result = taskFrontmatterSchema.safeParse({ ...baseTaskFrontmatter, status: 'bogus' });
         expect(result.success).toBe(false);
     });
 

@@ -3,7 +3,7 @@ schema_version: 1
 name: "{{ NAME }}"
 description: ""
 status: backlog
-type: task
+type: brainstorm
 profile: standard
 feature_id: null
 parent_wbs: null
@@ -20,30 +20,9 @@ updated_at: "{{ CREATED_AT }}"
 
 {{ BACKGROUND }}
 
-### Acceptance Criteria
-
-```gherkin
-Feature: {{ NAME }}
-
-  Scenario: Basic acceptance
-    Given a precondition
-    When an action is taken
-    Then an expected result occurs
-```
-
-- [ ] Acceptance checklist item
-
-### Design
+### Q&A
 
 ### Plan
-
-- [ ] Implementation step
-
-### Solution
-
-### Testing
-
-### Review
 
 ### References
 

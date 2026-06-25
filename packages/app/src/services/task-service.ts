@@ -10,6 +10,7 @@ import {
     buildTaskSkeleton,
     DEFAULT_TASK_VARIANT,
     MarkdownDocument,
+    renderTaskTemplate,
     TASK_STATUSES,
     type TaskBatchItem,
     type TaskSection,
@@ -27,6 +28,43 @@ import {
     renderSolutionFromDiff,
     renderTesting,
 } from './task-record';
+
+/**
+ * Replace or add a frontmatter field in rendered markdown.
+ * The rendered template carries placeholder defaults (e.g. `feature_id: null`,
+ * `status: backlog`); this patches them to the create-time resolved values
+ * before the file is written.
+ *
+ * YAML-aware: key must appear at line-start (no leading whitespace) so it
+ * doesn't match inside a section body. A `null` default is replaced; a
+ * non-existent key is appended before the closing `---` fence.
+ */
+function patchFrontmatterField(rendered: string, key: string, value: string): string {
+    // Replace an existing key at line start (YAML frontmatter only).
+    // The caller owns YAML formatting (formatYamlValue) — do NOT re-format here.
+    const existingRe = new RegExp(`^(?=\\s*${escapeRegex(key)}:)`, 'm');
+    if (existingRe.test(rendered)) {
+        return rendered.replace(new RegExp(`^${escapeRegex(key)}:.*$`, 'm'), `${key}: ${value}`);
+    }
+    // Key not present — append before the closing `---` fence
+    return rendered.replace(/^---\n/m, `---\n${key}: ${value}\n`);
+}
+
+function escapeRegex(s: string): string {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Wrap a value in double quotes when YAML would misinterpret it.
+ * Covers: special characters, numeric-looking strings (e.g. WBS `0042`
+ * would be parsed as octal), and the bare `null`/`true`/`false` literals.
+ */
+function formatYamlValue(value: string): string {
+    if (/[:{}[\],&*?|>!%@`#"'\\\n\r]/.test(value)) return `"${value}"`;
+    if (/^(null|true|false|yes|no|on|off)$/i.test(value)) return `"${value}"`;
+    if (/^\d/.test(value) && !/^\d{4}-\d{2}-\d{2}/.test(value)) return `"${value}"`;
+    return value;
+}
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -63,9 +101,19 @@ export interface TaskServiceContext {
      */
     sectionMatrix?: SectionMatrix;
     /**
+     * Resolve raw template content for a variant. Returns the template
+     * markdown as-is (with `{{ PLACEHOLDERS }}` intact) so the create path
+     * can render it with real values via `renderTaskTemplate`. When present,
+     * `create()` uses template-as-skeleton rendering; when absent, creation
+     * falls back to the legacy `buildTaskSkeleton` path.
+     */
+    resolveTemplate?: (variant: string) => string | undefined;
+    /**
      * Resolve per-variant section-body overrides from the variant's template
-     * file. The caller (CLI) owns file reading; returning `{}` (or omitting
-     * this) means matrix + guidance only.
+     * file. Used by the legacy `buildTaskSkeleton` path (fallback when
+     * `resolveTemplate` is absent) and by `batchCreate`. The caller (CLI)
+     * owns file reading; returning `{}` (or omitting this) means matrix +
+     * guidance only.
      */
     resolveTemplateBodies?: (variant: string) => Partial<Record<TaskSection, string>>;
     /**
@@ -264,6 +312,33 @@ export class TaskService {
             const filePath = this.resolveTaskPath(wbs, slug);
 
             const now = new Date().toISOString();
+
+            // ── template-as-skeleton path (preferred) ──
+            const rawTemplate = this.ctx.resolveTemplate?.(variant);
+            if (rawTemplate !== undefined) {
+                let content = renderTaskTemplate(rawTemplate, {
+                    NAME: params.title,
+                    WBS: wbs,
+                    BACKGROUND: background,
+                    CREATED_AT: now,
+                    ...(params.featureId !== undefined ? { FEATURE_ID: params.featureId } : {}),
+                });
+                // Post-render frontmatter patching: the template carries defaults
+                // (status: backlog, feature_id: null, etc.) — override with the
+                // values determined by the create path.
+                content = patchFrontmatterField(content, 'status', status);
+                content = patchFrontmatterField(content, 'template', variant);
+                if (params.featureId !== undefined) {
+                    content = patchFrontmatterField(content, 'feature_id', formatYamlValue(params.featureId));
+                }
+                if (params.parentWbs !== undefined) {
+                    content = patchFrontmatterField(content, 'parent_wbs', formatYamlValue(params.parentWbs));
+                }
+                const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder };
+                return { ref, content };
+            }
+
+            // ── legacy buildTaskSkeleton fallback ──
             const frontmatter = [
                 'schema_version: 1',
                 `name: "${params.title}"`,
@@ -511,6 +586,35 @@ export class TaskService {
             const filePath = this.resolveTaskPath(wbs, slug);
 
             const now = new Date().toISOString();
+
+            // ── template-as-skeleton path (preferred) ──
+            const rawTemplate = this.ctx.resolveTemplate?.(variant);
+            if (rawTemplate !== undefined) {
+                let content = renderTaskTemplate(rawTemplate, {
+                    NAME: item.name,
+                    WBS: wbs,
+                    BACKGROUND: background,
+                    CREATED_AT: now,
+                    ...(item.feature_id !== undefined && item.feature_id !== null
+                        ? { FEATURE_ID: item.feature_id }
+                        : {}),
+                });
+                content = patchFrontmatterField(content, 'status', status);
+                content = patchFrontmatterField(content, 'template', variant);
+                if (item.feature_id !== undefined && item.feature_id !== null) {
+                    content = patchFrontmatterField(content, 'feature_id', formatYamlValue(item.feature_id));
+                }
+                if (item.parent_wbs !== undefined && item.parent_wbs !== null) {
+                    content = patchFrontmatterField(content, 'parent_wbs', formatYamlValue(item.parent_wbs));
+                }
+                if (item.priority !== undefined && item.priority !== null) {
+                    content = patchFrontmatterField(content, 'priority', item.priority);
+                }
+                const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder };
+                return { ref, content };
+            }
+
+            // ── legacy buildTaskSkeleton fallback ──
             const fmLines = [
                 'schema_version: 1',
                 `name: "${item.name}"`,
@@ -736,6 +840,14 @@ export class TaskService {
             }
         }
         return String(max + 1).padStart(4, '0');
+    }
+
+    /** Resolve a WBS to its absolute file path. Returns `null` when not found. */
+    async getFilePath(wbs: string): Promise<string | null> {
+        const fileName = await this.findTaskFileName(wbs);
+        if (!fileName) return null;
+        const slug = fileName.replace(/^\d{4}_/, '').replace(/\.md$/, '');
+        return this.resolveTaskPath(wbs, slug);
     }
 
     private async resolveTaskFile(wbs: string): Promise<string> {

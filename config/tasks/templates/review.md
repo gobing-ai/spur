@@ -3,7 +3,7 @@ schema_version: 1
 name: "{{ NAME }}"
 description: ""
 status: backlog
-type: task
+type: review
 template: review
 profile: standard
 feature_id: null

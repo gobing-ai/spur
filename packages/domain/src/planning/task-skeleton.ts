@@ -165,5 +165,50 @@ export function extractTemplateBodies(templateMarkdown: string): Partial<Record<
     return bodies;
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Template rendering — "template as full skeleton" model
+// ─────────────────────────────────────────────────────────────────────────
+
+/** Variables substituted into task template placeholders. */
+export interface TaskTemplateVars {
+    /** Task title (replaces `{{ NAME }}`). */
+    NAME: string;
+    /** Allocated WBS number (replaces `{{ WBS }}`). */
+    WBS: string;
+    /** Background prose (replaces `{{ BACKGROUND }}`). */
+    BACKGROUND: string;
+    /** Creation timestamp in ISO 8601 (replaces `{{ CREATED_AT }}`). */
+    CREATED_AT: string;
+    /** Optional feature ID (replaces `{{ FEATURE_ID }}` in feature-impl template). */
+    FEATURE_ID?: string;
+}
+
+/**
+ * Render a task template by substituting `{{ PLACEHOLDER }}` tokens with real
+ * values. This implements the "template as full skeleton" model: the template IS
+ * the document structure; placeholders are FILLED, not stripped. Any remaining
+ * unmatched `{{ ... }}` tokens are cleaned up.
+ *
+ * Design rationale: the old `buildTaskSkeleton` approach used the matrix to
+ * decide which sections appear and extracted template body fragments — but this
+ * silently dropped sections the template author intended (e.g. `### Review` in
+ * `review.md`). Template-as-skeleton fixes that: the template owns the full
+ * section layout; the matrix gates validation only.
+ */
+export function renderTaskTemplate(templateContent: string, vars: TaskTemplateVars): string {
+    let rendered = templateContent;
+
+    for (const [key, value] of Object.entries(vars)) {
+        if (value === undefined) continue;
+        // Match {{KEY}} or {{ KEY }} (with optional spaces inside braces)
+        rendered = rendered.replace(new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g'), value);
+    }
+
+    // Clean up any remaining unmatched {{ ... }} placeholders
+    rendered = rendered.replace(/\{\{\s*\w+\s*\}\}/g, '');
+
+    return rendered;
+}
+
 /** Re-export the canonical guidance map for docs/skill generation and tests. */
 export { SECTION_GUIDANCE };
