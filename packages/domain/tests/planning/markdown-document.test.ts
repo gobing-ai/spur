@@ -602,4 +602,115 @@ describe('MarkdownDocument', () => {
             expect(reparsed.getSection('Goal')).toContain('More goal.');
         });
     });
+
+    describe('parse() duplicate section dedup', () => {
+        test('drops duplicate section, keeps first occurrence', () => {
+            const content = [
+                '---',
+                'name: Dup Test',
+                'status: backlog',
+                '---',
+                '',
+                '## 0099. Dup Test',
+                '',
+                '### Background',
+                '',
+                'First background — the real one.',
+                '',
+                '### Plan',
+                '',
+                '- [ ] Real plan item',
+                '',
+                '### Background',
+                '',
+                'Second background — corrupted duplicate.',
+                '',
+                '### Plan',
+                '',
+                '- [ ] Duplicate plan item',
+                '',
+            ].join('\n');
+
+            const doc = MarkdownDocument.parse(content, 'task');
+
+            // Only one of each section survives
+            expect(doc.sectionNames.filter((n) => n === 'Background')).toHaveLength(1);
+            expect(doc.sectionNames.filter((n) => n === 'Plan')).toHaveLength(1);
+
+            // First occurrence content is preserved
+            expect(doc.getSection('Background')).toContain('First background');
+            expect(doc.getSection('Background')).not.toContain('Second background');
+            expect(doc.getSection('Plan')).toContain('Real plan item');
+            expect(doc.getSection('Plan')).not.toContain('Duplicate plan item');
+
+            // Duplicate names are recorded
+            expect(doc.duplicateSectionNames).toContain('Background');
+            expect(doc.duplicateSectionNames).toContain('Plan');
+        });
+
+        test('serialize after dedup produces clean output', () => {
+            const content = [
+                '---',
+                'name: Clean Test',
+                'status: backlog',
+                '---',
+                '',
+                '## 0100. Clean Test',
+                '',
+                '### Background',
+                '',
+                'Keep me.',
+                '',
+                '### Background',
+                '',
+                'Drop me.',
+                '',
+            ].join('\n');
+
+            const doc = MarkdownDocument.parse(content, 'task');
+            const out = doc.serialize();
+
+            // Re-parse — should have no duplicates
+            const reparsed = MarkdownDocument.parse(out, 'task');
+            expect(reparsed.duplicateSectionNames).toHaveLength(0);
+            expect(reparsed.sectionNames.filter((n) => n === 'Background')).toHaveLength(1);
+            expect(reparsed.getSection('Background')).toContain('Keep me.');
+            expect(reparsed.getSection('Background')).not.toContain('Drop me.');
+        });
+
+        test('no duplicates = empty duplicateSectionNames', () => {
+            const doc = MarkdownDocument.parse(TASK_FILE, 'task');
+            expect(doc.duplicateSectionNames).toHaveLength(0);
+        });
+
+        test('replaceSection still targets the (sole) section after dedup', () => {
+            const content = [
+                '---',
+                'name: Replace Test',
+                'status: backlog',
+                '---',
+                '',
+                '## 0101. Replace Test',
+                '',
+                '### Background',
+                '',
+                'Old background.',
+                '',
+                '### Background',
+                '',
+                'Duplicate background.',
+                '',
+            ].join('\n');
+
+            const doc = MarkdownDocument.parse(content, 'task');
+            doc.replaceSection('Background', 'New background content.');
+            const out = doc.serialize();
+
+            const reparsed = MarkdownDocument.parse(out, 'task');
+            expect(reparsed.duplicateSectionNames).toHaveLength(0);
+            expect(reparsed.getSection('Background')).toContain('New background content.');
+            expect(reparsed.getSection('Background')).not.toContain('Old background');
+            expect(reparsed.getSection('Background')).not.toContain('Duplicate background');
+        });
+    });
 });

@@ -143,6 +143,8 @@ export class MarkdownDocument {
     private readonly _sections: Section[];
     /** Same-level heading lines stripped from section bodies during this doc's mutations (R2). */
     private readonly _strippedHeadings: string[] = [];
+    /** Section names that appeared more than once in the source — dropped at parse time, keeping first. */
+    private readonly _duplicateSectionNames: string[] = [];
 
     private constructor(
         domain: MarkdownDomain,
@@ -196,7 +198,7 @@ export class MarkdownDocument {
         const hits = findHeadings(body, hashes);
         const first = hits[0];
         const preamble = first !== undefined ? body.slice(0, first.index) : body;
-        const sections: Section[] = hits.map((hit, idx) => {
+        const allSections: Section[] = hits.map((hit, idx) => {
             const next = hits[idx + 1];
             const end = next !== undefined ? next.index : body.length;
             return {
@@ -207,7 +209,26 @@ export class MarkdownDocument {
             };
         });
 
-        return new MarkdownDocument(domain, frontmatterBlock, frontmatter, preamble, sections);
+        // Deduplicate: keep the first occurrence of each section name, drop the
+        // rest. Duplicate sections are a structural corruption (copy-paste error,
+        // double-write, or agent body-that-includes-other-section-headings).
+        // Recording the dropped names lets the CLI surface them as warnings so
+        // the corruption is visible rather than silently healed.
+        const seen = new Set<string>();
+        const sections: Section[] = [];
+        const duplicateNames: string[] = [];
+        for (const s of allSections) {
+            if (seen.has(s.name)) {
+                duplicateNames.push(s.name);
+            } else {
+                seen.add(s.name);
+                sections.push(s);
+            }
+        }
+
+        const doc = new MarkdownDocument(domain, frontmatterBlock, frontmatter, preamble, sections);
+        doc._duplicateSectionNames.push(...duplicateNames);
+        return doc;
     }
 
     /** Domain kind passed to {@link parse}. */
@@ -267,6 +288,16 @@ export class MarkdownDocument {
      */
     get strippedHeadings(): readonly string[] {
         return this._strippedHeadings;
+    }
+
+    /**
+     * Section names that appeared more than once in the source markdown and were
+     * dropped at parse time (keeping the first occurrence). Empty unless the file
+     * was structurally corrupted. The CLI layer surfaces these as warnings so the
+     * corruption is visible rather than silently self-healed.
+     */
+    get duplicateSectionNames(): readonly string[] {
+        return this._duplicateSectionNames;
     }
 
     private get canonicalSections(): readonly string[] {

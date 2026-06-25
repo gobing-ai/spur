@@ -411,6 +411,13 @@ export class PlanningWriteService {
                 'Use bullet lists, tables, or **bold** labels for sub-structure instead.',
         );
 
+        for (const dup of doc.duplicateSectionNames) {
+            warnings.push(
+                `Dropped duplicate "${dup}" section (appeared more than once in the file — ` +
+                    'likely a copy-paste or double-write error). The first occurrence was kept.',
+            );
+        }
+
         return {
             ref,
             eventName,

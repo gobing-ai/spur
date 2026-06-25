@@ -162,6 +162,13 @@ that turns the `todo` HITL-review gate from a formality into a real one — a re
 time. Design written against a stale snapshot of the codebase rots; design written right before
 `implement` reflects current reality. Refine `0042`, run `0042`; refine `0043`, run `0043`.
 
+**Refine arguments** (defined on the `/sp:dev-refine` entry point, passed through verbatim):
+
+| Argument | Effect |
+|----------|--------|
+| `--focus <mode>` | Narrows the gap analysis to a subset of domain hints. See the `sp:dev-refine` skill for the full value table (`all`, `requirements`, `background`, `constraints`, `acceptance`, `quick`). Default `all`. |
+| `--auto` | Skip interactive Q&A — synthesize improvements from the task content alone. Use for well-scoped tasks where the agent can fill gaps without operator input. |
+
 > **Requirements formatting:** author R-items as a GitHub task-list checkbox — `- [ ] R1. <text>`
 > — so progress is trackable in the file. The L3 check accepts the `- [ ] Rn.` / `- Rn.` / `Rn.`
 > forms; keep the `Rn.` (period) token so the R-numbering rule recognizes it.
