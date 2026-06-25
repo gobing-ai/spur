@@ -184,6 +184,17 @@ describe('TaskService', () => {
             expect(parented.some((t) => t.name === 'Unparented')).toBe(false);
         });
 
+        test('filters by feature ID (the feature_id traceability edge)', async () => {
+            await svc.create({ title: 'Feature-linked', featureId: 'A' });
+            await svc.create({ title: 'Other-feature', featureId: 'B' });
+            await svc.create({ title: 'Unlinked' });
+
+            const linkedToA = await svc.list({ featureId: 'A' });
+            expect(linkedToA.some((t) => t.name === 'Feature-linked')).toBe(true);
+            expect(linkedToA.some((t) => t.name === 'Other-feature')).toBe(false);
+            expect(linkedToA.some((t) => t.name === 'Unlinked')).toBe(false);
+        });
+
         test('filters by phase (legacy alias for status)', async () => {
             await svc.create({ title: 'Phase test', status: 'wip' });
 

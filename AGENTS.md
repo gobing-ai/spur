@@ -168,11 +168,12 @@ spur team       start|stop                    # Phase-4 stubs
 spur task       create <title> [--feature <id>] [--parent <wbs>] [--json]
 spur task       show <wbs> [--json]
 spur task       update <wbs> <status> [--section <name> --from-file <path>] [--json]
-spur task       list [--status <s>] [--json]
+spur task       list [--status <s>] [--parent <wbs>] [--feature <id>] [--json]
 spur task       refresh [--json]
 spur task       batch-create --file <json> [--json]
 spur task       resolve <file-path> [--json]
 spur task       check [<wbs>] [--strict] [--json]
+spur task       verdict <wbs> [--from-answer <path>] [--json]
 spur task       record <wbs> [--verdict-file <path>] [--solution-from-diff] [--transition <status>] [--json]
 spur task       migrate                         # Reserved (A17) — board-cutover gate; not yet wired
 spur feature    create <name> [--parent <id>] [--json]

@@ -159,6 +159,8 @@ export interface TaskShowResult extends TaskSummary {
 export interface TaskListFilters {
     status?: string;
     parentWbs?: string;
+    /** Filter to tasks linked to this feature (the `feature_id` traceability edge). */
+    featureId?: string;
     folder?: string;
     /** Legacy alias: 'phase' maps to status filter for backward compat. */
     phase?: string;
@@ -768,9 +770,11 @@ export class TaskService {
                 const fm = doc.frontmatterData ?? {};
                 const status = (fm.status as string) ?? '';
                 const parentWbs = (fm.parent_wbs as string | null) ?? undefined;
+                const featureId = (fm.feature_id as string | null) ?? undefined;
 
                 if (filters?.status !== undefined && filters.status !== status) continue;
                 if (filters?.parentWbs !== undefined && filters.parentWbs !== parentWbs) continue;
+                if (filters?.featureId !== undefined && filters.featureId !== featureId) continue;
                 if (filters?.phase !== undefined && filters.phase !== status) continue;
 
                 tasks.push({

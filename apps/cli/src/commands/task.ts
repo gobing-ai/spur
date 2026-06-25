@@ -145,6 +145,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option('--status <s>', 'Filter by status')
         .option('--phase <p>', 'Filter by phase (legacy alias for --status)')
         .option('--parent <wbs>', 'Filter by parent WBS')
+        .option('--feature <id>', 'Filter by linked feature ID (feature_id edge)')
         .option('--folder <path>', 'Custom tasks folder')
         .option('--json', 'Output machine-readable JSON')
         .action(async (options) => {
@@ -154,6 +155,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     status: options.status,
                     phase: options.phase,
                     parentWbs: options.parent,
+                    featureId: options.feature,
                 });
                 if (options.json) {
                     context.output.write(toJson(tasks));
