@@ -29,8 +29,7 @@ variants:
       forbidden: [Review]
     testing:
       required: [Solution, Testing]
-      optional: [Background]
-      forbidden: [Review]
+      optional: [Background, Review]
     # done REQUIRES the evidence trio (Solution/Testing/Review). The spec sections
     # a task was built from (Design/Plan/AC/…) are OPTIONAL, not forbidden, so a
     # finished task keeps its design history rather than being stripped to pass the
@@ -61,8 +60,7 @@ variants:
       forbidden: [Review]
     testing:
       required: [Solution, Testing]
-      optional: [Background, Requirements, Acceptance Criteria, Design, Plan]
-      forbidden: [Review]
+      optional: [Background, Requirements, Acceptance Criteria, Design, Plan, Review]
     # done keeps the spec sections optional (see `standard` rationale above) so a
     # finished feature-impl task retains its Design/Plan/AC history.
     done:
@@ -91,8 +89,7 @@ variants:
       forbidden: [Review]
     testing:
       required: [Root Cause, Solution, Testing]
-      optional: [Background]
-      forbidden: [Review]
+      optional: [Background, Review]
     done:
       required: [Root Cause, Solution, Testing, Review]
       optional: [Background, Acceptance Criteria, Design, Plan, Q&A]
