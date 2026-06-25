@@ -1,6 +1,6 @@
 ---
 name: dev-operations
-description: Unified reference for all 12 dev-* operations — purpose, inputs, backing (skill/CLI/inline), and behavior contract. The single source of truth for what each `/sp:dev-*` command does. (`implement` is covered as a sub-mode of run, #4.)
+description: Unified reference for all 11 dev-* operations — purpose, inputs, backing (skill/CLI/inline), and behavior contract. The single source of truth for what each `/sp:dev-*` command does. (`implement` is covered as a sub-mode of run, #4.)
 see_also:
   - spur-dev
 ---
@@ -16,13 +16,14 @@ table is the index; the per-operation sections below are the detail.
 | Pattern | Meaning | Commands |
 |---------|---------|----------|
 | `Skill()` | Delegates to a backing skill via `Skill(skill="<skill>", args="<op> $ARGUMENTS")`. The skill owns the procedure; the command is a thin entry point. | implement, unit, review, verify, run, refine, plan |
-| `inline` | The procedure is defined directly in the command file. No `Skill()` delegation — the command carries its own steps. | changelog, gitmsg, fixall, handover, new-task |
+| `inline` | The procedure is defined directly in the command file. No `Skill()` delegation — the command carries its own steps. | changelog, gitmsg, fixall, handover |
 
 The 7 `Skill()` commands back onto two skills: `sp:spur-dev` (planning + execution workflow) and
 `sp:code-verification` (SECU review + traceability). One additional `Skill()` command (`dev-brainstorm`)
-backs onto `sp:brainstorm` (structured ideation). The 5 `inline` commands cover git tooling and
-operational utilities that have no natural skill home — creating a skill for each would be scope
-creep for one-liner procedures.
+backs onto `sp:brainstorm` (structured ideation) and carries the two artifact exits — `--task` (one
+task) and `--feature` (validated feature with BDD AC; the front-half entry that hands off to
+`dev-plan`). The 4 `inline` commands cover git tooling and operational utilities that have no natural
+skill home — creating a skill for each would be scope creep for one-liner procedures.
 
 > **`dev-dogfood`** is not in this table. It is a sanctioned fat-file exception that carries its full
 > 4-phase protocol inline and does not map to a dev-* operation. See its command file for details.
@@ -42,8 +43,7 @@ creep for one-liner procedures.
 | 9 | gitmsg | `dev-gitmsg` | `inline` | git diff + conventional commit | `[--commit] [--scope <path>]` |
 | 10 | fixall | `dev-fixall` | `inline` | lint + test fix loop | `[--scope <path>]` |
 | 11 | handover | `dev-handover` | `inline` | structured doc generation | `"<blocker description>"` |
-| 12 | new-task | `dev-new-task` | `inline` | `spur task create` + intake | `"<description>" [--feature <id>] [--template <variant>] [--parent <wbs>]` |
-| 13 | brainstorm | `dev-brainstorm` | `Skill()` | `sp:brainstorm` (`dev-brainstorm`) | `"<topic>" [--depth <basic\|detailed\|comprehensive>] [--options <n>] [--skip-discovery]` |
+| 12 | brainstorm | `dev-brainstorm` | `Skill()` | `sp:brainstorm` (`dev-brainstorm`) | `"<topic>" [--depth <basic\|detailed\|comprehensive>] [--options <n>] [--skip-discovery] [--task [<feature-id>]] [--feature [<parent-id>]]` |
 
 ---
 
@@ -111,12 +111,16 @@ must not be changed without updating the backing skill.
 - **Behavior:** Read the affected doc → apply the constitution's edit rules (single-source-of-truth, cross-reference updates, same-commit sync triggers) → write via the correct tool.
 - **Delegation:** `Skill(skill="sp:doc-evolve", args="$ARGUMENTS")` (no thin command wrapper)
 
-### 13. brainstorm
+### 12. brainstorm
 
 - **Purpose:** Interactive solution design — heuristic discovery interview (grilling) followed by structured ideation with trade-offs and confidence scoring.
-- **Inputs:** `"<topic>"` (required). `--depth <basic|detailed|comprehensive>` controls how deep to walk the decision tree. `--options <n>` sets the number of solution approaches (default 3). `--skip-discovery` skips the grilling interview and goes straight to ideation.
+- **Inputs:** `"<topic>"` (required). `--depth <basic|detailed|comprehensive>` controls how deep to walk the decision tree. `--options <n>` sets the number of solution approaches (default 3). `--skip-discovery` skips the grilling interview and goes straight to ideation. `--task [<feature-id>]` and `--feature [<parent-id>]` are the two **artifact exits** (mutually exclusive — see below).
 - **Backing:** `sp:brainstorm` skill, `dev-brainstorm` operation.
 - **Behavior:** Two-phase protocol. Phase 1 (inline): walk the decision tree one question at a time, each with a recommended answer, exploring the codebase before asking the user. Phase 2 (delegated): pass the resolved decision tree to `sp:brainstorm` for structured ideation — each approach includes description, trade-offs, implementation notes, confidence level, and decision trace.
+- **Artifact exits (mutually exclusive):**
+  - `--task [<feature-id>]` — create one `todo` task from the ⭐ approach via `spur task create` (Background/Requirements/Plan seeded from the brainstorm). The fast path for a single unit of work.
+  - `--feature [<parent-id>]` — the **front-half entry**: `spur feature create`, then author Goal/Scope/BDD-AC by editing the feature file (no `--section` verb on `feature update`), then loop `spur feature check` to exit 0. Lands a validated feature; hands off to `/sp:dev-plan --feature <ID>` for decomposition. AC scenarios derive from the decision trace per [ac-style-guide.md](ac-style-guide.md).
+  - Passing both is an error.
 - **Delegation:** `Skill(skill="sp:brainstorm", args="dev-brainstorm --context <decision-tree> --options <n>")`
 
 ---
@@ -224,18 +228,3 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
   5. Print the path to the handover document.
 - **Invariants:** The handover is honest — rejected approaches are recorded so the next agent doesn't retry them. The blocker is specific, not "it doesn't work."
 
-### 12. new-task
-
-- **Purpose:** Create a single task file from a description via intake Q&A and `spur task create`.
-- **Inputs:** `"<description>"` (required, positional). `--feature <id>` links the task to a feature. `--template <variant>` selects the task template (`default`, `feature-impl`, `issue`, `review`, `meta`). `--parent <wbs>` creates a sub-task.
-- **Backing:** `inline` — `spur task create` + intake Q&A.
-- **Behavior:**
-  1. **Intake:** clarify the task scope with the operator:
-     - What is the task trying to accomplish? (Refine the description if vague.)
-     - Which feature does it belong to? (Use `--feature` if given; ask if not.)
-     - What template variant fits? (Use `--template` if given; default to `feature-impl` when `--feature` is set, `default` otherwise.)
-     - Is this a sub-task? (Use `--parent` if given; ask if the description implies nesting.)
-  2. **Create:** run `spur task create "<title>" --feature <id> --template <variant> --parent <wbs> --json` (omit `--feature`/`--parent` if not applicable).
-  3. **Report:** print the new task's WBS and file path.
-  4. For batch task creation from a decomposed feature, direct the operator to `dev-plan` instead — this command creates one task at a time.
-- **Invariants:** Always goes through `spur task create` — never writes a task file directly. The CLI validates the frontmatter and section structure before writing.

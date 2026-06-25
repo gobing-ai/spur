@@ -736,14 +736,29 @@ Two primitives back the anti-hallucination migration (superskill task 0041):
 ### 7.8 `sp:dev-*` command operations
 
 The `sp:dev-*` commands back onto four skills (`sp:spur-dev`, `sp:code-verification`,
-`sp:doc-evolve`, `sp:brainstorm`) or define their procedure inline. The authoritative reference for all 13 operations —
+`sp:doc-evolve`, `sp:brainstorm`) or define their procedure inline. The authoritative reference for all 11 operations —
 purpose, inputs, backing, behavior contract — is
 [`plugins/sp/skills/spur-dev/references/dev-operations.md`](../plugins/sp/skills/spur-dev/references/dev-operations.md).
 
 | Pattern | Operations | Backing |
 |---------|-----------|---------|
-| `Skill()` delegation | implement, unit, review, verify, run, refine, plan, docs | `sp:spur-dev`, `sp:code-verification`, `sp:doc-evolve` |
-| Inline procedure | changelog, gitmsg, fixall, handover, new-task | git CLI + `spur` CLI + agent reasoning |
+| `Skill()` delegation | implement, unit, review, verify, run, refine, plan, docs, brainstorm | `sp:spur-dev`, `sp:code-verification`, `sp:doc-evolve`, `sp:brainstorm` |
+| Inline procedure | changelog, gitmsg, fixall, handover | git CLI + `spur` CLI + agent reasoning |
+
+**Brainstorm artifact exits.** `dev-brainstorm` runs the grilling interview → ideation, then lands an
+artifact via one of two **mutually exclusive** exits:
+
+- `--task [<feature-id>]` — one `todo` task via `spur task create` (the fast path for a single unit
+  of work; skips feature/AC ceremony on purpose).
+- `--feature [<parent-id>]` — the **front-half entry**: `spur feature create`, then author Goal/Scope
+  and BDD acceptance criteria from the decision trace by **editing the feature file directly** (note:
+  `spur feature update` has no `--section`/`--from-file` verb — unlike `spur task update`), then loop
+  the `spur feature check` gate to exit 0. Lands a validated feature and hands off to
+  `/sp:dev-plan --feature <ID>` for schema-gated decomposition. Passing both exits is an error.
+
+> **`dev-new-task` retired (2026-06-25).** The standalone single-task command was a thin wrapper over
+> `spur task create` + intake; its use cases are absorbed by `dev-brainstorm --skip-discovery --task`
+> (same result, seeds Background/Requirements/Plan). Operation count dropped 12 → 11.
 
 **Pipeline step→command mapping (ADR-026):** `implement` → `/sp:dev-run --mode implement`, `test` → `/sp:dev-unit`,
 `review` → `/sp:dev-review`, `verify` → `/sp:dev-verify` (§7.5). The remaining commands are

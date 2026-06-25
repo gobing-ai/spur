@@ -5,7 +5,6 @@
       "Skill(rd3:task-decomposition)",
       "Skill(sp:rule-refine)",
       "Skill(sp:dev-run)",
-
       "WebFetch(domain:hono.dev)",
       "WebFetch(domain:www.npmjs.com)",
       "WebFetch(domain:orm.drizzle.team)",
@@ -13,7 +12,6 @@
       "WebFetch(domain:logtape.org)",
       "WebFetch(domain:mael.dev)",
       "WebFetch(domain:developers.cloudflare.com)",
-
       "Bash(bun run:*)",
       "Bash(bun test:*)",
       "Bash(bun add:*)",
@@ -29,7 +27,6 @@
       "Bash(npx biome *)",
       "Bash(npx tsc *)",
       "Bash(npm view *)",
-
       "Bash(echo:*)",
       "Bash(grep export:*)",
       "Bash(rtk ls *)",
@@ -43,16 +40,15 @@
       "Bash(sg:*)",
       "Bash(grep *)",
       "Bash(biome check *)",
-
       "Bash(spur --version)",
       "Bash(spur rule *)",
       "Bash(spur workflow *)",
       "Bash(spur agent *)",
       "Bash(spur task *)",
       "Bash(sqlite3 .spur/spur.db *)",
-
       "Read(//tmp/**)",
-      "Read(//private/tmp/**)"
+      "Read(//private/tmp/**)",
+      "Bash(spur feature *)"
     ]
   }
 }

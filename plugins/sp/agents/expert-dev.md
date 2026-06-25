@@ -68,7 +68,7 @@ The skill exposes two halves; route by intent:
 | "add tests" | Execution | `unit` |
 | "review the code" | Execution | `review` |
 | "verify the task" | Execution | `verify` |
-| "create a task" | Task creation | `new-task` |
+| "create a task" / "quick task from this idea" | Task creation | `brainstorm --skip-discovery --task` |
 | "fix all errors" | Fix cycle | `fixall` |
 | "commit message" | Git | `gitmsg` |
 | "update docs" | Docs | delegates to `sp:doc-evolve` |
