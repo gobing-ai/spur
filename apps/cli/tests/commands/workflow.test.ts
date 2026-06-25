@@ -277,7 +277,11 @@ terminalStates:
         });
 
         expect(exitCode).toBe(0);
-        expect(output.messages).toEqual(['workflow done: cli-test-flow -> done']);
+        // Human (non-json) sync run now prints a plan preview + live progress (0114),
+        // then the result line. Assert the result is present rather than exact-array
+        // equality, and that the preview led the output.
+        expect(output.messages).toContain('workflow done: cli-test-flow -> done');
+        expect(output.messages[0]?.startsWith('plan:')).toBe(true);
         await rm(dir, { recursive: true, force: true });
     });
 
@@ -313,7 +317,7 @@ terminalStates:
         });
 
         expect(exitCode).toBe(0);
-        expect(output.messages).toEqual(['workflow done: cli-dry-flow -> done']);
+        expect(output.messages).toContain('workflow done: cli-dry-flow -> done');
         await rm(dir, { recursive: true, force: true });
     });
 
@@ -329,7 +333,7 @@ terminalStates:
         );
 
         expect(exitCode).toBe(0);
-        expect(output.messages).toEqual(['workflow done: cli-test-flow -> done']);
+        expect(output.messages).toContain('workflow done: cli-test-flow -> done');
         await rm(dir, { recursive: true, force: true });
     });
 
@@ -370,6 +374,10 @@ terminalStates:
         });
 
         expect(exitCode).toBe(0);
+        // R5 (0114): --json output is exactly one message — the JSON envelope. No plan
+        // preview or progress lines leak into machine output.
+        expect(output.messages).toHaveLength(1);
+        expect(output.messages.some((m) => m.startsWith('plan:') || m.includes('▶') || m.includes('→'))).toBe(false);
         expect(JSON.parse(output.messages[0] ?? '{}')).toMatchObject({
             status: 'done',
             workflowName: 'cli-test-flow',

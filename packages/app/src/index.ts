@@ -159,3 +159,5 @@ export {
     type WorkflowRunStartedEvent,
     type WorkflowTransitionEvent,
 } from './workflow/observability';
+// Workflow step reporter — pure event→line / def→plan formatters for CLI progress (0114)
+export { renderRunPlan, renderStepLine, type StepEvent, type StepLineRenderer } from './workflow/step-reporter';

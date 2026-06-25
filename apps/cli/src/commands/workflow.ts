@@ -1,11 +1,18 @@
+import { resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import {
+    renderRunPlan,
+    renderStepLine,
+    type StepEvent,
     WorkflowAppService,
     type WorkflowListEntry,
     type WorkflowListResult,
+    type WorkflowObservabilityBus,
     type WorkflowTraceListResult,
     type WorkflowTraceTimeline,
 } from '@gobing-ai/spur-app';
+import { loadWorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
+import { EventBus } from '@gobing-ai/ts-infra';
 import { loadSpurConfig } from '../config/loader';
 import { resolveConfigFile } from '../config/resolver';
 import { SpurAppConfigSchema } from '../config/schema';
@@ -58,13 +65,14 @@ async function resolveWorkflowPaths(cwd: string): Promise<string[]> {
 export function registerWorkflowCommand(program: Command, context: CliContext): void {
     // `json` selects the HITL responder: interactive prompts must never fire under --json
     // (they would corrupt the JSON stream). Only `run` invokes actions, so only it passes json=true.
-    const makeSvc = (json?: boolean) =>
+    const makeSvc = (json?: boolean, observabilityBus?: WorkflowObservabilityBus) =>
         new WorkflowAppService({
             cwd: context.cwd,
             getDb: () => context.getDb(),
             agentService: () => context.agentService(),
             ruleService: () => context.ruleService(),
             hitlResponder: () => context.hitlResponder(json),
+            ...(observabilityBus ? { observabilityBus: () => observabilityBus } : {}),
         });
 
     const workflow = program.command('workflow').summary('validate and execute workflow YAML files');
@@ -100,6 +108,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             '--async',
             'Start the workflow in the background and exit immediately — monitor with `spur workflow trace <run-id>`',
         )
+        .option('--no-plan', 'Suppress the run-start plan preview (synchronous runs only)')
         .option('--json', 'Output machine-readable JSON where supported')
         .action(async (file, options) => {
             // When --async, spawn a detached child process that runs the workflow
@@ -154,7 +163,33 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             // User-supplied --vars win on conflict (spread last is intentional here:
             // spurBin is a default, overridable only if a caller deliberately sets it).
             const vars = { spurBin: resolveSpurBin(), ...parseVars(options.vars) };
-            const result = await makeSvc(options.json).run(file, {
+
+            // Observability DX (0114): for synchronous, human-facing runs only, print a
+            // run-start plan preview and a live per-step progress stream. Both are suppressed
+            // under --json (machine output stays byte-identical) and never reach the detached
+            // --async path (ignored stdio). commander negates --no-plan to options.plan=false.
+            const human = options.json !== true;
+            let bus: WorkflowObservabilityBus | undefined;
+            if (human) {
+                if (options.plan !== false) {
+                    try {
+                        const def = await loadWorkflowDef(resolve(context.cwd, file), { validateSchema: false });
+                        context.output.write(renderRunPlan(def));
+                    } catch {
+                        // Preview is advisory — a parse failure must not block the run.
+                    }
+                }
+                bus = new EventBus();
+                const report = (event: StepEvent): void => {
+                    const line = renderStepLine(event);
+                    if (line !== null) context.output.write(line);
+                };
+                bus.on('workflow.phase', report);
+                bus.on('workflow.action.started', report);
+                bus.on('workflow.action.finished', report);
+            }
+
+            const result = await makeSvc(options.json, bus).run(file, {
                 runId: options.runId || undefined,
                 vars,
                 dryRun: options.dryRun || undefined,

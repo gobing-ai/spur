@@ -28,6 +28,7 @@ detail-first then index (§4.5 rule 5 / T9).
 | [`server-side-adjustment-design.md`](design/server-side-adjustment-design.md) | Server/Web slice — ServerContext, EventBus/JobQueue/Scheduler wiring, oRPC surface | design (in progress) |
 | [`server-side-adjustment-feature-finalized.md`](design/server-side-adjustment-feature-finalized.md) | Server/Web — finalized feature decisions for the above | finalized |
 | [`spur-team-mode-design.md`](design/spur-team-mode-design.md) | Team mode — agent specs, inbox, `TeamService` | design |
+| [`workflow-observability.md`](design/workflow-observability.md) | `spur workflow run` DX — run-start plan preview + live EventBus step progress; board reuse (0114) | implemented |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See
@@ -176,13 +177,20 @@ overrides the global root and suppresses the bundled fallback for a hermetic run
   `ts-rule-engine` `RulePersistenceAdapter`; Spur writes via `DbRulePersistenceAdapter`).
 Backed by `ts-rule-engine`. Help dispatch per §1.0.
 
-#### `spur workflow validate <workflow.yaml> [--json] [--no-schema]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--json]` · `spur workflow continue [run-id] [--yes] [--json]` · `spur workflow list [--json]` · `spur workflow trace [run-id] [--workflow <name>] [--status <s>] [--since <date>] [--last <n>] [--json]`
+#### `spur workflow validate <workflow.yaml> [--json] [--no-schema]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--json]` · `spur workflow continue [run-id] [--yes] [--json]` · `spur workflow list [--json]` · `spur workflow trace [run-id] [--workflow <name>] [--status <s>] [--since <date>] [--last <n>] [--json]`
 - `validate <file>` — load + Zod-validate a workflow definition.
-- `run <file> [--run-id <id>] [--vars <json>] [--dry-run]` — execute; prints `<status>: <name> -> <finalState>`;
+- `run <file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan]` — execute; prints `<status>: <name> -> <finalState>`;
   exit 1 unless `done`. `--vars` takes a JSON object of per-run variable overrides
   (e.g. `--vars '{"taskId":"0042"}'`), merged over the workflow's `vars` for `${vars.*}` resolution.
   `--dry-run` validates the definition and walks the transition graph without executing actions
   — useful for verifying workflow structure before committing side effects.
+  **Observability (0114, synchronous human runs only):** before executing, prints a run-start plan
+  preview (`plan: <state> → … → <terminal>`, from the parsed definition) and then streams live
+  per-step progress from the workflow EventBus (`▶ <state> [<status>]`, `→ <node>: <kind>…`,
+  `✓ <status> (<duration>)`). Suppressed under `--json` (envelope stays byte-identical) and on the
+  detached `--async` path (ignored stdio → use `spur workflow trace`); `--no-plan` suppresses only
+  the preview. Mechanism: [`design/workflow-observability.md`](design/workflow-observability.md).
+  `--async` starts the run in a detached background process and returns the run id immediately.
 - `continue [run-id] [--yes]` — resume a paused (HITL) run (E3, design §6 / D04). Omit `run-id` to
   discover the most-recent paused run and confirm (skipped with `--yes`). Resolves the run's
   `workflow_name` back to its YAML, then `resumeRun`. Works for both lifecycle and pipeline runs;
