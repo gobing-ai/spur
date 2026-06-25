@@ -572,6 +572,79 @@ describe('spur task CLI', () => {
         expect(summary).toContain('Review written');
     });
 
+    // ── verdict ──
+    // The verdict command reads the answer file and writes .spur/run/<wbs>-verdict.json
+    // relative to the process cwd (not the test cwd), so we pass an absolute --from-answer
+    // and clean the emitted artifact afterward to keep the repo tree clean.
+    const verdictArtifacts: string[] = [];
+    afterAll(() => {
+        for (const p of verdictArtifacts) rmSync(p, { force: true });
+    });
+
+    test('verdict derives PASS from an all-MET answer table and writes the artifact', async () => {
+        const answerPath = join(cwd, '8001-verify-answer.txt');
+        await Bun.write(answerPath, '| Req | Status | Evidence |\n|-----|--------|----------|\n| R1 | MET | done |\n');
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'verdict', '8001', '--from-answer', answerPath, '--json'], {
+            cwd,
+            output,
+        });
+        verdictArtifacts.push(join(process.cwd(), '.spur', 'run', '8001-verdict.json'));
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lastMessage(output));
+        expect(parsed.verdict).toBe('PASS');
+        expect(parsed.wbs).toBe('8001');
+        expect(parsed.source).toBe('spur-task-verdict');
+    });
+
+    test('verdict (human output) prints a verdict summary line', async () => {
+        const answerPath = join(cwd, '8002-verify-answer.txt');
+        await Bun.write(answerPath, '| Req | Status |\n|-----|--------|\n| R1 | MET |\n');
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'verdict', '8002', '--from-answer', answerPath], { cwd, output });
+        verdictArtifacts.push(join(process.cwd(), '.spur', 'run', '8002-verdict.json'));
+        expect(exitCode).toBe(0);
+        expect(lastMessage(output)).toContain('Verdict: PASS');
+    });
+
+    test('verdict exits 1 on UNKNOWN when the answer has no parseable requirements', async () => {
+        const answerPath = join(cwd, '8003-verify-answer.txt');
+        await Bun.write(answerPath, 'no requirements table here\n');
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'verdict', '8003', '--from-answer', answerPath, '--json'], {
+            cwd,
+            output,
+        });
+        verdictArtifacts.push(join(process.cwd(), '.spur', 'run', '8003-verdict.json'));
+        expect(exitCode).toBe(1);
+        expect(JSON.parse(lastMessage(output)).verdict).toBe('UNKNOWN');
+    });
+
+    test('verdict exits 1 with an error when the answer file is missing', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'verdict', '8004', '--from-answer', join(cwd, 'nope.txt')], {
+            cwd,
+            output,
+        });
+        expect(exitCode).toBe(1);
+        expect(output.errors.some((e) => e.includes('Answer file not found'))).toBe(true);
+    });
+
+    // ── list --feature ──
+
+    test('list --feature filters to tasks linked to that feature', async () => {
+        // Feature IDs must match ^[A-Z][1-9]*$ (DD-14): a letter + optional 1-9 digits.
+        const out = createCapturedOutput();
+        await main(['task', 'create', 'Linked to F3', '--feature', 'F3'], { cwd, output: out });
+        await main(['task', 'create', 'Unlinked task'], { cwd, output: out });
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'list', '--feature', 'F3', '--json'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const tasks = JSON.parse(lastMessage(output)) as Array<{ name: string }>;
+        expect(tasks.some((t) => t.name === 'Linked to F3')).toBe(true);
+        expect(tasks.some((t) => t.name === 'Unlinked task')).toBe(false);
+    });
+
     describe('.spur/config.yaml tasks: block (R9 multi-folder)', () => {
         test('tasks.active from root config directs task create to that folder', async () => {
             // Isolated cwd so the config does not leak into the suite's shared cwd.

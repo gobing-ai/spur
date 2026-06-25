@@ -280,7 +280,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             const jsonOut = JSON.stringify({ wbs, ...result, source: 'spur-task-verdict' }, null, 2);
             const { mkdirSync, writeFileSync } = await import('node:fs');
             mkdirSync('.spur/run', { recursive: true });
-            writeFileSync(`.spur/run/${wbs}-verdict.json`, jsonOut + '\n');
+            writeFileSync(`.spur/run/${wbs}-verdict.json`, `${jsonOut}\n`);
 
             if (options.json) {
                 context.output.write(jsonOut);
