@@ -1,0 +1,113 @@
+---
+name: execution-workflow
+description: "Extracted section: the execution half — task selection → pipeline run → HITL surfacing → continue. How operations SEQUENCE in the task pipeline; per-operation definitions live in dev-operations.md, not here."
+see_also:
+  - spur-dev
+  - dev-operations
+---
+
+# Execution Workflow
+
+```
+pick task (spur task list --json)
+  → spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"<wbs>"}'
+  → on HITL pause: surface to operator → spur workflow continue [run-id] [--yes]
+```
+
+The execution half runs a single task through the `task-pipeline.yaml` workflow. The
+pipeline drives the work; the skill interprets results, surfaces HITL gates, and decides
+next steps.
+
+This file owns **how operations sequence** in the pipeline. What each operation *does*
+(`implement`, `unit`, `review`, `verify`) is defined once in
+[dev-operations.md](dev-operations.md) — this file links to it rather than restating it.
+
+> **`/sp:dev-run` drives the pipeline — it is NEVER a pipeline step.** The command
+> `/sp:dev-run <wbs>` means "run this whole pipeline" (default `--mode full`). The pipeline's
+> internal stages call `/sp:dev-run --mode implement`, `/sp:dev-unit`, `/sp:dev-review`,
+> `/sp:dev-verify` — never `/sp:dev-run` in full mode. Calling `/sp:dev-run --mode full` from
+> inside the `implement` step would recurse into another full pipeline run. The `implement`
+> step is the **implement operation** (dev-operations.md §4); the verify step is
+> `sp:code-verification`.
+
+## The pipeline's internal stages
+
+Each stage maps to one operation. The pipeline calls the operation; the operation does exactly
+one thing and yields, so the **pipeline (not the agent) owns the loop**.
+
+| Stage | Operation | Defined in |
+|-------|-----------|------------|
+| `implement` | `/sp:dev-run --mode implement <wbs>` — write the code that satisfies the task; author `## Solution`. | [dev-operations.md §4 run](dev-operations.md) |
+| `test` | `/sp:dev-unit <target> --auto` — extend/generate tests to the coverage target. | [dev-operations.md §1 unit](dev-operations.md) → [unit-testing.md](unit-testing.md) |
+| `review` | `/sp:dev-review <wbs>` — SECU-framework review of the diff. | [dev-operations.md §2 review](dev-operations.md) |
+| `verify` | `sp:code-verification` — requirements traceability + verdict. | [dev-operations.md §3 verify](dev-operations.md) |
+
+**Agent override** for any stage: the `--agent <name|inherit|auto>` flag (passed through from
+the thin wrapper via `$ARGUMENTS`) selects the executing agent. `inherit` = pipeline default
+(current agent), `auto` = resolve from current runtime, `<name>` = explicit override.
+
+## Section ownership — `## Solution`
+
+The implement step **owns** `## Solution` (the change-map). After writing code, before
+yielding, the implement agent authors the `## Solution` section — a markdown table listing
+each changed file with a `file:line` range and a one-line `what/why` summary — and writes it
+via `spur task update <wbs> --section Solution --from-file <tmp>`. Write **only when the
+section is bare** (absent, empty, or a known pipeline placeholder); never clobber a
+hand-authored change-map. The `replaceSection` upsert guarantees missing→add,
+present→replace, never duplicate. If the implement agent forgets, the pipeline's `record`
+step backfills a minimal change-map from `git diff --name-only` as a safety net.
+
+## Step 1: Task selection
+
+```bash
+spur task list --status backlog --json
+spur task list --status wip --json
+```
+
+Pick a task. Priority order: WIP tasks first (continue in-progress work), then highest-priority
+backlog tasks. Use `--json` for machine consumption; sort client-side by priority/created_at.
+
+## Step 2: Pipeline run
+
+```bash
+spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"<wbs>"}' --json
+```
+
+When `--agent <value>` is set (passed through from the thin wrapper), merge it into the vars:
+`--vars '{"wbs":"<wbs>","agent":"<value>"}'`. The pipeline YAML already reads `${vars.agent}`
+for every `agent.run` step — no YAML changes needed. `--agent auto` resolves the current runtime
+to its canonical agent name before merging; `--agent inherit` or omitting the flag keeps the
+pipeline's default (`vars.agent = "omp"`).
+
+The pipeline (`kind: state-machine`) runs the work loop:
+
+```
+precheck → implement → test → review → approve(HITL) → verify → record → done
+```
+
+Each step is an `agent.run` action carrying `sp:dev-*` command inputs. The skill monitors
+the run:
+
+- **On HITL pause** (`approve` state): surface the review output to the operator.
+  `spur workflow continue <run-id> --yes` to approve, or provide feedback to loop back.
+- **On guard failure** (`precheck`): the task's check findings block progress — fix the
+  task first.
+- **On completion** (`done`): the pipeline's `record` step has already written results into
+  the task's `## Testing` and `## Review` sections via `spur task record <wbs>` (verdict →
+  matrix-compliant tables; never transitions to `done` — the gate stays in the workflow).
+
+## Step 3: Continue
+
+After a completed task, decide next action:
+
+- **More tasks in the feature?** Pick the next one, run again.
+- **Feature complete?** Run `spur feature update <id> verifying` to mark it for
+  acceptance verification.
+- **All done?** Run `spur task refresh` + `spur feature refresh` to regenerate the kanban
+  and index.
+
+## Skipping HITL
+
+Passing `--vars '{"profile":"auto"}'` to `spur workflow run` (a var choice, not a YAML fork) skips
+the `approve` HITL gate — use for low-risk, well-understood tasks where operator review adds no value.
+(Combine with `wbs` in one object: `--vars '{"wbs":"0042","profile":"auto"}'`.)
