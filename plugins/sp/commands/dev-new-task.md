@@ -45,7 +45,9 @@ For batch task creation from a decomposed feature, use `dev-plan` instead.
 
 Implements the inline procedure defined in [dev-operations.md](../skills/spur-dev/references/dev-operations.md#13-new-task). No `Skill()` delegation.
 
+**Arguments received:** `$ARGUMENTS`. Parse per the Arguments table above.
+
 ## Platform Notes
 
-- **Claude Code:** native — `$ARGUMENTS` substitution, `Bash`/`Read`/`Write` tools work directly.
-- **Other platforms:** `$ARGUMENTS` is Claude-specific. Run the `spur` CLI commands manually per the procedure above.
+- **Claude Code:** native — `Bash`/`Read`/`Write` tools work directly.
+- **Other platforms:** Run the `spur` CLI commands manually per the procedure above.

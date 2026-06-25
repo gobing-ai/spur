@@ -26,12 +26,17 @@ everything that was done, broke, was fixed, and should be improved.
 - Producing a structured findings report (and optionally a fix task) from a real run, instead of
   re-typing the same dogfood instructions every session.
 
+> ⚠️ **Repo mutation warning.** Non-observe mode (`--max-retry` > 0, or the default `2`) applies
+> `Edit`/`Write` fixes directly to the working tree. For a first run against an unfamiliar testee
+> or when you only want findings, use **`--max-retry 0`** (observe-only) — it monitors and reports
+> without mutating the repo. You can always re-run with fixes enabled after reviewing the report.
+
 ## Arguments
 
 | Argument | Description | Default |
 |----------|-------------|---------|
 | `testee` | What to exercise — a slash command, agent skill, or CLI invocation (positional, required). Quote it if it contains flags. | (required) |
-| `--max-retry <n>` | Fix attempts per failed step. **`0` = observe-only**: monitor and report, never mutate the repo. | `2` |
+| `--max-retry <n>` | Fix attempts per failed step. **`0` = observe-only**: monitor and report, never mutate the repo. Recommended for first runs against unfamiliar testees. | `2` |
 | `--save` | Write the report to `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md`. | off |
 | `--task` | File the findings as a review-template task via `spur task create --template review`. | off |
 | `--full` | Include **all** severity findings (P1–P4) in the report and `--task` output. Default filters to P1+P2 only — actionable items. | off |

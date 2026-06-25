@@ -46,7 +46,9 @@ Inline procedure (no skill delegation):
 
 Implements the inline procedure defined in [dev-operations.md](../skills/spur-dev/references/dev-operations.md#12-handover). No `Skill()` delegation.
 
+**Arguments received:** `$ARGUMENTS`. Parse per the Arguments table above.
+
 ## Platform Notes
 
-- **Claude Code:** native — `$ARGUMENTS` substitution, `Bash`/`Read`/`Write` tools work directly.
-- **Other platforms:** `$ARGUMENTS` is Claude-specific. Run the `spur` CLI and doc generation manually per the procedure above.
+- **Claude Code:** native — `Bash`/`Read`/`Write` tools work directly.
+- **Other platforms:** Run the `spur` CLI and doc generation manually per the procedure above.

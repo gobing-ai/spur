@@ -45,7 +45,9 @@ Inline procedure (no skill delegation):
 
 Implements the inline procedure defined in [dev-operations.md](../skills/spur-dev/references/dev-operations.md#10-gitmsg). No `Skill()` delegation.
 
+**Arguments received:** `$ARGUMENTS`. Parse per the Arguments table above.
+
 ## Platform Notes
 
-- **Claude Code:** native — `$ARGUMENTS` substitution and `Bash` tool work directly.
-- **Other platforms:** `$ARGUMENTS` is Claude-specific. Run the git commands and message generation manually per the procedure above.
+- **Claude Code:** native — `Bash` tool works directly.
+- **Other platforms:** Run the git commands and message generation manually per the procedure above.
