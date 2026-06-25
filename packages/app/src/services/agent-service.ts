@@ -273,13 +273,21 @@ export class AgentService {
 
         // dispatch
         let result: AgentRunResult;
+        const controller = new AbortController();
+        const onTerminate = () => controller.abort();
         try {
+            process.on('SIGTERM', onTerminate);
+            process.on('SIGINT', onTerminate);
             result = await runner.runPromptCommand(agent, promptOptions, {
                 cwd: cwd || undefined,
                 ...(timeoutMs !== undefined ? { timeout: timeoutMs } : {}),
+                signal: controller.signal,
             });
         } catch (error) {
             return { ok: false, exitCode: 2, message: error instanceof Error ? error.message : String(error) };
+        } finally {
+            process.off('SIGTERM', onTerminate);
+            process.off('SIGINT', onTerminate);
         }
 
         return { ok: true, result };
