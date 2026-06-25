@@ -55,10 +55,10 @@ must not be changed without updating the backing skill.
 
 ### 1. unit
 
-- **Purpose:** Extend or generate tests for a task until the coverage target is met.
-- **Inputs:** `<wbs>` (required). `--coverage <pct>` overrides the default target. `--agent <name|inherit|auto>` controls which agent executes the tests.
+- **Purpose:** Extend or generate tests for a task or file until the coverage target is met with a fully passing suite.
+- **Inputs:** `<target>` (required — WBS, task file, source file, or glob). `--coverage <pct>` overrides the default target. `--agent <name|inherit|auto>` controls which agent executes the tests.
 - **Backing:** `sp:spur-dev` skill, `unit` operation.
-- **Behavior:** Read the task's implementation → identify untested paths → write targeted tests → run `bun test --coverage` → iterate until the per-file line/function coverage target (≥90%) is met.
+- **Behavior:** Detect the project stack → read the implementation → identify untested paths → write targeted tests → measure coverage → iterate until the per-file line/function target (≥90%) is met. The language-agnostic procedure (two workflows, gap categorization, coverage-vs-quality, escalation) is the SSOT in **[unit-testing.md](unit-testing.md)**; per-stack commands/parsing/idioms/gotchas live in **[stacks/](stacks/)** adapters (bun-ts, python, go).
 - **Delegation:** `Skill(skill="sp:spur-dev", args="unit $ARGUMENTS")`
 
 ### 2. review

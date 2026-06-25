@@ -333,9 +333,9 @@ verification guard.
 | `deep-research` | `sp` | ⏳ Deferred | L02 — same |
 | `knowledge-extraction` | `sp` | ⏳ Deferred | L03 — same |
 | `indexed-context` | `sp` | ⏳ Deferred | L01 — design agent-agnostic shape later |
-| `sys-testing` | `sp` | ⏳ Deferred | K06 — consolidate with deferred `spur inspect` (N group) |
+| `sys-testing` | `sp` | 🔀 Partial | K06 — unit procedure ported to `spur-dev/references/unit-testing.md` (language-agnostic spine) + `stacks/` adapters (bun-ts, python, go; rust/java added on first need). Backs the `unit` op, polyglot. Remaining sys-testing breadth (blocker catalog, pre/post checklists) still deferred; future CLI home (`spur inspect`?) undecided |
 | `advanced-testing` | `sp` | ⏳ Deferred | K07 — niche, after core |
-| `tdd-workflow` | `sp` | ⏳ Deferred | Prompt skill; extraction not on critical path |
+| `tdd-workflow` | `sp` | ✅ Done | Ported to `sp:spur-tdd` (standalone skill) — the test-DESIGN half (red-green-refactor, AAA, naming, mock-at-boundary); pairs with `spur-dev`'s `unit` op (coverage half). Contract-test + property-based depth deferred to `advanced-testing` (K07) |
 | `sys-debugging` | `sp` | ⏳ Deferred | M02 — re-apply ADR-016 test at design time |
 | `sys-developing` | `sp` | ⏳ Deferred | Prompt skill; same |
 | `code-implement-common` | `sp` | ⏳ Deferred | Prompt skill; same |
@@ -500,7 +500,7 @@ The committed batch (ADR-023 waves 0–5) has landed. Three workstreams remain, 
    | Batch | Skills (triage ID) | Shape when extracted |
    |-------|--------------------|---------------------|
    | Verification engine | code-review-common (K01), code-verification (K02), code-improvement (K03), functional-review (K04) | `spur review` / `spur verify` verbs behind the existing skills; deterministic checks via `ts-rule-engine` evaluators |
-   | Testing surface | sys-testing (K06), advanced-testing (K07) | Consolidate with the deferred `spur inspect` surface (N group) — one noun, adapter-based |
+   | Testing surface | sys-testing (K06), advanced-testing (K07) | K06's `unit` procedure ported into `spur-dev/references/unit-testing.md` (language-agnostic spine + `stacks/` adapters — bun-ts, python, go). Remaining sys-testing breadth + advanced-testing deferred; whether the deterministic measurement step consolidates under `spur inspect` (N group) or stays as workflow shell guards is **undecided** — decoupled from the testing-knowledge SSOT, which lives in the skill regardless (ADR-016) |
    | Context & research | indexed-context (L01), deep-research (L02), knowledge-extraction (L03), reverse-engineering (L04) | Re-apply the ADR-016 test at design time — much is prompt work that stays in skills |
    | Coordination | transfer/handover (M01), sys-debugging (M02), token-saver (M03), cli-for-ai (M04), product-management (M05) | Prompt skills; extract only if a deterministic verb survives the ADR-016 test |
    | `spur inspect` | coverage/lint/typecheck/deps (N01–N05) | Adapter-based project-state interrogation; near-term needs covered by rule presets + workflow shell guards |
