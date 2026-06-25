@@ -104,6 +104,12 @@ graph TB
 — initialization, every command with flags, the daily development loop
 (plan → implement → check → fix → verify → close), JSON output, configuration, and known limitations.
 
+**Slash-command workflow (agent-driven):**
+➡️ **[How to Use the `sp:dev-*` Slash Commands for Daily Software Development](./how_to_use_dev_slash_commands_for_daily_software_development.md)**
+— the `sp` plugin layer: take a vague idea to a verified prototype via `/sp:dev-brainstorm` →
+`/sp:dev-plan` → `/sp:dev-refine` → `/sp:dev-run` → `/sp:dev-verify`, the `--next` chain, and the
+autonomous pipeline.
+
 **Per-command reference:**
 
 | Command | Reference |
