@@ -245,6 +245,16 @@ Findings (P1+P2):
   the `#### Review Findings` heading followed by the table. The resulting task feeds straight
   into `/sp:dev-run` for the fix pass.
 
+  **`task check` L3 contract — do not leave `### Review` non-placeholder without a P-column.**
+  The review template ships **two** tables: `#### Review Findings` (under `### Background`) is the
+  *input* — the findings to fix — and `### Review` is the *post-fix reflection*. `spur task check`
+  fires a **hard L3 error** ("Review must contain P1–P4 priority findings table") whenever `### Review`
+  is present *and non-placeholder* but carries no `P1`–`P4` token (`task-check.ts` §L3). The shipped
+  template scaffold already satisfies this (its placeholder table contains `P1`/`P2`), so the safe path
+  is: write **only** `#### Review Findings` and leave `### Review` as the template scaffold. If you do
+  write a narrative into `### Review`, it **must** include a severity table with a `P1`–`P4` column —
+  a bare prose reflection FAILs the check. Verify with `spur task check <wbs> --json` before handoff.
+
 ## Implementation
 
 No skill delegation yet (fat-file exception). Execute the four phases above directly.

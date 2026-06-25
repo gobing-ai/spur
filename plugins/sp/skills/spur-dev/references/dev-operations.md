@@ -181,15 +181,16 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
 - **Inputs:** `--scope <path>` (default: entire working tree) — limits fixes to a file or directory.
 - **Backing:** `inline` — lint + test fix loop.
 - **Behavior:**
-  1. Run `bun run lint` (add `-- <path>` if `--scope` is given). Collect all errors.
-  2. If lint is clean, skip to step 4.
-  3. **Lint fix loop:** for each error, diagnose the root cause and apply the smallest fix. Re-run `bun run lint` after each batch of fixes. Loop until lint is green. If a fix introduces new errors, back it out and try a different approach.
-  4. Run `bun run test`. Collect all failures.
-  5. If tests are green, done.
-  6. **Test fix loop:** for each failure, diagnose (test bug vs implementation bug), apply the fix, re-run the failing test. Loop until all tests pass.
-  7. Final verification: run `bun run lint && bun run test` once more to confirm both are green simultaneously.
-  8. Report: list what was fixed (file + one-line summary per fix). If any error could not be resolved, report it explicitly — do not suppress.
-- **Invariants:** Never bypass with `--no-verify`, `--force`, or new `biome-ignore`/`eslint-disable` suppressions. Never skip or `.skip` a test to make the suite green. Fix the root cause, not the symptom.
+  1. Run `bun run format` (add `-- <path>` if `--scope` is given) to settle formatter-only diffs first — `bun run lint` asserts `--error-on-warnings` + typecheck but does **not** rewrite formatting, so a formatter-only change (e.g. a multi-line import reflow) can pass `lint` locally yet still be unformatted. Formatting before linting removes that class of false-green.
+  2. Run `bun run lint` (add `-- <path>` if `--scope` is given). Collect all errors.
+  3. If lint is clean, skip to step 5.
+  4. **Lint fix loop:** for each error, diagnose the root cause and apply the smallest fix. Re-run `bun run lint` after each batch of fixes. Loop until lint is green. If a fix introduces new errors, back it out and try a different approach.
+  5. Run `bun run test`. Collect all failures.
+  6. If tests are green, done.
+  7. **Test fix loop:** for each failure, diagnose (test bug vs implementation bug), apply the fix, re-run the failing test. Loop until all tests pass.
+  8. Final verification: run `bun run format && bun run lint && bun run test` once more to confirm formatting is settled and both gates are green simultaneously.
+  9. Report: list what was fixed (file + one-line summary per fix). If any error could not be resolved, report it explicitly — do not suppress.
+- **Invariants:** Never bypass with `--no-verify`, `--force`, or new `biome-ignore`/`eslint-disable` suppressions. Never skip or `.skip` a test to make the suite green. Fix the root cause, not the symptom. Never claim green on `bun run lint` alone — a formatter-only diff passes `lint` but fails the formatter; run `bun run format` (or assert it produces no diff) before declaring the gate clean.
 
 ### 11. handover
 

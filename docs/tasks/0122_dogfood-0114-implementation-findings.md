@@ -2,7 +2,7 @@
 schema_version: 1
 name: "dogfood 0114 implementation findings"
 description: ""
-status: todo
+status: done
 type: review
 template: review
 profile: standard
@@ -12,7 +12,7 @@ priority: P2
 tags: ["review"]
 dependencies: []
 created_at: "2026-06-25T20:53:10.000Z"
-updated_at: 2026-06-25T20:54:54.353Z
+updated_at: 2026-06-25T21:13:21.357Z
 ---
 
 ## 0122. dogfood 0114 implementation findings
@@ -30,22 +30,21 @@ Findings from dogfooding the `/sp:dev-*` pipeline while implementing task 0114 (
 | P3 | `spur task check` (L4 / DD-09) | Authoring detailed task AC emits `[WARN] task scenario "…" is not in feature "H2"'s AC` for every scenario, because the parent feature declares no AC. Noisy when a task is more specific than its feature. | Expected permissive-start behavior, but the warning fires per-scenario with no path to reconcile. Candidate: a verb to promote task AC into the feature, or suppress when the feature has zero AC (nothing to be a subset of). |
 | P3 | `apps/cli` Bash sandbox | A dogfood cleanup command (`... | head` followed by `rm -rf /tmp/<dir>` in one compound line) was denied by the permission gate, forcing a re-run. | Minor: keep destructive cleanup (`rm`) as its own command, never chained after a pipe, in dogfood scripts. |
 ### Plan
-
-- [ ] Fix P1 findings
-- [ ] Fix P2 findings
-- [ ] Re-review the changed code
-
+- [x] Fix P1 findings — none present (highest severity in this task is P2)
+- [x] Fix P2 findings — all three resolved (secu-review type-fit, fixall format gate, dogfood L3 contract)
+- [x] Re-review the changed code — `bun run format` + `bun run lint` + `bun test plugins/sp packages/app/tests/services/task-check.test.ts` all green (100 pass / 0 fail)
 ### Review
-Findings from dogfooding the `/sp:dev-*` pipeline while implementing 0114 (2026-06-25). Priority table below; full detail + recommendations in `### Background → #### Review Findings`. (This task is the *input* to a fix round — `### Review` reflection is filled after fixes land.)
+Post-fix reflection (fixes landed 2026-06-25). All three actionable P2 findings from the 0114 dogfood are resolved as **docs/process** changes in the `sp` plugin — no runtime code logic changed. The three P3/P4 items were left as documented-behavior observations (no fix warranted). One back-issue surfaced and is logged below.
 
-| Priority | Finding |
-|----------|---------|
-| P2 | 0114's pre-impl Design typed the preview as `renderRunPlan(walk: WorkflowRunResult)`, but that type has no step list — the "reuse dry-run walk" plan was unbuildable. Corrected during impl (preview reads the parsed def). Process gap: pre-impl review verified a capability existed, not the return type's fields. |
-| P2 | The dogfood/verify loop ran `bun run lint` but the real gate is `biome check --error-on-warnings` + format; a formatter-only diff passed `lint` yet failed the gate. Verify must run `bun run format` before claiming green. |
-| P2 | dev-dogfood protocol conflict: it instructs writing findings to `#### Review Findings` under Background, but `task check` L3 requires the P1–P4 table in `### Review` for the `review` template. Following the protocol verbatim produces a FAIL. Align the dogfood `--task` instruction with the L3 requirement. |
-| P3 | `spur task check` PASSes tasks with empty placeholder AC/Plan (0114 passed precheck while content-incomplete). Candidate: a `--strict` warning on placeholder-only AC/Plan for AC-requiring variants. |
-| P3 | DD-09 L4 emits a per-scenario warning when task AC isn't a subset of the (AC-less) parent feature — noisy with no reconciliation path. Candidate: suppress when the feature has zero AC. |
-| P4 | Bash sandbox denied a `… | head` + `rm -rf` compound cleanup line; keep `rm` unchained in dogfood scripts. |
+| Severity | File | Finding | Recommendation |
+| -------- | ---- | ------- | -------------- |
+| P2 | `plugins/sp/skills/code-verification/references/secu-review.md` | **Fixed.** Added a *type-fit* clause to the Correctness dimension + a dedicated "Type-fit check" subsection: every signature / field access / "reuse X" claim must resolve against the *actual* type's fields, not an assumed capability. Applies to pre-impl design review, where 0114's `renderRunPlan(walk: WorkflowRunResult)` slipped through. | Done. Reviewers now check return-type fields, not capability existence. |
+| P2 | `plugins/sp/skills/spur-dev/references/dev-operations.md` §10 (fixall) | **Fixed.** Root cause refined: `bun run lint` already runs `--error-on-warnings`; the real gap is it never asserts *formatting*. Loop now runs `bun run format` first and in final verification; added an invariant forbidding "green on `lint` alone". | Done. A formatter-only diff (multi-line import reflow) can no longer pass as green. |
+| P2 | `plugins/sp/commands/dev-dogfood.md` §Sinks | **Fixed.** Documented the `task check` L3 contract: `### Review`, if non-placeholder, must carry a `P1`–`P4` column or the check hard-FAILs (`task-check.ts:155`). Safe path: write only `#### Review Findings` and leave `### Review` as the template scaffold. | Done. The `--task` instruction no longer produces a check-FAILing task when followed verbatim. |
+| P3 | `plugins/sp/commands/dev-dogfood.md` (back-issue) | The original finding claimed "following the protocol verbatim produces a FAIL." Ground-truthing showed the *template scaffold's* `### Review` placeholder already contains `P1`/`P2`, so the bare protocol does **not** FAIL — the FAIL only occurs when an agent overwrites `### Review` with prose lacking a P-table. The fix documents the real trigger; the finding's stated cause was slightly imprecise. | No further fix — the corrected fix already covers the real trigger. Logged for accuracy. |
 ### References
 
 ### History
+- 2026-06-25T21:13:20.700Z todo → wip (system)
+- 2026-06-25T21:13:21.035Z wip → testing (system)
+- 2026-06-25T21:13:21.357Z testing → done (system)

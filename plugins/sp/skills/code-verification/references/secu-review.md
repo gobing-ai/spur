@@ -14,7 +14,7 @@ The code-quality lens applied in verify mode (Step 5) and review mode. Four dime
 |-----|------|----------------|
 | **S** | Security | Hardcoded secrets/keys/tokens; injection (SQL, shell, path); unsanitized external input; unsafe deserialization; missing authz at boundaries |
 | **E** | Efficiency | Needless O(n²) loops, N+1 queries, redundant I/O, unbounded growth, missing pagination |
-| **C** | Correctness | Null/undefined handling, off-by-one, unhandled error paths, race conditions, wrong edge-case behavior, logic that contradicts the requirement |
+| **C** | Correctness | Null/undefined handling, off-by-one, unhandled error paths, race conditions, wrong edge-case behavior, logic that contradicts the requirement; **type-fit** — every signature, field access, and "reuse X" claim resolves against the *actual* type's fields, not merely a capability assumed to exist |
 | **U** | Usability | Vague error messages (no context), unclear API shapes, missing types, inconsistent naming vs. the surrounding code |
 
 ## Focus parsing
@@ -32,6 +32,16 @@ A dimension absent from the focus set is skipped entirely. `all` expands to all 
 
 Each finding records: dimension, severity, `file:line`, one-line description, and a concrete
 remediation. Findings land in the task's `## Review` section, ranked severity-first.
+
+## Type-fit check (Correctness)
+
+When a design or plan says "reuse `X`" or types a signature as `f(arg: T)`, resolve `T` against its
+**real definition** before accepting it — read the type's fields, not just its name. A capability
+existing ("the dry-run walks transitions") does not mean its return type carries the data you need
+(`WorkflowRunResult` is terminal — it has no step list). Verify the *fields you will read*, not that
+the producer exists. This applies to pre-implementation design review as much as post-implementation
+review: a signature that cannot be built against the actual type is a blocker, caught at review, not
+at implementation.
 
 ## Relationship to requirement traceability
 
