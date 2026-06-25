@@ -4,23 +4,30 @@ description: The fat daily-workflow umbrella skill for the Spur planning+executi
 license: Apache-2.0
 metadata:
   author: spur
-  version: "1.0"
+  version: "1.1"
   platforms: "claude-code,codex,openclaw,opencode,antigravity"
   interactions:
     - pipeline
   halves:
     - planning
     - execution
-  pipeline_steps:
+  planning_steps:
     - intake
     - feature-create
     - ac-generation
     - feature-check-gate
     - decomposition
     - batch-create-gate
-    - task-selection
-    - workflow-run
-    - hitl-surfacing
+    - refine
+  execution_steps:
+    - precheck
+    - implement
+    - test
+    - review
+    - approve
+    - verify
+    - record
+    - done
   openclaw:
     emoji: "🔄"
 ---
@@ -35,9 +42,12 @@ skill knows *how to think*; the CLI knows *what is valid*.
 
 The two halves are a **sanctioned future split seam** (design §12.1, risk R4). Today they are one
 skill because they share vocabulary, gates, and the same CLI surface. When size hurts, split at the
-section boundary below — each half already owns its complete workflow independently.
+half boundary — each half's full procedure already lives in its own reference file and owns its
+complete workflow independently.
 
-## Planning half
+## The two halves at a glance
+
+**Planning half** — vague description → validated, decomposed feature:
 
 ```
 vague description
@@ -46,136 +56,12 @@ vague description
   → GATE: spur feature check   (BDD validator; loop until clean)
   → decomposition (prompt work) → task-batch JSON
   → GATE: task-batch.schema.json + spur task batch-create (atomic: all-or-nothing)
+  → refine (per task, just-in-time, before execution)
 ```
 
-The planning half transforms a description into a validated feature file with acceptance
-criteria, then decomposes it into a batch of tasks. Two CLI gates make LLM regressions
-unable to corrupt the corpus: `spur feature check` validates the AC, and
-`task-batch.schema.json` validates the decomposition shape before `spur task batch-create`
-writes anything.
+Full procedure: **[references/planning-workflow.md](references/planning-workflow.md)**.
 
-### Step 1: Intake
-
-When given a feature description, clarify before creating:
-
-1. **Scope** — what is in, what is explicitly out. Record both.
-2. **Constraints** — existing systems it must work with, performance/security boundaries.
-3. **Success criteria** — how will we know it's done? (Feeds AC generation.)
-
-Ask only what is ambiguous. A crisp description needs no Q&A loop — proceed directly to feature
-creation.
-
-### Step 2: Feature creation + AC generation
-
-```bash
-spur feature create "<name>" [--parent <id>]
-```
-
-The feature file lands in `docs/features/<ID>_<slug>.md`. Immediately author the `## Goal`
-(single sentence) and `## Scope` (in/out bullets).
-
-Then generate **BDD acceptance criteria** in the `## Acceptance Criteria` section using the
-Gherkin template. Conventions:
-
-- **R-numbered scenarios:** each scenario carries an `R1, R2, …` prefix in its title for
-  cheap, human-readable traceability. (Coverage matching is by **normalized scenario title** —
-  the R-prefix is stripped before matching — so keep the title text stable, not just the number.)
-- **Two AC tiers:** core scenarios (the must-pass gate) and edge-case scenarios (advisory
-  warnings — the permissive start, per DD-06). Mark edge-case scenarios explicitly.
-- **Scenario-title mapping:** the scenario title is the identity key for traceability edges
-  to task files — keep them stable and unique.
-- Use `spur agent run` with the BDD template (`config/templates/bdd/gherkin.md`) for
-  generation, or author directly if the feature is simple.
-
-### Step 3: Feature check gate (loop)
-
-```bash
-spur feature check <id> --json
-```
-
-The BDD validator gate. A non-zero exit means findings:
-
-1. Read each finding from the JSON output.
-2. Fix the **specific** AC issue — never restructure unrelated scenarios.
-3. Re-run. Loop until exit 0.
-
-This gate catches: malformed Gherkin, missing required scenario elements, traceability gaps.
-A skill regression can never corrupt the corpus — worst case is a rejected write with findings
-the skill can react to.
-
-### Step 4: Decomposition
-
-With a clean feature, decompose into tasks:
-
-1. Read the feature's scenarios (the AC).
-2. For each scenario, design one or more tasks that implement it — each task maps to at
-   least one scenario by title.
-3. Produce a **task-batch JSON** document conforming to `task-batch.schema.json` — a top-level
-   JSON **array** of strict task items (no `tasks` wrapper, only documented fields).
-
-Decomposition heuristics:
-- **One task = one atomic unit of work** a single agent can complete.
-- **Scenario coverage:** every core scenario maps to ≥1 task; edge-case scenarios may map
-  or be deferred.
-- **Sub-tasks:** record `parent_wbs` (quoted, e.g. `"0042"`) for sub-tasks; note ordering in
-  `background` prose (the item schema has no `dependencies` field).
-- **Template variants:** choose `feature-impl` for implementation tasks (pulls Goal →
-  Background from the linked feature, per B09).
-
-The batch JSON is the LLM→CLI contract — see
-[references/decomposition.md](references/decomposition.md) for the full schema and
-conventions.
-
-### Step 5: Batch-create gate
-
-```bash
-spur task batch-create --file <batch.json>
-```
-
-Atomic: all-or-nothing. If `task-batch.schema.json` validation fails, **nothing is written**
-and findings are returned. The skill reads the findings, fixes the JSON, and retries. Common
-failures:
-
-- Missing required fields per the template variant's section matrix.
-- Invalid status values (must be lowercase canonical).
-- `feature_id` referencing a non-existent feature.
-- WBS collisions (already-allocated range).
-
-Loop until the command exits 0 — then the batch is created and each task appears in the
-feature's `## Tasks` block on next `spur feature refresh`.
-
-### Step 6: Refine before execute (the spec-completion gate)
-
-`batch-create` lands a task at **`todo`** with its required sections (`Acceptance Criteria`,
-`Design`, `Plan`) **scaffolded as guidance comments only** — the batch item carries `background`
-and `requirements`, but it has no field for AC/Design/Plan, and `spur task check` gates on section
-*presence*, not human content. So a freshly batch-created `todo` task is **structurally ready but
-content-incomplete**: it passes `check` while its Design/Plan are still empty placeholders.
-
-Before a task enters the execution half, fill those sections via the **refine** operation
-(`/sp:dev-refine <wbs>`): read the task, elicit the missing AC/Design/Plan through targeted Q&A,
-and write each via `spur task update <wbs> --section <name> --from-file`. This is the only path
-that turns the `todo` HITL-review gate from a formality into a real one — a reviewer approves the
-*Design*, not an empty heading.
-
-**Do this just-in-time, per task, immediately before execution** — not in bulk at decomposition
-time. Design written against a stale snapshot of the codebase rots; design written right before
-`implement` reflects current reality. Refine `0042`, run `0042`; refine `0043`, run `0043`.
-
-**Refine arguments** (defined on the `/sp:dev-refine` entry point, passed through verbatim):
-
-| Argument | Effect |
-|----------|--------|
-| `--focus <mode>` | Narrows the gap analysis to a subset of domain hints. See the `sp:dev-refine` skill for the full value table (`all`, `requirements`, `background`, `constraints`, `acceptance`, `quick`). Default `all`. |
-| `--auto` | Skip interactive Q&A — synthesize improvements from the task content alone. Use for well-scoped tasks where the agent can fill gaps without operator input. |
-
-> **Requirements formatting:** author R-items as a GitHub task-list checkbox — `- [ ] R1. <text>`
-> — so progress is trackable in the file. The L3 check accepts the `- [ ] Rn.` / `- Rn.` / `Rn.`
-> forms; keep the `Rn.` (period) token so the R-numbering rule recognizes it.
-
----
-
-## Execution half
+**Execution half** — one task through the pipeline:
 
 ```
 pick task (spur task list --json)
@@ -183,168 +69,32 @@ pick task (spur task list --json)
   → on HITL pause: surface to operator → spur workflow continue [run-id] [--yes]
 ```
 
-The execution half runs a single task through the `task-pipeline.yaml` workflow. The
-pipeline drives the work; the skill interprets results, surfaces HITL gates, and decides
-next steps.
-
-> **`/sp:dev-run` drives the pipeline — it is NEVER a pipeline step.** The command
-> `/sp:dev-run <wbs>` means "run this whole pipeline" (default `--mode full`). The pipeline's
-> internal stages call `/sp:dev-run --mode implement`, `/sp:dev-unit`, `/sp:dev-review`,
-> `/sp:dev-verify` — never `/sp:dev-run` in full mode. Calling `/sp:dev-run --mode full` from
-> inside the `implement` step would recurse into another full pipeline run. The `implement`
-> step is the **implement operation** (below); the verify step is `sp:code-verification`.
-
-### The implement operation (the pipeline's implement step)
-
-`/sp:dev-run --mode implement <wbs>` (the `implement` pipeline stage) does exactly one thing:
-write the code that satisfies the task. Read the task's `## Requirements`, `## Design`, and
-`## Plan` (`spur task show <wbs> --json`), implement against them, and work the plan checklist.
-It does **not** run tests, review, or verify — those are the separate `test` / `review` /
-`verify` stages. Keeping implement single-purpose is what lets the pipeline (not the agent)
-own the loop: the agent implements, the workflow advances. Consolidated into `dev-run` as
-`--mode implement`; formerly `/sp:dev-implement`.
-
-**Agent override:** The `--agent <name|inherit|auto>` flag (passed through from the thin wrapper
-via `$ARGUMENTS`) controls which agent executes the implementation. `inherit` = pipeline default
-(current agent), `auto` = resolve from current runtime, `<name>` = explicit override.
-
-### Section ownership — `## Solution`
-
-The implement step **owns** `## Solution` (the change-map). After writing code, before
-yielding, the implement agent authors the `## Solution` section — a markdown table listing
-each changed file with a `file:line` range and a one-line `what/why` summary — and writes it
-via `spur task update <wbs> --section Solution --from-file <tmp>`. Write **only when the
-section is bare** (absent, empty, or a known pipeline placeholder); never clobber a
-hand-authored change-map. The `replaceSection` upsert guarantees missing→add,
-present→replace, never duplicate. If the implement agent forgets, the pipeline's `record`
-step backfills a minimal change-map from `git diff --name-only` as a safety net.
-
-### The unit operation (the pipeline's test step)
-
-`/sp:dev-unit <target> --auto` (the `test` pipeline stage) extends or generates tests
-until per-file line and function coverage reach the target (≥90% default). It does exactly
-one thing: write tests. It does **not** implement, review, or verify — those are separate
-stages. Read the task's implementation → identify untested paths → write targeted tests →
-run `bun test --coverage` → iterate until the coverage target is met.
-
-The `unit` operation is invoked via `Skill(skill="sp:spur-dev", args="unit $ARGUMENTS")`.
-It accepts a `<target>` (WBS number, file path, or glob), an optional `--coverage <pct>`,
-and an optional `--agent <name|inherit|auto>` for agent selection (`inherit` = current agent,
-`auto` = resolve from runtime, `<name>` = explicit).
-
-
-### Step 1: Task selection
-
-```bash
-spur task list --status backlog --json
-spur task list --status wip --json
-```
-
-Pick a task. Priority order: WIP tasks first (continue in-progress work), then highest-priority
-backlog tasks. Use `--json` for machine consumption; sort client-side by priority/created_at.
-
-### Step 2: Pipeline run
-
-```bash
-spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"<wbs>"}' --json
-```
-
-When `--agent <value>` is set (passed through from the thin wrapper), merge it into the vars:
-`--vars '{"wbs":"<wbs>","agent":"<value>"}'`. The pipeline YAML already reads `${vars.agent}`
-for every `agent.run` step — no YAML changes needed. `--agent auto` resolves the current runtime
-to its canonical agent name before merging; `--agent inherit` or omitting the flag keeps the
-pipeline's default (`vars.agent = "omp"`).
-
 The pipeline (`kind: state-machine`) runs the work loop:
 
 ```
 precheck → implement → test → review → approve(HITL) → verify → record → done
 ```
 
-Each step is an `agent.run` action carrying `sp:dev-*` command inputs. The skill monitors
-the run:
+Full procedure: **[references/execution-workflow.md](references/execution-workflow.md)**.
 
-- **On HITL pause** (`approve` state): surface the review output to the operator.
-  `spur workflow continue <run-id> --yes` to approve, or provide feedback to loop back.
-- **On guard failure** (`precheck`): the task's check findings block progress — fix the
-  task first.
-- **On completion** (`done`): the pipeline's `record` step has already written results into
-  the task's `## Testing` and `## Review` sections via `spur task record <wbs>` (verdict →
-  matrix-compliant tables; never transitions to `done` — the gate stays in the workflow).
+## Step routing
 
-### Step 3: Continue
+Each step delegates to a CLI verb and is documented in exactly one reference file. Read the
+reference for the half you're operating; do not duplicate its content here.
 
-After a completed task, decide next action:
-
-- **More tasks in the feature?** Pick the next one, run again.
-- **Feature complete?** Run `spur feature update <id> verifying` to mark it for
-  acceptance verification.
-- **All done?** Run `spur task refresh` + `spur feature refresh` to regenerate the kanban
-  and index.
-
-### Skipping HITL
-
-Passing `--vars '{"profile":"auto"}'` to `spur workflow run` (a var choice, not a YAML fork) skips
-the `approve` HITL gate — use for low-risk, well-understood tasks where operator review adds no value.
-(Combine with `wbs` in one object: `--vars '{"wbs":"0042","profile":"auto"}'`.)
-
----
-
-## Cross-cutting rules
-
-### Every write is CLI-gated
-
-Never edit a task or feature file directly. Every mutation goes through:
-
-| Intent | CLI verb |
-|--------|----------|
-| Create a task | `spur task create` |
-| Change status | `spur task update <wbs> <status>` |
-| Edit a section | `spur task update <wbs> --section <name> --from-file <path>` |
-| Record verify results | `spur task record <wbs> [--solution-from-diff] [--transition <status>]` |
-| Create a feature | `spur feature create` |
-| Batch create tasks | `spur task batch-create --file <json>` |
-
-### Section-editing workflow
-
-The dominant agent write pattern (hot path 2):
-
-1. Generate the new section content to a temp file.
-2. `spur task update <wbs> --section <name> --from-file <temp>` — the CLI writes it.
-3. Remove the temp file.
-
-This is the only sanctioned path for LLM-generated content to enter the corpus. The CLI
-validates the section against the status-section matrix before writing.
-
-**Body-only format** (avoids the corruption class fixed in task 0115):
-
-- **Body-only:** the temp file is the section *body* only — no `## SectionName` heading line.
-  The CLI adds the canonical heading (`### SectionName` for tasks). If the temp file starts with
-  a heading matching the section name the CLI strips it, but write body-only from the start.
-- **No same-level sub-headings:** never use `###` sub-headings inside a task section body (e.g.
-  `### AC1 — …`). They sit at the canonical section level and would become phantom sections on
-  re-parse; the CLI now strips them with a stderr warning, but write clean. Use bullet lists,
-  tables, or `**bold**` labels for sub-structure instead.
-- **Never suppress stderr:** run `spur task update` without `2>/dev/null`. Stderr carries the
-  diagnostic (including the strip warnings above); suppressing it turns a fixable error into a
-  silent exit-1 that wastes a round-trip.
-
-### The section-status matrix
-
-`spur task check <wbs> --json` returns the required and optional sections for the task's
-current status. Agents ask "what does this task need now?" with zero tokens by reading the
-`--json` output — no need to load and parse the matrix YAML.
-
-### Check before write
-
-Before editing any task file, run `spur task check <wbs>` to see what sections exist, what
-is missing, and what format rules apply. The check is the single validation surface:
-frontmatter schema, section-status matrix, section format rules, feature traceability.
-
-After writing a section, run `spur task check <wbs>` again to confirm the write introduced no
-structural issues (phantom sections, matrix violations) before moving on.
-
----
+| Step | Half | CLI gate | Reference |
+|------|------|----------|-----------|
+| Intake | planning | — (prompt work) | [planning-workflow.md](references/planning-workflow.md) |
+| Feature create + AC | planning | `spur feature create` | [planning-workflow.md](references/planning-workflow.md) · [ac-style-guide.md](references/ac-style-guide.md) |
+| Feature check gate | planning | `spur feature check` | [planning-workflow.md](references/planning-workflow.md) |
+| Decomposition | planning | `task-batch.schema.json` | [decomposition.md](references/decomposition.md) |
+| Batch-create gate | planning | `spur task batch-create` | [planning-workflow.md](references/planning-workflow.md) |
+| Refine | planning | `spur task update --section` | [planning-workflow.md](references/planning-workflow.md) |
+| Task selection | execution | `spur task list` | [execution-workflow.md](references/execution-workflow.md) |
+| Pipeline run | execution | `spur workflow run` | [execution-workflow.md](references/execution-workflow.md) |
+| Implement / test / review / verify | execution | `sp:dev-*` operations | [dev-operations.md](references/dev-operations.md) |
+| Continue | execution | `spur feature update` / `refresh` | [execution-workflow.md](references/execution-workflow.md) |
+| All writes (both halves) | — | CLI-gated section editing | [cross-cutting.md](references/cross-cutting.md) |
 
 ## When to use
 
@@ -364,16 +114,12 @@ Do **not** use this skill for:
 - Workflow authoring/tuning — use `sp:spur-workflows`.
 - Documentation maintenance — use `sp:doc-evolve`.
 
----
-
 ## Behavior
 
 This skill behaves as a **pipeline** operator: it converts intent into CLI-validated
 artifacts, gates every write, and drives execution workflows. It owns the full planning→done
 lifecycle but delegates every deterministic step to CLI verbs. It does not validate — the
 CLI does.
-
----
 
 ## Gotchas
 
@@ -392,20 +138,39 @@ CLI does.
    designed to split cleanly. Keep new logic in one half or the other — never straddle the
    seam with cross-half dependencies.
 
----
-
 ## Additional Resources
+
+**Workflow procedure (read the half you're operating):**
+
+- [references/planning-workflow.md](references/planning-workflow.md) — Steps 1–6: intake →
+  feature create → AC → check gate → decomposition → batch-create → refine.
+- [references/execution-workflow.md](references/execution-workflow.md) — task selection →
+  pipeline run → HITL surfacing → continue; pipeline-stage sequencing and `## Solution` ownership.
+- [references/cross-cutting.md](references/cross-cutting.md) — CLI-gated writes, the section-editing
+  body-only format, the section-status matrix, check-before-write. Shared by both halves.
+
+**Supporting detail:**
 
 - [references/decomposition.md](references/decomposition.md) — the `task-batch.schema.json`
   contract, template-variant selection, scenario-to-task mapping conventions.
 - [references/ac-style-guide.md](references/ac-style-guide.md) — BDD scenario authoring:
   R-numbering, the two AC tiers, scenario-title stability, Gherkin template usage.
+- [references/dev-operations.md](references/dev-operations.md) — the per-operation catalog: what
+  each `/sp:dev-*` operation does (unit/review/verify/run/refine/plan/...). The SSOT for operation
+  definitions; the execution workflow links here rather than restating them.
+- [references/unit-testing.md](references/unit-testing.md) — the `unit` operation procedure
+  (language-agnostic spine): file-focused vs task-scoped workflows, gap categorization,
+  coverage-vs-quality rules, escalation. Per-stack mechanics (commands, coverage parsing, idioms,
+  gotchas) live in [references/stacks/](references/stacks/) adapters (bun-ts, python, go). Backs
+  `dev-operations.md §1`.
+
+**Config & companions:**
+
 - `config/workflows/task-pipeline.yaml` — the execution pipeline definition.
-- **`sp:spur-plan`** — thin YAML front-end for the planning pipeline (`config/workflows/planning-pipeline.yaml`). The SSOT narrative for all dev-* operations lives here in sp:spur-dev.
 - `config/workflows/planning-pipeline.yaml` — the front-half state machine.
 - `config/templates/bdd/gherkin.md` — the BDD scenario template.
-
----
+- **`sp:spur-plan`** — thin YAML front-end for the planning pipeline. The SSOT narrative for all
+  dev-* operations lives here in sp:spur-dev.
 
 ## Platform Notes
 
