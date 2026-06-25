@@ -105,9 +105,14 @@ variants:
       optional: [Background]
 
   # Code-review result task — the deliverable is the P1–P4 findings table.
+  #
+  # The review template scaffolds Background (with #### Review Findings sub-section)
+  # and Plan (checklist). Plan is optional at backlog so the template checklist
+  # renders; Review is deferred to wip+ (post-implementation reflection).
   review:
     backlog:
       required: [Background]
+      optional: [Plan]
       forbidden: [Testing]
     todo:
       required: [Background, Plan]

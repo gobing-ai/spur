@@ -96,8 +96,58 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .option('--run-id <id>', 'Persisted run id for workflow run')
         .option('--vars <json>', 'Per-run variable overrides as a JSON object, e.g. \'{"taskId":"0042"}\'')
         .option('--dry-run', 'Validate and walk transitions without executing actions')
+        .option(
+            '--async',
+            'Start the workflow in the background and exit immediately — monitor with `spur workflow trace <run-id>`',
+        )
         .option('--json', 'Output machine-readable JSON where supported')
         .action(async (file, options) => {
+            // When --async, spawn a detached child process that runs the workflow
+            // synchronously and exit immediately with the run ID. The child is put
+            // in its own process group so it survives parent termination.
+            if (options.async) {
+                const runId = options.runId || crypto.randomUUID();
+                const spurParts = resolveSpurBin().split(' ');
+                const spurBin = spurParts[0] ?? process.execPath;
+                const spurArgs = spurParts.slice(1);
+                const cmd: string[] = [spurBin, ...spurArgs, 'workflow', 'run', file, '--run-id', runId];
+                if (options.vars) {
+                    cmd.push('--vars', options.vars);
+                }
+                if (options.dryRun) {
+                    cmd.push('--dry-run');
+                }
+                try {
+                    Bun.spawn({
+                        cmd,
+                        stdio: ['ignore', 'ignore', 'ignore'],
+                        env: process.env as Record<string, string>,
+                    }).unref();
+                } catch {
+                    // If Bun.spawn throws (e.g. in a non-Bun runtime), fall through
+                    // to the sync path so the workflow still runs.
+                    const result = await makeSvc(options.json).run(file, {
+                        runId,
+                        vars: { spurBin: resolveSpurBin(), ...parseVars(options.vars) },
+                        dryRun: options.dryRun || undefined,
+                    });
+                    context.output.write(
+                        options.json
+                            ? toJson(result)
+                            : `workflow ${result.status}: ${result.workflowName} -> ${result.finalState} (async spawn failed, ran sync)`,
+                    );
+                    context.setExitCode(result.status === 'done' ? 0 : 1);
+                    return;
+                }
+                const asyncResult = { runId, status: 'started', workflowName: file };
+                context.output.write(
+                    options.json
+                        ? toJson(asyncResult)
+                        : `Started async run: ${runId}\nMonitor with: spur workflow trace ${runId}`,
+                );
+                context.setExitCode(0);
+                return;
+            }
             // Inject a PATH-independent spur invocation so workflow shell guards
             // (e.g. `${vars.spurBin} task check ${vars.wbs}`) resolve the correct
             // binary inside the execa-spawned subprocess, whose env may lack PATH.
@@ -167,10 +217,12 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .command('clean')
         .description('Finalize orphaned runs stuck in running/pending past a staleness threshold (mark as failed).')
         .option('--older-than <minutes>', 'Staleness threshold in minutes', '30')
+        .option('--force', 'Clean ALL non-terminal runs regardless of age (overrides --older-than)')
         .option('--dry-run', 'List what would be cleaned without writing')
         .option('--json', 'Output machine-readable JSON where supported')
         .action(async (options) => {
-            const minutes = Number.parseInt(options.olderThan ?? '30', 10);
+            const force = options.force === true;
+            const minutes = force ? 0 : Number.parseInt(options.olderThan ?? '30', 10);
             if (!Number.isFinite(minutes) || minutes < 0) {
                 context.output.error(`Invalid --older-than value: ${options.olderThan}`);
                 context.setExitCode(2);
@@ -182,10 +234,12 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             } else {
                 const verb = result.dryRun ? 'Would finalize' : 'Finalized';
                 if (result.cleaned.length === 0) {
-                    context.output.write(`No stale runs older than ${minutes}m.`);
+                    const ageMsg = force ? '' : ` older than ${minutes}m`;
+                    context.output.write(`No stale runs${ageMsg}.`);
                 } else {
+                    const ageMsg = force ? ' (all non-terminal)' : ` (>${minutes}m)`;
                     context.output.write(
-                        `${verb} ${result.cleaned.length} stale run(s) (>${minutes}m):\n` +
+                        `${verb} ${result.cleaned.length} stale run(s)${ageMsg}:\n` +
                             result.cleaned.map((r) => `  ${r.runId} (started ${r.startedAt})`).join('\n'),
                     );
                 }
