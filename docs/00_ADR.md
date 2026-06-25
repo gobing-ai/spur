@@ -491,7 +491,18 @@ mid-decomposition is a normal transient state, so the gate nudges rather than bl
 dogfood finding, task 0109 shipped `done`-ready without a sub-task roster, making its completeness
 unverifiable. Relates: enforces the Tier-1 doc convention added to `decomposition.md`.
 
-**Detail:** `04_DESIGN.md §7.1` (`task check` row); implementation `packages/app/src/services/task-check.ts` (`runL4Rollup`).
+**Amendment (2026-06-25) — roster generator (task 0123).** The roll-up gate above only *warns*
+about a missing/stale roster; `spur task refresh-roster <wbs>` is the **generator** half — it
+regenerates a parent's sub-task roster table inside its `## Plan` between `refresh-roster` auto-gen
+markers, idempotently (insert-when-absent preserving hand-written Plan content; rewrite-in-place when
+present). It mirrors `spur feature refresh`'s `## Tasks` marker region, but does region handling in
+the service rather than via `MarkdownDocument.replaceMarkerRegion` (which normalizes the label to
+"spur feature refresh" and would mislabel a task roster). Zero children is a clean no-op; no `## Plan`
+errors. The global `spur task refresh` (kanban.md) is untouched. Relates: closes the 0121 R5 scope-guard
+deferral.
+
+**Detail:** `04_DESIGN.md §7.1` (`task check` + `task refresh-roster` rows); implementation
+`packages/app/src/services/task-check.ts` (`runL4Rollup`), `packages/app/src/services/task-service.ts` (`refreshRoster`).
 
 ---
 

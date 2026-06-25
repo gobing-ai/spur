@@ -192,6 +192,29 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             }
         });
 
+    // ── refresh-roster ──
+    task.command('refresh-roster')
+        .summary("Regenerate a parent task's sub-task roster block in its ## Plan (0121 roll-up gate's generator).")
+        .argument('<wbs>', 'Parent task WBS number')
+        .option('--folder <path>', 'Custom tasks folder')
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (wbs, options) => {
+            const svc = await makeService(context, options.folder);
+            try {
+                const result = await svc.refreshRoster(wbs);
+                if (options.json) {
+                    context.output.write(toJson(result));
+                } else if (!result.written) {
+                    context.output.write(`Task ${wbs} has no sub-tasks — nothing to roster.`);
+                } else {
+                    context.output.write(`Roster refreshed for ${wbs} (${result.childCount} sub-task(s)).`);
+                }
+            } catch (err) {
+                context.output.error(String(err));
+                context.setExitCode(1);
+            }
+        });
+
     // ── batch-create ──
     task.command('batch-create')
         .summary('Create many tasks from a validated JSON file — all-or-nothing (LLM→CLI gate).')
