@@ -300,11 +300,51 @@ sp:brainstorm delegates verification to cc:anti-hallucination:
 
 ---
 
-## Planned scenario-specific commands (candidates — not yet shipped)
+## Shipped commands
 
-Today's skill is deliberately generic. Per the delivery-doc §7.2 disposition (I05), `sp:brainstorm`
-gains a set of **scenario-specific slash commands** with targeted customization in a later batch
-(names finalized at Stage D). Recorded here so the candidate set isn't lost; no commands ship now.
+### `/sp:dev-brainstorm` — interactive solution design
+
+The first shipped scenario-specific command. A thin wrapper (`plugins/sp/commands/dev-brainstorm.md`)
+that adds a **grilling discovery interview** before the ideation phase: one question at a time,
+always with a recommendation, exploring the codebase before asking the user. Then delegates to
+this skill's `dev-brainstorm` operation for structured ideation.
+
+**Operation: `dev-brainstorm`**
+
+Invoked as `Skill(skill="sp:brainstorm", args="dev-brainstorm --context <decision-tree> --options <n>")`.
+Accepts a pre-built decision-tree context from the discovery phase and skips the clarification step
+(Phase 1 → Phase 2 transition in the skill's own workflow), going directly to structured ideation.
+
+**Decision-tree context format** (free-form markdown passed as `--context`):
+
+```
+## Decision Tree
+
+### Root: <top-level decision>
+- **Resolved:** <chosen answer>
+- **Rationale:** <why>
+
+### Branch: <child decision>
+- **Resolved:** <chosen answer>
+- **Rationale:** <why>
+- **Depends on:** <parent decision>
+
+...
+```
+
+The skill uses this tree to:
+1. **Constrain the option space** — each approach must be compatible with resolved decisions
+2. **Generate decision-trace annotations** — each approach lists which decisions it depends on
+3. **Calibrate confidence** — decisions resolved from codebase evidence get higher confidence
+
+When `--skip-discovery` is used (no `--context`), the operation falls back to the standard
+3-phase workflow with its own lightweight clarification step.
+
+### Candidate commands (not yet shipped)
+
+Remaining scenario-specific candidates from the delivery-doc §7.2 disposition (I05). Each would be
+a thin wrapper invoking this skill with a pre-seeded scenario frame. Ship only those that convert
+non-deterministic intent into a reliable sequence, not bare forwarders (ADR-016).
 
 | Candidate command | Scenario it specializes for |
 |---|---|
@@ -313,10 +353,6 @@ gains a set of **scenario-specific slash commands** with targeted customization 
 | `sp:brainstorm-feature` | Feature-shaping: scope options + AC sketches feeding `sp:spur-dev` |
 | `sp:brainstorm-stack` | Library/dependency selection with evidence-backed trade-offs |
 | `sp:brainstorm-refactor` | Refactor strategy options for a shallow/over-coupled module |
-
-Each would be a thin wrapper invoking this skill with a pre-seeded scenario frame (ADR-016 test
-applies per candidate when the batch is built — ship only those that convert non-deterministic
-intent into a reliable sequence, not bare forwarders).
 
 ---
 
