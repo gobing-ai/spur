@@ -3,7 +3,7 @@ template: meta
 schema_version: 1
 name: "Add --design/--auto design-doc generation to /sp:dev-plan planning half"
 description: ""
-status: todo
+status: done
 type: meta
 profile: standard
 feature_id: F
@@ -12,7 +12,7 @@ priority: P2
 tags: ["meta"]
 dependencies: []
 created_at: "2026-06-25T23:15:55.861Z"
-updated_at: 2026-06-25T23:27:22.603Z
+updated_at: 2026-06-25T23:43:21.281Z
 ---
 
 ## 0124. Add --design/--auto design-doc generation to /sp:dev-plan planning half
@@ -97,8 +97,43 @@ satellite and add its index row to `04_DESIGN.md §0`.
 `### Design` section; corpus-migration / board slice; any `app`/`domain`/`cli` TS code.
 **Verification:** no automated tests (no compiled surface) — acceptance-criteria dry-run of the three
 flag states + doc-coherence; `bun run lint` as the gate.
-### Testing
+### Solution
 
+Skill-prose change (no compiled surface). Five files touched + one satellite authored.
+
+| Site | Change |
+|------|--------|
+| `plugins/sp/commands/dev-plan.md:3` | `argument-hint` gains `[--design] [--auto]`. |
+| `plugins/sp/commands/dev-plan.md:30-46` | Arguments-table rows for `--design`/`--auto`; new "Design-doc generation" subsection with the three-state truth table + idempotency note (links skill Step 5.5). |
+| `plugins/sp/skills/spur-dev/references/planning-workflow.md:18` | Top-of-file pipeline diagram gains the conditional design-doc line. |
+| `plugins/sp/skills/spur-dev/references/planning-workflow.md` (Step 5.5) | New **Step 5.5: Design doc (conditional)** between batch-create (5) and refine (6): decision table, seam heuristic, detail-first→index authoring (§4.5/T9), idempotency, generate-and-report. |
+| `plugins/sp/skills/spur-dev/SKILL.md:21` | `metadata.planning_steps` gains `design-doc`. |
+| `plugins/sp/skills/spur-dev/SKILL.md` (two-halves diagram + routing table) | Planning diagram gains the design-doc line; Step-routing table gains a `Design doc | planning | — (prompt work; §4.5/T9)` row. |
+| `plugins/sp/skills/spur-dev/references/decomposition.md` (Design vs Solution split) | Disambiguation blockquote: task `### Design` (code-level, narrow) ≠ feature satellite `docs/design/<slug>.md` (per-feature, Step 5.5). |
+| `docs/design/dev-plan-design-doc-generation.md` (new) | **Dogfood output** — the satellite authored *by* the new Step 5.5, run on this task. Problem/Decision/Behavior/Mechanism/Idempotency/Scope/Consequences. |
+| `docs/04_DESIGN.md §0` | Index row added for the new satellite (detail-first ordering held: satellite written, then this row). |
+
+**Dogfood result:** Step 5.5 ran end-to-end on 0124. Seam detected (new flags change a command
+contract → ADR-worthy) → authored satellite first, then `04` index row, correct §4.5/T9 order.
+
+### Testing
+**Coverage: N/A** — skill/command doc change, no compiled surface. Verified by AC dry-run + the full gate.
+
+**Acceptance-criteria dry-run (dogfood on 0124 + reasoning for the unexercised states):**
+
+- [x] **AC1 — `--design` always authors.** Exercised: Step 5.5 authored `docs/design/dev-plan-design-doc-generation.md` then its `04 §0` row (detail-first).
+- [x] **AC2 — `--design` idempotent.** Verified by anchor: slug is a stable grep anchor; a re-run finds the existing file + its single `04` row → update-in-place path. No duplicate possible by construction.
+- [x] **AC3 — `--design` beats `--auto`.** Documented in dev-plan.md truth table + planning-workflow.md Step 5.5 decision table (`--design` wins, `--auto` ignored).
+- [x] **AC4 — `--auto` decides yes on a seam.** This task *is* the positive case — new flags = command-contract seam → authored + reported. Heuristic + report behavior documented in Step 5.5.
+- [x] **AC5 — `--auto` decides no on a non-seam.** Documented: internal/bug-fix/doc/chore/boundary-preserving-refactor → skip + report. (No non-seam feature to exercise in this task.)
+- [x] **AC6 — neither flag = current behavior.** No code path added when flags absent — Step 5.5 is gated behind the flags; default planning flow is unchanged (byte-for-byte).
+- [x] **AC7 — index/satellite invariant.** Verified: 6 satellites ↔ 6 `04 §0` rows; the new satellite has exactly 1 index ref.
+- [x] **Coherence:** flag names + precedence agree across dev-plan.md / planning-workflow.md / SKILL.md; Step 5.5 links §4.5 without restating satellite format.
+
+**Gate:** `bun run lint` clean · `bun run test` 1826 pass / 0 fail · `bun run test-cf` 1 pass · `bun run build` ✓ · `git status` only intentional changes.
 ### References
 
 ### History
+- 2026-06-25T23:39:01.830Z todo → wip (system)
+- 2026-06-25T23:43:15.779Z wip → testing (system)
+- 2026-06-25T23:43:21.281Z testing → done (system)

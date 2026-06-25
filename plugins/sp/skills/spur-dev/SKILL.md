@@ -18,6 +18,7 @@ metadata:
     - feature-check-gate
     - decomposition
     - batch-create-gate
+    - design-doc
     - refine
   execution_steps:
     - precheck
@@ -56,6 +57,7 @@ vague description
   → GATE: spur feature check   (BDD validator; loop until clean)
   → decomposition (prompt work) → task-batch JSON
   → GATE: task-batch.schema.json + spur task batch-create (atomic: all-or-nothing)
+  → design doc (conditional: --design / --auto) → docs/design/<slug>.md + 04 index
   → refine (per task, just-in-time, before execution)
 ```
 
@@ -89,6 +91,7 @@ reference for the half you're operating; do not duplicate its content here.
 | Feature check gate | planning | `spur feature check` | [planning-workflow.md](references/planning-workflow.md) |
 | Decomposition | planning | `task-batch.schema.json` | [decomposition.md](references/decomposition.md) |
 | Batch-create gate | planning | `spur task batch-create` | [planning-workflow.md](references/planning-workflow.md) |
+| Design doc | planning | — (prompt work; §4.5/T9) | [planning-workflow.md](references/planning-workflow.md) |
 | Refine | planning | `spur task update --section` | [planning-workflow.md](references/planning-workflow.md) |
 | Task selection | execution | `spur task list` | [execution-workflow.md](references/execution-workflow.md) |
 | Pipeline run | execution | `spur workflow run` | [execution-workflow.md](references/execution-workflow.md) |

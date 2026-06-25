@@ -1,6 +1,6 @@
 ---
 description: Plan a feature from a description — intake → feature create → AC generation → feature check gate → decomposition → batch-create
-argument-hint: "\"<description>\" [--feature <id>] [--parent <feature-id>]"
+argument-hint: "\"<description>\" [--feature <id>] [--parent <feature-id>] [--design] [--auto]"
 allowed-tools: ["Bash", "Read", "Write", "Skill"]
 ---
 
@@ -27,6 +27,22 @@ corpus mutation occurs until each gate passes.
 | `description` | Feature description (required, positional) | (required) |
 | `--feature <id>` | Plan tasks for an existing feature instead of creating one | (creates new) |
 | `--parent <feature-id>` | Parent feature for hierarchical ID allocation | (top-level) |
+| `--design` | Always author/update the feature's design satellite (`docs/design/<slug>.md`) + its `04_DESIGN.md` index row | off |
+| `--auto` | Let the agent decide whether a design doc is warranted (cross-cutting-seam detection). Ignored when `--design` is present | off |
+
+### Design-doc generation (`--design` / `--auto`)
+
+The planning half can author a design satellite for the feature. The two flags compose into a
+three-state truth table:
+
+| Flags | Behavior |
+|-------|----------|
+| `--design` (with or without `--auto`) | **Always** author/update the satellite + index. `--design` wins; `--auto` is ignored. |
+| `--auto` (no `--design`) | **Agent decides** during intake: if a cross-cutting seam is detected (a new command, module, schema, or transport — an ADR-worthy change) → author the doc and **report** the slug + a one-line rationale (no confirmation pause); otherwise skip and say so. |
+| neither | **Never** author. Default behavior — no design artifact, no `04` change. |
+
+Generation is idempotent: an existing satellite is **updated in place**, never overwritten or
+duplicated (constitution §4.5 + sync trigger T9). Full procedure: skill Step 5.5.
 
 ## Behavior
 

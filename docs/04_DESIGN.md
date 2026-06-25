@@ -29,6 +29,7 @@ detail-first then index (§4.5 rule 5 / T9).
 | [`server-side-adjustment-feature-finalized.md`](design/server-side-adjustment-feature-finalized.md) | Server/Web — finalized feature decisions for the above | finalized |
 | [`spur-team-mode-design.md`](design/spur-team-mode-design.md) | Team mode — agent specs, inbox, `TeamService` | design |
 | [`workflow-observability.md`](design/workflow-observability.md) | `spur workflow run` DX — run-start plan preview + live EventBus step progress; board reuse (0114) | implemented |
+| [`dev-plan-design-doc-generation.md`](design/dev-plan-design-doc-generation.md) | `/sp:dev-plan` design-doc step — `--design`/`--auto` flags, seam heuristic, satellite + index authoring (0124) | implemented |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See

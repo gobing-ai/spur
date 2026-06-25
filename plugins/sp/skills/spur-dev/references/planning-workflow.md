@@ -16,6 +16,7 @@ vague description
   → GATE: spur feature check   (BDD validator; loop until clean)
   → decomposition (prompt work) → task-batch JSON
   → GATE: task-batch.schema.json + spur task batch-create (atomic: all-or-nothing)
+  → design doc (conditional: --design always / --auto agent-decides) → docs/design/<slug>.md + 04 index
 ```
 
 The planning half transforms a description into a validated feature file with acceptance
@@ -119,6 +120,58 @@ feature's `## Tasks` block on next `spur feature refresh`.
 **sub-task roster into the parent's `## Plan`** now — in the same step. A parent without a roster
 cannot be checked for completeness. See [decomposition.md → Parent (umbrella) tasks](decomposition.md#parent-umbrella-tasks)
 for the roster format and the parent-completion rule.
+
+## Step 5.5: Design doc (conditional)
+
+A feature's **design satellite** (`docs/design/<slug>.md`) is the cross-cutting design record for the
+area — the decision record a reviewer reads, indexed from `docs/04_DESIGN.md §0`. The planning half
+authors it here, after the batch lands, when the feature warrants one. This is **per feature**, not
+per task: a task's in-file `### Design` section (code-level, written at refine — Step 6) is a separate,
+narrower artifact and does not replace the satellite.
+
+**Decision — does this run at all?** Driven by the `/sp:dev-plan` flags:
+
+| Flags | Action |
+|-------|--------|
+| `--design` (± `--auto`) | **Always** author/update the satellite. `--design` wins; `--auto` ignored. |
+| `--auto` (no `--design`) | **Decide from intake.** Author **iff** a cross-cutting seam is detected; else skip. |
+| neither | **Skip.** No satellite, no `04` change — Step 6 follows directly. |
+
+**The seam heuristic (the `--auto` decision).** A design doc is warranted when the feature introduces
+an **ADR-worthy** change — anything that shifts a boundary another engineer must reason about:
+
+- a **new command** or a new flag that changes a command's contract,
+- a **new module / package / service** (a new `apps/*` or `packages/*`, a new app-layer service),
+- a **new schema** — a DB table/migration, a Zod config key, a DTO/contract shape,
+- a **new transport / boundary** — an oRPC seam, an auth boundary, a job-queue or EventBus topic.
+
+If the work is internal to one module, a bug fix, a doc/chore, or a refactor with no boundary change,
+**skip** — note the skip in the report. When in doubt under `--auto`, lean skip; the operator can
+re-run with explicit `--design`.
+
+**Authoring (skill-prose — no CLI verb).** The `04` index is a hand-curated derived doc
+(constitution §4.5 rule 4 / §6.5), so write it directly, in the fixed **detail-first then index**
+order (§4.5 rule 5 / sync trigger **T9**):
+
+1. **Satellite first.** Write/update `docs/design/<slug>.md`. `<slug>` is the stable grep anchor —
+   derive it from the feature name (kebab-case), and **reuse the existing slug** on re-runs. Capture
+   the chosen approach + one-line reason, rejected alternatives, key interface/type **signatures**
+   (not bodies), invariants, and the surface it touches. Do **not** restate the satellite file format
+   here — follow the shape of existing satellites (`docs/design/server-side-adjustment-design.md`,
+   `workflow-observability.md`).
+2. **Index second.** Add or update the satellite's row in `docs/04_DESIGN.md §0` (the `| Satellite |
+   Area | Status |` table) — pointer + one-line area + status only, never a restatement of the body.
+
+**Idempotency (re-runnable).** `/sp:dev-plan … --design` may run many times for one feature. If the
+satellite already exists: **update in place** — merge new design content into its sections, refresh
+its `updated_at`, and leave its existing `04` index row alone (or adjust only its status). **Never**
+overwrite the whole file, create a second satellite, or add a duplicate index row. The invariant
+(§4.5 rule 1): exactly one `04 §0` row per satellite, every satellite reachable from exactly one row.
+
+**Report (no confirmation pause).** Under `--auto`, generation is autonomous — when the heuristic
+fires, author the doc and **report** the chosen slug and a one-line rationale ("authored
+`docs/design/<slug>.md` — new `spur <noun>` command + config key"); when it does not fire, report the
+skip and why. Do not pause to ask; the operator reviews the satellite afterward.
 
 ## Step 6: Refine before execute (the spec-completion gate)
 

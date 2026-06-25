@@ -197,6 +197,11 @@ the chosen approach + a one-line reason, rejected alternatives, key interface/ty
 (not bodies), and invariants. **Code budget: ≤2 illustrative snippets.** This is what a reviewer
 reads to approve the task *before* any code is written.
 
+> **Task `### Design` ≠ the feature design satellite.** This per-task section is code-level and narrow.
+> The feature's cross-cutting design record is the **satellite** `docs/design/<slug>.md`, authored once
+> per feature in the planning half (planning-workflow §Step 5.5), indexed from `04_DESIGN.md §0`. The
+> two coexist: the satellite frames the area; each task's `### Design` records that task's local decision.
+
 **Solution (written at `wip`/`testing`) = the change-map — HOW/WHERE:**
 a `file:line` table of every touched site, one sentence each; **≤8-line snippets only for
 non-obvious logic, never full-function dumps.** `spur task check` requires ≥1 `file:line` citation
