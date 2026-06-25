@@ -727,4 +727,97 @@ describe('spur task CLI', () => {
         expect(exitCode).toBe(0); // falls back to defaults, still creates task
         rmSync(dir, { recursive: true, force: true });
     });
+    // ── refresh-roster ──
+    test('refresh-roster with no sub-tasks prints nothing-to-roster message', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'Roster parent'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'refresh-roster', wbs], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(output.messages.join('')).toContain('nothing to roster');
+    });
+
+    test('refresh-roster with sub-tasks writes the roster and exits 0', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'Parent with kids'], { cwd, output: cOut });
+        const parentWbs = createdWbs(cOut);
+        // Parent needs a ## Plan section to host the roster.
+        const planFile = join(cwd, 'plan-body.md');
+        await Bun.write(planFile, 'Plan goes here.\n');
+        await main(['task', 'update', parentWbs, '--section', 'Plan', '--from-file', planFile], { cwd, output: cOut });
+        // Create two children under the parent.
+        await main(['task', 'create', 'Kid A', '--parent', parentWbs], { cwd, output: cOut });
+        await main(['task', 'create', 'Kid B', '--parent', parentWbs], { cwd, output: cOut });
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'refresh-roster', parentWbs], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(output.messages.join('')).toContain('Roster refreshed');
+        expect(output.messages.join('')).toContain('2 sub-task');
+    });
+
+    test('refresh-roster --json returns structured output', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'JSON roster parent'], { cwd, output: cOut });
+        const parentWbs = createdWbs(cOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'refresh-roster', parentWbs, '--json'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lastMessage(output));
+        expect(parsed.wbs).toBe(parentWbs);
+        expect(parsed.written).toBe(false);
+        expect(parsed.childCount).toBe(0);
+    });
+
+    test('refresh-roster with non-existent WBS exits 1 (catch block)', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'refresh-roster', '9999'], { cwd, output });
+        expect(exitCode).toBe(1);
+        expect(output.errors.length).toBeGreaterThan(0);
+    });
+
+    // ── list catch block ──
+    test('list with a bad folder exits 1 (catch block)', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'list', '--folder', join(cwd, 'totally-nonexistent-dir')], {
+            cwd,
+            output,
+        });
+        expect(exitCode).toBe(1);
+        expect(output.errors.length).toBeGreaterThan(0);
+    });
+
+    // ── update --section warnings (line 112) ──
+    test('update --section with a body containing a same-level heading emits warnings to error channel', async () => {
+        // WHY: a section body that itself contains a same-level markdown heading (###)
+        // gets stripped by PlanningWriteService, which populates result.warnings.
+        // The non-JSON path (line 111-112) routes those warnings to the error channel.
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'Warn section task'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+        const bodyFile = join(cwd, 'warn-section-body.md');
+        // Body contains a ### heading — same level as section headers, triggers strip warning.
+        await Bun.write(bodyFile, 'Some text.\n\n### Rogue heading\n\nMore text.\n');
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'update', wbs, '--section', 'Solution', '--from-file', bodyFile], {
+            cwd,
+            output,
+        });
+        expect(exitCode).toBe(0);
+        expect(output.errors.some((e) => e.includes('Stripped same-level heading'))).toBe(true);
+    });
+    test('path with non-existent folder exits 1 (path catch block)', async () => {
+        // Triggers the path action's catch block (lines 428-429).
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'path', '0001', '--folder', join(cwd, 'no-such-folder-xyz')], {
+            cwd,
+            output,
+        });
+        expect(exitCode).toBe(1);
+        expect(output.errors.length).toBeGreaterThan(0);
+    });
 });
