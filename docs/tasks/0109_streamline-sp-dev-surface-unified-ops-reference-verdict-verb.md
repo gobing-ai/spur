@@ -4,7 +4,7 @@ name: "Streamline sp:dev-* surface: unified ops reference, verdict verb, --agent
 status: todo
 template: feature-impl
 created_at: 2026-06-24T01:40:51.498Z
-updated_at: 2026-06-25T06:24:21.878Z
+updated_at: 2026-06-25T20:20:21.530Z
 feature_id: H2
 priority: P1
 tags: ["sp-plugin", "cli", "workflow", "dx", "observability", "refactor", "dogfood"]
@@ -38,7 +38,17 @@ Comprehensive review after 6 dogfood rounds surfaced five streamlining items on 
 <!-- Decision record — WHAT/WHY. Chosen approach + 1-line reason, rejected alternatives, key signatures (not bodies), invariants. ≤2 illustrative snippets MAX. -->
 
 ### Plan
+Decomposed into five sub-tasks (parent_wbs 0109). 0109 is complete only when all five are `done`.
 
-<!-- Ordered checklist or table of implementation steps (not prose). The how-to-execute order within this one task. -->
+| Sub-task | Covers | Title | Status |
+|----------|--------|-------|--------|
+| [0110](0110_unified-dev-operations-reference-repoint-ghost-commands.md) | R1, R2 | Unified dev-* operations reference + repoint ghost commands | ✅ done |
+| [0111](0111_spur-task-verdict-verb-extract-verify-step-verdict-derivatio.md) | R3 | `spur task verdict` verb — extract verify-step verdict derivation from YAML | ✅ done |
+| [0112](0112_dev-plan-responsibility-split-sp-spur-dev-execution-sp-spur-.md) | R4 | Dev/plan responsibility split — `sp:spur-dev` = execution, `sp:spur-plan` = planning | ✅ done |
+| [0113](0113_agent-override-on-dev-commands-rename-rd3-channel.md) | R5 | `--agent` override on dev-* commands (rename rd3 `--channel`) | ✅ done |
+| [0114](0114_observability-dx-run-start-plan-preview-eventbus-step-progre.md) | R6 | Observability DX — run-start plan preview + EventBus step progress | ⏳ todo |
 
+R7 (validate + dogfood) and R8 (doc sync) are cross-cutting: each sub-task carries its own validation and same-commit doc sync rather than a standalone task.
+
+**Remaining to close 0109:** only 0114 (R6). The observability-DX split anticipated in R8 ("if R6 grows large, split it to a follow-up") was taken — 0114 is that follow-up.
 ### History

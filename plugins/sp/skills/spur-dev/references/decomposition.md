@@ -106,6 +106,41 @@ Estimate five signals — **E** effort (hours), **D** independently-reviewable d
 | 3–4 | decomposition optional — single-task plan allowed with rationale |
 | 5+ | decompose into deliverable-based tasks |
 
+## Parent (umbrella) tasks
+
+When a task decomposes into sub-task **files** (each carrying `parent_wbs`), the original becomes a
+**parent/umbrella task**: it owns the requirements and the cross-cutting design, but it implements
+**nothing itself** — the work lives in its children.
+
+A parent is **not a skeleton task.** The "skeleton task" anti-pattern below targets *sub-tasks* that
+punt their content to the parent ("see parent"). A parent that holds the requirements and a roster
+of children is the *correct* shape — the inverse direction is fine.
+
+Two rules make a parent verifiable:
+
+1. **The parent's `## Plan` must carry the sub-task roster** — a table mapping each child to the
+   parent requirement(s) it covers, with its current status. Write it **immediately after
+   `batch-create`** (the same step that lands the children); a parent without a roster cannot be
+   checked for completeness by a human. Roster row template:
+
+   | Sub-task | Covers | Title | Status |
+   |----------|--------|-------|--------|
+   | `[0110](0110_<slug>.md)` | R1, R2 | <child title> | ✅ done / ⏳ todo / 🔶 wip |
+
+   The status column is maintained by hand today (refresh it when a child's status changes). A
+   command-driven roster refresh — mirroring `spur feature refresh`'s auto-generated `## Tasks`
+   block — is the planned automation; see the deferred roll-up task.
+
+2. **A parent is complete only when every sub-task is `done` (or `cancelled`).** Cross-cutting
+   requirements satisfied across multiple children (e.g. "validate + doc-sync") are met *inside*
+   each child, not as separate tasks. Do not mark a parent `done` while a child is open, and do not
+   leave a parent open once all children are closed.
+
+> **Gate note.** `spur task check` validates *structure*, not roll-up — it does **not** yet flag a
+> parent that is `done` with open children, or all-children-done with an open parent. Until that gate
+> lands, the roster (rule 1) is the manual completeness check. The enforcement gate is a deferred
+> enhancement.
+
 ## Decomposition heuristics
 
 - **Deliverable, not phase.** A subtask must be describable in one sentence a non-technical

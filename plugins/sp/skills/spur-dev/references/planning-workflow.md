@@ -115,6 +115,11 @@ failures:
 Loop until the command exits 0 — then the batch is created and each task appears in the
 feature's `## Tasks` block on next `spur feature refresh`.
 
+**If you decomposed a parent task into sub-task files** (the children carry `parent_wbs`), write the
+**sub-task roster into the parent's `## Plan`** now — in the same step. A parent without a roster
+cannot be checked for completeness. See [decomposition.md → Parent (umbrella) tasks](decomposition.md#parent-umbrella-tasks)
+for the roster format and the parent-completion rule.
+
 ## Step 6: Refine before execute (the spec-completion gate)
 
 `batch-create` lands a task at **`todo`** with its required sections (`Acceptance Criteria`,
