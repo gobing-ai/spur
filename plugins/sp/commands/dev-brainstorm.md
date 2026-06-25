@@ -1,6 +1,6 @@
 ---
 description: Interactive solution design — heuristic discovery interview followed by structured ideation with trade-offs and confidence scoring
-argument-hint: "<topic> [--depth <basic|detailed|comprehensive>] [--options <n>] [--skip-discovery] [--task [<feature-id>]] [--feature [<parent-id>]]"
+argument-hint: "<topic> [--depth <basic|detailed|comprehensive>] [--options <n>] [--skip-discovery] [--task [<feature-id>]] [--feature [<parent-id>]] [--next]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---
 
@@ -32,6 +32,7 @@ options" dump.
 | `--skip-discovery` | Skip the grilling interview — go straight to ideation from the topic alone | off |
 | `--task [<feature-id>]` | After ideation, create a single task file from the recommended approach via `spur task create`. Optionally link to a feature. **Mutually exclusive with `--feature`.** | off |
 | `--feature [<parent-id>]` | After ideation, create a **feature** with BDD acceptance criteria derived from the decision trace, then run the `spur feature check` gate. Lands a validated feature ready for `/sp:dev-plan` decomposition. Optionally nest under a parent feature. **Mutually exclusive with `--task`.** | off |
+| `--next` | After a clean `feature check`, auto-invoke `/sp:dev-plan --feature <ID>` to decompose the feature into a task batch — no manual hand-off. Requires `--feature` (ignored with `--task`, which already lands its terminal artifact). | off |
 
 ## Smart Positional Detection
 
@@ -116,8 +117,9 @@ creates the work item, and `/sp:dev-refine --next` picks it up from there.
 ### `--feature [<parent-id>]`
 
 When set, after ideation the command turns the brainstorm into a **validated feature with BDD
-acceptance criteria** — the front-half entry point. It lands a feature and *stops* at the
-`feature check` gate; decomposition into tasks is the separate `/sp:dev-plan` step (see below).
+acceptance criteria** — the front-half entry point. By default it lands a feature and *stops* at the
+`feature check` gate; decomposition into tasks is the separate `/sp:dev-plan` step (see below). Add
+`--next` to chain straight into decomposition (step 6).
 
 `--task` and `--feature` are **mutually exclusive** — they answer the same question ("what artifact
 does this brainstorm become?") at different altitudes. `--task` = one decision → one executable item
@@ -137,8 +139,12 @@ Passing both is an error.
    - **`## Acceptance Criteria`** ← BDD scenarios derived from the decision trace (the mapping below).
 4. **Gate** — run `spur feature check <ID> --json` and **loop until exit 0**: read each finding, fix
    the specific AC issue, re-run. The check is the only proof the AC is valid; never skip it.
-5. **Report** — print the feature ID, file path, scenario count, and the next step:
-   `/sp:dev-plan --feature <ID>` to decompose it into a task batch.
+5. **Report** — print the feature ID, file path, and scenario count. Without `--next`, also print the
+   next step (`/sp:dev-plan --feature <ID>`) and stop.
+6. **`--next` chain** — when `--next` is set and the `feature check` gate is clean, auto-invoke
+   `/sp:dev-plan --feature <ID>` to decompose the feature into a CLI-validated task batch (the same
+   `--next` convention the execution half uses). On a non-clean gate, stop — never decompose an
+   invalid feature.
 
 **Decision-trace → AC-scenario mapping** (the one non-obvious part). Each resolved decision from
 Phase 1 becomes one or more Gherkin scenarios:
@@ -156,14 +162,16 @@ Number scenarios `R1, R2, …` sequentially, stable forever (the title is the tr
 key). Use the Gherkin template at `config/templates/bdd/gherkin.md`. Full authoring rules:
 [ac-style-guide.md](../skills/spur-dev/references/ac-style-guide.md).
 
-**Why stop at the feature** — decomposition is the existing, schema-gated `/sp:dev-plan` step
-("feature with AC → validated task batch" via `task-batch.schema.json` + `spur task batch-create`).
-Folding it into `--feature` would duplicate that logic and bypass the batch-create gate's natural
-HITL checkpoint. Keep the chain composable: `--feature` lands the validated feature; `dev-plan`
-derives the tasks from it.
+**Why decomposition stays a distinct step** — even under `--next`, `--feature` does not *fold in*
+decomposition; it *delegates* to the existing, schema-gated `/sp:dev-plan` step ("feature with AC →
+validated task batch" via `task-batch.schema.json` + `spur task batch-create`). The two stay separate
+commands so the `batch-create` gate keeps its own checkpoint; `--next` only removes the manual
+copy-paste between them. Default (no `--next`) stops at the validated feature for a human to review
+before decomposing.
 
 This opens the full front-half chain: vague intent → grilling interview → validated feature with AC
-(`--feature`) → `/sp:dev-plan --feature <ID>` decomposition → executable task batch.
+(`--feature`) → `/sp:dev-plan --feature <ID>` decomposition (auto-invoked with `--next`) → executable
+task batch.
 
 ### `--skip-discovery`
 
@@ -192,8 +200,9 @@ one-shot ideation. Use when:
 | `/sp:dev-brainstorm "Microservice boundaries" --skip-discovery` | No interview — straight to ideation |
 | `/sp:dev-brainstorm "API auth strategy" --depth detailed --task H2` | Discovery interview → ideation → create task under feature H2 |
 | `/sp:dev-brainstorm docs/tasks/0042.md --task` | Interview seeded from task → create follow-up task |
-| `/sp:dev-brainstorm "User notification system" --feature` | Interview → ideation → create a top-level feature with BDD AC, gated by `feature check` |
+| `/sp:dev-brainstorm "User notification system" --feature` | Interview → ideation → create a top-level feature with BDD AC, gated by `feature check` (stops at the feature) |
 | `/sp:dev-brainstorm "Audit logging" --depth comprehensive --feature A` | Deep interview → feature nested under parent A, with AC from the decision trace |
+| `/sp:dev-brainstorm "Password reset via email" --feature --next` | Interview → feature with AC → gate → auto-invoke `/sp:dev-plan --feature <ID>` (decompose to tasks) |
 
 ## Implementation
 
@@ -211,6 +220,8 @@ spur task create "<approach-name>" --feature <id> --template feature-impl
 spur feature create "<feature-name>" [--parent <parent-id>] --json
 # then Edit the feature file: Goal, Scope, and Acceptance Criteria (BDD from decision trace)
 spur feature check <ID> --json   # loop until exit 0
+# Phase 3b chain (only when --next is also set): decompose to tasks
+# /sp:dev-plan --feature <ID>
 ```
 
 The `dev-brainstorm` operation on `sp:brainstorm` accepts a pre-built decision-tree context and
@@ -220,7 +231,10 @@ skips its own clarification step, going directly to structured ideation.
   Background from the brainstorm output. Lands a single `todo` task.
 - **`--feature`** — invoke `spur feature create`, then **edit the feature file** to author Goal,
   Scope, and BDD Acceptance Criteria (no `--section` verb exists on `feature update`), then loop the
-  `spur feature check` gate to exit 0. Hands off to `/sp:dev-plan --feature <ID>` for decomposition.
+  `spur feature check` gate to exit 0. Without `--next`, report the feature and stop. With `--next`,
+  on a clean gate auto-invoke `/sp:dev-plan --feature <ID>` to decompose into a task batch.
+- **`--next`** — chains the `--feature` exit into decomposition; ignored without `--feature` (and
+  with `--task`, which already lands a terminal artifact).
 - Passing both `--task` and `--feature` is an error — surface it and ask which artifact the operator
   wants.
 
@@ -236,6 +250,7 @@ skips its own clarification step, going directly to structured ideation.
 
 - **sp:brainstorm** — the backing ideation skill (structured options, trade-offs, confidence)
 - **sp:spur-dev** — convert brainstorm output to tasks via `/sp:dev-plan`
-- **sp:dev-plan** — the decomposition step `--feature` hands off to: feature with AC → task batch
+- **sp:dev-plan** — the decomposition step `--feature --next` auto-invokes (feature with AC → task batch). Call it directly only when a feature already exists and just needs decomposing; otherwise enter through `dev-brainstorm`.
+- **feature-dev.yaml** — the bundled workflow that drives a whole feature end-to-end (brainstorm → plan → execute every task → feature-verify → done)
 - **ac-style-guide** — BDD authoring conventions (R-numbering, `@core`/`@edge` tiers, scenario-title stability) the `--feature` exit follows
 - **Grilling interview pattern** — the one-question-at-a-time heuristic interview this command's Phase 1 is based on. The pattern: walk the decision tree branch by branch, always provide a recommended answer, explore the codebase before asking the user.
