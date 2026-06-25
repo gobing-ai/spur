@@ -59,8 +59,18 @@ happens, never reconstruct it at the end. Honest fixed-vs-unresolved accounting 
 3. Open the monitor ledger (in working memory):
 
    ```
-   | step | attempts | outcome | fix applied | finding | ~tokens | wall-clock |
+   | step | attempts | outcome | fix applied | finding | ~tokens | ~cached | cache% | wall-clock |
    ```
+
+   - `~tokens` — estimated total tokens consumed by the step (tool calls + I/O)
+   - `~cached` — estimated tokens served from context cache (re-reads, unchanged context)
+   - `cache%` — `~cached / ~tokens` as a percentage. High cache% → skill/command is efficient at reusing context; low cache% → candidate for prompt trimming or context-window tuning
+   - `wall-clock` — elapsed time for the step
+
+   Cache metrics are derived from the same heuristic as token count (tool-call count +
+   transcript size). The cache hit rate is an **estimate** — label it `~estimate` — but its
+   trend across runs is the signal: rising cache% means the skill is getting leaner; falling
+   cache% means context bloat is creeping in.
 
 ### Phase 2 — Execute + bounded fix
 
@@ -85,27 +95,102 @@ you are hunting is a finding, not a fix.
 
 The ledger is updated **live** in Phase 2. It is the single source of truth for the report — the
 report is assembled from it, not from memory. Capture for every step: attempts, outcome, any fix
-applied (file + one-line summary), findings surfaced, and the per-step cost estimate.
+applied (file + one-line summary), findings surfaced, per-step token estimates (total + cached),
+and wall-clock time.
+
+Cache-hit tracking per step is the operational signal for skill-tuning: a step with low cache%
+(< 40%) is re-reading files or re-sending prompt context unnecessarily — flag it as a P3 finding
+even if the step succeeded. A run with aggregate cache% < 50% is a tuning candidate regardless of
+PASS/PARTIAL/FAIL verdict.
 
 ### Phase 4 — Report
 
-Assemble the comprehensive report from the ledger. Required sections:
+Assemble the comprehensive report from the ledger. Produce a markdown document with these sections:
 
-1. **Testee** — what was exercised, classification, exact invocation.
-2. **Execution Summary** — overall result (PASS / PARTIAL / FAIL), **wall-clock time**,
-   **~estimated token cost** (see note below — always labeled as an estimate), total steps,
-   total fix attempts.
-3. **What We Did** — the ordered narrative of steps walked and actions taken.
-4. **Issues** — two groups:
-   - **Fixed** — issue, root cause, and the fix applied (file + change).
-   - **Unresolved** — issue, diagnosis, everything tried, why it still fails.
-5. **Findings** — improvement opportunities (not run-blocking), each with **severity** (`P1`–`P4`)
-   and **estimated effort** (e.g. S/M/L or hours). By default, only **P1 and P2** findings are
-   listed (actionable items). Pass `--full` to include P3/P4 (observations, nice-to-haves).
+#### 1. Testee
+
+```
+## Dogfood Report — `<testee invocation>`
+
+### 1. Testee
+
+- **Command:** `<slash command or CLI invocation>`
+- **Classification:** `slash command` | `agent skill` | `CLI invocation`
+- **Exact invocation:** the underlying `Skill()` call or shell command
+- **Task under test:** WBS + title (if applicable)
+```
+
+#### 2. Execution Summary
+
+```
+### 2. Execution Summary
+
+- **Result:** PASS / PARTIAL / FAIL  `(N issues fixed, N unresolved, N findings)`
+- **Wall-clock:** ~N min
+- **~Token cost (estimate):** ~N total  |  ~N cached (~X% hit rate)
+- **Steps:** N major steps (phase1 → phase2 → …), N total sub-steps
+- **Fix attempts:** N (brief label per fix)
+```
+
+Cache metrics use the same estimation heuristic as token count. A slash command cannot read its
+own exact token meter — derive from tool-call count + transcript size and **label EVERY token
+number with `~estimate`**. The cache-hit rate is the important trend signal across runs, not the
+absolute numbers.
+
+#### 3. What We Did
+
+```
+### 3. What We Did
+
+1. **Action label** — what happened, what was observed, key decisions made.
+2. **Action label** — …
+```
+
+Narrative, not bullet-point dump. One numbered entry per logical action taken (a step, a fix, a
+gate check). Include file references as `path-line`. This is the story of the run — someone
+reading it should understand what happened without looking at the ledger.
+
+#### 4. Issues
+
+```
+### 4. Issues
+
+#### Fixed
+
+1. **Issue title** — description.
+   - Root cause: why it happened.
+   - Fix: what was changed (`file:line` + one-line summary).
+
+#### Unresolved
+
+- (none)  |  or list each with diagnosis + everything tried.
+```
+
+Never collapse "no issues" into a one-liner — always include the `#### Fixed` and
+`#### Unresolved` sub-headings with `(none)` when empty. Consistent structure matters for
+machine parsing.
+
+#### 5. Findings
+
+```
+### 5. Findings
+
+- **P1** — finding description (file references, estimated effort).
+- **P2** — …
+```
+
+By default, only **P1 and P2** findings are listed (actionable items). Pass `--full` to include
+P3/P4 (observations, nice-to-haves). Each finding gets a severity badge, a one-line description,
+and when relevant a `file:line` reference. Findings are improvement opportunities — they didn't
+block the run but should be addressed.
+
+**Cache-health finding rule:** If aggregate cache% < 50% or any individual step has cache% < 40%,
+emit a P3 finding: "Low cache hit rate — candidate for context-window or prompt trimming."
 
 > **Token cost is an estimate.** A slash command cannot read its own exact token meter. Derive a
 > heuristic from tool-call count + transcript size + wall-clock and **label it `~estimate`**. Never
-> print a precise token number you cannot substantiate.
+> print a precise token number you cannot substantiate. Cache metrics use the same heuristic.
+> The signal is the **trend** across runs, not the absolute per-run numbers.
 
 ### Mandatory Summary Footer
 
@@ -114,6 +199,7 @@ Assemble the comprehensive report from the ledger. Required sections:
 ```
 ── Dogfood Summary ──
 Result: PASS   (3 issues fixed, 0 unresolved, 2 findings)
+Tokens: ~27,000 total  |  ~16,000 cached (~59% hit rate)  [~estimate]
 
 Fixed issues:
   • ts-runtime: added signal?: AbortSignal to ProcessOptions
@@ -132,10 +218,12 @@ Findings (P1+P2):
 **Rules:**
 
 - **Result line** is mandatory: `PASS / PARTIAL / FAIL` with counts `(N fixed, N unresolved, N findings)`.
+- **Tokens line** is mandatory: `~N total | ~N cached (~X% hit rate) [~estimate]`. Always
+  include the `[~estimate]` tag — never present these numbers as precise.
 - **Fixed issues** — list each if any; print `(none)` if empty.
 - **Unresolved issues** — list each if any; print `(none)` if empty.
 - **Findings** — list P1+P2 by default; with `--full`, include P3+P4. Print `(none)` if empty.
-- **If nothing to report** (PASS, zero issues, zero findings): print a single line `Result: PASS — no issues, no findings.`
+- **If nothing to report** (PASS, zero issues, zero findings): print a single line `Result: PASS — no issues, no findings.` (still include the tokens line).
 - **If `--save`**: append the report file path as the last line.
 - **If `--task`**: append the created task WBS as the last line.
 - Print the footer **after** any `--save` file write or `--task` creation — it's the last thing the user sees.
