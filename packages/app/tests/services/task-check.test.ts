@@ -954,4 +954,134 @@ describe('TaskCheckService', () => {
         expect(cov.length).toBeGreaterThan(0);
         expect(cov.every((f) => f.severity === 'warning')).toBe(true);
     });
+
+    // ── L4 roll-up (0121): parent↔child status drift + roster presence ──
+
+    /** A parent task body with a Plan; `withRoster` controls whether the Plan table names a child WBS. */
+    function parentBody(opts: { wbs: string; status: string; withRoster: boolean; rosterWbs?: string }): string {
+        const plan = opts.withRoster
+            ? ['| Sub-task | Status |', '| -------- | ------ |', `| ${opts.rosterWbs ?? '0002'} | open |`]
+            : ['- Implementation step'];
+        return [
+            taskFm({ feature_id: 'F1', status: opts.status, name: 'Parent task' }),
+            '',
+            '### Plan',
+            '',
+            ...plan,
+        ].join('\n');
+    }
+
+    /** A child task pointing at `parentWbs`, with the given status. */
+    function childBody(parentWbs: string, status: string): string {
+        return taskFm({ feature_id: 'F1', parent_wbs: parentWbs, status, name: 'Child task' });
+    }
+
+    test('roll-up: parent done while a child is open warns (drift down)', async () => {
+        const { fs, path, cleanup } = seedEnv({
+            wbs: '0001',
+            taskContent: parentBody({ wbs: '0001', status: 'done', withRoster: true }),
+            features: { F1: featureFm('F1', 'active') },
+            extraTasks: { '0002': childBody('0001', 'wip') },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const drift = result.findings.filter(
+            (f) => f.layer === 'L4' && f.severity === 'warning' && f.message.includes('still open'),
+        );
+        expect(drift.length).toBeGreaterThan(0);
+        expect(drift[0]?.message).toContain('0002');
+    });
+
+    test('roll-up: all children done while parent open warns (drift up)', async () => {
+        const { fs, path, cleanup } = seedEnv({
+            wbs: '0001',
+            taskContent: parentBody({ wbs: '0001', status: 'wip', withRoster: true }),
+            features: { F1: featureFm('F1', 'active') },
+            extraTasks: { '0002': childBody('0001', 'done'), '0003': childBody('0001', 'cancelled') },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const drift = result.findings.filter(
+            (f) => f.layer === 'L4' && f.severity === 'warning' && f.message.includes('parent is still'),
+        );
+        expect(drift.length).toBeGreaterThan(0);
+    });
+
+    test('roll-up: parent done with all children closed produces no drift warning', async () => {
+        const { fs, path, cleanup } = seedEnv({
+            wbs: '0001',
+            taskContent: parentBody({ wbs: '0001', status: 'done', withRoster: true }),
+            features: { F1: featureFm('F1', 'active') },
+            extraTasks: { '0002': childBody('0001', 'done') },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const drift = result.findings.filter(
+            (f) => f.layer === 'L4' && (f.message.includes('still open') || f.message.includes('parent is still')),
+        );
+        expect(drift).toHaveLength(0);
+    });
+
+    test('roll-up: a task with zero children is inert (R3 — no roll-up findings)', async () => {
+        const { fs, path, cleanup } = seedEnv({
+            wbs: '0001',
+            taskContent: parentBody({ wbs: '0001', status: 'done', withRoster: false }),
+            features: { F1: featureFm('F1', 'active') },
+            // no extraTasks — nothing points at 0001
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const rollup = result.findings.filter(
+            (f) =>
+                f.layer === 'L4' &&
+                (f.message.includes('still open') ||
+                    f.message.includes('parent is still') ||
+                    f.message.includes('roster')),
+        );
+        expect(rollup).toHaveLength(0);
+    });
+
+    test('roll-up: parent with children but no roster table warns (R2 — the 0109 gap)', async () => {
+        const { fs, path, cleanup } = seedEnv({
+            wbs: '0001',
+            taskContent: parentBody({ wbs: '0001', status: 'wip', withRoster: false }),
+            features: { F1: featureFm('F1', 'active') },
+            extraTasks: { '0002': childBody('0001', 'wip') },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const roster = result.findings.filter(
+            (f) => f.layer === 'L4' && f.severity === 'warning' && f.message.includes('roster'),
+        );
+        expect(roster.length).toBeGreaterThan(0);
+        expect(roster[0]?.section).toBe('Plan');
+    });
+
+    test('roll-up: parent whose Plan table names the child WBS suppresses the roster warning', async () => {
+        const { fs, path, cleanup } = seedEnv({
+            wbs: '0001',
+            taskContent: parentBody({ wbs: '0001', status: 'wip', withRoster: true, rosterWbs: '0002' }),
+            features: { F1: featureFm('F1', 'active') },
+            extraTasks: { '0002': childBody('0001', 'wip') },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const roster = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('roster'));
+        expect(roster).toHaveLength(0);
+    });
+
+    test('roll-up: --strict elevates drift warnings to errors (fails the gate)', async () => {
+        const { fs, path, cleanup } = seedEnv({
+            wbs: '0001',
+            taskContent: parentBody({ wbs: '0001', status: 'done', withRoster: true }),
+            features: { F1: featureFm('F1', 'active') },
+            extraTasks: { '0002': childBody('0001', 'wip') },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001', { strict: true });
+        cleanup();
+        const drift = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('still open'));
+        expect(drift.length).toBeGreaterThan(0);
+        expect(drift.every((f) => f.severity === 'error')).toBe(true);
+        expect(result.pass).toBe(false);
+    });
 });

@@ -100,6 +100,10 @@ export class TaskCheckService extends PlanningCheckService {
         const featuresDir = join(dirname(tasksDir), 'features');
         await this.runL4(doc, fm, findings, featuresDir, tasksDir);
 
+        // ── L4 roll-up (0121, R1–R3): parent↔child status drift + roster presence.
+        // Inert unless one or more sibling tasks declare parent_wbs == this wbs.
+        await this.runL4Rollup(doc, wbs, status, findings, tasksDir);
+
         return { wbs, ...this.summarizeWithStatus(status, findings, strict) };
     }
 
@@ -272,6 +276,114 @@ export class TaskCheckService extends PlanningCheckService {
                 }
             }
         }
+    }
+
+    /**
+     * L4 roll-up (0121): a task that is a decomposition parent — one or more
+     * sibling tasks whose `parent_wbs` points at it — has its parent↔child
+     * status relationship validated. Three advisory (warning) findings:
+     *
+     *  1. parent `done` while a kid is not `done`/`cancelled` (R1, drift down);
+     *  2. all kids `done`/`cancelled` while the parent is still open (R1, drift up);
+     *  3. parent `## Plan` carries no sub-task roster table (R2, the 0109 omission).
+     *
+     * Severity is `warning`; `--strict` elevates per the shared base. Inert for a
+     * task with zero kids (R3) — the dir scan finds nothing and returns early.
+     *
+     * NOTE (0121 design correction): L4 does NOT pre-load the corpus — `check()` is
+     * invoked per-task and resolves the *current* task's edges by reading individual
+     * files. Finding kids therefore requires one `readDir` + frontmatter scan of
+     * the tasks dir here; it cannot "reuse the same pass" as the Design assumed. The
+     * scan is O(n) over the tasks dir, once per check, and short-circuits when no
+     * kid references this wbs.
+     */
+    private async runL4Rollup(
+        doc: MarkdownDocument,
+        wbs: string,
+        status: string,
+        findings: CheckFindings[],
+        tasksDir: string,
+    ): Promise<void> {
+        const kids = await this.findChildren(tasksDir, wbs);
+        if (kids.length === 0) return; // not a parent — inert (R3)
+
+        const closed = (s: string): boolean => s === 'done' || s === 'cancelled';
+        const parentClosed = closed(status);
+        const openKids = kids.filter((c) => !closed(c.status));
+
+        // R1a: parent done/cancelled but a kid is still open.
+        if (parentClosed && openKids.length > 0) {
+            const list = openKids.map((c) => c.wbs).join(', ');
+            findings.push({
+                layer: 'L4',
+                severity: 'warning',
+                section: '',
+                message: `Parent is ${status} but sub-task(s) still open: ${list} — close or re-parent them`,
+            });
+        }
+
+        // R1b: every kid closed but the parent is still open.
+        if (!parentClosed && openKids.length === 0) {
+            findings.push({
+                layer: 'L4',
+                severity: 'warning',
+                section: '',
+                message: `All ${kids.length} sub-task(s) are done/cancelled but parent is still ${status} — close the parent`,
+            });
+        }
+
+        // R2: parent has kids but no sub-task roster in its Plan (the 0109 gap).
+        const planBody = doc.getSection('Plan') ?? '';
+        if (!this.hasSubtaskRoster(planBody, kids)) {
+            findings.push({
+                layer: 'L4',
+                severity: 'warning',
+                section: 'Plan',
+                message: 'Parent task has sub-tasks but its Plan has no sub-task roster (decomposition.md)',
+            });
+        }
+    }
+
+    /**
+     * A Plan body counts as carrying a sub-task roster when it references at least
+     * one sub-task WBS inside a markdown table. Heuristic, intentionally permissive
+     * (warning, not error): a table row mentioning a real sub-task WBS is the roster
+     * signal — a bare prose Plan or a checklist without WBS refs is not.
+     */
+    private hasSubtaskRoster(planBody: string, kids: { wbs: string }[]): boolean {
+        if (!/\|/.test(planBody)) return false; // no table at all
+        return kids.some((c) => planBody.includes(c.wbs));
+    }
+
+    /**
+     * Scan the tasks dir for sibling tasks whose `parent_wbs` resolves to `wbs`.
+     * Returns each sub-task's wbs + status. Self-referential and malformed files are
+     * skipped; a missing/unreadable dir yields no sub-tasks (the check stays inert).
+     */
+    private async findChildren(tasksDir: string, wbs: string): Promise<{ wbs: string; status: string }[]> {
+        const kids: { wbs: string; status: string }[] = [];
+        let entries: string[];
+        try {
+            entries = await this.fs.readDir(tasksDir);
+        } catch {
+            return kids;
+        }
+        for (const name of entries) {
+            const m = /^(\d{4})_.+\.md$/.exec(name);
+            if (m === null) continue;
+            const kidWbs = m[1];
+            if (kidWbs === undefined || kidWbs === wbs) continue; // skip self
+            try {
+                const raw = await this.fs.readFile(`${tasksDir}/${name}`);
+                const fm = MarkdownDocument.parse(raw, 'task').frontmatterData ?? {};
+                const parent = (fm.parent_wbs as string | undefined) ?? (fm['parent-wbs'] as string | undefined);
+                if (parent !== wbs) continue;
+                kids.push({ wbs: kidWbs, status: (fm.status as string) ?? 'backlog' });
+            } catch {
+                // Unreadable/malformed sibling — skip; it surfaces under its own check.
+            }
+        }
+        return kids;
     }
 
     /** Find a feature file by ID (filename prefix match: `{id}_`). */

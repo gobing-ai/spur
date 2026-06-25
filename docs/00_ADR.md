@@ -476,6 +476,23 @@ belongs in Spur, not in a Claude Code plugin tree with no shared foundation.
 per-item dispositions in `docs/plans/2026-06-10-rd3-migration-feature-list.md`; command and schema
 shapes land in `04_DESIGN.md` in the same commits the commands ship.
 
+**Amendment (2026-06-25) — parent↔child roll-up gate (task 0121).** `spur task check` gains a
+**roll-up** semantic in its L4 traceability layer: for any task that is a decomposition *parent*
+(one or more sibling tasks declare `parent_wbs` pointing at it), the parent↔child status
+relationship is validated. Three advisory (**warning**) findings, `--strict` elevating per the
+established convention: (a) parent `done`/`cancelled` while a child is still open; (b) all children
+`done`/`cancelled` while the parent is still open; (c) parent `## Plan` carries no sub-task roster
+table (the Tier-1 convention from `decomposition.md`). The check is **inert** for tasks with zero
+children — no behavior change there. This is the first `task check` rule that reads *sibling* tasks,
+not just the task under check; it does so with one `readDir` + frontmatter scan of the tasks dir
+(L4 resolves per-task edges file-by-file — it does not pre-load the corpus, so the children index
+cannot reuse an existing pass). Warning (not error) mirrors the DD-09 AC-coverage check: a parent
+mid-decomposition is a normal transient state, so the gate nudges rather than blocks. Trigger:
+dogfood finding, task 0109 shipped `done`-ready without a sub-task roster, making its completeness
+unverifiable. Relates: enforces the Tier-1 doc convention added to `decomposition.md`.
+
+**Detail:** `04_DESIGN.md §7.1` (`task check` row); implementation `packages/app/src/services/task-check.ts` (`runL4Rollup`).
+
 ---
 
 ## ADR-021: Functionality Lives in `packages/app`; Apps Are Transport Wrappers

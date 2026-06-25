@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Parent-task roll-up gate: spur task check flags parent/child status drift"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: H2
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-06-25T20:30:58.971Z"
-updated_at: 2026-06-25T20:32:03.958Z
+updated_at: 2026-06-25T21:34:57.001Z
 ---
 
 ## 0121. Parent-task roll-up gate: spur task check flags parent/child status drift
@@ -82,15 +82,53 @@ if children(t) is non-empty:                       # t is a parent/umbrella
 function checkParentRollup(parent: TaskRow, children: TaskRow[]): Finding[];
 ```
 ### Plan
-
-- [ ] Implementation step
-
+- [x] R1 — roll-up status check (drift-down + drift-up) in L4, warning severity, `--strict` elevates
+- [x] R2 — roster-presence advisory warning when a parent's Plan has no sub-task roster table
+- [x] R3 — inert on non-parents (zero children → no roll-up findings; reuse no second corpus pass)
+- [x] R4 — ADR-020 amendment + `04_DESIGN §7.1` sync (same commit); AGENTS surface unchanged
+- [x] R6 — lint green, both directions + inert + missing-roster tested, 0109 real-corpus fixture warns
+- [ ] R5 — auto-refresh roster generator: deferred to its own follow-on task (scope guard)
 ### Solution
+Parent↔child roll-up gate added to `spur task check`'s L4 traceability layer. Warning-severity, `--strict`-elevating, inert for tasks with no children. No new CLI flag — the verb surface is unchanged.
 
+| File | What / Why |
+| ---- | ---------- |
+| `packages/app/src/services/task-check.ts:101-108` | Wired `runL4Rollup(doc, wbs, status, findings, tasksDir)` into `check()` right after the existing `runL4` pass, so the roll-up runs in the same L4 stage. |
+| `packages/app/src/services/task-check.ts:355-420` | New `runL4Rollup` + `hasSubtaskRoster` + `findChildren` helpers. `runL4Rollup` emits three warnings (R1a parent-done-child-open, R1b all-children-closed-parent-open, R2 missing-roster) only when `findChildren` returns ≥1 child (R3 inert). `findChildren` does one `readDir` + frontmatter scan of the tasks dir, matching siblings whose `parent_wbs == wbs`, skipping self and malformed files. |
+| `packages/app/tests/services/task-check.test.ts:957-1090` | 7 roll-up tests: drift-down, drift-up, clean closed-parent/closed-children, no-children inert (R3), missing-roster (R2), roster-suppression, and `--strict` elevation (R1). |
+| `docs/00_ADR.md:479` | ADR-020 dated amendment (2026-06-25) defining the roll-up rule, its warning/strict severity, and the sibling-read semantic (R4). |
+| `docs/04_DESIGN.md:474` | Synced the `spur task check` §7.1 row with the roll-up semantic (same commit, R4). |
+
+**Design correction (per the 0122 type-fit lesson).** The task's Design assumed the roll-up could "reuse the same pass — L4 already loads the corpus, O(n) already being read." Reading the actual code showed L4 does **not** pre-load the corpus: `check()` is invoked per-task and resolves the current task's edges file-by-file. Finding children therefore requires a dedicated `readDir` + frontmatter scan here — it cannot reuse a non-existent corpus pass. The implementation does this honestly (one scan per check, short-circuited when no child references the wbs) and the divergence is documented in the `runL4Rollup` doc-comment and the ADR amendment. This is exactly the "verify the return type's fields, not the assumed capability" check that finding caught.
+
+**R5 deferred (scope guard):** the command-driven roster *refresh* generator is explicitly out of scope — this task is the GATE (a check that reads a missing roster), not the generator. Filing R5 as its own follow-on task.
+
+**Real-corpus validation (R6):** running `spur task check 0109` against the live corpus correctly emits "All 5 sub-task(s) are done/cancelled but parent is still todo — close the parent" — 0109's five children (0110–0114) are all `done` while 0109 sits `todo`. The exact drift the gate was built to catch.
 ### Testing
+7 new roll-up tests added to `packages/app/tests/services/task-check.test.ts`, all passing.
 
+| Req | Status | Evidence |
+| --- | ------ | -------- |
+| R1 (roll-up both directions + strict) | MET | `task-check.test.ts` — "drift down", "drift up", "--strict elevates drift warnings to errors" |
+| R2 (roster presence advisory) | MET | "parent with children but no roster table warns", "Plan table names the child WBS suppresses the warning" |
+| R3 (no false positives on non-parents) | MET | "a task with zero children is inert" — zero roll-up findings |
+| R4 (ADR + DESIGN sync) | MET | `docs/00_ADR.md:479` amendment; `docs/04_DESIGN.md:474` row synced |
+| R5 (scope guard) | MET (deferred) | Generator explicitly out of scope; documented in Solution |
+| R6 (validate + 0109 fixture) | MET | `bun run lint` green; full suite 1814 pass / 0 fail; `task check 0109` warns as predicted |
+
+Coverage: `packages/app/src/services/task-check.ts` at **100% line / 98.27% function** (≥90% target met). Full repo suite: 1814 pass / 0 fail across 146 files.
 ### Review
+SECU self-review of the roll-up gate diff. No blockers; the change is additive, warning-only, and inert for the common (childless) case.
 
+| Severity | File | Finding | Recommendation |
+| -------- | ---- | ------- | -------------- |
+| P3 | `packages/app/src/services/task-check.ts` (findChildren) | **Efficiency:** every `check()` of a parent re-reads the whole tasks dir + parses each sibling's frontmatter. For a batch `spur task check` (no wbs → all tasks), this is O(n²) frontmatter parses across the corpus. Acceptable at current corpus size (<200 tasks); flagged for the batch path. | If the corpus grows, hoist a one-shot `parentWbs→children[]` index into the batch loop (`apps/cli/src/commands/task.ts:326`) and pass it down, rather than scanning per task. Single-task checks are unaffected. |
+| P4 | `packages/app/src/services/task-check.ts` (hasSubtaskRoster) | **Correctness (heuristic):** the roster check passes if *any* child WBS appears inside a table. A Plan that tables only a subset of children still passes. Intentional (warning-grade nudge, not a completeness proof). | Leave as-is; tightening to "all children present" would fight the permissive-start convention. |
+
+**Verdict: PASS.** All requirements MET (R5 deferred by design). Type-fit verified — the implementation diverged from the Design's "reuse the corpus pass" assumption because L4 has no such pass; the divergence is documented in code + ADR. Back-issue: R5 (roster auto-refresh generator) should be filed as a follow-on task.
 ### References
 
 ### History
+- 2026-06-25T21:29:03.535Z todo → wip (system)
+- 2026-06-25T21:34:56.656Z wip → testing (system)
+- 2026-06-25T21:34:57.001Z testing → done (system)
