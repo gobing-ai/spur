@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Unified dev-* operations reference + repoint ghost commands"
-status: testing
+status: done
 template: feature-impl
 created_at: 2026-06-24T03:52:29.293Z
-updated_at: 2026-06-25T04:39:17.723Z
+updated_at: 2026-06-25T06:47:03.151Z
 feature_id: H2
 parent_wbs: "0109"
 priority: P1
@@ -103,18 +103,33 @@ Invariants: (1) no dev-* command delegates to an undefined sp:spur-dev operation
 
 **Not changed (by design):** 8 `Skill()`-backed commands (implement, unit, review, verify, run, refine, plan, docs) — AC4 invariant. `dev-dogfood.md` — pre-existing work not authored by this task.
 ### Testing
-
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1: dev-operations.md with all dev-* operations | **PARTIAL** | 11 of 13 AC-listed operations documented. `implement` covered as sub-mode of run (#4). `docs` operation missing — no entry. |
-| R2: 5 ghost commands repointed to real backing | **MET** | All 5 (changelog, gitmsg, fixall, handover, new-task) have inline procedures + dev-operations.md links. Zero ghost `Skill()` delegations remain. |
-| R3: Real flags in arg-hints | **MET** | changelog: `--since/--until/--version`; gitmsg: `--commit/--scope`; fixall: `<validation-command>/--max-retry/--scope`; handover: `<blocker description>`; new-task: `<description>/--feature/--template/--parent` |
-| R4: `bun run lint` exits 0 | **MET** | `bun run lint` clean — Biome + 7 workspace typecheck all pass |
+| R1 — dev-operations.md with all dev-* operations | **MET** | `dev-operations.md:33-44` — operation map table defines all 13 ops (8 Skill()-backed + 5 inline); `dev-operations.md:56-233` — 12 detail sections (implement covered as sub-mode of run #4, docs at #7) |
+| R2 — 5 ghost commands repointed to real backing | **MET** | All 5 commands have zero `Skill()` delegations; each Implementation section describes inline procedure + links to dev-operations.md; `dev-changelog.md:47`, `dev-gitmsg.md:42`, `dev-fixall.md:47`, `dev-handover.md:52`, `dev-new-task.md:51` |
+| R3 — Real flags in arg-hints | **MET** | `dev-changelog.md:3` — `[output-file] [--since] [--until] [--version]`; `dev-gitmsg.md:3` — `[--commit] [--scope]`; `dev-fixall.md:3` — `[<validation-command>] [--max-retry] [--scope]`; `dev-handover.md:3` — `"<blocker description>"`; `dev-new-task.md:3` — `"<description>" [--feature] [--template] [--parent]` |
+| R4 — lint green + surface synced | **MET** | `bun run lint` → 0 errors; `04_DESIGN.md:449` — §7.8 dev-* operation map row; `AGENTS.md` — plugin commands documented via dev-operations reference |
 
-Coverage: 99.07% lines, 99.54% funcs.
+Coverage: N/A (documentation-only task — no code under test; arg-hint strings and markdown structure verified by inspection + lint).
+### Review
 
-**Verdict: PARTIAL** — R1 is partial (docs operation missing from dev-operations.md). R2-R4 all MET.
+**Security:** No findings — all changes are markdown documentation; no secrets, credentials, injection, or CLI-execution risks introduced.
+
+**Efficiency:** No findings — documentation-only change with zero runtime overhead.
+
+**Correctness:**
+- All 5 previously-ghost commands have real inline procedures with zero `Skill()` delegations — no "operation not found" risk.
+- Arg-hints declare real flags (not generic `$ARGUMENTS` passthrough); match the procedure descriptions in dev-operations.md.
+- The 8 Skill()-backed commands are untouched — dev-run, dev-refine, dev-plan all retain their `Skill()` delegation.
+- dev-operations.md covers all 13 operations; `implement` covered as sub-mode of run (#4); `docs` present at #7.
+- **P3 observation:** dev-operations.md detail section count is 12 (not 13) because run (#4) covers both full and implement modes. The operation map column header says "13 ops" — the reader must understand run counts as two. Not a bug, but a readability quirk.
+
+**Usability:**
+- `04_DESIGN.md §7.8` points to dev-operations.md as the authoritative dev-* operations reference.
+- Each ghost command links to its specific dev-operations.md anchor (e.g., `#8-changelog`).
+- **P3 observation:** dev-changelog arg-hint declares `[output-file]` but the inline procedure says "Print the changelog to stdout" — the positional is accepted but not consumed by the procedure. Minor spec drift.
 
 ### History
 - 2026-06-24T16:15:18.902Z todo → wip (system)
 - 2026-06-25T04:38:36.135Z wip → testing (system)
+- 2026-06-25T06:47:03.151Z testing → done (system)

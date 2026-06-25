@@ -1,6 +1,6 @@
 ---
 description: Generate changelog from git commits
-argument-hint: "[output-file] [--since <tag|commit>] [--until <tag|commit>] [--version <version>]"
+argument-hint: "[--since <tag|commit>] [--until <tag|commit>] [--version <version>]"
 allowed-tools: ["Bash", "Read", "Write"]
 ---
 
@@ -20,7 +20,6 @@ Generate concise, user-friendly changelogs from git commits. Translates technica
 
 | Argument | Description | Default |
 |----------|-------------|---------|
-| `output-file` | Output file path (positional, optional) | append to `CHANGELOG.md` |
 | `--since <ref>` | Start reference — tag or commit | (most recent tag) |
 | `--until <ref>` | End reference — tag or commit | HEAD |
 | `--version <ver>` | Version number for the header | auto-detect from latest tag |

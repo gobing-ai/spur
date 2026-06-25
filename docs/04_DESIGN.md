@@ -446,7 +446,7 @@ shipped (`05 §9` tracks status).
 | 7.4 Section-Status-Matrix + format rules | Config file shapes under `./config` (ADR-015); warning-first enforcement core | triage A13/A14; `03 §12.3` |
 | 7.5 Lifecycle workflow definitions | `config/workflows/` task/feature lifecycle YAML shapes + guard wiring | ADR-022; `03 §12.2` |
 | 7.6 Task DTOs | oRPC contract shapes for the board | server/web design task (ADR-021.b) |
-| 7.8 `sp:dev-*` command operations | Dev-* operation map (13 ops: 8 `Skill()`-backed + 5 inline) | `plugins/sp/skills/spur-dev/references/dev-operations.md` |
+| 7.8 `sp:dev-*` command operations | Dev-* operation map (13 ops: 8 `Skill()`-backed + 5 inline; `implement` is a sub-mode of `run`) | `plugins/sp/skills/spur-dev/references/dev-operations.md` |
 
 ### 7.1 `spur task` commands
 
@@ -735,8 +735,8 @@ Two primitives back the anti-hallucination migration (superskill task 0041):
 
 ### 7.8 `sp:dev-*` command operations
 
-The `sp:dev-*` commands back onto three skills (`sp:spur-dev`, `sp:code-verification`,
-`sp:doc-evolve`) or define their procedure inline. The authoritative reference for all 13 operations —
+The `sp:dev-*` commands back onto four skills (`sp:spur-dev`, `sp:code-verification`,
+`sp:doc-evolve`, `sp:brainstorm`) or define their procedure inline. The authoritative reference for all 13 operations —
 purpose, inputs, backing, behavior contract — is
 [`plugins/sp/skills/spur-dev/references/dev-operations.md`](../plugins/sp/skills/spur-dev/references/dev-operations.md).
 
