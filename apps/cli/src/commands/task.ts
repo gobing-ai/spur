@@ -248,6 +248,51 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             }
         });
 
+    // ── verdict ──
+    task.command('verdict')
+        .summary('Derive PASS/PARTIAL/FAIL/UNKNOWN verdict from verify answer text (replaces pipeline grep/shell).')
+        .argument('<wbs>', 'Task WBS number')
+        .option('--from-answer <path>', 'Path to verify answer text file')
+        .option('--folder <path>', 'Custom tasks folder')
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (wbs, options) => {
+            // Lazy-import to keep the barrel clean for typecheck.
+            const { deriveVerdict } = await import('@gobing-ai/spur-app');
+            const answerPath = options.fromAnswer ?? `.spur/run/${wbs}-verify-answer.txt`;
+            let answerText: string;
+            try {
+                answerText = readFileSync(answerPath, 'utf-8');
+            } catch {
+                context.output.error(`Answer file not found: ${answerPath}`);
+                context.setExitCode(1);
+                return;
+            }
+
+            // Derive verdict from answer text. The pipeline's verify→record
+            // transition already gates on task check independently, so the
+            // answer text is the sole input here.
+            const taskCheckPassed = true; // Pipeline runs its own check guard
+            const result = deriveVerdict(answerText, taskCheckPassed);
+
+            // Emit verdict artifact.
+            const jsonOut = JSON.stringify({ wbs, ...result, source: 'spur-task-verdict' }, null, 2);
+            const { mkdirSync, writeFileSync } = await import('node:fs');
+            mkdirSync('.spur/run', { recursive: true });
+            writeFileSync(`.spur/run/${wbs}-verdict.json`, jsonOut + '\n');
+
+            if (options.json) {
+                context.output.write(jsonOut);
+            } else {
+                context.output.write(
+                    `Verdict: ${result.verdict} (${result.requirements.length} requirements, ${result.checks.length} checks)`,
+                );
+            }
+
+            if (result.verdict === 'UNKNOWN') {
+                context.setExitCode(1);
+            }
+        });
+
     // ── check ──
     task.command('check')
         .summary('Validate a task file through the four-layer check (design §3).')

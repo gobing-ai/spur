@@ -98,6 +98,8 @@ export type {
     TaskSummary,
 } from './services/task-service';
 export { TaskService } from './services/task-service';
+export type { VerdictResult } from './services/task-verdict';
+export { deriveVerdict } from './services/task-verdict';
 export type {
     AgentSpecInput,
     InboxEntry,

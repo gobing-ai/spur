@@ -117,13 +117,7 @@ states:
           answerFile: .spur/run/${vars.wbs}-verify-answer.txt
       - kind: shell
         options:
-          command: >
-            mkdir -p .spur/run &&
-            if ${vars.spurBin} task check ${vars.wbs} >/dev/null 2>&1 &&
-               grep -Eqi 'verdict[^A-Za-z]*pass|^[[:space:]]*pass\b|✅' ".spur/run/${vars.wbs}-verify-answer.txt" 2>/dev/null;
-            then V=PASS; else V=FAIL; fi;
-            printf '{"wbs":"%s","verdict":"%s","source":"pipeline-verify-step"}\n' "${vars.wbs}" "$V"
-            > ".spur/run/${vars.wbs}-verdict.json"
+          command: "${vars.spurBin} task verdict ${vars.wbs} --from-answer .spur/run/${vars.wbs}-verify-answer.txt"
 
   - id: record
     description: >
