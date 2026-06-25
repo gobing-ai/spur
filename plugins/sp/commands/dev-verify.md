@@ -1,6 +1,6 @@
 ---
 description: Verify a task against its requirements — traceability check producing a PASS/PARTIAL/FAIL verdict with per-requirement evidence
-argument-hint: "<wbs> [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force]"
+argument-hint: "<wbs> [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next]"
 allowed-tools: ["Bash", "Read", "Write", "Skill"]
 ---
 
@@ -29,12 +29,24 @@ the verdict artifact (`.spur/run/<wbs>-verdict.json`) is emitted for the pipelin
 | `--bdd` | Map `## Acceptance Criteria` scenarios to tests and fold into the verdict | off |
 | `--auto` | Skip confirmations (CI / pipeline use) | off |
 | `--force` | Bypass the terminal-status guard — verify even a `done`/`cancelled` task | off |
+| `--next` | On PASS verdict, auto-transition `testing → done`. On PARTIAL/FAIL, stop — do not advance. | off |
 
 ## Behavior
 
 Thin wrapper: status guard, change-scope detection, requirements traceability, SECU review, verdict
 aggregation, findings write-back, verdict-artifact emission, and the optional `--fix` pass are all
 owned by the skill.
+
+## `--next` chain
+
+When `--next` is set and the verdict is PASS:
+
+1. Transition: `spur task update <wbs> done`
+2. Stop — end of the chain (no further command to invoke)
+
+When the verdict is PARTIAL or FAIL: stop — surface the verdict, leave task at current status, do NOT transition to done.
+
+`--next` is the terminal step in the refine → run → verify → done chain.
 
 ## Implementation
 

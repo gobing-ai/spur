@@ -75,7 +75,8 @@ The JSON carries `{ wbs, name, status, filePath, content, frontmatter }`. Parse 
 
 Flags: `--auto` (no confirmations), `--force` (bypass the terminal-status guard), `--fix
 <none|blockers-first|all>` (post-verdict repair), `--focus <all|security|efficiency|correctness|usability>`
-(SECU dimensions), `--bdd` (scenario check).
+(SECU dimensions), `--bdd` (scenario check), `--next` (on PASS, auto-transition `testing → done`;
+on PARTIAL/FAIL, stop).
 
 ### Step 2 — Status guard
 

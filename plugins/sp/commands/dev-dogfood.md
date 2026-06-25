@@ -41,7 +41,7 @@ everything that was done, broke, was fixed, and should be improved.
 | `--task` | File the findings as a review-template task via `spur task create --template review`. | off |
 | `--full` | Include **all** severity findings (P1–P4) in the report and `--task` output. Default filters to P1+P2 only — actionable items. | off |
 
-`--save` and `--task` are independent and composable. With neither, the report is printed only.
+`--save` and `--task` are independent and composable. The full report is written to disk only with `--save`, but a **mandatory summary footer** (result + issues + findings) is always printed inline — see §Mandatory Summary Footer.
 
 ## Behavior
 
@@ -106,11 +106,44 @@ Assemble the comprehensive report from the ledger. Required sections:
 > heuristic from tool-call count + transcript size + wall-clock and **label it `~estimate`**. Never
 > print a precise token number you cannot substantiate.
 
+### Mandatory Summary Footer
+
+**After every run, always print this summary inline — regardless of `--save`:**
+
+```
+── Dogfood Summary ──
+Result: PASS   (3 issues fixed, 0 unresolved, 2 findings)
+
+Fixed issues:
+  • ts-runtime: added signal?: AbortSignal to ProcessOptions
+  • CLI: dedup now self-heals on next write
+  ...
+
+Unresolved issues:
+  • (none)
+
+Findings (P1+P2):
+  • P2 — pipeline assumes standard/feature-impl variants
+  • P2 — CLI has no --template option on spur task update
+  ...
+```
+
+**Rules:**
+
+- **Result line** is mandatory: `PASS / PARTIAL / FAIL` with counts `(N fixed, N unresolved, N findings)`.
+- **Fixed issues** — list each if any; print `(none)` if empty.
+- **Unresolved issues** — list each if any; print `(none)` if empty.
+- **Findings** — list P1+P2 by default; with `--full`, include P3+P4. Print `(none)` if empty.
+- **If nothing to report** (PASS, zero issues, zero findings): print a single line `Result: PASS — no issues, no findings.`
+- **If `--save`**: append the report file path as the last line.
+- **If `--task`**: append the created task WBS as the last line.
+- Print the footer **after** any `--save` file write or `--task` creation — it's the last thing the user sees.
+
 ### Sinks
 
 - **`--save`** → write the full report to `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md`
-  (create `docs/dogfood/` if absent). Print the path.
-- **`--task`** → create a fix task from the findings:
+  (create `docs/dogfood/` if absent). Path surfaced in the mandatory summary footer.
+- **`--task`** → create a fix task from the findings. Task WBS surfaced in the mandatory summary footer.
 
   ```bash
   spur task create "<testee> dogfood findings" --template review --json
@@ -135,7 +168,7 @@ Parse them per the Arguments table above:
   is the testee. If the testee itself contains flags (e.g. `/sp:dev-run 0110 --auto`), quote
   it so its flags are not mistaken for dev-dogfood's. Strip surrounding quotes after extracting.
 - `--max-retry <n>` (default `2`): fix attempts per failed step. `0` = observe-only.
-- `--save`: write the report to `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md`.
+- `--save`: write the full report to `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md`.
 - `--task`: file findings as a review-template task via `spur task create --template review`.
 - `--full`: include all severity findings (P1–P4) in the report and task. Default: P1+P2 only.
 

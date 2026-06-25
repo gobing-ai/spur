@@ -1,6 +1,6 @@
 ---
 description: Run a task — full pipeline (precheck→implement→test→review→approve→verify→record→done) or single-step (implement)
-argument-hint: "<wbs> [--mode <full|implement>] [--auto]"
+argument-hint: "<wbs> [--mode <full|implement>] [--auto] [--next]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 ---
 
@@ -30,6 +30,7 @@ Pick a task and run it. Two modes:
 | `wbs` | Task WBS number (required, positional) | (required) |
 | `--mode <full\|implement>` | `full` drives the complete pipeline; `implement` does only the implement step | `full` |
 | `--auto` | Skip the HITL approval gate (full mode) or skip confirmations (implement mode) | off |
+| `--next` | On success, auto-transition to `testing` and invoke `/sp:dev-verify <wbs> --next`. For `--mode implement` only — ignored in full mode. | off |
 
 ## Behavior
 
@@ -48,6 +49,16 @@ writing code, before yielding, the implement agent MUST:
    spur task update <wbs> --section Solution --from-file /tmp/<wbs>-solution.md
    ```
 3. Write **only when the section is bare** — do not clobber a hand-authored change-map.
+
+## `--next` chain (`--mode implement` only)
+
+When `--next` is set and implementation succeeds:
+
+1. Transition: `spur task update <wbs> testing`
+2. Invoke: `/sp:dev-verify <wbs> --next --auto` (auto-forwarding `--auto` if it was set)
+3. On failure: stop — surface the error, leave task at current status, do NOT invoke dev-verify
+
+`--next` with `--mode full` is a no-op — full mode already handles progression internally.
 
 ## Implementation
 

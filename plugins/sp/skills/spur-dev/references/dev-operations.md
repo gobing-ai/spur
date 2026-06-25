@@ -69,27 +69,27 @@ must not be changed without updating the backing skill.
 ### 3. verify
 
 - **Purpose:** Requirements traceability — verify a task's implementation against its acceptance criteria, producing a PASS/PARTIAL/FAIL verdict with per-requirement evidence.
-- **Inputs:** `<wbs>` (required). `--fix`, `--focus`, `--bdd`, `--auto`, `--force` modulate the verify pass.
+- **Inputs:** `<wbs>` (required). `--fix`, `--focus`, `--bdd`, `--auto`, `--force` modulate the verify pass. `--next`: on PASS verdict, auto-transition `testing → done` (terminal — no further command in chain). On PARTIAL/FAIL, stop.
 - **Backing:** `sp:code-verification` skill, `verify` mode.
-- **Behavior:** Status guard → change-scope detection → requirements traceability → SECU review → verdict aggregation → findings write-back → verdict-artifact emission → optional `--fix` pass. The verdict gates the pipeline's `done` transition.
+- **Behavior:** Status guard → change-scope detection → requirements traceability → SECU review → verdict aggregation → findings write-back → verdict-artifact emission → optional `--fix` pass. The verdict gates the pipeline's `done` transition. With `--next`: PASS → transition to `done`; PARTIAL/FAIL → stop and surface verdict.
 - **Delegation:** `Skill(skill="sp:code-verification", args="verify $ARGUMENTS")`
 
 ### 4. run
 
 - **Purpose:** Run a task through the execution pipeline (full) or execute a single pipeline step (implement).
-- **Inputs:** `<wbs>` (required). `--mode <full|implement>` selects the execution mode. `--auto` skips the HITL approve gate / confirmations.
+- **Inputs:** `<wbs>` (required). `--mode <full|implement>` selects the execution mode. `--auto` skips the HITL approve gate / confirmations. `--next`: on success, auto-transition to `testing` and invoke `/sp:dev-verify <wbs> --next --auto` (implement mode only — ignored in full mode).
 - **Backing:** `sp:spur-dev` skill — `run` operation for full pipeline, `implement` operation for the implement step.
 - **Modes:**
-  - **`full`** (default): Drive the full pipeline — precheck → implement → test → review → approve(HITL) → verify → record → done. Invokes `spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"<wbs>"}'` (with `profile: auto` when `--auto`). Monitors the run; on HITL pause surfaces to the operator.
-  - **`implement`**: Execute only the implement step. Read the task's `## Requirements` / `## Design` / `## Plan`, write the code that satisfies them, author the `## Solution` change-map section (file:line + what/why per changed file) via `spur task update <wbs> --section Solution --from-file`. This is the implement step the pipeline calls — it is NOT the pipeline driver.
+  - **`full`** (default): Drive the full pipeline — precheck → implement → test → review → approve(HITL) → verify → record → done. Invokes `spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"<wbs>"}'` (with `profile: auto` when `--auto`). Monitors the run; on HITL pause surfaces to the operator. `--next` is a no-op in this mode.
+  - **`implement`**: Execute only the implement step. Read the task's `## Requirements` / `## Design` / `## Plan`, write the code that satisfies them, author the `## Solution` change-map section (file:line + what/why per changed file) via `spur task update <wbs> --section Solution --from-file`. This is the implement step the pipeline calls — it is NOT the pipeline driver. With `--next`: on success, transition to `testing` + chain to dev-verify; on failure, stop.
 - **Delegation:** `Skill(skill="sp:spur-dev", args="run $ARGUMENTS")` for full mode; `Skill(skill="sp:spur-dev", args="implement $ARGUMENTS")` for implement mode.
 
 ### 5. refine
 
 - **Purpose:** Refine a task's requirements via structured Q&A — clarify scope, elicit missing details, tighten acceptance criteria before execution.
-- **Inputs:** `<wbs>` (required).
+- **Inputs:** `<wbs>` (required). `--next`: on success, auto-transition `backlog → todo` and invoke `/sp:dev-run --mode implement <wbs> --next --auto`.
 - **Backing:** `sp:spur-dev` skill, `refine` operation.
-- **Behavior:** Read the task → elicit missing AC/Design/Plan through targeted Q&A → write each via `spur task update <wbs> --section <name> --from-file`. Done just-in-time, per task, immediately before execution.
+- **Behavior:** Read the task → elicit missing AC/Design/Plan through targeted Q&A → write each via `spur task update <wbs> --section <name> --from-file`. Done just-in-time, per task, immediately before execution. With `--next`: on success, transition status + chain to dev-run; on failure, stop and surface error.
 - **Delegation:** `Skill(skill="sp:spur-dev", args="refine $ARGUMENTS")`
 
 ### 6. plan

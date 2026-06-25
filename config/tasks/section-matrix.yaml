@@ -61,7 +61,7 @@ variants:
       forbidden: [Review]
     testing:
       required: [Solution, Testing]
-      optional: [Background]
+      optional: [Background, Requirements, Acceptance Criteria, Design, Plan]
       forbidden: [Review]
     # done keeps the spec sections optional (see `standard` rationale above) so a
     # finished feature-impl task retains its Design/Plan/AC history.

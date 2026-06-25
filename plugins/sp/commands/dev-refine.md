@@ -1,6 +1,6 @@
 ---
 description: Refine task requirements via structured Q&A — clarify scope, elicit missing details, tighten acceptance criteria
-argument-hint: "<wbs> [--focus <mode>] [--description <text>] [--auto]"
+argument-hint: "<wbs> [--focus <mode>] [--description <text>] [--auto] [--next]"
 allowed-tools: ["Bash", "Read", "Write", "Skill"]
 ---
 
@@ -27,6 +27,7 @@ Refine a task's requirements by analyzing existing content for quality issues an
 | `--description <text>` | Additional context to guide Q&A synthesis | (none) |
 | `--focus <mode>` | Predefined hint bundle that expands into domain hints (see below) | `all` |
 | `--auto` | Skip interactive Q&A — use AI synthesis only | off |
+| `--next` | On success, auto-transition `backlog → todo` and invoke `/sp:dev-run --mode implement <wbs> --next` | off |
 
 ### Smart Positional Detection
 
@@ -59,6 +60,10 @@ Thin wrapper: task reading, gap analysis, Q&A, and section updates are all owned
 3. **Question** → Generate targeted Q&A based on the expanded domain hints.
 4. **Synthesize** → Update Background, Requirements, and Constraints sections via `spur task update --section`.
 5. **Profile** → Auto-set template/preset based on scope and complexity.
+6. **`--next` chain** → If refine succeeds (task check passes):
+   - Transition: `spur task update <wbs> todo`
+   - Invoke: `/sp:dev-run --mode implement <wbs> --next --auto` (auto-forwarding `--auto` since refine was auto)
+   - On failure: stop — surface the error, leave task at current status, do NOT invoke dev-run
 
 ## Examples
 
@@ -70,6 +75,7 @@ Thin wrapper: task reading, gap analysis, Q&A, and section updates are all owned
 | `/sp:dev-refine 0274 --description "CLI tool for auth"` | Add context hint |
 | `/sp:dev-refine 0274 --auto` | AI synthesis only (no interactive Q&A) |
 | `/sp:dev-refine 0274 --focus quick --auto` | Quick + auto |
+| `/sp:dev-refine 0274 --auto --next` | Auto-refine + auto-chain to dev-run |
 
 ## Implementation
 
