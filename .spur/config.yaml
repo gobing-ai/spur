@@ -30,6 +30,27 @@ bootstrap:
 # ── Spur app section (validated by a local zod schema — UNCHANGED keys) ──
 agent:
   default: omp
+  executors:
+    - name: omp
+      agent: omp
+    - name: omp-zai
+      agent: omp
+      model: zai/glm-5.2
+    - name: omp-zai-volc
+      agent: omp
+      model: volc/glm-5.2
+    - name: codex
+      agent: codex
+    - name: claude
+      agent: claude
+  default-by-phase:
+    dev-brainstorm: claude
+    dev-fixall: omp-zai-volc
+    dev-plan: claude
+    dev-run: omp-zai
+    dev-changelog: omp-zai-volc
+    dev-review: claude
+    dev-verify: claude
 
 rules:
   paths:
@@ -44,8 +65,11 @@ redaction:
 
 # ── Tasks configuration (design §9 — absorbed from docs/.tasks/config.jsonc) ──
 tasks:
-  active: docs/tasks
+  active: docs/tasks2
   folders:
     docs/tasks:
       baseCounter: 0
       label: Primary
+    docs/tasks2:
+      baseCounter: 128
+      label: Phase 2

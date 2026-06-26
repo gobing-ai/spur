@@ -3,7 +3,7 @@ template: standard
 schema_version: 1
 name: "Make agent auto resolution phase-aware with executor profiles"
 description: "Extend `.spur/config.yaml` agent defaults so `spur agent run --agent auto` can choose phase-specific executor profiles and inject model overrides."
-status: testing
+status: done
 type: task
 profile: standard
 feature_id: B1
@@ -12,7 +12,7 @@ priority: P1
 tags: [agent, config, cli, sp-dev]
 dependencies: []
 created_at: "2026-06-26T01:21:18.275Z"
-updated_at: 2026-06-26T16:09:06.891Z
+updated_at: 2026-06-26T16:29:56.797Z
 ---
 
 ## 0126. Make agent auto resolution phase-aware with executor profiles
@@ -296,3 +296,4 @@ Traceability — every requirement met:
   explicit `--model` precedence (R6). Plan expanded to 11 steps.
 - 2026-06-26T15:54:04.002Z todo → wip (system)
 - 2026-06-26T16:07:48.926Z wip → testing (system)
+- 2026-06-26T16:29:56.797Z testing → done (system)
