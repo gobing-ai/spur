@@ -74,6 +74,14 @@ When `--next` is set and implementation succeeds:
 
 `--next` with `--mode full` is a no-op — full mode already handles progression internally.
 
+**When `--next` is passed in full mode, emit a warning before doing anything else** (the flag is
+silently ignored otherwise, which surprises the operator):
+
+```
+warning: --next is ignored in full mode (full mode runs all stages).
+         To advance only one stage, use: /sp:dev-run <wbs> --mode implement --next
+```
+
 ## Implementation
 
 Delegates to **sp:spur-dev** skill. `$ARGUMENTS` passes all flags including `--agent` through verbatim:

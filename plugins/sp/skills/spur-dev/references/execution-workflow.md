@@ -69,15 +69,31 @@ backlog tasks. Use `--json` for machine consumption; sort client-side by priorit
 
 ## Step 2: Pipeline run
 
+**Launch async and poll the trace.** A pipeline with `agent.run` stages runs for many minutes
+(each stage can take the full `stepTimeoutMs`, default 10 min). Synchronous invocation blocks
+the caller for the entire duration and risks an orphaned run if the caller is interrupted
+(sync-orphan, see task 0127). Always use `--async` + `spur workflow trace` polling:
+
 ```bash
-spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"<wbs>"}' --json
+# Async launch + trace polling (recommended)
+RUN=$(spur workflow run config/workflows/task-pipeline.yaml \
+  --vars '{"wbs":"<wbs>"}' --async --json | jq -r '.runId')
+spur workflow trace "$RUN" --json   # poll until status is terminal (done/failed)
 ```
+
+Synchronous invocation (`--json` without `--async`) is acceptable **only** for short pipelines
+(< 2 min, e.g. precheck-only or a dry-run). Do not use it for the full task pipeline.
 
 When `--agent <value>` is set (passed through from the thin wrapper), merge it into the vars:
 `--vars '{"wbs":"<wbs>","agent":"<value>"}'`. The pipeline YAML already reads `${vars.agent}`
 for every `agent.run` step — no YAML changes needed. `--agent auto` resolves the current runtime
 to its canonical agent name before merging; `--agent inherit` or omitting the flag keeps the
 pipeline's default (`vars.agent = "omp"`).
+
+**`--next` in full mode is ignored — emit a warning.** When the incoming `$ARGUMENTS` carries
+`--next` and the resolved mode is `full` (the default), the flag has no effect (full mode runs
+all stages itself). Print a one-line warning before launching the pipeline so the operator knows
+their flag was a no-op, then proceed normally. (See `plugins/sp/commands/dev-run.md` `--next`.)
 
 The pipeline (`kind: state-machine`) runs the work loop:
 
