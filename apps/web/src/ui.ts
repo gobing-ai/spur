@@ -1,3 +1,10 @@
+// Markdown editor/preview is re-exported through the seam so apps/web imports it
+// from `@/ui`, never the raw `@uiw/react-md-editor` specifier. Its base theme
+// (.wmde-markdown + bundled Prism token colors) loads here exactly once; without
+// it code blocks render unstyled (0101 #4).
+import '@uiw/react-md-editor/markdown-editor.css';
+
+export { default as MDEditor } from '@uiw/react-md-editor';
 export { Badge, type BadgeProps } from './components/ui/Badge';
 export { Button, type ButtonProps } from './components/ui/Button';
 export { Card, CardBody, type CardBodyProps, type CardProps } from './components/ui/Card';

@@ -1,10 +1,6 @@
 import { taskStatusIcon } from '@gobing-ai/spur-domain/schema';
-import MDEditor from '@uiw/react-md-editor';
-import { Badge, Button, Checkbox, Loading, Select } from '@/ui';
-// Base theme for the markdown preview/editor (.wmde-markdown) + bundled Prism
-// token colors. Without this import code blocks render unstyled (0101 #4).
-import '@uiw/react-md-editor/markdown-editor.css';
 import { useEffect, useState } from 'react';
+import { Badge, Button, Checkbox, Loading, MDEditor, Select } from '@/ui';
 import { api } from '../../lib/rpc-client';
 import MarkdownBody from './MarkdownBody';
 import type { TaskSummary } from './types';
@@ -41,7 +37,7 @@ type BodyMode = 'preview' | 'edit';
 
 /**
  * Right-panel task detail — frontmatter, status transitions, and the markdown body.
- * The body is fetched via `api.task.show` on selection and rendered with @uiw/react-md-editor.
+ * The body is fetched via `api.task.show` on selection and rendered with the `MDEditor` seam (`@/ui`).
  * Inline editing (Save/Cancel) calls the body-write API (0090); a server denial reverts and
  * surfaces an error via the `api-error` CustomEvent (same surface as KanbanBoard).
  */

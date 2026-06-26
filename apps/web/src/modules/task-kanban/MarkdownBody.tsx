@@ -1,6 +1,6 @@
-import MDEditor from '@uiw/react-md-editor';
 import DOMPurify from 'dompurify';
 import { useEffect, useId, useState } from 'react';
+import { MDEditor } from '@/ui';
 
 /**
  * Renders a fenced ```mermaid block as an SVG diagram.
