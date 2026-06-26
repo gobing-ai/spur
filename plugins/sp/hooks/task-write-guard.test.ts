@@ -86,4 +86,13 @@ describe('task-write-guard', () => {
         const d = await runHook({ tool_name: 'Edit', tool_input: {} });
         expect(d.permissionDecision).toBe('allow');
     });
+
+    // Regression: a scratch file in /tmp that merely SHARES a `NNNN_` prefix with a real
+    // corpus task is NOT the corpus file — writing it must be allowed. Before the `--strict`
+    // fix, `spur task resolve` matched it by basename and the guard wrongly denied
+    // `/tmp/0103_design.md` & friends mid-pipeline.
+    test('allows a /tmp scratch file that only shares a WBS prefix with a real task', async () => {
+        const d = await runHook({ tool_name: 'Write', tool_input: { file_path: '/tmp/0067_design.md' } });
+        expect(d.permissionDecision).toBe('allow');
+    });
 });

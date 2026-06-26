@@ -82,7 +82,9 @@ async function main(): Promise<void> {
     if (cli === null) return decide('allow'); // not inside the spur workspace — nothing to guard.
 
     // Delegate ownership entirely to the CLI: exit 0 = owned by a task, non-zero = not owned.
-    const res = spawnSync('bun', ['run', cli, 'task', 'resolve', filePath, '--json'], {
+    // `--strict` matches ONLY the exact corpus path — a scratch file that merely shares a
+    // `NNNN_` prefix (e.g. `/tmp/0103_design.md`) is not the corpus task and must not be blocked.
+    const res = spawnSync('bun', ['run', cli, 'task', 'resolve', filePath, '--strict', '--json'], {
         cwd: projectDir,
         encoding: 'utf-8',
         timeout: 8000,
