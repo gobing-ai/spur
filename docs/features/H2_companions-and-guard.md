@@ -47,6 +47,21 @@ Feature: Companions and write guard
 | --- | ---- | ------ |
 | 0066 | W3: sp:spur-tasks and sp:spur-features companion skills | Done |
 | 0067 | W3: task-write-guard hook and resolve/info decision | Done |
+| 0105 | Close rd3->sp dev-run/dev-verify migration regression (verify skill + pipeline gate + recursion fix) | done |
+| 0106 | Pipeline done-gate + record-content: enforce section matrix at done, write real verify findings | done |
+| 0107 | Pipeline step-level timeout: kill a hung agent.run step (proper subprocess-killing timeout) | done |
+| 0108 | spur task record verb: move record-step logic out of pipeline YAML into a tested service | done |
+| 0109 | Streamline sp:dev-* surface: unified ops reference, verdict verb, --agent override, dev/plan split, observability DX | done |
+| 0110 | Unified dev-* operations reference + repoint ghost commands | done |
+| 0111 | spur task verdict verb — extract verify-step verdict derivation from YAML | done |
+| 0112 | Dev/plan responsibility split — sp:spur-dev = execution, sp:spur-plan = planning | done |
+| 0113 | --agent override on dev-* commands (rename rd3 --channel) | done |
+| 0114 | Observability DX — run-start plan preview + EventBus step progress | done |
+| 0115 | Fix replaceSection body validation + from-file header stripping + write pipeline L2 gate | done |
+| 0120 | Dogfood findings: streamline dev-run 0110 issues from dual dogfood reports | done |
+| 0121 | Parent-task roll-up gate: spur task check flags parent/child status drift | done |
+| 0122 | dogfood 0114 implementation findings | done |
+| 0123 | spur task refresh: auto-generate parent sub-task roster block | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

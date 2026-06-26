@@ -29,6 +29,8 @@ section matrix, templates, lifecycles, events, corpus migration, kanban/INDEX vi
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0088 | customize new workflows to streamline the development process | done |
+| 0124 | Add --design/--auto design-doc generation to /sp:dev-plan planning half | done |
+| 0125 | Add --agent to critical dev-* commands + extract sp:dogfood-testing backbone skill | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

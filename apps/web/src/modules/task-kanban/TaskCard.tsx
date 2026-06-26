@@ -1,6 +1,7 @@
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { useEffect, useState } from 'react';
+import { Badge, Card, CardBody } from '@/ui';
 import type { TaskSummary } from './types';
 
 const RELATIVE_REFRESH_MS = 60_000;
@@ -41,36 +42,51 @@ export default function TaskCard({ task, onClick }: Props) {
         : undefined;
 
     return (
-        <button
-            ref={setNodeRef}
-            type="button"
-            style={style}
-            className={`card card-compact bg-base-200 shadow-sm cursor-pointer hover:shadow-md transition-shadow border border-spur-border w-full text-left ${
+        <Card
+            variant="compact"
+            asChild
+            className={`bg-base-200 shadow-sm cursor-pointer hover:shadow-md transition-shadow border border-spur-border w-full text-left ${
                 isDragging ? 'opacity-30' : ''
             }`}
-            onClick={() => onClick(task.wbs)}
-            {...listeners}
-            {...attributes}
-            aria-roledescription="draggable card"
         >
-            <div className="card-body p-3 gap-1">
-                <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-mono text-spur-text-muted">{task.wbs}</span>
-                    {task.priority && <span className="badge badge-outline badge-xs">{task.priority}</span>}
-                </div>
-                <p className="text-sm font-medium text-spur-text leading-snug">{task.name}</p>
-                <div className="flex gap-1 flex-wrap items-center">
-                    {task.type && task.type !== 'task' && (
-                        <span className="badge badge-outline badge-xs">{task.type}</span>
-                    )}
-                    {task.featureId && <span className="badge badge-outline badge-xs">{task.featureId}</span>}
-                    {task.updatedAt && (
-                        <span className="text-[10px] text-spur-text-muted ml-auto" title={task.updatedAt}>
-                            {relativeTime(task.updatedAt, now)}
-                        </span>
-                    )}
-                </div>
-            </div>
-        </button>
+            <button
+                ref={setNodeRef}
+                type="button"
+                style={style}
+                onClick={() => onClick(task.wbs)}
+                {...listeners}
+                {...attributes}
+                aria-roledescription="draggable card"
+            >
+                <CardBody className="p-3 gap-1">
+                    <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-mono text-spur-text-muted">{task.wbs}</span>
+                        {task.priority && (
+                            <Badge variant="outline" size="xs">
+                                {task.priority}
+                            </Badge>
+                        )}
+                    </div>
+                    <p className="text-sm font-medium text-spur-text leading-snug">{task.name}</p>
+                    <div className="flex gap-1 flex-wrap items-center">
+                        {task.type && task.type !== 'task' && (
+                            <Badge variant="outline" size="xs">
+                                {task.type}
+                            </Badge>
+                        )}
+                        {task.featureId && (
+                            <Badge variant="outline" size="xs">
+                                {task.featureId}
+                            </Badge>
+                        )}
+                        {task.updatedAt && (
+                            <span className="text-[10px] text-spur-text-muted ml-auto" title={task.updatedAt}>
+                                {relativeTime(task.updatedAt, now)}
+                            </span>
+                        )}
+                    </div>
+                </CardBody>
+            </button>
+        </Card>
     );
 }

@@ -1,6 +1,6 @@
 import { taskStatusIcon } from '@gobing-ai/spur-domain/schema';
 import MDEditor from '@uiw/react-md-editor';
-import { Button } from '@/ui';
+import { Badge, Button, Checkbox, Loading, Select } from '@/ui';
 // Base theme for the markdown preview/editor (.wmde-markdown) + bundled Prism
 // token colors. Without this import code blocks render unstyled (0101 #4).
 import '@uiw/react-md-editor/markdown-editor.css';
@@ -353,7 +353,9 @@ export default function TaskDetail({ task, onTransition, onClose }: Props) {
                                     })}
                                 </div>
                             ) : OFF_TRACK.has(task.status) ? (
-                                <span className="badge badge-warning badge-xs">{task.status}</span>
+                                <Badge variant="warning" size="xs">
+                                    {task.status}
+                                </Badge>
                             ) : (
                                 <div className="flex items-center gap-1">
                                     {LIFECYCLE.map((phase, i) => {
@@ -412,9 +414,9 @@ export default function TaskDetail({ task, onTransition, onClose }: Props) {
                                 <span className="text-xs text-spur-text-muted block mb-1.5">Tags</span>
                                 <div className="flex flex-wrap gap-1">
                                     {tags.map((t) => (
-                                        <span key={t} className="badge badge-outline badge-xs text-spur-text-muted">
+                                        <Badge key={t} variant="outline" size="xs" className="text-spur-text-muted">
                                             {t}
-                                        </span>
+                                        </Badge>
                                     ))}
                                 </div>
                             </div>
@@ -425,7 +427,9 @@ export default function TaskDetail({ task, onTransition, onClose }: Props) {
                             {task.priority && (
                                 <div className="flex items-center gap-1.5 text-xs">
                                     <span className="text-spur-text-muted w-14 shrink-0">Priority</span>
-                                    <span className="badge badge-outline badge-xs">{task.priority}</span>
+                                    <Badge variant="outline" size="xs">
+                                        {task.priority}
+                                    </Badge>
                                 </div>
                             )}
                             {estimatedHours !== undefined && (
@@ -489,7 +493,7 @@ export default function TaskDetail({ task, onTransition, onClose }: Props) {
                 </div>
                 {loadingBody ? (
                     <div className="flex items-center gap-2 text-sm text-spur-text-muted">
-                        <span className="loading loading-spinner loading-xs text-spur-accent" />
+                        <Loading size="xs" className="text-spur-accent" />
                         Loading body…
                     </div>
                 ) : mode === 'edit' ? (
@@ -575,8 +579,10 @@ export default function TaskDetail({ task, onTransition, onClose }: Props) {
                             {ACTION_LABELS[actionModal] ?? actionModal} — Select Channel
                         </h4>
                         <div className="space-y-3">
-                            <select
-                                className="select select-bordered select-sm w-full bg-spur-bg text-spur-text"
+                            <Select
+                                variant="bordered"
+                                size="sm"
+                                className="w-full bg-spur-bg text-spur-text"
                                 value={selectedChannel}
                                 onChange={(e) => setSelectedChannel(e.target.value)}
                             >
@@ -585,11 +591,11 @@ export default function TaskDetail({ task, onTransition, onClose }: Props) {
                                         {ch}
                                     </option>
                                 ))}
-                            </select>
+                            </Select>
+                            {/* biome-ignore lint/a11y/noLabelWithoutControl: Checkbox renders an input inside the label */}
                             <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    className="checkbox checkbox-xs"
+                                <Checkbox
+                                    size="xs"
                                     checked={skipDeps}
                                     onChange={(e) => setSkipDeps(e.target.checked)}
                                 />

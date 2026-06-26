@@ -1,6 +1,6 @@
 import { useDroppable } from '@dnd-kit/core';
 import { taskStatusIcon } from '@gobing-ai/spur-domain/schema';
-import { Button } from '@/ui';
+import { Badge, Button } from '@/ui';
 import TaskCard from './TaskCard';
 import type { TaskSummary } from './types';
 
@@ -31,7 +31,9 @@ export default function KanbanColumn({ status, label, tasks, onCardClick, sortDi
                     {taskStatusIcon(status)} {label}
                 </span>
                 <div className="flex items-center gap-1">
-                    <span className="badge badge-sm badge-ghost">{tasks.length}</span>
+                    <Badge variant="ghost" size="sm">
+                        {tasks.length}
+                    </Badge>
                     {onSortToggle && (
                         <Button
                             variant="ghost"

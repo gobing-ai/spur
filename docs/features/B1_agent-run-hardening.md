@@ -39,6 +39,10 @@ already-supported agents.
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0068 | W3: spur agent run team-mode verification and single-LLM-surface docs | Done |
+| 0118 | Upstream: add AbortSignal support to ProcessExecutor for process-group signal forwarding | done |
+| 0119 | Add --next auto-chain option to dev-refine, dev-run, dev-verify | done |
+| 0126 | Make agent auto resolution phase-aware with executor profiles | todo |
+| 0128 | Harden implement-agent Solution prompt + re-measure pipeline cache hit rate | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

@@ -1,6 +1,6 @@
 import { TASK_VARIANTS, type TaskVariant } from '@gobing-ai/spur-domain/schema';
 import { useState } from 'react';
-import { Button } from '@/ui';
+import { Button, Input, Select, Textarea } from '@/ui';
 import { api } from '../../lib/rpc-client';
 
 interface Props {
@@ -126,12 +126,13 @@ export default function NewTaskPanel({ open, onClose, onCreated, folder }: Props
                         >
                             Name <span className="text-spur-error">*</span>
                         </label>
-                        <input
+                        <Input
                             id="new-task-name"
                             type="text"
-                            className={`input input-bordered input-sm w-full bg-spur-bg text-spur-text ${
-                                nameError ? 'input-error' : ''
-                            }`}
+                            variant="bordered"
+                            size="sm"
+                            error={!!nameError}
+                            className="w-full bg-spur-bg text-spur-text"
                             placeholder="Task name"
                             value={name}
                             onChange={(e) => {
@@ -152,9 +153,11 @@ export default function NewTaskPanel({ open, onClose, onCreated, folder }: Props
                         >
                             Template
                         </label>
-                        <select
+                        <Select
                             id="new-task-template"
-                            className="select select-bordered select-sm w-full bg-spur-bg text-spur-text"
+                            variant="bordered"
+                            size="sm"
+                            className="w-full bg-spur-bg text-spur-text"
                             value={template}
                             onChange={(e) => setTemplate(e.target.value as TaskVariant)}
                             disabled={submitting}
@@ -164,7 +167,7 @@ export default function NewTaskPanel({ open, onClose, onCreated, folder }: Props
                                     {v}
                                 </option>
                             ))}
-                        </select>
+                        </Select>
                     </div>
 
                     {/* Background */}
@@ -175,9 +178,11 @@ export default function NewTaskPanel({ open, onClose, onCreated, folder }: Props
                         >
                             Background <span className="text-spur-text-muted font-normal">(optional, markdown)</span>
                         </label>
-                        <textarea
+                        <Textarea
                             id="new-task-background"
-                            className="textarea textarea-bordered textarea-sm w-full bg-spur-bg text-spur-text font-mono text-xs"
+                            variant="bordered"
+                            size="sm"
+                            className="w-full bg-spur-bg text-spur-text font-mono text-xs"
                             placeholder="Why this task exists…"
                             rows={4}
                             value={background}
@@ -194,9 +199,11 @@ export default function NewTaskPanel({ open, onClose, onCreated, folder }: Props
                         >
                             Requirements <span className="text-spur-text-muted font-normal">(optional, markdown)</span>
                         </label>
-                        <textarea
+                        <Textarea
                             id="new-task-requirements"
-                            className="textarea textarea-bordered textarea-sm w-full bg-spur-bg text-spur-text font-mono text-xs"
+                            variant="bordered"
+                            size="sm"
+                            className="w-full bg-spur-bg text-spur-text font-mono text-xs"
                             placeholder="What must be done…"
                             rows={4}
                             value={requirements}

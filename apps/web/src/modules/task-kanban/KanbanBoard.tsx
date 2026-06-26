@@ -1,7 +1,7 @@
 import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { TASK_STATUSES, taskStatusIcon } from '@gobing-ai/spur-domain/schema';
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
-import { Button } from '@/ui';
+import { Button, Checkbox, Loading, Select } from '@/ui';
 import ResizeHandle from '../../components/ResizeHandle';
 import { api } from '../../lib/rpc-client';
 import KanbanColumn from './KanbanColumn';
@@ -171,7 +171,7 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
     if (loading) {
         return (
             <div className="flex items-center justify-center h-full">
-                <span className="loading loading-spinner loading-lg text-spur-accent" />
+                <Loading size="lg" className="text-spur-accent" />
             </div>
         );
     }
@@ -202,8 +202,10 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
                         <span className="text-xs text-spur-text-muted">{connected ? 'Live' : 'Polling'}</span>
                     </div>
                     <span className="text-xs text-spur-text-muted">|</span>
-                    <select
-                        className="select select-xs select-ghost text-xs"
+                    <Select
+                        variant="ghost"
+                        size="xs"
+                        className="text-xs"
                         value={folder}
                         onChange={(e) => setFolder(e.target.value)}
                         aria-label="Task folder"
@@ -213,14 +215,14 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
                                 {f.label ? `${f.label} (${f.path})` : f.path}
                             </option>
                         ))}
-                    </select>
+                    </Select>
                     <span className="text-xs text-spur-text-muted">|</span>
                     <div className="flex-1" />
                     {KANBAN_COLUMNS.map((status) => (
+                        // biome-ignore lint/a11y/noLabelWithoutControl: Checkbox renders an input inside the label
                         <label key={status} className="flex items-center gap-1 cursor-pointer">
-                            <input
-                                type="checkbox"
-                                className="checkbox checkbox-xs"
+                            <Checkbox
+                                size="xs"
                                 checked={!hiddenColumns.has(status)}
                                 onChange={() => toggleColumn(status)}
                             />
