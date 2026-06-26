@@ -18,8 +18,10 @@ workflow YAML (M12 — not new; verify team-mode, harden, document).
 
 ## Scope
 
-Team-mode end-to-end verification, hardening fixes, documentation. **Out:** new agent
-capabilities (none in batch).
+Team-mode end-to-end verification, hardening fixes, documentation, and config-driven
+selection hardening for `spur agent run` (phase-aware `--agent auto` executor resolution).
+**Out:** new agent *runtimes* or shims (none in batch) — only selection/resolution of
+already-supported agents.
 
 ## Acceptance Criteria
 
@@ -28,6 +30,8 @@ capabilities (none in batch).
 - [x] Hardening findings from verification fixed and regression-tested
 - [x] `04_DESIGN.md` documents `spur agent run` as the single LLM surface; sp skills and
       workflow YAML reference it exclusively (no alternative execution paths)
+- [ ] Phase-aware `--agent auto` resolves configured executor profiles (agent + optional
+      model) with documented fallback and fail-fast semantics — see task 0126
 
 ## Tasks
 
