@@ -107,18 +107,7 @@ export class AgentService {
         if (args.json) {
             this.ctx.output.write(toJson({ agents: results }));
         } else {
-            this.ctx.output.write(
-                results
-                    .map((result) => {
-                        // `usable` is liveness-only (installed && version); auth no longer
-                        // gates runnability, so it is surfaced as its own informational
-                        // column rather than folded into the state label.
-                        const state = result.usable ? 'usable' : 'missing';
-                        const auth = renderAuth(result.authenticated);
-                        return `${state} ${result.agent} tier=${result.tier} auth=${auth}${result.version ? ` ${result.version}` : ''}`;
-                    })
-                    .join('\n'),
-            );
+            this.ctx.output.write(renderDoctorTable(results));
         }
         return results.some((result) => !result.usable && result.tier === 1) ? 1 : 0;
     }
@@ -402,6 +391,56 @@ function renderAuth(authenticated: AuthState): string {
     if (authenticated === 'authenticated') return 'yes';
     if (authenticated === 'unauthenticated') return 'no';
     return '?';
+}
+
+/** The doctor-result fields the text table reads (structural subset — display-only). */
+type DoctorRow = {
+    agent: string;
+    usable: boolean;
+    tier: number;
+    authenticated: AuthState;
+    version: string | null;
+};
+
+/**
+ * Render the `spur agent doctor` text output as an aligned table with a header,
+ * a ✓/✗ state glyph, and a tier-1 summary footer. `--json` output is unaffected.
+ * A missing agent (no version) renders `—` for both auth and version.
+ */
+function renderDoctorTable(results: DoctorRow[]): string {
+    const dash = '—';
+    const rows = results.map((result) => {
+        const usable = result.usable;
+        return {
+            glyph: usable ? '✓' : '✗',
+            state: usable ? 'usable' : 'missing',
+            agent: result.agent,
+            tier: String(result.tier),
+            // A missing agent has nothing meaningful to report for auth/version.
+            auth: usable ? renderAuth(result.authenticated) : dash,
+            version: result.version ?? dash,
+        };
+    });
+
+    const header = { glyph: ' ', state: 'STATUS', agent: 'AGENT', tier: 'TIER', auth: 'AUTH', version: 'VERSION' };
+    const all = [header, ...rows];
+    const width = (key: keyof typeof header) => Math.max(...all.map((row) => row[key].length));
+    const wState = width('state');
+    const wAgent = width('agent');
+    const wTier = width('tier');
+    const wAuth = width('auth');
+
+    const line = (row: (typeof all)[number]) =>
+        `${row.glyph} ${row.state.padEnd(wState)}  ${row.agent.padEnd(wAgent)}  ${row.tier.padEnd(wTier)}  ${row.auth.padEnd(wAuth)}  ${row.version}`.trimEnd();
+
+    const usableCount = rows.filter((row) => row.state === 'usable').length;
+    const missingTier1 = results.filter((result) => !result.usable && result.tier === 1).length;
+    const footer =
+        missingTier1 > 0
+            ? `${usableCount} usable, ${missingTier1} missing (tier-1)`
+            : `${usableCount} usable, ${rows.length - usableCount} missing`;
+
+    return [line(header), ...rows.map(line), '', footer].join('\n');
 }
 
 function stringFlag(flags: Record<string, string | boolean>, name: string, fallback: string): string {

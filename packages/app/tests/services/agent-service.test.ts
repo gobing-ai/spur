@@ -245,9 +245,10 @@ describe('AgentService.doctor', () => {
 
         const exitCode = await svc.doctor({ json: false }, { doctorRunner });
         expect(exitCode).toBe(0);
-        expect(lines.some((l) => /auth=yes/.test(l) && /claude/.test(l))).toBe(true);
-        expect(lines.some((l) => /auth=no/.test(l) && /omp/.test(l))).toBe(true);
-        expect(lines.some((l) => /auth=\?/.test(l) && /opencode/.test(l))).toBe(true);
+        // Aligned table: auth renders as a yes/no/? column (no `auth=` prefix).
+        expect(lines.some((l) => /\bclaude\b/.test(l) && /\byes\b/.test(l))).toBe(true);
+        expect(lines.some((l) => /\bomp\b/.test(l) && /\bno\b/.test(l))).toBe(true);
+        expect(lines.some((l) => /\bopencode\b/.test(l) && /\?/.test(l))).toBe(true);
     });
 });
 

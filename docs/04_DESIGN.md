@@ -112,8 +112,11 @@ lists the team agent specs under `.spur/agents/` instead (`<id> <type> <purpose>
 the spec path).
 
 #### `spur agent doctor [agent] [--json]`
-Readiness check per agent; prints `usable|needs-auth|missing <agent> tier=<n> [version]`.
-Exit 1 if any **tier-1** agent is not usable. Backed by `ts-ai-runner` `DoctorRunner`.
+Readiness check per agent. Text mode prints an aligned table — `<✓|✗> <usable|missing> <agent>
+<tier> <auth:yes|no|?> <version>` with a `STATUS AGENT TIER AUTH VERSION` header and an
+`N usable, M missing (tier-1)` footer; `--json` emits `{ agents: [...] }`. Auth is informational
+(its own column, not a state label — liveness-only gate, ADR/0127). Exit 1 if any **tier-1** agent
+is not usable. Backed by `ts-ai-runner` `DoctorRunner`.
 
 #### `spur agent create <id> --type <agent-type> [--json] [flags]` · `spur agent edit <id>` · `spur agent delete <id> [--force]`
 Manage team agent specs under `.spur/agents/<id>.yaml` (backed by `ts-ai-runner` agent-spec helpers
