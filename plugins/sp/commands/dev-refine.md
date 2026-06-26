@@ -1,6 +1,6 @@
 ---
 description: Refine task requirements via structured Q&A — clarify scope, elicit missing details, tighten acceptance criteria
-argument-hint: "<wbs> [--focus <mode>] [--description <text>] [--agent <name|inherit|auto>] [--auto] [--next]"
+argument-hint: "<wbs> [--focus <mode>] [--description <text>] [--agent <name|auto>] [--auto] [--next]"
 allowed-tools: ["Bash", "Read", "Write", "Skill"]
 ---
 
@@ -26,7 +26,7 @@ Refine a task's requirements by analyzing existing content for quality issues an
 | `wbs` | WBS number or task file path (required, positional) | (required) |
 | `--description <text>` | Additional context to guide Q&A synthesis | (none) |
 | `--focus <mode>` | Predefined hint bundle that expands into domain hints (see below) | `all` |
-| `--agent <name\|inherit\|auto>` | Agent override for the synthesis step: `<name>` = explicit agent, `inherit` = current agent (default), `auto` = resolve current runtime | inherit |
+| `--agent <name\|auto>` | Spawn the AI-synthesis step under a specific agent via `spur agent run`. Omit (the default) to run synthesis **in the current session** — no subprocess | (in-session) |
 | `--auto` | Skip interactive Q&A — use AI synthesis only | off |
 | `--next` | On success, auto-transition `backlog → todo` and invoke `/sp:dev-run --mode implement <wbs> --next` | off |
 
@@ -56,10 +56,11 @@ Thin wrapper: task reading, gap analysis, Q&A, and section updates are all owned
 
 ### Agent override
 
-`--agent` controls which agent executes the AI-synthesis step (the `spur agent run` call the skill
-makes when filling sections under `--auto` or generating Q&A). Passed through `$ARGUMENTS` to the
-backing `sp:spur-dev` skill, which forwards it as `spur agent run … --agent <name>`. Semantics:
-`<name>` = explicit agent, `inherit` = current agent (default), `auto` = resolve from current runtime.
+`--agent` is an **inline** command (per the two-surface contract in
+[cross-cutting.md](../skills/spur-dev/references/cross-cutting.md) § "Honor `--agent`"): the default
+(no flag) runs the AI-synthesis step **in the current session**, writing sections directly via
+`spur task update --section --from-file`. An explicit `--agent <name>` or `--agent auto` spawns
+the step via `spur agent run` instead. The default never shells out.
 
 ## Workflow
 

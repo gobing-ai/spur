@@ -42,9 +42,13 @@ one thing and yields, so the **pipeline (not the agent) owns the loop**.
 | `review` | `/sp:dev-review <wbs>` — SECU-framework review of the diff. | [dev-operations.md §2 review](dev-operations.md) |
 | `verify` | `sp:code-verification` — requirements traceability + verdict. | [dev-operations.md §3 verify](dev-operations.md) |
 
-**Agent override** for any stage: the `--agent <name|inherit|auto>` flag (passed through from
-the thin wrapper via `$ARGUMENTS`) selects the executing agent. `inherit` = pipeline default
-(current agent), `auto` = resolve from current runtime, `<name>` = explicit override.
+**Agent override** for any stage: the `--agent <name|auto>` flag (passed through from
+the thin wrapper via `$ARGUMENTS`) selects the executing agent. Omitting it keeps the
+pipeline default — the spawned `agent.run` step resolves to the configured executor
+(`omp`); **"current agent" is not expressible on the pipeline surface** (the FSM runs a
+subprocess, and the calling agent cannot block on itself). `auto` resolves the current
+runtime to its canonical name before forwarding; `<name>` is an explicit override. See
+[cross-cutting.md](cross-cutting.md) for the full two-surface contract.
 
 ## Section ownership — `## Solution`
 
@@ -87,13 +91,16 @@ Synchronous invocation (`--json` without `--async`) is acceptable **only** for s
 When `--agent <value>` is set (passed through from the thin wrapper), merge it into the vars:
 `--vars '{"wbs":"<wbs>","agent":"<value>"}'`. The pipeline YAML already reads `${vars.agent}`
 for every `agent.run` step — no YAML changes needed. `--agent auto` resolves the current runtime
-to its canonical agent name before merging; `--agent inherit` or omitting the flag keeps the
-pipeline's default (`vars.agent = "omp"`).
+to its canonical agent name before merging; omitting the flag forwards nothing, so the spawned
+step resolves to the configured default executor (`vars.agent` defaults to `"omp"` in the
+pipeline YAML).
 
-**`--next` in full mode is ignored — emit a warning.** When the incoming `$ARGUMENTS` carries
-`--next` and the resolved mode is `full` (the default), the flag has no effect (full mode runs
-all stages itself). Print a one-line warning before launching the pipeline so the operator knows
-their flag was a no-op, then proceed normally. (See `plugins/sp/commands/dev-run.md` `--next`.)
+**`--next` in full mode is a usage error — reject, do not warn-and-proceed.** When the incoming
+`$ARGUMENTS` carries `--next` and the resolved mode is `full` (the default), the flag is invalid:
+full mode runs all stages itself, so "advance one stage then chain" has no meaning. Print the
+error and the corrective command, then stop — do not launch the pipeline. Silently ignoring a flag
+the operator typed is a worse failure mode than rejecting it. (See
+`plugins/sp/commands/dev-run.md` `--next` for the exact error text.)
 
 The pipeline (`kind: state-machine`) runs the work loop:
 

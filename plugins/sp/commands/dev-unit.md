@@ -1,6 +1,6 @@
 ---
 description: Generate or extend tests until the unit target is met
-argument-hint: "<target> [--coverage <n>] [--agent <name|inherit|auto>] [--auto]"
+argument-hint: "<target> [--coverage <n>] [--agent <name|auto>] [--auto]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 ---
 
@@ -28,7 +28,7 @@ delegate to the orchestration pipeline.
 |----------|----------|-------------|
 | `target` | Yes | WBS task number, task file path, source file path, or file glob |
 | `--coverage <n>` | No | Override the default focused coverage target. Default: `90` |
-| `--agent <name\|inherit\|auto>` | No | Agent override: `<name>` = explicit agent, `inherit` = current agent (default), `auto` = resolve current runtime |
+| `--agent <name\|auto>` | No | Spawn the test-generation step under a specific agent via `spur agent run`. Omit (the default) to run it **in the current session** — no subprocess |
 | `--auto` | No | Skip confirmations where the delegated workflow supports it |
 
 ## Target resolution
@@ -44,10 +44,10 @@ The `target` selects the skill's workflow (full detection rules in the reference
 
 ## Agent override
 
-`--agent` is optional; default is the current agent (no external delegation). Supported values:
-`inherit` (current agent), `auto` (resolve current runtime to its canonical name), or an explicit
-agent name (`claude-code`, `codex`, `openclaw`, `opencode`, `antigravity`, `pi`). The value is passed
-through to the skill verbatim and normalized there.
+`--agent` is an **inline** command (per the two-surface contract in
+[cross-cutting.md](../skills/spur-dev/references/cross-cutting.md) § "Honor `--agent`"): the default
+(no flag) runs the test-generation step **in the current session**. An explicit `--agent <name>` or
+`--agent auto` spawns it via `spur agent run` instead. The default never shells out.
 
 ## Examples
 

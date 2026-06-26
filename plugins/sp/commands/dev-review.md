@@ -1,6 +1,6 @@
 ---
 description: Review code for a task — SECU framework review across Security, Efficiency, Correctness, and Usability
-argument-hint: "<wbs> [--agent <name|inherit|auto>] [--focus <lens>] [--fix <none|blockers-first|all>]"
+argument-hint: "<wbs> [--agent <name|auto>] [--focus <lens>] [--fix <none|blockers-first|all>]"
 allowed-tools: ["Bash", "Read", "Write", "Skill"]
 ---
 
@@ -24,7 +24,7 @@ SECU review only — no requirements-traceability verdict and no pipeline gate a
 | Argument | Description | Default |
 |----------|-------------|---------|
 | `wbs` | Task WBS number (required, positional) | (required) |
-| `--agent <name\|inherit\|auto>` | Agent override: `<name>` = explicit agent, `inherit` = pipeline default, `auto` = resolve current agent | inherit |
+| `--agent <name\|auto>` | Spawn the review under a specific agent. Omit (the default) → the review runs under the configured default executor (`omp`). **Current-agent execution is not expressible** (subprocess FSM). | (configured default — `omp`) |
 | `--focus <lens>` | SECU dimensions: `all`, `security`, `efficiency`, `correctness`, `usability`, or comma-separated | `all` |
 | `--fix <strategy>` | Post-review repair: `none`, `blockers-first`, `all` | `none` |
 
@@ -35,9 +35,11 @@ skill.
 
 ### Agent override
 
-`--agent` controls which agent executes the review. Passed through `$ARGUMENTS` to the backing
-`sp:code-verification` skill. Semantics: `<name>` = explicit agent, `inherit` = pipeline default,
-`auto` = resolve from current runtime.
+`--agent` is a **pipeline** command (per the two-surface contract in
+[cross-cutting.md](../skills/spur-dev/references/cross-cutting.md) § "Honor `--agent`"). The review runs
+as a spawned step; the calling agent cannot block on itself, so "current agent" is **not expressible**.
+Omit the flag → the configured default executor (`omp`) runs the review. An explicit `--agent <name>`
+or `--agent auto` spawns that agent instead. Documented honestly — no `inherit` token implies otherwise.
 
 ## Implementation
 

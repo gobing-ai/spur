@@ -419,13 +419,16 @@ describe('AgentService.run agent resolution', () => {
         expect(errors.some((e) => e.includes('No usable Tier-1'))).toBe(true);
     });
 
-    test('--agent current is no longer special → treated as unknown agent (exit 2)', async () => {
+    test('dead tokens (current, inherit) → treated as unknown agent (exit 2)', async () => {
         // `current` (and the phantom `inherit`) were removed: the env-var-backed
         // path never had a producer (nothing sets SPUR_AGENT), so the token is now
         // resolved as a plain explicit name, which is unknown → exit 2.
         const svc = makeService({ SPUR_AGENT: 'pi' });
-        const exitCode = await svc.run('hello', { agent: 'current' });
-        expect(exitCode).toBe(2);
+        const currentExit = await svc.run('hello', { agent: 'current' });
+        expect(currentExit).toBe(2);
+        // `inherit` was never a real token — it fell through to explicit and exited 2.
+        const inheritExit = await svc.run('hello', { agent: 'inherit' });
+        expect(inheritExit).toBe(2);
     });
 
     test('--agent explicit not installed → exit 1', async () => {

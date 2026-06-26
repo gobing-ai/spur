@@ -1,6 +1,6 @@
 ---
 description: Verify a task against its requirements — traceability check producing a PASS/PARTIAL/FAIL verdict with per-requirement evidence
-argument-hint: "<wbs> [--agent <name|inherit|auto>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next]"
+argument-hint: "<wbs> [--agent <name|auto>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next]"
 allowed-tools: ["Bash", "Read", "Write", "Skill"]
 ---
 
@@ -24,7 +24,7 @@ the verdict artifact (`.spur/run/<wbs>-verdict.json`) is emitted for the pipelin
 | Argument | Description | Default |
 |----------|-------------|---------|
 | `wbs` | Task WBS number (required, positional) | (required) |
-| `--agent <name\|inherit\|auto>` | Agent override: `<name>` = explicit agent, `inherit` = pipeline default, `auto` = resolve current agent | inherit |
+| `--agent <name\|auto>` | Spawn the verification under a specific agent. Omit (the default) → the verify pass runs under the configured default executor (`omp`). **Current-agent execution is not expressible** (subprocess FSM). | (configured default — `omp`) |
 | `--fix <strategy>` | Post-verdict repair: `none`, `blockers-first` (UNMET only), `all` (UNMET + PARTIAL + major findings) | `none` |
 | `--focus <lens>` | SECU dimensions: `all`, `security`, `efficiency`, `correctness`, `usability`, or comma-separated | `all` |
 | `--bdd` | Map `## Acceptance Criteria` scenarios to tests and fold into the verdict | off |
@@ -40,9 +40,11 @@ owned by the skill.
 
 ### Agent override
 
-`--agent` controls which agent executes the verification. Passed through `$ARGUMENTS` to the backing
-`sp:code-verification` skill. Semantics: `<name>` = explicit agent, `inherit` = pipeline default,
-`auto` = resolve from current runtime.
+`--agent` is a **pipeline** command (per the two-surface contract in
+[cross-cutting.md](../skills/spur-dev/references/cross-cutting.md) § "Honor `--agent`"). The verify pass
+runs as a spawned step; the calling agent cannot block on itself, so "current agent" is **not
+expressible**. Omit the flag → the configured default executor (`omp`) runs the verification. An
+explicit `--agent <name>` or `--agent auto` spawns that agent instead.
 
 ## `--next` chain
 

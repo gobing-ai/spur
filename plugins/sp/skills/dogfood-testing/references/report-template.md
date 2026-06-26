@@ -26,7 +26,7 @@ Emit these sections in order. Headings are fixed (machine-parseable); never rena
 - **Command:** `<slash command or CLI invocation>`
 - **Classification:** `slash command` | `agent skill` | `CLI invocation`
 - **Exact invocation:** the underlying `Skill()` call or shell command
-- **Testee agent:** `<value forwarded via --agent>` | `inherit (default)`
+- **Testee agent:** `<value forwarded via --agent>` | `omitted (testee runs in current session)`
 - **Mode:** `observe-only (--max-retry 0)` | `fix (--max-retry N)`
 - **Task under test:** WBS + title (if applicable)
 ```

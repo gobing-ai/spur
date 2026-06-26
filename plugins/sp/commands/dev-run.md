@@ -1,6 +1,6 @@
 ---
 description: Run a task — full pipeline (precheck→implement→test→review→approve→verify→record→done) or single-step (implement)
-argument-hint: "<wbs> [--mode <full|implement>] [--agent <name|inherit|auto>] [--auto] [--next]"
+argument-hint: "<wbs> [--mode <full|implement>] [--agent <name|auto>] [--auto] [--next]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 ---
 
@@ -29,9 +29,9 @@ Pick a task and run it. Two modes:
 |----------|-------------|---------|
 | `wbs` | Task WBS number (required, positional) | (required) |
 | `--mode <full\|implement>` | `full` drives the complete pipeline; `implement` does only the implement step | `full` |
-| `--agent <name\|inherit\|auto>` | Agent override: `<name>` = explicit agent, `inherit` = pipeline default, `auto` = resolve current agent | (none — pipeline `vars.agent` default) |
+| `--agent <name\|auto>` | Spawn the pipeline steps under a specific agent. Omit (the default) → the spawned `agent.run` steps use the configured default executor (`omp`). **Current-agent execution is not expressible** on the pipeline surface (the FSM runs subprocesses). | (configured default — `omp`) |
 | `--auto` | Skip the HITL approval gate (full mode) or skip confirmations (implement mode) | off |
-| `--next` | On success, auto-transition to `testing` and invoke `/sp:dev-verify <wbs> --next`. For `--mode implement` only — ignored in full mode. | off |
+| `--next` | On success, auto-transition to `testing` and invoke `/sp:dev-verify <wbs> --next`. **`--mode implement` only** — a usage error in full mode (see below). | off |
 
 ## Behavior
 
@@ -40,16 +40,19 @@ pipeline invocation, HITL surfacing, and continuation logic are all owned by the
 
 ### Agent override
 
-`--agent` controls which agent executes the pipeline steps:
+`--agent` is a **pipeline** command (per the two-surface contract in
+[cross-cutting.md](../skills/spur-dev/references/cross-cutting.md) § "Honor `--agent`"). The dual-workflow
+FSM runs each stage as a subprocess; the calling agent cannot block on itself, so "current agent" is
+**not expressible** here. The honest behaviors:
 
 | Value | Behavior |
 |-------|----------|
-| `<name>` | Explicit agent name — threaded to `vars.agent` (full mode) or the backing `Skill()` call (implement mode) |
-| `inherit` | Use the pipeline's configured default (`vars.agent = "omp"`). Same as omitting the flag. |
-| `auto` | Resolve the current runtime to its canonical agent name (claude-code, codex, openclaw, opencode, antigravity, pi) |
+| *(omitted)* | Forward nothing — the spawned `agent.run` steps resolve to the configured default executor (`omp`). |
+| `<name>` | Spawn that explicit agent — threaded to `vars.agent` (full mode) or the backing `Skill()` call (implement mode). |
+| `auto` | Resolve the current runtime to its canonical agent name and spawn that. |
 
 In full mode, `--agent <value>` is merged into the `--vars` JSON passed to `spur workflow run`. In
-implement mode, it is passed through `$ARGUMENTS` to the backing skill.`
+implement mode, it is passed through `$ARGUMENTS` to the backing skill.
 
 ## Section ownership — `--mode implement`
 
@@ -72,14 +75,17 @@ When `--next` is set and implementation succeeds:
 2. Invoke: `/sp:dev-verify <wbs> --next --auto` (auto-forwarding `--auto` if it was set)
 3. On failure: stop — surface the error, leave task at current status, do NOT invoke dev-verify
 
-`--next` with `--mode full` is a no-op — full mode already handles progression internally.
+`--next` with `--mode full` is a **usage error** — full mode runs all pipeline stages itself, so
+"advance one stage then chain" has no meaning. Silently ignoring a flag the operator typed is a
+worse failure mode than rejecting it.
 
-**When `--next` is passed in full mode, emit a warning before doing anything else** (the flag is
-silently ignored otherwise, which surprises the operator):
+**When `--next` is passed in full mode, reject before doing anything else** — print the error and
+stop, do not launch the pipeline:
 
 ```
-warning: --next is ignored in full mode (full mode runs all stages).
-         To advance only one stage, use: /sp:dev-run <wbs> --mode implement --next
+error: --next is invalid in full mode (full mode runs all stages; there is nothing to advance to).
+       To run one stage and chain, use: /sp:dev-run <wbs> --mode implement --next
+       To run the whole pipeline, drop --next: /sp:dev-run <wbs>
 ```
 
 ## Implementation

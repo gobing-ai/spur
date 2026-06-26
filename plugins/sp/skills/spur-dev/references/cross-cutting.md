@@ -11,21 +11,40 @@ These mechanics apply to **every** write in both the planning and execution halv
 knows *how to think*; the CLI knows *what is valid* — every mutation passes through a CLI verb
 that validates before writing.
 
-## Honor `--agent` on every model call
+## Honor `--agent` — the two-surface contract
 
-When the invoking command forwarded `--agent <value>` (via `$ARGUMENTS`), **thread it into every
-`spur agent run` call** this skill makes — AC generation, decomposition synthesis, refine synthesis,
-any prose generation:
+`--agent` means different things on the two command surfaces. "Current agent" is achievable on
+one and physically impossible on the other, so the contract splits:
 
-```bash
-spur agent run "<prompt>" --agent <value> [--mode json]
-```
+| Surface | Commands | Default (no `--agent`, or `inherit`) | Explicit `--agent <name>` / `auto` |
+|---|---|---|---|
+| **Inline** | `dev-plan`, `dev-refine`, `dev-brainstorm`, `dev-unit` | Run the model step **in the current session** — do NOT shell to `spur agent run`; write the result via `spur task update --section --from-file` directly | Spawn via `spur agent run "<prompt>" --agent <value>` |
+| **Pipeline** | `dev-run`, `dev-review`, `dev-verify` | Forward nothing — the spawned `agent.run` step uses the configured default executor (`omp`). Current-agent execution is **not expressible** (the FSM runs a subprocess; the calling agent cannot block on itself) | Forward `--agent <value>` into the workflow `vars`, spawning that agent |
 
-Semantics: `<name>` = run under that explicit agent; `inherit` = the current agent (omit `--agent`,
-the CLI default); `auto` = pass `--agent auto` to resolve from the current runtime. If no `--agent`
-was forwarded, call `spur agent run` bare (resolves `auto`) — the prior behavior. **Never** hardcode
-an agent in a model call; the selector always flows from the command flag so the operator can steer
-which agent does the model work without editing the skill.
+### Inline surface — the default is in-session
+
+Inline commands are already an LLM running in the current session; the model step *is* the agent
+itself. So the default performs synthesis directly from the skill's own context and lands the
+result through the section-editing workflow above — no subprocess. `spur agent run` is invoked
+**only** when the operator forwarded an explicit agent (`<name>` or `auto`) — a deliberate spawn
+of a *different* agent.
+
+This is a skill-behavior rule, not a CLI rule. Nothing in `packages/app` gates it; the inline
+skill files carry the instruction to synthesize in-session unless an explicit agent was forwarded.
+
+### Pipeline surface — current-agent is impossible
+
+The dual-workflow FSM runs each stage as a subprocess (`task-pipeline.yaml`'s `agent.run` steps).
+The calling agent cannot block on itself, so there is no way to express "run this stage in the
+current session." The honest default is: forward nothing, and the spawned step resolves to the
+configured default executor. Document this impossibility in pipeline command docs rather than
+implying `inherit` runs the current agent.
+
+### Never hardcode an agent
+
+On both surfaces, the selector flows from the command flag so the operator can steer which agent
+does the model work without editing the skill. The only special-case token is `auto` (resolve from
+the current runtime) — every other value is an explicit agent name.
 
 ## Every write is CLI-gated
 

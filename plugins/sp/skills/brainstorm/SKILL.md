@@ -108,11 +108,12 @@ For verification → cc:anti-hallucination
 For synthesis → `spur agent run`
 ```
 
-**Honor `--agent`.** When the invoking command forwarded `--agent <value>` (via `$ARGUMENTS`),
-thread it into every `spur agent run` research/synthesis call: `spur agent run "<prompt>" --agent
-<value>`. `<name>` = explicit agent; `inherit` = current agent (omit the flag, the CLI default);
-`auto` = pass `--agent auto`. No `--agent` forwarded → call bare (resolves `auto`), the prior
-behavior. Never hardcode the agent — the selector flows from the command flag.
+**Honor `--agent`.** The default is to run synthesis **in the current session** — do not shell to
+`spur agent run`; write the result via `spur task update --section --from-file` directly. Only
+when the invoking command forwarded an explicit agent do you spawn it: `spur agent run "<prompt>"
+--agent <value>`, where `<value>` is an explicit `<name>` or `auto` (resolve from current runtime).
+Never hardcode the agent — the selector flows from the command flag. See
+[spur-dev/cross-cutting.md](../spur-dev/references/cross-cutting.md) for the two-surface contract.
 
 ### 4. Generate 2-3 Approaches
 

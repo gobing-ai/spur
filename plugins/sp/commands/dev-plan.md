@@ -1,6 +1,6 @@
 ---
 description: Plan a feature from a description — intake → feature create → AC generation → feature check gate → decomposition → batch-create
-argument-hint: "\"<description>\" [--feature <id>] [--parent <feature-id>] [--agent <name|inherit|auto>] [--design] [--auto]"
+argument-hint: "\"<description>\" [--feature <id>] [--parent <feature-id>] [--agent <name|auto>] [--design] [--auto]"
 allowed-tools: ["Bash", "Read", "Write", "Skill"]
 ---
 
@@ -27,7 +27,7 @@ corpus mutation occurs until each gate passes.
 | `description` | Feature description (required, positional) | (required) |
 | `--feature <id>` | Plan tasks for an existing feature instead of creating one | (creates new) |
 | `--parent <feature-id>` | Parent feature for hierarchical ID allocation | (top-level) |
-| `--agent <name\|inherit\|auto>` | Agent override for the model steps (AC generation, decomposition synthesis): `<name>` = explicit agent, `inherit` = current agent (default), `auto` = resolve current runtime | inherit |
+| `--agent <name\|auto>` | Spawn the model steps (AC generation, decomposition) under a specific agent via `spur agent run`. Omit (the default) to run them **in the current session** — no subprocess | (in-session) |
 | `--design` | Always author/update the feature's design satellite (`docs/design/<slug>.md`) + its `04_DESIGN.md` index row | off |
 | `--auto` | Let the agent decide whether a design doc is warranted (cross-cutting-seam detection). Ignored when `--design` is present | off |
 
@@ -53,10 +53,12 @@ entry point.
 
 ### Agent override
 
-`--agent` controls which agent executes the model-backed planning steps — AC generation and
-decomposition synthesis, both `spur agent run` calls inside `sp:spur-dev`. Passed through
-`$ARGUMENTS`; the skill forwards it as `spur agent run … --agent <name>`. Semantics: `<name>` =
-explicit agent, `inherit` = current agent (default), `auto` = resolve from current runtime.
+`--agent` is an **inline** command (per the two-surface contract in
+[cross-cutting.md](../skills/spur-dev/references/cross-cutting.md) § "Honor `--agent`"): the default
+(no flag) runs the model steps — AC generation and decomposition synthesis — **in the current
+session**, writing results directly via `spur task update --section --from-file`. An explicit
+`--agent <name>` or `--agent auto` spawns those steps via `spur agent run` instead. The default
+never shells out; that is the contract for an inline command.
 
 ## Implementation
 

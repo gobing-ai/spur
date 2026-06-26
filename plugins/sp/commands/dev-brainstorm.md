@@ -1,6 +1,6 @@
 ---
 description: Interactive solution design — heuristic discovery interview followed by structured ideation with trade-offs and confidence scoring
-argument-hint: "<topic> [--depth <basic|detailed|comprehensive>] [--options <n>] [--agent <name|inherit|auto>] [--skip-discovery] [--task [<feature-id>]] [--feature [<parent-id>]] [--next]"
+argument-hint: "<topic> [--depth <basic|detailed|comprehensive>] [--options <n>] [--agent <name|auto>] [--skip-discovery] [--task [<feature-id>]] [--feature [<parent-id>]] [--next]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---
 
@@ -29,7 +29,7 @@ options" dump.
 | `topic` | Problem description, question, or path to a task file (required, positional) | (required) |
 | `--depth <basic\|detailed\|comprehensive>` | How deep to walk the decision tree. `basic` = 1 level (surface trade-offs), `detailed` = 2-3 levels (resolve dependencies), `comprehensive` = exhaustive (every branch) | `detailed` |
 | `--options <n>` | Number of solution approaches to generate (2-8) | 3 |
-| `--agent <name\|inherit\|auto>` | Agent override for the ideation/research steps (the `spur agent run` synthesis + research delegations): `<name>` = explicit agent, `inherit` = current agent (default), `auto` = resolve current runtime | inherit |
+| `--agent <name\|auto>` | Spawn the ideation/research steps under a specific agent via `spur agent run`. Omit (the default) to run them **in the current session** — no subprocess | (in-session) |
 | `--skip-discovery` | Skip the grilling interview — go straight to ideation from the topic alone | off |
 | `--task [<feature-id>]` | After ideation, create a single task file from the recommended approach via `spur task create`. Optionally link to a feature. **Mutually exclusive with `--feature`.** | off |
 | `--feature [<parent-id>]` | After ideation, create a **feature** with BDD acceptance criteria derived from the decision trace, then run the `spur feature check` gate. Lands a validated feature ready for `/sp:dev-plan` decomposition. Optionally nest under a parent feature. **Mutually exclusive with `--task`.** | off |
@@ -210,10 +210,10 @@ one-shot ideation. Use when:
 The command owns Phase 1 (discovery interview) inline. Phase 2 delegates to **sp:brainstorm**'s
 `dev-brainstorm` operation. Phase 3 is the artifact exit — `--task` *or* `--feature`, never both.
 
-**Agent override.** `--agent` controls which agent executes the ideation/research model calls
-(`sp:brainstorm`'s `spur agent run` synthesis + research delegations). Passed through `$ARGUMENTS`;
-the skill forwards it as `spur agent run … --agent <name>`. Semantics: `<name>` = explicit agent,
-`inherit` = current agent (default), `auto` = resolve from current runtime.
+**Agent override.** `--agent` is an **inline** command (per the two-surface contract in
+[cross-cutting.md](../skills/spur-dev/references/cross-cutting.md) § "Honor `--agent`"). The default
+(no flag) runs the ideation/research model calls **in the current session**. An explicit
+`--agent <name>` or `--agent auto` spawns them via `spur agent run … --agent <value>` instead.
 
 ```
 # Phase 2 — Ideation
