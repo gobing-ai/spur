@@ -634,6 +634,14 @@ native resizable 3-column layout, which has no reproducible collapse defect. No 
 these are apps/web-only → package-private literals; promote to root `workspaces.catalog` only if a
 sibling workspace later needs them.
 
+**Consequence — single UI import seam (enforcement mechanism, not a new decision).** Because these
+libraries are apps/web-only, their imports are confined to a single seam: `apps/web/src/ui.ts`
+re-exports them (and the daisyUI component-class authoring is confined to `apps/web/src/components/ui/`).
+This boundary is enforced by the `config/rules/ui/` preset (tasks 0103 author@warning, 0104
+promote→error + wire into `recommended-pre-check`): `ui-import-seam-only` forbids raw UI-lib imports
+outside `ui.ts`; `no-daisyui-class-leak` forbids daisyUI component classes outside `components/ui/`.
+Mechanism detail: `docs/05_FEATURES.md §4`.
+
 ---
 
 ## ADR-026: Verification Is a Companion Skill; the Pipeline Completion Gate Is a Workflow Guard

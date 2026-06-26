@@ -78,6 +78,7 @@ curated narrative view; the ID tree is the authoritative satellite roster.
 | Fix engine (`--fix-mode none\|suggest\|auto`, `--dry-run`) | ✅ | per-rule effective mode `min(rule.fix.mode, maxFixMode)`; exit code from findings only |
 | SARIF output | ⏳ | Phase 3 |
 | Self-host the quality gate (`spur rule run` as CI check) | ✅ | `spur-check` script: lint + pre-check preset + tests + post-check preset — corrected 2026-06-12 (was ⏳; shipped in Phase 1) |
+| UI seam-boundary preset (`config/rules/ui/`) — enforces ADR-025's single UI import seam | ✅ | `ui-import-seam-only` (UI libs only via `apps/web/src/ui.ts`) + `no-daisyui-class-leak` (daisyUI component classes only in `components/ui/`); authored @warning (0103), promoted→error + wired into `recommended-pre-check` (0104) |
 
 ## 5. Workflows (`ts-dual-workflow-engine`)
 

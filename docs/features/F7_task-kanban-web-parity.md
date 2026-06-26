@@ -89,8 +89,8 @@ Feature: Task Kanban web parity
 | 0100 | Task Kanban UI parity v3: right-align status toggle group + right-docked resizable full-height detail panel (frontmatter skip, code-block styling) | done |
 | 0101 | UI seam scaffolding + Button wrapper pilot (apps/web) | done |
 | 0102 | Remaining UI wrappers + full apps/web refactor to ui.ts seam | done |
-| 0103 | Spur rule: UI import + class-leak boundary enforcement (warning) | todo |
-| 0104 | Promote UI boundary rule to error + wire into pre-check gate + doc sync | todo |
+| 0103 | Spur rule: UI import + class-leak boundary enforcement (warning) | done |
+| 0104 | Promote UI boundary rule to error + wire into pre-check gate + doc sync | done |
 | 0127 | sp-dev-run 0102 dogfood: fix sync-orphan, Solution section, cache hit rate | done |
 <!-- END AUTO-GENERATED -->
 
