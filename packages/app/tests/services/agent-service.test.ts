@@ -1156,6 +1156,227 @@ describe('AgentService.resolve', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Tests: AgentService — phase-aware auto resolution with executor profiles (0126)
+// ---------------------------------------------------------------------------
+// These exercise the `run`/`executeRun` path (the only path that threads the
+// prompt → phase). The resolved agent + model are observed via the agent name
+// passed to runPromptCommand and the model in PromptOptions.
+
+import type { AgentConfig } from '../../src/index';
+
+/** Build a service with an `agent` config block threaded in. */
+function makeConfiguredService(agentConfig: AgentConfig, env: Record<string, string | undefined> = {}) {
+    return new AgentService({ cwd: process.cwd(), env, output: nullOutput(), agentConfig });
+}
+
+/**
+ * Deps whose doctor reports per-agent usability from a map (default: usable).
+ * Captures the agent + PromptOptions passed to runPromptCommand for assertions.
+ */
+function mockResolutionDeps(usableByAgent: Record<string, boolean> = {}) {
+    const runner = { runPromptCommand: mock(() => Promise.resolve(makeRunResult())) };
+    const detector = {
+        detectOne: mock(() =>
+            Promise.resolve({ name: 'omp', installed: true, version: '1.0.0', channels: [], error: null }),
+        ),
+    };
+    const usable = (agent: string) => usableByAgent[agent] ?? true;
+    const doctor = {
+        runOne: mock((agent: string) =>
+            Promise.resolve(mockDoctorResult({ agent, installed: usable(agent), usable: usable(agent) })),
+        ),
+        runAll: mock(() =>
+            Promise.resolve(TIER1_PRIORITY.map((name: string) => mockDoctorResult({ agent: name, usable: true }))),
+        ),
+    };
+    return {
+        deps: {
+            runner: runner as unknown as AgentRunDeps['runner'],
+            detector: detector as unknown as AgentRunDeps['detector'],
+            doctorRunner: doctor as unknown as AgentRunDeps['doctorRunner'],
+        },
+        runner,
+    };
+}
+
+/** The agent name passed to the (single) runPromptCommand call. */
+function resolvedAgent(runner: { runPromptCommand: ReturnType<typeof mock> }): string {
+    return runner.runPromptCommand.mock.calls[0]?.[0] as string;
+}
+
+/** The model from the PromptOptions passed to runPromptCommand. */
+function resolvedModel(runner: { runPromptCommand: ReturnType<typeof mock> }): string | undefined {
+    return (runner.runPromptCommand.mock.calls[0]?.[1] as { model?: string } | undefined)?.model;
+}
+
+describe('AgentService phase-aware auto resolution', () => {
+    // First Tier-1 agent in priority order — the legacy-fallback expectation.
+    const firstPriority = TIER1_PRIORITY[0] as string;
+    const fullConfig: AgentConfig = {
+        default: 'omp',
+        executors: [
+            { name: 'omp', agent: 'omp' },
+            { name: 'omp-zai', agent: 'omp', model: 'zai//glm-5.2' },
+            { name: 'claude', agent: 'claude' },
+        ],
+        'default-by-phase': { 'dev-run': 'omp-zai', 'dev-review': 'claude' },
+    };
+
+    test('R1: phase mapping selects the configured executor with its model override', async () => {
+        const svc = makeConfiguredService(fullConfig);
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('/sp:dev-run 0126 --auto', { agent: 'auto', json: true }, deps);
+        expect(code).toBe(0);
+        expect(resolvedAgent(runner)).toBe('omp');
+        expect(resolvedModel(runner)).toBe('zai//glm-5.2');
+    });
+
+    test('R2: no phase match falls back to the default executor', async () => {
+        const svc = makeConfiguredService(fullConfig);
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'auto', json: true }, deps);
+        expect(code).toBe(0);
+        expect(resolvedAgent(runner)).toBe('omp');
+        expect(resolvedModel(runner)).toBeUndefined();
+    });
+
+    test('R3: legacy config (no executors / phase map) keeps Tier-1 priority behavior', async () => {
+        const svc = makeConfiguredService({});
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'auto', json: true }, deps);
+        expect(code).toBe(0);
+        // First usable Tier-1 in priority order.
+        expect(resolvedAgent(runner)).toBe(firstPriority);
+    });
+
+    test('absent agentConfig entirely → Tier-1 priority behavior', async () => {
+        const svc = makeService();
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('/sp:dev-run 0126', { agent: 'auto', json: true }, deps);
+        expect(code).toBe(0);
+        expect(resolvedAgent(runner)).toBe(firstPriority);
+    });
+
+    test('backward-compat: a pre-0126 `{ default: <agent> }` config resolves the named agent', async () => {
+        // The exact shape every shipped config has today: a default, no executors,
+        // no phase map. `default` resolves as a legacy direct agent name (R5/R8) —
+        // no model override, no phase routing, no crash.
+        const svc = makeConfiguredService({ default: 'pi' });
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('/sp:dev-run 0126', { agent: 'auto', json: true }, deps);
+        expect(code).toBe(0);
+        expect(resolvedAgent(runner)).toBe('pi');
+        expect(resolvedModel(runner)).toBeUndefined();
+    });
+
+    test('R4: phase mapping naming an unknown executor exits 2 before spawning', async () => {
+        const svc = makeConfiguredService({
+            executors: [{ name: 'omp', agent: 'omp' }],
+            'default-by-phase': { 'dev-review': 'nonexistent' },
+        });
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('/sp:dev-review 0126', { agent: 'auto', json: true }, deps);
+        expect(code).toBe(2);
+        expect(runner.runPromptCommand).not.toHaveBeenCalled();
+    });
+
+    test('R7: phase mapping to a known-but-unusable executor exits 1 with no fallback', async () => {
+        const svc = makeConfiguredService({
+            default: 'omp',
+            executors: [
+                { name: 'omp', agent: 'omp' },
+                { name: 'claude', agent: 'claude' },
+            ],
+            'default-by-phase': { 'dev-plan': 'claude' },
+        });
+        // claude unusable; omp usable — but R7 must NOT fall back to the omp default.
+        const { deps, runner } = mockResolutionDeps({ claude: false, omp: true });
+        const code = await svc.run('/sp:dev-plan 0126', { agent: 'auto', json: true }, deps);
+        expect(code).toBe(1);
+        expect(runner.runPromptCommand).not.toHaveBeenCalled();
+    });
+
+    test('R6: explicit --model overrides the executor model override', async () => {
+        const svc = makeConfiguredService(fullConfig);
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('/sp:dev-run 0126', { agent: 'auto', model: 'my-model', json: true }, deps);
+        expect(code).toBe(0);
+        expect(resolvedAgent(runner)).toBe('omp');
+        expect(resolvedModel(runner)).toBe('my-model');
+    });
+
+    test('slash-command phase normalization across every per-agent surface form', async () => {
+        // `spur agent run` may receive a prompt already translated for the target
+        // agent (translateSlashCommand runs after resolution), so extractPhase must
+        // recognize all of: claude (/sp:, /rd3:), opencode/gemini (/sp-, /rd3-),
+        // pi/omp (/skill:sp-, /skill:rd3-), codex ($sp-, $rd3-).
+        const prompts = [
+            '/sp:dev-run 0126', // claude
+            '/sp-dev-run 0126', // opencode / gemini
+            '/skill:sp-dev-run 0126', // pi / omp
+            '$sp-dev-run 0126', // codex
+            '/rd3:dev-run 0126', // rd3 claude
+            '/rd3-dev-run 0126', // rd3 opencode / gemini
+            '/skill:rd3-dev-run 0126', // rd3 pi / omp
+            '$rd3-dev-run 0126', // rd3 codex
+        ];
+        for (const prompt of prompts) {
+            const svc = makeConfiguredService(fullConfig);
+            const { deps, runner } = mockResolutionDeps();
+            const code = await svc.run(prompt, { agent: 'auto', json: true }, deps);
+            expect(code, `prompt=${prompt}`).toBe(0);
+            // Every form normalizes to phase dev-run → executor omp-zai.
+            expect(resolvedModel(runner), `prompt=${prompt}`).toBe('zai//glm-5.2');
+        }
+    });
+
+    test('a translated non-sp/rd3 skill prompt yields no phase (falls back to default)', async () => {
+        const svc = makeConfiguredService(fullConfig);
+        const { deps, runner } = mockResolutionDeps();
+        // `/skill:other-thing` is not an sp/rd3 command → no phase → default executor.
+        const code = await svc.run('/skill:other-thing 0126', { agent: 'auto', json: true }, deps);
+        expect(code).toBe(0);
+        expect(resolvedAgent(runner)).toBe('omp');
+        expect(resolvedModel(runner)).toBeUndefined();
+    });
+
+    test('R8: explicit --agent name does not consult phase config', async () => {
+        const svc = makeConfiguredService(fullConfig);
+        const { deps, runner } = mockResolutionDeps();
+        // dev-run maps to omp-zai, but an explicit agent must win with no model override.
+        const code = await svc.run('/sp:dev-run 0126', { agent: 'claude', json: true }, deps);
+        expect(code).toBe(0);
+        expect(resolvedAgent(runner)).toBe('claude');
+        expect(resolvedModel(runner)).toBeUndefined();
+    });
+
+    test('R12: prompt-less resolve() derives no phase and uses default → priority', async () => {
+        const svc = makeConfiguredService(fullConfig);
+        const { deps } = mockResolutionDeps();
+        const result = await svc.resolve({ agent: 'auto' }, deps);
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            // No prompt → no phase → default executor 'omp' (not the dev-run model override).
+            expect(result.agent).toBe('omp');
+            expect(result.model).toBeUndefined();
+            expect(result.source).toBe('default');
+        }
+    });
+
+    test('default falls through to priority when the default executor is unusable', async () => {
+        const svc = makeConfiguredService({
+            default: 'claude',
+            executors: [{ name: 'claude', agent: 'claude' }],
+        });
+        // claude unusable → default path miss → Tier-1 priority resolves.
+        const { deps, runner } = mockResolutionDeps({ claude: false });
+        const code = await svc.run('plain prompt', { agent: 'auto', json: true }, deps);
+        expect(code).toBe(0);
+        expect(resolvedAgent(runner)).toBe(firstPriority);
+    });
+});
+
+// ---------------------------------------------------------------------------
 // Tests: AgentService — timeout-kill routing (P0-b)
 // ---------------------------------------------------------------------------
 // The dogfood report claimed a timed-out agent.run reported ok:true and the

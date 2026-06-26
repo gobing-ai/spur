@@ -1,6 +1,6 @@
 import { dirname, join, resolve } from 'node:path';
 import { isatty } from 'node:tty';
-import { AgentService, RuleService } from '@gobing-ai/spur-app';
+import { type AgentConfig, AgentService, RuleService } from '@gobing-ai/spur-app';
 import { buildConfigFromEnv } from '@gobing-ai/spur-config';
 import { createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
 import type { HitlResponder } from '@gobing-ai/ts-dual-workflow-engine';
@@ -41,6 +41,8 @@ export function createCliContext(options: {
     setExitCode?: (code: number) => void;
     /** Pre-built DB adapter from runNodeApplication services.db (R4 eager injection). */
     db?: DbAdapter;
+    /** Validated `agent` config block, threaded into AgentService for phase-aware resolution. */
+    agentConfig?: AgentConfig;
 }): CliContext {
     const cwd = resolve(options.cwd ?? process.cwd());
     const env = options.env ?? process.env;
@@ -64,7 +66,7 @@ export function createCliContext(options: {
         setExitCode: options.setExitCode ?? noopSetExitCode,
         output: options.output,
         getDb,
-        agentService: () => new AgentService({ cwd, env, output: options.output }),
+        agentService: () => new AgentService({ cwd, env, output: options.output, agentConfig: options.agentConfig }),
         ruleService: () => new RuleService({ cwd, env, fs, output: options.output, getDb }),
         hitlResponder: (json?: boolean) =>
             isatty(1) && json !== true ? new ClackHitlResponder() : new DefaultHitlResponder(),

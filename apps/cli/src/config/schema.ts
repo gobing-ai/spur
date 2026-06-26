@@ -9,10 +9,53 @@
  */
 import { z } from 'zod';
 
-/** Schema for the `agent` section. */
-export const AgentConfigSchema = z.object({
-    default: z.string().optional(),
+/**
+ * Schema for a single named executor profile under `agent.executors`.
+ *
+ * An executor pairs a canonical coding-agent (`agent`) with an optional opaque
+ * `model` override. `name` is the selector key referenced from `agent.default`
+ * and `agent.default-by-phase`. `agent`/`model` are validated as non-empty
+ * strings here; canonicalization (`resolveAgentName`) and usability checks happen
+ * at resolution time in `AgentService`, not at schema-parse time.
+ */
+export const AgentExecutorConfigSchema = z.object({
+    name: z.string().min(1),
+    agent: z.string().min(1),
+    model: z.string().min(1).optional(),
 });
+
+/** A single executor profile entry. */
+export type AgentExecutorConfig = z.infer<typeof AgentExecutorConfigSchema>;
+
+/**
+ * Schema for the `agent` section.
+ *
+ * - `default` — executor selector first, legacy direct agent name second.
+ * - `executors` — named `{ name, agent, model? }` profiles; names must be unique.
+ * - `default-by-phase` — a `Record<phase, executorSelector>` **map** (not an
+ *   array of single-key maps); each value names an executor or a legacy agent.
+ */
+export const AgentConfigSchema = z
+    .object({
+        default: z.string().optional(),
+        executors: z.array(AgentExecutorConfigSchema).optional(),
+        'default-by-phase': z.record(z.string(), z.string()).optional(),
+    })
+    .superRefine((value, ctx) => {
+        const executors = value.executors;
+        if (executors === undefined) return;
+        const seen = new Set<string>();
+        for (const [index, executor] of executors.entries()) {
+            if (seen.has(executor.name)) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: `Duplicate executor name: ${executor.name}`,
+                    path: ['executors', index, 'name'],
+                });
+            }
+            seen.add(executor.name);
+        }
+    });
 
 /** Schema for the `rules` section. */
 export const RulesConfigSchema = z.object({
@@ -46,3 +89,6 @@ export const SpurAppConfigSchema = z.object({
 
 /** Inferred TypeScript type for the Spur app config section. */
 export type SpurAppConfig = z.infer<typeof SpurAppConfigSchema>;
+
+/** Inferred TypeScript type for the `agent` config section. */
+export type AgentConfig = z.infer<typeof AgentConfigSchema>;

@@ -92,8 +92,18 @@ skills that generate prose (AC, decompositions, reviews), workflow `agent.run` a
 runs all call `spur agent run`; Spur owns no other path that reaches a model (it is not a BYOK LLM
 platform — ADR/PRD). This keeps agent resolution, auth, slash-command translation, and team identity in
 one place, and is the seam where a future remote/SSE execution channel attaches without touching callers.
-Execute a prompt or slash command via a coding agent. `--agent` (default `auto`) selects the first
-usable Tier-1 agent; `current` reads `SPUR_AGENT` env var; explicit name resolves directly.
+Execute a prompt or slash command via a coding agent. `--agent` (default `auto`) resolves via the
+`agent` config block (0126): the prompt's slash command yields a **phase** — recognized in every
+per-agent surface form, since `spur agent run` may receive an already-translated prompt (`/sp:dev-run`
+claude, `/sp-dev-run` opencode/gemini, `/skill:sp-dev-run` pi/omp, `$sp-dev-run` codex, plus the `rd3`
+variants → all `dev-run`); a configured `agent.default-by-phase[phase]` selects a
+named `agent.executors` profile (`{ name, agent, model? }`) — its `model` becomes the run's model
+**unless** the user passed an explicit `--model` (explicit wins). A configured phase mapping is
+authoritative: an unknown executor exits 2, a known-but-unusable executor exits 1, and neither falls
+back. With no phase match, `agent.default` is resolved as an executor selector (then a legacy agent
+name); on miss, the static Tier-1 priority resolver picks the first usable Tier-1 agent — the legacy
+behavior preserved when no `agent` config is present. `current` reads `SPUR_AGENT` env var; an
+explicit name resolves directly and never consults phase config.
 `--continue` resumes the previous session. `--mode text|json` (default `text`) passes output format
 to the agent CLI. `--cwd` sets the working directory. `--json` emits a machine-readable envelope
 (`{ exitCode: number|null, stdout, stderr, signal?, durationMs }`). Slash commands like

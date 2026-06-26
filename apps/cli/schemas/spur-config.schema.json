@@ -103,7 +103,39 @@
             "properties": {
                 "default": {
                     "type": "string",
-                    "description": "Default coding agent (e.g. pi, claude, codex)."
+                    "description": "Default executor selector for `--agent auto` (resolved as an executor name first, then a legacy agent name e.g. pi, claude, codex)."
+                },
+                "executors": {
+                    "type": "array",
+                    "description": "Named executor profiles: each pairs a canonical agent with an optional model override. Referenced by name from `default` and `default-by-phase`.",
+                    "items": {
+                        "type": "object",
+                        "required": ["name", "agent"],
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "Executor selector name (unique across the list)."
+                            },
+                            "agent": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "Canonical coding agent (claude, codex, gemini, pi, opencode, antigravity-cli, openclaw, hermes, omp)."
+                            },
+                            "model": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "Opaque model override passed straight to the agent (e.g. zai//glm-5.2). Applied only when the user passes no explicit --model."
+                            }
+                        }
+                    }
+                },
+                "default-by-phase": {
+                    "type": "object",
+                    "description": "Map of dev phase (e.g. dev-run, dev-review) to executor selector. A configured phase mapping is authoritative — a broken mapping fails fast and does NOT fall back to `default`.",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
                 }
             }
         },

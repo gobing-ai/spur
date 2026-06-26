@@ -3,7 +3,10 @@
 
 export type { RuleEvalRunRow, RuleRunRow } from '@gobing-ai/spur-domain';
 export type {
+    AgentConfig,
+    AgentExecutorConfig,
     AgentResolveResult,
+    AgentResolveSource,
     AgentRunCaptureResult,
     AgentRunDeps,
     AgentServiceContext,

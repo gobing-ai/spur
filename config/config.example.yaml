@@ -36,7 +36,25 @@ server:
   webDistPath: null   # S5 local static asset path
 # ── Spur app section (validated by a local zod schema — UNCHANGED keys) ──
 agent:
+  # `default` is the executor selector for `--agent auto` (resolved as an executor
+  # name first, then a legacy agent name). Keep it simple, or define richer profiles:
   default: omp
+  # Named executor profiles: pair a canonical agent with an optional opaque model
+  # override. Referenced by name from `default` and `default-by-phase`.
+  # executors:
+  #   - name: omp
+  #     agent: omp
+  #   - name: omp-zai
+  #     agent: omp
+  #     model: zai//glm-5.2
+  #   - name: claude
+  #     agent: claude
+  # Per-phase auto routing — a MAP of dev phase → executor selector. A configured
+  # phase mapping is authoritative: a broken mapping fails fast (unknown executor →
+  # exit 2; unusable agent → exit 1) and does NOT fall back to `default`.
+  # default-by-phase:
+  #   dev-run: omp-zai
+  #   dev-review: claude
 
 rules:
   paths:

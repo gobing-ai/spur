@@ -248,7 +248,10 @@ export async function runAgentRun(
     flags: Record<string, string | boolean>,
     deps?: AgentRunDeps,
 ): Promise<number> {
-    const svc = new AgentService({ cwd: context.cwd, env: context.env, output: context.output });
+    // Use the context-built service so the validated `agent` config (executors +
+    // phase map, 0126) is threaded into resolution. Constructing a bare service here
+    // would drop agentConfig and silently disable phase-aware `--agent auto`.
+    const svc = context.agentService();
     // `--drain` is DB-backed, so it is resolved in the command layer (where getDb
     // lives) rather than in the app service. The addressed `--agent <id>` names a
     // message recipient (an agent spec id), which is a different namespace from the

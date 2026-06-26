@@ -63,12 +63,13 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
                 // from every later app.* logger (e.g. the rule engine).
                 config: process.env.NODE_ENV === 'test' ? { logging: { enabled: false } } : undefined,
                 services: { db },
-                async start(_appRt: ApplicationRuntime<SpurAppConfig>) {
+                async start(appRt: ApplicationRuntime<SpurAppConfig>) {
                     const context = createCliContext({
                         cwd: options.cwd,
                         env: options.env,
                         output,
                         db,
+                        agentConfig: appRt.appConfig?.agent,
                     });
                     exitCode = await runCommandDispatch(argv, context, output);
                 },

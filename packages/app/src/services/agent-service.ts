@@ -28,8 +28,40 @@ export interface AgentRunDeps {
     doctorRunner?: DoctorRunner;
 }
 
-/** Result from resolving the agent name. */
-export type AgentResolveResult = { ok: true; agent: AgentName } | { ok: false; exitCode: number; message: string };
+/**
+ * A named executor profile: a canonical coding-agent plus an optional opaque
+ * model override. Mirrors the CLI's `AgentExecutorConfig` zod shape structurally
+ * (the app layer must not import from `apps/cli`, R3).
+ */
+export interface AgentExecutorConfig {
+    name: string;
+    agent: string;
+    model?: string;
+}
+
+/**
+ * The `agent` config block consumed by resolution. Structurally compatible with
+ * the CLI's validated `agent` section; threaded in via {@link AgentServiceContext}.
+ * Absent → resolution behaves exactly as the legacy Tier-1 priority path.
+ */
+export interface AgentConfig {
+    default?: string;
+    executors?: AgentExecutorConfig[];
+    'default-by-phase'?: Record<string, string>;
+}
+
+/** How an `auto` resolution chose its agent — carried for diagnostics/tests. */
+export type AgentResolveSource = 'phase' | 'default' | 'priority' | 'current' | 'explicit';
+
+/**
+ * Result of resolving an execution profile from `--agent` + prompt + config.
+ * On success carries the canonical {@link AgentName}, an optional model override
+ * (applied only when the user passed no explicit `--model`), and the resolution
+ * source for diagnostics.
+ */
+export type AgentResolveResult =
+    | { ok: true; agent: AgentName; model?: string; source: AgentResolveSource }
+    | { ok: false; exitCode: number; message: string };
 /** Result from {@link AgentService.runCapture} — exit code + captured answer text. */
 export interface AgentRunCaptureResult {
     exitCode: number;
@@ -47,6 +79,12 @@ export interface AgentServiceContext {
     cwd: string;
     env: Record<string, string | undefined>;
     output: AgentServiceOutput;
+    /**
+     * Validated `agent` config block (executors + phase map). Optional — when
+     * absent (un-init'd CLI, tests), `--agent auto` resolves via the legacy
+     * Tier-1 priority path with no config lookup.
+     */
+    agentConfig?: AgentConfig;
 }
 
 // ---------------------------------------------------------------------------
@@ -72,7 +110,9 @@ export class AgentService {
         const detector = deps?.detector ?? new AgentDetector({ runner });
         const doctorRunner =
             deps?.doctorRunner ?? new DoctorRunner({ agentDetector: detector, runner, env: this.ctx.env });
-        return this.resolveAgent(flags, doctorRunner);
+        // Public resolve() has no prompt → no phase (R12): auto resolution derives
+        // no phase and falls through default → priority, never throwing.
+        return this.resolveAgent(undefined, flags, doctorRunner);
     }
 
     // -------------------------------------------------------------------------
@@ -215,8 +255,8 @@ export class AgentService {
         const doctorRunner =
             deps?.doctorRunner ?? new DoctorRunner({ agentDetector: detector, runner, env: this.ctx.env });
 
-        // resolve agent
-        const resolved = await this.resolveAgent(flags, doctorRunner);
+        // resolve agent — thread the prompt so `auto` can derive the phase
+        const resolved = await this.resolveAgent(prompt, flags, doctorRunner);
         if (!resolved.ok) {
             return { ok: false, exitCode: resolved.exitCode, message: resolved.message };
         }
@@ -239,11 +279,16 @@ export class AgentService {
         const systemPrompt = stringFlag(flags, 'system-prompt', '') || undefined;
         const taskId = stringFlag(flags, 'task', '') || undefined;
 
+        // Model precedence (R6): explicit `--model` wins; otherwise the resolved
+        // executor's model override (if any) applies.
+        const explicitModel = stringFlag(flags, 'model', '') || undefined;
+        const model = explicitModel ?? resolved.model;
+
         // build PromptOptions
         const promptOptions: PromptOptions = {
             input,
             continue: continueFlag || undefined,
-            model: stringFlag(flags, 'model', '') || undefined,
+            model,
             mode: mode as 'text' | 'json',
             ...(purpose !== undefined ? { purpose } : {}),
             ...(tags !== undefined ? { tags } : {}),
@@ -292,22 +337,113 @@ export class AgentService {
     // -------------------------------------------------------------------------
 
     private async resolveAgent(
+        prompt: string | undefined,
         flags: Record<string, string | boolean>,
         doctorRunner: DoctorRunner,
     ): Promise<AgentResolveResult> {
         const raw = stringFlag(flags, 'agent', 'auto');
-        if (raw === 'auto') return this.resolveAgentAuto(doctorRunner);
+        if (raw === 'auto') return this.resolveAgentAuto(prompt, doctorRunner);
         if (raw === 'current') return this.resolveAgentCurrent(doctorRunner);
-        return this.resolveAgentExplicit(raw, doctorRunner);
+        return this.resolveAgentExplicit(raw, doctorRunner, 'explicit');
     }
 
-    private async resolveAgentAuto(doctorRunner: DoctorRunner): Promise<AgentResolveResult> {
+    /**
+     * Resolve `--agent auto` as a two-stage selector (R4/R5/R7):
+     *  1. Phase from the raw prompt (`/sp:dev-run` → `dev-run`); none if absent.
+     *  2. A configured phase mapping resolves its named executor and FAILS FAST
+     *     if broken (unknown name → exit 2; unusable agent → exit 1) — it does NOT
+     *     fall back. Only an absent phase mapping falls through to the default.
+     *  3. `agent.default` is resolved as an executor selector; on miss, the static
+     *     Tier-1 priority resolver preserves legacy behavior.
+     */
+    private async resolveAgentAuto(
+        prompt: string | undefined,
+        doctorRunner: DoctorRunner,
+    ): Promise<AgentResolveResult> {
+        const config = this.ctx.agentConfig;
+        const phase = extractPhase(prompt);
+        const phaseMap = config?.['default-by-phase'];
+        const phaseSelector = phase !== undefined ? phaseMap?.[phase] : undefined;
+
+        // A configured phase mapping is authoritative — broken means fail, not fall back.
+        if (phaseSelector !== undefined && phase !== undefined) {
+            return this.resolveExecutorSelector(phaseSelector, doctorRunner, 'phase', phase);
+        }
+
+        // No phase mapping: try the default executor selector, then priority.
+        if (config?.default !== undefined) {
+            const viaDefault = await this.resolveExecutorSelector(config.default, doctorRunner, 'default');
+            if (viaDefault.ok) return viaDefault;
+        }
+
+        return this.resolveAgentPriority(doctorRunner);
+    }
+
+    /** Legacy static Tier-1 priority resolution (preserved fallback). */
+    private async resolveAgentPriority(doctorRunner: DoctorRunner): Promise<AgentResolveResult> {
         const results = await doctorRunner.runAll();
         for (const name of TIER1_PRIORITY) {
             const match = results.find((r) => r.agent === name);
-            if (match?.usable) return { ok: true, agent: name };
+            if (match?.usable) return { ok: true, agent: name, source: 'priority' };
         }
         return { ok: false, exitCode: 1, message: 'No usable Tier-1 agent found' };
+    }
+
+    /**
+     * Resolve an executor selector (from a phase map or `agent.default`) to an
+     * execution profile. The selector names a configured executor first, then a
+     * legacy direct agent name. `phase` (when given) marks a hard mapping: an
+     * unknown executor exits 2, an unusable agent exits 1 — no fallback.
+     */
+    private async resolveExecutorSelector(
+        selector: string,
+        doctorRunner: DoctorRunner,
+        source: 'phase' | 'default',
+        phase?: string,
+    ): Promise<AgentResolveResult> {
+        const executor = this.ctx.agentConfig?.executors?.find((e) => e.name === selector);
+        const phaseSuffix = phase !== undefined ? ` for phase '${phase}'` : '';
+
+        if (executor !== undefined) {
+            const canonical = resolveAgentName(executor.agent);
+            if (canonical === undefined) {
+                return {
+                    ok: false,
+                    exitCode: 2,
+                    message: `Executor '${executor.name}'${phaseSuffix} maps to unknown agent '${executor.agent}'`,
+                };
+            }
+            const usable = await this.checkUsable(canonical, doctorRunner);
+            if (!usable.ok) {
+                // A configured phase mapping must fail fast (R7); a default-path miss falls through.
+                if (phase !== undefined) {
+                    return {
+                        ok: false,
+                        exitCode: 1,
+                        message: `Executor '${executor.name}'${phaseSuffix} agent '${canonical}' is not usable — ${usable.reason} (spur agent doctor)`,
+                    };
+                }
+                return usable.result;
+            }
+            return { ok: true, agent: canonical, model: executor.model, source };
+        }
+
+        // No configured executor by this name.
+        if (phase !== undefined) {
+            // R7: an explicitly-mapped phase naming a missing executor exits 2.
+            return {
+                ok: false,
+                exitCode: 2,
+                message: `Unknown executor '${selector}'${phaseSuffix} — define it under agent.executors`,
+            };
+        }
+
+        // Default path: treat the selector as a legacy direct agent name.
+        const canonical = resolveAgentName(selector);
+        if (canonical === undefined) return { ok: false, exitCode: 2, message: `Unknown agent: ${selector}` };
+        const usable = await this.checkUsable(canonical, doctorRunner);
+        if (!usable.ok) return usable.result;
+        return { ok: true, agent: canonical, source };
     }
 
     private async resolveAgentCurrent(doctorRunner: DoctorRunner): Promise<AgentResolveResult> {
@@ -315,33 +451,42 @@ export class AgentService {
         if (value === undefined) {
             return { ok: false, exitCode: 2, message: "SPUR_AGENT is not set (agent 'current' requires it)" };
         }
-        return this.resolveAgentExplicit(value, doctorRunner);
+        return this.resolveAgentExplicit(value, doctorRunner, 'current');
     }
 
-    private async resolveAgentExplicit(name: string, doctorRunner: DoctorRunner): Promise<AgentResolveResult> {
+    private async resolveAgentExplicit(
+        name: string,
+        doctorRunner: DoctorRunner,
+        source: 'explicit' | 'current',
+    ): Promise<AgentResolveResult> {
         const canonical = resolveAgentName(name);
         if (canonical === undefined) {
             return { ok: false, exitCode: 2, message: `Unknown agent: ${name}` };
         }
+        const usable = await this.checkUsable(canonical, doctorRunner);
+        if (!usable.ok) return usable.result;
+        return { ok: true, agent: canonical, source };
+    }
+
+    /**
+     * Liveness-only readiness gate (P0-a): usable = installed && version !== null.
+     * Auth is NOT consulted — a logged-out agent is runnable and fails at runtime
+     * with its own error. Fails fast before any long-running stage burns the timeout.
+     */
+    private async checkUsable(
+        canonical: AgentName,
+        doctorRunner: DoctorRunner,
+    ): Promise<{ ok: true } | { ok: false; reason: string; result: AgentResolveResult }> {
         const result = await doctorRunner.runOne(canonical);
-        // Liveness-only gate (P0-a): usable = installed && version !== null. Auth is
-        // NOT consulted — a logged-out agent is runnable and fails at runtime with
-        // its own error. Fail fast before any long-running stage burns the timeout.
         if (!result.installed) {
-            return {
-                ok: false,
-                exitCode: 1,
-                message: `Agent '${canonical}' is not installed or not runnable — install it or select another agent (spur agent doctor)`,
-            };
+            const message = `Agent '${canonical}' is not installed or not runnable — install it or select another agent (spur agent doctor)`;
+            return { ok: false, reason: 'not installed', result: { ok: false, exitCode: 1, message } };
         }
         if (!result.usable) {
-            return {
-                ok: false,
-                exitCode: 1,
-                message: `Agent '${canonical}' is installed but not runnable (no version detected) — reinstall or select another agent (spur agent doctor)`,
-            };
+            const message = `Agent '${canonical}' is installed but not runnable (no version detected) — reinstall or select another agent (spur agent doctor)`;
+            return { ok: false, reason: 'no version detected', result: { ok: false, exitCode: 1, message } };
         }
-        return { ok: true, agent: canonical };
+        return { ok: true };
     }
 
     private async statCwd(cwd: string): Promise<Awaited<ReturnType<typeof stat>> | null> {
@@ -384,6 +529,31 @@ export class AgentService {
 
 function toJson(value: unknown): string {
     return JSON.stringify(value, null, 2);
+}
+
+/**
+ * Derive a dev phase from a raw slash-command prompt, BEFORE per-agent slash
+ * translation. Recognizes the `sp`/`rd3` command namespaces in their three
+ * surface forms and maps the command to its bare phase name:
+ *   `/sp:dev-run 0126 …` → `dev-run`
+ *   `/sp-dev-run 0126 …` → `dev-run`
+ *   `/rd3:dev-run 0126 …` → `dev-run`
+ * Any other prompt (or none) yields `undefined` — the resolver then uses the
+ * configured default / Tier-1 priority path, never a phase mapping.
+ */
+function extractPhase(prompt: string | undefined): string | undefined {
+    if (prompt === undefined) return undefined;
+    const trimmed = prompt.trimStart();
+    // Match the `sp`/`rd3` command in EVERY per-agent surface form, since
+    // `spur agent run` may receive a prompt already translated for the target
+    // agent (translateSlashCommand runs AFTER resolution). The captured token is
+    // the bare phase (`dev-run`). Forms (see translateSlashCommand):
+    //   claude          /sp:dev-run      /rd3:dev-run
+    //   opencode/gemini /sp-dev-run      /rd3-dev-run
+    //   pi/omp          /skill:sp-dev-run  /skill:rd3-dev-run
+    //   codex           $sp-dev-run      $rd3-dev-run
+    const match = trimmed.match(/^(?:\/skill:|\/|\$)(?:sp[:-]|rd3[:-])([a-z0-9-]+)/);
+    return match?.[1];
 }
 
 /** Compact tri-state auth label for the doctor text table (display-only). */
