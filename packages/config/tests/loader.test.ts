@@ -14,6 +14,7 @@ import {
 } from '../src/index';
 import {
     loadSpurConfig,
+    loadStructuredSpurConfig,
     type PlanningFolders,
     resolveConfigFile,
     resolvePlanningFolders,
@@ -387,5 +388,88 @@ describe('core CF-safety', () => {
         expect(typeof loader.resolvePlanningFolders).toBe('function');
         expect(typeof loader.bundledConfigRoot).toBe('function');
         expect(typeof loader.renderTemplate).toBe('function');
+    });
+});
+
+// ---- loadStructuredSpurConfig: the low-level structured-config loader ----
+
+describe('loadStructuredSpurConfig', () => {
+    test('parses YAML and returns the raw object in test mode (no JSON Schema validation)', async () => {
+        // Covers the validateJsonSchema=false branch (loader.ts ~L225-229): no $schema,
+        // no validation — just parseYaml over the file contents.
+        const cfgPath = join(tmpCwd, 'section-matrix.yaml');
+        await writeFile(cfgPath, 'version: "1"\nsections:\n  - a\n  - b\n');
+        const data = await loadStructuredSpurConfig(cfgPath);
+        expect(data).toEqual({ version: '1', sections: ['a', 'b'] });
+    });
+
+    test('returns an empty object for an empty file in test mode', async () => {
+        // Covers the `parseYaml(text) ?? {}` null-coalesce fallback (loader.ts ~L229).
+        const cfgPath = join(tmpCwd, 'empty.yaml');
+        await writeFile(cfgPath, '');
+        const data = await loadStructuredSpurConfig(cfgPath);
+        expect(data).toEqual({});
+    });
+
+    test('validates against a local $schema when validateJsonSchema is true', async () => {
+        // Covers the validateJsonSchema=true branch (loader.ts ~L231-244): the same path
+        // loadSpurConfig takes, but for an arbitrary structured-config file. task.ts uses
+        // this to load section-matrix.yaml against @gobing-ai/spur/schemas/*.
+        const schemaPath = join(tmpCwd, 'matrix-schema.json');
+        await writeFile(
+            schemaPath,
+            JSON.stringify({
+                $schema: 'https://json-schema.org/draft/2020-12/schema',
+                type: 'object',
+                properties: { sections: { type: 'array' } },
+            }),
+        );
+        const cfgPath = join(tmpCwd, 'section-matrix.yaml');
+        await writeFile(cfgPath, `$schema: "./matrix-schema.json"\nsections: [a, b]\n`);
+        const data = await loadStructuredSpurConfig(cfgPath, { validateJsonSchema: true });
+        expect(data.sections).toEqual(['a', 'b']);
+    });
+
+    test('embedded schema is served when manifest specifier matches (bun --compile path)', async () => {
+        // Covers the embeddedSchemas + resolveFn + fileSystem branch in loadStructuredSpurConfig
+        // — the exact path task.ts:592/603 take in the compiled binary.
+        const embeddedSchemas = new Map([
+            [
+                'schemas/section-matrix.json',
+                JSON.stringify({
+                    $schema: 'https://json-schema.org/draft/2020-12/schema',
+                    type: 'object',
+                    properties: { sections: { type: 'array' } },
+                }),
+            ],
+        ]);
+        const cfgPath = join(tmpCwd, 'section-matrix.yaml');
+        await writeFile(cfgPath, `$schema: "@gobing-ai/spur/schemas/section-matrix.json"\nsections: [a]\n`);
+        const data = await loadStructuredSpurConfig(cfgPath, {
+            validateJsonSchema: true,
+            embeddedSchemas,
+            schemaManifestSpecifier: '@gobing-ai/spur/package.json',
+        });
+        expect(data.sections).toEqual(['a']);
+    });
+
+    test('throws when embedded schema subpath is not registered', async () => {
+        // Covers makeEmbeddedReader error branch when invoked via loadStructuredSpurConfig.
+        const embeddedSchemas = new Map<string, string>();
+        const cfgPath = join(tmpCwd, 'section-matrix.yaml');
+        await writeFile(cfgPath, `$schema: "@gobing-ai/spur/schemas/never.json"\nsections: [a]\n`);
+        await expect(
+            loadStructuredSpurConfig(cfgPath, {
+                validateJsonSchema: true,
+                embeddedSchemas,
+                schemaManifestSpecifier: '@gobing-ai/spur/package.json',
+            }),
+        ).rejects.toThrow(/No embedded schema registered/);
+    });
+
+    test('throws on a non-existent file', async () => {
+        // createNodeFileSystem().readFile throws on a missing path — surfaces as a FS error,
+        // not a silent empty result.
+        await expect(loadStructuredSpurConfig(join(tmpCwd, 'nope.yaml'))).rejects.toThrow();
     });
 });
