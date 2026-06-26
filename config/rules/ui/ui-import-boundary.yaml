@@ -1,0 +1,48 @@
+# UI import + class-leak boundary rules — keep `apps/web/src/ui.ts` the single UI
+# import seam and keep daisyUI component classes confined to `components/ui/`.
+# Both rules START at severity `warning` so the gate never breaks during adoption
+# (DD-06); the warning->error promotion + pre-check wiring is Task 0104.
+# Precedent for the warning-first ramp: `require-corresponding-test` in
+# structure/test-location.yaml. Evaluators proven in boundary/dao-boundary.yaml.
+rules:
+  - id: ui-import-seam-only
+    description: >
+      Third-party UI libraries (daisyui, @uiw/react-md-editor, future UI libs)
+      may only be imported through the `apps/web/src/ui.ts` seam and the wrappers
+      under `apps/web/src/components/ui/`. Everything else in apps/web imports
+      from `@/ui`, never the raw library.
+    severity: warning
+    evaluator:
+      type: forbidden-import
+      config:
+        forbidden:
+          - specifier: "daisyui"
+          - specifier: "@uiw/react-md-editor"
+        scope:
+          include:
+            - "apps/web/src/**/*.ts"
+            - "apps/web/src/**/*.tsx"
+          exclude:
+            - "apps/web/src/components/ui/**"
+            - "apps/web/src/ui.ts"
+            - "**/tests/**"
+            - "**/node_modules/**"
+
+  - id: no-daisyui-class-leak
+    description: >
+      daisyUI COMPONENT classes (btn, card, badge, modal, ...) must not appear in
+      className strings outside `apps/web/src/components/ui/`. Layout/utility classes
+      (flex, grid, gap-*, p-*) are unaffected — the pattern is anchored to a
+      className context and word-bounded to the component-class allowlist only.
+    severity: warning
+    evaluator:
+      type: rg
+      config:
+        pattern: "className=[\"'][^\"']*\\b(btn|card|badge|modal|menu|navbar|drawer|tabs|alert|dropdown|collapse|join|tooltip|loading|select|checkbox|toggle)\\b"
+    include:
+      - "apps/web/src/**/*.tsx"
+    exclude:
+      - "apps/web/src/components/ui/**"
+      - "apps/web/src/ui.ts"
+      - "**/tests/**"
+      - "**/node_modules/**"
