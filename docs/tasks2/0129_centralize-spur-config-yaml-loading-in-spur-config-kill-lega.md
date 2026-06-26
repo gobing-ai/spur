@@ -12,7 +12,7 @@ priority: P1
 tags: []
 dependencies: []
 created_at: "2026-06-26T18:31:39.063Z"
-updated_at: 2026-06-26T18:45:48.010Z
+updated_at: 2026-06-26T18:52:35.754Z
 ---
 
 ## 0129. Centralize .spur/config.yaml loading in spur-config; kill legacy docs/.tasks/config.jsonc
@@ -220,3 +220,5 @@ pulling planning semantics into the core.
 - Workers bundle MUST NOT import `yaml`/`node:fs` (miniflare crash) → drives the core/loader split
 - `bun --compile` standalone binary has no `node_modules` for runtime schema resolution → embedded-schema path must survive the move into the facade
 ### History
+- 2026-06-26T18:51:10.517Z backlog → wip (system)
+- 2026-06-26T18:52:35.754Z wip → backlog (system)
