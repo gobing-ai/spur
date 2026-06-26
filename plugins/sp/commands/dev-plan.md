@@ -1,6 +1,6 @@
 ---
 description: Plan a feature from a description — intake → feature create → AC generation → feature check gate → decomposition → batch-create
-argument-hint: "\"<description>\" [--feature <id>] [--parent <feature-id>] [--design] [--auto]"
+argument-hint: "\"<description>\" [--feature <id>] [--parent <feature-id>] [--agent <name|inherit|auto>] [--design] [--auto]"
 allowed-tools: ["Bash", "Read", "Write", "Skill"]
 ---
 
@@ -27,6 +27,7 @@ corpus mutation occurs until each gate passes.
 | `description` | Feature description (required, positional) | (required) |
 | `--feature <id>` | Plan tasks for an existing feature instead of creating one | (creates new) |
 | `--parent <feature-id>` | Parent feature for hierarchical ID allocation | (top-level) |
+| `--agent <name\|inherit\|auto>` | Agent override for the model steps (AC generation, decomposition synthesis): `<name>` = explicit agent, `inherit` = current agent (default), `auto` = resolve current runtime | inherit |
 | `--design` | Always author/update the feature's design satellite (`docs/design/<slug>.md`) + its `04_DESIGN.md` index row | off |
 | `--auto` | Let the agent decide whether a design doc is warranted (cross-cutting-seam detection). Ignored when `--design` is present | off |
 
@@ -49,6 +50,13 @@ duplicated (constitution §4.5 + sync trigger T9). Full procedure: skill Step 5.
 Thin wrapper: intake Q&A, feature creation/selection, AC generation, the two CLI gates,
 and decomposition are all owned by the skill. This command parameterizes the planning-half
 entry point.
+
+### Agent override
+
+`--agent` controls which agent executes the model-backed planning steps — AC generation and
+decomposition synthesis, both `spur agent run` calls inside `sp:spur-dev`. Passed through
+`$ARGUMENTS`; the skill forwards it as `spur agent run … --agent <name>`. Semantics: `<name>` =
+explicit agent, `inherit` = current agent (default), `auto` = resolve from current runtime.
 
 ## Implementation
 

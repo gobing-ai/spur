@@ -56,7 +56,8 @@ Gherkin template. Conventions:
 - **Scenario-title mapping:** the scenario title is the identity key for traceability edges
   to task files — keep them stable and unique.
 - Use `spur agent run` with the BDD template (`config/templates/bdd/gherkin.md`) for
-  generation, or author directly if the feature is simple.
+  generation, or author directly if the feature is simple. **Thread `--agent` through** when the
+  command forwarded one — see [cross-cutting.md → Honor `--agent`](cross-cutting.md).
 
 Full authoring conventions: see [ac-style-guide.md](ac-style-guide.md).
 

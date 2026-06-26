@@ -11,6 +11,22 @@ These mechanics apply to **every** write in both the planning and execution halv
 knows *how to think*; the CLI knows *what is valid* — every mutation passes through a CLI verb
 that validates before writing.
 
+## Honor `--agent` on every model call
+
+When the invoking command forwarded `--agent <value>` (via `$ARGUMENTS`), **thread it into every
+`spur agent run` call** this skill makes — AC generation, decomposition synthesis, refine synthesis,
+any prose generation:
+
+```bash
+spur agent run "<prompt>" --agent <value> [--mode json]
+```
+
+Semantics: `<name>` = run under that explicit agent; `inherit` = the current agent (omit `--agent`,
+the CLI default); `auto` = pass `--agent auto` to resolve from the current runtime. If no `--agent`
+was forwarded, call `spur agent run` bare (resolves `auto`) — the prior behavior. **Never** hardcode
+an agent in a model call; the selector always flows from the command flag so the operator can steer
+which agent does the model work without editing the skill.
+
 ## Every write is CLI-gated
 
 Never edit a task or feature file directly. Every mutation goes through:

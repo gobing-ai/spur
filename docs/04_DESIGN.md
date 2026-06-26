@@ -30,6 +30,7 @@ detail-first then index (§4.5 rule 5 / T9).
 | [`spur-team-mode-design.md`](design/spur-team-mode-design.md) | Team mode — agent specs, inbox, `TeamService` | design |
 | [`workflow-observability.md`](design/workflow-observability.md) | `spur workflow run` DX — run-start plan preview + live EventBus step progress; board reuse (0114) | implemented |
 | [`dev-plan-design-doc-generation.md`](design/dev-plan-design-doc-generation.md) | `/sp:dev-plan` design-doc step — `--design`/`--auto` flags, seam heuristic, satellite + index authoring (0124) | implemented |
+| [`dev-agent-flag-and-dogfood-skill.md`](design/dev-agent-flag-and-dogfood-skill.md) | `--agent` on dev-refine/plan/brainstorm (threaded, not theater) + `sp:dogfood-testing` backbone extraction with enhanced report/ledger (0125) | implemented |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See
@@ -455,7 +456,7 @@ shipped (`05 §9` tracks status).
 | 7.4 Section-Status-Matrix + format rules | Config file shapes under `./config` (ADR-015); warning-first enforcement core | triage A13/A14; `03 §12.3` |
 | 7.5 Lifecycle workflow definitions | `config/workflows/` task/feature lifecycle YAML shapes + guard wiring | ADR-022; `03 §12.2` |
 | 7.6 Task DTOs | oRPC contract shapes for the board | server/web design task (ADR-021.b) |
-| 7.8 `sp:dev-*` command operations | Dev-* operation map (13 ops: 8 `Skill()`-backed + 5 inline; `implement` is a sub-mode of `run`) | `plugins/sp/skills/spur-dev/references/dev-operations.md` |
+| 7.8 `sp:dev-*` command operations | Dev-* operation map (13 ops: 9 `Skill()`-backed + 4 inline; `implement` is a sub-mode of `run`; `dev-dogfood` → `sp:dogfood-testing`) | `plugins/sp/skills/spur-dev/references/dev-operations.md` |
 
 ### 7.1 `spur task` commands
 

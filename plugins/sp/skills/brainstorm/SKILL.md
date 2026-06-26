@@ -108,6 +108,12 @@ For verification → cc:anti-hallucination
 For synthesis → `spur agent run`
 ```
 
+**Honor `--agent`.** When the invoking command forwarded `--agent <value>` (via `$ARGUMENTS`),
+thread it into every `spur agent run` research/synthesis call: `spur agent run "<prompt>" --agent
+<value>`. `<name>` = explicit agent; `inherit` = current agent (omit the flag, the CLI default);
+`auto` = pass `--agent auto`. No `--agent` forwarded → call bare (resolves `auto`), the prior
+behavior. Never hardcode the agent — the selector flows from the command flag.
+
 ### 4. Generate 2-3 Approaches
 
 Always generate multiple options:

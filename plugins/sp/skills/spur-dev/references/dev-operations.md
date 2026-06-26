@@ -25,8 +25,9 @@ task) and `--feature` (validated feature with BDD AC; the front-half entry that 
 `dev-plan`). The 4 `inline` commands cover git tooling and operational utilities that have no natural
 skill home — creating a skill for each would be scope creep for one-liner procedures.
 
-> **`dev-dogfood`** is not in this table. It is a sanctioned fat-file exception that carries its full
-> 4-phase protocol inline and does not map to a dev-* operation. See its command file for details.
+> **`dev-dogfood`** is not in this table. It is a thin `Skill()` wrapper over the **`sp:dogfood-testing`**
+> backbone skill (which owns the 4-phase dogfood protocol, the live ledger, and the report template);
+> it does not map to a numbered dev-* operation. See its command file and the backing skill for details.
 
 ## Operation map
 
@@ -36,14 +37,14 @@ skill home — creating a skill for each would be scope creep for one-liner proc
 | 2 | review | `dev-review` | `Skill()` | `sp:code-verification` (`review`) | `<wbs> [--agent <name\|inherit\|auto>] [--focus <lens>] [--fix <none\|blockers-first\|all>]` |
 | 3 | verify | `dev-verify` | `Skill()` | `sp:code-verification` (`verify`) | `<wbs> [--agent <name\|inherit\|auto>] [--fix ...] [--focus <lens>] [--bdd] [--auto] [--force]` |
 | 4 | run | `dev-run` | `Skill()` | `sp:spur-dev` (`run` / `implement`) | `<wbs> [--mode <full\|implement>] [--agent <name\|inherit\|auto>] [--auto]` |
-| 5 | refine | `dev-refine` | `Skill()` | `sp:spur-dev` (`refine`) | `<wbs>` |
-| 6 | plan | `dev-plan` | `Skill()` | `sp:spur-dev` (`plan`) | `"<description>" [--feature <id>] [--parent <feature-id>]` |
+| 5 | refine | `dev-refine` | `Skill()` | `sp:spur-dev` (`refine`) | `<wbs> [--focus <mode>] [--agent <name\|inherit\|auto>] [--auto] [--next]` |
+| 6 | plan | `dev-plan` | `Skill()` | `sp:spur-dev` (`plan`) | `"<description>" [--feature <id>] [--parent <feature-id>] [--agent <name\|inherit\|auto>] [--design] [--auto]` |
 | 7 | docs | *(no thin wrapper)* | `Skill()` | `sp:doc-evolve` | `"<change description>"` |
 | 8 | changelog | `dev-changelog` | `inline` | git log + conventional-commit grouping | `[--since <ref>] [--until <ref>] [--version <ver>]` |
 | 9 | gitmsg | `dev-gitmsg` | `inline` | git diff + conventional commit | `[--commit] [--scope <path>]` |
 | 10 | fixall | `dev-fixall` | `inline` | lint + test fix loop | `[--scope <path>]` |
 | 11 | handover | `dev-handover` | `inline` | structured doc generation | `"<blocker description>"` |
-| 12 | brainstorm | `dev-brainstorm` | `Skill()` | `sp:brainstorm` (`dev-brainstorm`) | `"<topic>" [--depth <basic\|detailed\|comprehensive>] [--options <n>] [--skip-discovery] [--task [<feature-id>]] [--feature [<parent-id>]] [--next]` |
+| 12 | brainstorm | `dev-brainstorm` | `Skill()` | `sp:brainstorm` (`dev-brainstorm`) | `"<topic>" [--depth <basic\|detailed\|comprehensive>] [--options <n>] [--agent <name\|inherit\|auto>] [--skip-discovery] [--task [<feature-id>]] [--feature [<parent-id>]] [--next]` |
 
 ---
 
@@ -90,7 +91,7 @@ must not be changed without updating the backing skill.
 ### 5. refine
 
 - **Purpose:** Refine a task's requirements via structured Q&A — clarify scope, elicit missing details, tighten acceptance criteria before execution.
-- **Inputs:** `<wbs>` (required). `--next`: on success, auto-transition `backlog → todo` and invoke `/sp:dev-run --mode implement <wbs> --next --auto`.
+- **Inputs:** `<wbs>` (required). `--focus <mode>` narrows the gap analysis. `--agent <name|inherit|auto>` controls which agent executes the AI-synthesis step (the `spur agent run` call). `--auto` skips interactive Q&A (synthesis only). `--next`: on success, auto-transition `backlog → todo` and invoke `/sp:dev-run --mode implement <wbs> --next --auto`.
 - **Backing:** `sp:spur-dev` skill, `refine` operation.
 - **Behavior:** Read the task → elicit missing AC/Design/Plan through targeted Q&A → write each via `spur task update <wbs> --section <name> --from-file`. Done just-in-time, per task, immediately before execution. With `--next`: on success, transition status + chain to dev-run; on failure, stop and surface error.
 - **Delegation:** `Skill(skill="sp:spur-dev", args="refine $ARGUMENTS")`
@@ -98,7 +99,7 @@ must not be changed without updating the backing skill.
 ### 6. plan
 
 - **Purpose:** Plan a feature from a description — intake → feature create → AC generation → feature check gate → decomposition → batch-create.
-- **Inputs:** `"<description>"` (required). `--feature <id>` links to an existing feature. `--parent <feature-id>` nests under a parent.
+- **Inputs:** `"<description>"` (required). `--feature <id>` links to an existing feature. `--parent <feature-id>` nests under a parent. `--agent <name|inherit|auto>` controls which agent executes the model-backed steps (AC generation, decomposition synthesis). `--design`/`--auto` drive the conditional design-doc step (Step 5.5).
 - **Backing:** `sp:spur-dev` skill, `plan` operation.
 - **Behavior:** Clarify scope → `spur feature create` → author BDD AC → `spur feature check` gate → decompose into task-batch JSON → `spur task batch-create` gate.
 - **Delegation:** `Skill(skill="sp:spur-dev", args="plan $ARGUMENTS")`
@@ -114,7 +115,7 @@ must not be changed without updating the backing skill.
 ### 12. brainstorm
 
 - **Purpose:** Interactive solution design — heuristic discovery interview (grilling) followed by structured ideation with trade-offs and confidence scoring.
-- **Inputs:** `"<topic>"` (required). `--depth <basic|detailed|comprehensive>` controls how deep to walk the decision tree. `--options <n>` sets the number of solution approaches (default 3). `--skip-discovery` skips the grilling interview and goes straight to ideation. `--task [<feature-id>]` and `--feature [<parent-id>]` are the two **artifact exits** (mutually exclusive — see below). `--next` chains the `--feature` exit into `/sp:dev-plan` decomposition.
+- **Inputs:** `"<topic>"` (required). `--depth <basic|detailed|comprehensive>` controls how deep to walk the decision tree. `--options <n>` sets the number of solution approaches (default 3). `--agent <name|inherit|auto>` controls which agent executes the ideation/research model calls. `--skip-discovery` skips the grilling interview and goes straight to ideation. `--task [<feature-id>]` and `--feature [<parent-id>]` are the two **artifact exits** (mutually exclusive — see below). `--next` chains the `--feature` exit into `/sp:dev-plan` decomposition.
 - **Backing:** `sp:brainstorm` skill, `dev-brainstorm` operation.
 - **Behavior:** Two-phase protocol. Phase 1 (inline): walk the decision tree one question at a time, each with a recommended answer, exploring the codebase before asking the user. Phase 2 (delegated): pass the resolved decision tree to `sp:brainstorm` for structured ideation — each approach includes description, trade-offs, implementation notes, confidence level, and decision trace.
 - **Artifact exits (mutually exclusive):**
