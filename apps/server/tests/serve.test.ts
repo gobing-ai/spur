@@ -25,6 +25,7 @@ function fakeRuntime(log?: { msg: string; data?: Record<string, unknown> }[]): A
 
 /** A no-op FileSystem fake — startServer threads it into the context only. */
 const fakeFs = {
+    resolve: (...segments: string[]) => segments.join('/'),
     exists: async () => false,
     readDir: async () => [],
     writeFile: async () => {},

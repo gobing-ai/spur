@@ -14,6 +14,7 @@
  */
 
 import { join } from 'node:path';
+import { DEFAULT_TASKS_DIR } from '@gobing-ai/spur-config';
 import {
     atomicWriteAsync,
     MarkdownDocument,
@@ -65,7 +66,7 @@ export interface MigrateOptions {
 /** Constructor options. */
 export interface CorpusMigratorOptions {
     fs: FileSystem;
-    /** Corpus directory to scan (default: `docs/tasks`). */
+    /** Corpus directory to scan (default: the config DEFAULT_TASKS_DIR). */
     corpusDir?: string;
     /** Domain kind (default: `task`). */
     domain?: MarkdownDomain;
@@ -438,7 +439,7 @@ export class CorpusMigrator {
 
     constructor(opts: CorpusMigratorOptions) {
         this.fs = opts.fs;
-        this.corpusDir = opts.corpusDir ?? 'docs/tasks';
+        this.corpusDir = opts.corpusDir ?? DEFAULT_TASKS_DIR;
         this.domain = opts.domain ?? 'task';
         // The M-rule pipeline is task-shaped (M2 profile, M3 feature_id, M5 parent_wbs,
         // task field order) and strict-validates against taskFrontmatterSchema. Feature

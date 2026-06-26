@@ -14,6 +14,15 @@ import { useTasks } from './useTasks';
 const TaskDetail = lazy(() => import('./TaskDetail'));
 const KANBAN_COLUMNS = TASK_STATUSES;
 
+/**
+ * Initial folder shown before the `task.folders` endpoint responds. The server is
+ * the authority on the actual phase folders (it reads `.spur/config.yaml`); this is
+ * only a first-paint placeholder, immediately replaced on mount. Mirrors the
+ * `DEFAULT_TASKS_DIR` SSOT in @gobing-ai/spur-config (kept inline to avoid a config
+ * dependency in the browser bundle).
+ */
+const BOOTSTRAP_FOLDER = 'docs/tasks';
+
 /** localStorage key for the user's last-set detail-panel width (px). */
 const DETAIL_WIDTH_KEY = 'spur:detail-width';
 
@@ -38,9 +47,12 @@ function applyFilters(tasks: TaskSummary[], filters?: TaskListFilters): TaskSumm
 export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: Props) {
     const [sortState, setSortState] = useState<Record<string, 'asc' | 'desc'>>({});
     const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set(['blocked', 'cancelled']));
-    const [folder, setFolder] = useState('docs/tasks');
+    // Bootstrap placeholders only — replaced on mount by the `task.folders` endpoint,
+    // which is the authority on the configured phase folders (server reads .spur/config.yaml).
+    // Kept inline (not imported from spur-config) so the browser bundle stays dependency-light.
+    const [folder, setFolder] = useState(BOOTSTRAP_FOLDER);
     const [folders, setFolders] = useState<{ path: string; label?: string }[]>([
-        { path: 'docs/tasks', label: 'Primary' },
+        { path: BOOTSTRAP_FOLDER, label: 'Primary' },
     ]);
     const [popupTaskWbs, setPopupTaskWbs] = useState<string | null>(null);
     // Default ~3× the old 576px (1728px), clamped to 80vw so it never overflows the viewport.
@@ -70,7 +82,13 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
             .folders({})
             .then((res) => {
                 const data = (res as { data?: { path: string; label?: string }[] }).data;
-                if (data && data.length > 0) setFolders(data);
+                const active = data?.[0]?.path;
+                if (data && active !== undefined) {
+                    setFolders(data);
+                    // Select the active folder (first entry from the server) so the board
+                    // reflects the configured phase folder, not the bootstrap default.
+                    setFolder((current) => (data.some((f) => f.path === current) ? current : active));
+                }
             })
             .catch(() => {
                 // Fallback to default folder list on error

@@ -6,6 +6,7 @@
  */
 
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
+import type { TaskFolderEntry, TaskFoldersConfig } from '@gobing-ai/spur-config/loader';
 import {
     atomicWriteAsync,
     buildTaskSkeleton,
@@ -84,27 +85,25 @@ function renderRosterTable(rows: { wbs: string; name: string; status: string }[]
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
-/** Per-folder configuration for WBS allocation (mirrors rd3:tasks folders config). */
-export interface FolderConfig {
-    /** Floor for WBS allocation in this folder (default: 0). */
-    base_counter: number;
-    /** Human-readable label (e.g. "Phase 1"). */
-    label?: string;
-}
+/**
+ * Per-folder configuration for WBS allocation. The canonical shape lives in
+ * `@gobing-ai/spur-config` ({@link TaskFolderEntry}); re-exported under the
+ * historical `FolderConfig` name so app consumers' imports stay stable (ADR-027).
+ */
+export type FolderConfig = TaskFolderEntry;
 
-/** Task-folder configuration sourced from the `tasks:` block in `.spur/config.yaml` (ADR-017). */
-export interface TaskFoldersConfig {
-    /** Default folder for task I/O when not overridden by --folder flag. */
-    active_folder: string;
-    /** Map of folder path → per-folder WBS seed. */
-    folders: Record<string, FolderConfig>;
-}
+/**
+ * Task-folder configuration sourced from the `tasks:` block in `.spur/config.yaml`.
+ * Re-exported from the single config owner so the type identity is shared across the
+ * loader↔service seam — no parallel definition (ADR-027).
+ */
+export type { TaskFoldersConfig };
 
 /** Dependencies injected into TaskService. */
 export interface TaskServiceContext {
     fs: FileSystem;
     writeService: PlanningWriteService;
-    /** Tasks folder path (default: active_folder from config, or 'docs/tasks'). */
+    /** Tasks folder path (active_folder from config; see DEFAULT_TASKS_DIR). */
     tasksDir: string;
     /** Project name for atomic writes. */
     projectName?: string;
@@ -863,29 +862,86 @@ export class TaskService {
 
     // ── resolve ──
 
-    async resolve(filePath: string): Promise<{ wbs: string; filePath: string } | null> {
-        const entries = await this.ctx.fs.readDir(this.ctx.tasksDir);
-        for (const name of entries) {
-            const [, wbs, slug] = /^(\d{4})_(.+)\.md$/.exec(name) ?? [];
-            if (!wbs || !slug) continue;
-            const taskPath = this.resolveTaskPath(wbs, slug);
-            if (taskPath === filePath) {
-                return { wbs, filePath: taskPath };
-            }
+    /**
+     * Resolve a file path to its owning task.
+     *
+     * Strategy 1 (always): exact match — the path IS a real corpus task file.
+     * Strategy 2 (lenient, default): the basename alone encodes a known WBS, so a
+     *   path anywhere (`/some/copy/0042_x.md`) resolves to corpus task 0042.
+     *
+     * `strict: true` disables Strategy 2. Use it when the question is "is this exact
+     * path a protected corpus file?" (the write-guard) — a scratch file that merely
+     * shares a `NNNN_` prefix (e.g. `/tmp/0103_design.md`) must NOT be claimed.
+     */
+    async resolve(
+        filePath: string,
+        opts: { strict?: boolean } = {},
+    ): Promise<{ wbs: string; filePath: string } | null> {
+        // Strategy 1: exact match against EVERY registered folder (not just the active
+        // one) — the corpus may span folders (e.g. docs/tasks + docs/tasks2). Compare
+        // normalized absolute paths so a relative or absolute input both match.
+        const target = resolve(filePath);
+        for (const dir of this.allFolderDirs()) {
+            const hit = await this.exactMatchInDir(dir, target);
+            if (hit !== null) return hit;
         }
+
+        if (opts.strict === true) return null;
 
         // Strategy 2: parse a WBS out of the basename and resolve it in the corpus.
         const basename = filePath.split('/').pop() ?? '';
         const capturedWbs = /^(\d{4})_.+\.md$/.exec(basename)?.[1];
         if (capturedWbs) {
-            try {
-                const taskPath = await this.resolveTaskFile(capturedWbs);
-                return { wbs: capturedWbs, filePath: taskPath };
-            } catch {
-                // basename looked like a task file but no such WBS exists — fall through.
-            }
+            const taskPath = await this.findWbsAcrossFolders(capturedWbs);
+            if (taskPath !== null) return { wbs: capturedWbs, filePath: taskPath };
         }
 
+        return null;
+    }
+
+    /** Locate WBS `wbs`'s file path across all registered folders (lenient Strategy 2). */
+    private async findWbsAcrossFolders(wbs: string): Promise<string | null> {
+        for (const dir of this.allFolderDirs()) {
+            let entries: string[];
+            try {
+                entries = await this.ctx.fs.readDir(dir);
+            } catch {
+                continue;
+            }
+            for (const name of entries) {
+                if (name.startsWith(`${wbs}_`) && name.endsWith('.md')) return `${dir}/${name}`;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * All registered task-folder directories as absolute paths: the active `tasksDir`
+     * plus every `foldersConfig.folders` key (resolved against the fs root). Deduped.
+     * Mirrors `allocateWbs`'s folder enumeration so resolution and allocation agree.
+     */
+    private allFolderDirs(): string[] {
+        const folderKeys = this.ctx.foldersConfig ? Object.keys(this.ctx.foldersConfig.folders) : [];
+        const dirs = [this.ctx.tasksDir, ...folderKeys.map((key) => this.ctx.fs.resolve(key))];
+        return [...new Set(dirs)];
+    }
+
+    /** Find the task whose real path equals `target` (already absolute) within one folder. */
+    private async exactMatchInDir(dir: string, target: string): Promise<{ wbs: string; filePath: string } | null> {
+        let entries: string[];
+        try {
+            entries = await this.ctx.fs.readDir(dir);
+        } catch {
+            return null; // folder may not exist yet
+        }
+        for (const name of entries) {
+            const captured = /^(\d{4})_(.+)\.md$/.exec(name);
+            if (captured === null) continue;
+            const taskPath = `${dir}/${name}`;
+            if (resolve(taskPath) === target) {
+                return { wbs: captured[1] as string, filePath: taskPath };
+            }
+        }
         return null;
     }
 

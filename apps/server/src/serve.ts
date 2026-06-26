@@ -1,4 +1,5 @@
 import { dirname, isAbsolute, join } from 'node:path';
+import { resolvePlanningFolders } from '@gobing-ai/spur-app';
 import type { ApplicationRuntime, ApplicationStopReason } from '@gobing-ai/ts-infra/application';
 import { runNodeApplication } from '@gobing-ai/ts-infra/application-node';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
@@ -93,6 +94,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
             const ctx: ServerContext = deps.createServerContext(appRt, {
                 cwd: process.cwd(),
                 fs,
+                folders: await resolvePlanningFolders(fs),
                 webDistPath: await resolveWebDistPath(options.webDistPath),
                 jobQueueEnabled: bootConfig.jobqueue.enabled,
                 scheduler,

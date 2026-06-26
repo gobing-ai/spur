@@ -7,14 +7,20 @@ describe('task handlers', () => {
         const enqueue = async (_type: string, _payload: unknown) => 'run-001';
         return {
             cwd: '/test',
-            fs: {
-                readFile: async (path: string) => {
-                    if (path.includes('config.jsonc')) {
-                        return '{ "folders": { "docs/tasks": { "label": "Primary" }, "docs/sprint2": { "label": "Sprint 2" } } }';
-                    }
-                    throw new Error('not found');
+            // Folders come from the boot-resolved planning folders (ADR-027); the handler
+            // never reads the retired docs/.tasks/config.jsonc. Default mock carries two
+            // registered folders so the "configured folders" case has something to map.
+            planningFolders: () => ({
+                tasksDir: 'docs/tasks',
+                featuresDir: 'docs/features',
+                foldersConfig: {
+                    active_folder: 'docs/tasks',
+                    folders: {
+                        'docs/tasks': { base_counter: 0, label: 'Primary' },
+                        'docs/sprint2': { base_counter: 0, label: 'Sprint 2' },
+                    },
                 },
-            },
+            }),
             taskService: () => ({
                 list: async () => [
                     {
@@ -264,13 +270,18 @@ describe('task handlers', () => {
     });
 
     test('folders handler falls back to default when config missing', async () => {
+        // When .spur/config.yaml is absent, the boot resolver yields the schema-default
+        // single folder; the handler maps exactly that (no JSONC, no hardcoded fallback).
         const ctx = {
             cwd: '/test',
-            fs: {
-                readFile: async () => {
-                    throw new Error('not found');
+            planningFolders: () => ({
+                tasksDir: 'docs/tasks',
+                featuresDir: 'docs/features',
+                foldersConfig: {
+                    active_folder: 'docs/tasks',
+                    folders: { 'docs/tasks': { base_counter: 0, label: 'Primary' } },
                 },
-            },
+            }),
         } as unknown as ServerContext;
         const handlers = createTaskHandlers(ctx);
         const fn = handlers.folders['~orpc'].handler as unknown as () => Promise<{

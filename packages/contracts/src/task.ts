@@ -117,7 +117,7 @@ export const taskActionResponseSchema = apiSuccessSchema(
     }),
 );
 
-/** Task folder entry — a configured task folder from docs/.tasks/config.jsonc. */
+/** Task folder entry — a configured task folder from .spur/config.yaml (tasks.folders). */
 export const taskFolderSchema = z.object({
     path: z.string(),
     label: z.string().optional(),

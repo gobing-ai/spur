@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { bundledConfigRoot, listBundledConfigFiles, listBundledTemplateFiles, resetBundledConfigCache } from '../src';
+import {
+    bundledConfigRoot,
+    listBundledConfigFiles,
+    listBundledTemplateFiles,
+    resetBundledConfigCache,
+} from '../src/loader';
 
 describe('bundled-config', () => {
     test('bundledConfigRoot resolves to the repo-root config/ directory in dev', () => {

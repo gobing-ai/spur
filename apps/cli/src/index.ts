@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 import { Command } from '@commander-js/extra-typings';
+import { type SpurAppConfig, spurConfigSchema } from '@gobing-ai/spur-config';
+import { loadSpurConfig, resolveConfigFile } from '@gobing-ai/spur-config/loader';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
 import type { ApplicationRuntime } from '@gobing-ai/ts-infra/application';
 import { runNodeApplication } from '@gobing-ai/ts-infra/application-node';
@@ -18,9 +20,7 @@ import { registerTaskCommand } from './commands/task';
 import { registerTeamCommand } from './commands/team';
 import { registerWorkflowCommand } from './commands/workflow';
 import { CLI_CONFIG } from './config';
-import { loadSpurConfig } from './config/loader';
-import { resolveConfigFile } from './config/resolver';
-import { type SpurAppConfig, SpurAppConfigSchema } from './config/schema';
+import { EMBEDDED_SPUR_SCHEMAS } from './config/embedded-schemas';
 import { createCliContext, createMigratedDbAdapter } from './context';
 import { errorMessage } from './errors';
 import { type CommandOutput, consoleOutput } from './output';
@@ -46,16 +46,18 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
 
     try {
         if (configFile !== undefined) {
-            // Validate against JSON Schema ($schema in config file) before bootstrapping.
-            // Throws StructuredConfigSchemaError on validation failure — fail fast, fix config.
-            await loadSpurConfig(configFile);
+            // Pre-validate .spur/config.yaml through the single facade loader (merged zod
+            // schema + optional JSON Schema). Pass the embedded schemas so the `$schema`
+            // ref resolves without node_modules (dev tree and --compile binary alike).
+            // Throws on validation failure — fail fast.
+            await loadSpurConfig(options.cwd ?? process.cwd(), { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS });
 
             // Bootstrap through runNodeApplication — standard path (R1).
             const app = await runNodeApplication<SpurAppConfig>({
                 configLoader: {
                     configFile,
                     bootstrapSection: 'bootstrap',
-                    appConfig: { safeParse: (raw) => SpurAppConfigSchema.safeParse(raw) },
+                    appConfig: { safeParse: (raw) => spurConfigSchema.safeParse(raw) },
                 },
                 // Under test, force logging off so initializeLogger() does not
                 // reconfigure LogTape with a console sink — which would reset the

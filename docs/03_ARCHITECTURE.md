@@ -29,7 +29,7 @@ spur/
 ├── packages/
 │   ├── app/         Application services — Agent/History/Plugin/Rule/Team/Workflow (ADR-021)
 │   ├── contracts/   oRPC transport contracts ONLY (health/DTOs) — @gobing-ai/spur-contracts
-│   ├── config/      Zod config schema + env parsing — @gobing-ai/spur-config
+│   ├── config/      Config SSOT — merged schema + the single `.spur/config.yaml` loader; core/loader split (ADR-027)
 │   ├── domain/      DAOs + schema + analytics + migrations; sole ts-db importer (ADR-011)
 ├── plugins/sp/      Agent-facing layer: Fat Skills + thin command/subagent wrappers (ADR-016/023)
 ├── config/          Spur-owned default config SSOT — rules/, workflows/, plugins/ (ADR-015)
@@ -70,6 +70,23 @@ packages/domain ► @gobing-ai/ts-db (sole importer — §8.1)
 3. `apps/web` imports contract **types** via oRPC client — never server internals.
 4. CLI commands are transport wrappers over package APIs — no domain logic reimplemented inline.
 5. Cross-workspace imports use `@gobing-ai/*` aliases, never deep relative paths.
+6. `.spur/config.yaml` is loaded only through `@gobing-ai/spur-config` — no surface parses or
+   schema-validates the config itself (§1.2, ADR-027).
+
+### 1.2 Config-loading boundary (ADR-027)
+
+`.spur/config.yaml` has one loader, in `@gobing-ai/spur-config`. The package splits into a
+dependency-free **core** (`.`: merged `spurConfigSchema`, `DEFAULT_*` constants, config types) and a
+node-only **`./loader`** (`loadSpurConfig`, `resolveConfigFile`, `resolvePlanningFolders`,
+embedded-schema resolution). The split exists because importing `yaml`/`node:fs` into the Cloudflare
+Workers bundle crashes miniflare — so the server imports only the core; CLI and `packages/app` (on
+Bun) import the loader.
+
+This replaced five parallel paths that had diverged before ADR-027: the CLI's structured-config
+loader, the app's raw-`yaml` `resolvePlanningFolders`, a CLI `resolveConfigFile`, the server's inline
+folder literals, and the server's legacy `docs/.tasks/config.jsonc` read. All consumers now derive
+the typed result from the single facade; config-shape types (`TaskFoldersConfig`) have one owner.
+Enforced by `config/rules/boundary/config-loading-ownership.yaml`.
 
 ## 2. Runtime Model
 

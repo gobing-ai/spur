@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { LifecycleAdapter, type LifecycleProfile } from '@gobing-ai/spur-app';
-import { bundledConfigRoot } from '@gobing-ai/spur-config';
+import { bundledConfigRoot } from '@gobing-ai/spur-config/loader';
 import { TaskRunLinkDao } from '@gobing-ai/spur-domain';
 import type { CliContext } from '../context';
 import { resolveSpurBin } from './resolve-spur-bin';

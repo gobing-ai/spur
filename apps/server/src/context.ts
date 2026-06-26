@@ -1,15 +1,32 @@
-import type { FeatureService, PlanningEvent as PlanningEventType, TaskService } from '@gobing-ai/spur-app';
+import type {
+    FeatureService,
+    PlanningEvent as PlanningEventType,
+    PlanningFolders,
+    TaskService,
+} from '@gobing-ai/spur-app';
 import {
     FeatureService as FeatureServiceImpl,
     PlanningWriteService as PlanningWriteServiceImpl,
     TaskService as TaskServiceImpl,
 } from '@gobing-ai/spur-app';
+// CF-safe core import: DEFAULT_* are plain string constants in the dependency-free core
+// entry of @gobing-ai/spur-config (no `yaml`/`node:fs`). This narrows the former inline-
+// literal exception to a "core import only" boundary (ADR-027, planning-folder-hardcode rule).
+import { DEFAULT_FEATURES_DIR, DEFAULT_TASKS_DIR } from '@gobing-ai/spur-config';
 import { createMigratedDbViaRuntime, type DbAdapter, dbHealthCheck } from '@gobing-ai/spur-domain';
 import type { EventBus, JobQueue, SchedulerAdapter } from '@gobing-ai/ts-infra';
 import type { ApplicationRuntime } from '@gobing-ai/ts-infra/application';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 
 type PlanningEventMap = Record<string, (detail: PlanningEventType) => void>;
+
+// Schema-default planning folders, used when serve.ts passes no resolved folders
+// (e.g. pure Workers bootstrap with no FS). Sourced from the config SSOT, not inlined.
+const DEFAULT_PLANNING_FOLDERS: PlanningFolders = {
+    tasksDir: DEFAULT_TASKS_DIR,
+    featuresDir: DEFAULT_FEATURES_DIR,
+    foldersConfig: { active_folder: DEFAULT_TASKS_DIR, folders: { [DEFAULT_TASKS_DIR]: { base_counter: 0 } } },
+};
 
 /**
  * Server job-queue handle — the ts-infra `JobQueue` producer interface
@@ -48,6 +65,13 @@ export interface ServerContext {
     /** Lazy, cached FeatureService (planning layer). */
     featureService(): FeatureService;
 
+    /**
+     * Resolved planning folders (phase folders) from `.spur/config.yaml` (via
+     * serve.ts), or schema defaults when no config/FS is available. The task.folders
+     * endpoint derives its response from this — never reads `docs/.tasks/config.jsonc`.
+     */
+    planningFolders(): PlanningFolders;
+
     /** EventBus<PlanningEventMap> — pub/sub seam for SSE (S6) and planning events. */
     eventBus(): EventBus<PlanningEventMap>;
 
@@ -80,6 +104,12 @@ export interface CreateServerContextOptions {
     scheduler?: ServerScheduler;
     /** When true, jobQueue() returns a "not configured" stub. Default true. */
     jobQueueEnabled?: boolean;
+    /**
+     * Pre-resolved planning folders (phase folders) from `.spur/config.yaml`. The
+     * bootstrap (`serve.ts`) resolves these async and passes them in so the sync
+     * service accessors never hardcode `docs/tasks`. Omitted → schema defaults.
+     */
+    folders?: PlanningFolders;
 }
 
 /** Error thrown when a disabled facility accessor is called. */
@@ -106,6 +136,9 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
     const dbUrl = options.dbUrl ?? ':memory:';
     const eventsBus = options.eventsBus ?? (appRt.events as unknown as EventBus<PlanningEventMap>);
     const jobQueueEnabled = options.jobQueueEnabled ?? false;
+    // Planning folders (phase folders) come pre-resolved from `.spur/config.yaml` via
+    // serve.ts — never hardcoded here. Fall back to schema defaults when absent.
+    const folders = options.folders ?? DEFAULT_PLANNING_FOLDERS;
 
     // ── Lazy caches ──
     let dbPromise: Promise<DbAdapter> | undefined;
@@ -133,7 +166,8 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                 taskSvc = new TaskServiceImpl({
                     fs,
                     writeService: new PlanningWriteServiceImpl({ fs, projectName: 'spur' }),
-                    tasksDir: 'docs/tasks',
+                    tasksDir: folders.tasksDir,
+                    foldersConfig: folders.foldersConfig,
                     projectName: 'spur',
                 });
             }
@@ -145,12 +179,16 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                 featureSvc = new FeatureServiceImpl({
                     fs,
                     writeService: new PlanningWriteServiceImpl({ fs, projectName: 'spur' }),
-                    featuresDir: 'docs/features',
-                    tasksDir: 'docs/tasks',
+                    featuresDir: folders.featuresDir,
+                    tasksDir: folders.tasksDir,
                     projectName: 'spur',
                 });
             }
             return featureSvc;
+        },
+
+        planningFolders(): PlanningFolders {
+            return folders;
         },
 
         eventBus(): EventBus<PlanningEventMap> {

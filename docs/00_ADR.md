@@ -678,3 +678,32 @@ with a `sectionIsBare` detection predicate (absent, empty/whitespace, placeholde
 is safety-net-backfilled from `git diff`. Trigger: dogfood finding, task 0106 — task 0101 reached
 `done` while FAILING its own `spur task check`. Relates: extends ADR-026; matches the verify→record
 guard pattern exactly.
+
+## ADR-027: Config Loading Is `spur-config`-Owned; Core/Loader Package Split; Legacy `docs/.tasks/config.jsonc` Retired
+
+**Date:** 2026-06-26.
+
+**Decision.** `.spur/config.yaml` has one loader: `loadSpurConfig` in `@gobing-ai/spur-config`. (a)
+The package splits into two entry points — a dependency-free **core** (`.`: schemas, `DEFAULT_TASKS_DIR`/
+`DEFAULT_FEATURES_DIR`, all config types) and a node-only **loader** (`./loader`: `loadSpurConfig`,
+`resolveConfigFile`, `resolvePlanningFolders`, embedded-schema resolution). (b) The merged
+`spurConfigSchema` owns every section (`tasks`, `features`, `agent`, `rules`, `workflows`,
+`redaction`) — the former CLI-local `SpurAppConfigSchema` is folded in. (c) Config shape types have a
+single owner: `TaskFoldersConfig`/`TaskFolderEntry` live in the loader; consumers re-export, never
+redefine. (d) The legacy rd3 `docs/.tasks/config.jsonc` read is removed; the server `task.folders`
+endpoint derives from `ctx.planningFolders()`.
+
+**Why.** `packages/config` shipped schemas but no loader, so each surface rolled its own (five
+parallel paths: CLI `loadStructuredConfig`, app raw-yaml `resolvePlanningFolders`, CLI
+`resolveConfigFile`, server inline literals, server JSONC read) — the drift behind the
+phase-folder bugs. The core/loader split is forced by the Cloudflare Workers bundle: importing
+`yaml`/`node:fs` crashes miniflare, so the server imports only the dependency-free core; that
+replaces the prior "inline the literals" hack with a real boundary. Blank/`null` folder values
+coerce to defaults (a broken config degrades, never wedges loading). Trigger: task 0129.
+
+**Relates:** completes ADR-015 (config Spur-owned at `./config`) and ADR-017 (bootstrap on
+ts-infra). Recurrence guarded by `config/rules/boundary/config-loading-ownership.yaml` (deferred to
+task 0129's remaining slice).
+
+**Detail:** loader shape + config keys in `04_DESIGN.md §2`; `spur-config` module boundary in
+`03_ARCHITECTURE.md`.

@@ -1,0 +1,45 @@
+# Planning-folder hardcode boundary — phase folders (rd3:tasks heritage) require
+# that every task/feature folder be DERIVED from `.spur/config.yaml` (tasks.active
+# / features.dir), never written as an inline `docs/tasks` / `docs/features` string.
+# A hardcode makes tasks created in a non-active phase folder (e.g. docs/tasks2)
+# invisible to the hardcoded surface — the class of bug behind the false-positive
+# write-guard deny and the server/web/team-service folder drift.
+#
+# The ONLY sanctioned literal lives in @gobing-ai/spur-config as DEFAULT_TASKS_DIR /
+# DEFAULT_FEATURES_DIR. Everything else derives via resolvePlanningFolders (app),
+# loadTaskFoldersConfig (CLI), or the task.folders endpoint (web). Pattern is the
+# ripgrep dialect (no lookbehind/backrefs).
+include:
+  - "apps/**/src/**/*.ts"
+  - "apps/**/src/**/*.tsx"
+  - "packages/**/src/**/*.ts"
+exclude:
+  - "**/node_modules/**"
+  - "**/tests/**"
+  # The single source of truth — the literal is allowed to exist here.
+  - "packages/config/src/index.ts"
+  # The web board's documented first-paint placeholder (BOOTSTRAP_FOLDER), replaced
+  # on mount by the task.folders endpoint; the browser bundle stays config-dep-free.
+  - "apps/web/src/modules/task-kanban/KanbanBoard.tsx"
+  # Cloudflare Workers path: context.ts imports DEFAULT_* from the CF-safe core entry of
+  # @gobing-ai/spur-config (plain string constants, no yaml/node:fs). No inline literal
+  # remains — the former exception narrowed to a core-only import (ADR-027).
+  # The folders endpoint derives its response from ctx.planningFolders(), never from a
+  # hardcoded path or the retired docs/.tasks/config.jsonc.
+rules:
+  - id: no-hardcoded-planning-folder
+    description: >
+      Do not hardcode the `docs/tasks` or `docs/features` folder path as a string
+      literal used as a VALUE (assignment, argument, fallback, or property). Phase
+      folders mean the active/registered folders come from `.spur/config.yaml` —
+      derive them via resolvePlanningFolders (app), loadTaskFoldersConfig (CLI), or
+      the DEFAULT_TASKS_DIR/DEFAULT_FEATURES_DIR constants in @gobing-ai/spur-config.
+      A literal silently ignores phase folders and loses tasks created outside the
+      active one. (Matches only code-context uses, not comments mentioning the path.)
+    severity: error
+    evaluator:
+      type: rg
+      config:
+        # Require a code-context prefix ( = ?? ( , : ) before the literal so prose
+        # comments that merely name the path do not trip the rule. ripgrep dialect.
+        pattern: "[=(,:]\\s*['\"`]docs/(tasks|features)2?['\"`]|fs\\.resolve\\(\\s*['\"`]docs['\"`]\\s*,\\s*['\"`](tasks|features)['\"`]"

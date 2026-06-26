@@ -10,6 +10,7 @@ import {
     validateAgentId,
 } from '@gobing-ai/ts-ai-runner';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+import { resolvePlanningFolders } from '../config/planning-folders';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -195,13 +196,14 @@ export class TeamService {
 
     /**
      * Assign a task to an agent by setting `assignee:` in the task file's YAML
-     * frontmatter. The task id is matched against `docs/tasks/<id>_*.md`.
+     * frontmatter. The task id is matched against `<folder>/<id>_*.md` across all
+     * registered task folders (phase folders).
      */
     async assignTask(taskId: string, agentId: string): Promise<void> {
         validateAgentId(agentId);
         const path = await this.resolveTaskFile(taskId);
         if (path === null) {
-            throw new Error(`No task file found for id "${taskId}" under docs/tasks/`);
+            throw new Error(`No task file found for id "${taskId}" in any registered task folder`);
         }
         const fs = this.ctx.fs;
         const source = await fs.readFile(path);
@@ -287,15 +289,22 @@ export class TeamService {
 
     private async resolveTaskFile(taskId: string): Promise<string | null> {
         const fs = this.ctx.fs;
-        const tasksDir = join(this.ctx.cwd, 'docs', 'tasks');
-        let entries: string[];
-        try {
-            entries = await fs.readDir(tasksDir);
-        } catch {
-            return null;
-        }
+        // Scan every registered task folder (phase folders), not a hardcoded one —
+        // the corpus may span docs/tasks + docs/tasks2 + … (rd3:tasks heritage).
+        const { foldersConfig } = await resolvePlanningFolders(fs);
+        const dirs = [...new Set([foldersConfig.active_folder, ...Object.keys(foldersConfig.folders)])];
         const prefix = `${taskId}_`;
-        const match = entries.find((entry) => entry.startsWith(prefix) && entry.endsWith('.md'));
-        return match === undefined ? null : join(tasksDir, match);
+        for (const dir of dirs) {
+            const absDir = join(this.ctx.cwd, dir);
+            let entries: string[];
+            try {
+                entries = await fs.readDir(absDir);
+            } catch {
+                continue;
+            }
+            const match = entries.find((entry) => entry.startsWith(prefix) && entry.endsWith('.md'));
+            if (match !== undefined) return join(absDir, match);
+        }
+        return null;
     }
 }

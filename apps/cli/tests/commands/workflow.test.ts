@@ -453,7 +453,7 @@ terminalStates:
     test('list subcommand falls back to default paths when config parse fails', async () => {
         const dir = await createTempProject();
         // Create a config file with a non-object `workflows` value — this will
-        // survive YAML parse but fail Zod's SpurAppConfigSchema validation,
+        // survive YAML parse but fail Zod's spurConfigSchema validation,
         // hitting the catch branch in resolveWorkflowPaths.
         await writeFile(join(dir, 'spur.yaml'), 'workflows: "not-an-object"\n');
         const output = createCapturedOutput();

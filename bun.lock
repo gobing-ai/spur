@@ -142,6 +142,8 @@
       "name": "@gobing-ai/spur-config",
       "version": "0.1.0",
       "dependencies": {
+        "@gobing-ai/ts-runtime": "catalog:",
+        "yaml": "catalog:",
         "zod": "catalog:",
       },
       "devDependencies": {

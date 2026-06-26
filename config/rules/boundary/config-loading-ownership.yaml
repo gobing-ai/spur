@@ -1,0 +1,53 @@
+# Config-loading ownership boundary — `.spur/config.yaml` has exactly ONE loader:
+# `loadSpurConfig` (+ helpers) in @gobing-ai/spur-config (ADR-027). Every other surface
+# consumes the typed, validated result through that facade; none parses or schema-validates
+# the config itself. Before ADR-027 there were five parallel loaders (CLI structured-config,
+# app raw-yaml, CLI resolveConfigFile, server inline literals, server JSONC read) — the drift
+# behind the phase-folder bugs. These rules block that class from returning.
+#
+# NOTE: a bare `config.yaml` string is NOT banned — `CLI_CONFIG.configFile`, the init seeder,
+# and existence checks legitimately name the path. The anti-pattern is *parsing config into a
+# typed shape outside the facade*, caught precisely below (no false positives on frontmatter /
+# workflow YAML parsing, which share `parseYaml` for unrelated inputs). Pattern is the ripgrep
+# dialect (no lookbehind/backrefs).
+rules:
+  - id: structured-config-loader-only-in-config
+    description: >
+      ts-runtime's `loadStructuredConfig` is the schema-validating config loader and may be
+      called ONLY inside packages/config — it is the single implementation behind
+      @gobing-ai/spur-config's `loadSpurConfig`/`loadStructuredSpurConfig`. Any other surface
+      must consume the typed result through that facade, never re-invoke the raw loader (that
+      was the CLI-vs-app divergence ADR-027 removed). (ADR-027)
+    severity: error
+    evaluator:
+      type: rg
+      config:
+        pattern: "loadStructuredConfig\\("
+    include:
+      - "apps/**/src/**/*.ts"
+      - "packages/**/src/**/*.ts"
+    exclude:
+      - "packages/config/src/**"
+      - "**/node_modules/**"
+      - "**/tests/**"
+
+  - id: no-legacy-tasks-config-jsonc
+    description: >
+      The rd3 `docs/.tasks/config.jsonc` config location is retired — task/feature folders come
+      from `.spur/config.yaml` via the spur-config facade. Do not read, reference, or recreate it
+      (the server folders endpoint regressed onto it once). Matches code-context uses, not prose
+      that merely names the retired path. (ADR-027)
+    severity: error
+    evaluator:
+      type: rg
+      config:
+        # Require a code-context prefix ( = ( , quote join readFile ) before the literal so a
+        # comment noting the path is retired does not trip the rule. ripgrep dialect.
+        pattern: "[=(,]\\s*['\"`][^'\"`]*config\\.jsonc['\"`]|['\"`][^'\"`]*\\.tasks/config['\"`]"
+    include:
+      - "apps/**/src/**/*.ts"
+      - "apps/**/src/**/*.tsx"
+      - "packages/**/src/**/*.ts"
+    exclude:
+      - "**/node_modules/**"
+      - "**/tests/**"

@@ -252,11 +252,13 @@ Two top-level concerns:
 - **Portable `bootstrap:` block** — consumed by `@gobing-ai/ts-infra` `runNodeApplication`. Shared across
   `spur-cli` and (future) `spur-server`. Keys map 1:1 to ts-infra's `LoggingOptions` /
   `TelemetryOptions` / `DatabaseOptions` / `SchedulerOptions`.
-- **Spur app section** — everything except `bootstrap:`, validated by a local zod schema
-  (`spurAppConfigSchema`). Keys are agent/rules/workflows/redaction/version/name, plus the
-  planning-layer `tasks:`/`features:` blocks (§9): `tasks.folders` (path → `{baseCounter, label?}`),
-  `tasks.active`, `features.dir`. Zod (`@gobing-ai/spur-config` `tasksConfigSchema`/`featuresConfigSchema`)
-  is the SSOT; `apps/cli/schemas/spur-config.schema.json` mirrors it for editor/CI validation.
+- **Spur app section** — everything except `bootstrap:`, validated by the single merged
+  `spurConfigSchema` in `@gobing-ai/spur-config` (ADR-027; the former CLI-local `SpurAppConfigSchema`
+  was folded in). Keys are agent/rules/workflows/redaction/version/name, plus the planning-layer
+  `tasks:`/`features:` blocks: `tasks.folders` (path → `{baseCounter, label?}`), `tasks.active`,
+  `features.dir`. The folder fields tolerate a blank/`null` value (an empty YAML key) and coerce to
+  the canonical default. `@gobing-ai/spur-config` is the SSOT; `apps/cli/schemas/spur-config.schema.json`
+  mirrors it for editor/CI validation.
 
 ```yaml
 version: "1"
@@ -361,6 +363,28 @@ relies on the `~/.config/spur` seed. The published global install (`dist/index.j
 directly and is the primary path.
 
 No symlinks participate in install or init — config propagates by copy-and-resolve only.
+
+### 2.4 Config loader — single facade in `@gobing-ai/spur-config` (ADR-027)
+
+`.spur/config.yaml` has exactly one loader. The package splits into two entry points so the
+dependency graph stays Workers-safe:
+
+| Entry | Imports | Exports | Consumed by |
+|-------|---------|---------|-------------|
+| `@gobing-ai/spur-config` (core) | zod only — no `yaml`, no `node:fs` | `spurConfigSchema`, `DEFAULT_TASKS_DIR`/`DEFAULT_FEATURES_DIR`, all config types (`SpurConfig`, `TaskFoldersConfig`, …) | server (Cloudflare Workers bundle), any runtime-agnostic consumer |
+| `@gobing-ai/spur-config/loader` (node) | `yaml`, `node:fs`, ts-runtime | `loadSpurConfig(cwd)`, `resolveConfigFile(cwd)`, `resolvePlanningFolders(fs)`, embedded-schema resolution | CLI, `packages/app` services (on Bun) |
+
+- `loadSpurConfig(cwd, opts?)` returns a fully-typed, validated `SpurConfig`. Missing file → schema
+  defaults; invalid YAML/schema → throws (fail fast). `validateJsonSchema` defaults on outside tests;
+  pass `embeddedSchemas` so the `$schema` ref resolves inside a `bun --compile` binary (the CLI passes
+  `EMBEDDED_SPUR_SCHEMAS`).
+- `resolvePlanningFolders(fs)` derives the active + registered task/feature folders, degrading to
+  defaults on any error (a broken config must not wedge folder resolution). `@gobing-ai/spur-app`
+  re-exports it so app/CLI consumers import from the application layer, not the config package.
+- **Type ownership.** `TaskFoldersConfig`/`TaskFolderEntry` are defined once in the loader; services
+  re-export, never redefine, so the loader↔service seam shares one identity.
+- **Guardrail.** `config/rules/boundary/config-loading-ownership.yaml` blocks `loadStructuredConfig`
+  outside `packages/config` and any reference to the retired `docs/.tasks/config.jsonc`.
 
 ## 3. Data Shapes
 

@@ -11,11 +11,10 @@ import {
     type WorkflowTraceListResult,
     type WorkflowTraceTimeline,
 } from '@gobing-ai/spur-app';
+import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import { loadWorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import { EventBus } from '@gobing-ai/ts-infra';
-import { loadSpurConfig } from '../config/loader';
-import { resolveConfigFile } from '../config/resolver';
-import { SpurAppConfigSchema } from '../config/schema';
+import { EMBEDDED_SPUR_SCHEMAS } from '../config/embedded-schemas';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
 import { resolveSpurBin } from '../workflow/resolve-spur-bin';
@@ -50,12 +49,9 @@ function parseVars(raw: string | undefined): Record<string, string> | undefined 
 
 /** Read configured workflow search paths, defaulting to `['.spur/workflows/']`. */
 async function resolveWorkflowPaths(cwd: string): Promise<string[]> {
-    const configFile = resolveConfigFile(cwd);
-    if (configFile === undefined) return ['.spur/workflows/'];
     try {
-        const raw = await loadSpurConfig(configFile);
-        const parsed = SpurAppConfigSchema.parse(raw);
-        return parsed.workflows?.paths ?? ['.spur/workflows/'];
+        const config = await loadSpurConfig(cwd, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS });
+        return config.workflows?.paths ?? ['.spur/workflows/'];
     } catch {
         return ['.spur/workflows/'];
     }

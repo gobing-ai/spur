@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import { join } from 'node:path';
 import type { LifecycleProfile } from '@gobing-ai/spur-app';
 import { LifecycleAdapter, TASK_LIFECYCLE_PROFILE } from '@gobing-ai/spur-app';
-import * as configModule from '@gobing-ai/spur-config';
+import * as configModule from '@gobing-ai/spur-config/loader';
 import { createCliContext } from '../../src/context';
 import type { CommandOutput } from '../../src/output';
 import { makeLifecycleAdapter } from '../../src/workflow/make-lifecycle-adapter';

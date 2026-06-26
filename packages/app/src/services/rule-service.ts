@@ -1,6 +1,6 @@
 import { homedir } from 'node:os';
 import { delimiter, join, relative, resolve } from 'node:path';
-import { bundledConfigRoot } from '@gobing-ai/spur-config';
+import { bundledConfigRoot } from '@gobing-ai/spur-config/loader';
 import {
     createId,
     type DbAdapter,

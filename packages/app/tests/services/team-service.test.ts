@@ -288,6 +288,34 @@ describe('TeamService status & assignment', () => {
         }
     });
 
+    test('assignTask finds a task in a NON-active registered phase folder', async () => {
+        // Regression: when `.spur/config.yaml` sets active=docs/tasks2 but the task
+        // lives in docs/tasks (a registered phase folder), assignTask must still find
+        // it. The old hardcoded `docs/tasks` (or a single-folder scan) would miss it
+        // whenever active ≠ the task's folder.
+        const { svc, cwd, cleanup } = await makeService();
+        try {
+            const nodeFs = createNodeFileSystem();
+            await nodeFs.ensureDir(join(cwd, '.spur'));
+            await writeFile(
+                join(cwd, '.spur', 'config.yaml'),
+                ['tasks:', '  active: docs/tasks2', '  folders:', '    docs/tasks: {}', '    docs/tasks2: {}'].join(
+                    '\n',
+                ),
+            );
+            // Task is in docs/tasks, NOT the active docs/tasks2.
+            const tasksDir = join(cwd, 'docs', 'tasks');
+            await nodeFs.ensureDir(tasksDir);
+            const taskPath = join(tasksDir, '0099_phase_one.md');
+            await writeFile(taskPath, '---\nname: "Phase One"\nstatus: Todo\n---\n\nbody\n');
+
+            await svc.assignTask('0099', 'planner');
+            expect(await readFile(taskPath, 'utf8')).toContain('assignee: planner');
+        } finally {
+            await cleanup();
+        }
+    });
+
     test('assignTask rejects a missing task file', async () => {
         const { svc, cleanup } = await makeService();
         try {

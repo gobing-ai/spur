@@ -4,7 +4,8 @@
     "type": "module",
     "private": true,
     "exports": {
-        ".": "./src/index.ts"
+        ".": "./src/index.ts",
+        "./loader": "./src/loader.ts"
     },
     "scripts": {
         "build": "bun build src/index.ts --outdir dist --target bun",
@@ -13,6 +14,8 @@
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
+        "@gobing-ai/ts-runtime": "catalog:",
+        "yaml": "catalog:",
         "zod": "catalog:"
     },
     "devDependencies": {

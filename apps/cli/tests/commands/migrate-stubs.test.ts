@@ -146,7 +146,9 @@ describe('CLI migrate and extracted domains', () => {
         expect(await main(['workflow', 'trace', '--json'], { cwd, output, dbUrl: workflowDb })).toBe(0);
         const traceResult = JSON.parse(output.messages.at(-1) ?? '{}');
         expect(traceResult.entries).toHaveLength(1);
-    });
+        // Drives ~8 full CLI commands serially via main(); under aggregate-suite
+        // contention this exceeds the 5s default. Raise the budget so it is not flaky.
+    }, 20_000);
 
     test('runs history analyze with --json and text output', async () => {
         const cwd = await createTempProject();

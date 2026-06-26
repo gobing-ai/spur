@@ -1,4 +1,3 @@
-import { join } from 'node:path';
 import type { WriteResult } from '@gobing-ai/spur-app';
 import { contract } from '@gobing-ai/spur-contracts';
 import { normalizeTaskStatus, TASK_TYPES } from '@gobing-ai/spur-domain/schema';
@@ -107,19 +106,11 @@ export function createTaskHandlers(ctx: ServerContext) {
         }),
 
         folders: os.task.folders.handler(async () => {
-            const configPath = join(ctx.cwd, 'docs/.tasks/config.jsonc');
-            let raw: string;
-            try {
-                raw = await ctx.fs.readFile(configPath);
-            } catch {
-                return { ok: true as const, data: [{ path: 'docs/tasks', label: 'Primary' }] };
-            }
-            const stripped = raw.replace(/^\s*\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-            const parsed = JSON.parse(stripped) as {
-                folders?: Record<string, { label?: string }>;
-            };
-            const folders = parsed.folders ?? {};
-            const data = Object.entries(folders).map(([path, cfg]) => ({
+            // Derived from `.spur/config.yaml` via the context's resolved planning folders
+            // (serve.ts resolves them at boot; context holds the schema-default fallback).
+            // Never reads the legacy `docs/.tasks/config.jsonc` (retired, ADR-027).
+            const { foldersConfig } = ctx.planningFolders();
+            const data = Object.entries(foldersConfig.folders).map(([path, cfg]) => ({
                 path,
                 label: cfg.label,
             }));

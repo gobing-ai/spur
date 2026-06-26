@@ -262,6 +262,36 @@ describe('TaskService', () => {
             const result = await svc.resolve('/completely/unrelated/file.ts');
             expect(result).toBeNull();
         });
+
+        // Strict mode (write-guard): only the EXACT corpus path is owned. A scratch
+        // file that merely shares a `NNNN_` prefix must not be claimed (the bug behind
+        // the false-positive Write deny on /tmp/0103_*.md).
+        test('strict: a scratch file sharing a WBS prefix is NOT owned', async () => {
+            const created = await svc.create({ title: 'Real corpus task' });
+            const wbs = created.ref.id;
+
+            const lenient = await svc.resolve(`/tmp/${wbs}_design.md`);
+            expect(lenient).not.toBeNull(); // default Strategy 2 still claims it
+
+            const strict = await svc.resolve(`/tmp/${wbs}_design.md`, { strict: true });
+            expect(strict).toBeNull(); // strict refuses the basename-only match
+        });
+
+        test('strict: the real corpus file IS still owned (exact path)', async () => {
+            const created = await svc.create({ title: 'Strict exact' });
+            const result = await svc.resolve(created.ref.filePath, { strict: true });
+            expect(result).not.toBeNull();
+            expect(result?.wbs).toBe(created.ref.id);
+        });
+
+        test('strict: a relative path to the corpus file resolves (path normalized)', async () => {
+            const created = await svc.create({ title: 'Strict relative' });
+            // tasksDir is absolute in tests; make a path with a redundant `.` segment.
+            const withDot = created.ref.filePath.replace(/\/([^/]+\.md)$/, '/./$1');
+            const result = await svc.resolve(withDot, { strict: true });
+            expect(result).not.toBeNull();
+            expect(result?.wbs).toBe(created.ref.id);
+        });
     });
 
     describe('batchCreate', () => {

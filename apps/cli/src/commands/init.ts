@@ -1,7 +1,7 @@
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
-import { bundledConfigRoot, listBundledConfigFiles } from '@gobing-ai/spur-config';
+import { bundledConfigRoot, listBundledConfigFiles } from '@gobing-ai/spur-config/loader';
 import { ArtifactDao } from '@gobing-ai/spur-domain';
 import { bundledRulesRoot, listBundledRuleFiles } from '@gobing-ai/ts-rule-engine';
 import { CLI_CONFIG } from '../config';

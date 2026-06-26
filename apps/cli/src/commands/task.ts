@@ -3,15 +3,15 @@ import { join } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import {
     PlanningWriteService,
+    resolvePlanningFolders,
     type SectionMatrix,
     TASK_LIFECYCLE_PROFILE,
     TaskCheckService,
-    type TaskFoldersConfig,
     TaskService,
 } from '@gobing-ai/spur-app';
-import { bundledConfigRoot, spurConfigSchema, tasksConfigSchema } from '@gobing-ai/spur-config';
+import { bundledConfigRoot, loadStructuredSpurConfig } from '@gobing-ai/spur-config/loader';
 import { extractTemplateBodies, TASK_VARIANTS, type TaskSection, taskStatusIcon } from '@gobing-ai/spur-domain';
-import { loadSpurConfig } from '../config/loader';
+import { EMBEDDED_SPUR_SCHEMAS } from '../config/embedded-schemas';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
 import { makeLifecycleAdapter } from '../workflow/make-lifecycle-adapter';
@@ -182,7 +182,8 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             try {
                 const kanban = await svc.refresh();
                 if (options.json) {
-                    context.output.write(toJson({ kanban_path: `${options.folder ?? 'docs/tasks'}/kanban.md` }));
+                    const activeFolder = (await resolvePlanningFolders(context.fs)).foldersConfig.active_folder;
+                    context.output.write(toJson({ kanban_path: `${options.folder ?? activeFolder}/kanban.md` }));
                 } else {
                     context.output.write(`kanban.md regenerated (${kanban.split('\n').length} lines)`);
                 }
@@ -336,7 +337,8 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             // exists so the testing→done lifecycle guard has a real, stable verb.
             const strict = options.strict === true;
             try {
-                const tasksDir = options.folder ?? context.fs.resolve('docs', 'tasks');
+                const activeFolder = (await resolvePlanningFolders(context.fs)).foldersConfig.active_folder;
+                const tasksDir = options.folder ?? context.fs.resolve(activeFolder);
                 const entries = await context.fs.readDir(tasksDir);
                 const wbsPattern: string[] = wbs
                     ? [wbs]
@@ -384,11 +386,12 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .summary('Resolve a file path to its owning task WBS.')
         .argument('<file-path>', 'File path to resolve')
         .option('--folder <path>', 'Custom tasks folder')
+        .option('--strict', 'Match only the exact corpus path (no basename-WBS fallback)')
         .option('--json', 'Output machine-readable JSON')
         .action(async (filePath, options) => {
             const svc = await makeService(context, options.folder);
             try {
-                const result = await svc.resolve(filePath);
+                const result = await svc.resolve(filePath, { strict: options.strict === true });
                 if (result) {
                     if (options.json) {
                         context.output.write(toJson(result));
@@ -431,47 +434,9 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             }
         });
 }
-const DEFAULT_TASKS_DIR = 'docs/tasks';
-
-/** Default folders config used when `.spur/config.yaml` has no `tasks:` block. */
-const DEFAULT_FOLDERS_CONFIG: TaskFoldersConfig = {
-    active_folder: DEFAULT_TASKS_DIR,
-    folders: { [DEFAULT_TASKS_DIR]: { base_counter: 0 } },
-};
-
-/**
- * Load task-folder configuration from the `tasks:` block in `.spur/config.yaml`
- * (the single project-config surface — ADR-017). Returns sensible defaults when
- * the file is absent, the `tasks:` block is missing, or the config is malformed.
- *
- * Maps the root-schema's camelCase keys (`active`, `baseCounter`) to the
- * snake_case shape {@link TaskFoldersConfig} consumes (`active_folder`, `base_counter`).
- */
-async function loadTaskFoldersConfig(projectRoot: string): Promise<TaskFoldersConfig> {
-    const configPath = join(projectRoot, '.spur', 'config.yaml');
-    try {
-        if (!existsSync(configPath)) return DEFAULT_FOLDERS_CONFIG;
-        const spurConfig = spurConfigSchema.parse(
-            await loadSpurConfig(configPath, { validateSchema: process.env.NODE_ENV !== 'test' }),
-        );
-        if (!spurConfig.tasks) return DEFAULT_FOLDERS_CONFIG;
-        const tasks = tasksConfigSchema.parse(spurConfig.tasks);
-        const folders: Record<string, { base_counter: number; label?: string }> = {};
-        for (const [path, fc] of Object.entries(tasks.folders)) {
-            folders[path] = { base_counter: fc.baseCounter, label: fc.label };
-        }
-        return {
-            active_folder: tasks.active,
-            folders: Object.keys(folders).length > 0 ? folders : DEFAULT_FOLDERS_CONFIG.folders,
-        };
-    } catch {
-        /* malformed config — use defaults */
-    }
-    return DEFAULT_FOLDERS_CONFIG;
-}
 
 async function makeService(context: CliContext, folderOverride?: string, noLifecycle = false): Promise<TaskService> {
-    const foldersConfig = await loadTaskFoldersConfig(context.cwd);
+    const foldersConfig = (await resolvePlanningFolders(context.fs)).foldersConfig;
     const tasksDir = folderOverride ?? context.fs.resolve(foldersConfig.active_folder);
     const lifecycle = noLifecycle ? undefined : makeLifecycleAdapter(context, TASK_LIFECYCLE_PROFILE);
     const writeService = new PlanningWriteService({
@@ -580,7 +545,10 @@ async function loadSectionMatrix(projectRoot: string): Promise<SectionMatrix> {
     // 1. Project-local: .spur/tasks/section-matrix.yaml
     const localPath = join(projectRoot, '.spur', 'tasks', 'section-matrix.yaml');
     if (existsSync(localPath)) {
-        const data = await loadSpurConfig(localPath, { validateSchema: true });
+        const data = await loadStructuredSpurConfig(localPath, {
+            validateJsonSchema: true,
+            embeddedSchemas: EMBEDDED_SPUR_SCHEMAS,
+        });
         return data as unknown as SectionMatrix;
     }
     // 2. Bundled fallback: config/tasks/section-matrix.yaml
@@ -588,7 +556,10 @@ async function loadSectionMatrix(projectRoot: string): Promise<SectionMatrix> {
     if (root !== null) {
         const matrixPath = join(root, 'tasks', 'section-matrix.yaml');
         if (existsSync(matrixPath)) {
-            const data = await loadSpurConfig(matrixPath, { validateSchema: true });
+            const data = await loadStructuredSpurConfig(matrixPath, {
+                validateJsonSchema: true,
+                embeddedSchemas: EMBEDDED_SPUR_SCHEMAS,
+            });
             return data as unknown as SectionMatrix;
         }
     }

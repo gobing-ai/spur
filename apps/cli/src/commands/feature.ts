@@ -4,6 +4,7 @@ import {
     FeatureCheckService,
     FeatureService,
     PlanningWriteService,
+    resolvePlanningFolders,
 } from '@gobing-ai/spur-app';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
@@ -22,7 +23,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         .option('--folder <path>', 'Custom features folder')
         .option('--json', 'Output machine-readable JSON')
         .action(async (name, options) => {
-            const svc = makeService(context, options.folder);
+            const svc = await makeService(context, options.folder);
             try {
                 const result = await svc.create(name, options.parent);
                 if (options.json) {
@@ -44,7 +45,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         .option('--folder <path>', 'Custom features folder')
         .option('--json', 'Output machine-readable JSON')
         .action(async (id, options) => {
-            const svc = makeService(context, options.folder);
+            const svc = await makeService(context, options.folder);
             try {
                 const result = await svc.show(id);
                 if (result === null) {
@@ -75,7 +76,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         .option('--folder <path>', 'Custom features folder')
         .option('--json', 'Output machine-readable JSON')
         .action(async (id, status, options) => {
-            const svc = makeService(context, options.folder);
+            const svc = await makeService(context, options.folder);
             try {
                 if (options.field !== undefined) {
                     if (options.value === undefined) {
@@ -107,7 +108,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         .option('--folder <path>', 'Custom features folder')
         .option('--json', 'Output machine-readable JSON')
         .action(async (options) => {
-            const svc = makeService(context, options.folder);
+            const svc = await makeService(context, options.folder);
             try {
                 let features = await svc.list();
                 if (options.status !== undefined) {
@@ -142,7 +143,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         .option('--folder <path>', 'Custom features folder')
         .option('--json', 'Output machine-readable JSON')
         .action(async (id, options) => {
-            const svc = makeService(context, options.folder);
+            const svc = await makeService(context, options.folder);
             try {
                 const result = await svc.move(id, options.parent ?? null, { dryRun: options.dryRun === true });
                 if (options.json) {
@@ -171,11 +172,11 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         .option('--folder <path>', 'Custom features folder')
         .option('--json', 'Output machine-readable JSON')
         .action(async (options) => {
-            const svc = makeService(context, options.folder);
+            const svc = await makeService(context, options.folder);
             try {
                 const result = await svc.refresh();
                 if (options.json) {
-                    const featuresDir = options.folder ?? context.fs.resolve('docs', 'features');
+                    const featuresDir = options.folder ?? (await resolvePlanningFolders(context.fs)).featuresDir;
                     context.output.write(
                         toJson({ index_path: `${featuresDir}/INDEX.md`, tasksUpdated: result.tasksUpdated }),
                     );
@@ -199,8 +200,9 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         .option('--folder <path>', 'Custom features folder')
         .option('--json', 'Output machine-readable JSON')
         .action(async (id, options) => {
-            const featuresDir = options.folder ?? context.fs.resolve('docs', 'features');
-            const tasksDir = context.fs.resolve('docs', 'tasks');
+            const resolved = await resolvePlanningFolders(context.fs);
+            const featuresDir = options.folder ?? context.fs.resolve(resolved.featuresDir);
+            const tasksDir = context.fs.resolve(resolved.tasksDir);
             const svc = new FeatureCheckService(context.fs);
             const json = options.json === true;
             const strict = options.strict === true;
@@ -254,9 +256,11 @@ function write(context: CliContext, json: boolean | undefined, result: unknown, 
     }
 }
 
-function makeService(context: CliContext, folderOverride?: string): FeatureService {
-    const featuresDir = folderOverride ?? context.fs.resolve('docs', 'features');
-    const tasksDir = context.fs.resolve('docs', 'tasks');
+async function makeService(context: CliContext, folderOverride?: string): Promise<FeatureService> {
+    // Derive feature/task folders from `.spur/config.yaml` (phase folders) — never hardcode.
+    const resolved = await resolvePlanningFolders(context.fs);
+    const featuresDir = folderOverride ?? context.fs.resolve(resolved.featuresDir);
+    const tasksDir = context.fs.resolve(resolved.tasksDir);
     const lifecycle = makeLifecycleAdapter(context, FEATURE_LIFECYCLE_PROFILE);
     const writeService = new PlanningWriteService({
         fs: context.fs,
