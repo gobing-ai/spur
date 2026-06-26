@@ -515,10 +515,15 @@ export class TaskService {
         await this.writeService.updateSection(ref, 'Testing', testingBody);
         result.testingWritten = true;
 
-        // ── Review section (R2) ──
-        const reviewBody = renderReview(verdict);
-        await this.writeService.updateSection(ref, 'Review', reviewBody);
-        result.reviewWritten = true;
+        // ── Review section (R2) — preserve existing review content ──
+        // The review agent writes a detailed SECU Review during the `review` step.
+        // Only overwrite with the verdict-rendered summary when the section is bare
+        // (absent/placeholder), matching the Solution safety-net pattern.
+        if (sectionIsBare(doc, 'Review')) {
+            const reviewBody = renderReview(verdict);
+            await this.writeService.updateSection(ref, 'Review', reviewBody);
+            result.reviewWritten = true;
+        }
 
         // ── Solution safety-net (R3) ──
         if (opts.solutionFromDiff && sectionIsBare(doc, 'Solution')) {

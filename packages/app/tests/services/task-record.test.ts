@@ -208,6 +208,18 @@ describe('renderReview', () => {
         const out = renderReview(v);
         expect(out).toContain('a b c');
     });
+
+    test('maps pass/fail status to P4/P1 when status is not already P1-P4', () => {
+        const v = makeVerdict({
+            checks: [
+                { name: 'spur task check', status: 'pass', evidence: 'task check passed' },
+                { name: 'coverage gate', status: 'fail', evidence: 'coverage below threshold' },
+            ],
+        });
+        const out = renderReview(v);
+        expect(out).toContain('| P4 | spur task check | — | task check passed |');
+        expect(out).toContain('| P1 | coverage gate | — | coverage below threshold |');
+    });
 });
 
 describe('renderSolutionFromDiff', () => {
@@ -372,6 +384,49 @@ describe('TaskService.record', () => {
         const result = await svc.record(wbs);
 
         expect(result.transitionedTo).toBeUndefined();
+    });
+
+    test('preserves existing Review when not bare (does not overwrite agent review)', async () => {
+        const wbs = await createTask(svc);
+
+        // Pre-populate Review with detailed SECU findings (as the review agent would)
+        const root = tasksDir.replace('/tasks', '');
+        const fs = createNodeFileSystem(root);
+        const filePath = `${tasksDir}/${wbs}_record-test-task.md`;
+        const ref = { kind: 'task' as const, id: wbs, filePath, folder: tasksDir };
+        const reviewBody = [
+            '**SECU findings** (review agent)',
+            '',
+            '| Priority | Dim | file:line | Description | Remediation |',
+            '|----------|-----|-----------|-------------|-------------|',
+            '| P4 | U | `Modal.tsx:43` | Escape handler tabIndex | Add tabIndex={-1} |',
+            '',
+        ].join('\n');
+        const writeService = new PlanningWriteService({ fs });
+        await writeService.updateSection(ref, 'Review', reviewBody);
+
+        // Write a verdict file
+        const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+        await fs.writeFile(
+            verdictPath,
+            JSON.stringify({
+                wbs,
+                verdict: 'PASS',
+                checks: [{ name: 'spur task check', status: 'pass', evidence: 'task check passed' }],
+            }),
+        );
+
+        const result = await svc.record(wbs, { verdictFile: verdictPath });
+
+        // Testing is always written; Review is preserved (not bare)
+        expect(result.testingWritten).toBe(true);
+        expect(result.reviewWritten).toBe(false);
+
+        // The agent's detailed review should be preserved
+        const raw = await fs.readFile(filePath);
+        expect(raw).toContain('SECU findings** (review agent)');
+        expect(raw).toContain('| P4 | U | `Modal.tsx:43`');
+        expect(raw).not.toContain('pipeline verify step');
     });
 });
 

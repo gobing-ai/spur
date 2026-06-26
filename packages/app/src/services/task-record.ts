@@ -193,7 +193,10 @@ export function renderReview(v: VerifyVerdict): string {
     } else {
         for (const check of v.checks) {
             const finding = check.evidence.replace(/\n/g, ' ');
-            lines.push(`| ${check.status} | ${check.name} | — | ${finding} |`);
+            // Map check status to P1–P4 severity so the L3 regex /P[1-4]/ matches.
+            // If status is already P1–P4, use it directly; otherwise map pass/fail.
+            const priority = /^P[1-4]$/.test(check.status) ? check.status : check.status === 'fail' ? 'P1' : 'P4';
+            lines.push(`| ${priority} | ${check.name} | — | ${finding} |`);
         }
     }
 
