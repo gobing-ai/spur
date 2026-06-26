@@ -34,7 +34,7 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
     agent
         .command('run')
         .description('Execute a prompt or slash command via a coding agent.')
-        .option('--agent <name>', 'Agent name, current, or auto')
+        .option('--agent <name>', 'Agent name or auto')
         .option('--continue', 'Resume the previous agent session')
         .option('--model <name>', 'Agent model argument')
         .option('--mode <mode>', 'Agent output mode: text|json')
@@ -277,7 +277,7 @@ async function drainIntoPrompt(
     flags: Record<string, string | boolean>,
 ): Promise<{ prompt: string | undefined; flags: Record<string, string | boolean> }> {
     const recipient = typeof flags.agent === 'string' ? flags.agent : '';
-    if (recipient === '' || recipient === 'auto' || recipient === 'current') {
+    if (recipient === '' || recipient === 'auto') {
         context.output.error('--drain requires an explicit --agent <id> matching a message recipient');
         return { prompt, flags };
     }

@@ -51,7 +51,7 @@ export interface AgentConfig {
 }
 
 /** How an `auto` resolution chose its agent — carried for diagnostics/tests. */
-export type AgentResolveSource = 'phase' | 'default' | 'priority' | 'current' | 'explicit';
+export type AgentResolveSource = 'phase' | 'default' | 'priority' | 'explicit';
 
 /**
  * Result of resolving an execution profile from `--agent` + prompt + config.
@@ -343,7 +343,6 @@ export class AgentService {
     ): Promise<AgentResolveResult> {
         const raw = stringFlag(flags, 'agent', 'auto');
         if (raw === 'auto') return this.resolveAgentAuto(prompt, doctorRunner);
-        if (raw === 'current') return this.resolveAgentCurrent(doctorRunner);
         return this.resolveAgentExplicit(raw, doctorRunner, 'explicit');
     }
 
@@ -446,18 +445,10 @@ export class AgentService {
         return { ok: true, agent: canonical, source };
     }
 
-    private async resolveAgentCurrent(doctorRunner: DoctorRunner): Promise<AgentResolveResult> {
-        const value = this.ctx.env.SPUR_AGENT;
-        if (value === undefined) {
-            return { ok: false, exitCode: 2, message: "SPUR_AGENT is not set (agent 'current' requires it)" };
-        }
-        return this.resolveAgentExplicit(value, doctorRunner, 'current');
-    }
-
     private async resolveAgentExplicit(
         name: string,
         doctorRunner: DoctorRunner,
-        source: 'explicit' | 'current',
+        source: 'explicit',
     ): Promise<AgentResolveResult> {
         const canonical = resolveAgentName(name);
         if (canonical === undefined) {

@@ -49,7 +49,7 @@ The command forwards these via `$ARGUMENTS`:
 | Argument | Description | Default |
 |----------|-------------|---------|
 | `testee` | What to exercise — a slash command, agent skill, or CLI invocation (positional, required). Quote it if it contains flags. | (required) |
-| `--agent <name\|inherit\|auto>` | **Testee-scoped** agent: the agent the **testee** runs under, forwarded into the testee invocation. The driver (this skill) always runs in the current session. See [§Testee-scoped agent](#testee-scoped-agent). | inherit |
+| `--agent <name\|auto>` | **Testee-scoped** agent: the agent the **testee** runs under, forwarded into the testee invocation. The driver (this skill) always runs in the current session. **Omit it** to forward nothing — the testee runs under its own default. See [§Testee-scoped agent](#testee-scoped-agent). | (omitted → forward nothing) |
 | `--max-retry <n>` | Fix attempts per failed step. **`0` = observe-only**: monitor and report, never mutate the repo. | `2` |
 | `--save` | Write the report to `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md`. | off |
 | `--task` | File findings as a review-template task via `spur task create --template review`. | off |
@@ -120,8 +120,12 @@ standard `/sp:dev-*` semantics: it sets the agent the **testee** runs under, **n
 ```
 
 If the testee does not accept `--agent` (e.g. a pure-inline command), record that as a **finding**
-("testee ignores `--agent`") rather than forcing the flag. `inherit` (default) forwards nothing —
-the testee runs under whatever it would default to.
+("testee ignores `--agent`") rather than forcing the flag. **Omitting `--agent` (the default)
+forwards nothing** — the testee runs under whatever it would default to (which, for a `spur agent
+run`-backed testee, is `--agent auto` → the configured default executor). There is no `inherit` or
+`current` token: "run under the current agent" is simply the default for an inline slash command
+(it executes in this session) and is **not** expressible for the spawned `spur agent run` path,
+which always launches a fresh agent subprocess.
 
 ## When to use
 

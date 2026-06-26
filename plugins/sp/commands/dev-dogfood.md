@@ -1,6 +1,6 @@
 ---
 description: Dogfood an agent skill/command/CLI — drive it end-to-end with bounded auto-fix, self-monitor, and emit a comprehensive report
-argument-hint: "<testee> [--agent <name|inherit|auto>] [--max-retry <n>] [--save] [--task] [--full]"
+argument-hint: "<testee> [--agent <name|auto>] [--max-retry <n>] [--save] [--task] [--full]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Grep", "Glob", "Skill"]
 ---
 
@@ -29,7 +29,7 @@ report of what happened, what broke, was fixed, and should be improved.
 | Argument | Description | Default |
 |----------|-------------|---------|
 | `testee` | What to exercise — a slash command, agent skill, or CLI invocation (positional, required). Quote it if it contains flags. | (required) |
-| `--agent <name\|inherit\|auto>` | **Testee-scoped:** the agent the **testee** runs under (forwarded into the testee invocation). The driver always runs in the current session. | inherit |
+| `--agent <name\|auto>` | **Testee-scoped:** the agent the **testee** runs under (forwarded into the testee invocation). The driver always runs in the current session. **Omit it** to forward nothing — the testee runs under its own default. | (omitted → forward nothing) |
 | `--max-retry <n>` | Fix attempts per failed step. **`0` = observe-only**: monitor and report, never mutate the repo. Recommended for first runs against unfamiliar testees. | `2` |
 | `--save` | Write the report to `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md`. | off |
 | `--task` | File the findings as a review-template task via `spur task create --template review`. | off |

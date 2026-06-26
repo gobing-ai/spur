@@ -419,37 +419,11 @@ describe('AgentService.run agent resolution', () => {
         expect(errors.some((e) => e.includes('No usable Tier-1'))).toBe(true);
     });
 
-    test('--agent current reads SPUR_AGENT env var', async () => {
-        const { output } = captureOutput();
-        const svc = makeService({ SPUR_AGENT: 'pi' }, output);
-        const runResult = makeRunResult();
-
-        const runner = {
-            runPromptCommand: mock(() => Promise.resolve(runResult)),
-        } as unknown as AgentRunDeps['runner'];
-        const detector = {
-            detectOne: mock(() =>
-                Promise.resolve({
-                    name: 'pi',
-                    installed: true,
-                    version: '1.0.0',
-                    channels: [],
-                    error: null,
-                }),
-            ),
-        } as unknown as AgentRunDeps['detector'];
-        const doctorRunner = {
-            runOne: mock(() => Promise.resolve(mockDoctorResult())),
-        } as unknown as AgentRunDeps['doctorRunner'];
-
-        const deps: AgentRunDeps = { runner, detector, doctorRunner };
-        const exitCode = await svc.run('hello', { agent: 'current' }, deps);
-        expect(exitCode).toBe(0);
-        expect(doctorRunner?.runOne).toHaveBeenCalledWith('pi');
-    });
-
-    test('--agent current SPUR_AGENT unset → exit 2', async () => {
-        const svc = makeService({});
+    test('--agent current is no longer special → treated as unknown agent (exit 2)', async () => {
+        // `current` (and the phantom `inherit`) were removed: the env-var-backed
+        // path never had a producer (nothing sets SPUR_AGENT), so the token is now
+        // resolved as a plain explicit name, which is unknown → exit 2.
+        const svc = makeService({ SPUR_AGENT: 'pi' });
         const exitCode = await svc.run('hello', { agent: 'current' });
         expect(exitCode).toBe(2);
     });
