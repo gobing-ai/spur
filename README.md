@@ -83,7 +83,7 @@ bun install
 # Run the CLI from source (the .ts entry runs only under Bun)
 bun run apps/cli/src/index.ts --help
 
-# Scaffold a project: writes .spur/config.json, local rules + an example
+# Scaffold a project: writes .spur/config.yaml, local rules + an example
 # workflow, and seeds ~/.config/spur/rules from the bundled presets
 bun run apps/cli/src/index.ts init --name my-project
 
@@ -222,11 +222,11 @@ silence the gate.
 
 ## Configuration
 
-`spur init` writes `.spur/config.json`:
-
-```json
-{ "version": 1, "project": "<name>", "database": ".spur/spur.db", "generatedBy": "@gobing-ai/spur" }
-```
+`spur init` writes a single `.spur/config.yaml` (ADR-027; the legacy `.spur/config.json`
+project marker is retired). It carries a portable `bootstrap:` block (logging, telemetry,
+database, scheduler — consumed by `@gobing-ai/ts-infra`) plus a Spur app section (`agent`,
+`rules`, `workflows`, `tasks`) validated by `spurConfigSchema`. Resolution order: project
+`.spur/config.yaml` → fallback `~/.config/spur/config.yaml`.
 
 App-layer config (server/web) comes from `@gobing-ai/spur-config` (`buildConfigFromEnv`): `DATABASE_URL`,
 `PORT`, `SPUR_TELEMETRY_ENABLED`, `SPUR_LOG_LEVEL`, etc. Spur never stores agent API keys — auth is
