@@ -39,7 +39,7 @@ execution half: a **HITL approval** on the design and a **PASS/PARTIAL/FAIL verd
 | Command | Phase | What it does | Backed by |
 |---------|-------|--------------|-----------|
 | `/sp:dev-brainstorm` | Plan | Grilling interview → options with trade-offs → land an artifact (`--task` or `--feature`) | `sp:brainstorm` |
-| `/sp:dev-plan` | Plan | Feature → BDD AC → `feature check` gate → decompose → `batch-create` gate | `sp:spur-dev` (planning) |
+| `/sp:dev-plan` | Plan | Feature → BDD AC → `feature check` gate → decompose → `batch-create` gate → optional design doc (`--design`/`--auto`) | `sp:spur-dev` (planning) |
 | `/sp:dev-refine` | Plan→Exec | Fill a task's AC / Design / Plan just-in-time via Q&A | `sp:spur-dev` |
 | `/sp:dev-run` | Exec | Run a task: full pipeline, or `--mode implement` for just the code | `sp:spur-dev` (execution) |
 | `/sp:dev-unit` | Exec | Generate/extend tests; measure coverage | `sp:spur-dev` |
@@ -49,6 +49,7 @@ execution half: a **HITL approval** on the design and a **PASS/PARTIAL/FAIL verd
 | `/sp:dev-gitmsg` | Exec | Draft a Conventional-Commits message from the diff | inline |
 | `/sp:dev-changelog` | Exec | Generate a changelog from commit history | inline |
 | `/sp:dev-handover` | Any | Write an honest handover doc when blocked | inline |
+| `/sp:dev-dogfood` | Any | Drive a command/skill/CLI end-to-end, fix-within-budget, emit a structured report | `sp:dogfood-testing` |
 
 > The single source of truth for every operation (purpose, inputs, behavior) is
 > [`plugins/sp/skills/spur-dev/references/dev-operations.md`](../../plugins/sp/skills/spur-dev/references/dev-operations.md).
@@ -191,7 +192,28 @@ gate certified the prototype actually does what the AC said.
 /sp:dev-fixall "bun run check"       # loop lint+type+test until green
 /sp:dev-handover "Blocked: the upstream rate-limiter has no test hook"  # honest handover when stuck
 /sp:dev-changelog --version 0.3.0    # changelog from commit history
+/sp:dev-dogfood "/sp:dev-run 0042 --auto" --max-retry 0 --save  # observe-only dogfood + report
 ```
+
+---
+
+## Two cross-cutting flags
+
+**`--agent <name|inherit|auto>`** — pick which agent does the model work. Available on the
+model-backed commands: `dev-refine`, `dev-plan`, `dev-brainstorm` (the AC/decomposition/ideation
+synthesis), and `dev-run`, `dev-verify`, `dev-unit`, `dev-review` (the pipeline/verification steps).
+`inherit` (default) = the current agent; `auto` = resolve from the runtime; `<name>` = an explicit
+agent (e.g. `codex`). The selector flows through to the underlying `spur agent run`, so it actually
+changes who runs the model call.
+
+> **Exception — `/sp:dev-dogfood --agent` is testee-scoped.** Because dogfood *drives* other commands,
+> its `--agent` sets the agent the **testee** runs under (forwarded into the testee invocation), not
+> the driver. The driver always runs in the current session.
+
+**`--design` / `--auto` on `/sp:dev-plan`** — author a feature design satellite
+(`docs/design/<slug>.md`) + its `04_DESIGN.md` index row. `--design` always authors; `--auto` lets the
+agent decide via a cross-cutting-seam heuristic (new command/module/schema/transport); neither = no
+design doc (the default). Idempotent — re-runs update in place.
 
 ---
 

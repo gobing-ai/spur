@@ -11,15 +11,18 @@ The `sp` plugin is the Claude Code plugin surface for the Spur toolkit. It provi
 
 ```
 plugins/sp/
-├── skills/                          # Domain knowledge + workflow documentation (9 skills)
+├── skills/                          # Domain knowledge + workflow documentation (12 skills)
 │   ├── brainstorm/                  # Structured ideation workflow (v1.0.0)
+│   ├── code-verification/           # Verify + SECU review (backs dev-verify/dev-review) (v1.0)
 │   ├── daily-summary/               # Daily summary report generator (v1.0.0)
 │   ├── doc-evolve/                  # Key-document evolution per constitution (v1.0)
-│   ├── spur-dev/                    # Daily-workflow umbrella: planning + execution (v1.0)
+│   ├── dogfood-testing/             # Dogfood backbone — 4-phase protocol + report (v1.0)
+│   ├── spur-dev/                    # Daily-workflow umbrella: planning + execution (v1.1)
 │   ├── spur-features/               # Companion reference for `spur feature` verbs (v1.0)
-│   ├── spur-plan/                   # Front-half planning pipeline, steps 3–6 (v1.0.0)
+│   ├── spur-plan/                   # Front-half planning pipeline (thin stub) (v1.0.0)
 │   ├── spur-rules/                  # Constraint-rule gate lifecycle (v2.0)
 │   ├── spur-tasks/                  # Companion reference for `spur task` verbs (v1.1)
+│   ├── spur-tdd/                    # TDD workflow companion (v1.0)
 │   └── spur-workflows/              # Dual-mode workflow engine lifecycle (v1.0)
 ├── commands/                        # Slash command definitions (18)
 ├── agents/                          # Expert subagent definitions (5)
@@ -38,12 +41,15 @@ plugins/sp/
 
 | Skill | Version | Platforms | Domain |
 |-------|---------|-----------|--------|
-| `spur-dev` | 1.0 | claude-code, codex, antigravity, opencode, openclaw | The fat daily-workflow umbrella — drives the full planning-to-execution pipeline: intake → feature create → AC generation → decomposition → batch-create → pipeline run → HITL gating |
-| `spur-plan` | 1.0.0 | claude-code, codex, antigravity, opencode, openclaw | Front-half planning pipeline (steps 3–6) — phasing, feature-ID derivation, design-doc generation; hands off to `spur-dev` (steps 7–12) |
+| `spur-dev` | 1.1 | claude-code, codex, antigravity, opencode, openclaw | The fat daily-workflow umbrella — drives the full planning-to-execution pipeline: intake → feature create → AC generation → decomposition → batch-create → design-doc (Step 5.5) → pipeline run → HITL gating |
+| `spur-plan` | 1.0.0 | claude-code, codex, antigravity, opencode, openclaw | Front-half planning pipeline — **thin stub placeholder**; `sp:spur-dev` owns the full planning+execution narrative and `/sp:dev-plan` delegates directly to it |
+| `code-verification` | 1.0 | claude-code, codex, antigravity, opencode, openclaw | Requirements-traceability verdict (PASS/PARTIAL/FAIL) + SECU code review — backs `/sp:dev-verify` and `/sp:dev-review` |
+| `dogfood-testing` | 1.0 | claude-code, codex, antigravity, opencode, openclaw | Dogfood backbone — drives a testee end-to-end with bounded auto-fix, a live monitor ledger, and a structured report; backs `/sp:dev-dogfood` |
 | `spur-tasks` | 1.1 | claude-code, codex, antigravity, opencode, openclaw | Companion reference for `spur task` CLI verbs — create (template variants), update, batch-create, record, check, resolve, refresh |
 | `spur-features` | 1.0 | claude-code, codex, antigravity, opencode, openclaw | Companion reference for `spur feature` CLI verbs — create, show, update, list, move, refresh, check |
 | `spur-rules` | 2.0 | claude-code, codex, antigravity, opencode, openclaw | Constraint-rule gate lifecycle — run presets, author rules, fine-tune severity/glob/exemptions, validate files, extend the engine (`@gobing-ai/ts-rule-engine`) |
 | `spur-workflows` | 1.0 | claude-code, codex, antigravity, opencode, openclaw | Dual-mode workflow engine lifecycle — choose state-machine vs transition-flow, author YAML, validate, run, trace, refine (`@gobing-ai/ts-dual-workflow-engine`) |
+| `spur-tdd` | 1.0.0 | claude-code, codex, antigravity, opencode, openclaw | TDD workflow companion — red-green-refactor guidance for the execution half |
 | `brainstorm` | 1.0.0 | claude-code, codex, antigravity, opencode, openclaw | Structured ideation workflow — generate solution options with trade-offs, confidence scoring; delegates verification to `cc:anti-hallucination` |
 | `daily-summary` | 1.0.0 | claude-code, codex, antigravity, opencode, openclaw | Daily summary report generator — orchestrates ccusage CLI + git history into structured markdown |
 | `doc-evolve` | 1.0 | claude-code, codex, antigravity, opencode, openclaw | Key-document evolution per `docs/99_PROJECT_CONSTITUTION.md` — drift audits, same-commit sync checks, frontmatter-contract verification, lesson-append |
@@ -64,7 +70,7 @@ There are **18 commands**, organized by the CLI surface they wrap:
 
 | Prefix | Count | Delegates To | Purpose |
 |--------|-------|-------------|---------|
-| `dev-*` | 11 | `sp:spur-dev` (9), `sp:code-verification` (2) | The dev-workflow surface — `dev-plan`, `dev-run`, `dev-new-task`, `dev-refine`, `dev-review`, `dev-verify`, `dev-unit`, `dev-fixall`, `dev-gitmsg`, `dev-changelog`, `dev-handover` |
+| `dev-*` | 12 | `sp:spur-dev` (4), `sp:code-verification` (2), `sp:brainstorm` (1), `sp:dogfood-testing` (1), inline (4) | The dev-workflow surface — `dev-plan`, `dev-run`, `dev-refine`, `dev-unit` (→ spur-dev); `dev-verify`, `dev-review` (→ code-verification); `dev-brainstorm` (→ brainstorm); `dev-dogfood` (→ dogfood-testing); `dev-fixall`, `dev-gitmsg`, `dev-changelog`, `dev-handover` (inline) |
 | `rule-*` | 3 | `sp:spur-rules` | The rule surface — `rule-add`, `rule-refine`, `rule-scan` |
 | `workflow-*` | 2 | `sp:spur-workflows` | The workflow surface — `workflow-add`, `workflow-refine` |
 | `spur-init` | 1 | `sp:doc-evolve` | Project bootstrap (`spur init`) with doc-evolve integration |
@@ -368,7 +374,7 @@ kept a **much smaller set** (18). The `cc` plugin took the meta-agent authoring 
 |-------------|-------------|--------|------|
 | `dev-plan` | `sp` | ✅ Done | Delegates to `sp:spur-dev` (plan operation) |
 | `dev-run` | `sp` | ✅ Done | Delegates to `sp:spur-dev` (run operation) |
-| `dev-new-task` | `sp` | ✅ Done | Delegates to `sp:spur-dev` (new-task) |
+| `dev-new-task` | `sp` | ❌ Retired | Superseded by `dev-brainstorm --skip-discovery --task` |
 | `dev-refine` | `sp` | ✅ Done | Delegates to `sp:spur-dev` (refine) |
 | `dev-review` | `sp` | ✅ Done | Delegates to `sp:spur-dev` (review) |
 | `dev-verify` | `sp` | ✅ Done | Delegates to `sp:spur-dev` (verify) |

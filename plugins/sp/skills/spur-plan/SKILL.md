@@ -1,6 +1,6 @@
 ---
 name: spur-plan
-description: "Front-half planning pipeline — phasing, feature-ID derivation, and design-doc generation (steps 3–6). Turns a brainstormed feature draft into an approved design doc + drafted feature list, then hands off to sp:spur-dev. Triggers on: 'plan a feature', 'design doc generation', 'derive feature id', 'planning pipeline', 'front-half workflow', 'spur-plan'."
+description: "Front-half planning pipeline placeholder — a thin stub. The full planning narrative (intake → feature → AC → decomposition → batch-create → design-doc Step 5.5) lives in sp:spur-dev, which /sp:dev-plan delegates to directly. Kept for future development of a dedicated front-half skill. Triggers on: 'planning pipeline front-end', 'spur-plan'."
 license: Apache-2.0
 version: 1.0.0
 created_at: 2026-06-19

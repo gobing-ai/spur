@@ -116,11 +116,15 @@ autonomous pipeline.
 |---|---|
 | `spur init` | [cmd_init.md](./cmd_init.md) |
 | `spur agent` | [cmd_agent.md](./cmd_agent.md) |
+| `spur history` | [cmd_history.md](./cmd_history.md) |
 | `spur rule` | [cmd_rule.md](./cmd_rule.md) |
 | `spur workflow` | [cmd_workflow.md](./cmd_workflow.md) |
 | `spur task` | [cmd_task.md](./cmd_task.md) |
 | `spur feature` | [cmd_feature.md](./cmd_feature.md) |
 | `spur message` | [cmd_message.md](./cmd_message.md) |
+| `spur team` | [cmd_team.md](./cmd_team.md) |
+| `spur status` | [cmd_status.md](./cmd_status.md) |
+| `spur migrate` | [cmd_migrate.md](./cmd_migrate.md) |
 | `spur serve` | [cmd_serve.md](./cmd_serve.md) |
 
 ### References
