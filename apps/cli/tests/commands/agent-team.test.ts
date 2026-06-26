@@ -248,7 +248,7 @@ describe('spur agent run --drain', () => {
             agent: 'claude',
             installed: true,
             version: '1',
-            authenticated: true,
+            authenticated: 'authenticated',
             usable: true,
             tier: 1 as const,
             channels: [],

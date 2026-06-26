@@ -5,6 +5,7 @@ import {
     type AgentName,
     type AgentRunResult,
     AiRunner,
+    type AuthState,
     DoctorRunner,
     getAgentShim,
     isClaudeStyleSlashCommand,
@@ -109,8 +110,12 @@ export class AgentService {
             this.ctx.output.write(
                 results
                     .map((result) => {
-                        const state = result.usable ? 'usable' : result.installed ? 'needs-auth' : 'missing';
-                        return `${state} ${result.agent} tier=${result.tier}${result.version ? ` ${result.version}` : ''}`;
+                        // `usable` is liveness-only (installed && version); auth no longer
+                        // gates runnability, so it is surfaced as its own informational
+                        // column rather than folded into the state label.
+                        const state = result.usable ? 'usable' : 'missing';
+                        const auth = renderAuth(result.authenticated);
+                        return `${state} ${result.agent} tier=${result.tier} auth=${auth}${result.version ? ` ${result.version}` : ''}`;
                     })
                     .join('\n'),
             );
@@ -330,8 +335,22 @@ export class AgentService {
             return { ok: false, exitCode: 2, message: `Unknown agent: ${name}` };
         }
         const result = await doctorRunner.runOne(canonical);
+        // Liveness-only gate (P0-a): usable = installed && version !== null. Auth is
+        // NOT consulted — a logged-out agent is runnable and fails at runtime with
+        // its own error. Fail fast before any long-running stage burns the timeout.
         if (!result.installed) {
-            return { ok: false, exitCode: 1, message: `Agent not installed: ${canonical}` };
+            return {
+                ok: false,
+                exitCode: 1,
+                message: `Agent '${canonical}' is not installed or not runnable — install it or select another agent (spur agent doctor)`,
+            };
+        }
+        if (!result.usable) {
+            return {
+                ok: false,
+                exitCode: 1,
+                message: `Agent '${canonical}' is installed but not runnable (no version detected) — reinstall or select another agent (spur agent doctor)`,
+            };
         }
         return { ok: true, agent: canonical };
     }
@@ -376,6 +395,13 @@ export class AgentService {
 
 function toJson(value: unknown): string {
     return JSON.stringify(value, null, 2);
+}
+
+/** Compact tri-state auth label for the doctor text table (display-only). */
+function renderAuth(authenticated: AuthState): string {
+    if (authenticated === 'authenticated') return 'yes';
+    if (authenticated === 'unauthenticated') return 'no';
+    return '?';
 }
 
 function stringFlag(flags: Record<string, string | boolean>, name: string, fallback: string): string {

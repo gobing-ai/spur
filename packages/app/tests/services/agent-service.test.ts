@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from 'bun:test';
-import type { AgentName, AgentRunResult } from '@gobing-ai/ts-ai-runner';
+import type { AgentName, AgentRunResult, AuthState } from '@gobing-ai/ts-ai-runner';
 import { TIER1_PRIORITY } from '@gobing-ai/ts-ai-runner';
 import { type AgentRunDeps, AgentService, type AgentServiceOutput } from '../../src/index';
 
@@ -34,12 +34,20 @@ function makeRunResult(overrides: Partial<AgentRunResult> = {}): AgentRunResult 
     };
 }
 
-function mockDoctorResult(overrides: Partial<{ installed: boolean; usable: boolean; tier: 1 | 2 }> = {}) {
+function mockDoctorResult(
+    overrides: Partial<{
+        agent: string;
+        installed: boolean;
+        authenticated: AuthState;
+        usable: boolean;
+        tier: 1 | 2;
+    }> = {},
+) {
     return {
-        agent: 'pi',
+        agent: overrides.agent ?? 'pi',
         installed: overrides.installed ?? true,
         version: '1.0.0',
-        authenticated: true,
+        authenticated: overrides.authenticated ?? 'authenticated',
         usable: overrides.usable ?? true,
         tier: (overrides.tier ?? 1) as 1 | 2,
         channels: [],
@@ -194,7 +202,7 @@ describe('AgentService.doctor', () => {
                         agent: 'claude',
                         installed: false,
                         version: null,
-                        authenticated: false,
+                        authenticated: 'unauthenticated' as AuthState,
                         usable: false,
                         tier: 1 as const,
                         channels: [],
@@ -207,7 +215,7 @@ describe('AgentService.doctor', () => {
                     agent: 'claude',
                     installed: false,
                     version: null,
-                    authenticated: false,
+                    authenticated: 'unauthenticated' as AuthState,
                     usable: false,
                     tier: 1 as const,
                     channels: [],
@@ -217,6 +225,29 @@ describe('AgentService.doctor', () => {
         } as unknown as AgentRunDeps['doctorRunner'];
         const exitCode = await svc.doctor({ json: false }, { doctorRunner });
         expect(exitCode).toBe(1);
+    });
+
+    test('text render surfaces authenticated as a yes/no/? column', async () => {
+        // Auth is informational now — all three states must render regardless of
+        // usable (a logged-out agent is usable but shows auth=no).
+        const { lines, output } = captureOutput();
+        const svc = makeService({}, output);
+        const doctorRunner = {
+            runAll: mock(() =>
+                Promise.resolve([
+                    mockDoctorResult({ agent: 'claude', authenticated: 'authenticated' }),
+                    mockDoctorResult({ agent: 'omp', authenticated: 'unauthenticated' }),
+                    mockDoctorResult({ agent: 'opencode', authenticated: 'unknown' }),
+                ]),
+            ),
+            runOne: mock(() => Promise.resolve(mockDoctorResult())),
+        } as unknown as AgentRunDeps['doctorRunner'];
+
+        const exitCode = await svc.doctor({ json: false }, { doctorRunner });
+        expect(exitCode).toBe(0);
+        expect(lines.some((l) => /auth=yes/.test(l) && /claude/.test(l))).toBe(true);
+        expect(lines.some((l) => /auth=no/.test(l) && /omp/.test(l))).toBe(true);
+        expect(lines.some((l) => /auth=\?/.test(l) && /opencode/.test(l))).toBe(true);
     });
 });
 
@@ -333,7 +364,7 @@ describe('AgentService.run agent resolution', () => {
                         agent: 'claude',
                         installed: false,
                         version: null,
-                        authenticated: false,
+                        authenticated: 'unauthenticated',
                         usable: false,
                         tier: 1 as const,
                         channels: [],
@@ -343,7 +374,7 @@ describe('AgentService.run agent resolution', () => {
                         agent: 'pi',
                         installed: true,
                         version: '1.0.0',
-                        authenticated: true,
+                        authenticated: 'authenticated',
                         usable: true,
                         tier: 1 as const,
                         channels: [],
@@ -371,7 +402,7 @@ describe('AgentService.run agent resolution', () => {
                         agent: name,
                         installed: false,
                         version: null,
-                        authenticated: false,
+                        authenticated: 'unauthenticated',
                         usable: false,
                         tier: 1 as const,
                         channels: [],
@@ -430,7 +461,7 @@ describe('AgentService.run agent resolution', () => {
                     agent: 'antigravity',
                     installed: false,
                     version: null,
-                    authenticated: false,
+                    authenticated: 'unauthenticated' as AuthState,
                     usable: false,
                     tier: 2 as const,
                     channels: [],
@@ -442,6 +473,66 @@ describe('AgentService.run agent resolution', () => {
         const deps: AgentRunDeps = { doctorRunner };
         const exitCode = await svc.run('hello', { agent: 'antigravity' }, deps);
         expect(exitCode).toBe(1);
+    });
+
+    test('--agent explicit installed-but-not-runnable (version null) → exit 1, fail fast (P0-a)', async () => {
+        // The dogfood defect: a pinned agent the doctor flags unusable (installed
+        // but no version) was dispatched anyway and burned the full stage timeout.
+        // The liveness gate must reject it BEFORE any stage runs.
+        const svc = makeService();
+        const doctorRunner = {
+            runOne: mock(() =>
+                Promise.resolve({
+                    agent: 'omp',
+                    installed: true,
+                    version: null, // broken install → not runnable
+                    authenticated: 'unauthenticated' as AuthState,
+                    usable: false,
+                    tier: 1 as const,
+                    channels: [],
+                    error: null,
+                }),
+            ),
+        } as unknown as AgentRunDeps['doctorRunner'];
+
+        const deps: AgentRunDeps = { doctorRunner };
+        const exitCode = await svc.run('hello', { agent: 'omp' }, deps);
+        expect(exitCode).toBe(1);
+    });
+
+    test('--agent explicit runnable-but-unauthenticated is NOT blocked (P0-a, auth off path)', async () => {
+        // Liveness-only gate: auth never feeds runnability. A logged-out agent
+        // is usable and must resolve ok — it fails at runtime with its own error.
+        const { errors, output } = captureOutput();
+        const runResult = makeRunResult();
+        const runner = {
+            runPromptCommand: mock(() => Promise.resolve(runResult)),
+        } as unknown as AgentRunDeps['runner'];
+        const detector = {
+            detectOne: mock(() =>
+                Promise.resolve({ name: 'omp', installed: true, version: '1.0.0', channels: [], error: null }),
+            ),
+        } as unknown as AgentRunDeps['detector'];
+        const doctorRunner = {
+            runOne: mock(() =>
+                Promise.resolve({
+                    agent: 'omp',
+                    installed: true,
+                    version: 'omp/16.1.20',
+                    authenticated: 'unauthenticated' as AuthState, // logged out
+                    usable: true, // but runnable
+                    tier: 1 as const,
+                    channels: [],
+                    error: null,
+                }),
+            ),
+        } as unknown as AgentRunDeps['doctorRunner'];
+
+        const svc = makeService({}, output);
+        const deps: AgentRunDeps = { runner, detector, doctorRunner };
+        const exitCode = await svc.run('hello', { agent: 'omp' }, deps);
+        expect(exitCode).toBe(0);
+        expect(errors.some((e) => /omp/.test(e) && /not runnable/.test(e))).toBe(false);
     });
 });
 
@@ -675,7 +766,7 @@ describe('AgentService.run Tier-2 warning', () => {
                     agent: 'openclaw',
                     installed: true,
                     version: '2.0.0',
-                    authenticated: true,
+                    authenticated: 'authenticated',
                     usable: true,
                     tier: 2 as const,
                     channels: [],
@@ -715,7 +806,7 @@ describe('AgentService.run Tier-2 warning', () => {
                     agent: 'openclaw',
                     installed: true,
                     version: '2.0.0',
-                    authenticated: true,
+                    authenticated: 'authenticated',
                     usable: true,
                     tier: 2 as const,
                     channels: [],
@@ -760,7 +851,7 @@ describe('AgentService.run codex resume', () => {
                     agent: 'codex',
                     installed: true,
                     version: '1.0.0',
-                    authenticated: true,
+                    authenticated: 'authenticated',
                     usable: true,
                     tier: 1 as const,
                     channels: [],
@@ -800,7 +891,7 @@ describe('AgentService.run codex resume', () => {
                     agent: 'codex',
                     installed: true,
                     version: '1.0.0',
-                    authenticated: true,
+                    authenticated: 'authenticated',
                     usable: true,
                     tier: 1 as const,
                     channels: [],
@@ -1019,7 +1110,7 @@ describe('AgentService.runCapture', () => {
                     agent: 'antigravity',
                     installed: true,
                     version: '2.0.0',
-                    authenticated: true,
+                    authenticated: 'authenticated',
                     usable: true,
                     tier: 2 as const,
                     channels: [],
@@ -1060,5 +1151,47 @@ describe('AgentService.resolve', () => {
         const result = await svc.resolve({ agent: 'not-an-agent' });
         expect(result.ok).toBe(false);
         if (!result.ok) expect(result.exitCode).toBe(2);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: AgentService — timeout-kill routing (P0-b)
+// ---------------------------------------------------------------------------
+// The dogfood report claimed a timed-out agent.run reported ok:true and the
+// pipeline advanced. The executor (ts-runtime) yields exitCode:null + a signal
+// on a timeout-kill; this block locks the downstream contract that such a
+// result routes to a NON-ZERO exit (never 0), so the action's `ok = exitCode
+// === 0` mapping yields ok:false and the pipeline routes to `failed`.
+
+describe('AgentService timeout-kill routing', () => {
+    function mockDepsWithResult(result: AgentRunResult): AgentRunDeps {
+        const runner = { runPromptCommand: mock(() => Promise.resolve(result)) } as unknown as AgentRunDeps['runner'];
+        const detector = {
+            detectOne: mock(() =>
+                Promise.resolve({ name: 'pi', installed: true, version: '1.0.0', channels: [], error: null }),
+            ),
+        } as unknown as AgentRunDeps['detector'];
+        const doctorRunner = {
+            runOne: mock(() => Promise.resolve(mockDoctorResult({ installed: true, usable: true }))),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        return { runner, detector, doctorRunner };
+    }
+
+    test('run: timed-out result (exitCode null + signal) → non-zero exit, never 0', async () => {
+        const svc = makeService();
+        // Exactly the shape ts-runtime returns when a subprocess is killed on
+        // timeout (process-executor.ts: exitCode ?? null, signal set).
+        const timedOut = makeRunResult({ exitCode: null, signal: 'SIGTERM', durationMs: 600_000 });
+        const exitCode = await svc.run('hello', { agent: 'pi', json: true }, mockDepsWithResult(timedOut));
+        expect(exitCode).not.toBe(0);
+        expect(exitCode).toBe(3);
+    });
+
+    test('runCapture: timed-out result → non-zero exitCode, never 0', async () => {
+        const svc = makeService();
+        const timedOut = makeRunResult({ exitCode: null, signal: 'SIGTERM' });
+        const { exitCode } = await svc.runCapture('hello', { agent: 'pi', mode: 'text' }, mockDepsWithResult(timedOut));
+        expect(exitCode).not.toBe(0);
+        expect(exitCode).toBe(3);
     });
 });

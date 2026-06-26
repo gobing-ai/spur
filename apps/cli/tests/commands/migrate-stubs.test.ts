@@ -37,13 +37,19 @@ describe('CLI migrate and extracted domains', () => {
         expect(await main(['agent', 'list'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
         expect(output.messages.at(-1)).toContain('claude');
 
-        expect(await main(['agent', 'doctor', 'antigravity', '--json'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
+        // antigravity-cli is runnable on this box, so under the liveness-only
+        // contract usable=true and doctor exits 0. (Previously the doctor
+        // conflated auth with liveness and antigravity-cli — no auth verb —
+        // reported usable:false → exit 1. That false-negative is now fixed.)
+        expect(await main(['agent', 'doctor', 'antigravity', '--json'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
         expect(JSON.parse(output.messages.at(-1) ?? '{}').agents[0]).toMatchObject({
             agent: 'antigravity-cli',
             tier: 1,
+            usable: true,
+            authenticated: 'unknown',
         });
 
-        expect(await main(['agent', 'doctor', 'antigravity'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
+        expect(await main(['agent', 'doctor', 'antigravity'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
         expect(output.messages.at(-1)).toContain('antigravity');
 
         expect(await main(['agent', 'missing'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
