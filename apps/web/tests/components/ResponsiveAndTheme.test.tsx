@@ -125,10 +125,10 @@ describe('dark mode', () => {
     });
 
     test('mobile header shows active module name', () => {
-        const { container } = renderBoard('/board/board');
+        const { container } = renderBoard('/board/tasks');
         const mobileBar = container.querySelector('.mobile-bar');
         expect(mobileBar).toBeDefined();
-        expect(mobileBar?.textContent).toContain('Board');
+        expect(mobileBar?.textContent).toContain('Tasks');
     });
 
     test('clicking theme toggle switches from light to dark', async () => {

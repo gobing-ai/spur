@@ -129,19 +129,18 @@ describe('router + module wiring', () => {
 
     test('navigating to /board/<id> renders the module component in the workspace', async () => {
         const { container } = renderAt(`/board/${modules[0]?.route}`);
-        // PlaceholderView renders this copy — proves the module element mounts under the Outlet.
-        await waitFor(() => expect(container.textContent).toContain('Welcome'));
-        expect(container.textContent).toContain('Select a module from the sidebar to get started.');
+        // The default module (Tasks) renders its board — proves the module element mounts under the Outlet.
+        await waitFor(() => expect(container.querySelector('[data-kanban-board]')).not.toBeNull());
     });
 
     test('root path redirects to the default module route', async () => {
         const { container } = renderAt('/');
-        await waitFor(() => expect(container.textContent).toContain('Welcome'));
+        await waitFor(() => expect(container.querySelector('[data-kanban-board]')).not.toBeNull());
     });
 
     test('sidebar renders one nav item per module and highlights the active one', async () => {
         const { container } = renderAt(`/board/${modules[0]?.route}`);
-        await waitFor(() => expect(container.textContent).toContain('Welcome'));
+        await waitFor(() => expect(container.querySelector('[data-kanban-board]')).not.toBeNull());
 
         const navLinks = container.querySelectorAll('nav a');
         expect(navLinks.length).toBe(modules.length);

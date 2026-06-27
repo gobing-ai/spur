@@ -1,11 +1,11 @@
-import { PlaceholderModule } from './placeholder';
 import { TaskKanbanModule } from './task-kanban';
 import type { WebModule } from './types';
 
 /**
- * Built-in modules in registration order.
+ * Built-in modules in registration order. The first entry is the default landing route
+ * (`/` redirects to `/board/<defaultModule.route>`).
  */
-const builtins: WebModule[] = [PlaceholderModule, TaskKanbanModule];
+const builtins: WebModule[] = [TaskKanbanModule];
 
 /** Read-only module list — registry entries appended in the builtins array above. */
 export const modules: ReadonlyArray<WebModule> = builtins;

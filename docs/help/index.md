@@ -110,6 +110,11 @@ graph TB
 `/sp:dev-plan` → `/sp:dev-refine` → `/sp:dev-run` → `/sp:dev-verify`, the `--next` chain, and the
 autonomous pipeline.
 
+**Extending the Spur Board (UI plugins):**
+➡️ **[How to Add a UI Plugin to the Spur Board](./how_to_extend_a_new_module_for_spur_board.md)**
+— the board is a module hub: add a self-contained React view with one directory and one registry
+line. Covers the `WebModule` contract, the RPC/UI seams, and what not to wire by hand.
+
 **Per-command reference:**
 
 | Command | Reference |
