@@ -5,6 +5,7 @@ GlobalRegistrator.register();
 import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import type { TaskSummary } from '../../../src/modules/task-kanban/types';
+import { teardownHappyDom } from '../../happy-dom';
 
 // Prevent mock leakage from other test files: TaskDetail calls api.task.show on mount
 // and imports @uiw/react-md-editor (which has heavy scheduler usage in test environments).
@@ -54,10 +55,7 @@ import KanbanColumn from '../../../src/modules/task-kanban/KanbanColumn';
 import TaskCard from '../../../src/modules/task-kanban/TaskCard';
 import TaskDetail from '../../../src/modules/task-kanban/TaskDetail';
 
-afterAll(async () => {
-    await new Promise((r) => setTimeout(r, 50));
-    await GlobalRegistrator.unregister();
-});
+afterAll(teardownHappyDom);
 
 afterEach(() => cleanup());
 

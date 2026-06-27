@@ -7,10 +7,9 @@ import { act, cleanup, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { useTaskParams } from '../../../src/modules/task-kanban/useTaskParams';
+import { teardownHappyDom } from '../../happy-dom';
 
-afterAll(async () => {
-    await GlobalRegistrator.unregister();
-});
+afterAll(teardownHappyDom);
 
 afterEach(() => cleanup());
 

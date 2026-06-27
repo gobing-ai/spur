@@ -6,6 +6,7 @@ import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import type { ComponentType } from 'react';
 import type { TaskSummary } from '../../../src/modules/task-kanban/types';
+import { teardownHappyDom } from '../../happy-dom';
 
 // ── Mock @uiw/react-md-editor: the real MDEditor's internal event system does
 //    not fire onChange under happy-dom + React 19. The mock exposes its onChange
@@ -79,9 +80,7 @@ const listCalls: number[] = [];
 
 import TaskDetail from '../../../src/modules/task-kanban/TaskDetail';
 
-afterAll(async () => {
-    await GlobalRegistrator.unregister();
-});
+afterAll(teardownHappyDom);
 
 afterEach(() => {
     cleanup();

@@ -9,6 +9,28 @@ import BoardLayout from '../../src/components/BoardLayout';
 import { resetLayoutState } from '../../src/lib/layout-state';
 import { modules } from '../../src/modules/registry';
 import { routes } from '../../src/router';
+import { teardownHappyDom } from '../happy-dom';
+
+// The router-wiring suite mounts the REAL Tasks module, whose KanbanBoard/useTasks fire
+// `api.task.list` + `api.task.folders` on mount. Without intercept those become real fetches
+// to `http://localhost:3000/api` (the no-origin fallback), which happy-dom blocks and logs as
+// "Cross-Origin Request Blocked" — passing tests, but leaked stderr noise.
+//
+// We stub `globalThis.fetch` rather than `mock.module('rpc-client')`: bun's module mocks are
+// process-global and are NOT reverted by `mock.restore()`, so mocking the client here would
+// leak into `lib/rpc-client.test.ts` (which sorts *after* this file and asserts the REAL
+// client). A fetch override is file-local and fully restored in afterAll. Spur API responses
+// are oRPC envelopes; an empty-array `{}` body keeps the board mounting with zero rows.
+const realFetch = globalThis.fetch;
+function installSilentApiFetch(): void {
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        if (url.includes('/api/')) {
+            return new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } });
+        }
+        return realFetch(input as RequestInfo, init);
+    }) as typeof fetch;
+}
 
 function renderBoard() {
     return render(
@@ -18,10 +40,15 @@ function renderBoard() {
     );
 }
 
-// File-scoped teardown: unregister only after BOTH describe blocks finish, so the second suite still
-// has a DOM (a describe-scoped afterAll would tear down happy-dom before the router suite runs).
+// Intercept API fetches for the whole file (both suites mount board components on render).
+installSilentApiFetch();
+
+// File-scoped teardown: restore the real fetch, then unregister only after BOTH describe blocks
+// finish, so the second suite still has a DOM (a describe-scoped afterAll would tear down
+// happy-dom before the router suite runs).
 afterAll(async () => {
-    await GlobalRegistrator.unregister();
+    globalThis.fetch = realFetch;
+    await teardownHappyDom();
 });
 
 describe('BoardLayout', () => {

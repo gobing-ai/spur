@@ -8,10 +8,9 @@ try {
 
 import { afterAll, afterEach, describe, expect, test } from 'bun:test';
 import { applyTheme, resolveTheme, toggleTheme } from '../../src/lib/theme';
+import { teardownHappyDom } from '../happy-dom';
 
-afterAll(async () => {
-    await GlobalRegistrator.unregister();
-});
+afterAll(teardownHappyDom);
 
 function mockMatchMedia(matchesDark: boolean) {
     globalThis.matchMedia = ((query: string) => ({

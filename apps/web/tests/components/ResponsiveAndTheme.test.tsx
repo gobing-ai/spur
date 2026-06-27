@@ -11,10 +11,9 @@ import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import BoardLayout from '../../src/components/BoardLayout';
 import { resetLayoutState } from '../../src/lib/layout-state';
+import { teardownHappyDom } from '../happy-dom';
 
-afterAll(async () => {
-    await GlobalRegistrator.unregister();
-});
+afterAll(teardownHappyDom);
 
 function renderBoard(route = '/board/tasks') {
     return render(

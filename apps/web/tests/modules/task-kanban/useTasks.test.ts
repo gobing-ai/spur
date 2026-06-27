@@ -6,6 +6,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { TaskSummary } from '../../../src/modules/task-kanban/types';
 import { createRefresh, TaskStore, useTasks } from '../../../src/modules/task-kanban/useTasks';
+import { teardownHappyDom } from '../../happy-dom';
 
 describe('createRefresh', () => {
     test('success: sets tasks and clears error', async () => {
@@ -55,9 +56,7 @@ describe('createRefresh', () => {
 });
 
 describe('useTasks', () => {
-    afterAll(async () => {
-        await GlobalRegistrator.unregister();
-    });
+    afterAll(teardownHappyDom);
 
     test('starts in loading state with empty tasks', () => {
         const listFn = async () => ({ data: [] });

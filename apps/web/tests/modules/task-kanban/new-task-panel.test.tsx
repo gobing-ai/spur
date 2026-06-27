@@ -5,6 +5,7 @@ GlobalRegistrator.register();
 import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import NewTaskPanel from '../../../src/modules/task-kanban/NewTaskPanel';
+import { teardownHappyDom } from '../../happy-dom';
 
 // ── api stub ────────────────────────────────────────────────────────────────
 const createCalls: Array<{ title: string; folder?: string; template?: string }> = [];
@@ -28,9 +29,7 @@ mock.module('../../../src/lib/rpc-client', () => ({
     },
 }));
 
-afterAll(async () => {
-    await GlobalRegistrator.unregister();
-});
+afterAll(teardownHappyDom);
 
 afterEach(() => {
     cleanup();

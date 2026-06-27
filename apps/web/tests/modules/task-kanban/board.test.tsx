@@ -6,6 +6,7 @@ import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import type { TaskSummary } from '../../../src/modules/task-kanban/types';
+import { teardownHappyDom } from '../../happy-dom';
 
 // ── api stub: the board imports `{ api }` from lib/rpc-client directly, so mock the module. ──
 const transitionCalls: Array<{ wbs: string; toStatus: string }> = [];
@@ -83,13 +84,7 @@ mock.module('@dnd-kit/utilities', () => ({
 const KanbanBoard = (await import('../../../src/modules/task-kanban/KanbanBoard')).default;
 const TaskFilters = (await import('../../../src/modules/task-kanban/TaskFilters')).default;
 
-afterAll(async () => {
-    // Let any pending React scheduler callback (from the lazy TaskDetail/MarkdownBody
-    // mounted by the panel tests) drain before window is torn down — otherwise a
-    // post-teardown scheduler task references window.event and throws.
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await GlobalRegistrator.unregister();
-});
+afterAll(teardownHappyDom);
 
 afterEach(() => {
     cleanup();
