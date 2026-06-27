@@ -3,7 +3,7 @@ template: standard
 schema_version: 1
 name: "Realign sp:dev-* --next step-chain so refine/run/verify reach done"
 description: ""
-status: backlog
+status: done
 type: task
 profile: standard
 feature_id: null
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-06-27T00:26:38.054Z"
-updated_at: 2026-06-27T00:45:42.170Z
+updated_at: 2026-06-27T00:55:00.501Z
 ---
 
 ## 0133. Realign sp:dev-* --next step-chain so refine/run/verify reach done
@@ -95,28 +95,78 @@ Feature: Realign sp:dev-* --next step-chain so refine/run/verify reach done
 Realigned the `--next` step-chain contract across the four execution-half commands and their two
 SSOT reference docs, and removed the stale YAML drift.
 
-| File | Change |
-|------|--------|
-| `plugins/sp/commands/dev-run.md` | `--next` no longer a full-mode usage error — it now **resolves the mode to `implement`**, transitions `todo → wip → testing` through the FSM (guards honored, no `--no-lifecycle`), and chains to `/sp:dev-verify --auto --next`. Added the review-pending stop + message. |
-| `plugins/sp/commands/dev-refine.md` | `--next` chains to `/sp:dev-run <wbs> --auto --next` (was `--mode implement`); `backlog → todo` honors the FSM guard; review-pending stop on failure. |
-| `plugins/sp/commands/dev-verify.md` | `--next` documented as terminal link acting on the **post-`--fix`** verdict; `testing → done` honors the `--strict-core` guard; review-pending stop on PARTIAL/FAIL/guard-fail. |
-| `plugins/sp/skills/spur-dev/references/execution-workflow.md` | Replaced the "full-mode `--next` is a usage error" block with the resolve-to-implement chain-link contract. |
-| `plugins/sp/skills/spur-dev/references/dev-operations.md` | §3 verify, §4 run, §5 refine `--next` descriptions updated to match the command contracts; `--auto` propagation noted. |
-| `plugins/sp/skills/spur-dev/references/cross-cutting.md` | Added "Status transitions in `--next` chains honor the FSM" — `--no-lifecycle` is pipeline-only; never add it to an interactive chain transition. |
-| `.spur/config/workflows/task-pipeline.yaml` | Synced from canonical `config/workflows/` — removed the stale `/sp:dev-implement` reference (dead command, merged into `--mode implement` in d5a512f) and the old inline-grep verdict logic. |
+| File:line | Change |
+|-----------|--------|
+| `plugins/sp/commands/dev-run.md:34` | `--next` row rewritten: advances to next step, transitions `todo → wip → testing` through the FSM (guards honored), chains to dev-verify; implies `--mode implement`. |
+| `plugins/sp/commands/dev-run.md:70-99` | `--next` chain section replaced — resolve-to-implement, FSM-honoring transitions, review-pending stop + message (was the full-mode usage-error block). |
+| `plugins/sp/commands/dev-refine.md:31` | `--next` chains to `/sp:dev-run <wbs> --auto --next` (was `--mode implement`); honors `backlog → todo` guard. |
+| `plugins/sp/commands/dev-refine.md:72-77` | Chain workflow step rewritten — no `--no-lifecycle`, review-pending stop. |
+| `plugins/sp/commands/dev-verify.md:33` | `--next` row: terminal link acting on the post-`--fix` verdict; `testing → done` `--strict-core` guard honored. |
+| `plugins/sp/commands/dev-verify.md:48-66` | `--next` chain section rewritten — post-fix PASS path + review-pending stop. |
+| `plugins/sp/skills/spur-dev/references/execution-workflow.md:98-105` | Replaced the "full-mode `--next` is a usage error" block with the chain-link contract. |
+| `plugins/sp/skills/spur-dev/references/dev-operations.md:76-94` | §3 verify / §4 run / §5 refine `--next` descriptions updated; `--auto` propagation noted. |
+| `plugins/sp/skills/spur-dev/references/cross-cutting.md:62-74` | New subsection: `--no-lifecycle` is pipeline-only; interactive chains honor the FSM. |
+| `.spur/config/workflows/task-pipeline.yaml:59-70` | Synced from canonical — removed stale `/sp:dev-implement` reference and old inline-grep verdict logic. |
 
 Notes:
-- The `apps/cli/spur-cli/config/workflows/` copy is a **gitignored build artifact** (`build:bundle`
-  regenerates it from canonical) — left untouched.
-- The runtime-loaded copies (`.spur/workflows/`, resolved via `config.yaml` `workflows.paths`) were
+- `apps/cli/spur-cli/config/workflows/` is a gitignored build artifact (`build:bundle` regenerates
+  it from canonical) — left untouched.
+- Runtime-loaded copies (`.spur/workflows/`, resolved via `config.yaml` `workflows.paths`) were
   already identical to canonical — verified via `spur workflow list --json`.
 
 Verification: `bun run lint` clean (376 files, typecheck green); `spur workflow validate` passes for
 both task-pipeline and task-lifecycle; 16/16 init+scaffold tests pass.
 ### Testing
+**Verdict: PASS** — all 9 requirements MET. Acceptance gate (`bun run lint`) green.
 
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 — chain coherence (refine→run→verify→done) | MET | `dev-refine.md:31` → `dev-run.md:34` → `dev-verify.md:33`; targets line up |
+| R2 — dev-run --next implies --mode implement (no usage error) | MET | `dev-run.md:34`, `dev-run.md:81-99` |
+| R3 — dev-refine --next chains to dev-run --auto --next | MET | `dev-refine.md:31`, `dev-refine.md:75` |
+| R4 — chains honor FSM (no --no-lifecycle in transitions) | MET | `cross-cutting.md:65`, `dev-run.md:81`, `dev-refine.md:74`, `dev-verify.md:61` |
+| R5 — guard failure stops as review-pending | MET | `dev-run.md:92`, `dev-refine.md:76`, `dev-verify.md:65` |
+| R6 — --auto propagates down the chain | MET | `dev-run.md:84`, `dev-operations.md:84,94` |
+| R7 — verify acts on post-fix verdict | MET | `dev-verify.md:33,53,58` |
+| R8 — no /sp:dev-implement reference in config/ or .spur/ | MET | grep CLEAN across both trees |
+| R9 — SSOT docs updated same commit | MET | `git show 0b0f22a`: execution-workflow.md, dev-operations.md, cross-cutting.md |
+
+Dogfood evidence (live validation during this session):
+- The `wip → testing` guard FAILED on a missing `file:line` citation in `## Solution` and stopped the
+  task at `wip` — the review-pending behavior R5 specifies. After the Solution was corrected,
+  `spur task check 0133` returned exit 0 and the transition proceeded. This proves the guard-honoring
+  chain (R4) genuinely blocks a non-compliant task instead of bypassing the gate.
+
+Gate: `bun run lint` — 376 files checked, 0 fixes, all 7 workspaces typecheck exit 0.
 ### Review
 
+Change surface: 7 markdown docs + 1 workflow YAML (synced from canonical). No executable TypeScript,
+no runtime behavior change in `packages/app` or `apps/cli`.
+
+| Priority | Severity | File | Finding | Recommendation |
+|----------|----------|------|---------|----------------|
+| P1 | blocker | — | None — no security/correctness blocker. | — |
+| P2 | major | — | None — no major finding. | — |
+| P3 | minor | — | None — no minor finding. | — |
+| P4 | nit | — | None — docs are internally consistent with the FSM edges. | — |
+
+SECU dimensions:
+
+- **Security** — no code paths, secrets, input handling, or auth surface touched. The YAML sync
+  removed a dead command reference; no new shell/eval surface.
+- **Efficiency** — docs-only; no algorithmic or runtime impact.
+- **Correctness** — the three `--next` targets form a closed chain; FSM transition names match the
+  `task-lifecycle.yaml` edges (`backlog→todo`, `todo→wip→testing`, `testing→done`). Verified against
+  the live FSM (illegal `backlog→wip` was correctly rejected during setup).
+- **Usability** — the review-pending message and post-fix verdict semantics are documented in both
+  the command files and the SSOT references, so an operator and a fresh agent read the same contract.
+
+No P1–P3 findings. The change is a documentation-and-config realignment with no security or
+efficiency exposure.
 ### References
 
 ### History
+- 2026-06-27T00:47:05.787Z backlog → todo (system)
+- 2026-06-27T00:47:07.162Z todo → wip (system)
+- 2026-06-27T00:50:50.084Z wip → testing (system)
+- 2026-06-27T00:55:00.501Z testing → done (system)
