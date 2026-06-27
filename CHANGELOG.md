@@ -1,5 +1,69 @@
 # Changelog
 
+## [0.2.6] — 2026-06-26
+
+A release focused on three surfaces: the **Spur Board web app** (Tasks as the default
+module and a documented module-hub pattern), the **`sp` dev-workflow plugin** (the
+`--next` step-chain, `--agent` overrides, and feature-level orchestration), and the
+**planning layer** (verdict/record/roster verbs and stricter gates).
+
+### New Features
+
+- **Spur Board: Tasks is the default module.** The placeholder landing module is gone;
+  opening the board lands on the Tasks kanban. A new *How to Add a UI Plugin to the Spur
+  Board* guide documents the module-hub pattern — adding a self-contained React view takes
+  one directory and one registry line, with no routing or sidebar wiring.
+- **Task Kanban board.** Tasks render as a status-grouped kanban with the active folder
+  selectable (not positional), plus a resizable right-dock task-detail panel, a New Task
+  slide-out, and inline task-body editing with Save/Cancel.
+- **Contextual workflow actions in TaskDetail.** Action buttons and a cancel-confirm modal
+  surface human-in-the-loop transitions directly from the board, backed by a new
+  `POST /tasks/{wbs}/actions` write API.
+- **`sp` dev-workflow `--next` step-chain.** `dev-refine` → `dev-run` → `dev-verify` now
+  chain via `--next`, honoring the task-lifecycle FSM (no `--no-lifecycle` in interactive
+  chains) and stopping review-pending on guard failure. `dev-run --next` implies
+  `--mode implement` instead of erroring on full mode.
+- **`--agent` override across dev-* commands.** Dev commands accept an explicit agent, and
+  `--agent` auto-resolution is now phase-aware (executor profiles). `spur agent doctor`
+  reports readiness with an aligned table, status glyph, and tri-state auth column.
+- **Feature-level orchestration.** The dev workflow can plan and run at the feature scope,
+  not just the task scope. `sp:spur-plan` and a design-doc generation mode feed planning.
+- **New dev skills & commands:** `dev-brainstorm` (grilling discovery with `--task`),
+  `/sp:dev-dogfood` (`--full` all-severity reporting), `sp:spur-tdd`, and
+  `sp:dev-gitmsg --commit`.
+
+### Improvements
+
+- **Workflow engine flags.** `--async`, `--force`, and `--no-lifecycle` on `spur workflow
+  run`; run-start plan preview and live EventBus step progress; `AbortSignal` propagated
+  through the agent subprocess chain; `spur workflow clean` finalizes orphaned runs.
+- **Centralized config loading (ADR-027).** `.spur/config.yaml` loading is centralized in
+  `spur-config`; the legacy `.spur/config.json` references are retired.
+- **UI boundary rules promoted to error.** `ui-import-seam-only` and
+  `no-daisyui-class-leak` are now `error` and run in the standing pre-check — daisyUI is
+  fully routed behind a typed `ui.ts` seam.
+- **Section-write guards & done-gate.** The workflow enforces the section matrix at done,
+  owns per-status sections, and guards phantom writes; `MarkdownDocument` deduplicates
+  sections at parse time.
+
+### Bug Fixes
+
+- **`spur task check` strictness.** `--strict-core` gate on `task check`; section-write
+  guard scoped to the exact corpus path via `resolve --strict`; parent-child roll-up gate
+  in `task check`; `Review` section accepted at `testing` status.
+- **Dead `--agent` surface removed.** The `current`/`$SPUR_AGENT` `--agent` paths and
+  stale dogfood agent docs are removed.
+- **Pipeline regression closed.** The rd3→sp dev verify-skill + completion-gate regression
+  (0105) is resolved.
+
+### Internal
+
+- Server-side implementation on Hono/oRPC across server and web (EventBus, JobQueue,
+  Scheduler, ServerModule registry, health endpoints).
+- Task-planning migration from `rd3` into the Spur planning layer (ADR-020–023).
+- Test coverage lifted above the 90% line/function threshold across CLI, server, and
+  domain; `plugins/sp` tests included in the verification gate.
+
 ## [Unreleased]
 
 ### Added
