@@ -51,17 +51,32 @@ describe('CLI migrate and extracted domains', () => {
         // antigravity-cli reports usable=true under the liveness-only contract
         // when it is runnable. (Previously the doctor conflated auth with liveness
         // and antigravity-cli — no auth verb — reported usable:false → exit 1.)
-        expect(await main(['agent', 'doctor', 'antigravity', '--json'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
+        //
+        // `doctor`'s exit code is a pure function of fleet health: usable→0, unusable→1.
+        // On a clean CI runner antigravity isn't installed, so doctor reports usable:false
+        // → exit 1; on a dev box with it installed, usable:true → exit 0. The exit-code
+        // and human-text assertions are gated on the *doctor's own* `usable` flag — the
+        // authoritative host signal — NOT `agent list` (which keys the agent as
+        // `antigravity-cli`, so `installedNames.has('antigravity')` is always false). The
+        // JSON shape (tier, agent name) is host-independent and asserted unconditionally.
+        const doctorJsonExit = await main(['agent', 'doctor', 'antigravity', '--json'], {
+            cwd,
+            output,
+            dbUrl: ':memory:',
+        });
         const doctorResult = JSON.parse(output.messages.at(-1) ?? '{}') as {
             agents: { agent: string; tier: number; usable: boolean; authenticated: string }[];
         };
         expect(doctorResult.agents[0]).toMatchObject({ agent: 'antigravity-cli', tier: 1 });
-        if (installedNames.has('antigravity')) {
+        const antigravityUsable = doctorResult.agents[0]?.usable === true;
+        expect(doctorJsonExit).toBe(antigravityUsable ? 0 : 1);
+        if (antigravityUsable) {
             expect(doctorResult.agents[0]).toMatchObject({ usable: true, authenticated: 'unknown' });
         }
 
-        expect(await main(['agent', 'doctor', 'antigravity'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
-        if (installedNames.has('antigravity')) {
+        const doctorTextExit = await main(['agent', 'doctor', 'antigravity'], { cwd, output, dbUrl: ':memory:' });
+        expect(doctorTextExit).toBe(antigravityUsable ? 0 : 1);
+        if (antigravityUsable) {
             expect(output.messages.at(-1)).toContain('antigravity');
         }
 
