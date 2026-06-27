@@ -123,8 +123,16 @@ export const taskFolderSchema = z.object({
     label: z.string().optional(),
 });
 
-/** Folders response: `{ ok: true, data: TaskFolder[] }`. */
-export const taskFoldersResponseSchema = apiSuccessSchema(z.array(taskFolderSchema));
+/**
+ * Folders response: `{ ok: true, data: TaskFolder[], activeFolder }`.
+ *
+ * `data` carries every configured folder in declaration order; `activeFolder` is the
+ * one `.spur/config.yaml` marks active (`tasks.active`). The client selects by
+ * `activeFolder` rather than guessing position — declaration order ≠ active order.
+ */
+export const taskFoldersResponseSchema = apiSuccessSchema(z.array(taskFolderSchema)).extend({
+    activeFolder: z.string().optional(),
+});
 
 /** oRPC contract for the task domain — list, show, create, transition, body. */
 export const taskContract = {

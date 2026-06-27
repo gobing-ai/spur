@@ -260,6 +260,7 @@ describe('task handlers', () => {
         const fn = handlers.folders['~orpc'].handler as unknown as () => Promise<{
             ok: boolean;
             data: Array<{ path: string; label?: string }>;
+            activeFolder?: string;
         }>;
         const result = await fn();
         expect(result.ok).toBe(true);
@@ -267,6 +268,8 @@ describe('task handlers', () => {
             { path: 'docs/tasks', label: 'Primary' },
             { path: 'docs/sprint2', label: 'Sprint 2' },
         ]);
+        // activeFolder carries tasks.active so the client never guesses by position.
+        expect(result.activeFolder).toBe('docs/tasks');
     });
 
     test('folders handler falls back to default when config missing', async () => {
@@ -291,5 +294,33 @@ describe('task handlers', () => {
         const result = await fn();
         expect(result.ok).toBe(true);
         expect(result.data).toEqual([{ path: 'docs/tasks', label: 'Primary' }]);
+    });
+
+    test('folders handler reports activeFolder even when it is not the first declared', async () => {
+        // Regression: the board must learn the active folder from `activeFolder`, not by
+        // assuming data[0]. Here `tasks.active` is the SECOND declared folder.
+        const ctx = {
+            cwd: '/test',
+            planningFolders: () => ({
+                tasksDir: 'docs/tasks2',
+                featuresDir: 'docs/features',
+                foldersConfig: {
+                    active_folder: 'docs/tasks2',
+                    folders: {
+                        'docs/tasks': { base_counter: 0, label: 'Primary' },
+                        'docs/tasks2': { base_counter: 128, label: 'Phase 2' },
+                    },
+                },
+            }),
+        } as unknown as ServerContext;
+        const handlers = createTaskHandlers(ctx);
+        const fn = handlers.folders['~orpc'].handler as unknown as () => Promise<{
+            ok: boolean;
+            data: Array<{ path: string; label?: string }>;
+            activeFolder?: string;
+        }>;
+        const result = await fn();
+        expect(result.activeFolder).toBe('docs/tasks2');
+        expect(result.data[0]?.path).toBe('docs/tasks');
     });
 });

@@ -109,12 +109,14 @@ export function createTaskHandlers(ctx: ServerContext) {
             // Derived from `.spur/config.yaml` via the context's resolved planning folders
             // (serve.ts resolves them at boot; context holds the schema-default fallback).
             // Never reads the legacy `docs/.tasks/config.jsonc` (retired, ADR-027).
+            // `activeFolder` carries `tasks.active` so the client selects the configured
+            // folder, not the first declared one (declaration order ≠ active order).
             const { foldersConfig } = ctx.planningFolders();
             const data = Object.entries(foldersConfig.folders).map(([path, cfg]) => ({
                 path,
                 label: cfg.label,
             }));
-            return { ok: true as const, data };
+            return { ok: true as const, data, activeFolder: foldersConfig.active_folder };
         }),
     };
 }

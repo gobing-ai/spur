@@ -81,13 +81,19 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
         api.task
             .folders({})
             .then((res) => {
-                const data = (res as { data?: { path: string; label?: string }[] }).data;
-                const active = data?.[0]?.path;
+                const { data, activeFolder } = res as {
+                    data?: { path: string; label?: string }[];
+                    activeFolder?: string;
+                };
+                // Prefer the server's `activeFolder` (`tasks.active` in .spur/config.yaml);
+                // fall back to the first entry only if the server omits it (older builds).
+                const active = activeFolder ?? data?.[0]?.path;
                 if (data && active !== undefined) {
                     setFolders(data);
-                    // Select the active folder (first entry from the server) so the board
-                    // reflects the configured phase folder, not the bootstrap default.
-                    setFolder((current) => (data.some((f) => f.path === current) ? current : active));
+                    // This effect runs once on mount, so `folder` is still the bootstrap
+                    // placeholder here — adopt the server's active folder unconditionally.
+                    // (User-initiated folder switches happen later via the <Select>, not here.)
+                    setFolder(active);
                 }
             })
             .catch(() => {
