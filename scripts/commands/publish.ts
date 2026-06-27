@@ -27,13 +27,21 @@ export async function publish(target: string | undefined, otp?: string): Promise
     const original = await Bun.file(manifestPath).text();
     const manifest = JSON.parse(original) as Record<string, unknown>;
 
-    // Build a name->version map from all workspace packages.
-    const wsVersions = new Map<string, string>();
+    // Build name->{version, private} map from all workspace packages. `private` marks
+    // packages that are never published — `bun build --target=bun` compiles them into
+    // the bundle, so their `workspace:*` refs must be STRIPPED from the published
+    // manifest (npm cannot resolve unpublished names) rather than version-resolved.
+    const wsInfo = new Map<string, { version?: string; private: boolean }>();
     for (const wsDir of ['apps', 'packages']) {
         const glob = new Bun.Glob(`${wsDir}/*/package.json`);
         for await (const entry of glob.scan({ cwd: repoRoot, absolute: true })) {
             const pkg = await loadJson(entry);
-            if (pkg.name) wsVersions.set(pkg.name as string, pkg.version as string);
+            if (pkg.name) {
+                wsInfo.set(pkg.name as string, {
+                    version: pkg.version as string | undefined,
+                    private: pkg.private === true,
+                });
+            }
         }
     }
 
@@ -49,10 +57,17 @@ export async function publish(target: string | undefined, otp?: string): Promise
         if (!deps) continue;
         for (const [name, range] of Object.entries(deps)) {
             if (range.startsWith('workspace:')) {
-                const version = wsVersions.get(name);
-                if (!version) throw new Error(`workspace package not found: ${name}`);
-                deps[name] = `^${version}`;
-                changed++;
+                const info = wsInfo.get(name);
+                if (info === undefined) throw new Error(`workspace package not found: ${name}`);
+                if (info.private) {
+                    // Bundled into the artifact at build time; not resolvable from npm.
+                    delete deps[name];
+                    changed++;
+                } else {
+                    if (!info.version) throw new Error(`workspace package has no version: ${name}`);
+                    deps[name] = `^${info.version}`;
+                    changed++;
+                }
             } else if (range === 'catalog:' && catalog[name]) {
                 deps[name] = catalog[name];
                 changed++;
