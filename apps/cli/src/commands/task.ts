@@ -8,13 +8,65 @@ import {
     TASK_LIFECYCLE_PROFILE,
     TaskCheckService,
     TaskService,
+    type TaskSummary,
 } from '@gobing-ai/spur-app';
 import { bundledConfigRoot, loadStructuredSpurConfig } from '@gobing-ai/spur-config/loader';
-import { extractTemplateBodies, TASK_VARIANTS, type TaskSection, taskStatusIcon } from '@gobing-ai/spur-domain';
+import {
+    extractTemplateBodies,
+    TASK_STATUSES,
+    TASK_VARIANTS,
+    type TaskSection,
+    taskStatusIcon,
+} from '@gobing-ai/spur-domain';
+import { type Colorize, makeColorize, shouldColor } from '../colors';
 import { EMBEDDED_SPUR_SCHEMAS } from '../config/embedded-schemas';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
 import { makeLifecycleAdapter } from '../workflow/make-lifecycle-adapter';
+
+/** Per-status column title for the human-readable board. */
+const STATUS_TITLE: Record<(typeof TASK_STATUSES)[number], string> = {
+    backlog: 'Backlog',
+    todo: 'Todo',
+    wip: 'WIP',
+    testing: 'Testing',
+    blocked: 'Blocked',
+    done: 'Done',
+    cancelled: 'Canceled',
+};
+
+/**
+ * Render the task list as a status-grouped board for the terminal.
+ *
+ * Built dynamically from the live `svc.list()` result — NOT coupled to the
+ * `kanban.md` file artifact (which `spur task refresh` owns). `columns` selects
+ * which status sections render: all of {@link TASK_STATUSES} for the full board,
+ * or a single status when the caller passed `--status`/`--phase` (so a filtered
+ * view shows only the matching section, not seven mostly-empty ones).
+ *
+ * Tasks within a section keep `list()` ordering and render as a plain bullet list
+ * (`•`) — a checkbox would falsely imply every task is incomplete. The board title
+ * is blue and section headers are cyan, so the hierarchy reads at a glance (no
+ * markdown/glow dependency); `color` is the identity colorizer when the stream is
+ * not a TTY, so piped output and tests stay plain text.
+ */
+function renderTaskBoard(
+    tasks: TaskSummary[],
+    boardTitle: string,
+    color: Colorize,
+    columns: readonly (typeof TASK_STATUSES)[number][],
+): string {
+    const lines: string[] = ['', `  ${color.blue(`Kanban Board — ${boardTitle}`)}`, ''];
+    for (const status of columns) {
+        const rows = tasks.filter((t) => t.status === status);
+        lines.push(`  ${color.cyan(`${taskStatusIcon(status)} ${STATUS_TITLE[status]}`)}`);
+        for (const t of rows) {
+            lines.push(`  • ${t.wbs}  ${t.name}`);
+        }
+        lines.push('');
+    }
+    return lines.join('\n');
+}
 
 /** Register the `spur task` command and its subcommands on the CLI program. */
 export function registerTaskCommand(program: Command, context: CliContext): void {
@@ -159,13 +211,22 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 });
                 if (options.json) {
                     context.output.write(toJson(tasks));
+                } else if (tasks.length === 0) {
+                    context.output.write('(no tasks)');
                 } else {
-                    if (tasks.length === 0) {
-                        context.output.write('(no tasks)');
-                    }
-                    for (const t of tasks) {
-                        context.output.write(`${t.wbs}  ${taskStatusIcon(t.status)} ${t.status.padEnd(9)}  ${t.name}`);
-                    }
+                    const { foldersConfig } = await resolvePlanningFolders(context.fs);
+                    const folderPath = options.folder ?? foldersConfig.active_folder;
+                    const label = foldersConfig.folders[folderPath]?.label;
+                    const boardTitle = label ? `${label} (${folderPath})` : folderPath;
+                    const color = makeColorize(shouldColor(context.env, process.stdout));
+                    // A status filter collapses the board to just the matching section;
+                    // an unfiltered (or non-canonical filter) view shows all columns.
+                    const requested = options.status ?? options.phase;
+                    const columns =
+                        requested !== undefined && (TASK_STATUSES as readonly string[]).includes(requested)
+                            ? [requested as (typeof TASK_STATUSES)[number]]
+                            : TASK_STATUSES;
+                    context.output.write(renderTaskBoard(tasks, boardTitle, color, columns));
                 }
             } catch (err) {
                 context.output.error(String(err));

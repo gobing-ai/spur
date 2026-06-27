@@ -236,11 +236,17 @@ describe('spur task CLI', () => {
     });
 
     // ── list ──
-    test('list prints all tasks', async () => {
+    test('list renders a status-grouped board with all columns', async () => {
         const output = createCapturedOutput();
         const exitCode = await main(['task', 'list'], { cwd, output });
         expect(exitCode).toBe(0);
-        expect(output.messages.join('')).toContain('backlog');
+        const board = output.messages.join('');
+        // WHY: the human board groups by status with a column per canonical state,
+        // so a freshly-created task (status backlog) must surface under the Backlog
+        // column header — not as a raw flat row.
+        expect(board).toContain('Kanban Board');
+        expect(board).toContain('Backlog');
+        expect(board).toMatch(/• \d{4}/);
     });
 
     test('list --status filters out non-matching tasks via --json', async () => {
@@ -266,6 +272,33 @@ describe('spur task CLI', () => {
         const exitCode = await main(['task', 'list', '--status', 'zzz-nonexistent'], { cwd, output });
         expect(exitCode).toBe(0);
         expect(output.messages.at(-1)).toContain('(no tasks)');
+    });
+
+    test('list board shows every canonical column header, even when empty', async () => {
+        // WHY: the board shape must be stable across runs, so every column header is
+        // rendered regardless of whether it holds tasks — the old `tasks list` board
+        // behavior, minus the redundant blurb/count lines.
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'list'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const board = output.messages.join('');
+        for (const col of ['Backlog', 'Todo', 'WIP', 'Testing', 'Blocked', 'Done', 'Canceled']) {
+            expect(board).toContain(col);
+        }
+    });
+
+    test('list --status collapses the board to only the matching column', async () => {
+        // WHY: a status filter should answer "what is in this column", not render the
+        // matching section among six empty ones. Fixture tasks are all created at
+        // backlog, so --status backlog shows Backlog but none of the other headers.
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'list', '--status', 'backlog'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const board = output.messages.join('');
+        expect(board).toContain('Backlog');
+        for (const col of ['Todo', 'WIP', 'Testing', 'Blocked', 'Done', 'Canceled']) {
+            expect(board).not.toContain(col);
+        }
     });
     test('resolve maps a task file path to its WBS', async () => {
         const cOut = createCapturedOutput();
