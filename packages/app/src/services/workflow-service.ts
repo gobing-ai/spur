@@ -16,7 +16,7 @@ import {
     type WorkflowDef,
     type WorkflowPersistenceAdapter,
 } from '@gobing-ai/ts-dual-workflow-engine';
-import { parseYamlObject } from '@gobing-ai/ts-runtime';
+import { createNodeFileSystem, parseYamlObject } from '@gobing-ai/ts-runtime';
 import type { HostAllowlist, HttpRequester } from '../workflow/actions/http-request';
 import { registerSpurBuiltins } from '../workflow/builtins';
 import { ObservableWorkflowAdapter, type WorkflowObservabilityBus } from '../workflow/observability';
@@ -25,6 +25,18 @@ import type { RuleService } from './rule-service';
 
 /** Workflow name that triggers a pipeline run-link (matches `config/workflows/task-pipeline.yaml`). */
 const TASK_PIPELINE_WORKFLOW = 'task-pipeline';
+
+/**
+ * Sentinel manifest prefix for embedded-schema resolution (mirrors the config loader's
+ * mechanism). ts-runtime resolves a bare package `$schema` ref by resolving
+ * `<pkg>/package.json` then joining the schema subpath; returning this sentinel as the
+ * manifest path makes the joined path start with the prefix, which the embedded reader
+ * recognizes. The NUL byte guarantees it never collides with a real filesystem path.
+ */
+const EMBEDDED_SCHEMA_PREFIX = '\0embedded-spur';
+
+/** The package whose `$schema` package-specifier refs resolve to the embedded map. */
+const SPUR_SCHEMA_MANIFEST = '@gobing-ai/spur/package.json';
 
 /** Link kind for pipeline runs in `task_run_links` (additive to `kind='lifecycle'`). */
 const PIPELINE_LINK_KIND = 'pipeline';
@@ -159,6 +171,15 @@ export interface WorkflowAppServiceContext {
      * such as the board. Persistence is unaffected whether or not it is present.
      */
     observabilityBus?(): WorkflowObservabilityBus;
+    /**
+     * Embedded Spur JSON schemas keyed by `schemas/<name>.schema.json` subpath. When
+     * present, a bundled workflow's `$schema: "@gobing-ai/spur/schemas/..."` ref is
+     * served from this map instead of resolved through `node_modules`. Required for
+     * `bun --compile` binaries (no `node_modules` at runtime) and for `validate` calls
+     * that run from a cwd outside the package tree (CI temp dirs), where
+     * `Bun.resolveSync` cannot find the owning package and would otherwise fail.
+     */
+    embeddedSchemas?(): ReadonlyMap<string, string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -177,6 +198,38 @@ export class WorkflowAppService {
         this.ctx = ctx;
     }
 
+    /**
+     * Build the embedded-schema injection for {@link loadWorkflowDef}, or `undefined`
+     * when no embedded schemas are configured (dev/runtime path: ts-runtime resolves the
+     * `$schema` ref from `node_modules`).
+     *
+     * When present, a `$schema: "@gobing-ai/spur/schemas/<name>.schema.json"` ref is
+     * served from the embedded map: the resolver maps the package manifest specifier to a
+     * sentinel path, and the file system returns the embedded schema text for any read
+     * under that sentinel. This makes validate independent of `node_modules` resolution —
+     * essential in a `--compile` binary and when the cwd is outside the package tree.
+     */
+    private embeddedSchemaOptions():
+        | { resolve: (s: string) => string; fileSystem: { readFile(p: string): Promise<string> } }
+        | undefined {
+        const embedded = this.ctx.embeddedSchemas?.();
+        if (embedded === undefined) return undefined;
+        const nodeFs = createNodeFileSystem();
+        return {
+            resolve: (specifier: string) =>
+                specifier === SPUR_SCHEMA_MANIFEST ? `${EMBEDDED_SCHEMA_PREFIX}/package.json` : specifier,
+            fileSystem: {
+                readFile: async (path: string) => {
+                    if (!path.startsWith(EMBEDDED_SCHEMA_PREFIX)) return nodeFs.readFile(path);
+                    const subpath = path.slice(EMBEDDED_SCHEMA_PREFIX.length + 1);
+                    const text = embedded.get(subpath);
+                    if (text === undefined) throw new Error(`No embedded schema registered for "${subpath}".`);
+                    return text;
+                },
+            },
+        };
+    }
+
     /** Validate a workflow YAML file. Returns a structured result instead of throwing. */
     async validate(file: string, opts: { validateSchema?: boolean } = {}): Promise<WorkflowValidateResult> {
         const absolute = resolve(this.ctx.cwd, file);
@@ -186,8 +239,10 @@ export class WorkflowAppService {
         }
 
         try {
+            const embedded = this.embeddedSchemaOptions();
             const workflow = await loadWorkflowDef(absolute, {
                 validateSchema: opts.validateSchema !== false,
+                ...(embedded !== undefined ? embedded : {}),
             });
             return { ok: true, valid: true, workflow };
         } catch (error) {

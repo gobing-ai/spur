@@ -91,6 +91,55 @@ describe('WorkflowAppService', () => {
             const result = await svc.validate('/tmp/nonexistent-svc.yaml');
             expect(result.ok).toBe(result.valid);
         });
+
+        // A bundled workflow declares `$schema: "@gobing-ai/spur/schemas/<name>.json"`.
+        // On CI the cwd is a temp dir outside the package tree, so `Bun.resolveSync`
+        // cannot find `@gobing-ai/spur` and `$schema` resolution throws → exit 1. Injecting
+        // `embeddedSchemas` must serve the schema from memory so validate is cwd-independent.
+        test('resolves a package-specifier $schema from embeddedSchemas (CI cwd-independence)', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-embedded-'));
+            const path = join(dir, 'pkg-schema.yaml');
+            await writeFile(
+                path,
+                [
+                    '"$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"',
+                    'name: embedded-flow',
+                    'kind: state-machine',
+                    'initialState: start',
+                    'states:',
+                    '  - id: start',
+                    '  - id: done',
+                    'transitions:',
+                    '  - from: start',
+                    '    to: done',
+                    'terminalStates: [done]',
+                ].join('\n'),
+            );
+
+            const schema = JSON.stringify({
+                type: 'object',
+                required: ['name'],
+                properties: { name: { type: 'string' } },
+            });
+            const embeddedSchemas = new Map([['schemas/state-machine-workflow.schema.json', schema]]);
+
+            const svc = new WorkflowAppService({ ...makeCtx(dir), embeddedSchemas: () => embeddedSchemas });
+            const result = await svc.validate(path);
+            expect(result.valid).toBe(true);
+
+            // A schema that rejects the workflow proves the embedded copy is actually
+            // applied, not silently skipped or falling back to disk resolution.
+            const rejecting = new Map([
+                [
+                    'schemas/state-machine-workflow.schema.json',
+                    JSON.stringify({ type: 'object', properties: { name: { enum: ['other'] } } }),
+                ],
+            ]);
+            const svcReject = new WorkflowAppService({ ...makeCtx(dir), embeddedSchemas: () => rejecting });
+            const rejected = await svcReject.validate(path);
+            expect(rejected.valid).toBe(false);
+            await rm(dir, { recursive: true });
+        });
     });
 
     describe('run', () => {

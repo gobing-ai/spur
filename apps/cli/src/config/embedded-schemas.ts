@@ -16,9 +16,13 @@
  */
 import sectionMatrixSchema from '../../schemas/section-matrix.schema.json';
 import spurConfigSchema from '../../schemas/spur-config.schema.json';
+import stateMachineWorkflowSchema from '../../schemas/state-machine-workflow.schema.json';
+import transitionFlowWorkflowSchema from '../../schemas/transition-flow-workflow.schema.json';
 
 /** Embedded Spur schemas keyed by `schemas/<name>.schema.json` subpath. */
 export const EMBEDDED_SPUR_SCHEMAS: ReadonlyMap<string, string> = new Map<string, string>([
     ['schemas/spur-config.schema.json', JSON.stringify(spurConfigSchema)],
     ['schemas/section-matrix.schema.json', JSON.stringify(sectionMatrixSchema)],
+    ['schemas/state-machine-workflow.schema.json', JSON.stringify(stateMachineWorkflowSchema)],
+    ['schemas/transition-flow-workflow.schema.json', JSON.stringify(transitionFlowWorkflowSchema)],
 ]);

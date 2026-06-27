@@ -68,6 +68,9 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             agentService: () => context.agentService(),
             ruleService: () => context.ruleService(),
             hitlResponder: () => context.hitlResponder(json),
+            // Resolve bundled-workflow `$schema` refs from the embedded map rather than
+            // node_modules, so validate works in a --compile binary and from any cwd.
+            embeddedSchemas: () => EMBEDDED_SPUR_SCHEMAS,
             ...(observabilityBus ? { observabilityBus: () => observabilityBus } : {}),
         });
 
