@@ -1,0 +1,42 @@
+# Enforce draining React's scheduler before tearing down happy-dom in web tests.
+#
+# WHY: React 19's scheduler defers render work onto a macrotask (MessageChannel →
+# performWorkUntilDeadline). A web test's `afterAll` that calls
+# `GlobalRegistrator.unregister()` directly removes `globalThis.window` while that
+# work may still be queued; the deferred callback then fires with no `window` and
+# throws `ReferenceError: window is not defined`, surfacing as bun's "Unhandled
+# error between tests". It is timing-dependent — a fast dev box drains the queue
+# before teardown, a loaded CI runner does not — so it passes locally and fails
+# only in CI. (Real incident: task-detail.test.tsx, 1 CI-only error.)
+#
+# FIX: route teardown through the shared `teardownHappyDom` helper
+# (apps/web/tests/happy-dom.ts), which unmounts, yields macrotasks so the scheduler
+# drains while `window` still exists, and only then unregisters. Use it as the
+# `afterAll` body in every web React test:  `afterAll(teardownHappyDom);`
+#
+# The helper itself is the one legitimate caller of `unregister()` and is excluded.
+# Severity is `warning`: convert to the helper or justify, not an automatic block.
+include:
+  - "apps/web/tests/**/*.test.ts"
+  - "apps/web/tests/**/*.test.tsx"
+exclude:
+  - "**/node_modules/**"
+  - "**/dist/**"
+  # The shared teardown helper is the sanctioned place that calls unregister().
+  - "apps/web/tests/happy-dom.ts"
+
+rules:
+  - id: happy-dom-teardown-via-helper
+    description: >
+      Do not call `GlobalRegistrator.unregister()` directly in a web test. React 19
+      schedules render work on a macrotask; unregistering happy-dom before it drains
+      removes `window` and throws "window is not defined" — a CI-only, timing-
+      dependent failure. Use `afterAll(teardownHappyDom)` from apps/web/tests/happy-dom.ts,
+      which drains the scheduler before tearing the DOM down.
+    severity: warning
+    evaluator:
+      type: rg
+      config:
+        # Match the call anywhere on a line (it usually sits inside an afterAll body),
+        # so both `await GlobalRegistrator.unregister()` and a bare call are caught.
+        pattern: "GlobalRegistrator\\.unregister\\("

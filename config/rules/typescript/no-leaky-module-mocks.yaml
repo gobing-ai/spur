@@ -8,33 +8,63 @@
 # but fail only in CI — exactly the 51-failure regression in
 # apps/cli/tests/commands/{command,content-command-modules}.test.ts.
 #
-# FIX: prefer `spyOn(namespaceImport, 'export')` over `mock.module()` — spyOn
-# IS reverted by `mock.restore()`/`mockRestore()` in afterEach, so it cannot
-# leak across files. Reserve `mock.module()` for cases that genuinely need it
-# (preventing import-time side effects), and only via `--preload`, where the
-# global scope is intentional. This rule is a `warning`, not an `error`:
-# treat a hit as "justify or convert," not an automatic block.
+# SCOPE: only FIRST-PARTY mocks (relative `./`/`../` or `@gobing-ai/*` specifiers)
+# are flagged. A `mock.module()` only leaks harmfully when another test file
+# statically imports the SAME module expecting the real implementation — which only
+# happens for the project's own modules. Third-party module swaps (e.g. `mermaid`,
+# `@dnd-kit/core`, `@uiw/react-md-editor`) are never asserted-real by another test,
+# so they cannot cause this failure and are intentionally NOT flagged.
+#
+# FIX: prefer `spyOn(namespaceImport, 'export')` over `mock.module()` — spyOn IS
+# reverted by `mock.restore()`/`mockRestore()` in afterEach, so it cannot leak.
+# CAVEAT: spyOn does NOT work on a callable Proxy (e.g. the oRPC `api` client) —
+# property access regenerates the method, bypassing the spy and hitting the network.
+# For such modules `mock.module()` is the only working option; keep it file-local and
+# ensure no later test statically imports the real module (dynamic `await import()`
+# in the reader is immune). This rule is a `warning`, not an `error`: treat a hit as
+# "justify or convert," not an automatic block.
 include:
+  # Both .ts and .tsx — the React component tests (.tsx) are where mock.module is
+  # most common, and they were previously invisible to this rule (the original globs
+  # only matched .test.ts), letting a cross-file leak ship undetected.
   - "apps/**/tests/**/*.test.ts"
+  - "apps/**/tests/**/*.test.tsx"
   - "packages/**/tests/**/*.test.ts"
+  - "packages/**/tests/**/*.test.tsx"
 exclude:
   - "**/node_modules/**"
   - "**/dist/**"
+  # These tests mock the FIRST-PARTY oRPC `api` client (`../../../src/lib/rpc-client`).
+  # That client is a callable Proxy, so spyOn cannot intercept it (the call regenerates
+  # and hits the network) — `mock.module()` is the only working mechanism. They are safe
+  # because they sort AFTER both rpc-client unit-test files (`lib/rpc-client.test.ts`,
+  # `rpc-client.test.ts`), so the override never leaks back into a real-import reader.
+  # Keep this list minimal: only files that mock a first-party module and have no
+  # spyOn-able alternative belong here. (markdown-body mocks only third-party modules —
+  # mermaid/dompurify — which the narrowed pattern no longer flags, so it is not listed.)
+  - "apps/web/tests/modules/task-kanban/board.test.tsx"
+  - "apps/web/tests/modules/task-kanban/components.test.tsx"
+  - "apps/web/tests/modules/task-kanban/new-task-panel.test.tsx"
+  - "apps/web/tests/modules/task-kanban/task-detail.test.tsx"
 
 rules:
   - id: no-leaky-mock-module
     description: >
-      Avoid `mock.module()` in bun:test files — it is process-global and is not
-      reverted by mock.restore(), so it leaks into other test files and causes
-      CI-only, file-order-dependent failures. Use spyOn() on a namespace import
-      instead (`import * as ns; spyOn(ns, 'fn')`), restored in afterEach. Only
-      use mock.module() for unavoidable import-time mocking, loaded via
-      --preload.
+      Avoid `mock.module()` of a first-party module (relative path or @gobing-ai/*)
+      in bun:test files — it is process-global, is not reverted by mock.restore(),
+      and leaks into any later test file that statically imports the same module,
+      causing CI-only, file-order-dependent failures. Prefer spyOn() on a namespace
+      import (`import * as ns; spyOn(ns, 'fn')`), restored in afterEach. If the target
+      is a callable Proxy (e.g. the oRPC api client) spyOn cannot intercept it; keep
+      the mock.module() file-local and ensure readers use dynamic `await import()`.
+      Third-party module swaps are not flagged (they never leak harmfully).
     severity: warning
     evaluator:
       type: rg
       config:
-        # Anchor to statement position (line start + optional indent) so prose
-        # mentions in comments ("// mock.module() leaks…") don't false-positive.
-        pattern: "^\\s*mock\\.module\\("
+        # First-party only: line-anchored `mock.module(` whose specifier starts with a
+        # relative path (`.`) or the `@gobing-ai/` scope. Third-party bare specifiers
+        # (mermaid, @dnd-kit/*, @uiw/*) are excluded — they cannot cause the leak. The
+        # line anchor keeps prose mentions in comments from false-positiving.
+        pattern: "^\\s*mock\\.module\\(\\s*['\"](\\.|@gobing-ai/)"
         flags: "m"
