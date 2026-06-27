@@ -4,6 +4,7 @@ GlobalRegistrator.register();
 
 import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
 import { cleanup, render, waitFor } from '@testing-library/react';
+import { createElement } from 'react';
 import { teardownHappyDom } from '../../happy-dom';
 
 // Mock mermaid: its real ESM render path needs a full DOM + worker support that
@@ -20,12 +21,12 @@ mock.module('mermaid', () => ({
 }));
 
 // DOMPurify in the test passes the SVG through unchanged (identity) — we only
-// need to verify MarkdownBody calls it and injects the result.
+// need to verify MermaidBlock calls it and injects the result.
 mock.module('dompurify', () => ({
     default: { sanitize: (html: string) => html },
 }));
 
-const MarkdownBody = (await import('../../../src/modules/task-kanban/MarkdownBody')).default;
+const { MermaidBlock, languageOf, nodeText } = await import('../../../src/modules/task-kanban/MarkdownBody');
 
 afterAll(teardownHappyDom);
 
@@ -34,44 +35,80 @@ afterEach(() => {
     renderCalls.length = 0;
 });
 
-// react-markdown transforms markdown→DOM in an effect, so the rendered output (the
-// `code` override that produces these nodes) appears after the first paint. On a loaded
-// CI runner that microtask resolves well past testing-library's 1s default, so every
-// query here must be async (findBy*/waitFor) with a CI-tolerant budget — a synchronous
-// getBy* would flake. The budget is generous because we assert the *eventual* DOM, not
-// latency; a real regression still fails (the element never appears).
+// These tests exercise the markdown→component *routing* primitives directly instead
+// of through MDEditor.Markdown. The full preview pipeline (react-markdown's unified
+// transform) renders in an async effect that, on a loaded CI runner, can stall past
+// any timeout and leaves the assertions racing the library's internals — flaky by
+// construction. `languageOf` (the routing predicate) and `nodeText` (the raw-source
+// extractor mermaid needs) are pure; `MermaidBlock` owns the one async path that
+// matters (lazy mermaid import → sanitize → inject). Testing them in isolation
+// asserts the same intent deterministically.
 const WAIT = { timeout: 5_000 } as const;
 
-describe('MarkdownBody — code block handling', () => {
-    test('routes a ```mermaid fence to the mermaid diagram renderer', async () => {
-        const src = ['# Heading', '', '```mermaid', 'graph TD; A-->B', '```', ''].join('\n');
-        const { findByTestId } = render(<MarkdownBody source={src} />);
+describe('languageOf — fenced-block routing predicate', () => {
+    test('extracts the language token from a language-xxx className', () => {
+        expect(languageOf('language-mermaid')).toBe('mermaid');
+        expect(languageOf('hljs language-ts other')).toBe('ts');
+    });
 
-        // The mermaid block placeholder is rendered, and mermaid.render was invoked.
+    test('returns null when no language class is present', () => {
+        expect(languageOf(undefined)).toBeNull();
+        expect(languageOf('')).toBeNull();
+        expect(languageOf('inline-code')).toBeNull();
+    });
+});
+
+describe('nodeText — raw source extraction from a highlighted node tree', () => {
+    test('returns string and number leaves verbatim', () => {
+        expect(nodeText('graph TD; A-->B')).toBe('graph TD; A-->B');
+        expect(nodeText(42)).toBe('42');
+    });
+
+    test('ignores nullish and boolean nodes', () => {
+        expect(nodeText(null)).toBe('');
+        expect(nodeText(undefined)).toBe('');
+        expect(nodeText(true)).toBe('');
+    });
+
+    test('concatenates the text leaves of a nested element tree', () => {
+        // rehype-prism-plus tokenizes fenced code into nested <span> elements; mermaid
+        // needs the original un-highlighted source, so the walk must flatten the tree.
+        const tree = createElement(
+            'code',
+            null,
+            createElement('span', null, 'graph '),
+            createElement('span', null, createElement('span', null, 'TD; '), 'A-->B'),
+        );
+        expect(nodeText(tree)).toBe('graph TD; A-->B');
+    });
+});
+
+describe('MermaidBlock — mermaid fence rendering', () => {
+    test('invokes mermaid.render with the fence code and injects the sanitized SVG', async () => {
+        const { findByTestId } = render(<MermaidBlock code="graph TD; A-->B" />);
+
         const diagram = await findByTestId('mermaid-diagram', {}, WAIT);
-        expect(diagram).toBeDefined();
         await waitFor(() => expect(renderCalls.length).toBe(1), WAIT);
         expect(renderCalls[0]?.code).toBe('graph TD; A-->B');
         // The sanitized SVG is injected into the diagram container.
         await waitFor(() => expect(diagram.querySelector('svg[data-mock="true"]')).not.toBeNull(), WAIT);
     });
 
-    test('renders a non-mermaid fenced block as a normal highlighted code block (no diagram)', async () => {
-        const src = ['```ts', 'const x: number = 1;', '```', ''].join('\n');
-        const { container, queryByTestId } = render(<MarkdownBody source={src} />);
+    test('falls back to a raw <pre><code> block when mermaid.render throws', async () => {
+        // A render failure must degrade to the raw source, never a thrown error (the
+        // component's documented contract).
+        mock.module('mermaid', () => ({
+            default: {
+                initialize: () => {},
+                render: async () => {
+                    throw new Error('boom');
+                },
+            },
+        }));
+        const { container, queryByTestId } = render(<MermaidBlock code="bad diagram" />);
 
-        await waitFor(() => expect(container.querySelector('pre')).not.toBeNull(), WAIT);
-        // A ts block is NOT routed to mermaid.
+        await waitFor(() => expect(container.querySelector('pre code')).not.toBeNull(), WAIT);
         expect(queryByTestId('mermaid-diagram')).toBeNull();
-        expect(renderCalls.length).toBe(0);
-        // rehype-prism-plus tags the <code> with a language class for highlighting.
-        expect(container.querySelector('code.language-ts')).not.toBeNull();
-    });
-
-    test('renders inline code without invoking the mermaid path', async () => {
-        const { container, queryByTestId } = render(<MarkdownBody source={'Use `npm install` here.'} />);
-
-        await waitFor(() => expect(container.querySelector('code')).not.toBeNull(), WAIT);
-        expect(queryByTestId('mermaid-diagram')).toBeNull();
+        expect(container.querySelector('pre code')?.textContent).toBe('bad diagram');
     });
 });

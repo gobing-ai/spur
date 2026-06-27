@@ -12,7 +12,7 @@ import { MDEditor } from '@/ui';
  * of mermaid's own `securityLevel: 'strict'`. Render failures fall back to the
  * raw source, never a thrown error.
  */
-function MermaidBlock({ code }: { code: string }) {
+export function MermaidBlock({ code }: { code: string }) {
     const id = useId().replace(/:/g, '');
     const [svg, setSvg] = useState<string | null>(null);
     const [error, setError] = useState(false);
@@ -58,7 +58,7 @@ type CodeProps = {
 };
 
 /** Extract the language token from a `language-xxx` className, or null. */
-function languageOf(className: string | undefined): string | null {
+export function languageOf(className: string | undefined): string | null {
     const match = (className ?? '').match(/language-(\w+)/);
     return match?.[1] ?? null;
 }
@@ -70,7 +70,7 @@ function languageOf(className: string | undefined): string | null {
  * code block's `children` is no longer a bare string. Mermaid needs the raw
  * un-highlighted source, so we walk the tree and concatenate its text leaves.
  */
-function nodeText(node: React.ReactNode): string {
+export function nodeText(node: React.ReactNode): string {
     if (node == null || typeof node === 'boolean') return '';
     if (typeof node === 'string' || typeof node === 'number') return String(node);
     if (Array.isArray(node)) return node.map(nodeText).join('');
