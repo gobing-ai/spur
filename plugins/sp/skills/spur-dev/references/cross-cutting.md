@@ -59,6 +59,20 @@ Never edit a task or feature file directly. Every mutation goes through:
 | Create a feature | `spur feature create` |
 | Batch create tasks | `spur task batch-create --file <json>` |
 
+## Status transitions in `--next` chains honor the FSM
+
+The interactive `--next` step-chain (`dev-refine → dev-run → dev-verify → done`) moves a task's
+status with `spur task update <wbs> <status>` **without `--no-lifecycle`**, so the lifecycle guards
+run: `wip → testing` invokes `spur task check`, `testing → done` invokes
+`spur task check --strict-core`. A guard failure **stops the chain as review-pending** — leave the
+task at its current status, surface the blocking finding, do not advance. This is the gate that
+keeps a malformed task out of `testing`/`done`.
+
+`--no-lifecycle` is **pipeline-only**: `task-pipeline.yaml` suppresses lifecycle-run creation
+because it runs the equivalent checks as its own workflow transitions (and to avoid orphaned
+lifecycle runs). Never add `--no-lifecycle` to an interactive chain transition — doing so bypasses
+the very guard the chain relies on for its review-pending stop.
+
 ## Section-editing workflow
 
 The dominant agent write pattern (hot path 2):

@@ -28,10 +28,10 @@ Pick a task and run it. Two modes:
 | Argument | Description | Default |
 |----------|-------------|---------|
 | `wbs` | Task WBS number (required, positional) | (required) |
-| `--mode <full\|implement>` | `full` drives the complete pipeline; `implement` does only the implement step | `full` |
+| `--mode <full\|implement>` | `full` drives the complete pipeline; `implement` does only the implement step. **`--next` forces `implement`** regardless of this flag. | `full` |
 | `--agent <name\|auto>` | Spawn the pipeline steps under a specific agent. Omit (the default) → the spawned `agent.run` steps use the configured default executor (`omp`). **Current-agent execution is not expressible** on the pipeline surface (the FSM runs subprocesses). | (configured default — `omp`) |
 | `--auto` | Skip the HITL approval gate (full mode) or skip confirmations (implement mode) | off |
-| `--next` | On success, auto-transition to `testing` and invoke `/sp:dev-verify <wbs> --next`. **`--mode implement` only** — a usage error in full mode (see below). | off |
+| `--next` | Advance the task to its next pipeline step. On success, transition `todo → wip → testing` through the lifecycle FSM (guards honored) and invoke `/sp:dev-verify <wbs> --auto --next`. **Implies `--mode implement`** — see below. | off |
 
 ## Behavior
 
@@ -67,26 +67,36 @@ writing code, before yielding, the implement agent MUST:
    ```
 3. Write **only when the section is bare** — do not clobber a hand-authored change-map.
 
-## `--next` chain (`--mode implement` only)
+## `--next` chain — advance to the next step
+
+`--next` makes this command **one link in the linear execution chain**
+(`refine → run → verify → done`), not the whole-pipeline driver. It always operates on the
+**implement** step: when `--next` is present, the mode resolves to `implement` even if `--mode full`
+was passed (full mode runs every step itself, so there is nothing to *advance to* — but rather than
+reject the operator's typed flag, `--next` reinterprets it as "run the implement step, then hand
+off"). This makes `/sp:dev-run <wbs> --auto --next` work as the headline chain link.
 
 When `--next` is set and implementation succeeds:
 
-1. Transition: `spur task update <wbs> testing --no-lifecycle`
-2. Invoke: `/sp:dev-verify <wbs> --next --auto` (auto-forwarding `--auto` if it was set)
-3. On failure: stop — surface the error, leave task at current status, do NOT invoke dev-verify
-
-`--next` with `--mode full` is a **usage error** — full mode runs all pipeline stages itself, so
-"advance one stage then chain" has no meaning. Silently ignoring a flag the operator typed is a
-worse failure mode than rejecting it.
-
-**When `--next` is passed in full mode, reject before doing anything else** — print the error and
-stop, do not launch the pipeline:
+1. **Transition through the FSM (guards honored — no `--no-lifecycle`):**
+   - `spur task update <wbs> wip` — the `todo → wip` guard is `always`; passes.
+   - `spur task update <wbs> testing` — the `wip → testing` guard runs `spur task check <wbs>`.
+2. **On a clean transition:** invoke `/sp:dev-verify <wbs> --auto --next` (`--auto` propagates down
+   the whole chain).
+3. **On a guard failure — stop as review-pending:** leave the task at its current status, surface
+   the blocking reason (e.g. a missing `## Solution` section that fails `spur task check`), and do
+   NOT invoke dev-verify. The chain halts here for the operator to resolve, exactly like the
+   pipeline's precheck/HITL gates.
 
 ```
-error: --next is invalid in full mode (full mode runs all stages; there is nothing to advance to).
-       To run one stage and chain, use: /sp:dev-run <wbs> --mode implement --next
-       To run the whole pipeline, drop --next: /sp:dev-run <wbs>
+review pending — wip → testing guard failed for <wbs>
+  spur task check reported: <blocking finding, e.g. "## Solution section is empty">
+  task left at wip. Resolve the finding, then re-run: /sp:dev-run <wbs> --auto --next
 ```
+
+Honoring the guard is the point: the FSM is what stops a malformed task from sliding into `testing`
+and then `done`. Bypassing it with `--no-lifecycle` (as the pipeline does for its own internal
+transitions) would defeat the review-pending stop the chain exists to provide.
 
 ## Implementation
 

@@ -56,17 +56,18 @@ states:
   - id: implement
     description: >
       Move the task to `wip` (via the normal verb — lifecycle guards apply, R3),
-      then run agent-driven implementation via /sp:dev-implement. NOTE: this step
-      must NOT call /sp:dev-run — that command DRIVES this pipeline, so calling it
-      here recurses. /sp:dev-implement is the single-step implement entry.
+      then run agent-driven implementation via /sp:dev-run --mode implement.
+      NOTE: this step must NOT call /sp:dev-run in full mode (the default) —
+      that command DRIVES this pipeline, so calling it here recurses.
+      --mode implement is the single-step implement entry.
     onEnter:
       - kind: shell
         options:
-          command: "${vars.spurBin} task update ${vars.wbs} wip"
+          command: "${vars.spurBin} task update ${vars.wbs} wip --no-lifecycle"
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: /sp:dev-implement ${vars.wbs} --auto
+          input: /sp:dev-run --mode implement ${vars.wbs} --auto
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: test
@@ -116,13 +117,7 @@ states:
           answerFile: .spur/run/${vars.wbs}-verify-answer.txt
       - kind: shell
         options:
-          command: >
-            mkdir -p .spur/run &&
-            if ${vars.spurBin} task check ${vars.wbs} >/dev/null 2>&1 &&
-               grep -Eqi 'verdict[^A-Za-z]*pass|^[[:space:]]*pass\b|✅' ".spur/run/${vars.wbs}-verify-answer.txt" 2>/dev/null;
-            then V=PASS; else V=FAIL; fi;
-            printf '{"wbs":"%s","verdict":"%s","source":"pipeline-verify-step"}\n' "${vars.wbs}" "$V"
-            > ".spur/run/${vars.wbs}-verdict.json"
+          command: "${vars.spurBin} task verdict ${vars.wbs} --from-answer .spur/run/${vars.wbs}-verify-answer.txt"
 
   - id: record
     description: >
@@ -143,7 +138,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: "${vars.spurBin} task update ${vars.wbs} done"
+          command: "${vars.spurBin} task update ${vars.wbs} done --no-lifecycle"
       - kind: note
         options:
           message: "Pipeline complete for task ${vars.wbs} (done gate cleared)."

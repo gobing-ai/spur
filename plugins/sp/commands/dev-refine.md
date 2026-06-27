@@ -28,7 +28,7 @@ Refine a task's requirements by analyzing existing content for quality issues an
 | `--focus <mode>` | Predefined hint bundle that expands into domain hints (see below) | `all` |
 | `--agent <name\|auto>` | Spawn the AI-synthesis step under a specific agent via `spur agent run`. Omit (the default) to run synthesis **in the current session** — no subprocess | (in-session) |
 | `--auto` | Skip interactive Q&A — use AI synthesis only | off |
-| `--next` | On success, auto-transition `backlog → todo` and invoke `/sp:dev-run --mode implement <wbs> --next` | off |
+| `--next` | Advance the task to its next step. On success, transition `backlog → todo` through the lifecycle FSM (guard honored) and invoke `/sp:dev-run <wbs> --auto --next` | off |
 
 ### Smart Positional Detection
 
@@ -70,9 +70,12 @@ the step via `spur agent run` instead. The default never shells out.
 4. **Synthesize** → Update Background, Requirements, and Constraints sections via `spur task update --section`.
 5. **Profile** → Auto-set template/preset based on scope and complexity.
 6. **`--next` chain** → If refine succeeds (task check passes):
-   - Transition: `spur task update <wbs> todo --no-lifecycle`
-   - Invoke: `/sp:dev-run --mode implement <wbs> --next --auto` (auto-forwarding `--auto` since refine was auto)
-   - On failure: stop — surface the error, leave task at current status, do NOT invoke dev-run
+   - Transition: `spur task update <wbs> todo` — the `backlog → todo` guard is `always`; passes.
+     (No `--no-lifecycle`: the chain honors the FSM so a real guard failure stops as review-pending.)
+   - Invoke: `/sp:dev-run <wbs> --auto --next` — `--next` resolves to the implement step, which then
+     chains to dev-verify. `--auto` propagates down the whole chain.
+   - On a guard failure or refine failure: stop — surface the blocking reason, leave the task at its
+     current status, do NOT invoke dev-run (review-pending stop).
 
 ## Examples
 
@@ -84,7 +87,7 @@ the step via `spur agent run` instead. The default never shells out.
 | `/sp:dev-refine 0274 --description "CLI tool for auth"` | Add context hint |
 | `/sp:dev-refine 0274 --auto` | AI synthesis only (no interactive Q&A) |
 | `/sp:dev-refine 0274 --focus quick --auto` | Quick + auto |
-| `/sp:dev-refine 0274 --auto --next` | Auto-refine + auto-chain to dev-run |
+| `/sp:dev-refine 0274 --auto --next` | Auto-refine, then chain `→ dev-run → dev-verify → done` |
 
 ## Implementation
 

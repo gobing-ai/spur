@@ -30,7 +30,7 @@ the verdict artifact (`.spur/run/<wbs>-verdict.json`) is emitted for the pipelin
 | `--bdd` | Map `## Acceptance Criteria` scenarios to tests and fold into the verdict | off |
 | `--auto` | Skip confirmations (CI / pipeline use) | off |
 | `--force` | Bypass the terminal-status guard — verify even a `done`/`cancelled` task | off |
-| `--next` | On PASS verdict, auto-transition `testing → done`. On PARTIAL/FAIL, stop — do not advance. | off |
+| `--next` | Terminal chain link. On the (post-`--fix`) PASS verdict, transition `testing → done` through the FSM (`--strict-core` guard honored). On PARTIAL/FAIL or guard failure, stop as review-pending. | off |
 
 ## Behavior
 
@@ -46,16 +46,25 @@ runs as a spawned step; the calling agent cannot block on itself, so "current ag
 expressible**. Omit the flag → the configured default executor (`omp`) runs the verification. An
 explicit `--agent <name>` or `--agent auto` spawns that agent instead.
 
-## `--next` chain
+## `--next` chain — the terminal link
 
-When `--next` is set and the verdict is PASS:
+`--next` makes verify the last step in the `refine → run → verify → done` chain.
 
-1. Transition: `spur task update <wbs> done`
-2. Stop — end of the chain (no further command to invoke)
+When `--fix` is set, `--next` acts on the **post-fix** verdict: the fix pass repairs findings, the
+skill re-verifies (Step 10's bounded loop), and the **re-verified** verdict drives the transition.
+A `--fix all` that turns a FAIL into a PASS therefore reaches `done`; a residual UNMET after the
+bounded retry does not.
 
-When the verdict is PARTIAL or FAIL: stop — surface the verdict, leave task at current status, do NOT transition to done.
+When the (post-fix) verdict is **PASS**:
 
-`--next` is the terminal step in the refine → run → verify → done chain.
+1. Transition: `spur task update <wbs> done` — the `testing → done` guard runs
+   `spur task check <wbs> --strict-core`. **No `--no-lifecycle`:** the guard is the final
+   defense-in-depth check before `done`.
+2. Stop — end of the chain (no further command to invoke).
+
+When the verdict is **PARTIAL/FAIL**, or the `testing → done` guard fails: stop as review-pending —
+surface the verdict (or the guard's blocking finding), leave the task at its current status, do NOT
+transition to `done`.
 
 ## Implementation
 

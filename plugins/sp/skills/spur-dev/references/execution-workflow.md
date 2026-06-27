@@ -95,12 +95,14 @@ to its canonical agent name before merging; omitting the flag forwards nothing, 
 step resolves to the configured default executor (`vars.agent` defaults to `"omp"` in the
 pipeline YAML).
 
-**`--next` in full mode is a usage error — reject, do not warn-and-proceed.** When the incoming
-`$ARGUMENTS` carries `--next` and the resolved mode is `full` (the default), the flag is invalid:
-full mode runs all stages itself, so "advance one stage then chain" has no meaning. Print the
-error and the corrective command, then stop — do not launch the pipeline. Silently ignoring a flag
-the operator typed is a worse failure mode than rejecting it. (See
-`plugins/sp/commands/dev-run.md` `--next` for the exact error text.)
+**`--next` resolves to the implement step — it is a chain link, not the pipeline driver.** When the
+incoming `$ARGUMENTS` carries `--next`, the mode resolves to `implement` even if `--mode full` was
+passed (or defaulted). `--next` means "advance the task to its next step, then hand off" — it runs
+the single implement step, transitions the task through the FSM (`todo → wip → testing`, guards
+honored), and chains to `/sp:dev-verify <wbs> --auto --next`. On a guard failure it stops as
+review-pending (leave status, surface the blocking finding, do not advance). The full pipeline
+(no `--next`) still runs every stage internally and ends at `done` on its own. See
+`plugins/sp/commands/dev-run.md` `--next` for the exact behavior and the review-pending message.
 
 The pipeline (`kind: state-machine`) runs the work loop:
 
