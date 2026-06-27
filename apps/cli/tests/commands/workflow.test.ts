@@ -63,11 +63,17 @@ describe('workflow command (main)', () => {
         'basic.yaml',
     ]) {
         test(`bundled config/workflows/${wf} validates (schema resolves)`, async () => {
+            // Isolate cwd to a temp dir with no .spur/config.yaml so main() takes
+            // the lightweight no-config branch. Without this, cwd falls back to
+            // process.cwd() (the repo root, which HAS a config), triggering full
+            // app bootstrap on every validate call — environment-fragile on CI.
+            const cwd = await createTempProject();
             const output = createCapturedOutput();
             const exitCode = await main(
                 ['workflow', 'validate', join(REPO_ROOT, 'config', 'workflows', wf), '--json'],
                 {
                     output,
+                    cwd,
                     dbUrl: ':memory:',
                 },
             );

@@ -32,25 +32,38 @@ describe('CLI migrate and extracted domains', () => {
         });
 
         expect(await main(['agent', 'list', '--json'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
-        expect(JSON.parse(output.messages.at(-1) ?? '{}')).toHaveProperty('agents');
+        const agentList = JSON.parse(output.messages.at(-1) ?? '{}') as {
+            agents: { name: string; installed: boolean }[];
+        };
+        expect(agentList).toHaveProperty('agents');
+        const installedNames = new Set((agentList.agents ?? []).filter((a) => a.installed).map((a) => a.name));
 
+        // `agent list` (text) and `doctor` reach into the host agent fleet. Only
+        // assert the host-specific outcome when that agent is actually installed —
+        // CI runs on a clean Linux runner with no agent CLIs, where these would
+        // otherwise be false negatives. The command mechanics (exit 0, JSON shape)
+        // are still verified unconditionally on every environment.
         expect(await main(['agent', 'list'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
-        expect(output.messages.at(-1)).toContain('claude');
+        if (installedNames.has('claude')) {
+            expect(output.messages.at(-1)).toContain('claude');
+        }
 
-        // antigravity-cli is runnable on this box, so under the liveness-only
-        // contract usable=true and doctor exits 0. (Previously the doctor
-        // conflated auth with liveness and antigravity-cli — no auth verb —
-        // reported usable:false → exit 1. That false-negative is now fixed.)
+        // antigravity-cli reports usable=true under the liveness-only contract
+        // when it is runnable. (Previously the doctor conflated auth with liveness
+        // and antigravity-cli — no auth verb — reported usable:false → exit 1.)
         expect(await main(['agent', 'doctor', 'antigravity', '--json'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
-        expect(JSON.parse(output.messages.at(-1) ?? '{}').agents[0]).toMatchObject({
-            agent: 'antigravity-cli',
-            tier: 1,
-            usable: true,
-            authenticated: 'unknown',
-        });
+        const doctorResult = JSON.parse(output.messages.at(-1) ?? '{}') as {
+            agents: { agent: string; tier: number; usable: boolean; authenticated: string }[];
+        };
+        expect(doctorResult.agents[0]).toMatchObject({ agent: 'antigravity-cli', tier: 1 });
+        if (installedNames.has('antigravity')) {
+            expect(doctorResult.agents[0]).toMatchObject({ usable: true, authenticated: 'unknown' });
+        }
 
         expect(await main(['agent', 'doctor', 'antigravity'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
-        expect(output.messages.at(-1)).toContain('antigravity');
+        if (installedNames.has('antigravity')) {
+            expect(output.messages.at(-1)).toContain('antigravity');
+        }
 
         expect(await main(['agent', 'missing'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
         expect(output.errors.at(-1)).toMatch(/unknown command/);
