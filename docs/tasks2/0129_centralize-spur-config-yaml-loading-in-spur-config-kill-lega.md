@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Centralize .spur/config.yaml loading in spur-config; kill legacy docs/.tasks/config.jsonc"
 description: ""
-status: backlog
+status: done
 type: task
 profile: standard
 feature_id: null
@@ -12,7 +12,7 @@ priority: P1
 tags: []
 dependencies: []
 created_at: "2026-06-26T18:31:39.063Z"
-updated_at: 2026-06-26T18:52:35.754Z
+updated_at: 2026-06-26T22:43:44.957Z
 ---
 
 ## 0129. Centralize .spur/config.yaml loading in spur-config; kill legacy docs/.tasks/config.jsonc
@@ -222,3 +222,6 @@ pulling planning semantics into the core.
 ### History
 - 2026-06-26T18:51:10.517Z backlog → wip (system)
 - 2026-06-26T18:52:35.754Z wip → backlog (system)
+- 2026-06-26T22:43:33.099Z backlog → todo (system)
+- 2026-06-26T22:43:39.369Z todo → testing (system)
+- 2026-06-26T22:43:44.957Z testing → done (system)

@@ -199,12 +199,14 @@ gate certified the prototype actually does what the AC said.
 
 ## Two cross-cutting flags
 
-**`--agent <name|inherit|auto>`** — pick which agent does the model work. Available on the
+**`--agent <name|auto>`** — pick which agent does the model work. Available on the
 model-backed commands: `dev-refine`, `dev-plan`, `dev-brainstorm` (the AC/decomposition/ideation
 synthesis), and `dev-run`, `dev-verify`, `dev-unit`, `dev-review` (the pipeline/verification steps).
-`inherit` (default) = the current agent; `auto` = resolve from the runtime; `<name>` = an explicit
-agent (e.g. `codex`). The selector flows through to the underlying `spur agent run`, so it actually
-changes who runs the model call.
+Omit the flag and the default depends on the surface: **inline** commands (`dev-refine`/`dev-plan`/
+`dev-brainstorm`/`dev-unit`) run the model step in the current session (no subprocess); **pipeline**
+commands (`dev-run`/`dev-verify`/`dev-review`) forward nothing and the spawned step resolves to the
+configured default executor (`omp`) — "current agent" is not expressible there. `auto` resolves the
+current runtime to its canonical name; `<name>` (e.g. `codex`) is an explicit spawn.
 
 > **Exception — `/sp:dev-dogfood --agent` is testee-scoped.** Because dogfood *drives* other commands,
 > its `--agent` sets the agent the **testee** runs under (forwarded into the testee invocation), not

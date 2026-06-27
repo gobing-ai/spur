@@ -12,7 +12,7 @@ priority: P1
 tags: []
 dependencies: []
 created_at: "2026-06-26T21:36:27.166Z"
-updated_at: 2026-06-26T23:44:04.238Z
+updated_at: 2026-06-26T23:53:35.289Z
 ---
 
 ## 0132. Make --agent inherit run in current session for inline /sp:dev-* commands; honest two-surface agent contract
@@ -158,68 +158,63 @@ explicitly deferred).
 - [ ] **P7.** Full gate: `bun run lint && bun run test && bun run test-cf && bun run build` green;
       `git status` clean of unintended diffs.
 ### Solution
+Change-map for the two-surface `--agent` contract. All edits landed in commit `2702e29`
+("docs(agent): honest two-surface --agent contract for /sp:dev-* commands").
 
+| File | What / Why |
+|------|------------|
+| `plugins/sp/skills/spur-dev/references/cross-cutting.md:14` | **SSOT rewrite (P1).** Replaced the dead three-value `<name>\|inherit\|auto` contract with the two-surface table: inline-default = in-session (no subprocess); pipeline-default = configured executor (`omp`), current-agent impossible; explicit = spawn on both. |
+| `plugins/sp/commands/dev-plan.md:30` | **Inline behavior (P2).** Default runs AC-gen/decomposition in-session; explicit `<name>`/`auto` spawns via `spur agent run`. Dropped `inherit`. |
+| `plugins/sp/commands/dev-refine.md:29` | **Inline behavior (P2).** Default synthesizes in-session; explicit agent shells out. |
+| `plugins/sp/commands/dev-brainstorm.md:32` | **Inline behavior (P2).** Ideation/research model calls in-session by default. |
+| `plugins/sp/commands/dev-unit.md:31` | **Inline behavior (P2).** Test generation in-session by default. |
+| `plugins/sp/commands/dev-run.md:32` | **Pipeline surface (P3) + `--next` fix.** `--agent` = pipeline command, current-agent not expressible; `--next` in full mode = usage error (not silent no-op). |
+| `plugins/sp/commands/dev-review.md:38` | **Pipeline surface (P3).** States `inherit` impossibility honestly. |
+| `plugins/sp/commands/dev-verify.md:43` | **Pipeline surface (P3).** Same two-surface framing. |
+| `plugins/sp/skills/spur-dev/references/dev-operations.md:39` | **Operation SSOT (P4).** Arg-hints + run/refine/plan rows updated; `--next`-in-full = usage error. |
+| `plugins/sp/skills/spur-dev/references/execution-workflow.md:45` | **Execution narrative (P4).** Agent-override + `--next`-rejection aligned to two-surface contract. |
+| `plugins/sp/skills/brainstorm/SKILL.md:11` | **Skill mirror (P4).** Inline-surface default reflected. |
+| `plugins/sp/skills/code-verification/SKILL.md:12` | **Skill mirror (P4).** Pipeline-surface default reflected. |
+| `plugins/sp/skills/dogfood-testing/references/report-template.md:2` | **(P4).** "Testee agent" line no longer shows `inherit (default)` as resolvable. |
+| `packages/app/tests/services/agent-service.test.ts:1` | **Dead-token regression (P5).** Verifies `current`/`inherit` → exit 2; confirms `$SPUR_AGENT` path gone. |
+
+**Verification (P7):** `bun run lint` + 1940 tests + `bun run test-cf` + `bun run build` all green (per landing commit); `spur task check 0132` PASS.
+
+**Deferred (P6):** the dogfood confirming no `omp` subprocess spawns on an inline default is inherently interactive — operator-run. The contract is skill-prose-enforced (no CLI gate), so the dogfood is the only behavioral proof.
 ### Testing
-**Verdict: PASS** — all 9 acceptance criteria MET; the PARTIAL review's 4 doc findings are already resolved in the working tree (`--fix all` found nothing to fix).
+Per-requirement traceability for the two-surface `--agent` contract (impl commit `2702e29`).
 
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 — Inline skills run default model step in-session; `spur agent run` only for explicit `<name>`/`auto` | **MET** | `dev-plan.md:30`, `dev-refine.md:29`, `dev-brainstorm.md:32`, `dev-unit.md:31` — all document in-session default + spawn-on-explicit. 7 in-session hits across the 4 inline commands. |
+| R2 — `cross-cutting.md` canonical contract rewritten (two-surface) | **MET** | `cross-cutting.md:14` "Honor `--agent` — the two-surface contract"; `:24` Inline surface; `:35` Pipeline surface. SSOT table live. |
+| R3 — All ~13 dev-* docs updated; phantom "inherit = current agent (CLI default)" removed | **MET** | `rg "inherit.*current agent.*CLI default"` → 0 hits across `plugins/sp/`, `docs/00_ADR.md`, `docs/04_DESIGN.md`. |
+| R4 — Pipeline docs state inherit = configured default + current-agent impossible | **MET** | `dev-run.md:43`, `dev-review.md:38`, `dev-verify.md:43` — 7 "not expressible/impossible/cannot block on itself" hits. |
+| R5 — Dead `current`/`inherit`/`$SPUR_AGENT` removed from resolver (verify retained) | **MET** | `agent-service.ts:345-346` — resolver handles only `auto` + explicit; `rg "SPUR_AGENT\|resolveAgentCurrent" packages/app/src/` → 0 hits. Regression test `agent-service.test.ts` retained. |
+| R6 — `report-template.md` "Testee agent" line fixed | **MET** | `report-template.md:29` — "`omitted (testee runs in current session)`"; no `inherit (default)` resolvable value. |
+| R7 — Gate green (lint + test + test-cf + build) | **MET** | Re-ran this verify: `bun run lint` exit 0 (all 5 workspace typechecks); `bun run test` → 1940 pass / 0 fail. (test-cf + build per landing commit `2702e29`.) |
+| R8 — Dogfood confirms inline default runs in-session (no `omp` subprocess) | **PARTIAL** | NOT RUN. The two-surface contract is enforced by skill prose only — there is no CLI gate asserting it. The interactive dogfood (`/sp:dev-refine <task> --auto` + `ps aux \| rg omp`) is the sole behavioral proof and has not been executed. |
 
-| AC | Status | Evidence |
-|----|--------|----------|
-| Inline default runs in-session (no subprocess) | MET | `dev-plan.md:56-61`, `dev-refine.md:59-63`, `dev-brainstorm.md:213-216`, `dev-operations.md:60/94/102/118` |
-| Inline explicit `--agent` spawns via `spur agent run` | MET | `dev-plan.md:60`, `dev-refine.md:62`, `dev-brainstorm.md:216` |
-| Pipeline default = configured executor (`omp`); current-agent impossible | MET | `dev-run.md:32/45-46/50`, `dev-verify.md:27/45-46`, `execution-workflow.md:45-51`, `code-verification/SKILL.md:76-79` |
-| Dead tokens gone (`current`/`inherit`/`$SPUR_AGENT`) | MET | grep `SPUR_AGENT\|resolveAgentCurrent` → 0 hits in `packages/app/src`; regression `agent-service.test.ts:422` asserts both exit 2 |
-| `cross-cutting.md` SSOT rewritten to two-surface contract | MET | `cross-cutting.md:14-47` — table L19-22, inline-default L24-33, pipeline-impossible L35-41 |
-| All ~13 command/skill docs updated | MET | 7 command `.md` + `dev-operations.md` rows all carry `<name\|auto>` form; grep `<name\|inherit\|auto>` → 0 hits |
-| Pipeline docs state current-agent impossible | MET | `dev-run.md:45`, `dev-verify.md:45`, `execution-workflow.md:48`, `code-verification/SKILL.md:78` |
-| `report-template.md` testee line fixed | MET | `report-template.md:29` — `omitted (testee runs in current session)` |
-| `lint + test + test-cf + build` green | MET | see checks below |
-
-
-The prior PARTIAL review flagged 4 stale doc references. All 4 are resolved in the current working tree (verified by grep + re-read):
-
-1. **execution-workflow.md** (High) — L45-51 rewritten to `--agent <name|auto>`, "current agent is not expressible on the pipeline surface", links cross-cutting.md.
-2. **brainstorm/SKILL.md** (High) — L111-116 rewritten to "default is to run synthesis in the current session"; explicit-agent-only spawn.
-3. **code-verification/SKILL.md** (High) — L76-79 rewritten to `--agent <name|auto>`, "omit to use the configured default executor omp".
-4. **report-template.md** (Medium) — L29 now reads `omitted (testee runs in current session)`.
-
-
-The review flagged 6 files in the working tree as unrelated task-folder/kanban work (`task.ts`, `task.test.ts`, `handlers.ts`, `handlers.test.ts`, `task.ts` contracts, `KanbanBoard.tsx`). These are **not** part of task 0132 and must not be swept into its commit. Confirmed: 0132 is doc+behavior only (no code in `packages/app`, no CLI flag changes).
-
-
-| Check | Status | Evidence |
-|-------|--------|----------|
-| `bun run lint` | pass | biome check + 7-workspace `tsc --noEmit`, exit 0 |
-| `bun run test` | pass | 1940 pass, 0 fail, 4958 expect() calls |
-| `bun run test-cf` | pass | spur-server Vitest 1/1 pass |
-| `bun run build` | pass | cli/server/web all built exit 0 |
-| dead-token grep | pass | `SPUR_AGENT\|resolveAgentCurrent` → 0 hits in `packages/app/src` |
-| phantom-wording grep | pass | `inherit.*current agent` → 0 hits in `plugins/` |
-| regression test | pass | `agent-service.test.ts:422` — both `current`+`inherit` exit 2 |
-
-
-AC L100 (dogfood an inline command to confirm no `omp` subprocess for the default case) is MET by code inspection: inline skills carry the "do not shell to `spur agent run` for the default" instruction directly (`dev-refine.md:59-63`, `dev-plan.md:56-61`). A live dogfood is a behavioral confirmation, not a code change; the instruction is in place and the gate is green.
-
-Verdict: PASS
+**Aggregation:** 7 MET, 1 PARTIAL, 0 UNMET → **PARTIAL**. The dogfood (R8) is the only unverified
+claim; everything else has concrete committed evidence. R8 cannot be auto-verified — it requires
+an interactive inline-command invocation and process inspection.
 ### Review
-**Verdict: PASS.** All acceptance criteria satisfied. Every finding from the prior PARTIAL verdict is resolved — the doc sweep is complete, dead tokens are confirmed gone, and the full gate is green.
+**Change type:** documentation-only (14 markdown files + 1 regression test). No runtime code, no
+input handling, no secrets surface.
 
-#### Review Findings
+**SECU dimensions:** Security — clean (no secrets/injection; test asserts exit codes only);
+Efficiency — N/A (docs); Correctness — clean (contract internally consistent, resolver matches
+docs, zero drift); Usability — clean (`--next` error gives corrective command, two-surface table
+readable).
 
-| Severity | File | Finding | Recommendation |
-|----------|------|---------|----------------|
-| P1 — fixed | `execution-workflow.md:45-51` | Pipeline SSOT contradicted the `cross-cutting.md` rewrite — still asserted the dead `<name\|inherit\|auto>` form and "current agent" default. | FIXED: rewritten to `--agent <name\|auto>`, configured-executor default, current-agent-impossible, links cross-cutting.md. |
-| P1 — fixed | `brainstorm/SKILL.md:111-116` | Inline SSOT still said `inherit = current agent (omit the flag, the CLI default)` — verbatim phantom wording AC L95 requires gone. | FIXED: "default runs synthesis in the current session"; explicit `--agent` only spawns. |
-| P1 — fixed | `code-verification/SKILL.md:76-82, 227-230` | Verify-path SSOT carried `<name\|inherit\|auto>` form. | FIXED: both agent-override blocks rewritten to `<name\|auto>` + pipeline-impossibility. |
-| P2 — fixed | `report-template.md:29` | "Testee agent" line showed `inherit (default)` as a resolvable value. | FIXED: `omitted (testee runs in current session)`. |
-| P2 — advisory | working tree (6 files) | Unrelated task-folder/kanban code (`task.ts`, `handlers.ts`, `KanbanBoard.tsx`, `contracts/task.ts`) in the diff — not part of 0132. | ADDRESSED: these remain unstaged; 0132's commit will include only doc + the regression test. Commit-hygiene note, not a deliverable defect. |
+| Priority | Finding | Dimension | Location | Disposition |
+|----------|---------|-----------|----------|-------------|
+| P1 | *(none)* | — | — | — |
+| P2 | *(none)* | — | — | — |
+| P3 | *(none)* | — | — | — |
+| P4 | **No deterministic enforcement of the in-session default.** The two-surface contract lives in skill prose; a future skill edit could silently revert it without failing any test. The R8 dogfood is the only behavioral guard. | Correctness (regression-risk) | `cross-cutting.md:14` (prose, not gated) | **Accept** — out of scope for this task; no CLI hook exists to assert skill-prose behavior. A regression test asserting "inline default does not spawn `spur agent run`" would close the gap but requires a new enforcement mechanism. |
 
-All P1/P2 findings resolved; no P3/P4 findings.
-
-#### Notes
-
-- **L100 dogfood (inline in-session confirmation):** the contract is correctly documented in the inline skill files (`dev-refine.md:59-63`, `dev-plan.md:56-61`, `dev-brainstorm.md:213-216`). The inline commands are markdown instructions with no code enforcement (by design — `cross-cutting.md:32`); behavioral confirmation is the operator's to observe via a live invocation. Not a blocker — the deliverable (doc + behavior contract) is complete and verified.
-- **Scope integrity:** 0132 touches zero `packages/app` code and zero CLI flags (Design L115, L135). Only docs + the `agent-service.test.ts` regression (already committed prior). The kanban/task-folder WIP stays unattributed.
+**`--fix` applicability:** none — documentation change, no code to repair.
 ### References
 
 ### History
