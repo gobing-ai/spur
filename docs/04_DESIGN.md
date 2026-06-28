@@ -785,13 +785,15 @@ Two primitives back the anti-hallucination migration (superskill task 0041):
 ### 7.8 `sp:dev-*` command operations
 
 The `sp:dev-*` commands back onto four skills (`sp:spur-dev`, `sp:code-verification`,
-`sp:doc-evolve`, `sp:brainstorm`) or define their procedure inline. The authoritative reference for all 11 operations —
-purpose, inputs, backing, behavior contract — is
+`sp:doc-evolve`, `sp:brainstorm`) or define their procedure inline. The authoritative reference for
+all 13 operations — purpose, inputs, backing, behavior contract — is
 [`plugins/sp/skills/spur-dev/references/dev-operations.md`](../plugins/sp/skills/spur-dev/references/dev-operations.md).
+The `runall` operation (#13) is the batch entry — it delegates the driver loop to the
+`sp:super-coder` agent per [`execution-batch.md`](../plugins/sp/skills/spur-dev/references/execution-batch.md).
 
 | Pattern | Operations | Backing |
 |---------|-----------|---------|
-| `Skill()` delegation | implement, unit, review, verify, run, refine, plan, docs, brainstorm | `sp:spur-dev`, `sp:code-verification`, `sp:doc-evolve`, `sp:brainstorm` |
+| `Skill()` delegation | implement, unit, review, verify, run, refine, plan, docs, brainstorm, runall | `sp:spur-dev`, `sp:code-verification`, `sp:doc-evolve`, `sp:brainstorm` |
 | Inline procedure | changelog, gitmsg, fixall, handover | git CLI + `spur` CLI + agent reasoning |
 
 **Brainstorm artifact exits.** `dev-brainstorm` runs the grilling interview → ideation, then lands an

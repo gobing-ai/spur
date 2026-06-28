@@ -97,6 +97,7 @@ reference for the half you're operating; do not duplicate its content here.
 | Pipeline run | execution | `spur workflow run` | [execution-workflow.md](references/execution-workflow.md) |
 | Implement / test / review / verify | execution | `sp:dev-*` operations | [dev-operations.md](references/dev-operations.md) |
 | Continue | execution | `spur feature update` / `refresh` | [execution-workflow.md](references/execution-workflow.md) |
+| Batch run | execution | `sp:super-coder` + `spur workflow run` | [execution-batch.md](references/execution-batch.md) |
 | All writes (both halves) | — | CLI-gated section editing | [cross-cutting.md](references/cross-cutting.md) |
 
 ## When to use
@@ -149,6 +150,9 @@ CLI does.
   feature create → AC → check gate → decomposition → batch-create → refine.
 - [references/execution-workflow.md](references/execution-workflow.md) — task selection →
   pipeline run → HITL surfacing → continue; pipeline-stage sequencing and `## Solution` ownership.
+- [references/execution-batch.md](references/execution-batch.md) — batch execution: resolve a task
+  set, topo-sort by dependencies, run each through `task-pipeline.yaml`, failure policy, batch
+  report. Backs `/sp:dev-runall` + the `sp:super-coder` orchestrator.
 - [references/cross-cutting.md](references/cross-cutting.md) — CLI-gated writes, the section-editing
   body-only format, the section-status matrix, check-before-write. Shared by both halves.
 

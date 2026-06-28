@@ -18,6 +18,12 @@ The execution half runs a single task through the `task-pipeline.yaml` workflow.
 pipeline drives the work; the skill interprets results, surfaces HITL gates, and decides
 next steps.
 
+> **Single-task vs batch.** This file covers the **single-task** execution half — one task through
+> `task-pipeline.yaml`. For **batch** execution (a set of tasks in dependency-correct order), see
+> **[execution-batch.md](execution-batch.md)** — it layers set resolution, topological ordering, a
+> failure policy, and a batch report on top of this same verbatim pipeline, driven by the
+> `sp:super-coder` orchestrator via `/sp:dev-runall`.
+
 This file owns **how operations sequence** in the pipeline. What each operation *does*
 (`implement`, `unit`, `review`, `verify`) is defined once in
 [dev-operations.md](dev-operations.md) — this file links to it rather than restating it.

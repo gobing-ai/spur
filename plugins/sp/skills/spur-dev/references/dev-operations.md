@@ -1,6 +1,6 @@
 ---
 name: dev-operations
-description: Unified reference for all 11 dev-* operations — purpose, inputs, backing (skill/CLI/inline), and behavior contract. The single source of truth for what each `/sp:dev-*` command does. (`implement` is covered as a sub-mode of run, #4.)
+description: Unified reference for all 13 dev-* operations — purpose, inputs, backing (skill/CLI/inline), and behavior contract. The single source of truth for what each `/sp:dev-*` command does. (`implement` is covered as a sub-mode of run, #4; `runall` is the batch operation, #13.)
 see_also:
   - spur-dev
 ---
@@ -15,15 +15,10 @@ table is the index; the per-operation sections below are the detail.
 
 | Pattern | Meaning | Commands |
 |---------|---------|----------|
-| `Skill()` | Delegates to a backing skill via `Skill(skill="<skill>", args="<op> $ARGUMENTS")`. The skill owns the procedure; the command is a thin entry point. | implement, unit, review, verify, run, refine, plan |
+| `Skill()` | Delegates to a backing skill via `Skill(skill="<skill>", args="<op> $ARGUMENTS")`. The skill owns the procedure; the command is a thin entry point. | implement, unit, review, verify, run, refine, plan, brainstorm, runall |
 | `inline` | The procedure is defined directly in the command file. No `Skill()` delegation — the command carries its own steps. | changelog, gitmsg, fixall, handover |
 
-The 7 `Skill()` commands back onto two skills: `sp:spur-dev` (planning + execution workflow) and
-`sp:code-verification` (SECU review + traceability). One additional `Skill()` command (`dev-brainstorm`)
-backs onto `sp:brainstorm` (structured ideation) and carries the two artifact exits — `--task` (one
-task) and `--feature` (validated feature with BDD AC; the front-half entry that hands off to
-`dev-plan`). The 4 `inline` commands cover git tooling and operational utilities that have no natural
-skill home — creating a skill for each would be scope creep for one-liner procedures.
+The 9 `Skill()` commands back onto three skills: `sp:spur-dev` (planning + execution workflow + batch), `sp:code-verification` (SECU review + traceability), and `sp:brainstorm` (structured ideation). The `runall` operation (#13) is `sp:spur-dev`'s batch entry — it delegates the driver loop to the `sp:super-coder` agent (the batch orchestrator) per [execution-batch.md](execution-batch.md). `dev-brainstorm` carries the two artifact exits — `--task` (one task) and `--feature` (validated feature with BDD AC; the front-half entry that hands off to `dev-plan`). The 4 `inline` commands cover git tooling and operational utilities that have no natural skill home — creating a skill for each would be scope creep for one-liner procedures.
 
 > **`dev-dogfood`** is not in this table. It is a thin `Skill()` wrapper over the **`sp:dogfood-testing`**
 > backbone skill (which owns the 4-phase dogfood protocol, the live ledger, and the report template);
@@ -45,6 +40,7 @@ skill home — creating a skill for each would be scope creep for one-liner proc
 | 10 | fixall | `dev-fixall` | `inline` | lint + test fix loop | `[--scope <path>]` |
 | 11 | handover | `dev-handover` | `inline` | structured doc generation | `"<blocker description>"` |
 | 12 | brainstorm | `dev-brainstorm` | `Skill()` | `sp:brainstorm` (`dev-brainstorm`) | `"<topic>" [--depth <basic\|detailed\|comprehensive>] [--options <n>] [--agent <name\|auto>] [--skip-discovery] [--task [<feature-id>]] [--feature [<parent-id>]] [--next]` |
+| 13 | runall | `dev-runall` | `Skill()` → agent | `sp:spur-dev` (`runall`) → `sp:super-coder` | `--tasks <selector> [--keep-going] [--auto] [--agent <name\|auto>] [--json]` |
 
 ---
 
@@ -124,6 +120,14 @@ must not be changed without updating the backing skill.
   - `--next` (with `--feature`) — on a clean `feature check`, auto-invoke `/sp:dev-plan --feature <ID>` so the planning half chains end-to-end like the execution half. Ignored without `--feature`.
   - Passing both `--task` and `--feature` is an error.
 - **Delegation:** `Skill(skill="sp:brainstorm", args="dev-brainstorm --context <decision-tree> --options <n>")`
+
+### 13. runall
+
+- **Purpose:** Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via `task-pipeline.yaml`, inspect verdicts, apply the failure policy, emit a batch report.
+- **Inputs:** `--tasks <selector>` (required — explicit WBS list, status pseudo-list, `feature:<id>`, or `ready`). `--keep-going` skips a failed task's in-batch dependents and continues independents (default halts on first failure). `--auto` sets `profile=auto` on each per-task run (skips the HITL approve gate). `--agent <name|auto>` is a **pipeline** override merged into each per-task `vars.agent` — pins the step executor, not the orchestrator; omit (default) → spawned steps use the configured default executor (`omp`); current-agent is **not expressible** (subprocess FSM). `--json` emits the report as JSON.
+- **Backing:** `sp:spur-dev` skill, `runall` operation → delegates the driver loop to the **`sp:super-coder`** agent (the batch orchestrator).
+- **Behavior:** The orchestrator reads [execution-batch.md](execution-batch.md) and drives: resolve selector → freeze set → topo-sort by `dependencies[]` (Kahn, WBS-ascending tie-break; cycle aborts) → resolve out-of-set deps by status (done → allow, else → block subtree) → run each task via `spur workflow run task-pipeline.yaml --async` + `spur workflow trace` polling → inspect terminal state + `.spur/run/<wbs>-verdict.json` → stop-the-batch default or `--keep-going` subtree skip → emit batch report. Per-task pipeline is invoked **verbatim** — no new FSM, no step edits. `--auto`/`--agent` are the only flags that cross the orchestrator→pipeline boundary (both into per-task `--vars`).
+- **Delegation:** `Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")` → `sp:super-coder` agent.
 
 ---
 

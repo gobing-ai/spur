@@ -42,6 +42,87 @@ Feature: spur-dev umbrella skill
     Given any shipped sp:dev-* command
     When its definition is inspected
     Then it parameterizes sp:spur-dev and contains no pipeline logic
+
+  # ── Batch execution (task 0141 — /sp:dev-runall + sp:super-coder) ──
+  Scenario: R1.1 Run an explicit WBS list
+    Given a set of tasks
+    When the operator selects them by explicit WBS list
+    Then exactly those tasks are resolved
+
+  Scenario: R1.2 Run a status pseudo-list
+    Given tasks with a given status
+    When the operator selects that status pseudo-list
+    Then every task with that status is resolved
+
+  Scenario: R1.3 Run a feature-scoped selection
+    Given a feature with linked tasks
+    When the operator selects feature:<id>
+    Then every task on that feature edge is resolved
+
+  Scenario: R1.4 Run the "ready" pseudo-list
+    Given tasks in todo/backlog with mixed dependency readiness
+    When the operator selects the ready pseudo-list
+    Then only dependency-satisfied tasks are resolved
+
+  Scenario: R2.1 The selected set is frozen at kickoff
+    Given a resolved set
+    When statuses change mid-batch
+    Then the working set is not re-queried
+
+  Scenario: R2.2 Tasks run in topological dependency order
+    Given an in-set dependency edge
+    When the batch runs
+    Then the dependency runs before its dependent
+
+  Scenario: R2.3 A dependency cycle aborts the batch
+    Given a dependency cycle in the set
+    When the batch is planned
+    Then it aborts before running any task
+
+  Scenario: R2.4 An unmet out-of-set dependency blocks the dependent subtree
+    Given an unmet out-of-set dependency
+    When the batch runs
+    Then the dependent subtree is blocked, independents still run
+
+  Scenario: R2.5 A satisfied out-of-set dependency is allowed
+    Given a done out-of-set dependency
+    When the batch runs
+    Then the dependent is treated as satisfied and runs
+
+  Scenario: R3.1 First pipeline failure halts the batch
+    Given a task pipeline ends in failed
+    When the default failure policy applies
+    Then the batch halts and remaining tasks are not attempted
+
+  Scenario: R3.2 --keep-going skips the failed subtree and continues
+    Given a task fails under --keep-going
+    When independents remain
+    Then the failed subtree is skipped and independents run
+
+  Scenario: R4.1 Each task runs through the standard pipeline
+    Given a task in the plan
+    When the batch runs it
+    Then it uses task-pipeline.yaml verbatim with no new FSM
+
+  Scenario: R4.2 --auto propagates the HITL profile to each task run
+    Given --auto is passed
+    When each task runs
+    Then profile=auto is set per run
+
+  Scenario: R4.3 --agent pins the per-task step executor, not the orchestrator
+    Given --agent is passed
+    When each task runs
+    Then agent is merged into per-task vars and the orchestrator is unchanged
+
+  Scenario: R5.1 super-coder drives between runs, never inside a step
+    Given sp:super-coder is the orchestrator
+    When the batch runs
+    Then it acts between runs and never inside a pipeline step
+
+  Scenario: R5.2 Batch report is emitted at completion
+    Given the batch finishes
+    When it terminates
+    Then a structured batch report is emitted
 ```
 
 ## Tasks
@@ -51,6 +132,8 @@ Feature: spur-dev umbrella skill
 | --- | ---- | ------ |
 | 0064 | W3: sp:spur-dev umbrella skill — planning and execution halves | Done |
 | 0065 | W3: sp:dev-* slash command subset and subagents | Done |
+| 0141 | Batch task execution — /sp:dev-runall + dependency-ordered driver + sp:super-coder orchestrator | done |
+| 0142 | Batch execution v2 — parallel runs (worktree isolation) + interactive within-step escalation | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
