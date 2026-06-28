@@ -120,7 +120,12 @@ When a Plan/Requirements/AC item is completed, flip `[ ]` → `[x]` in the same 
 that lands the section content. Never let a `done` task ship with unchecked boxes on completed
 work — a reader cannot tell `done` from `abandoned` by the boxes alone.
 
-Invariant: zero stray `- [ ]` entries on completed Plan/Requirements/AC items at transition time.
+Stray template-placeholder boxes (e.g. the standard template's `- [ ] Acceptance checklist item`
+or `- [ ] Implementation step`) that you did **not** author as real work must either be replaced
+with real items or removed — do not leave them as `[ ]` in a `done` task. "I only checked the real
+ones" is not compliant; the invariant is **zero** `- [ ]` lines remain.
+
+Invariant: zero `- [ ]` entries (real or placeholder) anywhere in a `done` task at transition time.
 
 ### F2 — Honest lifecycle transitions
 
@@ -164,10 +169,14 @@ Invariant: no `--from-file` staging files left in `/tmp` after the task is done.
 
 ## Dogfood mode — persist the report to `docs/dogfood/`
 
-When the operator asks this agent to execute work **as a dogfood** (any request naming "dogfood",
-"dogfood eating", "dogfood report", or asking you to self-monitor and report on the run), the
-dogfood report MUST be **persisted to disk**, not just printed in your final message. An inline-only
-report evaporates — `docs/dogfood/` is the durable evidence trail.
+**Trigger (read literally):** if the launch prompt contains the word "dogfood" — or asks you to
+"self-monitor", "report on the run", "watch the process", or produce a "report" of how execution
+went — you ARE in dogfood mode. You do not get to decide it isn't; the request decides. Treating a
+dogfood request as "execute + summarize in chat" is a **contract violation**, not a judgment call.
+
+In dogfood mode the report MUST be **persisted to disk**, not just printed in your final message.
+An inline-only report evaporates — `docs/dogfood/` is the durable evidence trail. A run that ends
+with no file under `docs/dogfood/` has FAILED the dogfood contract even if the underlying task is `done`.
 
 Do this by delegating report generation to the SSOT skill rather than inventing a report format:
 
@@ -191,6 +200,37 @@ Invariants for a dogfood-mode run:
 
 If the testee is this agent itself (self-dogfood), the self-observation findings still belong in the
 persisted report, not only in chat.
+
+## Before you report done — terminal gate (run this every time)
+
+This is the enforcement mechanism for the Definition of Done Housekeeping and Dogfood mode above.
+The sections above describe the obligations; **this checklist makes you execute them at the moment
+of completion.** Before you write your final message for ANY task you drove to `done`, run each
+check below as an actual command and answer it explicitly **in your final message** — not silently.
+
+You MUST run check #1 as the literal command and paste its numeric output. Do not eyeball the Plan
+section and conclude "boxes checked" — the check is over the **whole task file**, including stray
+template placeholders in sections you never used (`### Acceptance Criteria`, `### Design`). "I
+checked the real ones" is the failure mode this gate exists to stop; the only passing answer is the
+command printing `0`.
+
+| # | Check | Command to run (literal — paste the output) | Pass condition |
+|---|-------|----------------------------------------------|----------------|
+| 1 | F1 — no unchecked boxes anywhere | `grep -c '^\s*- \[ \]' <task-file>` | output is exactly `0` (whole file, not just Plan) |
+| 2 | F2 — honest transition | (state it) | named a pipeline run-id, OR "manual + `spur task check <wbs> --strict-core` PASS" |
+| 3 | F4 — gate evidence | (recall change type) | raw gate tails pasted if code/test/infra touched; one-liner only if pure-doc |
+| 4 | F5 — no `/tmp` residue | `ls /tmp/<wbs>-* 2>/dev/null \| wc -l` | output is `0` |
+| 5 | Dogfood (only if in dogfood mode) | `ls docs/dogfood/ \| grep <date-or-slug>` | a report file exists for this run |
+
+If check #1 prints anything other than `0`, you are **not done**: find each `- [ ]` line and either
+check it (real completed work), replace it with a real item, or remove it (stray placeholder in an
+unused section). Re-run the grep until it prints `0`.
+
+If any check fails, **fix it before reporting done** — do not report a task complete with a failed
+terminal-gate line. In your final message, include a short "Terminal gate" block showing each check
+**and its actual command output** (e.g. `F1: grep → 0 ✓ · F5: ls → 0 ✓ · dogfood: docs/dogfood/<file> ✓`).
+A cold-spawned agent that skips this block, or reports a check passed without showing its output,
+has not finished the task.
 
 ## Output Format
 
