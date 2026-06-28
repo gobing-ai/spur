@@ -3,7 +3,7 @@ template: standard
 schema_version: 1
 name: "Cold-spawn verification: sp:super-coder honors DoD contract via dev-runall without prompt coaching"
 description: ""
-status: backlog
+status: testing
 type: task
 profile: standard
 feature_id: null
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-06-28T21:47:01.215Z"
-updated_at: 2026-06-28T21:51:23.860Z
+updated_at: 2026-06-28T22:30:16.688Z
 ---
 
 ## 0144. Cold-spawn verification: sp:super-coder honors DoD contract via dev-runall without prompt coaching
@@ -52,31 +52,83 @@ Feature: sp:super-coder honors the DoD contract from its definition alone (cold-
     Then a report exists at docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md
 ```
 
-- [ ] AC1 — A cold-spawn run (no DoD/dogfood coaching in the prompt) is executed on a trivial task and its behavior recorded.
-- [ ] AC2 — Each of F1/F2/F4/F5 is verified operator-side as honored-or-not from the definition alone.
-- [ ] AC3 — Dogfood persistence to `docs/dogfood/` is verified to occur without prompt coaching.
-- [ ] AC4 — If any obligation is NOT honored cold, `super-coder.md` is hardened (stronger wording / explicit invariant) and re-tested; if all honored, the contract is confirmed sufficient and no edit is made.
+- [x] AC1 — A cold-spawn run (no DoD/dogfood coaching in the prompt) is executed on a trivial task and its behavior recorded. (Runs A=0145, B=0146.)
+- [x] AC2 — Each of F1/F2/F4/F5 is verified operator-side as honored-or-not from the definition alone. (Report §3 scorecard.)
+- [x] AC3 — Dogfood persistence to `docs/dogfood/` is verified to occur without prompt coaching. (Run B produced `2026-06-28-super-coder-0146-dogfood.md`.)
+- [x] AC4 — If any obligation is NOT honored cold, `super-coder.md` is hardened and re-tested; if all honored, confirmed sufficient. (v1 hardening fixed 3 cold; v2 targets the residual F1, re-test filed.)
 ### Plan
-- [ ] P1 — Pick/seed a **trivial** throwaway task as the cold-spawn target (a tiny doc or
-      no-op-ish change with a 2–3 item Plan so F1 box-flipping is observable). It must be cheap and
-      low-risk — the point is to observe the agent's housekeeping, not the work.
-- [ ] P2 — Cold-spawn `sp:super-coder` with a launch prompt that contains ONLY: the task to execute,
-      the project gate rules, and the dogfood request. **Deliberately withhold** F1/F2/F4/F5 wording
-      and any mention of `docs/dogfood/`/`--save`. This isolates the agent definition as the sole
-      source of the contract.
-- [ ] P3 — Operator-side verification (do NOT trust the agent's self-report): for the target task,
-      check `grep -c '^- \[ \]'` (F1), the transition honesty + `--strict-core` (F2), gate evidence
-      vs. change type (F4), `ls /tmp/<target>-*` (F5), and `ls docs/dogfood/` for a persisted report.
-- [ ] P4 — Record the outcome in a dogfood report under `docs/dogfood/`. If every obligation held
-      cold → mark the contract confirmed-sufficient, no edit. If any failed → harden `super-coder.md`
-      (promote the failed obligation to a stronger invariant) and re-run P2–P3 once to confirm.
-- [ ] P5 — Clean up the throwaway target task (cancel/delete) so it does not pollute the board.
+- [x] P1 — Seeded trivial throwaway probe tasks (0145, then 0146) as cold-spawn targets, each with a
+      2–3 item Plan so F1 box-flipping is observable.
+- [x] P2 — Cold-spawned `sp:super-coder` with launch prompts containing only the task + gate rules;
+      F1/F2/F4/F5/dogfood wording deliberately withheld (definition is the sole contract source).
+- [x] P3 — Operator-side verification against baselines (not the agent's self-report): unchecked-box
+      grep, transition honesty + `--strict-core`, gate evidence vs. change type, `/tmp` residue,
+      `docs/dogfood/` report presence.
+- [x] P4 — Recorded outcomes in `docs/dogfood/2026-06-28-super-coder-coldspawn-0144-dogfood.md`;
+      hardened `super-coder.md` (v1 terminal gate, v2 F1 grep) where obligations failed cold.
+- [x] P5 — Probe disposition: 0145/0146 are throwaway; their README deliverable is genuinely useful
+      and kept. The probe tasks are marked done (closed); no board pollution beyond the closed rows.
 ### Solution
+Cold-spawn verification executed via two probe runs (driver = main session, impartial verifier).
+Full evidence: `docs/dogfood/2026-06-28-super-coder-coldspawn-0144-dogfood.md`.
 
+| Artifact | What |
+|----------|------|
+| Run A (probe 0145) | Cold-spawn against the **passive-prose** definition → 3 of 5 obligations failed cold (dogfood-persist, F4, F5). Report: `docs/dogfood/2026-06-28-super-coder-0145-...` (inline-only — the failure itself). |
+| Hardening v1 | `plugins/sp/agents/super-coder.md:204-222` — added the **terminal "Before you report done" gate**; `:172-176` — Dogfood mode now triggers on the request word, inline-only = violation. |
+| Run B (probe 0146) | Cold-spawn against the **hardened** definition → 4 of 5 held cold. Report: `docs/dogfood/2026-06-28-super-coder-0146-dogfood.md`. |
+| Hardening v2 | `plugins/sp/agents/super-coder.md:211-227` — sharpened terminal-gate check #1 to a literal whole-file grep with pasted output, closing the residual F1 stray-placeholder miss (re-test pending). |
+| F1 cross-link | `plugins/sp/agents/super-coder.md:117-125` — F1 invariant now explicitly covers stray template placeholders. |
+
+Outcome: the terminal-gate restructuring fixed the 3 obligations that fully no-op'd under prose.
+F1 stray-placeholder leak has a v2 fix pending a third confirming cold-spawn (filed as a finding in
+the report; mechanical CLI-gate fallback identified).
 ### Testing
+**Verdict: PASS** — the cold-spawn experiment ran end-to-end and produced the evidence + hardening
+the task required. This is a verification task; the "tests" are the two cold-spawn probe runs and
+their operator-side checks.
 
+| AC | Status | Evidence |
+|----|--------|----------|
+| AC1 — cold-spawn run on a trivial task, behavior recorded | MET | Runs A (0145) + B (0146); `docs/dogfood/2026-06-28-super-coder-coldspawn-0144-dogfood.md` §2 |
+| AC2 — each of F1/F2/F4/F5 verified from definition alone | MET | Report §3 scorecard, operator-verified vs. baseline (not agent self-report) |
+| AC3 — dogfood persistence verified without coaching | MET | Run B produced `docs/dogfood/2026-06-28-super-coder-0146-dogfood.md` from the definition's trigger alone |
+| AC4 — harden + re-test if any obligation failed | MET (with one residual) | v1 hardening fixed 3 cold; v2 targets the residual F1, re-test filed as follow-up finding |
+
+Gate: `bun run lint` clean (markdown-only edits to `super-coder.md`). No code/test impact —
+one-line gate summary is appropriate per F4 (doc-only change).
+
+**Honest residual:** F1 stray-placeholder leak is fixed in wording (v2) but not yet re-confirmed by a
+third cold-spawn. Tracked as a P2 finding in the report with a mechanical CLI-gate fallback if prose
+proves insufficient. AC4 is satisfied (harden-and-retest cycle ran once and fixed the majority);
+the residual is a known, documented follow-up, not a silent gap.
 ### Review
+| Priority | Status | Note |
+|----------|--------|------|
+| P1 | NONE | No blocker. The hardening is doc-only (agent definition); no code/security/efficiency surface. |
+| P2 | OPEN (follow-up) | F1 stray-placeholder leak persists cold; v2 fix unverified. If a third cold-spawn still leaks, move enforcement to a `task check` rule (flag any `- [ ]` in a `done` task) — agent-discipline → CLI gate. |
 
+**What this verification proved.** Passive-prose obligations in a subagent definition do **not**
+survive cold-spawn — three of five silently no-op'd. Converting them to a **terminal gate the agent
+must execute and paste output for** fixed the three hard failures. The general lesson: for
+cold-spawned subagents, enforce at the **point of action** with a command-backed checklist, not
+background prose the agent must recall.
+
+**What remains honest.** F1's stray-template-placeholder leak resisted two prose iterations. The
+durable fix is mechanical (a CLI gate). v2 is the last prose attempt — if it fails the next
+cold-spawn, escalate to the `task check` rule. No back-issues from the hardening itself (lint clean).
+
+**Closure status (parked at `testing`, intentional).** 0144's work + evidence are complete, but the
+`testing → done` transition is legitimately blocked in this environment: the lifecycle adapter is
+unavailable (`spur workflow list` → `[]` despite YAMLs on disk), so the fallback done-gate runs
+`spur task check` in **strict** mode, where L4 "Missing feature_id" (DD-07) is a hard error. 0144 is
+a standalone task with no parent feature — so the strict gate correctly refuses. Rather than game the
+gate (`--no-lifecycle` would be the F2 anti-pattern this very task forbids), 0144 is left at
+`testing` with all work done. Both environment issues are filed as a separate task. Mark 0144 `done`
+once it is parented to a feature, or once the lifecycle adapter is restored.
 ### References
 
 ### History
+- 2026-06-28T22:25:15.158Z backlog → todo (system)
+- 2026-06-28T22:25:15.241Z todo → wip (system)
+- 2026-06-28T22:25:15.330Z wip → testing (system)
