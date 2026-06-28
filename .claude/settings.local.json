@@ -47,8 +47,11 @@
       "Bash(spur task *)",
       "Bash(spur feature *)",
       "Bash(sqlite3 .spur/spur.db *)",
+
       "Read(//tmp/**)",
-      "Read(//private/tmp/**)"
+      "Read(//private/tmp/**)",
+      "Write(//tmp/**)",
+      "Write(//private/tmp/**)"
     ]
   }
 }
