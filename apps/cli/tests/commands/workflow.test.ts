@@ -6,9 +6,10 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createMigratedDb } from '@gobing-ai/spur-domain';
 import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
-import { createCapturedOutput, createTempProject } from '../helpers';
+import { createCapturedOutput, createTempProject, runCli } from '../helpers';
 
 const MINIMAL_WORKFLOW_YAML = `name: cli-test-flow
 kind: state-machine
@@ -704,4 +705,91 @@ terminalStates:
         // Uses --force message (no age qualifier), not "older than 999m"
         expect(output.messages).toContain('No stale runs.');
     });
+
+    // End-to-end async-run cancel — the test that exercises the REAL launcher →
+    // detached worker → self-recorded pid → group-kill path, catching the two
+    // defects a stand-in `sleep` child hid: (A) the launcher used to write the pid
+    // before the run row existed (silent no-op → pid never persisted), and (B)
+    // SIGTERM to the worker alone never reached the agent grandchild. The worker
+    // here runs a `shell: sleep 30` (the grandchild stand-in for `agent.run`).
+    test('async run self-records its worker pid; cancel SIGTERMs the whole process group', async () => {
+        const cwd = await createTempProject();
+        // A workflow whose only step shells a long sleep — a real grandchild of
+        // the detached worker, so cancelling must reach beyond the worker itself.
+        const wfPath = join(cwd, 'sleeper.yaml');
+        await writeFile(
+            wfPath,
+            [
+                'name: sleeper-flow',
+                'kind: state-machine',
+                'initialState: work',
+                'states:',
+                '  - id: work',
+                '    onEnter:',
+                '      - kind: shell',
+                '        options:',
+                '          command: "sleep 30"',
+                '  - id: done',
+                'transitions:',
+                '  - from: work',
+                '    to: done',
+                'terminalStates:',
+                '  - done',
+            ].join('\n'),
+        );
+
+        // Launch async via the real CLI subprocess (exercises child_process.spawn
+        // detached + SPUR_ASYNC_WORKER plumbing). The launcher exits immediately.
+        const started = await runCli(['workflow', 'run', wfPath, '--async', '--json'], cwd);
+        expect(started.code).toBe(0);
+        const runId = (started.json as { runId?: string } | undefined)?.runId;
+        expect(typeof runId).toBe('string');
+        if (typeof runId !== 'string') return;
+
+        // Poll the shared file DB until the worker self-records its pid (Defect A:
+        // without the fix this stays null forever because the racy launcher write
+        // missed the not-yet-created row).
+        const db = await createMigratedDb({ url: join(cwd, '.spur', 'spur.db') });
+        let pid: number | null = null;
+        for (let i = 0; i < 100 && pid == null; i++) {
+            const row = await db.queryFirst<{ pid: number | null }>('SELECT pid FROM runs WHERE id = ?', runId);
+            pid = row?.pid ?? null;
+            if (pid == null) await Bun.sleep(50);
+        }
+        expect(pid).not.toBeNull();
+        if (pid == null) return;
+
+        // The worker (group leader) is alive — `kill(pid, 0)` does not throw.
+        expect(() => process.kill(pid, 0)).not.toThrow();
+
+        // Cancel: marks failed AND signals the worker's process group (-pid),
+        // reaching the `sleep 30` grandchild (Defect B).
+        const cancelled = await runCli(['workflow', 'cancel', runId, '--json'], cwd);
+        expect(cancelled.code).toBe(0);
+        expect((cancelled.json as { killed?: boolean } | undefined)?.killed).toBe(true);
+
+        // The whole group dies: poll until signalling the group throws ESRCH.
+        let groupGone = false;
+        for (let i = 0; i < 100 && !groupGone; i++) {
+            try {
+                process.kill(-pid, 0); // probe the group, no signal sent
+                await Bun.sleep(50);
+            } catch {
+                groupGone = true; // ESRCH — no process in the group remains
+            }
+        }
+        expect(groupGone).toBe(true);
+
+        // Run record is finalized failed.
+        const finalRow = await db.queryFirst<{ status: string }>('SELECT status FROM runs WHERE id = ?', runId);
+        expect(finalRow?.status).toBe('failed');
+
+        // Safety net: if the group somehow survived, reap it so the test host stays clean.
+        try {
+            process.kill(-pid, 'SIGKILL');
+        } catch {
+            // already gone — fine
+        }
+        await rm(cwd, { recursive: true, force: true });
+    }, 20_000);
 });

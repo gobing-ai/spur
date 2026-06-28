@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import {
@@ -111,14 +112,18 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .option('--json', 'Output machine-readable JSON where supported')
         .action(async (file, options) => {
             // When --async, spawn a detached child process that runs the workflow
-            // synchronously and exit immediately with the run ID. The child is put
-            // in its own process group so it survives parent termination.
+            // synchronously and exit immediately with the run ID. The child is its
+            // own session/process-group LEADER (`detached: true` → setsid), so it
+            // survives parent termination AND its pid doubles as a group id: the
+            // worker self-records that pid (SPUR_ASYNC_WORKER=1 → recordSelfPid), and
+            // `spur workflow cancel` SIGTERMs the negated pid to reach the worker +
+            // the agent.run grandchild it spawns.
             if (options.async) {
                 const runId = options.runId || crypto.randomUUID();
                 const spurParts = resolveSpurBin().split(' ');
                 const spurBin = spurParts[0] ?? process.execPath;
                 const spurArgs = spurParts.slice(1);
-                const cmd: string[] = [spurBin, ...spurArgs, 'workflow', 'run', file, '--run-id', runId];
+                const cmd: string[] = [...spurArgs, 'workflow', 'run', file, '--run-id', runId];
                 if (options.vars) {
                     cmd.push('--vars', options.vars);
                 }
@@ -126,14 +131,18 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     cmd.push('--dry-run');
                 }
                 try {
-                    Bun.spawn({
-                        cmd,
-                        stdio: ['ignore', 'ignore', 'ignore'],
-                        env: process.env as Record<string, string>,
-                    }).unref();
+                    const child = spawn(spurBin, cmd, {
+                        stdio: 'ignore',
+                        detached: true,
+                        // Mark the child as the async worker so it self-records its
+                        // own pid (== group id) onto the run row at creation time.
+                        env: { ...process.env, SPUR_ASYNC_WORKER: '1' },
+                    });
+                    // Detach: let the parent exit without waiting on the child.
+                    child.unref();
                 } catch {
-                    // If Bun.spawn throws (e.g. in a non-Bun runtime), fall through
-                    // to the sync path so the workflow still runs.
+                    // If spawn throws (e.g. in a runtime without child_process), fall
+                    // through to the sync path so the workflow still runs.
                     const result = await makeSvc(options.json).run(file, {
                         runId,
                         vars: { spurBin: resolveSpurBin(), ...parseVars(options.vars) },
@@ -192,6 +201,9 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 runId: options.runId || undefined,
                 vars,
                 dryRun: options.dryRun || undefined,
+                // Async worker self-records its pid so `spur workflow cancel` can
+                // signal the live process group (set by the --async launcher).
+                recordSelfPid: process.env.SPUR_ASYNC_WORKER === '1',
             });
             context.output.write(
                 options.json
@@ -249,7 +261,10 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
 
     workflow
         .command('clean')
-        .description('Finalize orphaned runs stuck in running/pending past a staleness threshold (mark as failed).')
+        .description(
+            'Finalize orphaned runs stuck in running/pending past a staleness threshold (mark as failed). ' +
+                'To cancel a single live run by id, use `spur workflow cancel <run-id>` instead.',
+        )
         .option('--older-than <minutes>', 'Staleness threshold in minutes', '30')
         .option('--force', 'Clean ALL non-terminal runs regardless of age (overrides --older-than)')
         .option('--dry-run', 'List what would be cleaned without writing')
@@ -277,6 +292,32 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                             result.cleaned.map((r) => `  ${r.runId} (started ${r.startedAt})`).join('\n'),
                     );
                 }
+            }
+        });
+
+    workflow
+        .command('cancel')
+        .description(
+            'Cancel a single non-terminal run by id (mark as failed). The bulk/stale variant is `spur workflow clean`.',
+        )
+        .argument('<run-id>', 'Run id to cancel')
+        .option('--json', 'Output machine-readable JSON where supported')
+        .action(async (runId, options) => {
+            const result = await makeSvc(options.json).cancel(runId);
+            if (options.json) {
+                context.output.write(toJson(result));
+                return;
+            }
+            if (result.status === 'not_found') {
+                context.output.error(`Run ${runId} not found.`);
+                context.setExitCode(1);
+                return;
+            }
+            if (result.finalized) {
+                const killNote = result.killed ? ' + signalled worker process group' : '';
+                context.output.write(`Cancelled run ${runId} (marked failed${killNote}).`);
+            } else {
+                context.output.write(`Run ${runId} already terminal (${result.status}) — no change.`);
             }
         });
 

@@ -81,13 +81,32 @@ ${QUEUE_JOBS_SCHEMA_SQL}
 `;
 
 /**
+ * Add a `pid` column to the engine-owned `runs` table so `spur workflow cancel
+ * <run-id>` can SIGTERM the in-flight subprocess of an async run (task 0140).
+ *
+ * The `runs` table is created by `WORKFLOW_ENGINE_SCHEMA_SQL`
+ * (`@gobing-ai/ts-dual-workflow-engine`), which Spur cannot edit, so the column
+ * is added as a Spur-side incremental migration. SQLite has no
+ * `ADD COLUMN IF NOT EXISTS`; this is safe because the applier journals each
+ * migration by id and runs it exactly once per database (`applyCliMigrations`,
+ * `existing != null → continue`). Requires `runs` to already exist — guaranteed
+ * for any real DB, since `0000` provisions the engine schema that creates it.
+ * Collision risk: if the engine package ever ships its own `runs.pid` column,
+ * this ALTER fails on fresh DBs — flagged for review at that point.
+ */
+export const RUN_PID_COLUMN_SCHEMA_SQL = `
+ALTER TABLE runs ADD COLUMN pid INTEGER;
+`;
+
+/**
  * Built-in migrations for compiled binaries and test use. `0000` provisions a
  * fresh database with the full current schema (inbox included); `0001` is the
  * incremental step that adds `inbox_messages` to databases created before team
  * mode; `0002` adds the rule-engine run history tables (`rule_runs`,
  * `rule_eval_runs`) to databases created before task 0040; `0003` adds the
  * planning event ledger (`planning_events`, `task_run_links`); `0004` adds the
- * `queue_jobs` table (`@gobing-ai/ts-infra` `DBJobQueue`/`DBQueueConsumer`, task 0074).
+ * `queue_jobs` table (`@gobing-ai/ts-infra` `DBJobQueue`/`DBQueueConsumer`, task 0074);
+ * `0005` adds the `pid` column to `runs` for subprocess cancellation (task 0140).
  * All are idempotent (`CREATE TABLE IF NOT EXISTS`), so applying them in sequence is
  * safe regardless of the database's age.
  */
@@ -100,6 +119,7 @@ export const CLI_MIGRATIONS: CliMigration[] = [
     { id: '0002_spur_cli_rule_history', sql: RULE_ENGINE_SCHEMA_SQL },
     { id: '0003_spur_cli_planning', sql: PLANNING_SCHEMA_SQL },
     { id: '0004_spur_cli_queue_jobs', sql: QUEUE_JOBS_SCHEMA_SQL },
+    { id: '0005_spur_cli_run_pid', sql: RUN_PID_COLUMN_SCHEMA_SQL },
 ];
 
 /** Filename marker for regenerated CLI-owned migrations. */

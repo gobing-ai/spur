@@ -41,6 +41,83 @@ const SPUR_SCHEMA_MANIFEST = '@gobing-ai/spur/package.json';
 /** Link kind for pipeline runs in `task_run_links` (additive to `kind='lifecycle'`). */
 const PIPELINE_LINK_KIND = 'pipeline';
 
+/**
+ * Send SIGTERM to an async run's worker and the agent subprocess it spawned.
+ *
+ * The async launcher starts the worker as a **process-group leader** (a detached
+ * child), so the recorded pid is also the group id. Signalling the negated pid
+ * (`-pid`) delivers SIGTERM to the whole group — the worker AND the `agent.run`
+ * grandchild (`claude`/`codex`) it spawned — which is the process an operator
+ * actually wants to stop. We fall back to a plain `kill(pid)` if the group kill
+ * fails (e.g. the pid is not a group leader, as for a sync run, or on a platform
+ * without POSIX process groups), so a recorded pid is always signalled some way.
+ *
+ * Returns `true` if a signal was delivered by either path, `false` if the process
+ * was already gone (ESRCH) or the signal could not be delivered. Best-effort
+ * cleanup — callers treat the run record, not the process exit, as the source of
+ * truth.
+ */
+function signalSubprocess(pid: number): boolean {
+    // Group kill first: reaches the worker + its agent grandchild in one signal.
+    try {
+        process.kill(-pid, 'SIGTERM');
+        return true;
+    } catch {
+        // No group (sync run / non-leader pid) or no POSIX groups — fall back to
+        // signalling the single process directly.
+    }
+    try {
+        process.kill(pid, 'SIGTERM');
+        return true;
+    } catch {
+        // ESRCH (no such process) is the expected "already dead" case; any other
+        // failure (EPERM, etc.) is also non-fatal — the run is finalized regardless.
+        return false;
+    }
+}
+
+/**
+ * Wrap a persistence adapter so the current process stamps its own pid onto a run
+ * row the instant the engine creates it (`createRun` / `createOrAttachRun`). Used
+ * by the async **worker** so `spur workflow cancel` can signal the live process:
+ * the worker self-records `process.pid` (the correct pid — the process actually
+ * executing the run), eliminating the launcher-side race where the pid was written
+ * before the run row existed. Every other persistence hook delegates unchanged.
+ *
+ * Implemented as a Proxy so the wide `WorkflowPersistenceAdapter` interface needs
+ * no per-method boilerplate — only the two create hooks are intercepted; all reads
+ * and other writes pass straight through to `inner`.
+ */
+function withSelfPidRecording(inner: WorkflowPersistenceAdapter, db: DbAdapter): WorkflowPersistenceAdapter {
+    // Best-effort: a DB predating the `pid` column must not abort the run.
+    const stamp = async (runId: string): Promise<void> => {
+        try {
+            await new RunDao(db).setPid(runId, process.pid);
+        } catch {
+            // pid persistence is best-effort; the run proceeds regardless.
+        }
+    };
+    return new Proxy(inner, {
+        get(target, prop, receiver) {
+            if (prop === 'createRun') {
+                return async (record: Parameters<WorkflowPersistenceAdapter['createRun']>[0]): Promise<void> => {
+                    await target.createRun(record);
+                    await stamp(record.id);
+                };
+            }
+            if (prop === 'createOrAttachRun') {
+                return async (record: Parameters<WorkflowPersistenceAdapter['createOrAttachRun']>[0]) => {
+                    const result = await target.createOrAttachRun(record);
+                    await stamp(result.id);
+                    return result;
+                };
+            }
+            const value = Reflect.get(target, prop, receiver);
+            return typeof value === 'function' ? value.bind(target) : value;
+        },
+    });
+}
+
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
@@ -64,6 +141,14 @@ export interface WorkflowRunOptions {
     vars?: Record<string, string>;
     /** Validate and walk the transition graph without executing actions. */
     dryRun?: boolean;
+    /**
+     * When true, the running process stamps its own pid onto the run row the
+     * instant the engine creates it, so `spur workflow cancel` can signal it.
+     * Set by the async worker (the detached `spur workflow run --run-id` child);
+     * the worker is its process group's leader, so the recorded pid doubles as
+     * the group id for a group-wide SIGTERM.
+     */
+    recordSelfPid?: boolean;
 }
 
 /** A paused run discovered for `spur workflow continue` (E3). */
@@ -87,6 +172,18 @@ export interface WorkflowCleanResult {
     dryRun: boolean;
     /** The runs that were (or would be) finalized. */
     cleaned: CleanedRun[];
+}
+
+/** Result of `spur workflow cancel <run-id>` — one non-terminal run finalized as `failed`. */
+export interface WorkflowCancelResult {
+    /** The run id requested. */
+    runId: string;
+    /** Whether the run was actually transitioned to `failed` (false if it was already terminal or missing). */
+    finalized: boolean;
+    /** The run's status after the call (`failed`, the prior terminal status, or `not_found`). */
+    status: string;
+    /** Whether a recorded worker pid was signalled (SIGTERM). `false` when no pid was recorded, the pid was already dead (ESRCH), or the run was missing/terminal. */
+    killed: boolean;
 }
 
 /** A single entry in a workflow file listing. */
@@ -257,7 +354,7 @@ export class WorkflowAppService {
 
     /** Load and run a workflow file. Returns the engine run result. */
     async run(file: string, opts: WorkflowRunOptions = {}): Promise<WorkflowRunResult> {
-        const svc = await this.createEngineService();
+        const svc = await this.createEngineService({ recordSelfPid: opts.recordSelfPid === true });
         const runId = opts.runId ?? crypto.randomUUID();
         const isDry = opts.dryRun === true;
         const result = await svc.runFile(file, {
@@ -348,6 +445,44 @@ export class WorkflowAppService {
             dryRun,
             cleaned: stale.map((r) => ({ runId: r.id, startedAt: r.started_at })),
         };
+    }
+
+    /**
+     * Cancel a single non-terminal run by id — SIGTERM its worker process group (if
+     * a pid was recorded) and mark the run `failed` with a `cancelled by operator`
+     * reason. The discoverable single-run counterpart to `clean` (which finalizes
+     * stale runs in bulk). Idempotent against already-terminal runs (no-op) and
+     * reports `not_found` for an unknown id.
+     *
+     * The pid is the async worker's, self-recorded at run creation (see
+     * {@link WorkflowRunOptions.recordSelfPid}); the worker is its group leader, so
+     * the SIGTERM goes to the whole group — the worker AND the `agent.run`
+     * grandchild it spawned — via {@link signalSubprocess}.
+     *
+     * Subprocess kill is best-effort: a recorded pid may already be dead (ESRCH is
+     * tolerated and reported as not-killed-but-finalized) or, rarely, recycled to a
+     * different process — we do not verify the target's identity (no portable way
+     * without `/proc`/`ps` fragility). The run-record finalization is the source of
+     * truth for "the run is cancelled"; the SIGTERM is process cleanup.
+     */
+    async cancel(runId: string): Promise<WorkflowCancelResult> {
+        const db = await this.ctx.getDb();
+        const dao = new RunDao(db);
+        const before = await dao.traceRowById(runId);
+        if (!before) {
+            return { runId, finalized: false, status: 'not_found', killed: false };
+        }
+        // Only a non-terminal run has a live subprocess worth killing. Read the pid
+        // before finalizing (finalizeStale's guard leaves terminal runs untouched).
+        const isNonTerminal = before.status === 'running' || before.status === 'pending';
+        const pid = isNonTerminal ? await dao.getPid(runId) : null;
+        const killed = pid != null ? signalSubprocess(pid) : false;
+        await dao.finalizeStale(runId, 'cancelled by operator (spur workflow cancel)');
+        const after = await dao.traceRowById(runId);
+        // finalizeStale's WHERE guard only transitions non-terminal runs; if the run
+        // was already terminal, status is unchanged and finalized is false.
+        const finalized = after?.status === 'failed' && before.status !== 'failed';
+        return { runId, finalized, status: after?.status ?? 'not_found', killed };
     }
 
     /**
@@ -519,7 +654,7 @@ export class WorkflowAppService {
         return { run, events };
     }
 
-    private async createEngineService(): Promise<EngineWorkflowService> {
+    private async createEngineService(opts: { recordSelfPid?: boolean } = {}): Promise<EngineWorkflowService> {
         const host = createDefaultWorkflowEngineHost();
         registerSpurBuiltins(host, {
             agentService: this.ctx.agentService(),
@@ -528,7 +663,13 @@ export class WorkflowAppService {
             httpRequester: this.ctx.httpRequester?.(),
             hostAllowlist: this.ctx.hostAllowlist?.(),
         });
-        const persistence: WorkflowPersistenceAdapter = new DbWorkflowPersistenceAdapter(await this.ctx.getDb());
+        const db = await this.ctx.getDb();
+        let persistence: WorkflowPersistenceAdapter = new DbWorkflowPersistenceAdapter(db);
+        // Async worker: stamp this process's pid onto the run row at creation so
+        // `spur workflow cancel` can SIGTERM the live process group.
+        if (opts.recordSelfPid === true) {
+            persistence = withSelfPidRecording(persistence, db);
+        }
         const bus = this.ctx.observabilityBus?.();
         const adapter = bus ? new ObservableWorkflowAdapter(persistence, bus) : persistence;
         return new EngineWorkflowService(host, adapter);

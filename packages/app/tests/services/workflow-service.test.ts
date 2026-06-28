@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
+import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createMigratedDb, TaskRunLinkDao } from '@gobing-ai/spur-domain';
+import { createMigratedDb, RunDao, TaskRunLinkDao } from '@gobing-ai/spur-domain';
 import type { AgentService } from '../../src/services/agent-service';
 import type { RuleService } from '../../src/services/rule-service';
 import { WorkflowAppService } from '../../src/services/workflow-service';
@@ -154,6 +155,88 @@ describe('WorkflowAppService', () => {
             expect(result.status).toBe('done');
             expect(result.runId).toBe('svc-run-1');
             expect(result.finalState).toBe('done');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('recordSelfPid stamps the running process pid onto the run row at creation', async () => {
+            // The async worker self-records its own pid the instant the engine
+            // creates the run row (SelfPidRecordingAdapter), eliminating the
+            // launcher-side race where the pid was written before the row existed.
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-selfpid-'));
+            const path = join(dir, 'test.yaml');
+            await writeFile(path, MINIMAL_WORKFLOW_YAML);
+
+            const ctx = makeCtx(dir);
+            const result = await new WorkflowAppService(ctx).run(path, { runId: 'svc-pid-1', recordSelfPid: true });
+            expect(result.status).toBe('done');
+
+            const db = await ctx.getDb();
+            const pid = await new RunDao(db).getPid('svc-pid-1');
+            expect(pid).toBe(process.pid);
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('a run without recordSelfPid leaves pid null (sync runs are not cancellable by group)', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-nopid-'));
+            const path = join(dir, 'test.yaml');
+            await writeFile(path, MINIMAL_WORKFLOW_YAML);
+
+            const ctx = makeCtx(dir);
+            await new WorkflowAppService(ctx).run(path, { runId: 'svc-nopid-1' });
+
+            const db = await ctx.getDb();
+            const pid = await new RunDao(db).getPid('svc-nopid-1');
+            expect(pid).toBeNull();
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('recordSelfPid is transparent across an action+transition+pause+resume run', async () => {
+            // Drive a richer run (note action, transitions, HITL pause, resume)
+            // through the pid-recording adapter to confirm it delegates every
+            // persistence hook unchanged while still stamping the pid.
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-pidpause-'));
+            const wfDir = join(dir, '.spur', 'workflows');
+            await mkdir(wfDir, { recursive: true });
+            const wfPath = join(wfDir, 'pauser.yaml');
+            await writeFile(
+                wfPath,
+                [
+                    'name: pid-pauser',
+                    'kind: state-machine',
+                    'initialState: start',
+                    'states:',
+                    '  - id: start',
+                    '    onEnter:',
+                    '      - kind: note',
+                    '        options:',
+                    '          message: go',
+                    '  - id: gate',
+                    '    pause: true',
+                    '  - id: done',
+                    'transitions:',
+                    '  - from: start',
+                    '    to: gate',
+                    '    guard: { kind: always }',
+                    '  - from: gate',
+                    '    to: done',
+                    '    guard: { kind: always }',
+                    'terminalStates:',
+                    '  - done',
+                ].join('\n'),
+            );
+
+            const ctx = makeCtx(dir);
+            const svc = new WorkflowAppService(ctx);
+            const paused = await svc.run(wfPath, { runId: 'pid-pause-1', recordSelfPid: true });
+            expect(paused.status).toBe('paused');
+
+            // pid stamped at creation, before the pause.
+            const db = await ctx.getDb();
+            expect(await new RunDao(db).getPid('pid-pause-1')).toBe(process.pid);
+
+            // Resume completes the run — the adapter delegated reseed/load hooks fine.
+            const resumed = await svc.continuePaused('pid-pause-1');
+            expect(resumed.status).toBe('done');
             await rm(dir, { recursive: true, force: true });
         });
 
@@ -592,6 +675,128 @@ terminalStates:
             expect(result.cleaned.map((r) => r.runId)).toEqual(['run_dry']);
             const row = await db.queryFirst<{ status: string }>('SELECT status FROM runs WHERE id = ?', 'run_dry');
             expect(row?.status).toBe('running'); // dry-run wrote nothing
+        });
+    });
+
+    describe('cancel (single-run finalization by id)', () => {
+        async function seedRun(
+            db: Awaited<ReturnType<ReturnType<typeof makeCtx>['getDb']>>,
+            id: string,
+            status: string,
+            startedAtIso: string,
+        ) {
+            await db.run(
+                `INSERT INTO runs (id, workflow_name, mode, status, started_at, metadata_json, created_at, updated_at)
+                 VALUES (?, 'task-pipeline', 'state-machine', ?, ?, '{}', 0, 0)`,
+                id,
+                status,
+                startedAtIso,
+            );
+        }
+
+        test('finalizes a non-terminal run as failed (no pid recorded → not killed)', async () => {
+            const ctx = makeCtx();
+            const db = await ctx.getDb();
+            await seedRun(db, 'run_live', 'running', new Date().toISOString());
+
+            const result = await new WorkflowAppService(ctx).cancel('run_live');
+
+            expect(result).toEqual({ runId: 'run_live', finalized: true, status: 'failed', killed: false });
+            const row = await db.queryFirst<{ status: string }>('SELECT status FROM runs WHERE id = ?', 'run_live');
+            expect(row?.status).toBe('failed');
+        });
+
+        test('a terminal run is a no-op (idempotent, not re-transitioned, not killed)', async () => {
+            const ctx = makeCtx();
+            const db = await ctx.getDb();
+            await seedRun(db, 'run_done', 'done', new Date().toISOString());
+
+            const result = await new WorkflowAppService(ctx).cancel('run_done');
+
+            expect(result.finalized).toBe(false);
+            expect(result.status).toBe('done');
+            expect(result.killed).toBe(false);
+            const row = await db.queryFirst<{ status: string }>('SELECT status FROM runs WHERE id = ?', 'run_done');
+            expect(row?.status).toBe('done'); // unchanged
+        });
+
+        test('a missing run reports not_found', async () => {
+            const ctx = makeCtx();
+
+            const result = await new WorkflowAppService(ctx).cancel('no_such_run');
+
+            expect(result).toEqual({ runId: 'no_such_run', finalized: false, status: 'not_found', killed: false });
+        });
+
+        test('SIGTERMs a recorded live pid via the single-process fallback, then finalizes', async () => {
+            const ctx = makeCtx();
+            const db = await ctx.getDb();
+            await seedRun(db, 'run_async', 'running', new Date().toISOString());
+            // A plain Bun.spawn child is NOT a process-group leader, so the group
+            // kill (`kill(-pid)`) fails and signalSubprocess falls back to the
+            // single-process `kill(pid)`. (The group path is covered by the
+            // detached-leader test below and the CLI end-to-end async-cancel test.)
+            const child = Bun.spawn({ cmd: ['sleep', '30'], stdio: ['ignore', 'ignore', 'ignore'] });
+            await new RunDao(db).setPid('run_async', child.pid);
+
+            const result = await new WorkflowAppService(ctx).cancel('run_async');
+
+            expect(result.killed).toBe(true);
+            expect(result.finalized).toBe(true);
+            // The SIGTERM was delivered: the child exits within a moment.
+            const exitCode = await child.exited;
+            expect(exitCode).not.toBe(0); // terminated by signal, not a clean 0
+        });
+
+        test('SIGTERMs the whole process group when the recorded pid is a group leader', async () => {
+            const ctx = makeCtx();
+            const db = await ctx.getDb();
+            await seedRun(db, 'run_group', 'running', new Date().toISOString());
+            // A detached child (child_process.spawn detached:true → setsid) is its
+            // own group leader, and the grandchild it spawns joins that group —
+            // mirroring the async worker + its agent.run grandchild. The leader holds
+            // the group open via a backgrounded `sleep` it waits on. signalSubprocess
+            // hits `kill(-pid)` first and must reap the entire group, not just the
+            // leader. (Bun.spawn does NOT create a new group, so node spawn is used.)
+            const leader = spawn('sh', ['-c', 'sleep 30 & wait'], { stdio: 'ignore', detached: true });
+            leader.unref();
+            const leaderPid = leader.pid;
+            expect(leaderPid).toBeDefined();
+            if (leaderPid === undefined) return;
+            await new RunDao(db).setPid('run_group', leaderPid);
+
+            const result = await new WorkflowAppService(ctx).cancel('run_group');
+
+            expect(result.killed).toBe(true);
+            expect(result.finalized).toBe(true);
+            // The whole group is gone — probing it throws ESRCH (the grandchild
+            // `sleep`, not just the leader, was reaped by the group signal).
+            let groupGone = false;
+            for (let i = 0; i < 80 && !groupGone; i++) {
+                try {
+                    process.kill(-leaderPid, 0);
+                    await Bun.sleep(25);
+                } catch {
+                    groupGone = true;
+                }
+            }
+            expect(groupGone).toBe(true);
+        });
+
+        test('an already-dead recorded pid is tolerated (ESRCH), run still finalizes', async () => {
+            const ctx = makeCtx();
+            const db = await ctx.getDb();
+            await seedRun(db, 'run_dead', 'running', new Date().toISOString());
+            // Spawn a child that exits immediately, wait for it, then record its pid.
+            const child = Bun.spawn({ cmd: ['true'], stdio: ['ignore', 'ignore', 'ignore'] });
+            await child.exited;
+            await new RunDao(db).setPid('run_dead', child.pid);
+
+            const result = await new WorkflowAppService(ctx).cancel('run_dead');
+
+            expect(result.killed).toBe(false); // ESRCH — process already gone
+            expect(result.finalized).toBe(true);
+            expect(result.status).toBe('failed');
         });
     });
 });

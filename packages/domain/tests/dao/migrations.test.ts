@@ -56,13 +56,18 @@ describe('db migrations', () => {
     });
 
     describe('CLI_MIGRATIONS', () => {
-        test('has foundation, team-inbox, rule-history, planning, and queue-jobs migrations', () => {
-            expect(CLI_MIGRATIONS).toHaveLength(5);
+        test('has foundation, team-inbox, rule-history, planning, queue-jobs, and run-pid migrations', () => {
+            expect(CLI_MIGRATIONS).toHaveLength(6);
             expect(CLI_MIGRATIONS[0]?.id).toBe('0000_spur_cli_foundation');
             expect(CLI_MIGRATIONS[1]?.id).toBe('0001_spur_cli_team_inbox');
             expect(CLI_MIGRATIONS[2]?.id).toBe('0002_spur_cli_rule_history');
             expect(CLI_MIGRATIONS[3]?.id).toBe('0003_spur_cli_planning');
             expect(CLI_MIGRATIONS[4]?.id).toBe('0004_spur_cli_queue_jobs');
+            expect(CLI_MIGRATIONS[5]?.id).toBe('0005_spur_cli_run_pid');
+        });
+
+        test('run-pid migration adds a pid column to runs', () => {
+            expect(CLI_MIGRATIONS[5]?.sql).toContain('ALTER TABLE runs ADD COLUMN pid');
         });
 
         test('queue-jobs migration creates queue_jobs', () => {
@@ -88,16 +93,25 @@ describe('db migrations', () => {
             expect(CLI_MIGRATIONS[2]?.sql).toContain('CREATE TABLE IF NOT EXISTS rule_eval_runs');
         });
 
-        test('existing DB that already applied 0000/0001 gains rule, planning, and queue tables', async () => {
+        test('existing DB that already applied 0000/0001 gains rule, planning, queue, and run-pid', async () => {
             const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            // Stub 0000 mirrors a realistic legacy DB: it predates the later
+            // migrations but already has `runs` (the engine schema has shipped it
+            // since before team-inbox), so 0005's ALTER has a target.
             await applyCliMigrations(adapter, [
-                { id: '0000_spur_cli_foundation', sql: 'CREATE TABLE IF NOT EXISTS workspaces (id TEXT);' },
+                {
+                    id: '0000_spur_cli_foundation',
+                    sql: 'CREATE TABLE IF NOT EXISTS workspaces (id TEXT); CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY);',
+                },
                 { id: '0001_spur_cli_team_inbox', sql: 'CREATE TABLE IF NOT EXISTS inbox_messages (id TEXT);' },
             ]);
 
-            // 0002 rule-history + 0003 planning + 0004 queue-jobs applied on top.
+            // 0002 rule-history + 0003 planning + 0004 queue-jobs + 0005 run-pid applied on top.
             const applied = await applyCliMigrations(adapter);
-            expect(applied).toBe(3);
+            expect(applied).toBe(4);
+            // 0005 added the pid column to the legacy runs table.
+            const cols = await adapter.queryAll<{ name: string }>('PRAGMA table_info(runs)');
+            expect(cols.some((c) => c.name === 'pid')).toBe(true);
             await adapter.run(
                 `INSERT INTO rule_runs (id, source_kind, status, started_at, created_at, updated_at)
                  VALUES ('r1', 'preset', 'done', datetime('now'), datetime('now'), datetime('now'))`,
@@ -126,7 +140,7 @@ describe('db migrations', () => {
             ]);
 
             const applied = await applyCliMigrations(adapter);
-            expect(applied).toBe(4); // renamed inbox migration + rule history + planning + queue-jobs
+            expect(applied).toBe(5); // renamed inbox migration + rule history + planning + queue-jobs + run-pid
             await adapter.run(
                 'INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
                 'm1',
@@ -207,6 +221,19 @@ describe('db migrations', () => {
             );
             expect(rows).toHaveLength(1);
             expect(rows[0]?.status).toBe('queued');
+            adapter.close();
+        });
+
+        test('runs table gains a nullable pid column after migration (0005)', async () => {
+            const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            await applyCliMigrations(adapter);
+            const cols = await adapter.queryAll<{ name: string; type: string; notnull: number }>(
+                'PRAGMA table_info(runs)',
+            );
+            const pidCol = cols.find((c) => c.name === 'pid');
+            expect(pidCol).toBeDefined();
+            expect(pidCol?.type).toBe('INTEGER');
+            expect(pidCol?.notnull).toBe(0); // nullable — sync runs have no pid
             adapter.close();
         });
     });

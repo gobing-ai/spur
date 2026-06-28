@@ -125,4 +125,22 @@ export class RunDao extends EntityDao<typeof runs, typeof runs.id> {
             runId,
         );
     }
+
+    /**
+     * Record the OS pid of the worker subprocess for an async run, so
+     * `spur workflow cancel <run-id>` can SIGTERM it. The `pid` column is added
+     * by the `0005_spur_cli_run_pid` migration. `null` clears it.
+     */
+    async setPid(runId: string, pid: number | null): Promise<void> {
+        await this.adapter.run('UPDATE runs SET pid = ? WHERE id = ?', pid, runId);
+    }
+
+    /**
+     * Read the recorded worker pid for a run, or `null` when none was recorded
+     * (sync runs, runs from before the pid column, or a cleared pid).
+     */
+    async getPid(runId: string): Promise<number | null> {
+        const row = await this.adapter.queryFirst<{ pid: number | null }>('SELECT pid FROM runs WHERE id = ?', runId);
+        return row?.pid ?? null;
+    }
 }
