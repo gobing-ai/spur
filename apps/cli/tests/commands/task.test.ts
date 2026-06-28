@@ -593,6 +593,107 @@ describe('spur task CLI', () => {
         }
     });
 
+    test('fallback done-gate passes a task with pass:True + L4 warnings only (Issue B fix: strict-core ≠ strict)', async () => {
+        // WHY: The real task-lifecycle FSM testing→done guard uses `--strict-core`
+        // (default severity — L4 warnings stay warnings). The pre-fix fallback passed
+        // `strict: true`, which elevated L4 warnings (e.g. missing feature_id) to
+        // errors, blocking tasks the real guard would allow. Verify the fix: a task
+        // whose only finding is an L4 warning (no feature_id) must transition done.
+        const spy = spyOn(configModule, 'bundledConfigRoot').mockReturnValue(null);
+        try {
+            const cOut = createCapturedOutput();
+            await main(['task', 'create', 'Strict-core gate target'], { cwd, output: cOut });
+            const wbs = createdWbs(cOut);
+
+            // Seed done-required sections with valid content so the ONLY finding is
+            // the L4 "missing feature_id" warning. Solution has a file:line citation
+            // (required hard-core), Review has a P1–P4 table (required hard-core).
+            const solutionBody = join(cwd, 'sol-strict-core.md');
+            await Bun.write(solutionBody, 'Fix applied in `apps/cli/src/commands/task.ts:645`.\n');
+            await main(['task', 'update', wbs, '--section', 'Solution', '--from-file', solutionBody], {
+                cwd,
+                output: createCapturedOutput(),
+            });
+            const testingBody = join(cwd, 'test-strict-core.md');
+            await Bun.write(testingBody, 'Tests pass with 95% coverage. N/A.\n');
+            await main(['task', 'update', wbs, '--section', 'Testing', '--from-file', testingBody], {
+                cwd,
+                output: createCapturedOutput(),
+            });
+            const reviewBody = join(cwd, 'rev-strict-core.md');
+            await Bun.write(
+                reviewBody,
+                '| Priority | Status | Note |\n|----------|--------|------|\n| P1 | DONE | ok |\n',
+            );
+            await main(['task', 'update', wbs, '--section', 'Review', '--from-file', reviewBody], {
+                cwd,
+                output: createCapturedOutput(),
+            });
+
+            // Walk to testing via --no-lifecycle so only the done transition hits the fallback.
+            await main(['task', 'update', wbs, 'todo', '--no-lifecycle'], { cwd, output: createCapturedOutput() });
+            await main(['task', 'update', wbs, 'wip', '--no-lifecycle'], { cwd, output: createCapturedOutput() });
+            await main(['task', 'update', wbs, 'testing', '--no-lifecycle'], { cwd, output: createCapturedOutput() });
+
+            // Attempt done: adapter unavailable (spy), fallback runs with strict:false.
+            // The only finding is L4 "Missing feature_id" (warning) — must NOT block.
+            const output = createCapturedOutput();
+            const exitCode = await main(['task', 'update', wbs, 'done'], { cwd, output });
+            // With the fix (strict:false), the L4 warning stays a warning → pass:true → done succeeds.
+            expect(exitCode).toBe(0);
+            expect(output.errors.every((e) => !e.includes('blocked'))).toBe(true);
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    test('fallback done-gate still blocks a task with a hard L3 error (regression guard)', async () => {
+        // WHY: fixing Issue B (strict→strict-core) must not loosen the gate for real
+        // hard-core errors. L3 "Solution must contain at least one file:line citation"
+        // is a hard error even under --strict-core — it must still block done.
+        const spy = spyOn(configModule, 'bundledConfigRoot').mockReturnValue(null);
+        try {
+            const cOut = createCapturedOutput();
+            await main(['task', 'create', 'Hard L3 gate target'], { cwd, output: cOut });
+            const wbs = createdWbs(cOut);
+
+            // Plant Solution WITHOUT a file:line citation → L3 hard error.
+            const solutionBody = join(cwd, 'sol-no-cite.md');
+            await Bun.write(solutionBody, 'Changed everything but forgot the citation.\n');
+            await main(['task', 'update', wbs, '--section', 'Solution', '--from-file', solutionBody], {
+                cwd,
+                output: createCapturedOutput(),
+            });
+            const testingBody = join(cwd, 'test-no-cite.md');
+            await Bun.write(testingBody, 'Tests pass. N/A.\n');
+            await main(['task', 'update', wbs, '--section', 'Testing', '--from-file', testingBody], {
+                cwd,
+                output: createCapturedOutput(),
+            });
+            const reviewBody = join(cwd, 'rev-no-cite.md');
+            await Bun.write(
+                reviewBody,
+                '| Priority | Status | Note |\n|----------|--------|------|\n| P1 | DONE | ok |\n',
+            );
+            await main(['task', 'update', wbs, '--section', 'Review', '--from-file', reviewBody], {
+                cwd,
+                output: createCapturedOutput(),
+            });
+
+            await main(['task', 'update', wbs, 'todo', '--no-lifecycle'], { cwd, output: createCapturedOutput() });
+            await main(['task', 'update', wbs, 'wip', '--no-lifecycle'], { cwd, output: createCapturedOutput() });
+            await main(['task', 'update', wbs, 'testing', '--no-lifecycle'], { cwd, output: createCapturedOutput() });
+
+            // Attempt done: hard L3 error → fallback must block even with strict:false.
+            const output = createCapturedOutput();
+            const exitCode = await main(['task', 'update', wbs, 'done'], { cwd, output });
+            expect(exitCode).toBe(1);
+            expect(output.errors.some((e) => e.includes('blocked'))).toBe(true);
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
     test('update --section --from-file with non-json output handles warnings', async () => {
         // Create a task with a section that triggers warnings on write (e.g. Review at backlog)
         const cOut = createCapturedOutput();

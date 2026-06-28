@@ -189,7 +189,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                                 `warning: lifecycle adapter unavailable — running \`spur task check\` inline as the ${status} gate. ` +
                                     'Restore the bundled task-lifecycle workflow to re-enable the real guard.',
                             );
-                            const ok = await runDoneGateCheck(context, wbs, options.folder, status === 'done');
+                            const ok = await runDoneGateCheck(context, wbs, options.folder);
                             if (!ok) {
                                 context.output.error(
                                     `Lifecycle transition blocked: \`spur task check ${wbs}\` failed. Fix the findings before transitioning to ${status}.`,
@@ -624,15 +624,21 @@ async function makeCheckService(context: CliContext): Promise<TaskCheckService> 
  * Inline lifecycle-gate backstop (P3, task 0130 retrospective). Runs the same
  * `spur task check` the lifecycle YAML guard runs, used ONLY when the lifecycle
  * adapter is unavailable and the transition targets a guarded state (`testing`
- * or `done`). Returns `true` iff the check passes. `strictCore` mirrors the
- * YAML's `--strict-core` for the testing→done gate; the wip→testing gate uses
- * the default severity (hard-core errors fail, advisories pass).
+ * or `done`). Returns `true` iff the check passes.
+ *
+ * Both guarded transitions use default severity (no blanket warning elevation):
+ *   - wip→testing: `spur task check <wbs>` (plain default)
+ *   - testing→done: `spur task check <wbs> --strict-core` (same as default — hard-core
+ *     L3/L2-gate errors are already errors; `--strict-core` adds no blanket elevation)
+ *
+ * Bug fixed (0147): the original implementation passed `strict: status === 'done'`, which
+ * elevated ALL warnings to errors for the done gate — stricter than the real FSM guard
+ * that uses `--strict-core` (no blanket elevation). The fix: always pass `strict: false`.
  */
 async function runDoneGateCheck(
     context: CliContext,
     wbs: string,
     folderOverride: string | undefined,
-    strictCore: boolean,
 ): Promise<boolean> {
     const foldersConfig = (await resolvePlanningFolders(context.fs)).foldersConfig;
     const tasksDir = folderOverride ?? context.fs.resolve(foldersConfig.active_folder);
@@ -642,7 +648,11 @@ async function runDoneGateCheck(
         return false; // missing task — let updateStatus throw the real error
     }
     const svc = new TaskCheckService(context.fs, await loadSectionMatrix(context.cwd));
-    const result = await svc.check(`${tasksDir}/${fileName}`, wbs, { strict: strictCore });
+    // Both the wip→testing and testing→done guards use default severity (not --strict, not
+    // --strict-core — both are equivalent here: hard-core L3/L2-gate errors are already
+    // errors in the base computation). Never pass strict:true here — that would block a
+    // `pass:True`-with-warnings task that the real FSM guard would allow through.
+    const result = await svc.check(`${tasksDir}/${fileName}`, wbs, { strict: false });
     return result.pass;
 }
 /**
