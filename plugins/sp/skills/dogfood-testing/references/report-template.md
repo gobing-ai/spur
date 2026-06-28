@@ -86,9 +86,26 @@ P3+P4.
 ```
 ### 5. Findings
 
-- **P1** — <what's wrong>. → **Action:** <concrete change>.  (`file:line`, ~effort)
+- **P1** — <what's wrong>. → **Action:** <concrete change>.  (`file:line`, ~effort)  `[feasible]`
 - **P2** — …
 ```
+
+Each finding MUST carry a **verification-feasibility tag** in brackets at the end of the line, so
+downstream task creation does not inherit an unactionable acceptance criterion:
+
+- `[feasible]` — the recommendation is verifiable (a test, a CLI check, an observable behavior).
+  This is the default; most findings are feasible.
+- `[stale]` — on re-check the finding no longer holds (the code already does the right thing, the
+  condition was misread). Do **not** file as a task — close inline with evidence. Catching this at
+  report time saves a no-op implementation task downstream.
+- `[unverifiable]` — the recommendation cannot be confirmed with existing tooling (e.g. a
+  cache-hit finding with no per-step telemetry; a perf claim with no measurement loop). If filed as
+  a task, its acceptance criterion must be reframed to what *can* be verified (e.g. "ship the
+  lever; measured proof deferred"), or the task should be deferred until the missing tooling exists.
+  Do not let it become a normal implementation task — it will ship an unverifiable "improvement."
+
+The tag is a prompt to whoever turns findings into tasks: `[stale]` → drop, `[unverifiable]` →
+reframe or defer, `[feasible]` → proceed. A finding without a tag is treated as `[feasible]`.
 
 Severity scale:
 - **P1** — blocks correct use or causes drift/wrong output; fix before shipping the testee.

@@ -71,6 +71,13 @@ spur task list --status wip --json
 Pick a task. Priority order: WIP tasks first (continue in-progress work), then highest-priority
 backlog tasks. Use `--json` for machine consumption; sort client-side by priority/created_at.
 
+**Reuse in-context task state.** Once a task's `show`/`check` output is in your context this
+session, do not re-fetch it for data you already hold — reference the prior result. Re-fetch only
+when the underlying state changed (e.g. you just wrote a section and need the new
+`requiredSections`). When you must fetch, ask for the smallest shape (`--json`, one field), not the
+full human dump. This keeps the programmatic drive's cache hit rate high; see the dogfood
+cache-conservation discipline (`plugins/sp/skills/dogfood-testing/references/monitor-ledger.md`).
+
 ## Step 2: Pipeline run
 
 **Launch async and poll the trace.** A pipeline with `agent.run` stages runs for many minutes
@@ -103,6 +110,14 @@ honored), and chains to `/sp:dev-verify <wbs> --auto --next`. On a guard failure
 review-pending (leave status, surface the blocking finding, do not advance). The full pipeline
 (no `--next`) still runs every stage internally and ends at `done` on its own. See
 `plugins/sp/commands/dev-run.md` `--next` for the exact behavior and the review-pending message.
+
+**MANDATORY `--next`-ignored warning (deterministic emission — not optional prose).** When
+`$ARGUMENTS` carries BOTH an explicit `--mode full` AND `--next`, the resolved mode is `implement`
+(the explicit `--mode full` has no effect). In that one case the operator MUST be warned before
+dispatch — emit the literal string defined in `plugins/sp/commands/dev-run.md` → "Mode resolution
+(deterministic — run before dispatch)". The plain `--next` case (no explicit `--mode full`) is the
+intended chain link and emits no warning. This emission is a required procedure step, not a
+"may mention" note — the trigger is mechanical (`$ARGUMENTS` contains both flags).
 
 The pipeline (`kind: state-machine`) runs the work loop:
 

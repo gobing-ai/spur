@@ -74,6 +74,33 @@ For each core scenario in the feature's AC:
 Edge-case scenarios may map to tasks or be deferred. Record deferrals explicitly:
 `Deferred: R7 — Edge case not in this iteration`.
 
+## Default to NOT decomposing
+
+**The default outcome of decomposition is "keep it as one task."** Splitting is the exception you
+must justify, not the baseline. This is the single most important rule on this page, and the one
+most often skipped when an agent moves fast: the agent reaches the decomposition step, sees a list
+of requirements or findings, and emits one child per item by reflex — producing many small tasks
+that the rubric would have rejected as Plan steps.
+
+**Every subtask has a real cost** — a file to track, a sequential bottleneck, a separate review,
+a context switch, a rollback boundary. Five subtasks at 1h each cost more total overhead than one
+task at 5h, with no parallelism or review benefit gained. So before producing any batch JSON:
+
+1. **Score the parent first.** Run the rubric (below) on the *whole* unit of work. If it lands at
+   0–2, the answer is **keep as one task** — stop, write the implementation steps in the parent's
+   `## Plan`, and do not call `batch-create` at all.
+2. **Only if the parent scores 5+ (or a force-decompose override fires)** does decomposition even
+   enter the conversation. Then score each *candidate* child — any candidate that scores 0–2 on
+   its own is a Plan step, not a task; merge it into a sibling.
+3. **"I can describe N pieces" is not a decomposition trigger.** A finding list, a requirement
+   list, or a bullet list is a *Plan checklist*, not a task list. Pieces become tasks only when
+   they clear the rubric independently (independent streams / distinct review gate / different
+   risk / different expert).
+
+The failure mode this section exists to prevent: a parent carrying 6 findings becomes 6 child
+tasks, several of which were <2h doc edits that belonged in the parent's Plan. When in doubt,
+**don't decompose** — the operator can always ask for a split after seeing the Plan.
+
 ## When to decompose at all
 
 **Every subtask has a cost** — a file to track, a sequential bottleneck, a separate review, a
@@ -89,7 +116,7 @@ Do **not** decompose when the work fits one agent's head, touches related files 
 has a single review gate, or is one deliverable with one rollback boundary. In that case write the
 steps in the parent task's **Plan**, not as separate task files.
 
-### Quick rubric
+### Quick rubric (required artifact — record it before writing any batch JSON)
 
 Estimate five signals — **E** effort (hours), **D** independently-reviewable deliverables,
 **L** layers/modules, **C** coordination (0 none / 1 moderate / 2 high), **R** risk (0 low / 1 med
@@ -106,6 +133,19 @@ Estimate five signals — **E** effort (hours), **D** independently-reviewable d
 | 3–4 | decomposition optional — single-task plan allowed with rationale |
 | 5+ | decompose into deliverable-based tasks |
 
+**Record the assessment.** Before `batch-create`, the rubric assessment MUST be written down — for
+the parent (and, if decomposing, each child candidate). This is the enforcement step that stops
+reflexive over-decomposition: if you cannot show the score, you have not justified the split. Two
+acceptable homes for the assessment:
+
+- **In the parent's `## Plan`** (for the keep-as-one decision): a one-line skip rationale naming
+  the score, e.g. *"Rubric: E1 D1 L1 C0 R0 = 3 → kept whole; steps below."*
+- **In each child's `background`** (when decomposing): a trailing line naming the score and the
+  trigger that cleared it, e.g. *"Rubric: E2 D1 L1 C1 R2 = 7 → decompose (force: R=high)."*
+
+A batch produced without a recorded assessment is incomplete — re-score before submitting to
+`batch-create`.
+
 ## Parent (umbrella) tasks
 
 When a task decomposes into sub-task **files** (each carrying `parent_wbs`), the original becomes a
@@ -119,13 +159,21 @@ of children is the *correct* shape — the inverse direction is fine.
 Two rules make a parent verifiable:
 
 1. **The parent's `## Plan` must carry the sub-task roster** — a table mapping each child to the
-   parent requirement(s) it covers, with its current status. Write it **immediately after
-   `batch-create`** (the same step that lands the children); a parent without a roster cannot be
-   checked for completeness by a human. Roster row template:
+   parent requirement(s) it covers, with its current status AND its blast radius. Write it
+   **immediately after `batch-create`** (the same step that lands the children); a parent without a
+   roster cannot be checked for completeness by a human. Roster row template:
 
-   | Sub-task | Covers | Title | Status |
-   |----------|--------|-------|--------|
-   | `[0110](0110_<slug>.md)` | R1, R2 | <child title> | ✅ done / ⏳ todo / 🔶 wip |
+   | Sub-task | Covers | Surface | Title | Status |
+   |----------|--------|---------|-------|--------|
+   | `[0110](0110_<slug>.md)` | R1, R2 | docs | <child title> | ✅ done / ⏳ todo / 🔶 wip |
+
+   The **Surface** column is the blast-radius signal for sequencing: `docs` (skill/command markdown,
+   no executable), `code` (app/package TS, has tests), or `infra` (DB schema/migration, workflow
+   YAML, CI/CD, `.github/`). When deciding execution order across children of the same priority,
+   **run `infra` first** (highest risk, load-bearing, hardest to revert), then `code`, then `docs`
+   — riskiest-first surfaces the hard problems while context is fresh and lets the cheap fixes
+   absorb any rework. A roster with only a Status column hides this and leads to priority-only
+   ordering that buries the infra change among doc edits.
 
    The status column is maintained by hand today (refresh it when a child's status changes). A
    command-driven roster refresh — mirroring `spur feature refresh`'s auto-generated `## Tasks`
@@ -165,6 +213,14 @@ Two rules make a parent verifiable:
   "write tests" tasks — testing is part of implementation.
 - **Review:** complex or cross-cutting tasks get a `review` companion task (template `review`).
   Simple tasks skip it — the pipeline's review step suffices.
+- **Record rejected split-alternatives (scope-creep guard).** When a requirement is split across
+  tasks (e.g. an R1/R2 split, or a finding that *could* have been its own task but was merged into
+  a sibling), record the alternative you rejected and why — in the parent's `## Plan` (for the
+  merge decision) or the child's `## Design` (for an R1/R2 split). This is what stops a 4h task
+  becoming a 2-day task: the moment you write "rejected: pidfile approach — another file artifact
+  to manage, stale on crash; the DB column is the natural home," the scope is bounded and the next
+  agent (or you, later) won't re-litigate it. A split without a recorded rejected-alternative is
+  incomplete — you have not shown the split was necessary, only that it was possible.
 
 ## Anti-patterns (do not do these)
 
@@ -174,6 +230,30 @@ Two rules make a parent verifiable:
 | **Skeleton tasks** (empty Background/Requirements, "see parent") | Task files must be self-contained for review | Merge back, or write it as a Plan step |
 | **Over-decomposition** (5 tasks each <30 min for one PR) | 5× tracking overhead for no parallelism or review benefit | One task with a Plan checklist |
 | **Under-decomposition** (one task spanning 3 subsystems + 20h) | Unreviewable, one giant PR, no fan-out | Split by subsystem/deliverable |
+
+### Worked example — the "list reflex" (the most common over-decomposition)
+
+A review/findings task arrives carrying 6 findings. The reflex move is to emit one child task per
+finding → 6 tasks. But several findings are typically <2h doc edits or one-line fixes that the
+rubric scores at 0–2 on their own. Those are **Plan steps**, not tasks.
+
+**Bad (reflex):** parent + 6 children, three of which were 30-min edits → 6 files, 6 reviews, 6
+rollback boundaries, for work that fit one focused session.
+
+**Better:** score each finding. Merge the <2h ones into the parent's `## Plan` as a checklist;
+spawn children only for the findings that clear the rubric independently (distinct module + real
+effort + own review boundary). A 6-finding parent often becomes parent + 2–3 children, not 6.
+
+The tell that you're reflex-decomposing: your child names are *"F1 — …", "F2 — …", "F3 — …"* —
+one per list item, sized by the list, not by the work. Re-score before submitting the batch.
+
+### Worked example — the phase split
+
+*"Add an Antigravity adapter"* decomposed as: 1) investigate the CLI, 2) design the abstraction,
+3) implement the adapter, 4) integrate config switching, 5) add tests. Five tasks — but #1 is an
+activity (not a deliverable), #2 belongs in the task's `## Design` section, #4 and #5 are part of
+#3, and the whole thing is one deliverable one agent completes in a session. Correct: **one task**,
+with research/design/implement/integrate/test as `## Plan` steps.
 
 ## Stage → sections, and the Design vs Solution split
 

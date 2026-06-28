@@ -66,6 +66,21 @@ writing code, before yielding, the implement agent MUST:
    spur task update <wbs> --section Solution --from-file /tmp/<wbs>-solution.md
    ```
 3. Write **only when the section is bare** — do not clobber a hand-authored change-map.
+4. **If the task is a partial deliverable, mark it.** When the requirements split across tasks
+   (e.g. an R1/R2 split where this task ships R1 and a follow-up task owns R2), or any acceptance
+   criterion is deferred to another task, the `## Solution` and `## Review` sections MUST carry a
+   visible `⚠️ PARTIAL` marker naming what is shipped vs. deferred and the follow-up task's WBS.
+   Without it, a downstream release can advertise a half-feature as complete (the `cancel` verb
+   that couldn't yet kill its subprocess is the canonical example). Format:
+
+   > ⚠️ **PARTIAL — R2 (subprocess kill) deferred to `<follow-up-wbs>`.** This task ships R1 only
+   > (the `cancel` verb + run finalization). The subprocess-kill half needs a pid-tracking layer
+   > tracked separately; until it lands, `cancel` marks the run `failed` but cannot reach the live
+   > process.
+
+   The marker belongs at the TOP of `## Solution` (so a reviewer sees it before the change-map)
+   and is echoed in `## Review`'s P-row for the deferred requirement (status `OPEN → <follow-up-wbs>`,
+   not `DONE`). Remove the marker only when the follow-up task closes.
 
 ## `--next` chain — advance to the next step
 
@@ -98,9 +113,38 @@ Honoring the guard is the point: the FSM is what stops a malformed task from sli
 and then `done`. Bypassing it with `--no-lifecycle` (as the pipeline does for its own internal
 transitions) would defeat the review-pending stop the chain exists to provide.
 
+## Mode resolution (deterministic — run before dispatch)
+
+`--next` always resolves the mode to `implement` (the chain link), regardless of `--mode`. The
+mode is decided mechanically from `$ARGUMENTS`, then the dispatch below runs. This is a
+deterministic resolution, not agent discretion.
+
+| `$ARGUMENTS` carries | Resolved mode | Dispatch |
+|---|---|---|
+| `--next` (with or without `--mode implement`) | `implement` | `implement $ARGUMENTS` |
+| `--next` **and** explicit `--mode full` | `implement` + **MANDATORY warning** (below) | `implement $ARGUMENTS` |
+| `--mode full` (no `--next`) | `full` | `run $ARGUMENTS` |
+| `--mode implement` (no `--next`) | `implement` | `implement $ARGUMENTS` |
+| neither (default) | `full` | `run $ARGUMENTS` |
+
+**MANDATORY warning — emit when `$ARGUMENTS` carries BOTH an explicit `--mode full` AND `--next`.**
+This is the only case `--next` is "ignored" (the operator asked for the full pipeline *and* the
+advance-chain; `--next` won the resolution, so the explicit `--mode full` has no effect). Emit
+this literal string to the operator **before** dispatching — it is a required step, not optional
+prose:
+
+```
+⚠️  --next is ignored in full mode: --next resolves the mode to `implement` (the chain link),
+    so an explicit --mode full has no effect. Running the implement step only. Drop --next to
+    run the full pipeline, or drop --mode full to silence this warning.
+```
+
+The plain `--next` case (no explicit `--mode full`) emits **no** warning — that is the intended
+chain-link behavior, not a silent ignore.
+
 ## Implementation
 
-Delegates to **sp:spur-dev** skill. `$ARGUMENTS` passes all flags including `--agent` through verbatim:
+Delegates to **sp:spur-dev** skill. `$ARGUMENTS` passes all flags including `--agent` through verbatim. Resolve the mode per the table above (emit the mandatory warning if triggered), then:
 
 - **full mode:** `Skill(skill="sp:spur-dev", args="run $ARGUMENTS")`
 - **implement mode:** `Skill(skill="sp:spur-dev", args="implement $ARGUMENTS")`

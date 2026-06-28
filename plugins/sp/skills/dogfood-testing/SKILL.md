@@ -50,14 +50,16 @@ The command forwards these via `$ARGUMENTS`:
 |----------|-------------|---------|
 | `testee` | What to exercise — a slash command, agent skill, or CLI invocation (positional, required). Quote it if it contains flags. | (required) |
 | `--agent <name\|auto>` | **Testee-scoped** agent: the agent the **testee** runs under, forwarded into the testee invocation. The driver (this skill) always runs in the current session. **Omit it** to forward nothing — the testee runs under its own default. See [§Testee-scoped agent](#testee-scoped-agent). | (omitted → forward nothing) |
-| `--max-retry <n>` | Fix attempts per failed step. **`0` = observe-only**: monitor and report, never mutate the repo. | `2` |
+| `--max-retry <n>` | Fix attempts per failed step. **`0` = observe-only** (the default): monitor and report, never mutate the repo. Pass `2` (or higher) to opt into applying `Edit`/`Write` fixes to the working tree. | `0` |
 | `--save` | Write the report to `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md`. | off |
 | `--task` | File findings as a review-template task via `spur task create --template review`. | off |
 | `--full` | Include all severity findings (P1–P4). Default: P1+P2 only. | off |
 
-> ⚠️ **Repo-mutation warning.** Default (`--max-retry 2`) applies `Edit`/`Write` fixes to the working
-> tree. **First run against any unfamiliar testee → use `--max-retry 0` (observe-only)** — monitor
-> and report without mutating. Review findings, then re-run with `--max-retry 2` to apply fixes.
+> ⚠️ **Repo-mutation warning.** The default is **observe-only (`--max-retry 0`)** — monitor and
+> report without mutating the working tree. This is the safe default: a dogfood run against an
+> unfamiliar testee (or a pipeline-driving testee that launches long, mutating runs) cannot mutate
+> anything by accident, and the full findings report is still produced. To apply `Edit`/`Write`
+> fixes, opt in explicitly with `--max-retry 2` (or higher).
 
 ## Phase 1 — Plan
 
@@ -89,7 +91,10 @@ a **finding**, not a fix.
 
 The ledger is updated **live** in Phase 2 and is the single source of truth for the report — the
 report is assembled from it, not from memory. Full methodology, column contract, token/cache
-estimation, and the cache-health finding rule: **[monitor-ledger.md](references/monitor-ledger.md)**.
+estimation, the cache-health finding rule, and the **cache-conservation discipline** (reuse CLI
+output already in context; don't re-ground scaffolding per step; prefer `--json` + targeted
+fields) live in **[monitor-ledger.md](references/monitor-ledger.md)**. Apply the conservation
+discipline while monitoring — low cache% is usually the driver re-fetching data it already holds.
 
 ## Phase 4 — Report
 

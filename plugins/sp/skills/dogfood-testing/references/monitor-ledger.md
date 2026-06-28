@@ -66,6 +66,30 @@ Cache% is the operational signal for testee-tuning:
 
 These feed the report's §5 Findings (see [report-template.md](report-template.md)).
 
+## Cache-conservation discipline (how to keep cache% high)
+
+The cache-health rule above *detects* waste; this section is the mitigation. The dogfooding driver
+(the agent running Phase 2/3) controls most of the cache% it later reports — low cache% is usually
+the driver re-fetching data it already holds. Apply these while monitoring each step:
+
+1. **Reuse CLI output already in context.** If a prior step (or a prior tool call this step)
+   captured `spur task show`/`check`/`list` output, do **not** re-invoke the same command for that
+   data — reference the prior result. Re-invocation is the #1 cause of sub-40% steps. Only re-fetch
+   when the underlying state *changed* (e.g. you just wrote a section and need the new
+   `requiredSections`).
+2. **Don't re-ground shared scaffolding per step.** Command docs, the skill preamble, and the
+   testee's own argument-hint are loaded once into your context — they do not need to be re-read or
+   re-quoted for each step. Re-sending unchanged preamble registers as fresh tokens, not cached.
+3. **Prefer `--json` + targeted fields over full human output.** When you must fetch, ask for the
+   smallest shape that answers the question (`--json` and read one field), not the full
+   human-formatted dump.
+4. **Estimate `~cached` honestly against this discipline.** If *you* re-read a file or re-sent
+   scaffolding this step, that portion is **not** cached — mark cache% down. The estimate is only
+   useful as a trend if it reflects what actually happened.
+
+The point is not to game the number — it is to drive the testee (and your own monitoring) toward
+reusing context, which is the real cost saving the cache% signal stands for.
+
 ## Worked ledger example
 
 ```

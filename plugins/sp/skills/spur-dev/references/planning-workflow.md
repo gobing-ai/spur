@@ -79,35 +79,63 @@ the skill can react to.
 
 ## Step 4: Decomposition
 
-With a clean feature, decompose into tasks:
+**Default: do not decompose.** A clean feature does not automatically become many tasks. The
+default outcome is one task whose `## Plan` carries the implementation steps; splitting is the
+exception you justify with the rubric. See [decomposition.md → Default to NOT
+decomposing](decomposition.md) — read it before this step.
 
-1. Read the feature's scenarios (the AC).
-2. For each scenario, design one or more tasks that implement it — each task maps to at
-   least one scenario by title.
-3. Produce a **task-batch JSON** document conforming to `task-batch.schema.json` — a top-level
+1. **Score the feature with the rubric first.** Compute E/D/L/C/R for the *whole* feature. Record
+   the assessment (this is a required artifact, not optional):
+   - **Score 0–2 → keep as one task.** Stop. Author one task (Background + Requirements from the
+     feature, the implementation steps as its `## Plan`). Do NOT call `batch-create`. You're done
+     with decomposition.
+   - **Score 3–4 → decomposition optional.** Prefer one task with a rationale unless a clear
+     deliverable boundary justifies a split.
+   - **Score 5+, or a force-decompose override fires → decompose.** Continue to step 2.
+2. **Only now design the split** — by deliverable boundary, never by phase or by list-item. Read
+   the feature's scenarios (the AC); each resulting task maps to ≥1 scenario by title.
+3. **Score each candidate child.** Any candidate that scores 0–2 on its own is a `## Plan` step of
+   a sibling, not a task — merge it. This is the check that stops a 6-item finding list becoming 6
+   tiny tasks.
+4. Produce a **task-batch JSON** document conforming to `task-batch.schema.json` — a top-level
    JSON **array** of strict task items (no `tasks` wrapper, only documented fields).
 
-Decomposition heuristics:
-- **One task = one atomic unit of work** a single agent can complete.
+Decomposition heuristics (apply only after deciding to decompose):
+- **One task = one atomic unit of work** a single agent can complete (target 2–8h; never <2h).
 - **Scenario coverage:** every core scenario maps to ≥1 task; edge-case scenarios may map
   or be deferred.
 - **Sub-tasks:** record `parent_wbs` (quoted, e.g. `"0042"`) for sub-tasks; note ordering in
   `background` prose (the item schema has no `dependencies` field).
 - **Template variants:** choose `feature-impl` for implementation tasks (pulls Goal →
   Background from the linked feature, per B09).
+- **Record the rubric score** in each child's `background` (a trailing line, e.g.
+  *"Rubric: E2 D1 L1 C1 R2 = 7 → decompose (force: R=high)."*) — the assessment artifact the
+  gate below checks for.
 
 The batch JSON is the LLM→CLI contract — see [decomposition.md](decomposition.md) for the
 full schema and conventions.
 
 ## Step 5: Batch-create gate
 
+**Pre-check (soundness, before the CLI gate).** Re-read each item in the batch JSON against the
+rubric before submitting. Specifically:
+
+- Would this item score 0–2 on its own? → it is a Plan step; merge it into a sibling or back into
+  the parent. Do not submit it as a task.
+- Is the batch one-item-per-list-entry (one finding → one task, one scenario → one task)? → you
+  are reflex-decomposing. Re-score and merge.
+- Does each item carry its rubric-score line in `background`? → if not, the assessment is missing;
+  score it before submitting.
+
+Only then run the CLI gate:
+
 ```bash
 spur task batch-create --file <batch.json>
 ```
 
 Atomic: all-or-nothing. If `task-batch.schema.json` validation fails, **nothing is written**
-and findings are returned. The skill reads the findings, fixes the JSON, and retries. Common
-failures:
+and findings are returned. The schema validates shape only (it cannot reject over-decomposition —
+that is the pre-check's job above). Common shape failures:
 
 - Missing required fields per the template variant's section matrix.
 - Invalid status values (must be lowercase canonical).
@@ -187,6 +215,25 @@ Before a task enters the execution half, fill those sections via the **refine** 
 and write each via `spur task update <wbs> --section <name> --from-file`. This is the only path
 that turns the `todo` HITL-review gate from a formality into a real one — a reviewer approves the
 *Design*, not an empty heading.
+
+**Check the variant before you write.** Which sections a task carries is decided by its `template:`
+frontmatter against `config/tasks/section-matrix.yaml` — NOT a fixed list. Before authoring any
+section, run `spur task check <wbs> --json` and read `requiredSections` / the L2 findings: they tell
+you exactly what this variant allows at the current status. The default `standard` variant wants
+`Acceptance Criteria` + `Design` + `Plan` at `todo`, but other variants differ — e.g. the `review`
+variant puts findings under `### Background` (`#### Review Findings`) and the fix checklist in
+`### Plan`, and does **not** use `### Requirements`/`### Acceptance Criteria`. Authoring a section
+that isn't in the variant's allowed list produces an L2 "not allowed in this variant/status" warning
+and an off-variant task. Write only what the matrix permits; route findings/checklists into the
+sections the variant actually defines.
+
+**Avoid creating off-variant sections in the first place.** There is no section-delete verb —
+intentionally none (the CLI surface stays minimal). Writing an empty body via
+`spur task update <wbs> --section <name> --from-file <empty-file>` currently leaves a **bare
+heading**, not a removal. So once an off-variant section exists, it cannot be cleanly dropped from
+the skill — the prevention (check the variant before writing, above) is the only reliable path. If
+you must correct an off-variant section, overwrite its body with a single line pointing at the
+correct section (e.g. *"See `### Plan` for the fix checklist."*) rather than leaving it empty.
 
 **Do this just-in-time, per task, immediately before execution** — not in bulk at decomposition
 time. Design written against a stale snapshot of the codebase rots; design written right before
