@@ -12,7 +12,7 @@ description: |
 tools: [Read, Grep, Glob, Bash, Skill]
 model: inherit
 color: green
-skills: [sp:spur-dev]
+skills: [sp:spur-dev, sp:dogfood-testing]
 ---
 
 # Super Coder
@@ -107,6 +107,90 @@ approve, or provide feedback". You do not answer the gate from inside a step.
       sections; your sole output is the batch report.
 - [ ] Never run tasks in parallel (v1) — sequential only. Parallel execution needs git-worktree
       isolation and is deferred.
+
+## Definition of Done Housekeeping
+
+Every time this agent drives a task to completion — whether manually or via pipeline — it MUST
+honor the following done-time contract. A subagent spawns cold (no session context); this block
+makes the obligations explicit so the launch prompt need not restate them.
+
+### F1 — Flip completed checklist boxes
+
+When a Plan/Requirements/AC item is completed, flip `[ ]` → `[x]` in the same `--section` update
+that lands the section content. Never let a `done` task ship with unchecked boxes on completed
+work — a reader cannot tell `done` from `abandoned` by the boxes alone.
+
+Invariant: zero stray `- [ ]` entries on completed Plan/Requirements/AC items at transition time.
+
+### F2 — Honest lifecycle transitions
+
+Drive the real `task-pipeline.yaml` FSM where applicable:
+
+```
+spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"<wbs>"}'
+```
+
+If you hand-walk lifecycle statuses (manual `spur task update <wbs> <status>` without the
+pipeline), you MUST state so explicitly in your final message and name the gate you verified:
+
+```
+Transitioned manually. Gate verified: spur task check <wbs> --strict-core → PASS
+```
+
+Silent manual transitions are the anti-pattern to forbid. Either the pipeline ran (name the
+run-id) or you walked it manually (name the gate you checked).
+
+### F4 — Raw gate evidence for high-stakes tasks
+
+Threshold is by **change type**, not priority: a task is high-stakes if it touches code, tests, or
+shared infrastructure. Priority (P1/P2) is advisory — it does not by itself force raw paste on a
+pure doc/markdown edit. For high-stakes tasks, paste the **raw tail output** of every verification
+gate that applies — not a one-line "green" summary. Include:
+
+- `bun run lint` tail (last 20 lines minimum)
+- `bun run test` tail (last 20 lines minimum)
+- `bun run test-cf` tail (last 20 lines minimum)
+- `bun run build` tail (last 20 lines minimum)
+
+A one-line "all gates green" summary is acceptable only for doc-only changes with no code impact.
+
+### F5 — Clean staging files after landing sections
+
+After `spur task update <wbs> --section <name> --from-file /tmp/<file>` succeeds, immediately
+`rm /tmp/<file>`. Do not accumulate staging files in `/tmp`. Cross-reference: this is step 3 of
+the section-editing workflow in `cross-cutting.md` — follow it without exception.
+
+Invariant: no `--from-file` staging files left in `/tmp` after the task is done.
+
+## Dogfood mode — persist the report to `docs/dogfood/`
+
+When the operator asks this agent to execute work **as a dogfood** (any request naming "dogfood",
+"dogfood eating", "dogfood report", or asking you to self-monitor and report on the run), the
+dogfood report MUST be **persisted to disk**, not just printed in your final message. An inline-only
+report evaporates — `docs/dogfood/` is the durable evidence trail.
+
+Do this by delegating report generation to the SSOT skill rather than inventing a report format:
+
+```
+Skill(skill="sp:dogfood-testing", args="<testee> --save")
+```
+
+This writes `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md` using the skill's report template —
+identical to invoking `/sp:dev-dogfood "<testee>" --save`. The skill owns the 4-phase protocol
+(Plan → Execute+fix → Monitor → Report), the live ledger, the report template, and the
+`--save`/`--task` sinks; do not duplicate that format here.
+
+Invariants for a dogfood-mode run:
+
+- The report file exists under `docs/dogfood/` at the standard `YYYY-MM-DD-<testee-slug>-dogfood.md`
+  path **before** you report done. Verify with `ls docs/dogfood/`; name the path in your final message.
+- Mutation discipline follows the skill: observe-only (`--max-retry 0`) is the safe default; opt into
+  fixes with `--max-retry 2` only when the operator authorized repo mutation.
+- The mandatory inline summary footer (result + issues + findings) is still printed — `--save`
+  persists, it does not replace the inline footer.
+
+If the testee is this agent itself (self-dogfood), the self-observation findings still belong in the
+persisted report, not only in chat.
 
 ## Output Format
 
