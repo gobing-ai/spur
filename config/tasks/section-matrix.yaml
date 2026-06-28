@@ -108,9 +108,11 @@ variants:
   # Plan and Review are optional at backlog/todo so the template renders cleanly;
   # Review becomes required at wip+.
   #
-  # Solution and Testing are optional at wip+ — not required, but tolerated so that
-  # a review-findings task that evolves into implementation work (the common dogfood
-  # follow-up path) can carry a change-map and coverage data without matrix violations.
+  # Requirements is optional from todo onward (the authoring stage where a refined
+  # review-findings task gains scoped requirements); Solution and Testing are optional
+  # at wip+ — none required, but tolerated so that a review-findings task that evolves
+  # into implementation work (the common dogfood follow-up path) can carry scoped
+  # requirements, a change-map, and coverage data without matrix violations.
   # The required list guards the real deliverables; optional is permissive on purpose.
   review:
     backlog:
@@ -119,17 +121,17 @@ variants:
       forbidden: [Testing]
     todo:
       required: [Background, Plan]
-      optional: [Q&A, Review]
+      optional: [Q&A, Requirements, Review]
       forbidden: [Testing]
     wip:
       required: [Background, Review]
-      optional: [Plan, Q&A, Solution, Testing]
+      optional: [Plan, Q&A, Requirements, Solution, Testing]
     testing:
       required: [Background, Review]
-      optional: [Plan, Solution, Testing]
+      optional: [Plan, Requirements, Solution, Testing]
     done:
       required: [Background, Review]
-      optional: [Plan, Q&A, Solution, Testing]
+      optional: [Plan, Q&A, Requirements, Solution, Testing]
       gate: true
     blocked:
       required: [Background]
