@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Batch execution v2 — parallel runs (worktree isolation) + interactive within-step escalation"
 description: ""
-status: todo
+status: blocked
 type: task
 profile: standard
 feature_id: H1
@@ -12,7 +12,7 @@ priority: P3
 tags: []
 dependencies: []
 created_at: "2026-06-28T05:37:28.269Z"
-updated_at: 2026-06-28T05:39:57.904Z
+updated_at: 2026-06-28T16:53:38.429Z
 ---
 
 ## 0142. Batch execution v2 — parallel runs (worktree isolation) + interactive within-step escalation
@@ -193,3 +193,4 @@ backlog.
 ### History
 - 2026-06-28T05:39:44.679Z todo → blocked (system)
 - 2026-06-28T05:39:57.815Z blocked → todo (system)
+- 2026-06-28T16:53:38.429Z todo → blocked (system)
