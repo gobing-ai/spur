@@ -90,6 +90,11 @@ must not be changed without updating the backing skill.
 - **Inputs:** `<wbs>` (required). `--focus <mode>` narrows the gap analysis. `--agent <name|auto>` is an **inline** override: omit (default) to run the synthesis **in the current session**; `<name>`/`auto` spawns it via `spur agent run`. `--auto` skips interactive Q&A (synthesis only) and propagates down the `--next` chain. `--next`: advance to the next step — transition `backlog → todo` through the FSM (guard honored) and invoke `/sp:dev-run <wbs> --auto --next` (which resolves to the implement step). On a guard/refine failure, stop as review-pending.
 - **Backing:** `sp:spur-dev` skill, `refine` operation.
 - **Behavior:** Read the task → elicit missing AC/Design/Plan through targeted Q&A → write each via `spur task update <wbs> --section <name> --from-file`. Done just-in-time, per task, immediately before execution. With `--next`: on success, transition status + chain to dev-run; on failure, stop and surface error.
+- **Pre-synthesis skip gate (under `--auto`):** Before invoking synthesis, run `spur task check <wbs> --json`. If the exit code is 0 (PASS) **and** the target sections already satisfy L3 structure (no L3 warnings for those sections), emit a structured SKIP result instead of synthesizing:
+  ```
+  SKIP — sections already meet L3: sections-considered=[Background, Requirements, Plan], reason="spur task check PASS, all target sections at L3"
+  ```
+  Synthesis is only invoked when there is a real gap to close. The SKIP result is the normal outcome for a well-specified task under `--auto`; it is not a failure.
 - **Delegation:** `Skill(skill="sp:spur-dev", args="refine $ARGUMENTS")`
 
 ### 6. plan

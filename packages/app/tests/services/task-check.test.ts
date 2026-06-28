@@ -589,6 +589,82 @@ describe('TaskCheckService', () => {
         expect(planWarnings).toHaveLength(0);
     });
 
+    test('L3: Plan with bold-phase header followed by checkbox items produces no warning (0129-shape)', async () => {
+        // WHY: the L3 Plan check must scan ALL lines for a list-item marker, not just the first.
+        // A Plan that opens with a **Phase A — …:** bold header and contains '- [ ]' checkbox items
+        // is a valid ordered form — the first-line-only test falsely flagged it as free-form prose.
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Plan bold-phase"',
+            'status: backlog',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Plan bold-phase',
+            '',
+            '### Background',
+            '',
+            'text',
+            '',
+            '### Plan',
+            '',
+            '**Phase A — Setup:**',
+            '- [ ] A1. Install dependencies',
+            '- [ ] A2. Configure environment',
+            '',
+            '**Phase B — Implementation:**',
+            '- [ ] B1. Write the fix',
+            '- [ ] B2. Add regression test',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+
+        const planWarnings = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Plan');
+        expect(planWarnings).toHaveLength(0);
+    });
+
+    test('L3: Plan as free-form prose still warns after permissive fix (guard against over-matching)', async () => {
+        // WHY: the multiline fix must not suppress warnings for genuinely free-form prose Plans.
+        // Pure paragraph text with no list markers must still trigger the L3 warning.
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Plan prose guard"',
+            'status: backlog',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Plan prose guard',
+            '',
+            '### Background',
+            '',
+            'text',
+            '',
+            '### Plan',
+            '',
+            '**Phase A — Setup:**',
+            'First we install the dependencies. Then we configure the environment.',
+            '',
+            '**Phase B — Implementation:**',
+            'We write the fix and add a regression test.',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+
+        const planWarnings = result.findings.filter(
+            (f) => f.layer === 'L3' && f.section === 'Plan' && f.severity === 'warning',
+        );
+        expect(planWarnings.length).toBeGreaterThan(0);
+        expect(planWarnings[0]?.message).toContain('checklist');
+    });
+
     test('resolveMatrixEntry falls back to the standard variant', () => {
         const svc = new TaskCheckService(createNodeFileSystem(), matrix);
         const entry = svc.resolveMatrixEntry('nonexistent', 'backlog');

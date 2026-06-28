@@ -68,6 +68,11 @@ the step via `spur agent run` instead. The default never shells out.
 2. **Analyze** → Check content for gaps and ambiguities against the focus bundle.
 3. **Question** → Generate targeted Q&A based on the expanded domain hints.
 4. **Synthesize** → Update Background, Requirements, and Constraints sections via `spur task update --section`.
+   - **Under `--auto`: pre-synthesis skip gate.** Before invoking synthesis, run `spur task check <wbs> --json`. If the check is PASS and the target sections already satisfy L3 structure (no L3 warnings for those sections), emit a SKIP result and stop — do not invoke synthesis:
+     ```
+     SKIP — sections already meet L3: sections-considered=[Background, Requirements, Plan], reason="spur task check PASS, all target sections at L3"
+     ```
+     A SKIP is the normal outcome for a well-specified task. It is not a failure. Under `--auto`, only invoke synthesis when a real L3 gap exists.
 5. **Profile** → Auto-set template/preset based on scope and complexity.
 6. **`--next` chain** → If refine succeeds (task check passes):
    - Transition: `spur task update <wbs> todo` — the `backlog → todo` guard is `always`; passes.

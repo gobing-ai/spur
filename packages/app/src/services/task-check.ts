@@ -185,7 +185,7 @@ export class TaskCheckService extends PlanningCheckService {
         // Plan: ordered checklist or table, not free-form prose (warning)
         const planBody = doc.getSection('Plan');
         if (planBody !== null && !isPlaceholderBody(planBody)) {
-            const isList = /^\s*[-*]\s|^\s*\d+\.\s/.test(planBody.trimStart());
+            const isList = /^\s*[-*]\s|^\s*\d+\.\s/m.test(planBody);
             const isTable = /\|/.test(planBody);
             if (!isList && !isTable) {
                 findings.push({

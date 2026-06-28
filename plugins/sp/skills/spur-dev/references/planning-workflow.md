@@ -246,6 +246,14 @@ time. Design written against a stale snapshot of the codebase rots; design writt
 | `--focus <mode>` | Narrows the gap analysis to a subset of domain hints. See the `sp:dev-refine` skill for the full value table (`all`, `requirements`, `background`, `constraints`, `acceptance`, `quick`). Default `all`. |
 | `--auto` | Skip interactive Q&A — synthesize improvements from the task content alone. Use for well-scoped tasks where the agent can fill gaps without operator input. |
 
+**Pre-synthesis skip gate (under `--auto`).** Before synthesizing, run `spur task check <wbs> --json`. When the check exits 0 (PASS) and the target sections show no L3 warnings, emit a structured SKIP instead of calling the synthesis agent:
+
+```
+SKIP — sections already meet L3: sections-considered=[Background, Requirements, Plan], reason="spur task check PASS, all target sections at L3"
+```
+
+This is the expected outcome for a task that is already well-specified. Under `--auto`, a SKIP is not an error — it means no gap was found. The operator can verify by reading the check output or the task file directly. Synthesis is only invoked when a real gap exists.
+
 > **Requirements formatting:** author R-items as a GitHub task-list checkbox — `- [ ] R1. <text>`
 > — so progress is trackable in the file. The L3 check accepts the `- [ ] Rn.` / `- Rn.` / `Rn.`
 > forms; keep the `Rn.` (period) token so the R-numbering rule recognizes it.
