@@ -175,6 +175,30 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         context.output.write(`Set ${key}=${value} on task ${result.ref.id}`);
                     }
                 } else if (status !== undefined) {
+                    // P3 backstop (task 0130 retrospective): the lifecycle YAML runs
+                    // `spur task check` as the wip→testing and testing→done guard. When the
+                    // lifecycle adapter is unavailable (--no-lifecycle, or the bundled
+                    // task-lifecycle workflow can't be resolved), the fallback
+                    // (SchemaLifecyclePort) silently permits the transition — so a task can
+                    // slide to `done` with L3 errors via raw CLI. Re-run the gate inline for
+                    // the two guarded terminal entries when the adapter is absent.
+                    if (options.lifecycle !== false && (status === 'done' || status === 'testing')) {
+                        const adapter = makeLifecycleAdapter(context, TASK_LIFECYCLE_PROFILE);
+                        if (adapter === undefined) {
+                            context.output.error(
+                                `warning: lifecycle adapter unavailable — running \`spur task check\` inline as the ${status} gate. ` +
+                                    'Restore the bundled task-lifecycle workflow to re-enable the real guard.',
+                            );
+                            const ok = await runDoneGateCheck(context, wbs, options.folder, status === 'done');
+                            if (!ok) {
+                                context.output.error(
+                                    `Lifecycle transition blocked: \`spur task check ${wbs}\` failed. Fix the findings before transitioning to ${status}.`,
+                                );
+                                context.setExitCode(1);
+                                return;
+                            }
+                        }
+                    }
                     const result = await svc.updateStatus(wbs, status);
                     if (options.json) {
                         context.output.write(toJson(result));
@@ -594,6 +618,32 @@ function loadTemplateBodies(projectRoot: string, variant: string): Partial<Recor
 
 async function makeCheckService(context: CliContext): Promise<TaskCheckService> {
     return new TaskCheckService(context.fs, await loadSectionMatrix(context.cwd));
+}
+
+/**
+ * Inline lifecycle-gate backstop (P3, task 0130 retrospective). Runs the same
+ * `spur task check` the lifecycle YAML guard runs, used ONLY when the lifecycle
+ * adapter is unavailable and the transition targets a guarded state (`testing`
+ * or `done`). Returns `true` iff the check passes. `strictCore` mirrors the
+ * YAML's `--strict-core` for the testing→done gate; the wip→testing gate uses
+ * the default severity (hard-core errors fail, advisories pass).
+ */
+async function runDoneGateCheck(
+    context: CliContext,
+    wbs: string,
+    folderOverride: string | undefined,
+    strictCore: boolean,
+): Promise<boolean> {
+    const foldersConfig = (await resolvePlanningFolders(context.fs)).foldersConfig;
+    const tasksDir = folderOverride ?? context.fs.resolve(foldersConfig.active_folder);
+    const entries = await context.fs.readDir(tasksDir);
+    const fileName = entries.find((n) => n.startsWith(`${wbs}_`) && n.endsWith('.md'));
+    if (!fileName) {
+        return false; // missing task — let updateStatus throw the real error
+    }
+    const svc = new TaskCheckService(context.fs, await loadSectionMatrix(context.cwd));
+    const result = await svc.check(`${tasksDir}/${fileName}`, wbs, { strict: strictCore });
+    return result.pass;
 }
 /**
  * Load the Section-Status-Matrix (design §3.2, R2). Resolution order:

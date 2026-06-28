@@ -5,10 +5,11 @@
  * These exercise the verb surface through the real `main()` entry point:
  * golden paths, the `--json` envelope shape, and exit codes 0/1/2 (design §10, R5).
  */
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { rmSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import * as configModule from '@gobing-ai/spur-config/loader';
 import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
 import { type CapturedOutput, createCapturedOutput } from '../helpers';
@@ -539,6 +540,57 @@ describe('spur task CLI', () => {
         // Non-existent task triggers the update catch block (lines 136-137)
         expect(exitCode).toBe(1);
         expect(output.errors.length).toBeGreaterThan(0);
+    });
+
+    test('testing→done is gated by `spur task check` when the lifecycle adapter is unavailable (P3 backstop)', async () => {
+        // Force the lifecycle adapter to be unavailable so the SchemaLifecyclePort
+        // fallback (which permits every transition) is in play — the exact hole P3
+        // describes: without the inline gate, `done` would succeed despite an L3 error.
+        const spy = spyOn(configModule, 'bundledConfigRoot').mockReturnValue(null);
+        try {
+            const cOut = createCapturedOutput();
+            await main(['task', 'create', 'P3 gate target'], { cwd, output: cOut });
+            const wbs = createdWbs(cOut);
+
+            // Plant a Solution with no `file:line` citation → L3 hard error at testing/done.
+            const bodyFile = join(cwd, 'no-citation.md');
+            await Bun.write(bodyFile, 'A change-map with no file:line citation.\n');
+            // Walk to testing first (also gated, but the wip→testing gate is the default
+            // severity; a bare Solution body passes it). Use --no-lifecycle on the walk so
+            // we control the path, then test the done transition under the fallback.
+            await main(['task', 'update', wbs, 'todo', '--no-lifecycle'], { cwd, output: createCapturedOutput() });
+            await main(['task', 'update', wbs, '--section', 'Solution', '--from-file', bodyFile], {
+                cwd,
+                output: createCapturedOutput(),
+            });
+            // Seed done-required sections so the ONLY failure is the L3 citation.
+            const testingBody = join(cwd, 'testing.md');
+            await Bun.write(testingBody, 'Testing evidence present.\n');
+            await main(['task', 'update', wbs, '--section', 'Testing', '--from-file', testingBody], {
+                cwd,
+                output: createCapturedOutput(),
+            });
+            const reviewBody = join(cwd, 'review.md');
+            await Bun.write(
+                reviewBody,
+                '| Priority | Status | Note |\n|----------|--------|------|\n| P1 | DONE | ok |\n',
+            );
+            await main(['task', 'update', wbs, '--section', 'Review', '--from-file', reviewBody], {
+                cwd,
+                output: createCapturedOutput(),
+            });
+            await main(['task', 'update', wbs, 'wip', '--no-lifecycle'], { cwd, output: createCapturedOutput() });
+            await main(['task', 'update', wbs, 'testing', '--no-lifecycle'], { cwd, output: createCapturedOutput() });
+
+            // Now attempt done WITHOUT --no-lifecycle: the adapter is unavailable (spy),
+            // so the inline gate must run `task check` and block the L3 citation error.
+            const output = createCapturedOutput();
+            const exitCode = await main(['task', 'update', wbs, 'done'], { cwd, output });
+            expect(exitCode).toBe(1);
+            expect(output.errors.some((e) => e.includes('blocked'))).toBe(true);
+        } finally {
+            spy.mockRestore();
+        }
     });
 
     test('update --section --from-file with non-json output handles warnings', async () => {
