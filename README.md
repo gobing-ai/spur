@@ -288,3 +288,6 @@ Apache-2.0 © [Robin Min](mailto:minlongbing@gmail.com)
 [rule]: https://github.com/gobing-ai/ts-libs/tree/main/packages/rule-engine
 [wf]: https://github.com/gobing-ai/ts-libs/tree/main/packages/dual-workflow-engine
 [hist]: https://github.com/gobing-ai/ts-libs/tree/main/packages/llm-jsonl-importer
+
+## References
+- [codex-usage-tracker](https://github.com/douglasmonsky/codex-usage-tracker)
