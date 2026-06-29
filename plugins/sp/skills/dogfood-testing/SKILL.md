@@ -50,16 +50,17 @@ The command forwards these via `$ARGUMENTS`:
 |----------|-------------|---------|
 | `testee` | What to exercise — a slash command, agent skill, or CLI invocation (positional, required). Quote it if it contains flags. | (required) |
 | `--agent <name\|auto>` | **Testee-scoped** agent: the agent the **testee** runs under, forwarded into the testee invocation. The driver (this skill) always runs in the current session. **Omit it** to forward nothing — the testee runs under its own default. See [§Testee-scoped agent](#testee-scoped-agent). | (omitted → forward nothing) |
-| `--max-retry <n>` | Fix attempts per failed step. **`0` = observe-only** (the default): monitor and report, never mutate the repo. Pass `2` (or higher) to opt into applying `Edit`/`Write` fixes to the working tree. | `0` |
+| `--max-retry <n>` | Fix attempts per failed step. The **default is `2`** (fix mode): apply `Edit`/`Write` fixes to the working tree, up to 2 attempts per step. Pass `--max-retry 0` for **observe-only** — monitor and report, never mutate the repo. | `2` |
 | `--save` | Write the report to `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md`. | off |
 | `--task` | File findings as a review-template task via `spur task create --template review`. | off |
 | `--full` | Include all severity findings (P1–P4). Default: P1+P2 only. | off |
 
-> ⚠️ **Repo-mutation warning.** The default is **observe-only (`--max-retry 0`)** — monitor and
-> report without mutating the working tree. This is the safe default: a dogfood run against an
-> unfamiliar testee (or a pipeline-driving testee that launches long, mutating runs) cannot mutate
-> anything by accident, and the full findings report is still produced. To apply `Edit`/`Write`
-> fixes, opt in explicitly with `--max-retry 2` (or higher).
+> ⚠️ **Repo-mutation warning.** The default is **fix mode (`--max-retry 2`)** — it applies
+> `Edit`/`Write` fixes to the working tree as it finds breakages. For a non-mutating run, opt into
+> **observe-only** with `--max-retry 0`: monitor and report, never touch files, full findings report
+> still produced. Reach for observe-only against an unfamiliar testee (or a pipeline-driving testee
+> that launches long, mutating runs) so it cannot mutate anything by accident; default fix mode
+> assumes you are dogfooding a testee you own and want fixed in place.
 
 ## Phase 1 — Plan
 
@@ -145,8 +146,10 @@ Do **not** use this skill for:
 
 ## Gotchas
 
-1. **Observe-only first.** Against any unfamiliar testee, `--max-retry 0` — inspect before you let
-   it mutate the working tree.
+1. **Observe-only for unfamiliar testees.** The default is fix mode (`--max-retry 2`), which mutates
+   the working tree. Against any testee you don't own or fully trust — or one that drives a long,
+   mutating pipeline — pass `--max-retry 0` first and inspect the findings before letting it apply
+   fixes.
 2. **The ledger is live, not reconstructed.** Honest fixed-vs-unresolved accounting depends on
    recording each step *as it happens*. Reconstructing at the end produces fiction.
 3. **A hiding fix is a finding.** If "fixing" a step would mask the bug, log it as a finding and
