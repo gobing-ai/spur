@@ -39,6 +39,9 @@ agent:
     - name: omp-zai-volc
       agent: omp
       model: volc/glm-5.2
+    - name: omp-deepseek
+      agent: omp
+      model: deepseek/deepseek-v4-pro
     - name: codex
       agent: codex
     - name: claude
@@ -47,7 +50,7 @@ agent:
     dev-brainstorm: claude
     dev-fixall: omp-zai-volc
     dev-plan: claude
-    dev-run: omp-zai
+    dev-run: omp-zai-volc
     dev-changelog: omp-zai-volc
     dev-review: claude
     dev-verify: claude
