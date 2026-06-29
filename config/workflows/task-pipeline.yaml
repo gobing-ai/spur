@@ -86,7 +86,7 @@ states:
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: review
-    description: SECU code review via /sp:dev-review.
+    description: SECUA-framework code review via /sp:dev-review (Security, Efficiency, Correctness, Usability, Architecture).
     onEnter:
       - kind: agent.run
         options:

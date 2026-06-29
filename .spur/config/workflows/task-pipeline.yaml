@@ -55,20 +55,26 @@ states:
 
   - id: implement
     description: >
-      Move the task to `wip` (via the normal verb — lifecycle guards apply, R3),
-      then run agent-driven implementation via /sp:dev-run --mode implement.
+      Run agent-driven implementation via /sp:dev-run --mode implement, THEN move the
+      task to `wip` via the normal verb. The lifecycle transition fires AFTER the
+      implement agent.run succeeds — onEnter runs in declaration order and the default
+      'fail' policy halts the sequence (routing the run to `failed`) if the agent.run
+      fails or times out, so a halted implement never leaves the task at `wip` with an
+      empty Solution (the F3 half-state). The `--no-lifecycle` flag is correct here: the
+      pipeline owns this transition; the FSM guard would otherwise re-run `spur task
+      check`, which is precheck's job.
       NOTE: this step must NOT call /sp:dev-run in full mode (the default) —
       that command DRIVES this pipeline, so calling it here recurses.
       --mode implement is the single-step implement entry.
     onEnter:
-      - kind: shell
-        options:
-          command: "${vars.spurBin} task update ${vars.wbs} wip --no-lifecycle"
       - kind: agent.run
         options:
           agent: ${vars.agent}
           input: /sp:dev-run --mode implement ${vars.wbs} --auto
           timeoutMs: ${vars.stepTimeoutMs}
+      - kind: shell
+        options:
+          command: "${vars.spurBin} task update ${vars.wbs} wip --no-lifecycle"
 
   - id: test
     description: Test execution + coverage via /sp:dev-unit.
@@ -80,7 +86,7 @@ states:
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: review
-    description: SECU code review via /sp:dev-review.
+    description: SECUA-framework code review via /sp:dev-review (Security, Efficiency, Correctness, Usability, Architecture).
     onEnter:
       - kind: agent.run
         options:

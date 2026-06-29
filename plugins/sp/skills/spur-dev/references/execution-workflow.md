@@ -45,7 +45,7 @@ one thing and yields, so the **pipeline (not the agent) owns the loop**.
 |-------|-----------|------------|
 | `implement` | `/sp:dev-run --mode implement <wbs>` — write the code that satisfies the task; author `## Solution`. | [dev-operations.md §4 run](dev-operations.md) |
 | `test` | `/sp:dev-unit <target> --auto` — extend/generate tests to the coverage target. | [dev-operations.md §1 unit](dev-operations.md) → [unit-testing.md](unit-testing.md) |
-| `review` | `/sp:dev-review <wbs>` — SECU-framework review of the diff. | [dev-operations.md §2 review](dev-operations.md) |
+| `review` | `/sp:dev-review <wbs>` — SECUA-framework review of the diff. | [dev-operations.md §2 review](dev-operations.md) |
 | `verify` | `sp:code-verification` — requirements traceability + verdict. | [dev-operations.md §3 verify](dev-operations.md) |
 
 **Agent override** for any stage: the `--agent <name|auto>` flag (passed through from

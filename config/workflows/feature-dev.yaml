@@ -62,7 +62,7 @@ states:
     description: >
       Drive EVERY pending task under the feature to done. The agent enumerates the work with
       `spur task list --feature ${featureId} --status todo --json`, then runs each task through
-      task-pipeline.yaml (refine → implement → test → review → verify → record → done). It
+      task-pipeline.yaml (precheck → implement → test → review → approve → verify → record → done). It
       stops and reports on the first non-PASS verdict — a failing task fails the feature.
     onEnter:
       - kind: agent.run
@@ -70,9 +70,13 @@ states:
           agent: ${vars.agent}
           input: >
             Run every pending task under feature ${vars.featureId} to done. Enumerate with
-            `${vars.spurBin} task list --feature ${vars.featureId} --status todo --json`, then
-            for each task run the task-pipeline (e.g. /sp:dev-refine <wbs> --auto --next, which
-            chains implement → verify → done). Stop and report on the first non-PASS verdict.
+            `${vars.spurBin} task list --feature ${vars.featureId} --status todo --json`; then
+            for each WBS run the standard single-task pipeline VERBATIM:
+            `${vars.spurBin} workflow run config/workflows/task-pipeline.yaml --vars
+            '{"wbs":"<wbs>","profile":"${vars.profile}","agent":"${vars.agent}"}' --async --json`,
+            polling `${vars.spurBin} workflow trace <run-id>` until terminal and inspecting
+            `.spur/run/<wbs>-verdict.json`. Stop and report on the first non-PASS verdict
+            (a failing task fails the feature).
 
   - id: feature-verify
     description: >
