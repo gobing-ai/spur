@@ -51,3 +51,4 @@ rules:
       - "**/tests/**"
       ## pure re-export for UI components
       - "apps/web/src/ui.ts"
+      - "apps/web/src/modules/config.ts"

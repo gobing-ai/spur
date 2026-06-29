@@ -1,6 +1,7 @@
 import type { TaskStatus } from '@gobing-ai/spur-domain/schema';
 import { lazy, Suspense } from 'react';
 import { api } from '../../lib/rpc-client';
+import type { WebModule } from '../types';
 import KanbanBoard from './KanbanBoard';
 import type { TaskSummary } from './types';
 import { useTaskParams } from './useTaskParams';
@@ -41,7 +42,7 @@ function TaskKanbanDetail() {
     );
 }
 
-export const TaskKanbanModule = {
+export const module: WebModule = {
     id: 'tasks',
     name: 'Tasks',
     icon: '📋',
