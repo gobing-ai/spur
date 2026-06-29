@@ -64,21 +64,30 @@ the step via `spur agent run` instead. The default never shells out.
 
 ## Workflow
 
-1. **Resolve wbs** → Load task file from WBS or path.
+1. **Load task** → Resolve the WBS to its file with `spur task path <wbs>` (or read a given path directly); `spur task show`/`check` also accept a bare WBS. The `spur task resolve` verb is the **inverse** (file-path → owning WBS), not the WBS→file lookup — don't use it here.
 2. **Analyze** → Check content for gaps and ambiguities against the focus bundle.
 3. **Question** → Generate targeted Q&A based on the expanded domain hints.
 4. **Synthesize** → Update Background, Requirements, and Constraints sections via `spur task update --section`.
-   - **Under `--auto`: pre-synthesis skip gate.** Before invoking synthesis, run `spur task check <wbs> --json`. If the check is PASS and the target sections already satisfy L3 structure (no L3 warnings for those sections), emit a SKIP result and stop — do not invoke synthesis:
+   - **Under `--auto`: pre-synthesis skip gate.** Before invoking synthesis, run `spur task check <wbs> --json`. Filter the findings to the target sections only ({Background, Requirements, Plan}). If there are **no L3 findings for those sections** (regardless of whether the overall exit code is 0 — other sections' findings do not count), emit a SKIP result and stop — do not invoke synthesis:
      ```
-     SKIP — sections already meet L3: sections-considered=[Background, Requirements, Plan], reason="spur task check PASS, all target sections at L3"
+     SKIP — sections already meet L3: sections-considered=[Background, Requirements, Plan], reason="no L3 findings for target sections"
      ```
-     A SKIP is the normal outcome for a well-specified task. It is not a failure. Under `--auto`, only invoke synthesis when a real L3 gap exists.
+     A SKIP is the normal outcome for a well-specified task. It is not a failure. Under `--auto`, only invoke synthesis when a real L3 gap exists in a **target section**. L3 findings on sections refine does not own (e.g. `### Review`) must not block the SKIP gate.
 5. **Profile** → Auto-set template/preset based on scope and complexity.
 6. **`--next` chain** → If refine succeeds (task check passes):
-   - Transition: `spur task update <wbs> todo` — the `backlog → todo` guard is `always`; passes.
-     (No `--no-lifecycle`: the chain honors the FSM so a real guard failure stops as review-pending.)
+   - Transition (idempotent): only when `status == backlog`, run `spur task update <wbs> todo` — the
+     `backlog → todo` guard is `always`; passes. When the task is **already at `todo` or past it**
+     (the common case after intake), the `backlog → todo` edge doesn't match — **skip the transition**
+     and chain anyway (`status >= todo` ⇒ already advanced; the FSM is not re-entered). The chain never
+     depends on a silently no-op or erroring guard.
+     (No `--no-lifecycle`: when a transition does run, the chain honors the FSM so a real guard failure
+     stops as review-pending.)
    - Invoke: `/sp:dev-run <wbs> --auto --next` — `--next` resolves to the implement step, which then
      chains to dev-verify. `--auto` propagates down the whole chain.
+   - **SKIP short-circuits synthesis, not `--next`.** A step-4 SKIP (sections already at L3) means *no
+     synthesis was needed* — it does **not** cancel the chain. Under `--auto --next`, a SKIP still flows
+     into this transition+`dev-run`. So "`refine --auto --next` on a well-specified task" is effectively
+     "run the pipeline"; an operator who wanted refinement only should drop `--next`.
    - On a guard failure or refine failure: stop — surface the blocking reason, leave the task at its
      current status, do NOT invoke dev-run (review-pending stop).
 

@@ -163,9 +163,18 @@ sub-section of `### Background`, so:
 spur task update <wbs> --section "Background" --from-file <path>   # body starts with "#### Review Findings"
 ```
 
-**Do not leave `### Review` non-placeholder without a P-column.** The review template ships two
-tables: `#### Review Findings` (under `### Background`) is the *input*; `### Review` is the *post-fix
-reflection*. `spur task check` fires a **hard L3 error** ("Review must contain P1–P4 priority findings
-table") whenever `### Review` is present *and non-placeholder* but carries no `P1`–`P4` token. Safe
-path: write **only** `#### Review Findings`; leave `### Review` as the scaffold (its placeholder
-already contains `P1`/`P2`). Verify with `spur task check <wbs> --json` before handoff.
+**Where the P-rows live, and how the L3 Review rule behaves.** The review template ships two tables:
+`#### Review Findings` (under `### Background`) is the *input* you populate from the dogfood findings;
+`### Review` is the *post-fix reflection* table, shipped as an **empty-cell scaffold**
+(`| P1 | | | |`). `spur task check`'s L3 Review rule keys off `### Review`, not `#### Review Findings`:
+
+- Write the dogfood findings into **`#### Review Findings`** (that is the `--task` sink target).
+- Leave **`### Review`** as the shipped empty-cell scaffold. The hardened L3 rule tolerates the empty
+  scaffold **wherever `### Review` is optional** (review variant: `backlog`/`todo` — the freshly
+  created state) and only requires a *populated* P-table once `### Review` becomes **required**
+  (`wip`+). So a freshly created `review` task at `backlog`/`todo` passes `task check` with the
+  scaffold untouched — no hand-written P-row is needed, and a bare prose note in `### Review` is the
+  thing that errors (it is neither the scaffold nor a populated table).
+
+Always verify with `spur task check <wbs> --json` before handoff; the sink path below writes only
+`#### Review Findings` and leaves `### Review` as the scaffold.

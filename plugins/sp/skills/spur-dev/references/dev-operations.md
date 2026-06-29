@@ -87,14 +87,21 @@ must not be changed without updating the backing skill.
 ### 5. refine
 
 - **Purpose:** Refine a task's requirements via structured Q&A — clarify scope, elicit missing details, tighten acceptance criteria before execution.
-- **Inputs:** `<wbs>` (required). `--focus <mode>` narrows the gap analysis. `--agent <name|auto>` is an **inline** override: omit (default) to run the synthesis **in the current session**; `<name>`/`auto` spawns it via `spur agent run`. `--auto` skips interactive Q&A (synthesis only) and propagates down the `--next` chain. `--next`: advance to the next step — transition `backlog → todo` through the FSM (guard honored) and invoke `/sp:dev-run <wbs> --auto --next` (which resolves to the implement step). On a guard/refine failure, stop as review-pending.
+- **Inputs:** `<wbs>` (required). `--focus <mode>` narrows the gap analysis. `--agent <name|auto>` is an **inline** override: omit (default) to run the synthesis **in the current session**; `<name>`/`auto` spawns it via `spur agent run`. `--auto` skips interactive Q&A (synthesis only) and propagates down the `--next` chain. `--next`: advance to the next step — transition `backlog → todo` through the FSM **idempotently** (only when `status == backlog`; a task already at `todo` or past it skips the transition and chains anyway — `status >= todo` ⇒ already advanced) and invoke `/sp:dev-run <wbs> --auto --next` (which resolves to the implement step). On a guard/refine failure, stop as review-pending.
 - **Backing:** `sp:spur-dev` skill, `refine` operation.
-- **Behavior:** Read the task → elicit missing AC/Design/Plan through targeted Q&A → write each via `spur task update <wbs> --section <name> --from-file`. Done just-in-time, per task, immediately before execution. With `--next`: on success, transition status + chain to dev-run; on failure, stop and surface error.
-- **Pre-synthesis skip gate (under `--auto`):** Before invoking synthesis, run `spur task check <wbs> --json`. If the exit code is 0 (PASS) **and** the target sections already satisfy L3 structure (no L3 warnings for those sections), emit a structured SKIP result instead of synthesizing:
+- **Behavior:** Read the task → elicit missing AC/Design/Plan through targeted Q&A → write each via `spur task update <wbs> --section <name> --from-file`. Done just-in-time, per task, immediately before execution. With `--next`: on success, transition status (idempotently — see Inputs) + chain to dev-run; on failure, stop and surface error.
+- **Pre-synthesis skip gate (under `--auto`):** Before invoking synthesis, run `spur task check <wbs> --json`. Filter the findings to the target sections only ({Background, Requirements, Plan}). If there are no L3 findings for any of those sections (regardless of whether the *overall* exit code is 0 — other sections may have findings), emit a structured SKIP result instead of synthesizing:
   ```
-  SKIP — sections already meet L3: sections-considered=[Background, Requirements, Plan], reason="spur task check PASS, all target sections at L3"
+  SKIP — sections already meet L3: sections-considered=[Background, Requirements, Plan], reason="no L3 findings for target sections"
   ```
-  Synthesis is only invoked when there is a real gap to close. The SKIP result is the normal outcome for a well-specified task under `--auto`; it is not a failure.
+  Under `--json`/machine consumption, emit the same decision as a structured object so a downstream
+  (observe-only) driver need not re-run `spur task check` to reconstruct it:
+  ```json
+  {"result": "SKIP", "sections-considered": ["Background", "Requirements", "Plan"], "reason": "no L3 findings for target sections"}
+  ```
+  Synthesis is only invoked when a real L3 gap exists in a target section. The SKIP result is the normal outcome for a well-specified task under `--auto`; it is not a failure.
+  **Scope:** only L3 findings whose `section` ∈ {Background, Requirements, Plan} count toward the SKIP gate. L3 findings on other sections (e.g. `### Review`) do not block the SKIP — refine does not own those sections.
+- **SKIP short-circuits synthesis, not `--next`.** A SKIP means no synthesis was needed — it does **not** cancel the `--next` chain. Under `--auto --next`, a SKIP still flows into the (idempotent) status transition and the chained `/sp:dev-run`. "`refine --auto --next` on a well-specified task" is therefore effectively "run the pipeline"; an operator who wanted refinement only should drop `--next`.
 - **Delegation:** `Skill(skill="sp:spur-dev", args="refine $ARGUMENTS")`
 
 ### 6. plan
