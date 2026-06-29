@@ -43,6 +43,11 @@ in the reviewed PR/commit/diff). Fix in priority order (P1 → P2 → …); re-r
 Post-implementation reflection — filled **after** the first fix round: what went wrong, what
 remains to fix before closing, and any **back-issues** (new findings surfaced by the fix).
 
+| Severity | File | Finding | Recommendation |
+| -------- | ---- | ------- | -------------- |
+| P1       |      |         |                |
+| P2       |      |         |                |
+
 ### References
 
 ### History
