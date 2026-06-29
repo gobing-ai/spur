@@ -477,6 +477,30 @@ describe('PlanningWriteService', () => {
             expect(result.toStatus).toBe('wip');
         });
 
+        test('normalizes legacy PascalCase status before lifecycle transition (task 0152)', async () => {
+            const fs = makeFs();
+            // A capturing spy that records what the lifecycle port actually receives.
+            const seen: { current: string; to: string }[] = [];
+            const port: LifecyclePort = {
+                requestTransition(_ref, currentStatus, to) {
+                    seen.push({ current: currentStatus, to });
+                    return { allowed: true, from: currentStatus, to };
+                },
+            };
+            const svc = new PlanningWriteService({ fs, lifecycle: port });
+            const ref = makeTaskRef();
+            // Seed a file with a legacy PascalCase status (old rd3 corpus shape).
+            await fs.writeFile(ref.filePath, makeTaskContent('Backlog' as string));
+
+            const result = await svc.transition(ref, 'todo');
+
+            // The engine must receive canonical lowercase — never raw "Backlog".
+            expect(seen[0]?.current).toBe('backlog');
+            expect(seen[0]?.to).toBe('todo');
+            expect(result.fromStatus).toBe('backlog');
+            expect(result.toStatus).toBe('todo');
+        });
+
         test('does not double-write updated_at — single writer (R2)', async () => {
             const fs = makeFs();
             const svc = new PlanningWriteService({ fs });

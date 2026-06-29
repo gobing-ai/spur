@@ -19,6 +19,8 @@ import {
     featureFrontmatterSchema,
     MarkdownDocument,
     type MarkdownDomain,
+    normalizeFeatureStatus,
+    normalizeTaskStatus,
     TASK_CANONICAL_SECTIONS,
     taskFrontmatterSchema,
     UNIVERSAL_SECTIONS,
@@ -322,8 +324,15 @@ export class PlanningWriteService {
             doc = MarkdownDocument.parse(raw, domain);
         }
 
-        // Track status for lifecycle + history + event
-        const currentStatus = (doc.frontmatterData?.status as string | undefined) ?? '';
+        // Track status for lifecycle + history + event. Normalize legacy
+        // PascalCase/alias values (old rd3 tasks) to canonical lowercase so
+        // the engine — which declares lowercase-only states (task-lifecycle.yaml)
+        // — never receives an undeclared status. Unknown values pass through
+        // unchanged; step-4 validation emits a clear Zod error for those.
+        const currentStatus = normalizeStatusForDomain(
+            (doc.frontmatterData?.status as string | undefined) ?? '',
+            domain,
+        );
 
         // Snapshot pre-existing non-canonical sections BEFORE mutating, so the
         // R3 guard blocks only phantoms THIS write introduces — never a file that
@@ -364,7 +373,7 @@ export class PlanningWriteService {
         }
 
         // ── Step 5: lifecycle transition (only if status changed) ──
-        const newStatus = (doc.frontmatterData?.status as string | undefined) ?? '';
+        const newStatus = normalizeStatusForDomain((doc.frontmatterData?.status as string | undefined) ?? '', domain);
         const statusChanged = mutation.kind === 'transition' && newStatus !== currentStatus;
         let fromStatus: string | undefined;
         let toStatus: string | undefined;
@@ -504,4 +513,23 @@ function resolveEventName(kind: MutationKind, domain: MarkdownDomain, statusChan
         return domain === 'task' ? 'task.transitioned' : 'feature.transitioned';
     }
     return domain === 'task' ? 'task.updated' : 'feature.updated';
+}
+
+/**
+ * Normalize a legacy/alias status for a domain, passing UNRECOGNIZED values
+ * through unchanged. A known-but-non-canonical value (legacy `Backlog`) maps
+ * to canonical `backlog`; an unknown value (`banana`) stays raw so step-4
+ * validation — not the lifecycle FSM — surfaces the error, and so a
+ * corrupted file remains editable for NON-status mutations (the same
+ * corrupted-file-remains-editable invariant the phantom-section guard at
+ * step 3.5 upholds).
+ */
+function normalizeStatusForDomain(status: string, domain: MarkdownDomain): string {
+    if (!status) return status;
+    const normalize = domain === 'task' ? normalizeTaskStatus : normalizeFeatureStatus;
+    try {
+        return normalize(status);
+    } catch {
+        return status;
+    }
 }
