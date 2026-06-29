@@ -1,20 +1,22 @@
 # How to Add a UI Plugin to the Spur Board
 
 > The Spur Board is a hub for UI plugins. Each plugin is a **module** — a
-> self-contained React view (plus optional right-panel contribution) registered
-> in one central registry. Adding a plugin touches **one directory and one
-> registry line**; no layout, routing, or sidebar code changes.
+> self-contained React view (plus optional right-panel contribution) that is
+> **auto-discovered** at build time. Adding a plugin touches **one directory,
+> zero wiring**: drop an `index.tsx` exporting a `WebModule` under
+> `apps/web/src/modules/` and the registry picks it up. No layout, routing,
+> sidebar, or registry edits.
 
 This guide is for internal developers adding a new board module. The Tasks
 kanban (`apps/web/src/modules/task-kanban/`) is the reference implementation —
 read it alongside this guide.
 
-## Mental model
-
 ```
                     ┌───────────── apps/web/src/modules/ ─────────────┐
                     │                                                 │
-   registry.ts  ──▶ │  builtins: [ TaskKanbanModule, <Yours> ]        │
+   discover.ts  ──▶ │  import.meta.glob('./*/index.{ts,tsx}')         │
+                    │    scans each root, reads the `module` export    │ ◀── build-time
+   registry.ts  ──▶ │  createRegistry(discovered) — validate + order  │
                     │                                                 │
    router.tsx   ──▶ │  routes generated FROM registry                 │ ◀── drives URL
    LeftSidebar  ──▶ │  nav items generated FROM registry              │ ◀── drives nav
@@ -25,7 +27,8 @@ read it alongside this guide.
 
 A module is a `WebModule` object. Everything user-visible (route, sidebar entry,
 workspace view, right panel) is derived from that one object — you never wire
-routing or navigation by hand.
+routing or navigation by hand. Discovery is eager (`{ eager: true, as: 'sync' }`)
+so validation runs at load, not route-hit time.
 
 ## The `WebModule` contract
 
@@ -108,36 +111,40 @@ function NotesDetail() {
     );
 }
 
-export const NotesModule: WebModule = {
-    id: 'notes',
-    name: 'Notes',
-    icon: '📝',
-    route: 'notes',
-    component: NotesView,
-    rightPanelComponent: NotesDetail,
+export const module: WebModule = {
+ id: 'notes',
+ name: 'Notes',
+ icon: '📝',
+ route: 'notes',
+ component: NotesView,
+ rightPanelComponent: NotesDetail,
 };
-```
 
-### 4. Register it
+### 4. There is no step 4 — it's already discovered
 
-`apps/web/src/modules/registry.ts` — add one import and one array entry:
+That is the entire wiring. The `module` named export you wrote in step 3 is the
+discovery contract: `apps/web/src/modules/discover.ts` runs
+`import.meta.glob('./*/index.{ts,tsx}', { eager: true, as: 'sync' })` over every
+configured root and reads the `module` export (falling back to `default`). The
+sidebar nav item, the `/board/notes` route, the `/board/notes/*` wildcard child,
+the active-module highlight, and the right panel are all derived automatically.
 
-```typescript
-import { NotesModule } from './notes';
-import { TaskKanbanModule } from './task-kanban';
-import type { WebModule } from './types';
+**Order and the default module.** Within a root, discovered modules are sorted
+alphabetically by directory name for a stable order independent of glob return
+order. `defaultModule` is the **first** enabled module — the route `/` redirects
+to `/board/<defaultModule.route>` (Tasks today, `t` sorts early). A module named
+`aaa-notes` would become the landing page; name accordingly.
 
-const builtins: WebModule[] = [TaskKanbanModule, NotesModule];
-```
+**Disabling without deleting.** A discovered module can be dropped from the
+enabled set by adding its id to `disabledModules` in
+`apps/web/src/modules/config.ts`, or by calling `disableModule(id)` at runtime.
+`enableModule(id)` restores it. This is the blacklist — the directory and its
+discovery contract stay intact; only the enabled flag flips.
 
-Order matters: the **first** entry is `defaultModule` — the route `/` redirects
-to `/board/<defaultModule.route>`. Put your module after the default, not
-before, unless you intend to change the landing page.
-
-That is the entire wiring. The sidebar nav item, the `/board/notes` route, the
-`/board/notes/*` wildcard child, the active-module highlight, and the right
-panel are all derived automatically.
-
+**Additional roots (future).** The first cut ships a single root
+(`apps/web/src/modules/`). `registerModuleRoot(dir)` is exported from
+`registry.ts` for the future multi-root case (extension folders); it is a no-op
+stub today and the single-root architecture is fixed for v0.
 ### 5. Talk to the server through the single RPC seam
 
 Data comes from the Spur server via oRPC. **The only import is `{ api }` from
@@ -163,9 +170,10 @@ Mirror the task-kanban test layout under
 - A component test that renders the view and asserts key copy/behavior.
 - A hook test for any data-fetching hook (the task module's `useTasks.test.ts`
   is the template — it tests the pure refresh factory without mocking oRPC).
-- The shared registry test (`apps/web/tests/modules/registry.test.ts`) already
-  asserts every registered module has the required fields and that `getModule`
-  resolves by id — your module is covered by just being registered.
+- The shared registry test (`apps/web/tests/modules/registry.test.ts`) and the
+  discovery test (`apps/web/tests/modules/discover.test.ts`) already assert the
+  registry validates/dedupes discovered modules and that `getModule` resolves by
+  id — your module is covered by just being discovered.
 
 ### 7. Run the gate
 
@@ -190,17 +198,18 @@ class will fail lint, not just review.
   and error interception.
 - **Don't import third-party UI libs directly.** daisyUI, `@uiw/react-md-editor`,
   and any future UI library must be re-exported through `apps/web/src/ui.ts`
-  first; everything else imports from `@/ui`.
 - **Don't put two modules in one directory** or share a directory across modules.
-  One module, one directory, one `WebModule` export.
+  One module, one directory, one named `module` export (or default export) in
+  `index.tsx`. A directory with neither export is silently skipped, not an error.
 
 ## Reference
 
 - **Authoritative spec:** `docs/design/server-side-adjustment-design.md` §3.4
   (Web module system) and §3.5 (Task Kanban as the proof-of-mechanism module).
 - **Reference implementation:** `apps/web/src/modules/task-kanban/`.
-- **Interface:** `apps/web/src/modules/types.ts`.
-- **Registry:** `apps/web/src/modules/registry.ts`.
+- **Registry:** `apps/web/src/modules/registry.ts` (runtime registry),
+  `apps/web/src/modules/discover.ts` (build-time glob discovery),
+  `apps/web/src/modules/config.ts` (roots + disabled lists).
 - **UI seams:** `apps/web/src/ui.ts` (import seam),
   `apps/web/src/components/ui/` (daisyUI-class authoring seam).
 - **Boundary rules:** `config/rules/ui/ui-import-boundary.yaml`.

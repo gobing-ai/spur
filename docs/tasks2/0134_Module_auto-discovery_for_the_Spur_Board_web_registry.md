@@ -2,9 +2,9 @@
 schema_version: 1
 name: Module auto-discovery for the Spur Board web registry
 description: Module auto-discovery for the Spur Board web registry
-status: Backlog
+status: done
 created_at: 2026-06-27T00:41:16.312Z
-updated_at: 2026-06-27T01:02:58.225Z
+updated_at: 2026-06-29T16:38:40.309Z
 folder: docs/tasks2
 type: task
 feature-id: ""
@@ -98,9 +98,19 @@ The board registry (apps/web/src/modules/registry.ts) is a hand-maintained built
 
 **Risk R1 — glob determinism.** `import.meta.glob` return order is not spec'd; mitigated by sorting within root in `discover.ts`. Risk R2 — a stray non-module directory under a root must not break the build; mitigated by skip-on-no-export (AC10).
 ### Solution
+**Implemented — `import.meta.glob` auto-discovery with a pure runtime registry.**
 
+File layout under `apps/web/src/modules/`:
+- `config.ts:1` (new) — `moduleRoots: ['./']`, `disabledModules: []`. Pure data, the swappable source for roots/blacklist.
+- `discover.ts:94` (new) — the sole `import.meta.glob('./*/index.{ts,tsx}', { eager: true, as: 'sync' })` call (`discover.ts:77`). Reads the named `module` export (fallback: `default`) via `readModule` (`discover.ts:44`)/`isWebModule` (`discover.ts:52`); sorts within root by directory name; skips entries with no WebModule export. Ships a bun-test fallback (`discoverViaFs`, `discover.ts:129`) wired from `discoverModules()` (`discover.ts:95`) so unit tests resolve `task-kanban` without the Vite transform.
+- `registry.ts:105` (rewritten) — `createRegistry(discovered, opts?)`: pure runtime registry owning duplicate id/route fail-fast validation, enable/disable, ordering (root-then-sorted), and the `modules`/`getModule`/`defaultModule` consumer exports (`registry.ts:108,111,116`). The module-level singletons wire `discoverModules()` + `config.ts` once at load.
+- `apps/web/src/modules/task-kanban/index.tsx:114` — one-line rename: `export const TaskKanbanModule` → `export const module: WebModule`.
 
+Consumer migration: `apps/web/src/router.tsx`, `apps/web/src/components/LeftSidebar.tsx`, `apps/web/src/components/BoardLayout.tsx` have **zero source diff** (verified via `git diff --stat`) — they import `{ modules }` / `{ defaultModule }` / `{ getModule }` from `./modules/registry` unchanged.
 
+Tests (all bun:test, happy-dom): `apps/web/tests/modules/registry.test.ts` (createRegistry fixtures + singleton wrappers), `apps/web/tests/modules/discover.test.ts` (readModule/isWebModule branches, discoverViaGlob with injectable glob, discoverViaFs with injectable fs seam covering catches + sort, real-fallback integration resolving task-kanban). `discover.ts` + `registry.ts` at 100% function/line coverage.
+
+Gates: `bun run lint` clean (7 workspaces); `bun run test` 1994/1994 pass, 99.48% function / 99.12% line aggregate; `bun run test-cf` pass; `bun run build` succeeds — the Astro web build resolves the glob and `task-kanban` lands in the BoardApp bundle (AC11 concretely verified: the `/board/tasks` route and `tasks` module id are present in `dist/web/_astro/BoardApp.DbI3iLzZ.js`).
 ### Plan
 1. **Add `config.ts`** — `moduleRoots` (first cut: `['./']`) and `disabledModules` (`[]`). No behavior yet; pure data.
 2. **Add `discover.ts`** — `import.meta.glob('./*/index.{ts,tsx}', { eager: true, as: 'sync' })`; `discoverModules(): WebModule[]` reads the `module` named export (fallback: default) from each entry, sorts within root by directory name, skips entries with no `WebModule` export.
@@ -113,13 +123,35 @@ The board registry (apps/web/src/modules/registry.ts) is a hand-maintained built
 9. **Gate** — `bun run lint` → `bun run test` (web, then full repo) → `bun run build` (proves the Astro build resolves the glob and `task-kanban` lands in the bundle). Fix any failure at the root cause; no `--no-verify`, no suppressions.
 10. **Commit** — atomic conventional commit: `feat(web): auto-discover board modules via import.meta.glob`.
 ### Review
+**Coverage-first hardening — made the build-only paths unit-testable.**
 
+The initial implementation left `discover.ts` at 78% line coverage and `registry.ts` at 93% — both below the 90% per-file gate. Root cause: `discoverViaGlob` (the always-live browser path) is dead under `bun test` because `import.meta.glob` is `undefined` there, and `discoverViaFs`'s defensive catches + sort comparator were unreachable with a single real module dir.
 
+Resolution: inject the dependencies rather than suppress the gate. `discoverViaGlob` now takes the glob fn as a param; `discoverViaFs` takes an `FsSeam` (`readdirSync` + `tryRequire`); `readModule`/`isWebModule` are exported as pure test seams. Tests inject fakes that exercise every branch (default-export fallback, malformed-field rejection, readdir catch, require catch, ext-loop `.tsx`→`.ts`, sort comparator with out-of-order entries). Both files now at 100% function/line coverage — no `istanbul ignore`, no `biome-ignore`, no skipped tests.
 
+**P1 (resolved):** `FsSeam.readdirSync` opts typed `{ withFileTypes: boolean }` failed tsc (node's overload needs literal `true`). Narrowed to `{ withFileTypes: true }`.
+
+**Type-safety fix:** test fixture `shape()` was typed `Record<string, unknown>`, breaking `toEqual(WebModule)` overloads. Retyped to `WebModule`; rejection tests build raw objects inline.
+
+No new suppressions. The 0134 implementation + its tests are the only source changes; all other workspaces untouched.
 ### Testing
+**Gate evidence (run 2026-06-29):**
 
+- `bun run lint` — clean across 7 workspaces (biome + per-workspace `tsc --noEmit`).
+- `bun run test` — 1994/1994 pass, 5080 expect() calls. Aggregate coverage 99.48% function / 99.12% line. Target files `discover.ts` and `registry.ts` both 100%.
+- `bun run test-cf` — 1/1 pass (Cloudflare Workers runtime).
+- `bun run build` — succeeds. The Astro web build resolves `import.meta.glob` and `task-kanban` lands in the BoardApp bundle (AC11): `dist/web/_astro/BoardApp.DbI3iLzZ.js` contains the `tasks` module id and `/board/` route strings.
 
-
+**AC traceability:**
+- AC1 (zero-wiring discovery) — `discover.ts` + the `module` named-export contract; a new dir under `modules/` is discovered with no registry edit.
+- AC2 (Tasks survives) — task-kanban migrated to `export const module`; build + tests prove `/board/tasks` resolves.
+- AC3 (consumer files unchanged) — `git diff --stat` on `router.tsx`, `LeftSidebar.tsx`, `BoardLayout.tsx` = empty.
+- AC4/AC5 (disable/enable without deletion) — `createRegistry(disabled)` + `disableModule`/`enableModule` round-trip in `registry.test.ts`.
+- AC6/AC7 (duplicate id/route fail loud) — `registry.test.ts` asserts the thrown error names the colliding id/route.
+- AC8 (deterministic order) — root-then-sorted order; `discoverViaGlob`/`discoverViaFs` sort tests prove stable ordering.
+- AC9 (test isolates the glob) — registry tests inject hand-built fixtures; `discoverModules` real-fallback test resolves task-kanban.
+- AC10 (empty root harmless) — `discoverViaFs` readdir-catch test returns empty; readModule-null test skips non-modules.
+- AC11 (build proves discovery) — build output verified above.
 ### Artifacts
 
 | Type | Path | Agent | Date |
@@ -128,3 +160,9 @@ The board registry (apps/web/src/modules/registry.ts) is a hand-maintained built
 ### References
 
 
+### History
+
+- 2026-06-29T07:03:06.647Z backlog → todo (system)
+- 2026-06-29T16:37:56.738Z todo → wip (system)
+- 2026-06-29T16:38:40.121Z wip → testing (system)
+- 2026-06-29T16:38:40.309Z testing → done (system)

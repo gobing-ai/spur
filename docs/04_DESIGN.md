@@ -693,6 +693,14 @@ History entry). Unconditional transitions use the engine's `always` guard (exter
 `requestTransition`, not auto-advance). `done` is re-enterable (reopen, warned); `cancelled` is
 truly terminal (no outgoing transitions).
 
+**Status normalization invariant (0152):** the raw frontmatter `status` is case-normalized
+(`normalizeTaskStatus` / `normalizeFeatureStatus`) at the `PlanningWriteService` boundary before
+`requestTransition`, so the file-wins re-seed always receives a canonical lowercase state even when
+the stored value is capitalized (`Backlog`), aliased (`completed`), or otherwise non-canonical. This
+service-boundary normalization is the sole production entry into the engine transition path; removing
+it re-introduces the `FSMError: Cannot reseed run … to undeclared state` crash for any case-drifted
+task. See `packages/app/src/services/planning-write-service.ts:326,367`.
+
 **Drift prevention:** `packages/domain/tests/planning/lifecycle-drift.test.ts` parses both YAMLs
 and asserts state sets == the `TASK_STATUSES` / `FEATURE_STATUSES` unions from `schema.ts`. The
 YAML files and the 0041 enums can never drift silently.

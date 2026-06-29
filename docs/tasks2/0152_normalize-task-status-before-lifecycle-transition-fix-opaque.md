@@ -3,7 +3,7 @@ template: standard
 schema_version: 1
 name: "Normalize task status before lifecycle transition; fix opaque FSMError on case-drift"
 description: ""
-status: backlog
+status: wip
 type: task
 profile: standard
 feature_id: null
@@ -12,13 +12,15 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-06-29T06:20:51.500Z"
-updated_at: 2026-06-29T06:22:38.687Z
+updated_at: 2026-06-29T07:20:19.218Z
 ---
 
 ## 0152. Normalize task status before lifecycle transition; fix opaque FSMError on case-drift
 
 ### Background
 A dogfood run of `/sp-dev-refine 0134 --auto --next` (`docs/dogfood/2026-06-29-dev-refine-0134-auto-next-dogfood.md`) surfaced a blocking `FAIL` in the `--next` chain: the `backlog → todo` lifecycle transition crashed with `FSMError: Cannot reseed run … to undeclared state "Backlog"`.
+
+**Outcome (fix-mode re-run, same session):** the dogfood was re-run under `--max-retry 2`; P1 was applied in place (service-boundary status normalization), the regression test was added, and the transition cleared — task 0134 advanced `Backlog → backlog → todo` and emits `task.transitioned`. The chain's `/sp-dev-run` link was deliberately not driven (its scope is a full code-implementation run, out of the dogfood's bounded-fix remit); it is now unblocked for a standalone invocation. Full findings in the report's §5 (P1 resolved × 2; P2 superseded by P1 analysis; P3 logged as follow-up).
 
 #### Root cause
 
@@ -29,18 +31,6 @@ The lifecycle workflow (`.spur/workflows/task-lifecycle.yaml`) and `TASK_STATUSE
 - `packages/app/src/workflow/lifecycle-adapter.ts:134` — `reseedRun(workflow, runId, currentStatus)` reseed uses the raw value; the engine has no `Backlog` state (only `backlog`) → throws.
 
 A normalizer already exists and is already used elsewhere — `normalizeTaskStatus` (`schema.ts:172`, case-insensitive + alias-tolerant) is invoked by the Zod frontmatter schema (`schema.ts:231`). The bug is that the transition path bypasses it. `newStatus` (`:367`) is the **post-mutation** frontmatter value, so it is also raw and unnormalized.
-
-#### Why this matters
-
-- **Blocks every `--next` chain on any task with a non-canonical status** — legacy/aliased/capitalized statuses (which `normalizeTaskStatus` already handles on input) still break the transition the instant the file SSOT is read back.
-- **Opaque error** — `FSMError: Cannot reseed run … to undeclared state "Backlog"` names the run id and bad state but not the file, the expected vocabulary, or the remediation. An operator hitting this on a `--next` chain has no actionable next step.
-- **Documented contract violated** — `sp-dev-refine/SKILL.md:78` asserts the `backlog → todo` guard "passes"; it does not for case-drifted tasks.
-#### Upstream evaluation
-
-Per AGENTS.md §"Shared-library evolution", the generic portion of R4 was evaluated for `~/xprojects/ts-libs`. The engine's `FSMError` throw at `packages/dual-workflow-engine/src/service.ts:103-110` (`assertReseedTargetDeclared`) hardcodes `Cannot reseed run "${runId}" to undeclared state "${newState}"` and leaves the `details?: unknown` field (`errors.ts:13-21`) unpopulated, despite `workflow.states` being in scope at the throw site.
-
-**Evaluation:** R1 makes this error **unreachable for the reported case-drift bug** — `normalizeTaskStatus` runs first (`packages/domain/src/planning/schema.ts:175-177`), so capitalized/aliased statuses never reach `assertReseedTargetDeclared`, and genuinely invalid statuses already throw a clear message there. The opaque `FSMError` surfaces only on **genuine workflow/config drift** (a canonical `TASK_STATUSES` value absent from `.spur/workflows/task-lifecycle.yaml`), a rarer, separable class. The upstream enrichment (populate `details` + list declared states in the message) is therefore **optional defense-in-depth**, broadly beneficial to all `ts-dual-workflow-engine` consumers but not a blocker for this task. R10 records the explicit decision the implementer must make.
-
 ### Requirements
 
 - R1 — The lifecycle transition path normalizes the status string through `normalizeTaskStatus` before it reaches the FSM, so a task whose frontmatter `status` is capitalized (`Backlog`), an alias (`completed`), or otherwise non-canonical still transitions through its canonical equivalent. Applies to **both** `currentStatus` (pre-transition) and `newStatus` (post-mutation).
@@ -148,21 +138,36 @@ Option A is surgical and uses existing infrastructure. `normalizeTaskStatus` thr
 **Out of scope:** the corpus-wide status audit (`spur task migrate` A17), engine-side changes, and any change to `MarkdownDocument.parse` normalization semantics.
 
 ### Plan
-- [ ] **P1 — Reproduce.** Hand-create (or script) a task frontmatter with `status: Backlog`; confirm `spur task update <wbs> todo` throws `FSMError: Cannot reseed run … to undeclared state "Backlog"`. Capture the exact error as the pre-fix baseline.
-- [ ] **P2 — Add the regression test (red).** In `packages/app/tests/`, add a test exercising the capitalized-status transition (Design §"Regression test"). Run it — it must fail with the original `FSMError` (TDD red).
-- [ ] **P3 — Apply the normalization fix.** Edit `planning-write-service.ts:326` and `:367` to wrap both status reads in `normalizeTaskStatus(...)`. Default the raw value to `'backlog'` when frontmatter `status` is absent. Import `normalizeTaskStatus` from `@gobing-ai/spur-domain`.
-- [ ] **P4 — Run the regression test (green).** Re-run the P2 test; it must now pass (TDD green). Run the broader planning-write test suite to confirm no regression.
-- [ ] **P5 — Error-message clarity (R4).** Wrap the transition call so a `normalizeTaskStatus` throw surfaces as the actionable message (task wbs + file + raw value + allowed vocabulary + remediation), not an opaque stack. Verify with a `status: frobnicate` case.
-- [ ] **P6 — Data fix 0134.** Normalize task 0134's frontmatter `status: Backlog` → `status: backlog` (one-character data fix for corpus hygiene; the transition fix already makes this non-blocking).
-- [ ] **P7 — Re-run the dogfood step.** `spur task update 0134 todo` (or `/sp-dev-refine 0134 --auto --next`) must transition cleanly; chain proceeds past the `backlog → todo` step.
-- [ ] **P8 — Doc sync (R9).** If `04_DESIGN.md` §7 or `03_ARCHITECTURE.md §12` documents the lifecycle transition boundary or the error contract, update in the same change. Check `docs/dogfood/2026-06-29-dev-refine-0134-auto-next-dogfood.md` is referenced as the source dogfood.
-- [ ] **P9 — Verification gate.** `bun run lint` clean; `bun run test` passes (incl. new regression test); `git status` shows only the fix + test + 0134 data fix + any doc sync.
+- [x] **P1 — Reproduce.** DONE — the dogfood observe-only run reproduced the crash (`spur task update 0134 todo` → `FSMError: Cannot reseed run … to undeclared state "Backlog"`); fix-mode re-confirmed 0134 still crashed before applying the fix.
+- [x] **P2 — Add the regression test.** DONE — `packages/app/tests/services/planning-write-service.test.ts:480` seeds legacy `status: Backlog`, asserts the lifecycle port receives canonical `backlog` via a capturing spy. (Strict TDD red-first was not followed — the fix and test landed together in the fix-mode session; the test does encode the original-failure assertion.)
+- [x] **P3 — Apply the normalization fix.** DONE — `planning-write-service.ts:326,367` wrap `currentStatus`/`newStatus` in `normalizeStatusForDomain` (dispatches to `normalizeTaskStatus`/`normalizeFeatureStatus`, passthrough on unknown) before `lifecycle.requestTransition` (`:373`).
+- [x] **P4 — Run the regression test (green).** DONE — test passes; full `packages/app` suite 639/639 green.
+- [x] **P5 — Error-message clarity (R4).** DONE via a different mechanism than planned — passthrough-on-unknown lets genuinely-invalid statuses (`frobnicate`) fall through to step-4 Zod validation, which emits a clear enum error naming the allowed vocabulary (corrupted-file-remains-editable invariant preserved). The originally-planned catch-and-rethrow enrichment was rendered unnecessary: post-normalization the opaque `FSMError` path is unreachable from the sole production callsite (call-graph audit, this run). R10 records the decision.
+- [x] **P6 — Data fix 0134.** DONE (self-healed) — the transition itself persisted canonical `status: todo`; 0134 verified at `todo`, passes `task check`. No separate one-character edit needed.
+- [x] **P7 — Re-run the dogfood step.** DONE — `spur task update 0134 todo` transitions cleanly; chain proceeds past `backlog → todo`.
+- [x] **P8 — Doc sync (R9).** DONE — added the "Status normalization invariant (0152)" note to `04_DESIGN.md` §7.5 (engine integration paragraph), documenting that the service-boundary normalization is the sole production entry into the transition path and that removing it re-introduces the crash. `03_ARCHITECTURE.md §12` needs no change (it describes the write-service seam, not the normalization boundary).
+- [x] **P9 — Verification gate.** DONE — `bun run lint` clean (7 workspaces); `packages/app` 639/639 pass (incl. new regression); `tsc --noEmit` clean. NOTE: the full `bun run test` reports 8 failures, all pre-existing in `plugins/sp/hooks/task-write-guard.test.ts` (caused by task 0151's in-progress hook rewrite, unrelated to this fix); `packages/app` (where this fix lives) is fully green.
 ### Solution
+Implemented Option A (service-boundary normalization) — the single production transition path.
 
+**Change:** `packages/app/src/services/planning-write-service.ts`
+- Imported `normalizeTaskStatus` + `normalizeFeatureStatus` from `@gobing-ai/spur-domain`.
+- Added `normalizeStatusForDomain(status, domain)` (file-local helper) that dispatches to the domain normalizer and passes unrecognized values through unchanged.
+- Wrapped `currentStatus` (step 2 capture, `:326`) and `newStatus` (step 5 capture, `:367`) with it, before `lifecycle.requestTransition` (`:373`).
+
+**Why the service layer, not the adapter (P2's original suggestion):** call-graph audit shows `planning-write-service.ts:373` is the **sole** production callsite for `LifecyclePort.requestTransition`. The adapter's `requestTransition` is only ever reached from there, so normalizing at the service boundary covers the entire production path. The adapter-level enrichment (P2) would protect a hypothetical future caller that bypasses the service layer — defensible as defense-in-depth but redundant today; deferred.
+
+**Why passthrough on unknown (not throw):** a corrupted `status: banana` on disk must not block a *non-status* edit (e.g. `spur task update 0152 --section Background ...`). This mirrors the corrupted-file-remains-editable invariant the step-3.5 phantom-section guard upholds. Unknown values fall through to step-4 validation, which emits a clear Zod enum error naming the allowed vocabulary. This satisfies R3/R4 via a different mechanism than the planned catch-and-rethrow (see Plan P5).
+
+**Scope note (R3):** the corpus audit for other capitalized statuses in `docs/tasks2/` is deferred — the read-time normalizer now makes the transition path self-healing regardless of stored casing. Regression test and coverage details in the `Testing` section below.
 ### Testing
+**Regression test:** `packages/app/tests/services/planning-write-service.test.ts:480` — "normalizes legacy capitalized status before lifecycle transition". Seeds a task with `status: Backlog` (capitalized), installs a capturing spy on the `LifecyclePort`, runs a `transition` mutation to `todo`, and asserts (a) the port received canonical `backlog` as `currentStatus` (not raw `Backlog`), (b) `newStatus` is canonical `todo`, (c) the transition completed without throwing. Covers both the pre-transition (`currentStatus`) and post-mutation (`newStatus`) normalization paths (R6).
 
+**Coverage:** `planning-write-service.ts` at 100% lines / 96.67% functions after the fix. The 8 `plugins/sp/hooks/task-write-guard.test.ts` failures are pre-existing (task 0151) and unrelated to this change.
 ### Review
 
 ### References
 
 ### History
+- 2026-06-29T07:08:04.830Z backlog → todo (system)
+- 2026-06-29T07:08:05.007Z todo → wip (system)
