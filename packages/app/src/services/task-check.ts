@@ -56,6 +56,79 @@ function isPlaceholderBody(body: string): boolean {
     return stripped.length === 0;
 }
 
+/**
+ * A `### Review` body counts as carrying a real findings table only when at least
+ * one `P1`–`P4` row has substantive content beyond the severity label itself — i.e.
+ * a markdown table row `| P2 | <file> | <finding> | … |` where some non-severity cell
+ * is non-empty. The shipped review template scaffolds an *empty-cell* P-table
+ * (`| P1 | | | |`); a bare `/P[1-4]/` match falsely accepts that scaffold as a
+ * populated table. Requiring a populated cell closes that false-pass so a review
+ * task can't reach `wip` with an empty findings table.
+ */
+function hasPopulatedPriorityTable(body: string): boolean {
+    for (const line of body.split('\n')) {
+        const cells = line.split('|');
+        if (cells.length < 3) continue; // not a table row
+        const severityIdx = cells.findIndex((c) => /^\s*P[1-4]\s*$/.test(c));
+        if (severityIdx === -1) continue;
+        const hasContent = cells.some((c, i) => i !== severityIdx && c.trim().length > 0);
+        if (hasContent) return true;
+    }
+    return false;
+}
+
+/**
+ * The shipped `### Review` scaffold is reflection prose plus an *empty-cell* P-table
+ * (`| P1 | | | |`). A review task carries this verbatim from creation until the first
+ * fix round fills it. Such a scaffold is a placeholder — neither a real findings table
+ * (so it must not satisfy the L3 rule) nor a half-authored section the operator forgot
+ * to table (so it must not error either): it errors only once the section becomes
+ * required (`wip`+), exactly like a missing required section.
+ *
+ * A body is the review scaffold when, after stripping the empty-cell P-table rows and
+ * the markdown table chrome (header + `---` separator), nothing but guidance prose
+ * remains. If real prose-with-no-table or a partially-filled table is present, it is
+ * NOT a scaffold — the L3 rule then applies and fires on the missing populated table.
+ */
+function isReviewScaffold(body: string): boolean {
+    if (isPlaceholderBody(body)) return true;
+    if (hasPopulatedPriorityTable(body)) return false; // real findings → not a scaffold
+    // The scaffold's structural signature is an empty-cell `P1`–`P4` table. Require it:
+    // pure prose with no table at all is a half-authored section, not the shipped
+    // scaffold, and must still error. The scaffold is present only when at least one
+    // empty-cell P-row exists AND every table row is empty-cell chrome (header,
+    // separator, or `| Pn | | | |`) — any real table content disqualifies it.
+    let sawEmptyPRow = false;
+    for (const line of body.split('\n')) {
+        if (!line.includes('|')) continue; // prose line — allowed alongside the scaffold table
+        const cells = line.split('|').map((c) => c.trim());
+        const isSeparator = cells.every((c) => c === '' || /^:?-+:?$/.test(c));
+        const isEmptyPRow = cells.every((c) => c === '' || /^P[1-4]$/.test(c)) && cells.some((c) => /^P[1-4]$/.test(c));
+        const isHeader = cells.some((c) => /severity|file|finding|recommendation/i.test(c));
+        if (isEmptyPRow) sawEmptyPRow = true;
+        else if (!isSeparator && !isHeader) return false; // real table content → not a scaffold
+    }
+    return sawEmptyPRow;
+}
+
+/**
+ * A `### Review` body is "prose-only" when, after stripping placeholder content,
+ * it contains no markdown table rows at all (no `|` characters). This covers the
+ * pre-fix-round authoring window where the operator has written context prose but
+ * has not yet drafted a findings table — a legitimate state when Review is *optional*
+ * (backlog/todo for the `review` variant). It must NOT be tolerated where Review is
+ * *required* (`wip`+): there a populated findings table is mandatory regardless.
+ */
+function isProseOnlyReview(body: string): boolean {
+    if (isPlaceholderBody(body)) return true; // placeholder — always tolerated as a scaffold
+    if (hasPopulatedPriorityTable(body)) return false; // real findings → not prose-only
+    // A body is prose-only when no line contains a `|` (table-row marker). If any
+    // `|` is present, the operator has started a table (even partially) — that is a
+    // half-authored section and must still trigger the L3 error.
+    const stripped = body.replace(/<!--[\s\S]*?-->/g, '');
+    return !stripped.split('\n').some((l) => l.includes('|'));
+}
+
 // ─── TaskCheckService ───────────────────────────────────────────────────
 
 /** Four-layer task validator (design §3). L1 schema → L2 matrix → L3 format → L4 traceability. */
@@ -154,11 +227,20 @@ export class TaskCheckService extends PlanningCheckService {
         // *allowed* at the current status (required or optional) — a forward-reference
         // scaffold at a status where Review is forbidden/absent is not forced to have
         // a populated table (L2 already flags the section itself).
+        //
+        // Where Review is *optional* (pre-fix-round window): both the empty-cell
+        // scaffold (shipped template) AND prose-only bodies with no table are tolerated
+        // — either is a legitimate "not yet authored" state. Where Review is *required*
+        // (wip+): only a truly-empty placeholder is tolerated; any authored content
+        // (prose or scaffold) requires a populated findings table.
         const revBody = doc.getSection('Review');
-        const revAllowed = (entry?.required ?? []).includes('Review') || (entry?.optional ?? []).includes('Review');
-        if (revBody !== null && !isPlaceholderBody(revBody) && revAllowed) {
-            const hasPColumn = /P[1-4]/.test(revBody);
-            if (!hasPColumn) {
+        const revRequired = (entry?.required ?? []).includes('Review');
+        const revAllowed = revRequired || (entry?.optional ?? []).includes('Review');
+        const revScaffoldTolerated = revRequired
+            ? isPlaceholderBody(revBody ?? '')
+            : isReviewScaffold(revBody ?? '') || isProseOnlyReview(revBody ?? '');
+        if (revBody !== null && !revScaffoldTolerated && revAllowed) {
+            if (!hasPopulatedPriorityTable(revBody)) {
                 findings.push({
                     layer: 'L3',
                     severity: 'error',

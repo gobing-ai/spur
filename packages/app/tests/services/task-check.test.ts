@@ -256,6 +256,217 @@ describe('TaskCheckService', () => {
         expect(reviewErrors.length).toBeGreaterThan(0);
         expect(reviewErrors[0]?.severity).toBe('error');
     });
+    test('L3: Review with empty-cell P-table scaffold does not satisfy the rule (hardening)', async () => {
+        // The shipped review template scaffolds an empty-cell P-table. A bare /P[1-4]/
+        // match would falsely accept it; the hardened rule treats it as a placeholder so
+        // a review task can't reach a Review-required status with an empty findings table.
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Empty scaffold"',
+            'status: done',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Empty scaffold',
+            '',
+            '### Solution',
+            '',
+            'Fixed `src/foo.ts:10-15`.',
+            '',
+            '### Testing',
+            '',
+            'Coverage: 95%.',
+            '',
+            '### Review',
+            '',
+            'Post-implementation reflection — to be filled after the first fix round.',
+            '',
+            '| Severity | File | Finding | Recommendation |',
+            '| -------- | ---- | ------- | -------------- |',
+            '| P1       |      |         |                |',
+            '| P2       |      |         |                |',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+
+        const reviewErrors = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Review');
+        expect(reviewErrors.length).toBeGreaterThan(0);
+        expect(reviewErrors[0]?.severity).toBe('error');
+    });
+    test('L3: empty-cell Review scaffold is tolerated where Review is optional', async () => {
+        // Pre-fix-round window: a review task carries the scaffold at a status where
+        // Review is optional. The rule must NOT force a populated table yet — only
+        // once Review becomes required (the prior test) does the scaffold error.
+        const reviewMatrix = {
+            variants: {
+                review: {
+                    todo: { required: ['Background'], optional: ['Review'] },
+                    done: { required: ['Background', 'Review'], gate: true },
+                },
+            },
+        };
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Scaffold at todo"',
+            'status: todo',
+            'template: review',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Scaffold at todo',
+            '',
+            '### Background',
+            '',
+            'Context.',
+            '',
+            '### Review',
+            '',
+            'Post-implementation reflection — to be filled after the first fix round.',
+            '',
+            '| Severity | File | Finding | Recommendation |',
+            '| -------- | ---- | ------- | -------------- |',
+            '| P1       |      |         |                |',
+            '| P2       |      |         |                |',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new TaskCheckService(fs, reviewMatrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+
+        const reviewErrors = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Review');
+        expect(reviewErrors.length).toBe(0);
+    });
+    test('L3: prose-only ### Review (no table) at optional status is tolerated (P1 regression)', async () => {
+        // WHY: a fresh review-template fix-task may have its ### Review authored as
+        // prose context (no table at all) when all findings are stale — this is a
+        // legitimate pre-fix-round state. The L3 rule must not fire at a status where
+        // Review is only *optional* (backlog/todo). This was the P1 bug in 0156:
+        // isReviewScaffold required at least one empty-cell P-row, which rejected
+        // prose-only Review bodies and forced an L3 error even when Review was optional.
+        const reviewMatrix = {
+            variants: {
+                review: {
+                    todo: { required: ['Background'], optional: ['Review'] },
+                    done: { required: ['Background', 'Review'], gate: true },
+                },
+            },
+        };
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Prose-only review"',
+            'status: todo',
+            'template: review',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Prose-only review',
+            '',
+            '### Background',
+            '',
+            'Context.',
+            '',
+            '### Review',
+            '',
+            'Post-implementation reflection — filled after the first fix round.',
+            'All findings from the dogfood run were stale; no table needed yet.',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new TaskCheckService(fs, reviewMatrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+
+        const reviewErrors = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Review');
+        expect(reviewErrors.length).toBe(0); // prose-only at optional status must be tolerated
+    });
+    test('L3: prose-only ### Review (no table) at required status still errors (guard)', async () => {
+        // WHY: the tolerance for prose-only Review must NOT extend to statuses where
+        // Review is *required* (wip+). A prose body with no findings table must still
+        // trigger the L3 error once Review is mandatory — otherwise a review task
+        // could reach done with no findings table at all.
+        const reviewMatrix = {
+            variants: {
+                review: {
+                    wip: { required: ['Background', 'Review'] },
+                },
+            },
+        };
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Prose-only at wip"',
+            'status: wip',
+            'template: review',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Prose-only at wip',
+            '',
+            '### Background',
+            '',
+            'Context.',
+            '',
+            '### Review',
+            '',
+            'Post-implementation reflection — all findings were stale so I wrote prose.',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new TaskCheckService(fs, reviewMatrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+
+        const reviewErrors = result.findings.filter(
+            (f) => f.layer === 'L3' && f.section === 'Review' && f.severity === 'error',
+        );
+        expect(reviewErrors.length).toBeGreaterThan(0); // prose-only at required status must error
+    });
+    test('L3: Review with a populated P-table passes', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Populated review"',
+            'status: done',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Populated review',
+            '',
+            '### Solution',
+            '',
+            'Fixed `src/foo.ts:10-15`.',
+            '',
+            '### Testing',
+            '',
+            'Coverage: 95%.',
+            '',
+            '### Review',
+            '',
+            '| Severity | File | Finding | Recommendation |',
+            '| -------- | ---- | ------- | -------------- |',
+            '| P2       | `src/foo.ts:10` | missing guard | add a null check |',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+
+        const reviewErrors = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Review');
+        expect(reviewErrors.length).toBe(0);
+    });
     test('L3: Review at backlog (forbidden) does not trigger P1-P4 check', async () => {
         const content = [
             '---',
