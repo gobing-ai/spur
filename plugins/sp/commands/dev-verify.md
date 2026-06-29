@@ -9,7 +9,7 @@ allowed-tools: ["Bash", "Read", "Write", "Skill"]
 Wraps the **sp:code-verification** skill (verify mode).
 
 Verify that a task's implementation satisfies its requirements and acceptance criteria. Maps each
-requirement to implementation evidence, runs a SECU code review, and produces a **PASS / PARTIAL /
+requirement to implementation evidence, runs a SECUA code review, and produces a **PASS / PARTIAL /
 FAIL** verdict. Findings are written back to the task's `## Testing` and `## Review` sections, and
 the verdict artifact (`.spur/run/<wbs>-verdict.json`) is emitted for the pipeline completion gate.
 
@@ -26,7 +26,7 @@ the verdict artifact (`.spur/run/<wbs>-verdict.json`) is emitted for the pipelin
 | `wbs` | Task WBS number (required, positional) | (required) |
 | `--agent <name\|auto>` | Spawn the verification under a specific agent. Omit (the default) → the verify pass runs under the configured default executor (`omp`). **Current-agent execution is not expressible** (subprocess FSM). | (configured default — `omp`) |
 | `--fix <strategy>` | Post-verdict repair: `none`, `blockers-first` (UNMET only), `all` (UNMET + PARTIAL + major findings) | `none` |
-| `--focus <lens>` | SECU dimensions: `all`, `security`, `efficiency`, `correctness`, `usability`, or comma-separated | `all` |
+| `--focus <lens>` | SECUA dimensions: `all`, `security`, `efficiency`, `correctness`, `usability`, `architecture`, or comma-separated | `all` |
 | `--bdd` | Map `## Acceptance Criteria` scenarios to tests and fold into the verdict | off |
 | `--auto` | Skip confirmations (CI / pipeline use) | off |
 | `--force` | Bypass the terminal-status guard — verify even a `done`/`cancelled` task | off |
@@ -34,7 +34,7 @@ the verdict artifact (`.spur/run/<wbs>-verdict.json`) is emitted for the pipelin
 
 ## Behavior
 
-Thin wrapper: status guard, change-scope detection, requirements traceability, SECU review, verdict
+Thin wrapper: status guard, change-scope detection, requirements traceability, SECUA review, verdict
 aggregation, findings write-back, verdict-artifact emission, and the optional `--fix` pass are all
 owned by the skill.
 
@@ -65,6 +65,12 @@ When the (post-fix) verdict is **PASS**:
 When the verdict is **PARTIAL/FAIL**, or the `testing → done` guard fails: stop as review-pending —
 surface the verdict (or the guard's blocking finding), leave the task at its current status, do NOT
 transition to `done`.
+
+> **Deferred `feature_id` and strict rigor:** the `--strict-core` done-gate treats a missing
+> `feature_id` as a warning (deferral is valid). If the operator opts into `--strict` rigor and
+> the `feature_id` error surfaces, use the sp:spur-dev feature-link helper to resolve it — single-task
+> mode or batch-sweep. The helper is opt-in only; it NEVER runs automatically from `--next` or any gate.
+> See [references/feature-link-helper.md](../skills/spur-dev/references/feature-link-helper.md).
 
 ## Implementation
 

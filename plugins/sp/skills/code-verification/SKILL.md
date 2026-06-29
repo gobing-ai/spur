@@ -1,6 +1,6 @@
 ---
 name: code-verification
-description: Verify a task's implementation against its requirements and acceptance criteria, and review code via the SECU framework. The verifier half of the Spur execution loop — produces a PASS/PARTIAL/FAIL verdict with per-requirement evidence, writes findings back to the task file via CLI verbs, and emits the verdict artifact the pipeline gate reads. Backs the `/sp:dev-verify` (task-oriented) and `/sp:dev-review` (source-oriented) commands. Triggers on "verify task", "verify this", "check the requirements", "code review", "SECU review", "requirements traceability", "review the diff", or validating a task's delivery before `done`.
+description: Verify a task's implementation against its requirements and acceptance criteria, and review code via the SECUA framework. The verifier half of the Spur execution loop — produces a PASS/PARTIAL/FAIL verdict with per-requirement evidence, writes findings back to the task file via CLI verbs, and emits the verdict artifact the pipeline gate reads. Backs the `/sp:dev-verify` (task-oriented) and `/sp:dev-review` (source-oriented) commands. Triggers on "verify task", "verify this", "check the requirements", "code review", "SECUA review", "SECU review", "requirements traceability", "review the diff", or validating a task's delivery before `done`.
 license: Apache-2.0
 metadata:
   author: spur
@@ -31,8 +31,8 @@ It backs two commands:
 
 | Command | Mode | Input | Output |
 |---------|------|-------|--------|
-| `/sp:dev-verify <wbs>` | **verify** | a task WBS | per-requirement verdict → `## Testing`; SECU findings → `## Review`; `.spur/run/<wbs>-verdict.json` |
-| `/sp:dev-review <wbs>` | **review** | a task WBS (diff scope) | SECU findings → `## Review` |
+| `/sp:dev-verify <wbs>` | **verify** | a task WBS | per-requirement verdict → `## Testing`; SECUA findings → `## Review`; `.spur/run/<wbs>-verdict.json` |
+| `/sp:dev-review <wbs>` | **review** | a task WBS (diff scope) | SECUA findings → `## Review` |
 
 The verify mode is the **completion gate's evidence source**: it emits a machine verdict the
 `task-pipeline.yaml` workflow reads before allowing `record → done`. A `PASS` clears the gate; a
@@ -77,8 +77,8 @@ Flags: `--agent <name|auto>` (agent override — passed through from the thin wr
 `auto` = resolve from current runtime, `<name>` = explicit override; omit to use the configured
 default executor `omp` — "current agent" is not expressible on the pipeline surface),
 `--auto` (no confirmations), `--force` (bypass the terminal-status guard), `--fix
-<none|blockers-first|all>` (post-verdict repair), `--focus <all|security|efficiency|correctness|usability>`
-(SECU dimensions), `--bdd` (scenario check), `--next` (on PASS, auto-transition `testing → done`;
+<none|blockers-first|all>` (post-verdict repair), `--focus <all|security|efficiency|correctness|usability|architecture>`
+(SECUA dimensions), `--bdd` (scenario check), `--next` (on PASS, auto-transition `testing → done`;
 on PARTIAL/FAIL, stop).
 
 ### Step 2 — Status guard
@@ -114,11 +114,12 @@ assign a per-requirement status:
 Record the evidence string (`file:line` or test name) per requirement — this is what lands in
 `## Testing`.
 
-### Step 5 — SECU review (Phase 7)
+### Step 5 — SECUA review (Phase 7)
 
 Review the changed code across the `--focus` dimensions (default all): **S**ecurity (secrets,
 injection, unsafe input), **E**fficiency, **C**orrectness (null/edge handling, logic), **U**sability
-(API clarity, error messages). Rank findings by severity (blocker / major / minor). See
+(API clarity, error messages), **A**rchitecture (module depth, seam placement, coupling, locality).
+Rank findings by severity (blocker / major / minor). See
 [references/secu-review.md](references/secu-review.md).
 
 ### Step 6 — BDD scenario check (if `--bdd`)
@@ -145,7 +146,7 @@ Assemble the evidence and write via CLI verbs (temp-file → `--section`):
 printf '...' > /tmp/<wbs>-testing.md
 spur task update <wbs> --section Testing --from-file /tmp/<wbs>-testing.md
 
-# Review section: SECU findings ranked by severity
+# Review section: SECUA findings ranked by severity
 printf '...' > /tmp/<wbs>-review.md
 spur task update <wbs> --section Review --from-file /tmp/<wbs>-review.md
 ```
@@ -172,10 +173,10 @@ then transcribes this output into the task's `## Testing` and `## Review` sectio
 
 - **Testing** ← verdict from `.spur/run/<wbs>-verdict.json` + per-requirement table
   from the answer file
-- **Review** ← SECU findings (P1–P4) extracted from the answer file
+- **Review** ← SECUA findings (P1–P4) extracted from the answer file
 
 The verify agent's output MUST include a per-requirement traceability table
-(`| Req | Status | Evidence |`) and a `### SECU Review` heading with ranked findings
+(`| Req | Status | Evidence |`) and a `### SECUA Review` heading with ranked findings
 so the record step can extract them mechanically. The verdict artifact
 (`.spur/run/<wbs>-verdict.json`) is the gate signal; the answer file is the evidence
 the record step transcribes — keep both structures stable.
@@ -204,7 +205,7 @@ interface VerifyVerdict {
 ### Step 10 — Fix pass (if `--fix` ≠ `none`)
 
 - `blockers-first` — repair only requirements that are UNMET (the blockers), then re-run Steps 4–9.
-- `all` — repair UNMET + PARTIAL requirements and major SECU findings, then re-run Steps 4–9.
+- `all` — repair UNMET + PARTIAL requirements and major SECUA findings, then re-run Steps 4–9.
 - `none` — stop at the verdict; report and exit.
 
 Loop is bounded — if a fix doesn't move a requirement to MET after one retry, report the residual
@@ -220,9 +221,13 @@ summary.
 
 ## Mode: review (`/sp:dev-review`)
 
-The source-oriented path: SECU review of a task's diff without the full traceability verdict. Runs
+The source-oriented path: SECUA review of a task's diff without the full traceability verdict. Runs
 Steps 3 + 5 + 8 (Review section only) — no verdict artifact, no `done` gate. Use for a focused
 quality/security audit of changes when the full verify isn't wanted.
+
+Flags: `--agent <name|auto>` (agent override), `--auto` (no confirmations), `--fix
+<none|blockers-first|all>` (post-review repair), and `--focus
+<all|security|efficiency|correctness|usability|architecture>` (SECUA dimensions).
 
 **Agent override:** The `--agent <name|auto>` flag (passed through from the thin wrapper
 via `$ARGUMENTS`) controls which agent executes the review. `auto` = resolve from current runtime,
@@ -235,7 +240,7 @@ is not expressible on the pipeline surface.
 
 - **Verify a task before `done`** — the pipeline's `verify` step, or a manual `/sp:dev-verify`.
 - **Audit completed work** — `--force` re-verifies a `done` task (compliance, post-merge).
-- **Focused code review** — `/sp:dev-review` for SECU findings on a diff.
+- **Focused code review** — `/sp:dev-review` for SECUA findings on a diff.
 
 Do **not** use this skill for:
 
@@ -262,7 +267,7 @@ Do **not** use this skill for:
 
 - [references/verdict-schema.md](references/verdict-schema.md) — the `VerifyVerdict` artifact shape
   and the per-requirement aggregation rule.
-- [references/secu-review.md](references/secu-review.md) — the SECU dimensions and finding-severity
+- [references/secu-review.md](references/secu-review.md) — the SECUA dimensions and finding-severity
   rubric.
 - `config/workflows/task-pipeline.yaml` — the `verify → record` gate that consumes the verdict.
 - **`sp:spur-dev`** — the execution-half umbrella that drives the pipeline this skill gates.

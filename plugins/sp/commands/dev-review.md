@@ -1,6 +1,6 @@
 ---
-description: Review code for a task — SECU framework review across Security, Efficiency, Correctness, and Usability
-argument-hint: "<wbs> [--agent <name|auto>] [--focus <lens>] [--fix <none|blockers-first|all>]"
+description: Review code for a task — SECUA framework review across Security, Efficiency, Correctness, Usability, and Architecture
+argument-hint: "<wbs> [--agent <name|auto>] [--focus <lens>] [--fix <none|blockers-first|all>] [--auto]"
 allowed-tools: ["Bash", "Read", "Write", "Skill"]
 ---
 
@@ -8,16 +8,16 @@ allowed-tools: ["Bash", "Read", "Write", "Skill"]
 
 Wraps the **sp:code-verification** skill (review mode).
 
-Review code changes for a task using the SECU framework (**S**ecurity, **E**fficiency,
-**C**orrectness, **U**sability). Analyzes the task's diff, produces severity-ranked findings, and
+Review code changes for a task using the SECUA framework (**S**ecurity, **E**fficiency,
+**C**orrectness, **U**sability, **A**rchitecture). Analyzes the task's diff, produces severity-ranked findings, and
 writes them to the task's `## Review` section. Source-oriented: unlike `/sp:dev-verify`, it runs the
-SECU review only — no requirements-traceability verdict and no pipeline gate artifact.
+SECUA review only — no requirements-traceability verdict and no pipeline gate artifact.
 
 ## When to use
 
 - A task's implementation is complete and needs a focused quality/security audit.
 - The operator says "review this" or "check the code."
-- You want SECU findings without the full verify verdict (use `/sp:dev-verify` for that).
+- You want SECUA findings without the full verify verdict (use `/sp:dev-verify` for that).
 
 ## Arguments
 
@@ -25,12 +25,13 @@ SECU review only — no requirements-traceability verdict and no pipeline gate a
 |----------|-------------|---------|
 | `wbs` | Task WBS number (required, positional) | (required) |
 | `--agent <name\|auto>` | Spawn the review under a specific agent. Omit (the default) → the review runs under the configured default executor (`omp`). **Current-agent execution is not expressible** (subprocess FSM). | (configured default — `omp`) |
-| `--focus <lens>` | SECU dimensions: `all`, `security`, `efficiency`, `correctness`, `usability`, or comma-separated | `all` |
+| `--focus <lens>` | SECUA dimensions: `all`, `security`, `efficiency`, `correctness`, `usability`, `architecture`, or comma-separated | `all` |
 | `--fix <strategy>` | Post-review repair: `none`, `blockers-first`, `all` | `none` |
+| `--auto` | Skip confirmations for the review/fix pass (CI / pipeline use) | off |
 
 ## Behavior
 
-Thin wrapper: diff scope, SECU analysis, findings ranking, and write-back are all owned by the
+Thin wrapper: diff scope, SECUA analysis, findings ranking, and write-back are all owned by the
 skill.
 
 ### Agent override
@@ -43,7 +44,7 @@ or `--agent auto` spawns that agent instead. Documented honestly — no `inherit
 
 ## Implementation
 
-Delegates to **sp:code-verification** skill (review mode). `$ARGUMENTS` passes all flags including `--agent` through verbatim:
+Delegates to **sp:code-verification** skill (review mode). `$ARGUMENTS` passes all flags including `--agent` and `--auto` through verbatim:
 
 ```
 Skill(skill="sp:code-verification", args="review $ARGUMENTS")

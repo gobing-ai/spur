@@ -18,7 +18,7 @@ table is the index; the per-operation sections below are the detail.
 | `Skill()` | Delegates to a backing skill via `Skill(skill="<skill>", args="<op> $ARGUMENTS")`. The skill owns the procedure; the command is a thin entry point. | implement, unit, review, verify, run, refine, plan, brainstorm, runall |
 | `inline` | The procedure is defined directly in the command file. No `Skill()` delegation — the command carries its own steps. | changelog, gitmsg, fixall, handover |
 
-The 9 `Skill()` commands back onto three skills: `sp:spur-dev` (planning + execution workflow + batch), `sp:code-verification` (SECU review + traceability), and `sp:brainstorm` (structured ideation). The `runall` operation (#13) is `sp:spur-dev`'s batch entry — it delegates the driver loop to the `sp:super-coder` agent (the batch orchestrator) per [execution-batch.md](execution-batch.md). `dev-brainstorm` carries the two artifact exits — `--task` (one task) and `--feature` (validated feature with BDD AC; the front-half entry that hands off to `dev-plan`). The 4 `inline` commands cover git tooling and operational utilities that have no natural skill home — creating a skill for each would be scope creep for one-liner procedures.
+The 9 `Skill()` commands back onto three skills: `sp:spur-dev` (planning + execution workflow + batch), `sp:code-verification` (SECUA review + traceability), and `sp:brainstorm` (structured ideation). The `runall` operation (#13) is `sp:spur-dev`'s batch entry — it delegates the driver loop to the `sp:super-coder` agent (the batch orchestrator) per [execution-batch.md](execution-batch.md). `dev-brainstorm` carries the two artifact exits — `--task` (one task) and `--feature` (validated feature with BDD AC; the front-half entry that hands off to `dev-plan`). The 4 `inline` commands cover git tooling and operational utilities that have no natural skill home — creating a skill for each would be scope creep for one-liner procedures.
 
 > **`dev-dogfood`** is not in this table. It is a thin `Skill()` wrapper over the **`sp:dogfood-testing`**
 > backbone skill (which owns the 4-phase dogfood protocol, the live ledger, and the report template);
@@ -29,7 +29,7 @@ The 9 `Skill()` commands back onto three skills: `sp:spur-dev` (planning + execu
 | # | Operation | Command | Backing | Skill / Verb | Arg-hint |
 |---|-----------|---------|---------|--------------|----------|
 | 1 | unit | `dev-unit` | `Skill()` | `sp:spur-dev` (`unit`) | `<wbs> [--coverage <pct>] [--agent <name\|auto>]` |
-| 2 | review | `dev-review` | `Skill()` | `sp:code-verification` (`review`) | `<wbs> [--agent <name\|auto>] [--focus <lens>] [--fix <none\|blockers-first\|all>]` |
+| 2 | review | `dev-review` | `Skill()` | `sp:code-verification` (`review`) | `<wbs> [--agent <name\|auto>] [--focus <lens>] [--fix <none\|blockers-first\|all>] [--auto]` |
 | 3 | verify | `dev-verify` | `Skill()` | `sp:code-verification` (`verify`) | `<wbs> [--agent <name\|auto>] [--fix ...] [--focus <lens>] [--bdd] [--auto] [--force]` |
 | 4 | run | `dev-run` | `Skill()` | `sp:spur-dev` (`run` / `implement`) | `<wbs> [--mode <full\|implement>] [--agent <name\|auto>] [--auto]` |
 | 5 | refine | `dev-refine` | `Skill()` | `sp:spur-dev` (`refine`) | `<wbs> [--focus <mode>] [--agent <name\|auto>] [--auto] [--next]` |
@@ -60,10 +60,10 @@ must not be changed without updating the backing skill.
 
 ### 2. review
 
-- **Purpose:** SECU-framework code review of a task's diff — Security, Efficiency, Correctness, Usability.
-- **Inputs:** `<wbs>` (required). `--agent <name|auto>` is a **pipeline** override: omit (default) → the review runs under the configured default executor (`omp`); current-agent is **not expressible** (subprocess FSM). `<name>`/`auto` spawns that agent. `--focus <lens>` narrows to one SECU dimension. `--fix <none|blockers-first|all>` controls auto-fix.
+- **Purpose:** SECUA-framework code review of a task's diff — Security, Efficiency, Correctness, Usability, Architecture.
+- **Inputs:** `<wbs>` (required). `--agent <name|auto>` is a **pipeline** override: omit (default) → the review runs under the configured default executor (`omp`); current-agent is **not expressible** (subprocess FSM). `<name>`/`auto` spawns that agent. `--focus <lens>` narrows to one SECUA dimension. `--fix <none|blockers-first|all>` controls auto-fix. `--auto` skips confirmations for review/fix passes.
 - **Backing:** `sp:code-verification` skill, `review` mode.
-- **Behavior:** Detect the diff scope → run SECU analysis → rank findings P1–P4 → write findings to the task's `## Review` section. With `--fix`, applies fixes for the selected severity tier.
+- **Behavior:** Detect the diff scope → run SECUA analysis → rank findings P1–P4 → write findings to the task's `## Review` section. With `--fix`, applies fixes for the selected severity tier.
 - **Delegation:** `Skill(skill="sp:code-verification", args="review $ARGUMENTS")`
 
 ### 3. verify
@@ -71,7 +71,7 @@ must not be changed without updating the backing skill.
 - **Purpose:** Requirements traceability — verify a task's implementation against its acceptance criteria, producing a PASS/PARTIAL/FAIL verdict with per-requirement evidence.
 - **Inputs:** `<wbs>` (required). `--agent <name|auto>` is a **pipeline** override: omit (default) → the verify pass runs under the configured default executor (`omp`); current-agent is **not expressible** (subprocess FSM). `<name>`/`auto` spawns that agent. `--fix`, `--focus`, `--bdd`, `--auto`, `--force` modulate the verify pass. `--next` (terminal chain link): on the **post-`--fix`** PASS verdict, transition `testing → done` through the FSM (`--strict-core` guard honored). On PARTIAL/FAIL or guard failure, stop as review-pending.
 - **Backing:** `sp:code-verification` skill, `verify` mode.
-- **Behavior:** Status guard → change-scope detection → requirements traceability → SECU review → verdict aggregation → findings write-back → verdict-artifact emission → optional `--fix` pass. The verdict gates the pipeline's `done` transition. With `--next`: the (post-`--fix`) PASS verdict → transition to `done` (FSM guard honored); PARTIAL/FAIL → stop and surface verdict.
+- **Behavior:** Status guard → change-scope detection → requirements traceability → SECUA review → verdict aggregation → findings write-back → verdict-artifact emission → optional `--fix` pass. The verdict gates the pipeline's `done` transition. With `--next`: the (post-`--fix`) PASS verdict → transition to `done` (FSM guard honored); PARTIAL/FAIL → stop and surface verdict.
 - **Delegation:** `Skill(skill="sp:code-verification", args="verify $ARGUMENTS")`
 
 ### 4. run
@@ -239,4 +239,3 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
      - Otherwise, write to `docs/handover/<YYYY-MM-DD>-<slug>.md` (create `docs/handover/` if absent).
   5. Print the path to the handover document.
 - **Invariants:** The handover is honest — rejected approaches are recorded so the next agent doesn't retry them. The blocker is specific, not "it doesn't work."
-

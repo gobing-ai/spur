@@ -2,7 +2,7 @@
 schema_version: 1
 name: "Enhance sp:dev-review with architecture/deep-review capability"
 description: ""
-status: todo
+status: done
 type: review
 template: review
 profile: standard
@@ -12,28 +12,30 @@ priority: P2
 tags: ["review"]
 dependencies: []
 created_at: "2026-06-29T00:28:36.096Z"
-updated_at: 2026-06-29T00:29:36.724Z
+updated_at: 2026-06-29T00:54:22.817Z
 ---
 
 ## 0149. Enhance sp:dev-review with architecture/deep-review capability
 
 ### Background
-Migration review found that `/sp:dev-review` now covers the core SECU path through
-`sp:code-verification`, but it did not preserve the old `rd3:dev-review` architecture/deepening
+Migration review found that `/sp:dev-review` covered the core SECU path through
+`sp:code-verification`, but did not preserve the old `rd3:dev-review` architecture/deepening
 capability backed by `rd3:code-improvement`.
 
-Current state:
+Decision: do not migrate `rd3:code-improvement` as a separate `sp` skill for this slice. Instead,
+make architecture a first-class fifth review dimension in `sp:code-verification`, yielding the
+SECUA framework:
 
-- `plugins/sp/commands/dev-review.md` accepts a task WBS and delegates to
-  `sp:code-verification` review mode.
-- `plugins/sp/skills/code-verification` covers Security, Efficiency, Correctness, and Usability.
-- The old rd3 command supported a fifth `architecture` focus and delegated that slice to
-  `rd3:code-improvement`.
-- `plugins/sp/skills/` has no equivalent `code-improvement` or architecture-review skill.
+- **S**ecurity
+- **E**fficiency
+- **C**orrectness
+- **U**sability
+- **A**rchitecture
 
-This is not a blocker for normal review, but it is a capability gap for making
-`sp:dev-review` a powerful review and issue-fixing tool. Architecture review should not be
-silently blended into SECU; it needs its own procedure and output contract.
+This keeps `/sp:dev-review` as one coherent review tool, lets `--focus architecture` work naturally,
+and avoids a second review output path. Architecture review remains constrained to the current diff:
+module depth, seam placement, coupling/locality, boundary drift, and test-surface damage. Larger
+refactors should be reported as follow-up tasks rather than performed opportunistically.
 
 #### Review Findings
 
@@ -42,25 +44,63 @@ in the reviewed PR/commit/diff). Fix in priority order (P1 → P2 → …); re-r
 
 | Severity | File | Finding | Recommendation |
 | -------- | ---- | ------- | -------------- |
-| P2 | `plugins/sp/commands/dev-review.md` | The `sp` review surface lacks the old rd3 `architecture` focus and has no delegated architecture/deepening reviewer. | Add an architecture/deep-review capability, either by creating an `sp:code-improvement` skill or by adding a clearly separated architecture-review mode behind `sp:dev-review`. |
-| P2 | `plugins/sp/skills/code-verification/references/secu-review.md` | SECU is intentionally limited to S/E/C/U; forcing architectural deepening into it would blur quality review with refactor discovery. | Keep SECU source review separate from architecture/deepening review; define how findings merge in the task `## Review` section. |
-| P3 | `plugins/sp/skills/spur-dev/references/dev-operations.md` | The operation map documents only SECU review, so users cannot discover architecture-focused review from the `sp` command surface. | Update the operation contract and examples after the architecture-review behavior is designed. |
+| P2 | `plugins/sp/skills/code-verification/references/secu-review.md` | Review dimensions stop at SECU and omit architecture, so `/sp:dev-review --focus architecture` cannot be expressed. | Extend the reference to SECUA and add an Architecture dimension with concrete checks and severity guidance. |
+| P2 | `plugins/sp/commands/dev-review.md` | The command surface advertises only Security/Efficiency/Correctness/Usability. | Update command description, focus values, and behavior text to SECUA. |
+| P3 | `plugins/sp/commands/dev-verify.md` + `plugins/sp/skills/spur-dev/references/dev-operations.md` | Verify/operation docs still describe SECU only. | Sync the shared review contract so verify and review use the same SECUA dimensions. |
 ### Plan
-- [ ] Decide the surface: either `--focus architecture` on `/sp:dev-review`, a separate `--depth <survey|deep>` modifier, or a distinct command/skill entry if mixing it into review creates too much ambiguity.
-- [ ] Port or rewrite the useful parts of `rd3:code-improvement`: deletion test, shallow-module detection, locality/leverage framing, ADR-aware constraints, and survey vs deep modes.
-- [ ] Define how architecture findings are written to `## Review` alongside SECU findings without weakening the P1-P4/L3 checker expectations.
-- [ ] Keep `--auto` behavior explicit: under auto, run survey mode and skip grilling loops; deep mode can propose a follow-up task rather than starting an interactive design session.
-- [ ] Update `plugins/sp/commands/dev-review.md`, `plugins/sp/skills/code-verification` or the new skill, and `plugins/sp/skills/spur-dev/references/dev-operations.md` in the same change.
-- [ ] Dogfood on a non-trivial task or package path and verify the output finds actionable architecture candidates, not generic refactor advice.
-### Review
-Post-implementation reflection — filled after the first fix round.
+- [x] Extend `plugins/sp/skills/code-verification/references/secu-review.md` from SECU to SECUA.
+- [x] Add `architecture` to `--focus` parsing and document the checks: depth/deletion test, seam placement, coupling/locality, boundary drift, and test surface.
+- [x] Update `/sp:dev-review` command docs to advertise SECUA and `--focus architecture`.
+- [x] Update `/sp:dev-verify` and dev-operation docs so the shared review contract is consistent.
+- [x] Keep architecture review diff-scoped: findings must cite changed files and recommend follow-up tasks for larger refactors.
+- [ ] Dogfood `/sp:dev-review <wbs> --focus architecture --auto` on a non-trivial task when an appropriate candidate is available.
+### Solution
+Implemented the selected design: architecture is now part of the existing review skill rather than a
+separate migrated skill.
 
-| Sev | Area | Finding | Resolution |
-| --- | ---- | ------- | ---------- |
-| P1 | - | None identified at task creation. | - |
-| P2 | Review capability | `sp:dev-review` lacks an architecture/deepening review path equivalent to old `rd3:dev-review --focus architecture`. | Track and implement through this task. |
-| P3 | Command discoverability | The current operation contract advertises only SECU review. | Update command/operation docs when the architecture-review surface is selected. |
-| P4 | - | None identified at task creation. | - |
+| File | Change |
+| ---- | ------ |
+| `plugins/sp/skills/code-verification/references/secu-review.md:8` | Renamed the review lens to SECUA. |
+| `plugins/sp/skills/code-verification/references/secu-review.md:19` | Added the Architecture dimension. |
+| `plugins/sp/skills/code-verification/references/secu-review.md:23` | Added `architecture` to focus parsing. |
+| `plugins/sp/skills/code-verification/references/secu-review.md:38` | Added architecture checks and severity guidance. |
+| `plugins/sp/skills/code-verification/SKILL.md:117` | Updated verify/review procedure language to SECUA. |
+| `plugins/sp/skills/code-verification/SKILL.md:179` | Updated the pipeline answer heading contract to `### SECUA Review`. |
+| `plugins/sp/commands/dev-review.md:2` | Updated the user-facing review command contract to SECUA. |
+| `plugins/sp/commands/dev-verify.md:29` | Synced verify command focus values to include `architecture`. |
+| `plugins/sp/skills/spur-dev/references/dev-operations.md:63` | Synced operation docs to SECUA. |
+### Testing
+Verified against the three Review-Findings requirements (R1/R2/R3). Docs/skill-contract change — no executable path; verification is a consistency proof over the contract surface.
+
+Coverage: N/A — documentation/skill-contract change only, no executable code path changed.
+
+| Req | Status | Evidence |
+| --- | ------ | -------- |
+| R1 (P2) — `secu-review.md` SECU→SECUA + Architecture dimension/checks/severity | MET | `secu-review.md:8,19,24,38-60` |
+| R2 (P2) — `dev-review.md` command surface SECUA + `--focus architecture` + behavior | MET | `dev-review.md:2,11,14,20,28,34` |
+| R3 (P3) — sync `dev-verify.md` + `dev-operations.md` to SECUA | MET | `dev-verify.md:12,29,37`; `dev-operations.md:21,63,64,66,74`; `SKILL.md:1,33,80,117,179,224` |
+
+Checks:
+- Residual bare-`SECU ` wording across the review-contract surface: NONE.
+- `--focus` enumerations missing `architecture`: NONE (all include it).
+- Answer-format heading contract `### SECUA Review`: consistent; no executable code matches the heading literal (`task-record.ts`/`task-service.ts` extract structurally) → safe rename.
+- `bun run lint` (biome + per-workspace tsc): clean.
+- `spur task check 0149`: pass.
+
+Verdict: PASS
+### Review
+**SECUA Review** — docs/skill-contract change. No P1–P4 findings.
+
+| Sev | Dim | Finding | Resolution |
+| --- | --- | ------- | ---------- |
+| P1 | - | None identified. | - |
+| - | Security | N/A — no input/secret/injection surface. | - |
+| - | Efficiency | N/A — no executable path. | - |
+| - | Correctness | Zero residual bare-`SECU` wording; every `--focus` enumeration includes `architecture`. | Verified by consistency scan. |
+| - | Usability | `--auto` added consistently to `dev-review.md` args and `dev-operations.md` arg-hint; SECUA documented uniformly across all four contract files. | - |
+| - | Architecture | Sound: architecture is a fifth SECUA dimension inside `sp:code-verification` (one coherent review tool, one output path) rather than a separately-migrated skill. No code-level coupling to the renamed heading — the record step extracts structurally. No boundary drift. | - |
+
+Open follow-up (tracked in Plan, not a requirement): live dogfood of `/sp:dev-review <wbs> --focus architecture --auto` on a non-trivial target.
 ### References
 - `plugins/sp/commands/dev-review.md`
 - `plugins/sp/skills/code-verification/SKILL.md`
@@ -71,3 +111,6 @@ Post-implementation reflection — filled after the first fix round.
 - `/Users/robin/projects/cc-agents/plugins/rd3/skills/code-improvement/SKILL.md`
 - `docs/features/H3_prompt-skill-moves.md`
 ### History
+- 2026-06-29T00:37:06.513Z todo → wip (system)
+- 2026-06-29T00:54:21.147Z wip → testing (system)
+- 2026-06-29T00:54:22.817Z testing → done (system)
