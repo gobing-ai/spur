@@ -3,16 +3,16 @@ template: standard
 schema_version: 1
 name: "Normalize task status before lifecycle transition; fix opaque FSMError on case-drift"
 description: ""
-status: wip
+status: done
 type: task
 profile: standard
-feature_id: null
+feature_id: F4
 parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
 created_at: "2026-06-29T06:20:51.500Z"
-updated_at: 2026-06-29T07:20:19.218Z
+updated_at: 2026-06-29T18:41:01.996Z
 ---
 
 ## 0152. Normalize task status before lifecycle transition; fix opaque FSMError on case-drift
@@ -165,9 +165,38 @@ Implemented Option A (service-boundary normalization) — the single production 
 
 **Coverage:** `planning-write-service.ts` at 100% lines / 96.67% functions after the fix. The 8 `plugins/sp/hooks/task-write-guard.test.ts` failures are pre-existing (task 0151) and unrelated to this change.
 ### Review
+**Verify verdict (`/sp:dev-verify 0152 --auto --fix all --focus all --force --next`): PASS** — all 10
+requirements MET; no blocker/major SECUA findings; `--fix all` had nothing to repair.
 
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `planning-write-service.ts:332` (`currentStatus`) + `:376` (`newStatus`) both wrap `normalizeStatusForDomain` before `requestTransition` (`:382`). |
+| R2 | MET | Single boundary; `normalizeStatusForDomain` (`:527`) is the only new surface; no engine/schema change. |
+| R3 | MET | Passthrough-on-unknown (`:530-534`) → unknown status falls to step-4 Zod (`:360-364`); `normalizeTaskStatus:176` throws on unknown. |
+| R4 | MET | Invalid status → Zod enum error naming task `ref.id` + allowed vocabulary (`:362`); R10/Solution record the co-location decision. |
+| R5 | MET | 0134 self-healed to `todo` (its History: `backlog → todo`); read-time normalization makes the manual data fix unnecessary. |
+| R6 | MET | Test `:480` "normalizes legacy PascalCase status before lifecycle transition" asserts the port receives canonical `backlog` (currentStatus) + `todo` (newStatus). |
+| R7 | MET | Only `planning-write-service.ts` executable surface touched (+ the local helper + import); no engine/schema change (committed diff `12fe5ca`). |
+| R8 | MET | `bun run lint` clean (7 workspaces typecheck); `planning-write-service.test.ts` 32/0 — re-confirmed this verify run. |
+| R9 | MET | `04_DESIGN.md:696` "Status normalization invariant (0152)" added; `03_ARCHITECTURE.md §12` correctly needs no change. |
+| R10 | MET | Solution records co-located enrichment (Option A), the existing `Lifecycle transition denied` throw covering valid/invalid-direction, and the optional non-blocking upstream `ts-libs` follow-up. |
+
+
+- **Security** — none. No new external-input surface; status is trusted internal frontmatter; no injection/secret exposure.
+- **Efficiency** — none. `normalizeStatusForDomain` is an O(1) map lookup, called twice per write; negligible.
+- **Correctness** — none (blocker/major). Both pre- and post-mutation paths normalized; empty-string guard prevents normalizing `''`; passthrough-on-unknown correctly defers genuine errors to Zod.
+- **Usability** — none. Unknown status yields a clear Zod enum message naming allowed values.
+- **Architecture** — none. Fix at the sole production callsite for `requestTransition`; reuses the existing normalizer; no new abstraction; excellent locality.
+
+**Findings:**
+- **P4 (minor, mitigated)** — `normalizeStatusForDomain`'s `try/catch` swallows the normalize error silently; a reader must trace two hops (here → step-4 Zod) to see why an unknown status isn't blocked at this site. The doc-comment (`:520-525`) explains the intent, so no action required. (`packages/app/src/services/planning-write-service.ts:530-534`)
+
+No P1–P3. Verdict gate: **cleared**.
 ### References
 
 ### History
 - 2026-06-29T07:08:04.830Z backlog → todo (system)
 - 2026-06-29T07:08:05.007Z todo → wip (system)
+- 2026-06-29T18:38:38.354Z wip → testing (system)
+- 2026-06-29T18:38:39.941Z testing → done (system)
