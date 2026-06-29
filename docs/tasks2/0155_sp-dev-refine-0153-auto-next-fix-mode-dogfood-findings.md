@@ -2,7 +2,7 @@
 schema_version: 1
 name: "/sp:dev-refine 0153 --auto --next fix-mode dogfood findings"
 description: ""
-status: backlog
+status: cancelled
 type: review
 template: review
 profile: standard
@@ -12,7 +12,7 @@ priority: P2
 tags: ["review"]
 dependencies: []
 created_at: "2026-06-29T21:02:38.964Z"
-updated_at: 2026-06-29T21:02:57.371Z
+updated_at: 2026-06-29T23:06:07.595Z
 ---
 
 ## 0155. /sp:dev-refine 0153 --auto --next fix-mode dogfood findings
@@ -46,6 +46,24 @@ implement time and found **stale as written** — resolved as a real L3 hardenin
 - [ ] Fix all the remaining findings if any
 - [ ] Re-review the changed code
 
+### Solution
+
+**Cancelled 2026-06-29 — 6 of 7 findings resolved/obsolete; the one live residual (template drift-check) is filed as a new task.**
+
+Audit against the current tree:
+
+| # | Sev | Finding | Disposition |
+|---|-----|---------|-------------|
+| 1 | P2 | `.spur/tasks/templates/review.md` drift (Review lacked P-table) | **RESOLVED (core)** — `.spur` review template's `### Review` now carries the empty-cell P1/P2 table. The secondary *drift-check on init/upgrade* ask is filed as a new task. |
+| 2 | P3 | `section-matrix.yaml` undocumented wip+ Review requirement | **RESOLVED** — matrix comment (lines ~104-110) now documents "Review becomes required at wip+". |
+| 3 | P3 | `dev-refine.md` SKIP feeds mutating `--next` | **RESOLVED** — dev-refine.md:87-90 + dev-operations.md:104 document the SKIP-short-circuits-synthesis-not-`--next` behavior. |
+| 4 | P3 | driver cache-conservation (low cache hit rate) | **NOT ACTIONABLE** — `[unverifiable]`, no per-step token telemetry; lever-only, no measurable proof possible here. |
+| 5 | P4 | `task.ts` `task delete` banner buries guard error | **STALE** — `spur task delete` removed; retirement is now `spur task update <wbs> cancelled`. |
+| 6 | P4 | `AGENTS.md:175` missing `path` row | **RESOLVED** — `path` row present (AGENTS.md:176); stale `delete` row gone. |
+| 7 | P4 | `security_reminder_hook.py` substring false-positive | **OBSOLETE** — no such `.py` exists in repo, superskill, or `~/.claude/hooks/`; it was a transient session hook, now gone. Unverifiable and inapplicable. |
+
+No P1. The only live residual (template drift-check) is tracked separately.
+
 ### Review
 
 Post-implementation reflection — filled **after** the first fix round: what went wrong, what
@@ -59,3 +77,4 @@ remains to fix before closing, and any **back-issues** (new findings surfaced by
 ### References
 
 ### History
+- 2026-06-29T23:06:07.595Z backlog → cancelled (system)
