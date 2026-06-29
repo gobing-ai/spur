@@ -42,6 +42,7 @@ execution half: a **HITL approval** on the design and a **PASS/PARTIAL/FAIL verd
 | `/sp:dev-plan` | Plan | Feature → BDD AC → `feature check` gate → decompose → `batch-create` gate → optional design doc (`--design`/`--auto`) | `sp:spur-dev` (planning) |
 | `/sp:dev-refine` | Plan→Exec | Fill a task's AC / Design / Plan just-in-time via Q&A | `sp:spur-dev` |
 | `/sp:dev-run` | Exec | Run a task: full pipeline, or `--mode implement` for just the code | `sp:spur-dev` (execution) |
+| `/sp:dev-runall` | Exec | Run a **batch** of tasks through their pipelines in dependency-correct order (set resolve → topo-sort → per-task run → batch report) | `sp:spur-dev` (`runall` op → `sp:super-coder`) |
 | `/sp:dev-unit` | Exec | Generate/extend tests; measure coverage | `sp:spur-dev` |
 | `/sp:dev-review` | Exec | SECU code review (security/efficiency/correctness/usability) | `sp:code-verification` |
 | `/sp:dev-verify` | Exec | Map requirements → evidence; emit a PASS/PARTIAL/FAIL verdict | `sp:code-verification` |
@@ -156,6 +157,20 @@ Three bundled workflows cover the altitudes:
 `feature-dev.yaml` is the one to run when you want a feature taken from idea to verified completion
 unattended: `spur workflow run config/workflows/feature-dev.yaml --vars '{"featureId":"B3"}'`.
 
+**Run a batch of tasks in dependency order.** When you have a set of tasks ready to execute (not a
+whole feature's lifecycle — just "run these tasks through their pipelines"), `/sp:dev-runall` is the
+batch driver. It resolves the set, topo-sorts by dependencies, runs each through `task-pipeline.yaml`,
+and emits a batch report. The batch orchestrator is `sp:super-coder`; it owns the spaces *between*
+task runs (set resolution, ordering, failure policy), never the steps inside a single task:
+
+```bash
+# Run every ready task through its pipeline (stop on first failure).
+/sp:dev-runall --tasks ready
+
+# Run a feature's tasks unattended, skipping the per-task HITL gate.
+/sp:dev-runall --tasks feature:A1 --auto
+```
+
 ---
 
 ## A worked example: idea → prototype in one sitting
@@ -211,6 +226,12 @@ current runtime to its canonical name; `<name>` (e.g. `codex`) is an explicit sp
 > **Exception — `/sp:dev-dogfood --agent` is testee-scoped.** Because dogfood *drives* other commands,
 > its `--agent` sets the agent the **testee** runs under (forwarded into the testee invocation), not
 > the driver. The driver always runs in the current session.
+
+> **Exception — `/sp:dev-runall --agent` pins the step executor, not the orchestrator.** `dev-runall`
+> runs N pipelines; each `agent.run` step resolves to the `--agent` value (threaded into every
+> per-task `vars.agent`). But `sp:super-coder` is always the batch orchestrator — it runs the loop in
+> its own context and is never replaced by `--agent`. Same dual-surface contract as `dev-run`, scaled
+> across the batch.
 
 **`--design` / `--auto` on `/sp:dev-plan`** — author a feature design satellite
 (`docs/design/<slug>.md`) + its `04_DESIGN.md` index row. `--design` always authors; `--auto` lets the

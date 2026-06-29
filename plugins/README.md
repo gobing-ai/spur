@@ -24,8 +24,8 @@ plugins/sp/
 │   ├── spur-tasks/                  # Companion reference for `spur task` verbs (v1.1)
 │   ├── spur-tdd/                    # TDD workflow companion (v1.0)
 │   └── spur-workflows/              # Dual-mode workflow engine lifecycle (v1.0)
-├── commands/                        # Slash command definitions (18)
-├── agents/                          # Expert subagent definitions (5)
+├── commands/                        # Slash command definitions (19)
+├── agents/                          # Specialist subagent definitions (6)
 ├── hooks/                           # Hook definitions + guard scripts
 │   ├── hooks.json
 │   ├── task-write-guard.ts          # PreToolUse guard — task-corpus write protection
@@ -66,11 +66,11 @@ Each skill directory contains:
 
 **Purpose:** Thin slash-command wrappers that parse user arguments and delegate to the corresponding skill. Each command is a user-facing entry point that bridges natural language to skill invocation.
 
-There are **18 commands**, organized by the CLI surface they wrap:
+There are **19 commands**, organized by the CLI surface they wrap:
 
 | Prefix | Count | Delegates To | Purpose |
 |--------|-------|-------------|---------|
-| `dev-*` | 12 | `sp:spur-dev` (4), `sp:code-verification` (2), `sp:brainstorm` (1), `sp:dogfood-testing` (1), inline (4) | The dev-workflow surface — `dev-plan`, `dev-run`, `dev-refine`, `dev-unit` (→ spur-dev); `dev-verify`, `dev-review` (→ code-verification); `dev-brainstorm` (→ brainstorm); `dev-dogfood` (→ dogfood-testing); `dev-fixall`, `dev-gitmsg`, `dev-changelog`, `dev-handover` (inline) |
+| `dev-*` | 13 | `sp:spur-dev` (5), `sp:code-verification` (2), `sp:brainstorm` (1), `sp:dogfood-testing` (1), inline (4) | The dev-workflow surface — `dev-plan`, `dev-run`, `dev-runall`, `dev-refine`, `dev-unit` (→ spur-dev); `dev-verify`, `dev-review` (→ code-verification); `dev-brainstorm` (→ brainstorm); `dev-dogfood` (→ dogfood-testing); `dev-fixall`, `dev-gitmsg`, `dev-changelog`, `dev-handover` (inline) |
 | `rule-*` | 3 | `sp:spur-rules` | The rule surface — `rule-add`, `rule-refine`, `rule-scan` |
 | `workflow-*` | 2 | `sp:spur-workflows` | The workflow surface — `workflow-add`, `workflow-refine` |
 | `spur-init` | 1 | `sp:doc-evolve` | Project bootstrap (`spur init`) with doc-evolve integration |
@@ -84,23 +84,23 @@ Each command file contains:
 
 ### 3. Agents (`agents/`)
 
-**Purpose:** Thin specialist subagents that route requests to the correct skill. Unlike general-purpose subagents, these are tightly scoped: each expert agent owns exactly one Spur CLI surface.
+**Purpose:** Specialist subagents that run in isolated context windows. Two shapes: **expert agents** route a request to the single skill they own; **`super-coder`** is a batch orchestrator that drives the `sp:spur-dev` `runall` loop (set resolution → topo-sort → per-task pipeline → batch report) across many tasks at once.
 
-| Agent | Delegates To | Color | Trigger Examples |
-|-------|-------------|-------|------------------|
-| `expert-dev` | `sp:spur-dev` | blue | "plan this feature", "run the full pipeline", "execute the dev workflow" |
-| `expert-features` | `sp:spur-features` | purple | "create a feature", "feature lifecycle", "move a feature subtree" |
-| `expert-rules` | `sp:spur-rules` | teal | "add a constraint rule", "fine-tune rules", "validate a rule file" |
-| `expert-tasks` | `sp:spur-tasks` | green | "create a task", "task check", "task lifecycle", "batch-create tasks" |
-| `expert-workflows` | `sp:spur-workflows` | blue | "author a workflow", "validate workflow", "state machine vs transition flow" |
+| Agent | Shape | Delegates To | Color | Trigger Examples |
+|-------|-------|-------------|-------|------------------|
+| `expert-dev` | expert | `sp:spur-dev` | blue | "plan this feature", "run the full pipeline", "execute the dev workflow" |
+| `expert-features` | expert | `sp:spur-features` | purple | "create a feature", "feature lifecycle", "move a feature subtree" |
+| `expert-rules` | expert | `sp:spur-rules` | teal | "add a constraint rule", "fine-tune rules", "validate a rule file" |
+| `expert-tasks` | expert | `sp:spur-tasks` | green | "create a task", "task check", "task lifecycle", "batch-create tasks" |
+| `expert-workflows` | expert | `sp:spur-workflows` | blue | "author a workflow", "validate workflow", "state machine vs transition flow" |
+| `super-coder` | orchestrator | `sp:spur-dev` + `sp:dogfood-testing` | green | "run all tasks", "run the batch", "execute the todo set", "runall" — batch driver for `/sp:dev-runall` |
 
 Each agent has:
-- `tools: [Read, Grep, Glob, Bash, Skill]` — read-heavy with CLI and skill access
-- `skills: [sp:<skill-name>]` — bound to exactly one skill
+- `skills: [sp:<skill-name>]` — bound to one skill (the five experts) or two (`sp:spur-dev` + `sp:dogfood-testing` for `super-coder`)
 - `model: inherit` — inherits the parent session's model
 - `color` — roster display accent
 
-**Design principle:** Expert agents are **delegates, not implementors**. They never contain domain logic. Their sole job is to recognize trigger phrases, route to the bound skill, and sequence multi-phase work in an isolated context window. For a single well-scoped operation, the matching `/sp:*` command is lighter; for work spanning multiple phases, the expert agent provides isolation.
+**Design principle:** Agents are **delegates, not implementors**. They never contain domain logic. The five experts recognize trigger phrases and route to their bound skill; `super-coder` drives the batch driver loop (the algorithm lives in `sp:spur-dev/references/execution-batch.md`) without reaching into individual pipeline steps. For a single well-scoped operation, the matching `/sp:*` command is lighter; for work spanning multiple phases or a batch, the agent provides an isolated context window.
 
 ### 4. Hooks (`hooks/`)
 
@@ -134,8 +134,8 @@ The hook fires on every `Write`/`Edit` tool call and checks whether the target p
 ```mermaid
 graph TB
     subgraph "User Entry Points"
-        CMD["Commands<br/>18 slash commands<br/>/sp:dev-plan, /sp:rule-add, /sp:workflow-add, ..."]
-        AGENT["Agents<br/>5 expert subagents<br/>expert-dev, expert-tasks, expert-rules, ..."]
+        CMD["Commands<br/>19 slash commands<br/>/sp:dev-plan, /sp:dev-runall, /sp:rule-add, ..."]
+        AGENT["Agents<br/>6 subagents (5 experts + super-coder)<br/>expert-dev, expert-tasks, super-coder, ..."]
         HOOK["PreToolUse Hook<br/>Write|Edit matcher"]
     end
 
@@ -368,7 +368,7 @@ verification guard.
 
 rd3 shipped 46 commands. The `sp` plugin applied the ADR-016 decision test (a command is justified
 only when it converts non-deterministic intent into a reliable sequence the CLI cannot express) and
-kept a **much smaller set** (18). The `cc` plugin took the meta-agent authoring commands (17).
+kept a **much smaller set** (19). The `cc` plugin took the meta-agent authoring commands (17).
 
 | rd3 command | Destination | Status | Note |
 |-------------|-------------|--------|------|
@@ -417,12 +417,14 @@ kept a **much smaller set** (18). The `cc` plugin took the meta-agent authoring 
 | `prd-init` | `sp` | ⏳ Deferred | M05 — same |
 | `prd-doc` | `sp` | ⏳ Deferred | M05 — same |
 | `prd-adjust` | `sp` | ⏳ Deferred | M05 — same |
-| *— (new)* | `sp` | ➖ N/A | `rule-add`, `rule-refine`, `rule-scan` (→ `sp:spur-rules`); `workflow-add`, `workflow-refine` (→ `sp:spur-workflows`); `spur-init` — created fresh for the Spur CLI surface |
+| *— (new)* | `sp` | ➖ N/A | `rule-add`, `rule-refine`, `rule-scan` (→ `sp:spur-rules`); `workflow-add`, `workflow-refine` (→ `sp:spur-workflows`); `spur-init`; `dev-runall` (→ `sp:spur-dev` `runall` op, batch driver) — created fresh for the Spur CLI surface |
 
 ### Agents (rd3 → destination)
 
-rd3 shipped 13 agents. The `sp` plugin kept 5 (one per Fat Skill); `cc` kept 5 (one per authoring
-skill). The "super-*" orchestration agents were folded into skills/engine capabilities.
+rd3 shipped 13 agents. The `sp` plugin kept 5 expert agents (one per Fat Skill) plus `super-coder`
+(a batch-task orchestrator — name-only reuse of rd3's `super-coder`, no logic relationship); `cc`
+kept 5 (one per authoring skill). The rd3 "super-*" orchestration roles were folded into
+skills/engine capabilities.
 
 | rd3 agent | Destination | Status | Note |
 |-----------|-------------|--------|------|
@@ -439,7 +441,7 @@ skill). The "super-*" orchestration agents were folded into skills/engine capabi
 | `jon-snow` | `sp` | 🔀 Absorbed | Into `sp:expert-dev` (pipeline routing + full runs) |
 | `knowledge-seeker` | `sp` | ⏳ Deferred | With the L-group research skills |
 | `second-brain` | `sp` | ⏳ Deferred | L01 — with `indexed-context` |
-| *— (new)* | `sp` | ➖ N/A | `expert-dev`, `expert-tasks`, `expert-features`, `expert-rules`, `expert-workflows` — created fresh, one per Fat Skill |
+| *— (new)* | `sp` | ➖ N/A | `expert-dev`, `expert-tasks`, `expert-features`, `expert-rules`, `expert-workflows` (one per Fat Skill); `super-coder` (batch-task orchestrator driving `/sp:dev-runall` — name-only reuse of rd3's `super-coder`) — created fresh |
 
 ### Hooks (rd3 → destination)
 
@@ -466,11 +468,9 @@ They stay live in `rd3` until the core stabilizes; deferral breaks nothing.
 
 ### Summary scorecard
 
-| Surface | rd3 count | ✅ Done | 🔀 Absorbed | ⏳ Deferred | ❌ Rejected | Destination count |
-|---------|-----------|---------|-------------|------------|------------|------------------|
-| **Skills** | 50 | 8 | 12 | 28 | 2 | `sp` 9 · `cc` 6 |
-| **Commands** | 46 | 28 | 4 | 14 | 0 | `sp` 18 · `cc` 17 |
-| **Agents** | 13 | 5 | 5 | 3 | 0 | `sp` 5 · `cc` 5 |
+| **Skills** | 50 | 8 | 12 | 28 | 2 | `sp` 12 · `cc` 6 |
+| **Commands** | 46 | 28 | 4 | 14 | 0 | `sp` 19 · `cc` 17 |
+| **Agents** | 13 | 5 | 5 | 3 | 0 | `sp` 6 · `cc` 5 |
 
 **Key consolidations:**
 
@@ -479,7 +479,7 @@ They stay live in `rd3` until the core stabilizes; deferral breaks nothing.
   `spur-features`; code-docs → `doc-evolve`; quick-grep stays a prompt skill.
 - **5 rd3 "super-*" agents → 1 in `sp`**: `expert-dev` absorbs the coder/tester/reviewer/brain/jon-snow
   roles behind the two `spur-dev` halves.
-- **ADR-016 command pruning**: 46 rd3 commands → 18 in `sp` (only commands that convert
+- **ADR-016 command pruning**: 46 rd3 commands → 19 in `sp` (only commands that convert
   non-deterministic intent survived; pure CLI forwarders were rejected).
 - **Meta-agent family fully in `cc`**: the `cc-*` skills + their expert agents + the add/refine/
   evaluate/evolve commands are all migrated; only the adapt/migrate/package/emit variants remain.
