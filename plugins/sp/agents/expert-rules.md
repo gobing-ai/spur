@@ -2,7 +2,7 @@
 name: expert-rules
 description: |
   Use PROACTIVELY for multi-step Spur constraint-rule work warranting its own context: auditing or hardening the rule catalog, discovering and codifying recurring anti-patterns, authoring/tuning rules end to end. Triggers: "audit the rule catalog", "harden the rules", "find rules to add", "scan for constraints", "author a batch of rules", "tighten these rules", "expert-rules". Use when rule work spans many files or operations and a lifecycle handoff beats one command.
-  
+
   <example>
   Context: Proactive sweep to codify new constraints.
   user: "Audit the codebase and harden our rule catalog."

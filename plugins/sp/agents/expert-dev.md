@@ -59,22 +59,24 @@ Invoke `sp:spur-dev` with the target operation using the platform's native skill
 | Claude Code | `Skill(skill="sp:spur-dev", args="<operation> <args>")` |
 | Other platforms | Invoke `sp:spur-dev` directly as a skill — this agent wrapper is optional |
 
-The skill exposes two halves; route by intent:
+The skill exposes two halves; route by intent. `sp:spur-dev` operations are invoked via
+`Skill(skill="sp:spur-dev", args="<op> …")`; the rows marked **inline command** are *not*
+`sp:spur-dev` operations — invoke their `/sp:dev-*` command directly (see `dev-operations.md`).
 
-| User intent | Half | Operation |
-|-------------|------|-----------|
-| "plan this feature" / "decompose" | Planning | `plan` |
-| "run this task" / "execute" | Execution | `run` |
-| "add tests" | Execution | `unit` |
-| "review the code" | Execution | `review` |
-| "verify the task" | Execution | `verify` |
-| "create a task" / "quick task from this idea" | Task creation | `brainstorm --skip-discovery --task` |
-| "fix all errors" | Fix cycle | `fixall` |
-| "commit message" | Git | `gitmsg` |
+| User intent | Half | Route |
+|-------------|------|-------|
+| "plan this feature" / "decompose" | Planning | `sp:spur-dev` op `plan` |
+| "run this task" / "execute" | Execution | `sp:spur-dev` op `run` |
+| "add tests" | Execution | `sp:spur-dev` op `unit` |
+| "review the code" | Execution | `sp:code-verification` op `review` |
+| "verify the task" | Execution | `sp:code-verification` op `verify` |
+| "create a task" / "quick task from this idea" | Task creation | `sp:brainstorm` op `dev-brainstorm --skip-discovery --task` |
+| "fix all errors" | Fix cycle | inline command `/sp:dev-fixall` |
+| "commit message" | Git | inline command `/sp:dev-gitmsg` |
 | "update docs" | Docs | delegates to `sp:doc-evolve` |
-| "changelog" | Changelog | `changelog` |
-| "hand off this work" | Handover | `handover` |
-| "refine requirements" | Refinement | `refine` |
+| "changelog" | Changelog | inline command `/sp:dev-changelog` |
+| "hand off this work" | Handover | inline command `/sp:dev-handover` |
+| "refine requirements" | Refinement | `sp:spur-dev` op `refine` |
 
 ## Multi-step workflows
 

@@ -212,7 +212,7 @@ When user confirms approach, delegate to sp:spur-dev:
 
 ```
 // Pseudocode: Delegate breakdown to sp:spur-dev
-Skill("sp:spur-dev", args: "convert <recommended_approach> to tasks")
+Skill(skill="sp:spur-dev", args="plan <recommended_approach>")
 
 // Receive structured JSON output, then create tasks via sp:spur-tasks
 Bash: spur task batch-create --file decomposition.json   # bare JSON array (see sp:spur-tasks)

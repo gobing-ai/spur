@@ -42,7 +42,8 @@ when the two disagree, the constitution wins and this skill is the bug.
 | **contract-verify** | Each doc's frontmatter matches its §4.1 row; `updated_at` is plausible | §4.3 | parse frontmatter; compare `owns`/`authority` vs §4.1; `git log` recency |
 | **lesson-append** | Append a dated lesson; dedup; promote recurring ones to a rule | §8 | format-check the line; `rg` for an equivalent before adding |
 
-The `sp:dev-docs` command routes here (`sync $ARGUMENTS`). Invoke directly for an audit or a lesson.
+No thin `dev-docs` command wrapper exists (`dev-operations.md §7`). Invoke this skill directly for
+an audit or a lesson, or reach it via `/sp:dev-plan`'s docs step and `/sp:spur-init`'s `customize`.
 
 ## Operating principle (R2): detect deterministically, judge with the LLM
 
@@ -165,4 +166,4 @@ Append a lesson to the right per-file section of §8:
 ## See also
 
 - **`docs/99_PROJECT_CONSTITUTION.md`** — the law this skill enforces. Always the tiebreaker.
-- **`sp:dev-docs`** — the thin command wrapper that routes here.
+- **`dev-operations.md §7`** — the `docs` operation entry (no thin command wrapper; invoke this skill directly).

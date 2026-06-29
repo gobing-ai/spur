@@ -1,5 +1,4 @@
 ---
-name: dev-runall
 description: Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via task-pipeline.yaml, emit a batch report
 argument-hint: "--tasks <selector> [--keep-going] [--auto] [--agent <name|auto>] [--json]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
