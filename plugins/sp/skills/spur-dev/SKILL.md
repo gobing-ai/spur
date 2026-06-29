@@ -170,6 +170,11 @@ CLI does.
   coverage-vs-quality rules, escalation. Per-stack mechanics (commands, coverage parsing, idioms,
   gotchas) live in [references/stacks/](references/stacks/) adapters (bun-ts, python, go). Backs
   `dev-operations.md §1`.
+- [references/feature-link-helper.md](references/feature-link-helper.md) — opt-in,
+  strictness-triggered helper to resolve a deferred `feature_id` edge: LLM-judge match against
+  existing features (prefer existing; create only as last resort; confirm before apply); single-task
+  mode + batch-sweep mode. Invoke only when the operator opts into `--strict` rigor or explicitly
+  asks to link a task to a feature — NEVER gate-time, NEVER automatic.
 
 **Config & companions:**
 

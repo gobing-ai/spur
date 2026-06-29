@@ -97,6 +97,10 @@ approve, or provide feedback". You do not answer the gate from inside a step.
 - [ ] Freeze the set at kickoff; never re-query `spur task list` to recompute membership mid-batch.
 - [ ] Abort the whole batch on a dependency cycle before running any task.
 - [ ] Emit the batch report at completion (clean / halted / aborted).
+- [ ] To resolve a deferred `feature_id` under operator-chosen strict rigor, use the sp:spur-dev
+      feature-link helper (single-task or sweep) — never invoke it automatically from within a
+      batch run; surface it only when the operator explicitly requests strict traceability.
+      Reference: [references/feature-link-helper.md](../skills/spur-dev/references/feature-link-helper.md).
 
 ### Never
 
