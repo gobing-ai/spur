@@ -2,7 +2,7 @@
 schema_version: 1
 name: "/sp:dev-refine 0151 --auto --next dogfood findings"
 description: ""
-status: backlog
+status: done
 type: review
 template: review
 profile: standard
@@ -12,7 +12,7 @@ priority: P2
 tags: ["review"]
 dependencies: []
 created_at: "2026-06-29T06:32:39.804Z"
-updated_at: 2026-06-29T06:35:51.251Z
+updated_at: 2026-06-29T19:58:42.212Z
 ---
 
 ## 0153. /sp:dev-refine 0151 --auto --next dogfood findings
@@ -50,15 +50,58 @@ itself is sound.
 - [ ] Fix all the remaining findings if any
 - [ ] Re-review the changed code
 
-### Review
-Post-implementation reflection — to be filled after the first fix round. Input findings (P1–P4) are
-recorded in `#### Review Findings` under `### Background` above; fix in priority order, then re-review
-and record back-issues here.
+### Solution
 
-> Note: this `### Review` section carries an explicit P1–P4 reference only to satisfy the L3
-> `task check` guard, which currently fires on a fresh review-template task (see finding P2 about the
-> template/checker mismatch in `#### Review Findings`). Once that bug is fixed, this note can be
-> removed and the section left as the standard reflection scaffold.
+Implementation of the 7 dogfood findings recorded under `#### Review Findings`. Fixes applied in
+priority order. One finding (the headline checker P2) was re-verified at implement time and resolved
+by a **real hardening** rather than the originally-described change — see the STALE note below.
+
+| File | Change | Finding |
+| ---- | ------ | ------- |
+| `packages/app/src/services/task-check.ts:51-100` | Added `hasPopulatedPriorityTable` + `isReviewScaffold`; the L3 Review rule now distinguishes an empty-cell scaffold (`\| P1 \| \| \| \|`) from a populated findings table. Status-aware: the scaffold is tolerated where `### Review` is **optional** (backlog/todo) and required to be populated where it is **required** (wip+). | P2 (checker) |
+| `packages/app/src/services/task-check.ts:212-228` | Reworked the Review L3 guard to use `revRequired`/`isReviewScaffold` so an empty scaffold no longer false-passes the `/P[1-4]/` regex. | P2 (checker) |
+| `packages/app/tests/services/task-check.test.ts:259-355` | 3 pinning tests: empty-cell scaffold errors where Review required; scaffold tolerated where optional; populated P-table passes. | P2 (checker) |
+| `plugins/sp/commands/dev-refine.md:67` | Step-1 label `Resolve wbs` → `Load task`; documents `task path`/`show` for WBS→file and that `task resolve` is the inverse (path→WBS). | P2/P4 (resolve mislabel) |
+| `plugins/sp/commands/dev-refine.md:77-88` | `--next` transition documented **idempotent** (skip when `status >= todo`); SKIP short-circuits synthesis, not `--next`. | P2 (idempotence), P3 (SKIP→next) |
+| `plugins/sp/skills/spur-dev/references/dev-operations.md:90-100` | Mirrored: idempotent transition; structured `{result, sections-considered, reason}` JSON for the skip-gate trace; SKIP-doesn't-cancel-`--next` note. | P2 (idempotence), P3 (trace), P3 (SKIP→next) |
+| `plugins/sp/skills/dogfood-testing/references/report-template.md:166-176` | Corrected the muddled "safe path" note: P-rows live under `#### Review Findings`; the L3 rule keys off `### Review` and now tolerates the empty scaffold where optional. | P2 (report-template note) |
+| `packages/app/src/services/task-service.ts:447-520` | New `TaskService.delete(wbs, {force})` with in-flight + parent guards; `findDependentWbs` helper. | P3 (no task delete verb) |
+| `apps/cli/src/commands/task.ts:522-545` | New `spur task delete <wbs> [--force] [--json]` verb. | P3 (no task delete verb) |
+| `packages/app/tests/services/task-service.test.ts:466-553` | 5 tests: backlog delete, in-flight guard, `--force`, parent guard, missing task. | P3 (no task delete verb) |
+| `AGENTS.md:176`, `docs/04_DESIGN.md:514` | Documented `spur task delete` in the CLI surface + design verb table (same-commit doc sync). | P3 (no task delete verb) |
+
+**STALE finding resolved — checker P2 as originally written.** The original P2 claimed a freshly created
+`review`-template task *fails its own check* with the L3 "Review must contain P1–P4" error. Re-verified
+at implement time with a probe: the shipped template (`config/templates/task/review.md:45-48`) ships
+`### Review` **with** a P1/P2 table, so a real review task **passes** (the `/P[1-4]/` regex matched the
+scaffold's severity labels). The prior dogfood only hit the error because it hand-wrote a *bare* `### Review`
+scaffold. So no template/checker *bug* existed as described. Rather than ship a no-op, the implement step
+hardened the rule defensively (the empty-cell scaffold should not satisfy a populated-table requirement) —
+a genuine behavioral improvement, now covered by tests. The misleading `report-template.md` note that caused
+the original confusion is corrected.
+
+> Note: this hardening makes this very task's `### Review` (previously a prose-only workaround note) now
+> require either the empty scaffold (tolerated at `todo`) or a populated table — the workaround note was
+> replaced with the clean scaffold as part of this fix.
+
+### Review
+Post-implementation reflection (first fix round).
+
+**What happened.** All 7 input findings (under `#### Review Findings`) were implemented. The headline
+checker P2 was re-verified at implement time and found **stale as written** (the shipped review template
+already ships a P-table, so a real review task passed). Rather than ship a no-op it was resolved with a
+real defensive hardening of the L3 Review rule, covered by new tests.
+
+**Back-issues surfaced by the fix (recorded below).**
+
+| Severity | File | Finding | Recommendation |
+| -------- | ---- | ------- | -------------- |
+| P3 | `packages/app/src/services/task-check.ts:212-228` | The hardened L3 rule makes any `review`-type task unable to reach `testing`/`done` until `### Review` carries a *populated* P-table — the empty scaffold no longer passes at `wip+`. This is intended, but it means review-findings tasks now require a real post-fix reflection table before closing (this task hit exactly that gate). | Confirm this is the desired lifecycle for review tasks; document it in the review-variant matrix comment so authors expect the wip+ requirement. `[feasible]` |
+| P4 | `apps/cli/src/commands/task.ts` (non-json delete error path) | The human-readable `task delete` guard error prints under the figlet banner; the message is correct but visually buried. | Consider suppressing the banner on error output for `delete` (cosmetic; `--json` path is clean). `[feasible]` |
 ### References
 
 ### History
+- 2026-06-29T19:24:32.248Z backlog → todo (system)
+- 2026-06-29T19:56:27.882Z todo → wip (system)
+- 2026-06-29T19:57:10.752Z wip → testing (system)
+- 2026-06-29T19:58:42.212Z testing → done (system)

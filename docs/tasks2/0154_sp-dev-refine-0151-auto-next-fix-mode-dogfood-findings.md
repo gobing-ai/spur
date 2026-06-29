@@ -2,7 +2,7 @@
 schema_version: 1
 name: "/sp:dev-refine 0151 --auto --next fix-mode dogfood findings"
 description: ""
-status: backlog
+status: todo
 type: review
 template: review
 profile: standard
@@ -12,7 +12,7 @@ priority: P2
 tags: ["review"]
 dependencies: []
 created_at: "2026-06-29T07:21:23.638Z"
-updated_at: 2026-06-29T07:21:58.472Z
+updated_at: 2026-06-29T21:18:12.571Z
 ---
 
 ## 0154. /sp:dev-refine 0151 --auto --next fix-mode dogfood findings
@@ -55,3 +55,4 @@ Post-implementation reflection — to be filled after the first fix round. Input
 ### References
 
 ### History
+- 2026-06-29T21:18:12.571Z backlog → todo (system)

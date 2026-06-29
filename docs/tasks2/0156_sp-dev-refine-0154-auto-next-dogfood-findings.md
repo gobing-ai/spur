@@ -2,7 +2,7 @@
 schema_version: 1
 name: "/sp:dev-refine 0154 --auto --next dogfood findings"
 description: ""
-status: backlog
+status: done
 type: review
 template: review
 profile: standard
@@ -12,7 +12,7 @@ priority: P2
 tags: ["review"]
 dependencies: []
 created_at: "2026-06-29T21:20:42.317Z"
-updated_at: 2026-06-29T21:21:11.971Z
+updated_at: 2026-06-29T21:53:50.008Z
 ---
 
 ## 0156. /sp:dev-refine 0154 --auto --next dogfood findings
@@ -44,22 +44,41 @@ This is the P1 above.
 
 **Verdict:** PARTIAL (0 fixed, 1 unresolved, 7 findings). One P1.
 ### Plan
+- [x] Fix P1 findings — L3 Review rule tolerance for prose-only `### Review` at optional status (`task-check.ts:122-131,239-241` + 2 new tests)
+- [x] Fix P2 findings — Skip-gate scoping to target sections only (`dev-operations.md:93-103`, `dev-refine.md:71-75`)
+- [x] Disposition all remaining findings — P2 FSM deferred; P3 stale/unverifiable closed; P4 routed out-of-repo
+- [x] Re-review the changed code — all gates green (lint, test, test-cf)
+### Solution
 
-- [ ] Fix P1 findings
-- [ ] Fix P2 findings
-- [ ] Fix all the remaining findings if any
-- [ ] Re-review the changed code
+Changed files and why:
+
+- `packages/app/src/services/task-check.ts:122-131` — Added `isProseOnlyReview` helper: detects a `### Review` body that has prose text but no markdown table rows at all (no `|` characters). This is the "P1 bug" state — an operator may write reflection prose without a table before the findings are known. Returns `true` (tolerated) when: the body has no `|` chars after stripping HTML comments, has no populated P-table, and is not a pure placeholder.
+
+- `packages/app/src/services/task-check.ts:239-241` — Updated `runL3` Review block: when Review is *optional* (pre-fix-round window), the scaffold-tolerated check now ORs `isReviewScaffold(revBody)` with `isProseOnlyReview(revBody)`. When Review is *required* (`wip`+), only `isPlaceholderBody` is tolerated — a populated findings table is still mandatory. The comment was updated to document both branches explicitly.
+
+- `packages/app/tests/services/task-check.test.ts:347-391` — Added two new L3 tests: (a) regression test proving prose-only `### Review` at optional status is tolerated (was failing before the fix), (b) guard test confirming prose-only `### Review` at required status still errors (prevents over-tolerance).
+
+- `plugins/sp/skills/spur-dev/references/dev-operations.md:93-103` — P2 doc fix: scoped the pre-synthesis skip gate PASS test to L3 findings whose `section` ∈ {Background, Requirements, Plan} only. The old text keyed off the overall exit code; a `### Review` L3 error (non-target section) blocked the SKIP gate even when all target sections were clean. Updated the SKIP reason string and added an explicit Scope note.
+
+- `plugins/sp/commands/dev-refine.md:71-75` — P2 doc fix: same scope correction — the SKIP gate now filters to target sections only, explicitly noting that findings on sections refine does not own must not block the gate.
 
 ### Review
-
-Post-implementation reflection — filled **after** the first fix round: what went wrong, what
-remains to fix before closing, and any **back-issues** (new findings surfaced by the fix).
+Post-implementation reflection — what went wrong, what was fixed, and back-issues.
 
 | Severity | File | Finding | Recommendation |
 | -------- | ---- | ------- | -------------- |
-| P1       |      |         |                |
-| P2       |      |         |                |
-
+| P1 | `packages/app/src/services/task-check.ts:122-131,239-241` | L3 Review rule rejected prose-only `### Review` at optional status — `isReviewScaffold` required at least one empty-cell P-row; no-table prose failed the check. | Fixed: added `isProseOnlyReview` helper; updated `runL3` to OR it into the optional-context tolerance. Two regression tests added. `[fixed]` |
+| P2 | `plugins/sp/skills/spur-dev/references/dev-operations.md:93-103` + `plugins/sp/commands/dev-refine.md:71-75` | Skip gate keyed off overall `task check` exit code; a `### Review` L3 error (non-target section) blocked SKIP even when all refine target sections were clean. | Fixed: scoped the gate to L3 findings for {Background, Requirements, Plan} only; updated SKIP reason string; added explicit Scope note in both docs. `[fixed]` |
+| P2 | `packages/app/src/services/task-service.ts` (done-FSM) | done-FSM does not enforce L2 section matrix at the `testing → done` guard (carried from 0154). | Deferred: in-flight 0152/0153/0155 FSM work on the same files; implementing here risks merge conflicts. Track as a follow-up task. `[deferred]` |
+| P3 | driver monitoring discipline | Cache hit rate `~45%` across the dogfood run — below the 50% floor. | Deferred to driver: reuse `task check` JSON across skip-gate and post-transition gate calls; reference already-read `task-check.ts` ranges. Lever documented in dogfood report; proof requires a re-run. `[unverifiable]` |
+| P3 | `plugins/sp/commands/dev-refine.md:67` | Finding already fixed on the working tree (0154 P2 #1 corrected `spur task path`). | Closed as stale. `[stale]` |
+| P3 | `plugins/sp/skills/spur-dev/references/dev-operations.md:90` | Finding already fixed (idempotent `backlog → todo` documented). | Closed as stale. `[stale]` |
+| P3 | global `~/.bun/bin/superskill` | `superskill hook run` now exposed by the installed binary; finding was stale. | Closed as stale. `[stale]` |
+| P4 | `plugins/cc/skills/cc-hooks/references/cross-platform.md:57` (out-of-repo) | Targets a path in the superskill repo; not actionable from spur-new. | Routed to superskill repo tracker. `[out-of-scope]` |
 ### References
 
 ### History
+- 2026-06-29T21:44:34.340Z backlog → todo (system)
+- 2026-06-29T21:44:38.257Z todo → wip (system)
+- 2026-06-29T21:53:41.772Z wip → testing (system)
+- 2026-06-29T21:53:50.008Z testing → done (system)
