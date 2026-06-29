@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.2.9] — 2026-06-29
+
+### Added
+
+- **Board module auto-discovery (web).** Board-registry modules are now discovered automatically at
+  build time and wired to the runtime registry; bare `/board` redirects to the default module.
+- **Batch task execution — `/sp:dev-runall` + `sp:super-coder`.** Run a set of tasks through their
+  pipelines in dependency-correct order, with a batch report emitted at the end.
+- **`spur workflow cancel <run-id>`.** Cancel a running workflow with pid-tracked subprocess kill.
+- **SECUA framework for `sp:dev-review` / `sp:dev-verify`.** The review and verify commands are
+  extended to the SECUA review framework.
+- **`sp:dev-gitmsg` per-file summarization.** Commit-message generation now groups changes by
+  concern and summarizes per file.
+- **Actionable `feature_id` warning in `spur task check`**, plus a done-gate regression test.
+- **`sp:super-coder` Definition of Done contract** — DoD housekeeping, dogfood persistence, and
+  point-of-action enforcement via a terminal gate.
+
+### Changed
+
+- **Portable task-write-guard hook.** The `sp` task-write-guard hook is now portable across installs.
+
+### Fixed
+
+- **Task status normalization before lifecycle transitions.** Opaque `FSMError` on case-drift is
+  resolved; task/feature status is normalized at the planning-write boundary.
+- **L3 review/plan checks hardened.** The L3 Review rule now handles prose-only and empty-cell
+  scaffolds; the L3 Plan check scans all lines with a refine pre-synthesis skip gate.
+- **Refine skip-gate scoped to target sections**, with updated Review guidance.
+- **Lifecycle gate backstop inlined** and `implement` `onEnter` reordered; project-local workflow
+  fallback with a non-strict done-gate.
+- **Workflow definitions realigned** with the SECUA rename and the batch delegation contract.
+- **GitHub Actions workflows fixed.**
+- **Hook error handling fixed.**
+- **`sp:dev-dogfood` `--max-retry` default** corrected.
+
 ## [0.2.6] — 2026-06-26
 
 A release focused on three surfaces: the **Spur Board web app** (Tasks as the default
