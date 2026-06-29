@@ -239,7 +239,8 @@ export class TaskCheckService extends PlanningCheckService {
                 layer: 'L4',
                 severity: 'warning',
                 section: '',
-                message: 'Missing feature_id — every task should reference a feature (one direction, DD-07)',
+                message:
+                    'Missing feature_id — every task should reference a feature (one direction, DD-07). To link: `spur task update <wbs> --feature <id>`, or use the sp:spur-dev feature-link helper.',
             });
         }
 

@@ -750,6 +750,8 @@ describe('TaskCheckService', () => {
             (f) => f.layer === 'L4' && f.severity === 'warning' && f.message.includes('Missing feature_id'),
         );
         expect(missingWarnings.length).toBeGreaterThan(0);
+        // Verify the message includes the actionable corrective hint (0148 P2).
+        expect(missingWarnings.some((f) => f.message.includes('spur task update'))).toBe(true);
     });
 
     test('L4: legacy feature-id key is also checked', async () => {

@@ -3,7 +3,7 @@ template: standard
 schema_version: 1
 name: "feature_id done-gate friction: confirm 0147 unblock + add opt-in feature-link healing (not auto, not gate-time)"
 description: ""
-status: wip
+status: done
 type: task
 profile: standard
 feature_id: null
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-06-28T23:29:00.250Z"
-updated_at: 2026-06-29T00:10:39.989Z
+updated_at: 2026-06-29T00:45:25.001Z
 ---
 
 ## 0148. feature_id done-gate friction: confirm 0147 unblock + add opt-in feature-link healing (not auto, not gate-time)
@@ -103,50 +103,103 @@ Feature: strictness-triggered, opt-in feature_id link healing (never silent/gate
     And the contract treats feature_id as a warning, unchanged
 ```
 
-- [ ] AC1 — Regression: a `feature_id: null` task transitions `testing → done` under `--strict-core` (deferral stays legal; the 0147 unblock is locked by a test).
-- [ ] AC2 — The L4 "Missing feature_id" warning message is actionable (names `spur task update <wbs> --feature <id>` and the heal helper).
-- [ ] AC3 — A **strictness-triggered, opt-in** LLM-judge link helper exists in `sp:spur-dev` (single-task): fires when the operator invokes/intends `--strict` rigor OR explicitly asks to link; matches an EXISTING feature first; creates only if none fits; confirms before applying via `spur feature` / `spur task update --feature`.
-- [ ] AC4 — A **batch sweep** mode of the helper supports a deliberate audit: enumerate orphan tasks (`spur task list` / `--strict` audit), propose a best-fit existing feature per orphan, apply per-orphan confirmed links in one pass; declining leaves the edge blank (deferral preserved).
-- [ ] AC5 — The default `--strict-core` done-gate and all `--next` chains are unchanged — NEVER auto-heal, NEVER auto-create. `super-coder.md` + `dev-*.md` reference the helper for discoverability only.
+- [x] AC1 — Regression: a `feature_id: null` task transitions `testing → done` under `--strict-core` (deferral stays legal; the 0147 unblock is locked by a test).
+- [x] AC2 — The L4 "Missing feature_id" warning message is actionable (names `spur task update <wbs> --feature <id>` and the heal helper).
+- [x] AC3 — A **strictness-triggered, opt-in** LLM-judge link helper exists in `sp:spur-dev` (single-task): fires when the operator invokes/intends `--strict` rigor OR explicitly asks to link; matches an EXISTING feature first; creates only if none fits; confirms before applying via `spur feature` / `spur task update --feature`.
+- [x] AC4 — A **batch sweep** mode of the helper supports a deliberate audit: enumerate orphan tasks (`spur task list` / `--strict` audit set), propose a best-fit existing feature per orphan, apply per-orphan confirmed links in one pass; declining leaves the edge blank (deferral preserved).
+- [x] AC5 — The default `--strict-core` done-gate and all `--next` chains are unchanged — NEVER auto-heal, NEVER auto-create. `super-coder.md` + `dev-verify.md` reference the helper for discoverability only.
 ### Plan
 Scoped to the **reconciled** design: deferral legal by default; healing triggered by the operator's
 strictness choice; prefer-existing + confirm; never gate-time/automatic; single-task + batch-sweep.
 
-- [ ] P1 (AC1) — Regression test in `apps/cli/tests/commands/task.test.ts` (next to the 0147 done-gate
+- [x] P1 (AC1) — Regression test in `apps/cli/tests/commands/task.test.ts` (next to the 0147 done-gate
       tests): a `feature_id: null` done-ready task passes the `--strict-core` `testing→done` gate.
       Locks the 0147 unblock so feature_id is never silently re-elevated into the default gate.
-- [ ] P2 (AC2) — Make the L4 warning actionable in `packages/app/src/services/task-check.ts:242`:
-      append the corrective path (`spur task update <wbs> --feature <id>`, or "run the sp:spur-dev
-      feature-link helper"). Keep severity `warning`; update the message test. No DD-07 change.
-- [ ] P3 (AC3) — Add the **strictness-triggered, opt-in single-task** feature-link helper to
-      `sp:spur-dev` (reference section + sub-flow). Trigger: operator invokes/intends `--strict` rigor
-      on a parentless task, OR asks to "link this task to a feature." Steps: (a) LLM-judge reads task
-      Background/Requirements; (b) `spur feature list` → propose the best-fit **existing** feature with
-      reasoning; (c) only if no node fits AND operator confirms → `spur feature create`; (d) apply via
-      `spur task update <wbs> --feature <id>`; (e) ALWAYS show the proposal before any mutation.
-      Boundary: NOT in the `--strict-core` gate, NOT in any `--next` chain, NOT automatic.
-- [ ] P4 (AC4) — Add the **batch sweep** mode to the helper: enumerate orphans
-      (`spur task list --json` filtered to `feature_id: null`, or the `--strict` audit set), propose a
-      best-fit existing feature per orphan, and present a per-orphan confirm/skip/override list before
-      applying any link. Declining an orphan leaves its edge blank (deferral preserved). Apply via
-      `spur task update <wbs> --feature <id>` per confirmed orphan.
-- [ ] P5 (AC5) — Reference the helper for discoverability in `plugins/sp/agents/super-coder.md` and the
-      relevant `plugins/sp/commands/dev-*.md` (one line: "to resolve a deferred feature_id under strict
-      rigor, use the sp:spur-dev feature-link helper — single-task or sweep"). Do NOT wire it into the
-      DoD terminal gate or transitions; the default done contract stays feature_id-agnostic.
-- [ ] P6 — Gate: `bun run lint && bun run test && bun run test-cf && bun run build` green; confirm the
-      only done-gate-adjacent change is the warning-message text (no severity/behavior change).
+- [x] P2 (AC2) — Made the L4 warning actionable in `packages/app/src/services/task-check.ts:242`:
+      appended the corrective path (`spur task update <wbs> --feature <id>`, and reference to the
+      feature-link helper). Kept severity `warning`; updated the message test. No DD-07 change.
+- [x] P3 (AC3) — Added the **strictness-triggered, opt-in single-task** feature-link helper to
+      `sp:spur-dev` as `plugins/sp/skills/spur-dev/references/feature-link-helper.md`.
+      Steps a–f: read task → list features (prefer existing) → LLM-judge match → propose → create
+      only if none fits AND confirmed → apply via `spur task update <wbs> --feature <id>`. Added
+      reference entry to SKILL.md Supporting detail section. NOT in `--strict-core` gate, NOT automatic.
+- [x] P4 (AC4) — Added the **batch sweep** mode to the helper in the same reference file: enumerate
+      orphans (`spur task list --json` filtered to `feature_id: null`), propose a best-fit existing
+      feature per orphan, present per-orphan confirm/skip/override before applying any link. Declining
+      leaves `feature_id` blank. Apply via `spur task update <wbs> --feature <id>` per confirmed orphan.
+- [x] P5 (AC5) — Added one-line discoverability note to `plugins/sp/agents/super-coder.md` (Rules/Always
+      section: references the helper, explicitly states it NEVER runs automatically from a batch run).
+      Added opt-in callout block to `plugins/sp/commands/dev-verify.md` (after the `--next` chain
+      section; clarifies `--strict-core` keeps feature_id a warning; marks the helper opt-in only,
+      NEVER from `--next` or any gate).
+- [x] P6 — Gate green: `bun run lint` (377 files clean) + `bun run test` (1965 pass / 0 fail) +
+      `bun run test-cf` (1 passed) + `bun run build` (all workspaces succeeded). Only done-gate-adjacent
+      change is the warning-message text — no severity/behavior change confirmed.
 
 **Dependency:** P1 builds on 0147 (done). P2–P5 are independent doc/skill + one message edit.
 **Out of scope:** changing DD-07 severity, making `--strict` a lifecycle gate, or any automatic
 gate-time feature creation.
 ### Solution
+Five deliverables shipped across two code files, two test files, and four skill/agent files:
 
+**P1 — Regression test** (`apps/cli/tests/commands/task.test.ts`)
+Added test `'0147 regression: feature_id=null task passes --strict-core done-gate (deferral preserved)'`. Creates a fresh task, runs `task check <wbs> --strict-core --json`, asserts exit code 0, `pass: true`, and that all `feature_id` findings are `warning` severity. Locks the 0147 unblock so feature_id never silently re-enters the hard-blocking set.
+
+**P2 — Actionable warning message** (`packages/app/src/services/task-check.ts:242`)
+Updated the L4 "Missing feature_id" message from a bare observation to an actionable one: appends `spur task update <wbs> --feature <id>` and a reference to the feature-link helper. Severity stays `warning`; DD-07 unchanged.
+
+**P2 test update** (`packages/app/tests/services/task-check.test.ts`)
+Extended the `'L4: missing feature_id warns (one direction)'` test with `expect(missingWarnings.some((f) => f.message.includes('spur task update'))).toBe(true)` — verifies the corrective hint is present.
+
+**P3+P4 — Feature-link helper reference** (`plugins/sp/skills/spur-dev/references/feature-link-helper.md`)
+New file documenting the opt-in, strictness-triggered helper:
+- Single-task mode (Steps a–f): read task → list features → LLM-judge match → propose to operator → create only if none fits and confirmed → apply via `spur task update --feature`.
+- Batch-sweep mode (Steps 1–6): enumerate orphans → list features once → propose per-orphan → per-orphan confirm/skip/override → apply confirmed only → report.
+- Design boundaries block: never gate-time, never automatic, always prefer existing features, always confirm before apply.
+
+**P3 (SKILL.md)** (`plugins/sp/skills/spur-dev/SKILL.md`)
+Added `feature-link-helper.md` to the Supporting detail section with a one-line description of the helper's trigger and behavior.
+
+**P5a — super-coder.md** (`plugins/sp/agents/super-coder.md`)
+Added discoverability note in the Rules/Always section: references the feature-link helper for strict-rigor resolution, explicitly states it NEVER runs automatically from a batch run.
+
+**P5b — dev-verify.md** (`plugins/sp/commands/dev-verify.md`)
+Added a callout block after the `--next` chain section: explains that `--strict-core` keeps feature_id as a warning, that strict rigor surfaces it, and that the feature-link helper is the resolution path — explicitly marked opt-in only, NEVER from `--next` or any gate.
+
+**P6 — Gate** (all green):
+- `bun run lint`: clean (377 files, no issues)
+- `bun run test`: 1965 pass / 0 fail across 147 files
+- `bun run test-cf`: 1 passed
+- `bun run build`: all workspaces succeeded
 ### Testing
+**Gate results (P6):**
 
+- `bun run lint`: Biome + tsc/noEmit clean across all workspaces (377 files, 0 issues)
+- `bun run test`: 1965 pass / 0 fail / 0 skip across 147 files (19.66s)
+- `bun run test-cf`: 1 file / 1 test passed (server Workers runtime)
+- `bun run build`: all workspaces built successfully
+
+**Test coverage for this task's changes:**
+
+P1 regression test (`apps/cli/tests/commands/task.test.ts`): `'0147 regression: feature_id=null task passes --strict-core done-gate (deferral preserved)'` — exercises the real `--strict-core` CLI flag end-to-end, asserts `pass: true` and all feature_id findings are `warning` severity. Locks DD-07 contract at the integration level.
+
+P2 message test (`packages/app/tests/services/task-check.test.ts`): `'L4: missing feature_id warns (one direction)'` — extended with `expect(missingWarnings.some((f) => f.message.includes('spur task update'))).toBe(true)`. Verifies the corrective command is present in the warning text.
+
+All other deliverables (P3+P4 feature-link-helper.md, P3 SKILL.md, P5a super-coder.md, P5b dev-verify.md) are documentation/skill files with no executable logic — the gate is the lint/build pass.
 ### Review
+**Self-review (design boundary compliance):**
 
+- DD-07 severity unchanged: `warning` in task-check.ts, `warning` in all test assertions.
+- `--strict-core` gate unchanged: no code change to `runDoneGateCheck()` or `task-lifecycle.yaml`.
+- `--strict` is not wired to any lifecycle transition — remains manual audit only.
+- Feature-link helper is reference-only (Markdown in `plugins/sp/skills/spur-dev/references/`): no executable logic, no CLI integration, no automatic trigger.
+- Discoverability notes in super-coder.md and dev-verify.md explicitly state "NEVER automatic / NEVER from gate / NEVER from `--next`."
+- The only code changes: one new integration test (P1), one warning-message string edit (P2a), one test assertion (P2b). All surgical, no adjacent changes.
+
+**Verdict: PASS** — all five plan items delivered; design boundaries intact; full gate green.
 ### References
 
 ### History
 - 2026-06-29T00:10:39.989Z backlog → wip (system)
+- 2026-06-29T00:45:15.907Z wip → testing (system)
+- 2026-06-29T00:45:25.001Z testing → done (system)

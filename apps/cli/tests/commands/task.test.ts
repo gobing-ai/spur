@@ -694,6 +694,37 @@ describe('spur task CLI', () => {
         }
     });
 
+    test('0147 regression: feature_id=null task passes --strict-core done-gate (deferral preserved)', async () => {
+        // WHY (0148 P1): the testing→done lifecycle FSM guard runs `spur task check <wbs> --strict-core`.
+        // Under --strict-core a missing feature_id MUST stay a warning, not an error — the
+        // default gate permits deferral (feature_id=null is a TODO, not a blocker). This test
+        // locks the 0147 fix: feature_id never silently re-enters the hard-core blocking set.
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', '0147-regression target'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+
+        // task check --strict-core on a freshly-created task (feature_id: null by default).
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'check', wbs, '--strict-core', '--json'], { cwd, output });
+
+        // Must pass: the only L4 finding is "Missing feature_id" at severity=warning.
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lastMessage(output)) as Array<{
+            pass: boolean;
+            findings: Array<{ message: string; severity: string }>;
+        }>;
+        const firstResult = parsed[0];
+        expect(firstResult).toBeDefined();
+        if (!firstResult) {
+            throw new Error('missing task check result');
+        }
+        expect(firstResult.pass).toBe(true);
+        // Confirm the feature_id finding is a warning (not an error) — the key 0147 invariant.
+        const featureIdFindings = firstResult.findings.filter((f) => f.message.includes('feature_id'));
+        expect(featureIdFindings.length).toBeGreaterThan(0);
+        expect(featureIdFindings.every((f) => f.severity === 'warning')).toBe(true);
+    });
+
     test('update --section --from-file with non-json output handles warnings', async () => {
         // Create a task with a section that triggers warnings on write (e.g. Review at backlog)
         const cOut = createCapturedOutput();
