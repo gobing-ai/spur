@@ -36,7 +36,7 @@ The 9 `Skill()` commands back onto three skills: `sp:spur-dev` (planning + execu
 | 6 | plan | `dev-plan` | `Skill()` | `sp:spur-dev` (`plan`) | `"<description>" [--feature <id>] [--parent <feature-id>] [--agent <name\|auto>] [--design] [--auto]` |
 | 7 | docs | *(no thin wrapper)* | `Skill()` | `sp:doc-evolve` | `"<change description>"` |
 | 8 | changelog | `dev-changelog` | `inline` | git log + conventional-commit grouping | `[--since <ref>] [--until <ref>] [--version <ver>]` |
-| 9 | gitmsg | `dev-gitmsg` | `inline` | git diff + conventional commit | `[--commit] [--scope <path>]` |
+| 9 | gitmsg | `dev-gitmsg` | `inline` | per-file diff summary → group → conventional commit | `[--commit] [--squash] [--scope <path>]` |
 | 10 | fixall | `dev-fixall` | `inline` | lint + test fix loop | `[--scope <path>]` |
 | 11 | handover | `dev-handover` | `inline` | structured doc generation | `"<blocker description>"` |
 | 12 | brainstorm | `dev-brainstorm` | `Skill()` | `sp:brainstorm` (`dev-brainstorm`) | `"<topic>" [--depth <basic\|detailed\|comprehensive>] [--options <n>] [--agent <name\|auto>] [--skip-discovery] [--task [<feature-id>]] [--feature [<parent-id>]] [--next]` |
@@ -159,31 +159,27 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
 
 ### 9. gitmsg
 
-- **Purpose:** Generate a conventional commit message from staged changes.
-- **Inputs:** `--scope <path>` (default: all staged changes) — limits diff analysis to a path.
-- **Backing:** `inline` — git diff + conventional commit formatting.
+- **Purpose:** Generate conventional commit message(s) from staged changes via per-file summarization → concern grouping → one message per group.
+- **Inputs:** `--scope <path>` (default: all staged changes) — limits diff analysis to a path. `--commit` — execute the commit (off by default; refuses on a multi-group staging unless `--squash`). `--squash` — collapse all concerns into one combined message and let `--commit` proceed on a mixed staging.
+- **Backing:** `inline` — per-file diff summary + concern grouping + conventional commit formatting.
 - **Behavior:**
-  1. Run `git diff --cached` (add `-- <path>` when `--scope` is given). If the diff is empty, report "no staged changes" and stop.
-  2. Analyze the diff: identify changed files, the nature of changes (new feature, bug fix, refactor, docs, chore, etc.), and the primary scope.
-  3. Determine the commit type from the dominant change:
-     - New functionality → `feat`
-     - Bug fix → `fix`
-     - Code restructuring without behavior change → `refactor`
-     - Documentation only → `docs`
-     - Build/config/tooling → `chore`
-     - Performance improvement → `perf`
-     - Test additions/changes → `test`
-  4. Determine the scope from the affected module/package (e.g. `cli`, `domain`, `server`, `web`, `app`). If `--scope` was given, use that.
-  5. Generate the message:
-     ```
-     <type>(<scope>): <summary>
+  1. Run `git diff --cached --stat` (add `-- <path>` when `--scope` is given) for the outline. If the diff is empty, report "no staged changes" and stop.
+  2. Capture the full diff to a temp file (`TEMP_FILE="/tmp/gitdiff_$(date +%s)"; git diff --cached > "$TEMP_FILE" 2>&1`) so analysis reads from disk, not a giant inline blob.
+  3. Read `$TEMP_FILE` and write **one sentence per changed file** — what changed and why, not a line count.
+  4. **Group the per-file sentences by concern.** For each group derive its commit type, scope, and message:
+     - Type from the dominant change — `feat` (new functionality) · `fix` (bug fix) · `refactor` (restructuring, no behavior change) · `docs` (documentation only) · `chore` (build/config/tooling) · `perf` · `test` · `style`.
+     - Scope from the affected module/package (`cli`, `domain`, `server`, `web`, `app`, …); `--scope` overrides.
+     - Message:
+       ```
+       <type>(<scope>): <summary>
 
-     <body — optional, only if the change is non-trivial>
-     ```
-     - Summary: imperative mood, ≤72 chars, lowercase first word, no period.
-     - Body (optional): bullet list of key changes, wrapped at 72 chars. Only include when the diff is non-obvious.
-  6. Print the message to stdout. The operator copies it into `git commit -m`.
-- **Invariants:** Never runs `git commit` — the command generates the message only. The operator commits.
+       <body — optional bullets from the group's per-file sentences>
+       ```
+       Summary: imperative mood, ≤72 chars, lowercase first word, no period. Body: only when the change is non-obvious.
+  5. **Resolve groups:** one group → emit its message; multiple groups (default) → emit one message per group **plus a split recommendation** (stage per concern, re-run); `--squash` → collapse to one combined message (dominant type/scope, per-file bullets).
+  6. Print the resolved message + a copy-paste `git commit -m` line. With `--commit`: execute it for a single group or under `--squash`; on a multi-group staging without `--squash`, **do not commit** — print the split guidance instead (one `git commit` can't honor per-group messages).
+  7. `rm "$TEMP_FILE"` once done — no `/tmp` diff residue (the F5 cleanup discipline).
+- **Invariants:** Without `--commit`, never runs `git commit` — message only, the operator commits. With `--commit`, only commits when the staging is a single concern OR `--squash` was given — a mixed staging without `--squash` is reported, never silently squashed. Never leave the temp diff file behind.
 
 ### 10. fixall
 
