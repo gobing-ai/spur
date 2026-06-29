@@ -7,7 +7,7 @@ import type { WebModule } from './types';
 /**
  * Build-time module discovery.
  *
- * The only place `import.meta.glob` is called. Eager (`{ eager: true, as: 'sync' }`)
+ * The only place `import.meta.glob` is called. Eager (`{ eager: true }`)
  * so the registry can validate / order synchronously at load. Each direct child
  * directory of a configured root exports a {@link WebModule} via a **named `module`
  * export** or a **default export**; missing both → the child is skipped (not an
@@ -29,16 +29,6 @@ import type { WebModule } from './types';
 
 /** Eager glob entries keyed by path. */
 type GlobEntries = Record<string, unknown>;
-
-/** The Vite glob — `undefined` under `bun test`. Narrowed with `in` + `typeof`. */
-const globRef = import.meta as unknown;
-const glob =
-    globRef !== null &&
-    typeof globRef === 'object' &&
-    'glob' in globRef &&
-    typeof (globRef as { glob?: unknown }).glob === 'function'
-        ? (globRef as { glob: (pattern: string, opts: Record<string, unknown>) => GlobEntries }).glob
-        : undefined;
 
 /** Read a discovered module from a glob/require entry by its `module` or `default` export. */
 export function readModule(entry: unknown): WebModule | null {
@@ -74,7 +64,7 @@ export function isWebModule(value: unknown): value is WebModule {
  */
 export function discoverViaGlob(globFn: (pattern: string, opts: Record<string, unknown>) => GlobEntries): WebModule[] {
     const found: WebModule[] = [];
-    const entries = globFn('./*/index.{ts,tsx}', { eager: true, as: 'sync' });
+    const entries = globFn('./*/index.{ts,tsx}', { eager: true });
     for (const entry of Object.values(entries)) {
         const mod = readModule(entry);
         if (mod) found.push(mod);
@@ -93,7 +83,13 @@ export function discoverViaGlob(globFn: (pattern: string, opts: Record<string, u
  * {@link discoverViaFs}; tests inject fakes directly.
  */
 export function discoverModules(): WebModule[] {
-    if (glob) return discoverViaGlob(glob);
+    try {
+        return discoverViaGlob(() => import.meta.glob('./*/index.{ts,tsx}', { eager: true }));
+    } catch (err) {
+        // `import.meta.glob` is a Vite/Astro compile-time macro. Bun test does not
+        // provide it, so the call above throws before discovery can run.
+        if (typeof require !== 'function') throw err;
+    }
     // Node modules lazily required here — never reached in the browser bundle (glob is defined there).
     const fs = require('node:fs') as typeof Fs;
     const path = require('node:path') as typeof NodePath;

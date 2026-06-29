@@ -165,6 +165,11 @@ describe('router + module wiring', () => {
         await waitFor(() => expect(container.querySelector('[data-kanban-board]')).not.toBeNull());
     });
 
+    test('bare /board redirects to the default module route', async () => {
+        const { container } = renderAt('/board');
+        await waitFor(() => expect(container.querySelector('[data-kanban-board]')).not.toBeNull());
+    });
+
     test('sidebar renders one nav item per module and highlights the active one', async () => {
         const { container } = renderAt(`/board/${modules[0]?.route}`);
         await waitFor(() => expect(container.querySelector('[data-kanban-board]')).not.toBeNull());
@@ -177,11 +182,12 @@ describe('router + module wiring', () => {
         expect(active?.getAttribute('href')).toBe(`/board/${modules[0]?.route}`);
     });
 
-    test('the route tree maps two child routes per module (base + wildcard)', () => {
+    test('the route tree maps an index redirect plus two child routes per module', () => {
         const boardRoute = routes.find((r) => r.path === '/board');
-        // Each module produces 2 children: `tasks` and `tasks/*`
-        expect(boardRoute?.children?.length).toBe(modules.length * 2);
-        const childPaths = boardRoute?.children?.map((c) => c.path) ?? [];
+        // One index redirect plus 2 children per module: `tasks` and `tasks/*`
+        expect(boardRoute?.children?.length).toBe(1 + modules.length * 2);
+        expect(boardRoute?.children?.some((c) => 'index' in c && c.index === true)).toBe(true);
+        const childPaths = boardRoute?.children?.flatMap((c) => ('path' in c ? [c.path] : [])) ?? [];
         for (const mod of modules) {
             expect(childPaths).toContain(mod.route);
             expect(childPaths).toContain(`${mod.route}/*`);

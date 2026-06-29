@@ -7,19 +7,25 @@ export const routes = [
     {
         path: '/board',
         element: <BoardLayout />,
-        children: modules.flatMap((mod) => [
+        children: [
             {
-                path: mod.route,
-                element: <mod.component />,
+                index: true,
+                element: <Navigate to={defaultModule ? defaultModule.route : '/board'} replace />,
             },
-            // Wildcard child so sub-paths (e.g. /board/tasks/0016) resolve to the
-            // same module instead of 404ing. The actual selection is driven by the
-            // `?selected` query param or the path param — the component decides.
-            {
-                path: `${mod.route}/*`,
-                element: <mod.component />,
-            },
-        ]),
+            ...modules.flatMap((mod) => [
+                {
+                    path: mod.route,
+                    element: <mod.component />,
+                },
+                // Wildcard child so sub-paths (e.g. /board/tasks/0016) resolve to the
+                // same module instead of 404ing. The actual selection is driven by the
+                // `?selected` query param or the path param — the component decides.
+                {
+                    path: `${mod.route}/*`,
+                    element: <mod.component />,
+                },
+            ]),
+        ],
     },
     {
         path: '/',
