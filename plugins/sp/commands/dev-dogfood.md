@@ -19,12 +19,12 @@ report of what happened, what broke, was fixed, and should be improved.
 - Producing a structured findings report (and optionally a fix task) from a real run, instead of
   re-typing the same dogfood instructions every session.
 
-> ⚠️ **Repo mutation warning.** The default is **observe-only (`--max-retry 0`)** — this command
-> monitors and reports without mutating the repo. To apply `Edit`/`Write` fixes directly to the
-> working tree, opt in explicitly with `--max-retry 2` (or higher). Observe-only is the safe
-> default: it produces the full findings report without touching files, so a dogfood run against
-> an unfamiliar testee — or a pipeline-driving testee that launches long, mutating runs — cannot
-> mutate anything by accident. Review the findings, then re-run with `--max-retry 2` to apply fixes.
+> ⚠️ **Repo mutation warning.** The default is **fix mode (`--max-retry 2`)** — this command applies
+> `Edit`/`Write` fixes to the working tree as it finds breakages. For a non-mutating run that only
+> monitors and reports, opt into **observe-only** with `--max-retry 0`. Use observe-only against an
+> unfamiliar testee — or a pipeline-driving testee that launches long, mutating runs — so it cannot
+> mutate anything by accident; it still produces the full findings report. Default fix mode assumes
+> you are dogfooding a testee you own and want fixed in place.
 
 ## Arguments
 
@@ -32,7 +32,7 @@ report of what happened, what broke, was fixed, and should be improved.
 |----------|-------------|---------|
 | `testee` | What to exercise — a slash command, agent skill, or CLI invocation (positional, required). Quote it if it contains flags. | (required) |
 | `--agent <name\|auto>` | **Testee-scoped:** the agent the **testee** runs under (forwarded into the testee invocation). The driver always runs in the current session. **Omit it** to forward nothing — the testee runs under its own default. | (omitted → forward nothing) |
-| `--max-retry <n>` | Fix attempts per failed step. **`0` = observe-only** (the default): monitor and report, never mutate the repo. Pass `2` (or higher) to opt into applying `Edit`/`Write` fixes to the working tree. | `0` |
+| `--max-retry <n>` | Fix attempts per failed step. The **default is `2`** (fix mode): apply `Edit`/`Write` fixes to the working tree, up to 2 attempts per step. Pass `--max-retry 0` for **observe-only** — monitor and report, never mutate the repo. | `2` |
 | `--save` | Write the report to `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md`. | off |
 | `--task` | File the findings as a review-template task via `spur task create --template review`. | off |
 | `--full` | Include **all** severity findings (P1–P4) in the report and `--task` output. Default filters to P1+P2 only. | off |
