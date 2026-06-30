@@ -6,7 +6,7 @@ allowed-tools: ["Bash", "Read", "Grep", "Glob", "Skill"]
 
 # Rule Scan
 
-Wraps the **sp:spur-rules** skill (`scan` operation).
+Wraps the **sp:spur-cli** facade (rule noun) (`scan` operation).
 
 Proactive rule discovery: surveys code for **repeated** smells that should be enforced as rules,
 clusters them by concern, filters out concerns already in the catalog, and reports ranked candidates.
@@ -38,14 +38,13 @@ route: add-new | refine-extend | already-covered }`. You decide which to act on.
 
 ## Implementation
 
-Delegates to **sp:spur-rules** skill:
+Delegates to **sp:spur-cli** facade (rule noun):
 
 ```
-Skill(skill="sp:spur-rules", args="scan $ARGUMENTS")
+Skill(skill="sp:spur-cli", args="rule scan $ARGUMENTS")
 ```
 
 ## Platform Notes
 
 - **Claude Code:** native — `Skill()` delegation and `$ARGUMENTS` work directly.
-- **Other platforms:** `Skill()` and `$ARGUMENTS` are Claude-specific. Invoke the `sp:spur-rules`
-  skill's `scan` operation directly and pass the optional scope as an argument in chat.
+- **Other platforms:** `Skill()` and `$ARGUMENTS` are Claude-specific. Invoke the `sp:spur-cli`  skill's `scan` operation directly and pass the optional scope as an argument in chat.

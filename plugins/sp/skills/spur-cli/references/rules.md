@@ -1,27 +1,11 @@
 ---
-name: spur-rules
-description: Operate `spur rule` as the project's constraint quality gate across its full lifecycle — run presets, author rules, fine-tune for delivery quality, validate rule files and preset schemas, and extend the engine. The deterministic verifier in the LLM code-delivery loop. Triggers on "spur rule", "constraint check", "rule gate", "quality gate", ".spur/rules", "recommended-pre-check", "add a rule", "fine-tune rules", "validate rule file", or verifying generated code against project standards.
-license: Apache-2.0
-metadata:
-  author: spur
-  version: "2.0"
-  platforms: "claude-code,codex,openclaw,opencode,antigravity"
-  interactions:
-    - reviewer
-    - pipeline
-  severity_levels:
-    - error
-    - warning
-    - info
-  pipeline_steps:
-    - run
-    - interpret
-    - fix-and-rerun
-  openclaw:
-    emoji: "🛡️"
+name: spur-cli-rules
+description: "spur-cli noun reference: operate `spur rule` as the project's constraint quality gate across its full lifecycle — run presets, author rules, fine-tune for delivery quality, validate rule files and preset schemas, and extend the engine. The deterministic verifier in the LLM code-delivery loop."
+see_also:
+  - spur-cli
 ---
 
-# Spur Rules
+# spur rule — the constraint quality gate
 
 `spur rule` runs declarative YAML constraint rules (powered by `@gobing-ai/ts-rule-engine`) over the
 working tree and reports policy violations. It is the **deterministic verifier** in an LLM delivery
@@ -36,9 +20,9 @@ Operating the gate well is a full lifecycle — not just running it. This skill 
 | Phase | Activity | Where |
 | ----- | -------- | ----- |
 | **Run & fix** | Gate the diff, interpret findings, self-correct, re-run until green | this file |
-| **Author** | Add a constraint by writing a new rule when a standard/anti-pattern emerges | [references/authoring-rules.md](references/authoring-rules.md) |
-| **Fine-tune** | Dial in quality: severity, glob scoping, exemptions, preset `disable`/`overrides`, layering | [references/fine-tuning.md](references/fine-tuning.md) |
-| **Validate & extend** | Validate files/presets, smoke-test, add custom evaluators/resolvers/formatters | [references/validation-and-extension.md](references/validation-and-extension.md) |
+| **Author** | Add a constraint by writing a new rule when a standard/anti-pattern emerges | [rules/authoring-rules.md](rules/authoring-rules.md) |
+| **Fine-tune** | Dial in quality: severity, glob scoping, exemptions, preset `disable`/`overrides`, layering | [rules/fine-tuning.md](rules/fine-tuning.md) |
+| **Validate & extend** | Validate files/presets, smoke-test, add custom evaluators/resolvers/formatters | [rules/validation-and-extension.md](rules/validation-and-extension.md) |
 
 ## When to use
 
@@ -66,22 +50,22 @@ The skill's logic divides by **whether the LLM adds value**:
 - **Agent-driven** (`scan`, `add`, `refine`) — convert fuzzy human intent into a reliable sequence the
   CLI cannot express as one verb. `scan` discovers candidate rules; `add`/`refine` author and tune
   them. These are the operations worth a slash command, and the skill owns all their logic. Full
-  procedures: [references/operations.md](references/operations.md).
+  procedures: [rules/operations.md](rules/operations.md).
 
 | Operation | Backed by | Input | Output (done-when) |
 | --------- | --------- | ----- | ------------------ |
 | `run` | `spur rule run` (CLI) | `[--preset <name>] [--rule <id>] [--file <path>] [--fail-on <sev>] [--stop-on-first [<sev>]]` | Gate to exit 0; findings interpreted, code fixed, re-run clean (the harness loop below) |
 | `validate` | `spur rule validate` (CLI) | `<file-or-preset> [--no-schema]` | Schema + Zod verdict |
 | `list` | `spur rule list` (CLI) | `[--preset <name>]` | Discovered files + source layer, or resolved rules for a preset |
-| `scan` | agent procedure | `[<path-or-glob>]` | **Propose-only** discovery: surveys code for recurring anti-patterns, clusters them, filters against the catalog, and reports ranked rule candidates (`add` new / `refine`-extend / already-covered). Authors nothing → [scan](references/operations.md#scan) |
-| `add` | agent procedure | `"<nl-description>" [--file <path>] [--preset <target>]` | **First reconciles against the existing catalog** (extend/refine an existing rule rather than duplicate, on confirmation); only a genuinely new concern is authored, then **validated AND smoke-tested both directions** (fires on bad, quiet on good); optionally wired into a preset → [add](references/operations.md#add) |
-| `refine` | agent procedure | `<rule-file-or-preset> [--intent "<goal>"] [--severity <sev>] [--scope <glob>] [--exempt <path>] [--disable <id>] [--override <id>] [--dry-run]` | Smallest change meeting the intent, re-validated and re-smoke-tested; `--dry-run` emits a diff only → [refine](references/operations.md#refine) |
+| `scan` | agent procedure | `[<path-or-glob>]` | **Propose-only** discovery: surveys code for recurring anti-patterns, clusters them, filters against the catalog, and reports ranked rule candidates (`add` new / `refine`-extend / already-covered). Authors nothing → [scan](rules/operations.md#scan) |
+| `add` | agent procedure | `"<nl-description>" [--file <path>] [--preset <target>]` | **First reconciles against the existing catalog** (extend/refine an existing rule rather than duplicate, on confirmation); only a genuinely new concern is authored, then **validated AND smoke-tested both directions** (fires on bad, quiet on good); optionally wired into a preset → [add](rules/operations.md#add) |
+| `refine` | agent procedure | `<rule-file-or-preset> [--intent "<goal>"] [--severity <sev>] [--scope <glob>] [--exempt <path>] [--disable <id>] [--override <id>] [--dry-run]` | Smallest change meeting the intent, re-validated and re-smoke-tested; `--dry-run` emits a diff only → [refine](rules/operations.md#refine) |
 
 `scan`, `add`, and `refine` are not CLI verbs. `add`/`refine` compose `validate` + `run` around a
 generated/edited YAML rule and both end in the same **validate-and-smoke-test** core
-([operations.md](references/operations.md#sub-procedure-validate-and-smoke-test)) so a tightened rule
+([operations.md](rules/operations.md#sub-procedure-validate-and-smoke-test)) so a tightened rule
 is verified exactly like an authored one. They also share the **find-existing-coverage** core
-([operations.md](references/operations.md#sub-procedure-find-existing-coverage)): `add` runs it up
+([operations.md](rules/operations.md#sub-procedure-find-existing-coverage)): `add` runs it up
 front (don't duplicate), `refine` runs it to locate a target and to catch overlap after a widening,
 and `scan` runs it to filter candidates against the catalog. Behavioral rule-testing (does a rule fire
 correctly?) is not a standalone operation — it **is** the verify core, invoked by `add` and `refine`.
@@ -127,7 +111,7 @@ Each finding has `ruleId`, `severity`, `message`, `filePath`, optional `line`, a
   the code. This distinction is first-class — never edit source to silence a broken rule.
 
 Full JSON schema and field nuances (e.g. `line` is present on forbid-matches, absent on
-require-misses): [references/authoring-rules.md](references/authoring-rules.md).
+require-misses): [rules/authoring-rules.md](rules/authoring-rules.md).
 
 ### Step 3: Fix and re-run
 
@@ -158,7 +142,7 @@ spur rule list --preset recommended-pre-check --json     # resolved rules for on
 
 Repo presets: `recommended-pre-check` (inner loop), `recommended-post-check` (final, adds coverage),
 `strict-check` (hardened boundaries), `rg-migration` (ripgrep-dialect guard). Rationale for the
-ordering and how to compose a new preset: [references/fine-tuning.md](references/fine-tuning.md).
+ordering and how to compose a new preset: [rules/fine-tuning.md](rules/fine-tuning.md).
 
 ## Behavior
 
@@ -191,14 +175,14 @@ rules the reviewer applies. It does not generate feature code; it constrains cod
 
 ## Additional Resources
 
-- [references/operations.md](references/operations.md) — the operation procedures
+- [rules/operations.md](rules/operations.md) — the operation procedures
   (run/scan/add/refine/validate/list), the shared find-existing-coverage and validate-and-smoke-test
   cores, and the fixture convention. The entry point for slash-command delegation.
-- [references/authoring-rules.md](references/authoring-rules.md) — add constraints: evaluator
+- [rules/authoring-rules.md](rules/authoring-rules.md) — add constraints: evaluator
   selection, real config shapes, the JSON finding schema, smoke-testing a new rule.
-- [references/fine-tuning.md](references/fine-tuning.md) — dial in quality: severity, glob scoping,
+- [rules/fine-tuning.md](rules/fine-tuning.md) — dial in quality: severity, glob scoping,
   exemptions, preset `extends`/`disable`/`overrides`, layering, governance.
-- [references/validation-and-extension.md](references/validation-and-extension.md) — validate files
+- [rules/validation-and-extension.md](rules/validation-and-extension.md) — validate files
   and presets, custom evaluators/resolvers/formatters, and the CLI-vs-library capability gaps.
 - `@gobing-ai/ts-rule-engine` README — authoritative library reference (every evaluator, fixer,
   preset mechanism, observability event).

@@ -6,7 +6,7 @@ allowed-tools: ["Bash", "Read", "Write", "Skill"]
 
 # Rule Add
 
-Wraps the **sp:spur-rules** skill (`add` operation).
+Wraps the **sp:spur-cli** facade (rule noun) (`add` operation).
 
 Codify a new constraint. **First check whether an existing rule/preset already covers the concern**
 (extend or refine it rather than duplicate — on user confirmation); author from scratch only when the
@@ -38,14 +38,13 @@ smoke-test directions pass.
 
 ## Implementation
 
-Delegates to **sp:spur-rules** skill:
+Delegates to **sp:spur-cli** facade (rule noun):
 
 ```
-Skill(skill="sp:spur-rules", args="add $ARGUMENTS")
+Skill(skill="sp:spur-cli", args="rule add $ARGUMENTS")
 ```
 
 ## Platform Notes
 
 - **Claude Code:** native — `Skill()` delegation and `$ARGUMENTS` work directly.
-- **Other platforms:** `Skill()` and `$ARGUMENTS` are Claude-specific. Invoke the `sp:spur-rules`
-  skill's `add` operation directly and pass the description/flags as arguments in chat.
+- **Other platforms:** `Skill()` and `$ARGUMENTS` are Claude-specific. Invoke the `sp:spur-cli`  skill's `add` operation directly and pass the description/flags as arguments in chat.

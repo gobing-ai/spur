@@ -6,7 +6,7 @@ allowed-tools: ["Bash", "Read", "Edit", "Skill"]
 
 # Rule Refine
 
-Wraps the **sp:spur-rules** skill (`refine` operation).
+Wraps the **sp:spur-cli** facade (rule noun) (`refine` operation).
 
 Make an existing rule more precise: kill a false positive by tightening `include`/`exclude`, fix a
 false negative, change blocking behavior via severity, exempt a legitimate case, or re-tune an
@@ -42,14 +42,13 @@ collision. Never widens scope merely to pass a gate.
 
 ## Implementation
 
-Delegates to **sp:spur-rules** skill:
+Delegates to **sp:spur-cli** facade (rule noun):
 
 ```
-Skill(skill="sp:spur-rules", args="refine $ARGUMENTS")
+Skill(skill="sp:spur-cli", args="rule refine $ARGUMENTS")
 ```
 
 ## Platform Notes
 
 - **Claude Code:** native — `Skill()` delegation and `$ARGUMENTS` work directly.
-- **Other platforms:** `Skill()` and `$ARGUMENTS` are Claude-specific. Invoke the `sp:spur-rules`
-  skill's `refine` operation directly and pass the target/flags as arguments in chat.
+- **Other platforms:** `Skill()` and `$ARGUMENTS` are Claude-specific. Invoke the `sp:spur-cli`  skill's `refine` operation directly and pass the target/flags as arguments in chat.

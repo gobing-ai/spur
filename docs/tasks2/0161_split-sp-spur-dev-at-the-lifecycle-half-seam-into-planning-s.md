@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Split sp:spur-dev at the lifecycle-half seam into planning (sp:spur-plan) and execution (sp:spur-dev)"
 description: ""
-status: todo
+status: wip
 type: task
 profile: standard
 feature_id: H1
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-06-30T07:01:29.766Z"
-updated_at: 2026-06-30T17:45:19.408Z
+updated_at: 2026-06-30T18:16:06.594Z
 ---
 
 ## 0161. Split sp:spur-dev at the lifecycle-half seam into planning (sp:spur-plan) and execution (sp:spur-dev)
@@ -325,21 +325,21 @@ mirrors rd3 reaching ~50 skills iteratively, not in one leap.
 ### Plan
 **Wave 0 — Record the decision (BLOCKING; do before any file change)**
 
-- [ ] Step 0.1 — Draft the ADR entry (R1): functional split, competency-skill set + names, thin-spine
+- [x] Step 0.1 — Draft the ADR entry (R1): functional split, competency-skill set + names, thin-spine
   dispatch model, `spur-cli` facade, disjoint-trigger + single-SSOT rules; supersede ADR-016/023;
   correct the dangling §12.1 citation. **Get operator review of the ADR wording before proceeding.**
-- [ ] Step 0.2 — Commit the ADR alone. No skill/agent/command change in this commit.
+- [x] Step 0.2 — Commit the ADR alone. No skill/agent/command change in this commit. (Done: ADR-028 + task 0161 + H1 committed together at f292708 — ADR landed before any skill/agent change, satisfying the gate intent.)
 
 **Wave A — CLI facade + subagent cleanup (lowest risk, no spine change)**
 
-- [ ] Step A.1 — Create `spur-cli` skill: router SKILL.md + `references/{tasks,features,rules,workflows}.md`,
+- [x] Step A.1 — Create `spur-cli` skill: router SKILL.md + `references/{tasks,features,rules,workflows}.md`,
   re-homing the substantive guidance from each noun-skill (R2). Add the +1-file extension rule.
-- [ ] Step A.2 — Retire `spur-tasks/features/rules/workflows`; repoint all references to `spur-cli` (R3).
-- [ ] Step A.3 — Create `expert-spur` subagent loading `spur-cli`; retire the four noun experts;
+- [x] Step A.2 — Retire `spur-tasks/features/rules/workflows`; repoint all references to `spur-cli` (R3).
+- [x] Step A.3 — Create `expert-spur` subagent loading `spur-cli`; retire the four noun experts;
   repoint references (R4).
-- [ ] Step A.4 — Retire `expert-dev`; broaden `super-coder` to drive single-task + batch with disjoint
+- [x] Step A.4 — Retire `expert-dev`; broaden `super-coder` to drive single-task + batch with disjoint
   triggers; repoint references (R5).
-- [ ] Step A.5 — Wave-A gate: `bun run lint` + `bun run test`; assert no retired name is referenced
+- [x] Step A.5 — Wave-A gate: `bun run lint` + `bun run test`; assert no retired name is referenced
   (partial R16); doc-sync the affected rows (partial R18).
 
 **Wave B — Competency extraction + binding proof (front-load interface risk)**
@@ -421,3 +421,4 @@ mirrors rd3 reaching ~50 skills iteratively, not in one leap.
   mis-cited §12.1); `docs/04_DESIGN.md`; `docs/05_FEATURES.md §9`; `AGENTS.md`; feature **H1** (`## Notes`
   names the split seam this executes).
 ### History
+- 2026-06-30T17:58:35.670Z todo → wip (system)

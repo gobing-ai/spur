@@ -1,7 +1,14 @@
 ---
 name: super-coder
 description: |
-  Batch task orchestrator — runs a set of tasks through their pipelines in dependency-correct order. Drives the batch driver loop defined in sp:spur-dev (resolve+freeze → topo-sort → per-task pipeline run → verdict inspect → continue/halt → batch report). Use PROACTIVELY when the operator runs "/sp:dev-runall" or asks to "run all tasks", "run the batch", "execute the todo set", or "runall". Name-only reuse of rd3:super-coder; no logic relationship.
+  Task pipeline driver — runs a single task end-to-end through its pipeline, OR a set of tasks in dependency-correct order. Drives the pipeline run + the batch driver loop defined in sp:spur-dev (single task: pipeline run → verdict inspect; batch: resolve+freeze → topo-sort → per-task pipeline run → verdict inspect → continue/halt → batch report). Use PROACTIVELY when the operator asks to "run this task end to end", "drive task 0042 through the pipeline", or runs "/sp:dev-runall" / asks to "run all tasks", "run the batch", "execute the todo set", "runall". Single-task lifecycle work that previously routed to expert-dev now lands here. Name-only reuse of rd3:super-coder; no logic relationship.
+
+  <example>
+  Context: Single-task end-to-end lifecycle run
+  user: "Drive task 0042 through the full pipeline."
+  assistant: "Delegating to sp:super-coder — runs 0042 through task-pipeline.yaml, inspects the terminal verdict, surfaces any HITL gate."
+  <commentary>A single task driven end-to-end is the degenerate (n=1) case of the batch loop; the orchestrator owns it too.</commentary>
+  </example>
 
   <example>
   Context: Batch execution of a feature's task set
@@ -17,9 +24,11 @@ skills: [sp:spur-dev, sp:dogfood-testing]
 
 # Super Coder
 
-The **batch task orchestrator**. Runs a set of task files through their pipelines in
-dependency-correct order, in its own context window. Use it when `/sp:dev-runall` is invoked or the
-operator asks to run a batch of tasks; for a single task, `/sp:dev-run <wbs>` is lighter.
+The **task pipeline driver**. Runs a single task end-to-end, or a set of task files through their
+pipelines in dependency-correct order, in its own context window. Use it when `/sp:dev-runall` is
+invoked, when the operator asks to drive one task end-to-end, or to run a batch. A single task is the
+n=1 case of the batch loop (the role formerly held by the retired `expert-dev`); for a one-off
+deterministic verb, `/sp:dev-run <wbs>` is lighter.
 
 ## Role
 

@@ -1,29 +1,11 @@
 ---
-name: spur-tasks
-description: Operate `spur task` as the project's task-file CLI — create tasks (with template variants), edit sections, drive the status lifecycle, record pipeline verdicts, query the four-layer readiness matrix via `check --json`, and regenerate `kanban.md`. The committed-corpus side of the planning layer; the deterministic vocabulary `sp:spur-dev` orchestrates against. Triggers on "spur task", "create a task", "edit a task section", "task status", "task check", "task record", "task matrix", "task lifecycle", ".spur tasks", "batch-create tasks", or looking up a task verb or convention.
-license: Apache-2.0
-metadata:
-  author: spur
-  version: "1.1"
-  platforms: "claude-code,codex,openclaw,opencode,antigravity"
-  interactions:
-    - reference
-    - companion
-  verbs:
-    - create
-    - show
-    - update
-    - list
-    - refresh
-    - batch-create
-    - record
-    - check
-    - resolve
-  openclaw:
-    emoji: "📋"
+name: spur-cli-tasks
+description: "spur-cli noun reference: operate `spur task` as the project's task-file CLI — create tasks (with template variants), edit sections, drive the status lifecycle, record pipeline verdicts, query the four-layer readiness matrix via `check --json`, and regenerate `kanban.md`. The committed-corpus side of the planning layer that the spine orchestrates against."
+see_also:
+  - spur-cli
 ---
 
-# Spur Tasks
+# spur task — the task-file CLI
 
 `spur task` is the CLI for the **task corpus** — the markdown task files under `docs/tasks/` (DD-08).
 Each verb is deterministic and machine-gated: WBS allocation is race-safe, section edits are
@@ -69,7 +51,7 @@ spur task create "Add email validation" --feature H2 --parent 0040
 The same `--template` axis drives both *which sections the new file carries* (per the
 Section-Status-Matrix) and *its creation status*: a spec'd task (a `--feature` link, or a batch item
 with `background`/`requirements`) is created at **`todo`**; a bare capture is created at **`backlog`**.
-See [references/verbs.md](references/verbs.md) for the variant detail.
+See [tasks/verbs.md](tasks/verbs.md) for the variant detail.
 
 Many tasks at once (the decomposition output) go through `batch-create` with a JSON **array** file
 — shape and gating live in `sp:spur-dev`'s decomposition reference, not here.
@@ -114,7 +96,7 @@ spur task update 0040 --priority P1
 
 The section-write-then-replace pattern is the workflow agents use to fill in `Plan` / `Solution` /
 `Testing` / `Review` during a run. See
-[references/section-editing.md](references/section-editing.md) for the full recipe. For pipeline
+[tasks/section-editing.md](tasks/section-editing.md) for the full recipe. For pipeline
 output specifically, prefer **`record`** (below) over hand-assembling Testing/Review files.
 
 ## Recording pipeline results — `record`
@@ -136,7 +118,7 @@ spur task record 0040 --verdict-file .spur/run/0040-verdict.json --solution-from
   `record` **never transitions to `done`** — the `testing→done` gate stays in the workflow (0108).
 
 The verdict shape (`wbs`, `verdict`, `requirements[]`, `checks[]`) and the rendered tables are
-documented in [references/verbs.md](references/verbs.md).
+documented in [tasks/verbs.md](tasks/verbs.md).
 
 ## The readiness matrix — `check --json`
 
@@ -163,7 +145,7 @@ The two flags are distinct gate profiles:
   `gate:true` required-section misses — *without* the blanket elevation. This is the variant wired
   as the `testing→done` lifecycle guard.
 
-See [references/verbs.md](references/verbs.md) for the JSON shape per finding.
+See [tasks/verbs.md](tasks/verbs.md) for the JSON shape per finding.
 
 ## Keeping the board honest — `refresh`
 
@@ -194,18 +176,18 @@ Returns exit `1` when no task owns the path.
 - **Not validation logic.** This skill tells you *to run* `check`; the rules it enforces live in
   the CLI (`task check` / `feature check`), never restated as prose checks here.
 - **Not features.** Feature authoring, hierarchical IDs, and AC conventions live in the companion
-  **`sp:spur-features`**.
+  **`spur feature` (see [features.md](features.md))**.
 
 ## References
 
 | Reference | Covers |
 | --------- | ------ |
-| [references/verbs.md](references/verbs.md) | Per-verb flag detail, template variants, verdict + check JSON shapes, exit codes |
-| [references/section-editing.md](references/section-editing.md) | The temp-file → `--section`/`--from-file` recipe; which sections to fill when; `record` vs. hand-editing |
+| [tasks/verbs.md](tasks/verbs.md) | Per-verb flag detail, template variants, verdict + check JSON shapes, exit codes |
+| [tasks/section-editing.md](tasks/section-editing.md) | The temp-file → `--section`/`--from-file` recipe; which sections to fill when; `record` vs. hand-editing |
 
 ## See also
 
 - **`sp:spur-dev`** — the umbrella skill that orchestrates these verbs into the planning +
   execution loop. Use it to *drive* work; use this skill to *look up a verb*.
-- **`sp:spur-features`** — the companion for `spur feature` (hierarchical IDs, AC conventions,
+- **`spur feature` (see [features.md](features.md))** — the companion for `spur feature` (hierarchical IDs, AC conventions,
   traceability).

@@ -24,7 +24,7 @@ metadata:
 see_also:
   - sp:dev-handover
   - sp:dev-changelog
-  - sp:spur-tasks
+  - sp:spur-cli
 ---
 
 # sp:daily-summary — Daily Summary Report Generator
@@ -164,5 +164,5 @@ Read the skill file and follow the workflow manually.
 
 - **Script source:** [scripts/daily-summary.ts](scripts/daily-summary.ts) — CLI implementation
 - **Tests:** [tests/daily-summary.test.ts](tests/daily-summary.test.ts) — unit coverage for parsing, date ranges, markdown output
-- **Related skills:** `sp:dev-handover` (blocker handoff), `sp:dev-changelog` (commit-based changelog), `sp:spur-tasks` (task management)
+- **Related skills:** `sp:dev-handover` (blocker handoff), `sp:dev-changelog` (commit-based changelog), `sp:spur-cli` (task management)
 - **Upstream CLI:** [ccusage](https://github.com/ryoppippi/ccusage) — AI agent token usage reporter

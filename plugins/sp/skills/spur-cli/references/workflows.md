@@ -1,27 +1,11 @@
 ---
-name: spur-workflows
-description: Operate `spur workflow` across its full lifecycle — choose the right execution mode, author state-machine and transition-flow workflows, validate definitions, run them, read run traces, and refine existing flows. Wraps the dual-mode FSM/transition-flow runtime (`@gobing-ai/ts-dual-workflow-engine`). Triggers on "spur workflow", "workflow engine", "state machine", "transition flow", "author a workflow", "validate workflow", "run workflow", "workflow YAML", ".spur workflows", "implement-check-fix loop", or orchestrating a multi-step process as a declarative workflow.
-license: Apache-2.0
-metadata:
-  author: spur
-  version: "1.0"
-  platforms: "claude-code,codex,openclaw,opencode,antigravity"
-  interactions:
-    - author
-    - pipeline
-  execution_modes:
-    - state-machine
-    - transition-flow
-  pipeline_steps:
-    - choose-mode
-    - author
-    - validate
-    - dry-run
-  openclaw:
-    emoji: "🔀"
+name: spur-cli-workflows
+description: "spur-cli noun reference: operate `spur workflow` across its full lifecycle — choose the right execution mode, author state-machine and transition-flow workflows, validate definitions, run them, read run traces, and refine existing flows. Wraps the dual-mode FSM/transition-flow runtime (`@gobing-ai/ts-dual-workflow-engine`)."
+see_also:
+  - spur-cli
 ---
 
-# Spur Workflows
+# spur workflow — the dual-mode workflow CLI
 
 `spur workflow` runs declarative YAML workflows (powered by `@gobing-ai/ts-dual-workflow-engine`) that
 orchestrate a multi-step process — an implement→check→fix loop, an import→validate→transform→write
@@ -72,7 +56,7 @@ ordered guards, and may loop back on itself (e.g. implement → check → fix �
 
 When intent is ambiguous, default to **state-machine** (the simpler, default kind) and say so — but
 in `add`, surface the recommendation **with its reason and the rejected alternative**, and confirm
-before authoring. Full procedure: [references/authoring-workflows.md](references/authoring-workflows.md).
+before authoring. Full procedure: [workflows/authoring-workflows.md](workflows/authoring-workflows.md).
 
 ## When to use
 
@@ -85,9 +69,9 @@ Use this skill to:
 - **Run a workflow** — execute a definition and read its run trace (states/nodes entered, transitions
   taken, terminal status).
 - **Refine an existing workflow** — fix a stuck guard, add a state/node, retune `iterationBound`,
-  re-scope variables / `env.allow`, with the smallest change. → references/operations.md
+  re-scope variables / `env.allow`, with the smallest change. → workflows/operations.md
 - **Extend the engine** — register a custom action/guard runner or a trust-gated extension module when
-  the built-ins (`note`, `shell`, `always`, `action-ok`) fall short. → references/validation-and-extension.md
+  the built-ins (`note`, `shell`, `always`, `action-ok`) fall short. → workflows/validation-and-extension.md
 
 ## Operations
 
@@ -100,21 +84,21 @@ The skill's logic divides by **whether the LLM adds value**:
 - **Agent-driven** (`add`, `refine`) — convert fuzzy human intent into a reliable sequence the CLI
   cannot express as one verb. `add` chooses the mode and authors a new workflow; `refine` tunes an
   existing one. These are the operations worth a slash command, and the skill owns all their logic.
-  Full procedures: [references/operations.md](references/operations.md).
+  Full procedures: [workflows/operations.md](workflows/operations.md).
 
 | Operation | Backed by | Input | Output (done-when) |
 | --------- | --------- | ----- | ------------------ |
 | `validate` | `spur workflow validate` (CLI) | `<file> [--no-schema]` | Schema + semantic verdict |
 | `run` | `spur workflow run` (CLI) | `<file> [--run-id <id>]` | Terminal state reached; trace read |
 | `list` | `spur workflow list` (CLI) | — | Persisted run records |
-| `add` | agent procedure | `"<nl-description>" [--kind <state-machine\|transition-flow>] [--file <path>]` | **Mode chosen (confirmed)** → first reconciled against existing workflows (extend an existing flow rather than duplicate) → YAML authored in real schema shape → **validated AND dry-run** (reaches the expected terminal state) → [add](references/operations.md#add) |
-| `refine` | agent procedure | `<workflow-file> [--intent "<goal>"] [--dry-run]` | Smallest change meeting the intent, re-validated and re-dry-run; `--dry-run` emits a diff only → [refine](references/operations.md#refine) |
+| `add` | agent procedure | `"<nl-description>" [--kind <state-machine\|transition-flow>] [--file <path>]` | **Mode chosen (confirmed)** → first reconciled against existing workflows (extend an existing flow rather than duplicate) → YAML authored in real schema shape → **validated AND dry-run** (reaches the expected terminal state) → [add](workflows/operations.md#add) |
+| `refine` | agent procedure | `<workflow-file> [--intent "<goal>"] [--dry-run]` | Smallest change meeting the intent, re-validated and re-dry-run; `--dry-run` emits a diff only → [refine](workflows/operations.md#refine) |
 
 `add` and `refine` are not CLI verbs. They compose `validate` + `run` around a generated/edited YAML
 definition and both end in the same **validate-and-dry-run** core
-([operations.md](references/operations.md#sub-procedure-validate-and-dry-run)) so a tuned workflow is
+([operations.md](workflows/operations.md#sub-procedure-validate-and-dry-run)) so a tuned workflow is
 verified exactly like an authored one. They also share the **find-existing-workflow** core
-([operations.md](references/operations.md#sub-procedure-find-existing-workflow)): `add` runs it up front
+([operations.md](workflows/operations.md#sub-procedure-find-existing-workflow)): `add` runs it up front
 (don't duplicate an existing flow), `refine` runs it to locate the target. `add` additionally runs the
 **mode-selection gate** before authoring — the one human-in-the-loop step unique to workflows.
 
@@ -228,13 +212,13 @@ the workflow's actions (`shell`, custom runners) do that; this skill builds and 
 
 ## Additional Resources
 
-- [references/operations.md](references/operations.md) — the operation procedures (validate/run/list/add/refine),
+- [workflows/operations.md](workflows/operations.md) — the operation procedures (validate/run/list/add/refine),
   the shared find-existing-workflow and validate-and-dry-run cores, and the mode-selection gate. The
   entry point for slash-command delegation.
-- [references/authoring-workflows.md](references/authoring-workflows.md) — author a workflow: mode
+- [workflows/authoring-workflows.md](workflows/authoring-workflows.md) — author a workflow: mode
   selection in depth, per-mode real YAML shapes, built-in actions/guards, template variables, the
   validate-and-dry-run core, expected-terminal-state assertion.
-- [references/validation-and-extension.md](references/validation-and-extension.md) — validate semantics,
+- [workflows/validation-and-extension.md](workflows/validation-and-extension.md) — validate semantics,
   custom action/guard runners, the trust-gated extension loader, and CLI-vs-library capability gaps.
 - `@gobing-ai/ts-dual-workflow-engine` README — authoritative library reference (both drivers,
   RunLifecycle, persistence, the full event map, every built-in capability).

@@ -1,31 +1,15 @@
 ---
-name: spur-features
-description: Operate `spur feature` as the project's feature CLI — author features with hierarchical IDs (DD-14), write acceptance criteria the validator and decomposition both read, drive the feature lifecycle, move subtrees, and keep traceability honest. The intent-and-AC side of the planning layer that `sp:spur-dev` orchestrates against. Triggers on "spur feature", "create a feature", "feature ID", "acceptance criteria", "AC scenarios", "R-numbering", "feature check", "feature lifecycle", "move a feature", "traceability", or looking up a feature verb or convention.
-license: Apache-2.0
-metadata:
-  author: spur
-  version: "1.0"
-  platforms: "claude-code,codex,openclaw,opencode,antigravity"
-  interactions:
-    - reference
-    - companion
-  verbs:
-    - create
-    - show
-    - update
-    - list
-    - move
-    - refresh
-    - check
-  openclaw:
-    emoji: "🌳"
+name: spur-cli-features
+description: "spur-cli noun reference: operate `spur feature` as the project's feature CLI — author features with hierarchical IDs (DD-14), write acceptance criteria the validator and decomposition both read, drive the feature lifecycle, move subtrees, and keep traceability honest. The intent-and-AC side of the planning layer that the spine orchestrates against."
+see_also:
+  - spur-cli
 ---
 
-# Spur Features
+# spur feature — the feature CLI
 
 `spur feature` is the CLI for the **feature tree** — the markdown feature files that capture intent
 (`Goal` / `Scope`) and acceptance criteria, organized by hierarchical IDs (DD-14). Features are the
-*why* and *what-done-looks-like*; tasks (see `sp:spur-tasks`) are the *how*.
+*why* and *what-done-looks-like*; tasks (see `spur task`) are the *how*.
 
 This is a **companion reference**, not an orchestrator. It documents *what each verb is* and *how
 to author features and AC well*. The end-to-end loop that turns a vague intake into a feature, AC,
@@ -123,7 +107,7 @@ paths; may be deferred). This is a **planning convention** (DD-06), not a `check
 today — the validator currently treats all scenarios uniformly — but tagging lets decomposition and
 future tiered gating tell them apart. Full rationale: `sp:spur-dev`'s AC style guide.
 
-See [references/acceptance-criteria.md](references/acceptance-criteria.md) for the Gherkin template
+See [features/acceptance-criteria.md](features/acceptance-criteria.md) for the Gherkin template
 and the checklist-vs-Gherkin two-format note.
 
 ## Traceability habits
@@ -166,19 +150,19 @@ restated as prose here. This is what `sp:spur-dev`'s feature-check gate loop run
 - **Not the planning loop.** Intake → create → AC generation → check-loop → decomposition →
   batch-create is `sp:spur-dev`'s planning half (R3).
 - **Not validation logic.** This skill says *run `check`*; the layers it enforces are CLI code.
-- **Not tasks.** Task verbs, the WBS lifecycle, and section editing live in **`sp:spur-tasks`**.
+- **Not tasks.** Task verbs, the WBS lifecycle, and section editing live in **`spur task` (see [tasks.md](tasks.md))**.
 
 ## References
 
 | Reference | Covers |
 | --------- | ------ |
-| [references/verbs.md](references/verbs.md) | Per-verb flag detail, JSON shapes, the 4 check layers |
-| [references/acceptance-criteria.md](references/acceptance-criteria.md) | Gherkin template, R-numbering, `@core`/`@edge`, traceability mechanics |
-| [references/roadmap-priority.md](references/roadmap-priority.md) | Roadmap hierarchy, priority/status conventions, and feature-tree adjustment workflow |
+| [features/verbs.md](features/verbs.md) | Per-verb flag detail, JSON shapes, the 4 check layers |
+| [features/acceptance-criteria.md](features/acceptance-criteria.md) | Gherkin template, R-numbering, `@core`/`@edge`, traceability mechanics |
+| [features/roadmap-priority.md](features/roadmap-priority.md) | Roadmap hierarchy, priority/status conventions, and feature-tree adjustment workflow |
 
 ## See also
 
 - **`sp:spur-dev`** — orchestrates these verbs into the planning + execution loop. Use it to
   *drive* planning; use this skill to *look up a verb* or *author AC*.
-- **`sp:spur-tasks`** — the companion for `spur task` (WBS lifecycle, section editing, the
+- **`spur task` (see [tasks.md](tasks.md))** — the companion for `spur task` (WBS lifecycle, section editing, the
   readiness matrix).

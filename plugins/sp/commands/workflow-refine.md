@@ -6,7 +6,7 @@ allowed-tools: ["Bash", "Read", "Edit", "Skill"]
 
 # Workflow Refine
 
-Wraps the **sp:spur-workflows** skill (`refine` operation).
+Wraps the **sp:spur-cli** facade (workflow noun) (`refine` operation).
 
 Adjust an existing workflow: fix a run that never reaches its terminal state (a guard/condition that
 never passes, a wrong transition target, an exhausted `iterationBound`), add a missing step, change
@@ -39,14 +39,14 @@ terminal. Never restructures to mask a flaw; never switches execution mode.
 
 ## Implementation
 
-Delegates to **sp:spur-workflows** skill:
+Delegates to **sp:spur-cli** facade (workflow noun):
 
 ```
-Skill(skill="sp:spur-workflows", args="refine $ARGUMENTS")
+Skill(skill="sp:spur-cli", args="workflow refine $ARGUMENTS")
 ```
 
 ## Platform Notes
 
 - **Claude Code:** native — `Skill()` delegation and `$ARGUMENTS` work directly.
-- **Other platforms:** `Skill()` and `$ARGUMENTS` are Claude-specific. Invoke the `sp:spur-workflows`
+- **Other platforms:** `Skill()` and `$ARGUMENTS` are Claude-specific. Invoke the `sp:spur-cli` (workflow)
   skill's `refine` operation directly and pass the target/flags as arguments in chat.

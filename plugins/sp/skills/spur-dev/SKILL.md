@@ -114,10 +114,10 @@ Use this skill for:
 
 Do **not** use this skill for:
 
-- Looking up task/feature verbs or conventions — use the `sp:spur-tasks` /
-  `sp:spur-features` companion skills.
-- Gate-level constraint checking — use `sp:spur-rules`.
-- Workflow authoring/tuning — use `sp:spur-workflows`.
+- Looking up task/feature/rule/workflow verbs or conventions — use the `sp:spur-cli` facade
+  (one reference per noun).
+- Gate-level constraint checking — use `sp:spur-cli` (rule noun).
+- Workflow authoring/tuning — use `sp:spur-cli` (workflow noun).
 - Documentation maintenance — use `sp:doc-evolve`.
 
 ## Behavior

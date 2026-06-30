@@ -269,7 +269,7 @@ Do **not** use this skill for:
 
 - Driving the pipeline — that's `/sp:dev-run` → `sp:spur-dev` (execution half).
 - Running tests / coverage — that's `/sp:dev-unit`.
-- Constraint-rule gating — that's `sp:spur-rules` (deterministic, complementary).
+- Constraint-rule gating — that's `sp:spur-cli` (deterministic, complementary).
 
 ---
 

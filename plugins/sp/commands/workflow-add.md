@@ -6,7 +6,7 @@ allowed-tools: ["Bash", "Read", "Write", "Skill"]
 
 # Workflow Add
 
-Wraps the **sp:spur-workflows** skill (`add` operation).
+Wraps the **sp:spur-cli** facade (workflow noun) (`add` operation).
 
 Author a new workflow. **First choose the execution mode** — `state-machine` (loops/retries, one
 active state) vs `transition-flow` (pipeline, action-per-node) — surfacing the recommendation with its
@@ -39,14 +39,14 @@ the dry-run reaches the expected terminal state.
 
 ## Implementation
 
-Delegates to **sp:spur-workflows** skill:
+Delegates to **sp:spur-cli** facade (workflow noun):
 
 ```
-Skill(skill="sp:spur-workflows", args="add $ARGUMENTS")
+Skill(skill="sp:spur-cli", args="workflow add $ARGUMENTS")
 ```
 
 ## Platform Notes
 
 - **Claude Code:** native — `Skill()` delegation and `$ARGUMENTS` work directly.
-- **Other platforms:** `Skill()` and `$ARGUMENTS` are Claude-specific. Invoke the `sp:spur-workflows`
+- **Other platforms:** `Skill()` and `$ARGUMENTS` are Claude-specific. Invoke the `sp:spur-cli` (workflow)
   skill's `add` operation directly and pass the description/flags as arguments in chat.

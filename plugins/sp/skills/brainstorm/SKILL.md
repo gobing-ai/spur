@@ -25,7 +25,7 @@ metadata:
     - output
 see_also:
   - cc:anti-hallucination
-  - sp:spur-tasks
+  - sp:spur-cli
 ---
 
 # sp:brainstorm — Structured Ideation Workflow
@@ -74,7 +74,7 @@ Activate sp:brainstorm when:
 - Pure research (use `spur agent run` for research instead)
 - Task creation without ideation (use `sp:spur-dev` instead)
 - Fact-checking or verification only (use `cc:anti-hallucination` instead)
-- Task file operations (use `sp:spur-tasks` instead)
+- Task file operations (use `sp:spur-cli` instead)
 
 ## Core Principles
 
@@ -156,8 +156,8 @@ When user confirms approach, delegate task creation:
 // Pseudocode: Delegate to sp:spur-dev for structured task breakdown
 Skill(skill="sp:spur-dev", args="plan <approach>")
 
-// Then use sp:spur-tasks for file creation
-Bash: spur task batch-create --file decomposition.json   # bare JSON array (see sp:spur-tasks)
+// Then use sp:spur-cli for file creation
+Bash: spur task batch-create --file decomposition.json   # bare JSON array (see sp:spur-cli)
 ```
 
 ## Workflow
@@ -238,7 +238,7 @@ docs/plans/YYYY-MM-DD-<topic>-brainstorm.md
 | Verification protocol | `cc:anti-hallucination` | Source-first validation |
 | Information synthesis | `spur agent run` | Multi-source consolidation |
 | Task breakdown | `sp:spur-dev` | Structured tasks |
-| Task file creation | `sp:spur-tasks` | WBS assignment, kanban |
+| Task file creation | `sp:spur-cli` | WBS assignment, kanban |
 
 ## Error Handling
 
