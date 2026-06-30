@@ -20,29 +20,40 @@ updated_at: "{{ CREATED_AT }}"
 
 {{ BACKGROUND }}
 
+### Requirements
+
+<!-- R-numbered list of what must be true when this task is complete. Keep empty until requirements are known. -->
+
 ### Acceptance Criteria
 
-```gherkin
-Feature: {{ NAME }}
+<!-- Given/When/Then scenarios or a checklist derived from Requirements. Keep empty if this task has no objective AC yet. -->
 
-  Scenario: Basic acceptance
-    Given a precondition
-    When an action is taken
-    Then an expected result occurs
-```
+### Q&A
 
-- [ ] Acceptance checklist item
+<!-- Clarifications and decisions made during refinement. Keep empty if none. -->
+
+### Design
+
+<!-- Chosen approach, key tradeoffs, invariants, and impacted surfaces. Keep snippets short. -->
 
 ### Plan
 
-- [ ] Implementation step
+<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
 
 ### Solution
 
+<!-- Filled during implementation: file:line change map and concise rationale. -->
+
 ### Testing
+
+<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
 
 ### Review
 
+<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+
 ### References
+
+<!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History

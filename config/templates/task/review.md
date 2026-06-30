@@ -31,12 +31,36 @@ in the reviewed PR/commit/diff). Fix in priority order (P1 → P2 → …); re-r
 | P1       |      |         |                |
 | P2       |      |         |                |
 
+### Requirements
+
+<!-- R-numbered fix requirements derived from the findings. Fill after triage/refinement. -->
+
+### Acceptance Criteria
+
+<!-- Checks that prove the findings were addressed. Keep empty until the review task becomes executable work. -->
+
+### Q&A
+
+<!-- Clarifications, false positives, accepted risk, and triage decisions. -->
+
+### Design
+
+<!-- Fix approach and tradeoffs if the findings require design judgment. -->
+
 ### Plan
 
 - [ ] Fix P1 findings
 - [ ] Fix P2 findings
 - [ ] Fix all the remaining findings if any
 - [ ] Re-review the changed code
+
+### Solution
+
+<!-- Filled during implementation: file:line change map and concise rationale. -->
+
+### Testing
+
+<!-- Filled during verification: commands/checks run, outcomes, coverage claim or N/A. -->
 
 ### Review
 
@@ -49,5 +73,7 @@ remains to fix before closing, and any **back-issues** (new findings surfaced by
 | P2       |      |         |                |
 
 ### References
+
+<!-- Links to source review, dogfood report, PR/diff, related tasks, or external references. -->
 
 ### History

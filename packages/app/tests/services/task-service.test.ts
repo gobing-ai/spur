@@ -754,6 +754,11 @@ describe('sectionIsBare', () => {
         expect(sectionIsBare(d, 'Testing')).toBe(true);
     });
 
+    test('returns true for guidance-comment-only scaffold', () => {
+        const d = doc('### Review\n<!-- Filled during review: P1-P4 findings. -->\n### Plan\n');
+        expect(sectionIsBare(d, 'Review')).toBe(true);
+    });
+
     test('returns false when section has real content', () => {
         const d = doc('### Solution\n| File | Change |\n|------|--------|\n| x.ts | thing |\n\n### Plan\n');
         expect(sectionIsBare(d, 'Solution')).toBe(false);

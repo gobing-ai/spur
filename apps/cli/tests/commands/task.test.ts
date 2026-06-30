@@ -128,14 +128,13 @@ describe('spur task CLI', () => {
         expect(content).toContain('template: meta');
     });
 
-    test('create --template brainstorm falls back to legacy path when no template file', async () => {
-        // 'brainstorm' is a valid variant but has no template file — exercises
-        // loadTemplateContent miss cache path (templateMissSet.add)
+    test('create --template brainstorm uses the brainstorm template', async () => {
         const output = createCapturedOutput();
         const exitCode = await main(['task', 'create', 'Brainstorm task', '--template', 'brainstorm'], { cwd, output });
         expect(exitCode).toBe(0);
         const content = await Bun.file(createdPath(output)).text();
         expect(content).toContain('Brainstorm task');
+        expect(content).toContain('template: brainstorm');
     });
 
     test('create --template review seeds Review Findings as input under Background', async () => {

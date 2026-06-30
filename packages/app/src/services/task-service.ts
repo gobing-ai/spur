@@ -233,8 +233,8 @@ function stripLeadingSectionHeader(body: string, sectionName: string): string {
 // ─── Section bareness — used by pipeline steps to decide when to write ──
 
 /**
- * Returns `true` if a named section is absent, empty/whitespace-only, or a
- * known pipeline placeholder (the old `printf 'Pipeline run …'` stub).
+ * Returns `true` if a named section is absent, empty/whitespace-only, guidance-comment-only,
+ * or a known pipeline placeholder (the old `printf 'Pipeline run …'` stub).
  *
  * Used by the implement step (write `Solution` only when bare, never clobber
  * a hand-authored change-map) and the record step (backfill `Solution` safety-net,
@@ -244,7 +244,7 @@ export function sectionIsBare(doc: MarkdownDocument, name: string): boolean {
     if (!doc.hasSection(name)) return true;
     const body = doc.getSection(name);
     if (body === null) return true;
-    const trimmed = body.trim();
+    const trimmed = body.replace(/<!--[\s\S]*?-->/g, '').trim();
     if (trimmed === '') return true;
     // Old pipeline placeholder: "Pipeline run <wbs> — …"
     if (/^Pipeline run \d{4}\b/.test(trimmed)) return true;
