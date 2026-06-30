@@ -1,7 +1,10 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+const originalSpawn = Bun.spawn;
+
 import {
     buildDailySummary,
     type CliOptions,
@@ -456,28 +459,20 @@ describe('writeSummary and ensureDir', () => {
 
 // ───────── getCcusageData ─────────
 
-function installFakeCcusage(dir: string, body: string): void {
-    const path = join(dir, 'ccusage');
-    writeFileSync(path, `#!/bin/sh\n${body}\n`, 'utf-8');
-    chmodSync(path, 0o755);
-}
-
 describe('getCcusageData', () => {
-    let shimDir: string;
-    let originalPath: string | undefined;
-
-    beforeEach(() => {
-        shimDir = mkdtempSync(join(tmpdir(), 'daily-summary-shim-'));
-        originalPath = process.env.PATH;
-    });
+    let spawnSpy: ReturnType<typeof spyOn> | undefined;
 
     afterEach(() => {
-        process.env.PATH = originalPath;
-        rmSync(shimDir, { recursive: true, force: true });
+        spawnSpy?.mockRestore();
     });
 
     test('returns null when ccusage binary is missing', async () => {
-        process.env.PATH = '/nonexistent';
+        spawnSpy = spyOn(Bun, 'spawn').mockImplementation((args, options) => {
+            if (args[0] === 'ccusage') {
+                throw new Error('ccusage not found');
+            }
+            return originalSpawn(args, options);
+        });
         const result = await getCcusageData('2026-04-17');
         expect(result).toBeNull();
     });
@@ -493,11 +488,19 @@ describe('getCcusageData', () => {
                 totalCost: 0.5,
             },
         };
-        installFakeCcusage(
-            shimDir,
-            `if [ "$1" = "--version" ]; then echo "1.0.0"; exit 0; fi\ncat <<'JSON'\n${JSON.stringify(payload)}\nJSON`,
-        );
-        process.env.PATH = `${shimDir}:${originalPath}`;
+        spawnSpy = spyOn(Bun, 'spawn').mockImplementation((args, options) => {
+            if (args[0] === 'ccusage') {
+                const isVersion = args[1] === '--version';
+                const stdoutText = isVersion ? '1.0.0' : JSON.stringify(payload);
+                return {
+                    stdout: new Response(stdoutText).body,
+                    stderr: new Response('').body,
+                    exited: Promise.resolve(0),
+                    exitCode: 0,
+                } as unknown as ReturnType<typeof Bun.spawn>;
+            }
+            return originalSpawn(args, options);
+        });
 
         const result = await getCcusageData('2026-04-17');
         expect(result).not.toBeNull();
@@ -506,19 +509,46 @@ describe('getCcusageData', () => {
     });
 
     test('returns null when ccusage exits non-zero', async () => {
-        installFakeCcusage(
-            shimDir,
-            `if [ "$1" = "--version" ]; then echo "1.0.0"; exit 0; fi\necho "boom" 1>&2\nexit 1`,
-        );
-        process.env.PATH = `${shimDir}:${originalPath}`;
+        spawnSpy = spyOn(Bun, 'spawn').mockImplementation((args, options) => {
+            if (args[0] === 'ccusage') {
+                const isVersion = args[1] === '--version';
+                if (isVersion) {
+                    return {
+                        stdout: new Response('1.0.0').body,
+                        stderr: new Response('').body,
+                        exited: Promise.resolve(0),
+                        exitCode: 0,
+                    } as unknown as ReturnType<typeof Bun.spawn>;
+                } else {
+                    return {
+                        stdout: new Response('').body,
+                        stderr: new Response('boom').body,
+                        exited: Promise.resolve(1),
+                        exitCode: 1,
+                    } as unknown as ReturnType<typeof Bun.spawn>;
+                }
+            }
+            return originalSpawn(args, options);
+        });
 
         const result = await getCcusageData('2026-04-17');
         expect(result).toBeNull();
     });
 
     test('returns null when ccusage produces invalid JSON', async () => {
-        installFakeCcusage(shimDir, `if [ "$1" = "--version" ]; then echo "1.0.0"; exit 0; fi\necho "not json"`);
-        process.env.PATH = `${shimDir}:${originalPath}`;
+        spawnSpy = spyOn(Bun, 'spawn').mockImplementation((args, options) => {
+            if (args[0] === 'ccusage') {
+                const isVersion = args[1] === '--version';
+                const stdoutText = isVersion ? '1.0.0' : 'not json';
+                return {
+                    stdout: new Response(stdoutText).body,
+                    stderr: new Response('').body,
+                    exited: Promise.resolve(0),
+                    exitCode: 0,
+                } as unknown as ReturnType<typeof Bun.spawn>;
+            }
+            return originalSpawn(args, options);
+        });
 
         const result = await getCcusageData('2026-04-17');
         expect(result).toBeNull();
@@ -638,7 +668,6 @@ describe('git-backed integration', () => {
 
     test('buildDailySummary populates tokenUsage when ccusage returns data', async () => {
         const today = todayLocal();
-        const shimDir = mkdtempSync(join(tmpdir(), 'daily-summary-bds-shim-'));
         const payload = {
             totals: {
                 inputTokens: 200,
@@ -649,12 +678,19 @@ describe('git-backed integration', () => {
                 totalCost: 1.25,
             },
         };
-        installFakeCcusage(
-            shimDir,
-            `if [ "$1" = "--version" ]; then echo "1.0.0"; exit 0; fi\ncat <<'JSON'\n${JSON.stringify(payload)}\nJSON`,
-        );
-        const originalPath = process.env.PATH;
-        process.env.PATH = `${shimDir}:${originalPath}`;
+        const spawnSpy = spyOn(Bun, 'spawn').mockImplementation((args, options) => {
+            if (args[0] === 'ccusage') {
+                const isVersion = args[1] === '--version';
+                const stdoutText = isVersion ? '1.0.0' : JSON.stringify(payload);
+                return {
+                    stdout: new Response(stdoutText).body,
+                    stderr: new Response('').body,
+                    exited: Promise.resolve(0),
+                    exitCode: 0,
+                } as unknown as ReturnType<typeof Bun.spawn>;
+            }
+            return originalSpawn(args, options);
+        });
         try {
             const summary = await buildDailySummary({
                 date: today,
@@ -667,15 +703,18 @@ describe('git-backed integration', () => {
             expect(summary.tokenUsage?.cacheTokens).toBe(100);
             expect(summary.platforms).toContain('Claude Code');
         } finally {
-            process.env.PATH = originalPath;
-            rmSync(shimDir, { recursive: true, force: true });
+            spawnSpy.mockRestore();
         }
     });
 
     test('buildDailySummary handles missing ccusage gracefully (skipCcusage=false)', async () => {
         const today = todayLocal();
-        const originalPath = process.env.PATH;
-        process.env.PATH = '/nonexistent';
+        const spawnSpy = spyOn(Bun, 'spawn').mockImplementation((args, options) => {
+            if (args[0] === 'ccusage') {
+                throw new Error('ccusage not found');
+            }
+            return originalSpawn(args, options);
+        });
         try {
             const summary = await buildDailySummary({
                 date: today,
@@ -686,7 +725,7 @@ describe('git-backed integration', () => {
             expect(summary.tokenUsage).toBeUndefined();
             expect(summary.platforms).not.toContain('Claude Code');
         } finally {
-            process.env.PATH = originalPath;
+            spawnSpy.mockRestore();
         }
     });
 });
@@ -747,7 +786,6 @@ describe('main entrypoint (in-process)', () => {
 
     test('prints token usage stats when ccusage returns data', async () => {
         const today = todayLocal();
-        const shimDir = mkdtempSync(join(tmpdir(), 'daily-summary-main-shim-'));
         const payload = {
             totals: {
                 inputTokens: 5,
@@ -758,12 +796,19 @@ describe('main entrypoint (in-process)', () => {
                 totalCost: 0.0123,
             },
         };
-        installFakeCcusage(
-            shimDir,
-            `if [ "$1" = "--version" ]; then echo "1.0.0"; exit 0; fi\ncat <<'JSON'\n${JSON.stringify(payload)}\nJSON`,
-        );
-        const originalPath = process.env.PATH;
-        process.env.PATH = `${shimDir}:${originalPath}`;
+        const spawnSpy = spyOn(Bun, 'spawn').mockImplementation((args, options) => {
+            if (args[0] === 'ccusage') {
+                const isVersion = args[1] === '--version';
+                const stdoutText = isVersion ? '1.0.0' : JSON.stringify(payload);
+                return {
+                    stdout: new Response(stdoutText).body,
+                    stderr: new Response('').body,
+                    exited: Promise.resolve(0),
+                    exitCode: 0,
+                } as unknown as ReturnType<typeof Bun.spawn>;
+            }
+            return originalSpawn(args, options);
+        });
         process.argv = ['bun', 'script', '--date', today, '--dry-run', '--no-git'];
         try {
             await main();
@@ -772,8 +817,7 @@ describe('main entrypoint (in-process)', () => {
             expect(output).toContain('Cost: $0.0123');
             expect(output).toContain('Claude Code');
         } finally {
-            process.env.PATH = originalPath;
-            rmSync(shimDir, { recursive: true, force: true });
+            spawnSpy.mockRestore();
         }
     });
 

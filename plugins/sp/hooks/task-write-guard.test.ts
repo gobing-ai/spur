@@ -45,12 +45,13 @@ function parseDecision(out: string): Decision {
 
 /** Drive the guard through the superskill SOURCE CLI (the real runtime, independent of the global install). */
 async function runViaRuntime(payload: unknown, env: Record<string, string> = {}): Promise<Decision> {
+    const localSpur = `bun run ${join(REPO_ROOT, 'apps', 'cli', 'src', 'index.ts')}`;
     const proc = Bun.spawn(['bun', 'run', SUPERSKILL_CLI, 'hook', 'run', 'sp', 'task-write-guard'], {
         cwd: REPO_ROOT,
         stdin: new TextEncoder().encode(JSON.stringify(payload)),
         stdout: 'pipe',
         stderr: 'pipe',
-        env: { ...process.env, CLAUDE_PROJECT_DIR: REPO_ROOT, ...env },
+        env: { ...process.env, CLAUDE_PROJECT_DIR: REPO_ROOT, SPUR_BIN: localSpur, ...env },
     });
     const out = await new Response(proc.stdout).text();
     await proc.exited;
