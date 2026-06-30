@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Strengthen sp dev-verify with mandatory Acceptance Criteria guard"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: H1
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-06-30T20:14:26.080Z"
-updated_at: 2026-06-30T20:14:26.082Z
+updated_at: 2026-06-30T20:47:19.854Z
 ---
 
 ## 0162. Strengthen sp dev-verify with mandatory Acceptance Criteria guard
@@ -144,14 +144,62 @@ cleanly enough for `task record`.
       verifier now surfaces the stale-reference/self-containment class correctly.
 
 ### Solution
-
-
+| File | Change | What / why |
+|------|--------|------------|
+| `plugins/sp/commands/dev-verify.md:2` | updated description | Describes verification as requirements plus Acceptance Criteria evidence, not requirements-only evidence. |
+| `plugins/sp/commands/dev-verify.md:31` | clarified `--bdd` | Makes AC checking automatic when AC exists and reserves `--bdd` for strict Gherkin scenario-to-test mapping. |
+| `plugins/sp/commands/dev-verify.md:42` | added AC guard section | Documents checklist/Gherkin AC evaluation, status rows, evidence expectations, and LLM-as-judge limits. |
+| `plugins/sp/skills/code-verification/SKILL.md:105` | renamed requirements gate | Keeps requirements traceability as the first completion gate. |
+| `plugins/sp/skills/code-verification/SKILL.md:119` | added AC guard | Defines per-AC statuses, evidence ladder, strict BDD behavior, and parseable AC answer table. |
+| `plugins/sp/skills/code-verification/SKILL.md:159` | expanded quality gate | Frames SECUA plus quality review and limits LLM-as-judge to blind-spot/advisory evidence unless grounded. |
+| `plugins/sp/skills/code-verification/SKILL.md:178` | updated aggregation | Folds core AC and blocker/major quality findings into PASS/PARTIAL/FAIL. |
+| `plugins/sp/skills/code-verification/references/verdict-schema.md:25` | added `acceptanceCriteria` | Extends the verdict contract with evidence-typed AC rows. |
+| `plugins/sp/skills/code-verification/references/verdict-schema.md:41` | updated aggregation docs | Documents requirement, AC, and quality-finding aggregation rules. |
+| `plugins/sp/skills/code-verification/references/secu-review.md:21` | adjusted severity gate effects | Makes blocker findings fail and unresolved major findings at least partial unless deferred/N/A. |
+| `plugins/sp/skills/code-verification/references/code-improvement.md:10` | clarified advisory lane | Prevents qualitative improvement candidates from certifying objective completion by themselves. |
+| `plugins/sp/tests/skill-structure.test.ts:186` | added R21 invariant | Locks the verifier contract so AC-first verification semantics cannot silently regress. |
 ### Testing
+Coverage: N/A (plugin verifier contract/docs plus structural invariant test; no runtime code path added).
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `plugins/sp/commands/dev-verify.md:31` documents automatic AC checking and strict `--bdd`; `plugins/sp/commands/dev-verify.md:42` adds the AC guard. |
+| R2 | MET | `plugins/sp/skills/code-verification/SKILL.md:105` keeps requirements traceability; `plugins/sp/skills/code-verification/SKILL.md:119` adds AC guard; `plugins/sp/skills/code-verification/SKILL.md:159` keeps SECUA/quality review. |
+| R3 | MET | `plugins/sp/skills/code-verification/SKILL.md:131` defines typed evidence: `test`, `command`, `static-ref`, `manual-review`, `llm-judge`, `n/a`. |
+| R4 | MET | `plugins/sp/skills/code-verification/SKILL.md:178` and `plugins/sp/skills/code-verification/references/verdict-schema.md:41` define aggregation across requirements, AC, and quality findings. |
+| R5 | MET | `plugins/sp/skills/code-verification/SKILL.md:149` and `plugins/sp/skills/code-verification/references/verdict-schema.md:68` define the parseable AC table; `plugins/sp/skills/code-verification/references/verdict-schema.md:25` adds `acceptanceCriteria`. |
+| R6 | MET | `plugins/sp/tests/skill-structure.test.ts:186` adds R21, asserting AC-first verifier semantics in command, skill, and verdict schema. |
+| R7 | MET | References were reviewed during implementation; shipped plugin docs deliberately avoid external reference names to preserve the R20 self-containment invariant. |
 
 
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: A task has Acceptance Criteria | MET | static-ref | `plugins/sp/commands/dev-verify.md:42` says non-empty AC must be evaluated without `--bdd`; `plugins/sp/skills/code-verification/SKILL.md:119` defines per-AC statuses and evidence. |
+| Scenario: Strict BDD verification is requested | MET | static-ref | `plugins/sp/commands/dev-verify.md:31` and `plugins/sp/skills/code-verification/SKILL.md:172` reserve `--bdd` for strict scenario-to-executable-evidence mapping. |
+| Scenario: Qualitative quality review is requested | MET | static-ref | `plugins/sp/skills/code-verification/SKILL.md:142` prevents `llm-judge` from clearing objective AC alone; `plugins/sp/skills/code-verification/references/code-improvement.md:10` frames qualitative improvement as advisory unless grounded. |
+| Checklist: dev-verify docs automatic AC | MET | static-ref | `plugins/sp/commands/dev-verify.md:31` and `plugins/sp/commands/dev-verify.md:42`. |
+| Checklist: code-verification three gates | MET | static-ref | `plugins/sp/skills/code-verification/SKILL.md:105`, `plugins/sp/skills/code-verification/SKILL.md:119`, `plugins/sp/skills/code-verification/SKILL.md:159`. |
+| Checklist: evidence ladder | MET | static-ref | `plugins/sp/skills/code-verification/SKILL.md:131` and `plugins/sp/skills/code-verification/references/verdict-schema.md:57`. |
+| Checklist: verdict aggregation | MET | static-ref | `plugins/sp/skills/code-verification/SKILL.md:178`, `plugins/sp/skills/code-verification/references/verdict-schema.md:41`, and `plugins/sp/skills/code-verification/references/secu-review.md:21`. |
+| Checklist: parseable AC verdict contract | MET | static-ref | `plugins/sp/skills/code-verification/SKILL.md:149`, `plugins/sp/skills/code-verification/SKILL.md:235`, and `plugins/sp/skills/code-verification/references/verdict-schema.md:25`. |
+| Checklist: regression invariant for 0161 miss class | MET | test | `plugins/sp/tests/skill-structure.test.ts:186`; `bun test plugins/sp/tests/skill-structure.test.ts` passed 8/0. |
+| Checklist: grounded references | MET | manual-review | Current sp docs plus requested local reference materials were reviewed; plugin output omits external dependency names by design to keep R20 green. |
+
+
+| Command | Result |
+|---------|--------|
+| `bun test plugins/sp/tests/skill-structure.test.ts` | PASS — 8 pass / 0 fail |
+| `bun run lint` | PASS — Biome clean, all workspace typechecks exit 0 |
+| `bun run test` | PASS — 2010 pass / 0 fail |
 ### Review
+**SECUA Review**
 
-
+| Priority | Dimension | Location | Finding | Recommendation | Status |
+|----------|-----------|----------|---------|----------------|--------|
+| P1 | Security / Correctness | — | No blocker findings. | None. | DONE |
+| P2 | Architecture / Usability | — | No major findings. The verifier contract is strengthened in docs/tests without adding a runtime subsystem. | None. | DONE |
+| P3 | Testing | `plugins/sp/tests/skill-structure.test.ts:186` | Structural invariant covers the AC-first verifier contract. | Keep R21 in the plugin gate when future verifier edits land. | DONE |
+| P4 | Documentation | — | No polish findings. | None. | DONE |
 ### References
 
 - `plugins/sp/commands/dev-verify.md`
@@ -173,3 +221,6 @@ cleanly enough for `task record`.
 ### History
 
 - 2026-06-30T20:14:26.082Z created (system)
+- 2026-06-30T20:45:29.744Z todo → wip (system)
+- 2026-06-30T20:45:42.621Z wip → testing (system)
+- 2026-06-30T20:47:19.854Z testing → done (system)
