@@ -13,14 +13,25 @@ updated_at: 2026-06-12T23:45:00.000Z
 
 ## Goal
 
-`sp:spur-dev` — the fat daily-workflow skill (design §12.1): planning half (description →
-feature + BDD AC → CLI-gated task decomposition) and execution half (pipeline runs + HITL),
-backing the `sp:dev-*` command family and `expert-*` subagents.
+The Spur daily-workflow skill suite: a **thin orchestration spine** (`sp:spur-dev`) that drives the
+planning→execution lifecycle and **dispatches deep, functionally-decomposed competency skills**
+(`sys-architecture`, `code-implementation`, `code-testing`, `code-verification`, `spec-decomposition`,
+with `spur-tdd` as a referenced discipline), plus a `sp:spur-cli` CLI facade — backing the `sp:dev-*`
+command family and the `expert-spur` / `super-coder` subagents (ADR-028).
 
 ## Scope
 
-The umbrella skill, the ADR-016-filtered dev-* command subset, the three subagents.
-**Out:** companions and the hook (H2).
+**In scope:**
+- The orchestration spine (`sp:spur-dev`) and the `phase → skill` binding in `task-pipeline.yaml`.
+- The functional competency skills (`sys-architecture`, `code-implementation`, `code-testing`,
+  `code-verification`, `spec-decomposition`) and `spur-tdd` as a referenced discipline.
+- The `sp:spur-cli` CLI facade (one reference per noun) and the `expert-spur` / `super-coder` subagents.
+- The ADR-016-filtered `sp:dev-*` command subset (byte-stable surface).
+
+**Out of scope:**
+- Companions and the write-guard hook (H2).
+- The gate-level rules engine (C).
+- Parallel/worktree batch execution (H1 task 0142, separately tracked).
 
 ## Acceptance Criteria
 
@@ -123,6 +134,95 @@ Feature: spur-dev umbrella skill
     Given the batch finishes
     When it terminates
     Then a structured batch report is emitted
+
+  # ── Functional decomposition (task 0161 — ADR-028: split the umbrella by function) ──
+  Scenario: R1 ADR records the functional split before any file changes
+    Given the functional split is not yet recorded in any ADR
+    When the restructure begins
+    Then a dated ADR entry supersedes the one-fat-skill posture of ADR-016/ADR-023
+    And no skill, agent, or command file is modified before that entry is committed
+
+  Scenario: R2 spur-cli is a CLI facade with one reference per noun
+    Given the spur CLI has the nouns tasks, features, rules, and workflows
+    When spur-cli is created
+    Then it has one reference file per noun and routes invocation guidance only
+    And it contains no competency logic
+
+  Scenario: R3 the four noun-skills are retired without content loss
+    Given spur-tasks, spur-features, spur-rules, and spur-workflows exist
+    When their content is re-homed into spur-cli reference files
+    Then the four noun-skills are removed and every reference to them points to spur-cli
+    And each retired skill's substantive guidance has a home in spur-cli
+
+  Scenario: R4 expert-spur replaces the four noun experts
+    Given expert-tasks, expert-features, expert-rules, and expert-workflows exist
+    When expert-spur is created loading spur-cli
+    Then the four noun experts are retired and references point to expert-spur
+    And expert-spur's trigger does not collide with the dev-workflow agents
+
+  Scenario: R5 super-coder absorbs the single-task lifecycle and expert-dev is retired
+    Given expert-dev and super-coder both delegate to the dev workflow
+    When the overlap is resolved
+    Then expert-dev is removed and super-coder drives both a single task end-to-end and a batch
+    And its triggers cover both without ambiguity against the /sp:dev-* commands
+
+  Scenario: R6 R7 R8 the competency skills exist on the functional axis
+    Given the fat skill owns design, implementation, and testing under one trigger
+    When the competencies are extracted
+    Then sys-architecture, code-implementation, and code-testing each exist as standalone skills
+    And each has a distinct trigger and owns its re-homed reference files
+
+  Scenario: R9 spur-tdd remains a referenced discipline skill
+    Given two mature systems disagree on whether TDD is its own skill
+    When the split is complete
+    Then spur-tdd remains a thin discipline skill referenced by code-implementation and code-testing
+    And it is not absorbed into either
+
+  Scenario: R10 spec-decomposition is extracted after the binding is proven
+    Given composition is fused to the orchestration spine today
+    When the spine-to-competency binding has been proven end-to-end
+    Then spec-decomposition is extracted as a standalone skill carrying its re-homed references
+    And the spine no longer inlines decomposition
+
+  Scenario: R12 the spine dispatches competencies and never inlines them
+    Given task-pipeline.yaml drives execution
+    When a task runs through the pipeline
+    Then each phase is bound to its competency skill and receives the WBS plus advisory payload
+    And spur-dev acts only as the dispatching spine
+
+  Scenario: R13 cross-cutting rules remain a single source of truth
+    Given cross-cutting.md is read by the spine and every competency
+    When the split is complete
+    Then exactly one cross-cutting.md exists and every competency links to it
+
+  Scenario: R15 the /sp:dev-* command surface is byte-stable
+    Given the dev-* commands are thin delegating wrappers
+    When delegation is re-pointed to the new owning skills
+    Then every command keeps its name and flags and only its delegation target changes
+
+  Scenario: R16 skills have disjoint trigger surfaces with resolving links
+    Given the spine, competencies, and spur-cli all carry triggers
+    When the assertion suite runs
+    Then no two skills share ambiguous trigger vocabulary
+    And exactly one cross-cutting.md exists, every cross-skill link resolves, and no retired name is still referenced
+
+  Scenario: R17 no cross-competency dependency leaks past the shared link
+    Given the split is complete
+    When any competency is operated end to end
+    Then it requires no step or reference owned by another competency
+    And the only cross-skill dependency is the shared cross-cutting.md link
+
+  Scenario: R19 the verification gate stays green after the restructure
+    Given all waves are complete
+    When the full verification gate runs
+    Then bun run lint, bun run test (incl. the new assertions), and bun run build all pass with no skips
+    And git status shows only intentional changes
+
+  Scenario: R20 the sp plugin is self-contained
+    Given the restructure re-homes content derived from rd3 and vendor references
+    When the plugin tree is scanned
+    Then no skill, agent, command, reference, config, or doc inside plugins/sp references vendors/ or the rd3 plugin path
+    And the self-containment assertion passes in the test gate
 ```
 
 ## Tasks
@@ -136,8 +236,13 @@ Feature: spur-dev umbrella skill
 
 ## Notes
 
-Two-halves contract is the sanctioned future split seam (risk R4). dev-* names continue
-rd3:dev-* for muscle memory; subset decided per candidate by the ADR-016 test (task 0065).
+The umbrella skill is decomposed by **function**, not by lifecycle phase (ADR-028, task 0161): a thin
+spine dispatches deep competency skills and never inlines them. A phase split (planning vs. execution)
+was considered and rejected — a phase boundary is temporal and relocates coupling rather than reducing
+it. The functional decomposition mirrors the migration origin's own architecture (~50 functional
+skills + thin spine); evidence reviewed at design time only (see task 0161), never a shipped
+dependency — `plugins/sp` is self-contained (ADR-028d). dev-* names continue for muscle memory; subset
+decided per candidate by the ADR-016 test (task 0065).
 
 ## History
 

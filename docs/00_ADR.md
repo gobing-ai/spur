@@ -707,3 +707,63 @@ task 0129's remaining slice).
 
 **Detail:** loader shape + config keys in `04_DESIGN.md §2`; `spur-config` module boundary in
 `03_ARCHITECTURE.md`.
+
+## ADR-028: `plugins/sp` Skills Decompose by Function, Not into a Monolith; Thin Spine Dispatches Competencies
+
+**Status:** Accepted · **Date:** 2026-06-30.
+
+**Decision.** ADR-023 rule (2) ("Fat Skills, thin others") is **refined, not reversed**: skills remain
+the cross-agent SSOT and commands/subagents remain thin wrappers of skills — but a skill's *internal
+granularity* is decided by **function**, not by collapsing the whole lifecycle into one umbrella.
+`sp:spur-dev` grew into an all-in-one skill owning design, implementation, testing, decomposition, and
+review under one trigger; this ADR commits to decomposing it along the **functional axis** into deep
+competency skills behind a thin orchestration spine. Specifically:
+
+**(a) Competency skills (deep, functional, independently triggerable):** `sys-architecture`
+(system-design / ADR judgment), `code-implementation` (implement + stack patterns), `code-testing`
+(coverage / gap analysis / extension), `code-verification` (review/verify — already split, kept),
+`spec-decomposition` (feature/spec → task batch). `spur-tdd` stays a thin **discipline** skill
+referenced by `code-implementation` and `code-testing`, not absorbed.
+
+**(b) Thin spine.** `sp:spur-dev` shrinks to an orchestration spine that owns the lifecycle FSM, the
+gates, and the section-write contract, and **binds each pipeline phase to a competency skill** in
+`config/workflows/task-pipeline.yaml` (phase → skill). The spine dispatches competencies and **never
+inlines** them.
+
+**(c) CLI facade.** A single `sp:spur-cli` skill (router pattern) replaces the per-noun skills
+`spur-tasks`/`spur-features`/`spur-rules`/`spur-workflows`, carrying **one reference file per `spur`
+noun**; a new noun adds exactly one reference file. The facade is invocation/dispatch guidance only —
+it does not absorb competency logic. One subagent `expert-spur` (loading `spur-cli`) replaces the four
+per-noun expert subagents; `expert-dev` retires into `super-coder` (which gains the single-task
+lifecycle role alongside batch).
+
+**(d) Invariants.** `cross-cutting.md` stays single-SSOT (one physical copy; competencies link to it,
+never copy). Skill trigger descriptions must be **mutually disjoint** so routing is unambiguous
+(machine-asserted). The `/sp:dev-*` command surface stays byte-stable across the split. The shipped
+`plugins/sp` plugin is **self-contained**: no skill, agent, command, reference, or doc inside it may
+reference `vendors/` or the external `rd3` plugin (`~/projects/cc-agents/plugins/rd3/`) — those are
+research-time evidence only, never a runtime or documentation dependency.
+
+**Why.** The risk in the umbrella skill is **conceptual coupling under one trigger surface**, not
+runtime context size (progressive disclosure already bounds that). A phase split (planning vs.
+execution) was rejected: a phase boundary is *temporal*, so it relocates coupling into shallow modules
+with a fat shared interface rather than reducing it. The functional axis yields deep modules with
+narrow interfaces, each reused outside the pipeline. This is the decomposition the migration's own
+origin (`rd3`) used — ~50 functional competency skills with a thin `orchestration-v2` spine that binds
+phase → skill and never inlines — and the umbrella skill was a regression from it; `code-verification`
+was already split by function, so a phase split would have introduced a second, conflicting
+decomposition axis into the same plugin. The router-facade pattern (one suite router + per-topic
+references) and TDD-as-standalone-discipline are corroborated by external references reviewed at design
+time (`vendors/gstack`, `vendors/Superpowers`) — used as evidence only, per invariant (d).
+
+**Supersedes:** the monolith reading of **ADR-023 (2)** — skills stay the SSOT and stay rich, but
+"rich" means a coherent competency, not the whole lifecycle. Corrects the dangling "design §12.1"
+citation in `spur-dev`'s SKILL.md (§12.1 governs markdown-as-SSOT, not skill granularity).
+
+**Relates:** extends ADR-016 (commands only where the LLM adds value) and ADR-026 (verification is a
+companion skill — the first functional split). Realized by task 0161 (feature H1), waved: ADR → CLI
+facade + subagent cleanup → competency extraction + spine↔competency binding proof → spine shrink +
+composition extraction + command re-point.
+
+**Detail:** destination model + the spine↔competency binding in `03_ARCHITECTURE.md §12`; skill/agent
+inventory in `04_DESIGN.md`; status in `05_FEATURES.md §9`.
