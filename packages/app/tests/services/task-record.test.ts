@@ -164,6 +164,9 @@ describe('renderTesting', () => {
         expect(out).toContain('| Requirement | Status | Evidence |');
         expect(out).toContain('| R1 | PASS | test passes |');
         expect(out).toContain('| R2 | PASS | lint clean |');
+        // P3 fix (task 0159): verdict-generated Testing must carry a coverage claim
+        // so `spur task check` does not warn about a missing coverage phrase.
+        expect(out).toContain('Coverage: N/A');
     });
 
     test('renders no-requirements row when empty', () => {

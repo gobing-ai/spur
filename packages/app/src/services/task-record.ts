@@ -167,7 +167,7 @@ export function renderTesting(v: VerifyVerdict): string {
         }
     }
 
-    lines.push('');
+    lines.push('- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)');
     return lines.join('\n');
 }
 

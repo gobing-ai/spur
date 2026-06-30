@@ -3,9 +3,9 @@
  * npm tarball, excluding test fixtures and OS junk, then inject `$schema`
  * directives so end users get IDE validation via the published schemas.
  *
- * Source config files do NOT carry `$schema` — adding them would break tests
- * in the monorepo dev environment where `@gobing-ai/spur` is a workspace
- * (node module resolution can't find it).
+ * Source config files MAY already carry a `$schema` directive — those are
+ * left untouched. Files without one get an unquoted `$schema:` prepended so
+ * end-user IDE validation resolves against the schemas shipped with the CLI.
  */
 import { cp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
@@ -28,8 +28,8 @@ export async function bundleConfig(target: string | undefined): Promise<void> {
     });
 
     // Inject $schema directives so end-user IDE validation resolves against
-    // the schemas shipped alongside the CLI in the npm package.
-    // Source files deliberately omit $schema to keep dev-env tests passing.
+    // the schemas shipped alongside the CLI in the npm package. Files that
+    // already carry a $schema directive are skipped to avoid duplicate keys.
     const injected = await injectSchemas(target, '');
 
     console.log(`Bundled config -> ${target} (fixtures/OS junk excluded, ${injected} $schema directives injected)`);
@@ -58,6 +58,10 @@ async function injectSchemas(dir: string, relPrefix: string): Promise<number> {
             const schema = schemaFor(rel);
             if (schema) {
                 const content = await readFile(full, 'utf-8');
+                // Skip files that already carry a $schema directive (quoted or
+                // unquoted) — duplicating it produces a "Map keys must be
+                // unique" YAMLParseError in every bundled workflow that has one.
+                if (/^\s*(?:\$schema|"\$schema")\s*:/m.test(content)) continue;
                 await writeFile(full, `$schema: "${schema}"\n${content}`);
                 count++;
             }
