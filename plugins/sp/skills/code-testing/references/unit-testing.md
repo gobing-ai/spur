@@ -103,8 +103,8 @@ task to `testing` blindly. Before the transition:
 3. Add minimal real `Design` content if needed to avoid warning-driven `--force` usage.
 4. Only then call `spur task update <wbs> testing`.
 
-Never substitute `--force` for honest backfill. The section-editing rules live in
-[cross-cutting.md](cross-cutting.md). (This guard governs the Spur task corpus and is stack-agnostic.)
+Never substitute `--force` for honest backfill. The section-editing rules live in the spine's
+`cross-cutting.md` (`sp:spur-dev`). (This guard governs the Spur task corpus and is stack-agnostic.)
 
 ## Coverage target
 

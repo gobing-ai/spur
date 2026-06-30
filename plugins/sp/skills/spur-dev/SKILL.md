@@ -1,6 +1,6 @@
 ---
 name: spur-dev
-description: The fat daily-workflow umbrella skill for the Spur planning+execution pipeline. Converts vague feature descriptions into CLI-validated feature files with BDD acceptance criteria, decomposes them into task batches, and runs tasks through the execution pipeline with HITL gating. Delegates every deterministic step to CLI verbs; contains zero validation logic. Triggers on "plan a feature", "decompose this", "run the task", "execute task", "dev workflow", "create tasks from this", "run pipeline", or operating the full spur planning lifecycle.
+description: The thin orchestration spine for the Spur planning→execution lifecycle. Drives the workflow — intake, the feature-check and batch-create gates, the execution pipeline (precheck→implement→test→review→verify→record→done), and HITL gating — and DISPATCHES deep competency skills for the work itself (sp:spec-decomposition, sp:sys-architecture, sp:code-implementation, sp:code-testing, sp:code-verification); it never inlines them. Owns the lifecycle FSM, the gates, and the CLI-gated section-write contract; contains zero validation logic. Triggers on "run the pipeline", "drive this task", "run the task through the pipeline", "execute the dev workflow", "continue the pipeline run", "plan a feature end to end", or operating the full spur planning→execution lifecycle. For the work itself — decompose / design / implement / test / review — the competency skills trigger directly.
 license: Apache-2.0
 metadata:
   author: spur
@@ -33,18 +33,31 @@ metadata:
     emoji: "🔄"
 ---
 
-# Spur Dev — The Daily-Workflow Umbrella Skill
+# Spur Dev — The Orchestration Spine
 
-`sp:spur-dev` is the fat skill that drives the full planning-to-execution workflow. It converts
-vague intent into shipped work: plan a feature with BDD acceptance criteria, decompose it into
-tasks validated by the CLI, then run those tasks through the execution pipeline with human-in-the-loop
-gates. Every write to the corpus goes through a CLI verb that validates before writing — the
-skill knows *how to think*; the CLI knows *what is valid*.
+`sp:spur-dev` is the **thin orchestration spine** that drives the full planning→execution lifecycle.
+It converts vague intent into shipped work by *orchestrating*, not by doing the work itself: it runs
+the gates (feature-check, batch-create) and the execution pipeline with human-in-the-loop control,
+and **dispatches deep competency skills** for each unit of work — it never inlines them. Every write
+to the corpus goes through a CLI verb that validates before writing — the spine knows *how to drive
+the lifecycle*; the competency skills know *how to do each job*; the CLI knows *what is valid*.
 
-The two halves are a **sanctioned future split seam** (design §12.1, risk R4). Today they are one
-skill because they share vocabulary, gates, and the same CLI surface. When size hurts, split at the
-half boundary — each half's full procedure already lives in its own reference file and owns its
-complete workflow independently.
+The skill was decomposed **by function** (ADR-028): design, decomposition, implementation, testing,
+and verification each became a standalone competency skill, leaving this spine to orchestrate them.
+
+**The competencies the spine dispatches:**
+
+| Unit of work | Competency skill |
+|--------------|------------------|
+| Design / ADR judgment (shape a task) | `sp:sys-architecture` |
+| Feature/spec → task batch | `sp:spec-decomposition` |
+| Implement to spec | `sp:code-implementation` |
+| Coverage / test extension | `sp:code-testing` |
+| Review / requirements verification | `sp:code-verification` |
+| Test-first discipline (composed in) | `sp:spur-tdd` |
+
+CLI verb usage for any `spur` noun lives in the `sp:spur-cli` facade. This spine owns only the
+lifecycle, the gates, and the section-write contract (`cross-cutting.md`).
 
 ## The two halves at a glance
 
@@ -89,7 +102,7 @@ reference for the half you're operating; do not duplicate its content here.
 | Intake | planning | — (prompt work) | [planning-workflow.md](references/planning-workflow.md) · [product-planning.md](references/product-planning.md) |
 | Feature create + AC | planning | `spur feature create` | [planning-workflow.md](references/planning-workflow.md) · [ac-style-guide.md](references/ac-style-guide.md) |
 | Feature check gate | planning | `spur feature check` | [planning-workflow.md](references/planning-workflow.md) |
-| Decomposition | planning | `task-batch.schema.json` | [decomposition.md](references/decomposition.md) |
+| Decomposition (dispatch) | planning | `task-batch.schema.json` | `sp:spec-decomposition` competency — the spine dispatches, does not inline |
 | Batch-create gate | planning | `spur task batch-create` | [planning-workflow.md](references/planning-workflow.md) |
 | Design doc | planning | — (prompt work; §4.5/T9) | [planning-workflow.md](references/planning-workflow.md) |
 | Refine | planning | `spur task update --section` | [planning-workflow.md](references/planning-workflow.md) |
@@ -176,10 +189,12 @@ CLI does.
 
 **Supporting detail:**
 
-- [references/decomposition.md](references/decomposition.md) — the `task-batch.schema.json`
-  contract, template-variant selection, scenario-to-task mapping conventions.
+- **`sp:spec-decomposition`** — the decomposition competency the spine dispatches at the decompose
+  step: the `task-batch.schema.json` contract, template-variant selection, scenario-to-task mapping,
+  the granularity standard. The spine runs the `batch-create` gate; the competency produces the batch.
 - [references/ac-style-guide.md](references/ac-style-guide.md) — BDD scenario authoring:
-  R-numbering, the two AC tiers, scenario-title stability, Gherkin template usage.
+  R-numbering, the two AC tiers, scenario-title stability, Gherkin template usage. Shared planning
+  convention (authored at feature-create, consumed by `sp:spec-decomposition`).
 - [references/dev-operations.md](references/dev-operations.md) — the per-operation catalog: what
   each `/sp:dev-*` operation does (unit/review/verify/run/refine/plan/...). The SSOT for operation
   definitions; the execution workflow links here rather than restating them.

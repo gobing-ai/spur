@@ -2,6 +2,7 @@
 name: decomposition
 description: Task decomposition conventions — the task-batch.schema.json contract, template-variant selection, scenario-to-task mapping.
 see_also:
+  - spec-decomposition
   - spur-dev
 # Granularity knobs — tune the decomposition standard here (judgment guidance, not
 # runtime-enforced). The skill cites these; editing them adjusts the agent's sizing.
@@ -165,7 +166,7 @@ Two rules make a parent verifiable:
 
    | Sub-task | Covers | Surface | Title | Status |
    |----------|--------|---------|-------|--------|
-   | `[0110](0110_<slug>.md)` | R1, R2 | docs | <child title> | ✅ done / ⏳ todo / 🔶 wip |
+   | `[0110](0110_<slug>.md)` (link format) | R1, R2 | docs | <child title> | ✅ done / ⏳ todo / 🔶 wip |
 
    The **Surface** column is the blast-radius signal for sequencing: `docs` (skill/command markdown,
    no executable), `code` (app/package TS, has tests), or `infra` (DB schema/migration, workflow

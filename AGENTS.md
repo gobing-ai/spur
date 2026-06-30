@@ -193,7 +193,12 @@ Every command supports `--json` for machine consumption.
 
 > **Planning layer (ADR-020–023).** The planning layer migrated from `cc-agents/rd3` — `spur task`
 > and `spur feature` — shipped in Roadmap Phase 1.5 (Waves 0–2 + 4–5 done; `04_DESIGN.md §7` filled).
-> The spec pipeline ships as a `plugins/sp` fat skill (`sp:spur-dev`). Two slices remain deferred:
+> The spec pipeline ships in `plugins/sp` as a **thin orchestration spine** (`sp:spur-dev`) that
+> dispatches deep, functionally-decomposed competency skills (`sp:sys-architecture`,
+> `sp:spec-decomposition`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, with
+> `sp:spur-tdd` as a referenced discipline), plus a single `sp:spur-cli` CLI facade (one reference per
+> `spur` noun) and the `expert-spur` / `super-coder` subagents (ADR-028, task 0161). Two slices remain
+> deferred:
 > the **local board + launcher** (postponed behind the server/web design task, ADR-021.b), and the
 > **`spur task migrate`** verb (reserved A17 — one-time corpus normalization gated on the board
 > cutover, `04_DESIGN.md §7.1`; the `corpus-migrator` service is complete but the CLI verb is not

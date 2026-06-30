@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-06-30T07:01:29.766Z"
-updated_at: 2026-06-30T18:32:12.883Z
+updated_at: 2026-06-30T18:50:57.391Z
 ---
 
 ## 0161. Split sp:spur-dev at the lifecycle-half seam into planning (sp:spur-plan) and execution (sp:spur-dev)
@@ -357,21 +357,21 @@ mirrors rd3 reaching ~50 skills iteratively, not in one leap.
 
 **Wave C — Spine shrink + composition extraction + command re-point**
 
-- [ ] Step C.1 — Create `spec-decomposition` (R10): `git mv` `decomposition.md` + `ac-style-guide.md`;
+- [x] Step C.1 — Create `spec-decomposition` (R10): `git mv` `decomposition.md` + `ac-style-guide.md`;
   bind the decompose phase to it.
-- [ ] Step C.2 — Shrink `spur-dev` to the thin spine (R14): strip competency narrative from SKILL.md +
+- [x] Step C.2 — Shrink `spur-dev` to the thin spine (R14): strip competency narrative from SKILL.md +
   trigger; keep `cross-cutting.md` here as the single SSOT (R13); narrow trigger to pipeline vocabulary.
-- [ ] Step C.3 — Re-point all 13 `/sp:dev-*` command delegations to the new owners; names/flags
+- [x] Step C.3 — Re-point all 13 `/sp:dev-*` command delegations to the new owners; names/flags
   unchanged (R15).
-- [ ] Step C.4 — Add/extend the full assertion suite (R16): disjoint triggers, exactly-one
+- [x] Step C.4 — Add/extend the full assertion suite (R16): disjoint triggers, exactly-one
   cross-cutting.md, all cross-skill links resolve, no retired name referenced, no cross-competency leak
   (R17).
 
 **Wave D — Sync + validate**
 
-- [ ] Step D.1 — Full doc-map sync (R18): `AGENTS.md`, `04_DESIGN.md`, `05_FEATURES.md §9`, feature H1,
+- [x] Step D.1 — Full doc-map sync (R18): `AGENTS.md`, `04_DESIGN.md`, `05_FEATURES.md §9`, feature H1,
   all `see_also` frontmatter — same commit as the drift-creating change.
-- [ ] Step D.2 — Validate (R19): `bun run lint` -> `bun run test` (incl. assertions, no skips) ->
+- [x] Step D.2 — Validate (R19): `bun run lint` -> `bun run test` (incl. assertions, no skips) ->
   `bun run build`; `git status` clean of unintended diffs; manually dry-trigger one phrase per new
   skill and confirm correct routing. Run `spur feature refresh H1`.
 ### Solution

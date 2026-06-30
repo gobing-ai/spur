@@ -81,8 +81,8 @@ the skill can react to.
 
 **Default: do not decompose.** A clean feature does not automatically become many tasks. The
 default outcome is one task whose `## Plan` carries the implementation steps; splitting is the
-exception you justify with the rubric. See [decomposition.md → Default to NOT
-decomposing](decomposition.md) — read it before this step.
+exception you justify with the rubric. See the `sp:spec-decomposition` skill ("Default to NOT
+decomposing") — read it before this step.
 
 1. **Score the feature with the rubric first.** Compute E/D/L/C/R for the *whole* feature. Record
    the assessment (this is a required artifact, not optional):
@@ -112,7 +112,7 @@ Decomposition heuristics (apply only after deciding to decompose):
   *"Rubric: E2 D1 L1 C1 R2 = 7 → decompose (force: R=high)."*) — the assessment artifact the
   gate below checks for.
 
-The batch JSON is the LLM→CLI contract — see [decomposition.md](decomposition.md) for the
+The batch JSON is the LLM→CLI contract — see the `sp:spec-decomposition` skill for the
 full schema and conventions.
 
 ## Step 5: Batch-create gate
@@ -147,7 +147,7 @@ feature's `## Tasks` block on next `spur feature refresh`.
 
 **If you decomposed a parent task into sub-task files** (the children carry `parent_wbs`), write the
 **sub-task roster into the parent's `## Plan`** now — in the same step. A parent without a roster
-cannot be checked for completeness. See [decomposition.md → Parent (umbrella) tasks](decomposition.md#parent-umbrella-tasks)
+cannot be checked for completeness. See `sp:spec-decomposition` ("Parent (umbrella) tasks")
 for the roster format and the parent-completion rule.
 
 ## Step 5.5: Design doc (conditional)
