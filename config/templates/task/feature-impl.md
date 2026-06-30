@@ -54,6 +54,8 @@ updated_at: "{{ CREATED_AT }}"
 
 ### References
 
+{{ FEATURE_ID }}
+
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History

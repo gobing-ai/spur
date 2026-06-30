@@ -134,6 +134,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             'spur-features',
             'spur-rules',
             'spur-workflows',
+            'spur-plan',
             'expert-tasks',
             'expert-features',
             'expert-rules',

@@ -11,26 +11,78 @@ The `sp` plugin is the Claude Code plugin surface for the Spur toolkit. It provi
 
 ```
 plugins/sp/
-├── skills/                          # Domain knowledge + workflow documentation (13 skills)
+├── skills/                          # Domain knowledge + workflow documentation (12 skills)
 │   ├── brainstorm/                  # Structured ideation workflow (v1.0.0)
+│   │   ├── agents/openai.yaml
+│   │   ├── examples/ideation-example.md
+│   │   └── references/workflows.md
 │   ├── code-implementation/         # Implementation competency (v1.0)
+│   │   └── references/
+│   │       ├── debugging.md
+│   │       └── implementation-patterns.md
 │   ├── code-testing/                # Testing / coverage competency (v1.0)
-│   ├── code-verification/           # Verify + SECU review (backs dev-verify/dev-review) (v1.0)
+│   │   └── references/
+│   │       ├── unit-testing.md
+│   │       └── stacks/
+│   │           ├── bun-ts.md
+│   │           ├── go.md
+│   │           └── python.md
+│   ├── code-verification/           # Verify + SECUA review (v1.0)
+│   │   └── references/
+│   │       ├── code-improvement.md
+│   │       ├── secu-review.md
+│   │       └── verdict-schema.md
 │   ├── daily-summary/               # Daily summary report generator (v1.0.0)
+│   │   ├── agents/openai.yaml
+│   │   ├── scripts/daily-summary.ts
+│   │   ├── scripts/logger.ts
+│   │   └── tests/daily-summary.test.ts
 │   ├── doc-evolve/                  # Key-document evolution per constitution (v1.0)
+│   │   └── references/operations.md
 │   ├── dogfood-testing/             # Dogfood backbone — 4-phase protocol + report (v1.0)
+│   │   └── references/
+│   │       ├── monitor-ledger.md
+│   │       └── report-template.md
 │   ├── spec-decomposition/          # Feature/spec → task-batch competency (v1.0)
+│   │   └── references/decomposition.md
 │   ├── spur-cli/                    # CLI facade: one reference per `spur` noun (v1.0)
+│   │   └── references/
+│   │       ├── tasks.md
+│   │       ├── features.md
+│   │       ├── rules.md
+│   │       ├── workflows.md
+│   │       ├── tasks/verbs.md
+│   │       ├── tasks/section-editing.md
+│   │       ├── features/verbs.md
+│   │       ├── features/acceptance-criteria.md
+│   │       ├── features/roadmap-priority.md
+│   │       ├── rules/operations.md
+│   │       ├── rules/authoring-rules.md
+│   │       ├── workflows/operations.md
+│   │       ├── workflows/authoring-workflows.md
+│   │       └── workflows/validation-and-extension.md
 │   ├── spur-dev/                    # Thin planning→execution orchestration spine (v1.1)
-│   ├── spur-plan/                   # Front-half planning pipeline (thin stub) (v1.0.0)
-│   ├── spur-tdd/                    # TDD workflow companion (v1.0)
+│   │   └── references/
+│   │       ├── dev-operations.md
+│   │       ├── execution-batch.md
+│   │       ├── feature-link-helper.md
+│   │       ├── product-planning.md
+│   │       ├── cross-cutting.md
+│   │       ├── ac-style-guide.md
+│   │       ├── execution-workflow.md
+│   │       └── planning-workflow.md
+│   ├── spur-tdd/                    # TDD workflow companion (v1.0.0)
 │   └── sys-architecture/            # Architecture / ADR judgment competency (v1.0)
+│       └── references/decision-method.md
 ├── commands/                        # Slash command definitions (19)
 ├── agents/                          # Specialist subagent definitions (2)
 ├── hooks/                           # Hook definitions + guard scripts
 │   ├── hooks.json
 │   ├── task-write-guard.ts          # PreToolUse guard — task-corpus write protection
 │   └── task-write-guard.test.ts     # Unit tests for the guard
+├── tests/                           # Plugin-structure tests
+│   └── skill-structure.test.ts
+├── plugin.json                      # Marketplace entry
 └── README.md                        # This file (lives at plugins/README.md)
 ```
 
@@ -42,25 +94,25 @@ plugins/sp/
 
 | Skill | Version | Platforms | Domain |
 |-------|---------|-----------|--------|
-| `spur-dev` | 1.1 | claude-code, codex, antigravity, opencode, openclaw | Thin orchestration spine — drives planning→execution, gates, HITL, and dispatches competencies; never inlines implementation/testing/decomposition/review |
-| `spur-plan` | 1.0.0 | claude-code, codex, antigravity, opencode, openclaw | Front-half planning pipeline — **thin stub placeholder**; `sp:spur-dev` owns the full planning+execution narrative and `/sp:dev-plan` delegates directly to it |
-| `spur-cli` | 1.0 | claude-code, codex, antigravity, opencode, openclaw | CLI facade — one reference per `spur` noun (`task`, `feature`, `rule`, `workflow`) |
-| `sys-architecture` | 1.0 | claude-code, codex, antigravity, opencode, openclaw | Architecture / ADR judgment before implementation |
-| `spec-decomposition` | 1.0 | claude-code, codex, antigravity, opencode, openclaw | Feature/spec → validated task-batch decomposition |
-| `code-implementation` | 1.0 | claude-code, codex, antigravity, opencode, openclaw | Implementation competency — task-driven code changes and Solution change-map |
-| `code-testing` | 1.0 | claude-code, codex, antigravity, opencode, openclaw | Testing competency — run tests, measure coverage, extend targeted tests |
-| `code-verification` | 1.0 | claude-code, codex, antigravity, opencode, openclaw | Requirements-traceability verdict (PASS/PARTIAL/FAIL) + SECU code review — backs `/sp:dev-verify` and `/sp:dev-review`; links broader code-improvement candidates out of review findings |
-| `dogfood-testing` | 1.0 | claude-code, codex, antigravity, opencode, openclaw | Dogfood backbone — drives a testee end-to-end with bounded auto-fix, a live monitor ledger, and a structured report; backs `/sp:dev-dogfood` |
-| `spur-tdd` | 1.0.0 | claude-code, codex, antigravity, opencode, openclaw | TDD workflow companion — red-green-refactor guidance for the execution half |
+| `spur-dev` | 1.1 | claude-code, codex, openclaw, opencode, antigravity | Thin orchestration spine — drives planning→execution, gates, HITL, and dispatches competencies; never inlines implementation/testing/decomposition/review |
+| `spur-cli` | 1.0 | claude-code, codex, openclaw, opencode, antigravity | CLI facade — one reference per `spur` noun (`task`, `feature`, `rule`, `workflow`), each with verb tables, flag guides, `--json` shapes, and write-contract rules |
+| `sys-architecture` | 1.0 | claude-code, codex, openclaw, opencode, antigravity | Architecture / ADR judgment — module boundaries, data flow, transport/storage/auth choices, build-vs-extend decisions |
+| `spec-decomposition` | 1.0 | claude-code, codex, openclaw, opencode, antigravity | Feature/spec → validated task-batch decomposition — scenario-to-task mapping, variant selection, granularity sizing, batch-JSON production |
+| `code-implementation` | 1.0 | claude-code, codex, openclaw, opencode, antigravity | Implementation competency — task-driven code changes, stack-pattern selection, root-cause debugging, and Solution change-map production |
+| `code-testing` | 1.0 | claude-code, codex, openclaw, opencode, antigravity | Testing competency — run tests, measure coverage, categorize gaps, extend targeted tests with per-stack adapters (Bun/TS, Go, Python) |
+| `code-verification` | 1.0 | claude-code, codex, openclaw, opencode, antigravity | Requirements-traceability verdict (PASS/PARTIAL/FAIL) + SECUA code review (Security, Efficiency, Correctness, Usability, Architecture) — backs `/sp:dev-verify` and `/sp:dev-review`; links broader code-improvement candidates out of review findings |
+| `dogfood-testing` | 1.0 | claude-code, codex, openclaw, opencode, antigravity | Dogfood backbone — drives a testee end-to-end with bounded auto-fix, a live monitor ledger, and a structured report; backs `/sp:dev-dogfood` |
+| `spur-tdd` | 1.0.0 | claude-code, codex, antigravity, opencode, openclaw | TDD workflow companion — red-green-refactor cycle, behavior-first test design, AAA structure, data builders, and mock-at-boundary anti-patterns |
 | `brainstorm` | 1.0.0 | claude-code, codex, antigravity, opencode, openclaw | Structured ideation workflow — generate solution options with trade-offs, confidence scoring; delegates verification to `cc:anti-hallucination` |
-| `daily-summary` | 1.0.0 | claude-code, codex, antigravity, opencode, openclaw | Daily summary report generator — orchestrates ccusage CLI + git history into structured markdown |
-| `doc-evolve` | 1.0 | claude-code, codex, antigravity, opencode, openclaw | Key-document evolution per `docs/99_PROJECT_CONSTITUTION.md` — drift audits, same-commit sync checks, frontmatter-contract verification, lesson-append |
+| `daily-summary` | 1.0.0 | claude-code, codex, antigravity, opencode, openclaw | Daily summary report generator — orchestrates ccusage CLI + git history into structured markdown summaries |
+| `doc-evolve` | 1.0 | claude-code, codex, openclaw, opencode, antigravity | Key-document evolution per `docs/99_PROJECT_CONSTITUTION.md` — drift audits, same-commit sync checks, frontmatter-contract verification, and machine-appended lessons |
 
 Each skill directory contains:
 
 - `SKILL.md` — Main documentation with YAML frontmatter (`name`, `description`, `metadata.version`, `metadata.platforms`, `metadata.interactions`, `openclaw.emoji`, etc.)
-- `references/` — Deep-dive docs where the skill warrants them (e.g. `spur-cli` ships one reference per CLI noun; `spur-dev` carries BDD and pipeline references)
+- `references/` — Deep-dive docs where the skill warrants them (e.g. `spur-cli` ships one reference per CLI noun plus per-noun sub-references for verbs, authoring, and operations; `spur-dev` carries BDD, planning, execution, and batch references; `code-testing` ships per-stack adapters)
 - Some skills (`daily-summary`) ship executable TypeScript under `scripts/` for data-collection
+- Some skills (`brainstorm`, `daily-summary`) carry `agents/openai.yaml` for multi-model dispatch
 
 **Design principle:** Skills are **knowledge, not execution**. They describe *what to do and why*; the `spur` CLI performs every deterministic, corpus-mutating operation and validates before writing. Skills contain zero validation logic — the CLI is the gate.
 
@@ -72,7 +124,7 @@ There are **19 commands**, organized by the CLI surface they wrap:
 
 | Prefix | Count | Delegates To | Purpose |
 |--------|-------|-------------|---------|
-| `dev-*` | 13 | `sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:brainstorm`, `sp:dogfood-testing`, inline | The dev-workflow surface — `dev-run` full mode/refine/plan/runall → spine; implement mode → implementation; unit → testing; review/verify → verification; brainstorm/dogfood → their skills; git ops inline |
+| `dev-*` | 13 | `sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:brainstorm`, `sp:dogfood-testing`, inline | The dev-workflow surface — `dev-run full` mode → spine; `dev-plan` → spine planning half; `dev-refine` → spine refine op; `dev-runall` → spine batch driver; `dev-review`/`dev-verify` → verification; `dev-unit` → testing; `dev-brainstorm` → brainstorm; `dev-dogfood` → dogfood-testing; `dev-fixall`/`dev-gitmsg`/`dev-changelog`/`dev-handover` → inline procedures |
 | `rule-*` | 3 | `sp:spur-cli` | The rule surface — `rule-add`, `rule-refine`, `rule-scan` |
 | `workflow-*` | 2 | `sp:spur-cli` | The workflow surface — `workflow-add`, `workflow-refine` |
 | `spur-init` | 1 | `sp:doc-evolve` | Project bootstrap (`spur init`) with doc-evolve integration |
@@ -97,6 +149,7 @@ Each agent has:
 - `skills: [sp:<skill-name>]` — bound to one skill (`expert-spur`) or two (`sp:spur-dev` + `sp:dogfood-testing` for `super-coder`)
 - `model: inherit` — inherits the parent session's model
 - `color` — roster display accent
+- `tools` — allowed tool set (`Read`, `Grep`, `Glob`, `Bash`, `Skill`)
 
 **Design principle:** Agents are **delegates, not implementors**. They never contain domain logic. `expert-spur` routes CLI corpus work to `sp:spur-cli`; `super-coder` drives the single-task/batch loop (the algorithm lives in `sp:spur-dev/references/execution-batch.md`) without reaching into individual pipeline steps. For a single well-scoped operation, the matching `/sp:*` command is lighter; for work spanning multiple phases or a batch, the agent provides an isolated context window.
 
@@ -139,7 +192,6 @@ graph TB
 
     subgraph "Knowledge Layer"
         SKILL_DEV["spur-dev<br/>Thin orchestration spine"]
-        SKILL_PLAN["spur-plan<br/>Front-half planning pipeline"]
         SKILL_CLI["spur-cli<br/>CLI noun facade"]
         SKILL_IMPL["code-implementation<br/>Implementation competency"]
         SKILL_TEST["code-testing<br/>Testing competency"]
@@ -149,6 +201,8 @@ graph TB
         SKILL_BS["brainstorm<br/>Structured ideation"]
         SKILL_DS["daily-summary<br/>Daily report generator"]
         SKILL_DOC["doc-evolve<br/>Document drift + sync"]
+        SKILL_DOG["dogfood-testing<br/>Dogfood protocol + report"]
+        SKILL_TDD["spur-tdd<br/>TDD workflow companion"]
     end
 
     subgraph "Execution Layer"
@@ -169,24 +223,26 @@ graph TB
     CMD -->|"Skill(sp:code-verification, ...)"| SKILL_VERIFY
     CMD -->|"Skill(sp:spur-cli, ...)"| SKILL_CLI
     CMD -->|"Skill(sp:doc-evolve, ...)"| SKILL_DOC
+    CMD -->|"Skill(sp:brainstorm, ...)"| SKILL_BS
+    CMD -->|"Skill(sp:dogfood-testing, ...)"| SKILL_DOG
 
     %% Agent → Skill bindings
     AGENT -->|"skills: [sp:spur-cli]"| SKILL_CLI
     AGENT -->|"skills: [sp:spur-dev, sp:dogfood-testing]"| SKILL_DEV
 
     %% Hook → Script
-    HOOK -->|"bun task-write-guard.ts"| SCRIPT
+    HOOK -->|"superskill hook run"| SCRIPT
 
     %% Script → CLI resolve
     SCRIPT -->|"spur task resolve"| CLI
 
     %% Skill → CLI delegations
-    SKILL_DEV -->|"spur task/feature/run"| CLI
-    SKILL_PLAN -->|"spur feature/task"| CLI
-    SKILL_TASKS -->|"spur task"| CLI
-    SKILL_FEAT -->|"spur feature"| CLI
-    SKILL_RULES -->|"spur rule"| CLI
-    SKILL_WF -->|"spur workflow"| CLI
+    SKILL_DEV -->|"spur task/feature/workflow"| CLI
+    SKILL_CLI -->|"spur task/feature/rule/workflow"| CLI
+    SKILL_IMPL -->|"spur task update --section"| CLI
+    SKILL_VERIFY -->|"spur task check/verdict/record"| CLI
+    SKILL_TDD -->|"spur task"| CLI
+    SKILL_DOG -->|"spur workflow run"| CLI
     SKILL_DOC -->|"spur task/feature"| CLI
 
     %% CLI → Corpus
@@ -201,7 +257,7 @@ graph TB
     classDef corpus fill:#f59e0b,color:#fff,stroke:#d97706
 
     class CMD,AGENT,HOOK entry
-    class SKILL_DEV,SKILL_PLAN,SKILL_TASKS,SKILL_FEAT,SKILL_RULES,SKILL_WF,SKILL_BS,SKILL_DS,SKILL_DOC knowledge
+    class SKILL_DEV,SKILL_CLI,SKILL_IMPL,SKILL_TEST,SKILL_VERIFY,SKILL_DECOMP,SKILL_ARCH,SKILL_BS,SKILL_DS,SKILL_DOC,SKILL_DOG,SKILL_TDD knowledge
     class CLI,SCRIPT execution
     class CORPUS,RULES,WFS corpus
 ```
@@ -276,7 +332,7 @@ All planning entities (tasks and features) share a common lifecycle, managed by 
 | **record** | `spur task record <wbs>` | — | Write Testing/Review from a verify verdict; optional Solution backfill (never transitions to `done`) |
 | **refresh** | `spur task refresh` | `spur feature refresh` | Index + feature-tree roll-up regeneration |
 
-The **workflow** and **rule** engines have their own lifecycles (author → validate → run → trace / refine), documented in their respective skills.
+The **workflow** and **rule** engines have their own lifecycles (author → validate → run → trace / refine), documented in their respective `sp:spur-cli` references.
 
 ## rd3 → `sp` / `cc` Migration Map
 
@@ -305,8 +361,8 @@ The `sp` and `cc` plugins are the two destinations for the legacy
 
 The `sp` plugin consolidated **many rd3 skills into a few Fat Skills**: the planning, decomposition,
 review, and pipeline skills collapsed into `spur-dev` + `spur-plan`; the task/feature CLI companions
-became `spur-tasks` + `spur-features`. The `cc` plugin took the meta-agent authoring family and the
-verification guard.
+became `spur-cli` (one skill with per-noun references). The `cc` plugin took the meta-agent authoring
+family and the verification guard.
 
 | rd3 skill | Destination | Status | Note |
 |-----------|-------------|--------|------|
@@ -338,7 +394,7 @@ verification guard.
 | `deep-research` | `sp` | ⏳ Deferred | L02 — same |
 | `knowledge-extraction` | `sp` | ⏳ Deferred | L03 — same |
 | `indexed-context` | `sp` | ⏳ Deferred | L01 — design agent-agnostic shape later |
-| `sys-testing` | `sp` | ✅ Done | Ported to `sp:code-testing` (`unit-testing.md` + `stacks/` adapters). |
+| `sys-testing` | `sp` | ✅ Done | Ported to `sp:code-testing` (`unit-testing.md` + per-stack adapters under `references/stacks/`). |
 | `advanced-testing` | `sp` | 🔀 Partial | Advanced techniques are folded into `sp:code-testing`; no standalone command until usage proves routing value. |
 | `tdd-workflow` | `sp` | ✅ Done | Ported to `sp:spur-tdd` (standalone discipline); pairs with `sp:code-testing` and `sp:code-implementation`. |
 | `sys-debugging` | `sp` | 🔀 Partial | Folded into `sp:code-implementation` as root-cause-first workflow for failed gates, runtime defects, and unclear test failures; no standalone command. |
@@ -361,7 +417,8 @@ verification guard.
 | `handover` | `sp` | ⏳ Deferred | M01 — prompt skill |
 | `quick-grep` | `sp` | 🔀 Absorbed | rg-usage guidance stays a prompt skill; CLI wrapper rejected (L05) |
 | *— (new)* | `sp` | ➖ N/A | `doc-evolve` created fresh (constitution-native; no rd3 ancestor) |
-| *— (new)* | `sp` | ➖ N/A | `spur-dev`, `spur-plan`, `spur-cli`, `sys-architecture`, `spec-decomposition`, `code-implementation`, `code-testing` created fresh or extracted as the Spur companion surface |
+| *— (new)* | `sp` | ➖ N/A | `spur-dev`, `spur-cli`, `sys-architecture`, `spec-decomposition`, `code-implementation`, `code-testing`, `code-verification`, `dogfood-testing`, `spur-tdd` created fresh or extracted as the Spur companion surface |
+| `spur-plan` | `sp` | ❌ Removed | Thin stub placeholder removed 2026-06-30 — the full planning narrative lives in `sp:spur-dev` and `/sp:dev-plan` delegates to it directly. |
 
 ### Commands (rd3 → destination)
 
@@ -374,9 +431,9 @@ kept a **much smaller set** (19). The `cc` plugin took the meta-agent authoring 
 | `dev-plan` | `sp` | ✅ Done | Delegates to `sp:spur-dev` (plan operation) |
 | `dev-run` | `sp` | ✅ Done | Delegates to `sp:spur-dev` (run operation) |
 | `dev-new-task` | `sp` | ❌ Retired | Superseded by `dev-brainstorm --skip-discovery --task` |
-| `dev-refine` | `sp` | ✅ Done | Delegates to `sp:spur-dev` (refine) |
-| `dev-review` | `sp` | ✅ Done | Delegates to `sp:code-verification` (review) |
-| `dev-verify` | `sp` | ✅ Done | Delegates to `sp:code-verification` (verify) |
+| `dev-refine` | `sp` | ✅ Done | Delegates to `sp:spur-dev` (refine operation) |
+| `dev-review` | `sp` | ✅ Done | Delegates to `sp:code-verification` (review operation) |
+| `dev-verify` | `sp` | ✅ Done | Delegates to `sp:code-verification` (verify operation) |
 | `dev-unit` | `sp` | ✅ Done | Delegates to `sp:code-testing` |
 | `dev-fixall` | `sp` | ✅ Done | Inline procedure |
 | `dev-gitmsg` | `sp` | ✅ Done | Inline procedure |
@@ -384,7 +441,8 @@ kept a **much smaller set** (19). The `cc` plugin took the meta-agent authoring 
 | `dev-handover` | `sp` | ✅ Done | Inline procedure |
 | `dev-brainstorm` | `sp` | 🔀 Absorbed | Into `sp:brainstorm` skill directly (no separate command) |
 | `dev-daily-summary` | `sp` | 🔀 Absorbed | Into `sp:daily-summary` skill directly |
-| `dev-transfer` | `sp` | 🔀 Absorbed | Into `sp:spur-dev` (transfer operation) |
+| `dev-dogfood` | `sp` | ✅ Done | Delegates to `sp:dogfood-testing` |
+| `dev-transfer` | `sp` | 🔀 Absorbed | Into `sp:spur-dev` (transfer operation); no standalone command |
 | `dev-init` | `sp` | 🔀 Absorbed | Into `spur-init` command → `sp:doc-evolve` |
 | `dev-reverse` | `sp` | ⏳ Deferred | L04 — with the `reverse-engineering` skill |
 | `skill-add` | `cc` | ✅ Done | `cc` `skill-add` |
@@ -416,7 +474,13 @@ kept a **much smaller set** (19). The `cc` plugin took the meta-agent authoring 
 | `prd-init` | `sp` | ❌ Rejected for now | Overlaps reverse-engineering/indexed-context; defer the capability, not a command wrapper. |
 | `prd-doc` | `sp` | ❌ Rejected for now | Use `sp:doc-evolve` for PRD/doc synchronization; no separate forwarding command. |
 | `prd-adjust` | `sp` | ❌ Rejected for now | Use `spur feature update` and the planning guidance; add a command only if a stable multi-step workflow emerges. |
-| *— (new)* | `sp` | ➖ N/A | `rule-add`, `rule-refine`, `rule-scan` (→ `sp:spur-cli` rule noun); `workflow-add`, `workflow-refine` (→ `sp:spur-cli` workflow noun); `spur-init`; `dev-runall` (→ `sp:spur-dev` `runall` op, batch driver) — created fresh for the Spur CLI surface |
+| `dev-runall` | `sp` | ✅ Done | Delegates to `sp:spur-dev` (runall operation — batch driver) |
+| `rule-add` | `sp` | ➖ N/A | Created fresh for the Spur rule surface (→ `sp:spur-cli`) |
+| `rule-refine` | `sp` | ➖ N/A | Created fresh for the Spur rule surface |
+| `rule-scan` | `sp` | ➖ N/A | Created fresh for the Spur rule surface |
+| `workflow-add` | `sp` | ➖ N/A | Created fresh for the Spur workflow surface |
+| `workflow-refine` | `sp` | ➖ N/A | Created fresh for the Spur workflow surface |
+| `spur-init` | `sp` | ➖ N/A | Created fresh (→ `sp:doc-evolve`); replaces the old `dev-init` |
 
 ### Agents (rd3 → destination)
 
@@ -449,8 +513,8 @@ rd3 shipped 13 agents. The `sp` plugin now keeps `expert-spur` (the CLI-corpus e
 
 ### Scripts (rd3 → destination)
 
-rd3's executable scripts (`scripts/evolution-engine.ts` 53k, `logger.ts` 40k, `best-practice-fixes.ts`
-17k, `fs.ts` 12k, `markdown-frontmatter.ts`, etc.) are the **meta-tooling backbone** (H07–H13, M06–M10).
+rd3's executable scripts (`scripts/evolution-engine.ts` 53 KB, `logger.ts` 40 KB, `best-practice-fixes.ts`
+17 KB, `fs.ts` 12 KB, `markdown-frontmatter.ts`, etc.) are the **meta-tooling backbone** (H07–H13, M06–M10).
 They stay live in `rd3` until the core stabilizes; deferral breaks nothing.
 
 | rd3 script group | Destination | Status | Note |
@@ -462,20 +526,25 @@ They stay live in `rd3` until the core stabilizes; deferral breaks nothing.
 | `markdown-frontmatter.ts` | `sp` | 🔀 Absorbed | H01 — into the Spur-local frontmatter library |
 | `grading.ts` / `validation-findings.ts` | `cc` | ⏳ Deferred | H07/H08 — meta-tooling backbone |
 | `utils.ts` | `cc` | ⏳ Deferred | Meta-tooling backbone |
-| `acpx-query.ts` (35k) | — | ❌ Rejected | I17 — archive; `spur agent run` replaces ACP |
+| `acpx-query.ts` (35 KB) | — | ❌ Rejected | I17 — archive; `spur agent run` replaces ACP |
 
 ### Summary scorecard
 
+| Category | rd3 count | Done | Absorbed | Deferred | Rejected | Destination counts |
+|----------|-----------|------|----------|----------|----------|---------------------|
 | **Skills** | 50 | 8 | 12 | 28 | 2 | `sp` 12 · `cc` 6 |
 | **Commands** | 46 | 28 | 4 | 14 | 0 | `sp` 19 · `cc` 17 |
-| **Agents** | 13 | 5 | 5 | 3 | 0 | `sp` 6 · `cc` 5 |
+| **Agents** | 13 | 5 | 5 | 3 | 0 | `sp` 2 · `cc` 5 |
+| **Hooks** | 1 | 1 | 0 | 0 | 0 | `sp` 1 · `cc` 1 |
 
 **Key consolidations:**
 
 - **12 rd3 skills absorbed into `sp` Fat Skills**: the planning/decomposition/review/pipeline family
-  folded into `spur-dev` + `spur-plan`; the task/feature CLI companions became `spur-tasks` +
-  `spur-features`; product-management judgment moved into the existing planning/roadmap references;
-  code-docs → `doc-evolve`; quick-grep stays a prompt skill.
+  folded into `spur-dev`; the task/feature CLI companions became `spur-cli` (one skill
+  with per-noun references); `spur-plan` was a thin stub placeholder kept for future development
+  and removed 2026-06-30 — its planning narrative already lives in `sp:spur-dev`. Product-management
+  judgment moved into the existing planning/roadmap references; code-docs → `doc-evolve`; quick-grep
+  stays a prompt skill.
 - **5 rd3 "super-*" agents → 1 in `sp`**: `super-coder` owns single-task + batch pipeline driving;
   implementation/testing/review work routes to the functional competencies.
 - **ADR-016 command pruning**: 46 rd3 commands → 19 in `sp` (only commands that convert
@@ -505,7 +574,7 @@ The committed batch (ADR-023 waves 0–5) has landed. Three workstreams remain, 
    | Batch | Skills (triage ID) | Shape when extracted |
    |-------|--------------------|---------------------|
    | Verification engine | code-review-common (K01), code-verification (K02), functional-review (K04) | `spur review` / `spur verify` verbs behind the existing skills; deterministic checks via `ts-rule-engine` evaluators. Code-improvement judgment is already partially absorbed into `sp:code-verification`. |
-   | Testing surface | remaining deterministic inspection only | K06's `unit` procedure and advanced-technique triggers live in `code-testing/references/unit-testing.md`; whether deterministic measurement consolidates under a future inspection surface or stays as workflow shell guards is still **undecided**. |
+   | Testing surface | remaining deterministic inspection only | K06's `unit` procedure and advanced-technique triggers live in `code-testing/references/unit-testing.md`; per-stack adapters live under `references/stacks/`. Whether deterministic measurement consolidates under a future inspection surface or stays as workflow shell guards is still **undecided**. |
    | Context & research | indexed-context (L01), deep-research (L02), knowledge-extraction (L03), reverse-engineering (L04) | Re-apply the ADR-016 test at design time — much is prompt work that stays in skills |
    | Coordination | transfer/handover (M01), token-saver (M03), cli-for-ai (M04) | Prompt skills; extract only if a deterministic verb survives the ADR-016 test. Sys-debugging and PM judgment are partially absorbed into existing `sp` planning/execution references. |
    | `spur inspect` | coverage/lint/typecheck/deps (N01–N05) | Adapter-based project-state interrogation; near-term needs covered by rule presets + workflow shell guards |

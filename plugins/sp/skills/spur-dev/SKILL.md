@@ -209,8 +209,8 @@ CLI does.
 - `config/workflows/task-pipeline.yaml` — the execution pipeline definition.
 - `config/workflows/planning-pipeline.yaml` — the front-half state machine.
 - `config/templates/bdd/gherkin.md` — the BDD scenario template.
-- **`sp:spur-plan`** — thin YAML front-end for the planning pipeline. The SSOT narrative for all
-  dev-* operations lives here in sp:spur-dev.
+- The planning-pipeline workflow is defined in `config/workflows/planning-pipeline.yaml`. The SSOT
+  narrative for all dev-* planning operations lives here in sp:spur-dev.
 
 ## Platform Notes
 

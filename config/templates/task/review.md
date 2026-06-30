@@ -4,7 +4,6 @@ name: "{{ NAME }}"
 description: ""
 status: backlog
 type: review
-template: review
 profile: standard
 feature_id: null
 parent_wbs: null
