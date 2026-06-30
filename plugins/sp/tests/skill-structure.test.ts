@@ -101,10 +101,10 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(offenders).toEqual([]);
     });
 
-    test('R16c — relative markdown links inside skill files resolve', () => {
+    test('R16c — relative markdown links inside plugin markdown files resolve', () => {
         const broken: string[] = [];
         const linkRe = /\]\((?!https?:|#)([^)]+\.md)(?:#[^)]*)?\)/g;
-        for (const file of walk(SKILLS_DIR, (p) => p.endsWith('.md'))) {
+        for (const file of allMarkdown) {
             const raw = readFileSync(file, 'utf8');
             // Strip fenced code blocks and inline-code spans: a link inside backticks documents a
             // FORMAT (e.g. the roster-row example `[0110](0110_<slug>.md)`), it is not a navigable link.
@@ -128,41 +128,36 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         // Retired in Wave A (noun-skills + noun-experts + expert-dev). The spur-cli facade and
         // expert-spur subagent replaced them; super-coder absorbed expert-dev's single-task role.
         const retired = [
-            'sp:spur-tasks',
-            'sp:spur-features',
-            'sp:spur-rules',
-            'sp:spur-workflows',
-            'sp:expert-tasks',
-            'sp:expert-features',
-            'sp:expert-rules',
-            'sp:expert-workflows',
-            'sp:expert-dev',
+            'spur-tasks',
+            'spur-features',
+            'spur-rules',
+            'spur-workflows',
+            'expert-tasks',
+            'expert-features',
+            'expert-rules',
+            'expert-workflows',
+            'expert-dev',
         ];
         const offenders: string[] = [];
-        for (const file of allMarkdown) {
+        for (const file of allMarkdown.filter((p) => !p.endsWith('skill-structure.test.ts'))) {
             const text = readFileSync(file, 'utf8');
             for (const name of retired) {
-                if (text.includes(name)) {
+                if (new RegExp(`(?:sp:)?${name}\\b`).test(text)) {
                     offenders.push(`${relative(PLUGIN_ROOT, file)} → ${name}`);
                 }
             }
         }
-        // super-coder.md intentionally narrates the expert-dev retirement in prose ("the role
-        // formerly held by the retired expert-dev"); allow that single historical mention without
-        // the sp: prefix — the assertion above only flags the sp:-prefixed skill/agent references
-        // that would actually mis-route.
         expect(offenders).toEqual([]);
     });
 
     test('R20 — no shipped plugin file references vendors/ or the external rd3 plugin', () => {
         const offenders: string[] = [];
         // Research-time evidence only; never a runtime/documentation dependency (ADR-028d).
-        const forbidden = [/\bvendors\//, /cc-agents\/plugins\/rd3/, /\/plugins\/rd3\//];
-        const files = [
-            ...allMarkdown,
-            ...walk(SKILLS_DIR, (p) => p.endsWith('.yaml') || p.endsWith('.yml')),
-            ...(statSync(AGENTS_DIR).isDirectory() ? walk(AGENTS_DIR, (p) => p.endsWith('.md')) : []),
-        ];
+        const forbidden = [/\bvendors\//i, /cc-agents\/plugins\/rd3/i, /\/plugins\/rd3\//i, /\brd3\b/i];
+        const files = walk(PLUGIN_ROOT, (p) => {
+            if (p.endsWith('.test.ts')) return false;
+            return /\.(md|ya?ml|json|ts)$/.test(p);
+        });
         for (const file of new Set(files)) {
             const text = readFileSync(file, 'utf8');
             for (const re of forbidden) {
