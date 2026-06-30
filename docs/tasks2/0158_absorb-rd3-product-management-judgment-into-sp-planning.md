@@ -3,7 +3,7 @@ template: standard
 schema_version: 1
 name: "Absorb rd3 product management judgment into sp planning"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: null
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-06-29T23:46:29.541Z"
-updated_at: 2026-06-29T23:47:33.281Z
+updated_at: 2026-06-30T04:52:36.673Z
 ---
 
 ## 0158. Absorb rd3 product management judgment into sp planning
@@ -130,11 +130,48 @@ Rejected for this round:
    - `biome check plugins/sp`
    - `rg -n "rd3:product-management|ftree|prd-" plugins/sp` and resolve any stale claims
 ### Solution
-
+| File | What / why |
+| --- | --- |
+| `plugins/sp/skills/spur-dev/references/product-planning.md:1` | Added the product-management judgment overlay for the existing planning path: intake, RICE/MoSCoW, strategy profiles, PRD-shaped output, and deterministic handoff rules. |
+| `plugins/sp/skills/spur-features/references/roadmap-priority.md:1` | Added feature hierarchy, priority/status, and roadmap adjustment guidance for `spur feature`. |
+| `plugins/sp/skills/spur-dev/SKILL.md:89` | Linked PM-shaped planning into the planning step routing and resource list without creating a new PM surface. |
+| `plugins/sp/skills/spur-features/SKILL.md:141` | Linked roadmap/priority conventions from the feature companion skill. |
+| `plugins/README.md:331` | Marked `rd3:product-management` as absorbed through existing planning/roadmap references and kept `sp:super-pm` plus `/sp:prd-*` rejected. |
 ### Testing
+Verdict: PASS
 
+Coverage: N/A (documentation-only change; no runtime code path added).
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1. Add PM planning guidance to the existing `sp` planning layer, preferably `plugins/sp/skills/spur-dev/references/product-planning.md`. | MET | `plugins/sp/skills/spur-dev/references/product-planning.md:1` adds the planning overlay; `plugins/sp/skills/spur-dev/SKILL.md:89` links it from planning intake. |
+| R2. Link the new guidance from `plugins/sp/skills/spur-dev/SKILL.md`. | MET | `plugins/sp/skills/spur-dev/SKILL.md:89` and `plugins/sp/skills/spur-dev/SKILL.md:165` reference `product-planning.md`. |
+| R3. Add feature hierarchy / roadmap / priority-status guidance to `sp:spur-features` or a focused reference under it. | MET | `plugins/sp/skills/spur-features/references/roadmap-priority.md:1` adds the focused reference; `plugins/sp/skills/spur-features/SKILL.md:141` links the core habits. |
+| R4. Reuse `sp:doc-evolve` for PRD/doc synchronization guidance instead of adding `/sp:prd-doc`. | MET | `plugins/sp/skills/spur-dev/references/product-planning.md:115` and `plugins/sp/skills/spur-dev/references/product-planning.md:143` route PRD-shaped docs to `sp:doc-evolve`; no `/sp:prd-doc` command was added. |
+| R5. Do not add `sp:super-pm`. | MET | `rg -n "super-pm|prd-" plugins/sp/commands plugins/sp/agents` returned no matches in live command/agent surfaces. |
+| R6. Do not add `/sp:prd-run`, `/sp:prd-doc`, `/sp:prd-adjust`, or `/sp:prd-init`. | MET | No command files were added; `rg -n "super-pm|prd-" plugins/sp/commands plugins/sp/agents` returned no matches. |
+| R7. Update `plugins/README.md` migration map and entity counts/status notes. | MET | `plugins/README.md:331` marks `product-management` absorbed; `plugins/README.md:477` updates the absorbed-skills note. |
+| R8. Verify with `bun test plugins/sp`, `biome check plugins/sp`, and grep for stale `rd3:product-management` routing assumptions. | MET | `bun test plugins/sp` passed 65 tests; `biome check plugins/sp` passed; stale-surface grep found only intentional rejection/routing notes in new references. |
+
+Checks:
+
+| Check | Status | Evidence |
+| --- | --- | --- |
+| `bun test plugins/sp` | pass | 65 pass, 0 fail. |
+| `biome check plugins/sp` | pass | Checked 7 files, no fixes applied. |
+| `rg -n "rd3:product-management\|ftree\|prd-" plugins/sp` | pass | Hits are intentional guidance/rejection notes in the new references only. |
+| `rg -n "super-pm\|prd-" plugins/sp/commands plugins/sp/agents` | pass | No live command or agent surfaces found. |
 ### Review
+| Severity | Status | Finding | Evidence |
+| --- | --- | --- | --- |
+| P1 | DONE | No blocker findings. | Docs-only change; focused plugin tests and Biome passed. |
+| P2 | DONE | No major correctness or routing findings. | Rejected PM surfaces remain absent from `plugins/sp/commands` and `plugins/sp/agents`. |
+| P3 | DONE | No follow-up required. | Guidance is linked from the owning skills and keeps deterministic work on existing Spur surfaces. |
+| P4 | DONE | No cosmetic findings. | Markdown is readable and scoped. |
 
+
+No security, efficiency, correctness, usability, or architecture findings. The change is advisory
+documentation only and preserves the existing command/agent surface.
 ### References
 - `plugins/README.md`
 - `/Users/robin/projects/cc-agents/plugins/rd3/skills/product-management/SKILL.md`
@@ -150,3 +187,6 @@ Rejected for this round:
 - `docs/00_ADR.md` — ADR-016 and ADR-023 constraints.
 ### History
 - 2026-06-29T23:47:33.192Z backlog → todo (system)
+- 2026-06-30T04:51:27.788Z todo → wip (system)
+- 2026-06-30T04:51:32.891Z wip → testing (system)
+- 2026-06-30T04:52:36.673Z testing → done (system)
