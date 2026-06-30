@@ -12,6 +12,11 @@ Use this reference when review findings reveal architectural friction, or when t
 make a code area easier to change, test, or navigate. This is not a silent refactor pass. It produces
 ranked improvement candidates and asks for a choice before broad implementation.
 
+In verify mode, improvement candidates are an advisory LLM-as-judge lane unless they contradict a
+task requirement, core Acceptance Criteria, security boundary, or correctness condition. Do not let a
+qualitative improvement candidate alone certify objective completion; pair it with deterministic or
+static evidence, or mark the related AC/requirement `PARTIAL`.
+
 ## Improvement Lens
 
 Look for changes that increase module depth: more behavior behind a smaller, clearer interface.

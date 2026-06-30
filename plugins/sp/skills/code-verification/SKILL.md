@@ -24,7 +24,7 @@ metadata:
 
 The **verifier** in the Spur execution loop. A coding agent reports "done" with overconfidence;
 this skill is the deterministic counterweight that proves — or disproves — the claim against the
-task's own requirements and acceptance criteria, then writes the evidence back to the corpus
+task's own requirements and Acceptance Criteria, then writes the evidence back to the corpus
 through CLI verbs.
 
 It backs two commands:
@@ -43,8 +43,8 @@ The verify mode is the **completion gate's evidence source**: it emits a machine
 `spur task check` validates section **presence**, not content — it passes a hollow `## Testing`
 heading. So presence-checking alone lets an agent march a task to `done` with empty evidence and an
 implementation that doesn't match its AC. This skill supplies the missing **content** verdict:
-it reads the requirements, maps each to implementation evidence, and refuses to certify what isn't
-there. The verdict artifact carries that signal to the pipeline gate (design §B).
+it reads requirements and AC, maps each to evidence, and refuses to certify what isn't there. The
+verdict artifact carries that signal to the pipeline gate (design §B).
 
 ## Cross-cutting rules (inherited from sp:spur-dev)
 
@@ -71,15 +71,17 @@ spur task show <wbs> --json
 The JSON carries `{ wbs, name, status, filePath, content, frontmatter }`. Parse from `content`:
 
 - `## Requirements` — the R-items (the traceability targets).
-- `## Acceptance Criteria` — the Gherkin scenarios (the BDD targets, if `--bdd`).
+- `## Acceptance Criteria` / `### Acceptance Criteria` — checklist items and Gherkin scenarios (the
+  AC targets). AC evaluation is mandatory when this section is non-empty; `--bdd` only tightens the
+  scenario-to-test requirement.
 
 Flags: `--agent <name|auto>` (agent override — passed through from the thin wrapper;
 `auto` = resolve from current runtime, `<name>` = explicit override; omit to use the configured
 default executor `omp` — "current agent" is not expressible on the pipeline surface),
 `--auto` (no confirmations), `--force` (bypass the terminal-status guard), `--fix
 <none|blockers-first|all>` (post-verdict repair), `--focus <all|security|efficiency|correctness|usability|architecture>`
-(SECUA dimensions), `--bdd` (scenario check), `--next` (on PASS, auto-transition `testing → done`;
-on PARTIAL/FAIL, stop).
+(SECUA dimensions), `--bdd` (strict Gherkin scenario-to-test check), `--next` (on PASS,
+auto-transition `testing → done`; on PARTIAL/FAIL, stop).
 
 ### Step 2 — Status guard
 
@@ -100,7 +102,7 @@ git diff --name-only "${COMMIT}~1"..HEAD -- '*.ts' '*.tsx' '*.js' '*.jsx'
 git status --porcelain
 ```
 
-### Step 4 — Requirements traceability (Phase 8)
+### Step 4 — Requirements traceability gate (Phase 8)
 
 For each `R{n}` in `## Requirements`, find implementation evidence in the changed files / tests and
 assign a per-requirement status:
@@ -111,10 +113,50 @@ assign a per-requirement status:
 | **PARTIAL** | Evidence for part of the requirement only |
 | **UNMET** | No implementation evidence found |
 
-Record the evidence string (`file:line` or test name) per requirement — this is what lands in
-`## Testing`.
+Record the evidence string (`file:line`, command, or test name) per requirement — this is what lands
+in `## Testing`.
 
-### Step 5 — SECUA review (Phase 7)
+### Step 5 — Acceptance Criteria guard
+
+If the task has a non-empty Acceptance Criteria section, evaluate every checklist item and every
+Gherkin scenario independently. This gate runs whether or not `--bdd` is set.
+
+| Per-AC status | Condition |
+|---------------|-----------|
+| **MET** | The AC is satisfied by concrete evidence |
+| **PARTIAL** | Some evidence exists, but a material condition is missing or only inferred |
+| **UNMET** | No implementation evidence satisfies the AC, or a required scenario fails |
+| **N/A** | The AC is explicitly non-applicable with a concrete reason |
+
+Evidence is typed so weak proof is visible:
+
+| Evidence type | Use when |
+|---------------|----------|
+| `test` | A named automated test or invariant test proves the behavior |
+| `command` | A CLI/gate command output proves the behavior |
+| `static-ref` | Source/doc/config references prove a contract or structural invariant |
+| `manual-review` | Reviewer reasoning is needed, with cited files and rationale |
+| `llm-judge` | Qualitative judgment only; advisory unless the AC is inherently qualitative |
+| `n/a` | The AC does not apply; must include the reason |
+
+Objective AC cannot be cleared by `llm-judge` alone. Pair qualitative judgment with deterministic or
+static evidence, or mark the row `PARTIAL`.
+
+When `--bdd` is set, each Gherkin scenario must map to executable evidence (`test` or `command`) or
+an explicitly reported missing-test condition. A missing executable mapping is `UNMET` when the
+scenario is core to the task and `PARTIAL` only when the scenario is documented as advisory/deferred.
+
+The answer file must include a stable AC table:
+
+```markdown
+### Acceptance Criteria Verification
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: CLI emits JSON | MET | test | `apps/cli/tests/foo.test.ts:42` |
+```
+
+### Step 6 — SECUA + quality review (Phase 7)
 
 Review the changed code across the `--focus` dimensions (default all): **S**ecurity (secrets,
 injection, unsafe input), **E**fficiency, **C**orrectness (null/edge handling, logic), **U**sability
@@ -124,29 +166,35 @@ Rank findings by severity (blocker / major / minor). See
 
 When review exposes broader architecture friction rather than a localized defect, use
 [references/code-improvement.md](references/code-improvement.md) to frame follow-up candidates
-instead of silently expanding the current fix.
+instead of silently expanding the current fix. LLM-as-judge reasoning is useful as a blind-spot
+finder, but actionable findings must cite files, severity, and verification feasibility.
 
-### Step 6 — BDD scenario check (if `--bdd`)
+### Step 7 — Strict BDD scenario lens (if `--bdd`)
 
-Map each `## Acceptance Criteria` scenario to a passing/failing test. Passed scenario → MET; failed
-→ UNMET; no covering test → PARTIAL. Fold into the per-requirement verdict.
+Apply the stricter mapping rules from Step 5 to Gherkin scenarios. Passed executable scenario →
+MET; failed executable scenario → UNMET; no executable evidence → UNMET for core scenarios or
+PARTIAL only when explicitly advisory/deferred. Fold the AC statuses into the aggregate verdict.
 
-### Step 7 — Aggregate the verdict
+### Step 8 — Aggregate the verdict
 
 ```
-any requirement UNMET            → FAIL
-any requirement PARTIAL (no UNMET) → PARTIAL
-all requirements MET             → PASS
+any core requirement UNMET                          → FAIL
+any core AC UNMET                                   → FAIL
+any P1/blocker correctness or security finding       → FAIL
+any core requirement or core AC PARTIAL (no FAIL)    → PARTIAL
+any unresolved major quality finding (no FAIL)       → PARTIAL
+all core requirements and AC MET or justified N/A    → PASS
 ```
 
-Only `PASS` clears the pipeline completion gate. (`PARTIAL`/`FAIL` route the pipeline to `failed`.)
+Minor/advisory findings do not block. Only `PASS` clears the pipeline completion gate.
+(`PARTIAL`/`FAIL` route the pipeline to `failed`.)
 
-### Step 8 — Write findings to the task
+### Step 9 — Write findings to the task
 
 Assemble the evidence and write via CLI verbs (temp-file → `--section`):
 
 ```bash
-# Testing section: per-requirement verdict table + evidence
+# Testing section: per-requirement and per-AC verdict tables + evidence
 printf '...' > /tmp/<wbs>-testing.md
 spur task update <wbs> --section Testing --from-file /tmp/<wbs>-testing.md
 
@@ -160,7 +208,7 @@ Section bodies passed to `spur task update --section` must be **body-only**. Do 
 headings to prevent phantom sections. Use a priority table or a bold label such as
 `**SECUA Review**` inside the body instead.
 
-### Step 9 — State the verdict (the gate contract)
+### Step 10 — State the verdict (the gate contract)
 
 End the verify output with an explicit, parseable verdict line so the pipeline can
 transport it deterministically:
@@ -185,7 +233,8 @@ then transcribes this output into the task's `## Testing` and `## Review` sectio
 - **Review** ← SECUA findings (P1–P4) extracted from the answer file
 
 The verify agent's output MUST include a per-requirement traceability table
-(`| Req | Status | Evidence |`) and a `### SECUA Review` heading with ranked findings
+(`| Req | Status | Evidence |`), an Acceptance Criteria table
+(`| AC | Status | Evidence Type | Evidence |`), and a `### SECUA Review` heading with ranked findings
 so the record step can extract them mechanically. The verdict artifact
 (`.spur/run/<wbs>-verdict.json`) is the gate signal; the answer file is the evidence
 the record step transcribes — keep both structures stable.
@@ -212,6 +261,12 @@ interface VerifyVerdict {
   wbs: string;
   verdict: 'PASS' | 'PARTIAL' | 'FAIL';
   requirements: Array<{ id: string; status: 'MET' | 'PARTIAL' | 'UNMET'; evidence: string }>;
+  acceptanceCriteria?: Array<{
+    id: string;
+    status: 'MET' | 'PARTIAL' | 'UNMET' | 'N/A';
+    evidenceType: 'test' | 'command' | 'static-ref' | 'manual-review' | 'llm-judge' | 'n/a';
+    evidence: string;
+  }>;
   checks: Array<{ name: string; status: 'pass' | 'fail' | 'warn'; evidence: string }>;
 }
 ```
@@ -225,16 +280,16 @@ Coverage: N/A (documentation-only change; no runtime code path added).
 
 This satisfies the task checker without pretending a coverage percentage was measured.
 
-### Step 10 — Fix pass (if `--fix` ≠ `none`)
+### Step 11 — Fix pass (if `--fix` ≠ `none`)
 
-- `blockers-first` — repair only requirements that are UNMET (the blockers), then re-run Steps 4–9.
-- `all` — repair UNMET + PARTIAL requirements and major SECUA findings, then re-run Steps 4–9.
+- `blockers-first` — repair only requirements/AC that are UNMET (the blockers), then re-run Steps 4–10.
+- `all` — repair UNMET + PARTIAL requirements/AC and major SECUA findings, then re-run Steps 4–10.
 - `none` — stop at the verdict; report and exit.
 
 Loop is bounded — if a fix doesn't move a requirement to MET after one retry, report the residual
 and stop (don't thrash).
 
-### Step 11 — Report
+### Step 12 — Report
 
 Show the verdict, the per-requirement table, and the gate outcome (cleared / blocked). Under the
 pipeline this is consumed by the gate; for a direct `/sp:dev-verify` invocation it's the operator's

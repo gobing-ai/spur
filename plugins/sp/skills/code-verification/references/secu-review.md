@@ -28,8 +28,8 @@ skipped entirely. `all` expands to all five.
 
 | Severity | Meaning | Gate effect (verify mode) | `--fix all` repairs? |
 |----------|---------|---------------------------|----------------------|
-| **blocker** | Ships a vulnerability or breaks a requirement | Contributes to a non-PASS verdict | Yes |
-| **major** | Real defect, not requirement-breaking | Advisory; noted in `## Review` | Yes |
+| **blocker** | Ships a vulnerability, breaks a requirement, or breaks core AC | FAIL | Yes |
+| **major** | Real defect, unresolved architecture/correctness risk, or material test gap | PARTIAL unless explicitly deferred/N/A | Yes |
 | **minor** | Style / polish / non-functional | Advisory only | No (left for the author) |
 
 Each finding records: dimension, severity, `file:line`, one-line description, and a concrete
@@ -69,10 +69,11 @@ the producer exists. This applies to pre-implementation design review as much as
 review: a signature that cannot be built against the actual type is a blocker, caught at review, not
 at implementation.
 
-## Relationship to requirement traceability
+## Relationship to requirement traceability and AC
 
-SECUA is the *quality* lens; requirement traceability (Step 4) is the *completeness* lens. A change
-can be SECUA-clean yet `FAIL` (a requirement is UNMET), or fully MET yet carry a blocker finding
-(insecure implementation of a satisfied requirement). The aggregate verdict reflects requirement
-status; blocker-severity SECUA findings are surfaced as gate-relevant in the `checks[]` array of the
-verdict artifact.
+SECUA is the *quality* lens; requirement traceability (Step 4) and the Acceptance Criteria guard
+(Step 5) are the *completeness* lenses. A change can be SECUA-clean yet `FAIL` (a requirement or
+core AC is UNMET), or fully MET yet carry a blocker finding (insecure implementation of a satisfied
+requirement). The aggregate verdict reflects requirement status, AC status, and gate-relevant
+review findings. Blocker and major SECUA findings are surfaced in the `checks[]` array of the
+verdict artifact so quality failures are not lost behind a requirements-only PASS.

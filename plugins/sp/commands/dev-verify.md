@@ -1,5 +1,5 @@
 ---
-description: Verify a task against its requirements — traceability check producing a PASS/PARTIAL/FAIL verdict with per-requirement evidence
+description: Verify a task against its requirements and Acceptance Criteria — traceability check producing a PASS/PARTIAL/FAIL verdict with evidence
 argument-hint: "<wbs> [--agent <name|auto>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next]"
 allowed-tools: ["Bash", "Read", "Write", "Skill"]
 ---
@@ -9,9 +9,10 @@ allowed-tools: ["Bash", "Read", "Write", "Skill"]
 Wraps the **sp:code-verification** skill (verify mode).
 
 Verify that a task's implementation satisfies its requirements and acceptance criteria. Maps each
-requirement to implementation evidence, runs a SECUA code review, and produces a **PASS / PARTIAL /
-FAIL** verdict. Findings are written back to the task's `## Testing` and `## Review` sections, and
-the verdict artifact (`.spur/run/<wbs>-verdict.json`) is emitted for the pipeline completion gate.
+requirement and each Acceptance Criteria item to evidence, runs a SECUA code review, and produces a
+**PASS / PARTIAL / FAIL** verdict. Findings are written back to the task's `## Testing` and
+`## Review` sections, and the verdict artifact (`.spur/run/<wbs>-verdict.json`) is emitted for the
+pipeline completion gate.
 
 ## When to use
 
@@ -27,16 +28,31 @@ the verdict artifact (`.spur/run/<wbs>-verdict.json`) is emitted for the pipelin
 | `--agent <name\|auto>` | Spawn the verification under a specific agent. Omit (the default) → the verify pass runs under the configured default executor (`omp`). **Current-agent execution is not expressible** (subprocess FSM). | (configured default — `omp`) |
 | `--fix <strategy>` | Post-verdict repair: `none`, `blockers-first` (UNMET only), `all` (UNMET + PARTIAL + major findings) | `none` |
 | `--focus <lens>` | SECUA dimensions: `all`, `security`, `efficiency`, `correctness`, `usability`, `architecture`, or comma-separated | `all` |
-| `--bdd` | Map `## Acceptance Criteria` scenarios to tests and fold into the verdict | off |
+| `--bdd` | Strict BDD lens: require Gherkin scenarios in `## Acceptance Criteria` to map to executable or explicitly missing test evidence. AC checking itself is automatic when AC exists. | off |
 | `--auto` | Skip confirmations (CI / pipeline use) | off |
 | `--force` | Bypass the terminal-status guard — verify even a `done`/`cancelled` task | off |
 | `--next` | Terminal chain link. On the (post-`--fix`) PASS verdict, transition `testing → done` through the FSM (`--strict-core` guard honored). On PARTIAL/FAIL or guard failure, stop as review-pending. | off |
 
 ## Behavior
 
-Thin wrapper: status guard, change-scope detection, requirements traceability, SECUA review, verdict
-aggregation, findings write-back, verdict-artifact emission, and the optional `--fix` pass are all
-owned by the skill.
+Thin wrapper: status guard, change-scope detection, requirements traceability, automatic Acceptance
+Criteria guard, SECUA/quality review, verdict aggregation, findings write-back, verdict-artifact
+emission, and the optional `--fix` pass are all owned by the skill.
+
+### Acceptance Criteria guard
+
+If the task contains a non-empty `## Acceptance Criteria` or `### Acceptance Criteria` section, the
+verify pass must evaluate it even when `--bdd` is omitted. The guard accepts checklist and Gherkin
+forms:
+
+- checklist items become AC rows with `MET` / `PARTIAL` / `UNMET` / `N/A` status and evidence;
+- Gherkin scenarios become AC rows keyed by scenario title;
+- `--bdd` tightens Gherkin handling by requiring each scenario to map to executable test evidence
+  or an explicitly reported missing-test condition.
+
+LLM-as-judge review can surface qualitative findings, but it cannot alone certify objective AC.
+Objective AC needs deterministic evidence (`test`, `command`), static evidence (`static-ref`), or an
+explicit justified `N/A`.
 
 ### Agent override
 

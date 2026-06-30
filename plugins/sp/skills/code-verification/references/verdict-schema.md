@@ -22,6 +22,13 @@ interface VerifyVerdict {
     status: 'MET' | 'PARTIAL' | 'UNMET';
     evidence: string;                          // file:line, test name, or "no evidence found"
   }>;
+  /** Per-Acceptance Criteria result. Present when the task has non-empty AC. */
+  acceptanceCriteria?: Array<{
+    id: string;                                // checklist label or "Scenario: <title>"
+    status: 'MET' | 'PARTIAL' | 'UNMET' | 'N/A';
+    evidenceType: 'test' | 'command' | 'static-ref' | 'manual-review' | 'llm-judge' | 'n/a';
+    evidence: string;                          // evidence or explicit N/A justification
+  }>;
   /** Discrete gate checks (sections populated, tests pass, lint clean, …). */
   checks: Array<{
     name: string;                              // e.g. "tests-pass", "lint-clean"
@@ -33,16 +40,40 @@ interface VerifyVerdict {
 
 ## Aggregation rule
 
-The aggregate `verdict` is derived from the per-requirement statuses:
+The aggregate `verdict` is derived from the per-requirement, per-AC, and blocking review statuses:
 
 ```
-any requirement UNMET              → FAIL
-any requirement PARTIAL (no UNMET) → PARTIAL
-all requirements MET               → PASS
+any core requirement UNMET                         → FAIL
+any core Acceptance Criteria UNMET                 → FAIL
+any blocker correctness/security check             → FAIL
+any core requirement or AC PARTIAL (no FAIL)       → PARTIAL
+any unresolved major quality check (no FAIL)       → PARTIAL
+all core requirements and AC MET or justified N/A  → PASS
 ```
 
 There is no "good enough" — `PARTIAL` blocks the gate exactly like `FAIL`. The distinction exists
 only to tell the operator *how far off* delivery is (UNMET = nothing there; PARTIAL = half there).
+
+## Acceptance Criteria evidence
+
+When a task has non-empty Acceptance Criteria, `acceptanceCriteria` must be populated. Evidence type
+is part of the contract so weak proof is visible to the pipeline and to reviewers:
+
+- `test` / `command`: deterministic evidence.
+- `static-ref`: source, configuration, or documentation reference evidence.
+- `manual-review`: reviewer reasoning with cited files.
+- `llm-judge`: qualitative judgment only; it cannot alone certify objective AC.
+- `n/a`: explicitly justified non-applicability.
+
+For answer files, emit a matching parseable table:
+
+```markdown
+### Acceptance Criteria Verification
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: CLI emits JSON | MET | test | `apps/cli/tests/foo.test.ts:42` |
+```
 
 ## How the gate reads it
 
