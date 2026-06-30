@@ -14,6 +14,7 @@
  *   R16d — no retired skill/agent name is referenced anywhere in the plugin.
  *   R20  — the plugin is self-contained: no shipped file references `vendors/` or the external rd3
  *          plugin path. Research-time evidence is never a runtime/documentation dependency.
+ *   R23  — repository ignore rules do not hide plugin skill entrypoints.
  */
 
 import { describe, expect, test } from 'bun:test';
@@ -21,6 +22,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 const PLUGIN_ROOT = join(import.meta.dir, '..');
+const REPO_ROOT = join(PLUGIN_ROOT, '..', '..');
 const SKILLS_DIR = join(PLUGIN_ROOT, 'skills');
 const AGENTS_DIR = join(PLUGIN_ROOT, 'agents');
 
@@ -181,5 +183,55 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             expect(skillDirs, `missing skill: ${name}`).toContain(name);
             statSync(join(SKILLS_DIR, name, 'SKILL.md')); // throws if absent
         }
+    });
+
+    test('R21 — dev-verify contract keeps AC as a first-class gate', () => {
+        const command = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-verify.md'), 'utf8');
+        const skill = readFileSync(join(SKILLS_DIR, 'code-verification', 'SKILL.md'), 'utf8');
+        const verdictSchema = readFileSync(
+            join(SKILLS_DIR, 'code-verification', 'references', 'verdict-schema.md'),
+            'utf8',
+        );
+
+        expect(command).toContain('AC checking itself is automatic when AC exists');
+        expect(command).toContain('Strict BDD lens');
+        expect(skill).toContain('### Step 5 — Acceptance Criteria guard');
+        expect(skill).toContain('| AC | Status | Evidence Type | Evidence |');
+        expect(skill).toContain('Objective AC cannot be cleared by `llm-judge` alone');
+        expect(verdictSchema).toContain('acceptanceCriteria?: Array');
+        expect(verdictSchema).toContain("evidenceType: 'test' | 'command' | 'static-ref'");
+    });
+
+    test('R22 — dogfood reports include a mandatory ledger and computed cache methodology', () => {
+        const command = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-dogfood.md'), 'utf8');
+        const skill = readFileSync(join(SKILLS_DIR, 'dogfood-testing', 'SKILL.md'), 'utf8');
+        const reportTemplate = readFileSync(
+            join(SKILLS_DIR, 'dogfood-testing', 'references', 'report-template.md'),
+            'utf8',
+        );
+        const monitorLedger = readFileSync(
+            join(SKILLS_DIR, 'dogfood-testing', 'references', 'monitor-ledger.md'),
+            'utf8',
+        );
+
+        expect(command).toContain('mandatory Monitor Ledger section');
+        expect(skill).toContain('Monitor Ledger');
+        expect(skill).toContain('recomputable from');
+        expect(reportTemplate).toContain('### 3. Monitor Ledger');
+        expect(reportTemplate).toContain('aggregate cache% = round((sum(Cached Tokens)');
+        expect(monitorLedger).toContain('Anti-fiction rule');
+        expect(monitorLedger).toContain('Cache % = round(Cached Tokens / (Fresh Tokens + Cached Tokens) * 100)');
+        expect(monitorLedger).toContain('aggregate cache% = round(sum(Cached Tokens)');
+    });
+
+    test('R23 — ignore rules do not hide plugin skill entrypoints', () => {
+        const gitignore = readFileSync(join(REPO_ROOT, '.gitignore'), 'utf8');
+        const unscopedSpurCliIgnores = gitignore
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter((line) => line === 'spur-cli' || line === 'spur-cli/');
+
+        expect(unscopedSpurCliIgnores).toEqual([]);
+        statSync(join(SKILLS_DIR, 'spur-cli', 'SKILL.md'));
     });
 });
