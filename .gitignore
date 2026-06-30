@@ -76,7 +76,7 @@ out
 # Nuxt.js build / generate output
 .nuxt
 spur.js
-spur-cli
+/spur-cli
 dist
 # Gatsby files
 .cache/
@@ -108,7 +108,7 @@ dist
 .turbo
 # Dependencies
 # Build output
-spur-cli/
+/apps/cli/spur-cli/
 dist/
 # Database files
 data/
