@@ -155,6 +155,11 @@ printf '...' > /tmp/<wbs>-review.md
 spur task update <wbs> --section Review --from-file /tmp/<wbs>-review.md
 ```
 
+Section bodies passed to `spur task update --section` must be **body-only**. Do not put a same-level
+`### SECUA Review` heading inside the `Review` section body; the task writer strips same-level
+headings to prevent phantom sections. Use a priority table or a bold label such as
+`**SECUA Review**` inside the body instead.
+
 ### Step 9 — State the verdict (the gate contract)
 
 End the verify output with an explicit, parseable verdict line so the pipeline can
@@ -185,6 +190,11 @@ so the record step can extract them mechanically. The verdict artifact
 (`.spur/run/<wbs>-verdict.json`) is the gate signal; the answer file is the evidence
 the record step transcribes — keep both structures stable.
 
+This `### SECUA Review` heading is an **answer-file contract only**. It belongs in
+`.spur/run/<wbs>-verify-answer.txt` so the pipeline record step can parse the captured output. It
+does **not** belong in the body file passed to `spur task update --section Review --from-file`;
+section bodies should use tables or bold labels, as noted in Step 8.
+
 (R9; the agent reporting PASS in prose is necessary but not sufficient).
 **Standalone** (`/sp:dev-verify` outside the pipeline), write the artifact yourself:
 
@@ -205,6 +215,15 @@ interface VerifyVerdict {
   checks: Array<{ name: string; status: 'pass' | 'fail' | 'warn'; evidence: string }>;
 }
 ```
+
+For documentation-only, configuration-only, or skill-doc verification where no runtime coverage
+measurement applies, include an explicit coverage line in the Testing evidence:
+
+```
+Coverage: N/A (documentation-only change; no runtime code path added).
+```
+
+This satisfies the task checker without pretending a coverage percentage was measured.
 
 ### Step 10 — Fix pass (if `--fix` ≠ `none`)
 

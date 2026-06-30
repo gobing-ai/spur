@@ -117,6 +117,12 @@ Severity scale:
 step < 40%, emit a **P3** — "Low cache hit rate — candidate for context-window or prompt trimming"
 with the offending step(s).
 
+**Migration grep rule.** When dogfooding migrations or retired surfaces, distinguish intentional
+legacy-term mentions in guidance from live routed surfaces. Pair any broad grep (for example,
+`rg "rd3:old|old-command" plugins/sp`) with a live-surface grep over the command and agent roots
+before filing a stale-routing finding. A deliberate rejection note in a reference file is not a
+live surface.
+
 ## Mandatory Summary Footer
 
 Print **after every run, inline, regardless of `--save`** — it is the last thing the user sees.
