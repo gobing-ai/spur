@@ -47,24 +47,51 @@ Emit these sections in order. Headings are fixed (machine-parseable); never rena
 ≥1 unresolved issue; `FAIL` = the run could not complete (a step blocked all downstream steps). A
 finding alone never lowers the verdict — findings are improvements, not failures.
 
-### 3. What We Did
+### 3. Monitor Ledger
+
+The report MUST include the live ledger table before the narrative. Do not summarize the ledger away:
+it is the audit trail for step outcomes, fix attempts, findings, and cache math.
+
+```
+### 3. Monitor Ledger
+
+| Step | Attempts | Outcome | Fix Applied | Finding | Fresh Tokens | Cached Tokens | Cache % | Basis | Wall-clock |
+|------|----------|---------|-------------|---------|--------------|---------------|---------|-------|------------|
+| resolve | 1 | PASS | — | — | ~800 | ~300 | 27% | 1 command + reused task summary | ~3s |
+
+**Cache calculation:** aggregate cache% = round((sum(Cached Tokens) / sum(Fresh Tokens + Cached Tokens)) * 100).
+```
+
+Ledger rules:
+
+- Every executed step gets exactly one row, recorded when the step resolves.
+- `Fresh Tokens` and `Cached Tokens` must be numbers with `~` prefixes; `Cache %` must be computed
+  from those two cells, not guessed.
+- `Basis` is mandatory. It names the observable inputs used for the estimate: command output,
+  previously-read file reused from context, generated report text, or similar.
+- The aggregate cache line in `### 2. Execution Summary` must equal the ledger formula above. If it
+  does not, the report is invalid.
+- If the driver cannot make a defensible estimate for a row, write `~0` cached and explain the
+  missing basis in `Basis`; do not invent a stable percentage.
+
+### 4. What We Did
 
 Narrative, one numbered entry per logical action (a step, a fix, a gate check). Include `path:line`
 references. Someone should understand the run without reading the ledger.
 
 ```
-### 3. What We Did
+### 4. What We Did
 
 1. **Action label** — what happened, what was observed, the decision made.
 2. **Action label** — …
 ```
 
-### 4. Issues
+### 5. Issues
 
 Always include both sub-headings, with `(none)` when empty — consistent structure matters for parsing.
 
 ```
-### 4. Issues
+### 5. Issues
 
 #### Fixed
 
@@ -77,14 +104,14 @@ Always include both sub-headings, with `(none)` when empty — consistent struct
 - (none)  |  each with diagnosis + everything tried.
 ```
 
-### 5. Findings
+### 6. Findings
 
 Findings are the **fine-tuning payload**. Each carries a severity, a `file:line`, and a concrete
 **recommended action** — what to change, not just what's wrong. Default lists P1+P2; `--full` adds
 P3+P4.
 
 ```
-### 5. Findings
+### 6. Findings
 
 - **P1** — <what's wrong>. → **Action:** <concrete change>.  (`file:line`, ~effort)  `[feasible]`
 - **P2** — …

@@ -39,7 +39,7 @@ testee (a /sp:... command, Skill(...), or shell CLI invocation)
   → PLAN     classify + derive ordered steps + open the live ledger
   → EXECUTE  run each step as a user; on failure, bounded diagnose→fix→re-run (or observe-only)
   → MONITOR  update the ledger live, per step — never reconstruct from memory at the end
-  → REPORT   assemble the report from the ledger; print the mandatory summary footer
+  → REPORT   assemble the report from the ledger, including the mandatory Monitor Ledger section
 ```
 
 ## Arguments
@@ -70,7 +70,7 @@ The command forwards these via `$ARGUMENTS`:
 2. **Derive ordered steps** from the testee's own docstring / `argument-hint` / workflow. If no step
    list can be derived, treat the whole invocation as one step.
 3. **Open the live ledger** (working memory) — see [monitor-ledger.md](references/monitor-ledger.md)
-   for the exact column contract.
+   for the exact column contract and cache calculation methodology.
 
 ## Phase 2 — Execute + bounded fix
 
@@ -91,7 +91,8 @@ a **finding**, not a fix.
 ## Phase 3 — Monitor
 
 The ledger is updated **live** in Phase 2 and is the single source of truth for the report — the
-report is assembled from it, not from memory. Full methodology, column contract, token/cache
+report is assembled from it, not from memory. The final report MUST include a `### 3. Monitor
+Ledger` section containing the ledger rows. Full methodology, column contract, token/cache
 estimation, the cache-health finding rule, and the **cache-conservation discipline** (reuse CLI
 output already in context; don't re-ground scaffolding per step; prefer `--json` + targeted
 fields) live in **[monitor-ledger.md](references/monitor-ledger.md)**. Apply the conservation
@@ -154,8 +155,9 @@ Do **not** use this skill for:
    recording each step *as it happens*. Reconstructing at the end produces fiction.
 3. **A hiding fix is a finding.** If "fixing" a step would mask the bug, log it as a finding and
    leave the step unresolved.
-4. **Token numbers are estimates.** A skill cannot read its own exact token meter — label every
-   number `~estimate`. The signal is the **trend** across runs, not the absolute per-run value.
+4. **Token numbers are estimates, but cache math is not free-form.** A skill cannot read its own
+   exact token meter, so label numbers `~estimate`; however, cache% must be recomputable from
+   Monitor Ledger row sums. Never invent or reuse a fixed percentage.
 5. **Testee-scoped `--agent`.** Don't confuse the driver agent (always current) with the testee
    agent (the forwarded value).
 6. **Stale command snapshot.** Slash-command definitions are snapshotted at session start. If you

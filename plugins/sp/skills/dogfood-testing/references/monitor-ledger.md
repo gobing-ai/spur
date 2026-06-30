@@ -23,36 +23,50 @@ one that took three attempts, and it loses the per-step signal that drives teste
 ## Column contract
 
 ```
-| step | attempts | outcome | fix applied | finding | ~tokens | ~cached | cache% | wall-clock |
+| Step | Attempts | Outcome | Fix Applied | Finding | Fresh Tokens | Cached Tokens | Cache % | Basis | Wall-clock |
 ```
 
 | Column | Meaning |
 |--------|---------|
-| `step` | The derived step label (Phase 1) or `N` for a single-step testee. |
-| `attempts` | How many times the step was run (1 = first-try; >1 = retried under the fix budget). |
-| `outcome` | `PASS` / `FIXED` / `UNRESOLVED` / `N/A`. (`FIXED` = failed then passed within budget.) |
-| `fix applied` | `file:line` + one-line summary, or `—`. |
-| `finding` | One-line finding surfaced at this step, or `—`. A finding does **not** change `outcome`. |
-| `~tokens` | Estimated total tokens for the step (tool calls + I/O). Label the aggregate `~estimate`. |
-| `~cached` | Estimated tokens served from context cache (re-reads, unchanged prompt context). |
-| `cache%` | `~cached / ~tokens` as a percentage. |
-| `wall-clock` | Elapsed time for the step. |
+| `Step` | The derived step label (Phase 1) or `N` for a single-step testee. |
+| `Attempts` | How many times the step was run (1 = first-try; >1 = retried under the fix budget). |
+| `Outcome` | `PASS` / `FIXED` / `UNRESOLVED` / `N/A`. (`FIXED` = failed then passed within budget.) |
+| `Fix Applied` | `file:line` + one-line summary, or `—`. |
+| `Finding` | One-line finding surfaced at this step, or `—`. A finding does **not** change `Outcome`. |
+| `Fresh Tokens` | Estimated fresh context for the step. Prefix with `~`. |
+| `Cached Tokens` | Estimated reused context for the step. Prefix with `~`. |
+| `Cache %` | `Cached Tokens / (Fresh Tokens + Cached Tokens)`, rounded to the nearest whole percent. |
+| `Basis` | Observable basis for the estimate: command output, prior file read reused, generated text, etc. |
+| `Wall-clock` | Elapsed time for the step. |
 
 ## Token + cache estimation heuristic
 
 A skill **cannot read its own exact token meter** — derive an estimate and label every number
-`~estimate`. The accepted heuristic:
+`~estimate`. The accepted methodology is deterministic from the ledger rows:
 
-- **`~tokens`** ≈ a function of tool-call count + transcript size for the step (more/larger tool
-  I/O → more tokens). Round to the nearest few hundred; precision is false confidence.
-- **`~cached`** ≈ the portion of that context that was unchanged from a prior step (re-read of a file
-  already read this session, repeated prompt scaffolding). Fresh reads and new output are *not* cached.
-- **`cache%`** = `~cached / ~tokens`. The **trend across runs** is the signal, not the absolute value:
-  rising cache% = the testee is reusing context efficiently (getting leaner); falling cache% = context
-  bloat creeping in.
+1. Estimate **Fresh Tokens** from new material consumed or produced by the step:
+   - text read from files or command output: `ceil(characters / 4)`, rounded to the nearest 100;
+   - generated prose/code/report text: `ceil(characters / 4)`, rounded to the nearest 100;
+   - short command/control overhead: add `~100` per tool invocation that produced non-empty output.
+2. Estimate **Cached Tokens** only for material already present in the current session and actively
+   reused by reference in this step. Use the same `ceil(characters / 4)` basis and round to the
+   nearest 100. Do not count fresh command output, newly read files, or regenerated scaffolding as
+   cached.
+3. Compute each row: `Cache % = round(Cached Tokens / (Fresh Tokens + Cached Tokens) * 100)`.
+4. Compute the report aggregate from row sums:
+   `aggregate cache% = round(sum(Cached Tokens) / sum(Fresh Tokens + Cached Tokens) * 100)`.
+
+The **trend across runs** is the signal, not the absolute value: rising cache% = the testee is
+reusing context efficiently; falling cache% = context bloat creeping in.
 
 > Never print a precise token number you cannot substantiate. The numbers exist to show a *trend*,
 > not to bill anyone.
+
+## Anti-fiction rule
+
+Never reuse a convenient cache percentage such as `45%` because it "feels right." A cache percentage
+is valid only when it can be recomputed from the ledger row sums. If the basis is missing, mark the
+row pessimistically (`Cached Tokens = ~0`) and explain the missing basis.
 
 ## Cache-health finding rule
 
@@ -64,7 +78,7 @@ Cache% is the operational signal for testee-tuning:
   PASS/PARTIAL/FAIL verdict. Emit a **P3** finding: "Low cache hit rate — candidate for
   context-window or prompt trimming."
 
-These feed the report's §5 Findings (see [report-template.md](report-template.md)).
+These feed the report's §6 Findings (see [report-template.md](report-template.md)).
 
 ## Cache-conservation discipline (how to keep cache% high)
 
@@ -93,13 +107,14 @@ reusing context, which is the real cost saving the cache% signal stands for.
 ## Worked ledger example
 
 ```
-| step | attempts | outcome | fix applied | finding | ~tokens | ~cached | cache% | wall-clock |
-|------|----------|---------|-------------|---------|---------|---------|--------|-----------|
-| 1 resolve | 1 | PASS | — | — | ~600 | ~400 | ~67% | ~3s |
-| 2 analyze | 1 | PASS | — | over-specified for refine | ~1100 | ~700 | ~64% | ~5s |
-| 3 synthesize | 2 | FIXED | spur-dev/SKILL.md:88 thread --agent | — | ~1500 | ~600 | ~40% | ~8s |
-| 4 profile | 1 | PASS | — | — | ~500 | ~350 | ~70% | ~2s |
+| Step | Attempts | Outcome | Fix Applied | Finding | Fresh Tokens | Cached Tokens | Cache % | Basis | Wall-clock |
+|------|----------|---------|-------------|---------|--------------|---------------|---------|-------|------------|
+| 1 resolve | 1 | PASS | — | — | ~600 | ~400 | 40% | task JSON output + prior command docs reused | ~3s |
+| 2 analyze | 1 | PASS | — | over-specified for refine | ~1100 | ~700 | 39% | task file read + prior task summary reused | ~5s |
+| 3 synthesize | 2 | FIXED | spur-dev/SKILL.md:88 thread --agent | — | ~1500 | ~600 | 29% | edit diff + prior plan reused | ~8s |
+| 4 profile | 1 | PASS | — | — | ~500 | ~350 | 41% | command output + prior profile reused | ~2s |
 ```
 
-Aggregate: ~3,700 ~tokens | ~2,050 ~cached (~55% hit rate) `[~estimate]` — above the 50% floor, no
-cache-health finding. Step 3 sits exactly at 40% — a borderline P3 candidate worth a note.
+Aggregate: total = `3700 + 2050 = 5750`; cached = `2050`; cache% =
+`round(2050 / 5750 * 100) = 36%` `[~estimate]` — below the 50% floor, so emit the P3 cache-health
+finding.

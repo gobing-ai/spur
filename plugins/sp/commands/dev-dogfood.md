@@ -37,8 +37,8 @@ report of what happened, what broke, was fixed, and should be improved.
 | `--task` | File the findings as a review-template task via `spur task create --template review`. | off |
 | `--full` | Include **all** severity findings (P1–P4) in the report and `--task` output. Default filters to P1+P2 only. | off |
 
-`--save` and `--task` are independent and composable. A **mandatory summary footer** (result +
-issues + findings) is always printed inline regardless of `--save`.
+`--save` and `--task` are independent and composable. A **mandatory Monitor Ledger section** and a
+**mandatory summary footer** (result + issues + findings) are always emitted regardless of `--save`.
 
 > **Testee-scoped `--agent`.** Unlike the other `/sp:dev-*` commands (where `--agent` picks the agent
 > doing the work), here the driver is always the current session; `--agent` sets the agent the
@@ -48,9 +48,9 @@ issues + findings) is always printed inline regardless of `--save`.
 
 ## Behavior
 
-Thin wrapper: the 4-phase protocol (Plan → Execute+fix → Monitor → Report), the live ledger, the
-report template, and the `--save`/`--task` sinks are all owned by the skill. This command parameterizes
-the testee, the retry budget, the testee agent, and the sinks.
+Thin wrapper: the 4-phase protocol (Plan → Execute+fix → Monitor → Report), the live ledger,
+cache-calculation method, report template, and the `--save`/`--task` sinks are all owned by the
+skill. This command parameterizes the testee, the retry budget, the testee agent, and the sinks.
 
 ## Implementation
 
