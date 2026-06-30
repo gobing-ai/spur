@@ -2,7 +2,7 @@
 name: authoring-rules
 description: Author new spur constraint rules — evaluator selection, real config shapes, JSON finding schema, smoke-testing.
 see_also:
-  - spur-rules
+  - spur-cli
 ---
 
 # Authoring Rules

@@ -9,12 +9,13 @@ allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 Run a **unit-testing workflow** that drives toward the unit target: focused coverage evidence for the
 requested target (per-file line/function `>= 90%` by default) with `100%` passing tests.
 
-Thin wrapper over the `sp:spur-dev` skill's `unit` operation. The skill owns the procedure — the
+Thin wrapper over the `sp:code-testing` competency. The skill owns the procedure — the
 language-agnostic spine (file vs task-scoped workflows, gap categorization, coverage-vs-quality,
-escalation) lives in [unit-testing.md](../skills/spur-dev/references/unit-testing.md), with per-stack
-commands/parsing/idioms/gotchas in [stacks/](../skills/spur-dev/references/stacks/) adapters (bun-ts,
-python, go). It runs against whatever stack the project uses. This command is standalone; it does not
-delegate to the orchestration pipeline.
+escalation) lives in [unit-testing.md](../skills/code-testing/references/unit-testing.md), with
+per-stack commands/parsing/idioms/gotchas in
+[stacks/](../skills/code-testing/references/stacks/) adapters (bun-ts, python, go). It runs against
+whatever stack the project uses. This command is standalone; it does not delegate to the
+orchestration pipeline.
 
 ## When to use
 
@@ -80,4 +81,4 @@ Skill(skill="sp:code-testing", args="$ARGUMENTS")
 ## Platform Notes
 
 - **Claude Code:** native — `Skill()` delegation and `$ARGUMENTS` work directly.
-- **Other platforms:** `Skill()` and `$ARGUMENTS` are Claude-specific. Invoke the `sp:spur-dev` skill's `unit` operation directly.
+- **Other platforms:** `Skill()` and `$ARGUMENTS` are Claude-specific. Invoke the `sp:code-testing` skill directly.

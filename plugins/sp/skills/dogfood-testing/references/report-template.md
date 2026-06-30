@@ -118,10 +118,9 @@ step < 40%, emit a **P3** — "Low cache hit rate — candidate for context-wind
 with the offending step(s).
 
 **Migration grep rule.** When dogfooding migrations or retired surfaces, distinguish intentional
-legacy-term mentions in guidance from live routed surfaces. Pair any broad grep (for example,
-`rg "rd3:old|old-command" plugins/sp`) with a live-surface grep over the command and agent roots
-before filing a stale-routing finding. A deliberate rejection note in a reference file is not a
-live surface.
+legacy-term mentions in guidance from live routed surfaces. Pair any broad grep for old skill or
+command names with a live-surface grep over the command and agent roots before filing a stale-routing
+finding. A deliberate rejection note in a reference file is not a live surface.
 
 ## Mandatory Summary Footer
 

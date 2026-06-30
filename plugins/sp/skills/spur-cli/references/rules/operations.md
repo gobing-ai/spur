@@ -2,7 +2,7 @@
 name: operations
 description: Named operation procedures (run/scan/add/refine/validate/list), the shared find-existing-coverage and validate-and-smoke-test cores that back the spur rule slash commands.
 see_also:
-  - spur-rules
+  - spur-cli
 ---
 
 # Operations

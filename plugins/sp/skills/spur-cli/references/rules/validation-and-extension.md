@@ -2,7 +2,7 @@
 name: validation-and-extension
 description: Validate rule files and presets, extend the engine with custom evaluators/resolvers/formatters, and the CLI-vs-library capability gaps.
 see_also:
-  - spur-rules
+  - spur-cli
 ---
 
 # Validation & Extension

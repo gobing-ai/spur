@@ -2,7 +2,7 @@
 name: feature-acceptance-criteria
 description: Gherkin template, R-numbering, @core/@edge tiers, and traceability mechanics for feature acceptance criteria.
 see_also:
-  - spur-features
+  - spur-cli
 ---
 
 # Authoring acceptance criteria

@@ -2,7 +2,7 @@
 name: task-section-editing
 description: The temp-file → --section/--from-file recipe for editing task sections, when to use record instead, and which sections to fill when.
 see_also:
-  - spur-tasks
+  - spur-cli
 ---
 
 # Editing task sections

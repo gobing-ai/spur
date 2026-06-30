@@ -2,7 +2,7 @@
 name: operations
 description: Named operation procedures (validate/run/list/add/refine), the mode-selection gate, and the shared find-existing-workflow and validate-and-dry-run cores that back the spur workflow slash commands.
 see_also:
-  - spur-workflows
+  - spur-cli
 ---
 
 # Operations

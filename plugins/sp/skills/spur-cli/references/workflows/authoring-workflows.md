@@ -2,7 +2,7 @@
 name: authoring-workflows
 description: Author a workflow — mode selection in depth, per-mode real YAML shapes, built-in actions and guards, template variables, and the validate-and-dry-run verification core.
 see_also:
-  - spur-workflows
+  - spur-cli
   - operations
 ---
 

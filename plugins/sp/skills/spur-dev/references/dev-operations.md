@@ -18,7 +18,15 @@ table is the index; the per-operation sections below are the detail.
 | `Skill()` | Delegates to a backing skill via `Skill(skill="<skill>", args="<op> $ARGUMENTS")`. The skill owns the procedure; the command is a thin entry point. | implement, unit, review, verify, run, refine, plan, brainstorm, runall |
 | `inline` | The procedure is defined directly in the command file. No `Skill()` delegation — the command carries its own steps. | changelog, gitmsg, fixall, handover |
 
-The 9 `Skill()` commands back onto three skills: `sp:spur-dev` (planning + execution workflow + batch), `sp:code-verification` (SECUA review + traceability), and `sp:brainstorm` (structured ideation). The `runall` operation (#13) is `sp:spur-dev`'s batch entry — it delegates the driver loop to the `sp:super-coder` agent (the batch orchestrator) per [execution-batch.md](execution-batch.md). `dev-brainstorm` carries the two artifact exits — `--task` (one task) and `--feature` (validated feature with BDD AC; the front-half entry that hands off to `dev-plan`). The 4 `inline` commands cover git tooling and operational utilities that have no natural skill home — creating a skill for each would be scope creep for one-liner procedures.
+The `Skill()` commands back onto five skills: `sp:spur-dev` (planning + execution workflow + batch),
+`sp:code-implementation` (single implement step), `sp:code-testing` (unit/coverage work),
+`sp:code-verification` (SECUA review + traceability), and `sp:brainstorm` (structured ideation). The
+`runall` operation (#13) is `sp:spur-dev`'s batch entry — it delegates the driver loop to the
+`sp:super-coder` agent (the batch orchestrator) per [execution-batch.md](execution-batch.md).
+`dev-brainstorm` carries the two artifact exits — `--task` (one task) and `--feature` (validated
+feature with BDD AC; the front-half entry that hands off to `dev-plan`). The 4 `inline` commands
+cover git tooling and operational utilities that have no natural skill home — creating a skill for
+each would be scope creep for one-liner procedures.
 
 > **`dev-dogfood`** is not in this table. It is a thin `Skill()` wrapper over the **`sp:dogfood-testing`**
 > backbone skill (which owns the 4-phase dogfood protocol, the live ledger, and the report template);
@@ -28,7 +36,7 @@ The 9 `Skill()` commands back onto three skills: `sp:spur-dev` (planning + execu
 
 | # | Operation | Command | Backing | Skill / Verb | Arg-hint |
 |---|-----------|---------|---------|--------------|----------|
-| 1 | unit | `dev-unit` | `Skill()` | `sp:spur-dev` (`unit`) | `<wbs> [--coverage <pct>] [--agent <name\|auto>]` |
+| 1 | unit | `dev-unit` | `Skill()` | `sp:code-testing` | `<target> [--coverage <pct>] [--agent <name\|auto>] [--auto]` |
 | 2 | review | `dev-review` | `Skill()` | `sp:code-verification` (`review`) | `<wbs> [--agent <name\|auto>] [--focus <lens>] [--fix <none\|blockers-first\|all>] [--auto]` |
 | 3 | verify | `dev-verify` | `Skill()` | `sp:code-verification` (`verify`) | `<wbs> [--agent <name\|auto>] [--fix ...] [--focus <lens>] [--bdd] [--auto] [--force]` |
 | 4 | run | `dev-run` | `Skill()` | `sp:spur-dev` (`run` / `implement`) | `<wbs> [--mode <full\|implement>] [--agent <name\|auto>] [--auto]` |

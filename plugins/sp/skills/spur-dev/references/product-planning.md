@@ -5,17 +5,17 @@ see_also:
   - spur-dev
   - planning-workflow
   - decomposition
-  - spur-features
+  - spur-cli
   - doc-evolve
 ---
 
 # Product Planning Guidance
 
-This reference absorbs the useful judgment from `rd3:product-management` without porting its old
-`ftree`, `prd-*`, or `super-pm` surfaces. `sp:spur-dev` remains the planning orchestrator. Product
-planning is a lens applied during intake, feature authoring, prioritization, decomposition, and doc
-handoff; deterministic writes still go through `spur feature`, `spur task`, `spur workflow`, and
-`sp:doc-evolve`.
+This reference captures product-management judgment for the Spur planning path without adding old
+feature-tree, PRD command, or PM-agent surfaces. `sp:spur-dev` remains the planning orchestrator.
+Product planning is a lens applied during intake, feature authoring, prioritization, decomposition,
+and doc handoff; deterministic writes still go through `spur feature`, `spur task`,
+`spur workflow`, and `sp:doc-evolve`.
 
 ## Routing Rule
 

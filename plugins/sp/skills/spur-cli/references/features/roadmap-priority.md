@@ -2,7 +2,7 @@
 name: feature-roadmap-priority
 description: Roadmap hierarchy, priority/status conventions, and feature-tree adjustment guidance for spur feature.
 see_also:
-  - spur-features
+  - spur-cli
   - feature-verbs
   - product-planning
 ---

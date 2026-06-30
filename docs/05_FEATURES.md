@@ -2,10 +2,10 @@
 doc: 05_FEATURES
 owns: STATUS — feature decomposition + state (✅ / 🔶 / ⏳ / 💤)
 authority: derived
-version: 1.3.0
+version: 1.3.1
 derived_from: [01_PRD, 02_ROADMAP, 04_DESIGN]
 owner: Robin Min
-updated_at: 2026-06-18
+updated_at: 2026-06-30
 read_before: citing or changing a feature's state
 edit_rules: 99 §6.6
 sync: [T4, T9]
@@ -151,7 +151,7 @@ Decomposition and per-item dispositions live in
 | Batch task execution (`/sp:dev-runall` + `sp:super-coder` orchestrator, task 0141) | ✅ | `/sp:dev-runall --tasks <selector>` runs a set through the per-task pipeline in dependency order; selectors: explicit WBS / status pseudo-list / `feature:<id>` / `ready`; set frozen at kickoff, Kahn topo-sort, cycle→abort, unmet out-of-set dep→block subtree; stop-the-batch default + `--keep-going`; orchestration is prose in `execution-batch.md` driven by `sp:super-coder` (ADR-022, zero engine code). Parallel execution + within-step Q&A deferred to task 0142 (the latter blocked on workspace/inbox/team-mode modules) |
 | Front-half planning pipeline + docs scaffold (task 0088) | ✅ | `spur init` scaffolds `docs/` stubs (preserve-marked, never clobbered); `/sp:spur-init` command customizes fresh project; `sp:spur-plan` skill + `planning-pipeline.yaml` (phasing → feature-ID → design-gen → approval → handoff); validates against workspace schema; hands off to `sp:spur-dev` |
 | `plugins/sp` Fat Skills + thin command/subagent wrappers (ADR-023) | ✅ | skills are SSOT; commands/subagents wrap skills; ADR-016-filtered command set |
-| Functional skill split — thin spine + competency skills (ADR-028, task 0161) | 🔶 | `sp:spur-dev` shrunk to a thin orchestration spine that dispatches deep competency skills (`sp:sys-architecture`, `sp:spec-decomposition`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`; `sp:spur-tdd` referenced discipline); the four `spur-<noun>` skills consolidated into the `sp:spur-cli` facade (one reference per noun); `expert-spur` replaces the four noun-experts; `super-coder` absorbs `expert-dev`. Waves A–C done (facade + competencies + spine shrink + binding proof + R16/R20 assertions in the gate). Plugin self-contained (no vendors/rd3 refs). Remaining: final doc-map sync + a live full-pipeline binding run |
+| Functional skill split — thin spine + competency skills (ADR-028, task 0161) | 🔶 | `sp:spur-dev` shrunk to a thin orchestration spine that dispatches deep competency skills (`sp:sys-architecture`, `sp:spec-decomposition`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`; `sp:spur-tdd` referenced discipline); the four `spur-<noun>` skills consolidated into the `sp:spur-cli` facade (one reference per noun); `expert-spur` replaces the four noun-experts; `super-coder` absorbs `expert-dev`. Waves A–C done (facade + competencies + spine shrink + binding proof + R16/R20 assertions in the gate). Plugin self-contained (no vendors/rd3 refs). Remaining: a live full-pipeline binding run |
 | Verifier skill + pipeline completion gate (ADR-026, tasks 0105–0106) | ✅ | `sp:code-verification` (verify + review modes) backs `/sp:dev-verify` / `/sp:dev-review`; emits `.spur/run/<wbs>-verdict.json`; `task-pipeline.yaml` gates `verify → record` on `verdict==PASS` (else `→ failed`); `implement` step split to `/sp:dev-run --mode implement` (de-recurses `/sp:dev-run --mode full`). Done: skill + commands + gate + workflow-validate/lint green, gate logic proven. Gate logic verified end-to-end: dogfood run on 0101 (task 0105 R5) confirmed verify→record gate; done-gate + section-ownership (task 0106) confirmed record→done gate + Solution/Testing/Review auto-population |
 
 ## 10. Deferred (needs design before build)

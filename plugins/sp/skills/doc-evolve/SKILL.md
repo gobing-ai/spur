@@ -153,9 +153,8 @@ Append a lesson to the right per-file section of §8:
   against the constitution.
 - **Not the authority** — it never overrides `00`/`01`/§2; on any conflict the authoritative doc
   wins and the skill defers.
-- **Not a port of `rd3:code-docs`** — that was a generic doc tool; this is constitution-native
-  (every operation cites a §). Behaviors of the old skill that have no constitution backing are
-  intentionally absent.
+- **Not a generic doc tool** — this is constitution-native (every operation cites a §). Behaviors
+  without constitution backing are intentionally absent.
 
 ## References
 

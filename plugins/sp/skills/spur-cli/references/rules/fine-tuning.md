@@ -2,7 +2,7 @@
 name: fine-tuning
 description: Dial in delivery quality — severity, glob scoping, exemptions, preset composition, layering, governance.
 see_also:
-  - spur-rules
+  - spur-cli
 ---
 
 # Fine-Tuning Rules and Presets

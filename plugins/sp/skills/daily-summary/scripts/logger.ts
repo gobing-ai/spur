@@ -1,9 +1,9 @@
 /**
  * Minimal self-contained logger for the embedded daily-summary script.
  *
- * The skill script stays self-contained (no CLI extraction, no monorepo coupling — disposition I16),
- * so it carries its own tiny logger rather than importing the host plugin's. API mirrors the rd3
- * logger subset the script + test use: `logger.{info,warn,error}` and `enableLogger(console, file)`.
+ * The skill script stays self-contained (no CLI extraction, no monorepo coupling), so it carries its
+ * own tiny logger rather than importing the host plugin's. API mirrors the logger subset the script
+ * and test use: `logger.{info,warn,error}` and `enableLogger(console, file)`.
  */
 
 type Channels = { console: boolean; file: boolean };

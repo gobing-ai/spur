@@ -2,7 +2,7 @@
 name: task-verbs
 description: Per-verb flag detail, template variants, verdict + check JSON shapes, and exit codes for spur task.
 see_also:
-  - spur-tasks
+  - spur-cli
 ---
 
 # `spur task` — verb detail

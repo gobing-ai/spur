@@ -2,7 +2,7 @@
 name: feature-verbs
 description: Per-verb flag detail, JSON shapes, and the four check layers for spur feature.
 see_also:
-  - spur-features
+  - spur-cli
 ---
 
 # `spur feature` — verb detail

@@ -2,7 +2,7 @@
 name: validation-and-extension
 description: Validate workflow definitions and extend the engine — validate semantics, custom action and guard runners, the trust-gated extension loader, and CLI-vs-library capability gaps.
 see_also:
-  - spur-workflows
+  - spur-cli
   - operations
 ---
 
