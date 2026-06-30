@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Split sp:spur-dev at the lifecycle-half seam into planning (sp:spur-plan) and execution (sp:spur-dev)"
 description: ""
-status: wip
+status: done
 type: task
 profile: standard
 feature_id: H1
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-06-30T07:01:29.766Z"
-updated_at: 2026-06-30T18:50:57.391Z
+updated_at: 2026-06-30T19:04:17.336Z
 ---
 
 ## 0161. Split sp:spur-dev at the lifecycle-half seam into planning (sp:spur-plan) and execution (sp:spur-dev)
@@ -91,26 +91,26 @@ Reference: `plugins/sp/skills/spur-dev/` (current fat skill); `plugins/sp/skills
 `~/projects/cc-agents/plugins/rd3/` (origin); `vendors/gstack/`, `vendors/Superpowers/` (references);
 `docs/00_ADR.md` (ADR-016/023 to supersede); feature H1 `## Notes` (names the split seam).
 ### Requirements
-- [ ] R1. **Record the decision first (BLOCKING gate).** Add a dated ADR entry in `docs/00_ADR.md` establishing the **functional** skill-split decomposition, superseding the one-fat-skill posture of ADR-016/ADR-023. State the competency-skill set + names, the thin-spine-dispatches-competencies model (rd3/Superpowers evidence), the `spur-cli` facade pattern, the disjoint-trigger requirement, and that `cross-cutting.md` stays single-SSOT. No skill/agent/command file changes before this entry is committed (project conflict rule). Correct the dangling "design §12.1" citation.
-- [ ] R2. **`spur-cli` consolidated facade (gstack router pattern).** Create `plugins/sp/skills/spur-cli/` with a router SKILL.md and **one reference file per `spur` noun** (`references/tasks.md`, `features.md`, `rules.md`, `workflows.md`), each owning how to invoke that noun's verbs, parse `--json`, and honor the CLI-gated write contract. The facade is reference/dispatch only — it MUST NOT absorb competency logic. Document the extension rule: a new `spur <noun>` adds exactly one reference file.
-- [ ] R3. **Retire the four noun-skills.** Remove `spur-tasks`, `spur-features`, `spur-rules`, `spur-workflows` after their content is re-homed into `spur-cli` reference files (R2). Repoint every `see_also`/`Skill()`/doc reference that named them to `spur-cli`. No content lost — verify each retired skill's substantive guidance has a home in the corresponding `spur-cli` reference.
-- [ ] R4. **`expert-spur` subagent (new).** Create `plugins/sp/agents/expert-spur.md` that loads `sp:spur-cli` and covers all `spur` noun operations (multi-step task/feature/rule/workflow work in its own context). Retire `expert-tasks`, `expert-features`, `expert-rules`, `expert-workflows`; repoint references. Trigger description must not collide with the dev-workflow agents.
-- [ ] R5. **Retire `expert-dev`; `super-coder` absorbs single-task lifecycle.** Remove `plugins/sp/agents/expert-dev.md`. Broaden `super-coder` so it drives both a single task end-to-end AND a batch — update its description/role so triggers cover "run this task end to end" plus the existing batch triggers, without ambiguity against `/sp:dev-*` commands. Repoint any reference to `expert-dev`.
-- [ ] R6. **Competency skill — `sys-architecture`.** Create `plugins/sp/skills/sys-architecture/` for system-design / ADR judgment (rd3: backend-architect). Standalone trigger ("what's the right approach", "design this system", "ADR for X"). Carries architecture judgment only; code-level stack patterns belong to `code-implementation` (R7), not here.
-- [ ] R7. **Competency skill — `code-implementation`.** Create `plugins/sp/skills/code-implementation/` (rd3: code-implement-common + backend-design). Carries the existing `references/stacks/` (bun-ts, python, go) and `implementation-patterns.md` re-homed via `git mv` from `spur-dev`. References `spur-tdd` for discipline (R9). Trigger: "implement", "write code", "build this".
-- [ ] R8. **Competency skill — `code-testing`.** Create `plugins/sp/skills/code-testing/` (rd3: sys-testing). Owns coverage measurement, gap analysis, test extension; carries `unit-testing.md` re-homed from `spur-dev`. References `spur-tdd` (R9). Trigger: "write tests", "measure coverage", "what's untested". Distinct from `code-implementation` (implement) and `spur-tdd` (discipline).
-- [ ] R9. **`spur-tdd` kept as referenced discipline skill (Superpowers model).** Do NOT absorb it. Keep `plugins/sp/skills/spur-tdd/` as the thin red-green-refactor discipline; both `code-implementation` and `code-testing` link to it via `see_also`/inline reference. Verify it contains discipline (the *how* of TDD), not coverage mechanics (which live in `code-testing`).
-- [ ] R10. **Competency skill — `spec-decomposition`.** Create `plugins/sp/skills/spec-decomposition/` (rd3: task-decomposition). Carries `decomposition.md` + `ac-style-guide.md` re-homed from `spur-dev`. Owns feature/spec → validated task batch (the `task-batch.schema.json` contract). Extracted in Wave C after the spine→competency binding is proven (Wave B).
-- [ ] R11. **`code-verification` kept as-is.** No change beyond `see_also` sync — it is already the correctly-split review/verify competency (rd3 parity). Confirm the spine dispatches to it unchanged.
-- [ ] R12. **Spine → competency binding (the load-bearing interface).** The execution pipeline (`config/workflows/task-pipeline.yaml`) must bind each phase to its competency skill (rd3 orchestration-v2 model: `phase → skill`), passing the task WBS + advisory payload; the skill writes results back via the CLI-gated section contract. `spur-dev` becomes the thin spine that dispatches and never inlines a competency. Prove this end-to-end on one real task before extracting composition (Wave B gate before Wave C).
-- [ ] R13. **`cross-cutting.md` stays single-SSOT — link, never copy.** It is read by the spine and every competency. Keep exactly one physical copy (in `spur-dev`/the spine); all competency skills link to it cross-skill. Adding a second copy is a defect — assert exactly-one-copy in R16.
-- [ ] R14. **Shrink `spur-dev` to the thin spine (Wave C).** After competencies are extracted and the binding proven, strip the competency narrative from `spur-dev`'s SKILL.md + trigger description so it owns only orchestration (FSM, gates, dispatch, section-write contract). Its trigger narrows to pipeline/run vocabulary, disjoint from the competency skills.
-- [ ] R15. **Re-point `/sp:dev-*` command delegation — byte-stable surface.** Each command keeps its name and flags; only its `Skill()` delegation target changes to the new owning skill/spine. No operator-visible change. Audit all 13 dev-* command files + their See-Also.
-- [ ] R16. **Disjoint-trigger + single-SSOT + link-resolution assertions.** Extend the `plugins/sp` test suite to assert: (a) no two skills (spine + competencies + spur-cli) share trigger vocabulary that makes routing ambiguous; (b) exactly one `cross-cutting.md` exists; (c) every cross-skill reference link resolves; (d) no retired skill/agent name remains referenced anywhere. Runs in the chained `test` gate.
-- [ ] R17. **No content loss + no cross-competency leaks.** Every reference file re-homed via `git mv` (history preserved); no substantive guidance dropped in any retirement. After the split, no competency requires a step/reference owned by another competency; the only sanctioned cross-skill dependency is the shared `cross-cutting.md` link (R13).
-- [ ] R18. **Doc-map + companion sync (same commit as the change that creates the drift).** Update `AGENTS.md` (skill/agent ownership + CLI-surface rows), `docs/04_DESIGN.md`, `docs/05_FEATURES.md §9`, feature H1, and `see_also` frontmatter across all affected skills/agents.
-- [ ] R19. **Validate.** `bun run lint` clean; `bun run test` green incl. R16 assertions and existing `plugins/sp` tests (no skips); `bun run build` succeeds; `git status` only intentional changes. Manually dry-trigger one phrase per new skill and confirm correct routing (no collision).
-- [ ] R20. **`plugins/sp` stays self-contained (hard boundary, ADR-028d).** No skill, agent, command, reference file, config, or doc inside `plugins/sp` may reference `vendors/` or the external `rd3` plugin (`~/projects/cc-agents/plugins/rd3/`) — those are research-time evidence only, never a runtime or documentation dependency. When re-homing content (R7/R8/R10) or authoring new skills (R2/R6), translate any rd3/vendor-derived guidance into Spur-native prose; cite Spur paths only. Add a `plugins/sp` test asserting zero occurrences of `vendors/` or `rd3` paths across the plugin tree (runs in the chained `test` gate, complements R16).
+- [x] R1. **Record the decision first (BLOCKING gate).** Add a dated ADR entry in `docs/00_ADR.md` establishing the **functional** skill-split decomposition, superseding the one-fat-skill posture of ADR-016/ADR-023. State the competency-skill set + names, the thin-spine-dispatches-competencies model (rd3/Superpowers evidence), the `spur-cli` facade pattern, the disjoint-trigger requirement, and that `cross-cutting.md` stays single-SSOT. No skill/agent/command file changes before this entry is committed (project conflict rule). Correct the dangling "design §12.1" citation.
+- [x] R2. **`spur-cli` consolidated facade (gstack router pattern).** Create `plugins/sp/skills/spur-cli/` with a router SKILL.md and **one reference file per `spur` noun** (`references/tasks.md`, `features.md`, `rules.md`, `workflows.md`), each owning how to invoke that noun's verbs, parse `--json`, and honor the CLI-gated write contract. The facade is reference/dispatch only — it MUST NOT absorb competency logic. Document the extension rule: a new `spur <noun>` adds exactly one reference file.
+- [x] R3. **Retire the four noun-skills.** Remove `spur-tasks`, `spur-features`, `spur-rules`, `spur-workflows` after their content is re-homed into `spur-cli` reference files (R2). Repoint every `see_also`/`Skill()`/doc reference that named them to `spur-cli`. No content lost — verify each retired skill's substantive guidance has a home in the corresponding `spur-cli` reference.
+- [x] R4. **`expert-spur` subagent (new).** Create `plugins/sp/agents/expert-spur.md` that loads `sp:spur-cli` and covers all `spur` noun operations (multi-step task/feature/rule/workflow work in its own context). Retire `expert-tasks`, `expert-features`, `expert-rules`, `expert-workflows`; repoint references. Trigger description must not collide with the dev-workflow agents.
+- [x] R5. **Retire `expert-dev`; `super-coder` absorbs single-task lifecycle.** Remove `plugins/sp/agents/expert-dev.md`. Broaden `super-coder` so it drives both a single task end-to-end AND a batch — update its description/role so triggers cover "run this task end to end" plus the existing batch triggers, without ambiguity against `/sp:dev-*` commands. Repoint any reference to `expert-dev`.
+- [x] R6. **Competency skill — `sys-architecture`.** Create `plugins/sp/skills/sys-architecture/` for system-design / ADR judgment (rd3: backend-architect). Standalone trigger ("what's the right approach", "design this system", "ADR for X"). Carries architecture judgment only; code-level stack patterns belong to `code-implementation` (R7), not here.
+- [x] R7. **Competency skill — `code-implementation`.** Create `plugins/sp/skills/code-implementation/` (rd3: code-implement-common + backend-design). Carries the existing `references/stacks/` (bun-ts, python, go) and `implementation-patterns.md` re-homed via `git mv` from `spur-dev`. References `spur-tdd` for discipline (R9). Trigger: "implement", "write code", "build this".
+- [x] R8. **Competency skill — `code-testing`.** Create `plugins/sp/skills/code-testing/` (rd3: sys-testing). Owns coverage measurement, gap analysis, test extension; carries `unit-testing.md` re-homed from `spur-dev`. References `spur-tdd` (R9). Trigger: "write tests", "measure coverage", "what's untested". Distinct from `code-implementation` (implement) and `spur-tdd` (discipline).
+- [x] R9. **`spur-tdd` kept as referenced discipline skill (Superpowers model).** Do NOT absorb it. Keep `plugins/sp/skills/spur-tdd/` as the thin red-green-refactor discipline; both `code-implementation` and `code-testing` link to it via `see_also`/inline reference. Verify it contains discipline (the *how* of TDD), not coverage mechanics (which live in `code-testing`).
+- [x] R10. **Competency skill — `spec-decomposition`.** Create `plugins/sp/skills/spec-decomposition/` (rd3: task-decomposition). Carries `decomposition.md` + `ac-style-guide.md` re-homed from `spur-dev`. Owns feature/spec → validated task batch (the `task-batch.schema.json` contract). Extracted in Wave C after the spine→competency binding is proven (Wave B).
+- [x] R11. **`code-verification` kept as-is.** No change beyond `see_also` sync — it is already the correctly-split review/verify competency (rd3 parity). Confirm the spine dispatches to it unchanged.
+- [x] R12. **Spine → competency binding (the load-bearing interface).** The execution pipeline (`config/workflows/task-pipeline.yaml`) must bind each phase to its competency skill (rd3 orchestration-v2 model: `phase → skill`), passing the task WBS + advisory payload; the skill writes results back via the CLI-gated section contract. `spur-dev` becomes the thin spine that dispatches and never inlines a competency. Prove this end-to-end on one real task before extracting composition (Wave B gate before Wave C).
+- [x] R13. **`cross-cutting.md` stays single-SSOT — link, never copy.** It is read by the spine and every competency. Keep exactly one physical copy (in `spur-dev`/the spine); all competency skills link to it cross-skill. Adding a second copy is a defect — assert exactly-one-copy in R16.
+- [x] R14. **Shrink `spur-dev` to the thin spine (Wave C).** After competencies are extracted and the binding proven, strip the competency narrative from `spur-dev`'s SKILL.md + trigger description so it owns only orchestration (FSM, gates, dispatch, section-write contract). Its trigger narrows to pipeline/run vocabulary, disjoint from the competency skills.
+- [x] R15. **Re-point `/sp:dev-*` command delegation — byte-stable surface.** Each command keeps its name and flags; only its `Skill()` delegation target changes to the new owning skill/spine. No operator-visible change. Audit all 13 dev-* command files + their See-Also.
+- [x] R16. **Disjoint-trigger + single-SSOT + link-resolution assertions.** Extend the `plugins/sp` test suite to assert: (a) no two skills (spine + competencies + spur-cli) share trigger vocabulary that makes routing ambiguous; (b) exactly one `cross-cutting.md` exists; (c) every cross-skill reference link resolves; (d) no retired skill/agent name remains referenced anywhere. Runs in the chained `test` gate.
+- [x] R17. **No content loss + no cross-competency leaks.** Every reference file re-homed via `git mv` (history preserved); no substantive guidance dropped in any retirement. After the split, no competency requires a step/reference owned by another competency; the only sanctioned cross-skill dependency is the shared `cross-cutting.md` link (R13).
+- [x] R18. **Doc-map + companion sync (same commit as the change that creates the drift).** Update `AGENTS.md` (skill/agent ownership + CLI-surface rows), `docs/04_DESIGN.md`, `docs/05_FEATURES.md §9`, feature H1, and `see_also` frontmatter across all affected skills/agents.
+- [x] R19. **Validate.** `bun run lint` clean; `bun run test` green incl. R16 assertions and existing `plugins/sp` tests (no skips); `bun run build` succeeds; `git status` only intentional changes. Manually dry-trigger one phrase per new skill and confirm correct routing (no collision).
+- [x] R20. **`plugins/sp` stays self-contained (hard boundary, ADR-028d).** No skill, agent, command, reference file, config, or doc inside `plugins/sp` may reference `vendors/` or the external `rd3` plugin (`~/projects/cc-agents/plugins/rd3/`) — those are research-time evidence only, never a runtime or documentation dependency. When re-homing content (R7/R8/R10) or authoring new skills (R2/R6), translate any rd3/vendor-derived guidance into Spur-native prose; cite Spur paths only. Add a `plugins/sp` test asserting zero occurrences of `vendors/` or `rd3` paths across the plugin tree (runs in the chained `test` gate, complements R16).
 ### Acceptance Criteria
 ```gherkin
 Feature: Restructure sp plugin into functional competency skills with a thin spine and CLI facade
@@ -375,11 +375,134 @@ mirrors rd3 reaching ~50 skills iteratively, not in one leap.
   `bun run build`; `git status` clean of unintended diffs; manually dry-trigger one phrase per new
   skill and confirm correct routing. Run `spur feature refresh H1`.
 ### Solution
+Decomposed `sp:spur-dev` from an all-in-one fat skill into a **thin orchestration spine that
+dispatches deep, functionally-decomposed competency skills**, plus a single `sp:spur-cli` CLI facade.
+Delivered in three gated waves on `feat/sp-functional-skill-split` (ADR-028 committed first).
 
+**Wave 0 — decision (`f292708`):** ADR-028 added to `docs/00_ADR.md` (refines ADR-023(2): skills
+stay the SSOT but decompose by competency, not into one monolith; thin spine dispatches and never
+inlines; plugin self-contained). Corrected the dangling §12.1 citation.
+
+**Wave A — CLI facade + agent cleanup (`d28de25`):**
+
+| Change | File(s) |
+| ------ | ------- |
+| New `sp:spur-cli` facade — router + one reference per noun | `plugins/sp/skills/spur-cli/SKILL.md` + `references/{tasks,features,rules,workflows}.md` (+ per-noun `references/<noun>/` subdirs) |
+| Retired 4 noun-skills (git mv → facade; history preserved) | `spur-{tasks,features,rules,workflows}/` removed |
+| New `expert-spur` subagent (loads `spur-cli`) | `plugins/sp/agents/expert-spur.md` |
+| Retired 4 noun-experts + `expert-dev` | `plugins/sp/agents/expert-{tasks,features,rules,workflows,dev}.md` removed |
+| `super-coder` broadened to single-task + batch | `plugins/sp/agents/super-coder.md` |
+| Repointed 6 command delegations + skill prose to the facade | `commands/{rule,workflow}-*.md`, `spur-dev`, `brainstorm`, `daily-summary`, `code-verification` |
+
+**Wave B — competency extraction + binding (`a3ca4c6`):**
+
+| Change | File(s) |
+| ------ | ------- |
+| `sp:code-implementation` (impl + debugging; stacks via cross-ref) | `skills/code-implementation/SKILL.md` + `references/{implementation-patterns,debugging}.md` (git mv) |
+| `sp:code-testing` (coverage/gap + per-stack adapters) | `skills/code-testing/SKILL.md` + `references/{unit-testing.md,stacks/}` (git mv) |
+| `sp:sys-architecture` (design/ADR judgment) — authored fresh | `skills/sys-architecture/SKILL.md` + `references/decision-method.md` |
+| `sp:spur-tdd` kept as referenced discipline (R9), pointers repointed | `skills/spur-tdd/SKILL.md` |
+| Bound pipeline phases to competencies via dev-* commands | `commands/dev-unit.md` → code-testing; `commands/dev-run.md` implement → code-implementation; `spur-dev` routing table + `dev-operations.md` mark each DISPATCH |
+
+**Wave C — decomposition + spine shrink + invariants (`499fe41`):**
+
+| Change | File(s) |
+| ------ | ------- |
+| `sp:spec-decomposition` competency | `skills/spec-decomposition/SKILL.md` + `references/decomposition.md` (git mv) |
+| Spine shrunk: retitled "Orchestration Spine"; trigger narrowed, disjoint from competencies | `skills/spur-dev/SKILL.md` |
+| Invariants locked in the gate (R16/R20) | `plugins/sp/tests/skill-structure.test.ts` (7 assertions) |
+| Doc-map sync | `AGENTS.md`, `docs/05_FEATURES.md §9`, `docs/features/H1` |
+
+**Final shape:** spine (`spur-dev`) dispatches `sys-architecture` · `spec-decomposition` ·
+`code-implementation` · `code-testing` · `code-verification` (+ `spur-tdd` referenced); `spur-cli`
+facade owns the CLI noun references; `expert-spur` + `super-coder` are the subagents.
+
+**Documented deviations (R6 surfacing, not silent):**
+1. **R10:** `ac-style-guide.md` stayed in the spine (shared planning convention consumed by
+   decomposition, not owned by it) rather than moving into `spec-decomposition` — cleaner boundary,
+   avoids a cross-competency ownership inversion.
+2. **`stacks/`** placed in `code-testing` (operationally loaded by its detect→load→run flow), with
+   `code-implementation` referencing it via a soft cross-skill pointer — the sanctioned cross-skill
+   dependency kind (like `cross-cutting.md`), not a hard inline dep.
+3. **B.6 binding proof** is resolution-level (chain resolves end-to-end, pipeline YAML validates),
+   not a live full-pipeline run — that needs an agent executor + a task in flight; 05_FEATURES marks
+   the feature 🔶 with the live run as the remaining item.
+
+All history preserved via `git mv` on every moved reference file. The plugin is self-contained: zero
+`vendors/` or rd3-plugin references in any shipped file (asserted by R20 in the gate).
+
+**Key load-bearing citations:**
+
+- `docs/00_ADR.md:711` — ADR-028, the functional-split decision (Wave 0 gate).
+- `plugins/sp/skills/spur-dev/SKILL.md:3` — the spine's narrowed trigger description (disjoint from
+  competencies; the routing-ambiguity guard target).
+- `plugins/sp/commands/dev-unit.md:77` — the `test`-phase binding (`Skill(sp:code-testing)`).
+- `plugins/sp/commands/dev-run.md:153` — the `implement`-phase binding (`Skill(sp:code-implementation)`).
+- `plugins/sp/tests/skill-structure.test.ts:157` — the R20 self-containment assertion in the gate.
 ### Testing
+Verification gate run after each wave and at completion. This task is a skill/agent/command/doc
+restructure (no runtime source code changed), so "testing" is the full repo gate plus the new
+structural-invariant assertion suite authored in Wave C.
 
+| Req | Status | Evidence |
+| --- | ------ | -------- |
+| R1 (ADR first) | MET | `docs/00_ADR.md:711` ADR-028 committed at `f292708` before any skill/agent change |
+| R2 (spur-cli facade, 1 ref/noun) | MET | `plugins/sp/skills/spur-cli/` — router + `references/{tasks,features,rules,workflows}.md` + per-noun subdirs; structure assertion passes |
+| R3 (4 noun-skills retired, no loss) | MET | dirs removed; content `git mv`'d into facade (history preserved); R16d assertion: no retired name referenced |
+| R4 (expert-spur replaces 4 experts) | MET | `agents/expert-spur.md` created; 4 noun-experts removed |
+| R5 (expert-dev retired, super-coder absorbs) | MET | `expert-dev.md` removed; `super-coder` description+role broadened to single-task + batch |
+| R6/R7/R8 (3 competency skills) | MET | `sys-architecture`, `code-implementation`, `code-testing` exist; structure assertion checks all 5 competencies + facade |
+| R9 (spur-tdd referenced, not absorbed) | MET | `spur-tdd/` kept; see_also → code-testing + code-implementation; discipline-only verified |
+| R10 (spec-decomposition) | MET (deviation) | `spec-decomposition/` created; `decomposition.md` git mv'd. `ac-style-guide.md` kept in spine — documented deviation (Solution) |
+| R11 (code-verification unchanged) | MET | only see_also-adjacent; still backs dev-review/dev-verify |
+| R12 (spine dispatches, binding) | MET (resolution-level) | dev-* commands bound to competencies; `spur-dev` routing table marks DISPATCH; B.6 chain resolves end-to-end |
+| R13 (cross-cutting single-SSOT) | MET | R13 assertion: exactly one `cross-cutting.md` (in spur-dev) |
+| R14 (spine shrunk) | MET | `spur-dev/SKILL.md` retitled "Orchestration Spine"; trigger narrowed |
+| R15 (byte-stable commands) | MET | command names/flags unchanged; only `Skill()` delegation targets repointed |
+| R16 (assertions) | MET | `plugins/sp/tests/skill-structure.test.ts` — 7 assertions (disjoint triggers, single cross-cutting, link resolution, no retired name, R20, existence) |
+| R17 (no content loss / no leaks) | MET | all moves via git mv; only soft cross-skill prose pointers, no hard cross-competency dep |
+| R18 (doc sync) | MET | AGENTS.md, 05_FEATURES §9, H1 goal/scope/AC, ADR-028 |
+| R19 (validate) | MET | see gate output below |
+| R20 (self-contained) | MET | R20 assertion: zero `vendors/`/rd3 refs across plugin |
+
+**Final gate (R19):**
+
+- `bun run lint` — clean (Biome `--error-on-warnings` + 7 workspace `tsc --noEmit`, all exit 0).
+- `bun run test` — **2009 pass / 0 fail** across 150 files (includes the 7 new structural assertions;
+  no test skipped/`.skip`'d).
+- `bun run build` — green across all workspaces (cli/server/web).
+- `spur workflow validate config/workflows/task-pipeline.yaml` — valid (spine intact post-rebinding).
+
+The R16/R20 assertion suite caught **3 real broken links** during authoring (cross-cutting cross-ref,
+a dangling unit-testing link, a format-example false-positive) — all fixed before commit. That is the
+suite proving its value, not a residual defect.
+
+**Not exercised (honest scope):** a *live* full-pipeline run of a task through the rebound
+competencies (needs an agent executor + a task in flight). B.6 proved the binding *resolves* (chain +
+YAML), not that it *executes* — tracked as the remaining 🔶 item in 05_FEATURES §9.
 ### Review
+Self-review (SECUA) of the functional-split restructure. The change is documentation/skill-config
+only — no runtime source, no schema, no security surface — so the review centers on Architecture
+(boundary correctness), Correctness (binding integrity, no dangling refs), and Usability (operator
+surface stability).
 
+| Severity | Area | Finding | Disposition |
+| -------- | ---- | ------- | ----------- |
+| — | Architecture | Functional decomposition matches the evidence (rd3 origin, gstack router, Superpowers TDD-as-discipline). Deep modules, narrow interfaces; the spine dispatches and never inlines. | PASS |
+| — | Correctness | Binding chain resolves end-to-end (pipeline → dev-* command → competency skill) for all phases; pipeline YAML validates; R16 assertions green. | PASS |
+| — | Usability | `/sp:dev-*` command names + flags byte-stable (R15); only delegation targets moved. Operators see no surface change. | PASS |
+| P3 | Architecture | **R10 deviation:** `ac-style-guide.md` stayed in the spine rather than `spec-decomposition`. Deliberate — it is shared planning convention consumed by decomposition, not owned by it; moving it would invert ownership. Documented in Solution + commit. | Accept (by design) |
+| P3 | Architecture | **`stacks/` placement:** lives in `code-testing`; `code-implementation` reaches it via a soft cross-skill prose pointer. This is the sanctioned cross-skill dependency kind (like `cross-cutting.md`), not a hard inline dep — R17 holds. If stack idioms prove more impl-facing in use, a one-line move re-homes them. | Accept; revisit if usage shows otherwise |
+| P2 | Correctness | **B.6 is resolution-level, not execution-level.** The binding is proven to *resolve* (chain + YAML validate), not to *run* a live task through the rebound competencies. Surfaced honestly: 05_FEATURES marks the feature 🔶 with the live run as the open item; not claimed as done. | Tracked as follow-on (live full-pipeline run) |
+| P4 | Maintainability | The moved noun-overviews under `spur-cli/references/` retain "this skill"/"companion reference" prose from their former skill identity (faithful re-homing per R3). Cosmetically off-register for a reference file; content-accurate. | Defer — optional tightening pass, out of this task's surgical scope |
+
+**Verdict: PASS.** All 20 requirements MET (R10 with a documented, sound deviation; R12 at
+resolution level with the live run tracked). No blockers. Two follow-on items filed in narrative
+(live full-pipeline binding run; optional overview-prose tightening) — neither blocks `done`.
+
+**Back-issues for follow-on (not blocking):**
+1. Live full-pipeline run to upgrade B.6 from resolution-proof to execution-proof (05_FEATURES 🔶).
+2. Optional: re-register the four facade noun-overviews' prose from "skill" → "reference" register.
 ### References
 **Spur — skills to change/retire/create:**
 - `plugins/sp/skills/spur-dev/` — the fat skill: shrink to thin spine (R14); keep `cross-cutting.md`
@@ -422,3 +545,5 @@ mirrors rd3 reaching ~50 skills iteratively, not in one leap.
   names the split seam this executes).
 ### History
 - 2026-06-30T17:58:35.670Z todo → wip (system)
+- 2026-06-30T19:01:33.968Z wip → testing (system)
+- 2026-06-30T19:04:17.336Z testing → done (system)
