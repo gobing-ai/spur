@@ -155,6 +155,11 @@ CLI does.
   report. Backs `/sp:dev-runall` + the `sp:super-coder` orchestrator.
 - [references/cross-cutting.md](references/cross-cutting.md) — CLI-gated writes, the section-editing
   body-only format, the section-status matrix, check-before-write. Shared by both halves.
+- [references/debugging.md](references/debugging.md) — root-cause-first debugging workflow for
+  failed gates, runtime defects, intermittent behavior, and unclear test failures.
+- [references/implementation-patterns.md](references/implementation-patterns.md) — production
+  implementation discipline for the `implement` step: task-driven scope, stack pattern selection,
+  progress persistence, and handoff.
 
 **Supporting detail:**
 

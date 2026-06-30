@@ -187,3 +187,19 @@ On escalation:
 2. **Report status honestly** — which gaps remain, which are documented-skipped, final coverage achieved.
 3. For task-scoped runs, leave the task in `wip` if implementation changes are still required; do not
    force it forward.
+
+## Advanced Techniques
+
+Advanced testing remains a technique layer, not a new command surface. Use these when coverage is
+green but confidence is still weak:
+
+| Technique | Use When | Typical Tooling |
+|-----------|----------|-----------------|
+| Mutation testing | Critical business/security logic needs proof that tests catch real defects. | Stryker, mutmut, PIT, infection |
+| Property-based testing | Algorithms, parsers, serializers, or data transforms have invariants across many inputs. | fast-check, Hypothesis, proptest |
+| Accessibility testing | UI behavior must meet WCAG expectations beyond visual checks. | axe, Pa11y, Playwright accessibility assertions |
+| Implementation comparison | Competing algorithms or designs need objective selection. | benchmark harness + common test corpus |
+
+Do not add these by default to every task. They are escalation tools for high-risk code or for a
+specific confidence gap the normal unit workflow cannot close. If the technique introduces new
+tooling, document why the existing stack gate is insufficient before adding it.

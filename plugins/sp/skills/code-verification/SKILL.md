@@ -122,6 +122,10 @@ injection, unsafe input), **E**fficiency, **C**orrectness (null/edge handling, l
 Rank findings by severity (blocker / major / minor). See
 [references/secu-review.md](references/secu-review.md).
 
+When review exposes broader architecture friction rather than a localized defect, use
+[references/code-improvement.md](references/code-improvement.md) to frame follow-up candidates
+instead of silently expanding the current fix.
+
 ### Step 6 — BDD scenario check (if `--bdd`)
 
 Map each `## Acceptance Criteria` scenario to a passing/failing test. Passed scenario → MET; failed
@@ -271,6 +275,8 @@ Do **not** use this skill for:
   rubric.
 - `config/workflows/task-pipeline.yaml` — the `verify → record` gate that consumes the verdict.
 - **`sp:spur-dev`** — the execution-half umbrella that drives the pipeline this skill gates.
+- [references/code-improvement.md](references/code-improvement.md) — architecture-improvement lens
+  for module depth, seam placement, locality, coupling, and testability.
 
 ---
 

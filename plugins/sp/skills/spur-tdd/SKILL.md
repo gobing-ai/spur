@@ -74,7 +74,7 @@ Match the situation to a workflow:
 | Bug fix | **Regression-first** — write a test that reproduces the bug, watch it fail, then fix |
 | Untested legacy code | **Characterization** — write tests capturing *current* behavior first, then change |
 | API / service boundary | **Contract-based** — define the consumer's expected request/response, mock the provider to satisfy it |
-| Algorithms / data transforms | Property/invariant thinking (full property-based tooling is deferred — `rd3:advanced-testing`) |
+| Algorithms / data transforms | Property/invariant thinking; deeper tooling is covered by `sp:spur-dev` unit-testing advanced techniques |
 
 ### Classic TDD (new feature)
 
