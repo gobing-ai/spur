@@ -44,7 +44,7 @@ rules:
     - .spur/rules/recommended-pre-check.yaml
 workflows:
   paths:
-    - .spur/config/workflows/
+    - .spur/workflows/
 redaction:
   enabled: true
 tasks:
@@ -74,7 +74,7 @@ describe('spurConfigSchema (merged)', () => {
             name: 'x',
             agent: { default: 'codex' },
             rules: { paths: ['.spur/rules/x.yaml'] },
-            workflows: { paths: ['.spur/config/workflows/'] },
+            workflows: { paths: ['.spur/workflows/'] },
             redaction: { enabled: true },
             tasks: { active: 'docs/tasks', folders: {} },
             features: { dir: 'docs/features' },

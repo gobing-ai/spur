@@ -90,8 +90,8 @@ function walk(dir: string, relPrefix: string, filter: RegExp = /\.(ya?ml|json)$/
  * each as a `/`-joined path relative to {@link bundledConfigRoot}.
  *
  * Intended for `spur init` to copy task templates, feature templates, and BDD
- * snippets into `.spur/config/templates/`. Returns an empty array when no
- * bundled directory is present.
+ * snippets into `.spur/templates/` (task templates land in `.spur/tasks/templates/`).
+ * Returns an empty array when no bundled directory is present.
  */
 export function listBundledTemplateFiles(): string[] {
     const root = bundledConfigRoot();

@@ -37,7 +37,7 @@ spur init --name <name> [--minimal] [--force] --json
 
 This scaffolds (idempotent, never overwrites customized docs):
 - `.spur/config.yaml` — minimal project config.
-- `.spur/config/workflows/`, `.spur/rules/`, `.spur/config/templates/` — defaults.
+- `.spur/workflows/`, `.spur/rules/`, `.spur/templates/`, `.spur/tasks/templates/` — defaults.
 - `docs/99_PROJECT_CONSTITUTION.md` + `docs/00`–`docs/05` stubs — the doc structure.
 
 ### Phase 2 — Non-deterministic customization (only if `--skip-docs` is absent)

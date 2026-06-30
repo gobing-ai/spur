@@ -28,7 +28,7 @@ describe('init command', () => {
         expect(existsSync(join(cwd, '.spur', 'config.yaml'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'rules', 'recommended-pre-check.yaml'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'rules', 'recommended-post-check.yaml'))).toBe(true);
-        expect(existsSync(join(cwd, '.spur', 'config', 'workflows', 'basic.yaml'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'workflows', 'basic.yaml'))).toBe(true);
         // Team-mode agent specs directory is tracked via .gitkeep.
         expect(existsSync(join(cwd, '.spur', 'agents', '.gitkeep'))).toBe(true);
 
@@ -38,15 +38,15 @@ describe('init command', () => {
         expect(existsSync(join(cwd, '.spur', 'tasks', 'templates', 'issue.md'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'tasks', 'templates', 'review.md'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'tasks', 'templates', 'meta.md'))).toBe(true);
-        expect(existsSync(join(cwd, '.spur', 'config', 'templates', 'feature', 'default.md'))).toBe(true);
-        expect(existsSync(join(cwd, '.spur', 'config', 'templates', 'bdd', 'gherkin.md'))).toBe(true);
-        expect(existsSync(join(cwd, '.spur', 'config', 'templates', 'bdd', 'checklist.md'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'templates', 'feature', 'default.md'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'templates', 'bdd', 'gherkin.md'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'templates', 'bdd', 'checklist.md'))).toBe(true);
         // Section matrix under .spur/tasks/
         expect(existsSync(join(cwd, '.spur', 'tasks', 'section-matrix.yaml'))).toBe(true);
-        // Lifecycle + pipeline workflows under .spur/config/workflows/
-        expect(existsSync(join(cwd, '.spur', 'config', 'workflows', 'task-lifecycle.yaml'))).toBe(true);
-        expect(existsSync(join(cwd, '.spur', 'config', 'workflows', 'feature-lifecycle.yaml'))).toBe(true);
-        expect(existsSync(join(cwd, '.spur', 'config', 'workflows', 'task-pipeline.yaml'))).toBe(true);
+        // Lifecycle + pipeline workflows under .spur/workflows/
+        expect(existsSync(join(cwd, '.spur', 'workflows', 'task-lifecycle.yaml'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'workflows', 'feature-lifecycle.yaml'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'workflows', 'task-pipeline.yaml'))).toBe(true);
     });
 
     test('seeds the global rules directory from the bundled presets', async () => {

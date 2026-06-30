@@ -19,7 +19,7 @@ async function isolatedOptions(cwd: string) {
 }
 
 describe('spur init template copy', () => {
-    test('templates are copied to .spur/tasks/templates/ and .spur/config/templates/', async () => {
+    test('templates are copied to .spur/tasks/templates/ and .spur/templates/', async () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
@@ -32,11 +32,11 @@ describe('spur init template copy', () => {
         expect(existsSync(join(tasksBase, 'issue.md'))).toBe(true);
         expect(existsSync(join(tasksBase, 'review.md'))).toBe(true);
         expect(existsSync(join(tasksBase, 'meta.md'))).toBe(true);
-        // Feature and BDD templates still under .spur/config/templates/
-        const configBase = join(cwd, '.spur', 'config', 'templates');
-        expect(existsSync(join(configBase, 'feature', 'default.md'))).toBe(true);
-        expect(existsSync(join(configBase, 'bdd', 'gherkin.md'))).toBe(true);
-        expect(existsSync(join(configBase, 'bdd', 'checklist.md'))).toBe(true);
+        // Feature and BDD templates under .spur/templates/
+        const templatesBase = join(cwd, '.spur', 'templates');
+        expect(existsSync(join(templatesBase, 'feature', 'default.md'))).toBe(true);
+        expect(existsSync(join(templatesBase, 'bdd', 'gherkin.md'))).toBe(true);
+        expect(existsSync(join(templatesBase, 'bdd', 'checklist.md'))).toBe(true);
     });
 
     test('bundled template files exist at source', async () => {
@@ -105,13 +105,13 @@ describe('spur init template copy', () => {
         expect(content).toContain('variants:');
     });
 
-    test('workflow lifecycle and pipeline YAMLs are copied to .spur/config/workflows/', async () => {
+    test('workflow lifecycle and pipeline YAMLs are copied to .spur/workflows/', async () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
         expect(await main(['init'], options)).toBe(0);
 
-        const wfDir = join(cwd, '.spur', 'config', 'workflows');
+        const wfDir = join(cwd, '.spur', 'workflows');
         expect(existsSync(join(wfDir, 'task-lifecycle.yaml'))).toBe(true);
         expect(existsSync(join(wfDir, 'feature-lifecycle.yaml'))).toBe(true);
         expect(existsSync(join(wfDir, 'task-pipeline.yaml'))).toBe(true);
@@ -152,13 +152,13 @@ describe('spur init template copy', () => {
         expect(content).toBe('CUSTOM CONTENT — must survive re-init');
     });
 
-    test('doc templates are also copied to .spur/config/templates/docs/', async () => {
+    test('doc templates are also copied to .spur/templates/docs/', async () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
         expect(await main(['init'], options)).toBe(0);
 
-        const tmplDir = join(cwd, '.spur', 'config', 'templates', 'docs');
+        const tmplDir = join(cwd, '.spur', 'templates', 'docs');
         expect(existsSync(join(tmplDir, '99_PROJECT_CONSTITUTION.md'))).toBe(true);
         expect(existsSync(join(tmplDir, '00_ADR.md'))).toBe(true);
         expect(existsSync(join(tmplDir, '05_FEATURES.md'))).toBe(true);

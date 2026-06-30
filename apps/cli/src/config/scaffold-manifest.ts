@@ -40,14 +40,14 @@ export const SCAFFOLD_MANIFEST: readonly ScaffoldEntry[] = [
     // Rule presets (ADR-015 — project-local rules stay at .spur/rules/)
     { source: 'rules/recommended-pre-check.yaml', target: 'rules/recommended-pre-check.yaml' },
     { source: 'rules/recommended-post-check.yaml', target: 'rules/recommended-post-check.yaml' },
-    // Workflows — lifecycle + pipeline definitions under .spur/config/workflows/
-    { source: 'workflows/basic.yaml', target: 'config/workflows/basic.yaml' },
-    { source: 'workflows/task-lifecycle.yaml', target: 'config/workflows/task-lifecycle.yaml' },
-    { source: 'workflows/feature-lifecycle.yaml', target: 'config/workflows/feature-lifecycle.yaml' },
-    { source: 'workflows/feature-dev.yaml', target: 'config/workflows/feature-dev.yaml' },
-    { source: 'workflows/task-pipeline.yaml', target: 'config/workflows/task-pipeline.yaml' },
+    // Workflows — lifecycle + pipeline definitions under .spur/workflows/ (where the runtime reads them)
+    { source: 'workflows/basic.yaml', target: 'workflows/basic.yaml' },
+    { source: 'workflows/task-lifecycle.yaml', target: 'workflows/task-lifecycle.yaml' },
+    { source: 'workflows/feature-lifecycle.yaml', target: 'workflows/feature-lifecycle.yaml' },
+    { source: 'workflows/feature-dev.yaml', target: 'workflows/feature-dev.yaml' },
+    { source: 'workflows/task-pipeline.yaml', target: 'workflows/task-pipeline.yaml' },
     // Planning pipeline — front-half (task 0088); companions the sp:spur-plan skill
-    { source: 'workflows/planning-pipeline.yaml', target: 'config/workflows/planning-pipeline.yaml' },
+    { source: 'workflows/planning-pipeline.yaml', target: 'workflows/planning-pipeline.yaml' },
     // Section matrix under .spur/tasks/
     { source: 'tasks/section-matrix.yaml', target: 'tasks/section-matrix.yaml' },
     // Task templates under .spur/tasks/templates/
@@ -56,14 +56,14 @@ export const SCAFFOLD_MANIFEST: readonly ScaffoldEntry[] = [
     { source: 'templates/task/issue.md', target: 'tasks/templates/issue.md' },
     { source: 'templates/task/review.md', target: 'tasks/templates/review.md' },
     { source: 'templates/task/meta.md', target: 'tasks/templates/meta.md' },
-    // Feature templates under .spur/config/templates/feature/
-    { source: 'templates/feature/default.md', target: 'config/templates/feature/default.md' },
-    // BDD snippets under .spur/config/templates/bdd/
-    { source: 'templates/bdd/gherkin.md', target: 'config/templates/bdd/gherkin.md' },
-    { source: 'templates/bdd/checklist.md', target: 'config/templates/bdd/checklist.md' },
+    // Feature templates under .spur/templates/feature/
+    { source: 'templates/feature/default.md', target: 'templates/feature/default.md' },
+    // BDD snippets under .spur/templates/bdd/
+    { source: 'templates/bdd/gherkin.md', target: 'templates/bdd/gherkin.md' },
+    { source: 'templates/bdd/checklist.md', target: 'templates/bdd/checklist.md' },
     // Docs scaffolds at the project root (R1 — task 0088): constitution + numbered doc stubs.
     // Idempotent / never-overwrite (preserve) — a customized live doc is never clobbered, even
-    // by `spur init --force`. Only `docs/` copies are preserved; the `.spur/config/templates/docs/`
+    // by `spur init --force`. Only `docs/` copies are preserved; the `.spur/templates/docs/`
     // copies below are regular templates and follow the normal --force behavior.
     {
         source: 'templates/docs/99_PROJECT_CONSTITUTION.md',
@@ -77,12 +77,12 @@ export const SCAFFOLD_MANIFEST: readonly ScaffoldEntry[] = [
     { source: 'templates/docs/03_ARCHITECTURE.md', target: 'docs/03_ARCHITECTURE.md', root: true, preserve: true },
     { source: 'templates/docs/04_DESIGN.md', target: 'docs/04_DESIGN.md', root: true, preserve: true },
     { source: 'templates/docs/05_FEATURES.md', target: 'docs/05_FEATURES.md', root: true, preserve: true },
-    // Doc templates under .spur/config/templates/docs/ (referenced by sp:doc-evolve and sp:spur-init)
-    { source: 'templates/docs/99_PROJECT_CONSTITUTION.md', target: 'config/templates/docs/99_PROJECT_CONSTITUTION.md' },
-    { source: 'templates/docs/00_ADR.md', target: 'config/templates/docs/00_ADR.md' },
-    { source: 'templates/docs/01_PRD.md', target: 'config/templates/docs/01_PRD.md' },
-    { source: 'templates/docs/02_ROADMAP.md', target: 'config/templates/docs/02_ROADMAP.md' },
-    { source: 'templates/docs/03_ARCHITECTURE.md', target: 'config/templates/docs/03_ARCHITECTURE.md' },
-    { source: 'templates/docs/04_DESIGN.md', target: 'config/templates/docs/04_DESIGN.md' },
-    { source: 'templates/docs/05_FEATURES.md', target: 'config/templates/docs/05_FEATURES.md' },
+    // Doc templates under .spur/templates/docs/ (referenced by sp:doc-evolve and sp:spur-init)
+    { source: 'templates/docs/99_PROJECT_CONSTITUTION.md', target: 'templates/docs/99_PROJECT_CONSTITUTION.md' },
+    { source: 'templates/docs/00_ADR.md', target: 'templates/docs/00_ADR.md' },
+    { source: 'templates/docs/01_PRD.md', target: 'templates/docs/01_PRD.md' },
+    { source: 'templates/docs/02_ROADMAP.md', target: 'templates/docs/02_ROADMAP.md' },
+    { source: 'templates/docs/03_ARCHITECTURE.md', target: 'templates/docs/03_ARCHITECTURE.md' },
+    { source: 'templates/docs/04_DESIGN.md', target: 'templates/docs/04_DESIGN.md' },
+    { source: 'templates/docs/05_FEATURES.md', target: 'templates/docs/05_FEATURES.md' },
 ] as const;
