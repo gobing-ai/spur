@@ -17,7 +17,7 @@ const SOURCE = new URL('../../config', import.meta.url).pathname;
 const EXCLUDE = /(^|\/)(\.DS_Store|fixtures)($|\/)/;
 
 /** Bundle `config/` into `target`, excluding fixtures and OS junk, then inject `$schema`. */
-export async function bundleConfig(target: string | undefined): Promise<void> {
+export async function bundleConfig(target: string | undefined): Promise<{ target: string; injected: number }> {
     if (!target) {
         throw new Error('Usage: spur-dev bundle-config <dist-config-dir>');
     }
@@ -32,7 +32,7 @@ export async function bundleConfig(target: string | undefined): Promise<void> {
     // already carry a $schema directive are skipped to avoid duplicate keys.
     const injected = await injectSchemas(target, '');
 
-    console.log(`Bundled config -> ${target} (fixtures/OS junk excluded, ${injected} $schema directives injected)`);
+    return { target, injected };
 }
 
 const SCHEMA_PREFIX = '@gobing-ai/spur/schemas/';

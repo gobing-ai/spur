@@ -44,9 +44,13 @@ try {
             await publish(args[0], otp);
             break;
         }
-        case 'bundle-config':
-            await bundleConfig(args[0]);
+        case 'bundle-config': {
+            const result = await bundleConfig(args[0]);
+            console.log(
+                `Bundled config -> ${result.target} (fixtures/OS junk excluded, ${result.injected} $schema directives injected)`,
+            );
             break;
+        }
         case 'build-binaries':
             await buildBinaries();
             break;
