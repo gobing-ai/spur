@@ -86,7 +86,7 @@ reference for the half you're operating; do not duplicate its content here.
 
 | Step | Half | CLI gate | Reference |
 |------|------|----------|-----------|
-| Intake | planning | — (prompt work) | [planning-workflow.md](references/planning-workflow.md) |
+| Intake | planning | — (prompt work) | [planning-workflow.md](references/planning-workflow.md) · [product-planning.md](references/product-planning.md) |
 | Feature create + AC | planning | `spur feature create` | [planning-workflow.md](references/planning-workflow.md) · [ac-style-guide.md](references/ac-style-guide.md) |
 | Feature check gate | planning | `spur feature check` | [planning-workflow.md](references/planning-workflow.md) |
 | Decomposition | planning | `task-batch.schema.json` | [decomposition.md](references/decomposition.md) |
@@ -106,6 +106,8 @@ Use this skill for:
 
 - **Planning a feature** — a description arrives; produce a feature file with AC and
   decomposed tasks.
+- **Product-shaped planning** — prioritize roadmap candidates, choose a strategy profile, or produce
+  PRD-shaped guidance without adding a separate PM command surface.
 - **Running a task** — pick a task, run it through the pipeline, handle HITL gates.
 - **Continuing interrupted work** — resume a paused pipeline run.
 - **Batch task creation** — decompose a feature into tasks and land them atomically.
@@ -160,6 +162,8 @@ CLI does.
 - [references/implementation-patterns.md](references/implementation-patterns.md) — production
   implementation discipline for the `implement` step: task-driven scope, stack pattern selection,
   progress persistence, and handoff.
+- [references/product-planning.md](references/product-planning.md) — product-management judgment for
+  intake, RICE/MoSCoW prioritization, strategy profiles, PRD-shaped output, and PM handoff rules.
 
 **Supporting detail:**
 

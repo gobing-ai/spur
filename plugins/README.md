@@ -328,7 +328,7 @@ verification guard.
 | `bdd-workflow` | `sp` | 🔀 Absorbed | BDD validation logic → shared BDD validator (X01); AC generation → `spur-dev` (C02) |
 | `feature-tree` | `sp` | 🔀 Absorbed | Into `spur feature` verbs + `spur-features` skill (B-group); in-memory tree rejected (B10) |
 | `tasks` | `sp` | 🔀 Absorbed | Into `spur task` verbs + `spur-tasks` skill (A-group) |
-| `product-management` | `sp` | 🔀 Partial | PM workflow mechanics are already covered by `sp:spur-dev`, `sp:spur-features`, `sp:spur-tasks`, `sp:doc-evolve`, and `spur workflow`; only PM judgment is being absorbed as planning guidance. No `sp:super-pm` or `/sp:prd-*` surface for now. |
+| `product-management` | `sp` | 🔀 Absorbed | PM workflow mechanics are already covered by `sp:spur-dev`, `sp:spur-features`, `sp:spur-tasks`, `sp:doc-evolve`, and `spur workflow`; PM judgment is absorbed into planning/roadmap references. No `sp:super-pm` or `/sp:prd-*` surface for now. |
 | `code-review-common` | `sp` | ⏳ Deferred | K01 — runs as `sp` skill + `spur agent run` meanwhile; extract post-stabilization |
 | `code-verification` | `sp` | ⏳ Deferred | K02 — same |
 | `code-improvement` | `sp` | 🔀 Partial | Folded into `sp:code-verification` as the code-improvement reference for architecture/refactoring candidates; no separate command. |
@@ -476,7 +476,8 @@ They stay live in `rd3` until the core stabilizes; deferral breaks nothing.
 
 - **12 rd3 skills absorbed into `sp` Fat Skills**: the planning/decomposition/review/pipeline family
   folded into `spur-dev` + `spur-plan`; the task/feature CLI companions became `spur-tasks` +
-  `spur-features`; code-docs → `doc-evolve`; quick-grep stays a prompt skill.
+  `spur-features`; product-management judgment moved into the existing planning/roadmap references;
+  code-docs → `doc-evolve`; quick-grep stays a prompt skill.
 - **5 rd3 "super-*" agents → 1 in `sp`**: `expert-dev` absorbs the coder/tester/reviewer/brain/jon-snow
   roles behind the two `spur-dev` halves.
 - **ADR-016 command pruning**: 46 rd3 commands → 19 in `sp` (only commands that convert

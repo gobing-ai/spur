@@ -138,6 +138,17 @@ the AC coverage map. Habits that keep it green:
   no task), coverage orphans (tasks claiming AC that doesn't exist), and broken edges.
 - **Run `refresh` after hand-edits** so the `## Tasks` block and tree reflect the files (files win).
 
+## Roadmap and priority habits
+
+Use feature hierarchy for user-facing capabilities and roadmap themes; keep technical-module mapping
+as prose or notes unless the product surface is developer infrastructure. Priority is a scalar field
+(`spur feature update <id> --field priority --value P1`), while status is lifecycle state
+(`backlog → active → verifying → blocked → done → cancelled`). Do not conflate the two.
+
+For roadmap adjustment, apply the RICE/MoSCoW and strategy guidance from `sp:spur-dev`'s product
+planning reference, then apply accepted deterministic changes through `spur feature update`,
+`spur feature move`, `spur feature refresh`, and `spur feature check`.
+
 ## The gate — `check --json`
 
 ```bash
@@ -163,6 +174,7 @@ restated as prose here. This is what `sp:spur-dev`'s feature-check gate loop run
 | --------- | ------ |
 | [references/verbs.md](references/verbs.md) | Per-verb flag detail, JSON shapes, the 4 check layers |
 | [references/acceptance-criteria.md](references/acceptance-criteria.md) | Gherkin template, R-numbering, `@core`/`@edge`, traceability mechanics |
+| [references/roadmap-priority.md](references/roadmap-priority.md) | Roadmap hierarchy, priority/status conventions, and feature-tree adjustment workflow |
 
 ## See also
 
