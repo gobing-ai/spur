@@ -35,6 +35,7 @@ in the reviewed PR/commit/diff). Fix in priority order (P1 → P2 → …); re-r
 
 - [ ] Fix P1 findings
 - [ ] Fix P2 findings
+- [ ] Fix all the remaining findings if any
 - [ ] Re-review the changed code
 
 ### Review
