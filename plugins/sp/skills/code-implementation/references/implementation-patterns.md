@@ -2,16 +2,15 @@
 name: implementation-patterns
 description: "Production implementation discipline for the sp execution loop: task-driven scope, branch/worktree hygiene, stack pattern selection, progress persistence, and handoff."
 see_also:
-  - spur-dev
-  - debugging
-  - unit-testing
+  - code-implementation
+  - code-testing
 ---
 
 # Implementation Patterns
 
-This reference supports the `implement` step of `sp:spur-dev`. It is intentionally not a separate
-command or agent: implementation is already owned by the execution loop, and deterministic writes
-still go through `spur task update`.
+This reference is the core of the `code-implementation` competency skill — the discipline the
+spine's `implement` step dispatches to. It is not a separate command: deterministic writes still go
+through `spur task update`, and the spine (`sp:spur-dev`) owns the lifecycle that invokes this skill.
 
 ## Preconditions
 
@@ -33,8 +32,8 @@ unblocks the requirement.
 Use this sequence:
 
 1. **Map requirement to files.** Identify the module, seam, config, docs, or tests that must change.
-2. **Choose a test strategy.** Use `sp:spur-tdd` for test-first work, or the `unit` operation for
-   gap-filling on existing code.
+2. **Choose a test strategy.** Use `sp:spur-tdd` for test-first work, or `sp:code-testing` for
+   gap-filling coverage on existing code.
 3. **Implement in a small slice.** Keep the first slice narrow enough to verify.
 4. **Run the narrow check.** Fix root causes, not symptoms.
 5. **Update the task Solution.** The `implement` step owns `## Solution`; write a change map through

@@ -1,0 +1,94 @@
+---
+name: code-testing
+description: The testing competency — run existing tests, measure coverage, categorize gaps, and pragmatically extend the suite with targeted tests, across stacks (Bun/TS, Python, Go). The deep skill the spine's `test` step dispatches to, backing `/sp:dev-unit`. Use when running tests, measuring coverage, finding untested paths, or extending a suite for coverage. Triggers on "write tests", "measure coverage", "what's untested", "coverage gap", "extend the test suite", "unit tests", "test step", "run the tests".
+license: Apache-2.0
+metadata:
+  author: spur
+  version: "1.0"
+  platforms: "claude-code,codex,openclaw,opencode,antigravity"
+  interactions:
+    - technique
+  competency: testing
+  openclaw:
+    emoji: "🧪"
+---
+
+# code-testing — the testing competency
+
+Run existing tests, measure what is covered, categorize the gaps, and extend the suite with targeted
+tests — language-agnostic spine with per-stack adapters. This is the deep competency the
+orchestration spine (`sp:spur-dev`) dispatches to at its `test` step (via `/sp:dev-unit`). It owns
+*how to test and measure coverage well*, not *when* (the spine decides that).
+
+## When to use
+
+- **Run + measure** — execute the suite, read the coverage report, identify untested paths.
+- **Gap-fill** — add targeted tests to close a coverage gap on existing code.
+- **The pipeline's `test` step** — `/sp:dev-unit <wbs>` dispatches here.
+
+Do **not** use this skill for:
+
+- **Writing the implementation** — that is `sp:code-implementation`.
+- **Test-first design (red-green-refactor)** — that is `sp:spur-tdd` (composed with this skill).
+- **Functional / requirements verification + review** — that is `sp:code-verification`.
+- **Driving the lifecycle** — that is the spine, `sp:spur-dev`.
+
+## Behavior
+
+This skill behaves as a **technique**: detect the stack → load the one matching adapter → run the
+suite → parse coverage → categorize gaps (untested branch, missing boundary, absent error path) →
+extend with the narrowest tests that close the highest-value gaps. Coverage is a signal, not the
+goal: it favors behavior-meaningful tests over line-chasing.
+
+Full procedure: **[references/unit-testing.md](references/unit-testing.md)** — file-focused vs
+task-scoped workflows, gap categorization, coverage-vs-quality rules, escalation. Per-stack
+mechanics (commands, coverage parsing, idioms, gotchas) live in the adapters:
+[references/stacks/](references/stacks/) — `bun-ts.md`, `python.md`, `go.md`.
+
+## Composition with the discipline + implementation skills
+
+- **`sp:spur-tdd`** — they compose: TDD *designs* the tests (red-green-refactor, behavior naming,
+  mock-at-boundary); this skill *runs and extends* the suite for coverage. TDD is the how-to-design;
+  this skill is the run/measure/gap-fill.
+- **`sp:code-implementation`** — the implement step writes code; this step proves it. The per-stack
+  adapters here are also the stack-idiom reference `code-implementation` consults cross-skill.
+
+## Per-stack adapters
+
+| Detected by | Stack | Adapter |
+|-------------|-------|---------|
+| `bun.lock` / `bunfig.toml` | Bun + TypeScript | [stacks/bun-ts.md](references/stacks/bun-ts.md) |
+| `pyproject.toml` / `pytest` | Python | [stacks/python.md](references/stacks/python.md) |
+| `go.mod` | Go | [stacks/go.md](references/stacks/go.md) |
+
+## Gotchas
+
+1. **Coverage is a signal, not the target.** A test that survives a business-rule change is the
+   wrong test — assert intent, not implementation.
+2. **One adapter per run.** Detect the stack, load the single matching adapter; do not mix idioms.
+3. **Escalate to debugging when a failure needs root-causing**, not more test authoring
+   (`sp:code-implementation`'s debugging reference).
+
+## See also
+
+- **`sp:spur-dev`** — the spine that dispatches this competency at the `test` step.
+- **`sp:code-implementation`** — writes the code this skill tests; consults these stack adapters.
+- **`sp:spur-tdd`** — the test-first discipline this skill composes with.
+- **`sp:code-verification`** — functional/requirements verification + review (a distinct gate).
+
+## Platform Notes
+
+### Claude Code
+
+Invoked via `/sp:dev-unit <wbs>` (which the pipeline's `test` step calls), or directly via
+`Skill(skill="sp:code-testing", args="<target>")`. Run the test/coverage commands via the Bash tool.
+
+### Codex / OpenClaw / OpenCode / Antigravity
+
+Invoke this skill directly for testing technique; run the stack's test commands via the Bash tool.
+The skill is the SSOT; the command and pipeline step are thin wrappers.
+
+---
+
+**Template type**: technique
+**Purpose**: Run tests, measure coverage, categorize gaps, and extend the suite across stacks — the deep skill the spine's test step dispatches to, backing /sp:dev-unit

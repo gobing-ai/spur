@@ -2,7 +2,8 @@
 name: unit-testing
 description: "SSOT for the `unit` operation procedure (language-agnostic spine) — file-focused and task-scoped test workflows, gap categorization, coverage-vs-quality rules, escalation. Backs `/sp:dev-unit` and dev-operations.md §1. Per-stack commands, coverage parsing, and gotchas live in stacks/<stack>.md adapters."
 see_also:
-  - spur-dev
+  - code-testing
+  - spur-tdd
   - dev-operations
 ---
 

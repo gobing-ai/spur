@@ -54,9 +54,9 @@ must not be changed without updating the backing skill.
 
 - **Purpose:** Extend or generate tests for a task or file until the coverage target is met with a fully passing suite.
 - **Inputs:** `<target>` (required — WBS, task file, source file, or glob). `--coverage <pct>` overrides the default target. `--agent <name|auto>` is an **inline** override: omit (default) to run test generation **in the current session**; `<name>`/`auto` spawns it via `spur agent run` (see cross-cutting.md § "Honor `--agent`").
-- **Backing:** `sp:spur-dev` skill, `unit` operation.
-- **Behavior:** Detect the project stack → read the implementation → identify untested paths → write targeted tests → measure coverage → iterate until the per-file line/function target (≥90%) is met. The language-agnostic procedure (two workflows, gap categorization, coverage-vs-quality, escalation) is the SSOT in **[unit-testing.md](unit-testing.md)**; per-stack commands/parsing/idioms/gotchas live in **[stacks/](stacks/)** adapters (bun-ts, python, go).
-- **Delegation:** `Skill(skill="sp:spur-dev", args="unit $ARGUMENTS")`
+- **Backing:** `sp:code-testing` competency skill.
+- **Behavior:** Detect the project stack → read the implementation → identify untested paths → write targeted tests → measure coverage → iterate until the per-file line/function target (≥90%) is met. The language-agnostic procedure (two workflows, gap categorization, coverage-vs-quality, escalation) and the per-stack adapters are the SSOT in **`sp:code-testing`** (`references/unit-testing.md` + `references/stacks/`). The spine dispatches here; it does not inline the procedure.
+- **Delegation:** `Skill(skill="sp:code-testing", args="$ARGUMENTS")`
 
 ### 2. review
 
@@ -78,11 +78,11 @@ must not be changed without updating the backing skill.
 
 - **Purpose:** Run a task through the execution pipeline (full) or execute a single pipeline step (implement).
 - **Inputs:** `<wbs>` (required). `--mode <full|implement>` selects the execution mode. `--agent <name|auto>` is a **pipeline** override: omit (default) → spawned steps use the configured default executor (`omp`); current-agent is **not expressible** (subprocess FSM). `<name>`/`auto` spawns that agent (merged into `vars.agent` for full mode, passed through `$ARGUMENTS` for implement mode). `--auto` skips the HITL approve gate / confirmations and propagates down the `--next` chain. `--next`: advance to the next step — **resolves the mode to `implement`** (even under `--mode full`); on success, transition `todo → wip → testing` through the FSM (guards honored) and invoke `/sp:dev-verify <wbs> --auto --next`. On a guard failure, stop as review-pending (leave status, surface the finding).
-- **Backing:** `sp:spur-dev` skill — `run` operation for full pipeline, `implement` operation for the implement step.
+- **Backing:** `sp:spur-dev` skill — `run` operation for the full pipeline (the spine drives it); `sp:code-implementation` competency skill for the implement step (the spine dispatches to it).
 - **Modes:**
   - **`full`** (default, no `--next`): Drive the full pipeline — precheck → implement → test → review → approve(HITL) → verify → record → done. Invokes `spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"<wbs>"}'` (with `profile: auto` when `--auto`). Monitors the run; on HITL pause surfaces to the operator. When `--next` is present the mode resolves to `implement` instead (full mode runs every stage itself, so there is nothing to advance to — `--next` reinterprets as "run the implement step, then chain").
   - **`implement`** (also the resolved mode when `--next` is set): Execute only the implement step. Read the task's `## Requirements` / `## Design` / `## Plan`, write the code that satisfies them, author the `## Solution` change-map section (file:line + what/why per changed file) via `spur task update <wbs> --section Solution --from-file`. This is the implement step the pipeline calls — it is NOT the pipeline driver. With `--next`: on success, transition `todo → wip → testing` through the FSM (guards honored — no `--no-lifecycle`) + chain to `/sp:dev-verify <wbs> --auto --next`; on a guard failure, stop as review-pending. **Partial-deliverable rule:** if the task ships only part of its requirements (e.g. an R1/R2 split with the rest in a follow-up task), the `## Solution` and `## Review` sections MUST carry a `⚠️ PARTIAL` marker naming the deferred part and the follow-up WBS — see `plugins/sp/commands/dev-run.md` → "Section ownership".
-- **Delegation:** `Skill(skill="sp:spur-dev", args="run $ARGUMENTS")` for full mode; `Skill(skill="sp:spur-dev", args="implement $ARGUMENTS")` for implement mode.
+- **Delegation:** `Skill(skill="sp:spur-dev", args="run $ARGUMENTS")` for full mode; `Skill(skill="sp:code-implementation", args="$ARGUMENTS")` for implement mode.
 
 ### 5. refine
 

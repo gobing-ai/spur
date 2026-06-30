@@ -70,11 +70,11 @@ The `target` selects the skill's workflow (full detection rules in the reference
 
 ## Implementation
 
-Delegates to **sp:spur-dev** skill (unit operation). `$ARGUMENTS` passes all flags including `--agent`
-through verbatim:
+Delegates to the **sp:code-testing** competency skill. `$ARGUMENTS` passes all flags including
+`--agent` through verbatim:
 
 ```
-Skill(skill="sp:spur-dev", args="unit $ARGUMENTS")
+Skill(skill="sp:code-testing", args="$ARGUMENTS")
 ```
 
 ## Platform Notes

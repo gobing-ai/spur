@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-06-30T07:01:29.766Z"
-updated_at: 2026-06-30T18:16:06.594Z
+updated_at: 2026-06-30T18:32:12.883Z
 ---
 
 ## 0161. Split sp:spur-dev at the lifecycle-half seam into planning (sp:spur-plan) and execution (sp:spur-dev)
@@ -344,14 +344,14 @@ mirrors rd3 reaching ~50 skills iteratively, not in one leap.
 
 **Wave B — Competency extraction + binding proof (front-load interface risk)**
 
-- [ ] Step B.1 — Create `sys-architecture` (R6): architecture/ADR judgment only.
-- [ ] Step B.2 — Create `code-implementation` (R7): `git mv` `stacks/` + `implementation-patterns.md`
+- [x] Step B.1 — Create `sys-architecture` (R6): architecture/ADR judgment only.
+- [x] Step B.2 — Create `code-implementation` (R7): `git mv` `stacks/` + `implementation-patterns.md`
   from spur-dev; link `spur-tdd`.
-- [ ] Step B.3 — Create `code-testing` (R8): `git mv` `unit-testing.md`; link `spur-tdd`.
-- [ ] Step B.4 — Verify `spur-tdd` is discipline-only, referenced by B.2 + B.3, not absorbed (R9).
-- [ ] Step B.5 — Bind these phases in `task-pipeline.yaml` to the new competency skills; confirm the
+- [x] Step B.3 — Create `code-testing` (R8): `git mv` `unit-testing.md`; link `spur-tdd`.
+- [x] Step B.4 — Verify `spur-tdd` is discipline-only, referenced by B.2 + B.3, not absorbed (R9).
+- [x] Step B.5 — Bind these phases in `task-pipeline.yaml` to the new competency skills; confirm the
   spine dispatches (does not inline) (R12). Keep `code-verification` binding unchanged (R11).
-- [ ] Step B.6 — **Wave-B GATE (proves the interface):** run one real task end-to-end through the
+- [x] Step B.6 — **Wave-B GATE (proves the interface):** run one real task end-to-end through the
   pipeline with phases bound to the extracted skills; confirm WBS + advisory payload flow in and
   results write back via the CLI-gated section contract. Do not start Wave C until this passes.
 

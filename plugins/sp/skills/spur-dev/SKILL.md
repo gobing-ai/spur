@@ -95,7 +95,10 @@ reference for the half you're operating; do not duplicate its content here.
 | Refine | planning | `spur task update --section` | [planning-workflow.md](references/planning-workflow.md) |
 | Task selection | execution | `spur task list` | [execution-workflow.md](references/execution-workflow.md) |
 | Pipeline run | execution | `spur workflow run` | [execution-workflow.md](references/execution-workflow.md) |
-| Implement / test / review / verify | execution | `sp:dev-*` operations | [dev-operations.md](references/dev-operations.md) |
+| Implement (dispatch) | execution | `sp:code-implementation` | competency skill — the spine dispatches, does not inline |
+| Test (dispatch) | execution | `sp:code-testing` | competency skill — the spine dispatches, does not inline |
+| Review / verify (dispatch) | execution | `sp:code-verification` | competency skill — the spine dispatches, does not inline |
+| Operation catalog | execution | `sp:dev-*` operations | [dev-operations.md](references/dev-operations.md) (spine dispatch table) |
 | Continue | execution | `spur feature update` / `refresh` | [execution-workflow.md](references/execution-workflow.md) |
 | Batch run | execution | `sp:super-coder` + `spur workflow run` | [execution-batch.md](references/execution-batch.md) |
 | All writes (both halves) | — | CLI-gated section editing | [cross-cutting.md](references/cross-cutting.md) |
@@ -156,14 +159,20 @@ CLI does.
   set, topo-sort by dependencies, run each through `task-pipeline.yaml`, failure policy, batch
   report. Backs `/sp:dev-runall` + the `sp:super-coder` orchestrator.
 - [references/cross-cutting.md](references/cross-cutting.md) — CLI-gated writes, the section-editing
-  body-only format, the section-status matrix, check-before-write. Shared by both halves.
-- [references/debugging.md](references/debugging.md) — root-cause-first debugging workflow for
-  failed gates, runtime defects, intermittent behavior, and unclear test failures.
-- [references/implementation-patterns.md](references/implementation-patterns.md) — production
-  implementation discipline for the `implement` step: task-driven scope, stack pattern selection,
-  progress persistence, and handoff.
+  body-only format, the section-status matrix, check-before-write. Shared by the spine and every
+  competency skill (the single sanctioned cross-skill dependency).
 - [references/product-planning.md](references/product-planning.md) — product-management judgment for
   intake, RICE/MoSCoW prioritization, strategy profiles, PRD-shaped output, and PM handoff rules.
+
+**Competency skills the spine dispatches to (the spine does not inline these):**
+
+- **`sp:code-implementation`** — the `implement` step: task-driven scope, stack pattern selection,
+  root-cause debugging, the `## Solution` change-map. Owns `implementation-patterns.md`, `debugging.md`.
+- **`sp:code-testing`** — the `test` step: coverage, gap analysis, test extension. Owns
+  `unit-testing.md` and the per-stack adapters (`stacks/`).
+- **`sp:code-verification`** — the `review`/`verify` steps: SECUA review + requirements traceability.
+- **`sp:sys-architecture`** — design/ADR judgment, consulted when a task's shape is unsettled.
+- **`sp:spur-tdd`** — the test-first discipline `code-implementation` and `code-testing` compose with.
 
 **Supporting detail:**
 
@@ -174,11 +183,6 @@ CLI does.
 - [references/dev-operations.md](references/dev-operations.md) — the per-operation catalog: what
   each `/sp:dev-*` operation does (unit/review/verify/run/refine/plan/...). The SSOT for operation
   definitions; the execution workflow links here rather than restating them.
-- [references/unit-testing.md](references/unit-testing.md) — the `unit` operation procedure
-  (language-agnostic spine): file-focused vs task-scoped workflows, gap categorization,
-  coverage-vs-quality rules, escalation. Per-stack mechanics (commands, coverage parsing, idioms,
-  gotchas) live in [references/stacks/](references/stacks/) adapters (bun-ts, python, go). Backs
-  `dev-operations.md §1`.
 - [references/feature-link-helper.md](references/feature-link-helper.md) — opt-in,
   strictness-triggered helper to resolve a deferred `feature_id` edge: LLM-judge match against
   existing features (prefer existing; create only as last resort; confirm before apply); single-task

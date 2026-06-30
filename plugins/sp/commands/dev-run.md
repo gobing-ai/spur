@@ -144,13 +144,17 @@ chain-link behavior, not a silent ignore.
 
 ## Implementation
 
-Delegates to **sp:spur-dev** skill. `$ARGUMENTS` passes all flags including `--agent` through verbatim. Resolve the mode per the table above (emit the mandatory warning if triggered), then:
+Resolve the mode per the table above (emit the mandatory warning if triggered), then delegate.
+`$ARGUMENTS` passes all flags including `--agent` through verbatim. The two modes route to different
+owners — **full** drives the whole pipeline (the spine), **implement** dispatches the single
+implementation competency:
 
-- **full mode:** `Skill(skill="sp:spur-dev", args="run $ARGUMENTS")`
-- **implement mode:** `Skill(skill="sp:spur-dev", args="implement $ARGUMENTS")`
+- **full mode:** `Skill(skill="sp:spur-dev", args="run $ARGUMENTS")` — the orchestration spine.
+- **implement mode:** `Skill(skill="sp:code-implementation", args="$ARGUMENTS")` — the implementation
+  competency the spine's `implement` step dispatches to.
 
 ## Platform Notes
 
 - **Claude Code:** native — `Skill()` delegation and `$ARGUMENTS` work directly.
-- **Other platforms:** `Skill()` and `$ARGUMENTS` are Claude-specific. Invoke the
-  `sp:spur-dev` skill's `run` operation directly.
+- **Other platforms:** `Skill()` and `$ARGUMENTS` are Claude-specific. For full mode invoke the
+  `sp:spur-dev` skill's `run` operation; for implement mode invoke `sp:code-implementation` directly.

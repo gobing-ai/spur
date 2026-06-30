@@ -2,8 +2,8 @@
 name: debugging
 description: "Root-cause-first debugging workflow for failed gates, failing tests, runtime defects, and flaky behavior during the sp execution loop."
 see_also:
-  - spur-dev
-  - unit-testing
+  - code-implementation
+  - code-testing
   - code-verification
 ---
 

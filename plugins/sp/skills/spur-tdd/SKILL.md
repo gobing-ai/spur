@@ -1,6 +1,6 @@
 ---
 name: spur-tdd
-description: "Test-driven development discipline for writing tests well — red-green-refactor cycle, behavior-first test design, AAA structure, naming, data builders, and mock-at-boundary anti-patterns. The how-to-write-a-good-test SSOT; pairs with sp:spur-dev's unit operation (which covers coverage extension). Triggers: write tests first, TDD, red-green-refactor, characterization test, contract test, how to structure/name a test, test design."
+description: "Test-driven development discipline for writing tests well — red-green-refactor cycle, behavior-first test design, AAA structure, naming, data builders, and mock-at-boundary anti-patterns. The how-to-write-a-good-test SSOT; pairs with sp:code-testing (which covers coverage extension). Triggers: write tests first, TDD, red-green-refactor, characterization test, contract test, how to structure/name a test, test design."
 license: Apache-2.0
 version: 1.0.0
 created_at: 2026-06-25
@@ -18,6 +18,8 @@ metadata:
     emoji: "🧪"
 see_also:
   - spur-dev
+  - code-testing
+  - code-implementation
 ---
 
 # Spur TDD — Test-Driven Development
@@ -30,12 +32,13 @@ patterns that make a test worth keeping. This is the **how to write a good test*
 | Concern | Owner |
 |---------|-------|
 | How to *design/structure/name* a test (this skill) | `sp:spur-tdd` |
-| How to *extend coverage / fill gaps* on existing code | `sp:spur-dev` `unit` op → `references/unit-testing.md` |
-| Per-stack commands, coverage parsing, idioms, gotchas | `unit-testing.md` → `references/stacks/<stack>.md` |
-| Debugging *why* a test fails | (debugging skill / `spur agent run`) |
+| How to *extend coverage / fill gaps* on existing code | `sp:code-testing` → `references/unit-testing.md` |
+| Per-stack commands, coverage parsing, idioms, gotchas | `sp:code-testing` → `references/stacks/<stack>.md` |
+| Writing the implementation the test drives | `sp:code-implementation` |
+| Debugging *why* a test fails | `sp:code-implementation` → `references/debugging.md` |
 
-Use `spur-tdd` when writing code test-first; use the `unit` operation when filling coverage on code
-that already exists. They compose: TDD designs the tests, the unit op proves the coverage.
+Use `spur-tdd` when writing code test-first; use `sp:code-testing` when filling coverage on code that
+already exists. They compose: TDD designs the tests, `sp:code-testing` proves the coverage.
 
 ## When to use
 
@@ -48,7 +51,7 @@ Load this skill when:
 - You know *what* to test but want the right *structure, name, or mock boundary*.
 
 Do **not** use it for routine test execution, coverage measurement, or post-hoc gap filling — that
-is the `unit` operation (`unit-testing.md`).
+is `sp:code-testing`.
 
 ## The cycle
 
@@ -74,7 +77,7 @@ Match the situation to a workflow:
 | Bug fix | **Regression-first** — write a test that reproduces the bug, watch it fail, then fix |
 | Untested legacy code | **Characterization** — write tests capturing *current* behavior first, then change |
 | API / service boundary | **Contract-based** — define the consumer's expected request/response, mock the provider to satisfy it |
-| Algorithms / data transforms | Property/invariant thinking; deeper tooling is covered by `sp:spur-dev` unit-testing advanced techniques |
+| Algorithms / data transforms | Property/invariant thinking; deeper tooling is covered by `sp:code-testing` advanced techniques |
 
 ### Classic TDD (new feature)
 
@@ -222,7 +225,7 @@ shortcut is slower — it just moves the cost to production.
   here is stack-agnostic.
 - **Composes with the pipeline.** When a task runs through `sp:spur-dev`, the implement stage can
   apply this discipline to author tests; the `test` stage (`unit` op) then proves coverage. This
-  skill is the *design* half, the unit op is the *coverage* half.
+  skill is the *design* half, `sp:code-testing` is the *coverage* half.
 
 ---
 
