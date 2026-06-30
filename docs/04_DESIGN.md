@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.3.0
+version: 1.3.1
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-06-18
+updated_at: 2026-06-30
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -792,16 +792,17 @@ Two primitives back the anti-hallucination migration (superskill task 0041):
 
 ### 7.8 `sp:dev-*` command operations
 
-The `sp:dev-*` commands back onto four skills (`sp:spur-dev`, `sp:code-verification`,
-`sp:doc-evolve`, `sp:brainstorm`) or define their procedure inline. The authoritative reference for
-all 13 operations — purpose, inputs, backing, behavior contract — is
+The `sp:dev-*` commands back onto the orchestration spine plus competency skills
+(`sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`,
+`sp:doc-evolve`, `sp:brainstorm`, `sp:dogfood-testing`) or define their procedure inline. The
+authoritative reference for all 13 operations — purpose, inputs, backing, behavior contract — is
 [`plugins/sp/skills/spur-dev/references/dev-operations.md`](../plugins/sp/skills/spur-dev/references/dev-operations.md).
 The `runall` operation (#13) is the batch entry — it delegates the driver loop to the
 `sp:super-coder` agent per [`execution-batch.md`](../plugins/sp/skills/spur-dev/references/execution-batch.md).
 
 | Pattern | Operations | Backing |
 |---------|-----------|---------|
-| `Skill()` delegation | implement, unit, review, verify, run, refine, plan, docs, brainstorm, runall | `sp:spur-dev`, `sp:code-verification`, `sp:doc-evolve`, `sp:brainstorm` |
+| `Skill()` delegation | implement, unit, review, verify, run, refine, plan, docs, brainstorm, dogfood, runall | `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:spur-dev`, `sp:doc-evolve`, `sp:brainstorm`, `sp:dogfood-testing` |
 | Inline procedure | changelog, gitmsg, fixall, handover | git CLI + `spur` CLI + agent reasoning |
 
 **Brainstorm artifact exits.** `dev-brainstorm` runs the grilling interview → ideation, then lands an
