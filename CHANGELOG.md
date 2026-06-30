@@ -1,5 +1,64 @@
 # Changelog
 
+## [0.2.10] — 2026-06-30
+
+### Added
+
+- **Functional skill split — competency skills + thin spine (ADR-028).** The monolithic `sp:spur-dev`
+  skill is decomposed into a thin orchestration spine that dispatches five deep competency skills:
+  `sp:code-implementation` (task-driven implementation, root-cause debugging, Solution change-maps),
+  `sp:code-testing` (coverage measurement, gap analysis, per-stack adapters for Bun/TS, Go, Python),
+  `sp:code-verification` (requirements-traceability verdict + SECUA review),
+  `sp:sys-architecture` (ADR judgment, module boundaries, build-vs-extend decisions), and
+  `sp:spec-decomposition` (feature→task-batch decomposition). The four `spur-<noun>` skills
+  consolidate into a single `sp:spur-cli` CLI facade with per-noun references. Five noun-experts
+  retire in favor of `sp:expert-spur`. The `sp:super-coder` agent broadens to drive single-task
+  end-to-end pipelines in addition to batches.
+- **Verify acceptance criteria guard with typed evidence ladder.** The `sp:dev-verify` command now
+  automatically evaluates acceptance criteria when present, with typed evidence
+  (`test`/`command`/`static-ref`/`manual-review`/`llm-judge`/`n/a`) so weak proof is visible.
+  Objective AC cannot be certified by `llm-judge` alone. AC statuses and blocker/major findings
+  fold into the aggregate PASS/PARTIAL/FAIL verdict. The verdict schema contract now carries an
+  `acceptanceCriteria` array.
+- **Dogfood Monitor Ledger with deterministic cache methodology.** Every dogfood report now requires
+  a mandatory `### 3. Monitor Ledger` table as the audit trail, with a deterministic `cache%` formula
+  computed from per-row Fresh/Cached Token sums and a mandatory Basis column. An anti-fiction rule
+  prevents invented cache percentages.
+- **Plugin structural invariants locked in test suite.** Seven new invariant tests (R13, R16a–d,
+  R20–R23) guard the functional skill split: cross-cutting.md single-SSOT, disjoint trigger surfaces
+  across skills, no dangling cross-skill references, no retired entity names, no vendors/rd3
+  references in shipped plugin files, mandatory AC guard semantics in verify path, mandatory monitor
+  ledger in dogfood path, and no unscoped ignore rules that hide plugin entrypoints.
+
+### Changed
+
+- **Full lifecycle scaffold in task templates.** All six task templates (`standard`, `feature-impl`,
+  `issue`, `review`, `meta`, `brainstorm`) now carry the complete lifecycle section scaffold with
+  guidance comments. The section matrix replaces forbidden section lists with broadly-permissive
+  optional lists so templates can pre-include all sections without check failures.
+- **Task template tightening.** The `feature-impl` template auto-populates `{{ FEATURE_ID }}` in the
+  References section when created with `--feature`. The `review` template drops a redundant
+  `template: review` frontmatter line (the creation path always sets it).
+- **`sp:spur-plan` skill stub removed.** The thin placeholder carried no active consumers — its
+  planning narrative has always lived in `sp:spur-dev`. References in `sp:spur-dev` and `spur-init`
+  updated accordingly.
+- **`plugins/README.md` regenerated** from the live `plugins/sp/` file tree with accurate skill
+  versions, expanded reference-file directory layout, corrected relationship diagram, and updated
+  migration scorecard.
+- **Scaffold paths migrated** from `.spur/config/` nested layout to `.spur/` flat paths
+  (workflows → `.spur/workflows/`, templates → `.spur/templates/`).
+
+### Fixed
+
+- **Vendors protection.** The `protected-files.yaml` no-modification rule now excludes `vendors/`.
+- **Spur-cli gitignore scoped to repo root.** The `spur-cli` ignore patterns are now anchored so
+  they don't hide plugin skill entrypoints in nested paths.
+- **Missing review checklist item.** The review template Plan checklist now includes "Fix all the
+  remaining findings if any."
+- **Hook error handling.** The task-write-guard hook error path is hardened.
+- **Daily-summary and task-write-guard tests** use spy-based stubs instead of PATH-shim mutations
+  for improved portability.
+
 ## [0.2.9] — 2026-06-29
 
 ### Added
