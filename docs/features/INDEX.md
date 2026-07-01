@@ -20,4 +20,5 @@
     ├── [backlog] **H1**: spur-dev umbrella skill ([H1_spur-dev-skill.md](./H1_spur-dev-skill.md))
     ├── [backlog] **H2**: Companion skills and write guard ([H2_companions-and-guard.md](./H2_companions-and-guard.md))
     └── [backlog] **H3**: Prompt-skill moves ([H3_prompt-skill-moves.md](./H3_prompt-skill-moves.md))
+[backlog] **I**: sp plugin hands-off ready ([I_sp-plugin-hands-off-ready.md](./I_sp-plugin-hands-off-ready.md))
 <!-- END AUTO-GENERATED -->

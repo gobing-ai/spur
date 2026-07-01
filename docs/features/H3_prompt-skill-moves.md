@@ -37,6 +37,8 @@ they stay live in cc-agents.
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0149 | Enhance sp:dev-review with architecture/deep-review capability | done |
+| 0164 | Subagent orchestration — parallel execution and fan-out patterns | done |
+| 0166 | Dogfood findings — dev-refine 0164 auto-next chain | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

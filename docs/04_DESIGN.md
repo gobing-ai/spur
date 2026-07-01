@@ -31,6 +31,7 @@ detail-first then index (§4.5 rule 5 / T9).
 | [`workflow-observability.md`](design/workflow-observability.md) | `spur workflow run` DX — run-start plan preview + live EventBus step progress; board reuse (0114) | implemented |
 | [`dev-plan-design-doc-generation.md`](design/dev-plan-design-doc-generation.md) | `/sp:dev-plan` design-doc step — `--design`/`--auto` flags, seam heuristic, satellite + index authoring (0124) | implemented |
 | [`dev-agent-flag-and-dogfood-skill.md`](design/dev-agent-flag-and-dogfood-skill.md) | `--agent` on dev-refine/plan/brainstorm (threaded, not theater) + `sp:dogfood-testing` backbone extraction with enhanced report/ledger (0125) | implemented |
+| [`e2e-workflow-for-system-development.md`](design/e2e-workflow-for-system-development.md) | End-to-end workflow system for system development — pipeline architecture, design step auto-detection, HITL gate model, doc-sync boundary (0167) | design |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See

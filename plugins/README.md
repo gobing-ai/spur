@@ -4,7 +4,7 @@
 
 The `sp` plugin is the Claude Code plugin surface for the Spur toolkit. It provides a full planning-to-execution pipeline — convert a vague feature description into a CLI-validated feature file with BDD acceptance criteria, decompose it into a task batch, run those tasks through execution workflows with human-in-the-loop gating — plus constraint-rule and dual-mode workflow engines, daily analytics, and document-drift enforcement. Every write to the task/feature corpus goes through a `spur` CLI verb that validates before writing; the plugin entities contain zero validation logic of their own.
 
-- **Marketplace entry:** `name: "sp"`, `version: "0.2.3"`, `source: "./plugins/sp"` (`plugin.json`)
+- **Marketplace entry:** `name: "sp"`, `version: "0.3.0"`, `source: "./plugins/sp"` (`plugin.json`)
 - **Owner:** Robin Min
 
 ## Directory Layout
@@ -78,11 +78,12 @@ plugins/sp/
 │   │       ├── cross-cutting.md
 │   │       ├── ac-style-guide.md
 │   │       ├── execution-workflow.md
+│   │       ├── gate-checklists.md
 │   │       └── planning-workflow.md
 │   ├── spur-tdd/                    # TDD workflow companion (v1.0.0)
 │   └── sys-architecture/            # Architecture / ADR judgment competency (v1.0)
 │       └── references/decision-method.md
-├── commands/                        # Slash command definitions (19)
+├── commands/                        # Slash command definitions (23)
 ├── agents/                          # Specialist subagent definitions (2)
 ├── hooks/                           # Hook definitions + guard scripts
 │   ├── hooks.json
@@ -132,11 +133,11 @@ Each skill directory contains:
 
 **Purpose:** Thin slash-command wrappers that parse user arguments and delegate to the corresponding skill. Each command is a user-facing entry point that bridges natural language to skill invocation.
 
-There are **20 commands**, organized by the CLI surface they wrap:
+There are **23 commands**, organized by the CLI surface they wrap:
 
 | Prefix | Count | Delegates To | Purpose |
 |--------|-------|-------------|---------|
-| `dev-*` | 14 | `sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:brainstorm`, `sp:dogfood-testing`, `sp:parallel-execution`, inline | The dev-workflow surface — `dev-run full` mode → spine; `dev-plan` → spine planning half; `dev-refine` → spine refine op; `dev-runall` → spine batch driver; `dev-parallel` → parallel-execution; `dev-review`/`dev-verify` → verification; `dev-unit` → testing; `dev-brainstorm` → brainstorm; `dev-dogfood` → dogfood-testing; `dev-fixall`/`dev-gitmsg`/`dev-changelog`/`dev-handover` → inline procedures |
+| `dev-*` | 17 | `sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:brainstorm`, `sp:dogfood-testing`, `sp:parallel-execution`, inline | The dev-workflow surface — `dev-run full` mode → spine; `dev-plan` → spine planning half; `dev-refine` → spine refine op; `dev-runall` → spine batch driver; `dev-idea` → idea-to-feature pipeline; `dev-wrap`/`dev-wrapall` → post-execution wrap-up; `dev-parallel` → parallel-execution; `dev-review`/`dev-verify` → verification; `dev-unit` → testing; `dev-brainstorm` → brainstorm; `dev-dogfood` → dogfood-testing; `dev-fixall`/`dev-gitmsg`/`dev-changelog`/`dev-handover` → inline procedures |
 | `rule-*` | 3 | `sp:spur-cli` | The rule surface — `rule-add`, `rule-refine`, `rule-scan` |
 | `workflow-*` | 2 | `sp:spur-cli` | The workflow surface — `workflow-add`, `workflow-refine` |
 | `spur-init` | 1 | `sp:doc-evolve` | Project bootstrap (`spur init`) with doc-evolve integration |
@@ -197,7 +198,7 @@ The hook fires on every `Write`/`Edit` tool call and checks whether the target p
 ```mermaid
 graph TB
     subgraph "User Entry Points"
-        CMD["Commands<br/>19 slash commands<br/>/sp:dev-plan, /sp:dev-runall, /sp:rule-add, ..."]
+        CMD["Commands<br/>23 slash commands<br/>/sp:dev-plan, /sp:dev-runall, /sp:rule-add, ..."]
         AGENT["Agents<br/>2 subagents<br/>expert-spur, super-coder"]
         HOOK["PreToolUse Hook<br/>Write|Edit matcher"]
     end
@@ -345,6 +346,30 @@ All planning entities (tasks and features) share a common lifecycle, managed by 
 | **refresh** | `spur task refresh` | `spur feature refresh` | Index + feature-tree roll-up regeneration |
 
 The **workflow** and **rule** engines have their own lifecycles (author → validate → run → trace / refine), documented in their respective `sp:spur-cli` references.
+
+## Workflow Pipelines
+
+The plugin ships workflow YAMLs under `config/workflows/` (symlinked from `.spur/workflows/`).
+Each pipeline owns one lifecycle phase:
+
+| Workflow | Phase | Entry command | Status |
+|---|---|---|---|
+| `basic.yaml` | Generic implement/check/fix | direct `spur workflow run` | existing |
+| `feature-lifecycle.yaml` | Feature status FSM | `spur feature update` | existing |
+| `task-lifecycle.yaml` | Task status FSM | `spur task update` | existing |
+| `planning-pipeline.yaml` | Planning/design from known slug | `/sp:dev-plan` | existing |
+| `task-pipeline.yaml` | Single-task execution | `/sp:dev-run` | existing |
+| `feature-dev.yaml` | Feature umbrella execution | `/sp:dev-runall --feature` | existing |
+| `idea-pipeline.yaml` | Idea to feature + AC + task batch | `/sp:dev-idea` | new in 0.3.0 |
+| `wrapup-pipeline.yaml` | Post-execution wrap-up | `/sp:dev-wrap`, `/sp:dev-wrapall` | new in 0.3.0 |
+
+New commands in 0.3.0:
+- `/sp:dev-idea` — unified entry from a vague idea to a feature with AC and a decomposed task batch.
+- `/sp:dev-wrap` — single-task post-execution wrap-up (learnings, metrics, doc-sync, feature transition).
+- `/sp:dev-wrapall` — batch post-execution wrap-up with `--since`/`--feature`/`--status` filters.
+
+New reference: `plugins/sp/skills/spur-dev/references/gate-checklists.md` — checkbox checklists for
+feature-check, batch-create, precheck, review, and verify gates.
 
 ## rd3 → `sp` / `cc` Migration Map
 

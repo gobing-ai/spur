@@ -233,6 +233,7 @@ Feature: spur-dev umbrella skill
 | 0141 | Batch task execution — /sp:dev-runall + dependency-ordered driver + sp:super-coder orchestrator | done |
 | 0142 | Batch execution v2 — parallel runs (worktree isolation) + interactive within-step escalation | blocked |
 | 0161 | Split sp:spur-dev at the lifecycle-half seam into planning (sp:spur-plan) and execution (sp:spur-dev) | done |
+| 0162 | Strengthen sp dev-verify with mandatory Acceptance Criteria guard | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

@@ -1,239 +1,465 @@
-# Design — End-to-end workflow for system development
+# Design — End-to-end Workflow System for System Development
 
 Owning task: [`0167`](../tasks2/0167_sp-plugin-hands-off-ready-idea-to-feature-flow-post-executio.md).
 Surface index row: [`04_DESIGN.md §0`](../04_DESIGN.md). Feature: `I` (sp plugin hands-off ready).
 
-## Problem
+## Purpose
 
-The sp plugin's development workflow is fragmented: idea-to-feature requires multiple manual commands, there's no post-execution wrap-up step, and the system-design step (where critical architectural decisions are made) is either missing or conflated with post-implementation documentation. The operator has no single entry point that takes a vague idea through to a task batch ready for execution, and no automatic step that syncs docs and captures learnings after execution completes.
+This is the all-in-one design document for Spur's system-development workflow system: the existing
+workflow set, the new 0167 idea/wrap-up workflows, the command wrappers that invoke them, the HITL
+and auto-routing contract, the checkpoint/memory artifacts, and the structural tests that keep the
+system aligned.
 
-## Decision
+The system is pipeline-based. Each pipeline owns one lifecycle phase and is implemented as a
+`spur workflow` state-machine YAML file. Skills perform phase work; workflows orchestrate phase order;
+CLI verbs perform validated corpus writes.
 
-A pipeline-based architecture where each pipeline owns one phase of the development lifecycle. Pipelines are `spur workflow` YAML files (ADR-022: orchestration is configuration), not skills. The system-design step is mandatory by default with auto-detection, and is fundamentally distinct from post-execution doc-sync.
+## Path Model
 
-**Why pipelines, not skills.** ADR-022: orchestration is configuration. Workflow YAMLs orchestrate the flow; existing skills (`brainstorm`, `spec-decomposition`, `sys-architecture`, `doc-evolve`) are invoked by `agent.run` steps. No orchestration logic in skill files. This means zero new skills — only 2 new workflow YAMLs + 3 thin command wrappers + reference updates.
+Workflow paths have two valid forms in this repository:
 
-**Why mandatory-by-default system-design.** "Nothing is too simple" (R2 pattern 2) — every idea gets a design, even if short. Architectural decisions (module boundaries, data flow, ADR entries) must be recorded before decomposition, not after implementation. The `--skip-design` flag exists for trivial features but is opt-in, not the default.
+| Path | Role | Rule |
+|---|---|---|
+| `.spur/workflows/<name>.yaml` | Project-facing workflow root used by operators, plugin commands, and seeded local config | Prefer this path in command examples and wrapper command docs. |
+| `config/workflows/<name>.yaml` | Physical repo source for this checkout; `.spur/workflows` is a symlink to it | Edit either path only when you understand they are the same inode in this repo. Do not copy between them. |
 
-## Architecture principles
+Implementation and validation may use either path. Plugin command examples should use
+`.spur/workflows/*` because it is the stable project-local surface after `spur init`. Repository
+tests may validate `config/workflows/*` directly because that is the committed physical source.
 
-1. **Orchestration is configuration (ADR-022).** Pipelines are `spur workflow` YAML files. Skills are invoked by `agent.run` steps. No orchestration logic in skill files.
-2. **Every write is CLI-gated.** Task/feature corpus mutations go through `spur` CLI verbs, never direct file writes. `.spur/memory/` is the exception — it's a working scratchpad, not validated corpus.
-3. **HITL gates at decision points.** `hitl.confirm` gates at feature-check, system-design approval, batch-create, and branch-cleanup. `--auto` auto-resolves gates per auto-decision principles, but taste decisions still surface.
-4. **Lifecycle guard respect.** Pipelines transition tasks/features through their existing lifecycle guards via `spur` CLI verbs, not around them. No new `*-lifecycle.yaml` workflows.
-5. **No nesting.** Each pipeline owns one lifecycle phase. Pipelines do not contain another pipeline's state machine. Delegation is via `agent.run` + `spur workflow run`.
-6. **Doc-sync boundary.** Design-step doc creation (ADR entries, architecture decisions) happens BEFORE code. Wrapup doc-sync (drift audit, lesson append) happens AFTER code. These are fundamentally different and must not be conflated.
+## System Principles
 
-## Lifecycle model
+1. **Orchestration is configuration.** Workflow YAMLs own phase order. Skills do not become pipeline
+   controllers.
+2. **Every corpus write is CLI-gated.** Task and feature mutations go through `spur task` /
+   `spur feature`. Direct writes are allowed only for working memory under `.spur/memory/`.
+3. **Pipelines own phases, not entities.** Entity lifecycle legality remains in
+   `feature-lifecycle.yaml` and `task-lifecycle.yaml`.
+4. **No nested state machines.** A pipeline may invoke another workflow through a command wrapper
+   only at a phase boundary; it must not inline another pipeline's state graph.
+5. **Design before decomposition.** Brainstorm always records a design summary. The heavier
+   `sp:sys-architecture` step runs unless the design signal or an explicit flag bypasses it.
+6. **Doc-sync after implementation.** Post-execution doc drift repair is wrap-up work, not initial
+   design work.
+7. **HITL is explicit.** Objective gates can be routed around in auto mode before entering a
+   `hitl.confirm` state. Taste and irreversible gates still pause.
+8. **Checkpoint all long-running phases.** Existing and future pipelines write resumable checkpoints
+   after gates and phase transitions.
 
-### Feature lifecycle (`feature-lifecycle.yaml`)
+## Workflow Inventory
+
+| Workflow | Path | Phase | Entry point | Terminal states | Status |
+|---|---|---|---|---|---|
+| `basic.yaml` | `.spur/workflows/basic.yaml` | Generic implement/check/fix loop | direct `spur workflow run` | `done`, `failed` | existing |
+| `feature-lifecycle.yaml` | `.spur/workflows/feature-lifecycle.yaml` | Feature status FSM | `spur feature update` | `done`, `cancelled` | existing |
+| `task-lifecycle.yaml` | `.spur/workflows/task-lifecycle.yaml` | Task status FSM | `spur task update` | `done`, `cancelled` | existing |
+| `planning-pipeline.yaml` | `.spur/workflows/planning-pipeline.yaml` | Planning/design from known slug | `/sp:dev-plan` | `handoff`, `cancelled` | existing |
+| `task-pipeline.yaml` | `.spur/workflows/task-pipeline.yaml` | Single-task execution | `/sp:dev-run` | `done`, `failed` | existing |
+| `feature-dev.yaml` | `.spur/workflows/feature-dev.yaml` | Feature umbrella execution | `/sp:dev-runall --feature` | `done`, `failed` | existing |
+| `idea-pipeline.yaml` | `.spur/workflows/idea-pipeline.yaml` | Idea to feature + AC + task batch | `/sp:dev-idea` | `handoff`, `cancelled` | new in 0167 |
+| `wrapup-pipeline.yaml` | `.spur/workflows/wrapup-pipeline.yaml` | Post-execution wrap-up | `/sp:dev-wrap`, `/sp:dev-wrapall` | `done`, `skipped` | new in 0167 |
+
+No new `*-lifecycle.yaml` files are added by 0167. Persistent entity lifecycle remains in the two
+existing lifecycle workflows.
+
+## Lifecycle Contracts
+
+### Feature Lifecycle
 
 ```
-backlog → active → verifying → done
-                                ↗
-              cancelled (terminal)
+backlog -> active -> verifying -> done
+      \        \          \         \
+       --------> blocked -> cancelled
 ```
 
-### Task lifecycle (`task-lifecycle.yaml`)
+Required guards:
+
+| Transition | Guard |
+|---|---|
+| `backlog -> active` | always |
+| `active -> verifying` | `spur feature check <id>` |
+| `verifying -> done` | `spur feature check <id> --strict` |
+
+Wrap-up must advance a feature idempotently through legal edges only. For `dev-wrapall --feature <id>`:
+
+1. If `backlog`, run `backlog -> active`.
+2. Run or confirm the normal feature check for `active -> verifying`.
+3. Run strict feature check for `verifying -> done`.
+4. Never attempt `backlog|active -> done` directly.
+
+### Task Lifecycle
 
 ```
-backlog → todo → wip → testing → done
-                                  ↗
-              cancelled (terminal)
+backlog -> todo -> wip -> testing -> done
+      \      \      \        \        \
+       -------> blocked -----> cancelled
 ```
 
-Pipelines respect these FSMs via `spur task update` / `spur feature update`. The `wrapup-pipeline.yaml` enforces the `verifying → done` guard with `spur feature check --strict` when `--feature` is used.
+Task execution pipelines may move the task through execution states. Wrap-up does not mutate task
+status; it consumes completed tasks unless an explicit `--status` filter selects tasks for
+analysis-only wrap-up.
 
-## Pipeline inventory
+## Existing Pipeline Contracts
 
-Seven workflows, each owning one lifecycle phase:
+### `planning-pipeline.yaml`
 
-| Pipeline | Phase | Entry Point | Terminal States | Status |
+Purpose: front-half planning from a known slug or task idea to a design handoff.
+
+State contract:
+
+```
+start -> phasing -> feature-id -> design-gen -> design-approval -> handoff
+```
+
+Rules:
+
+- `phasing` may be auto-routed when `profile=auto`.
+- `design-gen` produces a `docs/design/<slug>.md` satellite when requested by the seam heuristic.
+- `design-approval` is a taste gate. Auto mode may skip objective routing into the gate only when
+  prior approval is already encoded; otherwise it pauses.
+- The pipeline stops at handoff. It does not execute tasks.
+
+### `task-pipeline.yaml`
+
+Purpose: run one task through implementation, testing, review, verification, record, and done.
+
+State contract:
+
+```
+precheck -> implement -> test -> review -> approve -> verify -> record -> done
+          \                                                    \
+           -------------------------- failed -------------------
+```
+
+Rules:
+
+- `precheck` runs `spur task check <wbs>` before implementation.
+- `implement`, `test`, `review`, and `verify` dispatch existing `sp` competency skills through
+  `agent.run`.
+- `approve` is the human review gate; `profile=auto` can route around it only by objective verdict.
+- `verify` must produce a task verdict.
+- `record` records the verdict and solution through `spur task record`.
+- `done` is reached only after a PASS verdict and legal task transition.
+
+### `feature-dev.yaml`
+
+Purpose: umbrella feature execution from brainstorm/plan through task execution and feature verify.
+
+State contract:
+
+```
+brainstorm -> plan -> execute-tasks -> feature-verify -> done
+                                      \-> failed
+```
+
+Rules:
+
+- It is the full-loop workflow. Unlike `idea-pipeline.yaml`, it continues past task creation.
+- It delegates task execution to the task pipeline through command/workflow invocation at the
+  execution phase boundary.
+- `feature-verify` runs `spur feature check <featureId> --strict`.
+
+### `basic.yaml`
+
+Purpose: generic implement/check/fix loop for simple non-corpus work.
+
+State contract:
+
+```
+implement -> check -> done
+              \-> fix -> check
+```
+
+Rules:
+
+- It is not the standard task lifecycle path for `sp` task execution.
+- It remains a canonical minimal workflow example for schema and action-shape authors.
+
+## New 0167 Pipeline Contracts
+
+### `idea-pipeline.yaml`
+
+Purpose: unified entry from a vague idea to a feature, acceptance criteria, and executable task batch.
+
+Command wrapper:
+
+```bash
+spur workflow run .spur/workflows/idea-pipeline.yaml \
+  --vars '{"idea":"<text>","profile":"interactive|auto","design":"auto|force|skip"}'
+```
+
+State contract:
+
+```
+start
+  -> discovery
+  -> feature-create
+  -> ac-generate
+  -> feature-check
+  -> system-design
+  -> design-approval
+  -> decompose
+  -> batch-create
+  -> handoff
+```
+
+Required actions:
+
+| State | Action |
+|---|---|
+| `discovery` | Dispatch `sp:brainstorm`; write a brainstorm artifact and emit `needs_design`. |
+| `feature-create` | Use `spur feature create` or select an existing feature id. |
+| `ac-generate` | Generate AC using `ac-style-guide.md`; write through `spur feature update`. |
+| `feature-check` | Run `spur feature check <id> --strict`; objective gate. |
+| `system-design` | Dispatch `sp:sys-architecture` when design is required; create ADR/architecture/design artifacts through constitution rules. |
+| `design-approval` | HITL taste gate; not auto-clicked by `--auto`. |
+| `decompose` | Dispatch `sp:spec-decomposition` with brainstorm/design context. |
+| `batch-create` | Validate and create tasks through `spur task batch-create`; objective gate. |
+| `handoff` | Output feature id, task WBS list, and next command. No task execution. |
+
+Routing rules:
+
+- Brainstorm always records a design summary.
+- `--design` forces `system-design`.
+- `--skip-design` skips `system-design` but not the brainstorm design summary.
+- With neither flag, `needs_design=true` runs `system-design`; `needs_design=false` routes directly
+  from `feature-check` to `decompose`.
+- Ties run design.
+- `--auto` routes around objective gates (`feature-check`, `batch-create`) when the required checks
+  pass. It does not bypass `design-approval` unless an explicit prior approval is represented in the
+  workflow vars.
+
+### `wrapup-pipeline.yaml`
+
+Purpose: post-execution wrap-up for one task or a batch.
+
+Command wrappers:
+
+```bash
+spur workflow run .spur/workflows/wrapup-pipeline.yaml \
+  --vars '{"tasks":["0167"],"profile":"interactive|auto"}'
+
+spur workflow run .spur/workflows/wrapup-pipeline.yaml \
+  --vars '{"tasks":["0167","0168"],"feature":"I","profile":"auto"}'
+```
+
+State contract:
+
+```
+start
+  -> task-resolve
+  -> doc-sync
+  -> learning-capture
+  -> metrics-record
+  -> feature-transition
+  -> branch-cleanup
+  -> done
+```
+
+Required actions:
+
+| State | Action |
+|---|---|
+| `task-resolve` | Resolve explicit tasks or wrapper-selected task list; reject empty selection. |
+| `doc-sync` | Dispatch `sp:doc-evolve` once for the batch. |
+| `learning-capture` | Append working learnings to `.spur/memory/learnings.md`. |
+| `metrics-record` | Append one JSONL row per task to `.spur/memory/wrapup-metrics.jsonl`. |
+| `feature-transition` | If `feature` is set, advance through legal feature lifecycle edges only. |
+| `branch-cleanup` | If `merge=true`, dispatch `sp:branch-workflow` behind an irreversible HITL gate. |
+| `done` | Output wrap-up summary and next action. |
+
+Rules:
+
+- Project-level doc-sync runs once per batch.
+- Learning capture aggregates the batch, then writes task-specific entries.
+- Metrics are append-only and machine-readable.
+- Branch cleanup always pauses unless the operator explicitly confirms the irreversible action.
+- Task statuses are not mutated.
+
+## Design Step Routing
+
+The system has two related design mechanisms:
+
+| Mechanism | Pipeline | Input | Output | Default |
 |---|---|---|---|---|
-| `idea-pipeline.yaml` | Ideation: idea → feature + AC + task batch | `dev-idea` | handoff, cancelled | NEW (0167) |
-| `planning-pipeline.yaml` | Design: feature → design doc | `dev-plan` | handoff, cancelled | EXISTING |
-| `task-pipeline.yaml` | Execution: single task → done | `dev-run` | done, failed | EXISTING |
-| `wrapup-pipeline.yaml` | Wrap-up: done → docs synced + learnings | `dev-wrap` / `dev-wrapall` | done, skipped | NEW (0167) |
-| `feature-dev.yaml` | Umbrella: idea → done (full loop) | `dev-runall --feature` | done, failed | EXISTING |
-| `feature-lifecycle.yaml` | Feature FSM: backlog → active → verifying → done | `spur feature update` | done, cancelled | EXISTING |
-| `task-lifecycle.yaml` | Task FSM: backlog → todo → wip → testing → done | `spur task update` | done, cancelled | EXISTING |
+| Brainstorm design summary | `idea-pipeline.yaml` discovery | vague idea | short design summary in brainstorm artifact | always |
+| System architecture step | `idea-pipeline.yaml` system-design | feature + AC + brainstorm signal | ADR entries, architecture updates, design satellites | run unless confidently trivial |
+| Design satellite generation | `planning-pipeline.yaml` design-gen | known slug/task | `docs/design/<slug>.md` | controlled by `dev-plan --design/--auto` |
 
-**Phase ownership:**
-- `idea-pipeline.yaml` — Ideation: from vague idea to feature + AC + task batch. Stops at handoff.
-- `planning-pipeline.yaml` — Design: from known slug to design satellite doc. Stops at handoff.
-- `task-pipeline.yaml` — Execution: single task from precheck to done.
-- `wrapup-pipeline.yaml` — Wrap-up: from done tasks to docs synced + learnings captured.
-- `feature-dev.yaml` — Umbrella: full loop from idea to done. Delegates task execution to `task-pipeline.yaml`.
+`needs_design` criteria:
 
-**Overlap management:**
-- `idea-pipeline.yaml` and `feature-dev.yaml` share brainstorm+plan steps. Intentional: `idea-pipeline` stops at handoff; `feature-dev` continues to execution. Duplication is in YAML calls, not logic.
-- `idea-pipeline.yaml` and `planning-pipeline.yaml` both produce design docs. Different entry conditions: `idea-pipeline` starts from a vague idea (discovery focus); `planning-pipeline` starts from a known slug (design-doc focus). The `idea-pipeline` system-design step produces ADR entries + architecture decisions; the `planning-pipeline` design-gen step produces a design satellite doc.
-- Rule: each pipeline is a self-contained phase boundary with distinct entry/exit points.
+| Signal | Criteria |
+|---|---|
+| `true` | multiple subsystems, schema/config/DTO change, new module/package/service, new transport/boundary, new dependency, cross-cutting convention |
+| `false` | single-module fix, docs/chores, boundary-preserving refactor, existing pattern with no architectural impact |
 
-## End-to-end flow
+Flag truth table:
 
-```
-Operator: "I have an idea"
-    ↓
-dev-idea → idea-pipeline.yaml
-    ↓
-discovery (sp:brainstorm — outputs needs_design signal)
-    ↓
-feature-create (spur feature create)
-    ↓
-ac-generate (AC per ac-style-guide.md)
-    ↓
-feature-check (HITL: spur feature check --strict)
-    ↓
-system-design (sp:sys-architecture → ADR entries, architecture decisions)
-    ↓                    ↑ auto-detection (R16): needs_design signal from brainstorm
-design-approval (HITL)
-    ↓
-decompose (sp:spec-decomposition, informed by design doc)
-    ↓
-batch-create (HITL: spur task batch-create)
-    ↓
-handoff → operator runs dev-run / dev-runall
-    ↓
-task-pipeline.yaml (per task: precheck → implement → test → review → verify → record → done)
-    ↓
-dev-wrap / dev-wrapall → wrapup-pipeline.yaml
-    ↓
-doc-sync (sp:doc-evolve — post-implementation drift)
-    ↓
-learning-capture (write to .spur/memory/learnings.md)
-    ↓
-metrics-record (task durations, verdicts, gate decisions)
-    ↓
-feature-transition (if --feature: spur feature update <id> done)
-    ↓
-branch-cleanup (if --merge: sp:branch-workflow)
-    ↓
-done
-```
-
-## Design step auto-detection
-
-The `idea-pipeline.yaml` system-design step is mandatory by default ("nothing is too simple", R2 pattern 2). Auto-detection (R16) determines whether the step runs when neither `--design` nor `--skip-design` is explicitly set.
-
-### Signal source
-
-The brainstorm skill's scope decomposition check (R2 pattern 6) evaluates the idea during the discovery phase and outputs a `needs_design` boolean signal. This signal is passed as a workflow var to `idea-pipeline.yaml`.
-
-### Criteria
-
-The criteria mirror the seam heuristic from [`dev-plan-design-doc-generation.md`](dev-plan-design-doc-generation.md):
-
-**Needs design (`needs_design=true`):**
-- Multi-subsystem work (multiple distinct user-facing surfaces, multiple data models, multiple integration points)
-- Schema changes (DB table/migration, Zod config key, DTO/contract shape)
-- New module/package/service (`apps/*`, `packages/*`)
-- New transport/boundary (oRPC seam, auth boundary, job-queue/EventBus topic)
-- New dependency
-- Cross-cutting convention change
-
-**Can skip (`needs_design=false`):**
-- Single-module work
-- Bug fixes
-- Docs/chores
-- Boundary-preserving refactors
-- Follows existing pattern with no architectural impact
-
-### Flag truth table
-
-| Flags | `needs_design` signal | System-design step |
+| Flags | Signal | Route |
 |---|---|---|
-| `--design` | (ignored) | Runs (forced on) |
-| `--skip-design` | (ignored) | Skipped (forced off) |
-| neither | `true` (multi-subsystem/schema/transport/dependency) | Runs |
-| neither | `false` (single-module/bug-fix/pattern-following) | Skipped |
+| `--design` | ignored | run `system-design` |
+| `--skip-design` | ignored | skip `system-design`; keep brainstorm summary |
+| neither | `true` | run `system-design` |
+| neither | `false` | skip `system-design` |
 
-**Ties lean toward design** (R2 pattern 2: "nothing is too simple"). The operator can always override with `--skip-design`.
+## HITL And Auto Mode
 
-### Relationship to `dev-plan --design/--auto`
+Gate taxonomy:
 
-The existing `dev-plan --design/--auto` pattern controls whether the `planning-pipeline.yaml` design-gen step produces a design satellite doc. The new `dev-idea --design/--skip-design` pattern controls whether the `idea-pipeline.yaml` system-design step runs `sp:sys-architecture`. These are related but distinct:
-
-| Aspect | `dev-plan --design/--auto` | `dev-idea --design/--skip-design` |
-|---|---|---|
-| Pipeline | `planning-pipeline.yaml` | `idea-pipeline.yaml` |
-| Step | design-gen (satellite doc) | system-design (ADR + architecture) |
-| Decision | Seam heuristic (agent decides) | Scope decomposition check (brainstorm outputs signal) |
-| Default | Skip (no satellite) | Run (nothing is too simple) |
-| Force on | `--design` | `--design` |
-| Force off | (no flag — skip is default) | `--skip-design` |
-
-Both patterns use the same underlying criteria (seam heuristic) but apply them at different points in the lifecycle with different defaults.
-
-## HITL gate model
-
-### Gate locations
-
-| Gate | Pipeline | Purpose | Auto-resolvable? |
+| Gate | Pipeline | Decision type | Auto route allowed |
 |---|---|---|---|
-| feature-check | idea-pipeline | Validate feature + AC format | Yes (schema-valid → auto-approve) |
-| design-approval | idea-pipeline | Review architectural decisions before decomposition | No (taste decision) |
-| batch-create | idea-pipeline | Confirm task batch before creation | Yes (schema-valid → auto-approve) |
-| branch-cleanup | wrapup-pipeline | Confirm branch merge/delete (irreversible) | No (irreversible) |
+| `feature-check` | idea | objective schema/check result | yes |
+| `design-approval` | idea/planning | taste/architecture approval | no by default |
+| `batch-create` | idea | objective schema/check result | yes |
+| `approve` | task | objective if review verdict is PASS; taste otherwise | conditional |
+| `branch-cleanup` | wrapup | irreversible | no |
 
-### Auto-decision principles
+Auto-decision principles:
 
-With `--auto` (or `profile=auto` in workflow vars), gates auto-resolve per these principles:
+1. Schema-valid -> auto-approve.
+2. Gate-passed -> auto-continue.
+3. Tests-green -> auto-continue.
+4. Verdict-PASS -> auto-continue.
+5. Taste-decision -> surface to human.
+6. Irreversible action -> surface to human.
+7. Error -> stop.
 
-1. Schema-valid → auto-approve
-2. Gate-passed → auto-continue
-3. Tests-green → auto-continue
-4. Verdict-PASS → auto-continue
-5. Taste-decision → surface to human (even with `--auto`)
-6. Error → stop
+Implementation rule: `--auto` sets `profile=auto`. YAML transitions must route around an
+auto-resolvable HITL state before entry. The workflow engine does not auto-dismiss `hitl.confirm`.
 
-`--auto` is not `--yes-to-everything` — taste decisions (design-approval, branch-cleanup) still surface even in auto mode.
+## Command Surface
 
-## Doc-sync boundary
+| Command | Workflow | Required flags/options | Contract |
+|---|---|---|---|
+| `/sp:dev-plan` | `.spur/workflows/planning-pipeline.yaml` | `--design`, `--auto` | Known idea/slug to design handoff. |
+| `/sp:dev-run` | `.spur/workflows/task-pipeline.yaml` | `<wbs>`, `--auto`, `--wrap` | One task through execution; optional wrap-up after done. |
+| `/sp:dev-runall` | `.spur/workflows/task-pipeline.yaml` per selected task | `--feature`, `--auto`, `--wrap` | Batch execution with dependency/topology handling in the wrapper. |
+| `/sp:dev-idea` | `.spur/workflows/idea-pipeline.yaml` | `<idea>`, `--auto`, `--design`, `--skip-design` | Vague idea to feature + task batch handoff. |
+| `/sp:dev-wrap` | `.spur/workflows/wrapup-pipeline.yaml` | `<wbs>`, `--auto`, `--merge` | Single-task wrap-up. |
+| `/sp:dev-wrapall` | `.spur/workflows/wrapup-pipeline.yaml` | `--since`, `--feature`, `--status`, `--auto`, `--merge` | Batch wrap-up. |
 
-Design-step doc creation and wrapup doc-sync are fundamentally different operations that must not be conflated:
+Wrapper duties:
 
-| Aspect | System-design step (idea-pipeline) | doc-sync step (wrapup-pipeline) |
+- Build `--vars` JSON.
+- Resolve task selections for batch commands.
+- Prefer `.spur/workflows/<name>.yaml` in operator-facing command text.
+- Pass `profile=auto` when `--auto` is set.
+- Surface paused run ids and `spur workflow continue <run-id>` instructions.
+- Never directly mutate task/feature files.
+
+## Memory And Telemetry Artifacts
+
+| Artifact | Format | Writer | Purpose | Corpus-gated |
+|---|---|---|---|---|
+| `.spur/memory/learnings.md` | Markdown | `wrapup-pipeline.yaml` | Working learnings grouped by date/task | no |
+| `.spur/memory/wrapup-metrics.jsonl` | JSONL | `wrapup-pipeline.yaml` | Per-task wrap-up telemetry | no |
+| `.spur/memory/sessions/<session>.md` | Markdown + YAML frontmatter | all long-running pipelines | Resume checkpoint | no |
+
+Checkpoint frontmatter:
+
+```yaml
+session_id: "2026-07-01-0167"
+workflow: "task-pipeline"
+run_id: "wf_..."
+task_wbs: "0167"
+feature_id: "I"
+phase: "verify"
+last_gate: "review-approved"
+timestamp: "2026-07-01T18:30:00Z"
+next_action: "run verification"
+```
+
+Write checkpoints after:
+
+- every HITL gate decision;
+- every phase transition in `planning-pipeline`, `task-pipeline`, `feature-dev`, `idea-pipeline`,
+  and `wrapup-pipeline`;
+- every terminal state.
+
+Read checkpoints when:
+
+- `/sp:dev-run --continue` or `/sp:dev-runall --continue` is used;
+- the operator asks to resume a task or feature;
+- a workflow run is paused and later continued.
+
+## Documentation Boundaries
+
+| Operation | When | Writes |
 |---|---|---|
-| When | Before code, after feature-check | After code, after task completion |
-| What | Creates initial design docs | Updates docs to match implementation |
-| Writes to | `docs/00_ADR.md` (ADR entries), `docs/03_ARCHITECTURE.md` (decisions/rationale) | `docs/` drift audit, lesson-append to constitution |
-| Skill | `sp:sys-architecture` | `sp:doc-evolve` |
-| Purpose | "Write the high-level plan before code" | "Update docs to match what was built" |
+| Initial system design | before decomposition/code | `docs/00_ADR.md`, `docs/03_ARCHITECTURE.md`, `docs/04_DESIGN.md`, `docs/design/*` as needed |
+| Post-implementation doc sync | after task/feature execution | drift repairs in docs, lessons in `docs/99_PROJECT_CONSTITUTION.md §8` |
+| Working learning capture | during wrap-up | `.spur/memory/learnings.md` |
 
-Conflating these is a correctness risk: design decisions must be recorded before decomposition (so tasks align with module boundaries), not after implementation (when it's too late to influence task structure).
+The initial design step is allowed to create or update design artifacts. The wrap-up doc-sync step is
+allowed to repair drift and promote lessons. Neither step writes task or feature corpus files directly.
 
-## Cross-session memory
+## Workflow YAML Contract
 
-### Learning log (`.spur/memory/learnings.md`)
+All workflow files in this system use:
 
-Simple markdown, not JSON. Written by `wrapup-pipeline.yaml` learning-capture step. Not CLI-gated — working scratchpad, not validated corpus. High-value learnings are promoted to the constitution via `doc-evolve`'s lesson-append.
+| Field | Required value |
+|---|---|
+| `$schema` | `@gobing-ai/spur/schemas/state-machine-workflow.schema.json` |
+| `kind` | `state-machine` |
+| `initialState` | existing state id |
+| `states[].id` | unique state id |
+| `transitions[]` | explicit `from`, `to`, and guard |
+| LLM action kind | `agent.run` |
+| Shell action kind | `shell` |
+| HITL action kind | `hitl.confirm` |
+| Dry-run-safe notes | `note` |
 
-### Session checkpoints (`.spur/memory/sessions/`)
+Validation commands:
 
-Markdown files with YAML frontmatter (session_id, task_wbs, phase, last_gate, timestamp). Written after every gate/phase transition. Read on `dev-run` resume.
+```bash
+bun run apps/cli/src/index.ts workflow validate .spur/workflows/idea-pipeline.yaml --json
+bun run apps/cli/src/index.ts workflow validate .spur/workflows/wrapup-pipeline.yaml --json
+```
 
-## Command surface
+Repository-local CI or tests may validate `config/workflows/*.yaml` directly.
 
-| Command | Pipeline | Purpose |
-|---|---|---|
-| `/sp:dev-idea` | `idea-pipeline.yaml` | Unified entry: vague idea → feature + AC + task batch |
-| `/sp:dev-plan` | `planning-pipeline.yaml` | Design doc generation from known slug |
-| `/sp:dev-run` | `task-pipeline.yaml` | Single task execution |
-| `/sp:dev-runall` | `task-pipeline.yaml` (batch) | Batch task execution |
-| `/sp:dev-wrap` | `wrapup-pipeline.yaml` | Single-task post-execution wrap-up |
-| `/sp:dev-wrapall` | `wrapup-pipeline.yaml` | Batch post-execution wrap-up |
+## Structural Invariants
 
-All commands support `--auto` (skip HITL gates per auto-decision principles). `dev-idea` supports `--design`/`--skip-design` (override auto-detection). `dev-wrap`/`dev-wrapall` support `--since`/`--feature`/`--status`/`--merge` options.
+Task 0167 extends `plugins/sp/tests/skill-structure.test.ts` without renumbering existing R29.
 
-## Workflow YAML schema
+| Invariant | Coverage |
+|---|---|
+| R30 | `dev-idea`, `dev-wrap`, and `dev-wrapall` command docs exist, have valid frontmatter, and delegate to the correct workflows. |
+| R31 | `gate-checklists.md` exists and is linked from `plugins/sp/skills/spur-dev/SKILL.md`. |
+| R32 | `dev-operations.md` registers `idea`, `wrap`, and `wrapall`. |
+| R33 | `cross-cutting.md` contains auto-decision, iron laws, design approval, learning log, checkpoint, and pipeline alignment sections. |
+| R34 | `idea-pipeline.yaml` and `wrapup-pipeline.yaml` exist and validate against the state-machine schema. |
+| R35 | `sp:brainstorm` documents the design approval gate and `needs_design` signal. |
 
-All workflows use:
-- **Schema**: `@gobing-ai/spur/schemas/state-machine-workflow.schema.json`
-- **Kind**: `state-machine`
-- **LLM steps**: `agent.run` dispatching skills
-- **Gates**: `hitl.confirm` (auto-resolved when `profile=auto`)
-- **Iteration bound**: 20 (default)
-- **Vars**: passed as JSON via `--vars '{"key":"value"}'`
+Additional invariants for future workflow additions:
 
-New workflows (`idea-pipeline.yaml`, `wrapup-pipeline.yaml`) follow the same pattern as `planning-pipeline.yaml`, adding `skip_design` and `needs_design` vars for the auto-detection system.
+- Every new pipeline has exactly one owning phase.
+- Every new pipeline is listed in this document and in the relevant plugin README/reference.
+- Every new workflow validates with `spur workflow validate`.
+- Any new HITL gate is classified as objective, taste, irreversible, or error.
+- Any new working-memory artifact lives under `.spur/memory/` and has a documented format.
+
+## Implementation Sequence For 0167
+
+1. Add cross-cutting references: auto-decision principles, iron laws, pipeline alignment, learning log,
+   session checkpoints, gate checklists.
+2. Enhance `sp:brainstorm` to emit the design summary and `needs_design` contract.
+3. Add `wrapup-pipeline.yaml`, `dev-wrap`, `dev-wrapall`, and `--wrap` integration.
+4. Add `idea-pipeline.yaml` and `dev-idea`.
+5. Add checkpoint write/read actions to existing and new workflows.
+6. Register new operations in `dev-operations.md` and plugin README.
+7. Add R30-R35 structural tests.
+8. Validate workflows, run plugin tests, then run the project gate.
+
+## Acceptance Trace
+
+| Acceptance | Design coverage |
+|---|---|
+| AC1 | R30-R35 invariants section |
+| AC2 | workflow validation contract |
+| AC3 | `idea-pipeline.yaml` contract |
+| AC4 | `wrapup-pipeline.yaml` contract and memory artifacts |
+| AC5 | lifecycle contracts |
+| AC6 | HITL and auto mode |
+| AC7 | checkpoint contract |
+| AC8 | path model, command surface, registration invariants |
