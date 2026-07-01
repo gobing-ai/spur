@@ -475,7 +475,6 @@ export function assertNoNewPhantomSections(doc: MarkdownDocument, domain: Markdo
 function applyMutation(doc: MarkdownDocument, mutation: MutationDescriptor): void {
     switch (mutation.kind) {
         case 'create':
-            // Content already parsed — no additional mutation needed.
             break;
         case 'updateSection':
             if (mutation.sectionName !== undefined && mutation.sectionBody !== undefined) {

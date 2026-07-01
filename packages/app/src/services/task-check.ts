@@ -129,6 +129,38 @@ function isProseOnlyReview(body: string): boolean {
     return !stripped.split('\n').some((l) => l.includes('|'));
 }
 
+/**
+ * Detect a file:line citation in markdown table format — a file path in one column
+ * and a line number (or line range) in an adjacent column. Example rows:
+ *   | `src/foo.ts` | 42 | fixed the bug |
+ *   | `src/bar.ts` | 42-45 | refactored range |
+ *
+ * The file column must contain a recognisable extension (`.ts`, `.js`, `.md`, etc.);
+ * the line column must be a bare integer or integer range.
+ */
+function hasAdjacentFileLineColumns(body: string): boolean {
+    const lines = body.split('\n');
+    for (const line of lines) {
+        if (!line.includes('|')) continue;
+        const cells = line.split('|').map((c) => c.trim());
+        // Need at least 2 content cells for an adjacent pair.
+        if (cells.length < 3) continue;
+        for (let i = 0; i < cells.length - 1; i++) {
+            const a = cells[i];
+            const b = cells[i + 1];
+            if (a === undefined || b === undefined) continue;
+            // Column A is a file path (backtick-wrapped or bare, with a known extension).
+            // Strip backticks before testing the extension so `\`src/foo.ts\`` matches.
+            const fileText = a.replace(/`/g, '');
+            const fileCell = /\.(tsx?|jsx?|mjs|cjs|md|ya?ml|json|css|html|sql|sh|toml)$/i.test(fileText);
+            // Column B is a line number or range.
+            const lineCell = /^\d+(-\d+)?$/.test(b);
+            if (fileCell && lineCell) return true;
+        }
+    }
+    return false;
+}
+
 // ─── TaskCheckService ───────────────────────────────────────────────────
 
 /** Four-layer task validator (design §3). L1 schema → L2 matrix → L3 format → L4 traceability. */
@@ -213,7 +245,10 @@ export class TaskCheckService extends PlanningCheckService {
         const solBody = doc.getSection('Solution');
         if (solBody !== null && !isPlaceholderBody(solBody)) {
             const hasFileLine = /`[^`]+?:\d+(-\d+)?`/.test(solBody) || /[^\s`]\.\w+:\d+/.test(solBody);
-            if (!hasFileLine) {
+            // Also accept markdown table rows where a file path and a line number
+            // appear in adjacent columns (e.g. | `src/foo.ts` | 42 | ... |).
+            const hasTableFileLine = hasFileLine || hasAdjacentFileLineColumns(solBody);
+            if (!hasTableFileLine) {
                 findings.push({
                     layer: 'L3',
                     severity: 'error',

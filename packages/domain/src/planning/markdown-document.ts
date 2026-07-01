@@ -124,6 +124,27 @@ function findHeadings(body: string, hashes: string): HeadingHit[] {
 }
 
 /**
+ * Normalize YAML-parsed scalar values that the `yaml` library resolves to
+ * non-string types back to their canonical string form for the frontmatter
+ * data map. Without this, ISO 8601 timestamps written without YAML quotes
+ * (e.g. `updated_at: 2026-06-30T22:36:49Z`) are parsed as `Date` objects
+ * and fail Zod string validation on the next read.
+ */
+function normalizeYamlScalars(data: Record<string, unknown>): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(data)) {
+        if (value instanceof Date) {
+            out[key] = value.toISOString();
+        } else if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+            out[key] = normalizeYamlScalars(value as Record<string, unknown>);
+        } else {
+            out[key] = value;
+        }
+    }
+    return out;
+}
+
+/**
  * Unified markdown document with lossless frontmatter + section read/write.
  *
  * Usage:
@@ -184,7 +205,7 @@ export class MarkdownDocument {
             try {
                 const parsed = parseYaml(raw);
                 if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
-                    data = parsed as Record<string, unknown>;
+                    data = normalizeYamlScalars(parsed as Record<string, unknown>);
                 }
             } catch {
                 // Malformed YAML — leave data as empty object; raw text is still available.
@@ -472,8 +493,24 @@ export class MarkdownDocument {
      * @param key - frontmatter key (matched at line start, before the first `:`)
      * @param value - scalar value to write after `<key>: `
      */
+    /**
+     * Write `value` as a YAML-safe scalar, quoting when the raw string would be
+     * misinterpreted (ISO 8601 timestamps that contain `:`, numeric-looking
+     * strings like WBS `0042`, bare YAML literals like `null`/`true`/`false`,
+     * and strings with special characters). This keeps the round-tripped
+     * frontmatter valid across parse → serialize → parse cycles.
+     */
+    private yamlSafeValue(value: string): string {
+        // Already double-quoted by the caller — don't wrap again.
+        if (value.startsWith('"') && value.endsWith('"')) return value;
+        if (/[:{}[\],&*?|>!%@`#"'\\\n\r]/.test(value)) return `"${value}"`;
+        if (/^(null|true|false|yes|no|on|off)$/i.test(value)) return `"${value}"`;
+        if (/^\d/.test(value) && !/^\d{4}-\d{2}-\d{2}/.test(value)) return `"${value}"`;
+        return value;
+    }
+
     setFrontmatterField(key: string, value: string): void {
-        const fieldLine = `${key}: ${value}`;
+        const fieldLine = `${key}: ${this.yamlSafeValue(value)}`;
 
         if (this._frontmatter === null) {
             const raw = fieldLine;

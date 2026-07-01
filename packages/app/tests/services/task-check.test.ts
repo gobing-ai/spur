@@ -677,6 +677,125 @@ describe('TaskCheckService', () => {
         expect(solErrors.length).toBeGreaterThan(0);
     });
 
+    test('L3: Solution table with backtick-wrapped file + adjacent line column passes (P3 regression)', async () => {
+        // WHY: hasAdjacentFileLineColumns initially failed to strip backticks before
+        // checking file extensions — `\`src/foo.ts\`` didn't match the extension regex.
+        // This test locks the fix: backtick-wrapped paths in table columns are recognized.
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Table file:line"',
+            'status: done',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Table file:line',
+            '',
+            '### Solution',
+            '',
+            '| File | Lines | What / Why |',
+            '| ---- | ----- | ---------- |',
+            '| `src/foo.ts` | 42 | added validation |',
+            '',
+            '### Testing',
+            '',
+            'Coverage: 95%.',
+            '',
+            '### Review',
+            '',
+            '| Severity | File | Finding | Recommendation |',
+            '| -------- | ---- | ------- | -------------- |',
+            '| P2 | `src/foo.ts:42` | fixed | — |',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+        const solErrors = result.findings.filter(
+            (f) => f.layer === 'L3' && f.section === 'Solution' && f.severity === 'error',
+        );
+        expect(solErrors.length).toBe(0);
+    });
+
+    test('L3: Solution table with bare file + adjacent line range passes', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Table file:line range"',
+            'status: done',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Table file:line range',
+            '',
+            '### Solution',
+            '',
+            '| File | Lines | What / Why |',
+            '| ---- | ----- | ---------- |',
+            '| src/foo.ts | 10-25 | refactored parser |',
+            '',
+            '### Testing',
+            '',
+            'Coverage: 95%.',
+            '',
+            '### Review',
+            '',
+            '| Severity | File | Finding | Recommendation |',
+            '| -------- | ---- | ------- | -------------- |',
+            '| P2 | src/foo.ts:10-25 | fixed | — |',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+        const solErrors = result.findings.filter(
+            (f) => f.layer === 'L3' && f.section === 'Solution' && f.severity === 'error',
+        );
+        expect(solErrors.length).toBe(0);
+    });
+
+    test('L3: Solution table with file path but NO adjacent line column still errors', async () => {
+        // WHY: the table-format detection must not false-positive on a file column
+        // whose adjacent column is NOT a line number — only genuine file+line pairs count.
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Table no line"',
+            'status: done',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Table no line',
+            '',
+            '### Solution',
+            '',
+            '| File | Description |',
+            '| ---- | ----------- |',
+            '| src/foo.ts | added validation |',
+            '',
+            '### Testing',
+            '',
+            'Coverage: 95%.',
+            '',
+            '### Review',
+            '',
+            '| Severity | File | Finding | Recommendation |',
+            '| -------- | ---- | ------- | -------------- |',
+            '| P2 | src/foo.ts | fixed | — |',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+        const solErrors = result.findings.filter(
+            (f) => f.layer === 'L3' && f.section === 'Solution' && f.severity === 'error',
+        );
+        expect(solErrors.length).toBeGreaterThan(0);
+    });
+
     test('L3: Testing without coverage claim warns', async () => {
         const content = [
             '---',
