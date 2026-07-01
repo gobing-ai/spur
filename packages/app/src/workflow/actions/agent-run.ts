@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join } from 'node:path';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
@@ -20,6 +21,12 @@ const KIND = 'agent.run';
  * - `capture` (boolean): when true, use `AgentService.runCapture` to capture the
  *   agent's stdout. The answer text is returned in `data.answer` for downstream
  *   steps (e.g. `response.validate`). Output is buffered, not streamed.
+ * - `answerFile` (string): persist the captured answer to a file (implies capture).
+ *   Relative paths resolve against `cwd`; parent dirs are created.
+ * - `expectFile` (string): post-exit verification — after a successful (exit-0)
+ *   agent run, assert the file exists. If absent, downgrade to `ok:false` with a
+ *   clear error. Catches "agent exited 0 but didn't produce the expected artifact"
+ *   defects (R6-S2a). Relative paths resolve against `cwd`.
  * - `timeoutMs` (number): subprocess timeout in milliseconds. Forwarded via
  *   `AgentRunOptions.timeout` to `ProcessExecutor.run`, which kills the child
  *   on elapse. On timeout, the agent step exits non-zero → `ok:false` → pipeline
@@ -83,6 +90,7 @@ export class AgentRunActionRunner implements ActionRunner {
         // result.data, so a file is the deterministic transport for the answer —
         // e.g. the verify step writing its PASS/FAIL verdict artifact).
         const answerFile = asOptionalString(options.answerFile);
+        const expectFile = asOptionalString(options.expectFile);
         const capture = asOptionalBoolean(options.capture) || answerFile !== undefined;
         const agentLabel = agent ?? '<default>';
 
@@ -94,6 +102,17 @@ export class AgentRunActionRunner implements ActionRunner {
                 await mkdir(dirname(target), { recursive: true });
                 await writeFile(target, answer, 'utf8');
             }
+            // R6-S2a: verify expected side-effect artifact exists after exit-0.
+            if (ok && expectFile !== undefined) {
+                const target = isAbsolute(expectFile) ? expectFile : join(cwd, expectFile);
+                if (!existsSync(target)) {
+                    return {
+                        ok: false,
+                        data: { exitCode, agent: agentLabel, answer },
+                        error: `agent.run (${agentLabel}) exited 0 but expected file is absent: ${expectFile}`,
+                    };
+                }
+            }
             return {
                 ok,
                 data: { exitCode, agent: agentLabel, answer },
@@ -104,6 +123,16 @@ export class AgentRunActionRunner implements ActionRunner {
 
         const exitCode = await this.agentService.run(input, flags);
         const ok = exitCode === 0;
+        if (ok && expectFile !== undefined) {
+            const target = isAbsolute(expectFile) ? expectFile : join(cwd, expectFile);
+            if (!existsSync(target)) {
+                return {
+                    ok: false,
+                    data: { exitCode, agent: agentLabel },
+                    error: `agent.run (${agentLabel}) exited 0 but expected file is absent: ${expectFile}`,
+                };
+            }
+        }
         return {
             ok,
             data: { exitCode, agent: agentLabel },

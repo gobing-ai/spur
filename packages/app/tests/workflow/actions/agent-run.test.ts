@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ActionRunContext } from '@gobing-ai/ts-dual-workflow-engine';
@@ -209,6 +209,128 @@ describe('AgentRunActionRunner answerFile', () => {
         const runner = new AgentRunActionRunner(svc);
         await runner.execute({ input: 'verify', answerFile: 'nested/out.txt', cwd: dir }, makeCtx());
         expect(readFileSync(join(dir, 'nested', 'out.txt'), 'utf8')).toBe('FAIL');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: AgentRunActionRunner expectFile
+// ---------------------------------------------------------------------------
+
+describe('AgentRunActionRunner expectFile', () => {
+    let dir: string;
+    afterEach(() => {
+        if (dir) rmSync(dir, { recursive: true, force: true });
+    });
+
+    // R6-S2a: expectFile catches "agent exited 0 but didn't produce the expected
+    // artifact" — the silent-success defect where the agent claims success but the
+    // side-effect file (verdict, report, etc.) is missing.
+    test('non-capture: exit-0 + expectFile exists → ok:true', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
+        const file = join(dir, 'output.txt');
+        writeFileSync(file, 'done');
+        const svc = {
+            run: async () => 0,
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ input: 'build', expectFile: file }, makeCtx());
+        expect(result.ok).toBe(true);
+    });
+
+    test('non-capture: exit-0 + expectFile absent → ok:false with clear error', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
+        const svc = {
+            run: async () => 0,
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ input: 'build', expectFile: 'missing.txt', cwd: dir }, makeCtx());
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('exited 0 but expected file is absent');
+        expect(result.error).toContain('missing.txt');
+    });
+
+    test('capture: exit-0 + expectFile exists → ok:true', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
+        const file = join(dir, 'verdict.json');
+        writeFileSync(file, '{"verdict":"PASS"}');
+        const svc = {
+            runCapture: async () => ({ exitCode: 0, answer: 'verified' }),
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ input: 'verify', capture: true, expectFile: file }, makeCtx());
+        expect(result.ok).toBe(true);
+        expect(result.data).toEqual({ exitCode: 0, agent: '<default>', answer: 'verified' });
+    });
+
+    test('capture: exit-0 + expectFile absent → ok:false with clear error', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
+        const svc = {
+            runCapture: async () => ({ exitCode: 0, answer: 'all good' }),
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute(
+            { input: 'verify', capture: true, expectFile: 'nope.json', cwd: dir },
+            makeCtx(),
+        );
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('exited 0 but expected file is absent');
+        expect(result.error).toContain('nope.json');
+        expect(result.data).toEqual({ exitCode: 0, agent: '<default>', answer: 'all good' });
+    });
+
+    test('expectFile resolves relative to cwd', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
+        const svc = {
+            run: async () => 0,
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ input: 'build', expectFile: 'artifact.txt', cwd: dir }, makeCtx());
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('artifact.txt');
+    });
+
+    test('non-capture: non-zero exit skips expectFile check', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
+        const svc = {
+            run: async () => 2,
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ input: 'build', expectFile: 'missing.txt', cwd: dir }, makeCtx());
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('exited with code 2');
+        expect(result.error).not.toContain('expected file is absent');
+    });
+
+    test('capture: non-zero exit skips expectFile check', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
+        const svc = {
+            runCapture: async () => ({ exitCode: 1, answer: 'partial' }),
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute(
+            { input: 'build', capture: true, expectFile: 'missing.txt', cwd: dir },
+            makeCtx(),
+        );
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('exited with code 1');
+        expect(result.error).not.toContain('expected file is absent');
+    });
+
+    test('answerFile + expectFile together: both written and verified', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
+        const answerPath = join(dir, 'answer.txt');
+        const artifactPath = join(dir, 'artifact.txt');
+        writeFileSync(artifactPath, 'built');
+        const svc = {
+            runCapture: async () => ({ exitCode: 0, answer: 'build complete' }),
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute(
+            { input: 'build', answerFile: answerPath, expectFile: artifactPath },
+            makeCtx(),
+        );
+        expect(result.ok).toBe(true);
+        expect(readFileSync(answerPath, 'utf8')).toBe('build complete');
     });
 });
 
