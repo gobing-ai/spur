@@ -153,5 +153,6 @@ docs/.ftree/
 /apps/web/coverage
 /apps/web/.coverage
 /docs/dogfood
+/docs/memo.md
 
 .scratch/
