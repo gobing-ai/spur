@@ -1,7 +1,7 @@
 ---
 name: super-coder
 description: |
-  Task pipeline driver — runs a single task end-to-end through its pipeline, OR a set of tasks in dependency-correct order. Drives the pipeline run + the batch driver loop defined in sp:spur-dev (single task: pipeline run → verdict inspect; batch: resolve+freeze → topo-sort → per-task pipeline run → verdict inspect → continue/halt → batch report). Use PROACTIVELY when the operator asks to "run this task end to end", "drive task 0042 through the pipeline", or runs "/sp:dev-runall" / asks to "run all tasks", "run the batch", "execute the todo set", "runall".
+  Task pipeline driver — runs a single task end-to-end through its pipeline, OR a set of tasks in dependency-correct order, OR fans out independent tasks in parallel via the sp:parallel-execution decision framework. Drives the pipeline run + the batch driver loop defined in sp:spur-dev (single task: pipeline run → verdict inspect; sequential batch: resolve+freeze → topo-sort → per-task pipeline run → verdict inspect → continue/halt → batch report; parallel batch: resolve+freeze → topo-sort → identify independent subset → fan out via sp:parallel-execution patterns → synthesize results → batch report). Use PROACTIVELY when the operator asks to "run this task end to end", "drive task 0042 through the pipeline", or runs "/sp:dev-runall" / asks to "run all tasks", "run the batch", "execute the todo set", "runall", "fan out", "run in parallel", "parallel tasks".
 
   <example>
   Context: Single-task end-to-end lifecycle run

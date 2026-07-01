@@ -100,12 +100,15 @@ must not be changed without updating the backing skill.
 - **Behavior:** Read the task → elicit missing AC/Design/Plan through targeted Q&A → write each via `spur task update <wbs> --section <name> --from-file`. Done just-in-time, per task, immediately before execution. With `--next`: on success, transition status (idempotently — see Inputs) + chain to dev-run; on failure, stop and surface error.
 - **Pre-synthesis skip gate (under `--auto`):** Before invoking synthesis, run `spur task check <wbs> --json`. Filter the findings to the target sections only ({Background, Requirements, Plan}). If there are no L3 findings for any of those sections (regardless of whether the *overall* exit code is 0 — other sections may have findings), emit a structured SKIP result instead of synthesizing:
   ```
-  SKIP — sections already meet L3: sections-considered=[Background, Requirements, Plan], reason="no L3 findings for target sections"
+  SKIP — sections already meet L3: sections-considered=[Background, Requirements, Plan], reason="no L3 findings for target sections" (N L4 advisory: <labels>)
   ```
+  The `(N L4 advisory: <labels>)` suffix is emitted whenever `spur task check` returned ≥1 L4
+  finding — list each L4 finding's one-line label, comma-separated. Omit the suffix when there
+  are zero L4 findings. L4 advisories do not block the SKIP; the suffix is informational only.
   Under `--json`/machine consumption, emit the same decision as a structured object so a downstream
   (observe-only) driver need not re-run `spur task check` to reconstruct it:
   ```json
-  {"result": "SKIP", "sections-considered": ["Background", "Requirements", "Plan"], "reason": "no L3 findings for target sections"}
+  {"result": "SKIP", "sections-considered": ["Background", "Requirements", "Plan"], "reason": "no L3 findings for target sections", "l4Advisories": [{"message": "Missing feature_id — ..."}]}
   ```
   Synthesis is only invoked when a real L3 gap exists in a target section. The SKIP result is the normal outcome for a well-specified task under `--auto`; it is not a failure.
   **Scope:** only L3 findings whose `section` ∈ {Background, Requirements, Plan} count toward the SKIP gate. L3 findings on other sections (e.g. `### Review`) do not block the SKIP — refine does not own those sections.

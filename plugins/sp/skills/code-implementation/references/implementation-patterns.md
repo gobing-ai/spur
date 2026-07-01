@@ -22,6 +22,14 @@ Before writing code:
 3. Check the worktree and branch. Avoid mixing unrelated changes into the implementation evidence.
 4. Identify the stack and local conventions before adding files.
 5. Choose the narrowest verification command that proves the first behavior.
+6. **Reuse context from prior chain steps.** When this skill is invoked via a `--next` chain
+   (refine → run → verify), the calling session already holds the task file, `spur task check`
+   output, and any files read during refinement. Before re-reading a file, check whether it is
+   already in context — re-reading the task file or re-running `spur task check` when the prior
+   step's result is still valid wastes tokens and drags cache hit rate below 40%. Only re-fetch
+   when the underlying state changed (e.g. you just wrote a section and need the updated check).
+   Apply the same discipline to skill/command reference files: if the task's own references or
+   the refine step already loaded them, reference the in-context copy rather than re-reading.
 
 ## Task-Driven Implementation
 

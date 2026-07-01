@@ -40,7 +40,7 @@ When you want a deeper review (SECUA, architectural, or second-opinion):
    - `git diff` of the changes.
    - Self-review results (Workflow A output).
    - Any specific concerns or focus areas.
-2. **Request:** `/sp:dev-review-req <wbs> --mode request [--focus <lens>]`
+2. **Request:** Invoke `sp:code-review` directly or trigger via "review my changes", "review this diff".
 3. **Receive:** The reviewer produces a P1–P4 findings table.
 
 ## Workflow C — Processing review findings
@@ -75,7 +75,7 @@ Do **not** use this skill for:
 
 - **`sp:code-verification`** — post-implementation pipeline review and requirements verification.
 - **`sp:code-implementation`** — the implement step that produces the changes being reviewed.
-- **`/sp:dev-review-req`** — the slash-command entry point.
+- **`sp:code-verification`** — post-implementation pipeline review and requirements verification.
 
 ---
 

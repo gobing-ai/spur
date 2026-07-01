@@ -104,7 +104,7 @@ Do **not** use this skill for:
 
 - **`sp:spur-dev`** — the task lifecycle that runs alongside branch lifecycle.
 - **`sp:code-review`** — pre-merge self-review workflow.
-- **`/sp:dev-branch`** — the slash-command entry point.
+- **`sp:code-review`** — pre-merge self-review workflow.
 
 ---
 

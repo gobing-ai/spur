@@ -204,9 +204,14 @@ spur task update <wbs> --section Review --from-file /tmp/<wbs>-review.md
 ```
 
 Section bodies passed to `spur task update --section` must be **body-only**. Do not put a same-level
-`### SECUA Review` heading inside the `Review` section body; the task writer strips same-level
-headings to prevent phantom sections. Use a priority table or a bold label such as
-`**SECUA Review**` inside the body instead.
+heading inside any section body; the task writer strips same-level headings to prevent phantom
+sections. Concretely:
+
+- **Testing section:** do not put `### Acceptance Criteria Verification`, `### Per-Requirement
+  Traceability`, or any `###` heading inside the Testing body. Use bold labels
+  (`**Acceptance Criteria Verification**`) or tables instead.
+- **Review section:** do not put `### SECUA Review` or any `###` heading inside the Review body.
+  Use a priority table or a bold label such as `**SECUA Review**` instead.
 
 ### Step 10 — State the verdict (the gate contract)
 

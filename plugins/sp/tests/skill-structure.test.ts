@@ -235,4 +235,31 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(unscopedSpurCliIgnores).toEqual([]);
         statSync(join(SKILLS_DIR, 'spur-cli', 'SKILL.md'));
     });
+
+    test('R24 — parallel-execution skill and references exist (task 0164)', () => {
+        const skillDir = join(SKILLS_DIR, 'parallel-execution');
+        statSync(join(skillDir, 'SKILL.md'));
+        statSync(join(skillDir, 'references', 'fan-out-patterns.md'));
+        statSync(join(skillDir, 'references', 'result-synthesis.md'));
+    });
+
+    test('R25 — sys-debugging skill and protocol reference exist (task 0165)', () => {
+        const d = join(SKILLS_DIR, 'sys-debugging');
+        statSync(join(d, 'SKILL.md'));
+        statSync(join(d, 'references', 'debugging-protocol.md'));
+    });
+
+    test('R26 — code-review skill, self-review checklist, and review-lenses exist (task 0165)', () => {
+        const d = join(SKILLS_DIR, 'code-review');
+        statSync(join(d, 'SKILL.md'));
+        statSync(join(d, 'references', 'self-review-checklist.md'));
+        statSync(join(d, 'references', 'review-lenses.md'));
+    });
+
+    test('R27 — branch-workflow skill, branch-lifecycle, and worktree-patterns exist (task 0165)', () => {
+        const d = join(SKILLS_DIR, 'branch-workflow');
+        statSync(join(d, 'SKILL.md'));
+        statSync(join(d, 'references', 'branch-lifecycle.md'));
+        statSync(join(d, 'references', 'worktree-patterns.md'));
+    });
 });

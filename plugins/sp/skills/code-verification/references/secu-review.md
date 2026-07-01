@@ -77,3 +77,18 @@ core AC is UNMET), or fully MET yet carry a blocker finding (insecure implementa
 requirement). The aggregate verdict reflects requirement status, AC status, and gate-relevant
 review findings. Blocker and major SECUA findings are surfaced in the `checks[]` array of the
 verdict artifact so quality failures are not lost behind a requirements-only PASS.
+
+## Pre-Completion Verification
+
+Before declaring a task `done`, run this lightweight checklist. It catches the most common oversights that survive the formal pipeline gates:
+
+- [ ] All tests pass (`bun run test` exits 0).
+- [ ] Lint clean (`bun run lint` exits 0).
+- [ ] No `TODO` or `FIXME` without a linked task WBS.
+- [ ] `git status` shows only intentional changes (no debug artifacts, no temp files).
+- [ ] No `console.log` / `console.error` in production code (use the project logger).
+- [ ] No `--no-verify`, `--force`, or new suppression comments added to bypass gates.
+- [ ] Solution section contains `file:line` citations for every changed file.
+- [ ] Review section has P1–P4 findings table (even if all rows are empty — the table itself proves review happened).
+
+This checklist runs as part of the verify step when the task reaches `testing` status. It does not replace the formal gates — it augments them with between-pipeline hygiene checks.

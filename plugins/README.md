@@ -11,7 +11,11 @@ The `sp` plugin is the Claude Code plugin surface for the Spur toolkit. It provi
 
 ```
 plugins/sp/
-├── skills/                          # Domain knowledge + workflow documentation (12 skills)
+├── skills/                          # Domain knowledge + workflow documentation (16 skills)
+│   ├── branch-workflow/             # Branch lifecycle + worktree patterns (v1.0)
+│   │   └── references/
+│   │       ├── branch-lifecycle.md
+│   │       └── worktree-patterns.md
 │   ├── brainstorm/                  # Structured ideation workflow (v1.0.0)
 │   │   ├── agents/openai.yaml
 │   │   ├── examples/ideation-example.md
@@ -43,6 +47,10 @@ plugins/sp/
 │   │   └── references/
 │   │       ├── monitor-ledger.md
 │   │       └── report-template.md
+│   ├── parallel-execution/          # Fan-out decision framework + patterns (v1.0)
+│   │   └── references/
+│   │       ├── fan-out-patterns.md
+│   │       └── result-synthesis.md
 │   ├── spec-decomposition/          # Feature/spec → task-batch competency (v1.0)
 │   │   └── references/decomposition.md
 │   ├── spur-cli/                    # CLI facade: one reference per `spur` noun (v1.0)
@@ -102,6 +110,10 @@ plugins/sp/
 | `code-testing` | 1.0 | claude-code, codex, openclaw, opencode, antigravity | Testing competency — run tests, measure coverage, categorize gaps, extend targeted tests with per-stack adapters (Bun/TS, Go, Python) |
 | `code-verification` | 1.0 | claude-code, codex, openclaw, opencode, antigravity | Requirements-traceability verdict (PASS/PARTIAL/FAIL) + SECUA code review (Security, Efficiency, Correctness, Usability, Architecture) — backs `/sp:dev-verify` and `/sp:dev-review`; links broader code-improvement candidates out of review findings |
 | `dogfood-testing` | 1.0 | claude-code, codex, openclaw, opencode, antigravity | Dogfood backbone — drives a testee end-to-end with bounded auto-fix, a live monitor ledger, and a structured report; backs `/sp:dev-dogfood` |
+| `parallel-execution` | 1.0 | claude-code, codex, openclaw, opencode, antigravity | Fan-out decision framework — when to parallelize, four proven fan-out patterns (N-way investigation, competency-lens review, independent-task batch, adversarial panel), and result synthesis; backs `/sp:dev-parallel` |
+| `sys-debugging` | 1.0 | claude-code, codex, openclaw, opencode, antigravity | Structured debugging protocol — reproduce→isolate→root cause→fix→regression test; "ask the debugger before the LLM" principle, 15-minute escalation rule |
+| `code-review` | 1.0 | claude-code, codex, openclaw, opencode, antigravity | Code review workflow — pre-commit self-review checklist (6 categories, catches 60-80% of issues), structured review requests with SECUA lenses, findings processing |
+| `branch-workflow` | 1.0 | claude-code, codex, openclaw, opencode, antigravity | Branch-lifecycle discipline — create→worktree→commit→self-review→merge→cleanup; git worktree patterns for parallel branches |
 | `spur-tdd` | 1.0.0 | claude-code, codex, antigravity, opencode, openclaw | TDD workflow companion — red-green-refactor cycle, behavior-first test design, AAA structure, data builders, and mock-at-boundary anti-patterns |
 | `brainstorm` | 1.0.0 | claude-code, codex, antigravity, opencode, openclaw | Structured ideation workflow — generate solution options with trade-offs, confidence scoring; delegates verification to `cc:anti-hallucination` |
 | `daily-summary` | 1.0.0 | claude-code, codex, antigravity, opencode, openclaw | Daily summary report generator — orchestrates ccusage CLI + git history into structured markdown summaries |
@@ -120,11 +132,11 @@ Each skill directory contains:
 
 **Purpose:** Thin slash-command wrappers that parse user arguments and delegate to the corresponding skill. Each command is a user-facing entry point that bridges natural language to skill invocation.
 
-There are **19 commands**, organized by the CLI surface they wrap:
+There are **20 commands**, organized by the CLI surface they wrap:
 
 | Prefix | Count | Delegates To | Purpose |
 |--------|-------|-------------|---------|
-| `dev-*` | 13 | `sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:brainstorm`, `sp:dogfood-testing`, inline | The dev-workflow surface — `dev-run full` mode → spine; `dev-plan` → spine planning half; `dev-refine` → spine refine op; `dev-runall` → spine batch driver; `dev-review`/`dev-verify` → verification; `dev-unit` → testing; `dev-brainstorm` → brainstorm; `dev-dogfood` → dogfood-testing; `dev-fixall`/`dev-gitmsg`/`dev-changelog`/`dev-handover` → inline procedures |
+| `dev-*` | 14 | `sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:brainstorm`, `sp:dogfood-testing`, `sp:parallel-execution`, inline | The dev-workflow surface — `dev-run full` mode → spine; `dev-plan` → spine planning half; `dev-refine` → spine refine op; `dev-runall` → spine batch driver; `dev-parallel` → parallel-execution; `dev-review`/`dev-verify` → verification; `dev-unit` → testing; `dev-brainstorm` → brainstorm; `dev-dogfood` → dogfood-testing; `dev-fixall`/`dev-gitmsg`/`dev-changelog`/`dev-handover` → inline procedures |
 | `rule-*` | 3 | `sp:spur-cli` | The rule surface — `rule-add`, `rule-refine`, `rule-scan` |
 | `workflow-*` | 2 | `sp:spur-cli` | The workflow surface — `workflow-add`, `workflow-refine` |
 | `spur-init` | 1 | `sp:doc-evolve` | Project bootstrap (`spur init`) with doc-evolve integration |

@@ -8,7 +8,7 @@ allowed-tools: ["Bash", "Read", "Write", "Skill"]
 
 Wraps the **sp:spur-dev** skill (task refinement).
 
-Refine a task's requirements by analyzing existing content for quality issues and improving them through targeted Q&A. Read the task's current state, identify ambiguities and gaps in the acceptance criteria, and ask targeted questions to tighten the spec. Updates the task's sections via `spur task update --section` after each Q&A round.
+Refine a task's requirements by analyzing existing content for quality issues and improving them through targeted Q&A. Read the task's current state, identify ambiguities and gaps in the acceptance criteria, and ask targeted questions to tighten the spec. Updates the task's sections via `spur task update --section <name> --from-file <path>` after each Q&A round.
 
 ## When to use
 
@@ -67,11 +67,12 @@ the step via `spur agent run` instead. The default never shells out.
 1. **Load task** → Resolve the WBS to its file with `spur task path <wbs>` (or read a given path directly); `spur task show`/`check` also accept a bare WBS. The `spur task resolve` verb is the **inverse** (file-path → owning WBS), not the WBS→file lookup — don't use it here.
 2. **Analyze** → Check content for gaps and ambiguities against the focus bundle.
 3. **Question** → Generate targeted Q&A based on the expanded domain hints.
-4. **Synthesize** → Update Background, Requirements, and Constraints sections via `spur task update --section`.
+4. **Synthesize** → Update Background, Requirements, and Constraints sections via `spur task update --section <name> --from-file <path>`.
    - **Under `--auto`: pre-synthesis skip gate.** Before invoking synthesis, run `spur task check <wbs> --json`. Filter the findings to the target sections only ({Background, Requirements, Plan}). If there are **no L3 findings for those sections** (regardless of whether the overall exit code is 0 — other sections' findings do not count), emit a SKIP result and stop — do not invoke synthesis:
      ```
-     SKIP — sections already meet L3: sections-considered=[Background, Requirements, Plan], reason="no L3 findings for target sections"
+     SKIP — sections already meet L3: sections-considered=[Background, Requirements, Plan], reason="no L3 findings for target sections" (N L4 advisory: <labels>)
      ```
+     The `(N L4 advisory: <labels>)` suffix is emitted when `spur task check` returned ≥1 L4 finding — list each L4 finding's one-line label. Omit the suffix when there are zero L4 findings. L4 advisories do not block the SKIP.
      A SKIP is the normal outcome for a well-specified task. It is not a failure. Under `--auto`, only invoke synthesis when a real L3 gap exists in a **target section**. L3 findings on sections refine does not own (e.g. `### Review`) must not block the SKIP gate.
 5. **Profile** → Auto-set template/preset based on scope and complexity.
 6. **`--next` chain** → If refine succeeds (task check passes):

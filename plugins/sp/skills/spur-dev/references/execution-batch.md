@@ -236,3 +236,18 @@ The batch verdict: `clean` (all attempted tasks `done`) | `halted` (a failure st
 | R4.3 (`--agent` merged into per-task vars) | Step 3.2 |
 | R5.1 (orchestrator boundary) | "Zero engine code" preamble + Step 3 |
 | R5.2 (structured batch report) | Step 5 |
+
+## Parallel Execution
+
+When a batch contains tasks with **zero dependency edges between them** and **no file-overlap conflicts**, the orchestrator can fan them out in parallel instead of running them sequentially. This is an **orchestrator-level optimization** — the per-task pipeline (`task-pipeline.yaml`) is unchanged; only the execution order differs.
+
+**Decision framework:** `sp:parallel-execution` owns the full fan-out decision logic and patterns. Consult its [fan-out-patterns.md](../../parallel-execution/references/fan-out-patterns.md) before parallelizing. The orchestrator's responsibility is:
+1. Identify the independent subset from the topo-sorted batch (tasks with no edges to each other).
+2. Check for file-overlap conflicts (two tasks touching the same `file:line` range must serialize).
+3. Verify token budget supports N-way fan-out.
+4. Dispatch via `spur agent run` per task.
+5. Synthesize results per the [result-synthesis contract](../../parallel-execution/references/result-synthesis.md).
+
+**Parallel vs. sequential:** the default is sequential (topo-sort order). Parallel is an opt-in via `--mode parallel` on `sp:super-coder` or `/sp:dev-parallel`. When in doubt, run sequentially — parallel is only beneficial when tasks are provably independent.
+
+**See also:** `sp:parallel-execution` skill, `sp:super-coder` agent (parallel mode), `/sp:dev-parallel` command.

@@ -107,7 +107,6 @@ Do **not** use this skill for:
 
 - **`sp:code-implementation`** — the implement step that follows after root cause is found.
 - **`sp:code-testing`** — test runner and coverage measurement for regression tests.
-- **`/sp:dev-debug`** — the slash-command entry point for structured debugging.
 
 ---
 

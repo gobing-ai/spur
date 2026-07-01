@@ -1,6 +1,6 @@
 ---
 name: spur-cli
-description: The CLI facade for the Spur command surface — the single reference for operating every `spur` noun (task, feature, rule, workflow) from the command line: which verb does what, its flags, `--json` shapes, exit codes, and the CLI-gated write contract. One reference file per noun. Use when looking up or operating a `spur` verb or convention; NOT for driving the planning/execution lifecycle (that is the spine, sp:spur-dev). Triggers on "spur task", "spur feature", "spur rule", "spur workflow", "create a task", "create a feature", "run a rule", "author a workflow", "task check", "feature check", "acceptance criteria", "R-numbering", "batch-create", or looking up any spur CLI verb, flag, or convention.
+description: "The CLI facade for the Spur command surface — the single reference for operating every `spur` noun (task, feature, rule, workflow) from the command line: which verb does what, its flags, `--json` shapes, exit codes, and the CLI-gated write contract. One reference file per noun. Use when looking up or operating a `spur` verb or convention; NOT for driving the planning/execution lifecycle (that is the spine, sp:spur-dev). Triggers on \"spur task\", \"spur feature\", \"spur rule\", \"spur workflow\", \"create a task\", \"create a feature\", \"run a rule\", \"author a workflow\", \"task check\", \"feature check\", \"acceptance criteria\", \"R-numbering\", \"batch-create\", or looking up any spur CLI verb, flag, or convention."
 license: Apache-2.0
 metadata:
   author: spur
