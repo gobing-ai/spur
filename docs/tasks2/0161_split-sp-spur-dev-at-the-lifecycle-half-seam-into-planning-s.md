@@ -51,7 +51,7 @@ This is confirmed by the mature origin and two reference implementations:
   skill suite — sends any gstack request to the right skill."* This validates a centralized CLI/router
   facade *alongside* separate competency skills (gstack does both).
 - **obra/Superpowers** (`vendors/Superpowers/`) names skills by activity (`test-driven-development`,
-  `systematic-debugging`, `writing-plans`) and keeps **TDD as a standalone discipline skill** invoked
+  `sys-debugging`, `writing-plans`) and keeps **TDD as a standalone discipline skill** invoked
   "before writing implementation code" — separate from implementation. Its
   `subagent-driven-development` is the same thin-dispatch model: "dispatch a fresh implementer
   subagent per task, review after each, broad review at the end." Two mature systems converge on

@@ -2,7 +2,7 @@
 schema_version: 1
 name: "Dogfood findings for sp-dev-run 0162 --auto --next"
 description: ""
-status: backlog
+status: cancelled
 type: review
 template: review
 profile: standard
@@ -12,7 +12,7 @@ priority: P2
 tags: ["review"]
 dependencies: []
 created_at: "2026-06-30T20:47:30.357Z"
-updated_at: 2026-06-30T20:48:09.183Z
+updated_at: "2026-07-01T00:31:46.818Z"
 ---
 
 ## 0163. Dogfood findings for sp-dev-run 0162 --auto --next
@@ -52,3 +52,4 @@ remains to fix before closing, and any **back-issues** (new findings surfaced by
 ### References
 
 ### History
+- 2026-07-01T00:31:46.818Z backlog → cancelled (system)
