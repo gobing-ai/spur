@@ -118,6 +118,7 @@ apps/**/.spur/
 packages/**/.spur/
 logs/
 .tmp/
+**/.tmp-*/
 *.db
 # Coverage
 .coverage/
