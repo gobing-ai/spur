@@ -132,6 +132,10 @@ states:
       - kind: note
         options:
           message: "Wrap-up pipeline complete for tasks: ${vars.tasks}. Learnings at .spur/memory/learnings.md, metrics at .spur/memory/wrapup-metrics.jsonl."
+      # Checkpoint write: record session state for resume (Phase 4, task 0171 R3)
+      - kind: shell
+        options:
+          command: 'mkdir -p .spur/memory/sessions && echo "checkpoint: wrapup-pipeline done tasks=${vars.tasks} ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .spur/memory/sessions/wrapup-checkpoint.md'
 
   - id: skipped
     description: Terminal — wrap-up skipped (empty task list or operator abort).

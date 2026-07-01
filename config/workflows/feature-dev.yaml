@@ -86,6 +86,11 @@ states:
 
   - id: done
     description: Terminal — feature planned, all tasks executed, and the feature verified.
+    # Checkpoint write: record session state for resume (Phase 4, task 0171 R3)
+    onEnter:
+      - kind: shell
+        options:
+          command: 'mkdir -p .spur/memory/sessions && echo "checkpoint: feature-dev done featureId=${vars.featureId} ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .spur/memory/sessions/${vars.featureId}-checkpoint.md'
 
   - id: failed
     description: Terminal — plan rejected, a task failed verification, or the feature check did not pass.
