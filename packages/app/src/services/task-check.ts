@@ -217,18 +217,26 @@ export class TaskCheckService extends PlanningCheckService {
         // Requirements: R-numbering (warning, only when section has real content)
         const reqBody = doc.getSection('Requirements');
         if (reqBody !== null && !isPlaceholderBody(reqBody)) {
-            const rLines = reqBody.trim().split('\n');
+            // Split into blocks by blank lines. Each block is a candidate requirement
+            // item. A block whose first line is R-numbered counts as numbered. This is
+            // line-count tolerant: multi-line R-item bodies (continuation lines, detail
+            // paragraphs) don't dilute the ratio the way per-line counting does, so a
+            // well-structured Requirements section with multi-paragraph R-items doesn't
+            // false-positive (the 0174 dogfood bug).
+            const blocks = reqBody
+                .trim()
+                .split(/\n\s*\n/)
+                .filter((b) => b.trim().length > 0);
             let numbered = 0;
-            let allLines = 0;
-            for (const l of rLines) {
-                if (l.trim().length > 0) {
-                    allLines++;
-                    // Accept an optional list-bullet prefix and an optional task-list
-                    // checkbox: "- [ ] R1. …" / "- R1. …" / "* R1. …" / "R1. …".
-                    if (/^\s*[-*]?\s*(?:\[[ xX]\]\s*)?R\d+\.?\s/.test(l)) numbered++;
+            for (const block of blocks) {
+                const firstLine = block.trimStart().split('\n')[0] ?? '';
+                // Accept an optional list-bullet prefix and an optional task-list
+                // checkbox: "- [ ] R1. …" / "- R1. …" / "* R1. …" / "R1. …".
+                if (/^\s*[-*]?\s*(?:\[[ xX]\]\s*)?R\d+\.?\s/.test(firstLine)) {
+                    numbered++;
                 }
             }
-            if (numbered === 0 || numbered < allLines * 0.5) {
+            if (numbered === 0 || numbered < blocks.length * 0.5) {
                 findings.push({
                     layer: 'L3',
                     severity: 'warning',

@@ -12,7 +12,9 @@
 # commit (Q3 — hybrid by risk).
 #
 # Shape: phasing(HITL) → feature-id → design-gen → design-approval(HITL) → handoff
-#        (phasing/design-approval skipped when profile=auto).
+#        (phasing skipped when profile=auto; design-approval skipped when profile=auto
+#         AND design_approved=true — taste gates pause even in auto unless prior approval
+#         is encoded, per design doc HITL taxonomy).
 #
 # Vars (passed as a JSON object via `--vars`):
 #   slug     — the design-doc slug, e.g. `--vars '{"slug":"auth-migration"}'`
@@ -78,8 +80,11 @@ states:
   - id: design-approval
     description: >
       HITL gate — the highest-leverage gate in the pipeline. Loop until the operator
-      approves the design doc. Under profile=auto this state is never entered (design-gen
-      routes around it straight to handoff).
+      approves the design doc. Under profile=auto this state is skipped ONLY when
+      vars.design_approved=true (explicit prior approval); otherwise the taste gate
+      pauses even in auto mode (design doc HITL taxonomy). Loop back to design-gen
+      for revisions.
+    pause: true
     onEnter:
       - kind: hitl.confirm
         options:
@@ -90,6 +95,11 @@ states:
       Terminal — design doc approved; the drafted feature list is ready. Hand off to
       sp:spur-dev (steps 7–12), which starts at `spur feature create`. The seam is the
       drafted-feature-list file at docs/plans/${vars.slug}-drafted.md.
+    # Checkpoint write: record session state for resume (Phase 4, task 0171 R3)
+    onEnter:
+      - kind: shell
+        options:
+          command: 'mkdir -p .spur/memory/sessions && echo "checkpoint: planning-pipeline handoff slug=${vars.slug} ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .spur/memory/sessions/${vars.slug}-checkpoint.md'
 
   - id: cancelled
     description: Terminal — planning abandoned by the operator.
@@ -131,16 +141,17 @@ transitions:
     guard:
       kind: always
 
-  # ── design-gen → design-approval, OR skip the HITL gate when profile=auto ──
-  # Auto-skip guard tried FIRST: under profile=auto, route straight to handoff
-  # without entering design-approval (whose onEnter hitl.confirm would block).
+  # ── design-gen → design-approval, OR skip the HITL gate when profile=auto AND design_approved=true ──
+  # Auto-skip guard tried FIRST: under profile=auto with explicit prior approval,
+  # route straight to handoff without entering design-approval. Without prior
+  # approval, the taste gate pauses even in auto (design doc HITL taxonomy).
   - from: design-gen
     to: handoff
-    description: profile=auto — skip the design-approval HITL gate, hand off directly.
+    description: profile=auto AND design_approved=true — skip the design-approval HITL gate.
     guard:
       kind: shell
       options:
-        command: 'test "${vars.profile}" = auto'
+        command: 'test "${vars.profile}" = auto && test "${vars.design_approved}" = true'
   - from: design-gen
     to: design-approval
     description: Design doc drafted — gate on human approval.

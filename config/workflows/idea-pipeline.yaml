@@ -31,6 +31,7 @@ initialState: start
 terminalStates:
   - handoff
   - cancelled
+  - failed
 vars:
   idea: ""
   profile: "standard"
@@ -48,6 +49,9 @@ states:
       - kind: note
         options:
           message: "Idea pipeline start for idea: ${vars.idea}"
+      - kind: shell
+        options:
+          command: 'rm -f .spur/run/idea-ac-retry-count .spur/run/idea-decompose-retry-count'
 
   - id: discovery
     description: >
@@ -162,6 +166,12 @@ states:
   - id: cancelled
     description: Terminal — pipeline cancelled by operator or error.
 
+  - id: failed
+    description: >
+      Terminal — pipeline failed after exhausting retry caps on cyclic edges
+      (feature-check → ac-generate or batch-create → decompose). The error
+      message in the run trace identifies which edge exceeded the cap.
+
 transitions:
   # ── start -> discovery ──
   - from: start
@@ -209,11 +219,18 @@ transitions:
         command: '${vars.spurBin} feature check $(cat .spur/run/idea-feature-id.txt) --strict && (test "${vars.design}" = skip || (test "${vars.design}" = auto && test "$(jq -r .needs_design .spur/run/idea-needs-design.json 2>/dev/null)" = false))'
   - from: feature-check
     to: ac-generate
-    description: Feature check failed — revise AC.
+    description: "Feature check failed — revise AC (retry cap: 3)."
     guard:
       kind: shell
       options:
-        command: '! ${vars.spurBin} feature check $(cat .spur/run/idea-feature-id.txt) --strict'
+        command: '! ${vars.spurBin} feature check $(cat .spur/run/idea-feature-id.txt) --strict && test "$(cat .spur/run/idea-ac-retry-count 2>/dev/null || echo 0)" -lt 3 && echo $(( $(cat .spur/run/idea-ac-retry-count 2>/dev/null || echo 0) + 1 )) > .spur/run/idea-ac-retry-count'
+  - from: feature-check
+    to: failed
+    description: Feature check failed after 3 retries — escalate to failed.
+    guard:
+      kind: shell
+      options:
+        command: '! ${vars.spurBin} feature check $(cat .spur/run/idea-feature-id.txt) --strict && test "$(cat .spur/run/idea-ac-retry-count 2>/dev/null || echo 0)" -ge 3'
 
   # ── system-design: -> design-approval (normal) OR -> decompose (auto + prior approval) ──
   # Declaration order: auto-skip guard tried FIRST (like task-pipeline's review->verify pattern).
@@ -244,7 +261,7 @@ transitions:
     guard:
       kind: always
 
-  # ── batch-create: success -> handoff, failure -> decompose ──
+  # ── batch-create: success -> handoff, failure -> decompose (retry cap: 3), failure+cap -> failed ──
   - from: batch-create
     to: handoff
     description: Batch created — handoff.
@@ -254,8 +271,15 @@ transitions:
         command: '${vars.spurBin} task batch-create --file .spur/run/idea-task-batch.json'
   - from: batch-create
     to: decompose
-    description: Batch-create failed — revise decomposition.
+    description: "Batch-create failed — revise decomposition (retry cap: 3)."
     guard:
       kind: shell
       options:
-        command: '! ${vars.spurBin} task batch-create --file .spur/run/idea-task-batch.json'
+        command: '! ${vars.spurBin} task batch-create --file .spur/run/idea-task-batch.json && test "$(cat .spur/run/idea-decompose-retry-count 2>/dev/null || echo 0)" -lt 3 && echo $(( $(cat .spur/run/idea-decompose-retry-count 2>/dev/null || echo 0) + 1 )) > .spur/run/idea-decompose-retry-count'
+  - from: batch-create
+    to: failed
+    description: Batch-create failed after 3 retries — escalate to failed.
+    guard:
+      kind: shell
+      options:
+        command: '! ${vars.spurBin} task batch-create --file .spur/run/idea-task-batch.json && test "$(cat .spur/run/idea-decompose-retry-count 2>/dev/null || echo 0)" -ge 3'

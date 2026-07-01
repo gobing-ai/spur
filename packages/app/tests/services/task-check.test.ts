@@ -622,6 +622,55 @@ describe('TaskCheckService', () => {
         expect(reqWarnings).toHaveLength(0);
     });
 
+    test('L3: multi-line R-numbered Requirements produce no warning', async () => {
+        // WHY: R-items with multi-line bodies (continuation lines, detail paragraphs)
+        // must not false-positive. The heuristic counts requirement blocks, not lines,
+        // so one R-item that spans 10 lines of body text doesn't dilute the ratio.
+        // This is the 0174 dogfood bug — a 6-item Requirements section with R6 spanning
+        // ~8 continuation lines warned "~50% or fewer" under the old per-line count.
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Multi-line reqs"',
+            'status: backlog',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Multi-line reqs',
+            '',
+            '### Background',
+            '',
+            'text',
+            '',
+            '### Requirements',
+            '',
+            'R1. Add --dry-run flag pass-through to dev-wrap.',
+            '',
+            'R2. Run a live end-to-end dogfood of sp:dev-idea and sp:dev-wrapall.',
+            '',
+            'R3. Reconcile planning-pipeline design-approval HITL taxonomy.',
+            '',
+            'R4. (optional) Add structured dependencies support to the task-batch schema.',
+            '',
+            'R5. Advance feature I to done; parent task 0167 to done.',
+            '',
+            'R6. Fix the agent.run side-effect + cyclic-edge convergence defects.',
+            '    Root cause: RC1 (exit-0=success without side-effect verification) +',
+            '    RC2 (uncapped feature-check↔ac-generate loop). Three-layer solution:',
+            '    S1 loop cap, S2 side-effect verification via capture+shell,',
+            '    S3 A/B nesting diagnostic. This requirement supersedes the',
+            '    misdiagnosis in task 0173 Review and the 0167 close-out summary.',
+            '    Those were a propagation of unverified claims without trace evidence.',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+        const reqWarnings = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Requirements');
+        expect(reqWarnings).toHaveLength(0);
+    });
+
     test('L3: a guidance-placeholder Solution does NOT trigger the file:line error', async () => {
         // WHY: a not-yet-implemented task (Solution = guidance comment only) must
         // pass — forcing a file:line citation before implementation is the original

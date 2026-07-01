@@ -75,6 +75,15 @@ states:
       - kind: shell
         options:
           command: "${vars.spurBin} task update ${vars.wbs} wip --no-lifecycle"
+      # Post-implement cleanup: auto-format any unformatted output the agent produced.
+      # The agent may leave files that don't pass `biome check`, which then fails
+      # `bun run lint` downstream. Running format here is cheap (< 1 s) and prevents
+      # the test stage from tripping on a purely mechanical formatting defect (dogfood
+      # bug-733 — omp left agent-run.test.ts unformatted, causing a spurious lint gate
+      # failure that the ## Testing section mis-attributed to "pre-existing gaps").
+      - kind: shell
+        options:
+          command: "bun run format"
 
   - id: test
     description: Test execution + coverage via /sp:dev-unit.
@@ -84,6 +93,13 @@ states:
           agent: ${vars.agent}
           input: /sp:dev-unit ${vars.wbs} --auto
           timeoutMs: ${vars.stepTimeoutMs}
+      # Post-test gate: run the project's full lint gate (biome check + tsc). If the
+      # implement or test step left unformatted files or type errors, the run routes to
+      # `failed` rather than letting an agent-authored `## Testing` claim "all pass"
+      # against a red gate (dogfood bug-733).
+      - kind: shell
+        options:
+          command: "bun run lint"
 
   - id: review
     description: SECUA-framework code review via /sp:dev-review (Security, Efficiency, Correctness, Usability, Architecture).
@@ -147,6 +163,10 @@ states:
       - kind: note
         options:
           message: "Pipeline complete for task ${vars.wbs} (done gate cleared)."
+      # Checkpoint write: record session state for resume (Phase 4, task 0171 R3)
+      - kind: shell
+        options:
+          command: 'mkdir -p .spur/memory/sessions && echo "checkpoint: task-pipeline done wbs=${vars.wbs} ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .spur/memory/sessions/${vars.wbs}-checkpoint.md'
 
   - id: failed
     description: Terminal — precheck (or a gated step) failed; reported, not advanced.
