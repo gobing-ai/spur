@@ -205,6 +205,23 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     } else {
                         context.output.write(`${result.ref.id}: ${result.fromStatus} → ${result.toStatus}`);
                     }
+
+                    // ── done-transition feature_id nudge (human output only) ──
+                    // feature_id is intentionally deferred at create time. When a task
+                    // reaches `done`, surface a visible reminder if it's still missing —
+                    // advisory only; the transition is already committed. Under --json,
+                    // the consumer already has the L4 warning from `spur task check`.
+                    if (status === 'done' && !options.json) {
+                        const task = await svc.show(wbs);
+                        const featureId = task.frontmatter.feature_id as string | undefined;
+                        if (!featureId || featureId.length === 0) {
+                            context.output.write(
+                                `ⓘ  Task ${wbs} is now done but has no feature_id.\n` +
+                                    `   Link it with: spur task update ${wbs} --feature <id>\n` +
+                                    '   (Advisory only — the task is already done.)',
+                            );
+                        }
+                    }
                 } else {
                     context.output.error('Either <status>, --section/--from-file, or --feature/--priority is required');
                     context.setExitCode(2);
