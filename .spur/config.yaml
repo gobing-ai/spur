@@ -42,6 +42,9 @@ agent:
     - name: omp-deepseek
       agent: omp
       model: deepseek/deepseek-v4-pro
+    - name: minimax
+      agent: omp
+      model: minimax/MiniMax-M3
     - name: codex
       agent: codex
     - name: claude
@@ -52,6 +55,7 @@ agent:
     dev-plan: claude
     dev-run: omp-zai-volc
     dev-changelog: omp-zai-volc
+    dev-gitmsg: minimax
     dev-review: claude
     dev-verify: claude
 
