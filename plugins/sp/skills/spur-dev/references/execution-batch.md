@@ -1,6 +1,6 @@
 ---
 name: execution-batch
-description: "The batch driver loop — resolve+freeze a task set, topologically order by dependencies, run each task's pipeline in order, inspect the terminal verdict, decide continue/halt, and emit a structured batch report. Owns R1–R5 for batch execution; per-task execution reuses task-pipeline.yaml verbatim (ADR-022: orchestration is a loop in the skill, not a new FSM)."
+description: "The batch driver loop — resolve+freeze a task set, topologically order by dependencies, run each task's pipeline in order by default or fan out a proven-independent subset on request, inspect terminal verdicts, decide continue/halt, and emit a structured batch report. Owns R1–R5 for batch execution; per-task execution reuses task-pipeline.yaml verbatim (ADR-022: orchestration is a loop in the skill, not a new FSM)."
 see_also:
   - spur-dev
   - execution-workflow
@@ -11,7 +11,8 @@ see_also:
 
 `/sp:dev-runall` runs a **set** of task files through their pipelines in one operation, in
 dependency-correct order. This file owns the batch algorithm: selector resolution, set freeze,
-topological ordering, the per-task run loop, the failure policy, and the report shape.
+topological ordering, the per-task run loop, optional parallel fan-out, the failure policy, and the
+report shape.
 
 Single-task execution is documented in **[execution-workflow.md](execution-workflow.md)** — this file
 extends that procedure to the batch case. Read that file first for the single-task pipeline contract;
@@ -32,9 +33,10 @@ agent judgment between runs that a flat FSM cannot express.
 ```
 
 `sp:super-coder` owns the spaces **between** task runs: resolve+freeze the set, topo-sort, run each
-task's pipeline in order, inspect terminal state, decide continue/halt, emit the batch report. It
-does **not** decide how an individual `agent.run` step (implement/test/review) executes — that stays
-the pipeline's concern via `vars.agent` (default `omp`, pinned in `task-pipeline.yaml`).
+task's pipeline in order by default, optionally fan out a proven-independent subset, inspect terminal
+state, decide continue/halt, and emit the batch report. It does **not** decide how an individual
+`agent.run` step (implement/test/review) executes — that stays the pipeline's concern via
+`vars.agent` (default `omp`, pinned in `task-pipeline.yaml`).
 
 ## Step 1 — Selector resolution (R1)
 
@@ -109,7 +111,7 @@ The ordered execution plan: a WBS-ascending-topological list of tasks to run, pl
 ```
 plan = resolve(--tasks) → freeze → order(deps)        # may abort (cycle) or pre-block (unmet dep)
 report = []
-for wbs in plan:                                       # sequential — v1, no parallelism
+for wbs in plan:                                       # default sequential mode
     if any dependency of wbs failed earlier in THIS batch:
         report += skipped(wbs, reason); continue       # only relevant under --keep-going
     run: spur workflow run config/workflows/task-pipeline.yaml \
@@ -122,6 +124,12 @@ for wbs in plan:                                       # sequential — v1, no p
         else:            HALT; remaining → not-attempted; break    # stop-the-batch default (R3.1)
 emit batch report (per-task outcome + batch verdict)
 ```
+
+Parallel mode keeps the same lifecycle but swaps the inner loop for the independent-task batch
+pattern in [sp:parallel-execution](../../parallel-execution/SKILL.md): identify a zero-edge,
+non-overlapping subset; run each selected task's `task-pipeline.yaml` invocation in its own
+subagent/worktree-safe context; synthesize outcomes; then continue sequentially for dependent or
+conflicting tasks. If any decision-framework check fails, serialize and record the reason.
 
 ### 3.1 Per-task execution reuses the pipeline verbatim (R4)
 
@@ -210,10 +218,8 @@ The per-task outcome vocabulary: `done` | `failed` | `blocked` | `skipped` | `no
 The batch verdict: `clean` (all attempted tasks `done`) | `halted` (a failure stopped the batch) |
 `aborted` (cycle or selector error before any run).
 
-## Out of scope (deferred)
+## Still out of scope
 
-- **Parallel execution** of independent tasks — needs git-worktree isolation to avoid corpus /
-  working-tree contention. v1 is sequential.
 - **Interactive within-step Q&A** — a headless subprocess `agent.run` agent asking the operator a
   real question. This waits for the workspace module + inbox module + `spur agent` team mode.
   `sp:super-coder` surfaces blockers/HITL only at the **batch boundary** (between task runs), not

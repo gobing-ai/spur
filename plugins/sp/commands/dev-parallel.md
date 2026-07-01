@@ -53,7 +53,7 @@ Thin wrapper: delegates to `sp:parallel-execution` which owns the decision frame
 ## Implementation
 
 ```
-Skill(skill="sp:parallel-execution", args="<mode> --tasks <selector>")
+Skill(skill="sp:parallel-execution", args="$ARGUMENTS")
 ```
 
 ## Platform Notes

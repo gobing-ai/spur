@@ -25,6 +25,7 @@ const PLUGIN_ROOT = join(import.meta.dir, '..');
 const REPO_ROOT = join(PLUGIN_ROOT, '..', '..');
 const SKILLS_DIR = join(PLUGIN_ROOT, 'skills');
 const AGENTS_DIR = join(PLUGIN_ROOT, 'agents');
+const WORKFLOWS_DIR = join(REPO_ROOT, 'config', 'workflows');
 
 /** Recursively collect every file under `dir` matching `pred`. */
 function walk(dir: string, pred: (p: string) => boolean): string[] {
@@ -261,5 +262,32 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         statSync(join(d, 'SKILL.md'));
         statSync(join(d, 'references', 'branch-lifecycle.md'));
         statSync(join(d, 'references', 'worktree-patterns.md'));
+    });
+
+    test('R28 — bundled workflows all carry the Spur schema ref and task-pipeline pauses for HITL', () => {
+        for (const file of readdirSync(WORKFLOWS_DIR).filter((name) => name.endsWith('.yaml'))) {
+            const text = readFileSync(join(WORKFLOWS_DIR, file), 'utf8');
+            expect(text, `${file} should use the package schema ref`).toContain(
+                '"$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"',
+            );
+        }
+
+        const taskPipeline = readFileSync(join(WORKFLOWS_DIR, 'task-pipeline.yaml'), 'utf8');
+        expect(taskPipeline).toContain('  - id: approve\n');
+        expect(taskPipeline).toContain('    pause: true\n');
+        expect(taskPipeline).not.toContain('deferred until the globally-installed');
+    });
+
+    test('R29 — parallel batch contracts are not internally contradictory', () => {
+        const superCoder = readFileSync(join(AGENTS_DIR, 'super-coder.md'), 'utf8');
+        const executionBatch = readFileSync(join(SKILLS_DIR, 'spur-dev', 'references', 'execution-batch.md'), 'utf8');
+        const devRunall = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-runall.md'), 'utf8');
+        const devParallel = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-parallel.md'), 'utf8');
+
+        expect(superCoder).toContain('sp:parallel-execution');
+        expect(superCoder).not.toContain('Never run tasks in parallel (v1)');
+        expect(executionBatch).toContain('optional parallel fan-out');
+        expect(devRunall).toContain('--mode <sequential\\|parallel>');
+        expect(devParallel).toContain('args="$ARGUMENTS"');
     });
 });

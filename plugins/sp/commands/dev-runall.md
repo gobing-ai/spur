@@ -1,6 +1,6 @@
 ---
 description: Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via task-pipeline.yaml, emit a batch report
-argument-hint: "--tasks <selector> [--keep-going] [--auto] [--agent <name|auto>] [--json]"
+argument-hint: "--tasks <selector> [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <name|auto>] [--json]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 ---
 
@@ -10,8 +10,9 @@ Wraps the **sp:spur-dev** skill (execution half — batch operation).
 
 Run a **set** of task files through their pipelines in one operation, in dependency-correct order.
 Where `/sp:dev-run <wbs>` runs one task through `config/workflows/task-pipeline.yaml`, `/sp:dev-runall`
-runs N tasks sequentially — each through the same verbatim pipeline — with set resolution, freeze,
-topological ordering, failure policy, and a batch report layered on top by the skill.
+runs N tasks through the same verbatim pipeline with set resolution, freeze, topological ordering,
+failure policy, and a batch report layered on top by the skill. The default is sequential; parallel
+mode is opt-in and only applies to an independent subset that passes the fan-out checks.
 
 ## When to use
 
@@ -27,6 +28,7 @@ contract.
 | Argument | Description | Default |
 |----------|-------------|---------|
 | `--tasks <selector>` | The task set to run (required). See selector grammar below. | (required) |
+| `--mode <sequential\|parallel>` | Batch execution mode. `sequential` runs the topo-ordered plan one task at a time. `parallel` first applies the `sp:parallel-execution` dependency/file-overlap/token-budget checks, then fans out only the safe independent subset. | `sequential` |
 | `--keep-going` | On a failed task, skip its in-batch dependents and continue independents. Default halts on first failure. | off (stop-the-batch) |
 | `--auto` | Skip the HITL approve gate on each per-task run (sets `profile=auto` in each pipeline's `--vars`). Propagates to every task in the batch. | off |
 | `--agent <name\|auto>` | Pin the per-task step executor. Merged into each pipeline's `--vars.agent`. Omit (the default) → spawned `agent.run` steps use the configured default executor (`omp`). **`sp:super-coder` remains the batch orchestrator regardless of `--agent`** — the flag pins the step executor, not the orchestrator. | (configured default — `omp`) |
@@ -47,8 +49,8 @@ Resolution happens **once, at kickoff** — the set is frozen and never re-queri
 ## Behavior
 
 Thin wrapper: argument parsing and deterministic delegation route to the `sp:spur-dev` `runall`
-operation. Set resolution, freeze, topological ordering, the per-task run loop, failure policy, and
-report shape are owned by the skill's batch driver (documented in
+operation. Set resolution, freeze, topological ordering, the per-task run loop, optional parallel
+fan-out, failure policy, and report shape are owned by the skill's batch driver (documented in
 [references/execution-batch.md](../skills/spur-dev/references/execution-batch.md)).
 
 ### `--agent` — the two-surface contract

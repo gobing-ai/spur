@@ -81,7 +81,7 @@ Full procedure: **[references/planning-workflow.md](references/planning-workflow
 ```
 pick task (spur task list --json)
   → spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"<wbs>"}'
-  → on HITL pause: surface to operator → spur workflow continue [run-id] [--yes]
+  → on HITL pause (interactive profile): surface to operator → spur workflow continue [run-id] [--yes]
 ```
 
 The pipeline (`kind: state-machine`) runs the work loop:
@@ -114,6 +114,7 @@ reference for the half you're operating; do not duplicate its content here.
 | Operation catalog | execution | `sp:dev-*` operations | [dev-operations.md](references/dev-operations.md) (spine dispatch table) |
 | Continue | execution | `spur feature update` / `refresh` | [execution-workflow.md](references/execution-workflow.md) |
 | Batch run | execution | `sp:super-coder` + `spur workflow run` | [execution-batch.md](references/execution-batch.md) |
+| Parallel fan-out | execution | `sp:parallel-execution` decision framework | [execution-batch.md](references/execution-batch.md) |
 | All writes (both halves) | — | CLI-gated section editing | [cross-cutting.md](references/cross-cutting.md) |
 
 ## When to use
