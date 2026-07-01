@@ -175,6 +175,9 @@ CLI does.
 - [references/cross-cutting.md](references/cross-cutting.md) — CLI-gated writes, the section-editing
   body-only format, the section-status matrix, check-before-write. Shared by the spine and every
   competency skill (the single sanctioned cross-skill dependency).
+- [references/gate-checklists.md](references/gate-checklists.md) — checkbox checklists for the
+  five gates (feature-check, batch-create, precheck, review, verify). Each checklist is a
+  `- [ ]` list of prerequisites an agent verifies before entering the gate.
 - [references/product-planning.md](references/product-planning.md) — product-management judgment for
   intake, RICE/MoSCoW prioritization, strategy profiles, PRD-shaped output, and PM handoff rules.
 

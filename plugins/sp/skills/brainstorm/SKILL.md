@@ -231,6 +231,62 @@ Bash: spur task batch-create --file decomposition.json   # bare JSON array (see 
 docs/plans/YYYY-MM-DD-<topic>-brainstorm.md
 ```
 
+## Design Approval Gate
+
+The Design Approval Gate is the quality gate between brainstorm output and downstream consumption.
+No downstream command (`/sp:dev-idea`, `/sp:dev-plan`, `sp:spec-decomposition`) proceeds without a
+recorded design summary in the brainstorm artifact. This gate enforces six patterns drawn from the
+Superpowers `brainstorming` and `writing-plans` competencies.
+
+### The six patterns
+
+1. **Hard design-summary gate.** Every brainstorm output MUST include a `## Design Summary` section
+   in the saved artifact. Downstream commands check for its presence; absence is a hard stop, not a
+   warning. The summary is the contract between ideation and execution.
+2. **Nothing is too simple.** Every idea gets a design summary, even if the idea is trivial. A
+   one-paragraph summary is acceptable for trivial ideas; a one-line "too simple to design" note is
+   not. The pattern prevents skipping the design step under time pressure.
+3. **Spec self-review.** Before handoff, the brainstorm artifact is self-reviewed for: placeholders
+   (`TODO`, `TBD`, `???`, empty sections), internal contradictions, scope creep beyond the stated
+   scope, and ambiguity that would force the decompose step to guess. Fix before declaring done.
+4. **User review gate.** The operator reviews the written brainstorm doc before downstream commands
+   consume it. Under `--auto`, this taste gate is routed around only when the spec self-review
+   passes cleanly AND the design summary is non-trivial; otherwise it pauses. The operator's
+   override is recorded in the artifact.
+5. **Incremental design presentation.** The brainstorm is presented incrementally — overview, then
+   approaches, then recommendation — with the operator confirming each stage before the next. This
+   formalizes the existing Phase 3 interactive delivery as a hard requirement, not a suggestion.
+6. **Scope decomposition check.** The brainstorm outputs a `needs_design` boolean signal consumed
+   by `idea-pipeline.yaml`'s `system-design` step. This is the contract bridge between ideation and
+   the heavier `sp:sys-architecture` step.
+
+### The `needs_design` signal
+
+The signal is a boolean written to the brainstorm artifact's frontmatter and emitted to the calling
+pipeline. It determines whether `idea-pipeline.yaml` runs the `system-design` state or routes
+directly from `feature-check` to `decompose`.
+
+| Signal | Criteria |
+| --- | --- |
+| `true` | multiple subsystems touched; schema/config/DTO change; new module/package/service; new transport or boundary; new dependency; cross-cutting convention |
+| `false` | single-module fix; docs/chores; boundary-preserving refactor; existing pattern with no architectural impact |
+
+**Ties lean design.** When the criteria are mixed or ambiguous, set `needs_design: true`. The cost
+of an unnecessary design step is low; the cost of skipping a needed one is high.
+
+**Flag overrides** (consumed by `idea-pipeline.yaml`, not brainstorm itself):
+
+- `--design` forces `system-design` regardless of signal.
+- `--skip-design` skips `system-design` regardless of signal (the brainstorm design summary is still
+  recorded — only the heavier architecture step is skipped).
+
+### Auto-mode behavior
+
+With `--auto`, objective routing into the Design Approval Gate is allowed only when the spec
+self-review (pattern 3) passes cleanly. The brainstorm design summary is ALWAYS recorded — `--auto`
+does not bypass pattern 1 or pattern 2. The taste component of the user review gate (pattern 4)
+still pauses unless the operator has encoded prior approval in the workflow vars.
+
 ## Tool Selection
 
 | Research Need | Delegate To | Notes |

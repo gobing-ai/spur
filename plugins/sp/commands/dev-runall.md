@@ -1,6 +1,6 @@
 ---
 description: Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via task-pipeline.yaml, emit a batch report
-argument-hint: "--tasks <selector> [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <name|auto>] [--json]"
+argument-hint: "--tasks <selector> [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <name|auto>] [--json] [--wrap]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 ---
 
@@ -33,6 +33,7 @@ contract.
 | `--auto` | Skip the HITL approve gate on each per-task run (sets `profile=auto` in each pipeline's `--vars`). Propagates to every task in the batch. | off |
 | `--agent <name\|auto>` | Pin the per-task step executor. Merged into each pipeline's `--vars.agent`. Omit (the default) → spawned `agent.run` steps use the configured default executor (`omp`). **`sp:super-coder` remains the batch orchestrator regardless of `--agent`** — the flag pins the step executor, not the orchestrator. | (configured default — `omp`) |
 | `--json` | Emit the batch report as JSON (machine consumption). Off emits the markdown report to the transcript. | off |
+| `--wrap` | Trigger `wrapup-pipeline.yaml` after the batch completes. Equivalent to running `/sp:dev-wrapall` after execution. Does not change the execution pipeline. | off |
 
 ### Selector grammar (`--tasks <value>`)
 
@@ -79,6 +80,37 @@ Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")
 
 The skill reads [references/execution-batch.md](../skills/spur-dev/references/execution-batch.md)
 and drives the batch driver loop, delegating to `sp:super-coder` as the orchestrator.
+
+## `--wrap` — post-batch wrap-up
+
+When `--wrap` is set and the batch completes (all attempted tasks reach `done` or the batch is halted),
+automatically invoke the wrap-up pipeline:
+
+```bash
+spur workflow run .spur/workflows/wrapup-pipeline.yaml --vars '{"tasks":["<wbs1>","<wbs2>",...],"profile":"interactive|auto"}'
+```
+
+This is equivalent to running `/sp:dev-wrapall` after execution. The wrap-up captures learnings,
+records metrics, syncs docs, and optionally advances the feature / cleans up the branch (when `--merge`
+is also passed). `--wrap` does NOT change the execution pipeline — it only adds a post-batch wrap-up
+step.
+
+
+## Resume from checkpoint (`--continue`)
+
+When resuming an interrupted batch, read the latest checkpoint from
+`.spur/memory/sessions/` to recover context:
+
+```bash
+ls -t .spur/memory/sessions/*.md 2>/dev/null | head -1
+cat .spur/memory/sessions/<session-id>.md
+```
+
+Surface the checkpoint's `next_action` to the operator before resuming. Checkpoints are
+working memory — the task files and the batch plan are the authoritative state.
+
+See [cross-cutting.md](../skills/spur-dev/references/cross-cutting.md) § "Session Checkpoint
+Convention" for the full format.
 
 ## Platform Notes
 

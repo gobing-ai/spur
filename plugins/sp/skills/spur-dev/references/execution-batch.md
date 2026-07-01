@@ -257,3 +257,20 @@ When a batch contains tasks with **zero dependency edges between them** and **no
 **Parallel vs. sequential:** the default is sequential (topo-sort order). Parallel is an opt-in via `--mode parallel` on `sp:super-coder` or `/sp:dev-parallel`. When in doubt, run sequentially — parallel is only beneficial when tasks are provably independent.
 
 **See also:** `sp:parallel-execution` skill, `sp:super-coder` agent (parallel mode), `/sp:dev-parallel` command.
+
+
+## Checkpoint read on batch resume
+
+When resuming an interrupted batch run, read the latest checkpoint from
+`.spur/memory/sessions/` before re-launching:
+
+```bash
+ls -t .spur/memory/sessions/*.md 2>/dev/null | head -1
+```
+
+The checkpoint's YAML frontmatter contains `session_id`, `workflow`, `task_wbs` or `feature_id`,
+`phase`, `last_gate`, `timestamp`, and `next_action`. Surface `next_action` to the operator
+before resuming. The batch driver reads the checkpoint to determine which task was last
+attempted and whether it reached a terminal state. Checkpoints are working memory — the task
+files and the frozen task set are the authoritative state. See
+[cross-cutting.md](cross-cutting.md) § "Session Checkpoint Convention" for the full format.

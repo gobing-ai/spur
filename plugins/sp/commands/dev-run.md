@@ -1,6 +1,6 @@
 ---
 description: Run a task — full pipeline (precheck→implement→test→review→approve→verify→record→done) or single-step (implement)
-argument-hint: "<wbs> [--mode <full|implement>] [--agent <name|auto>] [--auto] [--next]"
+argument-hint: "<wbs> [--mode <full|implement>] [--agent <name|auto>] [--auto] [--next] [--wrap]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 ---
 
@@ -32,6 +32,7 @@ Pick a task and run it. Two modes:
 | `--agent <name\|auto>` | Spawn the pipeline steps under a specific agent. Omit (the default) → the spawned `agent.run` steps use the configured default executor (`omp`). **Current-agent execution is not expressible** on the pipeline surface (the FSM runs subprocesses). | (configured default — `omp`) |
 | `--auto` | Skip the HITL approval gate (full mode) or skip confirmations (implement mode) | off |
 | `--next` | Advance the task to its next pipeline step. On success, transition `todo → wip → testing` through the lifecycle FSM (guards honored) and invoke `/sp:dev-verify <wbs> --auto --next`. **Implies `--mode implement`** — see below. | off |
+| `--wrap` | Trigger `wrapup-pipeline.yaml` after the task reaches `done`. Equivalent to running `/sp:dev-wrap <wbs>` after execution. Does not change the execution pipeline. | off |
 
 ## Behavior
 
@@ -168,6 +169,38 @@ implementation competency:
 - **full mode:** `Skill(skill="sp:spur-dev", args="run $ARGUMENTS")` — the orchestration spine.
 - **implement mode:** `Skill(skill="sp:code-implementation", args="$ARGUMENTS")` — the implementation
   competency the spine's `implement` step dispatches to.
+
+## `--wrap` — post-execution wrap-up
+
+When `--wrap` is set and the task reaches `done`, automatically invoke the wrap-up pipeline:
+
+```bash
+spur workflow run .spur/workflows/wrapup-pipeline.yaml --vars '{"tasks":["<wbs>"],"profile":"interactive|auto"}'
+```
+
+This is equivalent to running `/sp:dev-wrap <wbs>` after execution. The wrap-up captures learnings,
+records metrics, syncs docs, and optionally advances the feature / cleans up the branch (when `--merge`
+is also passed). `--wrap` does NOT change the execution pipeline — it only adds a post-done wrap-up
+step. If the task fails (does not reach `done`), `--wrap` is not triggered.
+
+
+## Resume from checkpoint (`--continue`)
+
+When resuming a paused or interrupted task run, read the latest checkpoint from
+`.spur/memory/sessions/` to recover context:
+
+```bash
+ls -t .spur/memory/sessions/*-${wbs}-*.md 2>/dev/null | head -1
+cat .spur/memory/sessions/<session-id>.md
+```
+
+The checkpoint's YAML frontmatter contains `session_id`, `workflow`, `task_wbs`, `phase`,
+`last_gate`, `timestamp`, and `next_action`. Surface `next_action` to the operator before
+resuming. Checkpoints are working memory (not a validated corpus) — the task file is the
+authoritative state.
+
+See [cross-cutting.md](../skills/spur-dev/references/cross-cutting.md) § "Session Checkpoint
+Convention" for the full format and write/read triggers.
 
 ## Platform Notes
 

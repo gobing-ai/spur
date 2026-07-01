@@ -1,6 +1,6 @@
 ---
 description: Wrap up a single completed task — learnings, metrics, doc-sync, optional feature transition and branch cleanup
-argument-hint: "<wbs> [--auto] [--merge]"
+argument-hint: "<wbs> [--auto] [--merge] [--dry-run]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 ---
 
@@ -23,8 +23,9 @@ it consumes completed tasks and produces artifacts.
 | Argument | Description | Default |
 |----------|-------------|---------|
 | `<wbs>` | Task WBS number (required, positional) | (required) |
-| `--auto` | Skip objective confirmations. The branch-cleanup HITL gate still pauses (irreversible). | off |
+| `--auto` | Set `profile=auto` — routes around objective confirmations BEFORE entry. Branch-cleanup (irreversible) still pauses. Not `--yes-to-everything`. | off |
 | `--merge` | Run branch cleanup after wrap-up. IRREVERSIBLE — always pauses for confirmation. | off |
+| `--dry-run` | Pass-through to `spur workflow run --dry-run`. Validates transitions without writing corpus or memory artifacts. | off |
 
 ## Behavior
 
@@ -32,7 +33,8 @@ Thin wrapper: builds the `--vars` JSON and invokes the wrapup pipeline.
 
 ```bash
 spur workflow run .spur/workflows/wrapup-pipeline.yaml \
-  --vars '{"tasks":["<wbs>"],"profile":"interactive|auto","merge":"true|false"}'
+  --vars '{"tasks":["<wbs>"],"profile":"interactive|auto","merge":"true|false"}' \
+  [--dry-run]
 ```
 
 The pipeline runs: task-resolve -> doc-sync -> learning-capture -> metrics-record -> (feature-transition) -> (branch-cleanup) -> done.
@@ -42,6 +44,20 @@ The pipeline runs: task-resolve -> doc-sync -> learning-capture -> metrics-recor
 - Task statuses are NOT mutated by wrap-up.
 - For feature transition, use `/sp:dev-wrapall --feature <id>` (batch wrap-up supports feature transition).
 - Branch cleanup (`--merge`) is an irreversible HITL gate — always pauses, even under `--auto`.
+
+
+### `--auto` behavior
+
+`--auto` sets `profile=auto` in the wrapup-pipeline vars. Per the Auto-Decision Principles
+([cross-cutting.md](../skills/spur-dev/references/cross-cutting.md) § "Auto-Decision Principles"):
+
+- **Objective confirmations** are routed around BEFORE entry — the workflow engine does not
+  auto-dismiss `hitl.confirm` states.
+- **Irreversible gates** (`branch-cleanup`) still pause — the operator must explicitly confirm
+  the branch operation. `--auto` does not auto-click irreversible gates
+  (Auto-Decision Principle #6).
+- `--auto` is NOT `--yes-to-everything`. It auto-continues on objective pass; it surfaces
+  irreversible decisions to the human.
 
 ## Implementation
 
@@ -53,11 +69,13 @@ translates `--auto`/`--merge` into the vars JSON:
 WBS="<first positional from $ARGUMENTS>"
 PROFILE="interactive"
 MERGE="false"
+DRYRUN=""
 # Parse --auto -> PROFILE="auto"
 # Parse --merge -> MERGE="true"
+# Parse --dry-run -> DRYRUN="--dry-run"
 
 spur workflow run .spur/workflows/wrapup-pipeline.yaml \
-  --vars "{\"tasks\":[\"$WBS\"],\"profile\":\"$PROFILE\",\"merge\":\"$MERGE\"}"
+  --vars "{\"tasks\":[\"$WBS\"],\"profile\":\"$PROFILE\",\"merge\":\"$MERGE\"}" $DRYRUN
 ```
 
 On HITL pause (branch-cleanup with `--merge`), surface the run id and continue instruction:

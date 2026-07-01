@@ -1,6 +1,6 @@
 ---
 description: Wrap up a batch of completed tasks — learnings, metrics, doc-sync, feature transition, optional branch cleanup
-argument-hint: "[--since <iso-date>] [--feature <id>] [--status <s>] [--auto] [--merge]"
+argument-hint: "[--since <iso-date>] [--feature <id>] [--status <s>] [--auto] [--merge] [--dry-run]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 ---
 
@@ -25,8 +25,9 @@ task statuses — it consumes completed tasks and produces artifacts.
 | `--since <iso-date>` | Filter done tasks by frontmatter `updated_at >= date` (v1 approximation until a dedicated completion timestamp exists) | (no filter) |
 | `--feature <id>` | All tasks under feature + advance feature through legal lifecycle edges to `done` | (no feature) |
 | `--status <s>` | Filter tasks by status | `done` |
-| `--auto` | Skip objective confirmations. Branch-cleanup HITL still pauses (irreversible). | off |
+| `--auto` | Set `profile=auto` — routes around objective confirmations BEFORE entry. Branch-cleanup (irreversible) still pauses. Not `--yes-to-everything`. | off |
 | `--merge` | Run branch cleanup after wrap-up. IRREVERSIBLE — always pauses for confirmation. | off |
+| `--dry-run` | Pass-through to `spur workflow run --dry-run`. Validates transitions without writing corpus or memory artifacts. | off |
 
 ## Behavior
 
@@ -57,6 +58,20 @@ Never `backlog|active -> done` directly. Task statuses are NOT mutated.
 `--merge` triggers the irreversible HITL gate. It always pauses — even under `--auto` — because
 branch operations are irreversible. The operator must explicitly confirm.
 
+
+### `--auto` behavior
+
+`--auto` sets `profile=auto` in the wrapup-pipeline vars. Per the Auto-Decision Principles
+([cross-cutting.md](../skills/spur-dev/references/cross-cutting.md) § "Auto-Decision Principles"):
+
+- **Objective confirmations** are routed around BEFORE entry — the workflow engine does not
+  auto-dismiss `hitl.confirm` states.
+- **Irreversible gates** (`branch-cleanup`) still pause — the operator must explicitly confirm
+  the branch operation. `--auto` does not auto-click irreversible gates
+  (Auto-Decision Principle #6).
+- `--auto` is NOT `--yes-to-everything`. It auto-continues on objective pass; it surfaces
+  irreversible decisions to the human.
+
 ## Implementation
 
 `$ARGUMENTS` passes all flags. The wrapper resolves the task list, constructs the vars JSON, and
@@ -70,9 +85,10 @@ else
   TASKS=$(spur task list --status "$STATUS" --json | jq -c '[.[].wbs]')
 fi
 # Apply --since filter if given (frontmatter updated_at >= date)
+DRYRUN=""
 
 spur workflow run .spur/workflows/wrapup-pipeline.yaml \
-  --vars "{\"tasks\":$TASKS,\"feature\":\"$FEATURE\",\"profile\":\"$PROFILE\",\"merge\":\"$MERGE\"}"
+  --vars "{\"tasks\":$TASKS,\"feature\":\"$FEATURE\",\"profile\":\"$PROFILE\",\"merge\":\"$MERGE\"}" $DRYRUN
 ```
 
 On HITL pause (branch-cleanup with `--merge`), surface the run id and continue instruction:

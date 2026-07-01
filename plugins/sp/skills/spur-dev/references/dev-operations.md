@@ -1,6 +1,6 @@
 ---
 name: dev-operations
-description: Unified reference for all 13 dev-* operations — purpose, inputs, backing (skill/CLI/inline), and behavior contract. The single source of truth for what each `/sp:dev-*` command does. (`implement` is covered as a sub-mode of run, #4; `runall` is the batch operation, #13.)
+description: Unified reference for all 16 dev-* operations — purpose, inputs, backing (skill/CLI/inline), and behavior contract. The single source of truth for what each `/sp:dev-*` command does. (`implement` is covered as a sub-mode of run, #4; `runall` is the batch operation, #13.)
 see_also:
   - spur-dev
 ---
@@ -15,7 +15,7 @@ table is the index; the per-operation sections below are the detail.
 
 | Pattern | Meaning | Commands |
 |---------|---------|----------|
-| `Skill()` | Delegates to a backing skill via `Skill(skill="<skill>", args="<op> $ARGUMENTS")`. The skill owns the procedure; the command is a thin entry point. | implement, unit, review, verify, run, refine, plan, brainstorm, runall |
+| `Skill()` | Delegates to a backing skill via `Skill(skill="<skill>", args="<op> $ARGUMENTS")`. The skill owns the procedure; the command is a thin entry point. | implement, unit, review, verify, run, refine, plan, brainstorm, runall, wrap, wrapall, idea |
 | `inline` | The procedure is defined directly in the command file. No `Skill()` delegation — the command carries its own steps. | changelog, gitmsg, fixall, handover |
 
 The `Skill()` commands back onto five skills: `sp:spur-dev` (planning + execution workflow + batch),
@@ -49,6 +49,9 @@ each would be scope creep for one-liner procedures.
 | 11 | handover | `dev-handover` | `inline` | structured doc generation | `"<blocker description>"` |
 | 12 | brainstorm | `dev-brainstorm` | `Skill()` | `sp:brainstorm` (`dev-brainstorm`) | `"<topic>" [--depth <basic\|detailed\|comprehensive>] [--options <n>] [--agent <name\|auto>] [--skip-discovery] [--task [<feature-id>]] [--feature [<parent-id>]] [--next]` |
 | 13 | runall | `dev-runall` | `Skill()` → agent | `sp:spur-dev` (`runall`) → `sp:super-coder` | `--tasks <selector> [--keep-going] [--auto] [--agent <name\|auto>] [--json]` |
+| 14 | wrap | `dev-wrap` | `Skill()` | `spur workflow run` (wrapup-pipeline) | `<wbs> [--auto] [--merge]` |
+| 15 | wrapall | `dev-wrapall` | `Skill()` | `spur workflow run` (wrapup-pipeline) | `[--since <iso>] [--feature <id>] [--status <s>] [--auto] [--merge]` |
+| 16 | idea | `dev-idea` | `Skill()` | `spur workflow run` (idea-pipeline) | `"<idea>" [--auto] [--design] [--skip-design]` |
 
 ---
 
@@ -147,10 +150,34 @@ must not be changed without updating the backing skill.
 ### 13. runall
 
 - **Purpose:** Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via `task-pipeline.yaml`, inspect verdicts, apply the failure policy, emit a batch report.
-- **Inputs:** `--tasks <selector>` (required — explicit WBS list, status pseudo-list, `feature:<id>`, or `ready`). `--keep-going` skips a failed task's in-batch dependents and continues independents (default halts on first failure). `--auto` sets `profile=auto` on each per-task run (skips the HITL approve gate). `--agent <name|auto>` is a **pipeline** override merged into each per-task `vars.agent` — pins the step executor, not the orchestrator; omit (default) → spawned steps use the configured default executor (`omp`); current-agent is **not expressible** (subprocess FSM). `--json` emits the report as JSON.
+- **Inputs:** `--tasks <selector>` (required — explicit WBS list, status pseudo-list, `feature:<id>`, or `ready`). `--keep-going` skips a failed task's in-batch dependents and continues independents (default halts on first failure). `--auto` sets `profile=auto` on each per-task run (skips the HITL approve gate). `--agent <name|auto>` is a **pipeline** override merged into each per-task `vars.agent` — pins the step executor, not the orchestrator; omit (default) → spawned steps use the configured default executor (`omp`); current-agent is **not expressible** (subprocess FSM). `--json` emits the report as JSON. `--wrap` triggers `wrapup-pipeline.yaml` after the batch completes.
 - **Backing:** `sp:spur-dev` skill, `runall` operation → delegates the driver loop to the **`sp:super-coder`** agent (the batch orchestrator).
 - **Behavior:** The orchestrator reads [execution-batch.md](execution-batch.md) and drives: resolve selector → freeze set → topo-sort by `dependencies[]` (Kahn, WBS-ascending tie-break; cycle aborts) → resolve out-of-set deps by status (done → allow, else → block subtree) → run each task via `spur workflow run task-pipeline.yaml --async` + `spur workflow trace` polling → inspect terminal state + `.spur/run/<wbs>-verdict.json` → stop-the-batch default or `--keep-going` subtree skip → emit batch report. Per-task pipeline is invoked **verbatim** — no new FSM, no step edits. `--auto`/`--agent` are the only flags that cross the orchestrator→pipeline boundary (both into per-task `--vars`).
 - **Delegation:** `Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")` → `sp:super-coder` agent.
+
+### 14. wrap
+
+- **Purpose:** Wrap up a single completed task — capture learnings, record metrics, sync docs, and optionally advance the feature / clean up the branch.
+- **Inputs:** `<wbs>` (required, positional). `--auto` skips objective confirmations (the branch-cleanup HITL gate still pauses — irreversible). `--merge` triggers branch cleanup (irreversible HITL gate).
+- **Backing:** `spur workflow run .spur/workflows/wrapup-pipeline.yaml` — direct workflow invocation (no backing skill; the pipeline IS the procedure).
+- **Behavior:** Builds `--vars '{"tasks":["<wbs>"],"profile":"interactive|auto","merge":"true|false"}'` and invokes the wrapup pipeline. The pipeline runs: task-resolve → doc-sync → learning-capture → metrics-record → (feature-transition) → (branch-cleanup) → done. Task statuses are NOT mutated. Branch cleanup is an irreversible HITL gate that always pauses, even under `--auto`.
+- **Delegation:** Direct `spur workflow run .spur/workflows/wrapup-pipeline.yaml` (no `Skill()` call — the command builds the vars JSON and invokes the workflow directly via `Bash`).
+
+### 15. wrapall
+
+- **Purpose:** Wrap up a batch of completed tasks — capture learnings, record metrics, sync docs, advance a feature through legal lifecycle edges, and optionally clean up branches.
+- **Inputs:** `--since <iso-date>` filters done tasks by frontmatter `updated_at >= date` (v1 approximation). `--feature <id>` selects all tasks under a feature AND advances the feature through legal lifecycle edges (`backlog → active → verifying → done`, guards honored). `--status <s>` (default: `done`) filters by task status. `--auto` skips objective confirmations. `--merge` triggers branch cleanup (irreversible HITL gate).
+- **Backing:** `spur workflow run .spur/workflows/wrapup-pipeline.yaml` — direct workflow invocation.
+- **Behavior:** Resolves the task list via `spur task list --json` (filtered by `--feature`, `--since`, `--status`), builds `--vars '{"tasks":[...],"feature":"<id>","profile":"interactive|auto","merge":"true|false"}'`, and invokes the wrapup pipeline. The pipeline runs the same states as `wrap` but with the full task list and optional feature transition. Task statuses are NOT mutated. Feature transitions go through `spur feature update` so lifecycle guards apply. Branch cleanup is an irreversible HITL gate.
+- **Delegation:** Direct `spur workflow run .spur/workflows/wrapup-pipeline.yaml` (no `Skill()` call — the command resolves tasks and invokes the workflow directly via `Bash`).
+
+### 16. idea
+
+- **Purpose:** Turn a vague idea into a feature with AC and a decomposed task batch — the unified entry point for the planning half.
+- **Inputs:** `"<idea>"` (required, positional, quoted). `--auto` skips objective HITL gates (feature-check, batch-create); design-approval still pauses (taste gate). `--design` forces the system-design step to run. `--skip-design` skips system-design (brainstorm design summary still recorded).
+- **Backing:** `spur workflow run .spur/workflows/idea-pipeline.yaml` — direct workflow invocation.
+- **Behavior:** Builds `--vars '{"idea":"<text>","profile":"interactive|auto","design":"auto|force|skip"}'` and invokes the idea pipeline. The pipeline runs: discovery (sp:brainstorm, records design summary + emits `needs_design` signal) -> feature-create -> ac-generate -> feature-check (objective gate) -> system-design (conditional, via `needs_design` signal or `--design`/`--skip-design` flags) -> design-approval (taste HITL gate) -> decompose (sp:spec-decomposition) -> batch-create (objective gate) -> handoff. The pipeline STOPS at handoff — tasks are created but NOT executed. No pipeline nesting — idea-pipeline does not call task-pipeline or feature-dev.
+- **Delegation:** Direct `spur workflow run .spur/workflows/idea-pipeline.yaml` (no `Skill()` call — the command builds the vars JSON and invokes the workflow directly via `Bash`).
 
 ---
 

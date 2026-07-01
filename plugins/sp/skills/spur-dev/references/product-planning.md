@@ -50,6 +50,37 @@ Expertise calibration:
 - **Problem + rough scope:** ask boundary, metric, and dependency questions.
 - **Problem + personas + metrics:** ask tradeoff and opportunity-cost questions; do not over-elicit.
 
+## Elicitation Question Taxonomy
+
+Four dimensions frame every elicitation. Ask only what is missing — a senior, specific request may
+answer all four in its first sentence and proceed directly to feature creation. This taxonomy
+deepens the intake table above with the question *form* and the expertise-adaptive depth rule.
+
+| Dimension | Core question | What "answered" looks like |
+| --- | --- | --- |
+| Purpose | What user or business result changes if this ships? | A named outcome the operator will observe. |
+| Scope | What is explicitly in and out for this iteration? | A boundary testable against proposed tasks. |
+| Constraints | What timeline, risk, compliance, migration, or compatibility limits shape the plan? | A list of non-negotiables the plan must respect. |
+| Success criteria | Which observable metric, behavior, or acceptance signal proves it worked? | A signal encodable as an acceptance scenario. |
+
+### Expertise-adaptive questioning
+
+Calibrate depth to the input. Over-elicit and you waste the operator's time; under-elicit and you
+ship ambiguity into the corpus.
+
+| Input shape | Ask |
+| --- | --- |
+| Sparse idea (one sentence, no scope) | Purpose + Scope + Success — foundational framing only. |
+| Problem + rough scope | Constraints + Success — boundary and metric. |
+| Problem + personas + metrics | Opportunity cost + Constraints — tradeoff surface only. Do not re-elicit what is already stated. |
+| Senior, fully-specified request | Nothing. Proceed to `spur feature create`. |
+
+### Question form
+
+One question at a time, always with a recommended default. Never ask "what are your constraints?"
+open-ended; offer "I see X and Y as the likely constraints — am I missing one?" The recommendation
+trains the elicitation; the operator's override trains future elicitation.
+
 ## Prioritization
 
 Use prioritization to decide ordering, not to replace operator judgment.
@@ -103,6 +134,33 @@ Auto-selection heuristics:
 - Uncertain demand or missing success metric -> `mvp`.
 - Clear problem, scope, and acceptance signals -> `standard`.
 - Compliance, money movement, data loss, auth, migration, or reliability keywords -> `mature`.
+
+## Decomposition Decision Rules
+
+Each strategy profile implies a decomposition shape. Use these rules when the `sp:spec-decomposition`
+competency produces the task batch — the profile constrains granularity, edge-case coverage, and
+the acceptable task count.
+
+| Profile | Granularity | Edge cases | Target task count | Template variant |
+| --- | --- | --- | --- | --- |
+| `simplify` | One task if possible; split only when a single change spans two unrelated files. | Skip non-blocking. | 1-2 | `feature-impl` or `issue` |
+| `mvp` | Core happy path as one task; split only when a separate concern blocks the happy path. | Defer to a follow-up task noted in `## Background`. | 1-3 | `feature-impl` |
+| `standard` | One task per cohesive unit of work (a feature slice, a module, a cross-cutting change). | Include known edge cases in the same task or a sibling task. | 3-8 | `feature-impl` (mix with `review`/`meta` as needed) |
+| `mature` | One task per failure mode, migration step, rollback path, and observability surface — in addition to the core. | All failure modes, migration, rollback, and observability are first-class tasks, not afterthoughts. | 6-15 | `feature-impl` + `review` + `meta` mix |
+
+### Decision order
+
+1. Pick the profile (auto-select heuristics above, or operator override).
+2. Apply the granularity rule to each cohesive unit.
+3. Apply the edge-case rule to decide what stays in-task vs. splits out.
+4. Sanity-check the target count — if you are 2x over, the profile is wrong or the scope is two features.
+
+### When to split a feature
+
+If decomposition produces more than ~12 tasks under `mature` or ~8 under `standard`, the feature is
+probably two features. Split along the natural seam (subsystem, release boundary, team ownership)
+and create a second `spur feature create`. A single feature with 20 tasks is a decomposition smell,
+not a plan.
 
 ## Feature, Task, Or Doc
 

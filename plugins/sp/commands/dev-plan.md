@@ -29,7 +29,7 @@ corpus mutation occurs until each gate passes.
 | `--parent <feature-id>` | Parent feature for hierarchical ID allocation | (top-level) |
 | `--agent <name\|auto>` | Spawn the model steps (AC generation, decomposition) under a specific agent via `spur agent run`. Omit (the default) to run them **in the current session** — no subprocess | (in-session) |
 | `--design` | Always author/update the feature's design satellite (`docs/design/<slug>.md`) + its `04_DESIGN.md` index row | off |
-| `--auto` | Let the agent decide whether a design doc is warranted (cross-cutting-seam detection). Ignored when `--design` is present | off |
+| `--auto` | Set `profile=auto` (skip phasing HITL) AND enable design-doc auto-detection. Taste gates (design-approval) still pause. Not `--yes-to-everything`. | off |
 
 ### Design-doc generation (`--design` / `--auto`)
 
@@ -39,11 +39,25 @@ three-state truth table:
 | Flags | Behavior |
 |-------|----------|
 | `--design` (with or without `--auto`) | **Always** author/update the satellite + index. `--design` wins; `--auto` is ignored. |
-| `--auto` (no `--design`) | **Agent decides** during intake: if a cross-cutting seam is detected (a new command, module, schema, or transport — an ADR-worthy change) → author the doc and **report** the slug + a one-line rationale (no confirmation pause); otherwise skip and say so. |
-| neither | **Never** author. Default behavior — no design artifact, no `04` change. |
+| `--auto` (no `--design`) | **Agent decides** design doc AND sets `profile=auto` (skips phasing HITL). If a cross-cutting seam is detected → author the doc and **report** the slug + a one-line rationale; otherwise skip and say so. |
+| neither | **Never** author. Default behavior — no design artifact, no `04` change. `profile` stays `interactive`. |
 
 Generation is idempotent: an existing satellite is **updated in place**, never overwritten or
 duplicated (constitution §4.5 + sync trigger T9). Full procedure: skill Step 5.5.
+
+
+### `--auto` behavior
+
+`--auto` sets `profile=auto` in the planning-pipeline vars. Per the Auto-Decision Principles
+([cross-cutting.md](../skills/spur-dev/references/cross-cutting.md) § "Auto-Decision Principles"):
+
+- **Objective HITL gates** (`phasing`) are routed around BEFORE entry — the workflow engine
+  does not auto-dismiss `hitl.confirm` states. The YAML transitions skip the phasing state
+  entirely when `profile=auto`.
+- **Taste gates** (`design-approval`) still pause — the operator must explicitly approve the
+  design doc. `--auto` does not auto-click taste gates.
+- `--auto` is NOT `--yes-to-everything`. It auto-continues on objective pass; it surfaces
+  taste decisions to the human.
 
 ## Behavior
 

@@ -290,4 +290,61 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(devRunall).toContain('--mode <sequential\\|parallel>');
         expect(devParallel).toContain('args="$ARGUMENTS"');
     });
+
+    test('R30 — dev-idea, dev-wrap, dev-wrapall command docs exist and delegate to correct workflows', () => {
+        for (const [cmd, workflow] of [
+            ['dev-idea', 'idea-pipeline'],
+            ['dev-wrap', 'wrapup-pipeline'],
+            ['dev-wrapall', 'wrapup-pipeline'],
+        ] as const) {
+            const path = join(PLUGIN_ROOT, 'commands', `${cmd}.md`);
+            const text = readFileSync(path, 'utf8');
+            expect(text, `${cmd}.md should have frontmatter`).toContain('---\n');
+            expect(text, `${cmd}.md should delegate to ${workflow}`).toContain(workflow);
+        }
+    });
+
+    test('R31 — gate-checklists.md exists and is linked from spur-dev SKILL.md', () => {
+        statSync(join(SKILLS_DIR, 'spur-dev', 'references', 'gate-checklists.md'));
+        const skill = readFileSync(join(SKILLS_DIR, 'spur-dev', 'SKILL.md'), 'utf8');
+        expect(skill).toContain('gate-checklists');
+    });
+
+    test('R32 — dev-operations.md registers idea, wrap, and wrapall operations', () => {
+        const ops = readFileSync(join(SKILLS_DIR, 'spur-dev', 'references', 'dev-operations.md'), 'utf8');
+        expect(ops).toContain('idea');
+        expect(ops).toContain('wrap');
+        expect(ops).toContain('wrapall');
+    });
+
+    test('R33 — cross-cutting.md includes all six required convention sections', () => {
+        const cc = readFileSync(join(SKILLS_DIR, 'spur-dev', 'references', 'cross-cutting.md'), 'utf8');
+        for (const section of [
+            '## Auto-Decision Principles',
+            '## Iron Laws',
+            '## Design Approval Gate',
+            '## Learning Log Convention',
+            '## Session Checkpoint Convention',
+            '## Pipeline Alignment',
+        ]) {
+            expect(cc, `cross-cutting.md should contain "${section}"`).toContain(section);
+        }
+    });
+
+    test('R34 — idea-pipeline.yaml and wrapup-pipeline.yaml exist with valid schema', () => {
+        for (const name of ['idea-pipeline', 'wrapup-pipeline']) {
+            const path = join(WORKFLOWS_DIR, `${name}.yaml`);
+            const text = readFileSync(path, 'utf8');
+            expect(text, `${name}.yaml should have schema ref`).toContain(
+                '"$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"',
+            );
+            expect(text, `${name}.yaml should be kind: state-machine`).toContain('kind: state-machine');
+        }
+    });
+
+    test('R35 — brainstorm SKILL.md includes Design Approval Gate and needs_design signal', () => {
+        const bs = readFileSync(join(SKILLS_DIR, 'brainstorm', 'SKILL.md'), 'utf8');
+        expect(bs).toContain('## Design Approval Gate');
+        expect(bs).toContain('needs_design');
+    });
 });

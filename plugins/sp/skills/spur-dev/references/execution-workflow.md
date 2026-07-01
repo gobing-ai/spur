@@ -142,6 +142,21 @@ the run:
   the task's `## Testing` and `## Review` sections via `spur task record <wbs>` (verdict →
   matrix-compliant tables; never transitions to `done` — the gate stays in the workflow).
 
+
+## Checkpoint read on resume
+
+When resuming a paused or interrupted pipeline run (`--continue`), read the latest checkpoint
+from `.spur/memory/sessions/` before re-launching:
+
+```bash
+ls -t .spur/memory/sessions/*-${wbs}-*.md 2>/dev/null | head -1
+```
+
+The checkpoint's YAML frontmatter contains `session_id`, `workflow`, `task_wbs`, `phase`,
+`last_gate`, `timestamp`, and `next_action`. Surface `next_action` to the operator so they
+know where the run left off and what to do next. Checkpoints are written by the pipeline's
+checkpoint actions after every HITL gate decision and every phase transition. See
+[cross-cutting.md](cross-cutting.md) § "Session Checkpoint Convention" for the full format.
 ## Step 3: Continue
 
 After a completed task, decide next action:
