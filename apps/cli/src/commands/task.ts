@@ -679,7 +679,19 @@ async function runDoneGateCheck(
  * Falls back to a minimal permissive built-in only when both sources are
  * unreachable (e.g. a `bun build --compile` single binary with no project-local seed).
  */
+const sectionMatrixCache = new Map<string, Promise<SectionMatrix>>();
+
 async function loadSectionMatrix(projectRoot: string): Promise<SectionMatrix> {
+    const cached = sectionMatrixCache.get(projectRoot);
+    if (cached !== undefined) return cached;
+
+    const promise = loadSectionMatrixUncached(projectRoot);
+    sectionMatrixCache.set(projectRoot, promise);
+    promise.catch(() => sectionMatrixCache.delete(projectRoot));
+    return promise;
+}
+
+async function loadSectionMatrixUncached(projectRoot: string): Promise<SectionMatrix> {
     // 1. Project-local: .spur/tasks/section-matrix.yaml
     const localPath = join(projectRoot, '.spur', 'tasks', 'section-matrix.yaml');
     if (existsSync(localPath)) {

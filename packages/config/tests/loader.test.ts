@@ -170,6 +170,15 @@ describe('loadSpurConfig', () => {
         await writeConfig(tmpCwd, 'tasks:\n  active: 12345\n  folders: "not-a-map"');
         await expect(loadSpurConfig(tmpCwd)).rejects.toThrow();
     });
+
+    test('resolves package $schema refs from the workspace schema on disk', async () => {
+        await writeConfig(
+            tmpCwd,
+            '$schema: "@gobing-ai/spur/schemas/spur-config.schema.json"\nversion: "1"\nname: schema-ref\n',
+        );
+        const config = await loadSpurConfig(tmpCwd, { validateJsonSchema: true });
+        expect(config.name).toBe('schema-ref');
+    });
 });
 
 // ---- resolveConfigFile ----
@@ -277,6 +286,32 @@ describe('resolveConfigFile global fallback', () => {
         expect(code).toBe(0);
         expect(out).toBe(globalPath);
     });
+
+    test('loadSpurConfig uses the same global fallback as resolveConfigFile', async () => {
+        const fakeHome = await mkdtemp(join(tmpdir(), 'spur-home-'));
+        const globalDir = join(fakeHome, '.config', 'spur');
+        await mkdir(globalDir, { recursive: true });
+        await writeFile(join(globalDir, 'config.yaml'), 'name: global-loaded\n');
+
+        const projectDir = await mkdtemp(join(tmpdir(), 'spur-proj-'));
+        const loaderPath = join(import.meta.dir, '..', 'src', 'loader.ts');
+        const script = `
+            import { loadSpurConfig } from '${loaderPath}';
+            const config = await loadSpurConfig('${projectDir}', { validateJsonSchema: false });
+            process.stdout.write(config.name ?? 'undefined');
+        `;
+        const proc = Bun.spawn(['bun', '-e', script], {
+            env: { ...process.env, HOME: fakeHome, USERPROFILE: fakeHome, SPUR_SKIP_GLOBAL_CONFIG: '' },
+            stdout: 'pipe',
+            stderr: 'pipe',
+        });
+        const out = await new Response(proc.stdout).text();
+        const code = await proc.exited;
+        await rm(fakeHome, { recursive: true, force: true });
+        await rm(projectDir, { recursive: true, force: true });
+        expect(code).toBe(0);
+        expect(out).toBe('global-loaded');
+    });
 });
 
 // ---- loadSpurConfig: JSON Schema validation path (production) ----
@@ -364,6 +399,30 @@ describe('resolvePlanningFolders no-tasks branch', () => {
         expect(result.featuresDir).toBe('docs/my-features');
         expect(result.foldersConfig.active_folder).toBe(DEFAULT_TASKS_DIR);
         expect(result.foldersConfig.folders[DEFAULT_TASKS_DIR]).toEqual({ base_counter: 0 });
+    });
+
+    test('caches the parsed planning folders for the same FileSystem instance', async () => {
+        await writeConfig(tmpCwd, CONFIG_YAML);
+        const baseFs = createNodeFileSystem(tmpCwd);
+        let readCount = 0;
+        const fs = new Proxy(baseFs, {
+            get(target, prop, receiver) {
+                if (prop === 'readFile') {
+                    return async (path: string) => {
+                        readCount += 1;
+                        return target.readFile(path);
+                    };
+                }
+                const value = Reflect.get(target, prop, receiver);
+                return typeof value === 'function' ? value.bind(target) : value;
+            },
+        });
+
+        const first = await resolvePlanningFolders(fs);
+        const second = await resolvePlanningFolders(fs);
+
+        expect(first).toEqual(second);
+        expect(readCount).toBe(1);
     });
 });
 

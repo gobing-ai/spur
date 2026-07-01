@@ -15,7 +15,8 @@
  */
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { createNodeFileSystem, loadStructuredConfig } from '@gobing-ai/ts-runtime';
 import { parse as parseYaml } from 'yaml';
@@ -94,6 +95,45 @@ const SPUR_CONFIG_DIR = '.spur';
 const SPUR_CONFIG_FILE = 'config.yaml';
 /** Global user config file path (relative to home). */
 const GLOBAL_CONFIG_FILE = join(homedir(), '.config', 'spur', 'config.yaml');
+const LOADER_DIR = dirname(fileURLToPath(import.meta.url));
+
+let nextEmbeddedSchemasId = 1;
+const embeddedSchemasIds = new WeakMap<ReadonlyMap<string, string>, number>();
+const spurConfigCache = new Map<string, Promise<SpurConfig>>();
+const planningFoldersCache = new WeakMap<FileSystem, Promise<PlanningFolders>>();
+
+function embeddedSchemasId(embeddedSchemas: ReadonlyMap<string, string> | undefined): string {
+    if (embeddedSchemas === undefined) return 'disk';
+    let id = embeddedSchemasIds.get(embeddedSchemas);
+    if (id === undefined) {
+        id = nextEmbeddedSchemasId;
+        nextEmbeddedSchemasId += 1;
+        embeddedSchemasIds.set(embeddedSchemas, id);
+    }
+    return `embedded:${id}`;
+}
+
+function cacheKey(configPath: string, opts: LoadSpurConfigOptions | undefined, validateJsonSchema: boolean): string {
+    return [
+        configPath,
+        validateJsonSchema ? 'schema' : 'zod',
+        opts?.schemaManifestSpecifier ?? '@gobing-ai/spur/package.json',
+        embeddedSchemasId(opts?.embeddedSchemas),
+    ].join('\0');
+}
+
+function resolveSchemaSpecifier(specifier: string, manifestSpecifier: string): string {
+    if (specifier === manifestSpecifier) {
+        const workspaceManifest = join(LOADER_DIR, '..', '..', '..', 'apps', 'cli', 'package.json');
+        if (existsSync(workspaceManifest)) return workspaceManifest;
+    }
+    try {
+        const resolved = import.meta.resolve(specifier);
+        return resolved.startsWith('file:') ? fileURLToPath(resolved) : resolved;
+    } catch {
+        return specifier;
+    }
+}
 
 /**
  * Resolve the config file path following the project→global fallback order.
@@ -165,13 +205,27 @@ function makeEmbeddedReader(embeddedSchemas: ReadonlyMap<string, string>) {
  * @param opts - Validation + embedded-schema options.
  */
 export async function loadSpurConfig(cwd: string = process.cwd(), opts?: LoadSpurConfigOptions): Promise<SpurConfig> {
-    const configPath = join(cwd, SPUR_CONFIG_DIR, SPUR_CONFIG_FILE);
-    if (!existsSync(configPath)) {
+    const configPath = resolveConfigFile(cwd);
+    if (configPath === undefined) {
         return spurConfigSchema.parse({});
     }
 
     const validateJsonSchema = opts?.validateJsonSchema ?? process.env.NODE_ENV !== 'test';
+    const key = cacheKey(configPath, opts, validateJsonSchema);
+    const cached = spurConfigCache.get(key);
+    if (cached !== undefined) return cached;
 
+    const promise = loadSpurConfigFile(configPath, opts, validateJsonSchema);
+    spurConfigCache.set(key, promise);
+    promise.catch(() => spurConfigCache.delete(key));
+    return promise;
+}
+
+async function loadSpurConfigFile(
+    configPath: string,
+    opts: LoadSpurConfigOptions | undefined,
+    validateJsonSchema: boolean,
+): Promise<SpurConfig> {
     let raw: unknown;
 
     if (validateJsonSchema) {
@@ -182,8 +236,7 @@ export async function loadSpurConfig(cwd: string = process.cwd(), opts?: LoadSpu
             if (embeddedSchemas !== undefined && specifier === manifestSpecifier) {
                 return `${EMBEDDED_PREFIX}/package.json`;
             }
-            // Non-embedded: let ts-runtime resolve from disk (dev/runtime path).
-            return specifier;
+            return resolveSchemaSpecifier(specifier, manifestSpecifier);
         };
 
         const fileSystem = embeddedSchemas ? { readFile: makeEmbeddedReader(embeddedSchemas) } : undefined;
@@ -234,7 +287,7 @@ export async function loadStructuredSpurConfig(
         if (embeddedSchemas !== undefined && specifier === manifestSpecifier) {
             return `${EMBEDDED_PREFIX}/package.json`;
         }
-        return specifier;
+        return resolveSchemaSpecifier(specifier, manifestSpecifier);
     };
     const fileSystem = embeddedSchemas ? { readFile: makeEmbeddedReader(embeddedSchemas) } : undefined;
     return (await loadStructuredConfig(configPath, {
@@ -276,6 +329,15 @@ function defaultPlanningFolders(): PlanningFolders {
  * @param fs - The {@link FileSystem} port (injected so this works on any runtime).
  */
 export async function resolvePlanningFolders(fs: FileSystem): Promise<PlanningFolders> {
+    const cached = planningFoldersCache.get(fs);
+    if (cached !== undefined) return cached;
+
+    const promise = resolvePlanningFoldersUncached(fs);
+    planningFoldersCache.set(fs, promise);
+    return promise;
+}
+
+async function resolvePlanningFoldersUncached(fs: FileSystem): Promise<PlanningFolders> {
     const configPath = fs.resolve(join(SPUR_CONFIG_DIR, SPUR_CONFIG_FILE));
     if (!(await fs.exists(configPath))) return defaultPlanningFolders();
 
