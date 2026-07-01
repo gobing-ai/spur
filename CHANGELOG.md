@@ -1,5 +1,64 @@
 # Changelog
 
+## [0.2.11] — 2026-07-01
+
+### Added
+
+- **Parallel execution mode for batch task runs.** `sp:super-coder` gains an optional
+  parallel fan-out — default sequential, enters parallel only on explicit request when
+  the fan-out checks (dependency, file-overlap, token-budget) pass. `/sp-dev-runall`
+  accepts `--mode <sequential|parallel>`. Two new invariants guard the seam: R28
+  (workflow schema ref + HITL pause) and R29 (parallel batch contract consistency).
+- **Four new dev skills: debug, review, branch, parallel.** `sp:sys-debugging`
+  (5-phase debugging protocol), `sp:code-review` (pre-commit self-review + SECUA agent
+  review), `sp:branch-workflow` (branch lifecycle, worktrees, merge prep), and
+  `sp:parallel-execution` (fan-out patterns, result synthesis) ship as backing skills.
+  The thin `dev-branch` / `dev-debug` / `dev-review-req` command wrappers were added
+  and dropped within this cycle — invoke the skills directly.
+- **`/sp-dev-parallel` command** wrapping the parallel-execution skill with
+  `$ARGUMENTS` passthrough.
+- **Task-type-aware pipeline dispatch in `/sp-dev-run`**, routing by task type.
+- **L4 advisory suffix in `/sp-dev-refine` SKIP verdicts**, surfacing the next-level
+  check when a section is skipped.
+- **`feature_id` advisory on `spur task done`.** When a task reaches `done` without a
+  `feature_id`, prints a human-only nudge (skipped under `--json`) linking the task to
+  its feature for traceability.
+
+### Changed
+
+- **Config loading cached; schema refs resolve from disk.** `loader.ts` adds
+  `spurConfigCache`, `planningFoldersCache` (WeakMap on `FileSystem`), and `cacheKey()`
+  so repeated `loadSpurConfig` / `resolvePlanningFolders` calls skip re-reads; failed
+  loads evict from cache. `resolveSchemaSpecifier()` resolves
+  `@gobing-ai/spur/package.json` to the workspace manifest on disk in dev, fixing JSON
+  Schema validation in the monorepo. `task.ts` adds `sectionMatrixCache` for
+  `loadSectionMatrix`. Three loader tests cover schema-ref resolution, global fallback
+  parity, and planning-folders caching.
+- **`task-pipeline.yaml` enables `pause: true` on the `approve` state (E3 HITL)**,
+  removing the stale deferred comment about the global schema. `basic.yaml` adds a
+  `$schema` ref.
+- **Skill polish across the sp plugin.** `code-verification` gains section-write
+  guidance for the Testing field; `secu-review` gains a pre-completion checklist;
+  `spur-dev/dev-operations` codifies the L4 advisory in the SKIP contract;
+  `spur-dev/execution-batch` documents the parallel execution path;
+  `code-implementation/implementation-patterns` adds context-reuse guidance;
+  `spur-cli` and `sys-architecture` fix unquoted YAML descriptions. R24–R27
+  invariants cover description quoting and cross-ref integrity.
+
+### Fixed
+
+- **Planning-core YAML scalars and table-format file:line citations.**
+  `markdown-document.ts` adds `normalizeYamlScalars()` (Date→ISO) and `yamlSafeValue()`
+  to quote-unsafe scalars on write. `task-check.ts` adds `hasAdjacentFileLineColumns()`
+  so L3 accepts markdown table rows with `file:line` in adjacent columns (P3 from task
+  0166). Three regression tests cover the table-format detection.
+
+### Misc
+
+- New models added to `.spur/config.yaml`.
+- `.tmp-*` directories ignored.
+- Tracking docs updated for the 0161–0166 task cycle.
+
 ## [0.2.10] — 2026-06-30
 
 ### Added
