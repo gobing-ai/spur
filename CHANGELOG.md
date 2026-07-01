@@ -1,5 +1,66 @@
 # Changelog
 
+## [0.2.12] — 2026-07-01
+
+### Added
+
+- **Idea-to-feature pipeline (`idea-pipeline.yaml`).** New 13-state state-machine workflow
+  that converts a vague idea into a validated feature with acceptance criteria and a
+  decomposed task batch — discovery → feature-create → ac-generate → feature-check →
+  system-design → design-approval → decompose → batch-create → handoff. The pipeline
+  stops at handoff; tasks are created but not executed. Retry caps on cyclic edges
+  (feature-check↔ac-generate, batch-create↔decompose) prevent infinite loops.
+- **Post-execution wrap-up pipeline (`wrapup-pipeline.yaml`).** New 9-state workflow
+  that closes out a task batch: resolve → doc-sync → learning-capture → metrics-record →
+  feature-transition → done. Writes `.spur/memory/learnings.md` and
+  `.spur/memory/wrapup-metrics.jsonl` for cross-session continuity.
+- **Three new slash commands.** `/sp:dev-idea` drives the idea pipeline; `/sp:dev-wrap`
+  wraps up a single task; `/sp:dev-wrapall` wraps up a feature's task set. All three
+  delegate to the new pipeline YAMLs.
+- **Plugin 0.3.0.** The `sp` plugin ships at 0.3.0 with R30–R35 structural test
+  invariants (22 tests), cross-cutting convention documentation (CLI-gated writes,
+  section matrix, check-before-write, HITL taxonomy), a product-planning skill
+  (RICE/MoSCoW prioritization, strategy profiles), and parallel execution framework docs.
+- **`agent.run` expectFile option.** Workflow `agent.run` actions now accept an
+  `expectFile` option that verifies the expected side-effect artifact exists on disk
+  after a successful (exit-0) agent run. If absent, the step returns `ok: false` with a
+  descriptive error. 31 tests, 100% coverage.
+- **Session checkpoint writes.** Terminal states in `feature-dev.yaml`,
+  `planning-pipeline.yaml`, `task-pipeline.yaml`, and `wrapup-pipeline.yaml` write
+  session checkpoint markers to `.spur/memory/sessions/` for pipeline resume support.
+- **Cross-cutting conventions reference.** `gate-checklists.md` codifies R30–R35
+  invariants; `cross-cutting.md` documents the six write-discipline conventions shared
+  by the orchestration spine and all competency skills.
+
+### Changed
+
+- **Pipeline quality gates hardened.** The `task-pipeline.yaml` implement stage now runs
+  `bun run format` as a post-agent cleanup step, preventing unformatted agent output from
+  reaching the test stage. The test stage runs `bun run lint` as a post-agent gate — if
+  the lint gate is red, the run routes to `failed` before review can advance.
+- **`/sp:dev-wrap` and `/sp:dev-wrapall` accept `--dry-run`.** The flag passes through
+  to `spur workflow run --dry-run`, validating transitions without writing corpus or
+  memory artifacts.
+- **`bump-ver` syncs plugin manifests.** `bun run bump-ver <version>` now also updates
+  `.claude-plugin/marketplace.json` and `plugins/sp/plugin.json` so the `sp` plugin
+  version stays in lockstep with the spur CLI release.
+
+### Fixed
+
+- **R-numbering heuristic false-positive on multi-line requirements.** The task
+  Requirements L3 check now counts requirement blocks (blank-line-separated paragraphs)
+  instead of individual lines, so a multi-line R-item body no longer dilutes the ratio
+  and triggers a spurious warning.
+- **Planning pipeline design-approval was a pass-through under auto.** The
+  `design-approval` state in `planning-pipeline.yaml` was a bare node with no pause
+  mechanism — under `profile=auto` without explicit `design_approved=true`, it
+  auto-transitioned to handoff instead of pausing as a taste gate. Fixed: added
+  `pause: true` + `hitl.confirm`, matching the idea-pipeline pattern and the design doc
+  HITL taxonomy.
+- **Idea-pipeline YAML validation failure.** Two transition descriptions with unquoted
+  `(retry cap: 3)` caused `spur workflow validate` to fail on YAML nested-mapping parse
+  errors. Quoted both descriptions.
+
 ## [0.2.11] — 2026-07-01
 
 ### Added

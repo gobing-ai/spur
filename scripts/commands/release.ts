@@ -130,6 +130,52 @@ async function updateVersionSourceFile(filePath: string, previous: string, next:
     return true;
 }
 
+/**
+ * Sync `.claude-plugin/marketplace.json` and each listed plugin's `plugin.json`
+ * to `version` so the `sp` plugin version stays in lockstep with the spur CLI
+ * release (the plugin ships alongside the CLI, not independently — ADR-022).
+ * Appends the relative paths of any changed files to `staged`.
+ */
+async function syncMarketplaceAndPlugins(version: string, staged: string[]): Promise<void> {
+    const marketplacePath = `${repoRoot}.claude-plugin/marketplace.json`;
+    const marketplaceFile = Bun.file(marketplacePath);
+    if (!(await marketplaceFile.exists())) return;
+
+    const marketplace = (await marketplaceFile.json()) as {
+        plugins?: Array<{ name: string; version: string; source: string }>;
+    };
+    const plugins = marketplace.plugins ?? [];
+    let mpUpdated = false;
+    for (const entry of plugins) {
+        if (entry.version !== version) {
+            entry.version = version;
+            mpUpdated = true;
+        }
+    }
+    if (mpUpdated) {
+        await Bun.write(marketplacePath, `${JSON.stringify(marketplace, null, 4)}\n`);
+        staged.push('.claude-plugin/marketplace.json');
+        console.log(`Bumped marketplace plugins to ${version}`);
+    }
+
+    // Update each plugin's own plugin.json manifest.
+    for (const entry of plugins) {
+        const pluginJsonPath = `${repoRoot}${entry.source}/plugin.json`;
+        const pluginJsonFile = Bun.file(pluginJsonPath);
+        if (!(await pluginJsonFile.exists())) {
+            console.warn(`  ⚠ plugin.json not found at ${entry.source}/plugin.json — skipping`);
+            continue;
+        }
+        const pluginJson = (await pluginJsonFile.json()) as { name: string; version: string };
+        if (pluginJson.version !== version) {
+            pluginJson.version = version;
+            await Bun.write(pluginJsonPath, `${JSON.stringify(pluginJson, null, 4)}\n`);
+            staged.push(`${entry.source}/plugin.json`);
+            console.log(`Bumped ${entry.source}/plugin.json to ${version}`);
+        }
+    }
+}
+
 function assertCleanTreeOnBranch(): string {
     if (git(['status', '--porcelain']) !== '') {
         throw new Error('working tree is not clean. Commit or stash changes before releasing.');
@@ -189,44 +235,7 @@ async function bumpVersion(config: ReleaseConfig, version: string, options: { pu
     // Cascade workspace pin updates for consumers of this package.
     const pinChanges = await updateWorkspacePins(config.packageName, previous, version);
     staged.push(...pinChanges);
-    // Sync Claude Code plugin marketplace and plugin.json versions.
-    const marketplacePath = `${repoRoot}.claude-plugin/marketplace.json`;
-    const marketplaceFile = Bun.file(marketplacePath);
-    if (await marketplaceFile.exists()) {
-        const marketplace = (await marketplaceFile.json()) as {
-            plugins?: Array<{ name: string; version: string; source: string }>;
-        };
-        const plugins = marketplace.plugins ?? [];
-        let mpUpdated = false;
-        for (const entry of plugins) {
-            if (entry.version !== version) {
-                entry.version = version;
-                mpUpdated = true;
-            }
-        }
-        if (mpUpdated) {
-            await Bun.write(marketplacePath, `${JSON.stringify(marketplace, null, 4)}\n`);
-            staged.push('.claude-plugin/marketplace.json');
-            console.log(`Bumped marketplace plugins to ${version}`);
-        }
-
-        // Update each plugin's own plugin.json manifest.
-        for (const entry of plugins) {
-            const pluginJsonPath = `${repoRoot}${entry.source}/plugin.json`;
-            const pluginJsonFile = Bun.file(pluginJsonPath);
-            if (!(await pluginJsonFile.exists())) {
-                console.warn(`  ⚠ plugin.json not found at ${entry.source}/plugin.json — skipping`);
-                continue;
-            }
-            const pluginJson = (await pluginJsonFile.json()) as { name: string; version: string };
-            if (pluginJson.version !== version) {
-                pluginJson.version = version;
-                await Bun.write(pluginJsonPath, `${JSON.stringify(pluginJson, null, 4)}\n`);
-                staged.push(`${entry.source}/plugin.json`);
-                console.log(`Bumped ${entry.source}/plugin.json to ${version}`);
-            }
-        }
-    }
+    await syncMarketplaceAndPlugins(version, staged);
     if (Bun.file(`${repoRoot}bun.lock`).size > 0) staged.push('bun.lock');
     git(['add', ...staged]);
 
@@ -300,6 +309,8 @@ async function bumpAll(version: string, options: { push: boolean }): Promise<voi
         const pinChanges = await updateWorkspacePins(config.packageName, previous, version);
         staged.push(...pinChanges);
     }
+
+    await syncMarketplaceAndPlugins(version, staged);
 
     if (Bun.file(`${repoRoot}bun.lock`).size > 0) staged.push('bun.lock');
     git(['add', ...staged]);
