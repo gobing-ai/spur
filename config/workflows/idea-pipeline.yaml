@@ -51,7 +51,7 @@ states:
           message: "Idea pipeline start for idea: ${vars.idea}"
       - kind: shell
         options:
-          command: 'rm -f .spur/run/idea-ac-retry-count .spur/run/idea-decompose-retry-count .spur/run/idea-ac-done.txt'
+          command: 'rm -f .spur/run/idea-ac-retry-count .spur/run/idea-decompose-retry-count .spur/run/idea-feature-id.txt .spur/run/idea-ac-content.md .spur/run/idea-ac-done.txt'
 
   - id: discovery
     description: >
@@ -77,23 +77,31 @@ states:
         options:
           agent: ${vars.agent}
           input: "Create a feature for the idea: ${vars.idea}. Use 'spur feature create \"<name>\" --json' to create it. Write the feature id to .spur/run/idea-feature-id.txt. If an existing feature is appropriate, use its id instead."
+          expectFile: .spur/run/idea-feature-id.txt
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: ac-generate
     description: >
       Generate acceptance criteria per ac-style-guide.md. Write AC scenarios to the
-      feature file via direct body edit (spur feature update does not support
-      --section for features). The agent authors R-numbered Gherkin scenarios tied
-      to the design summary. A completion sentinel (.spur/run/idea-ac-done.txt) is
-      verified by expectFile after exit-0; if the agent crashes before writing it,
-      the step fails and the retry loop routes to failed (R6-S1 cap ≤ 3).
+      feature file via `spur feature update --section "Acceptance Criteria"
+      --from-file`. The agent authors R-numbered Gherkin scenarios tied to the
+      design summary into a captured file; the shell step verifies the file is
+      non-empty, writes it through the CLI, runs feature check, and writes a
+      completion sentinel (.spur/run/idea-ac-done.txt).
     onEnter:
+      - kind: shell
+        options:
+          command: 'rm -f .spur/run/idea-ac-content.md .spur/run/idea-ac-done.txt'
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: "Generate acceptance criteria for the feature whose id is in .spur/run/idea-feature-id.txt. Read the feature file, author R-numbered BDD Gherkin scenarios per ac-style-guide.md, and write them to the feature body via direct file edit (spur feature update does not support --section for features). Run 'spur feature check <id>' to validate. On completion, write the timestamp to .spur/run/idea-ac-done.txt as a sentinel."
-          expectFile: .spur/run/idea-ac-done.txt
+          input: "Generate acceptance criteria for the feature whose id is in .spur/run/idea-feature-id.txt. Read the feature file and author R-numbered BDD Gherkin scenarios per ac-style-guide.md. Output only the complete Acceptance Criteria section body, including the gherkin code fence, with no surrounding commentary and no section heading."
+          answerFile: .spur/run/idea-ac-content.md
+          expectFile: .spur/run/idea-ac-content.md
           timeoutMs: ${vars.stepTimeoutMs}
+      - kind: shell
+        options:
+          command: 'test -s .spur/run/idea-ac-content.md && ${vars.spurBin} feature update $(cat .spur/run/idea-feature-id.txt) --section "Acceptance Criteria" --from-file .spur/run/idea-ac-content.md && ${vars.spurBin} feature check $(cat .spur/run/idea-feature-id.txt) && date -u +%Y-%m-%dT%H:%M:%SZ > .spur/run/idea-ac-done.txt'
 
   - id: feature-check
     description: >

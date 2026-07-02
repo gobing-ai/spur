@@ -120,13 +120,32 @@ states:
       via spur feature update. Never attempt backlog|active -> done directly. The
       legal path: backlog -> active (always), active -> verifying (feature check
       guard), verifying -> done (strict feature check guard). Task statuses are NOT
-      mutated. The agent checks current status and advances idempotently.
+      mutated. The shell sequence checks current status, advances idempotently, and
+      verifies the observed status after every attempted transition.
     onEnter:
-      - kind: agent.run
+      - kind: shell
         options:
-          agent: ${vars.agent}
-          input: "Advance feature ${vars.feature} through legal lifecycle edges using spur feature update. Check current status with 'spur feature show ${vars.feature} --json'. If backlog, transition to active. If active, run 'spur feature check ${vars.feature}' then transition to verifying. If verifying, run 'spur feature check ${vars.feature} --strict' then transition to done. Never skip edges (no backlog->done directly). Report transitions made."
-          timeoutMs: ${vars.stepTimeoutMs}
+          command: >-
+            set -eu;
+            status="$(${vars.spurBin} feature show ${vars.feature} --json | jq -r .status)";
+            if test "$status" = backlog; then
+              ${vars.spurBin} feature update ${vars.feature} active >/dev/null;
+              status="$(${vars.spurBin} feature show ${vars.feature} --json | jq -r .status)";
+              test "$status" = active;
+            fi;
+            if test "$status" = active; then
+              ${vars.spurBin} feature check ${vars.feature};
+              ${vars.spurBin} feature update ${vars.feature} verifying >/dev/null;
+              status="$(${vars.spurBin} feature show ${vars.feature} --json | jq -r .status)";
+              test "$status" = verifying;
+            fi;
+            if test "$status" = verifying; then
+              ${vars.spurBin} feature check ${vars.feature} --strict;
+              ${vars.spurBin} feature update ${vars.feature} done >/dev/null;
+              status="$(${vars.spurBin} feature show ${vars.feature} --json | jq -r .status)";
+              test "$status" = done;
+            fi;
+            test "$status" = done
 
   - id: branch-cleanup
     description: >
