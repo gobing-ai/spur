@@ -11,6 +11,14 @@ This guide is for internal developers adding a new board module. The Tasks
 kanban (`apps/web/src/modules/task-kanban/`) is the reference implementation —
 read it alongside this guide.
 
+For the slash-command workflow that drives whole features through the board, see the
+[dev-slash-commands guide](./how_to_use_dev_slash_commands_for_daily_software_development.md).
+The UI module is the runtime surface those commands ultimately land work in.
+
+For the end-to-end pipeline architecture (planning to execution to wrap-up, 26 steps, HITL
+taxonomy, the mermaid diagram), see the
+[e2e-workflow design doc](../design/e2e-workflow-for-system-development.md).
+
 ```
                     ┌───────────── apps/web/src/modules/ ─────────────┐
                     │                                                 │
@@ -215,3 +223,7 @@ class will fail lint, not just review.
 - **Boundary rules:** `config/rules/ui/ui-import-boundary.yaml`.
 - **Server-side counterpart:** `docs/design/server-side-adjustment-design.md`
   §2.4 (server modules) — the same registry pattern, server-side.
+- **Slash-command layer (what drives modules):**
+  [`docs/help/how_to_use_dev_slash_commands_for_daily_software_development.md`](./how_to_use_dev_slash_commands_for_daily_software_development.md)
+- **E2E pipeline architecture (planning → execution → wrap-up, 26 steps, HITL taxonomy):**
+  [`docs/design/e2e-workflow-for-system-development.md`](../design/e2e-workflow-for-system-development.md)

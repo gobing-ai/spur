@@ -1,36 +1,47 @@
 # How to Use the `sp:dev-*` Slash Commands for Daily Software Development
 
-This guide shows how the `sp:dev-*` slash commands compose into one workflow that takes a **vague
-idea** all the way to a **verified, working prototype** — without you hand-writing task files,
-remembering which CLI verb gates what, or babysitting each step.
+This guide shows how the `sp:dev-*` slash commands compose into one workflow that takes a
+**vague idea** all the way to a **verified, working prototype** — without you hand-writing
+task files, remembering which CLI verb gates what, or babysitting each step.
 
-> **Audience.** You drive a coding agent (Claude Code, Codex, Gemini CLI, …) inside a Spur project.
-> The `sp` plugin is installed and `spur` is on your PATH. If you are new to the underlying CLI,
-> read [How to Use Spur for Daily Software Development](./how_to_use_spur_for_daily_software_development.md)
+> **Audience.** You drive a coding agent (Claude Code, Codex, Gemini CLI, …) inside a Spur
+> project. The `sp` plugin is installed and `spur` is on your PATH. If you are new to the
+> underlying CLI, read
+> [How to Use Spur for Daily Software Development](./how_to_use_spur_for_daily_software_development.md)
 > first — this doc is the slash-command layer on top of it.
 
 ---
 
 ## The mental model
 
-Spur splits development into a **planning half** (turn intent into validated, decomposed work) and an
-**execution half** (turn a task into shipped, verified code). Every command delegates the *deterministic*
-step to a `spur` CLI verb that **validates before it writes** — so an agent's bad output is rejected
-with findings, never silently committed to your corpus.
+Spur splits development into a **planning half** (turn intent into validated, decomposed
+work), an **execution half** (turn a task into shipped, verified code), and a **wrap-up
+half** (post-execution learning, metrics, doc-sync). Every command delegates the
+*deterministic* step to a `spur` CLI verb that **validates before it writes** — so an
+agent's bad output is rejected with findings, never silently committed to your corpus.
 
+```mermaid
+flowchart LR
+  IDEA([Vague idea]) -->|/sp:dev-brainstorm| B[/sp:dev-brainstorm<br/>grilling interview +<br/>structured ideation/]
+  B -->|/sp:dev-plan| P[/sp:dev-plan<br/>feature + AC + task batch/]
+  B -->|/sp:dev-idea| I[/sp:dev-idea<br/>unified idea entry<br/>= brainstorm + plan/]
+  I -->|handoff| CB[Corpus: feature +<br/>task batch]
+  P -->|handoff| CB
+  CB -->|/sp:dev-refine| R[/sp:dev-refine<br/>fill AC / Design / Plan/]
+  R -->|/sp:dev-run| X[/sp:dev-run<br/>task-pipeline.yaml/]
+  CB -->|/sp:dev-runall| XA[/sp:dev-runall<br/>batch driver + super-coder/]
+  X -->|done| D([Task done])
+  XA -->|done| D
+  D -->|/sp:dev-wrap or /sp:dev-wrapall| W[/sp:dev-wrap / -wrapall<br/>wrapup-pipeline.yaml/]
+  W -->|done| S([Shipped + synced])
 ```
-  IDEA ──────────────── PLANNING HALF ─────────────────►  TASKS ──── EXECUTION HALF ────►  PROTOTYPE
- (vague)                                                (validated)                        (verified)
 
-  /sp:dev-brainstorm ─→ /sp:dev-plan ─→ /sp:dev-refine ─→ /sp:dev-run ─→ /sp:dev-verify ─→ done
-   (decision tree,        (feature →      (fill AC/        (implement     (BDD + SECU
-    options, AC)           task batch)     Design/Plan)     + test         verdict)
-                                                            + review)
-```
-
-Two artifacts gate the planning half: **`spur feature check`** (your acceptance criteria are valid
-BDD) and **`spur task batch-create`** (your decomposition is well-formed). Two gates protect the
-execution half: a **HITL approval** on the design and a **PASS/PARTIAL/FAIL verdict** before `done`.
+Two artifacts gate the **planning half**: **`spur feature check`** (your acceptance criteria
+are valid BDD) and **`spur task batch-create`** (your decomposition is well-formed). Two
+gates protect the **execution half**: a **HITL approval** on the design and a
+**PASS/PARTIAL/FAIL verdict** before `done`. The **wrap-up half** mutates no task or
+feature state — it consumes completed tasks and produces learning + metrics + doc-sync
+artifacts (with optional feature transition and irreversible branch cleanup).
 
 ---
 
@@ -40,17 +51,20 @@ execution half: a **HITL approval** on the design and a **PASS/PARTIAL/FAIL verd
 |---------|-------|--------------|-----------|
 | `/sp:dev-brainstorm` | Plan | Grilling interview → options with trade-offs → land an artifact (`--task` or `--feature`) | `sp:brainstorm` |
 | `/sp:dev-plan` | Plan | Feature → BDD AC → `feature check` gate → decompose → `batch-create` gate → optional design doc (`--design`/`--auto`) | `sp:spur-dev` (planning) |
+| `/sp:dev-idea` | Plan | Unified entry: vague idea → feature + AC + task batch (the `idea-pipeline.yaml` workflow). Stops at handoff — no task execution. | `spur workflow run idea-pipeline.yaml` |
 | `/sp:dev-refine` | Plan→Exec | Fill a task's AC / Design / Plan just-in-time via Q&A | `sp:spur-dev` |
 | `/sp:dev-run` | Exec | Run a task: full pipeline, or `--mode implement` for just the code | `sp:spur-dev` (execution) |
 | `/sp:dev-runall` | Exec | Run a **batch** of tasks through their pipelines in dependency-correct order (set resolve → topo-sort → per-task run → batch report) | `sp:spur-dev` (`runall` op → `sp:super-coder`) |
-| `/sp:dev-unit` | Exec | Generate/extend tests; measure coverage | `sp:spur-dev` |
-| `/sp:dev-review` | Exec | SECU code review (security/efficiency/correctness/usability) | `sp:code-verification` |
+| `/sp:dev-unit` | Exec | Generate/extend tests; measure coverage | `sp:code-testing` |
+| `/sp:dev-review` | Exec | SECU code review (security/efficiency/correctness/usability/architecture) | `sp:code-verification` |
 | `/sp:dev-verify` | Exec | Map requirements → evidence; emit a PASS/PARTIAL/FAIL verdict | `sp:code-verification` |
 | `/sp:dev-fixall` | Exec | Loop a validation command until it passes (lint/type/test) | inline |
 | `/sp:dev-gitmsg` | Exec | Draft a Conventional-Commits message from the diff | inline |
 | `/sp:dev-changelog` | Exec | Generate a changelog from commit history | inline |
 | `/sp:dev-handover` | Any | Write an honest handover doc when blocked | inline |
 | `/sp:dev-dogfood` | Any | Drive a command/skill/CLI end-to-end, fix-within-budget, emit a structured report | `sp:dogfood-testing` |
+| `/sp:dev-wrap` | Wrap-up | Wrap up a single completed task — learnings, metrics, doc-sync, optional feature transition + branch cleanup | `spur workflow run wrapup-pipeline.yaml` |
+| `/sp:dev-wrapall` | Wrap-up | Wrap up a batch of completed tasks (filter by `--feature` / `--since` / `--status`) | `spur workflow run wrapup-pipeline.yaml` |
 
 > The single source of truth for every operation (purpose, inputs, behavior) is
 > [`plugins/sp/skills/spur-dev/references/dev-operations.md`](../../plugins/sp/skills/spur-dev/references/dev-operations.md).
@@ -59,14 +73,17 @@ execution half: a **HITL approval** on the design and a **PASS/PARTIAL/FAIL verd
 
 ## Two paths from idea to prototype
 
-Both paths start at the same command — `/sp:dev-brainstorm`. The only choice is **altitude**: is the
-idea a *capability* (many tasks → `--feature`) or a *single deliverable* (one task → `--task`)?
+Both paths start at the same command — `/sp:dev-brainstorm`. The only choice is
+**altitude**: is the idea a *capability* (many tasks → `--feature`) or a *single
+deliverable* (one task → `--task`)? Or do you have **no idea yet — just a vague utterance**?
+Then `/sp:dev-idea` is the unified entry that runs brainstorm + design + decomposition in
+one command.
 
 ### Path A — the feature-first path (an idea that is a *capability*)
 
-Use this when the idea is a whole feature/epic: "users should be able to reset their password,"
-"add audit logging across the app." It produces a feature with acceptance criteria, then **many**
-tasks derived from it.
+Use this when the idea is a whole feature/epic: "users should be able to reset their
+password," "add audit logging across the app." It produces a feature with acceptance
+criteria, then **many** tasks derived from it.
 
 ```bash
 # 1. Idea → validated feature with BDD AC → decomposed task batch, in one command.
@@ -80,19 +97,38 @@ tasks derived from it.
 spur workflow run config/workflows/feature-dev.yaml --vars '{"featureId":"B3"}'
 ```
 
-Prefer to drive tasks one at a time instead of the feature workflow? After step 1, run each task's
-chain by hand: `/sp:dev-refine 0042 --auto --next` (fills the spec, then auto-chains
-implement → verify → done).
+Prefer to drive tasks one at a time instead of the feature workflow? After step 1, run each
+task's chain by hand: `/sp:dev-refine 0042 --auto --next` (fills the spec, then
+auto-chains implement → verify → done).
 
-> **One front door.** `dev-brainstorm` is the entry when you want the interview; `--feature --next`
-> routes you through `dev-plan` automatically — you don't choose between them. Use `dev-plan`
-> *directly* only when a feature already exists and just needs decomposition. `--feature` (capability)
-> and `--task` (single deliverable) are **mutually exclusive** — pick by altitude, not by command.
+> **One front door.** `dev-brainstorm` is the entry when you want the interview;
+> `--feature --next` routes you through `dev-plan` automatically — you don't choose
+> between them. Use `dev-plan` *directly* only when a feature already exists and just
+> needs decomposition. `--feature` (capability) and `--task` (single deliverable) are
+> **mutually exclusive** — pick by altitude, not by command.
+
+### Path A' — the unified idea entry (no shape yet, just a thought)
+
+Use this when you don't want to think about the brainstorm/plan split. `/sp:dev-idea`
+runs the full idea-pipeline in one command — brainstorm → feature-create → AC →
+feature-check → system-design (conditional) → design-approval → decompose → batch-create
+→ handoff. It **stops at handoff** — tasks are created but not executed. Pick up with
+`/sp:dev-runall --tasks feature:<id>` or `/sp:dev-run <wbs>`.
+
+```bash
+/sp:dev-idea "add a --dry-run flag to spur history import" --auto
+# → emits feature id + task WBS list at handoff
+# → next: /sp:dev-runall --tasks feature:<id>  OR  /sp:dev-run <first-wbs>
+```
+
+`--design` forces the system-design step; `--skip-design` skips it (brainstorm design
+summary is always recorded). `--auto` routes around objective gates (`feature-check`,
+`batch-create`); `design-approval` (taste) still pauses.
 
 ### Path B — the fast lane (an idea that is *one deliverable*)
 
-Use this when the idea is a single unit of work: "fix the flaky retry in the uploader," "add a
-`--dry-run` flag to the import command." No feature ceremony — straight to a task.
+Use this when the idea is a single unit of work: "fix the flaky retry in the uploader,"
+"add a `--dry-run` flag to the import command." No feature ceremony — straight to a task.
 
 ```bash
 # 1. Capture the idea as one task (skip the interview if it's already clear).
@@ -102,15 +138,17 @@ Use this when the idea is a single unit of work: "fix the flaky retry in the upl
 /sp:dev-refine 0058 --auto --next
 ```
 
-> **Note.** The old `/sp:dev-new-task` command was retired — `dev-brainstorm --skip-discovery --task`
-> replaces it and seeds Background/Requirements/Plan from the brainstorm instead of an empty shell.
+> **Note.** The old `/sp:dev-new-task` command was retired — `dev-brainstorm
+> --skip-discovery --task` replaces it and seeds Background/Requirements/Plan from the
+> brainstorm instead of an empty shell.
 
 ---
 
 ## The `--next` chain — one command, the whole loop
 
-The execution commands chain through `--next`, so you typically type **one** command and the agent
-walks the rest, stopping only at a real gate (a failed verdict, or a HITL approval you didn't skip):
+The execution commands chain through `--next`, so you typically type **one** command and
+the agent walks the rest, stopping only at a real gate (a failed verdict, or a HITL
+approval you didn't skip):
 
 ```
 /sp:dev-refine <wbs> --auto --next
@@ -125,8 +163,13 @@ walks the rest, stopping only at a real gate (a failed verdict, or a HITL approv
      done                                        ← testing → done transition
 ```
 
-Any non-PASS verdict **stops the chain** and leaves the task at its current status with findings
-written to `## Testing` / `## Review` — you fix and re-run, you never get a silent bad `done`.
+Any non-PASS verdict **stops the chain** and leaves the task at its current status with
+findings written to `## Testing` / `## Review` — you fix and re-run, you never get a
+silent bad `done`.
+
+After `done`, **wrap up** with `/sp:dev-wrap <wbs>` (or `/sp:dev-wrapall --feature <id>`
+for the whole feature) to capture learnings, sync docs, and (optionally) advance the
+feature and clean up the branch.
 
 ---
 
@@ -139,29 +182,34 @@ When you trust the loop, hand the whole task to the pipeline instead of chaining
 /sp:dev-run 0042
 ```
 
-This runs `config/workflows/task-pipeline.yaml`. It pauses at the HITL approval gate; approve and it
-continues to a verified `done`. To run unattended (CI, batch), skip the human gate:
+This runs `config/workflows/task-pipeline.yaml`. It pauses at the HITL approval gate;
+approve and it continues to a verified `done`. To run unattended (CI, batch), skip the
+human gate:
 
 ```bash
 spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"0042","profile":"auto"}'
 ```
 
-Three bundled workflows cover the altitudes:
+Three bundled workflows cover the altitudes (the two new 0167 workflows are in italics):
 
 | Workflow | Drives | Shape |
 |----------|--------|-------|
 | `task-pipeline.yaml` | one task | precheck → implement → test → review → approve → verify → record → done |
 | `feature-dev.yaml` | a whole feature | brainstorm → plan → execute-tasks (loops every task through `task-pipeline`) → feature-verify → done |
 | `planning-pipeline.yaml` | front-half only | phasing → feature-id → design-gen → design-approval → handoff |
+| *`idea-pipeline.yaml`* | unified idea entry | discovery → feature-create → ac-generate → feature-check → system-design → design-approval → decompose → batch-create → handoff |
+| *`wrapup-pipeline.yaml`* | post-execution wrap-up | task-resolve → doc-sync → learning-capture → metrics-record → (feature-transition) → (branch-cleanup) → done |
 
-`feature-dev.yaml` is the one to run when you want a feature taken from idea to verified completion
-unattended: `spur workflow run config/workflows/feature-dev.yaml --vars '{"featureId":"B3"}'`.
+`feature-dev.yaml` is the one to run when you want a feature taken from idea to verified
+completion unattended: `spur workflow run config/workflows/feature-dev.yaml --vars
+'{"featureId":"B3"}'`.
 
-**Run a batch of tasks in dependency order.** When you have a set of tasks ready to execute (not a
-whole feature's lifecycle — just "run these tasks through their pipelines"), `/sp:dev-runall` is the
-batch driver. It resolves the set, topo-sorts by dependencies, runs each through `task-pipeline.yaml`,
-and emits a batch report. The batch orchestrator is `sp:super-coder`; it owns the spaces *between*
-task runs (set resolution, ordering, failure policy), never the steps inside a single task:
+**Run a batch of tasks in dependency order.** When you have a set of tasks ready to
+execute (not a whole feature's lifecycle — just "run these tasks through their
+pipelines"), `/sp:dev-runall` is the batch driver. It resolves the set, topo-sorts by
+dependencies, runs each through `task-pipeline.yaml`, and emits a batch report. The batch
+orchestrator is `sp:super-coder`; it owns the spaces *between* task runs (set resolution,
+ordering, failure policy), never the steps inside a single task:
 
 ```bash
 # Run every ready task through its pipeline (stop on first failure).
@@ -169,7 +217,49 @@ task runs (set resolution, ordering, failure policy), never the steps inside a s
 
 # Run a feature's tasks unattended, skipping the per-task HITL gate.
 /sp:dev-runall --tasks feature:A1 --auto
+
+# Run a batch unattended, then wrap up the whole batch (with optional branch cleanup).
+/sp:dev-runall --tasks feature:A1 --auto --wrap --merge
 ```
+
+---
+
+## Wrap-up — the post-execution half
+
+When tasks reach `done`, **wrap up** to capture learnings, sync docs, and (optionally)
+advance the feature and clean up the branch. `/sp:dev-wrap` is the single-task wrap;
+`/sp:dev-wrapall` is the batch wrap (filter by `--feature`, `--since`, `--status`).
+
+```bash
+# Single task: learnings, metrics, doc-sync
+/sp:dev-wrap 0042 --auto
+
+# Single task: include branch cleanup (IRREVERSIBLE — always pauses, even under --auto)
+/sp:dev-wrap 0042 --auto --merge
+
+# Batch wrap of every done task in feature A1 (advances the feature through legal lifecycle edges)
+/sp:dev-wrapall --feature A1 --auto
+
+# Batch wrap of tasks updated since 2026-07-01
+/sp:dev-wrapall --since 2026-07-01 --auto
+
+# Batch wrap with branch cleanup
+/sp:dev-wrapall --feature A1 --auto --merge
+```
+
+**Wrap-up contract:**
+
+- Task statuses are **NOT** mutated.
+- For feature transition (`backlog → active → verifying → done`), use
+  `/sp:dev-wrapall --feature <id>` (only the batch path advances features through the
+  lifecycle).
+- Branch cleanup (`--merge`) is an **irreversible HITL gate** — always pauses, even under
+  `--auto`. The operator must explicitly confirm.
+- Project-level doc-sync runs **once per batch**, not per task.
+
+You can chain wrap-up onto execution: `/sp:dev-run <wbs> --auto --wrap` and
+`/sp:dev-runall --tasks ... --wrap` both run `wrapup-pipeline.yaml` after the execution
+pipeline reaches `done`.
 
 ---
 
@@ -190,12 +280,16 @@ task runs (set resolution, ordering, failure policy), never the steps inside a s
 #   → /sp:dev-run --mode implement 0061 --next   (writes the code + ## Solution map)
 #   → /sp:dev-verify 0061 --next                 (verdict PASS → done)
 
+# Wrap up: learnings, doc-sync, branch cleanup
+/sp:dev-wrap 0061 --auto --merge
+
 # Ship it.
 /sp:dev-gitmsg --commit
 ```
 
-Three commands. The interview did the thinking, the CLI gates kept the corpus honest, and the verdict
-gate certified the prototype actually does what the AC said.
+Four commands. The interview did the thinking, the CLI gates kept the corpus honest, the
+verdict gate certified the prototype actually does what the AC said, and the wrap-up step
+captured the learnings and synced the docs.
 
 ---
 
@@ -215,44 +309,61 @@ gate certified the prototype actually does what the AC said.
 ## Two cross-cutting flags
 
 **`--agent <name|auto>`** — pick which agent does the model work. Available on the
-model-backed commands: `dev-refine`, `dev-plan`, `dev-brainstorm` (the AC/decomposition/ideation
-synthesis), and `dev-run`, `dev-verify`, `dev-unit`, `dev-review` (the pipeline/verification steps).
-Omit the flag and the default depends on the surface: **inline** commands (`dev-refine`/`dev-plan`/
-`dev-brainstorm`/`dev-unit`) run the model step in the current session (no subprocess); **pipeline**
-commands (`dev-run`/`dev-verify`/`dev-review`) forward nothing and the spawned step resolves to the
-configured default executor (`omp`) — "current agent" is not expressible there. `auto` resolves the
-current runtime to its canonical name; `<name>` (e.g. `codex`) is an explicit spawn.
+model-backed commands: `dev-refine`, `dev-plan`, `dev-brainstorm` (the
+AC/decomposition/ideation synthesis), and `dev-run`, `dev-verify`, `dev-unit`,
+`dev-review` (the pipeline/verification steps). Omit the flag and the default depends on
+the surface: **inline** commands (`dev-refine`/`dev-plan`/`dev-brainstorm`/`dev-unit`) run
+the model step in the current session (no subprocess); **pipeline** commands
+(`dev-run`/`dev-verify`/`dev-review`/`dev-runall`) forward nothing and the spawned step
+resolves to the configured default executor (`omp`) — "current agent" is not
+expressible there. `auto` resolves the current runtime to its canonical name; `<name>`
+(e.g. `codex`) is an explicit spawn.
 
-> **Exception — `/sp:dev-dogfood --agent` is testee-scoped.** Because dogfood *drives* other commands,
-> its `--agent` sets the agent the **testee** runs under (forwarded into the testee invocation), not
-> the driver. The driver always runs in the current session.
-
-> **Exception — `/sp:dev-runall --agent` pins the step executor, not the orchestrator.** `dev-runall`
-> runs N pipelines; each `agent.run` step resolves to the `--agent` value (threaded into every
-> per-task `vars.agent`). But `sp:super-coder` is always the batch orchestrator — it runs the loop in
-> its own context and is never replaced by `--agent`. Same dual-surface contract as `dev-run`, scaled
-> across the batch.
+> **Exception — `/sp:dev-dogfood --agent` is testee-scoped.** Because dogfood *drives*
+> other commands, its `--agent` sets the agent the **testee** runs under (forwarded into
+> the testee invocation), not the driver. The driver always runs in the current session.
+>
+> **Exception — `/sp:dev-runall --agent` pins the step executor, not the orchestrator.**
+> `dev-runall` runs N pipelines; each `agent.run` step resolves to the `--agent` value
+> (threaded into every per-task `vars.agent`). But `sp:super-coder` is always the batch
+> orchestrator — it runs the loop in its own context and is never replaced by `--agent`.
+> Same dual-surface contract as `dev-run`, scaled across the batch.
 
 **`--design` / `--auto` on `/sp:dev-plan`** — author a feature design satellite
-(`docs/design/<slug>.md`) + its `04_DESIGN.md` index row. `--design` always authors; `--auto` lets the
-agent decide via a cross-cutting-seam heuristic (new command/module/schema/transport); neither = no
-design doc (the default). Idempotent — re-runs update in place.
+(`docs/design/<slug>.md`) + its `04_DESIGN.md` index row. `--design` always authors;
+`--auto` lets the agent decide via a cross-cutting-seam heuristic (new
+command/module/schema/transport); neither = no design doc (the default). Idempotent —
+re-runs update in place.
+
+**`--auto` on `/sp:dev-idea`** — routes around objective gates (`feature-check`,
+`batch-create`). `design-approval` (taste) still pauses. Use `--design` to force
+system-design; `--skip-design` to skip it (brainstorm design summary is always recorded).
+
+**`--auto` on `/sp:dev-wrap` / `/sp:dev-wrapall`** — routes around objective
+confirmations. **`branch-cleanup` (when `--merge` is set) is irreversible and always
+pauses**, even under `--auto`.
 
 ---
 
 ## Guardrails — what keeps this safe
 
-1. **Never skip a gate.** A clean `feature check` is the only proof your AC is valid; a passing
-   `batch-create` is the only proof your decomposition is well-formed; a PASS verdict is the only
-   proof the code matches the requirements. The commands won't let an agent route around them.
-2. **The pipeline writes results, not you.** `## Testing` and `## Review` are filled by the verify
-   step; `## Solution` by the implement step. Don't hand-edit them mid-run.
-3. **Refine just-in-time.** Fill a task's Design/Plan *immediately before* executing it, not in bulk
-   at decomposition — design written against a stale codebase rots.
-4. **BDD is the default, not a flag.** Acceptance criteria are authored as Gherkin and validated by
-   `spur feature check`. To skip AC for a genuine chore, pick a `meta`/`issue` task template — there
-   is no "turn off BDD" switch, by design. (`--bdd` on `dev-verify` is the opposite: an opt-in to
-   *also* map scenarios to tests during verification.)
+1. **Never skip a gate.** A clean `feature check` is the only proof your AC is valid; a
+   passing `batch-create` is the only proof your decomposition is well-formed; a PASS
+   verdict is the only proof the code matches the requirements. The commands won't let an
+   agent route around them.
+2. **The pipeline writes results, not you.** `## Testing` and `## Review` are filled by
+   the verify step; `## Solution` by the implement step. Don't hand-edit them mid-run.
+3. **Refine just-in-time.** Fill a task's Design/Plan *immediately before* executing it,
+   not in bulk at decomposition — design written against a stale codebase rots.
+4. **BDD is the default, not a flag.** Acceptance criteria are authored as Gherkin and
+   validated by `spur feature check`. To skip AC for a genuine chore, pick a `meta`/`issue`
+   task template — there is no "turn off BDD" switch, by design. (`--bdd` on `dev-verify`
+   is the opposite: an opt-in to *also* map scenarios to tests during verification.)
+5. **Wrap-up consumes, never mutates.** `/sp:dev-wrap*` does not change task status. It
+   produces learning, metrics, and doc-sync artifacts, and only mutates feature status
+   when `--feature` is set (advancing through the legal lifecycle edges via
+   `spur feature update`). The one exception: `--merge` is **irreversible** and always
+   pauses for confirmation.
 
 ---
 
@@ -262,3 +373,4 @@ design doc (the default). Idempotent — re-runs update in place.
 - [`spur task`](./cmd_task.md) · [`spur feature`](./cmd_feature.md) · [`spur workflow`](./cmd_workflow.md) — the verbs the commands gate on
 - [`dev-operations.md`](../../plugins/sp/skills/spur-dev/references/dev-operations.md) — the authoritative per-operation reference
 - [`ac-style-guide.md`](../../plugins/sp/skills/spur-dev/references/ac-style-guide.md) — BDD acceptance-criteria authoring conventions
+- [`docs/design/e2e-workflow-for-system-development.md`](../design/e2e-workflow-for-system-development.md) — pipeline contracts, HITL taxonomy, the 26-step map

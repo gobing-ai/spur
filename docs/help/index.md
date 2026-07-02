@@ -39,11 +39,11 @@ Verify: `spur --version` → `0.2.5`; `spur agent doctor` checks every detected 
 |---|---|
 | `spur init` | Scaffold a local Spur project (`.spur/`) |
 | `spur status` | Show project, Git, and optional path status |
-| `spur agent` | Run and inspect supported coding agents |
+| `spur agent` | Run and inspect supported coding agents + team agent specs |
 | `spur rule` | Manage constraint rules and presets |
-| `spur workflow` | Validate and execute workflow YAML files |
-| `spur task` | Manage tasks (WBS-numbered, markdown-backed) |
-| `spur feature` | Manage features (hierarchical IDs) |
+| `spur workflow` | Validate, execute, observe, cancel, and clean workflow YAML files |
+| `spur task` | Manage tasks (WBS-numbered, markdown-backed) — 13 verbs |
+| `spur feature` | Manage features (hierarchical IDs) — 8 verbs |
 | `spur history` | Import and analyze coding-agent history |
 | `spur message` | Send and inspect durable inter-agent messages |
 | `spur team` | Coordinate team agent assignments and status |
@@ -55,27 +55,27 @@ Verify: `spur --version` → `0.2.5`; `spur agent doctor` checks every detected 
 ```mermaid
 graph TB
     subgraph "Spur CLI (apps/cli)"
-        CLI[spur command dispatch]
+        CLI[spur command dispatch<br/>commander + @commander-js/extra-typings]
     end
 
     subgraph "Application Services (packages/app)"
         AgentSvc[AgentService]
         RuleSvc[RuleService]
-        WorkflowSvc[WorkflowService]
-        TaskSvc[TaskService]
-        FeatureSvc[FeatureService]
+        WorkflowSvc[WorkflowService<br/>DbWorkflowPersistenceAdapter]
+        TaskSvc[TaskService<br/>PlanningWriteService]
+        FeatureSvc[FeatureService<br/>PlanningWriteService]
         HistorySvc[HistoryService]
         TeamSvc[TeamService]
     end
 
     subgraph "Domain (packages/domain)"
-        DB[SQLite DB<br/>spur.db]
-        Migrations[Schema migrations]
+        DB[(SQLite DB<br/>spur.db<br/>WAL mode)]
+        Migrations[Schema migrations<br/>CLI_SCHEMA_SQL]
         PlanningDAOs[Planning DAOs]
     end
 
     subgraph "External Engines (@gobing-ai/ts-*)"
-        AiRunner[ts-ai-runner<br/>AgentDetector, AiRunner]
+        AiRunner[ts-ai-runner<br/>AgentDetector, DoctorRunner, AiRunner]
         RuleEngine[ts-rule-engine<br/>RuleEngine, presets]
         WorkflowEngine[ts-dual-workflow-engine<br/>FSM + transition-flow]
         JsonlImporter[ts-llm-jsonl-importer]
@@ -99,21 +99,30 @@ graph TB
 
 ### The Details of These Commands
 
-**Complete guide:**
+**Complete guide (the CLI surface, end-to-end):**
 ➡️ **[How to Use Spur for Daily Software Development](./how_to_use_spur_for_daily_software_development.md)**
 — initialization, every command with flags, the daily development loop
-(plan → implement → check → fix → verify → close), JSON output, configuration, and known limitations.
+(plan → implement → check → fix → verify → close), JSON output, configuration, and known
+limitations.
 
-**Slash-command workflow (agent-driven):**
+**Slash-command workflow (agent-driven, recommended for daily work):**
 ➡️ **[How to Use the `sp:dev-*` Slash Commands for Daily Software Development](./how_to_use_dev_slash_commands_for_daily_software_development.md)**
-— the `sp` plugin layer: take a vague idea to a verified prototype via `/sp:dev-brainstorm` →
-`/sp:dev-plan` → `/sp:dev-refine` → `/sp:dev-run` → `/sp:dev-verify`, the `--next` chain, and the
-autonomous pipeline.
+— the `sp` plugin layer: take a vague idea to a verified prototype via
+`/sp:dev-brainstorm` → `/sp:dev-plan` → `/sp:dev-idea` → `/sp:dev-refine` → `/sp:dev-run` →
+`/sp:dev-verify` → `/sp:dev-wrap`/`/sp:dev-wrapall`, the `--next` chain, the `--auto` and
+`--agent` contracts, and the autonomous pipeline.
 
 **Adding a UI module to the Spur Board:**
 ➡️ **[How to Add a UI Module to the Spur Board](./how_to_add_a_new_ui_module.md)**
 — the board is a module hub: add a self-contained React view with one directory and zero
 wiring. Covers the `WebModule` contract, the RPC/UI seams, and what not to wire by hand.
+
+**End-to-end pipeline architecture (canonical reference):**
+➡️ **[`docs/design/e2e-workflow-for-system-development.md`](../design/e2e-workflow-for-system-development.md)**
+— the 8 workflow YAMLs, the 26-step linear map, the HITL/auto-mode taxonomy, the gate
+checklists, the lifecycle FSMs, the memory/checkpoint artifacts, and the
+`system design approval` gate. The slash-command guide points here for the underlying
+mechanics; the CLI guide points here for the 26-step view.
 
 **Per-command reference:**
 
@@ -142,3 +151,5 @@ wiring. Covers the `WebModule` contract, the RPC/UI seams, and what not to wire 
 - `docs/05_FEATURES.md` — **STATUS** (feature decomposition + state)
 - `docs/99_PROJECT_CONSTITUTION.md` — **PROCESS** (how docs are maintained)
 - `AGENTS.md` — agent entry point (stack, commands, gates, conventions)
+- [`docs/design/e2e-workflow-for-system-development.md`](../design/e2e-workflow-for-system-development.md)
+  — pipeline contracts + the 26-step map + the system overview mermaid diagram
