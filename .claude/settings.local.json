@@ -47,11 +47,13 @@
       "Bash(spur task *)",
       "Bash(spur feature *)",
       "Bash(sqlite3 .spur/spur.db *)",
-
       "Read(//tmp/**)",
       "Read(//private/tmp/**)",
       "Write(//tmp/**)",
-      "Write(//private/tmp/**)"
+      "Write(//private/tmp/**)",
+      "Read(//Users/robin/projects/cc-agents/plugins/rd3/**)",
+      "Read(//Users/robin/projects/cc-agents/vendors/**)",
+      "Read(//Users/robin/projects/cc-agents/plugins/rd3/skills/**)"
     ]
   }
 }

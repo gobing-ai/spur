@@ -17,7 +17,7 @@
 - **Three new slash commands.** `/sp:dev-idea` drives the idea pipeline; `/sp:dev-wrap`
   wraps up a single task; `/sp:dev-wrapall` wraps up a feature's task set. All three
   delegate to the new pipeline YAMLs.
-- **Plugin 0.3.0.** The `sp` plugin ships at 0.3.0 with R30–R35 structural test
+- **Plugin structural hardening.** The `sp` plugin (manifest version-synced at 0.2.12) ships with R30–R35 structural test
   invariants (22 tests), cross-cutting convention documentation (CLI-gated writes,
   section matrix, check-before-write, HITL taxonomy), a product-planning skill
   (RICE/MoSCoW prioritization, strategy profiles), and parallel execution framework docs.
