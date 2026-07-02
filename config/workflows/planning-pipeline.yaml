@@ -20,6 +20,8 @@
 #   slug     — the design-doc slug, e.g. `--vars '{"slug":"auth-migration"}'`
 #   profile  — set `--vars '{"profile":"auto"}'` to skip the HITL gates (Q4)
 #   feature  — optional parent feature ID for derivation context
+#   design_approved — "true" only when the operator explicitly approved the design in-session;
+#              lets profile=auto route around the design-approval taste gate (default "false")
 #
 # Seeded by `spur init`; adapt the agent.run inputs to your project's command set.
 
@@ -36,6 +38,7 @@ vars:
   slug: "draft"
   profile: "interactive"
   feature: ""
+  design_approved: "false"
 
 states:
   - id: start

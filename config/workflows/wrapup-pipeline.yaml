@@ -14,7 +14,8 @@
 #        (task-resolve with empty list short-circuits to `skipped`).
 #
 # Vars (passed as a JSON object via `--vars`):
-#   tasks    — JSON array of WBS strings (required), e.g. --vars '{"tasks":["0167"]}'
+#   tasks    — JSON array of WBS strings, passed as a JSON-encoded STRING value (the CLI
+#              rejects non-string --vars values), e.g. --vars '{"tasks":"[\"0167\"]"}'
 #   feature  — feature id to advance through legal lifecycle edges (optional)
 #   profile  — set --vars '{"profile":"auto"}' to skip objective confirmations
 #   merge    — set --vars '{"merge":"true"}' to run branch cleanup (irreversible HITL)
@@ -91,7 +92,7 @@ states:
           timeoutMs: ${vars.stepTimeoutMs}
       - kind: shell
         options:
-          command: 'test -s .spur/run/wrapup-learnings.md && cat .spur/run/wrapup-learnings.md >> .spur/memory/learnings.md && printf "\n" >> .spur/memory/learnings.md'
+          command: 'test -s .spur/run/wrapup-learnings.md && mkdir -p .spur/memory && cat .spur/run/wrapup-learnings.md >> .spur/memory/learnings.md && printf "\n" >> .spur/memory/learnings.md'
 
   - id: metrics-record
     description: >
@@ -112,7 +113,7 @@ states:
           timeoutMs: ${vars.stepTimeoutMs}
       - kind: shell
         options:
-          command: 'test -s .spur/run/wrapup-metrics.jsonl && cat .spur/run/wrapup-metrics.jsonl >> .spur/memory/wrapup-metrics.jsonl'
+          command: 'test -s .spur/run/wrapup-metrics.jsonl && mkdir -p .spur/memory && cat .spur/run/wrapup-metrics.jsonl >> .spur/memory/wrapup-metrics.jsonl'
 
   - id: feature-transition
     description: >
