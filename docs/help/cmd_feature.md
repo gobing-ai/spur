@@ -1,18 +1,22 @@
 # spur feature
 
-> Manage features with hierarchical IDs (groups A–H, digit children: A1, A1→B1, etc.).
+> Manage features with hierarchical IDs. Group letters A–Z are the top level; children
+> get the next free digit 1–9 (e.g. `F7` → `F71`, `F72`, …). IDs encode position — moving
+> a feature cascade-renames the subtree. Backed by `PlanningWriteService` over the same
+> write path as `spur task`.
 
 ## Subcommands
 
 | Subcommand | Description |
 |---|---|
-| `create <name>` | Create a feature; allocates a hierarchical ID under the create-lock |
-| `show <id>` | Show a feature by ID |
-| `update <id> [status]` | Update a feature status (lifecycle) or a scalar frontmatter field |
-| `list` | List features with optional status/priority filters |
-| `move <id>` | Move a feature to a new parent — cascade rename of the subtree |
-| `refresh` | Regenerate INDEX.md (ID-encoded tree) and repopulate each feature ## Tasks region |
+| `create <name>` | Allocate a hierarchical ID under the create-lock |
+| `show <id>` | Show a feature by ID (summary + content) |
+| `update <id> [status]` | Lifecycle transition, `--field/--value` scalar, or `--section/--from-file` body replace |
+| `list` | List features sorted by ID, with status/priority filters |
+| `move <id>` | Move a feature to a new parent — cascade-rename the subtree |
+| `refresh` | Regenerate `INDEX.md` and repopulate each feature's `## Tasks` region |
 | `check [id]` | Validate feature file(s) through the four-layer check |
+| `migrate` | **Reserved** — one-time corpus normalization, not yet wired |
 
 ## spur feature create
 
@@ -26,14 +30,17 @@ spur feature create [options] <name>
 
 | Flag | Description |
 |---|---|
-| `--parent <id>` | Parent feature ID (child gets the next free digit 1-9) |
+| `--parent <id>` | Parent feature ID (child gets the next free digit 1–9) |
 | `--folder <path>` | Custom features folder |
 | `--json` | Output machine-readable JSON |
+
+ID allocation under the create-lock (R1): `--parent` → next free child digit 1–9; no
+parent → next free group letter A–Z.
 
 ### Example
 
 ```bash
-spur feature create "User authentication"           # → allocates ID (e.g. F7)
+spur feature create "User authentication"           # → allocates a group letter (e.g. F7)
 spur feature create "OAuth provider" --parent F7    # → F71
 ```
 
@@ -52,6 +59,8 @@ spur feature show [options] <id>
 | `--folder <path>` | Custom features folder |
 | `--json` | Output machine-readable JSON |
 
+Returns the feature summary + content; exit 1 if not found.
+
 ### JSON shape
 
 ```json
@@ -66,27 +75,48 @@ spur feature show [options] <id>
 
 ## spur feature update
 
+Three mutation modes, composable in one invocation (applied in order: section → scalar field → status):
+
+### Mode (a): Lifecycle transition
+
 ```
-spur feature update [options] <id> [status]
+spur feature update [options] <id> <status>
+```
+
+### Mode (b): Section replace (body-only)
+
+```
+spur feature update [options] <id> --section <name> --from-file <path>
+```
+
+### Mode (c): Scalar frontmatter field
+
+```
+spur feature update [options] <id> --field <key> --value <value>
 ```
 
 | Argument | Description |
 |---|---|
 | `id` | Feature ID |
-| `status` | New lifecycle status (omit when using `--field/--value`) |
+| `status` | New lifecycle status (omit when using `--field/--value` or `--section/--from-file`) |
 
 | Flag | Description |
 |---|---|
 | `--field <key>` | Frontmatter field to set (e.g. `priority`) |
 | `--value <value>` | New value for `--field` |
+| `--section <name>` | Section name to replace (requires `--from-file`; body-only contract) |
+| `--from-file <path>` | File to read section body from (requires `--section`) |
 | `--folder <path>` | Custom features folder |
 | `--json` | Output machine-readable JSON |
+
+Exit 2 if an option pair is incomplete.
 
 ### Examples
 
 ```bash
-spur feature update F7 active                       # lifecycle transition
-spur feature update F7 --field priority --value P0  # set a scalar field
+spur feature update F7 active                                  # lifecycle transition
+spur feature update F7 --field priority --value P0            # set a scalar field
+spur feature update F7 --section Goal --from-file ./goal.md   # section replace (body-only)
 ```
 
 ### Feature statuses
@@ -95,8 +125,8 @@ spur feature update F7 --field priority --value P0  # set a scalar field
 backlog → active → verifying → done  (also: cancelled)
 ```
 
-> **No `--section`:** feature bodies (Goal/Scope/AC/Tasks/Notes) are hand-edited. The CLI owns
-> status, scalar `--field/--value`, IDs via create/move, and the `## Tasks` block via refresh.
+`verifying` is DD-13's status — it makes verification derivable, listable, event-triggerable,
+and assignable.
 
 ## spur feature list
 
@@ -115,10 +145,6 @@ spur feature list [options]
 
 Array of feature objects: `[{ id, status, priority, name }, ...]`
 
-### Verified corpus (2026-06-19)
-
-18 features: groups A–H (active), F1 (active P0), F2–F6 (backlog), B1/H1–H3 (backlog).
-
 ## spur feature move
 
 ```
@@ -136,11 +162,16 @@ spur feature move [options] <id>
 | `--folder <path>` | Custom features folder |
 | `--json` | Output machine-readable JSON |
 
+Cascade-rename (DD-14): re-IDs the node + all descendants (ID encodes position), renames
+their files, rewrites each `id` frontmatter + appends a move History line, and updates
+every task `feature_id` edge. Validates the full old→new plan first (collision / ≤9 /
+not-into-own-subtree); applies atomically with best-effort rollback.
+
 ### Example
 
 ```bash
-spur feature move F71 --parent B     # → B + next digit, cascade-renames subtree
-spur feature move F71 --dry-run      # preview the old→new ID map
+spur feature move F71 --parent B   # → B + next digit, cascade-renames subtree
+spur feature move F71 --dry-run    # preview the old→new ID map
 ```
 
 ## spur feature refresh
@@ -154,11 +185,13 @@ spur feature refresh [options]
 | `--folder <path>` | Custom features folder |
 | `--json` | Output machine-readable JSON |
 
-Regenerates `INDEX.md` (ID-encoded tree with status badges) and repopulates each feature's
-`## Tasks` region. Read-only over the corpus (files win); safe to run anytime.
+Regenerate `INDEX.md` (deterministic ID-encoded tree, per-node status badge + relative
+link) and repopulate each feature's `## Tasks` auto-gen marker region from task
+`feature_id` edges. Only the marker region is rewritten; the rest of the feature file and
+all task files are byte-preserved.
 
-> Run `spur feature refresh` when closing a task to keep feature `## Tasks` blocks tracking real
-> task status.
+> Run `spur feature refresh` when closing a task to keep feature `## Tasks` blocks tracking
+> real task status.
 
 ## spur feature check
 
@@ -176,10 +209,25 @@ spur feature check [options] [id]
 | `--folder <path>` | Custom features folder |
 | `--json` | Output machine-readable JSON |
 
-Four-layer check: L1 Zod frontmatter (hard) · L2 section presence · L3 format (BDD AC syntax,
-one-active-goal, ≤9 children) · L4 traceability (incoming feature_id edges, orphan scenarios).
+**Four-layer check:**
+
+- **L1** — Zod frontmatter schema (hard).
+- **L2** — section-matrix (status-driven required sections).
+- **L3** — BDD AC validation (shared 0043 module) + one-active-P0-goal over
+  {active, verifying} + ≤9-children (DD-14, corpus-derived).
+- **L4** — incoming `feature_id` edges + orphan-scenario warnings + **AC coverage**
+  (DD-09: feature scenarios covered by no linked task = warnings) + verifying-readiness
+  (linked tasks not done/cancelled).
+
+`--strict` elevates warnings to failures.
+
+## spur feature migrate
+
+> **Reserved.** One-time corpus normalization pass, gated on the board cutover. Not yet
+> wired in the CLI.
 
 ## See Also
 
 - [Daily Development Guide](./how_to_use_spur_for_daily_software_development.md) — §5.1 Planning
-- `docs/04_DESIGN.md` — §7.2 feature commands
+- [spur task](./cmd_task.md) — WBS-numbered tasks that link to features
+- `docs/04_DESIGN.md` — §7.2 `spur feature` commands (canonical surface)

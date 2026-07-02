@@ -1,6 +1,8 @@
 # spur message
 
-> Send and inspect durable inter-agent messages. Backs team coordination.
+> Send, list, and reply to durable inter-agent messages. Backs team coordination. Messages
+> persist in the SQLite `inbox_messages` table (backed by `TeamService` →
+> `ts-ai-runner` `MessageService` → `ts-db` `InboxMessageDao`).
 
 ## Subcommands
 
@@ -22,7 +24,7 @@ spur message send [options] <body>
 
 | Flag | Default | Description |
 |---|---|---|
-| `--to <id>` | — | Recipient agent id |
+| `--to <id>` | — | Recipient agent id (required) |
 | `--from <id>` | `operator` | Sender id |
 | `--json` | — | Output machine-readable JSON |
 
@@ -47,13 +49,20 @@ spur message send "Urgent: tests failing" --to reviewer --from operator
 ## spur message inbox
 
 ```
-spur message inbox [options]
+spur message inbox --agent <id> [--json]
 ```
 
 | Flag | Description |
 |---|---|
-| `--agent <id>` | Agent id |
+| `--agent <id>` | Agent id whose inbox to list (required) |
 | `--json` | Output machine-readable JSON |
+
+### Example
+
+```bash
+spur message inbox --agent reviewer
+spur message inbox --agent reviewer --json
+```
 
 ### JSON shape
 
@@ -88,6 +97,10 @@ spur message reply [options] <msg-id> <body>
 |---|---|
 | `--json` | Output machine-readable JSON |
 
+Looks up the original message, addresses the reply back to its `from_id`, and threads it via
+`in_reply_to`. Rejects an unknown id, or an operator-originated message (null sender) with
+no peer.
+
 ### Example
 
 ```bash
@@ -96,11 +109,12 @@ spur message reply msg-001 "Looks good, merging"
 
 ## Team Mode
 
-Team mode (Phase 1–3) uses prepend-on-drain: `team assign` + `message send` +
+Team mode (Phase 1–3) uses **prepend-on-drain**: `team assign` + `message send` +
 `agent run --drain <spec-id>` folds the spec's inbox into the prompt and maps spec-id →
-coding-agent type. There are no live daemons; `--drain` is the coordination mechanism.
+coding-agent type. There are no live daemons; `--drain` is the coordination mechanism. See
+[spur team](./cmd_team.md).
 
 ## See Also
 
-- [spur team](./cmd_agent.md) — agent spec management
+- [spur team](./cmd_team.md) — assign tasks to team agent specs.
 - [Daily Development Guide](./how_to_use_spur_for_daily_software_development.md) — §5.6 Team Coordination
