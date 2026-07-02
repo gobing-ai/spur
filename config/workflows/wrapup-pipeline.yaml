@@ -76,28 +76,43 @@ states:
 
   - id: learning-capture
     description: >
-      Append working learnings to .spur/memory/learnings.md. The agent extracts insights
-      from the batch — conventions discovered, errors hit and resolved, patterns that
-      worked, gotchas for future tasks. Grouped by date and task WBS. Working scratchpad,
-      not a CLI-gated corpus artifact.
+      Append working learnings to .spur/memory/learnings.md. The agent extracts
+      insights from the batch and writes them to a capture file; a downstream shell
+      step appends that file to the learnings scratchpad. This decouples content
+      generation from file persistence: the shell step's exit code is the real
+      success signal, and the capture file is verified before the append.
     onEnter:
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: "Extract working learnings from tasks ${vars.tasks}. Append to .spur/memory/learnings.md grouped by date and task WBS. Include: conventions discovered, errors hit and resolved, patterns that worked, gotchas. This is a working scratchpad, not a validated corpus."
+          input: "Extract working learnings from tasks ${vars.tasks}. Output as markdown grouped by date and task WBS. Include: conventions discovered, errors hit and resolved, patterns that worked, gotchas. Output raw markdown (no code fences) — your answer will be captured to a file and appended to .spur/memory/learnings.md."
+          answerFile: .spur/run/wrapup-learnings.md
+          expectFile: .spur/run/wrapup-learnings.md
           timeoutMs: ${vars.stepTimeoutMs}
+      - kind: shell
+        options:
+          command: 'test -s .spur/run/wrapup-learnings.md && cat .spur/run/wrapup-learnings.md >> .spur/memory/learnings.md && printf "\n" >> .spur/memory/learnings.md'
 
   - id: metrics-record
     description: >
-      Append one JSONL row per task to .spur/memory/wrapup-metrics.jsonl. Each row
-      records: task WBS, feature id, status, verdict, timestamp. Append-only and
-      machine-readable.
+      Append one JSONL row per task to .spur/memory/wrapup-metrics.jsonl. The agent
+      produces the JSONL content to a capture file; a downstream shell step appends
+      it. Each row records: task WBS, feature id, status, verdict, timestamp.
+      Append-only and machine-readable. The capture+shell decoupling means a
+      non-empty capture file is verified before the append (the agent.run exit-0
+      is no longer the sole success signal — the shell step's exit code gates the
+      write).
     onEnter:
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: "For each task in ${vars.tasks}, read the task file and append one JSONL row to .spur/memory/wrapup-metrics.jsonl with fields: wbs, feature_id, status, verdict (from .spur/run/<wbs>-verdict.json if available), timestamp. Append-only; do not overwrite existing rows."
+          input: "For each task in ${vars.tasks}, read the task file and output one JSONL line per task with fields: wbs, feature_id, status, verdict (from .spur/run/<wbs>-verdict.json if available), timestamp. Output raw JSONL (no code fences) — your answer will be captured to a file and appended to .spur/memory/wrapup-metrics.jsonl."
+          answerFile: .spur/run/wrapup-metrics.jsonl
+          expectFile: .spur/run/wrapup-metrics.jsonl
           timeoutMs: ${vars.stepTimeoutMs}
+      - kind: shell
+        options:
+          command: 'test -s .spur/run/wrapup-metrics.jsonl && cat .spur/run/wrapup-metrics.jsonl >> .spur/memory/wrapup-metrics.jsonl'
 
   - id: feature-transition
     description: >

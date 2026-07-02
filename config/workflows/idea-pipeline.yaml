@@ -51,7 +51,7 @@ states:
           message: "Idea pipeline start for idea: ${vars.idea}"
       - kind: shell
         options:
-          command: 'rm -f .spur/run/idea-ac-retry-count .spur/run/idea-decompose-retry-count'
+          command: 'rm -f .spur/run/idea-ac-retry-count .spur/run/idea-decompose-retry-count .spur/run/idea-ac-done.txt'
 
   - id: discovery
     description: >
@@ -82,25 +82,31 @@ states:
   - id: ac-generate
     description: >
       Generate acceptance criteria per ac-style-guide.md. Write AC scenarios to the
-      feature file via spur feature update (direct body edit, not --section). The
-      agent authors R-numbered Gherkin scenarios tied to the design summary.
+      feature file via direct body edit (spur feature update does not support
+      --section for features). The agent authors R-numbered Gherkin scenarios tied
+      to the design summary. A completion sentinel (.spur/run/idea-ac-done.txt) is
+      verified by expectFile after exit-0; if the agent crashes before writing it,
+      the step fails and the retry loop routes to failed (R6-S1 cap ≤ 3).
     onEnter:
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: "Generate acceptance criteria for the feature whose id is in .spur/run/idea-feature-id.txt. Read the feature file, author R-numbered BDD Gherkin scenarios per ac-style-guide.md, and write them to the feature body via direct file edit (spur feature update does not support --section for features). Run 'spur feature check <id>' to validate."
+          input: "Generate acceptance criteria for the feature whose id is in .spur/run/idea-feature-id.txt. Read the feature file, author R-numbered BDD Gherkin scenarios per ac-style-guide.md, and write them to the feature body via direct file edit (spur feature update does not support --section for features). Run 'spur feature check <id>' to validate. On completion, write the timestamp to .spur/run/idea-ac-done.txt as a sentinel."
+          expectFile: .spur/run/idea-ac-done.txt
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: feature-check
     description: >
-      Objective gate: run spur feature check <id> --strict. Under --auto, routes
-      around the HITL gate when the check passes. On failure, routes back to
-      ac-generate for AC revision. The feature id is read from
-      .spur/run/idea-feature-id.txt.
+      HITL gate: runs spur feature check <id> --strict. The check is objective
+      (schema/AC validation) and auto-routable — under profile=auto the transition
+      guards route directly from ac-generate to the appropriate next state, so this
+      state is only entered in interactive mode. On failure, the retry cap routes
+      back to ac-generate (≤3 retries) or escalates to failed.
+    pause: true
     onEnter:
-      - kind: note
+      - kind: hitl.confirm
         options:
-          message: "Running feature check for feature $(cat .spur/run/idea-feature-id.txt)"
+          prompt: "Feature check for $(cat .spur/run/idea-feature-id.txt). Review the AC and confirm to proceed? (Failures route back to ac-generate for revision, capped at 3 retries.)"
 
   - id: system-design
     description: >
@@ -141,13 +147,17 @@ states:
 
   - id: batch-create
     description: >
-      Objective gate: run spur task batch-create with the batch JSON from the
-      decompose state. Under --auto, routes around the HITL gate when the batch
-      validates. On failure, routes back to decompose.
+      HITL gate: runs spur task batch-create with the batch JSON from the
+      decompose state. The check is objective (schema validation) and
+      auto-routable — under profile=auto the transition guards route directly
+      from decompose to the appropriate next state, so this state is only
+      entered in interactive mode. On failure, the retry cap routes back to
+      decompose (≤3 retries) or escalates to failed.
+    pause: true
     onEnter:
-      - kind: note
+      - kind: hitl.confirm
         options:
-          message: "Running batch-create for feature $(cat .spur/run/idea-feature-id.txt)"
+          prompt: "Batch-create for feature $(cat .spur/run/idea-feature-id.txt). Review the task batch and confirm to proceed? (Failures route back to decompose for revision, capped at 3 retries.)"
 
   - id: handoff
     description: >
@@ -194,10 +204,48 @@ transitions:
     guard:
       kind: always
 
-  # ── ac-generate -> feature-check ──
+  # ── ac-generate: auto-skip (profile=auto) OR enter feature-check HITL gate (interactive) ──
+  # Declaration order: auto-skip guards tried FIRST (same pattern as task-pipeline review→verify
+  # and design-gen→handoff). Under profile=auto, the feature check runs as a transition guard and
+  # routes directly to the appropriate next state. Under interactive, the always fallback enters
+  # the feature-check state whose onEnter hitl.confirm pauses for operator confirmation.
+  #
+  # Auto-skip 1: pass + design route → system-design
+  - from: ac-generate
+    to: system-design
+    description: "profile=auto, check passed, design route — run system design."
+    guard:
+      kind: shell
+      options:
+        command: 'test "${vars.profile}" = auto && ${vars.spurBin} feature check $(cat .spur/run/idea-feature-id.txt) --strict && (test "${vars.design}" = force || (test "${vars.design}" = auto && test "$(jq -r .needs_design .spur/run/idea-needs-design.json 2>/dev/null)" != false))'
+  # Auto-skip 2: pass + skip-design route → decompose
+  - from: ac-generate
+    to: decompose
+    description: "profile=auto, check passed, skip-design route — go directly to decompose."
+    guard:
+      kind: shell
+      options:
+        command: 'test "${vars.profile}" = auto && ${vars.spurBin} feature check $(cat .spur/run/idea-feature-id.txt) --strict && (test "${vars.design}" = skip || (test "${vars.design}" = auto && test "$(jq -r .needs_design .spur/run/idea-needs-design.json 2>/dev/null)" = false))'
+  # Auto-skip 3: check failed, retry < 3 → loop back to ac-generate (self-loop)
+  - from: ac-generate
+    to: ac-generate
+    description: "profile=auto, check failed, retry cap not reached — re-run ac-generate."
+    guard:
+      kind: shell
+      options:
+        command: 'test "${vars.profile}" = auto && ! ${vars.spurBin} feature check $(cat .spur/run/idea-feature-id.txt) --strict && test "$(cat .spur/run/idea-ac-retry-count 2>/dev/null || echo 0)" -lt 3 && echo $(( $(cat .spur/run/idea-ac-retry-count 2>/dev/null || echo 0) + 1 )) > .spur/run/idea-ac-retry-count'
+  # Auto-skip 4: check failed, retry cap reached → escalate to failed
+  - from: ac-generate
+    to: failed
+    description: "profile=auto, check failed after 3 retries — escalate to failed."
+    guard:
+      kind: shell
+      options:
+        command: 'test "${vars.profile}" = auto && ! ${vars.spurBin} feature check $(cat .spur/run/idea-feature-id.txt) --strict && test "$(cat .spur/run/idea-ac-retry-count 2>/dev/null || echo 0)" -ge 3'
+  # Interactive fallback: enter feature-check HITL gate
   - from: ac-generate
     to: feature-check
-    description: AC generated — run feature check.
+    description: Interactive — enter feature-check HITL gate for operator confirmation.
     guard:
       kind: always
 
@@ -254,10 +302,35 @@ transitions:
     guard:
       kind: always
 
-  # ── decompose -> batch-create ──
+  # ── decompose: auto-skip (profile=auto) OR enter batch-create HITL gate (interactive) ──
+  # Auto-skip 1: check passes → handoff
+  - from: decompose
+    to: handoff
+    description: "profile=auto, batch-create passed — handoff."
+    guard:
+      kind: shell
+      options:
+        command: 'test "${vars.profile}" = auto && ${vars.spurBin} task batch-create --file .spur/run/idea-task-batch.json'
+  # Auto-skip 2: check failed, retry < 3 → loop back to decompose (self-loop)
+  - from: decompose
+    to: decompose
+    description: "profile=auto, batch-create failed, retry cap not reached — re-run decompose."
+    guard:
+      kind: shell
+      options:
+        command: 'test "${vars.profile}" = auto && ! ${vars.spurBin} task batch-create --file .spur/run/idea-task-batch.json && test "$(cat .spur/run/idea-decompose-retry-count 2>/dev/null || echo 0)" -lt 3 && echo $(( $(cat .spur/run/idea-decompose-retry-count 2>/dev/null || echo 0) + 1 )) > .spur/run/idea-decompose-retry-count'
+  # Auto-skip 3: check failed, retry cap reached → escalate to failed
+  - from: decompose
+    to: failed
+    description: "profile=auto, batch-create failed after 3 retries — escalate to failed."
+    guard:
+      kind: shell
+      options:
+        command: 'test "${vars.profile}" = auto && ! ${vars.spurBin} task batch-create --file .spur/run/idea-task-batch.json && test "$(cat .spur/run/idea-decompose-retry-count 2>/dev/null || echo 0)" -ge 3'
+  # Interactive fallback: enter batch-create HITL gate
   - from: decompose
     to: batch-create
-    description: Decomposition complete — create task batch.
+    description: Interactive — enter batch-create HITL gate for operator confirmation.
     guard:
       kind: always
 
