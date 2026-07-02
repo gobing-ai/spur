@@ -3,7 +3,7 @@ template: standard
 schema_version: 1
 name: "sp plugin hands-off ready — idea-to-feature flow + post-execution wrap-up + cross-session learning"
 description: ""
-status: testing
+status: done
 type: task
 profile: standard
 feature_id: I
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-01T06:04:09.068Z"
-updated_at: "2026-07-02T00:29:19.410Z"
+updated_at: "2026-07-02T00:49:19.134Z"
 ---
 
 ## 0167. sp plugin hands-off ready — idea-to-feature flow + post-execution wrap-up + cross-session learning
@@ -609,3 +609,4 @@ Phase 1 must complete first because Phase 2 and 3 depend on the conventions in `
 - 2026-07-02T00:21:17.289Z backlog → todo (system)
 - 2026-07-02T00:29:15.058Z todo → wip (system)
 - 2026-07-02T00:29:19.410Z wip → testing (system)
+- 2026-07-02T00:49:19.134Z testing → done (system)

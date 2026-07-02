@@ -535,7 +535,7 @@ Every subcommand supports `--json` (ADR-010 invariant). Source: delivery §1.2, 
 | `spur feature` | — (noun help) | 0 | Lists subcommands if no subcommand given. |
 | `spur feature create <name>` | `--parent <id>` `--folder <path>` `--json` | 0/1 | ID allocated under the create-lock (R1): `--parent` → next free child digit 1–9; no parent → next free group letter A–Z. |
 | `spur feature show <id>` | `--folder <path>` `--json` | 0/1 | Returns the feature summary + content; 1 if not found. |
-| `spur feature update <id> [status]` | `--field <key> --value <v>` `--folder <path>` `--json` | 0/1/2 | `<status>` runs the lifecycle transition (guarded, §7.5); `--field/--value` sets a scalar frontmatter field. 2 if `--field` given without `--value`. |
+| `spur feature update <id> [status]` | `--field <key> --value <v>` `--section <name> --from-file <path>` `--folder <path>` `--json` | 0/1/2 | `<status>` runs the lifecycle transition (guarded, §7.5); `--field/--value` sets a scalar frontmatter field; `--section/--from-file` replaces an existing feature section body using the same body-only contract as `spur task update --section`. Section, field, and status updates may be composed in one invocation and apply in that order. 2 if an option pair is incomplete. |
 | `spur feature list` | `--status <s>` `--priority <p>` `--folder <path>` `--json` | 0/1 | Lists features sorted by ID; optional status/priority filters. |
 | `spur feature check [<id>]` | `--strict` `--folder <path>` `--json` | 0/1 | Four-layer validation (§3): L1 schema, L2 section-matrix, L3 BDD AC (shared 0043 module) + one-active-P0-goal over {active,verifying} + ≤9-children (DD-14, corpus-derived), L4 incoming `feature_id` edges + orphan-scenario warnings + **AC coverage** (DD-09: feature scenarios covered by no linked task = warnings) + verifying-readiness (linked tasks not done/cancelled). Validates all features when `<id>` omitted; `--strict` elevates warnings. |
 | `spur feature refresh` | `--folder <path>` `--json` | 0/1 | Regenerate `INDEX.md` (deterministic ID-encoded tree, per-node status badge + relative link, §4.3) and repopulate each feature's `## Tasks` auto-gen marker region from task `feature_id` edges. Only the marker region is rewritten; the rest of the feature file and all task files are byte-preserved. |
@@ -812,8 +812,8 @@ artifact via one of two **mutually exclusive** exits:
 - `--task [<feature-id>]` — one `todo` task via `spur task create` (the fast path for a single unit
   of work; skips feature/AC ceremony on purpose).
 - `--feature [<parent-id>]` — the **front-half entry**: `spur feature create`, then author Goal/Scope
-  and BDD acceptance criteria from the decision trace by **editing the feature file directly** (note:
-  `spur feature update` has no `--section`/`--from-file` verb — unlike `spur task update`), then loop
+  and BDD acceptance criteria from the decision trace through
+  `spur feature update --section <name> --from-file <path>`, then loop
   the `spur feature check` gate to exit 0. Lands a validated feature and hands off to
   `/sp:dev-plan --feature <ID>` for schema-gated decomposition. Passing both exits is an error.
 
