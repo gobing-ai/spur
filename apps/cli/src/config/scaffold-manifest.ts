@@ -48,6 +48,9 @@ export const SCAFFOLD_MANIFEST: readonly ScaffoldEntry[] = [
     { source: 'workflows/task-pipeline.yaml', target: 'workflows/task-pipeline.yaml' },
     // Planning pipeline — front-half (task 0088); companions the sp:spur-plan skill
     { source: 'workflows/planning-pipeline.yaml', target: 'workflows/planning-pipeline.yaml' },
+    // Idea + wrap-up pipelines (task 0167) — backing workflows for /sp:dev-idea, /sp:dev-wrap, /sp:dev-wrapall
+    { source: 'workflows/idea-pipeline.yaml', target: 'workflows/idea-pipeline.yaml' },
+    { source: 'workflows/wrapup-pipeline.yaml', target: 'workflows/wrapup-pipeline.yaml' },
     // Section matrix under .spur/tasks/
     { source: 'tasks/section-matrix.yaml', target: 'tasks/section-matrix.yaml' },
     // Task templates under .spur/tasks/templates/

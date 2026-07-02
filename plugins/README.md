@@ -4,7 +4,7 @@
 
 The `sp` plugin is the Claude Code plugin surface for the Spur toolkit. It provides a full planning-to-execution pipeline — convert a vague feature description into a CLI-validated feature file with BDD acceptance criteria, decompose it into a task batch, run those tasks through execution workflows with human-in-the-loop gating — plus constraint-rule and dual-mode workflow engines, daily analytics, and document-drift enforcement. Every write to the task/feature corpus goes through a `spur` CLI verb that validates before writing; the plugin entities contain zero validation logic of their own.
 
-- **Marketplace entry:** `name: "sp"`, `version: "0.3.0"`, `source: "./plugins/sp"` (`plugin.json`)
+- **Marketplace entry:** `name: "sp"`, `version: "0.2.12"`, `source: "./plugins/sp"` (`plugin.json`, kept in sync with `.claude-plugin/marketplace.json`)
 - **Owner:** Robin Min
 
 ## Directory Layout
@@ -360,10 +360,10 @@ Each pipeline owns one lifecycle phase:
 | `planning-pipeline.yaml` | Planning/design from known slug | `/sp:dev-plan` | existing |
 | `task-pipeline.yaml` | Single-task execution | `/sp:dev-run` | existing |
 | `feature-dev.yaml` | Feature umbrella execution | `/sp:dev-runall --feature` | existing |
-| `idea-pipeline.yaml` | Idea to feature + AC + task batch | `/sp:dev-idea` | new in 0.3.0 |
-| `wrapup-pipeline.yaml` | Post-execution wrap-up | `/sp:dev-wrap`, `/sp:dev-wrapall` | new in 0.3.0 |
+| `idea-pipeline.yaml` | Idea to feature + AC + task batch | `/sp:dev-idea` | new in 0.2.12 |
+| `wrapup-pipeline.yaml` | Post-execution wrap-up | `/sp:dev-wrap`, `/sp:dev-wrapall` | new in 0.2.12 |
 
-New commands in 0.3.0:
+New commands in 0.2.12:
 - `/sp:dev-idea` — unified entry from a vague idea to a feature with AC and a decomposed task batch.
 - `/sp:dev-wrap` — single-task post-execution wrap-up (learnings, metrics, doc-sync, feature transition).
 - `/sp:dev-wrapall` — batch post-execution wrap-up with `--since`/`--feature`/`--status` filters.

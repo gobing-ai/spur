@@ -1,6 +1,6 @@
 ---
 description: Run a task — full pipeline (precheck→implement→test→review→approve→verify→record→done) or single-step (implement)
-argument-hint: "<wbs> [--mode <full|implement>] [--agent <name|auto>] [--auto] [--next] [--wrap]"
+argument-hint: "<wbs> [--mode <full|implement>] [--agent <name|auto>] [--auto] [--next] [--wrap] [--continue]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 ---
 
@@ -33,6 +33,7 @@ Pick a task and run it. Two modes:
 | `--auto` | Skip the HITL approval gate (full mode) or skip confirmations (implement mode) | off |
 | `--next` | Advance the task to its next pipeline step. On success, transition `todo → wip → testing` through the lifecycle FSM (guards honored) and invoke `/sp:dev-verify <wbs> --auto --next`. **Implies `--mode implement`** — see below. | off |
 | `--wrap` | Trigger `wrapup-pipeline.yaml` after the task reaches `done`. Equivalent to running `/sp:dev-wrap <wbs>` after execution. Does not change the execution pipeline. | off |
+| `--continue` | Resume an interrupted run: read the latest checkpoint from `.spur/memory/sessions/` and surface its `next_action` before resuming. See "Resume from checkpoint" below. | off |
 
 ## Behavior
 
@@ -175,8 +176,10 @@ implementation competency:
 When `--wrap` is set and the task reaches `done`, automatically invoke the wrap-up pipeline:
 
 ```bash
-spur workflow run .spur/workflows/wrapup-pipeline.yaml --vars '{"tasks":["<wbs>"],"profile":"interactive|auto"}'
+spur workflow run .spur/workflows/wrapup-pipeline.yaml --vars '{"tasks":"[\"<wbs>\"]","profile":"interactive|auto"}'
 ```
+
+(`tasks` is a JSON-encoded string — `--vars` values must be strings.)
 
 This is equivalent to running `/sp:dev-wrap <wbs>` after execution. The wrap-up captures learnings,
 records metrics, syncs docs, and optionally advances the feature / cleans up the branch (when `--merge`

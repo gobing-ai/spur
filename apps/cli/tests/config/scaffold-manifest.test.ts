@@ -13,6 +13,8 @@ describe('scaffold-manifest', () => {
         expect(sources).toContain('workflows/feature-lifecycle.yaml');
         expect(sources).toContain('workflows/task-pipeline.yaml');
         expect(sources).toContain('workflows/planning-pipeline.yaml');
+        expect(sources).toContain('workflows/idea-pipeline.yaml');
+        expect(sources).toContain('workflows/wrapup-pipeline.yaml');
         // Section matrix
         expect(sources).toContain('tasks/section-matrix.yaml');
         // Task templates
@@ -40,8 +42,8 @@ describe('scaffold-manifest', () => {
     });
 
     test('has the expected entry count (updated when adding scaffolds)', () => {
-        // 16 original + 1 planning-pipeline + 7 docs (root) + 7 docs templates = 31
-        expect(SCAFFOLD_MANIFEST.length).toBe(31);
+        // 16 original + 1 planning-pipeline + 2 idea/wrapup pipelines + 7 docs (root) + 7 docs templates = 33
+        expect(SCAFFOLD_MANIFEST.length).toBe(33);
     });
 
     test('docs entries are root-scoped and preserve-marked (R1 — task 0088)', () => {

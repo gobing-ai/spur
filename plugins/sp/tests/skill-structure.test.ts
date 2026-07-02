@@ -347,4 +347,22 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(bs).toContain('## Design Approval Gate');
         expect(bs).toContain('needs_design');
     });
+
+    test('R36 — every vars.* template reference in a workflow YAML is declared in its vars block', () => {
+        // The engine's template resolver THROWS on an undefined var ("Workflow variable "x" is
+        // not defined") — it does not fall through to the next transition. An undeclared var in
+        // any guard or action therefore crashes the run at that state. Declaring a default in the
+        // YAML's `vars:` block is the only safe shape (callers may override via --vars).
+        const offenders: string[] = [];
+        for (const file of readdirSync(WORKFLOWS_DIR).filter((name) => name.endsWith('.yaml'))) {
+            const text = readFileSync(join(WORKFLOWS_DIR, file), 'utf8');
+            const varsBlock = text.match(/^vars:\n((?:[ \t]+\S.*\n)+)/m)?.[1] ?? '';
+            const declared = new Set([...varsBlock.matchAll(/^[ \t]+([a-zA-Z_][a-zA-Z0-9_]*):/gm)].map((m) => m[1]));
+            for (const match of text.matchAll(/\$\{vars\.([a-zA-Z_][a-zA-Z0-9_]*)\}/g)) {
+                const name = match[1];
+                if (!declared.has(name)) offenders.push(`${file} → \${vars.${name}}`);
+            }
+        }
+        expect(offenders).toEqual([]);
+    });
 });

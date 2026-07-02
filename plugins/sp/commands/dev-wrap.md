@@ -33,9 +33,13 @@ Thin wrapper: builds the `--vars` JSON and invokes the wrapup pipeline.
 
 ```bash
 spur workflow run .spur/workflows/wrapup-pipeline.yaml \
-  --vars '{"tasks":["<wbs>"],"profile":"interactive|auto","merge":"true|false"}' \
+  --vars '{"tasks":"[\"<wbs>\"]","profile":"interactive|auto","merge":"true|false"}' \
   [--dry-run]
 ```
+
+> **`tasks` is a JSON-encoded string, not a JSON array.** `spur workflow run --vars` accepts only
+> string values (`--vars values must be strings`); the pipeline's guards parse the string with
+> `jq length`.
 
 The pipeline runs: task-resolve -> doc-sync -> learning-capture -> metrics-record -> (feature-transition) -> (branch-cleanup) -> done.
 
@@ -74,8 +78,10 @@ DRYRUN=""
 # Parse --merge -> MERGE="true"
 # Parse --dry-run -> DRYRUN="--dry-run"
 
-spur workflow run .spur/workflows/wrapup-pipeline.yaml \
-  --vars "{\"tasks\":[\"$WBS\"],\"profile\":\"$PROFILE\",\"merge\":\"$MERGE\"}" $DRYRUN
+# tasks must be a JSON-encoded STRING (--vars values are strings); jq -nc guarantees the shape.
+VARS=$(jq -nc --arg tasks "[\"$WBS\"]" --arg profile "$PROFILE" --arg merge "$MERGE" \
+  '{tasks:$tasks, profile:$profile, merge:$merge}')
+spur workflow run .spur/workflows/wrapup-pipeline.yaml --vars "$VARS" $DRYRUN
 ```
 
 On HITL pause (branch-cleanup with `--merge`), surface the run id and continue instruction:

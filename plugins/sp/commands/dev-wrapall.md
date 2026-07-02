@@ -88,8 +88,11 @@ fi
 DRYRUN=""
 # Parse --dry-run -> DRYRUN="--dry-run"
 
-spur workflow run .spur/workflows/wrapup-pipeline.yaml \
-  --vars "{\"tasks\":$TASKS,\"feature\":\"$FEATURE\",\"profile\":\"$PROFILE\",\"merge\":\"$MERGE\"}" $DRYRUN
+# tasks must be a JSON-encoded STRING (--vars values are strings; the CLI rejects raw arrays);
+# jq -nc passes the array text through as a string value.
+VARS=$(jq -nc --arg tasks "$TASKS" --arg feature "$FEATURE" --arg profile "$PROFILE" --arg merge "$MERGE" \
+  '{tasks:$tasks, feature:$feature, profile:$profile, merge:$merge}')
+spur workflow run .spur/workflows/wrapup-pipeline.yaml --vars "$VARS" $DRYRUN
 ```
 
 On HITL pause (branch-cleanup with `--merge`), surface the run id and continue instruction:

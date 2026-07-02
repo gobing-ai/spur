@@ -1,6 +1,6 @@
 ---
 description: Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via task-pipeline.yaml, emit a batch report
-argument-hint: "--tasks <selector> [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <name|auto>] [--json] [--wrap]"
+argument-hint: "--tasks <selector> [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <name|auto>] [--json] [--wrap] [--continue]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 ---
 
@@ -34,6 +34,7 @@ contract.
 | `--agent <name\|auto>` | Pin the per-task step executor. Merged into each pipeline's `--vars.agent`. Omit (the default) → spawned `agent.run` steps use the configured default executor (`omp`). **`sp:super-coder` remains the batch orchestrator regardless of `--agent`** — the flag pins the step executor, not the orchestrator. | (configured default — `omp`) |
 | `--json` | Emit the batch report as JSON (machine consumption). Off emits the markdown report to the transcript. | off |
 | `--wrap` | Trigger `wrapup-pipeline.yaml` after the batch completes. Equivalent to running `/sp:dev-wrapall` after execution. Does not change the execution pipeline. | off |
+| `--continue` | Resume an interrupted batch: read the latest checkpoint from `.spur/memory/sessions/` and surface its `next_action` before resuming. See "Resume from checkpoint" below. | off |
 
 ### Selector grammar (`--tasks <value>`)
 
@@ -87,8 +88,10 @@ When `--wrap` is set and the batch completes (all attempted tasks reach `done` o
 automatically invoke the wrap-up pipeline:
 
 ```bash
-spur workflow run .spur/workflows/wrapup-pipeline.yaml --vars '{"tasks":["<wbs1>","<wbs2>",...],"profile":"interactive|auto"}'
+spur workflow run .spur/workflows/wrapup-pipeline.yaml --vars '{"tasks":"[\"<wbs1>\",\"<wbs2>\"]","profile":"interactive|auto"}'
 ```
+
+(`tasks` is a JSON-encoded string — `--vars` values must be strings.)
 
 This is equivalent to running `/sp:dev-wrapall` after execution. The wrap-up captures learnings,
 records metrics, syncs docs, and optionally advances the feature / cleans up the branch (when `--merge`
