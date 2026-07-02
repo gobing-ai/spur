@@ -86,6 +86,7 @@ else
 fi
 # Apply --since filter if given (frontmatter updated_at >= date)
 DRYRUN=""
+# Parse --dry-run -> DRYRUN="--dry-run"
 
 spur workflow run .spur/workflows/wrapup-pipeline.yaml \
   --vars "{\"tasks\":$TASKS,\"feature\":\"$FEATURE\",\"profile\":\"$PROFILE\",\"merge\":\"$MERGE\"}" $DRYRUN
