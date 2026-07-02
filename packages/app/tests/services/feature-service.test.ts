@@ -111,6 +111,42 @@ describe('FeatureService', () => {
         });
     });
 
+    describe('updateSection', () => {
+        test('replaces an existing feature section body from a file', async () => {
+            const created = await svc.create('Section Feature');
+            const source = join(root, 'feature-goal.md');
+            writeFileSync(source, 'A sharper goal.\n');
+
+            const result = await svc.updateSection(created.ref.id, 'Goal', source);
+
+            expect(result.ref.id).toBe(created.ref.id);
+            const shown = await svc.show(created.ref.id);
+            expect(shown?.content).toContain('## Goal\nA sharper goal.\n');
+        });
+
+        test('strips a duplicate leading section heading from the source file', async () => {
+            const created = await svc.create('Heading Strip Feature');
+            const source = join(root, 'feature-ac.md');
+            writeFileSync(source, '## Acceptance Criteria\n\n```gherkin\nFeature: X\n```\n');
+
+            await svc.updateSection(created.ref.id, 'Acceptance Criteria', source);
+
+            const shown = await svc.show(created.ref.id);
+            expect(shown?.content).toContain('## Acceptance Criteria\n```gherkin\nFeature: X\n```\n');
+            expect(shown?.content).not.toContain('## Acceptance Criteria\n## Acceptance Criteria');
+        });
+
+        test('throws with available sections when the section is absent', async () => {
+            const created = await svc.create('Missing Section Feature');
+            const source = join(root, 'feature-missing.md');
+            writeFileSync(source, 'body\n');
+
+            await expect(svc.updateSection(created.ref.id, 'Background', source)).rejects.toThrow(
+                /Available sections: Goal, Scope, Acceptance Criteria, Tasks, Notes, History/,
+            );
+        });
+    });
+
     describe('transition — actor attribution', () => {
         // Why: the API caller's identity must reach the History audit line, not be
         // silently replaced by 'system'. A regression here (dropping the actor arg)

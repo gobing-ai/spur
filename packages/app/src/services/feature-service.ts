@@ -44,6 +44,21 @@ export interface FeatureShowResult extends FeatureSummary {
 
 const FEATURE_FILE_RE = /^([A-Z][1-9]*)_(.+)\.md$/;
 
+/**
+ * Strip a redundant leading section header from a feature section body.
+ *
+ * This mirrors task section updates: callers pass the section name separately,
+ * so a body file that starts with `## Acceptance Criteria` would duplicate the
+ * heading unless stripped before the shared write path replaces the section.
+ */
+function stripLeadingSectionHeader(body: string, sectionName: string): string {
+    const match = body.match(/^(\s*)#{1,6}\s+(.+?)\s*(?:\n|$)/);
+    if (match === null) return body;
+    const headingText = (match[2] ?? '').trim();
+    if (headingText.toLowerCase() !== sectionName.trim().toLowerCase()) return body;
+    return body.slice(match[0].length).replace(/^\n+/, '');
+}
+
 /** Core feature verbs over PlanningWriteService and direct corpus reads. */
 export class FeatureService {
     readonly ctx: FeatureServiceContext;
@@ -103,6 +118,21 @@ export class FeatureService {
     async transition(id: string, toStatus: string, actor?: string): Promise<WriteResult> {
         const ref = await this.refFor(id);
         return this.ctx.writeService.transition(ref, toStatus, actor ?? this.ctx.actor ?? 'system');
+    }
+
+    /** Replace an existing feature section body from a source file. */
+    async updateSection(id: string, sectionName: string, sourceFile: string): Promise<WriteResult> {
+        const ref = await this.refFor(id);
+        const current = await this.ctx.fs.readFile(ref.filePath);
+        const doc = MarkdownDocument.parse(current, 'feature');
+        if (!doc.sectionNames.includes(sectionName)) {
+            throw new Error(
+                `Feature ${id} does not contain section "${sectionName}". Available sections: ${doc.sectionNames.join(', ')}`,
+            );
+        }
+        const raw = await this.ctx.fs.readFile(sourceFile);
+        const body = stripLeadingSectionHeader(raw, sectionName);
+        return this.ctx.writeService.updateSection(ref, sectionName, body);
     }
 
     /** List features. */

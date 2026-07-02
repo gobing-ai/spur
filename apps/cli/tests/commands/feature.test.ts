@@ -8,7 +8,7 @@
  * and exit codes 0/1/2 (design §7.2, §10).
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { rmSync } from 'node:fs';
+import { rmSync, writeFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { main } from '../../src/index';
@@ -123,6 +123,55 @@ describe('spur feature CLI', () => {
             output: createCapturedOutput(),
         });
         expect(exitCode).toBe(2);
+    });
+
+    test('update --section --from-file replaces a feature section', async () => {
+        const cOut = createCapturedOutput();
+        await main(['feature', 'create', 'Section CLI'], { cwd, output: cOut });
+        const id = createdId(cOut);
+        const source = join(cwd, 'goal-body.md');
+        writeFileSync(source, 'CLI-written goal.\n');
+
+        const exitCode = await main(['feature', 'update', id, '--section', 'Goal', '--from-file', source], {
+            cwd,
+            output: createCapturedOutput(),
+        });
+        expect(exitCode).toBe(0);
+
+        const shown = createCapturedOutput();
+        await main(['feature', 'show', id], { cwd, output: shown });
+        expect(shown.messages.join('')).toContain('## Goal\nCLI-written goal.\n');
+    });
+
+    test('update --section without --from-file exits 2', async () => {
+        const cOut = createCapturedOutput();
+        await main(['feature', 'create', 'No Source'], { cwd, output: cOut });
+        const id = createdId(cOut);
+        const exitCode = await main(['feature', 'update', id, '--section', 'Goal'], {
+            cwd,
+            output: createCapturedOutput(),
+        });
+        expect(exitCode).toBe(2);
+    });
+
+    test('update status and section in one invocation', async () => {
+        const cOut = createCapturedOutput();
+        await main(['feature', 'create', 'Section Plus Status'], { cwd, output: cOut });
+        const id = createdId(cOut);
+        const source = join(cwd, 'scope-body.md');
+        writeFileSync(source, 'In scope: combined update.\n\nOut of scope: unrelated work.\n');
+
+        const exitCode = await main(['feature', 'update', id, 'active', '--section', 'Scope', '--from-file', source], {
+            cwd,
+            output: createCapturedOutput(),
+        });
+        expect(exitCode).toBe(0);
+
+        const shown = createCapturedOutput();
+        await main(['feature', 'show', id, '--json'], { cwd, output: shown });
+        const parsed = JSON.parse(lastMessage(shown));
+        expect(parsed.frontmatter.status).toBe('active');
+        expect(parsed.content).toContain('In scope: combined update.');
     });
 
     test('list --json returns features sorted by ID with status/priority', async () => {

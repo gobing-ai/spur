@@ -5,6 +5,7 @@ import {
     FeatureService,
     PlanningWriteService,
     resolvePlanningFolders,
+    type WriteResult,
 } from '@gobing-ai/spur-app';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
@@ -68,30 +69,65 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
     // ── update ──
     feature
         .command('update')
-        .summary('Update a feature status (lifecycle) or a scalar frontmatter field.')
+        .summary('Update a feature status, scalar frontmatter field, or section body.')
         .argument('<id>', 'Feature ID')
-        .argument('[status]', 'New lifecycle status (omit when using --field/--value)')
+        .argument('[status]', 'New lifecycle status')
         .option('--field <key>', 'Frontmatter field to set (e.g. priority)')
         .option('--value <value>', 'New value for --field')
+        .option('--section <name>', 'Section name to replace')
+        .option('--from-file <path>', 'File to read section body from (requires --section)')
         .option('--folder <path>', 'Custom features folder')
         .option('--json', 'Output machine-readable JSON')
         .action(async (id, status, options) => {
             const svc = await makeService(context, options.folder);
             try {
+                let result: WriteResult | undefined;
+                if (options.section !== undefined) {
+                    if (options.fromFile === undefined) {
+                        context.output.error('--from-file is required with --section');
+                        context.setExitCode(2);
+                        return;
+                    }
+                    result = await svc.updateSection(id, options.section, options.fromFile);
+                    if (!options.json) {
+                        for (const warning of result.warnings ?? []) {
+                            context.output.error(warning);
+                        }
+                        context.output.write(`Updated section '${options.section}' in feature ${result.ref.id}`);
+                    }
+                } else if (options.fromFile !== undefined) {
+                    context.output.error('--section is required with --from-file');
+                    context.setExitCode(2);
+                    return;
+                }
                 if (options.field !== undefined) {
                     if (options.value === undefined) {
                         context.output.error('--value is required with --field');
                         context.setExitCode(2);
                         return;
                     }
-                    const result = await svc.update(id, options.field, options.value);
-                    write(context, options.json, result, `Updated ${options.field} on feature ${result.ref.id}`);
-                } else if (status !== undefined) {
-                    const result = await svc.transition(id, status);
-                    write(context, options.json, result, `${result.ref.id}: ${result.fromStatus} → ${result.toStatus}`);
-                } else {
-                    context.output.error('Either <status> or --field/--value is required');
+                    result = await svc.update(id, options.field, options.value);
+                    if (!options.json) {
+                        context.output.write(`Updated ${options.field} on feature ${result.ref.id}`);
+                    }
+                } else if (options.value !== undefined) {
+                    context.output.error('--field is required with --value');
                     context.setExitCode(2);
+                    return;
+                }
+                if (status !== undefined) {
+                    result = await svc.transition(id, status);
+                    if (!options.json) {
+                        context.output.write(`${result.ref.id}: ${result.fromStatus} → ${result.toStatus}`);
+                    }
+                }
+                if (result === undefined) {
+                    context.output.error('Either <status>, --field/--value, or --section/--from-file is required');
+                    context.setExitCode(2);
+                    return;
+                }
+                if (options.json) {
+                    context.output.write(toJson(result));
                 }
             } catch (err) {
                 context.output.error(String(err));
@@ -245,15 +281,6 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                 context.setExitCode(1);
             }
         });
-}
-
-/** Write a write-result either as JSON or a human line. */
-function write(context: CliContext, json: boolean | undefined, result: unknown, humanLine: string): void {
-    if (json) {
-        context.output.write(toJson(result));
-    } else {
-        context.output.write(humanLine);
-    }
 }
 
 async function makeService(context: CliContext, folderOverride?: string): Promise<FeatureService> {
