@@ -3,7 +3,7 @@ template: standard
 schema_version: 1
 name: "sp plugin hands-off ready — idea-to-feature flow + post-execution wrap-up + cross-session learning"
 description: ""
-status: backlog
+status: testing
 type: task
 profile: standard
 feature_id: I
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-01T06:04:09.068Z"
-updated_at: "2026-07-01T15:28:43.774Z"
+updated_at: "2026-07-02T00:29:19.410Z"
 ---
 
 ## 0167. sp plugin hands-off ready — idea-to-feature flow + post-execution wrap-up + cross-session learning
@@ -342,6 +342,19 @@ This parent task will decompose into approximately 7-8 subtasks:
 - **PRD template files** (rd3 product-management pattern) — out of scope per `plugins/sp/skills/spur-dev/references/product-planning.md` constraint. PRD-shaped output guidance is already in `plugins/sp/skills/spur-dev/references/product-planning.md`.
 - **New lifecycle workflows** — not needed. Existing `feature-lifecycle.yaml` and `task-lifecycle.yaml` cover all persistent entities.
 ### Plan
+## Sub-Task Roster
+
+| WBS | Task | Phase | Status |
+|-----|------|-------|--------|
+| 0168 | Phase 1 — Foundation, cross-cutting conventions, brainstorm enhancement | 1 | done |
+| 0169 | Phase 2 — Wrap-up workflow, wrapup-pipeline.yaml, dev-wrap/dev-wrapall | 2 | done |
+| 0170 | Phase 3 — Idea-to-feature workflow, idea-pipeline.yaml, dev-idea | 3 | done |
+| 0171 | Phase 4 — Auto-flag propagation, checkpoint write/read actions | 4 | done |
+| 0172 | Phase 5 — Documentation, README, plugin.json 0.3.0, dev-operations | 5 | done |
+| 0173 | Phase 6 — Verification, R30-R35 structural tests, full gate dogfood | 6 | done |
+| 0174 | 0167 Follow-ups — post-implementation actions (Track B operational) | — | testing |
+| 0175 | spur feature update --section --from-file support (unblocks ac-generate) | — | todo |
+
 ## Overview
 
 6 phases, 27 steps. Each phase is independently testable. Phases are sequential — phase N+1 depends on phase N's outputs (files, conventions, commands). Within a phase, steps are sequential.
@@ -422,6 +435,89 @@ Phase 1 (Foundation) → Phase 2 (Wrap-Up) → Phase 3 (Idea-to-Feature) → Pha
 ```
 
 Phase 1 must complete first because Phase 2 and 3 depend on the conventions in `plugins/sp/skills/spur-dev/references/cross-cutting.md`. Phase 3 depends on Phase 2's `plugins/sp/skills/spur-dev/references/dev-operations.md` registration pattern. Phase 4 depends on Phase 2 and 3's commands. Phase 5 documents all prior phases. Phase 6 verifies everything.
+
+<!-- Filled during implementation: file:line change map and concise rationale. -->
+
+
+<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+
+
+<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+
+## Internal (sp plugin)
+
+**sp Plugin Core**
+- **ADR-022**: Orchestration is configuration — `spur workflow` YAML files are the orchestration mechanism, not skills.
+- **`plugins/sp/plugin.json`**: Plugin manifest (version 0.2.3 → 0.3.0 after this task).
+- **`plugins/README.md`**: Plugin README — command/workflow/skill inventory.
+- **`plugins/sp/skills/spur-dev/SKILL.md`**: The thin orchestration spine — dispatches competency skills, owns the lifecycle FSM, CLI-gated section-write contract.
+- **`plugins/sp/skills/spur-dev/references/dev-operations.md`**: Authoritative operation reference — 13 existing operations + 3 new (`idea`, `wrap`, `wrapall`).
+- **`plugins/sp/skills/spur-dev/references/cross-cutting.md`**: Cross-cutting rules — two-surface `--agent` contract, auto-decision principles, iron laws, pipeline alignment, learning log convention, session checkpoint convention.
+- **`plugins/sp/skills/spur-dev/references/product-planning.md`**: PM constraint — no standalone PM skill/command; elicitation taxonomy + decomposition decision rules.
+- **`plugins/sp/skills/spur-dev/references/ac-style-guide.md`**: AC conventions — R-numbering, @core/@edge tiers.
+- **`plugins/sp/skills/spur-dev/references/execution-workflow.md`**: Task pipeline execution loop (precheck → implement → test → review → verify → record → done).
+- **`plugins/sp/skills/spur-dev/references/execution-batch.md`**: Batch execution loop (resolve → topo-sort → per-task pipeline → batch report).
+- **`plugins/sp/skills/spur-dev/references/feature-link-helper.md`**: Feature↔task linking helper.
+- **`plugins/sp/skills/brainstorm/SKILL.md`**: Current brainstorm skill (3-phase workflow, to be enhanced with 6 Superpowers patterns).
+- **`plugins/sp/skills/spec-decomposition/SKILL.md`**: Decomposition competency — turns validated feature into task batch.
+- **`plugins/sp/skills/doc-evolve/SKILL.md`**: Document evolution — drift audit, sync check, lesson-append.
+- **`plugins/sp/skills/branch-workflow/SKILL.md`**: Branch lifecycle — create, merge, cleanup.
+- **`plugins/sp/skills/sys-architecture/SKILL.md`**: Architecture competency — design docs, ADR entries.
+- **`plugins/sp/agents/super-coder.md`**: Task pipeline driver agent.
+- **`plugins/sp/agents/expert-spur.md`**: Spur CLI corpus work agent.
+- **`plugins/sp/tests/skill-structure.test.ts`**: Structural invariants test (R13–R28; R30-R35 added by this task).
+
+**sp Plugin Commands (existing)**
+- `dev-brainstorm.md`, `dev-plan.md`, `dev-run.md`, `dev-runall.md`, `dev-refine.md`, `dev-verify.md`, `dev-unit.md`, `dev-dogfood.md`, `dev-handover.md`, `dev-fixall.md`, `dev-gitmsg.md`, `dev-review.md`, `dev-changelog.md`, `dev-parallel.md`
+
+**sp Plugin Commands (new, created by this task)**
+- `dev-idea.md` — unified idea-to-feature entry point (wraps `idea-pipeline.yaml`)
+- `dev-wrap.md` — single-task post-execution wrap-up (wraps `wrapup-pipeline.yaml`)
+- `dev-wrapall.md` — batch post-execution wrap-up (wraps `wrapup-pipeline.yaml` with task list)
+
+**Existing Spur Workflows**
+- **`config/workflows/basic.yaml`**: Simple implement → check → fix → done loop.
+- **`config/workflows/feature-dev.yaml`**: Umbrella: brainstorm → plan → execute-tasks → feature-verify → done. Delegates task execution to `task-pipeline.yaml`.
+- **`config/workflows/feature-lifecycle.yaml`**: Feature FSM: backlog → active → verifying → done; cancelled terminal.
+- **`config/workflows/planning-pipeline.yaml`**: Front-half planning: phasing → feature-id → design-gen → design-approval → handoff.
+- **`config/workflows/task-lifecycle.yaml`**: Task FSM: backlog → todo → wip → testing → done; cancelled terminal.
+- **`config/workflows/task-pipeline.yaml`**: Task execution: precheck → implement → test → review → approve → verify → record → done.
+
+**New Spur Workflows (created by this task)**
+- **`.spur/workflows/idea-pipeline.yaml`** (`config/workflows/idea-pipeline.yaml` physical source): Ideation phase: start → discovery → feature-create → ac-generate → feature-check → system-design → decompose → batch-create → handoff.
+- **`.spur/workflows/wrapup-pipeline.yaml`** (`config/workflows/wrapup-pipeline.yaml` physical source): Wrap-up phase: start → doc-sync → learning-capture → metrics-record → feature-transition → branch-cleanup → done.
+
+## Internal (Spur core)
+
+- **`docs/00_ADR.md`**: ADR-022 (orchestration is configuration), ADR-028 (expert-spur agent).
+- **`packages/app/`**: Application services (AgentService, WorkflowService, etc.).
+- **`drizzle/0000_spur_cli_foundation.sql`**: Active schema (CLI domain + history + workflow engine).
+
+## Internal (task)
+
+- **`docs/tasks2/0167_sp-plugin-hands-off-ready-idea-to-feature-flow-post-executio.md`**: This task file.
+
+## External (reference repos)
+
+**vendors/Superpowers**
+- **`vendors/Superpowers/skills/brainstorming/SKILL.md`**: Source for 6 brainstorm patterns — hard gate, "nothing is too simple", spec self-review, user review gate, incremental design presentation, scope decomposition check.
+- **`vendors/Superpowers/skills/writing-plans/SKILL.md`**: Source for scope decomposition check pattern.
+- **`vendors/Superpowers/skills/verification-before-completion/SKILL.md`**: Source for verification iron law (C1).
+- **`vendors/Superpowers/skills/using-superpowers/SKILL.md`**: Skill discovery pattern (always-on + auto-activate).
+
+**vendors/gstack**
+- **`vendors/gstack/skills/spec/SKILL.md`**: Source for idea-to-spec five-phase flow (inspires A1).
+- **`vendors/gstack/skills/autoplan/SKILL.md`**: Source for 6 auto-decision principles (inspires A3).
+- **`vendors/gstack/skills/learn/SKILL.md`**: Source for structured learning capture (inspires B2).
+- **`vendors/gstack/skills/retro/SKILL.md`**: Source for retrospective pattern (deferred — daily-summary covers daily).
+- **`vendors/gstack/skills/ship/SKILL.md`**: Source for verification iron law + metrics persistence (inspires B1 metrics-record).
+- **`vendors/gstack/skills/context_save_restore/SKILL.md`**: Source for session checkpoint pattern (inspires B3).
+
+**~/projects/cc-agents/plugins/rd3**
+- **`~/projects/cc-agents/plugins/rd3/skills/feature-planning/SKILL.md`**: Source for combined Phase 1+2 entry point with `--plan` flag (inspires A1).
+- **`~/projects/cc-agents/plugins/rd3/skills/product-management/SKILL.md`**: Source for PM orchestration patterns. Extracted into `plugins/sp/skills/spur-dev/references/product-planning.md` (elicitation taxonomy + decomposition decision rules). No standalone PM skill created (per `plugins/sp/skills/spur-dev/references/product-planning.md` constraint).
+- **`~/projects/cc-agents/plugins/rd3/skills/product-management/references/elicitation.md`**: Source for expertise-adaptive questioning (enriches A2).
+- **`~/projects/cc-agents/plugins/rd3/skills/product-management/references/decomposition-strategies.md`**: Source for per-profile decomposition rules (enriches `plugins/sp/skills/spur-dev/references/product-planning.md`).
 ### Solution
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->
@@ -510,3 +606,6 @@ Phase 1 must complete first because Phase 2 and 3 depend on the conventions in `
 - **`~/projects/cc-agents/plugins/rd3/skills/product-management/references/elicitation.md`**: Source for expertise-adaptive questioning (enriches A2).
 - **`~/projects/cc-agents/plugins/rd3/skills/product-management/references/decomposition-strategies.md`**: Source for per-profile decomposition rules (enriches `plugins/sp/skills/spur-dev/references/product-planning.md`).
 ### History
+- 2026-07-02T00:21:17.289Z backlog → todo (system)
+- 2026-07-02T00:29:15.058Z todo → wip (system)
+- 2026-07-02T00:29:19.410Z wip → testing (system)

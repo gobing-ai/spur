@@ -2,11 +2,11 @@
 schema_version: 1
 id: "I"
 name: "sp plugin hands-off ready"
-status: backlog
+status: active
 priority: P2
 tags: []
 created_at: "2026-07-01T06:18:45.452Z"
-updated_at: "2026-07-01T06:18:45.454Z"
+updated_at: "2026-07-02T00:21:35.857Z"
 ---
 
 # I: sp plugin hands-off ready
@@ -47,3 +47,4 @@ Feature: sp plugin hands-off ready
 ## Notes
 
 ## History
+- 2026-07-02T00:21:35.857Z backlog → active (system)
