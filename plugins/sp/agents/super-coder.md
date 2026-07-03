@@ -193,8 +193,10 @@ went — you ARE in dogfood mode. You do not get to decide it isn't; the request
 dogfood request as "execute + summarize in chat" is a **contract violation**, not a judgment call.
 
 In dogfood mode the report MUST be **persisted to disk**, not just printed in your final message.
-An inline-only report evaporates — `docs/dogfood/` is the durable evidence trail. A run that ends
-with no file under `docs/dogfood/` has FAILED the dogfood contract even if the underlying task is `done`.
+An inline-only report evaporates — `docs/dogfood/` holds the local-only run record (gitignored by
+design; never committed — reference it by run ID/summary in task files, not by path presented as
+committed evidence). A run that ends with no file under `docs/dogfood/` has FAILED the dogfood
+contract even if the underlying task is `done`.
 
 Do this by delegating report generation to the SSOT skill rather than inventing a report format:
 
@@ -238,7 +240,7 @@ command printing `0`.
 | 2 | F2 — honest transition | (state it) | named a pipeline run-id, OR "manual + `spur task check <wbs> --strict-core` PASS" |
 | 3 | F4 — gate evidence | (recall change type) | raw gate tails pasted if code/test/infra touched; one-liner only if pure-doc |
 | 4 | F5 — no `/tmp` residue | `ls /tmp/<wbs>-* 2>/dev/null \| wc -l` | output is `0` |
-| 5 | Dogfood (only if in dogfood mode) | `ls docs/dogfood/ \| grep <date-or-slug>` | a report file exists for this run |
+| 5 | Dogfood (only if in dogfood mode) | `rg -c '^### 3\. Monitor Ledger' <report> && rg -c '── Dogfood Summary ──' <report>` | both counts are `>= 1` (report exists under `docs/dogfood/` AND carries the mandatory ledger section AND the mandatory summary footer — not just any file matching the slug) |
 
 If check #1 prints anything other than `0`, you are **not done**: find each `- [ ]` line and either
 check it (real completed work), replace it with a real item, or remove it (stray placeholder in an

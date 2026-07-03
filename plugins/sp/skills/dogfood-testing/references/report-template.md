@@ -47,6 +47,11 @@ Emit these sections in order. Headings are fixed (machine-parseable); never rena
 ≥1 unresolved issue; `FAIL` = the run could not complete (a step blocked all downstream steps). A
 finding alone never lowers the verdict — findings are improvements, not failures.
 
+**The verdict grades the TESTEE, not the surrounding task.** If the testee is a
+pipeline/command and it failed, the verdict is `FAIL` (or `PARTIAL` per the rule above) even
+when the task was completed by other means; record the recovery under Issues/What-We-Did,
+never in the verdict value. Only `PASS` / `PARTIAL` / `FAIL` are legal values.
+
 ### 3. Monitor Ledger
 
 The report MUST include the live ledger table before the narrative. Do not summarize the ledger away:

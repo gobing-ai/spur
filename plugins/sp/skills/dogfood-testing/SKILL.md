@@ -184,6 +184,47 @@ directly. The `/sp:dev-dogfood` command is the entry point.
 Run the four-phase protocol via the Bash/CLI toolset; invoke this skill directly for the protocol
 logic and the `spur` CLI for the `--task` sink. Parse `--json` where the testee supports it.
 
+A session on these platforms never sees `Skill()` reference-file expansion, so the report contract
+is restated here **verbatim** rather than by pointer — do not fall back to a looser ad hoc report
+shape just because `report-template.md` wasn't auto-loaded.
+
+**The six mandatory section headings** (in order, each report MUST contain all six):
+
+1. `### 1. Testee`
+2. `### 2. Execution Summary`
+3. `### 3. Monitor Ledger`
+4. `### 4. What We Did`
+5. `### 5. Issues`
+6. `### 6. Findings`
+
+**The ledger requirement.** `### 3. Monitor Ledger` MUST contain the live per-step ledger table
+(populated during Phase 2/3 as steps run, never reconstructed from memory at the end) — this is
+the section [monitor-ledger.md](references/monitor-ledger.md) governs in full.
+
+**The footer requirement.** Every report — saved or not — MUST end by printing this exact block
+(verdict is strictly `PASS` / `PARTIAL` / `FAIL`, grading the testee, not the surrounding task):
+
+```
+── Dogfood Summary ──
+Result: PASS   (N fixed, N unresolved, N findings)
+Tokens: ~N total  |  ~N cached (~X% hit rate)  [~estimate]
+
+Fixed issues:
+  • <label>   (or: (none))
+
+Unresolved issues:
+  • <label>   (or: (none))
+
+Findings (P1+P2):
+  • P? — <label>   (or: (none))
+
+[Report: <path>]   ← only with --save
+[Task: <wbs>]      ← only with --task
+```
+
+A report missing any of the six headings, the live ledger, or this footer does not satisfy the
+dogfood contract on this platform, regardless of `Skill()` availability.
+
 ---
 
 **Template type**: technique
