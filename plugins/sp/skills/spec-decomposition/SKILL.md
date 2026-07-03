@@ -1,6 +1,6 @@
 ---
 name: spec-decomposition
-description: The decomposition competency — turn a validated feature into a well-formed task batch passing task-batch.schema.json: scenario-to-task mapping, template variants, sizing. Triggers: "decompose this", "break into tasks", "task batch", "create tasks from this feature", "split this work".
+description: "The decomposition competency — turn a validated feature into a well-formed task batch passing task-batch.schema.json: scenario-to-task mapping, template variants, sizing. Triggers: \"decompose this\", \"break into tasks\", \"task batch\", \"create tasks from this feature\", \"split this work\"."
 license: Apache-2.0
 metadata:
   author: spur

@@ -1,6 +1,6 @@
 ---
 name: doc-evolve
-description: Evolve docs/00-05 + AGENTS.md per docs/99_PROJECT_CONSTITUTION.md: drift audits, same-commit sync checks, frontmatter-contract verification, lesson-append. Triggers: "doc evolve", "doc drift", "sync docs", "drift audit", "are the docs stale", "append a lesson".
+description: "Evolve docs/00-05 + AGENTS.md per docs/99_PROJECT_CONSTITUTION.md: drift audits, same-commit sync checks, frontmatter-contract verification, lesson-append. Triggers: \"doc evolve\", \"doc drift\", \"sync docs\", \"drift audit\", \"are the docs stale\", \"append a lesson\"."
 license: Apache-2.0
 metadata:
   author: spur

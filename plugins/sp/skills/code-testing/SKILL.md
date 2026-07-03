@@ -1,6 +1,6 @@
 ---
 name: code-testing
-description: The testing competency — run tests, measure coverage, categorize gaps, extend the suite with targeted tests across Bun/TS, Python, Go. Triggers: "write tests", "measure coverage", "what's untested", "coverage gap", "extend the test suite", "run the tests".
+description: "The testing competency — run tests, measure coverage, categorize gaps, extend the suite with targeted tests across Bun/TS, Python, Go. Triggers: \"write tests\", \"measure coverage\", \"what's untested\", \"coverage gap\", \"extend the test suite\", \"run the tests\"."
 license: Apache-2.0
 metadata:
   author: spur

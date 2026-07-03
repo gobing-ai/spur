@@ -1,6 +1,6 @@
 ---
 name: spur-dev
-description: The thin orchestration spine for the planning→execution lifecycle: intake, feature-check/batch-create gates, the execution pipeline (precheck→implement→test→review→verify→record→done), HITL gating. Dispatches competency skills; never inlines them. Triggers: "run the pipeline", "drive this task", "plan a feature end to end", "continue the pipeline run", or operating the full lifecycle.
+description: "The thin orchestration spine for the planning→execution lifecycle: intake, feature-check/batch-create gates, the execution pipeline (precheck→implement→test→review→verify→record→done), HITL gating. Dispatches competency skills; never inlines them. Triggers: \"run the pipeline\", \"drive this task\", \"plan a feature end to end\", \"continue the pipeline run\", or operating the full lifecycle."
 license: Apache-2.0
 metadata:
   author: spur

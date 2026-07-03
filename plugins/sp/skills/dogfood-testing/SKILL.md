@@ -1,6 +1,6 @@
 ---
 name: dogfood-testing
-description: Drive a testee (skill/command/CLI) end-to-end as a real user, fix within a bounded retry budget, monitor with a live ledger, emit a structured report. Triggers: "dogfood this", "drive this command end-to-end", "test this skill as a user", "dogfood report".
+description: "Drive a testee (skill/command/CLI) end-to-end as a real user, fix within a bounded retry budget, monitor with a live ledger, emit a structured report. Triggers: \"dogfood this\", \"drive this command end-to-end\", \"test this skill as a user\", \"dogfood report\"."
 license: Apache-2.0
 metadata:
   author: spur

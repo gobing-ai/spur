@@ -1,6 +1,6 @@
 ---
 name: code-verification
-description: Verify a task's implementation against requirements and AC; SECUA code review. Produces a PASS/PARTIAL/FAIL verdict with per-requirement evidence. Triggers: "verify task", "verify this", "check the requirements", "code review", "SECUA review", "requirements traceability", "review the diff".
+description: "Verify a task's implementation against requirements and AC; SECUA code review. Produces a PASS/PARTIAL/FAIL verdict with per-requirement evidence. Triggers: \"verify task\", \"verify this\", \"check the requirements\", \"code review\", \"SECUA review\", \"requirements traceability\", \"review the diff\"."
 license: Apache-2.0
 metadata:
   author: spur
