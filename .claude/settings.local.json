@@ -12,6 +12,7 @@
       "WebFetch(domain:logtape.org)",
       "WebFetch(domain:mael.dev)",
       "WebFetch(domain:developers.cloudflare.com)",
+      "WebFetch(domain:ab.chatgpt.com)",
       "Bash(bun run:*)",
       "Bash(bun test:*)",
       "Bash(bun add:*)",
@@ -24,6 +25,7 @@
       "Bash(bun pm *)",
       "Bash(bunx biome:*)",
       "Bash(bunx tsc *)",
+      "Bash(bunx lefthook *)",
       "Bash(npx biome *)",
       "Bash(npx tsc *)",
       "Bash(npm view *)",
@@ -50,10 +52,7 @@
       "Read(//tmp/**)",
       "Read(//private/tmp/**)",
       "Write(//tmp/**)",
-      "Write(//private/tmp/**)",
-      "Read(//Users/robin/projects/cc-agents/plugins/rd3/**)",
-      "Read(//Users/robin/projects/cc-agents/vendors/**)",
-      "Read(//Users/robin/projects/cc-agents/plugins/rd3/skills/**)"
+      "Write(//private/tmp/**)"
     ]
   }
 }
