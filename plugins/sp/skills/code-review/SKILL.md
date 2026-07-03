@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: "The code-review workflow — pre-commit self-review checklist (catches 60-80% of issues), requesting agent review with structured context, and receiving/processing review findings into actionable tasks. Use before committing, before requesting peer review, or when processing review feedback. Triggers on \"review this\", \"self-review\", \"pre-commit check\", \"code review\", \"review my changes\", \"check before commit\"."
+description: "Pre-commit self-review checklist, structured review requests, and processing review findings into tasks. Triggers: \"review this\", \"self-review\", \"pre-commit check\", \"code review\", \"review my changes\", \"check before commit\"."
 license: Apache-2.0
 metadata:
   author: spur
@@ -90,8 +90,3 @@ Do **not** use this skill for:
 ## See also
 
 - **`sp:code-implementation`** — the implement step that produces the changes being reviewed.
-
----
-
-**Template type**: technique
-**Purpose**: Code review workflow — self-review before commit, structured review requests, and findings processing.

@@ -1,6 +1,6 @@
 ---
 name: spur-tdd
-description: "Test-driven development discipline for writing tests well — red-green-refactor cycle, behavior-first test design, AAA structure, naming, data builders, and mock-at-boundary anti-patterns. The how-to-write-a-good-test SSOT; pairs with sp:code-testing (which covers coverage extension). Triggers: write tests first, TDD, red-green-refactor, characterization test, contract test, how to structure/name a test, test design."
+description: "Test-driven development discipline: red-green-refactor, behavior-first test design, AAA structure, naming, data builders, mock-at-boundary anti-patterns. Triggers: \"write tests first\", \"TDD\", \"red-green-refactor\", \"characterization test\", \"contract test\", \"how to structure/name a test\"."
 license: Apache-2.0
 version: 1.0.0
 created_at: 2026-06-25
@@ -226,8 +226,3 @@ shortcut is slower — it just moves the cost to production.
 - **Composes with the pipeline.** When a task runs through `sp:spur-dev`, the implement stage can
   apply this discipline to author tests; the `test` stage (`unit` op) then proves coverage. This
   skill is the *design* half, `sp:code-testing` is the *coverage* half.
-
----
-
-**Iron Law:** no production code without a failing test first. Wrote code before the test? Delete it,
-start over.

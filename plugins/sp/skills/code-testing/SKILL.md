@@ -1,6 +1,6 @@
 ---
 name: code-testing
-description: The testing competency — run existing tests, measure coverage, categorize gaps, and pragmatically extend the suite with targeted tests, across stacks (Bun/TS, Python, Go). The deep skill the spine's `test` step dispatches to, backing `/sp:dev-unit`. Use when running tests, measuring coverage, finding untested paths, or extending a suite for coverage. Triggers on "write tests", "measure coverage", "what's untested", "coverage gap", "extend the test suite", "unit tests", "test step", "run the tests".
+description: The testing competency — run tests, measure coverage, categorize gaps, extend the suite with targeted tests across Bun/TS, Python, Go. Triggers: "write tests", "measure coverage", "what's untested", "coverage gap", "extend the test suite", "run the tests".
 license: Apache-2.0
 metadata:
   author: spur
@@ -17,7 +17,7 @@ metadata:
 
 Run existing tests, measure what is covered, categorize the gaps, and extend the suite with targeted
 tests — language-agnostic spine with per-stack adapters. This is the deep competency the
-orchestration spine (`sp:spur-dev`) dispatches to at its `test` step (via `/sp:dev-unit`). It owns
+spine (`sp:spur-dev`) dispatches to at its `test` step (via `/sp:dev-unit`). It owns
 *how to test and measure coverage well*, not *when* (the spine decides that).
 
 ## When to use
@@ -87,8 +87,3 @@ Invoked via `/sp:dev-unit <wbs>` (which the pipeline's `test` step calls), or di
 
 Invoke this skill directly for testing technique; run the stack's test commands via the Bash tool.
 The skill is the SSOT; the command and pipeline step are thin wrappers.
-
----
-
-**Template type**: technique
-**Purpose**: Run tests, measure coverage, categorize gaps, and extend the suite across stacks — the deep skill the spine's test step dispatches to, backing /sp:dev-unit

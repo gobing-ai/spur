@@ -32,15 +32,27 @@ Inline procedure (no skill delegation):
 1. Identify the current task context: read the active task via `spur task list --status wip --json`. If a WBS is known, use it; otherwise work from the current conversation.
 2. Gather context:
    - **Goal:** from the task's `## Background` / `## Requirements`.
-   - **Progress:** from `## Solution`, `## Testing`, `## Review` sections and the conversation.
+   - **Progress:** from `## Solution`, `## Testing`, `## Review` sections and the conversation —
+     reference these by path, don't restate their content.
    - **Blocker:** the `"<blocker description>"` argument.
    - **Rejected approaches:** what was tried and why it failed (from the conversation + prior handover).
+   - **Suggested skills:** which `sp:*` skill(s) the next agent should invoke, inferred from the
+     remaining Requirements/AC and the blocker itself.
    - **Next steps:** concrete actions for the next agent.
-3. Format as a markdown document with sections: Goal, Progress, Blocker, Rejected Approaches, Next Steps.
+3. Format as a markdown document with sections: Goal, Progress, Blocker, Rejected Approaches,
+   Suggested Skills, Next Steps.
 4. Write the document:
    - If a task context exists, write to the task's `## Notes` via `spur task update <wbs> --section Notes --from-file <path>`.
    - Otherwise, write to `docs/handover/<YYYY-MM-DD>-<slug>.md` (create `docs/handover/` if absent).
 5. Print the path to the handover document.
+
+## Redaction and duplication rules
+
+- **Redaction.** Never include secrets, API keys, tokens, credentials, or PII in the handover
+  document — redact with `<REDACTED>` and note what kind of value was removed.
+- **No duplication.** Reference existing artifacts — task sections, verdict files
+  (`.spur/run/<wbs>-verdict.json`), diffs, docs — by path. Don't paste their content into the
+  handover body; a pointer stays accurate, a copy goes stale.
 
 ## Implementation
 

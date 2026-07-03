@@ -1,6 +1,6 @@
 ---
 name: spec-decomposition
-description: The decomposition competency — turn a validated feature (with acceptance criteria) into a well-formed task batch that passes the task-batch.schema.json gate, mapping scenarios to tasks, choosing template variants, and sizing by the granularity standard. The deep skill the spine dispatches before execution; runs feature/spec → task batch. Use when decomposing a feature into tasks, breaking work into subtasks, sizing tasks, or producing the batch JSON for spur task batch-create. Triggers on "decompose this", "break into tasks", "decompose the feature", "task batch", "create tasks from this feature", "split this work", "decomposition".
+description: The decomposition competency — turn a validated feature into a well-formed task batch passing task-batch.schema.json: scenario-to-task mapping, template variants, sizing. Triggers: "decompose this", "break into tasks", "task batch", "create tasks from this feature", "split this work".
 license: Apache-2.0
 metadata:
   author: spur
@@ -16,7 +16,7 @@ metadata:
 # spec-decomposition — the decomposition competency
 
 Turn a validated feature (Goal, Scope, acceptance criteria) into a **well-formed task batch** that
-the CLI accepts. This is the deep competency the orchestration spine (`sp:spur-dev`) dispatches
+the CLI accepts. This is the deep competency the spine (`sp:spur-dev`) dispatches
 **before** execution — it owns *how to decompose well* (scenario→task mapping, sizing, variant
 selection), distinct from the spine which decides *when* to decompose and runs the gate.
 
@@ -70,6 +70,10 @@ the only proof the decomposition is well-formed; never hand-write task files to 
    match); a renamed scenario after batch-create breaks coverage.
 4. **Size by the standard, not by feel.** The granularity knobs in `decomposition.md` set the
    min/target/force-split bounds — apply them rather than guessing task size.
+5. **Cut vertical, not horizontal.** Every task is a thin slice through all the layers a scenario
+   touches, independently demoable on its own — never an all-schema/all-API/all-UI layer-task.
+   Prefactoring (making the change easy) is its own task, ordered first. Full doctrine, worked
+   wrong-vs-right example, and the pre-batch-create HITL quiz gate: `decomposition.md`.
 
 ## See also
 
@@ -89,8 +93,3 @@ Invoked by the spine's planning half (the decompose step), or directly via
 
 Invoke this skill directly for decomposition technique; run `spur task batch-create` via the Bash
 tool. The skill is the SSOT for the method; the CLI gate is the validator.
-
----
-
-**Template type**: technique
-**Purpose**: Turn a validated feature with AC into a well-formed, schema-gated task batch — scenario→task mapping, sizing, variant selection — the deep skill the spine dispatches before execution

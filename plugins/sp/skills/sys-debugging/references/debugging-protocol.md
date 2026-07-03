@@ -11,10 +11,10 @@ see_also:
 
 | Phase | Gate | Pass → | Fail → |
 |-------|------|--------|--------|
-| Reproduce | Failure reliably triggered? | Isolate | Document as INTERMITTENT |
+| Feedback loop | Named command is red-capable, deterministic (or pinned flake rate), fast, agent-runnable — and repro is minimised to load-bearing elements only? | Isolate | Keep narrowing; document as INTERMITTENT if still non-deterministic |
 | Isolate | Smallest repro found? | Root Cause | Continue isolating |
-| Root Cause | file:line anchor identified? | Fix | Escalate (15-min rule) |
-| Fix | Minimal fix applied, tests pass? | Regression Test | Re-examine root cause |
+| Root Cause | 3–5 ranked, falsifiable hypotheses tested top-down; file:line anchor identified? | Fix | Escalate (15-min rule) |
+| Fix | Minimal fix applied, `[DEBUG-xxxx]` instrumentation grepped out, tests pass? | Regression Test | Re-examine root cause |
 | Regression Test | Test fails-before, passes-after? | Done | Fix was incomplete |
 
 ## Common failure-mode signatures

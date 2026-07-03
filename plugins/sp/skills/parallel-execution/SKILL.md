@@ -1,6 +1,6 @@
 ---
 name: parallel-execution
-description: "The parallel-execution competency — decide when to fan out independent work across subagents, choose the right fan-out pattern for the job, and synthesize parallel results into a single coherent output. The decision framework the spine consults when a task batch contains independent items. Use when deciding whether work can be parallelized, fanning out N independent tasks, running a review panel, or merging subagent outputs. Triggers on \"fan out\", \"run in parallel\", \"parallel tasks\", \"parallelize\", \"concurrent execution\", \"multi-agent run\"."
+description: "Decide when to fan out independent work across subagents, choose the fan-out pattern, synthesize parallel results. Triggers: \"fan out\", \"run in parallel\", \"parallelize\", \"concurrent execution\", \"multi-agent run\"."
 license: Apache-2.0
 metadata:
   author: spur
@@ -113,8 +113,3 @@ Native — `Skill()` delegation and `spur agent run` for subagent spawns. The de
 ### Codex / OpenClaw / OpenCode / Antigravity
 
 Run the decision framework manually; spawn subagents via the platform's native multi-agent mechanism. Parse `--json` outputs for result synthesis.
-
----
-
-**Template type**: technique
-**Purpose**: The decision framework and execution patterns for parallel subagent fan-out — when to parallelize, which pattern to use, and how to synthesize results.

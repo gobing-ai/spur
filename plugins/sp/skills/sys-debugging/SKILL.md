@@ -1,6 +1,6 @@
 ---
 name: sys-debugging
-description: "The systematic debugging protocol — reproduce → isolate → identify root cause → fix → regression test. A disciplined alternative to ad-hoc debugging; teaches the agent to ask the debugger before the LLM, apply the 15-minute escalation rule, and create issue tasks from debugging sessions. Use when hitting a runtime error, test failure, build break, or any unexpected behavior. Triggers on \"debug this\", \"why is this failing\", \"fix this error\", \"what caused this\", \"trace this bug\", \"root cause\"."
+description: "The systematic debugging protocol: reproduce → isolate → root cause → fix → regression test. Triggers: \"debug this\", \"why is this failing\", \"fix this error\", \"what caused this\", \"trace this bug\", \"root cause\"."
 license: Apache-2.0
 metadata:
   author: spur
@@ -21,19 +21,34 @@ see_also:
 
 # sp:sys-debugging — Systematic Debugging Protocol
 
-A disciplined debugging protocol: reproduce → isolate → identify root cause → fix → regression test. This skill teaches the agent to debug methodically rather than flailing with print statements or guessing at fixes.
+A disciplined debugging protocol: build a feedback loop → isolate → identify root cause → fix → regression test. This skill teaches the agent to debug methodically rather than flailing with print statements or guessing at fixes.
 
 ## The protocol
 
-### Phase 1 — Reproduce
+### Phase 1 — Build the feedback loop
 
-Can you reliably trigger the failure? If not, you don't have a bug — you have a symptom.
+The deliverable of Phase 1 is not "I reproduced it" — it is **ONE named command**, already run at
+least once with its invocation and output pasted, that satisfies all four properties:
 
-1. Capture the exact error message, stack trace, and context (file:line, command, input).
-2. Try to reproduce with the same inputs. If it reproduces → proceed to Isolate. If not → document the reproduction gap and treat as intermittent.
-3. For flaky failures: run N times (N ≥ 5). Note the failure rate.
+1. **Red-capable** — asserts the user's exact symptom, not "runs without erroring." A command that
+   can only ever pass is not a feedback loop.
+2. **Deterministic** — same input, same result every run. For flaky bugs: not deterministic yet,
+   but a *pinned, raised* reproduction rate (e.g., "3/5 baseline → command makes it 5/5 by forcing
+   the race window").
+3. **Fast** — seconds, not minutes. A loop you're reluctant to re-run gets skipped under pressure,
+   which defeats the point.
+4. **Agent-runnable unattended** — no manual browser click, no interactive prompt.
 
-**Gate:** reproduction confirmed → proceed. Cannot reproduce → document as `INTERMITTENT` with failure rate and conditions.
+**Hard stop:** no red-capable command means no hypothesizing yet. Building the loop IS phase 1's
+work — do not jump to Root Cause on a loop that only demonstrates "it errors somewhere."
+
+**Minimise the repro:** once the loop is red, strip the reproduction down until every remaining
+element is load-bearing — delete inputs, fixtures, and setup steps one at a time and re-run the
+loop; if it still fails, the element wasn't necessary. Stop when removing anything further turns
+the loop green.
+
+**Gate:** a named, pasted, four-property-compliant command exists → proceed to Isolate. Cannot get
+one red yet → document as `INTERMITTENT` with failure rate and conditions, and keep narrowing.
 
 ### Phase 2 — Isolate
 
@@ -57,6 +72,12 @@ Identify the **underlying cause**, not the symptom. The root cause must be expre
 - **Not root cause:** "The variable was undefined." (symptom)
 - **Root cause:** "`src/auth.ts:42` — `getUser()` returns `null` when the session is expired, but the caller `src/login.ts:18` doesn't handle the null case."
 
+**Ranked, falsifiable hypotheses:** before probing, generate 3–5 candidate root causes and rank
+them by likelihood. Each hypothesis must state its prediction in the form "if X is the cause,
+changing Y makes the bug disappear" — a hypothesis you can't falsify with a code change or a probe
+is not a hypothesis, it's a guess. Surface the ranked list to the operator before acting on the
+top one; test hypotheses top-down, discarding each that the feedback loop refutes.
+
 **15-minute escalation rule:** If you've been debugging the same failure for 15 minutes without identifying the root cause, escalate:
 1. Document what you've tried (the `## Q&A` section of the task).
 2. Widen the search: ask a peer, search the codebase for similar patterns, or create an issue task.
@@ -65,6 +86,16 @@ Identify the **underlying cause**, not the symptom. The root cause must be expre
 ### Phase 4 — Fix
 
 Apply the minimal fix that addresses the root cause. No drive-by refactors, no "while I'm here" improvements (R3 — surgical changes only).
+
+**Instrumentation discipline:** if the loop requires temporary debug output to probe a hypothesis,
+tag every line with a unique prefix (`[DEBUG-xxxx]`, one id per session) so it is grep-able as a
+single unit. Add "grep for `[DEBUG-xxxx]`, remove all matches" to the done-checklist before
+closing the task — instrumentation that survives to the commit is noise the next reader has to
+re-diagnose.
+
+**Perf branch:** when the failure is a performance regression rather than a correctness bug,
+measure a baseline first (profile or timed run), then bisect against that number — never
+log-and-grep for a slow path. A perf claim without a before/after number is not verified.
 
 ### Phase 5 — Regression Test
 
@@ -107,8 +138,3 @@ Do **not** use this skill for:
 
 - **`sp:code-implementation`** — the implement step that follows after root cause is found.
 - **`sp:code-testing`** — test runner and coverage measurement for regression tests.
-
----
-
-**Template type**: technique
-**Purpose**: Structured debugging — a disciplined alternative to ad-hoc error investigation.

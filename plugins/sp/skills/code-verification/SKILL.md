@@ -1,6 +1,6 @@
 ---
 name: code-verification
-description: Verify a task's implementation against its requirements and acceptance criteria, and review code via the SECUA framework. The verifier half of the Spur execution loop — produces a PASS/PARTIAL/FAIL verdict with per-requirement evidence, writes findings back to the task file via CLI verbs, and emits the verdict artifact the pipeline gate reads. Backs the `/sp:dev-verify` (task-oriented) and `/sp:dev-review` (source-oriented) commands. Triggers on "verify task", "verify this", "check the requirements", "code review", "SECUA review", "SECU review", "requirements traceability", "review the diff", or validating a task's delivery before `done`.
+description: Verify a task's implementation against requirements and AC; SECUA code review. Produces a PASS/PARTIAL/FAIL verdict with per-requirement evidence. Triggers: "verify task", "verify this", "check the requirements", "code review", "SECUA review", "requirements traceability", "review the diff".
 license: Apache-2.0
 metadata:
   author: spur
@@ -48,13 +48,11 @@ verdict artifact carries that signal to the pipeline gate (design §B).
 
 ## Cross-cutting rules (inherited from sp:spur-dev)
 
-- **Every task write goes through a CLI verb.** Findings land via
-  `spur task update <wbs> --section <name> --from-file <tmp>` — never a direct file write. This is
-  the only sanctioned path for generated content into the corpus.
-- **The verdict artifact is the contract.** `.spur/run/<wbs>-verdict.json` is the machine signal
-  the workflow guard reads. Always write it last, after the verdict is final.
-- **Adapt to `spur task` verbs.** Use `spur task show <wbs> --json` / `spur task update` — never any
-  legacy `tasks` CLI.
+The CLI-gated section-write contract (every mutation via `spur task update --section --from-file`,
+never a legacy `tasks` CLI) is the SSOT in
+[spur-dev/cross-cutting.md](../spur-dev/references/cross-cutting.md) — this skill adds one rule of
+its own: **the verdict artifact is the contract.** `.spur/run/<wbs>-verdict.json` is the machine
+signal the workflow guard reads; always write it last, after the verdict is final.
 
 ---
 
@@ -128,29 +126,12 @@ Gherkin scenario independently. This gate runs whether or not `--bdd` is set.
 | **UNMET** | No implementation evidence satisfies the AC, or a required scenario fails |
 | **N/A** | The AC is explicitly non-applicable with a concrete reason |
 
-Evidence is typed so weak proof is visible:
-
-| Evidence type | Use when |
-|---------------|----------|
-| `test` | A named automated test or invariant test proves the behavior |
-| `command` | A CLI/gate command output proves the behavior |
-| `static-ref` | Source/doc/config references prove a contract or structural invariant |
-| `manual-review` | Reviewer reasoning is needed, with cited files and rationale |
-| `llm-judge` | Qualitative judgment only; advisory unless the AC is inherently qualitative |
-| `n/a` | The AC does not apply; must include the reason |
-
-Objective AC cannot be cleared by `llm-judge` alone. Pair qualitative judgment with deterministic or
-static evidence, or mark the row `PARTIAL`.
-
-Every **CORE behavior-bearing** AC must include at least one `test` or `command` evidence row. A
-`MET` behavior AC with only `static-ref`, `manual-review`, or `llm-judge` evidence is downgraded to
-`PARTIAL` by `spur task verdict` and surfaces an `evidence-rule-failed` check. AC rows are treated as
-core and behavior-bearing by default; add `[advisory]`, `[non-core]`, `[non-behavior]`, or
-`[docs-only]` in the AC id only when that weaker rule is intentional and reviewable.
-
-When the diff touches `apps/cli/**`, include one golden-path `--json` command invocation for the
-changed command as `command` evidence. If that command evidence is absent, emit a
-`cli-golden-path-present` check with `fail` status in `checks[]`.
+Evidence is typed so weak proof is visible. Objective AC cannot be cleared by `llm-judge` alone —
+pair qualitative judgment with deterministic or static evidence, or mark the row `PARTIAL`. Full
+type list, the core-behavior executable-evidence requirement, and the CLI golden-path rule are the
+contract in
+[references/verdict-schema.md](references/verdict-schema.md#acceptance-criteria-evidence); apply it
+here, don't re-derive it.
 
 When `--bdd` is set, each Gherkin scenario must map to executable evidence (`test` or `command`) or
 an explicitly reported missing-test condition. A missing executable mapping is `UNMET` when the
@@ -186,18 +167,12 @@ blessed in DESIGN.md are not flagged).
 | **NOT DONE** | The claim has no implementation in the diff |
 | **CHANGED** | The implementation differs from the written claim |
 
-**Rules.**
-
-- **Silent deviation = major finding → PARTIAL.** A claim marked NOT DONE **without** a `### Solution` note
-  documenting the deviation as goal-equivalent lowers the aggregate verdict to PARTIAL.
-- **Documented deviation = CHANGED, PASS-acceptable.** When `### Solution` names the claim and
-  asserts goal-equivalent intent, classify as CHANGED and do not lower the verdict.
-- **Scope-creep line.** Diff hunks that match **no** Requirement / Acceptance Criteria / Design /
-  Plan item are reported as scope-creep. Surface as a `scope-creep` row in `checks[]`. The count
-  alone does not lower the verdict; SECUA-A carries it as a major finding if scope-creep exceeds
-  50% of the diff.
-- **Calibrate SECUA-A.** Patterns blessed in DESIGN.md (or `docs/design/<slug>.md`) are not flagged
-  as architectural drift.
+**Rules.** A claim marked NOT DONE **without** a `### Solution` note is a silent deviation →
+major finding, verdict drops to PARTIAL. A claim NOT DONE **with** a `### Solution` note asserting
+goal-equivalent intent is a documented deviation → classify CHANGED, PASS-acceptable, no downgrade.
+Diff hunks matching no Requirement/AC/Design/Plan item are scope-creep — surface a `scope-creep` row
+in `checks[]`; SECUA-A escalates it to a major finding only past 50% of the diff. Patterns blessed in
+DESIGN.md (or `docs/design/<slug>.md`) calibrate SECUA-A and are never flagged as drift.
 
 Emit a `design-conformance` row into the verdict `checks[]`:
 
@@ -228,17 +203,11 @@ PARTIAL only when explicitly advisory/deferred. Fold the AC statuses into the ag
 
 ### Step 9 — Aggregate the verdict
 
-```
-any core requirement UNMET                          → FAIL
-any core AC UNMET                                   → FAIL
-any P1/blocker correctness or security finding       → FAIL
-any core requirement or core AC PARTIAL (no FAIL)    → PARTIAL
-any unresolved major quality finding (no FAIL)       → PARTIAL
-all core requirements and AC MET or justified N/A    → PASS
-```
-
-Minor/advisory findings do not block. Only `PASS` clears the pipeline completion gate.
-(`PARTIAL`/`FAIL` route the pipeline to `failed`.)
+Apply the aggregation rule in
+[references/verdict-schema.md](references/verdict-schema.md#aggregation-rule): core UNMET or a
+blocker finding → FAIL; core PARTIAL or an unresolved major finding (no FAIL) → PARTIAL; everything
+MET or justified N/A → PASS. Minor/advisory findings do not block. Only `PASS` clears the pipeline
+completion gate (`PARTIAL`/`FAIL` route the pipeline to `failed`).
 
 ### Step 10 — Write findings to the task
 
@@ -264,44 +233,32 @@ sections. Concretely:
 - **Review section:** do not put `### SECUA Review` or any `###` heading inside the Review body.
   Use a priority table or a bold label such as `**SECUA Review**` instead.
 
-### Step 11 — State the verdict (the gate contract)
+### Step 11 — State the verdict and hand off (the gate contract)
 
-End the verify output with an explicit, parseable verdict line so the pipeline can
-transport it deterministically:
+End the verify output with an explicit, parseable verdict line so the pipeline can transport it
+deterministically:
 
 ```
 Verdict: PASS    (or PARTIAL / FAIL)
 ```
 
-**Under the pipeline**, the `verify` step captures this answer to
-`.spur/run/<wbs>-verify-answer.txt` (via `agent.run answerFile`), and a deterministic
-shell step derives the gate artifact `.spur/run/<wbs>-verdict.json` from it **plus** an
-independent `spur task check` — so the artifact is never left to the agent's discretion
-
-### Step 12 — Handoff to record (pipeline context)
-
-Under the pipeline (`task-pipeline.yaml`), the verify agent's output is captured to
-`.spur/run/<wbs>-verify-answer.txt` (via `agent.run answerFile`). The **record** step
-then transcribes this output into the task's `## Testing` and `## Review` sections:
-
-- **Testing** ← verdict from `.spur/run/<wbs>-verdict.json` + per-requirement table
-  from the answer file
-- **Review** ← SECUA findings (P1–P4) extracted from the answer file
-
-The verify agent's output MUST include a per-requirement traceability table
+The verify agent's output MUST also include a per-requirement traceability table
 (`| Req | Status | Evidence |`), an Acceptance Criteria table
-(`| AC | Status | Evidence Type | Evidence |`), and a `### SECUA Review` heading with ranked findings
-so the record step can extract them mechanically. The verdict artifact
-(`.spur/run/<wbs>-verdict.json`) is the gate signal; the answer file is the evidence
-the record step transcribes — keep both structures stable.
+(`| AC | Status | Evidence Type | Evidence |`), and a `### SECUA Review` heading with ranked
+findings — this heading is an **answer-file contract only** (it must never appear in a
+`--section`-bound body file; see Step 10).
 
-This `### SECUA Review` heading is an **answer-file contract only**. It belongs in
-`.spur/run/<wbs>-verify-answer.txt` so the pipeline record step can parse the captured output. It
-does **not** belong in the body file passed to `spur task update --section Review --from-file`;
-section bodies should use tables or bold labels, as noted in Step 10.
+**Under the pipeline** (`task-pipeline.yaml`), `agent.run answerFile` captures this whole output to
+`.spur/run/<wbs>-verify-answer.txt`. A deterministic shell step then derives
+`.spur/run/<wbs>-verdict.json` from it plus an independent `spur task check` (R9; the agent
+reporting PASS in prose is necessary but not sufficient — the artifact is never left to the agent's
+discretion). The **record** step transcribes the answer file into the task: `## Testing` ← verdict +
+per-requirement/AC tables, `## Review` ← SECUA findings. Keep both structures stable — the record
+step extracts them mechanically.
 
-(R9; the agent reporting PASS in prose is necessary but not sufficient).
-**Standalone** (`/sp:dev-verify` outside the pipeline), write the artifact yourself:
+**Standalone** (`/sp:dev-verify` outside the pipeline — no answer-file capture exists), write the
+artifact yourself; shape and field-by-field contract in
+[references/verdict-schema.md](references/verdict-schema.md):
 
 ```bash
 mkdir -p .spur/run
@@ -310,42 +267,21 @@ jq -n --arg wbs "<wbs>" --arg v "<PASS|PARTIAL|FAIL>" \
   > .spur/run/<wbs>-verdict.json
 ```
 
-Shape ([references/verdict-schema.md](references/verdict-schema.md)):
-
-```typescript
-interface VerifyVerdict {
-  wbs: string;
-  verdict: 'PASS' | 'PARTIAL' | 'FAIL';
-  requirements: Array<{ id: string; status: 'MET' | 'PARTIAL' | 'UNMET'; evidence: string }>;
-  acceptanceCriteria?: Array<{
-    id: string;
-    status: 'MET' | 'PARTIAL' | 'UNMET' | 'N/A';
-    evidenceType: 'test' | 'command' | 'static-ref' | 'manual-review' | 'llm-judge' | 'n/a';
-    evidence: string;
-  }>;
-  checks: Array<{ name: string; status: 'pass' | 'fail' | 'warn'; evidence: string }>;
-}
-```
-
 For documentation-only, configuration-only, or skill-doc verification where no runtime coverage
-measurement applies, include an explicit coverage line in the Testing evidence:
+measurement applies, include an explicit coverage line in the Testing evidence
+(`Coverage: N/A (documentation-only change; no runtime code path added).`) — this satisfies the task
+checker without pretending a coverage percentage was measured.
 
-```
-Coverage: N/A (documentation-only change; no runtime code path added).
-```
+### Step 12 — Fix pass (if `--fix` ≠ `none`)
 
-This satisfies the task checker without pretending a coverage percentage was measured.
-
-### Step 13 — Fix pass (if `--fix` ≠ `none`)
-
-- `blockers-first` — repair only requirements/AC that are UNMET (the blockers), then re-run Steps 4–12.
-- `all` — repair UNMET + PARTIAL requirements/AC and major SECUA findings, then re-run Steps 4–12.
+- `blockers-first` — repair only requirements/AC that are UNMET (the blockers), then re-run Steps 4-11.
+- `all` — repair UNMET + PARTIAL requirements/AC and major SECUA findings, then re-run Steps 4-11.
 - `none` — stop at the verdict; report and exit.
 
 Loop is bounded — if a fix doesn't move a requirement to MET after one retry, report the residual
 and stop (don't thrash).
 
-### Step 14 — Report
+### Step 13 — Report
 
 Show the verdict, the per-requirement table, and the gate outcome (cleared / blocked). Under the
 pipeline this is consumed by the gate; for a direct `/sp:dev-verify` invocation it's the operator's
@@ -389,7 +325,7 @@ Do **not** use this skill for:
 1. **Presence ≠ content.** `spur task check` passing is **not** a PASS verdict. This skill is the
    content gate; never conflate the two.
 2. **Write the verdict artifact last.** The workflow guard reads it; a stale/partial file fails the
-   gate misleadingly. Emit it only after the verdict is final (Step 12).
+   gate misleadingly. Emit it only after the verdict is final (Step 11).
 3. **Never direct-write the task file.** All findings go through `spur task update --section`.
 4. **`PASS` is the only clear.** `PARTIAL` blocks the gate — there is no "good enough" pass.
 5. **Bounded fix loop.** `--fix` retries once per requirement, then reports residuals — don't loop
@@ -421,8 +357,3 @@ directly: `Skill(skill="sp:code-verification", args="verify <wbs> --fix all")`.
 
 Run `spur` CLI via Bash; parse `--json`. Invoke this skill directly for the verification logic — the
 skill is the SSOT; the commands are thin wrappers.
-
----
-
-**Template type**: technique
-**Purpose**: Verify a task against its requirements with a PASS/PARTIAL/FAIL verdict, write findings to the corpus via CLI verbs, and emit the verdict artifact the execution pipeline's completion gate consumes.

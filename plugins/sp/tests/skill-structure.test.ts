@@ -490,4 +490,62 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(implementBlock).toContain('NEVER invoke');
         expect(implementBlock).toContain('--mode implement');
     });
+
+    test('R42 — skill description budgets stay within the 0187 aggregate/per-skill caps', () => {
+        // Router skills (spine + facade) get a larger budget than the 14 competency/technique
+        // skills; the aggregate cap keeps total context load bounded even as skills are added.
+        const ROUTER_SKILLS = new Set(['spur-dev', 'spur-cli']);
+        const NON_ROUTER_BUDGET = 350;
+        const ROUTER_BUDGET = 600;
+        const AGGREGATE_BUDGET = 4400;
+
+        let aggregate = 0;
+        const offenders: string[] = [];
+        for (const skill of skillDirs) {
+            const text = readFileSync(join(SKILLS_DIR, skill, 'SKILL.md'), 'utf8');
+            const frontmatter = text.split('---')[1] ?? '';
+            const match = frontmatter.match(/^description:\s*([\s\S]*?)(?=\n[a-zA-Z_-]+:|\n?$)/m);
+            expect(match, `${skill} SKILL.md must have a description field`).not.toBeNull();
+            const raw = (match?.[1] ?? '').trim();
+            const desc = raw.replace(/^"|"$/g, '').replace(/^'|'$/g, '');
+            aggregate += desc.length;
+            const budget = ROUTER_SKILLS.has(skill) ? ROUTER_BUDGET : NON_ROUTER_BUDGET;
+            if (desc.length > budget) {
+                offenders.push(`${skill}: ${desc.length} chars (budget ${budget})`);
+            }
+        }
+        expect(offenders).toEqual([]);
+        expect(
+            aggregate,
+            `aggregate description chars (${aggregate}) must stay <= ${AGGREGATE_BUDGET}`,
+        ).toBeLessThanOrEqual(AGGREGATE_BUDGET);
+    });
+
+    test('R43 — README command index lists every commands/*.md file exactly once (task 0187 AC6)', () => {
+        const readmePath = join(PLUGIN_ROOT, 'README.md');
+        statSync(readmePath);
+        const readme = readFileSync(readmePath, 'utf8');
+        const commandFiles = readdirSync(join(PLUGIN_ROOT, 'commands'))
+            .filter((f) => f.endsWith('.md'))
+            .map((f) => f.replace(/\.md$/, ''));
+
+        const missing: string[] = [];
+        const duplicated: string[] = [];
+        for (const name of commandFiles) {
+            const re = new RegExp(`\\b${name}\\b`, 'g');
+            const count = (readme.match(re) ?? []).length;
+            if (count === 0) missing.push(name);
+            if (count > 1) duplicated.push(`${name} (${count}x)`);
+        }
+        expect(missing, 'commands missing from README index').toEqual([]);
+        expect(duplicated, 'commands listed more than once in README index').toEqual([]);
+    });
+
+    test('R44 — glossary.md exists exactly once and is linked from spur-dev SKILL.md (task 0187 R7/AC7)', () => {
+        const copies = allMarkdown.filter((p) => p.endsWith('glossary.md'));
+        expect(copies.map((p) => relative(PLUGIN_ROOT, p))).toEqual(['skills/spur-dev/references/glossary.md']);
+
+        const spineSkill = readFileSync(join(SKILLS_DIR, 'spur-dev', 'SKILL.md'), 'utf8');
+        expect(spineSkill).toContain('glossary.md');
+    });
 });

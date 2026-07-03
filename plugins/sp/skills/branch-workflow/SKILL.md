@@ -1,6 +1,7 @@
 ---
 name: branch-workflow
-description: "The branch-lifecycle discipline — create feature branches, isolate work in git worktrees for parallel development, commit atomically with conventional messages, self-review before merge, and clean up after merge. Use when starting new work, managing parallel branches, or preparing to merge. Triggers on \"create branch\", \"start feature\", \"worktree\", \"git branch\", \"merge prep\", \"branch cleanup\", \"finish branch\"."
+description: "Branch lifecycle discipline: create, worktree, commit, self-review, merge, cleanup."
+disable-model-invocation: true
 license: Apache-2.0
 metadata:
   author: spur
@@ -104,9 +105,3 @@ Do **not** use this skill for:
 
 - **`sp:spur-dev`** — the task lifecycle that runs alongside branch lifecycle.
 - **`sp:code-review`** — pre-merge self-review workflow.
-- **`sp:code-review`** — pre-merge self-review workflow.
-
----
-
-**Template type**: technique
-**Purpose**: Branch-lifecycle discipline — clean git branching, worktree isolation, and merge hygiene.

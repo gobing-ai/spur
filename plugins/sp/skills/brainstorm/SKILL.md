@@ -1,6 +1,6 @@
 ---
 name: brainstorm
-description: "Structured ideation workflow for generating solution options with trade-offs, confidence scoring, and delegation to research and task creation skills. Triggers: brainstorm ideas, explore solutions, consider options, research approaches, multiple solution options with trade-offs."
+description: "Structured ideation: generate solution options with trade-offs and confidence scoring, then delegate to research/task-creation skills. Triggers: \"brainstorm ideas\", \"explore solutions\", \"consider options\", \"research approaches\", \"what are my options\", \"how should I approach X\"."
 license: Apache-2.0
 version: 1.0.0
 created_at: 2026-03-25
@@ -49,13 +49,7 @@ The `sp:brainstorm` skill generates multiple solution approaches with explicit t
 // Brainstorm generates 2-3 approaches with trade-offs, delegates research and task creation
 ```
 
-**3-Phase Workflow:**
-
-```
-1. INPUT    → Parse (file path or issue description), extract context
-2. IDEATE   → Generate approaches with trade-offs (delegate research via spur agent run)
-3. OUTPUT   → Structured markdown, optional task delegation
-```
+The 3-phase pipeline (Input → Ideate → Output) is diagrammed once, in [Workflow](#workflow) below.
 
 ## When to Use
 
@@ -78,28 +72,14 @@ Activate sp:brainstorm when:
 
 ## Core Principles
 
-### 1. Two Input Modes
+### 1. Two Input Modes, Clarify Before Ideating
 
-```
-IF input contains "/" or "\" AND ends with ".md":
-    → Treat as file path → read and extract context
-ELSE:
-    → Treat as issue description → use directly
-```
+A file-path input is read and its Background/Requirements extracted; a bare description is used
+directly. Ambiguous or insufficient input (short, missing context, undefined terms, multiple valid
+readings) gets one `AskUserQuestion` at a time, preferring multiple choice. Detection rule and
+trigger list: [references/workflows.md](references/workflows.md#phase-1-input-processing).
 
-### 2. Clarify Before Ideating
-
-Use `AskUserQuestion` for ambiguous or insufficient input:
-
-**Clarification triggers:**
-- Input < 20 characters
-- Missing Background or Requirements (if from task file)
-- Undefined technical terms
-- Multiple valid interpretations
-
-**Format:** One question at a time, prefer multiple choice options.
-
-### 3. Delegate Research
+### 2. Delegate Research
 
 Don't implement research directly. Delegate to specialized skills:
 
@@ -115,40 +95,18 @@ when the invoking command forwarded an explicit agent do you spawn it: `spur age
 Never hardcode the agent — the selector flows from the command flag. See
 [spur-dev/cross-cutting.md](../spur-dev/references/cross-cutting.md) for the two-surface contract.
 
-### 4. Generate 2-3 Approaches
+### 3. Generate 2-3 Approaches
 
-Always generate multiple options:
+Always generate multiple options, each with description, trade-offs, confidence, and sources — full
+per-approach template: [references/workflows.md](references/workflows.md#approach-generation).
 
-```
-Approach 1: [Name] ⭐ Recommended
-  - Description: 2-3 sentences
-  - Trade-offs: Pros / Cons
-  - Confidence: HIGH/MEDIUM/LOW
-  - Sources: [Citations]
+### 4. Confidence Scoring
 
-Approach 2: [Name]
-  [... same structure ...]
+Every approach and every external claim carries a HIGH/MEDIUM/LOW confidence score plus a dated
+source citation — table, thresholds, and citation format:
+[references/workflows.md](references/workflows.md#confidence-scoring).
 
-Approach 3: [Name]
-  [... same structure ...]
-```
-
-### 5. Confidence Scoring
-
-| Level | Score | Criteria |
-|-------|-------|----------|
-| **HIGH** | >90% | Direct quote from official docs (2025+), verified today |
-| **MEDIUM** | 70-90% | Synthesized from multiple sources |
-| **LOW** | <70% | Uncertain, needs verification, flag for review |
-
-**Always cite sources with dates:**
-```markdown
-**Source**: [URL]
-**Verified**: YYYY-MM-DD
-**Confidence**: HIGH
-```
-
-### 6. Task Delegation
+### 5. Task Delegation
 
 When user confirms approach, delegate task creation:
 
@@ -162,73 +120,16 @@ Bash: spur task batch-create --file decomposition.json   # bare JSON array (see 
 
 ## Workflow
 
-### Phase 1: Input Processing
+The 3 phases (Input → Ideation → Output) run in sequence; only the pattern applies at every
+invocation, the step-by-step detail (validation checklist, `AskUserQuestion` example, output
+template, source-citation format) is needed only inside each phase, not at the point of deciding
+*whether* to invoke this skill — full detail: **[references/workflows.md](references/workflows.md)**.
 
-**Goal:** Parse and validate input, extract context
-
-**Input detection:**
-1. Check if path → read file, parse YAML frontmatter
-2. Extract Background, Requirements sections
-3. Validate non-empty content
-
-**Clarification:**
-- Use `AskUserQuestion` for ambiguous input
-- One question at a time
-- Prefer multiple choice
-
-### Phase 2: Ideation (Research + Generation)
-
-**Goal:** Generate 2-3 solution approaches with trade-offs
-
-**Research delegation:**
 ```
-1. Invoke cc:anti-hallucination for verification protocol
-2. Use `spur agent run` for research + synthesis
-3. Generate approaches based on verified information
-```
-
-**Approach structure:**
-```markdown
-### Approach N: [Descriptive Name] ⭐ (if recommended)
-
-**Description:** 2-3 sentences explaining the approach
-
-**Trade-offs:**
-- **Pros:**
-  - Advantage 1
-  - Advantage 2
-- **Cons:**
-  - Disadvantage 1
-  - Disadvantage 2
-
-**Implementation Notes:**
-- Key technical considerations
-- Dependencies or prerequisites
-
-**Confidence:** HIGH/MEDIUM/LOW
-**Sources:** [Citations with dates]
-```
-
-### Phase 3: Output
-
-**Goal:** Format and deliver structured results
-
-**Output sections:**
-1. **Overview** — Context and problem summary (100-150 words)
-2. **Approaches** — 2-3 options with trade-offs (200-300 words each)
-3. **Recommendations** — Recommended approach with reasoning
-4. **Next Steps** — Potential task items
-
-**Interactive delivery:**
-```
-1. Show Overview → "Does this capture the problem?"
-2. Show Approaches → "Any clarifications on these options?"
-3. Show Recommendations → "Ready for task creation?"
-```
-
-**File saving:**
-```
-docs/plans/YYYY-MM-DD-<topic>-brainstorm.md
+1. INPUT    → Parse (file path or issue description), extract context, clarify if ambiguous
+2. IDEATE   → Generate 2-3 approaches with trade-offs (delegate research via spur agent run)
+3. OUTPUT   → Structured markdown (Overview → Approaches → Recommendations → Next Steps),
+              delivered incrementally; saved to docs/plans/YYYY-MM-DD-<topic>-brainstorm.md
 ```
 
 ## Design Approval Gate
@@ -287,41 +188,6 @@ self-review (pattern 3) passes cleanly. The brainstorm design summary is ALWAYS 
 does not bypass pattern 1 or pattern 2. The taste component of the user review gate (pattern 4)
 still pauses unless the operator has encoded prior approval in the workflow vars.
 
-## Tool Selection
-
-| Research Need | Delegate To | Notes |
-|--------------|-------------|-------|
-| Verification protocol | `cc:anti-hallucination` | Source-first validation |
-| Information synthesis | `spur agent run` | Multi-source consolidation |
-| Task breakdown | `sp:spur-dev` | Structured tasks |
-| Task file creation | `sp:spur-cli` | WBS assignment, kanban |
-
-## Error Handling
-
-| Phase | Error | Action |
-|-------|-------|--------|
-| Input | File not found | Clear error, suggest checking path |
-| Input | Empty content | Ask for clarification |
-| Ideation | Tool unavailable | Continue with available, note reduced confidence |
-| Output | Save fails | Display output, suggest manual save |
-| Tasks | CLI fails | Report error, suggest manual creation |
-
-## Anti-Hallucination Integration
-
-sp:brainstorm delegates verification to cc:anti-hallucination:
-
-**Protocol:**
-1. **CHECK** — Does this claim need verification?
-2. **SELECT** — Best tool for information type
-3. **SEARCH** — Execute verification
-4. **CITE** — Include source with date
-5. **SCORE** — Assign confidence level
-
-**Confidence levels:**
-- **HIGH**: Direct quote from official docs (2025+)
-- **MEDIUM**: Synthesized from multiple sources
-- **LOW**: Uncertain, flag for review
-
 ## Common Pitfalls
 
 | Pitfall | Prevention |
@@ -331,16 +197,6 @@ sp:brainstorm delegates verification to cc:anti-hallucination:
 | Missing confidence scoring | Cite sources and assign confidence to each approach |
 | Over-ideating | Limit to 3 approaches; delegate deeper research |
 | Skipping task delegation | Offer task creation after user confirms approach |
-| Ignoring graceful degradation | Continue with available tools if research tools fail |
-
-## Best Practices
-
-- **Input first** — Clarify before generating to avoid rework
-- **Delegate research** — Use specialized skills, don't reimplement
-- **Evidence-based** — Always cite sources with dates
-- **Trade-off clarity** — Make pros/cons explicit for each approach
-- **Interactive delivery** — Show sections incrementally, confirm understanding
-- **Concrete next steps** — Convert recommendations to actionable tasks
 
 ## Reference Files
 

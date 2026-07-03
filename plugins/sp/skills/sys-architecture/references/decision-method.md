@@ -39,13 +39,64 @@ Score the candidates on the axes relevant to this decision — not all apply eve
 A one-way door with a large blast radius deserves more deliberation and almost always an ADR; a
 two-way door can be decided fast and revisited.
 
-## 4. Apply the deep-vs-shallow-module test
+## 4. Apply the deep-module vocabulary
 
 Prefer a design whose modules are **deep**: a narrow interface hiding substantial capability, reused
 by callers that do not need to know its internals. Be suspicious of **shallow** modules — thin
 wrappers with a wide interface, or boundaries drawn along *temporal phases* ("a step-1 module and a
 step-2 module") rather than *capabilities*. A boundary that two callers almost always cross together
 is the wrong boundary; relocate or remove it.
+
+Use these seven terms precisely — each has near-synonyms this method deliberately avoids, because a
+vaguer word lets an under-designed boundary pass without scrutiny:
+
+| Term | Meaning | Avoid |
+|------|---------|-------|
+| **Module** | A unit of functionality with one owner and one reason to change. | "piece", "part", "chunk" |
+| **Interface** | The surface callers depend on — signatures, types, contracts. Not the implementation. | "API" (too transport-coded), "surface area" |
+| **Depth** | Capability hidden ÷ interface size. A deep module does a lot behind a little. | "complexity" (depth is the *ratio*, not raw complexity) |
+| **Seam** | A place the design can vary without the caller knowing — the proven joint an adapter sits on. | "layer", "boundary" (see Rejected framings) |
+| **Adapter** | A concrete implementation behind a seam. One adapter alone does not prove the seam is real. | "wrapper", "shim" |
+| **Leverage** | What a module buys its callers — the work it removes from every call site. | "value", "benefit" |
+| **Locality** | How much of a change stays inside one module vs. spilling across many. | "cohesion" (locality is about *change*, not static grouping) |
+
+**The deletion test:** for any proposed module or seam, ask "if I deleted this and inlined its one
+caller, would anything get harder?" If no caller would notice, the boundary is not pulling its
+weight — either it hides no real complexity, or it has exactly one caller and no second use in
+sight. Deletion-test failures are the most common shallow-module smell.
+
+**One adapter = hypothetical seam, two = real.** A seam justified by "we might swap this later" is
+speculative until a second adapter actually exists. Building a seam for a hypothetical second
+implementation is premature abstraction (R2); building it when the second implementation is already
+needed is a real seam. When in doubt, inline the single adapter and extract the seam when the second
+caller arrives — extraction is cheap, premature generality is not.
+
+**The interface is the test surface.** A deep module's tests exercise the interface, not the
+internals — if a test needs to reach past the interface to assert something, either the interface
+is missing a capability it should expose, or the test is coupling to implementation detail that
+will make refactors expensive. This is also the fastest depth check available: an interface you
+can test completely from outside is doing its job.
+
+### Rejected framings
+
+These near-synonym terms are deliberately **not** used in this method, to keep the vocabulary above
+unambiguous:
+
+| Term | Why rejected |
+|------|--------------|
+| **Component** | Overloaded across UI frameworks and infra tooling — does not distinguish depth from size. |
+| **Service** | Implies a network/process boundary; conflates *module* (a code-level unit) with *deployment* (an infra-level unit). A module is not always a service and a service is not always one module. |
+| **Boundary** | Too generic — used for module edges, security perimeters, and transaction scopes alike. This method uses **seam** for the specific "place the design can vary" meaning. |
+
+### Design-it-twice (for a genuinely unsettled interface)
+
+When the interface shape itself is the open question — not just which of two known options to
+pick, but what the right shape even is — fan out 2–3 radically different interface designs in
+parallel via `sp:parallel-execution` (independent subagents, one design each, same problem
+statement) rather than iterating on one design serially. Compare the results on **depth**,
+**locality**, and **seam placement** — the three axes above that a single linear design pass tends
+to anchor on its first idea instead of exploring. Use this only when the interface is the crux of
+the decision; for a settled interface with a build-vs-extend question, steps 1–3 above are enough.
 
 ## 5. Recommend one, with the one-line reason
 

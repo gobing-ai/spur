@@ -1,6 +1,6 @@
 ---
 name: spur-dev
-description: The thin orchestration spine for the Spur planning→execution lifecycle. Drives the workflow — intake, the feature-check and batch-create gates, the execution pipeline (precheck→implement→test→review→verify→record→done), and HITL gating — and DISPATCHES deep competency skills for the work itself (sp:spec-decomposition, sp:sys-architecture, sp:code-implementation, sp:code-testing, sp:code-verification); it never inlines them. Owns the lifecycle FSM, the gates, and the CLI-gated section-write contract; contains zero validation logic. Triggers on "run the pipeline", "drive this task", "run the task through the pipeline", "execute the dev workflow", "continue the pipeline run", "plan a feature end to end", or operating the full spur planning→execution lifecycle. For the work itself — decompose / design / implement / test / review — the competency skills trigger directly.
+description: The thin orchestration spine for the planning→execution lifecycle: intake, feature-check/batch-create gates, the execution pipeline (precheck→implement→test→review→verify→record→done), HITL gating. Dispatches competency skills; never inlines them. Triggers: "run the pipeline", "drive this task", "plan a feature end to end", "continue the pipeline run", or operating the full lifecycle.
 license: Apache-2.0
 metadata:
   author: spur
@@ -163,58 +163,37 @@ CLI does.
 
 ## Additional Resources
 
-**Workflow procedure (read the half you're operating):**
+**Every reference file and its step is listed once, in [Step routing](#step-routing) above — this
+section adds what that table has no room for: per-file content summaries and items with no single
+step (glossary, config companions).** Read Step routing to find "which file for step X"; read below
+for "what's actually in file Y" or for resources that sit outside the step sequence.
 
-- [references/planning-workflow.md](references/planning-workflow.md) — Steps 1–6: intake →
-  feature create → AC → check gate → decomposition → batch-create → refine.
-- [references/execution-workflow.md](references/execution-workflow.md) — task selection →
-  pipeline run → HITL surfacing → continue; pipeline-stage sequencing and `## Solution` ownership.
-- [references/execution-batch.md](references/execution-batch.md) — batch execution: resolve a task
-  set, topo-sort by dependencies, run each through `task-pipeline.yaml`, failure policy, batch
-  report. Backs `/sp:dev-runall` + the `sp:super-coder` orchestrator.
-- [references/cross-cutting.md](references/cross-cutting.md) — CLI-gated writes, the section-editing
-  body-only format, the section-status matrix, check-before-write. Shared by the spine and every
-  competency skill (the single sanctioned cross-skill dependency).
+- [references/glossary.md](references/glossary.md) — sp's own vocabulary: spine, competency, facade,
+  corpus, gate, verdict, noun/verb, half, HITL, WBS, section-write contract — canonical term +
+  Avoid list. Owns term definitions only; `cross-cutting.md` owns the process rules that use them.
 - [references/gate-checklists.md](references/gate-checklists.md) — checkbox checklists for the
   five gates (feature-check, batch-create, precheck, review, verify). Each checklist is a
   `- [ ]` list of prerequisites an agent verifies before entering the gate.
-- [references/product-planning.md](references/product-planning.md) — product-management judgment for
-  intake, RICE/MoSCoW prioritization, strategy profiles, PRD-shaped output, and PM handoff rules.
-
-**Competency skills the spine dispatches to (the spine does not inline these):**
-
-- **`sp:code-implementation`** — the `implement` step: task-driven scope, stack pattern selection,
-  root-cause debugging, the `## Solution` change-map. Owns `implementation-patterns.md`, `debugging.md`.
-- **`sp:code-testing`** — the `test` step: coverage, gap analysis, test extension. Owns
-  `unit-testing.md` and the per-stack adapters (`stacks/`).
-- **`sp:code-verification`** — the `review`/`verify` steps: SECUA review + requirements traceability.
-- **`sp:sys-architecture`** — design/ADR judgment, consulted when a task's shape is unsettled.
-- **`sp:spur-tdd`** — the test-first discipline `code-implementation` and `code-testing` compose with.
-
-**Supporting detail:**
-
-- **`sp:spec-decomposition`** — the decomposition competency the spine dispatches at the decompose
-  step: the `task-batch.schema.json` contract, template-variant selection, scenario-to-task mapping,
-  the granularity standard. The spine runs the `batch-create` gate; the competency produces the batch.
 - [references/ac-style-guide.md](references/ac-style-guide.md) — BDD scenario authoring:
-  R-numbering, the two AC tiers, scenario-title stability, Gherkin template usage. Shared planning
-  convention (authored at feature-create, consumed by `sp:spec-decomposition`).
-- [references/dev-operations.md](references/dev-operations.md) — the per-operation catalog: what
-  each `/sp:dev-*` operation does (unit/review/verify/run/refine/plan/...). The SSOT for operation
-  definitions; the execution workflow links here rather than restating them.
+  R-numbering, the two AC tiers, scenario-title stability, Gherkin template usage.
 - [references/feature-link-helper.md](references/feature-link-helper.md) — opt-in,
   strictness-triggered helper to resolve a deferred `feature_id` edge: LLM-judge match against
   existing features (prefer existing; create only as last resort; confirm before apply); single-task
   mode + batch-sweep mode. Invoke only when the operator opts into `--strict` rigor or explicitly
   asks to link a task to a feature — NEVER gate-time, NEVER automatic.
 
-**Config & companions:**
+**Competency skills the spine dispatches to** (what each owns beyond the Step-routing row):
+
+- **`sp:code-implementation`** owns `implementation-patterns.md`, `debugging.md`.
+- **`sp:code-testing`** owns `unit-testing.md` and the per-stack adapters (`stacks/`).
+- **`sp:spec-decomposition`** owns the granularity standard (scenario→task sizing).
+- **`sp:spur-tdd`** — the test-first discipline `code-implementation` and `code-testing` compose with.
+
+**Config & companions (no single pipeline step owns these):**
 
 - `config/workflows/task-pipeline.yaml` — the execution pipeline definition.
 - `config/workflows/planning-pipeline.yaml` — the front-half state machine.
 - `config/templates/bdd/gherkin.md` — the BDD scenario template.
-- The planning-pipeline workflow is defined in `config/workflows/planning-pipeline.yaml`. The SSOT
-  narrative for all dev-* planning operations lives here in sp:spur-dev.
 
 ## Platform Notes
 
@@ -230,8 +209,3 @@ invocations within pipeline steps.
 
 Run `spur` CLI via the Bash tool; parse `--json` output. Invoke this skill directly for
 the workflow logic — the skill is the SSOT; commands and subagents are thin wrappers.
-
----
-
-**Template type**: technique
-**Purpose**: Drive the full Spur planning-to-execution workflow — convert intent into CLI-validated feature files, decomposed task batches, and pipeline-driven execution with HITL gating

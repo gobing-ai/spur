@@ -1,6 +1,6 @@
 ---
 name: doc-evolve
-description: Evolve and maintain the project's key documents (docs/00–05 + AGENTS.md) per docs/99_PROJECT_CONSTITUTION.md — drift audits, same-commit sync checks, frontmatter-contract verification, and machine-appended lessons. A constitution-native self-evolution driver, not a generic doc generator. Triggers on "doc evolve", "doc drift", "sync docs", "drift audit", "documentation drift", "are the docs stale", "update AGENTS.md surface", "append a lesson", "doc sync check", or maintaining docs/00–05 / the constitution.
+description: Evolve docs/00-05 + AGENTS.md per docs/99_PROJECT_CONSTITUTION.md: drift audits, same-commit sync checks, frontmatter-contract verification, lesson-append. Triggers: "doc evolve", "doc drift", "sync docs", "drift audit", "are the docs stale", "append a lesson".
 license: Apache-2.0
 metadata:
   author: spur

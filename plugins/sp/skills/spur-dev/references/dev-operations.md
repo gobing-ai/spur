@@ -264,13 +264,16 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
      <one-sentence goal>
 
      ## Progress
-     - <what was done>
+     - <what was done — reference existing artifacts by path, don't restate their content>
 
      ## Blocker
      <blocker description>
 
      ## Rejected Approaches
      - <approach> — <why it failed>
+
+     ## Suggested Skills
+     - <sp:skill-name> — <why the next agent should invoke it here>
 
      ## Next Steps
      1. <concrete action>
@@ -279,4 +282,16 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
      - If a task context exists, write to the task's `## Notes` section via `spur task update <wbs> --section Notes --from-file <path>`.
      - Otherwise, write to `docs/handover/<YYYY-MM-DD>-<slug>.md` (create `docs/handover/` if absent).
   5. Print the path to the handover document.
+- **Suggested Skills section:** Name the `sp:*` skill(s) the next agent should invoke to continue —
+  inferred from the task's remaining Requirements/AC and the blocker itself (e.g. a design
+  disagreement suggests `sp:sys-architecture`; an unmet AC suggests `sp:code-verification`). Omit
+  the section only when plain continuation is more relevant than any specific skill.
+- **Redaction rule.** Never write secrets, API keys, tokens, credentials, or PII into the handover
+  document — not in the Goal/Progress/Blocker prose, not in a pasted error message or log excerpt.
+  Redact with `<REDACTED>` and note what kind of value was removed; a handover is a durable file
+  that may be read by a different session, agent, or human than the one that hit the blocker.
+- **No-duplication rule.** Reference existing artifacts — task sections (`## Solution`,
+  `## Testing`, `## Review`), verdict files (`.spur/run/<wbs>-verdict.json`), diffs, and docs — by
+  **path**, not by pasting their content into the handover body. The handover is a pointer document;
+  restating content it can instead link to makes it stale the moment the source changes.
 - **Invariants:** The handover is honest — rejected approaches are recorded so the next agent doesn't retry them. The blocker is specific, not "it doesn't work."

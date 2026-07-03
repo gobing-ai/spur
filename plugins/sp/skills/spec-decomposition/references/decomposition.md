@@ -225,6 +225,65 @@ Two rules make a parent verifiable:
   agent (or you, later) won't re-litigate it. A split without a recorded rejected-alternative is
   incomplete — you have not shown the split was necessary, only that it was possible.
 
+## Vertical slices (the slicing-direction axis)
+
+The rubric above decides **whether** to split; this section decides **which direction** to cut once
+you do. Every task in a batch must be a thin **vertical slice** through all the layers a scenario
+touches (schema / API / UI / tests, as applicable) — independently demoable or verifiable on its
+own. A vertical slice proves the feature works end-to-end at a small scale; a horizontal layer-task
+proves nothing until every sibling layer-task also lands.
+
+**Horizontal layer-tasks are a named anti-pattern** — see the table below (`all-schema` /
+`all-API` / `all-UI` task split). The tell: task names read like layer inventories ("Add the users
+table", "Build the users API", "Build the users UI") instead of capability inventories ("User can
+register with email").
+
+**Wrong vs right, worked:**
+
+- **Wrong (horizontal):** Task 1 — add `users`/`sessions` tables. Task 2 — add
+  `POST /login`/`POST /register` endpoints. Task 3 — build the login/register UI. Nothing is
+  demoable until all three land; task 2 blocks on task 1, task 3 blocks on task 2 — a strict
+  chain with no parallelism, and a reviewer can't verify task 1 in isolation (a schema with no
+  caller proves nothing).
+- **Right (vertical):** Task 1 — user can register with email (schema column + endpoint + form,
+  thin but complete). Task 2 — user can log in with email (same three layers, reusing task 1's
+  schema). Each task is independently demoable (`curl` the endpoint, or click through the form)
+  and independently reviewable; task 2 only depends on task 1's schema, not its UI.
+
+**Prefactoring comes first.** "Make the change easy, then make the easy change" — when a vertical
+slice is blocked by an awkward existing shape (a function that needs splitting, a type that needs
+widening, a module boundary that needs to move), that refactor is its own task, ordered **before**
+the slices that depend on it, and it changes no behavior. Do not fold prefactoring into the first
+feature slice — a task that both reshapes existing code and adds a new capability is fighting two
+review lenses at once (§Anti-patterns: this is a variant of under-decomposition when the refactor
+is large enough to warrant its own review).
+
+## Pre-batch-create HITL checkpoint (quiz gate)
+
+Before calling `spur task batch-create`, present the proposed breakdown to the operator as a
+numbered list and get it reviewed — a batch is atomic and hard to unwind piecemeal once children
+exist, so this is the cheapest point to catch a granularity or ordering mistake.
+
+**Present:**
+
+```
+1. <title> — blocked by: none — covers: R1 (user can register with email)
+2. <title> — blocked by: #1 — covers: R2 (user can log in with email)
+3. <title> — blocked by: none — covers: R3 (user can reset password)
+```
+
+**Quiz the operator on:**
+- **Granularity** — does any task look like a horizontal layer-task, a phase-split, or a
+  <2h fragment that belongs in a Plan step instead?
+- **Dependency correctness** — is the `blocked-by` chain minimal (no task waits on a sibling it
+  doesn't actually need), and does it match the vertical-slice ordering (schema-owning slice
+  before the slices that reuse it)?
+
+Proceed to `batch-create` only after the operator confirms, or after they request adjustments and
+you re-present the revised list. **Skip this checkpoint under `--auto`** (the profile that already
+waives interactive HITL gates elsewhere in the pipeline) — record in the batch's parent Plan that
+the quiz was auto-skipped, same as any other `--auto`-waived gate.
+
 ## Anti-patterns (do not do these)
 
 | Anti-pattern | Why it's wrong | Instead |
@@ -233,6 +292,7 @@ Two rules make a parent verifiable:
 | **Skeleton tasks** (empty Background/Requirements, "see parent") | Task files must be self-contained for review | Merge back, or write it as a Plan step |
 | **Over-decomposition** (5 tasks each <30 min for one PR) | 5× tracking overhead for no parallelism or review benefit | One task with a Plan checklist |
 | **Under-decomposition** (one task spanning 3 subsystems + 20h) | Unreviewable, one giant PR, no fan-out | Split by subsystem/deliverable |
+| **Horizontal layer-task** (all-schema task, all-API task, all-UI task) | Nothing is demoable until every sibling layer lands; blocks in a strict chain with no parallelism | Cut vertical slices — one capability through all its layers, thin but complete |
 
 ### Worked example — the "list reflex" (the most common over-decomposition)
 

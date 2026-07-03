@@ -1,6 +1,6 @@
 ---
 name: code-implementation
-description: The implementation competency — turn a task's requirements, acceptance criteria, and design into production code with task-driven scope, stack-pattern selection, root-cause debugging, and a useful Solution change-map. The deep skill the spine's `implement` step dispatches to. Use when implementing a feature, fixing a bug, refactoring with test safety, or writing code to a spec. Triggers on "implement", "write code", "add feature", "build this", "fix the bug", "refactor", "code this task", "implement step".
+description: The implementation competency — turn a task's requirements, AC, and design into production code: task-driven scope, stack-pattern selection, root-cause debugging, a Solution change-map. Triggers: "implement", "write code", "add feature", "fix the bug", "refactor", "code this task".
 license: Apache-2.0
 metadata:
   author: spur
@@ -16,7 +16,7 @@ metadata:
 # code-implementation — the implementation competency
 
 Turn a task's requirements, acceptance criteria, and design into production code. This is the deep
-competency the orchestration spine (`sp:spur-dev`) dispatches to at its `implement` step — it owns
+competency the spine (`sp:spur-dev`) dispatches to at its `implement` step — it owns
 *how to implement well*, not *when to implement* (the spine decides that). Every deterministic write
 to the corpus still goes through `spur task update` (the CLI-gated write contract in
 `sp:spur-dev`'s `cross-cutting.md`).
@@ -89,8 +89,3 @@ directly via `Skill(skill="sp:code-implementation", args="<wbs>")`. Deterministi
 
 Invoke this skill directly for implementation technique; run the `spur` CLI via the Bash tool for
 corpus writes. The skill is the SSOT; commands and the pipeline step are thin wrappers.
-
----
-
-**Template type**: technique
-**Purpose**: Turn a task's requirements, AC, and design into production code — task-driven scope, pattern selection, root-cause debugging, Solution change-map — the deep skill the spine's implement step dispatches to

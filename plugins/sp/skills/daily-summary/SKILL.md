@@ -1,6 +1,7 @@
 ---
 name: daily-summary
-description: "Generate daily summary reports from AI coding agent usage data, git history, and user annotations. Orchestrates ccusage CLI and git commands to produce structured markdown summaries."
+description: "Generate a daily summary report from agent usage, git history, and your notes."
+disable-model-invocation: true
 license: Apache-2.0
 version: 1.0.0
 created_at: 2026-04-17

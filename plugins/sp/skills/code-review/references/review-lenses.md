@@ -63,5 +63,10 @@ Five dimensions for structured code review. Each lens has diagnostic questions; 
 - Does it follow existing patterns, or introduce a new one with justification?
 - Is the right separation of concerns maintained?
 - Would this change make future changes harder (coupling, rigidity)?
+- **Deep-module check:** does the new/changed module pass the deletion test (would inlining its one
+  caller make anything harder)? Is there a **seam** with only one **adapter** — i.e. speculative,
+  not yet justified by a second caller? Full vocabulary (module/interface/depth/seam/adapter/
+  leverage/locality) and the deletion test: `sp:sys-architecture`'s
+  [decision-method.md](../../sys-architecture/references/decision-method.md).
 
-**Severity guide:** Violates module boundary or dependency rule → P1. Introduces a new pattern without justification → P2. Minor boundary fuzziness → P3.
+**Severity guide:** Violates module boundary or dependency rule → P1. Introduces a new pattern without justification → P2 (a seam with only one adapter and no stated second-caller plan is this severity). Minor boundary fuzziness → P3.

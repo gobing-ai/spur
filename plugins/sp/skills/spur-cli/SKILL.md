@@ -1,6 +1,6 @@
 ---
 name: spur-cli
-description: "The CLI facade for the Spur command surface — the single reference for operating every `spur` noun (task, feature, rule, workflow) from the command line: which verb does what, its flags, `--json` shapes, exit codes, and the CLI-gated write contract. One reference file per noun. Use when looking up or operating a `spur` verb or convention; NOT for driving the planning/execution lifecycle (that is the spine, sp:spur-dev). Triggers on \"spur task\", \"spur feature\", \"spur rule\", \"spur workflow\", \"create a task\", \"create a feature\", \"run a rule\", \"author a workflow\", \"task check\", \"feature check\", \"acceptance criteria\", \"R-numbering\", \"batch-create\", or looking up any spur CLI verb, flag, or convention."
+description: "The CLI facade for the `spur` command surface — one reference per noun (task/feature/rule/workflow): verbs, flags, `--json` shapes, exit codes, the CLI-gated write contract. NOT for driving the lifecycle (that is the spine, sp:spur-dev). Triggers: \"spur task\", \"spur feature\", \"spur rule\", \"spur workflow\", \"create a task\", \"task check\", \"batch-create\", or looking up any spur CLI verb or convention."
 license: Apache-2.0
 metadata:
   author: spur
@@ -69,7 +69,7 @@ the whole point of this facade is that the CLI surface has a single, scalable ho
 ## What this skill is NOT
 
 - **Not the spine.** Driving a task through `task-pipeline.yaml`, HITL surfacing, decomposition, and
-  the planning loop is `sp:spur-dev` (the orchestration spine). This facade is the verb reference the
+  the planning loop is `sp:spur-dev` (the spine). This facade is the verb reference the
   spine and the operator both consult.
 - **Not validation logic.** This skill says *run `check` / `validate`*; the rules those verbs enforce
   live in the CLI (`task check`, `feature check`, `rule run`, `workflow validate`), never restated as
@@ -79,7 +79,7 @@ the whole point of this facade is that the CLI surface has a single, scalable ho
 
 ## See also
 
-- **`sp:spur-dev`** — the orchestration spine that dispatches these verbs into the planning +
+- **`sp:spur-dev`** — the spine that dispatches these verbs into the planning +
   execution lifecycle. Use it to *drive* work; use this facade to *look up or operate a verb*.
 - **`sp:expert-spur`** — the subagent that loads this facade for multi-step, multi-noun corpus work
   in its own context window.
@@ -95,8 +95,3 @@ directly via `Skill(skill="sp:spur-cli", args="<noun> <verb> …")` to look up o
 
 Run the `spur` CLI via the Bash tool and parse `--json` output. This facade is the SSOT for the verb
 surface; commands and subagents are thin wrappers over it.
-
----
-
-**Template type**: reference
-**Purpose**: Single CLI facade for the Spur command surface — one reference file per `spur` noun (task, feature, rule, workflow), documenting verbs, flags, `--json` shapes, and conventions

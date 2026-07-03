@@ -1,6 +1,6 @@
 ---
 name: dogfood-testing
-description: The backbone skill for dogfooding agent skills, slash commands, and CLI invocations — drive a testee end-to-end as a real user, fix what breaks within a bounded retry budget, monitor every step with a live ledger, and emit a structured report rich enough to fine-tune the testee. Backs the `/sp:dev-dogfood` command. Triggers on "dogfood this", "drive this command end-to-end", "test this skill as a user", "dogfood report", "exercise this command", or validating an agent skill/command/CLI before shipping.
+description: Drive a testee (skill/command/CLI) end-to-end as a real user, fix within a bounded retry budget, monitor with a live ledger, emit a structured report. Triggers: "dogfood this", "drive this command end-to-end", "test this skill as a user", "dogfood report".
 license: Apache-2.0
 metadata:
   author: spur
@@ -224,8 +224,3 @@ Findings (P1+P2):
 
 A report missing any of the six headings, the live ledger, or this footer does not satisfy the
 dogfood contract on this platform, regardless of `Skill()` availability.
-
----
-
-**Template type**: technique
-**Purpose**: Drive a testee end-to-end, fix-within-budget, monitor with a live ledger, and emit a structured report rich enough to fine-tune the testee

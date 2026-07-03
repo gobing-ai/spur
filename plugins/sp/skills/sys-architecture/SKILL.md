@@ -1,6 +1,6 @@
 ---
 name: sys-architecture
-description: "The architecture competency — make and record system-design decisions before code: module boundaries, data flow, the build-vs-extend call, transport/storage/auth choices, and the tradeoffs (coupling, blast radius, scalability, cost). Produces a decision with a one-line reason and routes it to the right doc (ADR for cross-cutting choices). The deep skill consulted when a task needs its shape decided, not its code written. Use when choosing an approach, weighing a design tradeoff, deciding where a boundary goes, or whether something warrants an ADR. Triggers on \"what's the right approach\", \"design this\", \"architecture\", \"should this be an ADR\", \"module boundary\", \"where does this belong\", \"design tradeoff\", \"build vs extend\"."
+description: "The architecture competency — decide and record system design before code: module boundaries, data flow, build-vs-extend, transport/storage/auth tradeoffs, ADR routing. Triggers: \"what's the right approach\", \"design this\", \"architecture\", \"should this be an ADR\", \"module boundary\", \"build vs extend\"."
 license: Apache-2.0
 metadata:
   author: spur
@@ -17,7 +17,7 @@ metadata:
 
 Decide and record the *shape* of a change before it is implemented: where boundaries go, how data
 flows, what to build vs. extend, and which cross-cutting choices warrant a recorded decision. This is
-a deep competency the orchestration spine (`sp:spur-dev`) consults when a task's design is unsettled —
+a deep competency the spine (`sp:spur-dev`) consults when a task's design is unsettled —
 it owns *deciding the shape*, distinct from `sp:code-implementation` which *builds the decided shape*.
 
 The split mirrors the project's own doc map: this skill produces **decisions with one-line reasons**
@@ -53,7 +53,8 @@ reversibility), recommends one with a one-line reason, and routes the result:
 - A **task-local design** → the task's `## Design` section (written via `spur task update`).
 
 Full procedure: **[references/decision-method.md](references/decision-method.md)** — candidate
-generation, the tradeoff dimensions, the deep-vs-shallow-module test, and the ADR-or-not gate.
+generation, the tradeoff dimensions, the deep-module vocabulary (module/interface/depth/seam/adapter/
+leverage/locality, the deletion test, design-it-twice), and the ADR-or-not gate.
 
 ## The ADR-or-not gate
 
@@ -93,8 +94,3 @@ directly for ADR entries.
 
 Invoke this skill directly for design judgment; write decisions to the owning docs and task sections.
 The skill is the SSOT for the method; the result lives in the docs it routes to.
-
----
-
-**Template type**: technique
-**Purpose**: Make and record system-design decisions before code — boundaries, data flow, build-vs-extend, tradeoffs, and the ADR-or-not gate — the deep skill consulted when a task needs its shape decided

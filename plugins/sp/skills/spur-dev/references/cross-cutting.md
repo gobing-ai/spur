@@ -11,6 +11,11 @@ These mechanics apply to **every** write in both the planning and execution halv
 knows *how to think*; the CLI knows *what is valid* — every mutation passes through a CLI verb
 that validates before writing.
 
+**Split from `glossary.md`:** this file owns **process rules** (how writes happen, what the Iron
+Laws are, what `--auto` does). [glossary.md](glossary.md) owns **term definitions** (what a word
+like *spine*, *gate*, or *verdict* means). A rule below may use a glossary term by name; it does
+not redefine it.
+
 ## Honor `--agent` — the two-surface contract
 
 `--agent` means different things on the two command surfaces. "Current agent" is achievable on
