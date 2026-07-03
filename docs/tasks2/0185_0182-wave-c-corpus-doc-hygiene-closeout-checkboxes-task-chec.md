@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "0182 Wave C: corpus/doc hygiene + closeout — checkboxes, task-check rule, changelog, hook wiring, commits"
 description: ""
-status: wip
+status: done
 type: task
 profile: standard
 feature_id: null
@@ -12,7 +12,7 @@ priority: P1
 tags: []
 dependencies: []
 created_at: "2026-07-03T01:08:16.982Z"
-updated_at: "2026-07-03T06:52:55.848Z"
+updated_at: "2026-07-03T07:50:26.897Z"
 ---
 
 ## 0185. 0182 Wave C: corpus/doc hygiene + closeout — checkboxes, task-check rule, changelog, hook wiring, commits
@@ -150,29 +150,129 @@ land in the Wave A commit, matching where their content changes originated.
 - [x] R9c — re-run `bun test plugins/sp/hooks/task-write-guard.test.ts`; confirm still green.
 - [x] R-gate — `bun run lint`, `bun run test`, `bun run test-cf`, `bun run build`; `spur
       workflow validate` for all four touched workflow YAMLs.
-- [ ] R12 — three wave-scoped Conventional Commits; verify `git status -s` clean afterward.
-- [ ] Close out 0185 itself (this task): fill AC/Q&A/Design/Plan/Solution/Testing/Review/
+- [x] R12 — three wave-scoped Conventional Commits; verify `git status -s` clean afterward.
+- [x] Close out 0185 itself (this task): fill AC/Q&A/Design/Plan/Solution/Testing/Review/
       References, transition wip → testing → done.
-- [ ] Close out parent 0182: Solution/Testing/Review, `spur task check --strict-core`,
+- [x] Close out parent 0182: Solution/Testing/Review, `spur task check --strict-core`,
       transition to done.
-- [ ] Produce the final aggregate dogfood report under `docs/dogfood/`.
+- [x] Produce the final aggregate dogfood report under `docs/dogfood/`.
 ### Solution
+**R7 / R7-optional (checkbox hygiene + guard rule).** Repaired stale `[ ]` boxes across the 0176
+umbrella and five wave children — all `done`, work complete, boxes never flipped at transition
+time: `docs/tasks2/0178_0176-wave-b-decomposition-wiring-and-parent-readiness.md` (14 boxes),
+`docs/tasks2/0179_0176-wave-c-verification-depth-and-functional-evidence.md` (23 boxes), and
+(discovered during R7-optional smoke-testing, extended beyond the literal R7 scope)
+`docs/tasks2/0176_sp-plugin-audit-remediation-decomposition-wiring-review-dept.md:119-165`'s own
+33-box decomposition rubric (Waves A–E). `packages/app/src/services/task-check.ts:1-30` (new
+`status` parameter threaded through `runL3(doc, status)` from `check()`) adds a new
+WARNING-severity rule that fires only when `status` is `done`/`cancelled` AND the body
+(`doc.bodyWithoutFrontmatter`) contains `- [ ] `. Terminal-status-gate-by-construction (not
+reusing `runL4Rollup`'s roster detection) structurally excludes the 0176 umbrella-parent false
+positive — a `todo`/`wip` parent with legitimately open child-tracked boxes never trips it. Five
+new tests in `packages/app/tests/services/task-check.test.ts` cover both fire and silent paths.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**R8 (CHANGELOG consolidation).** `CHANGELOG.md:3-43` — moved `## [Unreleased]` from its prior
+line 288 (after five released version blocks, a Keep-a-Changelog order violation) to immediately
+after the `# Changelog` H1. Removed two bullets from `[0.2.12]`'s `### Changed` ("Verification
+depth tightened", "Feature wrap-up lifecycle walk centralized") and re-added them under the
+relocated `[Unreleased]` alongside two new bullets (Wave A: HITL routing/timeout hardening; Wave
+E: agent doctor precheck, `--design-approved`, hook guard versioning), all four sourced verbatim
+from their respective wave's own Solution sections — none invented.
 
+**R9 (hook-wiring verification, not remediation).** Traced `superskill hook run sp
+task-write-guard` from the installed `@gobing-ai/superskill@0.2.8` binary to its source
+(`~/xprojects/superskill/apps/cli/src/commands/hook-run.ts:1-193`): confirmed it resolves via a
+statically-registered `HOOK_RUNNERS` dictionary keyed `'sp/task-write-guard'` — a hand-maintained,
+independently-vendored copy of the guard logic, NOT a dynamic loader of this repo's
+`plugins/sp/hooks/task-write-guard.ts:1-20`. The two implementations are logically identical
+today (same fail-open contract, same `spur task resolve --strict --json` delegation, same
+`SPUR_WRITE_GUARD=off` escape hatch) but carry real cross-repo drift risk. Disposition (0182 Q2):
+document the risk, no code change — `plugins/sp/hooks/task-write-guard.ts` remains the versioned,
+tested reference implementation any future superskill sync should match. Manual deny probe (owned
+path) and allow probe (unowned path) both verified against the live wired command; captured as
+AC11 command evidence. `task-write-guard.test.ts` re-run, still green, unchanged.
+
+**R12 (wave-scoped commits).** Blocked in this agent's own sandbox session by lefthook's
+pre-commit `format` step, initially misdiagnosed as a `config/rules/fixtures/**` biome
+write-deny (bug-754). The coordinator's separate, unrestricted sandbox session corrected the
+root cause: lefthook 1.13.0 allocates a PTY to spawn every hook command, and PTY allocation
+itself — not file writes — is what this agent's sandbox denies; `bun run format` exits 0 cleanly
+on its own. The operator explicitly authorized committing with `LEFTHOOK=0` (documented
+off-switch) after both hook checks were run manually and independently confirmed green: `bun run
+format` → "Checked 384 files … No fixes applied" (zero fixes needed); `cog verify --file` → OK
+for all three commit messages. No check was silenced — both ran and passed; only the
+PTY-blocked lefthook wrapper itself was bypassed, with explicit authorization and evidence in
+hand. Landed as three wave-scoped commits:
+
+| Commit | Files | Diff | Message |
+|--------|-------|------|---------|
+| `f84702d` | 12 | +736/−18 | `fix(pipeline): harden HITL routing, implement-step timeouts, absolute-path resolution` |
+| `ac4adbe` | 4 | +270/−3 | `fix(sp-plugin): enforce dogfood report contract; correct super-coder wording` |
+| `efffd81` | 10 | +430/−120 | `chore(corpus): close 0176-0181 hygiene, add task-check unchecked-box rule` |
+
+`git status -s` clean after landing, apart from the deliberately-excluded
+`.claude/settings.local.json` (a session permission artifact, not product work).
 ### Testing
+`bun run lint` — clean (Biome + per-workspace `tsc --noEmit`).
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+`bun run test` — passes across all workspaces + `plugins/sp` (`bunfig.toml` coverage thresholds
+met). New coverage this wave: `task-check.test.ts` (+5 tests, unchecked-box rule fire/silent
+paths), `task-write-guard.test.ts` (re-run, unchanged, green).
 
+`bun run test-cf` — passes (Cloudflare Workers Vitest, server).
+
+`bun run build` — succeeds across `apps/cli`, `apps/server`, `apps/web`.
+
+`spur workflow validate` — all four touched workflow YAMLs (`task-pipeline.yaml` plus the three
+Wave A/B/C-adjacent bundled workflows) validate clean.
+
+`spur task check 0185 --json` — `pass: true` at every status transition through this wave; one
+pre-existing L4 advisory (missing `feature_id`, expected for review-template tasks not linked to
+a feature).
+
+Hook-wiring verification (R9): manual deny probe against the live wired command
+(`superskill hook run sp task-write-guard`) on a task-owned path returned
+`permissionDecision: "deny"`; allow probe on a non-owned path returned `allow`. Both captured as
+command evidence per AC11.
+
+R12 evidence (lefthook bypass authorization, recorded per coordinator instruction): `bun run
+format` → "Checked 384 files … No fixes applied" (zero fixes, zero errors — the actual commit
+content was already format-clean); `cog verify --file` → OK for all three commit messages
+(`f84702d`, `ac4adbe`, `efffd81`). Committed with `LEFTHOOK=0` after both checks passed manually,
+with explicit operator authorization — not `--no-verify`, and not silent.
+
+No test skipped, `.skip`'d, or commented out to reach green.
 ### Review
+**P1–P4 findings:** none outstanding. The one design-conformance note worth recording: 0185's own
+Design section (authored before R12 landed) stated both sandbox-protected files
+(`.claude/settings.local.json`, `config/workflows/task-pipeline.yaml`) would "land in the Wave A
+commit" — that text is now stale on the `settings.local.json` half. The coordinator explicitly
+excluded `.claude/settings.local.json` from every commit (it is a session permission artifact,
+not product work); `config/workflows/task-pipeline.yaml` did land in Wave A (`f84702d`) as
+designed. Documented here rather than silently correcting the earlier Design prose, since Design
+sections are not rewritten after landing.
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Root-cause correction discipline (bug-754):** this task's own working session initially
+misdiagnosed the R12 commit blocker as a `config/rules/fixtures/**` biome write-deny (same class
+as bug-751) and logged it as such. The coordinator's independent, unrestricted sandbox session
+disproved that diagnosis directly (`bun run format` exits 0 there) and isolated the real cause —
+lefthook's PTY allocation being denied by this session's sandbox, unrelated to file-write scope
+entirely. `.wolf/buglog.json` bug-754 has been corrected in place (root_cause/fix fields
+rewritten, tagged `root-cause-corrected`) rather than left standing as a wrong diagnosis, and a
+new `.wolf/cerebrum.md` Key Learning records the diagnostic lesson (reproduce the exact failing
+step in isolation before attributing root cause to the first plausible sandbox-deny match).
 
+**Final disposition:** all R7/R7-optional/R8/R9/R12 requirements closed; canonical gates green;
+commits landed in wave-scoped order with a clean `git status -s`. No blocking or unresolved
+findings remain for 0185.
 ### References
-
-
-
-<!-- Links to the parent feature, design docs, related tasks, or external references. -->
-
+- Parent task: `0182`.
+- Sibling waves: `0183` (Wave A), `0184` (Wave B).
+- Commits: `f84702d` (Wave A), `ac4adbe` (Wave B), `efffd81` (Wave C, this task).
+- Related bugs: bug-751 (config/-tree write-deny), bug-753 (git stash recovery incident),
+  bug-754 (lefthook PTY denial, root-cause corrected during this task's own closeout).
+- superskill hook-runner source: `~/xprojects/superskill/apps/cli/src/commands/hook-run.ts`.
 ### History
 - 2026-07-03T05:33:13.481Z todo → wip (system)
+- 2026-07-03T07:50:22.026Z wip → testing (system)
+- 2026-07-03T07:50:26.897Z testing → done (system)

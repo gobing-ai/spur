@@ -3,7 +3,7 @@ template: review
 schema_version: 1
 name: "Post-0176 review remediation: dogfood report contract, pipeline HITL/timeout regressions, corpus hygiene"
 description: ""
-status: wip
+status: done
 type: review
 profile: standard
 feature_id: null
@@ -12,7 +12,7 @@ priority: P1
 tags: ["review"]
 dependencies: []
 created_at: "2026-07-03T00:20:57.875Z"
-updated_at: "2026-07-03T01:07:00.646Z"
+updated_at: "2026-07-03T13:10:48.898Z"
 ---
 
 ## 0182. Post-0176 review remediation: dogfood report contract, pipeline HITL/timeout regressions, corpus hygiene
@@ -141,60 +141,123 @@ Decided during review (no operator action needed):
 ### Plan
 Rubric (decomposition standard): E~16h D3 L3 C1 R2 → decomposition CANDIDATE. When work starts, decompose by the three waves below (each wave = one deliverable with its own gate); do not split further without re-scoring. Sequencing is riskiest-first: product regressions → dogfood contract → corpus hygiene + closeout. Answer blocking Q&A items (Q4/Q5 for Wave A; Q1 for Wave B; Q2/Q3 for Wave C) before entering the wave that consumes them.
 
-**Wave A — product regressions (R1, R2, R10, R11) — do first; blocks trusting any future pipeline dogfood**
-- [ ] P0 discovery: read `packages/app/src/workflow/actions/agent-run.ts` and confirm where the step timeout is enforced/observable; record the seam (or its absence) before coding R2b.
-- [ ] R1: `task-pipeline.yaml` — declare `__hitlAnswer: ""`; replace `approve → verify (always)` with ordered yes/no/cancel guards (Q4 routing); add `cancelled` terminal state + note action; `spur workflow validate --json` clean.
-- [ ] R1: structure test in `plugins/sp/tests/skill-structure.test.ts` asserting the three approve routes + cancelled state (pattern of the Wave A idea/planning HITL tests at :367).
-- [ ] R2a: add `implementTimeoutMs` var (default per Q5) + rationale comment citing bugs 742/744/746/748; implement step consumes it; other steps keep `stepTimeoutMs`.
-- [ ] R2b: agent-run timeout handoff artifact (`## Reason / ## Elapsed / ## Diff stat / ## Stdout tail`) + unit test on the timeout path; step still returns `ok:false`.
-- [ ] R2c: anti-recursion sentence inside the implement `input:` prompt string.
-- [ ] R10: `file-read-into-var.ts` absolute-path ternary (`isAbsolutePath` / `normalizeSeparators`) + new test case.
-- [ ] R11: rewrite `batchCreate` JSDoc (method behavior + return shape).
-- [ ] Wave A gate: `bun run lint` + `bun run test` + `bun run test-cf` green; every touched workflow YAML validates.
-- [ ] R2d: rerun the 0179 R7 probe end-to-end (`profile=auto`); capture `.spur/run/<wbs>-verdict.json` (PASS + Wave C `checks[]` rows) as `command` evidence in `### Testing`. If the probe still times out, STOP and record honestly — do not raise the timeout further without operator sign-off.
+**Wave A — product regressions (R1, R2, R10, R11) — do first; blocks trusting any future pipeline dogfood — executed as task 0183**
+- [x] P0 discovery: read `packages/app/src/workflow/actions/agent-run.ts` and confirm where the step timeout is enforced/observable; record the seam (or its absence) before coding R2b.
+- [x] R1: `task-pipeline.yaml` — declare `__hitlAnswer: ""`; replace `approve → verify (always)` with ordered yes/no/cancel guards (Q4 routing); add `cancelled` terminal state + note action; `spur workflow validate --json` clean.
+- [x] R1: structure test in `plugins/sp/tests/skill-structure.test.ts` asserting the three approve routes + cancelled state (pattern of the Wave A idea/planning HITL tests at :367).
+- [x] R2a: add `implementTimeoutMs` var (default per Q5) + rationale comment citing bugs 742/744/746/748; implement step consumes it; other steps keep `stepTimeoutMs`.
+- [x] R2b: agent-run timeout handoff artifact (`## Reason / ## Elapsed / ## Diff stat / ## Stdout tail`) + unit test on the timeout path; step still returns `ok:false`.
+- [x] R2c: anti-recursion sentence inside the implement `input:` prompt string.
+- [x] R10: `file-read-into-var.ts` absolute-path ternary (`isAbsolutePath` / `normalizeSeparators`) + new test case.
+- [x] R11: rewrite `batchCreate` JSDoc (method behavior + return shape).
+- [x] Wave A gate: `bun run lint` + `bun run test` + `bun run test-cf` green; every touched workflow YAML validates.
+- [x] R2d — rerun the 0179 R7 probe end-to-end (`profile=auto`); capture `.spur/run/<wbs>-verdict.json` as evidence. Attempted twice (once directly, once via the disposable probe task 0186); both attempts blocked by a distinct sandbox agent-subprocess-invocation restriction, unrelated to this task's own changes — recorded honestly as `bug-752`, not silently skipped. R1/R2a/R2c remain independently verified via `spur workflow validate` and the new structural test; R2d's live-pipeline proof is the one residual gap against original scope, fully documented with reproduction evidence.
 
-**Wave B — dogfood contract enforcement + report corrections (R3, R4, R5, R6)**
-- [ ] R3: testee-grading sentence in `report-template.md` §2 verdict rule (legal values PASS/PARTIAL/FAIL only).
-- [ ] R4a: super-coder.md gate #5 → structural `rg -c` probes for `### 3. Monitor Ledger` and `── Dogfood Summary ──`; update the pass condition + example line.
-- [ ] R4b: dogfood-testing SKILL.md Codex/OpenClaw/OpenCode/Antigravity platform note lists the six mandatory headings + ledger + footer verbatim.
-- [ ] R6: correct 0177 (§2 aggregate = ledger row sums; missing §1/§2 lines; footer Findings sub-list; `[fixed]` → legal tag) and 0176 (36% consistently; wall-clock line) in place.
-- [ ] R6: prepend the non-conforming-legacy banner + corrected verdict line to 0178/0179/0180/0181; NO fabricated ledgers.
-- [ ] R5 (after Q1): execute the chosen gitignore branch (un-ignore + track the six reports, OR strip links + reword "durable evidence trail").
-- [ ] Wave B gate: `rg -in 'PASS WITH|PASS with' docs/dogfood/2026-07-02-*.md` → 0; banner count = 4; plugin tests green.
+**Wave B — dogfood contract enforcement + report corrections (R3, R4, R5, R6) — executed as task 0184**
+- [x] R3: testee-grading sentence in `report-template.md` §2 verdict rule (legal values PASS/PARTIAL/FAIL only).
+- [x] R4a: super-coder.md gate #5 → structural `rg -c` probes for `### 3. Monitor Ledger` and `── Dogfood Summary ──`; update the pass condition + example line.
+- [x] R4b: dogfood-testing SKILL.md Codex/OpenClaw/OpenCode/Antigravity platform note lists the six mandatory headings + ledger + footer verbatim.
+- [x] R6: correct 0177 (§2 aggregate = ledger row sums; missing §1/§2 lines; footer Findings sub-list; `[fixed]` → legal tag) and 0176 (36% consistently; wall-clock line) in place.
+- [x] R6: prepend the non-conforming-legacy banner + corrected verdict line to 0178/0179/0180/0181; NO fabricated ledgers.
+- [x] R5 (after Q1): execute the chosen gitignore branch — Q1 answered (b) keep `docs/dogfood/` ignored; stripped report-file links from committed References sections in 0176–0181, replaced with run IDs + bug IDs; reworded `super-coder.md`'s "durable evidence trail" wording to describe a local-only artifact.
+- [x] Wave B gate: `rg -in 'PASS WITH|PASS with' docs/dogfood/2026-07-02-*.md` → 0; banner count = 4; plugin tests green.
 
-**Wave C — corpus/doc hygiene + closeout (R7, R8, R9, R12)**
-- [ ] R7: check all 14 boxes in 0178 and 23 in 0179 via `spur task update <wbs> --section <name> --from-file` (stage bodies in /tmp; rm after — F5 discipline); post-condition `grep -c '^\s*- \[ \]'` = 0 for both.
-- [ ] R7-optional (after Q3): task-check WARNING rule for unchecked boxes at terminal status + test; must not fire on roster-bearing umbrella parents.
-- [ ] R8: CHANGELOG — move Wave C/D bullets out of `[0.2.12]` into `[Unreleased]`; add missing Wave A + Wave E entries; optional `[Unreleased]`-to-top move per Q-approval.
-- [ ] R9 (after Q2): implement the chosen hook wiring; manual deny-probe captured as `command` evidence; `bun test plugins/sp/hooks/task-write-guard.test.ts` green; ADR entry if the cross-platform contract changed.
-- [ ] R12: commit everything in wave-scoped Conventional Commits. Suggested grouping: (1) `fix(workflows): route task-pipeline approve HITL answers; harden implement timeout + handoff` (Wave A product), (2) `fix(sp-plugin): enforce dogfood report contract; correct 2026-07-02 reports` (Wave B), (3) `chore(corpus): close 0176-0181 hygiene — checkboxes, changelog, hook wiring` (Wave C), (4) the pre-existing five-wave 0176 work in its own commit(s) FIRST so this task's diff stays reviewable. `git status -s` clean at the end.
-- [ ] Wave C gate: full canonical gates (`lint`, `test`, `test-cf`, `build`); `spur task check 0182 --strict-core --json` pass; write `### Solution`/`### Testing` via `spur task update`.
-
-<!-- AUTO-GENERATED by spur task refresh-roster -->
-| WBS | Sub-task | Status |
-| --- | -------- | ------ |
-| 0183 | 0182 Wave A: product regressions — HITL routing, implement timeout hardening, absolute-path fix, JSDoc | todo |
-| 0184 | 0182 Wave B: dogfood contract enforcement + report corrections | todo |
-| 0185 | 0182 Wave C: corpus/doc hygiene + closeout — checkboxes, task-check rule, changelog, hook wiring, commits | todo |
-<!-- END AUTO-GENERATED -->
+**Wave C — corpus/doc hygiene + closeout (R7, R8, R9, R12) — executed as task 0185**
+- [x] R7: check all 14 boxes in 0178 and 23 in 0179 via `spur task update <wbs> --section <name> --from-file` (stage bodies in /tmp; rm after — F5 discipline); post-condition `grep -c '^\s*- \[ \]'` = 0 for both. Extended during smoke-testing to also repair 0176's own 33 boxes (same drift, same fix).
+- [x] R7-optional (after Q3): task-check WARNING rule for unchecked boxes at terminal status + test; must not fire on roster-bearing umbrella parents.
+- [x] R8: CHANGELOG — move Wave C/D bullets out of `[0.2.12]` into `[Unreleased]`; add missing Wave A + Wave E entries; `[Unreleased]`-to-top move executed per Q-approval recorded in this task's own Q&A.
+- [x] R9 (after Q2): Q2 answered (a) keep `superskill hook run sp task-write-guard` wiring, VERIFY execution path — no code change needed; manual deny-probe captured as `command` evidence; `bun test plugins/sp/hooks/task-write-guard.test.ts` green; no ADR needed (verification, not a contract change).
+- [x] R12: commit everything in wave-scoped Conventional Commits — landed as `f84702d` (Wave A), `ac4adbe` (Wave B), `efffd81` (Wave C); `git status -s` clean apart from the deliberately-excluded `.claude/settings.local.json` (session artifact, not product work).
+- [x] Wave C gate: full canonical gates (`lint`, `test`, `test-cf`, `build`); `spur task check 0182 --strict-core --json` pass; write `### Solution`/`### Testing` via `spur task update`.
 ### Solution
+Decomposed into three wave-scoped children and executed sequentially, each with its own gate:
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- **Wave A (task `0183`)** — product regressions. `config/workflows/task-pipeline.yaml` — ordered
+  `__hitlAnswer` guards (yes→verify, no→failed, cancel→cancelled) replacing the single
+  `always→verify` edge; new `cancelled` terminal state; `implementTimeoutMs` (30 min, distinct
+  from the shared 10-min `stepTimeoutMs`) with a rationale comment citing bugs 742/744/746/748;
+  anti-recursion sentence in the implement prompt. `packages/app/src/workflow/actions/
+  agent-run.ts` — best-effort `.spur/run/<runId>-<state>-partial.md` handoff artifact on
+  timeout/failure. `packages/app/src/workflow/actions/file-read-into-var.ts` — absolute-path
+  resolution fix (no longer re-joins `context.workdir` onto an already-absolute path).
+  `packages/app/src/services/task-service.ts` — `batchCreate` JSDoc rewritten to describe its
+  actual steps and return shape. Structural coverage added in
+  `plugins/sp/tests/skill-structure.test.ts` (R41).
 
+- **Wave B (task `0184`)** — dogfood contract enforcement. `plugins/sp/skills/dogfood-testing/
+  references/report-template.md` — mandatory live Monitor Ledger + `── Dogfood Summary ──` footer
+  with a strict PASS/PARTIAL/FAIL vocabulary. `plugins/sp/agents/super-coder.md:196` — reworded
+  the "durable evidence trail" claim to reflect `docs/dogfood/` staying gitignored (Q1 (b)).
+  Corrected the four non-conforming 2026-07-02 dogfood reports (0178–0181) in place with a
+  banner + honest verdict rather than fabricated ledgers.
+
+- **Wave C (task `0185`)** — corpus hygiene + closeout. `packages/app/src/services/
+  task-check.ts` — new WARNING-tier rule (terminal status + `- [ ] ` present) plus 5 tests
+  including two negative-path tests proving it does not false-positive on umbrella parents.
+  Repaired 33+14+23 stale checkboxes across `docs/tasks2/0176_*.md`, `0178_*.md`, `0179_*.md`.
+  `CHANGELOG.md:3-43` relocated to Keep-a-Changelog order. R9: verified (did not change) the
+  `superskill hook run sp task-write-guard` wiring — documented the two-copy architecture as a
+  drift risk rather than remediating it, per the task's own Q2 disposition.
+
+**R12 — commits.** Landed as three wave-scoped Conventional Commits: `f84702d` (Wave A, 12
+files, +736/−18), `ac4adbe` (Wave B, 4 files, +270/−3), `efffd81` (Wave C, 10 files, +430/−120).
+Blocked initially in this session's own sandbox by a lefthook PTY-allocation denial
+(misdiagnosed at first as a `config/`-tree file-write deny, corrected as bug-754); executed by
+the coordinator from an unrestricted sandbox session after the operator authorized `LEFTHOOK=0`
+following two independently-passing manual checks (`bun run format`, `cog verify --file`).
+
+**R2d — the one residual gap against original scope.** The 0179 R7 live-pipeline probe (rerun
+with `profile=auto`, capturing `.spur/run/<wbs>-verdict.json` as evidence) was attempted twice —
+directly in 0183, then via the disposable probe task `0186` — and both attempts were blocked by
+a distinct sandbox restriction on agent-subprocess invocation, unrelated to any change made in
+this task (bug-752, `packages/app/src/services/agent-service.ts` is the invocation seam; the
+restriction is environmental, not a code defect). R1/R2a/R2c remain independently verified via
+`spur workflow validate` and the new structural test; only the end-to-end live-pipeline proof
+could not be exercised in this environment.
 ### Testing
+Per-wave gates (each child task's own `### Testing` carries the full command evidence; summarized
+here):
 
-<!-- Filled during verification: commands/checks run, outcomes, coverage claim or N/A. -->
+- **Wave A (0183):** `bun run lint` clean, `bun run test` passes, `bun run test-cf` passes,
+  every touched workflow YAML validates via `spur workflow validate`. R2d live-pipeline probe
+  attempted twice, both blocked by bug-752 (sandbox agent-subprocess restriction); recorded
+  honestly, not silently skipped.
+- **Wave B (0184):** plugin tests green; `rg -in 'PASS WITH|PASS with' docs/dogfood/2026-07-02-*.md`
+  → 0 matches; banner count on corrected legacy reports = 4.
+- **Wave C (0185):** `bun run lint`, `bun run test`, `bun run test-cf`, `bun run build` all green;
+  manual hook deny/allow probes captured as command evidence; `bun test
+  plugins/sp/hooks/task-write-guard.test.ts` green, unchanged.
 
+**This task's own closeout gate:**
+
+`bun run lint` — clean.
+`bun run test` — passes across all workspaces + `plugins/sp`.
+`bun run test-cf` — passes (Cloudflare Workers Vitest, server).
+`bun run build` — succeeds across `apps/cli`, `apps/server`, `apps/web`.
+`spur task check 0182 --strict-core --json` — pass (all three sub-tasks `done`, gate clean).
+`git status -s` — clean apart from the deliberately-excluded `.claude/settings.local.json`.
+
+No test skipped, `.skip`'d, or commented out to reach green at any point across all three waves.
+
+Coverage: N/A at the umbrella level — coverage is a per-wave concern (each child task carries its
+own numeric coverage claim in its own `### Testing`; aggregate workspace coverage stayed above
+the `bunfig.toml` threshold across all three commits, confirmed by the `bun run test` gate above).
 ### Review
-
-Post-implementation reflection — filled **after** the first fix round: what went wrong, what
-remains to fix before closing, and any **back-issues** (new findings surfaced by the fix).
+Post-implementation reflection — filled after all three waves closed: what went wrong, what
+remains, and back-issues surfaced during the fix.
 
 | Severity | File | Finding | Recommendation |
 | -------- | ---- | ------- | -------------- |
-| P1       |      |         |                |
-| P2       |      |         |                |
+| P2 | `packages/app/src/services/agent-service.ts` | R2d (0179 R7 live-pipeline probe rerun) could not be exercised end-to-end through a real agent invocation — blocked twice by a sandbox restriction on agent-subprocess spawning (bug-752), unrelated to any change in this task. | Rerun the probe in an environment where at least one agent CLI can actually invoke (e.g. outside the current sandboxed session); no code change indicated — R1/R2a/R2c are already independently verified structurally. |
+| P2 | `.wolf/buglog.json` (bug-754) | This task's own working session initially misdiagnosed the R12 commit blocker as a `config/rules/fixtures/**` biome write-deny; a parallel unrestricted sandbox session proved the real cause was lefthook's PTY allocation being denied, unrelated to file-write scope. | Root cause corrected in place post-hoc (not left standing wrong); a cerebrum Key Learning now records the diagnostic lesson — reproduce the exact failing step in isolation before attributing root cause to the first plausible sandbox-deny match. |
+| P3 | `docs/tasks2/0185_...md` (Design section) | 0185's own Design section, authored before R12 landed, states both sandbox-protected files land in the Wave A commit — stale on the `.claude/settings.local.json` half, which was explicitly excluded from every commit as a session artifact. | Documented as a known drift in 0185's own Review rather than silently rewriting landed Design prose; no functional impact. |
+| P3 | Task `0186` (disposable R2d probe) | Left in `blocked` status in the corpus rather than deleted, to preserve the diagnostic trail for bug-752. | Intentional — the blocked probe task is the evidence artifact, not dead corpus; leave as-is. |
 
+**Final disposition:** all three waves (0183, 0184, 0185) closed `done`; all Wave A/B/C
+requirements (R1–R12, R2d excepted per above) delivered; canonical gates green across the whole
+effort; three wave-scoped commits landed with a clean working tree. The structural fixes (R1,
+R2a–c, R10, R11) are independently proven; the one residual gap (R2d's live end-to-end proof) is
+an environmental sandbox limitation, fully documented, not a defect in the delivered code.
 ### References
 - Source review: operator-requested comprehensive review, 2026-07-02 session (findings catalogued in this task's Background; conclusions logged to `.wolf/memory.md` and `.wolf/cerebrum.md` Key Learnings).
 - Buglog: bug-749 (dogfood report contract violations — this task's G3/G5/G7), bug-750 (task-pipeline HITL cancel regression — G1), bug-742 (nested pipeline recursion — G2c), bug-744/746/748 (implement timeouts — G2), bug-747 (`--folder` threading — G13, out of scope).
@@ -205,3 +268,5 @@ remains to fix before closing, and any **back-issues** (new findings surfaced by
 ### History
 - 2026-07-03T00:21:08.260Z backlog → todo (system)
 - 2026-07-03T01:07:00.646Z todo → wip (system)
+- 2026-07-03T13:10:41.807Z wip → testing (system)
+- 2026-07-03T13:10:48.898Z testing → done (system)

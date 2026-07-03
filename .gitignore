@@ -143,6 +143,7 @@ docs/.ftree/
 .wolf/
 
 /docs/tasks/kanban.md
+/docs/tasks2/kanban.md
 /config/config.yaml
 /.antigravitycli/
 .ant-colony/
