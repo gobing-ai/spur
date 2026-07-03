@@ -39,6 +39,10 @@ vars:
   profile: "interactive"
   feature: ""
   design_approved: "false"
+  __hitlAnswer: ""
+  spurBin: "spur"
+  agent: "omp"
+  stepTimeoutMs: "600000"
 
 states:
   - id: start
@@ -60,14 +64,16 @@ states:
 
   - id: feature-id
     description: >
-      Derive the feature ID by scanning docs/features + 05_FEATURES for the parent and
-      allocating the child id (same rule as `spur feature create`). Result is recorded for
-      the design-doc generation step. Invokes sp:doc-evolve if 05_FEATURES index needs a
-      placeholder row.
+      Allocate the feature id via the canonical `spur feature create` verb (it owns the
+      hierarchical ID rule per DD-14). The agent derives a feature name from ${vars.slug}
+      and invokes the verb; the new id is captured for the design-doc generation step.
     onEnter:
       - kind: agent.run
         options:
-          input: "Derive the feature ID for ${vars.slug} (scan docs/features + docs/05_FEATURES.md; allocate child id under parent ${vars.feature}). Record the derived id."
+          agent: ${vars.agent}
+          input: "Allocate a feature id for slug ${vars.slug} via the canonical verb. Run `${vars.spurBin} feature create \"<human title derived from ${vars.slug}>\" --parent ${vars.feature} --json` and capture the new feature id from the JSON output into .spur/run/plan-feature-id.txt for the design-gen step. If an existing feature for ${vars.slug} is appropriate, use its id instead and write it to the same file. Do not re-implement id-allocation rules in prose; the verb owns them."
+          expectFile: .spur/run/plan-feature-id.txt
+          timeoutMs: ${vars.stepTimeoutMs}
 
   - id: design-gen
     description: >
@@ -78,7 +84,9 @@ states:
     onEnter:
       - kind: agent.run
         options:
+          agent: ${vars.agent}
           input: "Author the design doc at docs/design/${vars.slug}.md from docs/plans/${vars.slug}-drafted.md. Invoke sp:doc-evolve to stage the 04_DESIGN index edit."
+          timeoutMs: ${vars.stepTimeoutMs}
 
   - id: design-approval
     description: >
@@ -130,12 +138,16 @@ transitions:
     to: feature-id
     description: Phasing decided — proceed to feature-ID derivation.
     guard:
-      kind: always
+      kind: shell
+      options:
+        command: 'test "${vars.__hitlAnswer}" = yes || test "${vars.__hitlAnswer}" = no'
   - from: phasing
     to: cancelled
     description: Operator cancelled planning.
     guard:
-      kind: always
+      kind: shell
+      options:
+        command: 'test "${vars.__hitlAnswer}" = cancel'
 
   # ── linear body ──
   - from: feature-id
@@ -166,14 +178,20 @@ transitions:
     to: handoff
     description: Design approved — hand off to sp:spur-dev.
     guard:
-      kind: always
+      kind: shell
+      options:
+        command: 'test "${vars.__hitlAnswer}" = yes'
   - from: design-approval
     to: design-gen
     description: Rework — operator requested design revisions.
     guard:
-      kind: always
+      kind: shell
+      options:
+        command: 'test "${vars.__hitlAnswer}" = no'
   - from: design-approval
     to: cancelled
     description: Operator cancelled planning.
     guard:
-      kind: always
+      kind: shell
+      options:
+        command: 'test "${vars.__hitlAnswer}" = cancel'

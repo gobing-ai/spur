@@ -5,6 +5,7 @@ import type { RuleService } from '../services/rule-service';
 import { AgentRunActionRunner } from './actions/agent-run';
 import { FileExistsActionRunner } from './actions/file-exists';
 import { FileReadActionRunner } from './actions/file-read';
+import { FileReadIntoVarActionRunner } from './actions/file-read-into-var';
 import { HitlConfirmActionRunner } from './actions/hitl-confirm';
 import { HitlInputActionRunner } from './actions/hitl-input';
 import { HitlSelectActionRunner } from './actions/hitl-select';
@@ -29,6 +30,7 @@ export function registerSpurBuiltins(host: WorkflowEngineHost, options: SpurWork
     host.registerAction(new RuleCheckActionRunner(options.ruleService), 'builtin');
     host.registerAction(new FileExistsActionRunner(fileSystem), 'builtin');
     host.registerAction(new FileReadActionRunner(fileSystem), 'builtin');
+    host.registerAction(new FileReadIntoVarActionRunner(fileSystem), 'builtin');
     host.registerAction(new HitlConfirmActionRunner(options.hitlResponder), 'builtin');
     host.registerAction(new HitlSelectActionRunner(options.hitlResponder), 'builtin');
     host.registerAction(new HitlInputActionRunner(options.hitlResponder), 'builtin');

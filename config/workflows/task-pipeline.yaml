@@ -46,6 +46,9 @@ states:
       Pre-flight structural validation. The precheck→implement guard runs
       `spur task check <wbs>`; a failure routes to `failed` (blocked report).
     onEnter:
+      - kind: shell
+        options:
+          command: "${vars.spurBin} agent doctor ${vars.agent}"
       - kind: note
         options:
           # R4 task_run_links linkage (kind=pipeline) is written by a WorkflowService

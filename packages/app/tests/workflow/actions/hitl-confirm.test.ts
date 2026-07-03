@@ -24,12 +24,13 @@ describe('HitlConfirmActionRunner', () => {
         expect(result.setVars).toEqual({ __hitlAnswer: 'no' });
     });
 
-    test('returns ok:false on cancel', async () => {
+    test('returns ok:true + setVars on cancel so workflows can route to cancelled', async () => {
         const responder: HitlResponder = { respond: async () => ({ value: 'cancel', cancelled: true }) };
         const runner = new HitlConfirmActionRunner(responder);
         const result = await runner.execute({ prompt: 'Proceed?' }, makeCtx());
-        expect(result.ok).toBe(false);
-        expect(result.error).toContain('cancelled');
+        expect(result.ok).toBe(true);
+        expect(result.data).toEqual({ answer: 'cancel', cancelled: true });
+        expect(result.setVars).toEqual({ __hitlAnswer: 'cancel' });
     });
 
     test('returns ok:false on missing prompt', async () => {

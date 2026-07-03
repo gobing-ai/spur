@@ -44,13 +44,9 @@ export class HitlConfirmActionRunner implements ActionRunner {
             ok: !(answer.cancelled || answer.value === 'cancel'),
         });
 
-        if (answer.cancelled || answer.value === 'cancel') {
-            return { ok: false, error: 'hitl.confirm cancelled' };
-        }
-
         return {
             ok: true,
-            data: { answer: answer.value },
+            data: { answer: answer.value, cancelled: answer.cancelled === true || answer.value === 'cancel' },
             setVars: { [varName]: answer.value },
         };
     }
