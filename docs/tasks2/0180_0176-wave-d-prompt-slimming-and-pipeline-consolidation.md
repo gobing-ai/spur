@@ -314,8 +314,7 @@ Coverage: 99.45% funcs / 99.06% lines from `bun run test`.
 Final disposition: PASS with one logged follow-up (bug-747) and the repeated dogfood timeout recorded as bug-746.
 ### References
 - Parent: 0176 (`docs/tasks2/0176_sp-plugin-audit-remediation-decomposition-wiring-review-dept.md`)
-- Dogfood workflow run: `4ac8a861-6233-4e19-ad43-595d99bec537`
-- Dogfood report: `docs/dogfood/2026-07-02-sp-super-coder-0180-wave-d-dogfood.md`
+- Dogfood workflow run: `4ac8a861-6233-4e19-ad43-595d99bec537` (local-only dogfood report retained under `docs/dogfood/`, gitignored — not committed; referenced here by run ID per ADR/Q1 decision).
 - ADR: ADR-029 (`docs/00_ADR.md:771`)
 - Related issues: bug-746 (0180 implement timeout), bug-747 (`--folder` lifecycle guard gap), plus timeout lineage bug-740/742/744
 ### History

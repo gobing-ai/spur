@@ -199,7 +199,7 @@ export class TaskCheckService extends PlanningCheckService {
         this.runL2(doc, entry, findings);
 
         // ── L3: Format rules (warning-first, 3 hard-core) ──
-        this.runL3(doc, entry, findings);
+        this.runL3(doc, entry, status, findings);
         // ── L4: Traceability — feature_id edges, parent_wbs, dependencies, AC coverage
         const tasksDir = dirname(filePath);
         const featuresDir = join(dirname(tasksDir), 'features');
@@ -213,7 +213,12 @@ export class TaskCheckService extends PlanningCheckService {
     }
 
     // ── L3: Format rules ──
-    private runL3(doc: MarkdownDocument, entry: MatrixEntry | undefined, findings: CheckFindings[]): void {
+    private runL3(
+        doc: MarkdownDocument,
+        entry: MatrixEntry | undefined,
+        status: string,
+        findings: CheckFindings[],
+    ): void {
         // Requirements: R-numbering (warning, only when section has real content)
         const reqBody = doc.getSection('Requirements');
         if (reqBody !== null && !isPlaceholderBody(reqBody)) {
@@ -318,6 +323,27 @@ export class TaskCheckService extends PlanningCheckService {
                     severity: 'warning',
                     section: 'Plan',
                     message: 'Plan should be ordered checklist or table, not free-form prose',
+                });
+            }
+        }
+
+        // Terminal-status open checkboxes (0182 R7-optional): a `done`/`cancelled` task
+        // should carry zero unchecked `- [ ] ` boxes anywhere in its body — an open box
+        // on closed work means the reader can't tell "done" from "abandoned" by the
+        // boxes alone. Warning only (never error): a task can be legitimately closed
+        // with an intentionally-unchecked box (e.g. a deferred sub-item noted in prose).
+        // Gated strictly on terminal status so it never fires on a roster-bearing
+        // umbrella/tracking parent still in progress (todo/wip) — the 0176 roster
+        // pattern's Plan is expected to carry open boxes until every child lands.
+        if (status === 'done' || status === 'cancelled') {
+            const fullBody = doc.bodyWithoutFrontmatter;
+            const openBoxes = (fullBody.match(/^\s*[-*]\s\[ \]\s/gm) ?? []).length;
+            if (openBoxes > 0) {
+                findings.push({
+                    layer: 'L3',
+                    severity: 'warning',
+                    section: '',
+                    message: `Task is ${status} but carries ${openBoxes} unchecked checklist box(es) — flip to [x] or remove before closing`,
                 });
             }
         }

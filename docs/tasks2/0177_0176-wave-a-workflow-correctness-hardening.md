@@ -181,9 +181,8 @@ Focused partial test command passed all 42 assertions but exited non-zero becaus
 
 Residual risk: `idea-pipeline.yaml` still relies on shell commands for sentinel/counter state. That matches the current workflow DSL and is covered by structural tests, but a first-class retry/sentinel action would be cleaner in a later wave.
 ### References
-- Dogfood report: `docs/dogfood/2026-07-02-sp-super-coder-0177-wave-a-dogfood.md`
-- Failed dogfood workflow run: `34233eec-d3ed-44c8-9030-e0b813fb03b5`
-- Parent decomposition dogfood report: `docs/dogfood/2026-07-02-sp-super-coder-0176-decomposition-dogfood.md`
+- Failed dogfood workflow run: `34233eec-d3ed-44c8-9030-e0b813fb03b5` (local-only dogfood report retained under `docs/dogfood/`, gitignored — not committed; referenced here by run ID per ADR/Q1 decision).
+- Parent task: `0176`.
 ### History
 - 2026-07-02T06:42:17.053Z todo → wip (system)
 - 2026-07-02T13:54:56.219Z wip → testing (system)

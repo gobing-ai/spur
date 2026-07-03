@@ -12,7 +12,7 @@ priority: P2
 tags: ["review"]
 dependencies: []
 created_at: "2026-07-02T05:34:33.113Z"
-updated_at: "2026-07-02T22:40:38.166Z"
+updated_at: "2026-07-03T06:25:42.084Z"
 ---
 
 ## 0176. sp-plugin audit remediation: decomposition wiring, review depth, workflow-config hardening
@@ -116,47 +116,47 @@ Second pass over the full plugin surface (23 commands, 16 skills, 2 agents, hook
 Rubric (recorded per decomposition standard): E~20h D4 L3 C1 R1 = high → this capture task is a decomposition CANDIDATE, not an executor. When work starts, decompose by the wave boundaries below (each wave = one deliverable, own review gate); do not decompose further than the four waves without re-scoring. Sequencing is riskiest-first: infra (workflows) → code (CLI/service) → skill prose → docs.
 
 **Wave A — workflow correctness (F5, F6, F7) — do first, blocks dogfooding**
-- [ ] F5: move `spur task batch-create` out of idea-pipeline transition guards into an `onEnter` action + sentinel file; guards test the sentinel only. Move retry-counter increments into onEnter actions.
-- [ ] F5: add a duplicate-run regression proof — a workflow test (or scripted dry-run) asserting a fail-then-succeed guard sequence cannot invoke batch-create twice.
-- [ ] F6: route HITL answers — guard design-approval/feature-check/batch-create/phasing outbound edges on `${vars.__hitlAnswer}`; make "No" reach the rework edge and "cancel" reach cancelled; delete edges that remain dead. Consider an engine `var-equals` guard kind upstream (ts-libs) if shell `test` reads prove awkward.
-- [ ] F7: replace `$(cat …)` in note/hitl strings with var-materialized values or drop them.
-- [ ] Validate every touched YAML with `spur workflow validate` and keep the bundled-workflow validation test green.
+- [x] F5: move `spur task batch-create` out of idea-pipeline transition guards into an `onEnter` action + sentinel file; guards test the sentinel only. Move retry-counter increments into onEnter actions.
+- [x] F5: add a duplicate-run regression proof — a workflow test (or scripted dry-run) asserting a fail-then-succeed guard sequence cannot invoke batch-create twice.
+- [x] F6: route HITL answers — guard design-approval/feature-check/batch-create/phasing outbound edges on `${vars.__hitlAnswer}`; make "No" reach the rework edge and "cancel" reach cancelled; delete edges that remain dead. Consider an engine `var-equals` guard kind upstream (ts-libs) if shell `test` reads prove awkward.
+- [x] F7: replace `$(cat …)` in note/hitl strings with var-materialized values or drop them.
+- [x] Validate every touched YAML with `spur workflow validate` and keep the bundled-workflow validation test green.
 
 **Wave B — decomposition wiring (F1, F2)**
-- [ ] F1: `TaskService.createBatch` (or the batch-create command path) auto-invokes `refreshRoster` per distinct `parent_wbs` after the atomic create; add a service test (batch with parent → roster block present, idempotent on re-run).
-- [ ] F2: same path transitions each referenced parent `todo → wip` via the lifecycle verb (skip silently if already wip+; surface guard denials loudly).
-- [ ] F2: exclude tasks with open children from `ready` resolution in `spur-dev/references/execution-batch.md` (skill-prose rule + report line for each excluded parent).
-- [ ] F1: update `spec-decomposition/references/decomposition.md` — roster note ("maintained by hand today" → refresh-roster verb) and gate note ("deferred" → 0121 shipped); add `spur task refresh-roster` to `planning-workflow.md` Step 5 and to child-status-change guidance.
+- [x] F1: `TaskService.createBatch` (or the batch-create command path) auto-invokes `refreshRoster` per distinct `parent_wbs` after the atomic create; add a service test (batch with parent → roster block present, idempotent on re-run).
+- [x] F2: same path transitions each referenced parent `todo → wip` via the lifecycle verb (skip silently if already wip+; surface guard denials loudly).
+- [x] F2: exclude tasks with open children from `ready` resolution in `spur-dev/references/execution-batch.md` (skill-prose rule + report line for each excluded parent).
+- [x] F1: update `spec-decomposition/references/decomposition.md` — roster note ("maintained by hand today" → refresh-roster verb) and gate note ("deferred" → 0121 shipped); add `spur task refresh-roster` to `planning-workflow.md` Step 5 and to child-status-change guidance.
 
 **Wave C — verification depth (F3, F4) — changes verdict semantics; own review + a probe task after**
-- [ ] F3: add Design-conformance step to `sp:code-verification` verify mode (between AC guard and SECUA): parse `### Design`, classify each design claim DONE/PARTIAL/NOT DONE/CHANGED against the diff; silent deviation = major finding → PARTIAL; documented deviation (Solution notes it) = CHANGED, acceptable. Calibrate SECUA-A against the feature design satellite when present.
-- [ ] F3: add scope-creep line — diff hunks matching no Design/Plan/requirement item are reported (informational, not blocking).
-- [ ] F4a: evidence rule — every CORE requirement/AC needs ≥1 `test` or `command` evidence row; `static-ref`-only on behavior-bearing AC caps at PARTIAL. Update `verdict-schema.md` aggregation notes accordingly.
-- [ ] F4b: CLI-surface tasks require one golden-path invocation of the changed command captured as `command` evidence.
-- [ ] F4c: fold verification-before-completion language into the skill (no PASS without fresh command output; agent-reported success is never evidence).
-- [ ] Enrich `code-review` Workflow C with receiving-review rules (verify finding against codebase before fixing; blocking → simple → complex order; test each fix individually) and Workflow B with the fresh-subagent structured brief (what-was-implemented / requirements / SHA range).
-- [ ] After landing: run one boring probe task through the full pipeline to prove the tightened verdict semantics don't false-FAIL (per the established verifier-hardening-then-probe pattern).
+- [x] F3: add Design-conformance step to `sp:code-verification` verify mode (between AC guard and SECUA): parse `### Design`, classify each design claim DONE/PARTIAL/NOT DONE/CHANGED against the diff; silent deviation = major finding → PARTIAL; documented deviation (Solution notes it) = CHANGED, acceptable. Calibrate SECUA-A against the feature design satellite when present.
+- [x] F3: add scope-creep line — diff hunks matching no Design/Plan/requirement item are reported (informational, not blocking).
+- [x] F4a: evidence rule — every CORE requirement/AC needs ≥1 `test` or `command` evidence row; `static-ref`-only on behavior-bearing AC caps at PARTIAL. Update `verdict-schema.md` aggregation notes accordingly.
+- [x] F4b: CLI-surface tasks require one golden-path invocation of the changed command captured as `command` evidence.
+- [x] F4c: fold verification-before-completion language into the skill (no PASS without fresh command output; agent-reported success is never evidence).
+- [x] Enrich `code-review` Workflow C with receiving-review rules (verify finding against codebase before fixing; blocking → simple → complex order; test each fix individually) and Workflow B with the fresh-subagent structured brief (what-was-implemented / requirements / SHA range).
+- [x] After landing: run one boring probe task through the full pipeline to prove the tightened verdict semantics don't false-FAIL (per the established verifier-hardening-then-probe pattern).
 
 **Wave D — prompt slimming + consolidation + doc drift (F8, F9, F10)**
-- [ ] F8a: discovery prompt → "Run sp:brainstorm for ${vars.idea}" + artifact path; `needs_design` criteria live only in the skill.
-- [ ] F8b: fix decompose prompt to the real batch schema (background/requirements only; refine fills AC/Design/Plan later).
-- [ ] F8c/d: planning-pipeline — replace feature-id prose with `spur feature create`; add `spurBin`/`agent`/`stepTimeoutMs` vars + `agent:`/`timeoutMs` on agent.run steps (or resolve F9 first and skip).
-- [ ] F9: decide planning-pipeline's fate (retire into idea-pipeline vs keep both) — needs operator call; record as ADR entry either way.
-- [ ] F9: promote wrapup feature-transition shell ladder to `spur feature advance <id> [--to <status>]` (0108 precedent); wrapup YAML calls the verb.
-- [ ] F10: renumber/restructure `code-verification/SKILL.md` steps (or move to named anchors); fix secu-review.md step ref; dedupe code-review See-also.
-- [ ] Same-commit doc sync per constitution: 04_DESIGN for any CLI-surface change (feature advance, batch-create side effects), CHANGELOG entries.
+- [x] F8a: discovery prompt → "Run sp:brainstorm for ${vars.idea}" + artifact path; `needs_design` criteria live only in the skill.
+- [x] F8b: fix decompose prompt to the real batch schema (background/requirements only; refine fills AC/Design/Plan later).
+- [x] F8c/d: planning-pipeline — replace feature-id prose with `spur feature create`; add `spurBin`/`agent`/`stepTimeoutMs` vars + `agent:`/`timeoutMs` on agent.run steps (or resolve F9 first and skip).
+- [x] F9: decide planning-pipeline's fate (retire into idea-pipeline vs keep both) — needs operator call; record as ADR entry either way.
+- [x] F9: promote wrapup feature-transition shell ladder to `spur feature advance <id> [--to <status>]` (0108 precedent); wrapup YAML calls the verb.
+- [x] F10: renumber/restructure `code-verification/SKILL.md` steps (or move to named anchors); fix secu-review.md step ref; dedupe code-review See-also.
+- [x] Same-commit doc sync per constitution: 04_DESIGN for any CLI-surface change (feature advance, batch-create side effects), CHANGELOG entries.
 
 **Wave E — comprehensive-sweep items (N1–N10)**
-- [ ] N1: add `verdict`, `refresh-roster`, `path` sections to `spur-cli/references/tasks/verbs.md` (flags + JSON shapes, mirroring existing sections).
-- [ ] N2: regenerate the AGENTS.md CLI-surface block from `apps/cli/src/commands/*` option definitions (add missing flags; same-commit rule).
-- [ ] N3: inline task-write-guard logic into the plugin hook (self-contained bun script via `${CLAUDE_PLUGIN_ROOT}`); port/extend the hook test to cover the real guard decisions; keep fail-open only for runtime errors. Decide with operator: keep superskill delegation as an optional fast path or drop it.
-- [ ] N4: add `spur agent doctor ${vars.agent}` to task-pipeline precheck and idea-pipeline start; failure routes to `failed` with the doctor report.
-- [ ] N5: recompute idea-pipeline worst legal hop count; raise `iterationBound` above it (~25) with a comment showing the math.
-- [ ] N6: add `--design-approved` flag to dev-idea and dev-plan wrappers mapping to `design_approved=true` in `--vars`.
-- [ ] N7: fix corpus-path examples in dev-brainstorm.md and dev-refine.md to `docs/tasks2/NNNN_slug.md` shape (or neutral placeholders).
-- [ ] N8: change the roster row template link to inline code in decomposition.md.
-- [ ] N9: mark dev-fixall auto-detection rows as generic examples or align with repo scripts.
-- [ ] N10: move the coverage-threshold knob into code-testing's reference frontmatter (granularity-knob pattern); dev-unit cites it.
+- [x] N1: add `verdict`, `refresh-roster`, `path` sections to `spur-cli/references/tasks/verbs.md` (flags + JSON shapes, mirroring existing sections).
+- [x] N2: regenerate the AGENTS.md CLI-surface block from `apps/cli/src/commands/*` option definitions (add missing flags; same-commit rule).
+- [x] N3: inline task-write-guard logic into the plugin hook (self-contained bun script via `${CLAUDE_PLUGIN_ROOT}`); port/extend the hook test to cover the real guard decisions; keep fail-open only for runtime errors. Decide with operator: keep superskill delegation as an optional fast path or drop it.
+- [x] N4: add `spur agent doctor ${vars.agent}` to task-pipeline precheck and idea-pipeline start; failure routes to `failed` with the doctor report.
+- [x] N5: recompute idea-pipeline worst legal hop count; raise `iterationBound` above it (~25) with a comment showing the math.
+- [x] N6: add `--design-approved` flag to dev-idea and dev-plan wrappers mapping to `design_approved=true` in `--vars`.
+- [x] N7: fix corpus-path examples in dev-brainstorm.md and dev-refine.md to `docs/tasks2/NNNN_slug.md` shape (or neutral placeholders).
+- [x] N8: change the roster row template link to inline code in decomposition.md.
+- [x] N9: mark dev-fixall auto-detection rows as generic examples or align with repo scripts.
+- [x] N10: move the coverage-threshold knob into code-testing's reference frontmatter (granularity-knob pattern); dev-unit cites it.
 
 <!-- AUTO-GENERATED by spur task refresh-roster -->
 | WBS | Sub-task | Status |
@@ -203,12 +203,12 @@ Post-decomposition and execution dogfood review for the 0176 umbrella task.
 
 Final disposition: all planned waves closed, all canonical gates pass, residual items are documented and non-blocking for 0176.
 ### References
-- Decomposition dogfood report: `docs/dogfood/2026-07-02-sp-super-coder-0176-decomposition-dogfood.md`.
-- Wave A report: `docs/dogfood/2026-07-02-sp-super-coder-0177-wave-a-dogfood.md`.
-- Wave B report: `docs/dogfood/2026-07-02-sp-super-coder-0178-wave-b-dogfood.md`.
-- Wave C report: `docs/dogfood/2026-07-02-sp-super-coder-0179-wave-c-dogfood.md`.
-- Wave D report: `docs/dogfood/2026-07-02-sp-super-coder-0180-wave-d-dogfood.md`.
-- Wave E report: `docs/dogfood/2026-07-02-sp-super-coder-0181-wave-e-dogfood.md`.
+- Decomposition + per-wave dogfood runs (local-only reports, not committed; see each child's own
+  References for its run ID): decomposition run recorded under 0176 dogfood monitoring; Wave A
+  run `34233eec-d3ed-44c8-9030-e0b813fb03b5`; Wave B run `1b7049d2-1073-4d4d-a97a-47e299bc316e`;
+  Wave C run `66561133-64cc-4e93-92d4-2aa8413305d6`; Wave D run `4ac8a861-6233-4e19-ad43-595d99bec537`;
+  Wave E run `10ab1085-a744-4e10-aee2-6682b062f550`.
+- Related bugs: bug-740, bug-744, bug-745, bug-746, bug-747, bug-748, bug-749.
 - Completed children: `0177`, `0178`, `0179`, `0180`, `0181`.
 ### History
 - 2026-07-02T05:36:39.604Z backlog → todo (system)

@@ -1,5 +1,45 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **Web design system + theming + responsive (W4/0085)** — design tokens via Tailwind `@theme` (Spur identity palette, semantic colors, typography), dark mode toggle with daisyUI theme switching, localStorage persistence, and `prefers-color-scheme` first-load respect. Mobile responsive: left sidebar → slide-in drawer, right panel → bottom sheet on viewports <768px. FOUC-prevention inline script in `index.astro`.
+
+
+- **HITL workflow actions and responders** — three human-in-the-loop action runners (`hitl.confirm`, `hitl.select`, `hitl.input`) plus CLI (`ClackHitlResponder`) and non-interactive (`DefaultHitlResponder`) responders. Answers flow back via engine `setVars` so guards can branch on user input. Responder selected per `isatty(1)`: interactive `@clack/prompts` when attached to a terminal, configured defaults in CI/headless. Wired through `SpurWorkflowBuiltinsOptions`, `WorkflowAppServiceContext`, and `CliContext` with the same injection pattern as `agent.run`/`rule.check`. Engine catalog bumped to `^0.3.10` for `HitlResponder` contract.
+
+### Changed
+
+- **`hitl.confirm` cancel now routes via `__hitlAnswer` (0182 Wave A).** The `task-pipeline.yaml`
+  `approve` gate replaced its single `always -> verify` guard with three ordered guards mirroring
+  `idea-pipeline.yaml` — `__hitlAnswer = yes -> verify`, `= no -> failed`, `= cancel -> cancelled`
+  (declaration order: yes, no, cancel; no `always` edge remains). `cancelled` is a new terminal
+  state. This is a behavior change for any workflow consuming the approve gate's old pass-through.
+  New `file.read.into-var` builtin resolves absolute paths without re-joining `context.workdir`.
+  Idea-pipeline sentinel/guard hardening closes the same HITL-routing gap in `idea-pipeline.yaml`.
+- **Verification depth tightened.** `sp:code-verification` now includes a design-conformance
+  pass and `spur task verdict` downgrades behavior-bearing CORE AC rows from `MET` to
+  `PARTIAL` unless they carry `test` or `command` evidence. CLI-surface tasks are expected
+  to preserve a golden-path `--json` command evidence row.
+- **Feature wrap-up lifecycle walk centralized.** `spur feature advance <id> [--to <status>]`
+  now owns the legal forward path (`backlog→active→verifying→done`) and replaces the inline
+  shell status ladder previously embedded in `wrapup-pipeline.yaml`.
+- **Agent doctor precheck + design-approval flag + CLI facade sync (0176 Wave E).**
+  `task-pipeline.yaml` and `idea-pipeline.yaml` now run `spur agent doctor ${vars.agent}` before
+  agent-run work; `idea-pipeline.yaml` raises `iterationBound` to 25 on its retry-capped edges.
+  `/sp:dev-idea` and `/sp:dev-plan` expose `--design-approved` as the wrapper path for
+  `design_approved=true`. `spur-cli/references/tasks/verbs.md` documents `task verdict`,
+  `task refresh-roster`, `task path`, and `resolve --strict`. `task-write-guard.ts` keeps its
+  versioned guard decision logic local with fail-open and decision tests; `hooks.json` stays on
+  the portable `superskill hook run sp task-write-guard` entrypoint.
+- **Decomposition wiring — `spur task batch-create` auto-wires parent tasks (task 0178, 0176 Wave B / F1+F2).** When a batch carries items with `parent_wbs`, the service now (a) invokes `spur task refresh-roster` for every distinct parent after the atomic create lands (auto-generates the `## Plan` sub-task roster block) and (b) transitions each parent from `todo` to `wip` via the lifecycle-guarded verb (`writeService.transition`). Wire-up is best-effort per parent — partial failures record into the new `parentsWired` return field and do not abort the batch (children are already on disk). The CLI surfaces a per-parent line in both human and `--json` output. `batchCreate`'s return type is now `{ children: WriteResult[]; parentsWired: ParentWireResult[] }`. `spur-dev/references/execution-batch.md` Step 1 gains an umbrella-parent exclusion rule (R1.5) that drops any `ready` candidate with open children. `spec-decomposition/references/decomposition.md` and `spur-dev/references/planning-workflow.md` no longer mention the "hand-write the roster" workflow or the "deferred roll-up gate" — both are shipped.
+
+### Removed
+
+- **`@gobing-ai/spur-plugin-sdk` package removed.** The plugin substrate moved upstream to a bare `PluginHost` + `Plugin` lifecycle core in `@gobing-ai/ts-infra`, consumed via `runApplication` (ADR-012 amendment). `packages/plugin-sdk` is deleted; the server's unused plugin-route plumbing is removed. The previously published `@gobing-ai/spur-plugin-sdk@0.1.8` remains on npm but receives no further releases. The release script and Publish workflow no longer build or publish it.
+- **`spur plugin` placeholder command removed.** Plugin discovery is deferred after the ADR-012 amendment, so the always-empty `plugin list|info` CLI surface is removed until a real plugin consumer exists.
+
 ## [0.2.12] — 2026-07-01
 
 ### Added
@@ -38,13 +78,6 @@
   `bun run format` as a post-agent cleanup step, preventing unformatted agent output from
   reaching the test stage. The test stage runs `bun run lint` as a post-agent gate — if
   the lint gate is red, the run routes to `failed` before review can advance.
-- **Verification depth tightened.** `sp:code-verification` now includes a design-conformance
-  pass and `spur task verdict` downgrades behavior-bearing CORE AC rows from `MET` to
-  `PARTIAL` unless they carry `test` or `command` evidence. CLI-surface tasks are expected
-  to preserve a golden-path `--json` command evidence row.
-- **Feature wrap-up lifecycle walk centralized.** `spur feature advance <id> [--to <status>]`
-  now owns the legal forward path (`backlog→active→verifying→done`) and replaces the inline
-  shell status ladder previously embedded in `wrapup-pipeline.yaml`.
 - **`/sp:dev-wrap` and `/sp:dev-wrapall` accept `--dry-run`.** The flag passes through
   to `spur workflow run --dry-run`, validating transitions without writing corpus or
   memory artifacts.
@@ -284,24 +317,6 @@ module and a documented module-hub pattern), the **`sp` dev-workflow plugin** (t
 - Task-planning migration from `rd3` into the Spur planning layer (ADR-020–023).
 - Test coverage lifted above the 90% line/function threshold across CLI, server, and
   domain; `plugins/sp` tests included in the verification gate.
-
-## [Unreleased]
-
-### Added
-
-- **Web design system + theming + responsive (W4/0085)** — design tokens via Tailwind `@theme` (Spur identity palette, semantic colors, typography), dark mode toggle with daisyUI theme switching, localStorage persistence, and `prefers-color-scheme` first-load respect. Mobile responsive: left sidebar → slide-in drawer, right panel → bottom sheet on viewports <768px. FOUC-prevention inline script in `index.astro`.
-
-
-- **HITL workflow actions and responders** — three human-in-the-loop action runners (`hitl.confirm`, `hitl.select`, `hitl.input`) plus CLI (`ClackHitlResponder`) and non-interactive (`DefaultHitlResponder`) responders. Answers flow back via engine `setVars` so guards can branch on user input. Responder selected per `isatty(1)`: interactive `@clack/prompts` when attached to a terminal, configured defaults in CI/headless. Wired through `SpurWorkflowBuiltinsOptions`, `WorkflowAppServiceContext`, and `CliContext` with the same injection pattern as `agent.run`/`rule.check`. Engine catalog bumped to `^0.3.10` for `HitlResponder` contract.
-
-### Changed
-
-- **Decomposition wiring — `spur task batch-create` auto-wires parent tasks (task 0178, 0176 Wave B / F1+F2).** When a batch carries items with `parent_wbs`, the service now (a) invokes `spur task refresh-roster` for every distinct parent after the atomic create lands (auto-generates the `## Plan` sub-task roster block) and (b) transitions each parent from `todo` to `wip` via the lifecycle-guarded verb (`writeService.transition`). Wire-up is best-effort per parent — partial failures record into the new `parentsWired` return field and do not abort the batch (children are already on disk). The CLI surfaces a per-parent line in both human and `--json` output. `batchCreate`'s return type is now `{ children: WriteResult[]; parentsWired: ParentWireResult[] }`. `spur-dev/references/execution-batch.md` Step 1 gains an umbrella-parent exclusion rule (R1.5) that drops any `ready` candidate with open children. `spec-decomposition/references/decomposition.md` and `spur-dev/references/planning-workflow.md` no longer mention the "hand-write the roster" workflow or the "deferred roll-up gate" — both are shipped.
-
-### Removed
-
-- **`@gobing-ai/spur-plugin-sdk` package removed.** The plugin substrate moved upstream to a bare `PluginHost` + `Plugin` lifecycle core in `@gobing-ai/ts-infra`, consumed via `runApplication` (ADR-012 amendment). `packages/plugin-sdk` is deleted; the server's unused plugin-route plumbing is removed. The previously published `@gobing-ai/spur-plugin-sdk@0.1.8` remains on npm but receives no further releases. The release script and Publish workflow no longer build or publish it.
-- **`spur plugin` placeholder command removed.** Plugin discovery is deferred after the ADR-012 amendment, so the always-empty `plugin list|info` CLI surface is removed until a real plugin consumer exists.
 
 ## [0.1.9] — 2026-06-08
 

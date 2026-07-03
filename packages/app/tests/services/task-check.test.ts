@@ -1541,4 +1541,102 @@ describe('TaskCheckService', () => {
         expect(drift.every((f) => f.severity === 'error')).toBe(true);
         expect(result.pass).toBe(false);
     });
+
+    // ── L3: terminal-status open checkboxes (0182 R7-optional) ──
+
+    test('terminal-status boxes: a done task with an unchecked box triggers the warning', async () => {
+        const content = [
+            taskFm({ status: 'done', name: 'Closed task' }),
+            '',
+            '### Plan',
+            '',
+            '- [x] Step one',
+            '- [ ] Step two',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const boxes = result.findings.filter(
+            (f) => f.layer === 'L3' && f.severity === 'warning' && f.message.includes('unchecked checklist box'),
+        );
+        expect(boxes).toHaveLength(1);
+        expect(boxes[0]?.message).toContain('done');
+        expect(boxes[0]?.message).toContain('1 unchecked');
+    });
+
+    test('terminal-status boxes: a cancelled task with an unchecked box triggers the warning', async () => {
+        const content = [
+            taskFm({ status: 'cancelled', name: 'Cancelled task' }),
+            '',
+            '### Plan',
+            '',
+            '- [ ] Step one',
+            '- [ ] Step two',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const boxes = result.findings.filter(
+            (f) => f.layer === 'L3' && f.severity === 'warning' && f.message.includes('unchecked checklist box'),
+        );
+        expect(boxes).toHaveLength(1);
+        expect(boxes[0]?.message).toContain('cancelled');
+        expect(boxes[0]?.message).toContain('2 unchecked');
+    });
+
+    test('terminal-status boxes: a done task with all boxes checked does not trigger the warning', async () => {
+        const content = [
+            taskFm({ status: 'done', name: 'Closed task' }),
+            '',
+            '### Plan',
+            '',
+            '- [x] Step one',
+            '- [x] Step two',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const boxes = result.findings.filter((f) => f.layer === 'L3' && f.message.includes('unchecked checklist box'));
+        expect(boxes).toHaveLength(0);
+    });
+
+    test('terminal-status boxes: a todo/wip roster-bearing umbrella parent with open Plan boxes does NOT trigger the warning', async () => {
+        // The 0176 roster pattern: an umbrella/tracking parent's Plan legitimately
+        // carries open checklist items until every child sub-task lands. Gating the
+        // rule strictly on terminal status (done/cancelled) must not fire here.
+        const content = [
+            taskFm({ status: 'wip', name: 'Umbrella parent' }),
+            '',
+            '### Plan',
+            '',
+            '| Sub-task | Status |',
+            '| -------- | ------ |',
+            '| 0002 | open |',
+            '',
+            '- [ ] Wave A',
+            '- [ ] Wave B',
+            '- [ ] Wave C',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const boxes = result.findings.filter((f) => f.layer === 'L3' && f.message.includes('unchecked checklist box'));
+        expect(boxes).toHaveLength(0);
+    });
+
+    test('terminal-status boxes: a todo umbrella parent with open Plan boxes does NOT trigger the warning', async () => {
+        const content = [
+            taskFm({ status: 'todo', name: 'Umbrella parent' }),
+            '',
+            '### Plan',
+            '',
+            '- [ ] Wave A',
+            '- [ ] Wave B',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const boxes = result.findings.filter((f) => f.layer === 'L3' && f.message.includes('unchecked checklist box'));
+        expect(boxes).toHaveLength(0);
+    });
 });

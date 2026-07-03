@@ -83,8 +83,7 @@ Commands run:
 
 Residual risk: the portable `superskill hook run sp task-write-guard` runtime must continue to dispatch equivalent logic in installed environments. This repo now keeps the source decision matrix versioned and tested, but the cross-repo runtime remains a release/deployment seam.
 ### References
-- Dogfood run: `10ab1085-a744-4e10-aee2-6682b062f550` (`task-pipeline.yaml`, failed in implement after 600942ms).
-- Dogfood report: `docs/dogfood/2026-07-02-sp-super-coder-0181-wave-e-dogfood.md`.
+- Dogfood run: `10ab1085-a744-4e10-aee2-6682b062f550` (`task-pipeline.yaml`, failed in implement after 600942ms; local-only dogfood report retained under `docs/dogfood/`, gitignored — not committed; referenced here by run ID per ADR/Q1 decision).
 - Parent task: `0176`.
 - Related bugs/learnings: bug-748, bug-749.
 ### History
