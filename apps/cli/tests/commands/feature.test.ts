@@ -49,6 +49,7 @@ describe('spur feature CLI', () => {
         expect(allOut).toContain('create');
         expect(allOut).toContain('show');
         expect(allOut).toContain('update');
+        expect(allOut).toContain('advance');
         expect(allOut).toContain('list');
     });
 
@@ -228,6 +229,92 @@ describe('spur feature CLI', () => {
         const exitCode = await main(['feature', 'update', id, 'active'], { cwd, output });
         expect(exitCode).toBe(0);
         expect(lastMessage(output)).toContain(`${id}:`);
+    });
+
+    test('advance walks the forward lifecycle path to a reachable target', async () => {
+        const cOut = createCapturedOutput();
+        await main(['feature', 'create', 'Advance Me'], { cwd, output: cOut });
+        const id = createdId(cOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'advance', id, '--to', 'active', '--json'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lastMessage(output));
+        expect(parsed).toEqual({
+            id,
+            status: 'active',
+            hops: [{ from: 'backlog', to: 'active' }],
+        });
+    });
+
+    test('advance prints a human trail for a successful hop', async () => {
+        const cOut = createCapturedOutput();
+        await main(['feature', 'create', 'Advance Human'], { cwd, output: cOut });
+        const id = createdId(cOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'advance', id, '--to', 'active'], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(lastMessage(output)).toContain(`${id}: advanced to active`);
+        expect(lastMessage(output)).toContain('backlog → active');
+    });
+
+    test('advance is idempotent when the feature already has the target status', async () => {
+        const cOut = createCapturedOutput();
+        await main(['feature', 'create', 'Advance Idempotent'], { cwd, output: cOut });
+        const id = createdId(cOut);
+        await main(['feature', 'update', id, 'active'], { cwd, output: createCapturedOutput() });
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'advance', id, '--to', 'active', '--json'], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(JSON.parse(lastMessage(output))).toEqual({ id, status: 'active', hops: [] });
+    });
+
+    test('advance prints human no-op when already at the target status', async () => {
+        const cOut = createCapturedOutput();
+        await main(['feature', 'create', 'Advance Noop Human'], { cwd, output: cOut });
+        const id = createdId(cOut);
+        await main(['feature', 'update', id, 'active'], { cwd, output: createCapturedOutput() });
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'advance', id, '--to', 'active'], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(lastMessage(output)).toBe(`${id}: already at active; no advance needed`);
+    });
+
+    test('advance unknown feature exits 1', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'advance', 'ZZZZZ', '--json'], { cwd, output });
+        expect(exitCode).toBe(1);
+        expect(output.errors.at(-1)).toContain('Feature ZZZZZ not found');
+    });
+
+    test('advance exits 1 when the target is not reachable along the forward path', async () => {
+        const cOut = createCapturedOutput();
+        await main(['feature', 'create', 'Advance Unreachable'], { cwd, output: cOut });
+        const id = createdId(cOut);
+        await main(['feature', 'update', id, '--field', 'status', '--value', 'blocked'], {
+            cwd,
+            output: createCapturedOutput(),
+        });
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'advance', id, '--to', 'done'], { cwd, output });
+        expect(exitCode).toBe(1);
+        expect(output.errors.at(-1)).toContain(`cannot reach 'done' from 'blocked'`);
+    });
+
+    test('advance exits 1 when a guarded hop is denied', async () => {
+        const cOut = createCapturedOutput();
+        await main(['feature', 'create', 'Advance Guarded'], { cwd, output: cOut });
+        const id = createdId(cOut);
+        await main(['feature', 'update', id, 'active'], { cwd, output: createCapturedOutput() });
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'advance', id, '--to', 'verifying'], { cwd, output });
+        expect(exitCode).toBe(1);
+        expect(output.errors.at(-1)).toContain('Lifecycle transition denied');
     });
 
     test('update with neither status nor --field exits 2', async () => {

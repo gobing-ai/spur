@@ -135,6 +135,76 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
             }
         });
 
+    // ── advance ──
+    feature
+        .command('advance')
+        .summary('Walk a feature through the legal forward lifecycle path.')
+        .argument('<id>', 'Feature ID to advance')
+        .option('--to <status>', "Target status (default: 'done')")
+        .option('--folder <path>', 'Custom features folder')
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (id, options) => {
+            const svc = await makeService(context, options.folder);
+            const target = options.to ?? 'done';
+            const forwardPath: Record<string, string> = {
+                backlog: 'active',
+                active: 'verifying',
+                verifying: 'done',
+            };
+            const history: Array<{ from: string; to: string }> = [];
+            try {
+                const initial = await svc.show(id);
+                if (initial === null) {
+                    context.output.error(`Feature ${id} not found`);
+                    context.setExitCode(1);
+                    return;
+                }
+                let current = initial.status;
+                if (current === target) {
+                    if (options.json) {
+                        context.output.write(toJson({ id, status: current, hops: history }));
+                    } else {
+                        context.output.write(`${id}: already at ${current}; no advance needed`);
+                    }
+                    return;
+                }
+                let next: string | undefined = forwardPath[current];
+                while (next !== undefined) {
+                    if (current === 'active') {
+                        await assertFeatureCheckPass(context, id, options.folder, false);
+                    } else if (current === 'verifying') {
+                        await assertFeatureCheckPass(context, id, options.folder, true);
+                    }
+
+                    const result = await svc.transition(id, next);
+                    history.push({ from: result.fromStatus ?? current, to: result.toStatus ?? next });
+                    const observed = await svc.show(id);
+                    current = observed?.status ?? result.toStatus ?? next;
+                    if (current !== next) {
+                        throw new Error(
+                            `Feature ${id} expected status '${next}' after transition, observed '${current}'`,
+                        );
+                    }
+                    if (current === target) break;
+                    next = forwardPath[current];
+                }
+                if (current !== target) {
+                    context.output.error(`${id}: cannot reach '${target}' from '${current}' along the forward path`);
+                    context.setExitCode(1);
+                    return;
+                }
+                if (options.json) {
+                    context.output.write(toJson({ id, status: current, hops: history }));
+                } else {
+                    const trail = history.map((h) => `${h.from} → ${h.to}`).join(', ');
+                    context.output.write(`${id}: advanced to ${current} (${trail})`);
+                }
+            } catch (err) {
+                context.output.error(String(err));
+                context.setExitCode(1);
+            }
+        });
+
     // ── list ──
     feature
         .command('list')
@@ -294,4 +364,29 @@ async function makeService(context: CliContext, folderOverride?: string): Promis
         ...(lifecycle ? { lifecycle } : {}),
     });
     return new FeatureService({ fs: context.fs, writeService, featuresDir, tasksDir });
+}
+
+async function assertFeatureCheckPass(
+    context: CliContext,
+    id: string,
+    folderOverride: string | undefined,
+    strict: boolean,
+): Promise<void> {
+    const resolved = await resolvePlanningFolders(context.fs);
+    const featuresDir = folderOverride ?? context.fs.resolve(resolved.featuresDir);
+    const tasksDir = context.fs.resolve(resolved.tasksDir);
+    const entries = await context.fs.readDir(featuresDir);
+    const fileName = entries.find((name) => name.match(new RegExp(`^${id}_.+\\.md$`)));
+    if (fileName === undefined) {
+        throw new Error(`Feature ${id} not found`);
+    }
+    const result = await new FeatureCheckService(context.fs).check(`${featuresDir}/${fileName}`, id, {
+        strict,
+        featuresDir,
+        tasksDir,
+    });
+    if (!result.pass) {
+        const details = result.findings.map((f) => `${f.layer} ${f.section}: ${f.message}`).join('; ');
+        throw new Error(`Feature ${id} check failed before advance${strict ? ' (strict)' : ''}: ${details}`);
+    }
 }

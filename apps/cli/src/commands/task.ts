@@ -327,14 +327,22 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .action(async (options) => {
             const svc = await makeService(context, options.folder);
             try {
-                const results = await svc.batchCreate(options.file);
+                const { children, parentsWired } = await svc.batchCreate(options.file);
                 if (options.json) {
-                    const ids = results.map((r) => r.ref.id);
-                    context.output.write(toJson({ created: results.length, wbs: ids }));
+                    const ids = children.map((r) => r.ref.id);
+                    context.output.write(toJson({ created: children.length, wbs: ids, parentsWired }));
                 } else {
-                    context.output.write(`Created ${results.length} task(s)`);
-                    for (const r of results) {
+                    context.output.write(`Created ${children.length} task(s)`);
+                    for (const r of children) {
                         context.output.write(`  ${r.ref.id}  ${r.ref.filePath}`);
+                    }
+                    if (parentsWired.length > 0) {
+                        context.output.write(`Wired ${parentsWired.length} parent(s):`);
+                        for (const p of parentsWired) {
+                            const txLine = p.transitionedTo ? ` → ${p.transitionedTo}` : '';
+                            const errLine = p.errors.length > 0 ? ` (errors: ${p.errors.join('; ')})` : '';
+                            context.output.write(`  ${p.wbs}  rostered=${p.rostered}${txLine}${errLine}`);
+                        }
                     }
                 }
             } catch (err) {
@@ -416,7 +424,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 );
             }
 
-            if (result.verdict === 'UNKNOWN') {
+            if (result.verdict !== 'PASS') {
                 context.setExitCode(1);
             }
         });
