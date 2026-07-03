@@ -2,12 +2,17 @@
 
 ## [Unreleased]
 
+_No changes yet._
+
+## [0.3.0] — 2026-07-03
+
 ### Added
 
 - **Web design system + theming + responsive (W4/0085)** — design tokens via Tailwind `@theme` (Spur identity palette, semantic colors, typography), dark mode toggle with daisyUI theme switching, localStorage persistence, and `prefers-color-scheme` first-load respect. Mobile responsive: left sidebar → slide-in drawer, right panel → bottom sheet on viewports <768px. FOUC-prevention inline script in `index.astro`.
-
+- **`spur feature update --section/--from-file` (0175, Wave D).** `feature update` now accepts an optional `--section <name>` + `--from-file <path>` pair that rewrites a single frontmatter-or-body section from a file, mirroring `spur task update`. The feature body sections (Status, Acceptance Criteria, Linked Tasks, etc.) become machine-writable without a full-body round-trip. `wrapup-pipeline.yaml`'s feature-transition step now uses `feature update --section` for its linked-tasks write, replacing the previous inline `sed` shellout.
 
 - **HITL workflow actions and responders** — three human-in-the-loop action runners (`hitl.confirm`, `hitl.select`, `hitl.input`) plus CLI (`ClackHitlResponder`) and non-interactive (`DefaultHitlResponder`) responders. Answers flow back via engine `setVars` so guards can branch on user input. Responder selected per `isatty(1)`: interactive `@clack/prompts` when attached to a terminal, configured defaults in CI/headless. Wired through `SpurWorkflowBuiltinsOptions`, `WorkflowAppServiceContext`, and `CliContext` with the same injection pattern as `agent.run`/`rule.check`. Engine catalog bumped to `^0.3.10` for `HitlResponder` contract.
+- **`--continue` flag wired through sp-plugin dev commands.** `/sp:dev-idea`, `/sp:dev-plan`, and `/sp:dev-run` now pass `--continue` through to the underlying `spur agent run` invocation, enabling session-resume across pipeline steps.
 
 ### Changed
 
@@ -39,6 +44,13 @@
 
 - **`@gobing-ai/spur-plugin-sdk` package removed.** The plugin substrate moved upstream to a bare `PluginHost` + `Plugin` lifecycle core in `@gobing-ai/ts-infra`, consumed via `runApplication` (ADR-012 amendment). `packages/plugin-sdk` is deleted; the server's unused plugin-route plumbing is removed. The previously published `@gobing-ai/spur-plugin-sdk@0.1.8` remains on npm but receives no further releases. The release script and Publish workflow no longer build or publish it.
 - **`spur plugin` placeholder command removed.** Plugin discovery is deferred after the ADR-012 amendment, so the always-empty `plugin list|info` CLI surface is removed until a real plugin consumer exists.
+
+### Fixed
+
+- **Pipeline hardening across idea/planning/wrapup/task (0176 Wave C).** Implement-step agent runs now enforce a timeout; `file.read.into-var` and `agent.run` actions resolve absolute paths instead of re-joining `context.workdir` and double-rooting; idea/planning/wrapup pipelines reject undeclared variables at validate time and create missing output directories at run time.
+- **`--vars` JSON-string double-encoding.** `spur workflow run --vars '<json>'` parsed the flag once at the CLI boundary and again inside the workflow app service, corrupting nested JSON values. Single-parse fix; dev-command wrappers that pass `--vars` now carry a raw JSON string.
+- **Dogfood report contract enforcement.** `sp:dev-dogfood` rejects reports missing the mandatory `### 3. Monitor Ledger` table; `sp:super-coder` wording corrected to match the single-task-vs-batch contract.
+- **Task-check unchecked-box rule.** `spur task check` now flags an unchecked `- [ ]` box in the Plan section as a readiness failure — a task with outstanding sub-items cannot pass `check`.
 
 ## [0.2.12] — 2026-07-01
 
