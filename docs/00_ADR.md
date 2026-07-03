@@ -767,3 +767,46 @@ composition extraction + command re-point.
 
 **Detail:** destination model + the spine↔competency binding in `03_ARCHITECTURE.md §12`; skill/agent
 inventory in `04_DESIGN.md`; status in `05_FEATURES.md §9`.
+
+## ADR-029: Planning-Pipeline Fate Deferred; `spur feature advance` Added for Lifecycle Walks
+
+**Status:** Accepted · **Date:** 2026-07-02.
+
+**Decision.** Two related decisions, captured together because the same audit wave produced both:
+
+(a) **Planning-pipeline fate deferred.** `config/workflows/planning-pipeline.yaml` overlaps
+substantially with `config/workflows/idea-pipeline.yaml` (the design-gen → design-approval → handoff
+tail is duplicated; the only planning-pipeline-unique state is `phasing`, which stages a possible
+`02_ROADMAP.md` edit). F9 of the 0176 audit framed this as "decide and record the fate of
+planning-pipeline before making broad edits to its behavior." This ADR records the **deferral**, not
+the fate: the operator call (retire / keep / fold into idea-pipeline) is reserved for a follow-up
+wave. F8c/d of task 0180 (minimal prompt + vars alignment) are non-fate-changing compatibility
+fixes that work under any of the three resolutions. A future operator decision supersedes this
+entry with the chosen resolution and the corresponding edit.
+
+(b) **`spur feature advance` added; `feature update` retains single-step semantics.** The
+`wrapup-pipeline.yaml` `feature-transition` state embedded a ~20-line shell status ladder
+(`backlog → active → verifying → done`) that called `spur feature check` + `spur feature update`
+`+` `spur feature show` per hop. R5 of 0180 said "promote to a CLI verb or explicitly defer with
+rationale." Decision: **promote** to a new CLI verb `spur feature advance <id> [--to <status>]`
+that walks the legal lifecycle path idempotently and verifies after every hop. Rationale for adding
+(not deferring): the embedded shell ladder was the substantive F9 finding, and a CLI verb
+centralizes the legal-edge walk in code (with tests) instead of re-implementing it in workflow YAML
+every time. `spur feature update <id> <status>` remains the single-step transition verb; the
+advance verb is for the multi-hop walk. Both share the same `FeatureService.transition` legal-edge
+guard.
+
+**Why.** The deferral (a) is honest: the planning-pipeline decision is a real product call that
+should not be made by a single audit wave. F8c/d's narrow fixes buy time without pre-judging. The
+advance verb (b) addresses the embedded-shell-ladder finding with the same 0108 precedent that
+introduced `spur task record` — replace a ~20-line shell block with a tested CLI verb. The legal-edge
+guard is already in `FeatureService.transition`; the verb just calls it in a loop with verification
+between hops.
+
+**Relates:** records the F9 outcome of the 0176 audit (Wave D, task 0180). Realized by task 0180
+(F9a deferral, F9b/c verb). Supersedes: the implicit "shell ladder in workflow YAML is fine"
+posture. Extends ADR-016 (commands only where the LLM adds value) — `spur feature advance` is a
+mechanical multi-hop walker, not an LLM surface.
+
+**Detail:** CLI surface row in `04_DESIGN.md §1`; the verb's implementation in
+`apps/cli/src/commands/feature.ts`.

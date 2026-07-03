@@ -38,6 +38,13 @@
   `bun run format` as a post-agent cleanup step, preventing unformatted agent output from
   reaching the test stage. The test stage runs `bun run lint` as a post-agent gate — if
   the lint gate is red, the run routes to `failed` before review can advance.
+- **Verification depth tightened.** `sp:code-verification` now includes a design-conformance
+  pass and `spur task verdict` downgrades behavior-bearing CORE AC rows from `MET` to
+  `PARTIAL` unless they carry `test` or `command` evidence. CLI-surface tasks are expected
+  to preserve a golden-path `--json` command evidence row.
+- **Feature wrap-up lifecycle walk centralized.** `spur feature advance <id> [--to <status>]`
+  now owns the legal forward path (`backlog→active→verifying→done`) and replaces the inline
+  shell status ladder previously embedded in `wrapup-pipeline.yaml`.
 - **`/sp:dev-wrap` and `/sp:dev-wrapall` accept `--dry-run`.** The flag passes through
   to `spur workflow run --dry-run`, validating transitions without writing corpus or
   memory artifacts.
@@ -286,6 +293,10 @@ module and a documented module-hub pattern), the **`sp` dev-workflow plugin** (t
 
 
 - **HITL workflow actions and responders** — three human-in-the-loop action runners (`hitl.confirm`, `hitl.select`, `hitl.input`) plus CLI (`ClackHitlResponder`) and non-interactive (`DefaultHitlResponder`) responders. Answers flow back via engine `setVars` so guards can branch on user input. Responder selected per `isatty(1)`: interactive `@clack/prompts` when attached to a terminal, configured defaults in CI/headless. Wired through `SpurWorkflowBuiltinsOptions`, `WorkflowAppServiceContext`, and `CliContext` with the same injection pattern as `agent.run`/`rule.check`. Engine catalog bumped to `^0.3.10` for `HitlResponder` contract.
+
+### Changed
+
+- **Decomposition wiring — `spur task batch-create` auto-wires parent tasks (task 0178, 0176 Wave B / F1+F2).** When a batch carries items with `parent_wbs`, the service now (a) invokes `spur task refresh-roster` for every distinct parent after the atomic create lands (auto-generates the `## Plan` sub-task roster block) and (b) transitions each parent from `todo` to `wip` via the lifecycle-guarded verb (`writeService.transition`). Wire-up is best-effort per parent — partial failures record into the new `parentsWired` return field and do not abort the batch (children are already on disk). The CLI surfaces a per-parent line in both human and `--json` output. `batchCreate`'s return type is now `{ children: WriteResult[]; parentsWired: ParentWireResult[] }`. `spur-dev/references/execution-batch.md` Step 1 gains an umbrella-parent exclusion rule (R1.5) that drops any `ready` candidate with open children. `spec-decomposition/references/decomposition.md` and `spur-dev/references/planning-workflow.md` no longer mention the "hand-write the roster" workflow or the "deferred roll-up gate" — both are shipped.
 
 ### Removed
 

@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.3.1
+version: 1.3.2
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-06-30
+updated_at: 2026-07-02
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -510,11 +510,11 @@ Source: delivery §1.1, design §10.
 | `spur task list` | `--status <s>` `--phase <p>` `--parent <wbs>` `--feature <id>` `--folder <path>` `--json` | 0/1 | `--phase` is a legacy alias for `--status`; `--feature` filters to tasks carrying that `feature_id` edge (exact match) — the enumeration primitive for feature-level execution loops. Filters combine (AND). |
 | `spur task refresh` | `--folder <path>` `--json` | 0/1 | Regenerate `kanban.md` — pure function, deterministic ordering (A06). |
 | `spur task refresh-roster <wbs>` | `--folder <path>` `--json` | 0/1 | Regenerate a parent's sub-task roster block inside its `## Plan` (the generator half of the 0121 roll-up gate, task 0123). Scans `parent_wbs` children, renders a WBS·title·status table between `refresh-roster` auto-gen markers, and writes it idempotently — inserting the block (preserving hand-written Plan content) when absent, rewriting it in place when present. Zero children → clean no-op (`written:false`); no `## Plan` → error. `--json`: `{wbs, childCount, written}`. |
-| `spur task batch-create --file <json>` | `--folder <path>` `--json` | 0/1 | Create many tasks from validated JSON — all-or-nothing; validated against `apps/cli/schemas/task-batch.schema.json` (A08/C03). |
+| `spur task batch-create --file <json>` | `--folder <path>` `--json` | 0/1 | Create many tasks from validated JSON — all-or-nothing for child creation; validated against `apps/cli/schemas/task-batch.schema.json` (A08/C03). After children land, every distinct `parent_wbs` is wired best-effort: parent roster refresh + `todo→wip` lifecycle transition. `--json`: `{created, wbs, parentsWired:[{wbs, rostered, transitionedTo, errors[]}]}`. |
 | `spur task resolve <file-path>` | `--folder <path>` `--json` | 0/1 | Maps a path to owning task (WBS + file). Returns 1 if no match. Strategies: direct match, filename WBS parse, walk-up (A10). |
 | `spur task check [<wbs>]` | `--strict` `--strict-core` `--folder <path>` `--json` | 0/1 | Four-layer validation (§3). L4 traceability: `feature_id`/`parent_wbs`/`dependencies` edge resolution + **AC coverage** (DD-09: task scenarios must be a subset of the linked feature's AC by normalized title — warnings by default) + **parent↔child roll-up** (ADR-020 amendment 2026-06-25, task 0121: for a decomposition parent, warn when the parent is `done` with an open child, when all children are closed but the parent is still open, or when the parent `## Plan` lacks a sub-task roster table — all warnings, `--strict` elevates; inert for tasks with no children). Validates all tasks when `<wbs>` omitted; `--strict` elevates ALL warnings; `--strict-core` is the `testing→done` gate variant (fails only on hard-core errors — Solution `file:line`, Review P1–P4, and `gate:true` required-section misses — without the blanket elevation). Matrix loaded from `config/tasks/section-matrix.yaml`. |
-| `spur task verdict <wbs>` | `--from-answer <path>` `--folder <path>` `--json` | 0/1 | Derive the PASS/PARTIAL/FAIL gate verdict from the verify-step answer file and write `.spur/run/<wbs>-verdict.json`. PASS only if the agent reported PASS **and** `spur task check` passes; otherwise FAIL. The deterministic replacement for grep-over-prose in the pipeline verify step (0109). Consumed by the completion gate and by `spur task record`. |
-| `spur task record <wbs>` | `--verdict-file <path>` `--solution-from-diff` `--transition <status>` `--folder <path>` `--json` | 0/1 | Write Testing/Review from verify verdict; optional Solution backfill from `git diff` and status transition. Never transitions to `done` — the gate stays in the workflow (0108). |
+| `spur task verdict <wbs>` | `--from-answer <path>` `--folder <path>` `--json` | 0/1 | Derive the PASS/PARTIAL/FAIL/UNKNOWN gate verdict from the verify-step answer file and write `.spur/run/<wbs>-verdict.json`. Parses requirement rows, AC rows, and checks rows; behavior-bearing CORE AC rows marked `MET` without `test`/`command` evidence are downgraded to `PARTIAL` and surfaced via `evidence-rule-failed`. The deterministic replacement for grep-over-prose in the pipeline verify step (0109). Consumed by the completion gate and by `spur task record`. |
+| `spur task record <wbs>` | `--verdict-file <path>` `--solution-from-diff` `--transition <status>` `--folder <path>` `--json` | 0/1 | Write Testing/Review from verify verdict; optional Solution backfill from `git diff` and status transition. Preserves `acceptanceCriteria[]` evidence rows in Testing when present. Never transitions to `done` — the gate stays in the workflow (0108). |
 
 **Exit codes:** 0 success, 1 error, 2 invalid usage. Follows the design §10 `api-response` envelope
 for `--json` output (`{ ok, data? }`).
@@ -536,6 +536,7 @@ Every subcommand supports `--json` (ADR-010 invariant). Source: delivery §1.2, 
 | `spur feature create <name>` | `--parent <id>` `--folder <path>` `--json` | 0/1 | ID allocated under the create-lock (R1): `--parent` → next free child digit 1–9; no parent → next free group letter A–Z. |
 | `spur feature show <id>` | `--folder <path>` `--json` | 0/1 | Returns the feature summary + content; 1 if not found. |
 | `spur feature update <id> [status]` | `--field <key> --value <v>` `--section <name> --from-file <path>` `--folder <path>` `--json` | 0/1/2 | `<status>` runs the lifecycle transition (guarded, §7.5); `--field/--value` sets a scalar frontmatter field; `--section/--from-file` replaces an existing feature section body using the same body-only contract as `spur task update --section`. Section, field, and status updates may be composed in one invocation and apply in that order. 2 if an option pair is incomplete. |
+| `spur feature advance <id>` | `--to <status>` `--folder <path>` `--json` | 0/1 | Walk a feature through the legal forward lifecycle path (`backlog→active→verifying→done`, default target `done`). Runs the same feature checks the old wrapup shell ladder used before guarded hops (`active→verifying` non-strict, `verifying→done` strict), verifies observed status after each transition, and returns `{id,status,hops}` in `--json`. |
 | `spur feature list` | `--status <s>` `--priority <p>` `--folder <path>` `--json` | 0/1 | Lists features sorted by ID; optional status/priority filters. |
 | `spur feature check [<id>]` | `--strict` `--folder <path>` `--json` | 0/1 | Four-layer validation (§3): L1 schema, L2 section-matrix, L3 BDD AC (shared 0043 module) + one-active-P0-goal over {active,verifying} + ≤9-children (DD-14, corpus-derived), L4 incoming `feature_id` edges + orphan-scenario warnings + **AC coverage** (DD-09: feature scenarios covered by no linked task = warnings) + verifying-readiness (linked tasks not done/cancelled). Validates all features when `<id>` omitted; `--strict` elevates warnings. |
 | `spur feature refresh` | `--folder <path>` `--json` | 0/1 | Regenerate `INDEX.md` (deterministic ID-encoded tree, per-node status badge + relative link, §4.3) and repopulate each feature's `## Tasks` auto-gen marker region from task `feature_id` edges. Only the marker region is rewritten; the rest of the feature file and all task files are byte-preserved. |
@@ -543,8 +544,8 @@ Every subcommand supports `--json` (ADR-010 invariant). Source: delivery §1.2, 
 
 ID rules (DD-14): valid IDs match `^[A-Z][1-9]*$`. The `## Tasks` auto-gen markers are
 `<!-- AUTO-GENERATED by spur feature refresh -->` … `<!-- END AUTO-GENERATED -->` (recognized by
-`MarkdownDocument.replaceMarkerRegion`). The full `spur feature` surface (create/show/update/list/check/
-refresh/move) is now live.
+`MarkdownDocument.replaceMarkerRegion`). The full `spur feature` surface
+(create/show/update/advance/list/check/refresh/move) is now live.
 
 ### 7.3 Frontmatter schemas
 
