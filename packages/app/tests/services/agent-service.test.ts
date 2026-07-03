@@ -1124,6 +1124,48 @@ describe('AgentService.runCapture', () => {
         // Verify runner was called (dispatch happened)
         expect(runner.runPromptCommand).toHaveBeenCalledTimes(1);
     });
+
+    // R2b (G2): durationMs/signal/stderr must be forwarded, not discarded — the
+    // agent.run action's timeout/failure handoff artifact depends on them.
+    test('forwards durationMs on success', async () => {
+        const svc = makeService();
+        const { deps } = mockDeps(makeRunResult({ stdout: 'ok', durationMs: 12345 }));
+        const result = await svc.runCapture('hello', { agent: 'pi' }, deps);
+        expect(result.durationMs).toBe(12345);
+    });
+
+    test('forwards signal and stderr on a killed (timeout) run', async () => {
+        const svc = makeService();
+        const { deps } = mockDeps(
+            makeRunResult({
+                exitCode: null,
+                signal: 'SIGKILL',
+                stdout: 'partial',
+                stderr: 'oops',
+                durationMs: 1_800_000,
+            }),
+        );
+        const result = await svc.runCapture('hello', { agent: 'pi' }, deps);
+        expect(result.exitCode).toBe(3);
+        expect(result.signal).toBe('SIGKILL');
+        expect(result.stderr).toBe('oops');
+        expect(result.durationMs).toBe(1_800_000);
+    });
+
+    test('signal is undefined (not present) on a normal non-zero exit', async () => {
+        const svc = makeService();
+        const { deps } = mockDeps(makeRunResult({ exitCode: 1, stdout: 'partial' }));
+        const result = await svc.runCapture('hello', { agent: 'pi' }, deps);
+        expect(result.signal).toBeUndefined();
+    });
+
+    test('validation failure (missing prompt) returns no duration/signal/stderr', async () => {
+        const svc = makeService();
+        const result = await svc.runCapture(undefined, {});
+        expect(result.durationMs).toBeUndefined();
+        expect(result.signal).toBeUndefined();
+        expect(result.stderr).toBeUndefined();
+    });
 });
 
 // ---------------------------------------------------------------------------

@@ -62,10 +62,23 @@ export type AgentResolveSource = 'phase' | 'default' | 'priority' | 'explicit';
 export type AgentResolveResult =
     | { ok: true; agent: AgentName; model?: string; source: AgentResolveSource }
     | { ok: false; exitCode: number; message: string };
-/** Result from {@link AgentService.runCapture} — exit code + captured answer text. */
+/**
+ * Result from {@link AgentService.runCapture} — exit code + captured answer text,
+ * plus the diagnostic fields needed to build a timeout/failure handoff artifact
+ * (R2b / G2): `durationMs` and `signal` are forwarded from the underlying
+ * `AgentRunResult` (previously discarded here), `stderr` likewise. On a
+ * validation failure (e.g. bad `--mode`) that never reaches the subprocess,
+ * these are all `undefined`/`0`.
+ */
 export interface AgentRunCaptureResult {
     exitCode: number;
     answer: string;
+    /** Wall-clock subprocess duration in ms, when available (R2b). */
+    durationMs?: number;
+    /** Termination signal when the subprocess was killed (e.g. timeout), if any (R2b). */
+    signal?: string;
+    /** Captured stderr, when available (R2b). */
+    stderr?: string;
 }
 
 /** Output sink injected into AgentService. */
@@ -200,7 +213,16 @@ export class AgentService {
         }
         const result = outcome.result;
         const exitCode = result.exitCode === 0 ? 0 : 3;
-        return { exitCode, answer: result.stdout };
+        // R2b: forward the diagnostic fields AiRunner already computed (exitCode
+        // null + signal on timeout, durationMs always) instead of discarding them —
+        // agent.run uses these to write a timeout/failure handoff artifact.
+        return {
+            exitCode,
+            answer: result.stdout,
+            durationMs: result.durationMs,
+            ...(result.signal !== undefined ? { signal: result.signal } : {}),
+            stderr: result.stderr,
+        };
     }
 
     // -------------------------------------------------------------------------

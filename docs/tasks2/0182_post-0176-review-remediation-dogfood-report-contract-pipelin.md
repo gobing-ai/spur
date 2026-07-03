@@ -3,7 +3,7 @@ template: review
 schema_version: 1
 name: "Post-0176 review remediation: dogfood report contract, pipeline HITL/timeout regressions, corpus hygiene"
 description: ""
-status: todo
+status: wip
 type: review
 profile: standard
 feature_id: null
@@ -12,7 +12,7 @@ priority: P1
 tags: ["review"]
 dependencies: []
 created_at: "2026-07-03T00:20:57.875Z"
-updated_at: "2026-07-03T00:28:14.768Z"
+updated_at: "2026-07-03T01:07:00.646Z"
 ---
 
 ## 0182. Post-0176 review remediation: dogfood report contract, pipeline HITL/timeout regressions, corpus hygiene
@@ -112,10 +112,17 @@ Notes for the verifier: rows tagged `[core][behavior]` require ≥1 `test` or `c
 Open operator decisions — resolve BEFORE the wave that consumes them (blocking items marked). Record each answer here with a date line when decided.
 
 - **Q1 (blocks R5, Wave B): `docs/dogfood/` gitignore fate.** Options: (a) **un-ignore + commit** — recommended: committed tasks 0176–0181 already link the six reports as evidence, super-coder.md:196 calls the folder "the durable evidence trail", and ~40 pre-ignore reports are tracked anyway, so the ignore only creates a silent tracked/untracked hybrid; (b) keep ignored — then strip the links from committed References sections and reword the "durable evidence trail" claim. Cost of (a): dogfood noise in the repo history (~5–13 KB per report).
+  - **Answered 2026-07-02: (b) keep ignored.** `docs/dogfood/` stays gitignored. R5 executes branch (b): strip the six 2026-07-02 report links from committed References sections in tasks 0176–0181 (replace with run IDs + bug IDs, which those sections already carry), and reword `plugins/sp/agents/super-coder.md:196`'s "durable evidence trail" wording to describe a local-only artifact. Dogfood reports produced by this task (0182) remain local-only — never `git add`ed; referenced from task files by run ID/summary, not by path presented as committed evidence.
 - **Q2 (blocks R9, Wave C): hook guard wiring.** Options: (a) keep `superskill hook run sp task-write-guard` and VERIFY superskill executes this repo's `task-write-guard.ts` (if it vendors its own copy, document the drift risk); (b) inline `bun ${CLAUDE_PLUGIN_ROOT}/hooks/task-write-guard.ts` — self-contained but `${CLAUDE_PLUGIN_ROOT}` was previously rejected for portability (0181 report P3; task 0151); (c) **dual fallback** — recommended: `sh -c 'command -v superskill >/dev/null 2>&1 && exec superskill hook run sp task-write-guard; exec bun "${CLAUDE_PLUGIN_ROOT}/hooks/task-write-guard.ts"'` — superskill fast path where present, versioned local guard elsewhere, fail-open only on runtime error. Whatever is chosen: prove the deny path manually (AC11).
+  - **Answered 2026-07-02: (a) keep wiring, VERIFY execution path.** Keep `hooks.json` as `superskill hook run sp task-write-guard`. Operator owns `superskill` (source: `~/xprojects/superskill`). Verification (done during Wave C discovery): the installed `superskill` binary (`@gobing-ai/superskill@0.2.8`, resolved from `/Users/robin/node_modules/@gobing-ai/superskill/dist/index.js`) dispatches `sp/task-write-guard` to a **hard-coded vendored copy** of the guard logic in `~/xprojects/superskill/apps/cli/src/commands/hook-run.ts` (`resolveSpurTaskOwnership` + `runSpTaskWriteGuard`) — it does NOT execute this repo's `plugins/sp/hooks/task-write-guard.ts`. The two implementations are currently logically identical (same fail-open contract, same `spur task resolve --strict --json` delegation, same `SPUR_WRITE_GUARD=off` escape hatch) but are two independently-maintained copies with real drift risk: a future fix to one will not propagate to the other. Manual deny probe (`echo '{"tool_name":"Write","tool_input":{"file_path":"docs/tasks2/0182_..."}}' | superskill hook run sp task-write-guard`) returned `permissionDecision: "deny"` — the guard is NOT a defect blocking correct execution today, so the Q2 "MAY fix in superskill" branch is not triggered. Disposition: document the drift risk in this task's Solution/Review (no superskill code change needed); `plugins/sp/hooks/task-write-guard.ts` remains the versioned, tested reference implementation that any future superskill sync should match.
 - **Q3 (optional, Wave C): task-check advisory for unchecked boxes at terminal status.** Recommended yes as a WARNING-level rule (never error — Plan boxes on umbrella/tracking parents can be legitimately open while children carry the work; the 0176 roster pattern must not trip it). If declined, R7 remains a one-off corpus repair and the terminal-gate grep in super-coder.md stays the only guard.
+  - **Answered 2026-07-02: yes, assessed via `spur rule` first per operator direction; ruled infeasible there, falls back to task-check L-rule.** Feasibility check: `spur rule`'s `RuleEngine`/`ConstraintRule` seam (`@gobing-ai/ts-rule-engine`) evaluates presets (`rg`/`regex`/`sg`/etc. evaluators) over **glob-included files by content pattern only** — it has no frontmatter-conditional primitive. A rule with `include: docs/tasks2/**/*.md` + pattern `^\s*- \[ \]` (mode forbid) would fire on every task with an open checkbox regardless of `status`, producing exactly the false-positive storm on legitimate `todo`/`wip`/umbrella-parent tasks that the WARNING-only, terminal-status-only requirement exists to avoid — the rule-engine genuinely cannot express "only warn when `status` is `done`/`cancelled`". Falling back to the task's own stated fallback: implement as the smallest `task-check.ts` L-rule (new `L1`/`L2`-tier check, `severity: 'warning'`, fires only when `fm.status` is `done` or `cancelled` and the task body contains `- [ ]`), with a unit test asserting it does NOT fire on a `todo`/`wip` task with open boxes (0176 umbrella-parent pattern) and DOES fire on a `done` task with an open box.
 - **Q4 (blocks R1, Wave A): where does `no` route from `approve`?** Recommended `no → failed` with an explanatory note action (rejection is terminal for this run; the operator re-runs the pipeline after addressing review findings). Alternative `no → review` (re-review loop) rejected as default: task-pipeline has no rework loop today and adding one silently changes the run-cost profile; do it deliberately later if wanted.
+  - **Answered 2026-07-02: accepted as recommended.** `approve` gate: `yes → verify`; `no → failed` (terminal, with a note action recording "operator rejected at approval gate"); `cancel → cancelled` (new terminal state, mirroring `idea-pipeline.yaml:352-366`'s pattern). Ordered guards declared yes → no → cancel; no `always` edge remains out of `approve`.
 - **Q5 (blocks R2a, Wave A): implement timeout default.** Recommended `implementTimeoutMs: "1800000"` (30 min) — every observed real implement run needed >10 min; 30 min bounds the blast radius while the handoff artifact (R2b) makes any residual timeout recoverable. Keep 600 s for test/review/verify steps (they never timed out). Per-run override stays available via `--vars`.
+  - **Answered 2026-07-02: accepted as recommended.** `implementTimeoutMs: "1800000"` (30 min) for the implement step only; `stepTimeoutMs: "600000"` (10 min) unchanged for test/review/verify. Rationale comment in the YAML cites bugs 742/744/746/748 (5/5 dogfood runs timed out at the old 600s implement budget).
+
+**R8 CHANGELOG move — approved 2026-07-02:** move the `[Unreleased]` heading to the top of `CHANGELOG.md` (Keep-a-Changelog order), in addition to consolidating all five wave entries (A–E) under it. This is a Q-gated action per Design item 5 ("guarded by Q-approval since it churns the whole file's diff") — approval recorded here satisfies that gate.
 
 Decided during review (no operator action needed):
 - 0178–0181 reports are NOT retro-fitted with ledgers — the monitor-ledger anti-fiction rule forbids reconstructed numbers; they get a banner + corrected verdict line only (R6).
@@ -162,6 +169,14 @@ Rubric (decomposition standard): E~16h D3 L3 C1 R2 → decomposition CANDIDATE. 
 - [ ] R9 (after Q2): implement the chosen hook wiring; manual deny-probe captured as `command` evidence; `bun test plugins/sp/hooks/task-write-guard.test.ts` green; ADR entry if the cross-platform contract changed.
 - [ ] R12: commit everything in wave-scoped Conventional Commits. Suggested grouping: (1) `fix(workflows): route task-pipeline approve HITL answers; harden implement timeout + handoff` (Wave A product), (2) `fix(sp-plugin): enforce dogfood report contract; correct 2026-07-02 reports` (Wave B), (3) `chore(corpus): close 0176-0181 hygiene — checkboxes, changelog, hook wiring` (Wave C), (4) the pre-existing five-wave 0176 work in its own commit(s) FIRST so this task's diff stays reviewable. `git status -s` clean at the end.
 - [ ] Wave C gate: full canonical gates (`lint`, `test`, `test-cf`, `build`); `spur task check 0182 --strict-core --json` pass; write `### Solution`/`### Testing` via `spur task update`.
+
+<!-- AUTO-GENERATED by spur task refresh-roster -->
+| WBS | Sub-task | Status |
+| --- | -------- | ------ |
+| 0183 | 0182 Wave A: product regressions — HITL routing, implement timeout hardening, absolute-path fix, JSDoc | todo |
+| 0184 | 0182 Wave B: dogfood contract enforcement + report corrections | todo |
+| 0185 | 0182 Wave C: corpus/doc hygiene + closeout — checkboxes, task-check rule, changelog, hook wiring, commits | todo |
+<!-- END AUTO-GENERATED -->
 ### Solution
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->
@@ -189,3 +204,4 @@ remains to fix before closing, and any **back-issues** (new findings surfaced by
 - Open thread this task closes: 0179 R7 (full-pipeline proof of the tightened verifier) via R2d.
 ### History
 - 2026-07-03T00:21:08.260Z backlog → todo (system)
+- 2026-07-03T01:07:00.646Z todo → wip (system)

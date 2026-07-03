@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ActionRunContext } from '@gobing-ai/ts-dual-workflow-engine';
@@ -411,5 +411,92 @@ describe('AgentRunActionRunner timeoutMs', () => {
         const result = await runner.execute({ input: 'test', timeoutMs: 'abc' } as Record<string, unknown>, makeCtx());
         expect(result.ok).toBe(true);
         expect(capturedFlags.timeout).toBeUndefined();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: AgentRunActionRunner partial-work handoff artifact (R2b / G2)
+// ---------------------------------------------------------------------------
+
+describe('AgentRunActionRunner partial-work handoff artifact', () => {
+    let dir: string;
+    afterEach(() => {
+        if (dir) rmSync(dir, { recursive: true, force: true });
+    });
+
+    // R2b: a failed captured run (e.g. implement-step timeout, bugs 742/744/746/748)
+    // must leave a machine-readable handoff artifact — exit reason, elapsed time,
+    // diff stat, and stdout/stderr tails — instead of discarding everything but a
+    // one-line "exited with code N" message.
+    test('captured timeout (null exit + signal) writes a partial-work artifact under .spur/run', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
+        const svc = {
+            runCapture: async () => ({
+                exitCode: 137,
+                answer: 'partial stdout output before the kill',
+                durationMs: 1_800_123,
+                signal: 'SIGKILL',
+                stderr: 'some stderr noise',
+            }),
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute(
+            { input: 'test', capture: true, timeoutMs: 1_800_000 },
+            makeCtx({ runId: 'run-abc', stateOrNodeId: 'implement', workdir: dir }),
+        );
+        expect(result.ok).toBe(false);
+
+        const artifactPath = join(dir, '.spur', 'run', 'run-abc-implement-partial.md');
+        const artifact = readFileSync(artifactPath, 'utf8');
+        expect(artifact).toContain('killed by signal SIGKILL');
+        expect(artifact).toContain('1800123ms');
+        expect(artifact).toContain('partial stdout output before the kill');
+        expect(artifact).toContain('some stderr noise');
+        expect(artifact).toContain('git diff --stat');
+    });
+
+    test('captured non-timeout failure (plain non-zero exit) also writes the artifact', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
+        const svc = {
+            runCapture: async () => ({ exitCode: 3, answer: 'agent crashed', durationMs: 500 }),
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        await runner.execute(
+            { input: 'test', capture: true },
+            makeCtx({ runId: 'run-xyz', stateOrNodeId: 'test', workdir: dir }),
+        );
+
+        const artifactPath = join(dir, '.spur', 'run', 'run-xyz-test-partial.md');
+        const artifact = readFileSync(artifactPath, 'utf8');
+        expect(artifact).toContain('exited with code 3');
+        expect(artifact).toContain('agent crashed');
+    });
+
+    test('successful captured run does not write a partial-work artifact', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
+        const svc = {
+            runCapture: async () => ({ exitCode: 0, answer: 'all good', durationMs: 100 }),
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        await runner.execute(
+            { input: 'test', capture: true },
+            makeCtx({ runId: 'run-ok', stateOrNodeId: 'implement', workdir: dir }),
+        );
+
+        const artifactPath = join(dir, '.spur', 'run', 'run-ok-implement-partial.md');
+        expect(existsSync(artifactPath)).toBe(false);
+    });
+
+    test('non-capture (plain run) failure does not write a partial-work artifact (no captured data to hand off)', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
+        const svc = { run: async () => 1 } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        await runner.execute(
+            { input: 'test' },
+            makeCtx({ runId: 'run-plain', stateOrNodeId: 'implement', workdir: dir }),
+        );
+
+        const artifactPath = join(dir, '.spur', 'run', 'run-plain-implement-partial.md');
+        expect(existsSync(artifactPath)).toBe(false);
     });
 });

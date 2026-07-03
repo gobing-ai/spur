@@ -1,8 +1,15 @@
+import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join } from 'node:path';
+import { promisify } from 'node:util';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
-import type { AgentService } from '../../services/agent-service';
+import type { AgentRunCaptureResult, AgentService } from '../../services/agent-service';
+
+const execFileAsync = promisify(execFile);
+
+/** Bound the stdout/stderr tail captured into the partial-work artifact (R2b). */
+const PARTIAL_ARTIFACT_TAIL_CHARS = 4000;
 
 const KIND = 'agent.run';
 
@@ -31,6 +38,12 @@ const KIND = 'agent.run';
  *   `AgentRunOptions.timeout` to `ProcessExecutor.run`, which kills the child
  *   on elapse. On timeout, the agent step exits non-zero → `ok:false` → pipeline
  *   routes to `failed`. Absent by default (no timeout).
+ *
+ * On a captured run that fails (non-zero/null exit), a partial-work handoff
+ * artifact is written to `.spur/run/<runId>-<stateOrNodeId>-partial.md` (R2b /
+ * G2): exit reason (signal vs exit code), elapsed ms, `git diff --stat`, and a
+ * bounded tail of the captured stdout/stderr. Best-effort — a write failure
+ * here never masks the underlying `ok:false` action result.
  *
  * Session latch (Q8): the first executed agent.run opens a session (continue: false);
  * subsequent ones inherit it (continue: true). On success, sets `__agentSession: "open"`.
@@ -95,7 +108,8 @@ export class AgentRunActionRunner implements ActionRunner {
         const agentLabel = agent ?? '<default>';
 
         if (capture) {
-            const { exitCode, answer } = await this.agentService.runCapture(input, flags);
+            const captured = await this.agentService.runCapture(input, flags);
+            const { exitCode, answer } = captured;
             const ok = exitCode === 0;
             if (answerFile !== undefined) {
                 const target = isAbsolute(answerFile) ? answerFile : join(cwd, answerFile);
@@ -112,6 +126,9 @@ export class AgentRunActionRunner implements ActionRunner {
                         error: `agent.run (${agentLabel}) exited 0 but expected file is absent: ${expectFile}`,
                     };
                 }
+            }
+            if (!ok) {
+                await writePartialWorkArtifact(context, agentLabel, captured, cwd);
             }
             return {
                 ok,
@@ -165,4 +182,72 @@ function asOptionalNumber(value: unknown): number | undefined {
         return Number.isNaN(n) ? undefined : n;
     }
     return undefined;
+}
+
+/**
+ * Write a machine-readable partial-work handoff artifact after a failed
+ * captured `agent.run` (R2b / G2 — implement-step timeouts, bugs 742/744/746/748).
+ * Destination: `.spur/run/<runId>-<stateOrNodeId>-partial.md`, relative to `cwd`.
+ * Best-effort: any error here is swallowed so it never masks the real `ok:false`
+ * action result the caller already returns.
+ */
+async function writePartialWorkArtifact(
+    context: ActionRunContext,
+    agentLabel: string,
+    captured: AgentRunCaptureResult,
+    cwd: string,
+): Promise<void> {
+    try {
+        const exitReason =
+            captured.signal !== undefined
+                ? `killed by signal ${captured.signal} (likely timeout)`
+                : `exited with code ${captured.exitCode}`;
+        const diffStat = await gitDiffStat(cwd);
+        const stdoutTail = tail(captured.answer, PARTIAL_ARTIFACT_TAIL_CHARS);
+        const stderrTail = tail(captured.stderr ?? '', PARTIAL_ARTIFACT_TAIL_CHARS);
+        const body = [
+            `# Partial-work handoff — ${agentLabel}`,
+            '',
+            `- run: ${context.runId}`,
+            `- state: ${context.stateOrNodeId}`,
+            `- exit reason: ${exitReason}`,
+            `- elapsed: ${captured.durationMs ?? 'unknown'}ms`,
+            '',
+            '## git diff --stat',
+            '```',
+            diffStat || '(no diff)',
+            '```',
+            '',
+            '## stdout tail',
+            '```',
+            stdoutTail || '(empty)',
+            '```',
+            '',
+            '## stderr tail',
+            '```',
+            stderrTail || '(empty)',
+            '```',
+            '',
+        ].join('\n');
+
+        const target = join(cwd, '.spur', 'run', `${context.runId}-${context.stateOrNodeId}-partial.md`);
+        await mkdir(dirname(target), { recursive: true });
+        await writeFile(target, body, 'utf8');
+    } catch {
+        // Best-effort — never let artifact-writing mask the real failure.
+    }
+}
+
+async function gitDiffStat(cwd: string): Promise<string> {
+    try {
+        const { stdout } = await execFileAsync('git', ['diff', '--stat'], { cwd, maxBuffer: 1024 * 1024 });
+        return stdout.trim();
+    } catch {
+        return '';
+    }
+}
+
+function tail(text: string, maxChars: number): string {
+    if (text.length <= maxChars) return text;
+    return `... (truncated) ...\n${text.slice(text.length - maxChars)}`;
 }

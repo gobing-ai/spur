@@ -1,6 +1,6 @@
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
-import { joinPath } from '@gobing-ai/ts-runtime';
+import { isAbsolutePath, joinPath, normalizeSeparators } from '@gobing-ai/ts-runtime';
 
 const KIND = 'file.read.into-var';
 
@@ -8,7 +8,8 @@ const KIND = 'file.read.into-var';
  * Read a file's utf-8 content and project it into a workflow var via `setVars`.
  *
  * Options:
- * - `path` (string, required): path to read. Relative paths resolve against
+ * - `path` (string, required): path to read. Absolute paths (e.g. `/tmp/x`,
+ *   `C:/x`) are used as-is (normalized to forward slashes); relative paths resolve against
  *   `context.workdir`. The path is resolved once at execution time; the resolved
  *   absolute path is included in the action result for traceability.
  * - `var` (string, required): destination var name. The trimmed file content is
@@ -51,7 +52,9 @@ export class FileReadIntoVarActionRunner implements ActionRunner {
         }
         const trim = options.trim === undefined ? true : options.trim !== false;
 
-        const resolved = joinPath(context.workdir ?? '.', rawPath);
+        const resolved = isAbsolutePath(rawPath)
+            ? normalizeSeparators(rawPath)
+            : joinPath(context.workdir ?? '.', rawPath);
         const stat = await this.fileSystem.stat(resolved);
         if (stat === null) {
             return { ok: false, error: `file.read.into-var: file not found: ${resolved}` };

@@ -560,9 +560,27 @@ export class TaskService {
     // ── batch-create ──
 
     /**
-     * Per-parent summary produced by the post-create wire-up pass (task 0178,
-     * decomposition wiring F1/F2). Surfaced alongside the children the batch
-     * created so the CLI can report which parents were rostered / transitioned.
+     * Atomically create a batch of tasks from a JSON file, then wire up their
+     * parents (R11 / G11 — this doc previously duplicated {@link ParentWireResult}'s
+     * comment instead of describing this method).
+     *
+     * Steps:
+     * 1. Read `jsonPath` and parse it as JSON; parse/schema failures throw
+     *    (`batch validation failed: ...` lists every `taskBatchSchema` issue).
+     * 2. Create each item in array order via {@link createBatchItem} (which itself
+     *    allocates a fresh WBS under the create-lock, race-safe).
+     * 3. If any item fails mid-batch, best-effort delete every task file already
+     *    created in this call (no partial batch is left on disk), then rethrow.
+     * 4. Post-create wire-up (task 0178, F1/F2): for each distinct `parent_wbs`
+     *    seen in the batch, refresh its sub-task roster and transition it
+     *    `todo → wip` if applicable — see {@link wireUpParents}.
+     *
+     * @param jsonPath Path to a batch file matching `taskBatchSchema` (a bare
+     *   array of `{name, background?, requirements?, feature_id?, parent_wbs?,
+     *   priority?, tags?, template?}` items).
+     * @returns `children` — one {@link WriteResult} per created task, in the same
+     *   order as the input array. `parentsWired` — one {@link ParentWireResult}
+     *   per distinct parent touched by the wire-up pass.
      */
     async batchCreate(jsonPath: string): Promise<{ children: WriteResult[]; parentsWired: ParentWireResult[] }> {
         const raw = await this.ctx.fs.readFile(jsonPath);

@@ -431,4 +431,63 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         );
         expect(decompose).not.toContain('acceptance_criteria');
     });
+
+    test('R41 — task-pipeline approve gate routes three HITL outcomes with no always fallback (0182 R1)', () => {
+        const taskPipeline = readFileSync(join(WORKFLOWS_DIR, 'task-pipeline.yaml'), 'utf8');
+
+        // cancelled must be a declared terminal state, and the approve state's own
+        // description must document all three outcomes (not just the happy path).
+        expect(taskPipeline).toContain('  - cancelled\n');
+        expect(taskPipeline).toContain('  - id: cancelled\n');
+
+        // __hitlAnswer must be declared in vars: (R36's undeclared-var crash guard) and
+        // default to empty until the approve state's hitl.confirm sets it.
+        expect(taskPipeline).toContain('__hitlAnswer: ""');
+
+        const transitionBlocks = taskPipeline.split('\ntransitions:\n')[1] ?? '';
+        const approveBlock =
+            transitionBlocks.split('# ── approve:')[1]?.split('# ── completion gate')[0] ?? transitionBlocks;
+
+        const hitlAnswer = `$${'{vars.__hitlAnswer}'}`;
+        expect(approveBlock).toContain(`test "${hitlAnswer}" = yes`);
+        expect(approveBlock).toContain(`test "${hitlAnswer}" = no`);
+        expect(approveBlock).toContain(`test "${hitlAnswer}" = cancel`);
+
+        // Declaration order matters (yes checked before no before cancel) — assert the
+        // three guard commands appear in that order, not just that all three exist.
+        const yesIdx = approveBlock.indexOf(`test "${hitlAnswer}" = yes`);
+        const noIdx =
+            approveBlock.indexOf(`test "${hitlAnswer}" = no"`) !== -1
+                ? approveBlock.indexOf(`test "${hitlAnswer}" = no"`)
+                : approveBlock.indexOf(`test "${hitlAnswer}" = no'`);
+        const cancelIdx = approveBlock.indexOf(`test "${hitlAnswer}" = cancel`);
+        expect(yesIdx).toBeGreaterThan(-1);
+        expect(noIdx).toBeGreaterThan(-1);
+        expect(cancelIdx).toBeGreaterThan(-1);
+        expect(yesIdx).toBeLessThan(noIdx);
+        expect(noIdx).toBeLessThan(cancelIdx);
+
+        // No bare `always` transition may originate from approve — every exit must be
+        // gated on the captured answer (bug-750: an always edge silently approves).
+        const approveFromBlocks = [
+            ...transitionBlocks.matchAll(/ {2}- from: approve\n(?:.*\n)*?(?= {2}- from:|Z)/g),
+        ].map((m) => m[0]);
+        expect(approveFromBlocks.length).toBe(3);
+        for (const block of approveFromBlocks) {
+            expect(block).not.toContain('kind: always');
+        }
+
+        // R2a — implement step uses its own (longer) timeout budget, not the shared
+        // stepTimeoutMs, and the rationale is documented inline (bugs 742/744/746/748).
+        expect(taskPipeline).toContain('implementTimeoutMs: "1800000"');
+        const implementBlock = taskPipeline.split('  - id: implement\n')[1]?.split('  - id: test\n')[0] ?? '';
+        const varsImplementTimeout = `$${'{vars.implementTimeoutMs}'}`;
+        expect(implementBlock).toContain(`timeoutMs: ${varsImplementTimeout}`);
+        expect(implementBlock).not.toContain(`timeoutMs: \${vars.stepTimeoutMs}`);
+
+        // R2c — anti-recursion guard: the implement prompt must warn against invoking
+        // the pipeline (or full-mode dev-run) from inside the implement step itself.
+        expect(implementBlock).toContain('NEVER invoke');
+        expect(implementBlock).toContain('--mode implement');
+    });
 });

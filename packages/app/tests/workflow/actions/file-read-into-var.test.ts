@@ -89,4 +89,41 @@ describe('FileReadIntoVarActionRunner', () => {
             }
         }
     });
+
+    // R10 (G10) — an absolute `path` must be used as-is, never joined onto
+    // `context.workdir`. Before the fix, `joinPath('/tmp', '/etc/other/f.txt')`
+    // collapsed to a workdir-prefixed path and silently read/created the wrong
+    // file (or 404'd) whenever a caller passed an absolute path.
+    test('R10 — resolves an absolute path as-is, not joined onto workdir', async () => {
+        let statPath = '';
+        const fs = {
+            stat: async (p: string) => {
+                statPath = p;
+                return { size: 5, isFile: () => true, isDirectory: () => false, mtimeMs: 0 };
+            },
+            readFile: async () => 'hello',
+        } as unknown as FileSystem;
+        const runner = new FileReadIntoVarActionRunner(fs);
+        const result = await runner.execute({ path: '/etc/other/f.txt', var: 'x' }, makeCtx({ workdir: '/tmp' }));
+        expect(result.ok).toBe(true);
+        expect(statPath).toBe('/etc/other/f.txt');
+        expect(result.data).toMatchObject({ path: '/etc/other/f.txt' });
+        // Not workdir-prefixed:
+        expect(statPath.startsWith('/tmp')).toBe(false);
+    });
+
+    test('R10 — still joins a relative path onto workdir', async () => {
+        let statPath = '';
+        const fs = {
+            stat: async (p: string) => {
+                statPath = p;
+                return { size: 5, isFile: () => true, isDirectory: () => false, mtimeMs: 0 };
+            },
+            readFile: async () => 'hello',
+        } as unknown as FileSystem;
+        const runner = new FileReadIntoVarActionRunner(fs);
+        const result = await runner.execute({ path: 'rel/f.txt', var: 'x' }, makeCtx({ workdir: '/tmp' }));
+        expect(result.ok).toBe(true);
+        expect(statPath.startsWith('/tmp')).toBe(true);
+    });
 });
