@@ -153,6 +153,23 @@ describe('parseVerdict', () => {
         expect(v.requirements).toHaveLength(1);
         expect(v.requirements[0]?.id).toBe('R1');
     });
+
+    test('parses acceptanceCriteria array', () => {
+        const v = parseVerdict(
+            JSON.stringify({
+                acceptanceCriteria: [
+                    {
+                        id: 'Scenario: CLI emits JSON',
+                        status: 'MET',
+                        evidenceType: 'command',
+                        evidence: 'spur task show 0001 --json',
+                    },
+                ],
+            }),
+        );
+        expect(v.acceptanceCriteria).toHaveLength(1);
+        expect(v.acceptanceCriteria?.[0]?.evidenceType).toBe('command');
+    });
 });
 
 describe('renderTesting', () => {
@@ -184,6 +201,22 @@ describe('renderTesting', () => {
         // Verify no raw newlines inside table cell
         const afterHeader = out.split('|-------------|--------|----------|')[1] ?? '';
         expect(afterHeader).not.toContain('\nline2');
+    });
+
+    test('renders acceptance criteria evidence table when present', () => {
+        const v = makeVerdict({
+            acceptanceCriteria: [
+                {
+                    id: 'Scenario: CLI emits JSON',
+                    status: 'MET',
+                    evidenceType: 'command',
+                    evidence: 'spur task show 0001 --json',
+                },
+            ],
+        });
+        const out = renderTesting(v);
+        expect(out).toContain('| Acceptance Criteria | Status | Evidence Type | Evidence |');
+        expect(out).toContain('| Scenario: CLI emits JSON | MET | command | spur task show 0001 --json |');
     });
 });
 

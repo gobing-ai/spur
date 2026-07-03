@@ -170,6 +170,22 @@ export interface TaskShowResult extends TaskSummary {
     content: string;
 }
 
+/**
+ * Per-parent summary produced by `TaskService.batchCreate` (task 0178, F1/F2).
+ * Surfaced alongside the children the batch created so the CLI can report which
+ * parents were rostered / transitioned and what (if anything) failed.
+ */
+export interface ParentWireResult {
+    /** Parent WBS. */
+    wbs: string;
+    /** True if the sub-task roster block was written (false on no-op / error). */
+    rostered: boolean;
+    /** New status after a successful transition, or `null` if the parent was not `todo`. */
+    transitionedTo: string | null;
+    /** Per-step error messages, empty when both steps succeeded. */
+    errors: string[];
+}
+
 /** Filter options for the list verb. */
 export interface TaskListFilters {
     status?: string;
@@ -543,7 +559,12 @@ export class TaskService {
 
     // ── batch-create ──
 
-    async batchCreate(jsonPath: string): Promise<WriteResult[]> {
+    /**
+     * Per-parent summary produced by the post-create wire-up pass (task 0178,
+     * decomposition wiring F1/F2). Surfaced alongside the children the batch
+     * created so the CLI can report which parents were rostered / transitioned.
+     */
+    async batchCreate(jsonPath: string): Promise<{ children: WriteResult[]; parentsWired: ParentWireResult[] }> {
         const raw = await this.ctx.fs.readFile(jsonPath);
         let parsed: unknown;
         try {
@@ -579,7 +600,67 @@ export class TaskService {
             throw err;
         }
 
-        return writeResults;
+        const parentsWired = await this.wireUpParents(this.collectDistinctParents(items));
+        return { children: writeResults, parentsWired };
+    }
+
+    /**
+     * Distinct non-empty `parent_wbs` values from a validated batch, in first-seen
+     * order. Skips `null` / `undefined` / empty-string — a childless top-level
+     * task is fine. Used by `batchCreate` to know which parents need their roster
+     * refreshed and lifecycle transitioned (F1/F2).
+     */
+    private collectDistinctParents(items: TaskBatchItem[]): string[] {
+        const seen = new Set<string>();
+        const ordered: string[] = [];
+        for (const item of items) {
+            const wbs = item.parent_wbs;
+            if (typeof wbs !== 'string' || wbs === '') continue;
+            if (seen.has(wbs)) continue;
+            seen.add(wbs);
+            ordered.push(wbs);
+        }
+        return ordered;
+    }
+
+    /**
+     * Post-create wire-up pass. For each distinct parent in the batch:
+     *   - refresh the sub-task roster (`refreshRoster` — idempotent, marker-delimited)
+     *   - transition `todo → wip` if the parent is currently `todo` (F2; skip silently
+     *     for every other status so a parent already `wip` or later is not re-noised)
+     *
+     * Best-effort per parent: a failure on one parent records an entry in the
+     * returned `parentsWired` and the loop continues. Rolling children back when
+     * a parent's wire-up fails would discard atomic-create success on a heuristic
+     * guess; the children are already on disk and a follow-up `spur task
+     * refresh-roster` / manual transition is the right escape hatch.
+     */
+    private async wireUpParents(parentWbsList: string[]): Promise<ParentWireResult[]> {
+        const out: ParentWireResult[] = [];
+        for (const wbs of parentWbsList) {
+            const entry: ParentWireResult = { wbs, rostered: false, transitionedTo: null, errors: [] };
+            try {
+                const roster = await this.refreshRoster(wbs);
+                entry.rostered = roster.written;
+            } catch (err) {
+                entry.errors.push(`refreshRoster: ${err instanceof Error ? err.message : String(err)}`);
+            }
+            try {
+                const current = await this.show(wbs);
+                if (current.status === 'todo') {
+                    const filePath = await this.resolveTaskFile(wbs);
+                    const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: this.ctx.tasksDir };
+                    const wr = await this.writeService.transition(ref, 'wip', 'system');
+                    entry.transitionedTo = wr.toStatus ?? 'wip';
+                } else {
+                    entry.transitionedTo = null;
+                }
+            } catch (err) {
+                entry.errors.push(`transition: ${err instanceof Error ? err.message : String(err)}`);
+            }
+            out.push(entry);
+        }
+        return out;
     }
 
     private async createBatchItem(item: TaskBatchItem): Promise<WriteResult> {
@@ -631,6 +712,18 @@ export class TaskService {
                 }
                 if (item.priority !== undefined && item.priority !== null) {
                     content = patchFrontmatterField(content, 'priority', item.priority);
+                }
+                if (item.tags !== undefined && item.tags.length > 0) {
+                    content = patchFrontmatterField(
+                        content,
+                        'tags',
+                        `[${item.tags.map((tag) => JSON.stringify(tag)).join(', ')}]`,
+                    );
+                }
+                if ((item.requirements ?? '').trim() !== '') {
+                    const doc = MarkdownDocument.parse(content, 'task');
+                    doc.replaceSection('Requirements', bulletizeRequirements(item.requirements ?? ''));
+                    content = doc.serialize();
                 }
                 const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder };
                 return { ref, content };

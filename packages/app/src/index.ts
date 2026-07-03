@@ -95,6 +95,7 @@ export {
 } from './services/task-record';
 export type {
     FolderConfig,
+    ParentWireResult,
     TaskActionJob,
     TaskActionResult,
     TaskFoldersConfig,
@@ -135,6 +136,7 @@ export { WorkflowAppService } from './services/workflow-service';
 export { AgentRunActionRunner } from './workflow/actions/agent-run';
 export { FileExistsActionRunner } from './workflow/actions/file-exists';
 export { FileReadActionRunner } from './workflow/actions/file-read';
+export { FileReadIntoVarActionRunner } from './workflow/actions/file-read-into-var';
 export { HitlConfirmActionRunner } from './workflow/actions/hitl-confirm';
 export { HitlInputActionRunner } from './workflow/actions/hitl-input';
 export {

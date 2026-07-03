@@ -25,6 +25,7 @@ describe('registerSpurBuiltins', () => {
         expect(actions).toContain('rule.check');
         expect(actions).toContain('file.exists');
         expect(actions).toContain('file.read');
+        expect(actions).toContain('file.read.into-var');
         expect(actions).toContain('http.request');
     });
 
@@ -54,6 +55,7 @@ describe('registerSpurBuiltins', () => {
         expect(host.actionOrigin('rule.check')).toBe('builtin');
         expect(host.actionOrigin('file.exists')).toBe('builtin');
         expect(host.actionOrigin('file.read')).toBe('builtin');
+        expect(host.actionOrigin('file.read.into-var')).toBe('builtin');
         expect(host.actionOrigin('http.request')).toBe('builtin');
     });
 

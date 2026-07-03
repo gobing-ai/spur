@@ -60,6 +60,7 @@ interface MockRunner {
 }
 
 interface MockDetector {
+    detectAll: ReturnType<typeof mock>;
     detectOne: ReturnType<typeof mock>;
 }
 
@@ -79,6 +80,17 @@ function mockDeps(runResult?: AgentRunResult): {
         runPromptCommand: mock(() => Promise.resolve(result)),
     };
     const detector: MockDetector = {
+        detectAll: mock(() =>
+            Promise.resolve([
+                {
+                    name: 'pi',
+                    installed: true,
+                    version: '1.0.0',
+                    channels: [],
+                    error: null,
+                },
+            ]),
+        ),
         detectOne: mock(() =>
             Promise.resolve({
                 name: 'pi',
@@ -138,7 +150,8 @@ function makeService(env: Record<string, string | undefined> = {}, output = null
 describe('AgentService.list', () => {
     test('returns exit 0', async () => {
         const svc = makeService();
-        const exitCode = await svc.list({ json: false });
+        const { deps } = mockDeps();
+        const exitCode = await svc.list({ json: false }, deps);
         expect(typeof exitCode).toBe('number');
         expect(exitCode).toBe(0);
     });
@@ -146,7 +159,8 @@ describe('AgentService.list', () => {
     test('--json outputs JSON envelope', async () => {
         const { lines, output } = captureOutput();
         const svc = makeService({}, output);
-        const exitCode = await svc.list({ json: true });
+        const { deps } = mockDeps();
+        const exitCode = await svc.list({ json: true }, deps);
         expect(exitCode).toBe(0);
         const jsonLine = lines.find((l) => l.includes('"agents"'));
         expect(jsonLine).toBeDefined();
@@ -157,7 +171,8 @@ describe('AgentService.list', () => {
     test('plain output has ok/missing prefix lines', async () => {
         const { lines, output } = captureOutput();
         const svc = makeService({}, output);
-        await svc.list({ json: false });
+        const { deps } = mockDeps();
+        await svc.list({ json: false }, deps);
         expect(lines.length).toBeGreaterThanOrEqual(1);
         const text = lines[0] ?? '';
         // Each line starts with 'ok' or 'missing'

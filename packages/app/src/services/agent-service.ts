@@ -119,8 +119,9 @@ export class AgentService {
     // Public: list
     // -------------------------------------------------------------------------
 
-    async list(opts: { json: boolean }): Promise<number> {
-        const agents = await new AgentDetector().detectAll();
+    async list(opts: { json: boolean }, deps?: AgentRunDeps): Promise<number> {
+        const detector = deps?.detector ?? new AgentDetector();
+        const agents = await detector.detectAll();
         if (opts.json) {
             this.ctx.output.write(toJson({ agents }));
         } else {

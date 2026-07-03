@@ -305,13 +305,26 @@ describe('TaskService', () => {
             const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
             await fs.writeFile(batchFile, json);
 
-            const results = await svc.batchCreate(batchFile);
+            const { children, parentsWired } = await svc.batchCreate(batchFile);
 
-            expect(results).toHaveLength(3);
-            for (const r of results) {
+            expect(children).toHaveLength(3);
+            for (const r of children) {
                 expect(r.ref.id).toMatch(/^\d{4}$/);
                 expect(await fs.exists(r.ref.filePath)).toBe(true);
             }
+            const thirdResult = children.at(2);
+            expect(thirdResult).toBeDefined();
+            if (thirdResult === undefined) throw new Error('expected third batch result');
+            const taggedTask = await fs.readFile(thirdResult.ref.filePath);
+            expect(taggedTask).toContain('tags: ["rd3-migration"]');
+            // Item 3 has parent_wbs: '0042' — wire-up attempts roster+transition on
+            // a non-existent parent. Both fail; the per-parent errors are recorded
+            // without aborting the batch (children are already on disk).
+            expect(parentsWired).toHaveLength(1);
+            expect(parentsWired[0]?.wbs).toBe('0042');
+            expect(parentsWired[0]?.rostered).toBe(false);
+            expect(parentsWired[0]?.transitionedTo).toBeNull();
+            expect(parentsWired[0]?.errors.length).toBeGreaterThan(0);
         });
 
         test('rolls back all tasks on partial failure', async () => {
@@ -375,13 +388,16 @@ describe('TaskService', () => {
                 ]);
                 await isolateFs.writeFile(batchFile, json);
 
-                const results = await isolateSvc.batchCreate(batchFile);
-                expect(results).toHaveLength(1);
+                const { children, parentsWired } = await isolateSvc.batchCreate(batchFile);
+                expect(children).toHaveLength(1);
+                expect(parentsWired).toEqual([]); // no parent_wbs in the batch
 
-                const first = results[0];
+                const first = children[0];
                 if (!first) throw new Error('Expected at least one result');
                 const raw = await isolateFs.readFile(first.ref.filePath);
                 expect(raw).toContain('R1. Must do X.');
+                const doc = MarkdownDocument.parse(raw, 'task');
+                expect(doc.getSection('Requirements')).not.toContain('Keep empty until requirements are known');
             } finally {
                 rmSync(root, { recursive: true, force: true });
             }
@@ -409,15 +425,19 @@ describe('TaskService', () => {
                         },
                     ]),
                 );
-                const results = await isolateSvc.batchCreate(batchFile);
-                const first = results[0];
+                const { children, parentsWired } = await isolateSvc.batchCreate(batchFile);
+                const first = children[0];
                 if (!first) throw new Error('Expected a result');
                 const raw = await isolateFs.readFile(first.ref.filePath);
                 expect(raw).toContain('- R1. First.');
                 expect(raw).toContain('- R2. Second.');
                 expect(raw).toContain('- R3. Third.');
+                expect(MarkdownDocument.parse(raw, 'task').getSection('Requirements')).not.toContain(
+                    'Keep empty until requirements are known',
+                );
                 // A specified batch item lands at todo (ready to execute).
                 expect(MarkdownDocument.parse(raw, 'task').frontmatterData?.status).toBe('todo');
+                expect(parentsWired).toEqual([]); // no parent_wbs in this batch either
             } finally {
                 rmSync(root, { recursive: true, force: true });
             }
@@ -457,6 +477,104 @@ describe('TaskService', () => {
                 // The first item was written then must be rolled back — zero task files remain.
                 const taskFiles = (await isolateFs.readDir(dir)).filter((e) => /^\d{4}_.+\.md$/.test(e));
                 expect(taskFiles).toHaveLength(0);
+            } finally {
+                rmSync(root, { recursive: true, force: true });
+            }
+        });
+
+        test('auto-refreshes the parent sub-task roster and transitions parent todo→wip (R1/R2/R5)', async () => {
+            // The 0178 wire-up pass: after a batch that names a parent_wbs, the
+            // parent file must contain the roster marker + a row for the new child,
+            // the parent's frontmatter `status` must be `wip`, and a second batch
+            // (different child, same parent) leaves a single, valid roster region
+            // listing both children.
+            const root = mkdtempSync(join(tmpdir(), 'spur-task-svc-wireup-'));
+            const dir = join(root, 'tasks');
+            const isolateFs = createNodeFileSystem(root);
+            await isolateFs.ensureDir(dir);
+            const writeService = new PlanningWriteService({ fs: isolateFs });
+            const isolateSvc = new TaskService({ fs: isolateFs, tasksDir: dir, writeService });
+
+            try {
+                // Use the service to allocate a valid parent. The create path
+                // renders a complete frontmatter (schema_version included),
+                // required for the transition step's L1 validation. We then
+                // rewind status to `todo` and add a `## Plan` section so the
+                // wire-up pass has a roster block to host.
+                const created = await isolateSvc.create({ title: 'Umbrella parent' });
+                const parentWbs = created.ref.id;
+                const parentPath = join(dir, `${parentWbs}_umbrella-parent.md`);
+                if (created.ref.filePath !== parentPath) {
+                    await isolateFs.writeFile(parentPath, await isolateFs.readFile(created.ref.filePath));
+                    await isolateFs.deleteFile(created.ref.filePath);
+                }
+                const parentDoc = MarkdownDocument.parse(await isolateFs.readFile(parentPath), 'task');
+                parentDoc.setFrontmatterField('status', 'todo');
+                parentDoc.replaceSection('Plan', 'Decompose the work into shippable units.');
+                await isolateFs.writeFile(parentPath, parentDoc.serialize());
+
+                // First batch: a single child pointing at the parent.
+                const batchFile1 = join(dir, 'batch-wireup-1.json');
+                await isolateFs.writeFile(
+                    batchFile1,
+                    JSON.stringify([
+                        {
+                            name: 'First child',
+                            parent_wbs: parentWbs,
+                            background: 'Some context.',
+                            requirements: 'R1. Do X.',
+                        },
+                    ]),
+                );
+
+                const { children: first, parentsWired: firstWired } = await isolateSvc.batchCreate(batchFile1);
+                expect(first).toHaveLength(1);
+                expect(firstWired).toHaveLength(1);
+                const firstWire = firstWired[0];
+                expect(firstWire).toBeDefined();
+                if (firstWire === undefined) throw new Error('expected first parentsWired entry');
+                expect(firstWire.wbs).toBe(parentWbs);
+                expect(firstWire.rostered).toBe(true); // a roster block was written
+                expect(firstWire.transitionedTo).toBe('wip'); // parent was `todo` → `wip`
+                expect(firstWire.errors).toEqual([]);
+
+                // Parent file now carries the marker-delimited roster with the first
+                // child row, AND the frontmatter status is `wip`.
+                const parentAfterFirst = await isolateFs.readFile(parentPath);
+                expect(parentAfterFirst).toContain('<!-- AUTO-GENERATED by spur task refresh-roster -->');
+                expect(parentAfterFirst).toContain('| First child |');
+                const firstDoc = MarkdownDocument.parse(parentAfterFirst, 'task');
+                expect(firstDoc.frontmatterData?.status).toBe('wip');
+
+                // Second batch: a different child under the same parent.
+                const batchFile2 = join(dir, 'batch-wireup-2.json');
+                await isolateFs.writeFile(
+                    batchFile2,
+                    JSON.stringify([
+                        {
+                            name: 'Second child',
+                            parent_wbs: parentWbs,
+                            background: 'More context.',
+                            requirements: 'R1. Do Y.',
+                        },
+                    ]),
+                );
+
+                const { children: second, parentsWired: secondWired } = await isolateSvc.batchCreate(batchFile2);
+                expect(second).toHaveLength(1);
+                const secondWire = secondWired[0];
+                expect(secondWire).toBeDefined();
+                if (secondWire === undefined) throw new Error('expected second parentsWired entry');
+                // The parent is already `wip`; the transition step is skipped, the
+                // roster is refreshed in place (idempotent — single marker region).
+                expect(secondWire.transitionedTo).toBeNull();
+                expect(secondWire.rostered).toBe(true);
+
+                const parentAfterSecond = await isolateFs.readFile(parentPath);
+                const starts = parentAfterSecond.match(/AUTO-GENERATED by spur task refresh-roster/g) ?? [];
+                expect(starts).toHaveLength(1); // exactly one marker region
+                expect(parentAfterSecond).toContain('| First child |');
+                expect(parentAfterSecond).toContain('| Second child |');
             } finally {
                 rmSync(root, { recursive: true, force: true });
             }

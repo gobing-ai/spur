@@ -21,6 +21,7 @@ export interface VerifyVerdict {
     wbs: string;
     verdict: 'PASS' | 'PARTIAL' | 'FAIL' | 'UNKNOWN';
     requirements: VerdictRequirement[];
+    acceptanceCriteria?: VerdictAcceptanceCriteria[];
     checks: VerdictCheck[];
 }
 
@@ -28,6 +29,14 @@ export interface VerifyVerdict {
 export interface VerdictRequirement {
     id: string;
     status: string;
+    evidence: string;
+}
+
+/** A single Acceptance Criteria evaluated during verification. */
+export interface VerdictAcceptanceCriteria {
+    id: string;
+    status: string;
+    evidenceType: string;
     evidence: string;
 }
 
@@ -80,8 +89,9 @@ export function parseVerdict(raw: string, fallbackWbs?: string): VerifyVerdict {
             const wbs = typeof obj.wbs === 'string' ? obj.wbs : (fallbackWbs ?? '');
             const verdict = normalizeVerdict(obj.verdict);
             const requirements = normalizeRequirements(obj.requirements);
+            const acceptanceCriteria = normalizeAcceptanceCriteria(obj.acceptanceCriteria);
             const checks = normalizeChecks(obj.checks);
-            return { wbs, verdict, requirements, checks };
+            return { wbs, verdict, requirements, acceptanceCriteria, checks };
         }
     } catch {
         // Malformed JSON — fall through to UNKNOWN.
@@ -126,6 +136,18 @@ function normalizeRequirements(raw: unknown): VerdictRequirement[] {
         }));
 }
 
+function normalizeAcceptanceCriteria(raw: unknown): VerdictAcceptanceCriteria[] {
+    if (!Array.isArray(raw)) return [];
+    return raw
+        .filter((ac): ac is Record<string, unknown> => ac !== null && typeof ac === 'object')
+        .map((ac) => ({
+            id: typeof ac.id === 'string' ? ac.id : '',
+            status: typeof ac.status === 'string' ? ac.status : '',
+            evidenceType: typeof ac.evidenceType === 'string' ? ac.evidenceType : '',
+            evidence: typeof ac.evidence === 'string' ? ac.evidence : '',
+        }));
+}
+
 function normalizeChecks(raw: unknown): VerdictCheck[] {
     if (!Array.isArray(raw)) return [];
     return raw
@@ -164,6 +186,16 @@ export function renderTesting(v: VerifyVerdict): string {
         for (const req of v.requirements) {
             const evidence = req.evidence.replace(/\n/g, ' ');
             lines.push(`| ${req.id} | ${req.status} | ${evidence} |`);
+        }
+    }
+
+    if ((v.acceptanceCriteria ?? []).length > 0) {
+        lines.push('');
+        lines.push('| Acceptance Criteria | Status | Evidence Type | Evidence |');
+        lines.push('|---------------------|--------|---------------|----------|');
+        for (const ac of v.acceptanceCriteria ?? []) {
+            const evidence = ac.evidence.replace(/\n/g, ' ');
+            lines.push(`| ${ac.id} | ${ac.status} | ${ac.evidenceType} | ${evidence} |`);
         }
     }
 
