@@ -145,10 +145,13 @@ that is the pre-check's job above). Common shape failures:
 Loop until the command exits 0 — then the batch is created and each task appears in the
 feature's `## Tasks` block on next `spur feature refresh`.
 
-**If you decomposed a parent task into sub-task files** (the children carry `parent_wbs`), write the
-**sub-task roster into the parent's `## Plan`** now — in the same step. A parent without a roster
-cannot be checked for completeness. See `sp:spec-decomposition` ("Parent (umbrella) tasks")
-for the roster format and the parent-completion rule.
+**If you decomposed a parent task into sub-task files** (the children carry `parent_wbs`), the
+sub-task roster is **auto-generated** — `spur task batch-create` invokes `spur task refresh-roster`
+for each distinct `parent_wbs` after the atomic create lands (task 0178 F1), and transitions
+decomposed parents from `todo` to `wip` (task 0178 F2). You do **not** hand-write the roster;
+re-run `spur task refresh-roster <parent-wbs>` to re-emit it after a child status change outside
+`batch-create`. See `sp:spec-decomposition` ("Parent (umbrella) tasks") for the roster format and
+the parent-completion rule.
 
 ## Step 5.5: Design doc (conditional)
 

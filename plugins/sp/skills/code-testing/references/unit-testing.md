@@ -5,6 +5,12 @@ see_also:
   - code-testing
   - spur-tdd
   - dev-operations
+parameters:
+  coverage:
+    flag: "--coverage <pct>"
+    default: 90
+    applies_to: "line and function coverage targets"
+    invariant: "Never relaxes the 100% passing-test requirement."
 ---
 
 # Unit Testing
@@ -108,9 +114,9 @@ Never substitute `--force` for honest backfill. The section-editing rules live i
 
 ## Coverage target
 
-The default target is **per-file line ≥ 90% and function ≥ 90%** with a fully passing suite.
-`--coverage <pct>` may raise or lower the line/function target but never relaxes the "100% passing"
-requirement. How each stack reports those numbers is in its adapter.
+The default target is **per-file line ≥ 90% and function ≥ 90%** with a fully passing suite. The
+wrapper flag is owned here: `--coverage <pct>` may raise or lower the line/function target but never
+relaxes the "100% passing" requirement. How each stack reports those numbers is in its adapter.
 
 > **Realistic targets by surface.** 90% is the Spur default; some surfaces justify lower (see
 > [§ When to accept lower coverage](#when-to-accept-lower-coverage)). Domain/business logic should run

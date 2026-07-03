@@ -39,7 +39,7 @@ options" dump.
 
 | Input Pattern | Detection | Example |
 |---------------|-----------|---------|
-| Ends with `.md` | Task file path — extract Background + Requirements as discovery seed | `docs/tasks/0042.md` |
+| Ends with `.md` | Task file path — extract Background + Requirements as discovery seed | `docs/tasks2/0042_add-email-validation.md` |
 | Plain text | Use as the problem statement directly | `Should we use Redis or Postgres for session storage?` |
 
 ## Behavior
@@ -196,11 +196,11 @@ one-shot ideation. Use when:
 | Command | Effect |
 |---------|--------|
 | `/sp:dev-brainstorm "Should we use Redis or Postgres for session storage?"` | Detailed discovery interview → 3 options with trade-offs |
-| `/sp:dev-brainstorm docs/tasks/0042.md --depth comprehensive` | Deep interview seeded from task context → 3 options |
+| `/sp:dev-brainstorm docs/tasks2/0042_add-email-validation.md --depth comprehensive` | Deep interview seeded from task context → 3 options |
 | `/sp:dev-brainstorm "API auth strategy" --depth basic --options 5` | Quick interview → 5 options |
 | `/sp:dev-brainstorm "Microservice boundaries" --skip-discovery` | No interview — straight to ideation |
 | `/sp:dev-brainstorm "API auth strategy" --depth detailed --task H2` | Discovery interview → ideation → create task under feature H2 |
-| `/sp:dev-brainstorm docs/tasks/0042.md --task` | Interview seeded from task → create follow-up task |
+| `/sp:dev-brainstorm docs/tasks2/0042_add-email-validation.md --task` | Interview seeded from task → create follow-up task |
 | `/sp:dev-brainstorm "User notification system" --feature` | Interview → ideation → create a top-level feature with BDD AC, gated by `feature check` (stops at the feature) |
 | `/sp:dev-brainstorm "Audit logging" --depth comprehensive --feature A` | Deep interview → feature nested under parent A, with AC from the decision trace |
 | `/sp:dev-brainstorm "Password reset via email" --feature --next` | Interview → feature with AC → gate → auto-invoke `/sp:dev-plan --feature <ID>` (decompose to tasks) |

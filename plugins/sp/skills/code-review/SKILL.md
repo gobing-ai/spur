@@ -35,22 +35,38 @@ Run before `git commit`. Catches 60-80% of issues that a reviewer would flag.
 
 When you want a deeper review (SECUA, architectural, or second-opinion):
 
-1. **Prepare context:**
-   - Task WBS and a one-sentence summary of what was implemented.
-   - `git diff` of the changes.
-   - Self-review results (Workflow A output).
-   - Any specific concerns or focus areas.
-2. **Request:** Invoke `sp:code-review` directly or trigger via "review my changes", "review this diff".
-3. **Receive:** The reviewer produces a P1–P4 findings table.
+1. **Prepare a structured brief** and prefer a fresh reviewer context/subagent when available:
+
+   ```markdown
+   WHAT_WAS_IMPLEMENTED:
+   <one paragraph>
+
+   PLAN_OR_REQUIREMENTS:
+   <task WBS, requirements, AC, or design refs>
+
+   DIFF_RANGE:
+   <base sha>..<head sha> or "working tree"
+
+   FOCUS_HINTS:
+   <security | correctness | architecture | specific concern>
+   ```
+
+2. **Attach evidence:** include the relevant `git diff`, self-review results (Workflow A output), and
+   any verification commands already run.
+3. **Request:** Invoke `sp:code-review` directly or trigger via "review my changes", "review this diff".
+4. **Receive:** The reviewer produces a P1–P4 findings table.
 
 ## Workflow C — Processing review findings
 
 When you receive review findings:
 
-1. **Triage:** P1 (blockers) → fix immediately. P2 (should fix) → fix before merge. P3 (nice to have) → file a follow-up task or fix. P4 (advisory) → acknowledge.
-2. **Fix in priority order** — P1 first, verify each fix, then move to P2.
-3. **Re-review:** After all P1/P2 fixes, request a follow-up review to confirm resolution.
-4. **File follow-up tasks** for deferred P3/P4 items via `spur task create --template review`.
+1. **Verify each finding against the codebase first.** A finding can be stale or based on a misread;
+   cite the file/line that proves it before changing code. Reasoned pushback is allowed.
+2. **Fix in priority order:** blockers first (P1), then simple P2 fixes, then complex P2 fixes. Keep
+   unrelated refactors out of the review-response diff.
+3. **Test each fix individually** with the narrowest command that proves it, then run the task gate.
+4. **Re-review:** After all P1/P2 fixes, request a follow-up review to confirm resolution.
+5. **File follow-up tasks** for deferred P3/P4 items via `spur task create --template review`.
 
 ## When to use
 
@@ -73,9 +89,7 @@ Do **not** use this skill for:
 
 ## See also
 
-- **`sp:code-verification`** — post-implementation pipeline review and requirements verification.
 - **`sp:code-implementation`** — the implement step that produces the changes being reviewed.
-- **`sp:code-verification`** — post-implementation pipeline review and requirements verification.
 
 ---
 

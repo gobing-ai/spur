@@ -47,12 +47,22 @@ kickoff** — the driver never re-queries `spur task list` to recompute membersh
 |---|---|---|
 | Explicit WBS list | `^[0-9, ]+$` | Split on comma; validate each token is a 4-digit WBS; collect the explicit set. (R1.1) |
 | `feature:<id>` | literal `feature:` prefix | `spur task list --feature <id> --json`; collect `wbs` from each row. (R1.3) |
-| `ready` | literal `ready` | Resolve the union of `spur task list --status todo --json` + `spur task list --status backlog --json`, then keep only tasks whose every `dependencies[]` entry resolves to `status == done` (via `spur task show <dep> --json`). Report each excluded task with its unmet dependency. (R1.4) |
+| `ready` | literal `ready` | Resolve the union of `spur task list --status todo --json` + `spur task list --status backlog --json`, drop tasks with open children (R1.5, umbrella-parent exclusion below), then keep only tasks whose every `dependencies[]` entry resolves to `status == done` (via `spur task show <dep> --json`). Report each excluded task with its unmet dependency. (R1.4) |
 | Status pseudo-list | `todo` \| `backlog` \| `wip` \| `blocked` \| `testing` | `spur task list --status <value> --json`; collect `wbs` from each row. (R1.2) |
 | *(else)* | no match | Error: "unknown selector `<value>`" — list the valid forms and halt before running anything. |
 
 **Dedup:** an explicit list with a repeated WBS (`--tasks 0040,0040`) collapses to a single entry;
 the frozen set is a set, not a multiset.
+
+**Umbrella-parent exclusion:** a `ready` candidate whose `spur task list` shows at least one child
+task (any non-`done`/non-`cancelled` task with `parent_wbs == <wbs>`) is dropped from the `ready`
+set. By decomposition contract a parent "implements nothing itself" — running it would
+re-implement a task that is the abstraction over its children. `spur task batch-create` now
+auto-transitions decomposed parents to `wip` and refreshes their `## Plan` roster (task 0178
+F1/F2), so a `todo` umbrella with open children is a near-impossible-by-construction state;
+this rule is belt-and-braces for the rare case where the parent is re-opened or a child was
+created outside `batch-create`. Each excluded parent is reported in the batch report with
+`reason: "umbrella parent — <n> open children (<child-wbs-list>)"`.
 
 **`ready` edge note:** a `ready` candidate whose dependency is **out-of-set** is resolved here by
 status lookup (satisfied → included). In-set dependencies (a task in the set depending on another
@@ -230,6 +240,7 @@ The batch verdict: `clean` (all attempted tasks `done`) | `halted` (a failure st
 | AC | Where satisfied |
 |---|---|
 | R1.1–R1.4 (selector grammar) | Step 1 — selector resolution table |
+| R1.5 (umbrella-parent exclusion) | Step 1 — "Umbrella-parent exclusion" paragraph |
 | R2.1 (freeze at kickoff) | Step 2.1 |
 | R2.2 (topological order) | Step 2.4 (Kahn, WBS-ascending tie-break) |
 | R2.3 (cycle aborts) | Step 2.4 cycle handling |

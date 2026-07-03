@@ -7,7 +7,7 @@ see_also:
 
 # SECUA Review
 
-The code-quality lens applied in verify mode (Step 5) and review mode. Five dimensions, selected by
+The code-quality lens applied in verify mode (Step 7) and review mode. Five dimensions, selected by
 `--focus` (default `all`; comma-separated subset accepted).
 
 | Dim | Name | What it checks |

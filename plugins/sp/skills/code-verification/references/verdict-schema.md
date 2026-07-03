@@ -65,6 +65,13 @@ is part of the contract so weak proof is visible to the pipeline and to reviewer
 - `llm-judge`: qualitative judgment only; it cannot alone certify objective AC.
 - `n/a`: explicitly justified non-applicability.
 
+Every CORE behavior-bearing AC requires executable evidence: at least one `test` or `command` row.
+`spur task verdict` treats AC rows as core and behavior-bearing by default; add `[advisory]`,
+`[non-core]`, `[non-behavior]`, or `[docs-only]` in the AC id only when that weaker rule is
+intentional. A MET behavior AC with only `static-ref`, `manual-review`, or `llm-judge` evidence is
+downgraded to `PARTIAL` and emits an `evidence-rule-failed` check. CLI-surface changes should also
+emit a `cli-golden-path-present` check backed by a golden-path `--json` command invocation.
+
 For answer files, emit a matching parseable table:
 
 ```markdown
@@ -74,6 +81,18 @@ For answer files, emit a matching parseable table:
 |----|--------|---------------|----------|
 | Scenario: CLI emits JSON | MET | test | `apps/cli/tests/foo.test.ts:42` |
 ```
+
+## Checks evidence
+
+Wave C verification can emit the following additive `checks[]` rows:
+
+| Check | Meaning |
+| ----- | ------- |
+| `design-conformance` | Task `### Design` claims were classified DONE / PARTIAL / NOT DONE / CHANGED against the diff. |
+| `scope-creep` | Diff hunks did not map to Requirements / AC / Design / Plan items. Informational unless SECUA raises it. |
+| `evidence-rule-pass` | All behavior-bearing AC rows had executable evidence or were explicitly non-behavioral. |
+| `evidence-rule-failed` | One or more MET behavior-bearing AC rows lacked `test` / `command` evidence and were downgraded to PARTIAL. |
+| `cli-golden-path-present` | CLI-surface tasks supplied, or failed to supply, one golden-path command evidence row. |
 
 ## How the gate reads it
 

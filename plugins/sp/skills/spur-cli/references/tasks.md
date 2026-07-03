@@ -53,8 +53,10 @@ Section-Status-Matrix) and *its creation status*: a spec'd task (a `--feature` l
 with `background`/`requirements`) is created at **`todo`**; a bare capture is created at **`backlog`**.
 See [tasks/verbs.md](tasks/verbs.md) for the variant detail.
 
-Many tasks at once (the decomposition output) go through `batch-create` with a JSON **array** file
-— shape and gating live in `sp:spur-dev`'s decomposition reference, not here.
+Many tasks at once (the decomposition output) go through `batch-create` with a JSON **array** file.
+After child creation succeeds, the CLI refreshes each referenced parent roster and advances a parent
+still at `todo` to `wip`; the JSON result includes `parentsWired[]` for these best-effort side
+effects. Shape and gating live in `sp:spur-dev`'s decomposition reference.
 
 ## Editing a task: status vs. section vs. frontmatter
 

@@ -142,6 +142,16 @@ Evidence is typed so weak proof is visible:
 Objective AC cannot be cleared by `llm-judge` alone. Pair qualitative judgment with deterministic or
 static evidence, or mark the row `PARTIAL`.
 
+Every **CORE behavior-bearing** AC must include at least one `test` or `command` evidence row. A
+`MET` behavior AC with only `static-ref`, `manual-review`, or `llm-judge` evidence is downgraded to
+`PARTIAL` by `spur task verdict` and surfaces an `evidence-rule-failed` check. AC rows are treated as
+core and behavior-bearing by default; add `[advisory]`, `[non-core]`, `[non-behavior]`, or
+`[docs-only]` in the AC id only when that weaker rule is intentional and reviewable.
+
+When the diff touches `apps/cli/**`, include one golden-path `--json` command invocation for the
+changed command as `command` evidence. If that command evidence is absent, emit a
+`cli-golden-path-present` check with `fail` status in `checks[]`.
+
 When `--bdd` is set, each Gherkin scenario must map to executable evidence (`test` or `command`) or
 an explicitly reported missing-test condition. A missing executable mapping is `UNMET` when the
 scenario is core to the task and `PARTIAL` only when the scenario is documented as advisory/deferred.
@@ -156,7 +166,48 @@ The answer file must include a stable AC table:
 | Scenario: CLI emits JSON | MET | test | `apps/cli/tests/foo.test.ts:42` |
 ```
 
-### Step 6 — SECUA + quality review (Phase 7)
+### Step 6 — Design conformance (Phase 7a; Wave C / 0179 R1–R3)
+
+Verify the implementation matches the **approved design**, not just the requirements. The `### Design`
+section is the artifact the `refine` HITL gate approves; without this step, an implementation can
+diverge completely from the chosen approach and still PASS requirements/AC.
+
+**What to read.** Pull `### Design` from the task content (sub-bullets, chosen approach, invariants,
+signatures, rejected alternatives, calibrated tradeoffs). The feature design satellite
+`docs/design/<slug>.md` is consulted when one exists (calibration source for SECUA-A: patterns
+blessed in DESIGN.md are not flagged).
+
+**Classification.** For each non-trivial design claim, classify against the diff:
+
+| Status | Condition |
+|--------|-----------|
+| **DONE** | The diff implements the claim exactly as written |
+| **PARTIAL** | Some but not all sub-aspects of the claim are implemented |
+| **NOT DONE** | The claim has no implementation in the diff |
+| **CHANGED** | The implementation differs from the written claim |
+
+**Rules.**
+
+- **Silent deviation = major finding → PARTIAL.** A claim marked NOT DONE **without** a `### Solution` note
+  documenting the deviation as goal-equivalent lowers the aggregate verdict to PARTIAL.
+- **Documented deviation = CHANGED, PASS-acceptable.** When `### Solution` names the claim and
+  asserts goal-equivalent intent, classify as CHANGED and do not lower the verdict.
+- **Scope-creep line.** Diff hunks that match **no** Requirement / Acceptance Criteria / Design /
+  Plan item are reported as scope-creep. Surface as a `scope-creep` row in `checks[]`. The count
+  alone does not lower the verdict; SECUA-A carries it as a major finding if scope-creep exceeds
+  50% of the diff.
+- **Calibrate SECUA-A.** Patterns blessed in DESIGN.md (or `docs/design/<slug>.md`) are not flagged
+  as architectural drift.
+
+Emit a `design-conformance` row into the verdict `checks[]`:
+
+```markdown
+| Check | Status | Evidence |
+|-------|--------|----------|
+| design-conformance | pass | 4/5 claims DONE; 1 CHANGED (Solution §3) |
+```
+
+### Step 7 — SECUA + quality review (Phase 7)
 
 Review the changed code across the `--focus` dimensions (default all): **S**ecurity (secrets,
 injection, unsafe input), **E**fficiency, **C**orrectness (null/edge handling, logic), **U**sability
@@ -169,13 +220,13 @@ When review exposes broader architecture friction rather than a localized defect
 instead of silently expanding the current fix. LLM-as-judge reasoning is useful as a blind-spot
 finder, but actionable findings must cite files, severity, and verification feasibility.
 
-### Step 7 — Strict BDD scenario lens (if `--bdd`)
+### Step 8 — Strict BDD scenario lens (if `--bdd`)
 
 Apply the stricter mapping rules from Step 5 to Gherkin scenarios. Passed executable scenario →
 MET; failed executable scenario → UNMET; no executable evidence → UNMET for core scenarios or
 PARTIAL only when explicitly advisory/deferred. Fold the AC statuses into the aggregate verdict.
 
-### Step 8 — Aggregate the verdict
+### Step 9 — Aggregate the verdict
 
 ```
 any core requirement UNMET                          → FAIL
@@ -189,7 +240,7 @@ all core requirements and AC MET or justified N/A    → PASS
 Minor/advisory findings do not block. Only `PASS` clears the pipeline completion gate.
 (`PARTIAL`/`FAIL` route the pipeline to `failed`.)
 
-### Step 9 — Write findings to the task
+### Step 10 — Write findings to the task
 
 Assemble the evidence and write via CLI verbs (temp-file → `--section`):
 
@@ -213,7 +264,7 @@ sections. Concretely:
 - **Review section:** do not put `### SECUA Review` or any `###` heading inside the Review body.
   Use a priority table or a bold label such as `**SECUA Review**` instead.
 
-### Step 10 — State the verdict (the gate contract)
+### Step 11 — State the verdict (the gate contract)
 
 End the verify output with an explicit, parseable verdict line so the pipeline can
 transport it deterministically:
@@ -227,7 +278,7 @@ Verdict: PASS    (or PARTIAL / FAIL)
 shell step derives the gate artifact `.spur/run/<wbs>-verdict.json` from it **plus** an
 independent `spur task check` — so the artifact is never left to the agent's discretion
 
-### Step 8b — Handoff to record (pipeline context)
+### Step 12 — Handoff to record (pipeline context)
 
 Under the pipeline (`task-pipeline.yaml`), the verify agent's output is captured to
 `.spur/run/<wbs>-verify-answer.txt` (via `agent.run answerFile`). The **record** step
@@ -247,7 +298,7 @@ the record step transcribes — keep both structures stable.
 This `### SECUA Review` heading is an **answer-file contract only**. It belongs in
 `.spur/run/<wbs>-verify-answer.txt` so the pipeline record step can parse the captured output. It
 does **not** belong in the body file passed to `spur task update --section Review --from-file`;
-section bodies should use tables or bold labels, as noted in Step 8.
+section bodies should use tables or bold labels, as noted in Step 10.
 
 (R9; the agent reporting PASS in prose is necessary but not sufficient).
 **Standalone** (`/sp:dev-verify` outside the pipeline), write the artifact yourself:
@@ -285,16 +336,16 @@ Coverage: N/A (documentation-only change; no runtime code path added).
 
 This satisfies the task checker without pretending a coverage percentage was measured.
 
-### Step 11 — Fix pass (if `--fix` ≠ `none`)
+### Step 13 — Fix pass (if `--fix` ≠ `none`)
 
-- `blockers-first` — repair only requirements/AC that are UNMET (the blockers), then re-run Steps 4–10.
-- `all` — repair UNMET + PARTIAL requirements/AC and major SECUA findings, then re-run Steps 4–10.
+- `blockers-first` — repair only requirements/AC that are UNMET (the blockers), then re-run Steps 4–12.
+- `all` — repair UNMET + PARTIAL requirements/AC and major SECUA findings, then re-run Steps 4–12.
 - `none` — stop at the verdict; report and exit.
 
 Loop is bounded — if a fix doesn't move a requirement to MET after one retry, report the residual
 and stop (don't thrash).
 
-### Step 12 — Report
+### Step 14 — Report
 
 Show the verdict, the per-requirement table, and the gate outcome (cleared / blocked). Under the
 pipeline this is consumed by the gate; for a direct `/sp:dev-verify` invocation it's the operator's
@@ -305,7 +356,7 @@ summary.
 ## Mode: review (`/sp:dev-review`)
 
 The source-oriented path: SECUA review of a task's diff without the full traceability verdict. Runs
-Steps 3 + 5 + 8 (Review section only) — no verdict artifact, no `done` gate. Use for a focused
+Steps 3 + 7 + 10 (Review section only) — no verdict artifact, no `done` gate. Use for a focused
 quality/security audit of changes when the full verify isn't wanted.
 
 Flags: `--agent <name|auto>` (agent override), `--auto` (no confirmations), `--fix
@@ -338,7 +389,7 @@ Do **not** use this skill for:
 1. **Presence ≠ content.** `spur task check` passing is **not** a PASS verdict. This skill is the
    content gate; never conflate the two.
 2. **Write the verdict artifact last.** The workflow guard reads it; a stale/partial file fails the
-   gate misleadingly. Emit it only after the verdict is final (Step 9).
+   gate misleadingly. Emit it only after the verdict is final (Step 12).
 3. **Never direct-write the task file.** All findings go through `spur task update --section`.
 4. **`PASS` is the only clear.** `PARTIAL` blocks the gate — there is no "good enough" pass.
 5. **Bounded fix loop.** `--fix` retries once per requirement, then reports residuals — don't loop

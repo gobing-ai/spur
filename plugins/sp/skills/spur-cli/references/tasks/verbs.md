@@ -163,8 +163,69 @@ hand-edits or when the board looks stale.
 ## `resolve <file-path>`
 
 Map a file path to its **owning task** — returns the WBS + task file. Strategies, in order: direct
-task-file match, filename WBS parse, then walk-up the directory tree (A10). Returns exit `1` if no
-task owns the path. `--json` for structured output.
+task-file match, filename WBS parse, then walk-up the directory tree (A10). Use `--strict` to match
+only the exact corpus path, with no basename-WBS fallback. Returns exit `1` if no task owns the path.
+`--json` for structured output.
+
+## `verdict <wbs>`
+
+Derive a PASS / PARTIAL / FAIL / UNKNOWN verdict from a verify-step answer text file (the agent's
+structured evidence write-up). Replaces the pipeline's verify→record transition's previous grep/shell
+ladder (0108; ADR-022). On a readable answer, emits `.spur/run/<wbs>-verdict.json` (mkdir-p the
+directory first).
+
+| Flag | Effect |
+| ---- | ------ |
+| `--from-answer <path>` | Path to the verify answer text file (default `.spur/run/<wbs>-verify-answer.txt`). |
+| `--folder <path>` | Custom tasks folder. |
+| `--json` | Emit the verdict JSON envelope to stdout. |
+
+Verdict shape (always written to `.spur/run/<wbs>-verdict.json` regardless of `--json`):
+
+```json
+{
+  "wbs": "0040",
+  "verdict": "PASS",
+  "requirements": [{ "id": "R1", "status": "MET", "evidence": "…" }],
+  "acceptanceCriteria": [{ "id": "AC-1", "status": "MET", "evidence": "…" }],
+  "checks": [{ "name": "design-conformance", "status": "PASS", "evidence": "…" }],
+  "source": "spur-task-verdict"
+}
+```
+
+- `verdict`: `PASS` | `PARTIAL` | `FAIL` | `UNKNOWN`. A missing/unreadable answer file is a CLI
+  input error and exits non-zero before writing a verdict artifact.
+- Behavior-bearing requirements and AC need `test` or `command` evidence; static-reference-only rows
+  cap the verdict at `PARTIAL`.
+- Exit code: `0` on `PASS`, `1` on `PARTIAL` / `FAIL` / `UNKNOWN` (so the pipeline's verify→record
+  guard can gate on exit code AND read the JSON).
+
+## `refresh-roster <wbs>`
+
+Regenerate a parent task's sub-task roster block in `## Plan` — the marker-delimited table that the
+L4 roll-up gate (`runL4Rollup`, task 0121) reads. Idempotent: same children → same block. Invoked
+automatically by `spur task batch-create` for each distinct `parent_wbs` after the atomic create
+lands (task 0178, F1); invoke manually after a child status change outside `batch-create`.
+
+| Flag | Effect |
+| ---- | ------ |
+| `--folder <path>` | Custom tasks folder. |
+| `--json` | Emit `{ written, childCount, wbs }` machine-readable. |
+
+Human output: `Roster refreshed for <wbs> (N sub-task(s)).` on a successful write, or
+`Task <wbs> has no sub-tasks — nothing to roster.` when the parent has no children.
+
+## `path <wbs>`
+
+Resolve a WBS to its absolute task file path. Inverse of `resolve <file-path>`.
+
+| Flag | Effect |
+| ---- | ------ |
+| `--folder <path>` | Custom tasks folder. |
+| `--json` | Emit `{ wbs, filePath }` machine-readable. |
+
+Human output: the absolute path on stdout. Exit `1` with `Task <wbs> not found` when the WBS is
+unallocated.
 
 ## Reserved
 

@@ -1,46 +1,84 @@
 #!/usr/bin/env bun
 /**
- * task-write-guard — compatibility shim.
+ * task-write-guard — PreToolUse guard for the Spur task corpus.
  *
- * The guard logic now lives in superskill's hook runtime registry; installed hook configs call the
- * stable PATH command `superskill hook run sp task-write-guard` (see `plugins/sp/hooks/hooks.json`
- * and task 0151). This file is kept only as a thin adapter for any environment that still invokes
- * the old script path directly: it forwards stdin to the installed command and mirrors its exit code.
+ * Deny a raw `Write` or `Edit` whose target path is owned by a Spur task. Mutate task files through
+ * the `spur task` CLI (e.g. `spur task update <wbs> --section <name> --from-file <file>`), never by
+ * hand. Pure delegation: ownership is decided by `spur task resolve --strict --json`'s exit code
+ * alone (exit 0 → owned, non-zero → unowned).
  *
- * It performs NO source-tree CLI lookup — that coupling (the old `findCli()` walking to
- * `apps/cli/src/index.ts`) is what made the hook non-portable. If `superskill` is not on PATH the
- * shim fails open (emits an allow decision), matching the guard's overall fail-open contract.
+ * **Fail-open contract** (inherited from the pre-N3 shim and from superskill's runner): every error
+ * path — unparseable payload, non-Write/Edit tool, empty path, missing `spur` binary, spawn
+ * failure, timeout, `spur task resolve` non-zero exit, non-JSON stdout — emits an `allow`
+ * decision. A broken guard must never wedge an agent tool call.
+ *
+ * **Escape hatch:** `SPUR_WRITE_GUARD=off` short-circuits to allow.
+ *
+ * Self-contained by design (Wave E, task 0181, R3). Installed hook configs still use the portable
+ * `superskill hook run sp task-write-guard` entrypoint from task 0151, while this source script keeps
+ * the real guard decisions versioned and covered by this repo's test gate.
  */
 
 import { spawnSync } from 'node:child_process';
 
-function allow(): never {
-    process.stdout.write(
-        JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow' } }),
-    );
+interface ToolPayload {
+    tool_name?: string;
+    tool_input?: { file_path?: string };
+}
+
+type TaskOwnership = 'owned' | 'unowned' | 'unknown';
+
+function preToolUseDecision(decision: 'allow' | 'deny', reason?: string): never {
+    const out: Record<string, unknown> = {
+        hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: decision },
+    };
+    if (reason !== undefined) out.systemMessage = reason;
+    process.stdout.write(JSON.stringify(out));
     process.exit(0);
 }
 
-async function main(): Promise<void> {
-    const stdinText = await Bun.stdin.text();
-    const res = spawnSync('superskill', ['hook', 'run', 'sp', 'task-write-guard'], {
-        input: stdinText,
+/** Resolve whether a path is owned by a Spur task via `spur task resolve --strict --json`. */
+function resolveSpurTaskOwnership(filePath: string, cwd: string): TaskOwnership {
+    const spurBin = process.env.SPUR_BIN || 'spur';
+    const parts = spurBin.split(' ');
+    const cmd = parts[0] ?? 'spur';
+    const args = [...parts.slice(1), 'task', 'resolve', filePath, '--strict', '--json'];
+    const res = spawnSync(cmd, args, {
+        cwd,
         encoding: 'utf-8',
-        timeout: 9000,
+        timeout: 8000,
     });
-    // The decision rides in stdout JSON. Forward it ONLY when the child produced a parseable
-    // PreToolUse decision. Any other outcome — superskill missing, an older build without the
-    // `hook run` subcommand (errors with empty stdout), a crash, a timeout, or non-JSON output —
-    // fails open. A broken/absent runtime must never wedge the agent's tool call.
-    if (res.error || !res.stdout) return allow();
+    if (res.error || typeof res.status !== 'number') return 'unknown';
+    return res.status === 0 ? 'owned' : 'unowned';
+}
+
+async function main(): Promise<void> {
+    if (process.env.SPUR_WRITE_GUARD === 'off') preToolUseDecision('allow');
+
+    const stdinText = await Bun.stdin.text();
+    let payload: ToolPayload;
     try {
-        const parsed = JSON.parse(res.stdout) as { hookSpecificOutput?: { permissionDecision?: unknown } };
-        if (parsed.hookSpecificOutput?.permissionDecision === undefined) return allow();
+        payload = JSON.parse(stdinText) as ToolPayload;
     } catch {
-        return allow();
+        preToolUseDecision('allow'); // unparseable payload — fail open
     }
-    process.stdout.write(res.stdout);
-    process.exit(res.status ?? 0);
+
+    const toolName = payload.tool_name ?? '';
+    if (toolName !== 'Write' && toolName !== 'Edit') preToolUseDecision('allow');
+
+    const filePath = payload.tool_input?.file_path ?? '';
+    if (filePath === '') preToolUseDecision('allow');
+
+    const ownership = resolveSpurTaskOwnership(filePath, process.env.CLAUDE_PROJECT_DIR ?? process.cwd());
+    if (ownership === 'owned') {
+        preToolUseDecision(
+            'deny',
+            `${filePath} is a task file owned by the spur corpus. Edit it through the spur CLI ` +
+                '(e.g. `spur task update <wbs> --section <name> --from-file <file>`), not a raw ' +
+                'Write/Edit. Set SPUR_WRITE_GUARD=off to bypass.',
+        );
+    }
+    preToolUseDecision('allow');
 }
 
 void main();

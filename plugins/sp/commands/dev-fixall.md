@@ -30,12 +30,13 @@ Systematically resolve all validation errors (lint, typecheck, tests) using a de
 
 ## Auto-Detection
 
-When `validation-command` is omitted, detect from project config:
+When `validation-command` is omitted, detect from project config. The rows below are generic
+fallback examples; a repository-specific script contract wins when documented by its AGENTS.md.
 
 | Config File | Detection | Validation Command |
 |-------------|-----------|-------------------|
 | `biome.json` | `"biome"` in filename | `bun run check` |
-| `tsconfig.json` | `"tsconfig"` in filename | `bun run typecheck` |
+| `tsconfig.json` | `"tsconfig"` in filename | stack-specific typecheck command |
 | `package.json` + `bun.lockb` | Bun project | `bun run check` |
 
 For this project, the default is `bun run check` (runs lint + typecheck + test).

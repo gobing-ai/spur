@@ -1,6 +1,6 @@
 ---
 description: Turn a vague idea into a feature with AC and a decomposed task batch — discovery, feature-create, AC, feature-check, system-design, decompose, batch-create, handoff
-argument-hint: "\"<idea>\" [--auto] [--design] [--skip-design]"
+argument-hint: "\"<idea>\" [--auto] [--design] [--skip-design] [--design-approved]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 ---
 
@@ -29,6 +29,7 @@ The pipeline STOPS at handoff — tasks are created but NOT executed. Use `/sp:d
 | `--auto` | Set `profile=auto` — routes around objective HITL gates (feature-check, batch-create) BEFORE entry. Design-approval (taste) still pauses. Not `--yes-to-everything`. | off |
 | `--design` | Force the system-design step to run, regardless of the `needs_design` signal. | off |
 | `--skip-design` | Skip the system-design step. The brainstorm design summary is still recorded. | off |
+| `--design-approved` | Set `design_approved=true` for an explicitly approved design in the current operator session; under `--auto`, routes around the design-approval taste gate. | off |
 
 ## Behavior
 
@@ -36,7 +37,7 @@ Thin wrapper: builds the `--vars` JSON and invokes the idea pipeline.
 
 ```bash
 spur workflow run .spur/workflows/idea-pipeline.yaml \
-  --vars '{"idea":"<text>","profile":"interactive|auto","design":"auto|force|skip"}'
+  --vars '{"idea":"<text>","profile":"interactive|auto","design":"auto|force|skip","design_approved":"false|true"}'
 ```
 
 ### Design routing
@@ -83,12 +84,14 @@ translates `--auto`/`--design`/`--skip-design` into the vars JSON:
 IDEA="<first positional from $ARGUMENTS>"
 PROFILE="interactive"
 DESIGN="auto"
+DESIGN_APPROVED="false"
 # Parse --auto -> PROFILE="auto"
 # Parse --design -> DESIGN="force"
 # Parse --skip-design -> DESIGN="skip"
+# Parse --design-approved -> DESIGN_APPROVED="true"
 
 spur workflow run .spur/workflows/idea-pipeline.yaml \
-  --vars "{\"idea\":\"$IDEA\",\"profile\":\"$PROFILE\",\"design\":\"$DESIGN\"}"
+  --vars "{\"idea\":\"$IDEA\",\"profile\":\"$PROFILE\",\"design\":\"$DESIGN\",\"design_approved\":\"$DESIGN_APPROVED\"}"
 ```
 
 On HITL pause, surface the run id and continue instruction:

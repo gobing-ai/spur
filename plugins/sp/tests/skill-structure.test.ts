@@ -365,4 +365,70 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         }
         expect(offenders).toEqual([]);
     });
+
+    test('R37 — idea/planning pipelines route HITL answers and keep transition guards side-effect free', () => {
+        const idea = readFileSync(join(WORKFLOWS_DIR, 'idea-pipeline.yaml'), 'utf8');
+        const planning = readFileSync(join(WORKFLOWS_DIR, 'planning-pipeline.yaml'), 'utf8');
+
+        expect(idea).toContain('kind: file.read.into-var');
+        expect(idea).toContain('  - id: batch-create-run\n');
+        expect(idea).not.toContain('$(cat .spur/run/idea-feature-id.txt)');
+
+        const transitionBlocks = idea.split('\ntransitions:\n')[1] ?? '';
+        expect(transitionBlocks).not.toContain('task batch-create --file .spur/run/idea-task-batch.json');
+        expect(transitionBlocks).not.toContain('> .spur/run/idea-ac-retry-count');
+        expect(transitionBlocks).not.toContain('> .spur/run/idea-decompose-retry-count');
+
+        const hitlAnswer = `$${'{vars.__hitlAnswer}'}`;
+        for (const text of [idea, planning]) {
+            expect(text).toContain(`test "${hitlAnswer}" = yes`);
+            expect(text).toContain(`test "${hitlAnswer}" = no`);
+            expect(text).toContain(`test "${hitlAnswer}" = cancel`);
+        }
+    });
+
+    test('R38 — planning-pipeline declares agent dispatch vars used by agent.run steps', () => {
+        const planning = readFileSync(join(WORKFLOWS_DIR, 'planning-pipeline.yaml'), 'utf8');
+        for (const line of ['  agent: "omp"', '  spurBin: "spur"', '  stepTimeoutMs: "600000"']) {
+            expect(planning).toContain(line);
+        }
+        const varsAgent = `$${'{vars.agent}'}`;
+        const varsStepTimeout = `$${'{vars.stepTimeoutMs}'}`;
+        const varsSpurBin = `$${'{vars.spurBin}'}`;
+        expect(planning).toContain(`agent: ${varsAgent}`);
+        expect(planning).toContain(`timeoutMs: ${varsStepTimeout}`);
+        expect(planning).toContain(`${varsSpurBin} feature create`);
+    });
+
+    test('R39 — idea-pipeline discovery delegates needs_design criteria to sp:brainstorm', () => {
+        const idea = readFileSync(join(WORKFLOWS_DIR, 'idea-pipeline.yaml'), 'utf8');
+        const discovery = idea.split('  - id: discovery\n')[1]?.split('  - id: feature-create\n')[0] ?? '';
+        expect(discovery).toContain(
+            'The skill owns the approach-generation, design summary, and `needs_design` signal criteria',
+        );
+        expect(discovery).not.toContain('High / Medium / Low');
+        expect(discovery).not.toContain('2-3 approaches');
+    });
+
+    test('R40 — idea-pipeline decompose prompt matches task-batch schema fields', () => {
+        const idea = readFileSync(join(WORKFLOWS_DIR, 'idea-pipeline.yaml'), 'utf8');
+        const decompose = idea.split('  - id: decompose\n')[1]?.split('  - id: batch-create\n')[0] ?? '';
+        for (const field of [
+            'name',
+            'background',
+            'requirements',
+            'feature_id',
+            'parent_wbs',
+            'priority',
+            'tags',
+            'template',
+        ]) {
+            expect(decompose).toContain(field);
+        }
+        expect(decompose).toContain('Schema-permitted fields per entry');
+        expect(decompose).toContain(
+            'Acceptance Criteria, Design, and Plan sections are filled in by the per-task refine step',
+        );
+        expect(decompose).not.toContain('acceptance_criteria');
+    });
 });

@@ -1,6 +1,6 @@
 ---
 description: Plan a feature from a description — intake → feature create → AC generation → feature check gate → decomposition → batch-create
-argument-hint: "\"<description>\" [--feature <id>] [--parent <feature-id>] [--agent <name|auto>] [--design] [--auto]"
+argument-hint: "\"<description>\" [--feature <id>] [--parent <feature-id>] [--agent <name|auto>] [--design] [--auto] [--design-approved]"
 allowed-tools: ["Bash", "Read", "Write", "Skill"]
 ---
 
@@ -30,6 +30,7 @@ corpus mutation occurs until each gate passes.
 | `--agent <name\|auto>` | Spawn the model steps (AC generation, decomposition) under a specific agent via `spur agent run`. Omit (the default) to run them **in the current session** — no subprocess | (in-session) |
 | `--design` | Always author/update the feature's design satellite (`docs/design/<slug>.md`) + its `04_DESIGN.md` index row | off |
 | `--auto` | Set `profile=auto` (skip phasing HITL) AND enable design-doc auto-detection. Taste gates (design-approval) still pause. Not `--yes-to-everything`. | off |
+| `--design-approved` | Pass `design_approved=true` to the planning workflow when the operator already approved the design in this session; under `--auto`, routes around the design-approval taste gate. | off |
 
 ### Design-doc generation (`--design` / `--auto`)
 
@@ -55,7 +56,8 @@ duplicated (constitution §4.5 + sync trigger T9). Full procedure: skill Step 5.
   does not auto-dismiss `hitl.confirm` states. The YAML transitions skip the phasing state
   entirely when `profile=auto`.
 - **Taste gates** (`design-approval`) still pause — the operator must explicitly approve the
-  design doc. `--auto` does not auto-click taste gates.
+  design doc. `--auto` does not auto-click taste gates unless `--design-approved` records explicit
+  prior approval in the workflow vars.
 - `--auto` is NOT `--yes-to-everything`. It auto-continues on objective pass; it surfaces
   taste decisions to the human.
 
@@ -76,7 +78,8 @@ never shells out; that is the contract for an inline command.
 
 ## Implementation
 
-Delegates to **sp:spur-dev** skill:
+Delegates to **sp:spur-dev** skill. The planning workflow invocation includes
+`"design_approved":"true"` only when `--design-approved` is present:
 
 ```
 Skill(skill="sp:spur-dev", args="plan $ARGUMENTS")

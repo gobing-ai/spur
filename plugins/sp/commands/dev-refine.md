@@ -35,7 +35,7 @@ Refine a task's requirements by analyzing existing content for quality issues an
 | Input Pattern | Detection | Example |
 |---------------|-----------|---------|
 | Digits only | WBS number | `0274` |
-| Ends with `.md` | File path | `docs/tasks/0274_my-task.md` |
+| Ends with `.md` | File path | `docs/tasks2/0274_my-task.md` |
 
 ### `--focus` Values
 

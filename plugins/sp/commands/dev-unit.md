@@ -28,7 +28,7 @@ orchestration pipeline.
 | Argument | Required | Description |
 |----------|----------|-------------|
 | `target` | Yes | WBS task number, task file path, source file path, or file glob |
-| `--coverage <n>` | No | Override the default focused coverage target. Default: `90` |
+| `--coverage <n>` | No | Override the focused coverage target owned by `code-testing/references/unit-testing.md` frontmatter. Default: `90` |
 | `--agent <name\|auto>` | No | Spawn the test-generation step under a specific agent via `spur agent run`. Omit (the default) to run it **in the current session** — no subprocess |
 | `--auto` | No | Skip confirmations where the delegated workflow supports it |
 
