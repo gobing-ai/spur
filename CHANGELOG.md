@@ -4,6 +4,17 @@
 
 _No changes yet._
 
+## [0.3.1] — 2026-07-03
+
+### Added
+
+- **`sp-no-vendor-refs` boundary rule (task 0187).** New `config/rules/boundary/sp-no-vendor-refs.yaml` forbids any `plugins/sp` file from referencing `vendors/`; runs as the 29th recommended-pre-check rule so `bun run spur-check` gates the boundary. Structural test R20 remains as defense-in-depth.
+- **Task 0187 closeout record.** `docs/tasks2/0187_adopt-vendors-skills-lessons-into-plugins-sp-10-point-improv.md` lands the program's closeout documentation.
+
+### Changed
+
+- **Adopt vendor skill-engineering lessons across the `sp` plugin (task 0187).** Pruned all 16 skill descriptions to enforced budgets (aggregate 4173/4400 chars); flipped `daily-summary` and `branch-workflow` to `disable-model-invocation`; reworked `sys-debugging` to feedback-loop-first and added the vertical-slice doctrine to `spec-decomposition` and the deep-module vocabulary to `sys-architecture`. Added a plugin `README.md` (flow map + command index) and a `spur-dev` glossary SSOT (`references/glossary.md`). Pruned duplication (`code-verification` 424 → 359, `brainstorm` 422 → 278 lines). Hardened `dev-handover` (suggested skills, redaction, no-duplication rules). Added structural tests R42–R44; fixed the R43 word-boundary regex-escaping bug.
+
 ## [0.3.0] — 2026-07-03
 
 ### Added
