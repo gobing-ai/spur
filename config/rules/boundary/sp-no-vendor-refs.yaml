@@ -1,0 +1,29 @@
+# Vendor-boundary rule (task 0187, R11) — vendors/ is reference-only source material
+# consumed by humans/agents authoring plugins/sp skills. Absorb its lessons into
+# sp's own prose; never cite or link a vendors/ path FROM inside a shipped plugin
+# file. A live reference makes plugins/sp depend on a directory that is not part
+# of the installed plugin surface (vendors/ is not copied when sp is distributed),
+# and it signals an unabsorbed lesson — copy the idea, then delete the pointer.
+include:
+  - "plugins/sp/**/*.md"
+  - "plugins/sp/**/*.yaml"
+  - "plugins/sp/**/*.yml"
+  - "plugins/sp/**/*.json"
+  - "plugins/sp/**/*.ts"
+exclude:
+  - "**/node_modules/**"
+  - "plugins/sp/tests/**"
+rules:
+  - id: sp-no-vendor-refs
+    description: >
+      Do not reference a `vendors/` path from inside plugins/sp. vendors/ is
+      reference-only source material for authoring lessons; once a lesson is
+      absorbed into sp's own skills/references, the vendors/ pointer must be
+      removed, not left as a live citation. (Structural test R20 in
+      plugins/sp/tests/skill-structure.test.ts enforces the same invariant at
+      the file-content level; this rule enforces it at commit/pre-check time.)
+    severity: error
+    evaluator:
+      type: rg
+      config:
+        pattern: "vendors/"
