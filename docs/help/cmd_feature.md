@@ -12,11 +12,11 @@
 | `create <name>` | Allocate a hierarchical ID under the create-lock |
 | `show <id>` | Show a feature by ID (summary + content) |
 | `update <id> [status]` | Lifecycle transition, `--field/--value` scalar, or `--section/--from-file` body replace |
+| `advance <id>` | Walk a feature through the legal forward lifecycle path to a target status |
 | `list` | List features sorted by ID, with status/priority filters |
 | `move <id>` | Move a feature to a new parent — cascade-rename the subtree |
 | `refresh` | Regenerate `INDEX.md` and repopulate each feature's `## Tasks` region |
 | `check [id]` | Validate feature file(s) through the four-layer check |
-| `migrate` | **Reserved** — one-time corpus normalization, not yet wired |
 
 ## spur feature create
 
@@ -128,6 +128,35 @@ backlog → active → verifying → done  (also: cancelled)
 `verifying` is DD-13's status — it makes verification derivable, listable, event-triggerable,
 and assignable.
 
+## spur feature advance
+
+```
+spur feature advance [options] <id>
+```
+
+| Argument | Description |
+|---|---|
+| `id` | Feature ID to advance |
+
+| Flag | Default | Description |
+|---|---|---|
+| `--to <status>` | `done` | Target status (`backlog` → `active` → `verifying` → `done`) |
+| `--folder <path>` | — | Custom features folder |
+| `--json` | — | Output machine-readable JSON |
+
+Walks a feature through the legal forward lifecycle path (`backlog → active → verifying →
+done`), one hop at a time, until the `--to` target is reached. Runs `feature check` at the
+gates: standard before leaving `active`, strict before leaving `verifying`. Prints the hop
+trail on success (`F7: advanced to done (active → verifying, verifying → done)`).
+
+### Example
+
+```bash
+spur feature advance F7                 # → done (walks the full forward path)
+spur feature advance F7 --to verifying  # stop at verifying
+spur feature advance F7 --json          # { id, status, hops: [{from, to}, ...] }
+```
+
 ## spur feature list
 
 ```
@@ -220,11 +249,6 @@ spur feature check [options] [id]
   (linked tasks not done/cancelled).
 
 `--strict` elevates warnings to failures.
-
-## spur feature migrate
-
-> **Reserved.** One-time corpus normalization pass, gated on the board cutover. Not yet
-> wired in the CLI.
 
 ## See Also
 

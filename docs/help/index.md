@@ -29,7 +29,7 @@ spur --help
 curl -fsSL https://<release-host>/install.sh | bash
 ```
 
-Verify: `spur --version` → `0.2.5`; `spur agent doctor` checks every detected agent.
+Verify: `spur --version` → `0.3.1`; `spur agent doctor` checks every detected agent.
 
 ### CLI Surface
 
@@ -42,7 +42,7 @@ Verify: `spur --version` → `0.2.5`; `spur agent doctor` checks every detected 
 | `spur agent` | Run and inspect supported coding agents + team agent specs |
 | `spur rule` | Manage constraint rules and presets |
 | `spur workflow` | Validate, execute, observe, cancel, and clean workflow YAML files |
-| `spur task` | Manage tasks (WBS-numbered, markdown-backed) — 13 verbs |
+| `spur task` | Manage tasks (WBS-numbered, markdown-backed) — 12 verbs |
 | `spur feature` | Manage features (hierarchical IDs) — 8 verbs |
 | `spur history` | Import and analyze coding-agent history |
 | `spur message` | Send and inspect durable inter-agent messages |
