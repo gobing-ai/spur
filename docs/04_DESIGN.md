@@ -94,10 +94,20 @@ clobbering a configured project. `--json` emits
   skips `.spur/rules` + `.spur/workflows`. The manifest is pure data — adding a default is a
   one-line edit, no control-flow change.
 - **`/sp:spur-init` owns content adaptation only.** Calls `spur init` as its first step, then
-  routes every doc touch through `sp:doc-evolve` (project naming, stack detection, PRD/ADR
-  drafts). It NEVER creates scaffold files itself — it edits content the CLI already wrote. A
-  post-scaffold validation probe (`spur status`, `spur task create`, `spur workflow validate`)
-  confirms the fresh tree is immediately functional.
+  performs three classes of adaptation. Two probes sit between scaffold and customization:
+  - *Functional probe (Phase 1.5):* `spur status`, `spur task create`, `spur workflow validate`.
+  - *Rule glob adaptation (Phase 1.6):* the `recommended-pre-check` preset ships globs calibrated
+    to Spur's monorepo (`apps/**/*.ts` etc.). On any other layout these match zero files and `rg`
+    exits 2, surfacing as `kind: "error"` findings. The command detects the project layout
+    (monorepo / single-package / flat / polyglot) and writes adapted overrides under
+    `.spur/rules/<category>/` — local-layer shadowing (first-layer-wins by relative path), not
+    scaffold materialization. The probe `spur rule run --preset recommended-pre-check` must then
+    report zero `kind: "error"` findings. Adapted rule files are customization overlays, analogous
+    to the Phase 2 doc edits — NOT `SCAFFOLD_MANIFEST` entries.
+  - *Doc customization (Phase 2):* routes every doc touch through `sp:doc-evolve` (project naming,
+    stack detection, PRD/ADR drafts).
+  The command NEVER creates `SCAFFOLD_MANIFEST` files itself — it edits content the CLI already
+  wrote, or writes local-layer overlays the CLI never owned.
 
 **Scaffold-variant parity invariant.** `SCAFFOLD_MANIFEST` ships exactly one
 `templates/task/<variant>.md` entry per `TASK_VARIANTS`

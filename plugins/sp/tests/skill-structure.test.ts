@@ -558,4 +558,31 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const spineSkill = readFileSync(join(SKILLS_DIR, 'spur-dev', 'SKILL.md'), 'utf8');
         expect(spineSkill).toContain('glossary.md');
     });
+
+    test('R45 — spur-init.md declares the Phase 1.6 rule glob adaptation probe (task 0188 ownership contract)', () => {
+        // The ownership contract (04_DESIGN.md §1.1) requires /sp:spur-init to adapt
+        // recommended-pre-check globs to the project's layout instead of shipping a broken probe.
+        // A "dogfood artifact" excuse is NOT acceptable — the command must inspect the tree and
+        // rewrite layout-dependent globs as local-layer overlays under .spur/rules/<category>/.
+        const spurInit = readFileSync(join(PLUGIN_ROOT, 'commands', 'spur-init.md'), 'utf8');
+
+        // Phase 1.6 section exists and names the probe.
+        expect(spurInit, 'spur-init.md must declare a Phase 1.6 rule glob adaptation section').toContain(
+            '### Phase 1.6 — Rule glob adaptation',
+        );
+        expect(spurInit).toContain('recommended-pre-check');
+
+        // The LLM-as-judge framing: the executing agent inspects the tree and rewrites globs.
+        expect(spurInit, 'Phase 1.6 must frame the agent as the LLM-as-judge').toContain('LLM-as-judge');
+
+        // Adapted rules land as local-layer overlays, NOT scaffold files.
+        expect(spurInit).toContain('.spur/rules/<category>/');
+        expect(spurInit, 'Phase 1.6 must state the local-layer shadowing invariant (first-layer-wins)').toContain(
+            'first-layer-wins',
+        );
+
+        // The old "dogfood artifact" excuse must be gone — it papered over a real probe gap.
+        expect(spurInit, 'spur-init.md must NOT dismiss the probe as a dogfood artifact').not.toContain('dogfood');
+        expect(spurInit).not.toContain('intentionally NOT a probe');
+    });
 });
