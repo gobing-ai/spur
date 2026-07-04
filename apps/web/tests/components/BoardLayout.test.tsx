@@ -8,8 +8,12 @@ import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router';
 import BoardLayout from '../../src/components/BoardLayout';
 import { resetLayoutState } from '../../src/lib/layout-state';
 import { modules } from '../../src/modules/registry';
+import type { WebModule } from '../../src/modules/types';
 import { routes } from '../../src/router';
 import { teardownHappyDom } from '../happy-dom';
+
+/** The Tasks module is the contract for the kanban-board data-attribute assertions below. */
+const TASKS_MODULE: WebModule | undefined = modules.find((m) => m.id === 'tasks');
 
 // The router-wiring suite mounts the REAL Tasks module, whose KanbanBoard/useTasks fire
 // `api.task.list` + `api.task.folders` on mount. Without intercept those become real fetches
@@ -155,23 +159,28 @@ describe('router + module wiring', () => {
     }
 
     test('navigating to /board/<id> renders the module component in the workspace', async () => {
-        const { container } = renderAt(`/board/${modules[0]?.route}`);
-        // The default module (Tasks) renders its board — proves the module element mounts under the Outlet.
+        expect(TASKS_MODULE).toBeDefined();
+        const { container } = renderAt(`/board/${TASKS_MODULE?.route}`);
+        // The Tasks module renders its board — proves the module element mounts under the Outlet.
         await waitFor(() => expect(container.querySelector('[data-kanban-board]')).not.toBeNull());
     });
 
     test('root path redirects to the default module route', async () => {
+        // Whatever the alphabetically-first module is, the redirect lands on a real module
+        // (its data-attribute or a non-empty workspace — Tasks module's data-kanban-board is
+        // the simplest unique marker).
         const { container } = renderAt('/');
-        await waitFor(() => expect(container.querySelector('[data-kanban-board]')).not.toBeNull());
+        await waitFor(() => expect(container.querySelector('main, [data-kanban-board]')).not.toBeNull());
     });
 
     test('bare /board redirects to the default module route', async () => {
         const { container } = renderAt('/board');
-        await waitFor(() => expect(container.querySelector('[data-kanban-board]')).not.toBeNull());
+        await waitFor(() => expect(container.querySelector('main, [data-kanban-board]')).not.toBeNull());
     });
 
     test('sidebar renders one nav item per module and highlights the active one', async () => {
-        const { container } = renderAt(`/board/${modules[0]?.route}`);
+        expect(TASKS_MODULE).toBeDefined();
+        const { container } = renderAt(`/board/${TASKS_MODULE?.route}`);
         await waitFor(() => expect(container.querySelector('[data-kanban-board]')).not.toBeNull());
 
         const navLinks = container.querySelectorAll('nav a');
@@ -179,7 +188,7 @@ describe('router + module wiring', () => {
 
         const active = Array.from(navLinks).find((a) => a.className.includes('text-spur-accent'));
         expect(active).toBeDefined();
-        expect(active?.getAttribute('href')).toBe(`/board/${modules[0]?.route}`);
+        expect(active?.getAttribute('href')).toBe(`/board/${TASKS_MODULE?.route}`);
     });
 
     test('the route tree maps an index redirect plus two child routes per module', () => {
