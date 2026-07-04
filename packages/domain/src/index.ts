@@ -24,6 +24,7 @@ export {
     INBOX_MESSAGES_SCHEMA_SQL,
     loadSqlMigrations,
     QUEUE_JOBS_SCHEMA_SQL,
+    SYSTEM_EVENTS_SCHEMA_SQL,
 } from './migrations';
 export * from './planning/locks';
 export * from './planning/markdown-document';

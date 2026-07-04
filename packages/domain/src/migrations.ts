@@ -63,6 +63,26 @@ CREATE TABLE IF NOT EXISTS queue_jobs (
 CREATE INDEX IF NOT EXISTS queue_jobs_ready_idx ON queue_jobs (status, next_retry_at, created_at);
 `;
 
+/**
+ * DDL for the `system_events` table — a capped append-only ledger of planning
+ * and system events persisted by the server EventBus tap (task 0189 wave A /
+ * 0198). Indexed on `occurred_at` (history query newest-first + since-filter)
+ * and `event_name` (per-stream board tabs). Kept byte-compatible with
+ * `drizzle/0006_spur_cli_system_events.sql`.
+ */
+export const SYSTEM_EVENTS_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS system_events (
+    id TEXT PRIMARY KEY,
+    event_name TEXT NOT NULL,
+    occurred_at TEXT NOT NULL,
+    actor TEXT,
+    payload_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_system_events_occurred_at ON system_events (occurred_at);
+CREATE INDEX IF NOT EXISTS idx_system_events_event_name ON system_events (event_name);
+`;
+
 /** SQL that creates the Spur CLI-owned domain tables plus package-owned tables. */
 export const CLI_SCHEMA_SQL = `
 ${DOMAIN_SCHEMA_SQL}
@@ -78,6 +98,8 @@ ${RULE_ENGINE_SCHEMA_SQL}
 ${INBOX_MESSAGES_SCHEMA_SQL}
 
 ${QUEUE_JOBS_SCHEMA_SQL}
+
+${SYSTEM_EVENTS_SCHEMA_SQL}
 `;
 
 /**
@@ -106,7 +128,9 @@ ALTER TABLE runs ADD COLUMN pid INTEGER;
  * `rule_eval_runs`) to databases created before task 0040; `0003` adds the
  * planning event ledger (`planning_events`, `task_run_links`); `0004` adds the
  * `queue_jobs` table (`@gobing-ai/ts-infra` `DBJobQueue`/`DBQueueConsumer`, task 0074);
- * `0005` adds the `pid` column to `runs` for subprocess cancellation (task 0140).
+ * `0005` adds the `pid` column to `runs` for subprocess cancellation (task 0140);
+ * `0006` adds the `system_events` ledger persisted by the server EventBus tap
+ * (observabilities board v1, task 0189 wave A / 0198).
  * All are idempotent (`CREATE TABLE IF NOT EXISTS`), so applying them in sequence is
  * safe regardless of the database's age.
  */
@@ -120,6 +144,7 @@ export const CLI_MIGRATIONS: CliMigration[] = [
     { id: '0003_spur_cli_planning', sql: PLANNING_SCHEMA_SQL },
     { id: '0004_spur_cli_queue_jobs', sql: QUEUE_JOBS_SCHEMA_SQL },
     { id: '0005_spur_cli_run_pid', sql: RUN_PID_COLUMN_SCHEMA_SQL },
+    { id: '0006_spur_cli_system_events', sql: SYSTEM_EVENTS_SCHEMA_SQL },
 ];
 
 /** Filename marker for regenerated CLI-owned migrations. */

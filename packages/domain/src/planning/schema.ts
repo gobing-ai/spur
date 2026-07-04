@@ -179,6 +179,17 @@ export function normalizeTaskStatus(raw: string): TaskStatus {
 }
 
 /**
+ * Like {@link normalizeTaskStatus} but never throws — unrecognized statuses
+ * fall back to `'todo'` so a single malformed task file cannot break read paths
+ * (e.g. the task list endpoint). Use the throwing variant on write paths where
+ * the caller needs to reject an invalid status.
+ */
+export function normalizeTaskStatusSafe(raw: string): TaskStatus {
+    const key = raw.trim().toLowerCase();
+    return TASK_STATUS_ALIASES[key] ?? 'todo';
+}
+
+/**
  * Normalize a raw feature-status string (case-insensitive, alias-tolerant) to
  * its lowercase canonical form. Throws on values outside the combined alias
  * map so callers can surface the allowed set in the error.
