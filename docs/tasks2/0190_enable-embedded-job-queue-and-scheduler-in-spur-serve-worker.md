@@ -12,7 +12,7 @@ priority: P1
 tags: ["approach-c", "server", "infra"]
 dependencies: []
 created_at: "2026-07-03T23:35:28.254Z"
-updated_at: "2026-07-04T04:13:23.896Z"
+updated_at: "2026-07-04T07:16:09.369Z"
 ---
 
 ## 0190. Enable embedded job queue and scheduler in spur serve (worker loop + handler registry)
@@ -26,14 +26,14 @@ Decision D6: in-process worker inside `spur serve`, Bun path only — Cloudflare
 Dependency: P1 Observabilities task (tab contract + system_events pruning hand-off + event visibility). Check ts-infra's `JobQueue`/`QueueJobDao` consumer surface first — if a claim/complete API is missing upstream, prefer the smallest ts-libs enhancement over a Spur-side workaround (AGENTS.md shared-library evolution rule).
 
 ### Requirements
-- [ ] R1 — Worker loop in `packages/app` (e.g. `JobWorkerService`): polls `queue_jobs` for pending jobs, claims atomically, dispatches to the handler registry, records terminal status; poll interval configurable with a sane default; graceful shutdown completes or releases the in-flight job (never orphans a claimed row).
-- [ ] R2 — Typed handler registry: job kind → handler mapping registered at serve bootstrap; a claimed job with an unregistered kind is marked failed with an error naming the kind (fail loud, no silent drop).
-- [ ] R3 — Enable on Bun serve path only: `jobQueueEnabled: true` + `scheduler.enabled: true` wired through `apps/server/src/serve.ts`/`bootstrap.ts`; Cloudflare entrypoint (`worker.ts`) boots with neither and still serves health + OpenAPI (covered by `bun run test-cf`).
-- [ ] R4 — Scheduler lifecycle: `NodeSchedulerAdapter.start()` on serve boot, `stop()` on shutdown; first registered entry = `system_events` retention pruning (replacing/backstopping the P1 insert-time cap); second = smoke job for tests.
-- [ ] R5 — Job lifecycle events (enqueued/started/completed/failed) emitted on the EventBus; visible in the Observability Events tab without further work.
-- [ ] R6 — `GET /api/jobs/stats` returning counts by status (rides the existing `JobQueue.stats`); Jobs tab added to the `observability` web module via its tab-extension contract showing stats + recent job events.
-- [ ] R7 — Tests: worker loop against in-memory SQLite (execute, unknown-kind failure, shutdown release), scheduler registration, stats endpoint, CF no-op; no test sleeps longer than necessary (inject clock/interval where possible).
-- [ ] R8 — Full gate green: `bun run lint`, `bun run test`, `bun run test-cf`, `bun run build`.
+- [ ] R1. Worker loop in `packages/app` (e.g. `JobWorkerService`): polls `queue_jobs` for pending jobs, claims atomically, dispatches to the handler registry, records terminal status; poll interval configurable with a sane default; graceful shutdown completes or releases the in-flight job (never orphans a claimed row).
+- [ ] R2. Typed handler registry: job kind → handler mapping registered at serve bootstrap; a claimed job with an unregistered kind is marked failed with an error naming the kind (fail loud, no silent drop).
+- [ ] R3. Enable on Bun serve path only: `jobQueueEnabled: true` + `scheduler.enabled: true` wired through `apps/server/src/serve.ts`/`bootstrap.ts`; Cloudflare entrypoint (`worker.ts`) boots with neither and still serves health + OpenAPI (covered by `bun run test-cf`).
+- [ ] R4. Scheduler lifecycle: `NodeSchedulerAdapter.start()` on serve boot, `stop()` on shutdown; first registered entry = `system_events` retention pruning (replacing/backstopping the P1 insert-time cap); second = smoke job for tests.
+- [ ] R5. Job lifecycle events (enqueued/started/completed/failed) emitted on the EventBus; visible in the Observability Events tab without further work.
+- [ ] R6. `GET /api/jobs/stats` returning counts by status (rides the existing `JobQueue.stats`); Jobs tab added to the `observability` web module via its tab-extension contract showing stats + recent job events.
+- [ ] R7. Tests: worker loop against in-memory SQLite (execute, unknown-kind failure, shutdown release), scheduler registration, stats endpoint, CF no-op; no test sleeps longer than necessary (inject clock/interval where possible).
+- [ ] R8. Full gate green: `bun run lint`, `bun run test`, `bun run test-cf`, `bun run build`.
 ### Acceptance Criteria
 ```gherkin
 Feature: Embedded job queue and scheduler

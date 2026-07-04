@@ -12,7 +12,7 @@ priority: P2
 tags: ["approach-c", "cli", "planning"]
 dependencies: []
 created_at: "2026-07-03T23:35:28.256Z"
-updated_at: "2026-07-03T23:46:03.187Z"
+updated_at: "2026-07-04T06:56:36.402Z"
 ---
 
 ## 0192. Wire spur task migrate verb (A17) and run the board-cutover corpus normalization
@@ -99,3 +99,7 @@ F6
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-07-04T06:55:32.010Z todo → wip (system)
+- 2026-07-04T06:56:35.879Z wip → testing (system)
+- 2026-07-04T06:56:36.232Z testing → done (system)
+- 2026-07-04T06:56:36.402Z done → todo (system)

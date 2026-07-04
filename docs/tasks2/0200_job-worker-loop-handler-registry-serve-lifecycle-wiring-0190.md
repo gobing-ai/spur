@@ -12,7 +12,7 @@ priority: P1
 tags: ["approach-c", "server", "infra", "subtask"]
 dependencies: []
 created_at: "2026-07-04T04:13:23.850Z"
-updated_at: "2026-07-04T04:17:09.415Z"
+updated_at: "2026-07-04T07:11:32.637Z"
 ---
 
 ## 0200. Job worker loop, handler registry, serve lifecycle wiring (0190 wave A)
@@ -22,10 +22,10 @@ updated_at: "2026-07-04T04:17:09.415Z"
 Wave A of parent 0190 (job queue enablement) — read the parent's Background and Design first; its upstream-audit step (ts-db `QueueJobDao` / ts-infra `DBJobQueue` consumer surface) belongs to THIS slice and must run before coding. Delivers the consumer half: `JobWorkerService` + `JobHandlerRegistry` in `packages/app` (injected pollMs/clock, claim → dispatch → complete/fail, unknown kind fails loud, stop releases in-flight), and the Bun-path serve wiring (`jobQueueEnabled: true`, worker start/stop in lifecycle, shutdown ordering). Cloudflare stays untouched (NotConfigured).
 
 ### Requirements
-- [ ] R1 — Upstream audit recorded in parent Design: claim/complete/fail/release surface of the resolved ts-db/ts-infra packages; smallest ts-libs enhancement if insufficient (never raw SQL in Spur outside packages/domain). (Parent Design)
-- [ ] R2 — `JobHandlerRegistry` + `JobWorkerService` with injected interval/clock; tests: execute-to-completed, unknown-kind→failed-loud, stop-releases-in-flight; no real sleeps. (Parent R1, R2, R7)
-- [ ] R3 — Serve wiring Bun path: enable queue, registry built at bootstrap, worker start/stop in lifecycle with correct shutdown order. (Parent R3)
-- [ ] R4 — CF no-op proven by `bun run test-cf`; full gate green. (Parent R3, R8)
+- [ ] R1. Upstream audit recorded in parent Design: claim/complete/fail/release surface of the resolved ts-db/ts-infra packages; smallest ts-libs enhancement if insufficient (never raw SQL in Spur outside packages/domain). (Parent Design)
+- [ ] R2. `JobHandlerRegistry` + `JobWorkerService` with injected interval/clock; tests: execute-to-completed, unknown-kind→failed-loud, stop-releases-in-flight; no real sleeps. (Parent R1, R2, R7)
+- [ ] R3. Serve wiring Bun path: enable queue, registry built at bootstrap, worker start/stop in lifecycle with correct shutdown order. (Parent R3)
+- [ ] R4. CF no-op proven by `bun run test-cf`; full gate green. (Parent R3, R8)
 ### Acceptance Criteria
 ```gherkin
 Feature: Embedded job queue and scheduler

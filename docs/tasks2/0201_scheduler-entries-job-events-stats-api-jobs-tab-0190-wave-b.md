@@ -12,7 +12,7 @@ priority: P1
 tags: ["approach-c", "server", "web", "subtask"]
 dependencies: []
 created_at: "2026-07-04T04:13:23.850Z"
-updated_at: "2026-07-04T04:17:16.847Z"
+updated_at: "2026-07-04T07:14:37.970Z"
 ---
 
 ## 0201. Scheduler entries, job events, stats API, Jobs tab (0190 wave B)
@@ -22,11 +22,11 @@ updated_at: "2026-07-04T04:17:16.847Z"
 Wave B of parent 0190 (job queue enablement) — read the parent's Background and Design first. Depends on wave A (worker + registry running). Delivers the periphery: scheduler start/stop in the serve lifecycle with the first real entries (`system-events-prune` via enqueue — replacing/backstopping 0189's insert-time cap — plus a `smoke` kind), job lifecycle events on the bus added to the shared event-name list (tap + SSE inherit), `GET /api/jobs/stats`, and the Jobs tab appended to the observability module's tabs contract (needs 0189 wave B shipped).
 
 ### Requirements
-- [ ] R1 — Scheduler start/stop in serve lifecycle; `system-events-prune` (enqueue path) + `smoke` entries registered; firing tested via injected clock. (Parent R4)
-- [ ] R2 — `job.enqueued|started|completed|failed` events (metadata only) on the bus; names added to the shared event-name list. (Parent R5)
-- [ ] R3 — `jobs` server module: `GET /api/jobs/stats` riding `JobQueue.stats()`; endpoint test. (Parent R6)
-- [ ] R4 — Jobs tab appended to observability `tabs.ts`: stats + recent `job.*` events from the history API. (Parent R6)
-- [ ] R5 — Full gate green incl. `test-cf`; manual: prune/smoke activity visible in Events + Jobs tabs under `spur serve`. (Parent R8)
+- [ ] R1. Scheduler start/stop in serve lifecycle; `system-events-prune` (enqueue path) + `smoke` entries registered; firing tested via injected clock. (Parent R4)
+- [ ] R2. `job.enqueued|started|completed|failed` events (metadata only) on the bus; names added to the shared event-name list. (Parent R5)
+- [ ] R3. `jobs` server module: `GET /api/jobs/stats` riding `JobQueue.stats()`; endpoint test. (Parent R6)
+- [ ] R4. Jobs tab appended to observability `tabs.ts`: stats + recent `job.*` events from the history API. (Parent R6)
+- [ ] R5. Full gate green incl. `test-cf`; manual: prune/smoke activity visible in Events + Jobs tabs under `spur serve`. (Parent R8)
 ### Acceptance Criteria
 ```gherkin
 Feature: Embedded job queue and scheduler
