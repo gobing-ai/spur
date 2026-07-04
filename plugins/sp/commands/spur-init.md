@@ -27,7 +27,11 @@ structure wired up.
 
 ## Behavior
 
-Two phases — deterministic scaffold first, then non-deterministic customization:
+Two phases — deterministic scaffold first, then non-deterministic customization. **Ownership
+contract:** this command owns content *adaptation* only; `spur init` owns *file materialization*
+(`04_DESIGN.md` §1.1 "Init ownership contract"). The command NEVER creates scaffold files
+itself — it edits content the CLI already wrote. One Phase 1.5 validation probe sits between
+the two phases to confirm the fresh tree is immediately functional.
 
 ### Phase 1 — Deterministic scaffold (`spur init`)
 
@@ -37,13 +41,29 @@ spur init --name <name> [--minimal] [--force] --json
 
 This scaffolds (idempotent, never overwrites customized docs):
 - `.spur/config.yaml` — minimal project config.
-- `.spur/workflows/`, `.spur/rules/`, `.spur/templates/`, `.spur/tasks/templates/` — defaults.
+- `.spur/workflows/`, `.spur/rules/`, `.spur/templates/`, `.spur/tasks/templates/` — defaults
+  (one template per `TASK_VARIANTS` entry, driven by `SCAFFOLD_MANIFEST`).
 - `docs/99_PROJECT_CONSTITUTION.md` + `docs/00`–`docs/05` stubs — the doc structure.
+
+### Phase 1.5 — Functional validation probe
+
+Before any customization, confirm the fresh scaffold is immediately functional. If any probe
+fails, STOP and report the gap rather than papering over it with customization:
+
+```
+spur status
+spur task create "__probe__" --template standard   # confirms task template + matrix resolve
+spur workflow validate .spur/workflows/task-pipeline.yaml
+```
+
+(`spur rule run --preset recommended-pre-check` is intentionally NOT a probe: on a project
+with no `apps/`/`packages/` dirs the rule globs match zero files and surface as findings —
+that's a Spur-dogfoods-its-own-preset artifact, not a scaffold gap. See `04_DESIGN.md` §1.1.)
 
 ### Phase 2 — Non-deterministic customization (only if `--skip-docs` is absent)
 
-After the scaffold, customize the fresh project. **Every authoritative-doc touch routes through
-`sp:doc-evolve`** to honor the constitution §5 sync triggers.
+After the scaffold + validation, customize the fresh project. **Every authoritative-doc touch
+routes through `sp:doc-evolve`** to honor the constitution §5 sync triggers.
 
 1. **Stack detection.** Read `package.json` / `Cargo.toml` / `go.mod` / `pyproject.toml` to detect
    the runtime, language, and framework. Record findings in `docs/03_ARCHITECTURE.md` §1 (module
@@ -65,11 +85,8 @@ Skill(skill="sp:doc-evolve", args="customize --project <name>")
 
 ## Implementation
 
-Phase 1 runs `spur init` directly (Bash). Phase 2 delegates to `sp:doc-evolve` for every doc touch.
-
-## Platform Notes
-
-- **Claude Code:** native — `Skill()` delegation and `$ARGUMENTS` work directly.
+Phase 1 runs `spur init` directly (Bash). Phase 1.5 runs the validation probes via Bash and
+halts on any failure. Phase 2 delegates to `sp:doc-evolve` for every doc touch.
 - **Other platforms:** `Skill()` and `$ARGUMENTS` are Claude-specific. Run `spur init` via Bash,
   then invoke the `sp:doc-evolve` skill's `customize` operation directly.
 

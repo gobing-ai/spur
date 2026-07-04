@@ -529,11 +529,21 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             .filter((f) => f.endsWith('.md'))
             .map((f) => f.replace(/\.md$/, ''));
 
+        // Scope the index check to the "### Command index" section only — commands are
+        // legitimately cross-referenced elsewhere (skill-dispatch table, pipeline routing),
+        // and those prose mentions must not count as index duplicates. The section runs from
+        // the "### Command index" heading to the next "## " (top-level) heading.
+        const lines = readme.split('\n');
+        const startIdx = lines.findIndex((l) => l.trim() === '### Command index');
+        expect(startIdx, 'README must have a "### Command index" section').toBeGreaterThanOrEqual(0);
+        const endIdx = lines.findIndex((l, i) => i > startIdx && /^## /.test(l));
+        const indexSection = lines.slice(startIdx, endIdx === -1 ? undefined : endIdx).join('\n');
+
         const missing: string[] = [];
         const duplicated: string[] = [];
         for (const name of commandFiles) {
             const re = new RegExp(`\\b${name}\\b`, 'g');
-            const count = (readme.match(re) ?? []).length;
+            const count = (indexSection.match(re) ?? []).length;
             if (count === 0) missing.push(name);
             if (count > 1) duplicated.push(`${name} (${count}x)`);
         }

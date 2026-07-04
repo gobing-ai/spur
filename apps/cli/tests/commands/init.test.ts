@@ -3,6 +3,9 @@ import { existsSync } from 'node:fs';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { bundledConfigRoot } from '@gobing-ai/spur-config/loader';
+import { TASK_VARIANTS } from '@gobing-ai/spur-domain';
+import { SCAFFOLD_MANIFEST } from '../../src/config/scaffold-manifest';
 import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
 import { createTempProject } from '../helpers';
@@ -38,6 +41,7 @@ describe('init command', () => {
         expect(existsSync(join(cwd, '.spur', 'tasks', 'templates', 'issue.md'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'tasks', 'templates', 'review.md'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'tasks', 'templates', 'meta.md'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'tasks', 'templates', 'brainstorm.md'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'templates', 'feature', 'default.md'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'templates', 'bdd', 'gherkin.md'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'templates', 'bdd', 'checklist.md'))).toBe(true);
@@ -135,5 +139,40 @@ describe('init command', () => {
         expect(result.project).toBe('fixture');
         expect(result.created.length).toBeGreaterThan(0);
         expect(result.globalRulesSeeded).toBeGreaterThan(0);
+    });
+    test('SCAFFOLD_MANIFEST ships exactly one task template per TASK_VARIANTS entry', () => {
+        // SSOT alignment invariant (task 0188): every variant the planning layer
+        // recognizes must resolve to a scaffolded template, and the manifest must
+        // not drift into shipping templates for variants the schema no longer lists.
+        const taskTargets = new Set(
+            SCAFFOLD_MANIFEST.filter((e) => e.target.startsWith('tasks/templates/')).map((e) =>
+                e.target.slice('tasks/templates/'.length, -'.md'.length),
+            ),
+        );
+        expect([...taskTargets].sort()).toEqual([...TASK_VARIANTS].sort());
+    });
+
+    test('every SCAFFOLD_MANIFEST task template resolves to a bundled source file', async () => {
+        // A manifest entry whose `source` is missing from the bundled config tree
+        // would silently drop a template from the fresh project. Catch it here.
+        const configRoot = bundledConfigRoot();
+        expect(configRoot, 'bundled config root must resolve in test env').not.toBeNull();
+        for (const entry of SCAFFOLD_MANIFEST.filter((e) => e.target.startsWith('tasks/templates/'))) {
+            const sourcePath = join(configRoot as string, entry.source);
+            expect(existsSync(sourcePath), `missing source: ${entry.source}`).toBe(true);
+        }
+    });
+
+    test('freshly scaffolded tree supports task creation with the standard template', async () => {
+        // Functional probe mirroring /sp:spur-init Phase 1.5: the scaffold must be
+        // immediately usable, not just present on disk.
+        const cwd = await createTempProject();
+        const { options } = await isolatedOptions(cwd);
+
+        expect(await main(['init'], options)).toBe(0);
+        // task create reads the scaffolded template + section-matrix; failure here
+        // means the scaffold is internally inconsistent.
+        expect(await main(['task', 'create', 'probe-task', '--json'], options)).toBe(0);
+        expect(existsSync(join(cwd, '.spur', 'tasks'))).toBe(true);
     });
 });

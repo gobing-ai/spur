@@ -87,6 +87,23 @@ project. Re-running is blocked (exit 1) unless `--force` is given, preventing a 
 clobbering a configured project. `--json` emits
 `{ ok, project, config, created[], skipped[], globalConfigSeeded }`.
 
+**Init ownership contract.** Two surfaces collaborate; their cut is strict (task 0188):
+- **`spur init` owns file materialization.** Copies every `SCAFFOLD_MANIFEST` entry from
+  `bundledConfigRoot()` to `.spur/` (and the `docs/` stubs to the project root). Idempotent;
+  `--force` overwrites non-preserve entries, never overwrites preserve-marked docs; `--minimal`
+  skips `.spur/rules` + `.spur/workflows`. The manifest is pure data — adding a default is a
+  one-line edit, no control-flow change.
+- **`/sp:spur-init` owns content adaptation only.** Calls `spur init` as its first step, then
+  routes every doc touch through `sp:doc-evolve` (project naming, stack detection, PRD/ADR
+  drafts). It NEVER creates scaffold files itself — it edits content the CLI already wrote. A
+  post-scaffold validation probe (`spur status`, `spur task create`, `spur workflow validate`)
+  confirms the fresh tree is immediately functional.
+
+**Scaffold-variant parity invariant.** `SCAFFOLD_MANIFEST` ships exactly one
+`templates/task/<variant>.md` entry per `TASK_VARIANTS`
+(`standard·feature-impl·issue·review·brainstorm·meta`); enforced by
+`apps/cli/tests/commands/init.test.ts` to prevent template/manifest drift.
+
 #### `spur agent run <prompt> [--agent <name>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--drain] [--json]`
 **The single LLM execution surface.** Every model invocation in Spur routes through this verb — sp
 skills that generate prose (AC, decompositions, reviews), workflow `agent.run` actions, and team-mode
@@ -337,7 +354,7 @@ config/
   tasks/
     section-matrix.yaml             # Section-Status-Matrix for `spur task check` (§7.4)
   templates/                        # task/feature/bdd/docs body templates (§8); CLI never hardcodes body content (DD-11)
-    task/{default,feature-impl,issue,review,meta}.md
+    task/{standard,feature-impl,issue,review,brainstorm,meta}.md   # one per TASK_VARIANTS entry (§7.3.1); SSOT alignment invariant enforced by init.test.ts
     feature/default.md
     bdd/{gherkin,checklist}.md
     docs/{99_PROJECT_CONSTITUTION,00_ADR,01_PRD,02_ROADMAP,03_ARCHITECTURE,04_DESIGN,05_FEATURES}.md  # doc stubs (task 0088)

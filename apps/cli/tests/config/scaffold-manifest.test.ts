@@ -22,6 +22,7 @@ describe('scaffold-manifest', () => {
         expect(sources).toContain('templates/task/feature-impl.md');
         expect(sources).toContain('templates/task/issue.md');
         expect(sources).toContain('templates/task/review.md');
+        expect(sources).toContain('templates/task/brainstorm.md');
         expect(sources).toContain('templates/task/meta.md');
         // Feature template
         expect(sources).toContain('templates/feature/default.md');
@@ -42,8 +43,8 @@ describe('scaffold-manifest', () => {
     });
 
     test('has the expected entry count (updated when adding scaffolds)', () => {
-        // 16 original + 1 planning-pipeline + 2 idea/wrapup pipelines + 7 docs (root) + 7 docs templates = 33
-        expect(SCAFFOLD_MANIFEST.length).toBe(33);
+        // 16 original + 1 planning-pipeline + 2 idea/wrapup pipelines + 7 docs (root) + 7 docs templates + 1 brainstorm task template = 34
+        expect(SCAFFOLD_MANIFEST.length).toBe(34);
     });
 
     test('docs entries are root-scoped and preserve-marked (R1 — task 0088)', () => {

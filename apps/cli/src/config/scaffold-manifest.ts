@@ -58,6 +58,7 @@ export const SCAFFOLD_MANIFEST: readonly ScaffoldEntry[] = [
     { source: 'templates/task/feature-impl.md', target: 'tasks/templates/feature-impl.md' },
     { source: 'templates/task/issue.md', target: 'tasks/templates/issue.md' },
     { source: 'templates/task/review.md', target: 'tasks/templates/review.md' },
+    { source: 'templates/task/brainstorm.md', target: 'tasks/templates/brainstorm.md' },
     { source: 'templates/task/meta.md', target: 'tasks/templates/meta.md' },
     // Feature templates under .spur/templates/feature/
     { source: 'templates/feature/default.md', target: 'templates/feature/default.md' },
