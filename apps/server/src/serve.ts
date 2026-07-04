@@ -1,13 +1,14 @@
 import { dirname, isAbsolute, join } from 'node:path';
 import { resolvePlanningFolders } from '@gobing-ai/spur-app';
+import { SystemEventDao } from '@gobing-ai/spur-domain';
 import type { ApplicationRuntime, ApplicationStopReason } from '@gobing-ai/ts-infra/application';
 import { runNodeApplication } from '@gobing-ai/ts-infra/application-node';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { createApp, serverBootstrapConfig } from './bootstrap';
 import { createServerContext, type ServerContext, type ServerScheduler } from './context';
+import { registerSystemEventTap } from './modules/events/system-event-tap';
 import { openUrl } from './open-url';
-
 /** Options for {@link startServer}. */
 export interface StartServerOptions {
     port: number;
@@ -99,6 +100,18 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 jobQueueEnabled: bootConfig.jobqueue.enabled,
                 scheduler,
             });
+            // System-event persistence tap (task 0189 wave A / 0198). Best-effort:
+            // tap failures are isolated by registerSystemEventTap and never break
+            // other EventBus subscribers. Bun-only — the Workers path has no long-lived bus.
+            if (bootConfig.events.enabled) {
+                try {
+                    const dao = new SystemEventDao(await ctx.getDb());
+                    registerSystemEventTap(ctx.eventBus(), dao, appRt.logger);
+                    appRt.logger.debug('system_events tap registered');
+                } catch (error) {
+                    appRt.logger.warn('system_events tap registration failed', { error: String(error) });
+                }
+            }
 
             const app = deps.createApp(appRt, { fs, ctx });
 

@@ -1,6 +1,6 @@
 import type { WriteResult } from '@gobing-ai/spur-app';
 import { contract } from '@gobing-ai/spur-contracts';
-import { normalizeTaskStatus, TASK_TYPES } from '@gobing-ai/spur-domain/schema';
+import { normalizeTaskStatusSafe, TASK_TYPES } from '@gobing-ai/spur-domain/schema';
 import { NotFoundError } from '@gobing-ai/ts-utils';
 import { implement } from '@orpc/server';
 import type { ServerContext } from '../../context';
@@ -40,8 +40,7 @@ export function createTaskHandlers(ctx: ServerContext) {
                 return {
                     wbs: t.wbs,
                     name: t.name,
-                    status: normalizeTaskStatus(t.status),
-                    // Pass the raw priority through — the corpus mixes P0–P3 with high/medium/low.
+                    status: normalizeTaskStatusSafe(t.status),
                     priority: typeof fm.priority === 'string' ? fm.priority : undefined,
                     featureId: (fm.feature_id as string | null) ?? undefined,
                     parentWbs: (fm.parent_wbs as string | null) ?? undefined,
@@ -63,7 +62,7 @@ export function createTaskHandlers(ctx: ServerContext) {
                 data: {
                     wbs: result.wbs,
                     name: result.name,
-                    status: normalizeTaskStatus(result.status),
+                    status: normalizeTaskStatusSafe(result.status),
                     frontmatter: result.frontmatter,
                     content: result.content,
                     filePath: result.filePath,

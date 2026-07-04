@@ -3,6 +3,7 @@ import type { ServerContext } from '../context';
 import { eventsModule } from './events';
 import { featureModule } from './feature';
 import { healthModule } from './health';
+import { messagesModule } from './messages';
 import { taskModule } from './task';
 import type { ServerModule } from './types';
 
@@ -17,7 +18,7 @@ import type { ServerModule } from './types';
  * (explicit routes before wildcard mounts), but modules are
  * self-contained — no module depends on another being mounted first.
  */
-const builtins: ServerModule[] = [healthModule, taskModule, featureModule, eventsModule];
+const builtins: ServerModule[] = [healthModule, taskModule, featureModule, eventsModule, messagesModule];
 
 /**
  * Mount every built-in module on the Hono app.

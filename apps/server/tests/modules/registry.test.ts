@@ -3,9 +3,9 @@ import { Hono } from 'hono';
 import { builtins, registerModules } from '../../src/modules/registry';
 
 describe('module registry', () => {
-    test('builtins includes health, task, feature, and events modules', () => {
+    test('builtins includes health, task, feature, events, and messages modules', () => {
         const names = builtins.map((m) => m.name);
-        expect(names).toEqual(['health', 'task', 'feature', 'events']);
+        expect(names).toEqual(['health', 'task', 'feature', 'events', 'messages']);
     });
 
     test('registerModules mounts all builtins without throwing', () => {

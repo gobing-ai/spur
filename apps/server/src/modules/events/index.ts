@@ -3,6 +3,7 @@ import type { EventBus } from '@gobing-ai/ts-infra';
 import type { Hono } from 'hono';
 import type { ServerContext } from '../../context';
 import type { ServerModule } from '../types';
+import { PLANNING_EVENT_NAMES } from './event-names';
 
 /** SSE heartbeat keepalive — enqueues a comment frame unless the stream is closed. */
 export function sendKeepalive(
@@ -75,17 +76,7 @@ export const eventsModule: ServerModule = {
                     signal.addEventListener('abort', teardown);
 
                     heartbeatInterval = setInterval(sendKeepalive, 15_000, closed, controller, encoder);
-
-                    const eventNames: PlanningEventName[] = [
-                        'task.created',
-                        'task.updated',
-                        'task.transitioned',
-                        'feature.created',
-                        'feature.updated',
-                        'feature.transitioned',
-                    ];
-
-                    for (const name of eventNames) {
+                    for (const name of PLANNING_EVENT_NAMES) {
                         const handler = (event: unknown) => {
                             if (closed.current) return;
                             const envelope = {
@@ -127,6 +118,35 @@ export const eventsModule: ServerModule = {
                 'Content-Type': 'text/event-stream',
                 'Cache-Control': 'no-cache',
             });
+        });
+
+        // GET /api/events/history — recent system_events ledger rows (newest-first).
+        // Query params: ?name=<event name> &since=<ISO timestamp> &limit=<int, default 100, max 500>.
+        app.get('/api/events/history', async (c) => {
+            const nameParam = c.req.query('name');
+            const sinceParam = c.req.query('since');
+            const limitParam = c.req.query('limit');
+            let limit = 100;
+            if (limitParam !== undefined) {
+                const parsed = Number.parseInt(limitParam, 10);
+                if (!Number.isNaN(parsed) && parsed > 0) {
+                    limit = Math.min(parsed, 500);
+                }
+            }
+            const dao = await ctx.systemEventDao();
+            const rows = await dao.query({
+                name: nameParam || undefined,
+                since: sinceParam || undefined,
+                limit,
+            });
+            const events = rows.map((row) => ({
+                id: row.id,
+                eventName: row.event_name,
+                occurredAt: row.occurred_at,
+                actor: row.actor,
+                payload: row.payload_json ? JSON.parse(row.payload_json) : null,
+            }));
+            return c.json({ events, count: events.length });
         });
     },
 };

@@ -3,17 +3,19 @@ import type {
     PlanningEvent as PlanningEventType,
     PlanningFolders,
     TaskService,
+    TeamService,
 } from '@gobing-ai/spur-app';
 import {
     FeatureService as FeatureServiceImpl,
     PlanningWriteService as PlanningWriteServiceImpl,
     TaskService as TaskServiceImpl,
+    TeamService as TeamServiceImpl,
 } from '@gobing-ai/spur-app';
 // CF-safe core import: DEFAULT_* are plain string constants in the dependency-free core
 // entry of @gobing-ai/spur-config (no `yaml`/`node:fs`). This narrows the former inline-
 // literal exception to a "core import only" boundary (ADR-027, planning-folder-hardcode rule).
 import { DEFAULT_FEATURES_DIR, DEFAULT_TASKS_DIR } from '@gobing-ai/spur-config';
-import { createMigratedDbViaRuntime, type DbAdapter, dbHealthCheck } from '@gobing-ai/spur-domain';
+import { createMigratedDbViaRuntime, type DbAdapter, dbHealthCheck, SystemEventDao } from '@gobing-ai/spur-domain';
 import type { EventBus, JobQueue, SchedulerAdapter } from '@gobing-ai/ts-infra';
 import type { ApplicationRuntime } from '@gobing-ai/ts-infra/application';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
@@ -65,6 +67,12 @@ export interface ServerContext {
     /** Lazy, cached FeatureService (planning layer). */
     featureService(): FeatureService;
 
+    /** Lazy, cached TeamService (messaging + team status). */
+    teamService(): TeamService;
+
+    /** Lazy SystemEventDao (system_events ledger) for the history endpoint + tap. */
+    systemEventDao(): Promise<SystemEventDao>;
+
     /**
      * Resolved planning folders (phase folders) from `.spur/config.yaml` (via
      * serve.ts), or schema defaults when no config/FS is available. The task.folders
@@ -95,6 +103,8 @@ export interface ServerContext {
 /** Options for `createServerContext`. */
 export interface CreateServerContextOptions {
     cwd: string;
+    /** Environment map for subprocess-aware services (TeamService). Defaults to {}. */
+    env?: Record<string, string | undefined>;
     fs: FileSystem;
     webDistPath?: string;
     dbUrl?: string;
@@ -144,6 +154,8 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
     let dbPromise: Promise<DbAdapter> | undefined;
     let taskSvc: TaskService | undefined;
     let featureSvc: FeatureService | undefined;
+    let teamSvc: TeamService | undefined;
+    let systemEventDaoPromise: Promise<SystemEventDao> | undefined;
     let jobQueuePromise: Promise<ServerJobQueue> | undefined;
 
     return {
@@ -185,6 +197,23 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                 });
             }
             return featureSvc;
+        },
+
+        teamService(): TeamService {
+            if (!teamSvc) {
+                teamSvc = new TeamServiceImpl({
+                    cwd,
+                    env: options.env ?? {},
+                    fs,
+                    getDb: () => this.getDb(),
+                });
+            }
+            return teamSvc;
+        },
+
+        async systemEventDao(): Promise<SystemEventDao> {
+            systemEventDaoPromise ??= this.getDb().then((db) => new SystemEventDao(db));
+            return systemEventDaoPromise;
         },
 
         planningFolders(): PlanningFolders {

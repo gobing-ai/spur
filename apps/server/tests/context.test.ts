@@ -80,6 +80,73 @@ describe('createServerContext', () => {
         expect(svc1).toBe(svc2);
     });
 
+    test('teamService() builds a TeamService', () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
+
+        const svc = ctx.teamService();
+        expect(svc).toBeDefined();
+    });
+
+    test('teamService() caches the instance', () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
+
+        const svc1 = ctx.teamService();
+        const svc2 = ctx.teamService();
+        expect(svc1).toBe(svc2);
+    });
+
+    test('systemEventDao() returns a SystemEventDao backed by the migrated DB', async () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
+
+        const dao = await ctx.systemEventDao();
+        expect(dao).toBeDefined();
+        // query() against the empty ledger resolves to [] (idempotent, no throw).
+        const rows = await dao.query({});
+        expect(rows).toEqual([]);
+    });
+
+    test('systemEventDao() caches the instance across calls', async () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
+
+        const dao1 = await ctx.systemEventDao();
+        const dao2 = await ctx.systemEventDao();
+        expect(dao1).toBe(dao2);
+    });
+
+    test('planningFolders() returns the resolved folders', () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
+
+        const folders = ctx.planningFolders();
+        expect(folders).toBeDefined();
+        expect(typeof folders.tasksDir).toBe('string');
+        expect(typeof folders.featuresDir).toBe('string');
+    });
+
+    test('planningFolders() honors folders passed via options', () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, {
+            cwd: '/tmp/test',
+            fs: testFs,
+            folders: {
+                tasksDir: '/custom/tasks',
+                featuresDir: '/custom/features',
+                foldersConfig: {
+                    active_folder: 'tasks',
+                    folders: {},
+                },
+            },
+        });
+
+        const folders = ctx.planningFolders();
+        expect(folders.tasksDir).toBe('/custom/tasks');
+        expect(folders.featuresDir).toBe('/custom/features');
+    });
+
     test('eventBus() returns the appRt events by default', () => {
         const appRt = makeAppRt();
         const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
