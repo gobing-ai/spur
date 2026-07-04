@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Observability web module: shell, tabs contract, Events + Inbox tabs (0189 wave B)"
 description: ""
-status: todo
+status: backlog
 type: task
 profile: standard
 feature_id: J
@@ -12,7 +12,7 @@ priority: P1
 tags: ["approach-c", "web", "subtask"]
 dependencies: []
 created_at: "2026-07-04T04:13:23.849Z"
-updated_at: "2026-07-04T04:17:01.966Z"
+updated_at: "2026-07-04T06:22:45.167Z"
 ---
 
 ## 0199. Observability web module: shell, tabs contract, Events + Inbox tabs (0189 wave B)
@@ -51,14 +51,65 @@ Feature: Observabilities board module
 <!-- Clarifications and decisions made during refinement. Keep empty if none. -->
 
 ### Design
-Parent 0189's Design owns the full approach — this slice implements its **Web** paragraph: `apps/web/src/modules/observability/` per the auto-discovery contract (`docs/help/how_to_add_a_new_ui_module.md`; task-kanban is the reference), tabs-as-data in `tabs.ts` (`{id,label,component}[]`, shell maps the array — THE extension contract 0201 and 0210 append to), System Events tab (history fetch → live EventSource append; check whether the kanban's SSE hook is extractable before writing a new one), Inbox tab (thread grouping by `in_reply_to`). All UI imports through `apps/web/src/ui.ts` (ADR-025). Depends on: 0198 (history + inbox APIs). Blocks: 0201's Jobs tab, 0210's Process tab, 0206's live inbox.
+**Module structure.** `apps/web/src/modules/observability/` per the auto-discovery contract (`docs/help/how_to_add_a_new_ui_module.md`; `task-kanban` is the reference). Zero manual wiring — a `WebModule` named export in `index.tsx` is discovered at build time by `import.meta.glob('./*/index.{ts,tsx}')`.
+
+```
+apps/web/src/modules/observability/
+    index.tsx          # exports { module }: WebModule — id: 'observability', route: 'observability'
+    tabs.ts            # tabs-as-data: { id, label, component }[] — THE extension contract
+    ObservabilityView.tsx   # shell: renders tab bar + active tab panel
+    EventsTab.tsx      # System Events tab: history fetch + SSE live append
+    InboxTab.tsx       # Inbox Messages tab: list with sender/recipient/timestamp/thread context
+    types.ts           # EventItem, InboxMessageItem, TabDefinition, etc.
+    useEvents.ts       # hook: initial history fetch + EventSource live tail
+    useInbox.ts        # hook: fetch inbox messages with optional agent filter
+```
+
+**Component tree.**
+```
+ObservabilityView (shell)
+  ├─ TabBar — maps tabs.ts array → clickable tabs, highlights active
+  └─ active panel
+       ├─ EventsTab  (default tab)
+       │    ├─ EventList (history rows from useEvents)
+       │    └─ live-indicator (SSE connected status)
+       └─ InboxTab
+            ├─ Agent filter dropdown (optional, from query params)
+            └─ MessageList (grouped by in_reply_to chain)
+```
+
+**Tabs-as-data contract (R2)** — `tabs.ts`:
+```typescript
+export interface TabDefinition {
+    id: string;        // unique within this module (e.g. 'events', 'inbox')
+    label: string;     // display text in the tab bar
+    component: ComponentType;  // the panel to render
+}
+export const TABS: TabDefinition[] = [
+    { id: 'events', label: 'Events', component: EventsTab },
+    { id: 'inbox', label: 'Inbox', component: InboxTab },
+];
+```
+0190 (Jobs) and 0195 (Process List) append entries to this array. The shell `ObservabilityView` maps `TABS` — they never touch the shell component.
+
+**Data flow.**
+- **Events tab (R3):** `useEvents()` hook does initial `GET /api/events/history?limit=100` (from 0198's R3 endpoint), then opens `EventSource('/api/events/planning')` (existing SSE, 0198 R2 emits the same `PLANNING_EVENT_NAMES`). New events append to the list in state — same SSE wiring as the existing kanban module, but inline (the kanban SSE hook is task-specific coupling; extracting a generic `useSSE` is deferred per the parent design's "check before writing a new one" instruction — assessment: the kanban SSE is tightly coupled to task refresh, not generic; inline a ~15-line EventSource effect here).
+- **Inbox tab (R4):** `useInbox(agentFilter?)` hook calls `GET /api/messages/inbox?agent=<id>` (single agent) or `GET /api/messages?limit=50` (all messages, from 0198's R4 endpoint). Messages grouped by `in_reply_to`: if a message has `inReplyTo`, nest it under its parent; unthreaded messages display at root level.
+
+**Import seam compliance (R5).** All UI imports through `apps/web/src/ui.ts` (ADR-025). No direct daisyUI class usage — use the wrapped components from `@/components/ui/`. No `@orpc/*` or raw `fetch` — use `{ api }` from `@/lib/rpc-client` for the history/inbox REST endpoints, and raw `EventSource` for the SSE stream (the SSE endpoint is not oRPC-contract-bound per parent 0189 Design).
+
+**Route.** `/board/observability` — derived from the `WebModule.route` field. The registry auto-generates the route; no manual router.tsx edits.
+
+**State management.** No external state library — React `useState` + `useEffect` per tab (pattern matches task-kanban's `useTasks` hook). The modules share no cross-tab state.
 ### Plan
-- [ ] Module scaffold: `WebModule` export + discovery test (R1).
-- [ ] Tabs-as-data contract in `tabs.ts`; document the append convention for later tabs (R2).
-- [ ] System Events tab: history fetch + SSE live append (R3).
-- [ ] Inbox Messages tab: list + thread context (R4).
-- [ ] Seam compliance + component tests; gate: `bun run lint && bun run test && bun run test-cf && bun run build`; `bun run spur-check` (R5).
-- [ ] Manual: `spur serve` → both tabs render live data.
+- [ ] Module scaffold: create `apps/web/src/modules/observability/` directory with `index.tsx` exporting a `WebModule` (`id: 'observability'`, `name: 'Observability'`, `icon: '🔭'`, `route: 'observability'`); `ObservabilityView.tsx` shell with tab bar + active tab panel; `types.ts` with `TabDefinition`, `EventItem`, `InboxMessageItem`; `tabs.ts` with the tab array (R1, R2).
+- [ ] Discovery test: assert `getModule('observability')` resolves in the registry test (`apps/web/tests/modules/registry.test.ts`) — covered automatically by glob discovery; validate the module shape matches `WebModule` (R1).
+- [ ] System Events tab: `EventsTab.tsx` rendering `useEvents()` hook — initial `GET /api/events/history?limit=100` then `EventSource('/api/events/planning')` live append; newest-first rendering with event name, timestamp, actor (R3).
+- [ ] Inbox Messages tab: `InboxTab.tsx` rendering `useInbox(agentFilter?)` hook — `GET /api/messages/inbox?agent=<id>` or `GET /api/messages?limit=50`; sender/recipient/timestamp columns; `in_reply_to` thread grouping (nested rendering, indented children) (R4).
+- [ ] Import seam compliance: all UI imports through `@/ui`; no direct daisyUI class usage; `api` from `@/lib/rpc-client` for REST endpoints; `EventSource` for SSE (browser built-in, no import needed) (R5).
+- [ ] Component tests mirroring task-kanban style: render `ObservabilityView`, assert tab bar renders both tabs; render `EventsTab`, assert history rows render; render `InboxTab`, assert message list renders with thread grouping; hook tests for `useEvents` and `useInbox` (R5).
+- [ ] Gate: `bun run lint && bun run test && bun run test-cf && bun run build`; `bun run spur-check` (R5).
+- [ ] Manual: `spur serve`, open `/board/observability`, verify Events tab renders; send a `spur task update` and see the event land live; verify Inbox tab renders messages from `spur message send` (R5).
 ### Solution
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->
@@ -78,3 +129,4 @@ J
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-07-04T06:22:45.167Z todo → backlog (system)
