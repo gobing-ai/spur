@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { type DbAdapter, InboxMessageDao, MarkdownDocument } from '@gobing-ai/spur-domain';
+import { type DbAdapter, InboxMessageDao, InboxRecentDao, MarkdownDocument } from '@gobing-ai/spur-domain';
 import {
     type AgentSpec,
     buildIdentityPreamble,
@@ -26,7 +26,8 @@ export interface TeamServiceOutput {
 export interface TeamServiceContext {
     cwd: string;
     env: Record<string, string | undefined>;
-    output: TeamServiceOutput;
+    /** Optional output sink; TeamService does not read it (kept for CLI stdout coupling). */
+    output?: TeamServiceOutput;
     getDb(): Promise<DbAdapter>;
     /** Filesystem port for reading/writing task files. */
     fs: FileSystem;
@@ -53,6 +54,12 @@ export interface InboxEntry {
 /** Result of listing an agent's inbox. */
 export interface InboxResult {
     messages: InboxEntry[];
+    count: number;
+}
+
+/** Result of listing recent messages across all agents. */
+export interface RecentMessagesResult {
+    messages: Array<InboxEntry & { toId: string }>;
     count: number;
 }
 
@@ -141,6 +148,30 @@ export class TeamService {
                 status: row.status,
                 createdAt: new Date(row.createdAt).toISOString(),
                 inReplyTo: row.inReplyTo,
+            })),
+            count: rows.length,
+        };
+    }
+
+    /**
+     * List recent messages across ALL agents (newest first), for the board's
+     * global message feed. Differs from {@link getInbox} (one agent's queue) by
+     * spanning every recipient. Delegates to {@link InboxRecentDao} (domain) so
+     * this package stays raw-SQL-free (project rule `raw-sql-only-in-domain`).
+     * Returns an empty list when the table is absent.
+     */
+    async listRecent(limit = 50): Promise<RecentMessagesResult> {
+        const dao = await this.inboxRecentDao();
+        const rows = await dao.listRecent(limit);
+        return {
+            messages: rows.map((row) => ({
+                id: row.id,
+                fromId: row.from_id,
+                toId: row.to_id,
+                body: row.body,
+                status: row.status,
+                createdAt: new Date(row.created_at).toISOString(),
+                inReplyTo: row.in_reply_to,
             })),
             count: rows.length,
         };
@@ -280,6 +311,11 @@ export class TeamService {
     private async inboxDao(): Promise<InboxMessageDao> {
         const db = await this.ctx.getDb();
         return new InboxMessageDao(db);
+    }
+
+    private async inboxRecentDao(): Promise<InboxRecentDao> {
+        const db = await this.ctx.getDb();
+        return new InboxRecentDao(db);
     }
 
     private orchestrator(): Promise<TeamOrchestrator> {

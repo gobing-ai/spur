@@ -135,6 +135,47 @@ describe('TeamService messaging', () => {
             await cleanup();
         }
     });
+
+    test('listRecent returns messages across all agents newest-first', async () => {
+        const { svc, cleanup } = await makeService();
+        try {
+            await svc.sendMessage('coder', 'planner', 'first');
+            await svc.sendMessage('coder', 'coder', 'second');
+            await svc.sendMessage(null, 'planner', 'broadcast');
+
+            const recent = await svc.listRecent(50);
+            expect(recent.count).toBe(3);
+            // Each row carries the recipient (toId) — the global feed is per-recipient,
+            // unlike getInbox which is scoped to one agent.
+            expect(recent.messages[0]?.toId).toBeDefined();
+            expect(recent.messages.every((m) => typeof m.toId === 'string')).toBe(true);
+            // createdAt surfaced as ISO for stable display.
+            expect(recent.messages[0]?.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('listRecent clamps limit into [1, 500] and defaults to 50', async () => {
+        const { svc, cleanup } = await makeService();
+        try {
+            await svc.sendMessage('coder', 'planner', 'one');
+
+            // limit <= 0 → clamped to 1.
+            const one = await svc.listRecent(0);
+            expect(one.count).toBe(1);
+
+            // limit huge → clamped to 500 (still returns all 1 row present).
+            const huge = await svc.listRecent(100_000);
+            expect(huge.count).toBe(1);
+
+            // No arg → default 50.
+            const def = await svc.listRecent();
+            expect(def.count).toBe(1);
+        } finally {
+            await cleanup();
+        }
+    });
 });
 
 // ---------------------------------------------------------------------------

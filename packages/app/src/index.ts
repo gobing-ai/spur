@@ -110,6 +110,7 @@ export type {
     AgentSpecInput,
     InboxEntry,
     InboxResult,
+    RecentMessagesResult,
     SendResult,
     TeamServiceContext,
     TeamServiceOutput,
