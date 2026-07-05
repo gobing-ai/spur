@@ -14,8 +14,8 @@
  *   bun run scripts/merge-coverage.ts          # generate + merge
  *   bun run scripts/merge-coverage.ts --merge   # merge only (skip test runs)
  */
-import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { dirname, join, relative, resolve } from 'node:path';
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { join, relative, resolve } from 'node:path';
 
 const ROOT = process.cwd();
 const WORKSPACES = [
@@ -39,11 +39,10 @@ function shouldExclude(relPath: string): boolean {
 /** Determine which workspace owns a repo-root-relative source path. */
 function owningWorkspace(relPath: string): string | null {
     for (const ws of WORKSPACES) {
-        if (relPath.startsWith(ws + '/')) return ws;
+        if (relPath.startsWith(`${ws}/`)) return ws;
     }
     return null;
 }
-
 
 /** Locate a workspace's lcov: <ws>/coverage/lcov.info (always fresh-generated). */
 async function findWorkspaceLcov(ws: string): Promise<string | null> {
@@ -102,7 +101,8 @@ async function parseWorkspaceLcov(
         if (!rootFileMap.has(relPath)) {
             rootFileMap.set(relPath, new Map() as LineMap);
         }
-        const lineMap = rootFileMap.get(relPath)!;
+        const lineMap = rootFileMap.get(relPath);
+        if (!lineMap) continue;
         for (const [, line, count] of daMatches) {
             const ln = Number(line);
             const ct = Number(count);
@@ -119,7 +119,8 @@ function writeMergedLcov(fileMap: Map<string, LineMap>): string {
     const chunks: string[] = [];
 
     for (const sf of sortedPaths) {
-        const lineMap = fileMap.get(sf)!;
+        const lineMap = fileMap.get(sf);
+        if (!lineMap) continue;
         const entries = [...lineMap.entries()].sort((a, b) => a[0] - b[0]);
         const total = entries.length;
         const hit = entries.filter(([, c]) => c > 0).length;
@@ -131,7 +132,7 @@ function writeMergedLcov(fileMap: Map<string, LineMap>): string {
         chunks.push('end_of_record');
     }
 
-    return chunks.join('\n') + '\n';
+    return `${chunks.join('\n')}\n`;
 }
 
 /** Run workspace tests with coverage if lcov is missing or stale. */

@@ -39,7 +39,7 @@ describe('TaskKanbanDetail', () => {
     test('renders the right-panel container with a selected task', async () => {
         const mod = await import('../../../src/modules/task-kanban');
         const Component = mod.module.rightPanelComponent;
-        expect(Component).toBeDefined();
+        if (!Component) throw new Error('rightPanelComponent not set');
 
         const { container } = render(<Component />);
         await waitFor(() => expect(container.textContent).toContain('Loading…'));
@@ -47,12 +47,11 @@ describe('TaskKanbanDetail', () => {
 });
 
 describe('transition', () => {
-    let apiErrors: Array<{ message: string }> = [];
+    const apiErrors: Array<{ message: string }> = [];
 
     beforeEach(() => {
-        apiErrors = [];
-        window.addEventListener('api-error', ((e: CustomEvent) =>
-            apiErrors.push(e.detail as { message: string })) as EventListener);
+        window.addEventListener('api-error', ((e: Event) =>
+            apiErrors.push((e as CustomEvent).detail as { message: string })) as EventListener);
     });
 
     test('dispatches api-error event on failure', async () => {

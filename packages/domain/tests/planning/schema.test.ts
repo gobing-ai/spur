@@ -10,7 +10,6 @@ import {
     normalizeTaskStatusSafe,
     TASK_STATUS_ICONS,
     TASK_STATUSES,
-    type TaskStatus,
     taskFrontmatterSchema,
     taskStatusIcon,
 } from '../../src/planning/schema';
