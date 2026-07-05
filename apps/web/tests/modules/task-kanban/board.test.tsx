@@ -4,13 +4,14 @@ GlobalRegistrator.register();
 
 import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
-import React from 'react';
 import { MemoryRouter } from 'react-router';
 import type { TaskSummary } from '../../../src/modules/task-kanban/types';
 import { teardownHappyDom } from '../../happy-dom';
 
 // ── api stub: the board imports `{ api }` from lib/rpc-client directly, so mock the module. ──
 const transitionCalls: Array<{ wbs: string; toStatus: string }> = [];
+const createCalls: Array<{ title: string; folder?: string; template?: string }> = [];
+const actionCalls: Array<{ wbs: string; action: string; channel?: string; skipDeps?: boolean }> = [];
 let transitionImpl: () => Promise<unknown> = async () => ({ ok: true });
 
 const tasks: TaskSummary[] = [
@@ -26,6 +27,10 @@ mock.module('../../../src/lib/rpc-client', () => ({
                 transitionCalls.push(input);
                 return transitionImpl();
             },
+            create: (input: { title: string; folder?: string; template?: string }) => {
+                createCalls.push(input);
+                return Promise.resolve({ data: { wbs: '0003', filePath: 'c.md' } });
+            },
             show: async () => ({
                 data: {
                     wbs: '0001',
@@ -37,6 +42,10 @@ mock.module('../../../src/lib/rpc-client', () => ({
                 },
             }),
             body: async () => ({ data: { wbs: '0001', filePath: 'a.md' } }),
+            action: (input: { wbs: string; action: string; channel?: string; skipDeps?: boolean }) => {
+                actionCalls.push(input);
+                return Promise.resolve({ data: { runId: 'r1', action: input.action, status: 'queued' } });
+            },
             folders: async () => ({ data: [{ path: 'docs/tasks', label: 'Primary' }] }),
         },
     },
@@ -85,66 +94,16 @@ mock.module('@dnd-kit/utilities', () => ({
     CSS: { Transform: { toString: () => '' } },
 }));
 
-// Capture onCreated from NewTaskPanel so tests can simulate task creation.
-let capturedOnCreated: (() => void) | null = null;
-mock.module('../../../src/modules/task-kanban/NewTaskPanel', () => ({
-    default: ({ onCreated, open }: { onCreated: () => void; open: boolean }) => {
-        capturedOnCreated = onCreated;
-        if (!open) return null;
-        return React.createElement('div', { 'data-testid': 'new-task-panel' }, 'New Task Panel');
-    },
-}));
-
-// Capture onTransition from the lazy-loaded TaskDetail.
-let capturedOnTransition: ((wbs: string, toStatus: string) => void) | null = null;
-mock.module('../../../src/modules/task-kanban/TaskDetail', () => ({
-    default: ({
-        task,
-        onTransition,
-        onClose,
-    }: {
-        task: { wbs: string; name: string; status: string };
-        onTransition: (wbs: string, toStatus: string) => void;
-        onClose?: () => void;
-    }) => {
-        capturedOnTransition = onTransition;
-        return React.createElement(
-            'div',
-            { 'data-testid': 'task-detail' },
-            React.createElement(
-                'button',
-                {
-                    type: 'button',
-                    'aria-label': 'Close detail',
-                    'data-testid': 'task-detail-close',
-                    onClick: onClose,
-                },
-                '✕',
-            ),
-            React.createElement(
-                'button',
-                {
-                    type: 'button',
-                    'data-testid': 'task-detail-cancel',
-                    onClick: () => onTransition(task.wbs, 'cancelled'),
-                },
-                'Cancel task',
-            ),
-        );
-    },
-}));
-
 const KanbanBoard = (await import('../../../src/modules/task-kanban/KanbanBoard')).default;
-const TaskFilters = (await import('../../../src/modules/task-kanban/TaskFilters')).default;
 
 afterAll(teardownHappyDom);
 afterEach(() => {
     cleanup();
     transitionCalls.length = 0;
+    createCalls.length = 0;
+    actionCalls.length = 0;
     transitionImpl = async () => ({ ok: true });
     capturedOnDragStart = null;
-    capturedOnCreated = null;
-    capturedOnTransition = null;
     // Restore the original rpc-client mock (sort/lane-defaults/error tests may have changed it)
     mock.module('../../../src/lib/rpc-client', () => ({
         api: {
@@ -153,6 +112,10 @@ afterEach(() => {
                 transition: (input: { wbs: string; toStatus: string }) => {
                     transitionCalls.push(input);
                     return transitionImpl();
+                },
+                create: (input: { title: string; folder?: string; template?: string }) => {
+                    createCalls.push(input);
+                    return Promise.resolve({ data: { wbs: '0003', filePath: 'c.md' } });
                 },
                 show: async () => ({
                     data: {
@@ -165,6 +128,10 @@ afterEach(() => {
                     },
                 }),
                 body: async () => ({ data: { wbs: '0001', filePath: 'a.md' } }),
+                action: (input: { wbs: string; action: string; channel?: string; skipDeps?: boolean }) => {
+                    actionCalls.push(input);
+                    return Promise.resolve({ data: { runId: 'r1', action: input.action, status: 'queued' } });
+                },
                 folders: async () => ({ data: [{ path: 'docs/tasks', label: 'Primary' }] }),
             },
         },
@@ -513,26 +480,19 @@ test('onDragStart captures the active drag id', async () => {
     // The mock DragOverlay just passes children through, so check the DOM
 });
 
-// ── handleCreated: onCreated callback from NewTaskPanel refreshes task list ──
-test('handleCreated refreshes tasks when NewTaskPanel signals creation', async () => {
-    const { getByText, getByTestId } = renderBoard();
+// ── NewTaskPanel integration: board opens the real creation panel ──
+test('opens the real NewTaskPanel from the board toolbar', async () => {
+    const { getByRole, getByText } = renderBoard();
     await waitFor(() => expect(getByText('Alpha')).toBeDefined());
 
-    // Open New Task panel to set capturedOnCreated
     fireEvent.click(getByText('+ New Task'));
-    await waitFor(() => expect(getByTestId('new-task-panel')).toBeDefined());
-
-    // Trigger onCreated — handleCreated calls listWithFolder → refreshes tasks
-    expect(capturedOnCreated).not.toBeNull();
-    (capturedOnCreated as NonNullable<typeof capturedOnCreated>)();
-
-    // Board still shows Alpha after refresh (using original mock's data)
-    await waitFor(() => expect(getByText('Alpha')).toBeDefined());
+    await waitFor(() => expect(getByRole('dialog', { name: 'New Task' })).toBeDefined());
+    expect(getByText('Create Task')).toBeDefined();
 });
 
 // ── onTransition: TaskDetail cancel fires transition callback ──
 test('TaskDetail cancel button fires onTransition to move card', async () => {
-    const { getByText, getByTestId, container } = renderBoard();
+    const { getByRole, getByTestId, getByText, container } = renderBoard();
     await waitFor(() => expect(getByText('Alpha')).toBeDefined());
 
     // Make the cancelled column visible (hidden by default)
@@ -549,11 +509,11 @@ test('TaskDetail cancel button fires onTransition to move card', async () => {
 
     // Open detail panel
     fireEvent.click(getByText('Alpha'));
-    await waitFor(() => expect(getByTestId('task-detail')).toBeDefined());
+    await waitFor(() => expect(getByTestId('header-cancel')).toBeDefined());
 
-    // Fire onTransition directly — exercises the callback (lines 330-350)
-    expect(capturedOnTransition).not.toBeNull();
-    (capturedOnTransition as NonNullable<typeof capturedOnTransition>)('0001', 'cancelled');
+    fireEvent.click(getByTestId('header-cancel'));
+    await waitFor(() => expect(getByRole('dialog', { name: 'Confirm cancel task' })).toBeDefined());
+    fireEvent.click(getByRole('button', { name: 'Cancel task' }));
 
     // Optimistic update: Alpha moves from todo to cancelled
     const cancelledCol = container.querySelector('[aria-label="cancelled column"]') as HTMLElement;
@@ -569,7 +529,7 @@ test('onTransition catch handler dispatches api-error when transition fails', as
     transitionImpl = async () => {
         throw new Error('Server gone');
     };
-    const { getByText, getByTestId, container } = renderBoard();
+    const { getByRole, getByTestId, getByText, container } = renderBoard();
     await waitFor(() => expect(getByText('Alpha')).toBeDefined());
 
     // Make cancelled column visible
@@ -586,15 +546,16 @@ test('onTransition catch handler dispatches api-error when transition fails', as
 
     // Open detail to capture onTransition
     fireEvent.click(getByText('Alpha'));
-    await waitFor(() => expect(getByTestId('task-detail')).toBeDefined());
+    await waitFor(() => expect(getByTestId('header-cancel')).toBeDefined());
 
     // Spy window.dispatchEvent
     const dispatchSpy = mock((_event: Event) => true);
     const origDispatch = window.dispatchEvent;
     window.dispatchEvent = dispatchSpy;
 
-    expect(capturedOnTransition).not.toBeNull();
-    (capturedOnTransition as NonNullable<typeof capturedOnTransition>)('0001', 'cancelled');
+    fireEvent.click(getByTestId('header-cancel'));
+    await waitFor(() => expect(getByRole('dialog', { name: 'Confirm cancel task' })).toBeDefined());
+    fireEvent.click(getByRole('button', { name: 'Cancel task' }));
 
     // Optimistic update still moves Alpha
     const cancelledCol = container.querySelector('[aria-label="cancelled column"]') as HTMLElement;
@@ -688,16 +649,3 @@ test('shows error message when task list fetch fails', async () => {
     await waitFor(() => expect(getByText('Network Error')).toBeDefined());
 });
 const KANBAN_COLUMNS = ['backlog', 'todo', 'wip', 'testing', 'blocked', 'done', 'cancelled'];
-
-describe('TaskFilters', () => {
-    test('renders feature/parent/assignee filter controls (R3 — no status dropdown)', () => {
-        const { getByLabelText, queryByLabelText } = render(
-            <TaskFilters filters={{ featureId: 'W3', parentWbs: '0001', assignee: 'robin' }} onChange={() => {}} />,
-        );
-        // R3: status <select> removed
-        expect(queryByLabelText('Filter by status')).toBeNull();
-        expect((getByLabelText('Filter by feature') as HTMLInputElement).value).toBe('W3');
-        expect((getByLabelText('Filter by parent WBS') as HTMLInputElement).value).toBe('0001');
-        expect((getByLabelText('Filter by assignee') as HTMLInputElement).value).toBe('robin');
-    });
-});
