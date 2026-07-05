@@ -24,8 +24,25 @@ interface MessagesResponse {
 }
 
 const INBOX_URL = `${resolveApiUrl()}/messages/inbox`;
+const SSE_URL = `${resolveApiUrl()}/events/planning`;
 const DEFAULT_AGENT = 'operator';
 const DEFAULT_LIMIT = 50;
+
+/** SSE event names that signal a new inbox message (metadata-only payloads). */
+const MESSAGE_EVENT_NAMES = new Set(['message.sent', 'message.replied']);
+
+/**
+ * Runtime-narrow an SSE envelope. Network input is untrusted — a malformed frame
+ * must not crash the tab. Returns the `eventName` so the caller can decide whether
+ * to react; the message payload itself is metadata-only (no body), so the inbox
+ * is refetched rather than mutated in place.
+ */
+function parseSseEventName(value: unknown): string | null {
+    if (value === null || typeof value !== 'object') return null;
+    const obj = value as Record<string, unknown>;
+    if (typeof obj.eventName !== 'string') return null;
+    return obj.eventName;
+}
 
 /**
  * Runtime-narrow an unknown network payload into a `MessagesResponse`, or
@@ -74,19 +91,23 @@ function parseInboxMessage(value: unknown): InboxMessageRow | null {
 }
 
 /**
- * Inbox Messages tab (task 0189 R5).
+ * Inbox Messages tab (task 0189 R5; live tail task 0193/0206).
  *
  * Loads the agent's inbox queue from `/api/messages/inbox?agent=` and groups
  * messages by `inReplyTo` so threads surface as a single cluster with
  * sender/recipient/timestamp context per row.
  *
- * Live tail for new messages lands with task 0193 (messages module +
- * send/reply APIs); v1 polls on focus and on a 15 s interval as a safety net
- * so the operator sees new rows without re-opening the tab.
+ * Live tail (0206): subscribes to `message.sent|replied` on the board's existing
+ * EventSource (`/api/events/planning`). Event payloads are metadata-only (no body),
+ * so a `message.*` event triggers a refetch rather than an in-place append. A 15 s
+ * poll + focus-refetch remain as a safety net (and the serverless fallback when
+ * SSE is unavailable). Unread messages — those that arrived since the tab last had
+ * focus — surface a badge in the header.
  */
 export default function InboxTab() {
     const [messages, setMessages] = useState<InboxMessageRow[] | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [unreadCount, setUnreadCount] = useState(0);
 
     const load = useCallback(async (signal: AbortSignal): Promise<void> => {
         try {
@@ -103,11 +124,15 @@ export default function InboxTab() {
         }
     }, []);
 
+    // Initial load + 15 s safety-net poll + focus refetch.
     useEffect(() => {
         const controller = new AbortController();
         void load(controller.signal);
         const interval = setInterval(() => void load(new AbortController().signal), 15_000);
-        const onFocus = () => void load(new AbortController().signal);
+        const onFocus = () => {
+            setUnreadCount(0);
+            void load(new AbortController().signal);
+        };
         globalThis.addEventListener?.('focus', onFocus);
         return () => {
             controller.abort();
@@ -115,6 +140,29 @@ export default function InboxTab() {
             globalThis.removeEventListener?.('focus', onFocus);
         };
     }, [load]);
+
+    // Live tail: subscribe to message.* events on the board's EventSource. Payloads
+    // are metadata-only (no body), so refetch the full inbox rather than mutating.
+    useEffect(() => {
+        if (typeof EventSource === 'undefined') return;
+        const es = new EventSource(SSE_URL);
+        es.onmessage = (frame) => {
+            try {
+                const raw: unknown = JSON.parse(frame.data);
+                const eventName = parseSseEventName(raw);
+                if (!eventName || !MESSAGE_EVENT_NAMES.has(eventName)) return;
+                // The tab is hidden (not focused) OR the SSE arrival itself means a new
+                // message — bump unread and refetch. Reset is handled by the focus listener.
+                setUnreadCount((n) => n + 1);
+                void load(new AbortController().signal);
+            } catch {
+                // Malformed frame — drop silently.
+            }
+        };
+        return () => es.close();
+    }, [load]);
+
+    // When focus returns to the tab, clear unread (handled in the focus listener above).
 
     if (error) {
         return (
@@ -158,6 +206,11 @@ export default function InboxTab() {
             <div className="px-4 py-2 border-b border-spur-border bg-base-200 shrink-0">
                 <span className="text-xs font-semibold text-spur-text uppercase tracking-wide">Inbox Messages</span>
                 <span className="ml-2 text-xs text-spur-text-muted">{messages.length} message(s)</span>
+                {unreadCount > 0 && (
+                    <Badge variant="primary" size="xs" className="ml-2" data-inbox-unread>
+                        {unreadCount} new
+                    </Badge>
+                )}
             </div>
             <ul className="flex-1 overflow-y-auto p-2 space-y-2" data-inbox-tab>
                 {grouped.map(([key, thread]) => (
