@@ -72,6 +72,7 @@
         "test-cf": "bun run --filter '@gobing-ai/spur-server' test-cf",
         "verify-gha-ci": "act -W .github/workflows/ci.yml -j verify",
         "test": "NODE_ENV=test bun test --coverage --coverage-dir=.coverage --reporter=dots",
+        "test:coverage": "bun run scripts/merge-coverage.ts",
         "check": "bun run lint && bun run test",
         "spur-check": "bun run lint && bun run test-pre-check && bun run test && bun run test-post-check",
         "test:full": "NODE_ENV=test bun test --update-snapshots --coverage --coverage-dir=.coverage && NODE_ENV=test bun test plugins/sp --update-snapshots",
