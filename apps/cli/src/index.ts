@@ -79,13 +79,8 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
             await app.stop('shutdown');
         } else {
             // No config file — direct path (pre-init, tests).
-            // This preserves the exact same behavior as before for un-initialized projects.
-            const context = createCliContext({
-                cwd: options.cwd,
-                env: options.env,
-                output,
-                db,
-            });
+            const ctxOpts = { cwd: options.cwd, env: options.env, output, db };
+            const context = createCliContext(ctxOpts);
             exitCode = await runCommandDispatch(argv, context, output);
         }
     } finally {
@@ -147,11 +142,16 @@ export function bannerText(): string {
     return figlet.textSync(CLI_CONFIG.binaryLabel, { font: 'Standard' });
 }
 
-if (import.meta.main) {
+/** CLI entry point extracted for test coverage. Does NOT call process.exit(). */
+export async function runCli(): Promise<number> {
     const argv = process.argv.slice(2);
     if (!argv.includes('--json')) {
         consoleOutput.write(bannerText());
     }
-    const exitCode = await main();
+    return main();
+}
+
+if (import.meta.main) {
+    const exitCode = await runCli();
     process.exit(exitCode);
 }

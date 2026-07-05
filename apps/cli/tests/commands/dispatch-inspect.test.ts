@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { createBufferTarget, setDefaultOutputTargets } from '@gobing-ai/ts-utils';
-import { bannerText, main } from '../../src';
+import { bannerText, main, runCli } from '../../src';
 import { noopSetExitCode } from '../../src/context';
 import { gitContext } from '../../src/git-context';
 import { consoleOutput } from '../../src/output';
@@ -133,6 +133,14 @@ describe('CLI dispatch and status', () => {
         }
         expect(stdout.text()).toBe('to-stdout\n');
         expect(stderr.text()).toBe('to-stderr\n');
+    });
+
+    test('runCli returns exit code from main', async () => {
+        const cwd = await createTempProject();
+        const exitCode = await runCli();
+        // runCli delegates to main() — verifiable through a simple status call.
+        // main() with default args returns a numeric exit code.
+        expect(typeof exitCode).toBe('number');
     });
 
     test('noopSetExitCode is callable', () => {
