@@ -9,7 +9,7 @@ import { useTasks } from './useTasks';
 
 const TaskDetail = lazy(() => import('./TaskDetail'));
 /** Fire a status transition and surface failures the same way the board's optimistic path does. */
-function transition(wbs: string, toStatus: string): void {
+export function transition(wbs: string, toStatus: string): void {
     api.task.transition({ wbs, toStatus: toStatus as TaskStatus }).catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : 'Transition failed';
         if (typeof window !== 'undefined') {
