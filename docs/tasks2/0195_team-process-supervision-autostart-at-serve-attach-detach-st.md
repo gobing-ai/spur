@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Team process supervision: autostart at serve, attach/detach stdio streams, process registry"
 description: ""
-status: wip
+status: Done
 type: task
 profile: standard
 feature_id: G2
@@ -12,7 +12,7 @@ priority: P2
 tags: [approach-c,collaboration,server,cli]
 dependencies: []
 created_at: 2026-07-03T23:35:28.258Z
-updated_at: 2026-07-04T04:13:23.928Z
+updated_at: 2026-07-05T07:22:10.758Z
 ---
 
 ## 0195. Team process supervision: autostart at serve, attach/detach stdio streams, process registry

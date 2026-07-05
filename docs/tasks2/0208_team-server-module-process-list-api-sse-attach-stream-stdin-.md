@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Team server module: process list API, SSE attach stream, stdin endpoint (0195 wave B)"
 description: ""
-status: todo
+status: Done
 type: task
 profile: standard
 feature_id: G2
@@ -12,7 +12,7 @@ priority: P2
 tags: [approach-c,server,collaboration,subtask]
 dependencies: []
 created_at: 2026-07-04T04:13:23.856Z
-updated_at: 2026-07-04T04:18:08.873Z
+updated_at: 2026-07-05T07:17:56.376Z
 ---
 
 ## 0208. Team server module: process list API, SSE attach stream, stdin endpoint (0195 wave B)

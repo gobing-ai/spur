@@ -175,13 +175,12 @@ Durable inter-agent messaging over the SQLite `inbox_messages` table (backed by 
 - `reply` — look up the original message, address the reply back to its `from_id`, and thread it via
   `in_reply_to`. Rejects an unknown id, or an operator-originated message (null sender) with no peer.
 
-#### `spur team assign <task-id> <agent-id>` · `spur team status [--json]` · `spur team start` · `spur team stop`
+#### `spur team assign <task-id> <agent-id>` · `spur team status [--json]` · `spur team start <agent-id> [--server <url>] [--json]` · `spur team stop <agent-id> [--server <url>] [--json]`
 Team coordination (backed by `TeamService`).
 - `assign` — set `assignee: <agent-id>` in the YAML frontmatter of `docs/tasks/<task-id>_*.md`
   (replacing any existing assignee). Errors if no matching task file is found.
-- `status` — list every spec under `.spur/agents/` with its run status (`stopped` in Phase 1-3, since
-  there is no daemon yet); `--json` emits `{ agents: [...] }`.
-- `start` / `stop` — Phase-4 deferred stubs that print the daemon-not-available message and exit 0.
+- `status` — list every spec under `.spur/agents/` with its run status; `--json` emits `{ agents: [...] }`.
+- `start` / `stop` — POST to `<server>/team/agents/<id>/(start|stop)` (default server `http://localhost:3000/api`; `--server` overrides). `--json` returns the raw server payload; otherwise `start` prints `started <id> (pid=<pid>, status=<status>)`, `stop` prints `stopped <id>`. Exit 1 on transport failure or server-side error.
 
 #### `spur rule run [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <severity>] [--stop-on-first [<severity>]] [--fix-mode <mode>] [--dry-run] [--verbose] [--json]`
 Evaluate constraint rules over the working tree. `--preset` (default `recommended-pre-check`) or
@@ -766,6 +765,26 @@ verdict blocks `done`. This is the spur-native replacement for rd3's default-on 
 | Required section | Owning step | When |
 |------------------|-------------|------|
 | `Solution` (change-map) | `/sp:dev-run --mode implement` | After writing code — the implement agent authors a markdown table of changed files with `file:line` + `what/why`. Idempotent (upsert via `replaceSection`); writes only when the section is bare (absent, empty, or a placeholder). |
+| `Testing` (verdict table) | `record` | Post-verify — transcribes the per-requirement verdict + evidence from `.spur/run/<wbs>-verify-answer.txt` and `.spur/run/<wbs>-verdict.json`. |
+| `Review` (P1–P4 findings) | `record` | Post-verify — transcribes SECU findings from the verify output. |
+
+The `record` step provides a **Solution safety-net**: if the implement step didn't write
+`## Solution`, `record` backfills a minimal change-map from `git diff --name-only`. A
+`sectionIsBare` predicate (in `packages/app/src/services/task-service.ts`) detects absent,
+empty/whitespace, or placeholder sections — the single reusable mechanism behind all three
+writes.
+
+**Done gate:** the `record → done` transition runs a shell guard `spur task check <wbs>`
+with a `record → failed` sibling on negation — mirroring the `verify → record` verdict gate
+exactly. The guard passes because every required section was guaranteed upstream; a genuinely
+non-compliant task routes to `failed` instead of a silent bad `done`.
+
+**Pipeline section-ownership model (ADR-026 amendment, 2026-06-23, task 0106):** every
+`done`-required section ([Solution, Testing, Review]) is owned by exactly one pipeline step:
+
+| Required section | Owning step | When |
+|------------------|-------------|------|
+| `Solution` (change-map) | `/sp:dev-implement` | After writing code — the implement agent authors a markdown table of changed files with `file:line` + `what/why`. Idempotent (upsert via `replaceSection`); writes only when the section is bare (absent, empty, or a placeholder). |
 | `Testing` (verdict table) | `record` | Post-verify — transcribes the per-requirement verdict + evidence from `.spur/run/<wbs>-verify-answer.txt` and `.spur/run/<wbs>-verdict.json`. |
 | `Review` (P1–P4 findings) | `record` | Post-verify — transcribes SECU findings from the verify output. |
 

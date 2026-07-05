@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "CLI team verbs: start, stop, attach replacing Phase-4 stubs (0195 wave C)"
 description: ""
-status: todo
+status: Done
 type: task
 profile: standard
 feature_id: G2
@@ -12,7 +12,7 @@ priority: P2
 tags: [approach-c,cli,collaboration,subtask]
 dependencies: []
 created_at: 2026-07-04T04:13:23.857Z
-updated_at: 2026-07-04T04:18:16.255Z
+updated_at: 2026-07-05T07:20:44.647Z
 ---
 
 ## 0209. CLI team verbs: start, stop, attach replacing Phase-4 stubs (0195 wave C)

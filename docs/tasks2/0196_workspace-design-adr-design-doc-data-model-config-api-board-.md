@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Workspace design: ADR + design doc (data model, config, API, board tabs)"
 description: ""
-status: todo
+status: Done
 type: task
 profile: standard
 feature_id: G3
@@ -12,7 +12,7 @@ priority: P2
 tags: [approach-c,design,collaboration]
 dependencies: []
 created_at: 2026-07-03T23:35:28.259Z
-updated_at: 2026-07-03T23:44:13.181Z
+updated_at: 2026-07-05T07:23:47.486Z
 ---
 
 ## 0196. Workspace design: ADR + design doc (data model, config, API, board tabs)
