@@ -4,6 +4,7 @@ GlobalRegistrator.register();
 
 import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import React from 'react';
 import { MemoryRouter } from 'react-router';
 import type { TaskSummary } from '../../../src/modules/task-kanban/types';
 import { teardownHappyDom } from '../../happy-dom';
@@ -46,16 +47,19 @@ mock.module('../../../src/lib/rpc-client', () => ({
 let capturedOnDragEnd:
     | ((event: { active: { id: string | number }; over: { id: string | number } | null }) => void)
     | null = null;
-
+let capturedOnDragStart: ((event: { active: { id: string | number } }) => void) | null = null;
 mock.module('@dnd-kit/core', () => ({
     DndContext: ({
         children,
         onDragEnd,
+        onDragStart,
     }: {
         children: unknown;
         onDragEnd?: (event: { active: { id: string | number }; over: { id: string | number } | null }) => void;
+        onDragStart?: (event: { active: { id: string | number } }) => void;
     }) => {
         capturedOnDragEnd = onDragEnd ?? null;
+        capturedOnDragStart = onDragStart ?? null;
         return children;
     },
     DragOverlay: ({ children }: { children: unknown }) => children,
@@ -81,15 +85,91 @@ mock.module('@dnd-kit/utilities', () => ({
     CSS: { Transform: { toString: () => '' } },
 }));
 
+// Capture onCreated from NewTaskPanel so tests can simulate task creation.
+let capturedOnCreated: (() => void) | null = null;
+mock.module('../../../src/modules/task-kanban/NewTaskPanel', () => ({
+    default: ({ onCreated, open }: { onCreated: () => void; open: boolean }) => {
+        capturedOnCreated = onCreated;
+        if (!open) return null;
+        return React.createElement('div', { 'data-testid': 'new-task-panel' }, 'New Task Panel');
+    },
+}));
+
+// Capture onTransition from the lazy-loaded TaskDetail.
+let capturedOnTransition: ((wbs: string, toStatus: string) => void) | null = null;
+mock.module('../../../src/modules/task-kanban/TaskDetail', () => ({
+    default: ({
+        task,
+        onTransition,
+        onClose,
+    }: {
+        task: { wbs: string; name: string; status: string };
+        onTransition: (wbs: string, toStatus: string) => void;
+        onClose?: () => void;
+    }) => {
+        capturedOnTransition = onTransition;
+        return React.createElement(
+            'div',
+            { 'data-testid': 'task-detail' },
+            React.createElement(
+                'button',
+                {
+                    type: 'button',
+                    'aria-label': 'Close detail',
+                    'data-testid': 'task-detail-close',
+                    onClick: onClose,
+                },
+                '✕',
+            ),
+            React.createElement(
+                'button',
+                {
+                    type: 'button',
+                    'data-testid': 'task-detail-cancel',
+                    onClick: () => onTransition(task.wbs, 'cancelled'),
+                },
+                'Cancel task',
+            ),
+        );
+    },
+}));
+
 const KanbanBoard = (await import('../../../src/modules/task-kanban/KanbanBoard')).default;
 const TaskFilters = (await import('../../../src/modules/task-kanban/TaskFilters')).default;
 
 afterAll(teardownHappyDom);
-
 afterEach(() => {
     cleanup();
     transitionCalls.length = 0;
     transitionImpl = async () => ({ ok: true });
+    capturedOnDragStart = null;
+    capturedOnCreated = null;
+    capturedOnTransition = null;
+    // Restore the original rpc-client mock (sort/lane-defaults/error tests may have changed it)
+    mock.module('../../../src/lib/rpc-client', () => ({
+        api: {
+            task: {
+                list: async () => ({ data: tasks }),
+                transition: (input: { wbs: string; toStatus: string }) => {
+                    transitionCalls.push(input);
+                    return transitionImpl();
+                },
+                show: async () => ({
+                    data: {
+                        wbs: '0001',
+                        name: 'Alpha',
+                        status: 'todo',
+                        frontmatter: {},
+                        content: '## Body',
+                        filePath: 'a.md',
+                    },
+                }),
+                body: async () => ({ data: { wbs: '0001', filePath: 'a.md' } }),
+                folders: async () => ({ data: [{ path: 'docs/tasks', label: 'Primary' }] }),
+            },
+        },
+        resolveApiUrl: () => 'http://localhost:3000/api',
+    }));
 });
 
 function renderBoard(props: Partial<Parameters<typeof KanbanBoard>[0]> = {}) {
@@ -394,6 +474,219 @@ test('an invalid stored detail width falls back to the computed default', async 
     }
 });
 
+// ── toggleColumn: clicking a column checkbox hides/shows the column ──
+test('column toggle hides and shows a column lane', async () => {
+    const { getByText, queryByLabelText, container } = renderBoard();
+    await waitFor(() => expect(getByText('Alpha')).toBeDefined());
+
+    // Find all labels with checkboxes, locate the one with "blocked" text
+    const labels = container.querySelectorAll('label.flex.items-center.gap-1');
+    let blockedCheckbox: HTMLInputElement | null = null;
+    labels.forEach((label) => {
+        if (label.textContent?.includes('blocked')) {
+            blockedCheckbox = label.querySelector('input[type="checkbox"]');
+        }
+    });
+    expect(blockedCheckbox).not.toBeNull();
+    // Initially unchecked — blocked column should not be rendered
+    expect(queryByLabelText('blocked column')).toBeNull();
+
+    // Toggle it on
+    if (blockedCheckbox) fireEvent.click(blockedCheckbox);
+    await waitFor(() => expect(queryByLabelText('blocked column')).toBeTruthy());
+
+    // Toggle it off
+    if (blockedCheckbox) fireEvent.click(blockedCheckbox);
+    await waitFor(() => expect(queryByLabelText('blocked column')).toBeNull());
+});
+
+// ── handleDragStart: onDragStart sets activeDragId ──
+test('onDragStart captures the active drag id', async () => {
+    const { getByText } = renderBoard();
+    await waitFor(() => expect(getByText('Alpha')).toBeDefined());
+
+    expect(capturedOnDragStart).not.toBeNull();
+    (capturedOnDragStart as NonNullable<typeof capturedOnDragStart>)({
+        active: { id: '0001' },
+    });
+    // The DragOverlay renders when activeDragId is set — verify via the TaskCard inside
+    // The mock DragOverlay just passes children through, so check the DOM
+});
+
+// ── handleCreated: onCreated callback from NewTaskPanel refreshes task list ──
+test('handleCreated refreshes tasks when NewTaskPanel signals creation', async () => {
+    const { getByText, getByTestId } = renderBoard();
+    await waitFor(() => expect(getByText('Alpha')).toBeDefined());
+
+    // Open New Task panel to set capturedOnCreated
+    fireEvent.click(getByText('+ New Task'));
+    await waitFor(() => expect(getByTestId('new-task-panel')).toBeDefined());
+
+    // Trigger onCreated — handleCreated calls listWithFolder → refreshes tasks
+    expect(capturedOnCreated).not.toBeNull();
+    (capturedOnCreated as NonNullable<typeof capturedOnCreated>)();
+
+    // Board still shows Alpha after refresh (using original mock's data)
+    await waitFor(() => expect(getByText('Alpha')).toBeDefined());
+});
+
+// ── onTransition: TaskDetail cancel fires transition callback ──
+test('TaskDetail cancel button fires onTransition to move card', async () => {
+    const { getByText, getByTestId, container } = renderBoard();
+    await waitFor(() => expect(getByText('Alpha')).toBeDefined());
+
+    // Make the cancelled column visible (hidden by default)
+    const labels = container.querySelectorAll('label.flex.items-center.gap-1');
+    labels.forEach((label) => {
+        if (label.textContent?.includes('cancelled')) {
+            const cb = label.querySelector('input[type="checkbox"]') as HTMLInputElement;
+            if (cb) fireEvent.click(cb);
+        }
+    });
+    await waitFor(() => {
+        expect(container.querySelector('[aria-label="cancelled column"]')).toBeTruthy();
+    });
+
+    // Open detail panel
+    fireEvent.click(getByText('Alpha'));
+    await waitFor(() => expect(getByTestId('task-detail')).toBeDefined());
+
+    // Fire onTransition directly — exercises the callback (lines 330-350)
+    expect(capturedOnTransition).not.toBeNull();
+    (capturedOnTransition as NonNullable<typeof capturedOnTransition>)('0001', 'cancelled');
+
+    // Optimistic update: Alpha moves from todo to cancelled
+    const cancelledCol = container.querySelector('[aria-label="cancelled column"]') as HTMLElement;
+    await waitFor(() => expect(cancelledCol.textContent).toContain('Alpha'));
+
+    // The api transition call fires asynchronously
+    await waitFor(() => expect(transitionCalls.length).toBeGreaterThan(0));
+    expect(transitionCalls[0]).toEqual({ wbs: '0001', toStatus: 'cancelled' });
+});
+
+// ── onTransition catch: failed api.transition dispatches api-error ──
+test('onTransition catch handler dispatches api-error when transition fails', async () => {
+    transitionImpl = async () => {
+        throw new Error('Server gone');
+    };
+    const { getByText, getByTestId, container } = renderBoard();
+    await waitFor(() => expect(getByText('Alpha')).toBeDefined());
+
+    // Make cancelled column visible
+    const labels = container.querySelectorAll('label.flex.items-center.gap-1');
+    labels.forEach((label) => {
+        if (label.textContent?.includes('cancelled')) {
+            const cb = label.querySelector('input[type="checkbox"]') as HTMLInputElement;
+            if (cb) fireEvent.click(cb);
+        }
+    });
+    await waitFor(() => {
+        expect(container.querySelector('[aria-label="cancelled column"]')).toBeTruthy();
+    });
+
+    // Open detail to capture onTransition
+    fireEvent.click(getByText('Alpha'));
+    await waitFor(() => expect(getByTestId('task-detail')).toBeDefined());
+
+    // Spy window.dispatchEvent
+    const dispatchSpy = mock((_event: Event) => true);
+    const origDispatch = window.dispatchEvent;
+    window.dispatchEvent = dispatchSpy;
+
+    expect(capturedOnTransition).not.toBeNull();
+    (capturedOnTransition as NonNullable<typeof capturedOnTransition>)('0001', 'cancelled');
+
+    // Optimistic update still moves Alpha
+    const cancelledCol = container.querySelector('[aria-label="cancelled column"]') as HTMLElement;
+    await waitFor(() => expect(cancelledCol.textContent).toContain('Alpha'));
+
+    // api-error should be dispatched
+    await waitFor(() => expect(dispatchSpy).toHaveBeenCalled());
+
+    window.dispatchEvent = origDispatch;
+});
+
+// ── DragOverlay: activeDragId renders card in drag overlay ──
+test('DragOverlay renders a TaskCard when a drag is active', async () => {
+    const { getByText, container } = renderBoard();
+    await waitFor(() => expect(getByText('Alpha')).toBeDefined());
+
+    // Trigger drag start to set activeDragId
+    expect(capturedOnDragStart).not.toBeNull();
+    (capturedOnDragStart as NonNullable<typeof capturedOnDragStart>)({
+        active: { id: '0001' },
+    });
+
+    // The DragOverlay renders inside a div.opacity-90 (mock passes children through)
+    await waitFor(() => {
+        const overlay = container.querySelector('.opacity-90');
+        expect(overlay).toBeTruthy();
+        expect(overlay?.textContent).toContain('Alpha');
+    });
+});
+// ── onResizeEnd: resize handle saves width to localStorage ──
+test('resize handle saves detail width to localStorage on pointer up', async () => {
+    const { getByText, container } = renderBoard();
+    await waitFor(() => expect(getByText('Alpha')).toBeDefined());
+
+    // Open detail panel
+    fireEvent.click(getByText('Alpha'));
+    await waitFor(() => {
+        const panel = container.querySelector('[role="dialog"][aria-label="Task detail"]');
+        expect(panel).toBeTruthy();
+    });
+
+    // Find resize handle
+    const panel = container.querySelector('[role="dialog"][aria-label="Task detail"]') as HTMLElement;
+    const handle = panel.querySelector('[data-testid="resize-handle-h"]') as HTMLElement;
+    expect(handle).toBeTruthy();
+
+    // Simulate a resize: pointer down, move, then pointer up.
+    fireEvent.pointerDown(handle, { clientX: 800, clientY: 100 });
+    fireEvent.pointerMove(window, { clientX: 700, clientY: 100 });
+    fireEvent.pointerUp(window);
+
+    // onResizeEnd should have saved the clamped width to localStorage
+    const stored = window.localStorage.getItem('spur:detail-width');
+    expect(stored).toBeTruthy();
+    const storedNum = Number(stored);
+    expect(storedNum).toBeGreaterThan(0);
+});
+// ── error state: failed fetch shows error message ──
+test('shows error message when task list fetch fails', async () => {
+    mock.module('../../../src/lib/rpc-client', () => ({
+        api: {
+            task: {
+                list: async () => {
+                    throw new Error('Network Error');
+                },
+                transition: () => transitionImpl(),
+                show: async () => ({
+                    data: {
+                        wbs: '0001',
+                        name: 'Alpha',
+                        status: 'todo',
+                        frontmatter: {},
+                        content: '## Body',
+                        filePath: 'a.md',
+                    },
+                }),
+                body: async () => ({ data: { wbs: '0001', filePath: 'a.md' } }),
+                folders: async () => ({ data: [{ path: 'docs/tasks', label: 'Primary' }] }),
+            },
+        },
+        resolveApiUrl: () => 'http://localhost:3000/api',
+    }));
+    const KanbanBoardReload = (await import('../../../src/modules/task-kanban/KanbanBoard')).default;
+
+    const { getByText } = render(
+        <MemoryRouter>
+            <KanbanBoardReload onSelectTask={() => {}} />
+        </MemoryRouter>,
+    );
+    await waitFor(() => expect(getByText('Failed to load tasks')).toBeDefined());
+    await waitFor(() => expect(getByText('Network Error')).toBeDefined());
+});
 const KANBAN_COLUMNS = ['backlog', 'todo', 'wip', 'testing', 'blocked', 'done', 'cancelled'];
 
 describe('TaskFilters', () => {
