@@ -136,10 +136,8 @@ describe('CLI dispatch and status', () => {
     });
 
     test('runCli returns exit code from main', async () => {
-        const cwd = await createTempProject();
         const exitCode = await runCli();
-        // runCli delegates to main() — verifiable through a simple status call.
-        // main() with default args returns a numeric exit code.
+        // runCli delegates to main() with process.argv.
         expect(typeof exitCode).toBe('number');
     });
 
