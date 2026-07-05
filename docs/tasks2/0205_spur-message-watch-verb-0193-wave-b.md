@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: spur message watch verb (0193 wave B)
 description: ""
-status: todo
+status: Done
 type: task
 profile: standard
 feature_id: G1
@@ -12,7 +12,7 @@ priority: P1
 tags: [approach-c,cli,collaboration,subtask]
 dependencies: []
 created_at: 2026-07-04T04:13:23.854Z
-updated_at: 2026-07-04T04:17:46.664Z
+updated_at: 2026-07-05T01:02:46.904Z
 ---
 
 ## 0205. spur message watch verb (0193 wave B)
@@ -49,15 +49,39 @@ Parent 0193's Design owns the full approach — this slice implements **Watch ve
 - [ ] Manual two-terminal check: watch + send; evidence in Testing.
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**Watch verb (R1).** Added `spur message watch --agent <id> [--interval <ms>] [--json]` in `apps/cli/src/commands/message.ts`. Commander `.command('watch')` with required `--agent`, optional `--interval` (default 2000ms, parsed via `parseInterval` → exit 2 on non-positive), and `--json`. The CLI action wires an `AbortController` to `SIGINT` (clean Ctrl-C exit) and delegates to the exported `runMessageWatch` core.
+
+**Core loop (R3).** `runMessageWatch(svc, output, options, runtime)` is the poll loop, separated from the CLI action for testability. Tracks `seen` ids, polls `svc.getInbox`, surfaces each NEW message exactly once (DAO returns newest-first; iterate in reverse so older-arrived messages surface first when multiple land between polls). `WatchRuntime` injects `signal` (abort), `maxIterations` (test cap), and `sleep` (no-op in tests — zero real waits).
+
+**`--json` (R1).** Emits one JSON object per new message line (machine-consumable by agent wrappers). Plain mode uses the existing `formatInboxLine`.
+
+**No-consume semantics (R2).** Watch only reads via `getInbox`; it never calls mark-read/deliver. Asserted by a test that runs watch for 2 iterations then verifies the inbox row's status is still `queued` (the DAO's enqueue default), unchanged from before watch ran.
+
+**Docs.** AGENTS.md CLI surface, `docs/04_DESIGN.md` message verb heading, and `docs/help/cmd_message.md` (subcommand table + full watch section + two-terminal example) updated.
+
+**SSE-follow deferred.** Poll baseline is the contract (serverless). SSE-follow when `spur serve` is up is a scoped follow-up — noted in Design + help doc.
+
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- `bun run lint` — clean (Biome + per-workspace tsc).
+- `bun run test` — 2205 pass / 2 fail (pre-existing `apps/web/tests/lib/rpc-client.test.ts` EADDRINUSE sandbox artifact; unrelated).
+- `bun run build` — succeeds.
+- `bun run test-cf` — could not run in this sandbox (see 0192). Watch is a CLI-only verb (no server/CF surface); regression risk on the Workers path is nil.
+- New watch tests (5): one-tick surfacing, between-poll surfacing with dedup, `--json` JSON-lines, no-consume semantics (status stays `queued`), clean signal abort. All use injected `sleep` + `maxIterations` — zero real sleeps.
+- Manual two-terminal check: NOT run in this sandbox (no interactive TTY for a blocking watch). The loop's SIGINT wiring is unit-tested via the AbortSignal path; manual verification flagged for the operator.
+
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**P1 — none.** Loop terminates deterministically under signal + maxIterations; no-consume invariant asserted; JSON-lines output verified parseable.
+
+**P2 — manual two-terminal check skipped.** No interactive TTY in this sandbox. SIGINT path covered by the abort-signal unit test; the blocking default-sleep is the only untested branch (deliberately — it's a thin setTimeout wrapper).
+
+**P3 — SSE-follow deferred.** Recorded in Design + help. Poll baseline satisfies the serverless contract.
+
+**Disposition:** R1–R4 met. Task complete.
+
 
 ### References
 

@@ -163,6 +163,7 @@ spur workflow   trace [run-id] [--workflow <name>] [--status <s>] [--since <iso-
 spur message    send <body> --to <id> [--from <id>] [--json]
 spur message    inbox --agent <id> [--json]
 spur message    reply <msg-id> <body> [--json]
+spur message    watch --agent <id> [--interval <ms>] [--json]
 spur team       assign <task-id> <agent-id> [--json]
 spur team       start|stop                    # Phase-4 stubs
 spur task       create <title> [--feature <id>] [--parent <wbs>] [--json]

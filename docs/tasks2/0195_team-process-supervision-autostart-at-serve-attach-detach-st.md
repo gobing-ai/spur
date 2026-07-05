@@ -78,7 +78,18 @@ Feature: Team process supervision
 ```
 ### Q&A
 
-<!-- Clarifications and decisions made during refinement. Keep empty if none. -->
+**OPEN — supervised-agent command model (HITL gate, 0207 R1).** What command does a supervised agent process actually run? Three options:
+
+- **(a) Spur-provided headless work loop.** The supervisor runs a built-in wrapper: a drain-poll loop pairing `spur agent run --agent <id> --drain` with `spur message watch --agent <id>`. Operator writes nothing in the spec — every supervised agent runs the same loop. Pro: zero spec-schema change, restart semantics owned by Spur, pairs naturally with 0193's watch verb. Con: rigid — agents that need a custom entrypoint (a long-running MCP server, a custom polling loop) can't be supervised.
+
+- **(b) Spec-declared `command` argv.** Add `command: string[]` to the agent spec YAML; the supervisor spawns exactly that. Pro: maximally flexible (any long-running process — MCP servers, watchers, custom loops). Con: every supervised spec needs an explicit command; the drain-loop pairing is the operator's job to wire; restart semantics delegated to whatever the command does.
+
+- **(c) Both — `command` optional, fall back to (a).** Spec's `command` wins when present; absent → the spur-provided drain-loop wrapper. Pro: flexible AND zero-config for the common case (drain-loop agents). Con: two code paths to test; the default wrapper must stay stable.
+
+**Recommendation: (c).** It gives zero-config supervision for the 90% case (drain-loop agents — the entire reason 0193 built watch) while leaving an escape hatch for non-drain long-running processes (MCP servers etc.). The default wrapper is a thin composition of verbs that already exist, so the "two paths" cost is low. Restart semantics: no auto-restart in v1 either way (exits recorded, not retried) — the `command` choice doesn't change that.
+
+**Awaiting operator confirmation before 0207 implementation proceeds.**
+
 
 ### Design
 **Approach.** The largest infra item of the cycle (decision D7): a `SupervisorService` in `packages/app` owning child processes spawned from `.spur/agents/<id>.yaml` specs, a server `team` module exposing registry + attach/stdin endpoints, CLI verbs replacing the Phase-4 stubs, and the Process List tab. Transport is server-mediated stdio streams — SSE out (ring-buffer replay + live tail), POST in. Explicitly NO PTY, no interactive TUI agents, no auto-restart in v1 (exits recorded, not retried).

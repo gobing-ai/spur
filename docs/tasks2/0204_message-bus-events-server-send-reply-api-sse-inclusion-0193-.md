@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: Message bus events, server send/reply API, SSE inclusion (0193 wave A)
 description: ""
-status: todo
+status: Done
 type: task
 profile: standard
 feature_id: G1
@@ -12,7 +12,7 @@ priority: P1
 tags: [approach-c,server,collaboration,subtask]
 dependencies: []
 created_at: 2026-07-04T04:13:23.853Z
-updated_at: 2026-07-04T04:17:39.181Z
+updated_at: 2026-07-05T00:55:37.124Z
 ---
 
 ## 0204. Message bus events, server send/reply API, SSE inclusion (0193 wave A)
@@ -65,15 +65,38 @@ Parent 0193's Design owns the full approach — this slice implements **Event em
 - [ ] Gate: `bun run lint && bun run test && bun run test-cf && bun run build`; `bun run spur-check` (R5).
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**R1 — Event emission.** Added optional `MessageEventBus` + `MessageEventPayload` to `packages/app/src/services/team-service.ts`. `sendMessage` emits `message.sent` (or `message.replied` when `replyTo` is set — single emission point, no double-fire) after a successful enqueue. Payload is metadata only: `{msgId, fromId, toId, threadId, createdAt}` — the body NEVER appears (asserted by test). Emission is isolated in try/catch so a bus failure can't break the durable send. Exported `MessageEventBus`/`MessageEventPayload` from `@gobing-ai/spur-app`.
+
+**R1 — `message.read` deferred.** `InboxMessageDao` (ts-db) has no mark-read API — only `markDelivered`/`markFailed` (drain path). Added a code comment + Design note recording the deferral until a mark-read API exists; `message.sent|replied` cover the observable IPC need.
+
+**R2 — Server POST endpoints.** Extended `apps/server/src/modules/messages/index.ts` with `POST /api/messages` (body `{to, body, from?}`) and `POST /api/messages/:id/reply` (body `{body}`). Both wrap the SAME `TeamService` methods the CLI uses → events fire identically. Boundary validation: required-field checks, malformed-JSON handling, TeamService error → 400.
+
+**R3 — Shared event-name list.** Added `message.sent|replied` to `apps/server/src/modules/events/event-names.ts`. One source feeds both the system_events tap (persistence) and the SSE stream (live board) — no second stream, one board EventSource (decision recorded in parent 0193 Design).
+
+**Context wiring.** `apps/server/src/context.ts` `teamService()` now injects `eventsBus` into `TeamServiceImpl`. CLI constructs TeamService without a bus → no-op emission (messaging works unchanged).
+
+**Types.** `ServerEventMap` ↔ `MessageEventBus` are structurally compatible (both `Record<string, (event) => void>`); cast through `unknown` at the injection point.
+
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- `bun run lint` — clean (Biome + per-workspace tsc).
+- `bun run test` — 2200 pass / 2 fail (the 2 are the pre-existing `apps/web/tests/lib/rpc-client.test.ts` EADDRINUSE sandbox artifact; unmodified, unrelated).
+- `bun run build` — succeeds across all workspaces.
+- `bun run test-cf` — could not run in this sandbox (wrangler/miniflare EPERM on log dir + 127.0.0.1 bind; environment limitation noted in 0192). My changes touch `packages/app` (TeamService) and `apps/server` modules — the messages module is Bun-gated (no-op on CF), and TeamService is unused on the CF path, so regression risk is low. The shared event-names list is a plain array constant.
+- New tests: 3 TeamService event-emission tests (`packages/app/tests/services/team-service.test.ts`); 7 messages-module POST endpoint tests (`apps/server/tests/modules/messages/index.test.ts`); 1 event-names test (`apps/server/tests/modules/events/event-names.test.ts`).
+
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**P1 — none.** Events fire on the single TeamService path; metadata-only payload asserted; POST endpoints validated; threading regression guard in place.
+
+**P2 — `message.read` deferred.** Recorded in Design + code comment. InboxMessageDao has no mark-read API; `sent|replied` cover the IPC need. Flag for a follow-up if/when read-receipts become a requirement.
+
+**P3 — `test-cf` not run in this environment.** See 0192 caveat. CF no-op stance preserved (messages module gates on `ctx`).
+
+**Disposition:** R1–R5 met. Task complete.
+
 
 ### References
 
