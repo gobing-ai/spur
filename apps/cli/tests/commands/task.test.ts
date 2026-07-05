@@ -1151,36 +1151,51 @@ describe('spur task CLI', () => {
     });
 
     test('refresh-roster with sub-tasks writes the roster and exits 0', async () => {
+        const isoCwd = await mkdtemp(join(tmpdir(), 'spur-task-roster-cli-'));
+        await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'Parent with kids'], { cwd, output: cOut });
-        const parentWbs = createdWbs(cOut);
-        // Parent needs a ## Plan section to host the roster.
-        const planFile = join(cwd, 'plan-body.md');
-        await Bun.write(planFile, 'Plan goes here.\n');
-        await main(['task', 'update', parentWbs, '--section', 'Plan', '--from-file', planFile], { cwd, output: cOut });
-        // Create two children under the parent.
-        await main(['task', 'create', 'Kid A', '--parent', parentWbs], { cwd, output: cOut });
-        await main(['task', 'create', 'Kid B', '--parent', parentWbs], { cwd, output: cOut });
+        try {
+            await main(['task', 'create', 'Parent with kids'], { cwd: isoCwd, output: cOut });
+            const parentWbs = createdWbs(cOut);
+            // Parent needs a ## Plan section to host the roster.
+            const planFile = join(isoCwd, 'plan-body.md');
+            await Bun.write(planFile, 'Plan goes here.\n');
+            await main(['task', 'update', parentWbs, '--section', 'Plan', '--from-file', planFile], {
+                cwd: isoCwd,
+                output: cOut,
+            });
+            // Create two children under the parent.
+            await main(['task', 'create', 'Kid A', '--parent', parentWbs], { cwd: isoCwd, output: cOut });
+            await main(['task', 'create', 'Kid B', '--parent', parentWbs], { cwd: isoCwd, output: cOut });
 
-        const output = createCapturedOutput();
-        const exitCode = await main(['task', 'refresh-roster', parentWbs], { cwd, output });
-        expect(exitCode).toBe(0);
-        expect(output.messages.join('')).toContain('Roster refreshed');
-        expect(output.messages.join('')).toContain('2 sub-task');
+            const output = createCapturedOutput();
+            const exitCode = await main(['task', 'refresh-roster', parentWbs], { cwd: isoCwd, output });
+            expect(exitCode).toBe(0);
+            expect(output.messages.join('')).toContain('Roster refreshed');
+            expect(output.messages.join('')).toContain('2 sub-task');
+        } finally {
+            rmSync(isoCwd, { recursive: true, force: true });
+        }
     });
 
     test('refresh-roster --json returns structured output', async () => {
+        const isoCwd = await mkdtemp(join(tmpdir(), 'spur-task-roster-json-cli-'));
+        await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
         const cOut = createCapturedOutput();
-        await main(['task', 'create', 'JSON roster parent'], { cwd, output: cOut });
-        const parentWbs = createdWbs(cOut);
+        try {
+            await main(['task', 'create', 'JSON roster parent'], { cwd: isoCwd, output: cOut });
+            const parentWbs = createdWbs(cOut);
 
-        const output = createCapturedOutput();
-        const exitCode = await main(['task', 'refresh-roster', parentWbs, '--json'], { cwd, output });
-        expect(exitCode).toBe(0);
-        const parsed = JSON.parse(lastMessage(output));
-        expect(parsed.wbs).toBe(parentWbs);
-        expect(parsed.written).toBe(false);
-        expect(parsed.childCount).toBe(0);
+            const output = createCapturedOutput();
+            const exitCode = await main(['task', 'refresh-roster', parentWbs, '--json'], { cwd: isoCwd, output });
+            expect(exitCode).toBe(0);
+            const parsed = JSON.parse(lastMessage(output));
+            expect(parsed.wbs).toBe(parentWbs);
+            expect(parsed.written).toBe(false);
+            expect(parsed.childCount).toBe(0);
+        } finally {
+            rmSync(isoCwd, { recursive: true, force: true });
+        }
     });
 
     test('refresh-roster with non-existent WBS exits 1 (catch block)', async () => {

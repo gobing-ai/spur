@@ -356,6 +356,20 @@ describe('Modal', () => {
         onClick(fakeEvent);
         expect(stopped).toBe(true);
     });
+
+    test('keydown inside modal-box does not propagate to backdrop', () => {
+        const result = Modal({ open: true, onClose: () => {}, children: 'X' }) as React.ReactElement;
+        const box = (result.props as Record<string, unknown>).children as React.ReactElement;
+        const boxProps = box.props as Record<string, unknown>;
+        let stopped = false;
+        const onKeyDown = boxProps.onKeyDown as (e: { stopPropagation: () => void }) => void;
+        onKeyDown({
+            stopPropagation: () => {
+                stopped = true;
+            },
+        });
+        expect(stopped).toBe(true);
+    });
 });
 
 describe('Select', () => {

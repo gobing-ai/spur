@@ -66,6 +66,13 @@ describe('HistoryService', () => {
             expect(result.mode).toBe('incremental');
         });
 
+        test('accepts explicit full import mode for a known source', async () => {
+            const svc = new HistoryService(makeCtx());
+            const result = await svc.import('codex', { mode: 'full', root: emptyRoot() });
+            expect(result.source).toBe('codex');
+            expect(result.mode).toBe('full');
+        });
+
         test('uses force-file mode when a file path is provided, rejecting a missing file', async () => {
             const svc = new HistoryService(makeCtx());
             // A file path selects force-file mode; the 0.3.0 importer surfaces a missing

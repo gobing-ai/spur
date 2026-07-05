@@ -9,7 +9,7 @@ import BoardLayout from '../../src/components/BoardLayout';
 import { resetLayoutState } from '../../src/lib/layout-state';
 import { modules } from '../../src/modules/registry';
 import type { WebModule } from '../../src/modules/types';
-import { routes } from '../../src/router';
+import { createAppRouter, routes } from '../../src/router';
 import { teardownHappyDom } from '../happy-dom';
 
 /** The Tasks module is the contract for the kanban-board data-attribute assertions below. */
@@ -29,6 +29,81 @@ const realFetch = globalThis.fetch;
 function installSilentApiFetch(): void {
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        if (url.includes('/api/features/F/status')) {
+            return new Response(JSON.stringify({ ok: true, data: { status: 'done' } }), {
+                status: 200,
+                headers: { 'content-type': 'application/json' },
+            });
+        }
+        if (url.includes('/api/features/F/check')) {
+            return new Response(
+                JSON.stringify({
+                    ok: true,
+                    data: {
+                        id: 'F',
+                        status: 'active',
+                        pass: false,
+                        findings: [
+                            {
+                                layer: 'L2',
+                                severity: 'warning',
+                                section: 'Scope',
+                                message: 'Clarify scope',
+                            },
+                        ],
+                        requiredSections: ['Goal', 'Scope'],
+                        missingSections: ['Risks'],
+                    },
+                }),
+                { status: 200, headers: { 'content-type': 'application/json' } },
+            );
+        }
+        if (url.includes('/api/features/F')) {
+            return new Response(
+                JSON.stringify({
+                    ok: true,
+                    data: {
+                        id: 'F',
+                        name: 'Root',
+                        status: 'active',
+                        frontmatter: { owner: 'robin', priority: 'P1' },
+                        filePath: 'docs/features/F.md',
+                        content: [
+                            '# F Root',
+                            '',
+                            '## Goal',
+                            'Ship feature workflow.',
+                            '',
+                            '## Scope',
+                            'Feature board and checks.',
+                            '',
+                            '## Acceptance Criteria',
+                            '```gherkin',
+                            'Given a feature',
+                            'When it is opened',
+                            'Then details render',
+                            '```',
+                        ].join('\n'),
+                    },
+                }),
+                { status: 200, headers: { 'content-type': 'application/json' } },
+            );
+        }
+        if (url.includes('/api/features')) {
+            return new Response(
+                JSON.stringify({
+                    ok: true,
+                    data: [
+                        { id: 'F', name: 'Root', status: 'active' },
+                        { id: 'F1', name: 'Child', status: 'done' },
+                    ],
+                }),
+                {
+                    status: 200,
+                    headers: { 'content-type': 'application/json' },
+                },
+            );
+        }
         if (url.includes('/api/')) {
             return new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } });
         }
@@ -44,9 +119,6 @@ function renderBoard() {
     );
 }
 
-// Intercept API fetches for the whole file (both suites mount board components on render).
-installSilentApiFetch();
-
 // File-scoped teardown: restore the real fetch, then unregister only after BOTH describe blocks
 // finish, so the second suite still has a DOM (a describe-scoped afterAll would tear down
 // happy-dom before the router suite runs).
@@ -57,12 +129,14 @@ afterAll(async () => {
 
 describe('BoardLayout', () => {
     beforeEach(() => {
+        installSilentApiFetch();
         localStorage.clear();
         resetLayoutState();
     });
 
     afterEach(() => {
         cleanup();
+        globalThis.fetch = realFetch;
         localStorage.clear();
     });
 
@@ -151,7 +225,14 @@ describe('BoardLayout', () => {
 });
 
 describe('router + module wiring', () => {
-    afterEach(() => cleanup());
+    beforeEach(() => {
+        installSilentApiFetch();
+    });
+
+    afterEach(() => {
+        cleanup();
+        globalThis.fetch = realFetch;
+    });
 
     function renderAt(initialPath: string) {
         const router = createMemoryRouter(routes, { initialEntries: [initialPath] });
@@ -201,5 +282,9 @@ describe('router + module wiring', () => {
             expect(childPaths).toContain(mod.route);
             expect(childPaths).toContain(`${mod.route}/*`);
         }
+    });
+
+    test('createAppRouter constructs the browser router lazily', () => {
+        expect(createAppRouter()).toBeDefined();
     });
 });

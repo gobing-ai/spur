@@ -136,9 +136,20 @@ describe('CLI dispatch and status', () => {
     });
 
     test('runCli returns exit code from main', async () => {
-        const exitCode = await runCli();
-        // runCli delegates to main() with process.argv.
-        expect(typeof exitCode).toBe('number');
+        // runCli() writes the banner + delegates to main() with process.argv.
+        // Under `bun test`, process.argv has no spur command, so Commander falls
+        // through to top-level help. Redirect consoleOutput so neither the banner
+        // nor the help text leaks into the test runner's stdout.
+        const stdout = createBufferTarget();
+        const stderr = createBufferTarget();
+        const restore = setDefaultOutputTargets({ stdout, stderr });
+        try {
+            const exitCode = await runCli();
+            // runCli delegates to main() with process.argv.
+            expect(typeof exitCode).toBe('number');
+        } finally {
+            restore();
+        }
     });
 
     test('noopSetExitCode is callable', () => {

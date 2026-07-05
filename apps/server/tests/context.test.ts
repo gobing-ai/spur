@@ -290,16 +290,25 @@ describe('createServerContext', () => {
     });
 
     test('R3: NodeSchedulerAdapter registers + starts + stops a real cron entry', async () => {
-        const { NodeSchedulerAdapter } = await import('@gobing-ai/ts-infra/scheduler-node');
-        const adapter = new NodeSchedulerAdapter();
-        let ticks = 0;
-        adapter.register('* * * * * *', async () => {
-            ticks += 1;
-        });
-        await adapter.start();
-        await adapter.stop();
-        // Registration + lifecycle complete without throwing; tick count is timing-dependent
-        // so we only assert the adapter accepted the entry and the start/stop cycle is clean.
-        expect(ticks).toBeGreaterThanOrEqual(0);
+        const { setLoggerMuted } = await import('@gobing-ai/ts-infra');
+        // The 6-field cron below is intentionally unparseable — it exercises the adapter's
+        // documented fallback (60s interval + WARN log). Mute the logger so the expected
+        // warning doesn't leak into test output.
+        setLoggerMuted(true);
+        try {
+            const { NodeSchedulerAdapter } = await import('@gobing-ai/ts-infra/scheduler-node');
+            const adapter = new NodeSchedulerAdapter();
+            let ticks = 0;
+            adapter.register('* * * * * *', async () => {
+                ticks += 1;
+            });
+            await adapter.start();
+            await adapter.stop();
+            // Registration + lifecycle complete without throwing; tick count is timing-dependent
+            // so we only assert the adapter accepted the entry and the start/stop cycle is clean.
+            expect(ticks).toBeGreaterThanOrEqual(0);
+        } finally {
+            setLoggerMuted(false);
+        }
     });
 });

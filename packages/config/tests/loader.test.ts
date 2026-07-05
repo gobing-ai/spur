@@ -22,13 +22,21 @@ import {
 } from '../src/loader';
 
 let tmpCwd: string;
+let originalSkipGlobalConfig: string | undefined;
 
 beforeEach(async () => {
+    originalSkipGlobalConfig = process.env.SPUR_SKIP_GLOBAL_CONFIG;
+    process.env.SPUR_SKIP_GLOBAL_CONFIG = 'true';
     tmpCwd = await mkdtemp(join(tmpdir(), 'spur-cfg-'));
 });
 
 afterEach(async () => {
     await rm(tmpCwd, { recursive: true, force: true });
+    if (originalSkipGlobalConfig === undefined) {
+        delete process.env.SPUR_SKIP_GLOBAL_CONFIG;
+    } else {
+        process.env.SPUR_SKIP_GLOBAL_CONFIG = originalSkipGlobalConfig;
+    }
 });
 
 const CONFIG_YAML = `version: "1"

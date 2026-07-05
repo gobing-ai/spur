@@ -52,7 +52,7 @@ mock.module('@uiw/react-md-editor', () => ({ default: MockMDEditor }));
 // ── Mock @/ui: keep real Button/Select, mock Input for controllable onChange ──
 const inputOnChangeById = new Map<string, (e: { target: { value: string } }) => void>();
 
-function MockInput({ id, onChange, variant, size, error, className, ...rest }: Record<string, unknown>) {
+function MockInput({ id, onChange, variant, size, error, className, value, ...rest }: Record<string, unknown>) {
     if (id && typeof onChange === 'function') {
         inputOnChangeById.set(String(id), onChange as (e: { target: { value: string } }) => void);
     }
@@ -62,7 +62,9 @@ function MockInput({ id, onChange, variant, size, error, className, ...rest }: R
     if (size === 'sm') inputClasses.push('input-sm');
     if (error) inputClasses.push('input-error');
     if (typeof className === 'string') inputClasses.push(className);
-    return React.createElement('input', { id, className: inputClasses.join(' '), ...rest });
+    // defaultValue (not value) avoids React's controlled-without-onChange warning; the real
+    // onChange is captured above and invoked directly, bypassing happy-dom's broken input events.
+    return React.createElement('input', { id, className: inputClasses.join(' '), defaultValue: value, ...rest });
 }
 
 mock.module('@/ui', () => ({

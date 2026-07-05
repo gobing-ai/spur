@@ -50,6 +50,7 @@ describe('transition', () => {
     const apiErrors: Array<{ message: string }> = [];
 
     beforeEach(() => {
+        apiErrors.length = 0;
         window.addEventListener('api-error', ((e: Event) =>
             apiErrors.push((e as CustomEvent).detail as { message: string })) as EventListener);
     });
