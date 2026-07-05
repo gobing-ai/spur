@@ -36,6 +36,15 @@ function shouldExclude(relPath: string): boolean {
     return EXCLUDE_PATTERNS.some((p) => p.test(relPath));
 }
 
+/** Determine which workspace owns a repo-root-relative source path. */
+function owningWorkspace(relPath: string): string | null {
+    for (const ws of WORKSPACES) {
+        if (relPath.startsWith(ws + '/')) return ws;
+    }
+    return null;
+}
+
+
 /** Locate a workspace's lcov: <ws>/coverage/lcov.info (always fresh-generated). */
 async function findWorkspaceLcov(ws: string): Promise<string | null> {
     const primary = join(ws, 'coverage', 'lcov.info');
@@ -80,6 +89,14 @@ async function parseWorkspaceLcov(
 
         const daMatches = [...rec.matchAll(/^DA:(\d+),(\d+)/gm)];
         if (daMatches.length === 0) continue;
+
+        // Only accept records from the owning workspace to avoid
+        // cross-workspace lcov pollution.
+        const owner = owningWorkspace(relPath);
+        if (owner !== null && owner !== ws) {
+            skipped++;
+            continue;
+        }
 
         records++;
         if (!rootFileMap.has(relPath)) {
