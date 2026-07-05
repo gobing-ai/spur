@@ -1,7 +1,7 @@
 ---
 template: feature-impl
 schema_version: 1
-name: "Phase 6 Verification — R30-R35 structural tests, full gate, dogfood runs"
+name: Phase 6 Verification — R30-R35 structural tests, full gate, dogfood runs
 description: ""
 status: done
 type: task
@@ -11,8 +11,8 @@ parent_wbs: "0167"
 priority: P2
 tags: []
 dependencies: []
-created_at: "2026-07-01T18:42:39.273Z"
-updated_at: "2026-07-01T21:50:01.387Z"
+created_at: 2026-07-01T18:42:39.273Z
+updated_at: 2026-07-01T21:50:01.387Z
 ---
 
 ## 0173. Phase 6 Verification — R30-R35 structural tests, full gate, dogfood runs

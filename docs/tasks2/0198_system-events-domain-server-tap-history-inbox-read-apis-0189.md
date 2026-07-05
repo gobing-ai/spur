@@ -1,7 +1,7 @@
 ---
 template: feature-impl
 schema_version: 1
-name: "system_events domain, server tap, history + inbox read APIs (0189 wave A)"
+name: system_events domain, server tap, history + inbox read APIs (0189 wave A)
 description: ""
 status: done
 type: task
@@ -9,10 +9,10 @@ profile: standard
 feature_id: J
 parent_wbs: "0189"
 priority: P1
-tags: ["approach-c", "server", "subtask"]
+tags: [approach-c,server,subtask]
 dependencies: []
-created_at: "2026-07-04T04:13:23.847Z"
-updated_at: "2026-07-04T04:16:54.540Z"
+created_at: 2026-07-04T04:13:23.847Z
+updated_at: 2026-07-04T04:16:54.540Z
 ---
 
 ## 0198. system_events domain, server tap, history + inbox read APIs (0189 wave A)

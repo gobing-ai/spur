@@ -1,7 +1,7 @@
 ---
 template: feature-impl
 schema_version: 1
-name: "Workspace module implementation (gated on approved workspace design)"
+name: Workspace module implementation (gated on approved workspace design)
 description: ""
 status: blocked
 type: task
@@ -9,10 +9,10 @@ profile: standard
 feature_id: G3
 parent_wbs: null
 priority: P3
-tags: ["approach-c", "collaboration", "board", "gated"]
+tags: [approach-c,collaboration,board,gated]
 dependencies: []
-created_at: "2026-07-03T23:35:28.260Z"
-updated_at: "2026-07-03T23:44:29.208Z"
+created_at: 2026-07-03T23:35:28.260Z
+updated_at: 2026-07-03T23:44:29.208Z
 ---
 
 ## 0197. Workspace module implementation (gated on approved workspace design)

@@ -4,15 +4,14 @@ schema_version: 1
 name: "Post-0176 review remediation: dogfood report contract, pipeline HITL/timeout regressions, corpus hygiene"
 description: ""
 status: done
-type: review
+type: task
 profile: standard
-feature_id: null
 parent_wbs: null
 priority: P1
-tags: ["review"]
+tags: [review]
 dependencies: []
-created_at: "2026-07-03T00:20:57.875Z"
-updated_at: "2026-07-03T13:10:48.898Z"
+created_at: 2026-07-03T00:20:57.875Z
+updated_at: 2026-07-03T13:10:48.898Z
 ---
 
 ## 0182. Post-0176 review remediation: dogfood report contract, pipeline HITL/timeout regressions, corpus hygiene

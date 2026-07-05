@@ -1,7 +1,7 @@
 ---
 template: feature-impl
 schema_version: 1
-name: "Process List tab in observability module (0195 wave D)"
+name: Process List tab in observability module (0195 wave D)
 description: ""
 status: todo
 type: task
@@ -9,10 +9,10 @@ profile: standard
 feature_id: G2
 parent_wbs: "0195"
 priority: P2
-tags: ["approach-c", "web", "collaboration", "subtask"]
+tags: [approach-c,web,collaboration,subtask]
 dependencies: []
-created_at: "2026-07-04T04:13:23.858Z"
-updated_at: "2026-07-04T04:18:23.661Z"
+created_at: 2026-07-04T04:13:23.858Z
+updated_at: 2026-07-04T04:18:23.661Z
 ---
 
 ## 0210. Process List tab in observability module (0195 wave D)

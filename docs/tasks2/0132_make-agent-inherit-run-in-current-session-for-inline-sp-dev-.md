@@ -1,17 +1,16 @@
 ---
 template: feature-impl
 schema_version: 1
-name: "Make --agent inherit run in current session for inline /sp:dev-* commands; honest two-surface agent contract"
+name: Make --agent inherit run in current session for inline /sp:dev-* commands; honest two-surface agent contract
 description: ""
 status: done
 type: task
 profile: standard
-feature_id: null
 parent_wbs: null
 priority: P1
 tags: []
 dependencies: []
-created_at: "2026-06-26T21:36:27.166Z"
+created_at: 2026-06-26T21:36:27.166Z
 updated_at: 2026-06-27T06:34:18.890Z
 ---
 

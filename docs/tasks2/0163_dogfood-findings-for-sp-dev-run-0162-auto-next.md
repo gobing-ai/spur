@@ -1,18 +1,17 @@
 ---
+template: review
 schema_version: 1
-name: "Dogfood findings for sp-dev-run 0162 --auto --next"
+name: Dogfood findings for sp-dev-run 0162 --auto --next
 description: ""
 status: cancelled
-type: review
-template: review
+type: task
 profile: standard
-feature_id: null
 parent_wbs: null
 priority: P2
-tags: ["review"]
+tags: [review]
 dependencies: []
-created_at: "2026-06-30T20:47:30.357Z"
-updated_at: "2026-07-01T00:31:46.818Z"
+created_at: 2026-06-30T20:47:30.357Z
+updated_at: 2026-07-01T00:31:46.818Z
 ---
 
 ## 0163. Dogfood findings for sp-dev-run 0162 --auto --next

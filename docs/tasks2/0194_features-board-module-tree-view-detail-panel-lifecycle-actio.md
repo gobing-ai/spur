@@ -9,10 +9,10 @@ profile: standard
 feature_id: F8
 parent_wbs: null
 priority: P2
-tags: ["approach-c", "board", "web"]
+tags: [approach-c,board,web]
 dependencies: []
-created_at: "2026-07-03T23:35:28.257Z"
-updated_at: "2026-07-03T23:43:58.329Z"
+created_at: 2026-07-03T23:35:28.257Z
+updated_at: 2026-07-03T23:43:58.329Z
 ---
 
 ## 0194. Features board module: tree view, detail panel, lifecycle actions, check runner

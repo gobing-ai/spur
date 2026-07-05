@@ -1,7 +1,7 @@
 ---
 template: feature-impl
 schema_version: 1
-name: "Phase 4 Auto-flag propagation + checkpoint write/read actions in all pipelines"
+name: Phase 4 Auto-flag propagation + checkpoint write/read actions in all pipelines
 description: ""
 status: done
 type: task
@@ -11,8 +11,8 @@ parent_wbs: "0167"
 priority: P2
 tags: []
 dependencies: []
-created_at: "2026-07-01T18:42:39.272Z"
-updated_at: "2026-07-01T21:17:07.920Z"
+created_at: 2026-07-01T18:42:39.272Z
+updated_at: 2026-07-01T21:17:07.920Z
 ---
 
 ## 0171. Phase 4 Auto-flag propagation + checkpoint write/read actions in all pipelines

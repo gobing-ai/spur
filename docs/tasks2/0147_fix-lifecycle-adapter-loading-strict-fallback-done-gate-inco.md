@@ -1,17 +1,16 @@
 ---
 template: standard
 schema_version: 1
-name: "Fix lifecycle-adapter loading + strict fallback done-gate inconsistency (surfaced by 0144 cold-spawn)"
+name: Fix lifecycle-adapter loading + strict fallback done-gate inconsistency (surfaced by 0144 cold-spawn)
 description: ""
 status: done
 type: task
 profile: standard
-feature_id: null
 parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
-created_at: "2026-06-28T22:30:16.767Z"
+created_at: 2026-06-28T22:30:16.767Z
 updated_at: 2026-06-28T23:09:09.369Z
 ---
 

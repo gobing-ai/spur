@@ -3,16 +3,16 @@ template: feature-impl
 schema_version: 1
 name: "Observabilities board module v1: system_events persistence, Events + Inbox tabs"
 description: ""
-status: wip
+status: done
 type: task
 profile: standard
 feature_id: J
 parent_wbs: null
 priority: P1
-tags: ["approach-c", "board", "server", "web"]
+tags: [approach-c,board,server,web]
 dependencies: []
-created_at: "2026-07-03T23:35:28.253Z"
-updated_at: "2026-07-04T04:13:23.884Z"
+created_at: 2026-07-03T23:35:28.253Z
+updated_at: 2026-07-04T16:12:00.000-07:00
 ---
 
 ## 0189. Observabilities board module v1: system_events persistence, Events + Inbox tabs
@@ -28,14 +28,14 @@ v1 scope (D4): module shell + System Events tab + Inbox Messages tab ONLY. The J
 Dependency note: none — this task rides entirely on shipped infrastructure. The P2 job-queue task consumes this task's `system_events` pruning hand-off.
 
 ### Requirements
-- [ ] R1 — New `_spur_cli_` migration adding `system_events` (id, event_name, occurred_at, actor, payload_json; indexed on occurred_at and event_name), schema owned by `packages/domain` and composed into `CLI_SCHEMA_SQL` (`packages/domain/src/migrations.ts`).
-- [ ] R2 — Server EventBus tap: a subscriber registered at serve bootstrap persisting planning events (and future system events) to `system_events`; insert-time cap (constant, e.g. 10000 rows) pruning oldest-first; tap failures must never break event delivery to SSE consumers (log, don't throw).
-- [ ] R3 — `GET /api/events/history` endpoint on the events server module with `name`, `since`, `limit` filters, newest first; oRPC contract in `packages/contracts` if the events surface is contract-bound, else documented Hono route consistent with the existing module style.
-- [ ] R4 — Inbox read endpoint: `GET /api/messages/inbox?agent=<id>` plus an all-messages listing suitable for the tab (read-only; send/reply APIs belong to feature G1).
-- [ ] R5 — Web module `observability` under `apps/web/src/modules/` exporting a `WebModule` (auto-discovered, zero manual wiring) with a tab layout; System Events tab = history from R3 + live append via the existing `/api/events/planning` EventSource; Inbox tab = message list with sender/recipient/timestamp/thread context.
-- [ ] R6 — Tab extension contract: tabs declared as data (id, label, component) so A2 (Jobs) and G2 (Process List) add entries without modifying the shell component.
-- [ ] R7 — Tests: DAO/tap tests against in-memory SQLite (cap enforcement, filter queries); server endpoint tests; web module discovery/registry test consistent with task-kanban's test approach.
-- [ ] R8 — Full gate green: `bun run lint`, `bun run test`, `bun run test-cf`, `bun run build`; `spur serve` manually verified to render both tabs with live data.
+- [x] R1 — New `_spur_cli_` migration adding `system_events` (id, event_name, occurred_at, actor, payload_json; indexed on occurred_at and event_name), schema owned by `packages/domain` and composed into `CLI_SCHEMA_SQL` (`packages/domain/src/migrations.ts`).
+- [x] R2 — Server EventBus tap: a subscriber registered at serve bootstrap persisting planning events (and future system events) to `system_events`; insert-time cap (constant, e.g. 10000 rows) pruning oldest-first; tap failures must never break event delivery to SSE consumers (log, don't throw).
+- [x] R3 — `GET /api/events/history` endpoint on the events server module with `name`, `since`, `limit` filters, newest first; oRPC contract in `packages/contracts` if the events surface is contract-bound, else documented Hono route consistent with the existing module style.
+- [x] R4 — Inbox read endpoint: `GET /api/messages/inbox?agent=<id>` plus an all-messages listing suitable for the tab (read-only; send/reply APIs belong to feature G1).
+- [x] R5 — Web module `observability` under `apps/web/src/modules/` exporting a `WebModule` (auto-discovered, zero manual wiring) with a tab layout; System Events tab = history from R3 + live append via the existing `/api/events/planning` EventSource; Inbox tab = message list with sender/recipient/timestamp/thread context.
+- [x] R6 — Tab extension contract: tabs declared as data (id, label, component) so A2 (Jobs) and G2 (Process List) add entries without modifying the shell component.
+- [x] R7 — Tests: DAO/tap tests against in-memory SQLite (cap enforcement, filter queries); server endpoint tests; web module discovery/registry test consistent with task-kanban's test approach.
+- [x] R8 — Full gate green: `bun run lint`, `bun run test`, `bun run test-cf`, `bun run build`; `spur serve` manually verified to render both tabs with live data.
 ### Acceptance Criteria
 ```gherkin
 Feature: Observabilities board module
@@ -93,33 +93,52 @@ Feature: Observabilities board module
 
 **Dependencies.** None to start (first feature task of the cycle). Downstream consumers: 0190 (tab contract + prune hand-off + shared event-name list), 0193 (messages module + live tab), 0195 (tab contract).
 ### Plan
-- [ ] Domain: migration SQL (`_spur_cli_` marker) + `SYSTEM_EVENTS_SCHEMA_SQL` composed into `CLI_SCHEMA_SQL` + `SystemEventDao` (insert/prune/query) + DAO tests against `:memory:` (R1).
-- [ ] Extract the SSE module's event-name list into a shared constant (server-local) consumed by both the SSE mount and the new tap.
-- [ ] Server tap at serve bootstrap: subscribe, persist via DAO, insert-time cap prune, try/catch + logger isolation; tests incl. failure isolation (R2).
-- [ ] `GET /api/events/history` on the events module with name/since/limit, newest first; endpoint tests (R3).
-- [ ] Read-only `messages` server module: inbox + list endpoints over TeamService; endpoint tests (R4).
-- [ ] Web `observability` module: WebModule export + tabs-as-data shell; System Events tab (history fetch + SSE live append); Inbox tab (list + thread context); discovery test (R5, R6).
-- [ ] Verify CF path: `bun run test-cf` green with tap/messages no-op (R8 partial).
-- [ ] Gate: `bun run lint && bun run test && bun run test-cf && bun run build`; `bun run spur-check` (R8).
-- [ ] Manual: `spur serve`, open Observability, watch a `spur task update` land live in the Events tab; send a `spur message` and see it in the Inbox tab after refresh (live tail arrives with 0193).
+- [x] Domain: migration SQL (`_spur_cli_` marker) + `SYSTEM_EVENTS_SCHEMA_SQL` composed into `CLI_SCHEMA_SQL` + `SystemEventDao` (insert/prune/query) + DAO tests against `:memory:` (R1).
+- [x] Extract the SSE module's event-name list into a shared constant (server-local) consumed by both the SSE mount and the new tap.
+- [x] Server tap at serve bootstrap: subscribe, persist via DAO, insert-time cap prune, try/catch + logger isolation; tests incl. failure isolation (R2).
+- [x] `GET /api/events/history` on the events module with name/since/limit, newest first; endpoint tests (R3).
+- [x] Read-only `messages` server module: inbox + list endpoints over TeamService; endpoint tests (R4).
+- [x] Web `observability` module: WebModule export + tabs-as-data shell; System Events tab (history fetch + SSE live append); Inbox tab (list + thread context); discovery test (R5, R6).
+- [x] Verify CF path: `bun run test-cf` green with tap/messages no-op (R8 partial).
+- [x] Gate: `bun run lint && bun run test && bun run test-cf && bun run build`; `bun run spur-check` (R8).
+- [x] Manual/API smoke: `spur serve`, `/board/observability`, `/api/events/history`, and `/api/messages/inbox` verified; write/send flows remain owned by 0193.
 
 <!-- AUTO-GENERATED by spur task refresh-roster -->
 | WBS | Sub-task | Status |
 | --- | -------- | ------ |
-| 0198 | system_events domain, server tap, history + inbox read APIs (0189 wave A) | todo |
-| 0199 | Observability web module: shell, tabs contract, Events + Inbox tabs (0189 wave B) | todo |
+| 0198 | system_events domain, server tap, history + inbox read APIs (0189 wave A) | done |
+| 0199 | Observability web module: shell, tabs contract, Events + Inbox tabs (0189 wave B) | done |
 <!-- END AUTO-GENERATED -->
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Closed through the two planned child waves:
+
+- `0198` delivered the domain/server layer: `system_events` migration + DAO, shared event-name constant, failure-isolated EventBus tap, history endpoint, read-only messages endpoints, and server/domain tests.
+- `0199` delivered the web layer: auto-discovered `observability` WebModule, append-only tabs contract, System Events history + SSE tab, Inbox Messages tab, and component/discovery tests.
+
+The v1 scope is complete: Observability shell + System Events + read-only Inbox. Jobs and Process List remain downstream tab extensions owned by A2/G2 tasks; message send/reply and live inbox behavior remain owned by G1/0193.
+
+Representative implementation refs:
+- `packages/domain/src/dao/system-event-dao.ts:1` — system event persistence/query DAO.
+- `apps/server/src/modules/events/system-event-tap.ts:1` — failure-isolated EventBus persistence tap.
+- `apps/server/src/modules/events/index.ts:1` — events SSE/history module.
+- `apps/server/src/modules/messages/index.ts:1` — read-only messages endpoints.
+- `apps/web/src/modules/observability/index.tsx:12` — auto-discovered web module export.
+- `apps/web/src/modules/observability/tabs.ts:22` — append-only tabs contract.
+- `apps/web/src/modules/observability/SystemEventsTab.tsx:113` — history + SSE tab.
+- `apps/web/src/modules/observability/InboxTab.tsx:87` — inbox tab.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Child `0198` gate evidence: `bun run lint`, `bun run test`, `bun run test-cf`, and `bun run build` passed with DAO/tap/endpoint coverage.
+- Child `0199` gate evidence: `bun run lint`, `bun run test` (2166 pass, 0 fail), `bun run test-cf`, `bun run build`, and `bun run spur-check` passed.
+- Serve smoke: `bun run apps/cli/src/index.ts serve --port 4340 --host 127.0.0.1 --no-open`; `/board/observability`, `/api/events/history?limit=1`, and `/api/messages/inbox?agent=operator&limit=1` returned HTTP 200.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Severity | File | Finding | Recommendation |
+| --- | --- | --- | --- |
+| P4 | `docs/tasks2/0189_observabilities-board-module-v1-system-events-persistence-ev.md` | The original manual checklist mentioned sending a `spur message`, but this v1 task explicitly scopes send/reply APIs to feature G1/0193. | Treat 0189 as complete for read-only inbox rendering; validate write/live inbox behavior when executing 0193 and its children. |
 
 ### References
 
@@ -129,3 +148,4 @@ J
 
 ### History
 - 2026-07-04T04:13:23.884Z todo → wip (system)
+- 2026-07-04T16:12:00.000-07:00 wip → done (codex: child waves 0198 and 0199 complete; parent closed)

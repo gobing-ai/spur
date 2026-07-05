@@ -6,13 +6,12 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: null
 parent_wbs: "0176"
 priority: P2
 tags: []
 dependencies: []
-created_at: "2026-07-02T06:29:12.249Z"
-updated_at: "2026-07-03T05:35:25.519Z"
+created_at: 2026-07-02T06:29:12.249Z
+updated_at: 2026-07-03T05:35:25.519Z
 ---
 
 ## 0179. 0176 Wave C: verification depth and functional evidence

@@ -1,7 +1,7 @@
 ---
 template: standard
 schema_version: 1
-name: "Normalize task status before lifecycle transition; fix opaque FSMError on case-drift"
+name: Normalize task status before lifecycle transition; fix opaque FSMError on case-drift
 description: ""
 status: done
 type: task
@@ -11,7 +11,7 @@ parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
-created_at: "2026-06-29T06:20:51.500Z"
+created_at: 2026-06-29T06:20:51.500Z
 updated_at: 2026-06-29T18:41:01.996Z
 ---
 

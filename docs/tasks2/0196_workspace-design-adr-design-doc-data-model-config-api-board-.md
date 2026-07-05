@@ -9,10 +9,10 @@ profile: standard
 feature_id: G3
 parent_wbs: null
 priority: P2
-tags: ["approach-c", "design", "collaboration"]
+tags: [approach-c,design,collaboration]
 dependencies: []
-created_at: "2026-07-03T23:35:28.259Z"
-updated_at: "2026-07-03T23:44:13.181Z"
+created_at: 2026-07-03T23:35:28.259Z
+updated_at: 2026-07-03T23:44:13.181Z
 ---
 
 ## 0196. Workspace design: ADR + design doc (data model, config, API, board tabs)

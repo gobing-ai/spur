@@ -1,18 +1,18 @@
 ---
 template: review
 schema_version: 1
-name: "Dogfood findings — dev-refine 0164 auto-next chain"
+name: Dogfood findings — dev-refine 0164 auto-next chain
 description: ""
 status: done
-type: review
+type: task
 profile: standard
 feature_id: H3
 parent_wbs: null
 priority: P2
-tags: ["review"]
+tags: [review]
 dependencies: []
-created_at: "2026-06-30T23:29:53.230Z"
-updated_at: "2026-07-01T00:49:22.193Z"
+created_at: 2026-06-30T23:29:53.230Z
+updated_at: 2026-07-01T00:49:22.193Z
 ---
 
 ## 0166. Dogfood findings — dev-refine 0164 auto-next chain

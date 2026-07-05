@@ -9,10 +9,10 @@ profile: standard
 feature_id: G2
 parent_wbs: "0195"
 priority: P2
-tags: ["approach-c", "cli", "collaboration", "subtask"]
+tags: [approach-c,cli,collaboration,subtask]
 dependencies: []
-created_at: "2026-07-04T04:13:23.857Z"
-updated_at: "2026-07-04T04:18:16.255Z"
+created_at: 2026-07-04T04:13:23.857Z
+updated_at: 2026-07-04T04:18:16.255Z
 ---
 
 ## 0209. CLI team verbs: start, stop, attach replacing Phase-4 stubs (0195 wave C)

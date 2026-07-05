@@ -6,13 +6,12 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: null
 parent_wbs: "0182"
 priority: P1
 tags: []
 dependencies: []
-created_at: "2026-07-03T01:08:16.982Z"
-updated_at: "2026-07-03T07:50:26.897Z"
+created_at: 2026-07-03T01:08:16.982Z
+updated_at: 2026-07-03T07:50:26.897Z
 ---
 
 ## 0185. 0182 Wave C: corpus/doc hygiene + closeout — checkboxes, task-check rule, changelog, hook wiring, commits

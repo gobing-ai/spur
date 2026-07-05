@@ -1,17 +1,16 @@
 ---
 template: standard
 schema_version: 1
-name: "F1 — dogfood/pipeline mutating-gate for pipeline-driving testees"
+name: F1 — dogfood/pipeline mutating-gate for pipeline-driving testees
 description: ""
 status: done
 type: task
 profile: standard
-feature_id: null
 parent_wbs: "0130"
 priority: P1
 tags: []
 dependencies: []
-created_at: "2026-06-27T07:03:28.259Z"
+created_at: 2026-06-27T07:03:28.259Z
 updated_at: 2026-06-27T15:34:46.237Z
 ---
 

@@ -1,7 +1,7 @@
 ---
 template: feature-impl
 schema_version: 1
-name: "spur message watch verb (0193 wave B)"
+name: spur message watch verb (0193 wave B)
 description: ""
 status: todo
 type: task
@@ -9,10 +9,10 @@ profile: standard
 feature_id: G1
 parent_wbs: "0193"
 priority: P1
-tags: ["approach-c", "cli", "collaboration", "subtask"]
+tags: [approach-c,cli,collaboration,subtask]
 dependencies: []
-created_at: "2026-07-04T04:13:23.854Z"
-updated_at: "2026-07-04T04:17:46.664Z"
+created_at: 2026-07-04T04:13:23.854Z
+updated_at: 2026-07-04T04:17:46.664Z
 ---
 
 ## 0205. spur message watch verb (0193 wave B)

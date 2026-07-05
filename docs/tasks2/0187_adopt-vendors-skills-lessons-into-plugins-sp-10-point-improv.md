@@ -1,11 +1,12 @@
 ---
-schema_version: 1
-name: "Adopt vendors/skills lessons into plugins/sp — 10-point improvement program"
-status: done
 template: standard
-created_at: 2026-07-03T14:55:59.759Z
-updated_at: "2026-07-03T21:22:46.068Z"
+schema_version: 1
+name: Adopt vendors/skills lessons into plugins/sp — 10-point improvement program
+status: done
+type: task
 priority: P2
+created_at: 2026-07-03T14:55:59.759Z
+updated_at: 2026-07-03T21:22:46.068Z
 ---
 
 ## 0187. Adopt vendors/skills lessons into plugins/sp — 10-point improvement program

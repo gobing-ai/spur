@@ -4,15 +4,14 @@ schema_version: 1
 name: "sp-plugin audit remediation: decomposition wiring, review depth, workflow-config hardening"
 description: ""
 status: done
-type: review
+type: task
 profile: standard
-feature_id: null
 parent_wbs: null
 priority: P2
-tags: ["review"]
+tags: [review]
 dependencies: []
-created_at: "2026-07-02T05:34:33.113Z"
-updated_at: "2026-07-03T06:25:42.084Z"
+created_at: 2026-07-02T05:34:33.113Z
+updated_at: 2026-07-03T06:25:42.084Z
 ---
 
 ## 0176. sp-plugin audit remediation: decomposition wiring, review depth, workflow-config hardening

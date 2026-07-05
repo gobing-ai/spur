@@ -1,17 +1,17 @@
 ---
 template: issue
 schema_version: 1
-name: "Make sp task-write-guard hook portable across superskill/rulesync installs"
+name: Make sp task-write-guard hook portable across superskill/rulesync installs
 description: ""
 status: done
-type: issue
+type: task
 profile: standard
 feature_id: H2
 parent_wbs: null
 priority: P1
-tags: ["bug"]
+tags: [bug]
 dependencies: []
-created_at: "2026-06-29T05:34:21.692Z"
+created_at: 2026-06-29T05:34:21.692Z
 updated_at: 2026-06-29T07:20:15.483Z
 ---
 

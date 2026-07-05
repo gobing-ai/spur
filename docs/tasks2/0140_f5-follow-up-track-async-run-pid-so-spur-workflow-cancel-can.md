@@ -1,17 +1,16 @@
 ---
 template: issue
 schema_version: 1
-name: "F5 follow-up — track async-run pid so `spur workflow cancel` can kill the in-flight subprocess"
+name: F5 follow-up — track async-run pid so `spur workflow cancel` can kill the in-flight subprocess
 description: ""
 status: done
-type: issue
+type: task
 profile: standard
-feature_id: null
 parent_wbs: "0130"
 priority: P3
-tags: ["bug"]
+tags: [bug]
 dependencies: []
-created_at: "2026-06-27T16:04:19.603Z"
+created_at: 2026-06-27T16:04:19.603Z
 updated_at: 2026-06-27T23:39:01.276Z
 ---
 

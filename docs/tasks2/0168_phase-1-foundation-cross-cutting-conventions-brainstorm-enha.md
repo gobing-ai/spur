@@ -1,7 +1,7 @@
 ---
 template: feature-impl
 schema_version: 1
-name: "Phase 1 Foundation — cross-cutting conventions, brainstorm enhancement, gate-checklists"
+name: Phase 1 Foundation — cross-cutting conventions, brainstorm enhancement, gate-checklists
 description: ""
 status: done
 type: task
@@ -11,8 +11,8 @@ parent_wbs: "0167"
 priority: P2
 tags: []
 dependencies: []
-created_at: "2026-07-01T18:42:39.267Z"
-updated_at: "2026-07-01T20:51:13.221Z"
+created_at: 2026-07-01T18:42:39.267Z
+updated_at: 2026-07-01T20:51:13.221Z
 ---
 
 ## 0168. Phase 1 Foundation — cross-cutting conventions, brainstorm enhancement, gate-checklists

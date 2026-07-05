@@ -1,7 +1,7 @@
 ---
 template: feature-impl
 schema_version: 1
-name: "Batch execution v2 — parallel runs (worktree isolation) + interactive within-step escalation"
+name: Batch execution v2 — parallel runs (worktree isolation) + interactive within-step escalation
 description: ""
 status: blocked
 type: task
@@ -11,7 +11,7 @@ parent_wbs: null
 priority: P3
 tags: []
 dependencies: []
-created_at: "2026-06-28T05:37:28.269Z"
+created_at: 2026-06-28T05:37:28.269Z
 updated_at: 2026-06-28T16:53:38.429Z
 ---
 

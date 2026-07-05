@@ -9,10 +9,10 @@ profile: standard
 feature_id: A1
 parent_wbs: null
 priority: P0
-tags: ["approach-c", "cli", "bug"]
+tags: [approach-c,cli,bug]
 dependencies: []
-created_at: "2026-07-03T23:35:28.251Z"
-updated_at: "2026-07-04T00:55:33.105Z"
+created_at: 2026-07-03T23:35:28.251Z
+updated_at: 2026-07-04T00:55:33.105Z
 ---
 
 ## 0188. Fix spur init + /sp:spur-init: full package scaffold and ownership contract

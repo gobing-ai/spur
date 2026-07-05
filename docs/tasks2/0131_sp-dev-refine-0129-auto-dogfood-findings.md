@@ -1,17 +1,16 @@
 ---
+template: review
 schema_version: 1
-name: "/sp:dev-refine 0129 --auto dogfood findings"
+name: /sp:dev-refine 0129 --auto dogfood findings
 description: ""
 status: done
-type: review
-template: review
+type: task
 profile: standard
-feature_id: null
 parent_wbs: null
 priority: P2
-tags: ["review"]
+tags: [review]
 dependencies: []
-created_at: "2026-06-26T19:14:43.613Z"
+created_at: 2026-06-26T19:14:43.613Z
 updated_at: 2026-06-28T18:40:57.167Z
 ---
 

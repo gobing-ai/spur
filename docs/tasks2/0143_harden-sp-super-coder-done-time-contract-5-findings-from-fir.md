@@ -1,17 +1,16 @@
 ---
 template: standard
 schema_version: 1
-name: "Harden sp:super-coder done-time contract — 5 findings from first 0131 run"
+name: Harden sp:super-coder done-time contract — 5 findings from first 0131 run
 description: ""
 status: done
 type: task
 profile: standard
-feature_id: null
 parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
-created_at: "2026-06-28T18:38:41.444Z"
+created_at: 2026-06-28T18:38:41.444Z
 updated_at: 2026-06-28T21:26:50.742Z
 ---
 

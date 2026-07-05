@@ -9,10 +9,10 @@ profile: standard
 feature_id: G1
 parent_wbs: "0193"
 priority: P1
-tags: ["approach-c", "web", "collaboration", "subtask"]
+tags: [approach-c,web,collaboration,subtask]
 dependencies: []
-created_at: "2026-07-04T04:13:23.855Z"
-updated_at: "2026-07-04T04:17:54.059Z"
+created_at: 2026-07-04T04:13:23.855Z
+updated_at: 2026-07-04T04:17:54.059Z
 ---
 
 ## 0206. Live board inbox tab: message events live tail (0193 wave C)

@@ -1,17 +1,16 @@
 ---
 template: feature-impl
 schema_version: 1
-name: "Centralize .spur/config.yaml loading in spur-config; kill legacy docs/.tasks/config.jsonc"
+name: Centralize .spur/config.yaml loading in spur-config; kill legacy docs/.tasks/config.jsonc
 description: ""
 status: done
 type: task
 profile: standard
-feature_id: null
 parent_wbs: null
 priority: P1
 tags: []
 dependencies: []
-created_at: "2026-06-26T18:31:39.063Z"
+created_at: 2026-06-26T18:31:39.063Z
 updated_at: 2026-06-26T22:43:44.957Z
 ---
 

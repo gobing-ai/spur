@@ -9,10 +9,10 @@ profile: standard
 feature_id: G2
 parent_wbs: "0195"
 priority: P2
-tags: ["approach-c", "infra", "collaboration", "subtask"]
+tags: [approach-c,infra,collaboration,subtask]
 dependencies: []
-created_at: "2026-07-04T04:13:23.855Z"
-updated_at: "2026-07-04T04:18:01.471Z"
+created_at: 2026-07-04T04:13:23.855Z
+updated_at: 2026-07-04T04:18:01.471Z
 ---
 
 ## 0207. SupervisorService: spawn, registry, ring buffer, lifecycle events, autostart (0195 wave A)

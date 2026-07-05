@@ -1,17 +1,16 @@
 ---
 template: meta
 schema_version: 1
-name: "F6 — improve cache-hit rate for programmatic dev-run drives"
+name: F6 — improve cache-hit rate for programmatic dev-run drives
 description: ""
 status: cancelled
-type: meta
+type: task
 profile: standard
-feature_id: null
 parent_wbs: "0130"
 priority: P3
-tags: ["meta"]
+tags: [meta]
 dependencies: []
-created_at: "2026-06-27T07:03:28.263Z"
+created_at: 2026-06-27T07:03:28.263Z
 updated_at: 2026-06-27T16:30:48.345Z
 ---
 

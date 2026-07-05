@@ -1,17 +1,16 @@
 ---
 template: standard
 schema_version: 1
-name: "Realign sp:dev-* --next step-chain so refine/run/verify reach done"
+name: Realign sp:dev-* --next step-chain so refine/run/verify reach done
 description: ""
 status: done
 type: task
 profile: standard
-feature_id: null
 parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
-created_at: "2026-06-27T00:26:38.054Z"
+created_at: 2026-06-27T00:26:38.054Z
 updated_at: 2026-06-27T00:55:00.501Z
 ---
 

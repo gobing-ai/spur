@@ -1,7 +1,7 @@
 ---
 template: feature-impl
 schema_version: 1
-name: "Phase 3 Idea-to-Feature workflow — idea-pipeline.yaml, dev-idea, design approval gate"
+name: Phase 3 Idea-to-Feature workflow — idea-pipeline.yaml, dev-idea, design approval gate
 description: ""
 status: done
 type: task
@@ -11,8 +11,8 @@ parent_wbs: "0167"
 priority: P2
 tags: []
 dependencies: []
-created_at: "2026-07-01T18:42:39.271Z"
-updated_at: "2026-07-01T21:03:52.473Z"
+created_at: 2026-07-01T18:42:39.271Z
+updated_at: 2026-07-01T21:03:52.473Z
 ---
 
 ## 0170. Phase 3 Idea-to-Feature workflow — idea-pipeline.yaml, dev-idea, design approval gate

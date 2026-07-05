@@ -6,13 +6,12 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: null
 parent_wbs: "0176"
 priority: P2
 tags: []
 dependencies: []
-created_at: "2026-07-02T06:29:12.250Z"
-updated_at: "2026-07-02T22:39:32.693Z"
+created_at: 2026-07-02T06:29:12.250Z
+updated_at: 2026-07-02T22:39:32.693Z
 ---
 
 ## 0181. 0176 Wave E: comprehensive sweep cleanup

@@ -1,7 +1,7 @@
 ---
 template: feature-impl
 schema_version: 1
-name: "Split sp:spur-dev at the lifecycle-half seam into planning (sp:spur-plan) and execution (sp:spur-dev)"
+name: Split sp:spur-dev at the lifecycle-half seam into planning (sp:spur-plan) and execution (sp:spur-dev)
 description: ""
 status: done
 type: task
@@ -11,7 +11,7 @@ parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
-created_at: "2026-06-30T07:01:29.766Z"
+created_at: 2026-06-30T07:01:29.766Z
 updated_at: 2026-06-30T19:04:17.336Z
 ---
 

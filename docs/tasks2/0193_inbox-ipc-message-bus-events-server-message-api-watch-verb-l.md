@@ -9,10 +9,10 @@ profile: standard
 feature_id: G1
 parent_wbs: null
 priority: P1
-tags: ["approach-c", "collaboration", "server", "cli"]
+tags: [approach-c,collaboration,server,cli]
 dependencies: []
-created_at: "2026-07-03T23:35:28.257Z"
-updated_at: "2026-07-04T04:13:23.918Z"
+created_at: 2026-07-03T23:35:28.257Z
+updated_at: 2026-07-04T04:13:23.918Z
 ---
 
 ## 0193. Inbox IPC: message bus events, server message API, watch verb, live board inbox

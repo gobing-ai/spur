@@ -1,7 +1,7 @@
 ---
 template: feature-impl
 schema_version: 1
-name: "0167 follow-ups — post-implementation actions"
+name: 0167 follow-ups — post-implementation actions
 description: ""
 status: done
 type: task
@@ -11,8 +11,8 @@ parent_wbs: "0167"
 priority: P2
 tags: []
 dependencies: []
-created_at: "2026-07-01T22:05:29.538Z"
-updated_at: "2026-07-02T00:56:01.151Z"
+created_at: 2026-07-01T22:05:29.538Z
+updated_at: 2026-07-02T00:56:01.151Z
 ---
 
 ## 0174. 0167 follow-ups — post-implementation actions

@@ -1,18 +1,17 @@
 ---
 template: standard
 schema_version: 1
-name: "R2d probe — trivial pipeline smoke test (0182/0183)"
+name: R2d probe — trivial pipeline smoke test (0182/0183)
 description: ""
 status: blocked
 type: task
 profile: standard
-feature_id: null
 parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
-created_at: "2026-07-03T04:36:01.867Z"
-updated_at: "2026-07-03T04:42:56.023Z"
+created_at: 2026-07-03T04:36:01.867Z
+updated_at: 2026-07-03T04:42:56.023Z
 ---
 
 ## 0186. R2d probe — trivial pipeline smoke test (0182/0183)

@@ -1,19 +1,10 @@
 ---
 schema_version: 1
 name: Module auto-discovery for the Spur Board web registry
-description: Module auto-discovery for the Spur Board web registry
 status: done
+type: task
 created_at: 2026-06-27T00:41:16.312Z
 updated_at: 2026-06-29T16:38:40.309Z
-folder: docs/tasks2
-type: task
-feature-id: ""
-impl_progress:
-  planning: pending
-  design: pending
-  implementation: pending
-  review: pending
-  testing: pending
 ---
 
 ## 0134. Module auto-discovery for the Spur Board web registry

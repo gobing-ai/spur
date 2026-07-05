@@ -1,17 +1,16 @@
 ---
+template: review
 schema_version: 1
-name: "/sp:dev-refine 0151 --auto --next fix-mode dogfood findings"
+name: /sp:dev-refine 0151 --auto --next fix-mode dogfood findings
 description: ""
 status: cancelled
-type: review
-template: review
+type: task
 profile: standard
-feature_id: null
 parent_wbs: null
 priority: P2
-tags: ["review"]
+tags: [review]
 dependencies: []
-created_at: "2026-06-29T07:21:23.638Z"
+created_at: 2026-06-29T07:21:23.638Z
 updated_at: 2026-06-29T23:05:52.986Z
 ---
 

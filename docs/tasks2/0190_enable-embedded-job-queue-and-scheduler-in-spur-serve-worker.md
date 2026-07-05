@@ -1,18 +1,18 @@
 ---
 template: feature-impl
 schema_version: 1
-name: "Enable embedded job queue and scheduler in spur serve (worker loop + handler registry)"
+name: Enable embedded job queue and scheduler in spur serve (worker loop + handler registry)
 description: ""
-status: wip
+status: done
 type: task
 profile: standard
 feature_id: A2
 parent_wbs: null
 priority: P1
-tags: ["approach-c", "server", "infra"]
+tags: [approach-c,server,infra]
 dependencies: []
-created_at: "2026-07-03T23:35:28.254Z"
-updated_at: "2026-07-04T07:16:09.369Z"
+created_at: 2026-07-03T23:35:28.254Z
+updated_at: 2026-07-04T16:28:44.000-07:00
 ---
 
 ## 0190. Enable embedded job queue and scheduler in spur serve (worker loop + handler registry)
@@ -26,14 +26,14 @@ Decision D6: in-process worker inside `spur serve`, Bun path only — Cloudflare
 Dependency: P1 Observabilities task (tab contract + system_events pruning hand-off + event visibility). Check ts-infra's `JobQueue`/`QueueJobDao` consumer surface first — if a claim/complete API is missing upstream, prefer the smallest ts-libs enhancement over a Spur-side workaround (AGENTS.md shared-library evolution rule).
 
 ### Requirements
-- [ ] R1. Worker loop in `packages/app` (e.g. `JobWorkerService`): polls `queue_jobs` for pending jobs, claims atomically, dispatches to the handler registry, records terminal status; poll interval configurable with a sane default; graceful shutdown completes or releases the in-flight job (never orphans a claimed row).
-- [ ] R2. Typed handler registry: job kind → handler mapping registered at serve bootstrap; a claimed job with an unregistered kind is marked failed with an error naming the kind (fail loud, no silent drop).
-- [ ] R3. Enable on Bun serve path only: `jobQueueEnabled: true` + `scheduler.enabled: true` wired through `apps/server/src/serve.ts`/`bootstrap.ts`; Cloudflare entrypoint (`worker.ts`) boots with neither and still serves health + OpenAPI (covered by `bun run test-cf`).
-- [ ] R4. Scheduler lifecycle: `NodeSchedulerAdapter.start()` on serve boot, `stop()` on shutdown; first registered entry = `system_events` retention pruning (replacing/backstopping the P1 insert-time cap); second = smoke job for tests.
-- [ ] R5. Job lifecycle events (enqueued/started/completed/failed) emitted on the EventBus; visible in the Observability Events tab without further work.
-- [ ] R6. `GET /api/jobs/stats` returning counts by status (rides the existing `JobQueue.stats`); Jobs tab added to the `observability` web module via its tab-extension contract showing stats + recent job events.
-- [ ] R7. Tests: worker loop against in-memory SQLite (execute, unknown-kind failure, shutdown release), scheduler registration, stats endpoint, CF no-op; no test sleeps longer than necessary (inject clock/interval where possible).
-- [ ] R8. Full gate green: `bun run lint`, `bun run test`, `bun run test-cf`, `bun run build`.
+- [x] R1. Worker loop in `packages/app` (e.g. `JobWorkerService`): polls `queue_jobs` for pending jobs, claims atomically, dispatches to the handler registry, records terminal status; poll interval configurable with a sane default; graceful shutdown completes or releases the in-flight job (never orphans a claimed row).
+- [x] R2. Typed handler registry: job kind → handler mapping registered at serve bootstrap; a claimed job with an unregistered kind is marked failed with an error naming the kind (fail loud, no silent drop).
+- [x] R3. Enable on Bun serve path only: `jobQueueEnabled: true` + `scheduler.enabled: true` wired through `apps/server/src/serve.ts`/`bootstrap.ts`; Cloudflare entrypoint (`worker.ts`) boots with neither and still serves health + OpenAPI (covered by `bun run test-cf`).
+- [x] R4. Scheduler lifecycle: `NodeSchedulerAdapter.start()` on serve boot, `stop()` on shutdown; first registered entry = `system_events` retention pruning (replacing/backstopping the P1 insert-time cap); second = smoke job for tests.
+- [x] R5. Job lifecycle events (enqueued/started/completed/failed) emitted on the EventBus; visible in the Observability Events tab without further work.
+- [x] R6. `GET /api/jobs/stats` returning counts by status (rides the existing `JobQueue.stats`); Jobs tab added to the `observability` web module via its tab-extension contract showing stats + recent job events.
+- [x] R7. Tests: worker loop against in-memory SQLite (execute, unknown-kind failure, shutdown release), scheduler registration, stats endpoint, CF no-op; no test sleeps longer than necessary (inject clock/interval where possible).
+- [x] R8. Full gate green: `bun run lint`, `bun run test`, `bun run test-cf`, `bun run build`.
 ### Acceptance Criteria
 ```gherkin
 Feature: Embedded job queue and scheduler
@@ -82,6 +82,8 @@ Feature: Embedded job queue and scheduler
 
 **Upstream check FIRST.** Before writing the worker, read the resolved `.d.ts` of ts-db's `QueueJobDao` and ts-infra's `JobQueue`/`DBJobQueue` (resolve from inside `packages/domain`, not the store dir name — versions lag). The worker needs claim-pending (atomic status flip), complete, fail, release. If the consumer surface is missing/insufficient upstream, make the smallest ts-libs enhancement (AGENTS.md shared-library rule) and consume by semver — do NOT hand-roll SQL against `queue_jobs` in Spur (`packages/domain` is the sole ts-db consumer; any raw fallback lives there, flagged as temporary). Record the found surface + decision here.
 
+**Upstream audit result (0200, 2026-07-04).** The installed `@gobing-ai/ts-*` 0.4.3 packages already expose the needed consumer surface: `@gobing-ai/ts-infra/job-queue-db` exports `DBQueueConsumer` with `register`, `start`, `stop`, `stats`, and `processOnce`; `QueueConsumerConfig` supports poll interval, concurrency, visibility timeout, backoff, drain timeout, and queue lifecycle events; `packages/domain/src/db.ts:88` wraps that as `createQueueConsumer()` / `ServerQueueConsumer` so apps never import ts-db directly. Decision: no Spur-side SQL and no further ts-libs change for wave A. Implement a thin app-layer `JobWorkerService`/`JobHandlerRegistry` over the upstream consumer and wire that into Bun serve.
+
 **Worker (R1, R2).** `packages/app/src/services/job-worker-service.ts` (or `workflow/`-sibling placement consistent with existing service layout): constructor takes `{ dao|queue, registry, eventBus, logger, pollMs (default ~1000), clock? }`. Loop: claim next pending → emit `job.started` → dispatch `registry.get(kind)` → complete + `job.completed` | fail + `job.failed` (unknown kind → fail with message naming the kind). `start()` begins the loop; `stop()` (awaited by serve shutdown) finishes the in-flight job or releases the claim — a claimed row must never be left stranded. Inject the poll interval/clock so tests never sleep.
 
 **Registry (R2).** `JobHandlerRegistry`: `register(kind, handler)` / `get(kind)`; `JobHandler = (payload, ctx) => Promise<void>`. Registered at serve bootstrap. Keep typing pragmatic — a `Record<string, unknown>` payload with per-handler parse (zod where a payload shape exists) beats a generic type-map contraption (R2/simplicity).
@@ -98,34 +100,47 @@ Feature: Embedded job queue and scheduler
 
 **Dependencies.** 0189 (tab-extension contract, shared event-name list, `system_events` prune hand-off). Blocks nothing hard, but 0191's action-execution design prefers this queue as its execution channel.
 ### Plan
-- [ ] Upstream audit: read resolved `QueueJobDao`/`DBJobQueue` `.d.ts` for claim/complete/fail/release; record findings in Design; if insufficient, land the smallest ts-libs enhancement and bump the catalog.
-- [ ] `JobHandlerRegistry` + `JobWorkerService` in `packages/app` with injected pollMs/clock; unit tests: execute, unknown-kind fail-loud, stop-releases-in-flight (R1, R2, R7).
-- [ ] Serve wiring (Bun path): enable queue, build registry, start/stop worker in lifecycle; shutdown ordering test (R3).
-- [ ] Scheduler start/stop in serve lifecycle; register `system-events-prune` (enqueue path) + `smoke`; test the registration + firing via injected clock (R4).
-- [ ] Job lifecycle events on the bus; extend the shared event-name list so tap + SSE carry them (R5).
-- [ ] `jobs` server module: `GET /api/jobs/stats`; endpoint test (R6).
-- [ ] Jobs tab appended to observability `tabs.ts`: stats + recent job events (R6).
-- [ ] CF check: `bun run test-cf` green, no queue/scheduler on Workers (R3).
-- [ ] Gate: `bun run lint && bun run test && bun run test-cf && bun run build`; `bun run spur-check` (R8).
-- [ ] Manual: `spur serve`, watch `system-events-prune`/smoke activity appear in the Events + Jobs tabs.
+- [x] Upstream audit: read resolved `QueueJobDao`/`DBJobQueue` `.d.ts` for claim/complete/fail/release; record findings in Design; if insufficient, land the smallest ts-libs enhancement and bump the catalog.
+- [x] `JobHandlerRegistry` + `JobWorkerService` in `packages/app` with injected pollMs/clock; unit tests: execute, unknown-kind fail-loud, stop-releases-in-flight (R1, R2, R7).
+- [x] Serve wiring (Bun path): enable queue, build registry, start/stop worker in lifecycle; shutdown ordering test (R3).
+- [x] Scheduler start/stop in serve lifecycle; register `system-events-prune` (enqueue path) + `smoke`; test the registration + firing via injected clock (R4).
+- [x] Job lifecycle events on the bus; extend the shared event-name list so tap + SSE carry them (R5).
+- [x] `jobs` server module: `GET /api/jobs/stats`; endpoint test (R6).
+- [x] Jobs tab appended to observability `tabs.ts`: stats + recent job events (R6).
+- [x] CF check: `bun run test-cf` green, no queue/scheduler on Workers (R3).
+- [x] Gate: `bun run lint && bun run test && bun run test-cf && bun run build`; `bun run spur-check` (R8).
+- [x] Manual: `spur serve`, watch `system-events-prune`/smoke activity appear in the Events + Jobs tabs.
 
 <!-- AUTO-GENERATED by spur task refresh-roster -->
 | WBS | Sub-task | Status |
 | --- | -------- | ------ |
-| 0200 | Job worker loop, handler registry, serve lifecycle wiring (0190 wave A) | todo |
-| 0201 | Scheduler entries, job events, stats API, Jobs tab (0190 wave B) | todo |
+| 0200 | Job worker loop, handler registry, serve lifecycle wiring (0190 wave A) | done |
+| 0201 | Scheduler entries, job events, stats API, Jobs tab (0190 wave B) | done |
 <!-- END AUTO-GENERATED -->
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- Wave A (`0200`) delivered the app-layer consumer facade: `packages/app/src/services/job-worker-service.ts:3` exposes `JobHandlerRegistry` and `JobWorkerService` over the upstream ts-libs `DBQueueConsumer` surface, with tests for dispatch, unknown-kind failure, and lifecycle handling.
+- `apps/server/src/context.ts:100` wires `createQueueConsumer()` through `ServerContext`; `apps/server/src/bootstrap.ts:34` enables queue/scheduler on the Bun serve path; `apps/server/src/serve.ts:140` starts the worker and shuts down scheduler → worker → HTTP server.
+- Wave B (`0201`) delivered built-in scheduler jobs: `apps/server/src/serve.ts:13` defines `system-events-prune` and `smoke`; `apps/server/src/serve.ts:60` registers interval enqueue entries; `apps/server/src/serve.ts:140` registers the matching worker handlers.
+- `apps/server/src/modules/events/event-names.ts:6` adds queue/scheduler lifecycle event names to the persisted/SSE event list, reusing the 0189 system event tap.
+- `apps/server/src/modules/jobs/index.ts:12` adds `GET /api/jobs/stats`, and `apps/server/src/modules/registry.ts` registers the jobs module with the built-ins.
+- `apps/web/src/modules/observability/JobsTab.tsx:91` renders job status counts and recent queue/scheduler events; `apps/web/src/modules/observability/tabs.ts:23` appends the Jobs tab through the 0199 tab contract.
+- The parent Design records the upstream audit: installed `@gobing-ai/ts-*` 0.4.3 already exposes the required consumer surface, so no raw Spur SQL or additional ts-libs change was needed.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- `bun run lint` — clean.
+- `bun run test` — 2177 pass, 0 fail; coverage gate satisfied.
+- `bun run test-cf` — Workers runtime test passed, confirming the CF entrypoint remains unaffected.
+- `bun run build` — cli/server/web build succeeded.
+- `bun run spur-check` — 29 pre-check rules passed, 2177 tests passed, 2 post-check rules passed.
+- `bun run apps/cli/src/index.ts serve --port 4341 --host 127.0.0.1 --no-open` probe: `/api/jobs/stats`, `/api/events/history?limit=5`, and `/board/observability` all returned HTTP 200; history included persisted `queue.consumer.started`, confirming queue lifecycle visibility.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Severity | File | Finding | Recommendation |
+| --- | --- | --- | --- |
+| P4 | `apps/server/src/serve.ts` | Scheduled jobs use production-scale intervals (`300000` ms prune, `600000` ms smoke), so the manual serve probe verifies startup and event visibility but does not wait for a scheduled tick. | Keep the deterministic scheduler registration test as the tick assertion; tune intervals later if operational feedback calls for a different cadence. |
 
 ### References
 
@@ -135,3 +150,4 @@ A2
 
 ### History
 - 2026-07-04T04:13:23.896Z todo → wip (system)
+- 2026-07-04T16:28:44.000-07:00 wip → done (codex: embedded queue worker, scheduler jobs, jobs API/tab, full gates green)

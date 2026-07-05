@@ -1,7 +1,7 @@
 ---
 template: feature-impl
 schema_version: 1
-name: "Batch task execution — /sp:dev-runall + dependency-ordered driver + sp:super-coder orchestrator"
+name: Batch task execution — /sp:dev-runall + dependency-ordered driver + sp:super-coder orchestrator
 description: ""
 status: done
 type: task
@@ -11,7 +11,7 @@ parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
-created_at: "2026-06-28T04:23:18.035Z"
+created_at: 2026-06-28T04:23:18.035Z
 updated_at: 2026-06-28T05:40:19.105Z
 ---
 

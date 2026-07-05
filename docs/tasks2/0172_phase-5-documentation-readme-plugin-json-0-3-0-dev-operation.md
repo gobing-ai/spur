@@ -1,7 +1,7 @@
 ---
 template: feature-impl
 schema_version: 1
-name: "Phase 5 Documentation — README, plugin.json 0.3.0, dev-operations completeness"
+name: Phase 5 Documentation — README, plugin.json 0.3.0, dev-operations completeness
 description: ""
 status: done
 type: task
@@ -11,8 +11,8 @@ parent_wbs: "0167"
 priority: P2
 tags: []
 dependencies: []
-created_at: "2026-07-01T18:42:39.273Z"
-updated_at: "2026-07-01T21:20:37.412Z"
+created_at: 2026-07-01T18:42:39.273Z
+updated_at: 2026-07-01T21:20:37.412Z
 ---
 
 ## 0172. Phase 5 Documentation — README, plugin.json 0.3.0, dev-operations completeness

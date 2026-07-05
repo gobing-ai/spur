@@ -1,7 +1,7 @@
 ---
 template: feature-impl
 schema_version: 1
-name: "Message bus events, server send/reply API, SSE inclusion (0193 wave A)"
+name: Message bus events, server send/reply API, SSE inclusion (0193 wave A)
 description: ""
 status: todo
 type: task
@@ -9,10 +9,10 @@ profile: standard
 feature_id: G1
 parent_wbs: "0193"
 priority: P1
-tags: ["approach-c", "server", "collaboration", "subtask"]
+tags: [approach-c,server,collaboration,subtask]
 dependencies: []
-created_at: "2026-07-04T04:13:23.853Z"
-updated_at: "2026-07-04T04:17:39.181Z"
+created_at: 2026-07-04T04:13:23.853Z
+updated_at: 2026-07-04T04:17:39.181Z
 ---
 
 ## 0204. Message bus events, server send/reply API, SSE inclusion (0193 wave A)

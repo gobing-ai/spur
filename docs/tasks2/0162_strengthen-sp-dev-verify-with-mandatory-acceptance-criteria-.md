@@ -1,7 +1,7 @@
 ---
 template: feature-impl
 schema_version: 1
-name: "Strengthen sp dev-verify with mandatory Acceptance Criteria guard"
+name: Strengthen sp dev-verify with mandatory Acceptance Criteria guard
 description: ""
 status: done
 type: task
@@ -11,7 +11,7 @@ parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
-created_at: "2026-06-30T20:14:26.080Z"
+created_at: 2026-06-30T20:14:26.080Z
 updated_at: 2026-06-30T20:47:19.854Z
 ---
 

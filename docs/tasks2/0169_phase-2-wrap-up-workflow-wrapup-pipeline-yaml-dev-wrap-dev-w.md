@@ -1,7 +1,7 @@
 ---
 template: feature-impl
 schema_version: 1
-name: "Phase 2 Wrap-Up workflow — wrapup-pipeline.yaml, dev-wrap, dev-wrapall, --wrap flag"
+name: Phase 2 Wrap-Up workflow — wrapup-pipeline.yaml, dev-wrap, dev-wrapall, --wrap flag
 description: ""
 status: done
 type: task
@@ -11,8 +11,8 @@ parent_wbs: "0167"
 priority: P2
 tags: []
 dependencies: []
-created_at: "2026-07-01T18:42:39.270Z"
-updated_at: "2026-07-01T20:57:09.886Z"
+created_at: 2026-07-01T18:42:39.270Z
+updated_at: 2026-07-01T20:57:09.886Z
 ---
 
 ## 0169. Phase 2 Wrap-Up workflow — wrapup-pipeline.yaml, dev-wrap, dev-wrapall, --wrap flag

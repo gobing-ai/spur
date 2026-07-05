@@ -1,17 +1,16 @@
 ---
 template: standard
 schema_version: 1
-name: "Migrate rd3 engineering operations pack to sp"
+name: Migrate rd3 engineering operations pack to sp
 description: ""
 status: done
 type: task
 profile: standard
-feature_id: null
 parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
-created_at: "2026-06-29T23:34:46.101Z"
+created_at: 2026-06-29T23:34:46.101Z
 updated_at: 2026-06-29T23:55:13.117Z
 ---
 

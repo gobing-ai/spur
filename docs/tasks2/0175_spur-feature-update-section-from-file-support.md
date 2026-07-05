@@ -1,12 +1,13 @@
 ---
-schema_version: 1
-name: "spur feature update --section --from-file support"
-status: done
 template: feature-impl
-created_at: 2026-07-02T00:13:34.396Z
-updated_at: "2026-07-02T00:54:46.294Z"
+schema_version: 1
+name: spur feature update --section --from-file support
+status: done
+type: task
 feature_id: I
 parent_wbs: "0167"
+created_at: 2026-07-02T00:13:34.396Z
+updated_at: 2026-07-02T00:54:46.294Z
 ---
 
 ## 0175. spur feature update --section --from-file support

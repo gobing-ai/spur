@@ -1,17 +1,16 @@
 ---
 template: standard
 schema_version: 1
-name: "Absorb rd3 product management judgment into sp planning"
+name: Absorb rd3 product management judgment into sp planning
 description: ""
 status: done
 type: task
 profile: standard
-feature_id: null
 parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
-created_at: "2026-06-29T23:46:29.541Z"
+created_at: 2026-06-29T23:46:29.541Z
 updated_at: 2026-06-30T04:52:36.673Z
 ---
 

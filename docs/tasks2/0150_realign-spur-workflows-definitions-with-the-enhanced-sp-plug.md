@@ -1,7 +1,7 @@
 ---
 template: standard
 schema_version: 1
-name: "Realign .spur/workflows definitions with the enhanced sp plugin (SECU→SECUA, feature-dev delegation, stale copy re-sync)"
+name: Realign .spur/workflows definitions with the enhanced sp plugin (SECU→SECUA, feature-dev delegation, stale copy re-sync)
 description: ""
 status: done
 type: task
@@ -11,7 +11,7 @@ parent_wbs: null
 priority: P1
 tags: []
 dependencies: []
-created_at: "2026-06-29T04:56:01.854Z"
+created_at: 2026-06-29T04:56:01.854Z
 updated_at: 2026-06-29T05:30:17.718Z
 ---
 

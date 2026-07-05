@@ -6,13 +6,12 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: null
 parent_wbs: "0176"
 priority: P2
 tags: []
 dependencies: []
-created_at: "2026-07-02T06:29:12.249Z"
-updated_at: "2026-07-03T05:35:17.613Z"
+created_at: 2026-07-02T06:29:12.249Z
+updated_at: 2026-07-03T05:35:17.613Z
 ---
 
 ## 0178. 0176 Wave B: decomposition wiring and parent readiness

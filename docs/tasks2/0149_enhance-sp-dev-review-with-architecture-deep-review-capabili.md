@@ -1,17 +1,17 @@
 ---
+template: review
 schema_version: 1
-name: "Enhance sp:dev-review with architecture/deep-review capability"
+name: Enhance sp:dev-review with architecture/deep-review capability
 description: ""
 status: done
-type: review
-template: review
+type: task
 profile: standard
 feature_id: H3
 parent_wbs: null
 priority: P2
-tags: ["review"]
+tags: [review]
 dependencies: []
-created_at: "2026-06-29T00:28:36.096Z"
+created_at: 2026-06-29T00:28:36.096Z
 updated_at: 2026-06-29T00:54:22.817Z
 ---
 

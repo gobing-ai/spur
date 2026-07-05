@@ -9,10 +9,10 @@ profile: standard
 feature_id: G2
 parent_wbs: null
 priority: P2
-tags: ["approach-c", "collaboration", "server", "cli"]
+tags: [approach-c,collaboration,server,cli]
 dependencies: []
-created_at: "2026-07-03T23:35:28.258Z"
-updated_at: "2026-07-04T04:13:23.928Z"
+created_at: 2026-07-03T23:35:28.258Z
+updated_at: 2026-07-04T04:13:23.928Z
 ---
 
 ## 0195. Team process supervision: autostart at serve, attach/detach stdio streams, process registry

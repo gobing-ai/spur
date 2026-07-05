@@ -6,13 +6,12 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: null
 parent_wbs: "0176"
 priority: P1
 tags: []
 dependencies: []
-created_at: "2026-07-02T06:29:12.247Z"
-updated_at: "2026-07-02T13:56:14.155Z"
+created_at: 2026-07-02T06:29:12.247Z
+updated_at: 2026-07-02T13:56:14.155Z
 ---
 
 ## 0177. 0176 Wave A: workflow correctness hardening

@@ -6,13 +6,12 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: null
 parent_wbs: "0176"
 priority: P2
 tags: []
 dependencies: []
-created_at: "2026-07-02T06:29:12.250Z"
-updated_at: "2026-07-02T22:20:55.951Z"
+created_at: 2026-07-02T06:29:12.250Z
+updated_at: 2026-07-02T22:20:55.951Z
 ---
 
 ## 0180. 0176 Wave D: prompt slimming and pipeline consolidation

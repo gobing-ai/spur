@@ -1,17 +1,16 @@
 ---
 template: issue
 schema_version: 1
-name: "F3 — eliminate implement-step half-state (backlog→wip before code written)"
+name: F3 — eliminate implement-step half-state (backlog→wip before code written)
 description: ""
 status: done
-type: issue
+type: task
 profile: standard
-feature_id: null
 parent_wbs: "0130"
 priority: P2
-tags: ["bug"]
+tags: [bug]
 dependencies: []
-created_at: "2026-06-27T07:03:28.262Z"
+created_at: 2026-06-27T07:03:28.262Z
 updated_at: 2026-06-27T15:27:00.669Z
 ---
 

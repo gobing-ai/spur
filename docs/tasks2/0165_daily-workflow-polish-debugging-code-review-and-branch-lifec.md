@@ -1,18 +1,17 @@
 ---
 template: feature-impl
 schema_version: 1
-name: "Daily workflow polish — debugging, code review, and branch lifecycle skills"
+name: Daily workflow polish — debugging, code review, and branch lifecycle skills
 description: ""
 status: done
 type: task
 profile: standard
-feature_id: null
 parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
-created_at: "2026-06-30T22:36:50.555Z"
-updated_at: "2026-06-30T23:48:49.286Z"
+created_at: 2026-06-30T22:36:50.555Z
+updated_at: 2026-06-30T23:48:49.286Z
 ---
 
 ## 0165. Daily workflow polish — debugging, code review, and branch lifecycle skills
