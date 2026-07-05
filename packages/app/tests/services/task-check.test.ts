@@ -1217,8 +1217,8 @@ describe('TaskCheckService', () => {
             taskContent: content,
             features: { F1: featureFm('F1', 'active') },
             extraTasks: {
-                '0002': taskFm({ feature_id: 'F1', name: 'Dep 1' }),
-                '0003': taskFm({ feature_id: 'F1', name: 'Dep 2' }),
+                '0002': taskFm({ feature_id: 'F1', name: 'Dep 1', status: 'done' }),
+                '0003': taskFm({ feature_id: 'F1', name: 'Dep 2', status: 'done' }),
             },
         });
         const svc = new TaskCheckService(fs, matrix);
@@ -1241,6 +1241,113 @@ describe('TaskCheckService', () => {
 
         const depWarnings = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('Dependency'));
         expect(depWarnings.length).toBeGreaterThan(0);
+    });
+
+    test('readiness: direct dependency must be done before the task is ready', async () => {
+        const content = taskFm({ feature_id: 'F1', dependencies: ['0002'] });
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: content,
+            features: { F1: featureFm('F1', 'active') },
+            extraTasks: {
+                '0002': taskFm({ feature_id: 'F1', name: 'Dep 1', status: 'wip' }),
+            },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        const readiness = result.findings.filter(
+            (f) => f.layer === 'L4' && f.message.includes('Prerequisite 0002 is wip'),
+        );
+        expect(readiness).toHaveLength(1);
+    });
+
+    test('readiness: transitive dependency status is surfaced', async () => {
+        const content = taskFm({ feature_id: 'F1', dependencies: ['0002'] });
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: content,
+            features: { F1: featureFm('F1', 'active') },
+            extraTasks: {
+                '0002': taskFm({ feature_id: 'F1', name: 'Dep 1', status: 'done', dependencies: ['0003'] }),
+                '0003': taskFm({ feature_id: 'F1', name: 'Dep 2', status: 'todo' }),
+            },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        const readiness = result.findings.filter(
+            (f) => f.layer === 'L4' && f.message.includes('Transitive prerequisite 0003 is todo'),
+        );
+        expect(readiness).toHaveLength(1);
+    });
+
+    test('readiness: prose dependency must be mirrored in frontmatter dependencies', async () => {
+        const content = [
+            taskFm({ feature_id: 'F1' }),
+            '',
+            '### Requirements',
+            '',
+            'R1. This task depends on 0002 before implementation.',
+        ].join('\n');
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: content,
+            features: { F1: featureFm('F1', 'active') },
+            extraTasks: { '0002': taskFm({ feature_id: 'F1', name: 'Dep 1', status: 'done' }) },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        const prose = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('not mirrored'));
+        expect(prose).toHaveLength(1);
+        expect(prose[0]?.section).toBe('Requirements');
+    });
+
+    test('readiness: gate language is surfaced as a prerequisite advisory', async () => {
+        const content = [
+            taskFm({ feature_id: 'F1' }),
+            '',
+            '### Design',
+            '',
+            'GATED on operator approval after the design doc is reviewed.',
+        ].join('\n');
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: content,
+            features: { F1: featureFm('F1', 'active') },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        const gate = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('gate language'));
+        expect(gate).toHaveLength(1);
+        expect(gate[0]?.section).toBe('Design');
+    });
+
+    test('readiness: blocked status reports not-ready state', async () => {
+        const content = taskFm({ feature_id: 'F1', status: 'blocked' });
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: content,
+            features: { F1: featureFm('F1', 'active') },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        const blocked = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('is blocked'));
+        expect(blocked).toHaveLength(1);
+    });
+
+    test('readiness: dependency cycle is reported instead of recursing forever', async () => {
+        const content = taskFm({ feature_id: 'F1', dependencies: ['0002'] });
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: content,
+            features: { F1: featureFm('F1', 'active') },
+            extraTasks: {
+                '0002': taskFm({ feature_id: 'F1', name: 'Dep 1', status: 'done', dependencies: ['0001'] }),
+            },
+        });
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+
+        const cycle = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('cycle detected'));
+        expect(cycle).toHaveLength(1);
     });
 
     test('L4: --strict elevates feature_id done error (already error, stays error)', async () => {

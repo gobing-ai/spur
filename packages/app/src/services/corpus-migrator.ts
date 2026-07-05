@@ -90,6 +90,7 @@ const PRIORITY_MAP: Readonly<Record<string, string>> = {
 
 /** Canonical frontmatter field order for deterministic output. */
 const FIELD_ORDER = [
+    'template',
     'schema_version',
     'name',
     'description',
@@ -104,6 +105,10 @@ const FIELD_ORDER = [
     'created_at',
     'updated_at',
 ] as const;
+
+// Keys where `null` is a meaningful value (explicit "no parent" vs field-absent).
+// These must round-trip as `null` rather than be dropped by the serializer.
+const NULL_PRESERVING_KEYS = new Set(['parent_wbs']);
 
 // ── M-rule transforms (pure functions) ───────────────────────────────────────
 
@@ -175,6 +180,11 @@ export function applyM3(data: Record<string, unknown>, flags: MigrationFlag[]): 
 export function applyM4(data: Record<string, unknown>): void {
     delete data.impl_progress;
     delete data.folder;
+    // A bare `description:` (no value) round-trips through YAML as `null`; the schema
+    // requires a string. Coerce to empty string to preserve the "explicit empty" intent.
+    if (data.description === null) {
+        data.description = '';
+    }
     if (data.description !== undefined && data.name !== undefined && String(data.description) === String(data.name)) {
         delete data.description;
     }
@@ -191,7 +201,13 @@ export function applyM4(data: Record<string, unknown>): void {
  * Unresolvable values are reported and dropped.
  */
 export function applyM5(data: Record<string, unknown>, wbsFromFile: string, flags: MigrationFlag[]): void {
-    if (data.parent_wbs !== undefined) return; // already canonical
+    // Coerce an existing numeric `parent_wbs` (e.g. `90` from a prior tool) to the
+    // canonical zero-padded WBS string (`0090`). The schema requires `string | null`.
+    if (typeof data.parent_wbs === 'number' && Number.isFinite(data.parent_wbs)) {
+        data.parent_wbs = String(data.parent_wbs).padStart(4, '0');
+    }
+
+    if (data.parent_wbs !== undefined && data.parent_wbs !== null) return; // already canonical
 
     let resolved: string | undefined;
 
@@ -353,12 +369,20 @@ export function serializeFrontmatter(data: Record<string, unknown>): string {
     for (const key of FIELD_ORDER) {
         if (!(key in data)) continue;
         const value = data[key];
-        if (value === undefined || value === null) continue;
+        if (value === undefined) continue;
+        // `null` is dropped except for keys where it's a meaningful explicit value.
+        if (value === null && !NULL_PRESERVING_KEYS.has(key)) continue;
 
-        if (Array.isArray(value)) {
-            if (value.length === 0) continue;
-            const items = value.map((v) => yamlScalar(v)).join(',');
-            lines.push(`${key}: [${items}]`);
+        if (value === null) {
+            lines.push(`${key}: null`);
+        } else if (Array.isArray(value)) {
+            if (value.length === 0) {
+                // Preserve explicit empty arrays — distinct from field-absent (e.g. `dependencies: []`).
+                lines.push(`${key}: []`);
+            } else {
+                const items = value.map((v) => yamlScalar(v)).join(',');
+                lines.push(`${key}: [${items}]`);
+            }
         } else if (typeof value !== 'object') {
             // Scalars only. No schema field is object-typed (M4 drops `impl_progress`),
             // so an object here would be a bug upstream — skip rather than emit broken YAML.
@@ -373,10 +397,27 @@ export function serializeFrontmatter(data: Record<string, unknown>): string {
 
 /** Format a scalar value for YAML output. */
 function yamlScalar(value: unknown): string {
+    // Numbers (e.g. `schema_version: 1`) emit bare so they re-parse as numbers.
+    if (typeof value === 'number') return String(value);
+
     const str = String(value);
-    // Quote only when YAML flow-safety demands it: `: ` (colon-space), leading `#`,
-    // leading/trailing whitespace. Plain colons in timestamps (T00:00:00) are safe.
-    if (str.includes(': ') || str.startsWith('#') || str.startsWith(' ') || str.endsWith(' ')) {
+    // Quote strings when YAML would reinterpret them on re-parse:
+    // - empty string (bare parses as null)
+    // - all-digit (especially leading-zero WBS IDs like `0195` — bare parses as number 195)
+    // - YAML 1.1 bool-looking words (yes/no/on/off/true/false/null)
+    // - `: ` (colon-space), leading `#`, leading/trailing whitespace (flow-safety)
+    // Plain colons in timestamps (T00:00:00) are safe and stay unquoted.
+    const looksNumeric = /^\d+$/.test(str);
+    const looksBoolish = /^(yes|no|on|off|true|false|null)$/i.test(str);
+    if (
+        str === '' ||
+        looksNumeric ||
+        looksBoolish ||
+        str.includes(': ') ||
+        str.startsWith('#') ||
+        str.startsWith(' ') ||
+        str.endsWith(' ')
+    ) {
         return JSON.stringify(str);
     }
     return str;

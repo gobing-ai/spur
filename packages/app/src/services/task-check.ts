@@ -42,6 +42,12 @@ export interface CheckResult {
     pass: boolean;
 }
 
+interface TaskSnapshot {
+    wbs: string;
+    status: string;
+    dependencies: string[];
+}
+
 /**
  * A section body is a placeholder when, after stripping HTML guidance comments
  * (`<!-- … -->`) and blockquote `> TBD`-style markers, nothing substantive
@@ -208,6 +214,12 @@ export class TaskCheckService extends PlanningCheckService {
         // ── L4 roll-up (0121, R1–R3): parent↔child status drift + roster presence.
         // Inert unless one or more sibling tasks declare parent_wbs == this wbs.
         await this.runL4Rollup(doc, wbs, status, findings, tasksDir);
+
+        // ── L4 readiness (0211/R4): dependencies and gate-like prose are prerequisites.
+        // Terminal tasks are completion records, not readiness candidates.
+        if (status !== 'done' && status !== 'cancelled') {
+            await this.runL4Readiness(doc, fm, wbs, status, findings, tasksDir);
+        }
 
         return { wbs, ...this.summarizeWithStatus(status, findings, strict) };
     }
@@ -505,6 +517,147 @@ export class TaskCheckService extends PlanningCheckService {
     private hasSubtaskRoster(planBody: string, kids: { wbs: string }[]): boolean {
         if (!/\|/.test(planBody)) return false; // no table at all
         return kids.some((c) => planBody.includes(c.wbs));
+    }
+
+    private async runL4Readiness(
+        doc: MarkdownDocument,
+        fm: Record<string, unknown>,
+        wbs: string,
+        status: string,
+        findings: CheckFindings[],
+        tasksDir: string,
+    ): Promise<void> {
+        if (status === 'blocked') {
+            findings.push({
+                layer: 'L4',
+                severity: 'warning',
+                section: '',
+                message: `Task ${wbs} is blocked — readiness is false until the blocker is resolved or explicitly forced`,
+            });
+        }
+
+        const declaredDeps = this.extractDependencyWbs(fm.dependencies);
+        const proseDeps = this.extractProsePrerequisites(doc);
+        for (const dep of proseDeps) {
+            if (!declaredDeps.includes(dep.wbs)) {
+                findings.push({
+                    layer: 'L4',
+                    severity: 'warning',
+                    section: dep.section,
+                    message: `Prose prerequisite ${dep.wbs} is not mirrored in frontmatter dependencies[]`,
+                });
+            }
+        }
+
+        const directDeps = [...new Set([...declaredDeps, ...proseDeps.map((d) => d.wbs)])].filter((dep) => dep !== wbs);
+        for (const depWbs of directDeps) {
+            await this.checkDependencyReadiness(depWbs, wbs, findings, tasksDir, new Set([wbs]), false);
+        }
+
+        this.checkGateLanguage(doc, findings);
+    }
+
+    private extractDependencyWbs(raw: unknown): string[] {
+        if (!Array.isArray(raw)) return [];
+        const deps: string[] = [];
+        for (const item of raw) {
+            if (typeof item !== 'string') continue;
+            const match = /^(\d{4})/.exec(item.trim());
+            if (match?.[1] !== undefined) deps.push(match[1]);
+        }
+        return deps;
+    }
+
+    private extractProsePrerequisites(doc: MarkdownDocument): { wbs: string; section: string }[] {
+        const refs: { wbs: string; section: string }[] = [];
+        for (const section of ['Background', 'Requirements', 'Design', 'Acceptance Criteria', 'Plan']) {
+            const body = doc.getSection(section);
+            if (body === null) continue;
+            for (const line of body.split('\n')) {
+                const isPrereq =
+                    /\b(depends on|gated on|blocked by|after|requires|waiting for|merged|approved|approval|HITL)\b/i.test(
+                        line,
+                    ) || /\b(pre-gate|post-gate|content-gate|capstone)\b/i.test(line);
+                if (!isPrereq) continue;
+                for (const match of line.matchAll(/\b(\d{4})\b/g)) {
+                    const wbs = match[1];
+                    if (wbs !== undefined) refs.push({ wbs, section });
+                }
+            }
+        }
+        return refs;
+    }
+
+    private async checkDependencyReadiness(
+        depWbs: string,
+        rootWbs: string,
+        findings: CheckFindings[],
+        tasksDir: string,
+        seen: Set<string>,
+        transitive: boolean,
+    ): Promise<void> {
+        if (seen.has(depWbs)) {
+            findings.push({
+                layer: 'L4',
+                severity: 'warning',
+                section: '',
+                message: `Prerequisite cycle detected while checking ${rootWbs}: ${[...seen, depWbs].join(' -> ')}`,
+            });
+            return;
+        }
+
+        const dep = await this.readTaskSnapshot(tasksDir, depWbs);
+        if (dep === null) return;
+
+        if (dep.status !== 'done') {
+            findings.push({
+                layer: 'L4',
+                severity: 'warning',
+                section: '',
+                message: `${transitive ? 'Transitive prerequisite' : 'Prerequisite'} ${depWbs} is ${dep.status}; task ${rootWbs} is not ready until it is done`,
+            });
+        }
+
+        const nextSeen = new Set(seen);
+        nextSeen.add(depWbs);
+        for (const childDep of dep.dependencies) {
+            await this.checkDependencyReadiness(childDep, rootWbs, findings, tasksDir, nextSeen, true);
+        }
+    }
+
+    private checkGateLanguage(doc: MarkdownDocument, findings: CheckFindings[]): void {
+        for (const section of ['Background', 'Requirements', 'Design', 'Acceptance Criteria', 'Plan']) {
+            const body = doc.getSection(section);
+            if (body === null) continue;
+            if (
+                /\b(HITL|human[- ]in[- ]the[- ]loop|approval|approved|merge event|merged|content-gate|GATED|capstone)\b/i.test(
+                    body,
+                )
+            ) {
+                findings.push({
+                    layer: 'L4',
+                    severity: 'warning',
+                    section,
+                    message: `${section} contains gate language; model the gate as a frontmatter dependency or verify it before treating the task as ready`,
+                });
+            }
+        }
+    }
+
+    private async readTaskSnapshot(tasksDir: string, wbs: string): Promise<TaskSnapshot | null> {
+        const path = await this.findTaskFile(tasksDir, wbs);
+        if (path === null) return null;
+        try {
+            const raw = await this.fs.readFile(path);
+            const fm = MarkdownDocument.parse(raw, 'task').frontmatterData ?? {};
+            return {
+                wbs,
+                status: (fm.status as string | undefined) ?? 'backlog',
+                dependencies: this.extractDependencyWbs(fm.dependencies),
+            };
+        } catch {
+            return null;
+        }
     }
 
     /**

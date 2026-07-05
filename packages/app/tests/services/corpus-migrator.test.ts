@@ -534,6 +534,71 @@ describe('serializeFrontmatter', () => {
         const result = serializeFrontmatter(data);
         expect(result).toContain('tags: [kernel,cli]');
     });
+
+    test('preserves template frontmatter key (drives task-check variant)', () => {
+        // `template` selects the task-check section-layout variant (task-check.ts);
+        // dropping it silently flips every feature-impl task to the default variant.
+        const data = {
+            template: 'feature-impl',
+            schema_version: 1,
+            name: 'Test',
+            status: 'todo',
+            created_at: '2026-05-01T00:00:00.000Z',
+            updated_at: '2026-05-01T00:00:00.000Z',
+        };
+        const result = serializeFrontmatter(data);
+        expect(result).toContain('template: feature-impl');
+    });
+
+    test('preserves parent_wbs: null (explicit no-parent vs field-absent)', () => {
+        // Top-level tasks carry `parent_wbs: null` to mark "no parent" explicitly;
+        // absence is ambiguous. null must round-trip for this key.
+        const data = {
+            schema_version: 1,
+            name: 'Top-level',
+            status: 'todo',
+            parent_wbs: null,
+            created_at: '2026-05-01T00:00:00.000Z',
+            updated_at: '2026-05-01T00:00:00.000Z',
+        };
+        const result = serializeFrontmatter(data);
+        expect(result).toContain('parent_wbs: null');
+    });
+
+    test('preserves explicit empty dependencies array', () => {
+        // `dependencies: []` is an explicit "no deps" marker, distinct from a
+        // missing key. Empty arrays must round-trip rather than be dropped.
+        const data = {
+            schema_version: 1,
+            name: 'Test',
+            status: 'todo',
+            dependencies: [],
+            created_at: '2026-05-01T00:00:00.000Z',
+            updated_at: '2026-05-01T00:00:00.000Z',
+        };
+        const result = serializeFrontmatter(data);
+        expect(result).toContain('dependencies: []');
+    });
+
+    test('quotes WBS-style strings so YAML re-parses them as strings (round-trip)', () => {
+        // A bare `parent_wbs: 0195` re-parses as the number 195, breaking the schema's
+        // `string | null` contract. Leading-zero WBS IDs must be quoted on output.
+        const data = {
+            schema_version: 1,
+            name: 'Sub-task',
+            status: 'todo',
+            parent_wbs: '0195',
+            dependencies: ['0090', '0091'],
+            created_at: '2026-05-01T00:00:00.000Z',
+            updated_at: '2026-05-01T00:00:00.000Z',
+        };
+        const result = serializeFrontmatter(data);
+        expect(result).toContain('parent_wbs: "0195"');
+        expect(result).toContain('dependencies: ["0090","0091"]');
+        // Real numbers stay bare (schema_version is `z.literal(1)`, a number).
+        expect(result).toContain('schema_version: 1');
+        expect(result).not.toContain('schema_version: "1"');
+    });
 });
 
 // ── Integration: CorpusMigrator ─────────────────────────────────────────────
@@ -636,7 +701,8 @@ describe('CorpusMigrator integration', () => {
         expect(output).not.toContain('preset:');
         expect(output).toContain('priority: P2');
         expect(output).toContain('tags: [kernel,cli,wave-5]');
-        expect(output).toContain('dependencies: [0090,0091]');
+        // WBS-style strings are quoted so YAML re-parses them as strings, not numbers.
+        expect(output).toContain('dependencies: ["0090","0091"]');
     });
 
     test('migrates parent_id convention to parent_wbs', async () => {
@@ -648,7 +714,8 @@ describe('CorpusMigrator integration', () => {
         await migrator.migrate();
 
         const output = readFileSync(join(dir, '0051_Sub-task_with_parent_id.md'), 'utf-8');
-        expect(output).toContain('parent_wbs: 0050');
+        // WBS IDs are quoted to survive YAML round-trip as strings.
+        expect(output).toContain('parent_wbs: "0050"');
         // Check frontmatter has no parent_id key (the body prose title is fine)
         const fmBlock = output.split('---')[1] ?? '';
         expect(fmBlock).not.toContain('parent_id');
@@ -663,7 +730,7 @@ describe('CorpusMigrator integration', () => {
         await migrator.migrate();
 
         const output = readFileSync(join(dir, '0140_0139.A_Refactor_parent_task.md'), 'utf-8');
-        expect(output).toContain('parent_wbs: 0139');
+        expect(output).toContain('parent_wbs: "0139"');
     });
 
     test('skips files with no frontmatter', async () => {

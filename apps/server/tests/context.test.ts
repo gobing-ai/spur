@@ -241,6 +241,29 @@ describe('createServerContext', () => {
         expect(stats.pending).toBe(0);
     });
 
+    test('queueConsumer() throws when the job queue is disabled', async () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
+
+        await expect(ctx.queueConsumer()).rejects.toThrow('queueConsumer is not configured');
+    });
+
+    test('queueConsumer() builds and caches the DBQueueConsumer when enabled', async () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, {
+            cwd: '/tmp/test',
+            fs: testFs,
+            dbUrl: ':memory:',
+            jobQueueEnabled: true,
+        });
+
+        const c1 = await ctx.queueConsumer();
+        const c2 = await ctx.queueConsumer();
+        expect(c1).toBe(c2);
+        expect(typeof c1.register).toBe('function');
+        expect(typeof c1.processOnce).toBe('function');
+    });
+
     test('scheduler() throws when disabled (default)', () => {
         const appRt = makeAppRt();
         const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });

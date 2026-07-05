@@ -14,6 +14,13 @@ describe('PLANNING_EVENT_NAMES', () => {
         expect(PLANNING_EVENT_NAMES).toContain('feature.transitioned');
     });
 
+    test('includes queue and scheduler lifecycle events', () => {
+        expect(PLANNING_EVENT_NAMES).toContain('queue.job.enqueued');
+        expect(PLANNING_EVENT_NAMES).toContain('queue.job.completed');
+        expect(PLANNING_EVENT_NAMES).toContain('queue.job.failed');
+        expect(PLANNING_EVENT_NAMES).toContain('scheduler.job.executed');
+    });
+
     test('is a non-empty array of planning event names', () => {
         expect(Array.isArray(PLANNING_EVENT_NAMES)).toBe(true);
         expect(PLANNING_EVENT_NAMES.length).toBeGreaterThan(0);

@@ -47,7 +47,7 @@ Make the harness robust and clean before adding surface.
 
 **Exit:** clean-clone build works; CLI self-hosts its own gate; history/coverage paths covered.
 
-## Phase 1.5 — Planning Layer (rd3 migration) _(current — waves done, board cutover pending)_
+## Phase 1.5 — Planning Layer (rd3 migration) _(current — waves done, board cutover done)_
 
 Migrate the task/feature domain from `cc-agents/plugins/rd3` per ADR-020–023. Scope,
 per-item dispositions, and full wave contents live in
@@ -59,11 +59,10 @@ status only. Per ADR-023(3), Stage D designs everything collectively before the 
 - [x] **Wave 0 — Foundation** (schema, BDD validator, locking, lifecycle definitions, migrate tool)
 - [x] **Wave 1 — Task CLI** (`spur task`)
 - [x] **Wave 2 — Feature CLI** (`spur feature`)
-- [ ] **Wave 3 — Board** per Stage-D design; **A17 cutover gate** — the operator is never boardless.
-      The server/web design task (ADR-021.b) is now **designed** (2026-06-15): see the
-      **Server-Side Adjustment** programme below (groups S + W). The live Task Kanban board (W3)
-      replaces the generated `kanban.md` and unblocks the A17 cutover. Implementation is tracked as
-      the S/W waves below, not here.
+- [x] **Wave 3 — Board** per Stage-D design; **A17 cutover gate cleared** (2026-07-04, task 0192).
+      The live Task Kanban board (W3) is the daily driver; the generated `kanban.md` has been
+      retired and the live `docs/tasks2/` corpus was normalized via `spur task migrate`. The
+      server/web implementation lives in the **Server-Side Adjustment** programme below (groups S + W).
 - [x] **Wave 4 — Pipeline + execution** (planning skill, task-pipeline workflow, HITL continue)
 - [x] **Wave 5 — sp wrappers** (ADR-016-filtered)
 - [ ] **Wave 6 — cc-agents cleanup** (each item gated on its verified replacement)
@@ -71,7 +70,7 @@ status only. Per ADR-023(3), Stage D designs everything collectively before the 
 **Exit:** operator daily-drives the spur board; agents drive `spur task` across the 7 corpora;
 legacy `plugins/rd3` executable surface frozen.
 
-### Phase 1.5 — Server-Side Adjustment (server/web re-foundation) _(current — designed, awaiting impl)_
+### Phase 1.5 — Server-Side Adjustment (server/web re-foundation) _(current — implementing; core waves shipped)_
 
 Re-founds `apps/server` (Hono base API server, module system, task/feature modules) and `apps/web`
 (Astro static SPA: React + Tailwind v4 + daisyUI, 3-column board, Task Kanban) so Wave 3's board is
@@ -85,24 +84,25 @@ criteria, and wave sequencing are authoritative in
   `@gobing-ai/ts-runtime@0.3.19`; Spur catalog bumped to `^0.3.19`, gate green. S0/S1 unblocked.
   **D1 support in `ts-db` remains scoped out** this round (CF factory throws `D1NotConfiguredError`;
   Cloudflare path runs health + OpenAPI only; local Bun path carries full functionality).
-- [ ] **S0 wave — Server foundation**: S0 (`spur serve` launcher), S1 (middleware pipeline, graceful
+- [x] **S0 wave — Server foundation**: S0 (`spur serve` launcher), S1 (middleware pipeline, graceful
   shutdown, `ServerContext` + DB/FS/EventBus/JobQueue/Scheduler wiring), S2 (module system + health
-  reference module). *Gate: server boots, pipeline + module system proven.*
-- [ ] **W0 wave — Web foundation**: W1 (stack migration), W2 (3-column layout + `WebModule` system +
+  reference module). *Gate: server boots, pipeline + module system proven.* Shipped 2026-06.
+- [x] **W0 wave — Web foundation**: W1 (stack migration), W2 (3-column layout + `WebModule` system +
   React Router 7 + extended `rpc-client`), W5 (unified Vite dev server). *Gate: static SPA shell,
-  layout, module system proven; one-port dev. Can overlap S0 (needs only the health endpoint).*
-- [ ] **S1 wave — Server domain**: S3 (task + feature modules), S4 (contracts + output envelope +
+  layout, module system proven; one-port dev. Can overlap S0 (needs only the health endpoint).* Shipped 2026-06.
+- [x] **S1 wave — Server domain**: S3 (task + feature modules), S4 (contracts + output envelope +
   error mapping + `planningEventContract`), S5 (static asset serving). *Gate: task/feature API live,
-  contracts shipped, board served on one port.*
-- [ ] **W1 wave — Web module**: W3 (Task Kanban — proves the design end-to-end), W4 (theming /
+  contracts shipped, board served on one port.* Shipped 2026-07 (events/jobs/messages modules added).
+- [x] **W1 wave — Web module**: W3 (Task Kanban — proves the design end-to-end), W4 (theming /
   dark mode / responsive, P2). *Gate: Task Kanban functional end-to-end → satisfies Wave 3 board +
-  A17 cutover.*
+  A17 cutover.* Shipped 2026-07 (observability module added).
 - [ ] **Deferred — SSE live stream**: S6 (server SSE handler) + W6 (client subscription). Designed
   now (design §2.9), implementation gated on module-system stability and D1; board uses polling
   until then. `planningEventContract` ships with S4.
 
-**Exit:** `spur serve` launches a live Task Kanban board backed by the task/feature oRPC API; the
-board replaces `kanban.md` and clears the A17 cutover gate.
+**Exit (reached 2026-07-04):** `spur serve` launches a live Task Kanban board backed by the
+task/feature oRPC API; the board replaced `kanban.md` (retired in the A17 cutover, task 0192) and
+cleared the A17 cutover gate. The legacy `kanban.md` generator is removed.
 
 ## Phase 2 — Agent Execution & Run Model
 

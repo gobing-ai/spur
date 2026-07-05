@@ -582,11 +582,13 @@ export default function TaskDetail({ task, onTransition, onClose }: Props) {
                                 value={selectedChannel}
                                 onChange={(e) => setSelectedChannel(e.target.value)}
                             >
-                                {['claude', 'codex', 'pi', 'opencode', 'antigravity', 'openclaw'].map((ch) => (
-                                    <option key={ch} value={ch}>
-                                        {ch}
-                                    </option>
-                                ))}
+                                {['claude', 'codex', 'gemini', 'pi', 'opencode', 'antigravity', 'openclaw'].map(
+                                    (ch) => (
+                                        <option key={ch} value={ch}>
+                                            {ch}
+                                        </option>
+                                    ),
+                                )}
                             </Select>
                             {/* biome-ignore lint/a11y/noLabelWithoutControl: Checkbox renders an input inside the label */}
                             <label className="flex items-center gap-2 cursor-pointer">

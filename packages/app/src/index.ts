@@ -43,6 +43,8 @@ export type {
     HistoryServiceContext,
 } from './services/history-service';
 export { HistoryService } from './services/history-service';
+export type { JobWorkerConsumer, JobWorkerServiceOptions } from './services/job-worker-service';
+export { JobHandlerRegistry, JobWorkerService } from './services/job-worker-service';
 export { BusPlanningEventEmitter, type PlanningEventMap } from './services/planning-events';
 export type {
     CapturingEmitter,
@@ -97,13 +99,14 @@ export type {
     FolderConfig,
     ParentWireResult,
     TaskActionJob,
+    TaskActionName,
     TaskActionResult,
     TaskFoldersConfig,
     TaskServiceContext,
     TaskShowResult,
     TaskSummary,
 } from './services/task-service';
-export { TaskService } from './services/task-service';
+export { TASK_ACTION_COMMANDS, TaskService } from './services/task-service';
 export type { VerdictResult } from './services/task-verdict';
 export { deriveVerdict } from './services/task-verdict';
 export type {

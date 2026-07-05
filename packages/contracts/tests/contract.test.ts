@@ -222,13 +222,19 @@ describe('task contract routes', () => {
     });
 
     test('action input validates wbs and supported action', () => {
-        const result = taskActionInputSchema.parse({ wbs: '0001', action: 'run' });
+        const result = taskActionInputSchema.parse({ wbs: '0001', action: 'run', channel: 'codex', skipDeps: true });
         expect(result.wbs).toBe('0001');
         expect(result.action).toBe('run');
+        expect(result.channel).toBe('codex');
+        expect(result.skipDeps).toBe(true);
     });
 
     test('action input rejects unsupported action', () => {
         expect(() => taskActionInputSchema.parse({ wbs: '0001', action: 'unknown' })).toThrow();
+    });
+
+    test('action input rejects unsupported channel', () => {
+        expect(() => taskActionInputSchema.parse({ wbs: '0001', action: 'run', channel: 'unknown' })).toThrow();
     });
 
     test('action input rejects invalid wbs', () => {

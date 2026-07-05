@@ -64,13 +64,13 @@ the step via `spur agent run` instead. The default never shells out.
 
 ## Workflow
 
-1. **Load task** → Resolve the WBS to its file with `spur task path <wbs>` (or read a given path directly); `spur task show`/`check` also accept a bare WBS. The `spur task resolve` verb is the **inverse** (file-path → owning WBS), not the WBS→file lookup — don't use it here.
+1. **Load task** → Resolve the WBS to its file with `spur task path <wbs>` (or read a given path directly); `spur task show`/`check` also accept a bare WBS. The `spur task resolve` verb is the **inverse** (file-path → owning WBS), not the WBS→file lookup — don't use it here. Some file-read surfaces truncate long sections around 768 chars for display; `spur task check` reads the file directly, so treat visible truncation markers as display artifacts unless the file itself is truncated.
 2. **Analyze** → Check content for gaps and ambiguities against the focus bundle.
 3. **Question** → Generate targeted Q&A based on the expanded domain hints.
-4. **Synthesize** → Update Background, Requirements, and Constraints sections via `spur task update --section <name> --from-file <path>`.
-   - **Under `--auto`: pre-synthesis skip gate.** Before invoking synthesis, run `spur task check <wbs> --json`. Filter the findings to the target sections only ({Background, Requirements, Plan}). If there are **no L3 findings for those sections** (regardless of whether the overall exit code is 0 — other sections' findings do not count), emit a SKIP result and stop — do not invoke synthesis:
+4. **Synthesize** → Update Background, Requirements, Design, Acceptance Criteria, and Constraints sections via `spur task update --section <name> --from-file <path>`.
+   - **Under `--auto`: pre-synthesis skip gate.** Before invoking synthesis, run `spur task check <wbs> --json`. Filter the findings to the target sections only ({Background, Requirements, Plan, Design, Acceptance Criteria}). If there are **no L3 findings for those sections** (regardless of whether the overall exit code is 0 — other sections' findings do not count), emit a SKIP result and stop — do not invoke synthesis:
      ```
-     SKIP — sections already meet L3: sections-considered=[Background, Requirements, Plan], reason="no L3 findings for target sections" (N L4 advisory: <labels>)
+     SKIP — sections already meet L3: sections-considered=[Background, Requirements, Plan, Design, Acceptance Criteria], reason="no L3 findings for target sections" (N L4 advisory: <labels>)
      ```
      The `(N L4 advisory: <labels>)` suffix is emitted when `spur task check` returned ≥1 L4 finding — list each L4 finding's one-line label. Omit the suffix when there are zero L4 findings. L4 advisories do not block the SKIP.
      A SKIP is the normal outcome for a well-specified task. It is not a failure. Under `--auto`, only invoke synthesis when a real L3 gap exists in a **target section**. L3 findings on sections refine does not own (e.g. `### Review`) must not block the SKIP gate.
@@ -83,6 +83,7 @@ the step via `spur agent run` instead. The default never shells out.
      depends on a silently no-op or erroring guard.
      (No `--no-lifecycle`: when a transition does run, the chain honors the FSM so a real guard failure
      stops as review-pending.)
+   - Before invoking the chain, print: `→ refining <wbs>: SKIP, chaining to /sp:dev-run (will implement)`.
    - Invoke: `/sp:dev-run <wbs> --auto --next` — `--next` resolves to the implement step, which then
      chains to dev-verify. `--auto` propagates down the whole chain.
    - **SKIP short-circuits synthesis, not `--next`.** A step-4 SKIP (sections already at L3) means *no
@@ -91,6 +92,10 @@ the step via `spur agent run` instead. The default never shells out.
      "run the pipeline"; an operator who wanted refinement only should drop `--next`.
    - On a guard failure or refine failure: stop — surface the blocking reason, leave the task at its
      current status, do NOT invoke dev-run (review-pending stop).
+
+**Task-check note.** `spur task check` is status-keyed by design: a task reverted from `done` back to
+`todo` is checked as a `todo` task, not as historical completed work. Treat reverted tasks as current
+state unless a separate history-aware advisory exists.
 
 ## Examples
 

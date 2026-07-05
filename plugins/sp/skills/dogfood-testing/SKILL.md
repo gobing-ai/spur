@@ -50,7 +50,7 @@ The command forwards these via `$ARGUMENTS`:
 |----------|-------------|---------|
 | `testee` | What to exercise — a slash command, agent skill, or CLI invocation (positional, required). Quote it if it contains flags. | (required) |
 | `--agent <name\|auto>` | **Testee-scoped** agent: the agent the **testee** runs under, forwarded into the testee invocation. The driver (this skill) always runs in the current session. **Omit it** to forward nothing — the testee runs under its own default. See [§Testee-scoped agent](#testee-scoped-agent). | (omitted → forward nothing) |
-| `--max-retry <n>` | Fix attempts per failed step. The **default is `2`** (fix mode): apply `Edit`/`Write` fixes to the working tree, up to 2 attempts per step. Pass `--max-retry 0` for **observe-only** — monitor and report, never mutate the repo. | `2` |
+| `--max-retry <n>` | Fix attempts per failed step. The **default is `2`** (fix mode): apply `Edit`/`Write` fixes to the working tree, up to 2 attempts per step. For pipeline-driving testees, this flag is mandatory: pass `--max-retry 0` for **observe-only**, or `--max-retry N` to acknowledge fix-mode mutation risk. | `2` unless the testee is pipeline-driving |
 | `--save` | Write the report to `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md`. | off |
 | `--task` | File findings as a review-template task via `spur task create --template review`. | off |
 | `--full` | Include all severity findings (P1–P4). Default: P1+P2 only. | off |
@@ -58,12 +58,19 @@ The command forwards these via `$ARGUMENTS`:
 > ⚠️ **Repo-mutation warning.** The default is **fix mode (`--max-retry 2`)** — it applies
 > `Edit`/`Write` fixes to the working tree as it finds breakages. For a non-mutating run, opt into
 > **observe-only** with `--max-retry 0`: monitor and report, never touch files, full findings report
-> still produced. Reach for observe-only against an unfamiliar testee (or a pipeline-driving testee
-> that launches long, mutating runs) so it cannot mutate anything by accident; default fix mode
-> assumes you are dogfooding a testee you own and want fixed in place.
+> still produced. When the testee is pipeline-driving (`--next`, `run`, `runall`, `wrap`, or
+> `idea`), omission is ambiguous and MUST fail before planning with:
+> `⚠ pipeline-driving testee detected; pass --max-retry 0 (observe-only) or --max-retry N (fix mode, tree mutation acknowledged)`.
+> Explicit `--max-retry 0` and explicit `--max-retry N` both proceed.
 
 ## Phase 1 — Plan
 
+0. **Refuse ambiguous pipeline-driving testees.** Before deriving steps, inspect the raw `testee`
+   string. If it contains any of `--next`, ` run`, ` runall`, ` wrap`, or ` idea` and the dogfood
+   invocation did not explicitly pass `--max-retry`, exit non-zero with exactly:
+   `⚠ pipeline-driving testee detected; pass --max-retry 0 (observe-only) or --max-retry N (fix mode, tree mutation acknowledged)`.
+   Do not auto-substitute `--max-retry 0`: the driver retry budget does not constrain the testee's
+   own pipeline chain, which may still mutate through its own tools.
 1. **Resolve + classify** the testee: slash command (`/sp:...`), agent skill (`Skill(...)`), or shell
    CLI (`spur ...`, `bun run ...`). Everything before the first dogfood flag is the testee; if it
    carries its own flags, it must be quoted.

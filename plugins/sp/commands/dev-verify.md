@@ -25,7 +25,7 @@ pipeline completion gate.
 | Argument | Description | Default |
 |----------|-------------|---------|
 | `wbs` | Task WBS number (required, positional) | (required) |
-| `--agent <name\|auto>` | Spawn the verification under a specific agent. Omit (the default) → the verify pass runs under the configured default executor (`omp`). **Current-agent execution is not expressible** (subprocess FSM). | (configured default — `omp`) |
+| `--agent <name\|auto>` | Spawn the verification under a specific agent. *Pipeline surface* (invoked from `task-pipeline.yaml`'s `verify` step, already an `agent.run` subprocess): omit (the default) → the spawned step uses the configured default executor (`omp`); current-agent execution is not expressible there. *Standalone inline surface* (`/sp:dev-verify <wbs>` run directly): the Implementation below delegates via inline `Skill()`, which runs in the **current session** — omitting `--agent` here spawns nothing. | (pipeline: `omp`; standalone: current session) |
 | `--fix <strategy>` | Post-verdict repair: `none`, `blockers-first` (UNMET only), `all` (UNMET + PARTIAL + major findings) | `none` |
 | `--focus <lens>` | SECUA dimensions: `all`, `security`, `efficiency`, `correctness`, `usability`, `architecture`, or comma-separated | `all` |
 | `--bdd` | Strict BDD lens: require Gherkin scenarios in `## Acceptance Criteria` to map to executable or explicitly missing test evidence. AC checking itself is automatic when AC exists. | off |
@@ -56,11 +56,22 @@ explicit justified `N/A`.
 
 ### Agent override
 
-`--agent` is a **pipeline** command (per the two-surface contract in
-[cross-cutting.md](../skills/spur-dev/references/cross-cutting.md) § "Honor `--agent`"). The verify pass
-runs as a spawned step; the calling agent cannot block on itself, so "current agent" is **not
-expressible**. Omit the flag → the configured default executor (`omp`) runs the verification. An
-explicit `--agent <name>` or `--agent auto` spawns that agent instead.
+`--agent` behaves differently depending on which surface invokes `/sp:dev-verify` — the two-surface
+contract in [cross-cutting.md](../skills/spur-dev/references/cross-cutting.md) § "Honor `--agent`"
+classifies `dev-verify` as pipeline-surface, but that classification describes the *pipeline* path
+only; the standalone invocation is inline. Both are documented here so neither is misread as the
+other's default:
+
+- **Pipeline path** (`task-pipeline.yaml`'s `verify` state runs `agent.run` with
+  `input: /sp:dev-verify ${vars.wbs} --auto --fix all`): the whole step is already a spawned
+  subprocess. The calling agent cannot block on itself, so "current agent" is **not expressible**
+  here. Omit `--agent` → the configured default executor (`omp`) runs the step. An explicit
+  `--agent <name>` (via `vars.agent`) spawns that agent instead.
+- **Standalone path** (`/sp:dev-verify <wbs>` invoked directly, not via the pipeline): the
+  Implementation below delegates with an inline `Skill(skill="sp:code-verification", ...)` call,
+  which runs in the **current session** — omitting `--agent` spawns nothing. An explicit
+  `--agent <name>` or `--agent auto` on this path spawns that agent via `spur agent run` instead of
+  running inline (mirroring the inline-surface contract `dev-refine`/`dev-plan` already use).
 
 ## `--next` chain — the terminal link
 

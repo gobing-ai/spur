@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
 import type { ServerContext } from '../../../src/context';
 import { eventsModule, sendKeepalive } from '../../../src/modules/events';
+import { PLANNING_EVENT_NAMES } from '../../../src/modules/events/event-names';
 
 describe('eventsModule', () => {
     test('is a valid ServerModule with name "events"', () => {
@@ -140,17 +141,10 @@ describe('eventsModule', () => {
         await reader.read();
         await reader.cancel();
 
-        // After cancel, all 6 event handlers should be unsubscribed
-        expect(offCalls.length).toBe(6);
+        // After cancel, every registered event handler should be unsubscribed.
+        expect(offCalls.length).toBe(PLANNING_EVENT_NAMES.length);
         const offNames = offCalls.map((c) => c.name).sort();
-        expect(offNames).toEqual([
-            'feature.created',
-            'feature.transitioned',
-            'feature.updated',
-            'task.created',
-            'task.transitioned',
-            'task.updated',
-        ]);
+        expect(offNames).toEqual([...PLANNING_EVENT_NAMES].sort());
     });
 
     test('client disconnect (request abort) tears down subscriptions and closes the stream', async () => {
@@ -182,10 +176,10 @@ describe('eventsModule', () => {
         await reader.read();
         controller.abort();
 
-        // The stream closes cleanly (no error), and all 6 subscriptions are detached.
+        // The stream closes cleanly (no error), and all subscriptions are detached.
         const { done } = await reader.read();
         expect(done).toBe(true);
-        expect(offCalls.length).toBe(6);
+        expect(offCalls.length).toBe(PLANNING_EVENT_NAMES.length);
     });
 
     test('does not double-tear-down when both abort and cancel fire', async () => {
@@ -208,10 +202,10 @@ describe('eventsModule', () => {
         const reader = (res.body as ReadableStream<Uint8Array>).getReader();
         await reader.read();
 
-        // Abort then cancel — teardown is idempotent, so off() fires exactly 6 times total.
+        // Abort then cancel — teardown is idempotent, so off() fires exactly once per registered event.
         controller.abort();
         await reader.cancel();
-        expect(offCalls.length).toBe(6);
+        expect(offCalls.length).toBe(PLANNING_EVENT_NAMES.length);
     });
 });
 

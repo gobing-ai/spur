@@ -3,9 +3,49 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator';
 GlobalRegistrator.register();
 
 import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
-import { cleanup, fireEvent, render } from '@testing-library/react';
-import NewTaskPanel from '../../../src/modules/task-kanban/NewTaskPanel';
+import { act, cleanup, fireEvent, render } from '@testing-library/react';
+import type { ComponentType } from 'react';
 import { teardownHappyDom } from '../../happy-dom';
+
+interface MockEditorProps {
+    value?: string;
+    onChange?: (val?: string) => void;
+    textareaProps?: {
+        id?: string;
+        placeholder?: string;
+        disabled?: boolean;
+        'aria-label'?: string;
+    };
+}
+
+const editorOnChangeById = new Map<string, (val?: string) => void>();
+
+const MockMDEditor = Object.assign(
+    function MockEditor({ value, onChange, textareaProps }: MockEditorProps) {
+        if (textareaProps?.id && onChange) {
+            editorOnChangeById.set(textareaProps.id, onChange);
+        }
+        return (
+            <textarea
+                id={textareaProps?.id}
+                aria-label={textareaProps?.['aria-label'] ?? 'markdown editor'}
+                placeholder={textareaProps?.placeholder}
+                disabled={textareaProps?.disabled}
+                value={value ?? ''}
+                onChange={(e) => onChange?.((e.target as HTMLTextAreaElement).value)}
+            />
+        );
+    } as ComponentType<MockEditorProps>,
+    {
+        Markdown: function MockMarkdown({ source }: { source?: string }) {
+            return <div data-testid="markdown-preview">{source}</div>;
+        },
+    },
+);
+
+mock.module('@uiw/react-md-editor', () => ({ default: MockMDEditor }));
+
+const { default: NewTaskPanel } = await import('../../../src/modules/task-kanban/NewTaskPanel');
 
 // ── api stub ────────────────────────────────────────────────────────────────
 const createCalls: Array<{ title: string; folder?: string; template?: string }> = [];
@@ -35,6 +75,7 @@ afterEach(() => {
     cleanup();
     createCalls.length = 0;
     bodyCalls.length = 0;
+    editorOnChangeById.clear();
     createImpl = async () => ({ data: { wbs: '0009', filePath: 'a.md' } });
     bodyImpl = async () => ({ data: { wbs: '0009', filePath: 'a.md' } });
 });
@@ -52,12 +93,12 @@ function renderPanel(props: Partial<Parameters<typeof NewTaskPanel>[0]> = {}) {
 
 describe('NewTaskPanel', () => {
     test('R1 — renders Name input, Background/Requirements fields, and action buttons when open', () => {
-        const { getByLabelText, getByText } = renderPanel();
+        const { getByLabelText, getByPlaceholderText, getByText } = renderPanel();
 
         expect(getByText('New Task')).toBeDefined();
         expect(getByLabelText('Name *')).toBeDefined();
-        expect(getByLabelText(/Background/)).toBeDefined();
-        expect(getByLabelText(/Requirements/)).toBeDefined();
+        expect(getByPlaceholderText('Why this task exists…')).toBeDefined();
+        expect(getByPlaceholderText('What must be done…')).toBeDefined();
         expect(getByText('Create Task')).toBeDefined();
         expect(getByText('Cancel')).toBeDefined();
     });
@@ -162,18 +203,40 @@ describe('NewTaskPanel', () => {
         expect(input.type).toBe('text');
     });
 
-    test('Background textarea accepts markdown placeholder hint', () => {
+    test('R1 — Background markdown editor exposes the markdown placeholder hint', () => {
         const { getByPlaceholderText } = renderPanel();
 
         const textarea = getByPlaceholderText('Why this task exists…') as HTMLTextAreaElement;
         expect(textarea).toBeDefined();
     });
 
-    test('Requirements textarea accepts markdown placeholder hint', () => {
+    test('R1 — Requirements markdown editor exposes the markdown placeholder hint', () => {
         const { getByPlaceholderText } = renderPanel();
 
         const textarea = getByPlaceholderText('What must be done…') as HTMLTextAreaElement;
         expect(textarea).toBeDefined();
+    });
+
+    test('R1 — toggles Background from edit to live preview', () => {
+        const { getAllByRole, getByTestId } = renderPanel();
+
+        act(() => {
+            editorOnChangeById.get('new-task-background')?.('**context**');
+        });
+        const previewButton = getAllByRole('button', { name: 'Preview' })[0];
+        expect(previewButton).toBeDefined();
+        fireEvent.click(previewButton as HTMLElement);
+
+        expect(getByTestId('new-task-background-preview')).toBeDefined();
+        expect(getByTestId('markdown-preview').textContent).toBe('**context**');
+    });
+
+    test('R1 — includes a manual resize handle on the panel edge', () => {
+        const { getByTestId } = renderPanel();
+
+        const handle = getByTestId('resize-handle-h');
+        expect(handle).toBeDefined();
+        expect(handle.getAttribute('aria-orientation')).toBe('vertical');
     });
 
     test('panel uses role="dialog" for accessibility', () => {

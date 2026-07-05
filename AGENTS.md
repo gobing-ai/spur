@@ -177,7 +177,7 @@ spur task       path <wbs> [--json]
 spur task       check [<wbs>] [--strict] [--strict-core] [--json]
 spur task       verdict <wbs> [--from-answer <path>] [--json]
 spur task       record <wbs> [--verdict-file <path>] [--solution-from-diff] [--transition <status>] [--json]
-spur task       migrate                         # Reserved (A17) — board-cutover gate; not yet wired
+spur task       migrate [--dry-run] [--folder <path>] [--json]
 spur feature    create <name> [--parent <id>] [--json]
 spur feature    show <id> [--json]
 spur feature    update <id> [status] [--field <k> --value <v>] [--json]
@@ -197,12 +197,11 @@ Every command supports `--json` for machine consumption.
 > dispatches deep, functionally-decomposed competency skills (`sp:sys-architecture`,
 > `sp:spec-decomposition`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, with
 > `sp:spur-tdd` as a referenced discipline), plus a single `sp:spur-cli` CLI facade (one reference per
-> `spur` noun) and the `expert-spur` / `super-coder` subagents (ADR-028, task 0161). Two slices remain
-> deferred:
-> the **local board + launcher** (postponed behind the server/web design task, ADR-021.b), and the
-> **`spur task migrate`** verb (reserved A17 — one-time corpus normalization gated on the board
-> cutover, `04_DESIGN.md §7.1`; the `corpus-migrator` service is complete but the CLI verb is not
-> wired). Scope and per-item dispositions: `docs/plans/2026-06-10-rd3-migration-feature-list.md`;
+> `spur` noun) and the `expert-spur` / `super-coder` subagents (ADR-028, task 0161). One slice remains
+> deferred: the **local board + launcher** (postponed behind the server/web design task, ADR-021.b).
+> The **A17 live corpus apply** shipped 2026-07-04 (task 0192): `spur task migrate` is wired, the live
+> `docs/tasks2/` corpus is normalized, and `kanban.md` generation is retired (the web Task Kanban board
+> is the daily driver). Scope and per-item dispositions: `docs/plans/2026-06-10-rd3-migration-feature-list.md`;
 > mechanism: `docs/03_ARCHITECTURE.md §12`. Status tracking: `docs/05_FEATURES.md §9`.
 
 ## Verification gate (all must pass before "done")

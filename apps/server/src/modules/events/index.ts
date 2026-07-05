@@ -1,4 +1,3 @@
-import type { PlanningEventName } from '@gobing-ai/spur-app';
 import type { EventBus } from '@gobing-ai/ts-infra';
 import type { Hono } from 'hono';
 import type { ServerContext } from '../../context';
@@ -32,10 +31,10 @@ export const eventsModule: ServerModule = {
         if (!ctx) return;
 
         app.get('/api/events/planning', (c) => {
-            const bus: EventBus<Record<PlanningEventName, (event: unknown) => void>> = ctx.eventBus();
+            const bus: EventBus<Record<string, (event: unknown) => void>> = ctx.eventBus();
             const closed = { current: false };
             let heartbeatInterval: ReturnType<typeof setInterval> | undefined;
-            const handlers = new Map<PlanningEventName, (event: unknown) => void>();
+            const handlers = new Map<string, (event: unknown) => void>();
             // Fires when the client disconnects (tab close, navigation, EventSource recycle).
             const signal = c.req.raw.signal;
 

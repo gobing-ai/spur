@@ -13,7 +13,7 @@
 | `show <wbs>` | Show a task by WBS (frontmatter at top level under `--json`) |
 | `update <wbs> [status]` | Lifecycle transition, or `--section`/`--feature`/`--priority` mutation |
 | `list` | List tasks with optional filtering (status / parent / feature) |
-| `refresh` | Regenerate `kanban.md` from the task corpus (deterministic) |
+| `refresh` | Re-scan the task corpus and report counts (`kanban.md` retired — A17 cutover) |
 | `refresh-roster <wbs>` | Regenerate a parent's sub-task roster block inside its `## Plan` |
 | `batch-create` | Create many tasks from validated JSON (all-or-nothing) |
 | `record <wbs>` | Write Testing/Review from verify verdict; optional Solution backfill + status move |
@@ -21,7 +21,7 @@
 | `check [wbs]` | Validate a task file (or all tasks) through the four-layer check |
 | `resolve <file-path>` | Map a file path to its owning task WBS |
 | `path <wbs>` | Resolve a WBS to its absolute task file path |
-| `migrate` | **Reserved (A17)** — one-time corpus normalization, not yet wired |
+| `migrate` | Run the A17 task corpus normalization report/apply pass |
 
 ## spur task create
 
@@ -168,10 +168,11 @@ spur task refresh [options]
 | Flag | Description |
 |---|---|
 | `--folder <path>` | Custom tasks folder |
-| `--json` | Output machine-readable JSON (emits `kanban_path`) |
+| `--json` | Output machine-readable JSON (emits `{folders, tasks}`) |
 
-Regenerates `kanban.md` from the task corpus. Pure function, deterministic ordering — safe
-to run anytime.
+Re-scans the task corpus and reports folder/task counts. The generated `kanban.md` artifact
+was retired in the A17 cutover (task 0192) once the web Task Kanban board became the daily
+driver — this verb no longer writes any file.
 
 ## spur task refresh-roster
 
@@ -318,9 +319,20 @@ Resolve a WBS to its absolute task file path. The inverse of `spur task resolve`
 
 ## spur task migrate
 
-> **Reserved (A17).** One-time corpus normalization pass, gated on the board cutover
-> (`04_DESIGN.md §7.1`). Not yet wired in the CLI; the `corpus-migrator` service is complete
-> but the verb is reserved.
+```
+spur task migrate [options]
+```
+
+| Flag | Description |
+|---|---|
+| `--dry-run` | Produce the full report without writing files |
+| `--folder <path>` | Custom tasks folder |
+| `--json` | Output machine-readable JSON |
+
+Runs the A17 corpus normalization pass over the active task folder. Dry-run reports the same
+per-file changes without writing; apply writes through the corpus migrator's atomic write path.
+Idempotent: a second run over a migrated corpus is a no-op. The live `docs/tasks2/` corpus was
+migrated 2026-07-04 (task 0192); subsequent runs are no-ops.
 
 ## See Also
 

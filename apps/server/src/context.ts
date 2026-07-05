@@ -15,12 +15,18 @@ import {
 // entry of @gobing-ai/spur-config (no `yaml`/`node:fs`). This narrows the former inline-
 // literal exception to a "core import only" boundary (ADR-027, planning-folder-hardcode rule).
 import { DEFAULT_FEATURES_DIR, DEFAULT_TASKS_DIR } from '@gobing-ai/spur-config';
-import { createMigratedDbViaRuntime, type DbAdapter, dbHealthCheck, SystemEventDao } from '@gobing-ai/spur-domain';
+import {
+    createMigratedDbViaRuntime,
+    type DbAdapter,
+    dbHealthCheck,
+    type ServerQueueConsumer,
+    SystemEventDao,
+} from '@gobing-ai/spur-domain';
 import type { EventBus, JobQueue, SchedulerAdapter } from '@gobing-ai/ts-infra';
 import type { ApplicationRuntime } from '@gobing-ai/ts-infra/application';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 
-type PlanningEventMap = Record<string, (detail: PlanningEventType) => void>;
+type ServerEventMap = Record<string, (detail: PlanningEventType | unknown) => void>;
 
 // Schema-default planning folders, used when serve.ts passes no resolved folders
 // (e.g. pure Workers bootstrap with no FS). Sourced from the config SSOT, not inlined.
@@ -80,8 +86,8 @@ export interface ServerContext {
      */
     planningFolders(): PlanningFolders;
 
-    /** EventBus<PlanningEventMap> — pub/sub seam for SSE (S6) and planning events. */
-    eventBus(): EventBus<PlanningEventMap>;
+    /** EventBus<ServerEventMap> — pub/sub seam for SSE, planning, queue, and scheduler events. */
+    eventBus(): EventBus<ServerEventMap>;
 
     /**
      * Job queue for async work (history import, rule runs) — a `DBJobQueue` over
@@ -90,6 +96,12 @@ export interface ServerContext {
      * `NotConfiguredError` when disabled (the single-operator default).
      */
     jobQueue(): Promise<ServerJobQueue>;
+
+    /**
+     * Job worker consumer for the in-process Bun serve worker. Shares the same
+     * migrated DB and EventBus as {@link jobQueue}. Disabled with the queue.
+     */
+    queueConsumer(): Promise<ServerQueueConsumer<unknown>>;
 
     /**
      * Scheduler for periodic tasks (stale-lock cleanup, analytics) — a real
@@ -109,10 +121,10 @@ export interface CreateServerContextOptions {
     webDistPath?: string;
     dbUrl?: string;
     /** Pre-built EventBus from bootstrapper. Defaults to appRt.events. */
-    eventsBus?: EventBus<PlanningEventMap>;
+    eventsBus?: EventBus<ServerEventMap>;
     /** Pre-built SchedulerAdapter from bootstrapper. */
     scheduler?: ServerScheduler;
-    /** When true, jobQueue() returns a "not configured" stub. Default true. */
+    /** When true, jobQueue()/queueConsumer() are available. Default false. */
     jobQueueEnabled?: boolean;
     /**
      * Pre-resolved planning folders (phase folders) from `.spur/config.yaml`. The
@@ -144,7 +156,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
     const cwd = options.cwd;
     const fs = options.fs;
     const dbUrl = options.dbUrl ?? ':memory:';
-    const eventsBus = options.eventsBus ?? (appRt.events as unknown as EventBus<PlanningEventMap>);
+    const eventsBus = options.eventsBus ?? (appRt.events as unknown as EventBus<ServerEventMap>);
     const jobQueueEnabled = options.jobQueueEnabled ?? false;
     // Planning folders (phase folders) come pre-resolved from `.spur/config.yaml` via
     // serve.ts — never hardcoded here. Fall back to schema defaults when absent.
@@ -157,6 +169,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
     let teamSvc: TeamService | undefined;
     let systemEventDaoPromise: Promise<SystemEventDao> | undefined;
     let jobQueuePromise: Promise<ServerJobQueue> | undefined;
+    let queueConsumerPromise: Promise<ServerQueueConsumer<unknown>> | undefined;
 
     return {
         cwd,
@@ -220,7 +233,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
             return folders;
         },
 
-        eventBus(): EventBus<PlanningEventMap> {
+        eventBus(): EventBus<ServerEventMap> {
             return eventsBus;
         },
 
@@ -240,6 +253,18 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                 return createJobQueue(db, eventsBus);
             })();
             return jobQueuePromise;
+        },
+
+        async queueConsumer(): Promise<ServerQueueConsumer<unknown>> {
+            if (!jobQueueEnabled) {
+                throw new NotConfiguredError('queueConsumer');
+            }
+            queueConsumerPromise ??= (async () => {
+                const { createQueueConsumer } = await import('@gobing-ai/spur-domain');
+                const db = await this.getDb();
+                return createQueueConsumer(db, { events: eventsBus as never });
+            })();
+            return queueConsumerPromise;
         },
 
         scheduler(): ServerScheduler {

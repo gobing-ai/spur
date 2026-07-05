@@ -32,8 +32,8 @@ export function serverBootstrapConfig(env: Record<string, string | undefined>): 
         logging: { enabled: !isTest, level: (env.SPUR_LOG_LEVEL as LoggingOptions['level']) ?? 'info' },
         telemetry: { enabled: false },
         events: { enabled: true },
-        jobqueue: { enabled: false },
-        scheduler: { enabled: false },
+        jobqueue: { enabled: !isTest },
+        scheduler: { enabled: !isTest },
     };
 }
 /**

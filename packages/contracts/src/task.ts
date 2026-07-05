@@ -100,11 +100,25 @@ export const taskBodyUpdateResponseSchema = apiSuccessSchema(
     }),
 );
 
+/** Agent channels accepted by task workflow actions. */
+export const taskActionChannelSchema = z.enum([
+    'claude',
+    'codex',
+    'gemini',
+    'pi',
+    'opencode',
+    'antigravity',
+    'openclaw',
+]);
+
+/** Supported task workflow action names. */
+export const taskActionNameSchema = z.enum(['refine', 'plan', 'run', 'verify', 'decompose', 'evaluate']);
+
 /** Action input (POST /tasks/{wbs}/actions). */
 export const taskActionInputSchema = z.object({
     wbs: z.string().regex(/^\d{4}$/),
-    action: z.enum(['refine', 'plan', 'run', 'verify', 'decompose', 'evaluate']),
-    channel: z.string().optional(),
+    action: taskActionNameSchema,
+    channel: taskActionChannelSchema.optional(),
     skipDeps: z.boolean().optional(),
 });
 

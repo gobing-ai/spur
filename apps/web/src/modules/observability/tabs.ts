@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import InboxTab from './InboxTab';
+import JobsTab from './JobsTab';
 import SystemEventsTab from './SystemEventsTab';
 
 /**
@@ -22,4 +23,5 @@ export interface ObservabilityTab {
 export const OBSERVABILITY_TABS: readonly ObservabilityTab[] = [
     { id: 'system-events', label: 'System Events', component: SystemEventsTab },
     { id: 'inbox', label: 'Inbox Messages', component: InboxTab },
+    { id: 'jobs', label: 'Jobs', component: JobsTab },
 ];

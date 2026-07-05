@@ -6,8 +6,9 @@
  * golden paths, the `--json` envelope shape, and exit codes 0/1/2 (design §10, R5).
  */
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { rmSync } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
+import { existsSync, rmSync } from 'node:fs';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as configModule from '@gobing-ai/spur-config/loader';
 import { main } from '../../src/index';
@@ -50,6 +51,39 @@ function lastMessage(output: CapturedOutput): string {
     const msg = output.messages.at(-1);
     if (msg === undefined) throw new Error('no output captured');
     return msg;
+}
+
+const LEGACY_MIGRATION_TASK = `---
+name: "Legacy migration task"
+description: "Legacy migration task"
+status: Done
+created_at: 2026-05-09T04:48:47.680Z
+updated_at: 2026-05-11T00:00:00.000Z
+folder: docs/tasks
+type: task
+feature-id: F-1.4.1
+impl_progress:
+  planning: done
+---
+
+## 0050. Legacy migration task
+
+### Background
+
+This prose must survive migration unchanged.
+
+### Requirements
+
+R1. Keep body prose.
+`;
+
+async function seedMigrationCorpus(): Promise<{ root: string; tasksDir: string; taskPath: string }> {
+    const root = await mkdtemp(join(tmpdir(), 'spur-task-migrate-cli-'));
+    const tasksDir = join(root, 'docs', 'tasks');
+    await mkdir(tasksDir, { recursive: true });
+    const taskPath = join(tasksDir, '0050_Legacy_migration_task.md');
+    await writeFile(taskPath, LEGACY_MIGRATION_TASK);
+    return { root, tasksDir, taskPath };
 }
 
 describe('spur task CLI', () => {
@@ -387,32 +421,105 @@ describe('spur task CLI', () => {
     });
 
     // ── refresh ──
-    test('refresh regenerates kanban.md and exits 0', async () => {
+    test('refresh re-scans corpus and exits 0 (kanban.md retired — A17)', async () => {
         const output = createCapturedOutput();
         const exitCode = await main(['task', 'refresh'], { cwd, output });
         expect(exitCode).toBe(0);
-        expect(output.messages.join('')).toContain('kanban.md regenerated');
+        expect(output.messages.join('')).toContain('Corpus scanned');
+        // kanban.md is no longer generated.
+        expect(existsSync(join(cwd, 'docs', 'tasks', 'kanban.md'))).toBe(false);
     });
 
-    test('refresh --json returns kanban path', async () => {
+    test('refresh --json returns folder and task counts', async () => {
         const output = createCapturedOutput();
         const exitCode = await main(['task', 'refresh', '--json'], { cwd, output });
         expect(exitCode).toBe(0);
         const parsed = JSON.parse(lastMessage(output));
-        expect(parsed.kanban_path).toContain('kanban.md');
+        expect(parsed.folders).toBeGreaterThan(0);
+        expect(parsed.tasks).toBeGreaterThanOrEqual(0);
     });
 
     test('refresh --folder uses custom folder', async () => {
         const output = createCapturedOutput();
         const exitCode = await main(['task', 'refresh', '--folder', join(cwd, 'docs', 'tasks')], { cwd, output });
         expect(exitCode).toBe(0);
-        expect(output.messages.join('')).toContain('kanban.md regenerated');
+        expect(output.messages.join('')).toContain('Corpus scanned');
     });
 
     test('refresh with bad folder exits 1', async () => {
         const output = createCapturedOutput();
         const exitCode = await main(['task', 'refresh', '--folder', join(cwd, 'nonexistent')], { cwd, output });
         expect(exitCode).toBe(1);
+    });
+
+    // ── migrate ──
+    test('migrate --dry-run reports M1-M8 and writes nothing', async () => {
+        const { root, tasksDir, taskPath } = await seedMigrationCorpus();
+        try {
+            const before = await readFile(taskPath, 'utf8');
+            const output = createCapturedOutput();
+            const exitCode = await main(['task', 'migrate', '--dry-run', '--folder', tasksDir], { cwd: root, output });
+
+            expect(exitCode).toBe(0);
+            expect(await readFile(taskPath, 'utf8')).toBe(before);
+            const text = output.messages.join('\n');
+            expect(text).toContain('Task corpus migration dry-run complete');
+            for (const rule of ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8']) {
+                expect(text).toContain(`  ${rule}:`);
+            }
+            expect(text).toContain('50: modified');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('migrate --dry-run --json returns the full report envelope', async () => {
+        const { root, tasksDir } = await seedMigrationCorpus();
+        try {
+            const output = createCapturedOutput();
+            const exitCode = await main(['task', 'migrate', '--dry-run', '--folder', tasksDir, '--json'], {
+                cwd: root,
+                output,
+            });
+
+            expect(exitCode).toBe(0);
+            const parsed = JSON.parse(lastMessage(output));
+            expect(parsed.ok).toBe(true);
+            expect(parsed.dryRun).toBe(true);
+            expect(parsed.corpusDir).toBe(tasksDir);
+            expect(parsed.filesScanned).toBe(1);
+            expect(parsed.filesModified).toBe(1);
+            expect(parsed.fileReports[0].modified).toBe(true);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('migrate is idempotent on a fixture corpus', async () => {
+        const { root, tasksDir, taskPath } = await seedMigrationCorpus();
+        try {
+            const firstOutput = createCapturedOutput();
+            const firstExit = await main(['task', 'migrate', '--folder', tasksDir, '--json'], {
+                cwd: root,
+                output: firstOutput,
+            });
+            expect(firstExit).toBe(0);
+            const firstReport = JSON.parse(lastMessage(firstOutput));
+            expect(firstReport.filesModified).toBe(1);
+            const afterFirst = await readFile(taskPath, 'utf8');
+
+            const secondOutput = createCapturedOutput();
+            const secondExit = await main(['task', 'migrate', '--folder', tasksDir, '--json'], {
+                cwd: root,
+                output: secondOutput,
+            });
+            expect(secondExit).toBe(0);
+            const secondReport = JSON.parse(lastMessage(secondOutput));
+            expect(secondReport.filesModified).toBe(0);
+            expect(await readFile(taskPath, 'utf8')).toBe(afterFirst);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
     });
 
     // ── batch-create ──
@@ -623,10 +730,17 @@ describe('spur task CLI', () => {
             await main(['task', 'update', wbs, 'wip', '--no-lifecycle'], { cwd, output: createCapturedOutput() });
             await main(['task', 'update', wbs, 'testing', '--no-lifecycle'], { cwd, output: createCapturedOutput() });
 
-            // Now attempt done WITHOUT --no-lifecycle: the adapter is unavailable (spy),
+            // Now attempt done WITHOUT --no-lifecycle: the adapter is unavailable (spy
+            // forces bundledConfigRoot to null; SPUR_GLOBAL_RULES_DIR redirects the 0071
+            // R5 global-fallback tier to a nonexistent dir so the adapter stays truly
+            // unavailable regardless of what this machine has seeded under ~/.config/spur),
             // so the inline gate must run `task check` and block the L3 citation error.
             const output = createCapturedOutput();
-            const exitCode = await main(['task', 'update', wbs, 'done'], { cwd, output });
+            const exitCode = await main(['task', 'update', wbs, 'done'], {
+                cwd,
+                output,
+                env: { ...process.env, SPUR_GLOBAL_RULES_DIR: join(cwd, 'no-such-global-config') },
+            });
             expect(exitCode).toBe(1);
             expect(output.errors.some((e) => e.includes('blocked'))).toBe(true);
         } finally {
@@ -676,10 +790,16 @@ describe('spur task CLI', () => {
             await main(['task', 'update', wbs, 'wip', '--no-lifecycle'], { cwd, output: createCapturedOutput() });
             await main(['task', 'update', wbs, 'testing', '--no-lifecycle'], { cwd, output: createCapturedOutput() });
 
-            // Attempt done: adapter unavailable (spy), fallback runs with strict:false.
-            // The only finding is L4 "Missing feature_id" (warning) — must NOT block.
+            // Attempt done: adapter unavailable (spy + SPUR_GLOBAL_RULES_DIR redirect, see
+            // the P3 backstop test above for why both are needed post-0071/R5), fallback
+            // runs with strict:false. The only finding is L4 "Missing feature_id" (warning)
+            // — must NOT block.
             const output = createCapturedOutput();
-            const exitCode = await main(['task', 'update', wbs, 'done'], { cwd, output });
+            const exitCode = await main(['task', 'update', wbs, 'done'], {
+                cwd,
+                output,
+                env: { ...process.env, SPUR_GLOBAL_RULES_DIR: join(cwd, 'no-such-global-config') },
+            });
             // With the fix (strict:false), the L4 warning stays a warning → pass:true → done succeeds.
             expect(exitCode).toBe(0);
             expect(output.errors.every((e) => !e.includes('blocked'))).toBe(true);
@@ -726,8 +846,14 @@ describe('spur task CLI', () => {
             await main(['task', 'update', wbs, 'testing', '--no-lifecycle'], { cwd, output: createCapturedOutput() });
 
             // Attempt done: hard L3 error → fallback must block even with strict:false.
+            // (SPUR_GLOBAL_RULES_DIR redirect: same reason as the P3 backstop test above —
+            // keep the adapter genuinely unavailable post-0071/R5's global-fallback tier.)
             const output = createCapturedOutput();
-            const exitCode = await main(['task', 'update', wbs, 'done'], { cwd, output });
+            const exitCode = await main(['task', 'update', wbs, 'done'], {
+                cwd,
+                output,
+                env: { ...process.env, SPUR_GLOBAL_RULES_DIR: join(cwd, 'no-such-global-config') },
+            });
             expect(exitCode).toBe(1);
             expect(output.errors.some((e) => e.includes('blocked'))).toBe(true);
         } finally {

@@ -140,7 +140,7 @@ Decomposition and per-item dispositions live in
 | Feature | Status | Acceptance |
 |---------|--------|-----------|
 | Collective design stage (schemas, lifecycle design, server/web design task, skill contract) | ✅ | Stage D done; `04 §7.1–7.6` filled; waves implemented |
-| Task management (`spur task` CRUD/WBS/sections/check) | ✅ | agents drive the two hot paths across the 7 corpora; check validates schema + matrix. `migrate` verb reserved (board-cutover gate, delivery §6) |
+| Task management (`spur task` CRUD/WBS/sections/check) | ✅ | agents drive the two hot paths across the 7 corpora; check validates schema + matrix. `migrate` verb wired (A17); live `docs/tasks2/` corpus normalized 2026-07-04 (task 0192); `kanban.md` generation retired |
 | Variant templates + Section-Status-Matrix + format rules | ✅ | warning-first enforcement; hard core (AC/Solution/Review formats) gates |
 | Shared BDD validator (Gherkin subset + checklist + coverage) | ✅ | one implementation behind task check, feature check, pipeline output |
 | Feature management (`spur feature` over `docs/features/`) | ✅ | INDEX + task-links regenerate; `feature-id` is the single traceability edge |

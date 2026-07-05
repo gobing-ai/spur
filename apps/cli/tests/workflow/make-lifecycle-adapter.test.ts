@@ -113,4 +113,60 @@ describe('makeLifecycleAdapter', () => {
             expect(result).toBeUndefined();
         });
     });
+
+    describe('Issue C fix (0071 R5) — global ~/.config/spur/workflows/ fallback', () => {
+        // WHY: a compiled binary has no bundled config root, and a project's own
+        // .spur/workflows/ may predate a lifecycle-workflow addition (or was never
+        // fully seeded) even though `spur init` already seeded the file globally to
+        // ~/.config/spur/workflows/ — the same tier RuleService already treats as
+        // authoritative for rules (priority 10). Without this fallback the adapter
+        // silently degrades to the inline `spur task check` gate (task 0071/F5),
+        // even though a real, already-installed workflow YAML is one lookup away.
+        let globalDir: string;
+
+        beforeAll(() => {
+            globalDir = join(import.meta.dir, '..', `.tmp-global-config-${Date.now()}`);
+            const workflowsDir = join(globalDir, 'workflows');
+            mkdirSync(workflowsDir, { recursive: true });
+            writeFileSync(
+                join(workflowsDir, 'task-lifecycle.yaml'),
+                'kind: state-machine\nname: task-lifecycle\ninitialState: backlog\nstates: []\ntransitions: []\n',
+            );
+        });
+
+        afterAll(() => {
+            rmSync(globalDir, { recursive: true, force: true });
+        });
+
+        test('returns a LifecycleAdapter when bundled root is null, project-local is missing, and the global seeded YAML exists', (): void => {
+            const nullRootSpy = spyOn(configModule, 'bundledConfigRoot').mockReturnValue(null);
+            spies.push(nullRootSpy);
+
+            // cwd has no .spur/workflows/ of its own; SPUR_GLOBAL_RULES_DIR redirects
+            // the global lookup to our seeded fixture directory (test isolation, same
+            // override RuleService and commands/init.ts already honor).
+            const ctx = createCliContext({
+                output: nullOutput(),
+                cwd: join(globalDir, '..'),
+                env: { SPUR_GLOBAL_RULES_DIR: globalDir },
+            });
+            const result = makeLifecycleAdapter(ctx, TASK_LIFECYCLE_PROFILE);
+
+            expect(result).toBeInstanceOf(LifecycleAdapter);
+        });
+
+        test('returns undefined when bundled root is null, project-local is missing, and the global override YAML is also missing', (): void => {
+            const nullRootSpy = spyOn(configModule, 'bundledConfigRoot').mockReturnValue(null);
+            spies.push(nullRootSpy);
+
+            const ctx = createCliContext({
+                output: nullOutput(),
+                cwd: join(globalDir, '..'),
+                env: { SPUR_GLOBAL_RULES_DIR: globalDir },
+            });
+            const result = makeLifecycleAdapter(ctx, { ...TASK_LIFECYCLE_PROFILE, workflowName: 'does-not-exist' });
+
+            expect(result).toBeUndefined();
+        });
+    });
 });

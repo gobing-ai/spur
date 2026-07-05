@@ -10,6 +10,10 @@ import { DOMAIN_SCHEMA_SQL, PLANNING_SCHEMA_SQL } from './schema';
 export interface CliMigration {
     id: string;
     sql: string;
+    addColumnIfMissing?: {
+        table: string;
+        column: string;
+    };
 }
 
 /**
@@ -121,6 +125,20 @@ ALTER TABLE runs ADD COLUMN pid INTEGER;
 `;
 
 /**
+ * Add the `external_key` column to legacy `runs` tables created before
+ * `packages/domain` owned workflow-run lookup by external entity key.
+ *
+ * New databases already get this column from `DOMAIN_SCHEMA_SQL`/`runsTable`,
+ * so this migration uses `addColumnIfMissing` to journal itself without
+ * executing the ALTER when the column is already present. Old databases missing
+ * the column still receive the same narrow SQLite ALTER used by the run-pid
+ * precedent.
+ */
+export const RUNS_EXTERNAL_KEY_COLUMN_SCHEMA_SQL = `
+ALTER TABLE runs ADD COLUMN external_key TEXT;
+`;
+
+/**
  * Built-in migrations for compiled binaries and test use. `0000` provisions a
  * fresh database with the full current schema (inbox included); `0001` is the
  * incremental step that adds `inbox_messages` to databases created before team
@@ -130,7 +148,8 @@ ALTER TABLE runs ADD COLUMN pid INTEGER;
  * `queue_jobs` table (`@gobing-ai/ts-infra` `DBJobQueue`/`DBQueueConsumer`, task 0074);
  * `0005` adds the `pid` column to `runs` for subprocess cancellation (task 0140);
  * `0006` adds the `system_events` ledger persisted by the server EventBus tap
- * (observabilities board v1, task 0189 wave A / 0198).
+ * (observabilities board v1, task 0189 wave A / 0198); `0007` backfills
+ * `runs.external_key` for databases whose `runs` table predates that column.
  * All are idempotent (`CREATE TABLE IF NOT EXISTS`), so applying them in sequence is
  * safe regardless of the database's age.
  */
@@ -145,6 +164,11 @@ export const CLI_MIGRATIONS: CliMigration[] = [
     { id: '0004_spur_cli_queue_jobs', sql: QUEUE_JOBS_SCHEMA_SQL },
     { id: '0005_spur_cli_run_pid', sql: RUN_PID_COLUMN_SCHEMA_SQL },
     { id: '0006_spur_cli_system_events', sql: SYSTEM_EVENTS_SCHEMA_SQL },
+    {
+        id: '0007_spur_cli_runs_external_key',
+        sql: RUNS_EXTERNAL_KEY_COLUMN_SCHEMA_SQL,
+        addColumnIfMissing: { table: 'runs', column: 'external_key' },
+    },
 ];
 
 /** Filename marker for regenerated CLI-owned migrations. */
@@ -164,8 +188,14 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
         );
         if (existing != null) continue;
 
-        for (const statement of splitSqlStatements(migration.sql)) {
-            await adapter.exec(statement);
+        const addColumnGuard = migration.addColumnIfMissing ?? builtInAddColumnGuard(migration.id);
+        const shouldApplySql =
+            addColumnGuard === undefined || !(await columnExists(adapter, addColumnGuard.table, addColumnGuard.column));
+
+        if (shouldApplySql) {
+            for (const statement of splitSqlStatements(migration.sql)) {
+                await adapter.exec(statement);
+            }
         }
         await adapter.run(
             'INSERT INTO "__spur_cli_migrations" (id, applied_at) VALUES (?, ?)',
@@ -191,6 +221,16 @@ export async function loadSqlMigrations(folder: string): Promise<CliMigration[]>
         });
     }
     return migrations.length > 0 ? migrations : CLI_MIGRATIONS;
+}
+
+async function columnExists(adapter: DbAdapter, table: string, column: string): Promise<boolean> {
+    const rows = await adapter.queryAll<{ name: string }>(`PRAGMA table_info("${table}")`);
+    return rows.some((row) => row.name === column);
+}
+
+function builtInAddColumnGuard(id: string): CliMigration['addColumnIfMissing'] | undefined {
+    if (id === '0007_spur_cli_runs_external_key') return { table: 'runs', column: 'external_key' };
+    return undefined;
 }
 
 function splitSqlStatements(sql: string): string[] {

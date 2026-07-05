@@ -1,4 +1,3 @@
-import type { PlanningEventName } from '@gobing-ai/spur-app';
 import { createId, type SystemEventDao } from '@gobing-ai/spur-domain';
 import type { EventBus, Logger } from '@gobing-ai/ts-infra';
 import { PLANNING_EVENT_NAMES } from './event-names';
@@ -7,7 +6,7 @@ import { PLANNING_EVENT_NAMES } from './event-names';
 export const SYSTEM_EVENTS_CAP = 10_000;
 
 /** The planning event bus shape consumed by the system-event tap. */
-export type PlanningEventBus = EventBus<Record<PlanningEventName, (event: unknown) => void>>;
+export type PlanningEventBus = EventBus<Record<string, (event: unknown) => void>>;
 
 /** Handle returned by {@link registerSystemEventTap}. */
 export interface SystemEventTap {
@@ -28,7 +27,7 @@ export function registerSystemEventTap(
     dao: SystemEventDao,
     logger: Pick<Logger, 'warn' | 'debug'>,
 ): SystemEventTap {
-    const handlers = new Map<PlanningEventName, (event: unknown) => void>();
+    const handlers = new Map<string, (event: unknown) => void>();
     const inFlight = new Set<Promise<void>>();
 
     for (const name of PLANNING_EVENT_NAMES) {
@@ -61,7 +60,7 @@ export function registerSystemEventTap(
 
 async function persist(
     dao: SystemEventDao,
-    name: PlanningEventName,
+    name: string,
     occurredAt: string,
     actor: string | null,
     payloadJson: string | null,

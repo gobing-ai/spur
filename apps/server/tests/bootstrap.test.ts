@@ -8,11 +8,15 @@ describe('serverBootstrapConfig', () => {
         expect(cfg.logging.enabled).toBe(false);
         expect(cfg.telemetry.enabled).toBe(false);
         expect(cfg.events.enabled).toBe(true);
+        expect(cfg.jobqueue.enabled).toBe(false);
+        expect(cfg.scheduler.enabled).toBe(false);
     });
 
-    test('enables logging outside test mode', () => {
+    test('enables Bun serve facilities outside test mode', () => {
         const cfg = serverBootstrapConfig({});
         expect(cfg.logging.enabled).toBe(true);
+        expect(cfg.jobqueue.enabled).toBe(true);
+        expect(cfg.scheduler.enabled).toBe(true);
     });
 
     test('respects SPUR_LOG_LEVEL env var', () => {

@@ -9,6 +9,7 @@ import {
     CLI_MIGRATIONS,
     CLI_SCHEMA_SQL,
     loadSqlMigrations,
+    RUNS_EXTERNAL_KEY_COLUMN_SCHEMA_SQL,
 } from '../../src/migrations';
 
 describe('db migrations', () => {
@@ -56,8 +57,8 @@ describe('db migrations', () => {
     });
 
     describe('CLI_MIGRATIONS', () => {
-        test('has foundation, team-inbox, rule-history, planning, queue-jobs, run-pid, and system-events migrations', () => {
-            expect(CLI_MIGRATIONS).toHaveLength(7);
+        test('has foundation, team-inbox, rule-history, planning, queue-jobs, run-pid, system-events, and runs-external-key migrations', () => {
+            expect(CLI_MIGRATIONS).toHaveLength(8);
             expect(CLI_MIGRATIONS[0]?.id).toBe('0000_spur_cli_foundation');
             expect(CLI_MIGRATIONS[1]?.id).toBe('0001_spur_cli_team_inbox');
             expect(CLI_MIGRATIONS[2]?.id).toBe('0002_spur_cli_rule_history');
@@ -65,10 +66,17 @@ describe('db migrations', () => {
             expect(CLI_MIGRATIONS[4]?.id).toBe('0004_spur_cli_queue_jobs');
             expect(CLI_MIGRATIONS[5]?.id).toBe('0005_spur_cli_run_pid');
             expect(CLI_MIGRATIONS[6]?.id).toBe('0006_spur_cli_system_events');
+            expect(CLI_MIGRATIONS[7]?.id).toBe('0007_spur_cli_runs_external_key');
         });
 
         test('run-pid migration adds a pid column to runs', () => {
             expect(CLI_MIGRATIONS[5]?.sql).toContain('ALTER TABLE runs ADD COLUMN pid');
+        });
+
+        test('runs-external-key migration adds an external_key column to legacy runs tables', () => {
+            expect(CLI_MIGRATIONS[7]?.sql).toBe(RUNS_EXTERNAL_KEY_COLUMN_SCHEMA_SQL);
+            expect(CLI_MIGRATIONS[7]?.sql).toContain('ALTER TABLE runs ADD COLUMN external_key');
+            expect(CLI_MIGRATIONS[7]?.addColumnIfMissing).toEqual({ table: 'runs', column: 'external_key' });
         });
 
         test('queue-jobs migration creates queue_jobs', () => {
@@ -94,7 +102,7 @@ describe('db migrations', () => {
             expect(CLI_MIGRATIONS[2]?.sql).toContain('CREATE TABLE IF NOT EXISTS rule_eval_runs');
         });
 
-        test('existing DB that already applied 0000/0001 gains rule, planning, queue, and run-pid', async () => {
+        test('existing DB that already applied 0000/0001 gains rule, planning, queue, run-pid, and runs-external-key', async () => {
             const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             // Stub 0000 mirrors a realistic legacy DB: it predates the later
             // migrations but already has `runs` (the engine schema has shipped it
@@ -106,12 +114,14 @@ describe('db migrations', () => {
                 },
                 { id: '0001_spur_cli_team_inbox', sql: 'CREATE TABLE IF NOT EXISTS inbox_messages (id TEXT);' },
             ]);
-            // 0002 rule-history + 0003 planning + 0004 queue-jobs + 0005 run-pid + 0006 system-events applied on top.
+            // 0002 rule-history + 0003 planning + 0004 queue-jobs + 0005 run-pid
+            // + 0006 system-events + 0007 runs-external-key applied on top.
             const applied = await applyCliMigrations(adapter);
-            expect(applied).toBe(5);
-            // 0005 added the pid column to the legacy runs table.
+            expect(applied).toBe(6);
+            // 0005 and 0007 backfilled columns on the legacy runs table.
             const cols = await adapter.queryAll<{ name: string }>('PRAGMA table_info(runs)');
             expect(cols.some((c) => c.name === 'pid')).toBe(true);
+            expect(cols.some((c) => c.name === 'external_key')).toBe(true);
             await adapter.run(
                 `INSERT INTO rule_runs (id, source_kind, status, started_at, created_at, updated_at)
                  VALUES ('r1', 'preset', 'done', datetime('now'), datetime('now'), datetime('now'))`,
@@ -140,7 +150,7 @@ describe('db migrations', () => {
             ]);
 
             const applied = await applyCliMigrations(adapter);
-            expect(applied).toBe(6); // renamed inbox + rule + planning + queue-jobs + run-pid + system-events
+            expect(applied).toBe(7); // renamed inbox + rule + planning + queue-jobs + run-pid + system-events + runs-external-key
             await adapter.run(
                 'INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
                 'm1',
@@ -151,6 +161,38 @@ describe('db migrations', () => {
             );
             const rows = await adapter.queryAll('SELECT id FROM inbox_messages');
             expect(rows).toHaveLength(1);
+            adapter.close();
+        });
+
+        test('fresh DB journals runs-external-key without duplicate-column errors', async () => {
+            const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            const applied = await applyCliMigrations(adapter);
+            expect(applied).toBe(CLI_MIGRATIONS.length);
+
+            const cols = await adapter.queryAll<{ name: string }>('PRAGMA table_info(runs)');
+            expect(cols.filter((c) => c.name === 'external_key')).toHaveLength(1);
+            const row = await adapter.queryFirst<{ id: string }>(
+                'SELECT id FROM "__spur_cli_migrations" WHERE id = ?',
+                '0007_spur_cli_runs_external_key',
+            );
+            expect(row?.id).toBe('0007_spur_cli_runs_external_key');
+
+            const secondApplied = await applyCliMigrations(adapter);
+            expect(secondApplied).toBe(0);
+            adapter.close();
+        });
+
+        test('folder-loaded runs-external-key migration also skips when foundation already created the column', async () => {
+            const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            await applyCliMigrations(adapter, [{ id: '0000_spur_cli_foundation', sql: CLI_SCHEMA_SQL }]);
+
+            const applied = await applyCliMigrations(adapter, [
+                { id: '0007_spur_cli_runs_external_key', sql: RUNS_EXTERNAL_KEY_COLUMN_SCHEMA_SQL },
+            ]);
+
+            expect(applied).toBe(1);
+            const cols = await adapter.queryAll<{ name: string }>('PRAGMA table_info(runs)');
+            expect(cols.filter((c) => c.name === 'external_key')).toHaveLength(1);
             adapter.close();
         });
     });

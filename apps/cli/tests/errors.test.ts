@@ -36,6 +36,21 @@ describe('errors', () => {
             expect(errorMessage(new Error('boom'))).toBe('boom');
         });
 
+        test('formats SQLITE_BUSY errors as a one-line retry suggestion', () => {
+            const err = new Error('SQLITE_BUSY: database is locked') as Error & { code: string };
+            err.code = 'SQLITE_BUSY';
+
+            expect(errorMessage(err)).toBe(
+                'SQLite database is busy; another Spur process is holding the lock. Retry after the other command finishes.',
+            );
+        });
+
+        test('formats string SQLITE_BUSY errors as a one-line retry suggestion', () => {
+            expect(errorMessage('SQLITE_BUSY: database is locked')).toBe(
+                'SQLite database is busy; another Spur process is holding the lock. Retry after the other command finishes.',
+            );
+        });
+
         test('handles non-Error values', () => {
             expect(errorMessage('string error')).toBe('string error');
             expect(errorMessage(42)).toBe('42');
