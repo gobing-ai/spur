@@ -207,6 +207,38 @@ describe('eventsModule', () => {
         await reader.cancel();
         expect(offCalls.length).toBe(PLANNING_EVENT_NAMES.length);
     });
+
+    test('SSE stream tears down immediately when signal is already aborted', async () => {
+        const app = new Hono();
+        const offCalls: Array<{ name: string }> = [];
+        const ctx = {
+            eventBus: () => ({
+                on: () => {},
+                off: (name: string) => {
+                    offCalls.push({ name });
+                },
+            }),
+        } as unknown as ServerContext;
+
+        eventsModule.mount(app, ctx);
+
+        // Create a request whose signal is already aborted before the fetch.
+        const ac = new AbortController();
+        ac.abort();
+        const req = new Request('http://localhost/api/events/planning', { signal: ac.signal });
+        const res = await app.fetch(req);
+
+        expect(res.status).toBe(200);
+        expect(res.headers.get('Content-Type')).toBe('text/event-stream');
+
+        // The stream should close immediately since signal.aborted === true in start().
+        const reader = (res.body as ReadableStream<Uint8Array>).getReader();
+        const { done } = await reader.read();
+        expect(done).toBe(true);
+        // No subscriptions should have been registered — teardown fires but there's
+        // nothing to clean up (off() was never preceded by on()).
+        expect(offCalls.length).toBe(0);
+    });
 });
 
 describe('sendKeepalive', () => {

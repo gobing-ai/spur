@@ -141,6 +141,45 @@ describe('globalErrorHandler', () => {
         expect(body.error.code).toBe('NOT_FOUND');
     });
 
+    test('HTTPException status 409 → CONFLICT code', async () => {
+        const a = app();
+        a.get('/test', () => {
+            throw new (class extends Error {
+                status = 409;
+            })('Conflict');
+        });
+        const res = await a.request('/test');
+        expect(res.status).toBe(409);
+        const body = await json(res);
+        expect(body.error.code).toBe('CONFLICT');
+    });
+
+    test('HTTPException status 422 → VALIDATION_FAILED code', async () => {
+        const a = app();
+        a.get('/test', () => {
+            throw new (class extends Error {
+                status = 422;
+            })('Validation failed');
+        });
+        const res = await a.request('/test');
+        expect(res.status).toBe(422);
+        const body = await json(res);
+        expect(body.error.code).toBe('VALIDATION_FAILED');
+    });
+
+    test('HTTPException status 503 → LOCK_TIMEOUT code', async () => {
+        const a = app();
+        a.get('/test', () => {
+            throw new (class extends Error {
+                status = 503;
+            })('Lock timeout');
+        });
+        const res = await a.request('/test');
+        expect(res.status).toBe(503);
+        const body = await json(res);
+        expect(body.error.code).toBe('LOCK_TIMEOUT');
+    });
+
     test('error response includes requestId when available', async () => {
         const a = new Hono();
         a.use('*', async (c, next) => {
