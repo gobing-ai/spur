@@ -79,6 +79,8 @@ export {
     type RuleValidateServiceResult as RuleValidateResult,
     type RuleValidateServiceResult,
 } from './services/rule-service';
+export type { ProcessEntry, ProcessFrame, SupervisorOptions } from './services/supervisor-service';
+export { SupervisorService } from './services/supervisor-service';
 export type { CheckFindings, CheckResult as TaskCheckResult, SectionMatrix } from './services/task-check';
 export { TaskCheckService } from './services/task-check';
 export type {

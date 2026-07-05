@@ -126,4 +126,32 @@ export const featureContract = {
                 }),
             ),
         ),
+
+    check: oc
+        .route({
+            method: 'POST',
+            path: '/features/{id}/check',
+            summary: 'Run the four-layer feature check',
+            tags: ['feature'],
+        })
+        .input(z.object({ id: featureIdSchema }))
+        .output(
+            apiSuccessSchema(
+                z.object({
+                    id: z.string(),
+                    status: z.string(),
+                    pass: z.boolean(),
+                    findings: z.array(
+                        z.object({
+                            layer: z.enum(['L1', 'L2', 'L3', 'L4']),
+                            severity: z.enum(['error', 'warning', 'info']),
+                            section: z.string(),
+                            message: z.string(),
+                        }),
+                    ),
+                    requiredSections: z.array(z.string()),
+                    missingSections: z.array(z.string()),
+                }),
+            ),
+        ),
 };

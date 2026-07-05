@@ -24,4 +24,9 @@ export const PLANNING_EVENT_NAMES: string[] = [
     // exists (InboxMessageDao currently only exposes markDelivered/markFailed).
     'message.sent',
     'message.replied',
+    // Team process supervision (task 0195/0207): process lifecycle events
+    // emitted by SupervisorService. Metadata only — agentId + pid + optional exitCode.
+    'process.spawned',
+    'process.exited',
+    'process.stopped',
 ];

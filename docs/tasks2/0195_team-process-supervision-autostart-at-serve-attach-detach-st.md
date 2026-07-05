@@ -78,23 +78,20 @@ Feature: Team process supervision
 ```
 ### Q&A
 
-**OPEN — supervised-agent command model (HITL gate, 0207 R1).** What command does a supervised agent process actually run? Three options:
+**Resolved (2026-07-04, operator decision): Option (c) — spec-declared `command` optional, fall back to spur-provided drain-loop wrapper.**
 
-- **(a) Spur-provided headless work loop.** The supervisor runs a built-in wrapper: a drain-poll loop pairing `spur agent run --agent <id> --drain` with `spur message watch --agent <id>`. Operator writes nothing in the spec — every supervised agent runs the same loop. Pro: zero spec-schema change, restart semantics owned by Spur, pairs naturally with 0193's watch verb. Con: rigid — agents that need a custom entrypoint (a long-running MCP server, a custom polling loop) can't be supervised.
+When an agent spec has a `command` field (`command: string[]`), the supervisor spawns that command directly. When `command` is absent (the common case), the supervisor runs a built-in headless work loop: a drain-poll wrapper pairing `spur agent run --agent <id> --drain` with `spur message watch --agent <id>`. No auto-restart in v1 — exits are recorded, not retried. The `command` field also serves as an escape hatch for non-drain long-running processes (MCP servers, custom watchers).
 
-- **(b) Spec-declared `command` argv.** Add `command: string[]` to the agent spec YAML; the supervisor spawns exactly that. Pro: maximally flexible (any long-running process — MCP servers, watchers, custom loops). Con: every supervised spec needs an explicit command; the drain-loop pairing is the operator's job to wire; restart semantics delegated to whatever the command does.
-
-- **(c) Both — `command` optional, fall back to (a).** Spec's `command` wins when present; absent → the spur-provided drain-loop wrapper. Pro: flexible AND zero-config for the common case (drain-loop agents). Con: two code paths to test; the default wrapper must stay stable.
-
-**Recommendation: (c).** It gives zero-config supervision for the 90% case (drain-loop agents — the entire reason 0193 built watch) while leaving an escape hatch for non-drain long-running processes (MCP servers etc.). The default wrapper is a thin composition of verbs that already exist, so the "two paths" cost is low. Restart semantics: no auto-restart in v1 either way (exits recorded, not retried) — the `command` choice doesn't change that.
-
-**Awaiting operator confirmation before 0207 implementation proceeds.**
+Implementation implications for 0207:
+- Add optional `command: string[]` to the agent spec schema (ts-ai-runner `AgentSpec` type — verify whether it already has a field; if not, smallest upstream enhancement per shared-library rule)
+- `SupervisorService.spawn(spec)` checks `spec.command`: present → spawn directly; absent → build the drain-loop wrapper argv
+- The default wrapper is a thin composition of existing verbs — no new binary, fixed argv shape
 
 
 ### Design
 **Approach.** The largest infra item of the cycle (decision D7): a `SupervisorService` in `packages/app` owning child processes spawned from `.spur/agents/<id>.yaml` specs, a server `team` module exposing registry + attach/stdin endpoints, CLI verbs replacing the Phase-4 stubs, and the Process List tab. Transport is server-mediated stdio streams — SSE out (ring-buffer replay + live tail), POST in. Explicitly NO PTY, no interactive TUI agents, no auto-restart in v1 (exits recorded, not retried).
 
-**OPEN DESIGN POINT — settle in Q&A before implementing (do not guess):** what command does a supervised agent process actually run? Options: (a) a spur-provided headless work loop (e.g. a drain-poll wrapper around `spur agent run --agent <id> --drain` + `spur message watch`), (b) a spec-declared `command` argv field added to the agent spec YAML, (c) both with (a) as default. This determines spec-schema changes and restart semantics. Draft a short proposal in Q&A, get operator confirmation (HITL), THEN implement. Everything else below is settled.
+**OPEN DESIGN POINT — RESOLVED (2026-07-04, operator): option (c).** `command: string[]` optional in agent spec; absent → spur-provided drain-loop wrapper. See Q&A. Implementation proceeds.
 
 **Supervisor (R1, R3).** `packages/app` service: spawn via the runtime process seam (ProcessExecutor / `Bun.spawn` behind it — VERIFY the seam supports long-running children with piped stdio + kill; if it only runs-to-completion, make the smallest ts-runtime enhancement (spawn-handle API) rather than raw `child_process` in app code — shared-library rule; record the finding here). Registry: `Map<agentId, { pid, status: running|exited|stopped, startedAt, exit? }>`. Per-process ring buffer of framed output `{ stream: stdout|stderr, ts, line }`, bounded (e.g. 500 frames, constant). Lifecycle events on the bus: `process.spawned|exited|stopped` (agent id + pid) — they land in Events tab via the 0189 tap + shared name list. Serve shutdown: SIGTERM children, bounded wait, SIGKILL stragglers — no zombies.
 

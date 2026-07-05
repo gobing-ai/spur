@@ -1,4 +1,5 @@
 import type { WriteResult } from '@gobing-ai/spur-app';
+import { FeatureCheckService } from '@gobing-ai/spur-app';
 import { contract } from '@gobing-ai/spur-contracts';
 import { normalizeFeatureStatus, PRIORITIES, type Priority } from '@gobing-ai/spur-domain/schema';
 import { NotFoundError } from '@gobing-ai/ts-utils';
@@ -61,6 +62,7 @@ export function createFeatureHandlers(ctx: ServerContext) {
         }),
 
         transition: os.feature.transition.handler(async ({ input }) => {
+            // The global error handler maps "Lifecycle transition denied" → 409 GUARD_DENIED.
             await ctx.featureService().transition(input.id, input.toStatus, input.actor);
             return { ok: true as const, data: { id: input.id, status: input.toStatus } };
         }),
@@ -68,6 +70,20 @@ export function createFeatureHandlers(ctx: ServerContext) {
         refresh: os.feature.refresh.handler(async () => {
             const { tasksUpdated } = await ctx.featureService().refresh();
             return { ok: true as const, data: { rebuilt: tasksUpdated } };
+        }),
+
+        check: os.feature.check.handler(async ({ input }) => {
+            const folders = ctx.planningFolders();
+            const feature = await ctx.featureService().show(input.id);
+            if (!feature) throw new NotFoundError(`Feature ${input.id} not found`);
+            const svc = new FeatureCheckService(ctx.fs);
+            return {
+                ok: true as const,
+                data: await svc.check(feature.filePath, input.id, {
+                    featuresDir: folders.featuresDir,
+                    tasksDir: folders.tasksDir,
+                }),
+            };
         }),
     };
 }

@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "SupervisorService: spawn, registry, ring buffer, lifecycle events, autostart (0195 wave A)"
 description: ""
-status: todo
+status: WIP
 type: task
 profile: standard
 feature_id: G2
@@ -12,7 +12,7 @@ priority: P2
 tags: [approach-c,infra,collaboration,subtask]
 dependencies: []
 created_at: 2026-07-04T04:13:23.855Z
-updated_at: 2026-07-04T04:18:01.471Z
+updated_at: 2026-07-05T05:56:18.831Z
 ---
 
 ## 0207. SupervisorService: spawn, registry, ring buffer, lifecycle events, autostart (0195 wave A)
@@ -52,7 +52,28 @@ Parent 0195's Design owns the full approach — this slice implements **Supervis
 - [ ] Gate: `bun run lint && bun run test && bun run test-cf && bun run build`; `bun run spur-check` (R6).
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**Service layer (R3/R4).** Created `packages/app/src/services/supervisor-service.ts` with `SupervisorService`:
+- **Process registry**: `Map<string, { handle: PipeProcess, entry: ProcessEntry }>` — tracks agentId, pid, status (running/exited/stopped), startedAt, exitCode.
+- **Ring buffer**: per-process bounded `ProcessFrame[]` (500 frames), piped from child stdout/stderr via `ReadableStream` reader; oldest frames dropped on overflow.
+- **Option (c) command model**: `spec.command?: string[]` (extended AgentSpec — YAML round-trips extra fields, no upstream change needed). Present → spawn directly; absent → `defaultWrapperArgv(agentId)` using `process.execPath` + `agent run --agent <id> --drain --continue` argv.
+- **Process lifecycle events**: `process.spawned|exited|stopped` emitted on the bus (metadata-only: agentId + pid + optional exitCode).
+- **Graceful shutdown**: `stop()` → SIGTERM, 3s bounded wait, SIGKILL stragglers. `stopAll()` → parallel graceful stop of all running processes.
+- **Autostart**: `startAutostart(ids)` → validates all ids against loaded specs first (fail-loud on unknown), then spawns each async.
+- **Lazy spec loading**: `loadSpecs()` → `loadAgentSpecs(configDir)` from ts-ai-runner, cached via `specsPromise`.
+
+**Event names (R4).** Added `process.spawned|exited|stopped` to `apps/server/src/modules/events/event-names.ts` — flow into the system_events tap + SSE stream automatically.
+
+**Server context (R2/R5).** Added `supervisor()` accessor to `ServerContext` + `createServerContext` implementation. Constructs SupervisorService lazily with `ProcessExecutor` and `configDir: ${cwd}/.spur/agents`. `teamAutostart?: string[]` option added to `CreateServerContextOptions` for serve boot wiring (next step).
+
+**Exports.** `SupervisorService`, `ProcessEntry`, `ProcessFrame`, `SupervisorOptions` exported from `@gobing-ai/spur-app`.
+
+**Typecheck strict.** All 7 workspaces typecheck-clean.
+
+**Remaining for 0207 completion (deferred):**
+- Serve boot wiring: read `team.autostart` from config at `serve.ts`/`bootstrap.ts`, call `supervisor().startAutostart(ids)` after DB migration.
+- Supervisor unit tests with fake ProcessExecutor (spawn/exit/stop registry truth, ring-buffer bounds, event emission).
+- Manual e2e with echo-loop agent spec.
+
 
 ### Testing
 

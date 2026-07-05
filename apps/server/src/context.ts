@@ -2,12 +2,14 @@ import type {
     FeatureService,
     PlanningEvent as PlanningEventType,
     PlanningFolders,
+    SupervisorService,
     TaskService,
     TeamService,
 } from '@gobing-ai/spur-app';
 import {
     FeatureService as FeatureServiceImpl,
     PlanningWriteService as PlanningWriteServiceImpl,
+    SupervisorService as SupervisorServiceImpl,
     TaskService as TaskServiceImpl,
     TeamService as TeamServiceImpl,
 } from '@gobing-ai/spur-app';
@@ -25,6 +27,7 @@ import {
 import type { EventBus, JobQueue, SchedulerAdapter } from '@gobing-ai/ts-infra';
 import type { ApplicationRuntime } from '@gobing-ai/ts-infra/application';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+import { ProcessExecutor } from '@gobing-ai/ts-runtime';
 
 type ServerEventMap = Record<string, (detail: PlanningEventType | unknown) => void>;
 
@@ -75,6 +78,9 @@ export interface ServerContext {
 
     /** Lazy, cached TeamService (messaging + team status). */
     teamService(): TeamService;
+
+    /** Lazy, cached SupervisorService (process supervision, task 0195/0207). */
+    supervisor(): SupervisorService;
 
     /** Lazy SystemEventDao (system_events ledger) for the history endpoint + tap. */
     systemEventDao(): Promise<SystemEventDao>;
@@ -132,6 +138,11 @@ export interface CreateServerContextOptions {
      * service accessors never hardcode `docs/tasks`. Omitted → schema defaults.
      */
     folders?: PlanningFolders;
+    /**
+     * Agent spec ids for autostart (task 0195/0207). The supervisor spawns these
+     * at serve boot; a missing spec id fails loud. Omitted → no autostart.
+     */
+    teamAutostart?: string[];
 }
 
 /** Error thrown when a disabled facility accessor is called. */
@@ -167,6 +178,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
     let taskSvc: TaskService | undefined;
     let featureSvc: FeatureService | undefined;
     let teamSvc: TeamService | undefined;
+    let supervisorSvc: SupervisorService | undefined;
     let systemEventDaoPromise: Promise<SystemEventDao> | undefined;
     let jobQueuePromise: Promise<ServerJobQueue> | undefined;
     let queueConsumerPromise: Promise<ServerQueueConsumer<unknown>> | undefined;
@@ -226,6 +238,18 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                 });
             }
             return teamSvc;
+        },
+
+        supervisor(): SupervisorService {
+            if (!supervisorSvc) {
+                const pe = new ProcessExecutor();
+                supervisorSvc = new SupervisorServiceImpl({
+                    processExecutor: pe,
+                    eventBus: eventsBus as unknown as never,
+                    configDir: `${cwd}/.spur/agents`,
+                });
+            }
+            return supervisorSvc;
         },
 
         async systemEventDao(): Promise<SystemEventDao> {
