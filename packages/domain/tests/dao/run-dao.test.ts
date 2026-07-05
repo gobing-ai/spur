@@ -131,4 +131,116 @@ describe('RunDao', () => {
             adapter.close();
         });
     });
+
+    describe('trace queries', () => {
+        test('traceRows returns runs matching status filter', async () => {
+            const adapter = await setup();
+            const dao = new RunDao(adapter);
+            const r1 = await dao.open({ agent: 'pi', status: 'running' });
+            await dao.open({ agent: 'claude', status: 'done' });
+
+            const rows = await dao.traceRows({ status: 'running', limit: 10 });
+            expect(rows.length).toBeGreaterThanOrEqual(1);
+            expect(rows.some((r) => r.id === r1.id)).toBe(true);
+            adapter.close();
+        });
+
+        test('traceRows filters by workflow when specified', async () => {
+            const adapter = await setup();
+            const dao = new RunDao(adapter);
+            await adapter.run(
+                `INSERT INTO runs (id, workflow_name, mode, status, started_at, created_at, updated_at)
+                 VALUES ('run_wf', 'deploy', 'state-machine', 'running', 0, 0, 0)`,
+            );
+
+            const rows = await dao.traceRows({ workflow: 'deploy', limit: 10 });
+            expect(rows.length).toBe(1);
+            expect(rows[0]?.id).toBe('run_wf');
+            adapter.close();
+        });
+
+        test('traceRows applies limit', async () => {
+            const adapter = await setup();
+            const dao = new RunDao(adapter);
+            await dao.open({ agent: 'pi' });
+            await dao.open({ agent: 'pi' });
+
+            const rows = await dao.traceRows({ limit: 1 });
+            expect(rows.length).toBe(1);
+            adapter.close();
+        });
+
+        test('traceRowById returns run-level fields', async () => {
+            const adapter = await setup();
+            const dao = new RunDao(adapter);
+            const ws = await new WorkspaceDao(adapter).add({ name: 'test-ws', root: '/tmp/test' });
+            const run = await dao.open({ workspaceId: ws.id, agent: 'pi', status: 'running' });
+
+            const row = await dao.traceRowById(run.id);
+            expect(row).toBeDefined();
+            expect(row?.id).toBe(run.id);
+            expect(row?.status).toBe('running');
+            expect(row?.workflow_name).toBeDefined();
+            adapter.close();
+        });
+
+        test('traceRowById returns undefined for missing run', async () => {
+            const adapter = await setup();
+            const dao = new RunDao(adapter);
+            const row = await dao.traceRowById('run_nonexistent');
+            // queryFirst returns undefined for no row (SQLite null → undefined).
+            expect(row).toBeFalsy();
+            adapter.close();
+        });
+    });
+
+    describe('metadata and pid', () => {
+        test('stampMetadata writes and persists JSON metadata', async () => {
+            const adapter = await setup();
+            const dao = new RunDao(adapter);
+            const run = await dao.open({ agent: 'pi' });
+
+            await dao.stampMetadata(run.id, { dryRun: true, version: 2 });
+
+            const found = await dao.findById(run.id);
+            const meta = JSON.parse(found?.metadataJson ?? '{}');
+            expect(meta.dryRun).toBe(true);
+            expect(meta.version).toBe(2);
+            adapter.close();
+        });
+
+        test('setPid and getPid round-trip', async () => {
+            const adapter = await setup();
+            const dao = new RunDao(adapter);
+            const run = await dao.open({ agent: 'pi' });
+
+            await dao.setPid(run.id, 12345);
+
+            const pid = await dao.getPid(run.id);
+            expect(pid).toBe(12345);
+            adapter.close();
+        });
+
+        test('getPid returns null for unset pid', async () => {
+            const adapter = await setup();
+            const dao = new RunDao(adapter);
+            const run = await dao.open({ agent: 'pi' });
+
+            const pid = await dao.getPid(run.id);
+            expect(pid).toBeNull();
+            adapter.close();
+        });
+
+        test('setPid accepts null to clear', async () => {
+            const adapter = await setup();
+            const dao = new RunDao(adapter);
+            const run = await dao.open({ agent: 'pi' });
+            await dao.setPid(run.id, 12345);
+            await dao.setPid(run.id, null);
+
+            const pid = await dao.getPid(run.id);
+            expect(pid).toBeNull();
+            adapter.close();
+        });
+    });
 });

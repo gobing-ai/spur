@@ -2,11 +2,11 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator';
 
 GlobalRegistrator.register();
 
+
 import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
 import { cleanup, render, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
 import { teardownHappyDom } from '../../happy-dom';
-
 // Mock mermaid: its real ESM render path needs a full DOM + worker support that
 // happy-dom lacks. The mock returns a deterministic SVG so we can assert routing.
 const renderCalls: Array<{ id: string; code: string }> = [];
@@ -28,7 +28,9 @@ mock.module('dompurify', () => ({
 
 // Dynamic import is required because happy-dom must be registered before
 // any React/component module loads (the component tree reads from document).
-const { MermaidBlock, languageOf, nodeText } = await import('../../../src/modules/task-kanban/MarkdownBody');
+const { MermaidBlock, languageOf, nodeText, renderCodeBlock } = await import(
+    '../../../src/modules/task-kanban/MarkdownBody'
+);
 
 afterAll(teardownHappyDom);
 
@@ -126,3 +128,21 @@ describe('MermaidBlock — mermaid fence rendering', () => {
         expect(container.querySelector('pre code')?.textContent).toBe('bad diagram');
     });
 });
+
+describe('renderCodeBlock', () => {
+    test('returns plain code element for non-mermaid languages', () => {
+        const el = renderCodeBlock({ className: 'language-ts', children: 'const x = 1;' });
+        expect(el.type).toBe('code');
+        expect(el.props.className).toBe('language-ts');
+        expect(el.props.children).toBe('const x = 1;');
+    });
+
+    test('delegates to MermaidBlock for mermaid language', () => {
+        const el = renderCodeBlock({ className: 'language-mermaid', children: 'graph TD; A-->B' });
+        // Renders a MermaidBlock component (not a plain code element).
+        // MermaidBlock's type is a function component, so we verify it's not 'code'.
+        expect(el.type).not.toBe('code');
+    });
+});
+
+

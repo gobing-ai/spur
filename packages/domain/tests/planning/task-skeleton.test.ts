@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
     buildTaskSkeleton,
     extractTemplateBodies,
+    renderTaskTemplate,
     SECTION_GUIDANCE,
     sectionMatrixSchema,
 } from '../../src/planning/task-skeleton';
@@ -124,5 +125,53 @@ describe('sectionMatrixSchema', () => {
             variants: { standard: { someday: { required: ['Background'] } } },
         });
         expect(bad.success).toBe(false);
+    });
+});
+
+describe('renderTaskTemplate', () => {
+    test('replaces all standard placeholders', () => {
+        const template = '# {{ NAME }}\n\nWBS: {{ WBS }}\n\n{{ BACKGROUND }}\n\nCreated: {{ CREATED_AT }}';
+        const result = renderTaskTemplate(template, {
+            NAME: 'My Task',
+            WBS: '0099',
+            BACKGROUND: 'Some background text.',
+            CREATED_AT: '2026-07-05T00:00:00Z',
+        });
+        expect(result).toContain('# My Task');
+        expect(result).toContain('WBS: 0099');
+        expect(result).toContain('Some background text.');
+        expect(result).toContain('Created: 2026-07-05T00:00:00Z');
+        expect(result).not.toContain('{{');
+    });
+
+    test('replaces optional FEATURE_ID when provided', () => {
+        const result = renderTaskTemplate('Feature: {{ FEATURE_ID }}', {
+            NAME: 'T',
+            WBS: '01',
+            BACKGROUND: 'bg',
+            CREATED_AT: 'now',
+            FEATURE_ID: 'F12',
+        });
+        expect(result).toBe('Feature: F12');
+    });
+
+    test('cleans unmatched placeholders', () => {
+        const result = renderTaskTemplate('{{ NAME }} says {{ UNKNOWN }}', {
+            NAME: 'Alice',
+            WBS: '01',
+            BACKGROUND: 'bg',
+            CREATED_AT: 'now',
+        });
+        expect(result).toBe('Alice says ');
+    });
+
+    test('handles placeholders with spaces inside braces', () => {
+        const result = renderTaskTemplate('{{  NAME  }}', {
+            NAME: 'Bob',
+            WBS: '01',
+            BACKGROUND: 'bg',
+            CREATED_AT: 'now',
+        });
+        expect(result).toBe('Bob');
     });
 });

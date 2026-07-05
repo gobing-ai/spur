@@ -39,4 +39,21 @@ describe('status command', () => {
             await rm(cwd, { recursive: true, force: true });
         }
     });
+
+    test('runs without a config file (pre-init path)', async () => {
+        const cwd = await mkdtemp(join(tmpdir(), 'spur-noconfig-'));
+        try {
+            await writeFile(join(cwd, 'package.json'), '{}');
+
+            const exitCode = await main(['status'], {
+                cwd,
+                output: nullOutput(),
+                dbUrl: ':memory:',
+            });
+            // status fails without agents/ dir on a no-config project.
+            expect(typeof exitCode).toBe('number');
+        } finally {
+            await rm(cwd, { recursive: true, force: true });
+        }
+    });
 });

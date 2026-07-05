@@ -91,22 +91,28 @@ export function nodeText(node: React.ReactNode): string {
  * `code` component override that diverts ```mermaid fences to {@link MermaidBlock};
  * every other language renders through the default highlighter.
  */
+/**
+ * Renders a fenced code block, diverting ```mermaid to {@link MermaidBlock}.
+ * Extracted from the default export for direct testing without MDEditor.Markdown.
+ */
+export function renderCodeBlock({ className, children, ...props }: CodeProps) {
+    if (languageOf(className) === 'mermaid') {
+        return <MermaidBlock code={nodeText(children).trim()} />;
+    }
+    return (
+        <code className={className} {...props}>
+            {children}
+        </code>
+    );
+}
+
 export default function MarkdownBody({ source }: { source: string }) {
     return (
         <MDEditor.Markdown
             source={source}
             wrapperElement={{ 'data-color-mode': 'light' }}
             components={{
-                code({ className, children, ...props }: CodeProps) {
-                    if (languageOf(className) === 'mermaid') {
-                        return <MermaidBlock code={nodeText(children).trim()} />;
-                    }
-                    return (
-                        <code className={className} {...props}>
-                            {children}
-                        </code>
-                    );
-                },
+                code: renderCodeBlock,
             }}
         />
     );
