@@ -26,14 +26,24 @@ export function serverBootstrapConfig(env: Record<string, string | undefined>): 
     events: { enabled: boolean };
     jobqueue: { enabled: boolean };
     scheduler: { enabled: boolean };
+    /** Agent spec ids to autostart at serve boot (comma-separated, task 0195/0207). */
+    teamAutostart: string[];
 } {
     const isTest = env.NODE_ENV === 'test';
+    const raw = env.SPUR_TEAM_AUTOSTART;
+    const teamAutostart = raw
+        ? raw
+              .split(',')
+              .map((s) => s.trim())
+              .filter((s) => s.length > 0)
+        : [];
     return {
         logging: { enabled: !isTest, level: (env.SPUR_LOG_LEVEL as LoggingOptions['level']) ?? 'info' },
         telemetry: { enabled: false },
         events: { enabled: true },
         jobqueue: { enabled: !isTest },
         scheduler: { enabled: !isTest },
+        teamAutostart,
     };
 }
 /**

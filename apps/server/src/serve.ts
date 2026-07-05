@@ -186,8 +186,28 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 webDistPath: await resolveWebDistPath(options.webDistPath),
                 jobQueueEnabled: bootConfig.jobqueue.enabled,
                 scheduler,
+                teamAutostart: bootConfig.teamAutostart,
             });
             let jobWorker: JobWorkerService<unknown> | undefined;
+
+            // Team process autostart (task 0195/0207): spawn supervised agents listed
+            // in SPUR_TEAM_AUTOSTART at serve boot. Fails loud on unknown spec ids.
+            if (bootConfig.teamAutostart.length > 0) {
+                try {
+                    const supervisor = ctx.supervisor();
+                    await supervisor.startAutostart(bootConfig.teamAutostart);
+                    appRt.logger.info('Autostart agents spawned', { ids: bootConfig.teamAutostart });
+                } catch (error) {
+                    appRt.logger.error(
+                        'Autostart failed — server will continue but supervised agents are not running',
+                        {
+                            error: String(error),
+                        },
+                    );
+                    throw error;
+                }
+            }
+
             // System-event persistence tap (task 0189 wave A / 0198). Best-effort:
             // tap failures are isolated by registerSystemEventTap and never break
             // other EventBus subscribers. Bun-only — the Workers path has no long-lived bus.
@@ -237,6 +257,11 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 appRt.logger.info('Shutting down server', { signal });
                 if (scheduler) await scheduler.stop();
                 if (jobWorker) await jobWorker.stop();
+                try {
+                    await ctx.supervisor().stopAll();
+                } catch (error) {
+                    appRt.logger.warn('Supervisor shutdown error', { error: String(error) });
+                }
                 server.stop(true);
                 await appRt.stop('shutdown' as ApplicationStopReason);
                 process.exit(0);

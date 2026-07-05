@@ -107,6 +107,15 @@ export class SupervisorService {
         return this.ringBuffers.get(agentId) ?? [];
     }
 
+    /** Write a line to the supervised process's stdin (for POST /api/team/processes/:id/stdin). */
+    writeStdin(agentId: string, line: string): void {
+        const proc = this.processes.get(agentId);
+        if (proc?.entry.status !== 'running') {
+            throw new Error(`Agent "${agentId}" is not running`);
+        }
+        proc.handle.writeStdin(`${line}\n`);
+    }
+
     /**
      * Spawn a supervised agent process. If the spec has `command: string[]`, spawn
      * it directly. Otherwise, use the default drain-loop wrapper.

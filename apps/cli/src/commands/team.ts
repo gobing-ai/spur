@@ -3,9 +3,8 @@ import { TeamService, type TeamStatusEntry } from '@gobing-ai/spur-app';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
 
-/** Message printed by the deferred Phase-4 daemon stubs. */
-const DAEMON_STUB_MESSAGE =
-    'Team daemon not yet available. Use `spur agent run --drain` for deferred message delivery.';
+/** Default server API URL for team start/stop (requires spur serve). */
+const DEFAULT_SERVER = 'http://localhost:3000/api';
 
 /** Register `spur team` commands. */
 export function registerTeamCommand(program: Command, context: CliContext): void {
@@ -29,15 +28,23 @@ export function registerTeamCommand(program: Command, context: CliContext): void
         });
 
     noun.command('start')
-        .description('Deferred daemon stub.')
-        .action(() => {
-            context.output.write(DAEMON_STUB_MESSAGE);
+        .description('Start a supervised agent process (requires spur serve).')
+        .argument('<agent-id>', 'Agent spec id')
+        .option('--server <url>', 'Server API URL', DEFAULT_SERVER)
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (agentId, options) => {
+            const code = await runTeamStart(agentId, options, context);
+            context.setExitCode(code);
         });
 
     noun.command('stop')
-        .description('Deferred daemon stub.')
-        .action(() => {
-            context.output.write(DAEMON_STUB_MESSAGE);
+        .description('Stop a supervised agent process (requires spur serve).')
+        .argument('<agent-id>', 'Agent spec id')
+        .option('--server <url>', 'Server API URL', DEFAULT_SERVER)
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (agentId, options) => {
+            const code = await runTeamStop(agentId, options, context);
+            context.setExitCode(code);
         });
 }
 
@@ -63,6 +70,112 @@ async function runTeamStatus(options: { json?: boolean }, context: CliContext): 
         return 0;
     }
     context.output.write(status.agents.map(formatStatusLine).join('\n'));
+    return 0;
+}
+
+/** Payload of a `spur team start` server response. */
+interface StartResponse {
+    ok?: boolean;
+    error?: string;
+    pid?: number;
+    status?: string;
+}
+
+/** Payload of a `spur team stop` server response. */
+interface StopResponse {
+    ok?: boolean;
+    error?: string;
+}
+
+/** Send `spur team start <agent-id>` to the server and translate the response. */
+async function performTeamStart(
+    agentId: string,
+    options: { server: string; json?: boolean },
+): Promise<
+    | { ok: true; body: StartResponse }
+    | { ok: false; error: string; status: number }
+    | { ok: false; transportError: unknown }
+> {
+    try {
+        const url = `${options.server}/team/agents/${encodeURIComponent(agentId)}/start`;
+        const res = await fetch(url, { method: 'POST' });
+        const body = (await res.json()) as StartResponse;
+        if (res.ok) return { ok: true, body };
+        return { ok: false, error: body.error ?? `start failed: ${res.status}`, status: res.status };
+    } catch (err) {
+        return { ok: false, transportError: err };
+    }
+}
+
+/** `spur team start <agent-id> [--server <url>] [--json]` — spawn via server API. */
+async function runTeamStart(
+    agentId: string,
+    options: { server: string; json?: boolean },
+    context: CliContext,
+): Promise<number> {
+    const result = await performTeamStart(agentId, options);
+    if ('transportError' in result) {
+        const err = result.transportError;
+        context.output.error(
+            `Cannot reach server at ${options.server} — is spur serve running? (${err instanceof Error ? err.message : String(err)})`,
+        );
+        return 1;
+    }
+    if (!result.ok) {
+        context.output.error(result.error);
+        return 1;
+    }
+    if (options.json) {
+        context.output.write(toJson(result.body));
+    } else {
+        context.output.write(`started ${agentId} (pid=${result.body.pid}, status=${result.body.status ?? '?'})`);
+    }
+    return 0;
+}
+
+/** Send `spur team stop <agent-id>` to the server and translate the response. */
+async function performTeamStop(
+    agentId: string,
+    options: { server: string; json?: boolean },
+): Promise<
+    | { ok: true; body: StopResponse }
+    | { ok: false; error: string; status: number }
+    | { ok: false; transportError: unknown }
+> {
+    try {
+        const url = `${options.server}/team/agents/${encodeURIComponent(agentId)}/stop`;
+        const res = await fetch(url, { method: 'POST' });
+        const body = (await res.json()) as StopResponse;
+        if (res.ok) return { ok: true, body };
+        return { ok: false, error: body.error ?? `stop failed: ${res.status}`, status: res.status };
+    } catch (err) {
+        return { ok: false, transportError: err };
+    }
+}
+
+/** `spur team stop <agent-id> [--server <url>] [--json]` — stop via server API. */
+async function runTeamStop(
+    agentId: string,
+    options: { server: string; json?: boolean },
+    context: CliContext,
+): Promise<number> {
+    const result = await performTeamStop(agentId, options);
+    if ('transportError' in result) {
+        const err = result.transportError;
+        context.output.error(
+            `Cannot reach server at ${options.server} — is spur serve running? (${err instanceof Error ? err.message : String(err)})`,
+        );
+        return 1;
+    }
+    if (!result.ok) {
+        context.output.error(result.error);
+        return 1;
+    }
+    if (options.json) {
+        context.output.write(toJson(result.body));
+    } else {
+        context.output.write(`stopped ${agentId}`);
+    }
     return 0;
 }
 

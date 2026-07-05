@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react
 
 import InboxTab from '../../../src/modules/observability/InboxTab';
 import ObservabilityShell from '../../../src/modules/observability/ObservabilityShell';
+import ProcessListTab from '../../../src/modules/observability/ProcessListTab';
 import SystemEventsTab from '../../../src/modules/observability/SystemEventsTab';
 import { teardownHappyDom } from '../../happy-dom';
 
@@ -298,5 +299,71 @@ describe('observability components', () => {
         // Non-message event did not trigger an inbox refetch.
         expect(inboxCalls.length).toBe(callsBefore);
         expect(container.querySelector('[data-inbox-unread]')).toBeNull();
+    });
+
+    test('process list renders rows and refetches on process SSE events', async () => {
+        let rows: {
+            agentId: string;
+            pid: number | null;
+            status: string;
+            startedAt: string;
+            exitCode: number | null;
+        }[] = [
+            {
+                agentId: 'planner',
+                pid: 123,
+                status: 'running',
+                startedAt: new Date(Date.now() - 90_000).toISOString(),
+                exitCode: null,
+            },
+        ];
+        const processCalls: string[] = [];
+        globalThis.fetch = (async (input: RequestInfo | URL) => {
+            const url = String(input);
+            if (url.includes('/team/processes')) {
+                processCalls.push(url);
+                return jsonResponse({ processes: rows, count: rows.length });
+            }
+            return new Response('not found', { status: 404 });
+        }) as typeof fetch;
+
+        const { getByText, container } = render(<ProcessListTab />);
+        await waitFor(() => expect(getByText('planner')).toBeDefined());
+        expect(getByText('pid=123')).toBeDefined();
+        expect(container.querySelector('[data-process-list-tab]')?.textContent).toContain('running');
+
+        rows = [
+            ...rows,
+            {
+                agentId: 'reviewer',
+                pid: null,
+                status: 'exited',
+                startedAt: new Date(Date.now() + 1_000).toISOString(),
+                exitCode: 0,
+            },
+        ];
+        const before = processCalls.length;
+        await act(async () => {
+            FakeEventSource.instances[0]?.onmessage?.(
+                new MessageEvent('message', {
+                    data: JSON.stringify({ eventName: 'process.exited' }),
+                }),
+            );
+        });
+
+        await waitFor(() => expect(getByText('reviewer')).toBeDefined());
+        expect(processCalls.length).toBeGreaterThan(before);
+        expect(getByText('pid=?')).toBeDefined();
+    });
+
+    test('process list renders empty and error states', async () => {
+        globalThis.fetch = (async () => jsonResponse({ processes: [], count: 0 })) as unknown as typeof fetch;
+        const empty = render(<ProcessListTab />);
+        await waitFor(() => expect(empty.getByText(/No supervised processes/)).toBeDefined());
+        empty.unmount();
+
+        globalThis.fetch = (async () => new Response('nope', { status: 503 })) as unknown as typeof fetch;
+        const failed = render(<ProcessListTab />);
+        await waitFor(() => expect(failed.getByRole('alert').textContent).toContain('process list fetch failed: 503'));
     });
 });

@@ -63,6 +63,7 @@ function makeDeps(overrides: Partial<StartServerDeps> = {}): StartServerDeps {
             events: { enabled: true },
             jobqueue: { enabled: false },
             scheduler: { enabled: false },
+            teamAutostart: [],
         }),
         runNodeApplication: (async (opts: { config: unknown; start: (rt: ApplicationRuntime) => Promise<void> }) => {
             const rt = fakeRuntime();
@@ -236,6 +237,7 @@ describe('startServer', () => {
                 events: { enabled: true },
                 jobqueue: { enabled: false },
                 scheduler: { enabled: true },
+                teamAutostart: [],
             }),
             runNodeApplication: (async (opts: {
                 config: unknown;
@@ -320,6 +322,7 @@ describe('startServer', () => {
                 events: { enabled: false },
                 jobqueue: { enabled: true },
                 scheduler: { enabled: true },
+                teamAutostart: [],
             }),
             createServerContext: (() =>
                 ({
