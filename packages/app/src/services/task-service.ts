@@ -818,9 +818,7 @@ export class TaskService {
      * daily driver — this verb no longer writes any file.
      */
     async refresh(): Promise<{ folders: number; tasks: number }> {
-        const folders = this.ctx.foldersConfig
-            ? [...new Set([this.ctx.tasksDir, ...Object.keys(this.ctx.foldersConfig.folders)])]
-            : [this.ctx.tasksDir];
+        const folders = this.allFolderDirs();
 
         let totalTasks = 0;
         for (const folder of folders) {
@@ -1102,7 +1100,7 @@ export class TaskService {
         if (rel.startsWith('..') || isAbsolute(rel)) {
             throw new Error(`Invalid folder: ${folder} escapes the planning workspace`);
         }
-        return folder;
+        return candidate;
     }
 
     private slugify(title: string): string {
