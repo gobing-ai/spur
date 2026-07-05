@@ -11,6 +11,7 @@
 | `send <body>` | Enqueue a message for an agent |
 | `inbox` | List messages addressed to an agent |
 | `reply <msg-id> <body>` | Thread a reply to a message |
+| `watch` | Follow an agent inbox — surface new messages as they arrive |
 
 ## spur message send
 
@@ -105,6 +106,35 @@ no peer.
 
 ```bash
 spur message reply msg-001 "Looks good, merging"
+```
+
+## spur message watch
+
+```
+spur message watch [options]
+```
+
+| Flag | Description |
+|---|---|
+| `--agent <id>` | Agent id whose inbox to watch (required) |
+| `--interval <ms>` | Poll interval in milliseconds (default 2000) |
+| `--json` | Emit one JSON object per new message (machine-consumable by agent wrappers) |
+
+Follows an agent's inbox and surfaces each new message exactly once as it arrives. Polls the
+store directly via `TeamService` — no server required (serverless is the contract; SSE-follow
+when `spur serve` is up is a future optimization). `Ctrl-C` exits cleanly.
+
+**Watch SURFACES, it never CONSUMES** — it does not mark messages read/delivered. Read-marking
+stays with `--drain` / explicit reads, which makes `watch` safe to run alongside a drain loop.
+
+### Example
+
+```bash
+# Terminal 1: an agent session watches its inbox
+spur message watch --agent planner --json
+
+# Terminal 2: another agent drops a message in
+spur message send "Plan ready for review" --to planner
 ```
 
 ## Team Mode

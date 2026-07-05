@@ -166,7 +166,7 @@ and the app-layer `TeamService`).
 - `edit` — open the spec in `$EDITOR`, or print its path when `$EDITOR` is unset. Errors if missing.
 - `delete` — remove the spec; refuses (exit 2) without `--force`; errors (exit 1) if missing.
 
-#### `spur message send --to <id> <body> [--from <id>] [--json]` · `spur message inbox --agent <id> [--json]` · `spur message reply <msg-id> <body> [--json]`
+#### `spur message send --to <id> <body> [--from <id>] [--json]` · `spur message inbox --agent <id> [--json]` · `spur message reply <msg-id> <body> [--json]` · `spur message watch --agent <id> [--interval <ms>] [--json]`
 Durable inter-agent messaging over the SQLite `inbox_messages` table (backed by `TeamService` →
 `ts-ai-runner` `MessageService` → `ts-db` `InboxMessageDao`).
 - `send` — enqueue a message; `--from` defaults to `operator`. Prints `queued <id> → <to>`.
