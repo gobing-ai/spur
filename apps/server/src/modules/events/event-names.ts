@@ -18,4 +18,10 @@ export const PLANNING_EVENT_NAMES: string[] = [
     'queue.job.retrying',
     'queue.stats',
     'scheduler.job.executed',
+    // Inbox IPC (task 0193/0204): message lifecycle events emitted inside
+    // TeamService. Metadata only — id/from/to/thread id/createdAt; the body
+    // stays in the store. `message.read` is deferred until a mark-read API
+    // exists (InboxMessageDao currently only exposes markDelivered/markFailed).
+    'message.sent',
+    'message.replied',
 ];

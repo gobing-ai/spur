@@ -3,8 +3,9 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
+import { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
-import { TeamService, type TeamServiceContext } from '../../src/index';
+import { type MessageEventBus, type MessageEventPayload, TeamService, type TeamServiceContext } from '../../src/index';
 
 // ---------------------------------------------------------------------------
 // Harness
@@ -15,7 +16,9 @@ function nullOutput() {
 }
 
 /** Build a TeamService over a temp project dir + a shared in-memory database. */
-async function makeService(): Promise<{ svc: TeamService; cwd: string; db: DbAdapter; cleanup: () => Promise<void> }> {
+async function makeService(
+    bus?: MessageEventBus,
+): Promise<{ svc: TeamService; cwd: string; db: DbAdapter; cleanup: () => Promise<void> }> {
     const cwd = await mkdtemp(join(tmpdir(), 'spur-team-'));
     const db = await createMigratedDb({ url: ':memory:' });
     const ctx: TeamServiceContext = {
@@ -24,6 +27,7 @@ async function makeService(): Promise<{ svc: TeamService; cwd: string; db: DbAda
         output: nullOutput(),
         getDb: async () => db,
         fs: createNodeFileSystem(cwd),
+        ...(bus ? { eventBus: bus } : {}),
     };
     return {
         svc: new TeamService(ctx),
@@ -34,6 +38,18 @@ async function makeService(): Promise<{ svc: TeamService; cwd: string; db: DbAda
             await rm(cwd, { recursive: true, force: true });
         },
     };
+}
+
+/** Build a fresh EventBus and capture every emitted payload by event name. */
+function makeCapturingBus(): { bus: MessageEventBus; events: Map<string, MessageEventPayload[]> } {
+    const bus = new EventBus<Record<'message.sent' | 'message.replied', (event: MessageEventPayload) => void>>();
+    const events = new Map<string, MessageEventPayload[]>([
+        ['message.sent', []],
+        ['message.replied', []],
+    ]);
+    bus.on('message.sent', (e) => events.get('message.sent')?.push(e));
+    bus.on('message.replied', (e) => events.get('message.replied')?.push(e));
+    return { bus, events };
 }
 
 // ---------------------------------------------------------------------------
@@ -104,6 +120,58 @@ describe('TeamService messaging', () => {
             // from_id null — there is no addressable peer to reply to.
             const sent = await svc.sendMessage(null, 'planner', 'broadcast');
             await expect(svc.replyToMessage(sent.msgId, 'reply')).rejects.toThrow(/operator-originated/);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    // ── Event emission (task 0193/0204 R1) ──
+
+    test('sendMessage emits message.sent with metadata only (no body)', async () => {
+        const { bus, events } = makeCapturingBus();
+        const { svc, cleanup } = await makeService(bus);
+        try {
+            const result = await svc.sendMessage('coder', 'planner', 'secret body');
+            const sent = events.get('message.sent');
+            expect(sent?.length).toBe(1);
+            const payload = sent?.[0];
+            expect(payload?.msgId).toBe(result.msgId);
+            expect(payload?.fromId).toBe('coder');
+            expect(payload?.toId).toBe('planner');
+            expect(payload?.threadId).toBeNull();
+            expect(payload?.createdAt).toBeTruthy();
+            // The event payload must NEVER carry the body — events are observable metadata.
+            expect(JSON.stringify(payload)).not.toContain('secret body');
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('replyToMessage emits message.replied with the thread id', async () => {
+        const { bus, events } = makeCapturingBus();
+        const { svc, cleanup } = await makeService(bus);
+        try {
+            const sent = await svc.sendMessage('coder', 'planner', 'need a plan');
+            await svc.replyToMessage(sent.msgId, 'here is the plan');
+            // Exactly one of each event — the reply does not also fire message.sent.
+            expect(events.get('message.sent')?.length).toBe(1);
+            const replied = events.get('message.replied');
+            expect(replied?.length).toBe(1);
+            expect(replied?.[0]?.threadId).toBe(sent.msgId);
+            expect(replied?.[0]?.toId).toBe('coder'); // reply addresses the original sender
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('no bus wired — send/reply still succeed, no events fired', async () => {
+        // The CLI default has no bus; messaging must work unchanged.
+        const { svc, cleanup } = await makeService();
+        try {
+            const result = await svc.sendMessage('coder', 'planner', 'hi');
+            expect(result.status).toBe('queued');
+            const reply = await svc.replyToMessage(result.msgId, 'ack');
+            expect(reply.status).toBe('queued');
         } finally {
             await cleanup();
         }

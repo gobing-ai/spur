@@ -9,6 +9,7 @@ import {
     TeamOrchestrator,
     validateAgentId,
 } from '@gobing-ai/ts-ai-runner';
+import type { EventBus } from '@gobing-ai/ts-infra';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { resolvePlanningFolders } from '../config/planning-folders';
 
@@ -31,7 +32,32 @@ export interface TeamServiceContext {
     getDb(): Promise<DbAdapter>;
     /** Filesystem port for reading/writing task files. */
     fs: FileSystem;
+    /**
+     * Optional EventBus for message lifecycle events (`message.sent|replied`).
+     * When absent (CLI default), message sends/replies still succeed — they
+     * just don't publish. The server injects its bus so the tap persists and
+     * SSE streams the events (single emission point, identical CLI/server behavior).
+     */
+    eventBus?: MessageEventBus;
 }
+
+/**
+ * Metadata-only payload for `message.sent|replied` events. The body is NEVER
+ * included — events are observable metadata; bodies stay in the store.
+ */
+export interface MessageEventPayload {
+    msgId: string;
+    fromId: string | null;
+    toId: string;
+    /** Thread root id (`in_reply_to`) when this message is a reply, else null. */
+    threadId: string | null;
+    createdAt: string;
+}
+
+/** Bus shape consumed by TeamService — pub/sub over message event names. */
+export type MessageEventBus = EventBus<
+    Record<'message.sent' | 'message.replied', (event: MessageEventPayload) => void>
+>;
 
 /** Result of enqueuing or threading a message. */
 export interface SendResult {
@@ -132,6 +158,15 @@ export class TeamService {
         if (fromId !== null) validateAgentId(fromId);
         const dao = await this.inboxDao();
         const msgId = await dao.enqueue(fromId, toId, body, replyTo);
+        // Emit a single lifecycle event: `message.replied` when this send is a reply
+        // (thread context), otherwise `message.sent`. Metadata only — never the body.
+        this.emitMessageEvent(replyTo !== undefined ? 'message.replied' : 'message.sent', {
+            msgId,
+            fromId,
+            toId,
+            threadId: replyTo ?? null,
+            createdAt: new Date().toISOString(),
+        });
         return { msgId, toId, status: 'queued', injected: false };
     }
 
@@ -311,6 +346,21 @@ export class TeamService {
     private async inboxDao(): Promise<InboxMessageDao> {
         const db = await this.ctx.getDb();
         return new InboxMessageDao(db);
+    }
+
+    /**
+     * Publish a message lifecycle event when a bus is wired. No-op without one
+     * (CLI default). Isolated try/catch so a bus failure never breaks the send —
+     * the row is already durable; the event is observable metadata.
+     */
+    private emitMessageEvent(name: 'message.sent' | 'message.replied', payload: MessageEventPayload): void {
+        const bus = this.ctx.eventBus;
+        if (!bus) return;
+        try {
+            bus.emit(name, payload);
+        } catch {
+            // Swallow — see method doc.
+        }
     }
 
     private async inboxRecentDao(): Promise<InboxRecentDao> {

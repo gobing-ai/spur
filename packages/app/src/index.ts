@@ -113,6 +113,8 @@ export type {
     AgentSpecInput,
     InboxEntry,
     InboxResult,
+    MessageEventBus,
+    MessageEventPayload,
     RecentMessagesResult,
     SendResult,
     TeamServiceContext,

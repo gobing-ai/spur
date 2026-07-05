@@ -219,6 +219,10 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                     env: options.env ?? {},
                     fs,
                     getDb: () => this.getDb(),
+                    // Wire the server bus so message lifecycle events flow to the
+                    // system_events tap + SSE stream (task 0193/0204). Structurally
+                    // compatible — both are Record<string, (event) => void> buses.
+                    eventBus: eventsBus as unknown as never,
                 });
             }
             return teamSvc;
