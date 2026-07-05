@@ -92,6 +92,7 @@ async function parseWorkspaceLcov(
         // Only accept records from the owning workspace to avoid
         // cross-workspace lcov pollution.
         const owner = owningWorkspace(relPath);
+
         if (owner !== null && owner !== ws) {
             skipped++;
             continue;
@@ -210,9 +211,13 @@ async function main(): Promise<void> {
     );
 
     // Clean up workspace-local coverage dirs.
+    // TEMP: disabled for debugging NewTaskPanel 14% merge artifact
+    // for (const ws of WORKSPACES) {
+    // Clean up workspace-local coverage dirs.
     for (const ws of WORKSPACES) {
         await rm(join(ws, 'coverage'), { recursive: true, force: true });
     }
 }
+
 
 await main();
