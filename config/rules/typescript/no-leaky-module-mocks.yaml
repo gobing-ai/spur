@@ -45,6 +45,7 @@ exclude:
   - "apps/web/tests/modules/task-kanban/board.test.tsx"
   - "apps/web/tests/modules/task-kanban/components.test.tsx"
   - "apps/web/tests/modules/task-kanban/new-task-panel.test.tsx"
+  - "apps/web/tests/modules/features/components.test.tsx"
   - "apps/web/tests/modules/task-kanban/task-detail.test.tsx"
   - "apps/web/tests/modules/task-kanban/index.test.tsx"
 

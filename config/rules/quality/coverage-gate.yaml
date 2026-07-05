@@ -34,4 +34,3 @@ rules:
           - "**/schema/**"
           - "**/migrations.ts"
           - "**/db.ts"
-          - "**/*.tsx"
