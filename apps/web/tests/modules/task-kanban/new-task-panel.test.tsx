@@ -310,9 +310,10 @@ describe('NewTaskPanel', () => {
         await new Promise((r) => setTimeout(r, 50));
 
         expect(createCalls).toHaveLength(1);
-        expect(createCalls[0].title).toBe('My Test Task');
-        expect(createCalls[0].folder).toBe('docs/tasks');
-        expect(createCalls[0].template).toBe('standard');
+        const c = createCalls[0] as (typeof createCalls)[0];
+        expect(c.title).toBe('My Test Task');
+        expect(c.folder).toBe('docs/tasks');
+        expect(c.template).toBe('standard');
         expect(onCreated).toHaveBeenCalledTimes(1);
         expect(onClose).toHaveBeenCalledTimes(1);
     });
@@ -330,8 +331,8 @@ describe('NewTaskPanel', () => {
         await new Promise((r) => setTimeout(r, 50));
 
         expect(createCalls).toHaveLength(1);
-        expect(bodyCalls).toHaveLength(1);
-        expect(bodyCalls[0].body).toBe('### Background\nSome background context');
+        const b = bodyCalls[0] as (typeof bodyCalls)[0];
+        expect(b.body).toBe('### Background\nSome background context');
         expect(onCreated).toHaveBeenCalledTimes(1);
     });
 
@@ -350,7 +351,8 @@ describe('NewTaskPanel', () => {
 
         expect(createCalls).toHaveLength(1);
         expect(bodyCalls).toHaveLength(1);
-        expect(bodyCalls[0].body).toBe('### Background\nbg\n\n### Requirements\nreqs');
+        const b2 = bodyCalls[0] as (typeof bodyCalls)[0];
+        expect(b2.body).toBe('### Background\nbg\n\n### Requirements\nreqs');
     });
 
     test('submit handles body seeding failure gracefully', async () => {
