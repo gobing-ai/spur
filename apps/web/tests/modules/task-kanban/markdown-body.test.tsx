@@ -26,6 +26,8 @@ mock.module('dompurify', () => ({
     default: { sanitize: (html: string) => html },
 }));
 
+// Dynamic import is required because happy-dom must be registered before
+// any React/component module loads (the component tree reads from document).
 const { MermaidBlock, languageOf, nodeText } = await import('../../../src/modules/task-kanban/MarkdownBody');
 
 afterAll(teardownHappyDom);
@@ -80,6 +82,18 @@ describe('nodeText — raw source extraction from a highlighted node tree', () =
             createElement('span', null, createElement('span', null, 'TD; '), 'A-->B'),
         );
         expect(nodeText(tree)).toBe('graph TD; A-->B');
+    });
+
+    test('concatenates arrays of element nodes', () => {
+        const a = createElement('span', null, 'foo');
+        const b = createElement('span', null, 'bar');
+        expect(nodeText([a, b])).toBe('foobar');
+    });
+
+    test('returns empty string for unrecognized node types', () => {
+        // No `props` and not a primitive/array — the fallback return.
+        const weird = { kind: 'something' } as unknown as React.ReactNode;
+        expect(nodeText(weird)).toBe('');
     });
 });
 
