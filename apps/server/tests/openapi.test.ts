@@ -8,4 +8,14 @@ describe('openapi', () => {
         expect(spec.info).toBeDefined();
         expect(spec.paths).toBeDefined();
     });
+    test('merges plugin-contributed path fragments into spec.paths', async () => {
+        const pluginPaths = {
+            '/plugins/foo': {
+                get: { operationId: 'foo', responses: { '200': { description: 'ok' } } },
+            },
+        };
+        const spec = await generateOpenApiSpec(pluginPaths);
+        expect(spec.paths).toHaveProperty('/plugins/foo');
+        expect(spec.info.title).toBe('Spur API');
+    });
 });
