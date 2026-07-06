@@ -141,6 +141,7 @@ docs/.ftree/
 
 /docs/.workflow-runs
 .wolf/
+/.claude/last-session.json
 
 /docs/tasks/kanban.md
 /docs/tasks2/kanban.md

@@ -497,7 +497,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const ROUTER_SKILLS = new Set(['spur-dev', 'spur-cli']);
         const NON_ROUTER_BUDGET = 350;
         const ROUTER_BUDGET = 600;
-        const AGGREGATE_BUDGET = 4400;
+        const AGGREGATE_BUDGET = 5500; // scales with skill count (20 skills post-0216 wayfinder); per-skill caps below are the real bloat guard
 
         let aggregate = 0;
         const offenders: string[] = [];
@@ -584,5 +584,226 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         // The old "dogfood artifact" excuse must be gone — it papered over a real probe gap.
         expect(spurInit, 'spur-init.md must NOT dismiss the probe as a dogfood artifact').not.toContain('dogfood');
         expect(spurInit).not.toContain('intentionally NOT a probe');
+    });
+
+    test('R46 — gate-bearing skills carry the anti-rationalization anatomy (task 0214 R1)', () => {
+        // Behavioral counter-pressure layer (0214 R1): sp has strong DETERMINISTIC gates but no
+        // human-pressure counter-layer. Each load-bearing skill must carry a "Common
+        // Rationalizations" table (excuse → factual rebuttal) and a "Red Flags" list (observable
+        // violation signals). Structural presence + minimum row/item counts are locked here so a
+        // future edit that strips the anatomy fails the gate instead of silently rotting.
+        const loadBearing = [
+            'code-verification',
+            'spur-tdd',
+            'sys-debugging',
+            'code-implementation',
+            'spec-decomposition',
+            'code-review',
+            'sys-architecture',
+            'brainstorm',
+            'wayfinder',
+        ];
+        const sectionBody = (text: string, heading: string): string | null => {
+            const start = text.indexOf(`\n## ${heading}\n`);
+            if (start === -1) return null;
+            const after = text.indexOf('\n## ', start + 1);
+            return text.slice(start, after === -1 ? undefined : after);
+        };
+        const offenders: string[] = [];
+        for (const skill of loadBearing) {
+            const text = readFileSync(join(SKILLS_DIR, skill, 'SKILL.md'), 'utf8');
+            const cr = sectionBody(text, 'Common Rationalizations');
+            const rf = sectionBody(text, 'Red Flags');
+            if (cr === null) {
+                offenders.push(`${skill}: missing "## Common Rationalizations"`);
+                continue;
+            }
+            if (rf === null) {
+                offenders.push(`${skill}: missing "## Red Flags"`);
+                continue;
+            }
+            // Data rows = pipe-rows minus the header row and the |---| separator row.
+            const pipeRows = cr.split('\n').filter((l) => l.trim().startsWith('|'));
+            const separators = pipeRows.filter((l) => /^\|[\s:|-]+\|?$/.test(l.trim())).length;
+            const dataRows = pipeRows.length - separators - 1; // minus header row
+            if (dataRows < 3) offenders.push(`${skill}: Common Rationalizations has ${dataRows} rows (need >= 3)`);
+            const flagItems = rf.split('\n').filter((l) => l.trim().startsWith('- ')).length;
+            if (flagItems < 3) offenders.push(`${skill}: Red Flags has ${flagItems} items (need >= 3)`);
+        }
+        expect(offenders).toEqual([]);
+    });
+
+    test('R47 — verification-before-completion rule exists and is referenced from verify/implement/test (0214 R2)', () => {
+        // Universal honesty gate (0214 R2): a cross-cutting section generalizes Iron Law 7 to every
+        // completion claim, carries a Red-Flags table, and is referenced from the pipeline verify
+        // step plus at least the implement and test skills.
+        const cc = readFileSync(join(SKILLS_DIR, 'spur-dev', 'references', 'cross-cutting.md'), 'utf8');
+        expect(cc).toContain('## Verification Before Completion');
+        expect(cc).toContain('Red Flags — an unverified claim');
+        // The section carries a Red-Flags table (a "| ... | ... |" row beyond the header).
+        const vbc = cc.slice(cc.indexOf('## Verification Before Completion'));
+        const tableRows = vbc.split('\n').filter((l) => l.trim().startsWith('|'));
+        expect(tableRows.length).toBeGreaterThanOrEqual(5); // header + separator + >= 3 red-flag rows
+
+        const anchor = 'cross-cutting.md#verification-before-completion';
+        for (const skill of ['code-verification', 'code-implementation', 'code-testing']) {
+            const text = readFileSync(join(SKILLS_DIR, skill, 'SKILL.md'), 'utf8');
+            expect(text, `${skill} must reference ${anchor}`).toContain(anchor);
+        }
+    });
+
+    test('R48 — Wave 2 competencies + review enrichment landed (0214 R4/R5/R6)', () => {
+        // R4: doubt-driven-development skill — five-step loop, artifact-not-claim rule, bounded stop,
+        // doubt-theater red flag.
+        const doubt = readFileSync(join(SKILLS_DIR, 'doubt-driven-development', 'SKILL.md'), 'utf8');
+        for (const marker of ['CLAIM', 'EXTRACT', 'DOUBT', 'RECONCILE', 'STOP']) {
+            expect(doubt, `doubt-driven-development must document the ${marker} step`).toContain(marker);
+        }
+        expect(doubt).toContain('artifact + contract');
+        expect(doubt).toContain('NOT the claim');
+        expect(doubt).toContain('3 cycles');
+        expect(doubt.toLowerCase()).toContain('doubt theater');
+
+        // R5: source-driven-development is the single sp owner; the two questions are distinguished.
+        const source = readFileSync(join(SKILLS_DIR, 'source-driven-development', 'SKILL.md'), 'utf8');
+        expect(source).toContain('single sp owner');
+        expect(source).toContain('Does the API exist?');
+        expect(source).toContain('using it correctly under its contract');
+        // Overlap resolved: brainstorm delegates to the sp owner, not the external cc: skill.
+        const brainstorm = readFileSync(join(SKILLS_DIR, 'brainstorm', 'SKILL.md'), 'utf8');
+        expect(brainstorm).toContain('sp:source-driven-development');
+        expect(brainstorm).not.toContain('cc:anti-hallucination');
+
+        // R6: code-review references carry the five review-depth subsections, in sp vocabulary.
+        const lenses = readFileSync(join(SKILLS_DIR, 'code-review', 'references', 'review-lenses.md'), 'utf8');
+        for (const section of [
+            '## Structural Remedies',
+            '## Change Sizing',
+            '## Honesty in Review',
+            '## Dead-Code Hygiene',
+            '## Dependency Discipline',
+        ]) {
+            expect(lenses, `review-lenses.md must contain "${section}"`).toContain(section);
+        }
+    });
+
+    test('R49 — Wave 3 enrichment landed (0214 R7/R8/R9)', () => {
+        // R7: sys-debugging hardening — untrusted error output, non-reproducible decision tree,
+        // instrumentation keep/remove — with the feedback-loop-first Phase 1 unchanged.
+        const debug = readFileSync(join(SKILLS_DIR, 'sys-debugging', 'SKILL.md'), 'utf8');
+        expect(debug, 'Phase 1 must remain feedback-loop-first').toContain('### Phase 1 — Build the feedback loop');
+        expect(debug).toContain('Error output is untrusted data');
+        expect(debug).toContain('Non-reproducible bugs — the decision tree');
+        expect(debug).toContain('Instrumentation — keep vs remove');
+
+        // R8: decision-brief SSOT exists and is referenced from the three HITL sites.
+        const brief = join(SKILLS_DIR, 'spur-dev', 'references', 'decision-brief.md');
+        statSync(brief);
+        const briefText = readFileSync(brief, 'utf8');
+        expect(briefText).toContain('# Decision-Brief Format');
+        expect(briefText.toLowerCase()).toContain('recommendation'); // recommendation is mandatory
+        for (const [label, p] of [
+            ['brainstorm', join(SKILLS_DIR, 'brainstorm', 'SKILL.md')],
+            ['dev-refine', join(PLUGIN_ROOT, 'commands', 'dev-refine.md')],
+            ['decomposition', join(SKILLS_DIR, 'spec-decomposition', 'references', 'decomposition.md')],
+        ] as const) {
+            expect(readFileSync(p, 'utf8'), `${label} must reference decision-brief.md`).toContain('decision-brief.md');
+        }
+
+        // R9: the four subagent disciplines are documented in all three surfaces.
+        const disciplines = ['ledger', 'cheapest model', 'pre-judge the reviewer'];
+        for (const p of [
+            join(SKILLS_DIR, 'parallel-execution', 'SKILL.md'),
+            join(AGENTS_DIR, 'super-coder.md'),
+            join(SKILLS_DIR, 'spur-dev', 'references', 'execution-batch.md'),
+        ]) {
+            const text = readFileSync(p, 'utf8').toLowerCase();
+            expect(text, `${p} must document subagent disciplines`).toContain('subagent execution disciplines');
+            expect(text).toContain('file');
+            for (const d of disciplines) expect(text, `${p} missing "${d}"`).toContain(d);
+        }
+    });
+
+    test('R50 — architecture-upkeep survey + behavioral eval harness landed (0215 R1/R2)', () => {
+        // R1: sys-architecture carries a survey OPERATION that emits a MARKDOWN report and reuses the
+        // deep-module vocabulary by reference; a thin /sp:dev-arch command exists; dev-review is unchanged.
+        const sysArch = readFileSync(join(SKILLS_DIR, 'sys-architecture', 'SKILL.md'), 'utf8');
+        expect(sysArch).toContain('## Survey operation');
+        expect(sysArch).toContain('MARKDOWN candidate report');
+        expect(sysArch).toContain('- survey'); // operations: - survey
+        statSync(join(SKILLS_DIR, 'sys-architecture', 'references', 'upkeep-survey.md'));
+        const survey = readFileSync(join(SKILLS_DIR, 'sys-architecture', 'references', 'upkeep-survey.md'), 'utf8');
+        expect(survey).toContain('never'); // never auto-refactor
+        expect(survey.toLowerCase()).toContain('never emit an html');
+        expect(survey).toContain('decision-method.md'); // reuse-by-reference, not restated
+        statSync(join(PLUGIN_ROOT, 'commands', 'dev-arch.md'));
+        // /sp:dev-review is unchanged — still the SECUA per-task diff review, not a survey.
+        const devReview = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-review.md'), 'utf8');
+        expect(devReview).toContain('SECUA');
+        expect(devReview).not.toContain('survey');
+
+        // R2: a behavioral eval harness exists with a free (deterministic) and paid (live) tier,
+        // documented, with a separate `bun run eval` entry point that is not a *.test.ts file.
+        const evalsDir = join(SKILLS_DIR, '..', 'evals');
+        for (const f of ['judge.ts', 'scenarios.ts', 'run-eval.ts', 'judge.test.ts', 'README.md']) {
+            statSync(join(evalsDir, f));
+        }
+        const evalReadme = readFileSync(join(evalsDir, 'README.md'), 'utf8');
+        expect(evalReadme.toLowerCase()).toContain('free');
+        expect(evalReadme.toLowerCase()).toContain('paid');
+        expect(evalReadme).toContain('bun run eval');
+        const pkg = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8')) as {
+            scripts: Record<string, string>;
+        };
+        expect(pkg.scripts.eval, 'package.json must expose a separate `eval` entry point').toContain('run-eval.ts');
+        // The live/paid tier runner is a standalone script, NOT a test file — so the default suite
+        // never picks it up (D4: behavioral evals do not entangle the always-on structural suite).
+        expect(pkg.scripts.eval).not.toContain('.test.ts');
+    });
+
+    test('R51 — wayfinder skill anatomy + brainstorm escalation reference (task 0216 R1/R2/R5)', () => {
+        // R1: wayfinder SKILL.md exists with full anatomy.
+        const wayfinder = readFileSync(join(SKILLS_DIR, 'wayfinder', 'SKILL.md'), 'utf8');
+        for (const section of [
+            '## Overview',
+            '## When to Use',
+            '## Process',
+            '## Common Rationalizations',
+            '## Red Flags',
+            '## Verification',
+        ]) {
+            expect(wayfinder, `wayfinder SKILL.md must contain "${section}"`).toContain(section);
+        }
+
+        // Core wayfinding concepts expressed in sp vocabulary — no vendor tracker references.
+        expect(wayfinder).toContain('spur feature');
+        expect(wayfinder).toContain('spur task');
+        expect(wayfinder).toContain('## Not yet specified');
+        expect(wayfinder).toContain('## Out of scope');
+        expect(wayfinder).toContain('## Destination');
+        expect(wayfinder).toContain('## Decisions so far');
+        expect(wayfinder).toContain('spur task update');
+        expect(wayfinder).not.toContain('GitHub issue');
+        expect(wayfinder).not.toContain('wayfinder:map');
+        expect(wayfinder).not.toContain('issue tracker');
+
+        // R2: brainstorm SKILL.md references wayfinder in its escalation path.
+        const brainstorm = readFileSync(join(SKILLS_DIR, 'brainstorm', 'SKILL.md'), 'utf8');
+        expect(brainstorm).toContain('sp:wayfinder');
+        expect(brainstorm).toContain('## Wayfinding Escalation');
+        expect(brainstorm).toContain('scope check');
+        expect(brainstorm).toContain('multi-session investigation');
+
+        // R3: --wayfind flag is documented in both surfaces.
+        const devBrainstorm = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-brainstorm.md'), 'utf8');
+        expect(devBrainstorm).toContain('--wayfind');
+        expect(devBrainstorm).toContain('sp:wayfinder');
+
+        // R4: "work through the map" operational mode is documented in wayfinder.
+        expect(wayfinder).toContain('### Work Through the Map');
+        expect(wayfinder).toContain('Never resolve more than one ticket per session');
+
+        // R5: wayfinder carries the anti-rationalization anatomy (checked by R46 load-bearing list).
+        // No vendors/ reference anywhere in the shipped files (checked by R20).
     });
 });

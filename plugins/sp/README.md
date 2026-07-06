@@ -121,6 +121,8 @@ list this README is checked against.
 | `dev-handover` | Generate a structured handover document when blocked — captures goal, progress, blocker, rejected approaches, and next steps |
 | `dev-dogfood` | Dogfood an agent skill/command/CLI — drive it end-to-end with bounded auto-fix, self-monitor, and emit a comprehensive report |
 | `dev-fixall` | Fix all lint, type, and test errors systematically across the working tree |
+| `dev-simplify` | Simplify recently-changed code for clarity without changing behavior — incremental, test-after-each, revert on regression |
+| `dev-arch` | Survey a codebase (or module tree) for shallow modules and deepening opportunities — emit a ranked MARKDOWN candidate report that feeds the planning half; never auto-refactors |
 | `dev-gitmsg` | Generate conventional commit message(s) from staged changes via per-file summarization, optionally commit |
 | `dev-changelog` | Generate changelog from git commits |
 
@@ -155,8 +157,8 @@ Commands above are thin wrappers; the actual logic lives in `skills/`. The spine
 dispatches five competency skills by function — design (`sp:sys-architecture`), decomposition
 (`sp:spec-decomposition`), implementation (`sp:code-implementation`), testing (`sp:code-testing`),
 and verification (`sp:code-verification`) — plus a CLI facade (`sp:spur-cli`, one reference per
-`spur` noun) and standalone technique skills (`sp:spur-tdd`, `sp:brainstorm`, `sp:sys-debugging`,
-`sp:code-review`, `sp:parallel-execution`, `sp:doc-evolve`, `sp:dogfood-testing`). See
+`spur` noun) and standalone technique skills (`sp:spur-tdd`, `sp:brainstorm`, `sp:wayfinder`,
+`sp:sys-debugging`, `sp:code-review`, `sp:parallel-execution`, `sp:doc-evolve`, `sp:dogfood-testing`). See
 [skills/spur-dev/SKILL.md](skills/spur-dev/SKILL.md)'s Step routing table for which skill owns which
 pipeline step.
 
@@ -164,7 +166,7 @@ pipeline step.
 
 ```
 plugins/sp/
-├── skills/                          # Domain knowledge + workflow docs (16 skills)
+├── skills/                          # Domain knowledge + workflow docs (18 skills)
 │   ├── brainstorm/                  # Structured ideation workflow
 │   │   ├── agents/openai.yaml
 │   │   ├── examples/ideation-example.md
@@ -204,8 +206,9 @@ plugins/sp/
 │   ├── spur-tdd/                    # TDD workflow companion (SKILL.md only)
 │   ├── sys-architecture/            # Architecture / ADR judgment competency
 │   │   └── references/decision-method.md
-│   └── sys-debugging/               # Structured debugging protocol
-│       └── references/debugging-protocol.md
+│   ├── sys-debugging/               # Structured debugging protocol
+│   │   └── references/debugging-protocol.md
+│   └── wayfinder/                   # Multi-session investigation maps (SKILL.md only)
 ├── commands/                        # 23 slash-command definitions
 ├── agents/                          # 2 specialist subagents (expert-spur, super-coder)
 ├── hooks/                           # hooks.json + task-write-guard.{ts, test.ts}
@@ -239,7 +242,7 @@ Tier 3 — Execution Layer (spur CLI + Guard Scripts)
 
 The single source of truth for domain knowledge and workflow documentation. Each skill is a
 self-contained knowledge module that teaches the agent how to operate one slice of the Spur CLI
-surface or run one workflow. All 16 skills target the same five platforms: `claude-code`, `codex`,
+surface or run one workflow. All 18 skills target the same five platforms: `claude-code`, `codex`,
 `antigravity`, `opencode`, `openclaw`.
 
 | Skill | Ver | Domain |
@@ -252,12 +255,14 @@ surface or run one workflow. All 16 skills target the same five platforms: `clau
 | `code-testing` | 1.0 | Testing competency — run tests, measure coverage, categorize gaps, extend targeted tests with per-stack adapters (Bun/TS, Go, Python) |
 | `code-verification` | 1.0 | Requirements-traceability verdict (PASS/PARTIAL/FAIL) + SECUA code review (Security, Efficiency, Correctness, Usability, Architecture); backs `/sp:dev-verify` and `/sp:dev-review` |
 | `code-review` | 1.0 | Pre-commit self-review checklist (6 categories, catches 60-80% of issues) + SECUA review lenses + findings processing |
+| `code-simplification` | 1.0 | Behavior-preserving simplification — Chesterton's Fence, signal tables, incremental change + test-after-each, scope-to-changed |
 | `dogfood-testing` | 1.0 | Dogfood backbone — drives a testee end-to-end with bounded auto-fix, a live monitor ledger, and a structured report; backs `/sp:dev-dogfood` |
 | `parallel-execution` | 1.0 | Fan-out decision framework — when to parallelize, four proven fan-out patterns, and result synthesis; backs `/sp:dev-parallel` |
 | `sys-debugging` | 1.0 | Structured debugging protocol — reproduce→isolate→root cause→fix→regression test; "ask the debugger before the LLM" principle |
 | `branch-workflow` | 1.0 | Branch-lifecycle discipline — create→worktree→commit→self-review→merge→cleanup; git worktree patterns for parallel branches |
 | `spur-tdd` | 1.0.0 | TDD workflow companion — red-green-refactor cycle, behavior-first test design, AAA structure, data builders, mock-at-boundary anti-patterns |
 | `brainstorm` | 1.0.0 | Structured ideation workflow — generate solution options with trade-offs and confidence scoring |
+| `wayfinder` | 1.0.0 | Multi-session investigation maps — chart a spur feature as the map when the destination itself is foggy, then resolve one ticket per session until the route is clear |
 | `daily-summary` | 1.0.0 | Daily summary report generator — orchestrates ccusage CLI + git history into structured markdown summaries |
 | `doc-evolve` | 1.0 | Key-document evolution per `docs/99_PROJECT_CONSTITUTION.md` — drift audits, same-commit sync checks, frontmatter-contract verification, machine-appended lessons |
 
@@ -280,11 +285,11 @@ Skills contain zero validation logic — the CLI is the gate.
 
 Thin slash-command wrappers that parse user arguments and delegate to the corresponding skill. Each
 command is a user-facing entry point that bridges natural language to skill invocation. There are
-**23 commands** (see the Command index above for the full list), organized by the surface they wrap:
+**24 commands** (see the Command index above for the full list), organized by the surface they wrap:
 
 | Prefix | Count | Delegates to | Purpose |
 |--------|-------|-------------|---------|
-| `dev-*` | 17 | `sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:brainstorm`, `sp:dogfood-testing`, `sp:parallel-execution`, inline | The dev-workflow surface — planning, execution, batch, wrap-up, review/verify, hygiene |
+| `dev-*` | 18 | `sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:code-simplification`, `sp:brainstorm`, `sp:dogfood-testing`, `sp:parallel-execution`, inline | The dev-workflow surface — planning, execution, batch, wrap-up, review/verify, hygiene |
 | `rule-*` | 3 | `sp:spur-cli` | The rule surface — `rule-add`, `rule-refine`, `rule-scan` |
 | `workflow-*` | 2 | `sp:spur-cli` | The workflow surface — `workflow-add`, `workflow-refine` |
 | `spur-init` | 1 | `sp:doc-evolve` | Project bootstrap (`spur init`) with doc-evolve integration |
