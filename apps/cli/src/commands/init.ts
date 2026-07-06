@@ -158,7 +158,7 @@ export function registerInitCommand(program: Command, context: CliContext): void
                 '  logging:',
                 '    enabled: true',
                 '    level: info',
-                '    console: true',
+                '    console: false',
                 '    json: true',
                 '    file: true',
                 `    filePath: ${CLI_CONFIG.configDir}/logs/spur.log`,

@@ -58,14 +58,18 @@ function fakeApp() {
 function makeDeps(overrides: Partial<StartServerDeps> = {}): StartServerDeps {
     return {
         serverBootstrapConfig: () => ({
-            logging: { enabled: false, level: 'info' as const },
+            logging: { enabled: false, level: 'info' as const, console: false },
             telemetry: { enabled: false },
             events: { enabled: true },
             jobqueue: { enabled: false },
             scheduler: { enabled: false },
             teamAutostart: [],
         }),
-        runNodeApplication: (async (opts: { config: unknown; start: (rt: ApplicationRuntime) => Promise<void> }) => {
+        runNodeApplication: (async (opts: {
+            config: unknown;
+            configLoader?: { configFile: string; bootstrapSection: string };
+            start: (rt: ApplicationRuntime) => Promise<void>;
+        }) => {
             const rt = fakeRuntime();
             await opts.start(rt);
             return rt;
@@ -75,6 +79,7 @@ function makeDeps(overrides: Partial<StartServerDeps> = {}): StartServerDeps {
         createServerContext: (() => ({}) as never) as unknown as StartServerDeps['createServerContext'],
         createScheduler: async () => ({ start: async () => {}, stop: async () => {}, register: () => {} }) as never,
         openUrl: async () => {},
+        resolveConfigFile: () => undefined,
         ...overrides,
     };
 }
@@ -232,7 +237,7 @@ describe('startServer', () => {
 
         const deps = makeDeps({
             serverBootstrapConfig: () => ({
-                logging: { enabled: false, level: 'info' as const },
+                logging: { enabled: false, level: 'info' as const, console: false },
                 telemetry: { enabled: false },
                 events: { enabled: true },
                 jobqueue: { enabled: false },
@@ -317,7 +322,7 @@ describe('startServer', () => {
 
         const deps = makeDeps({
             serverBootstrapConfig: () => ({
-                logging: { enabled: false, level: 'info' as const },
+                logging: { enabled: false, level: 'info' as const, console: false },
                 telemetry: { enabled: false },
                 events: { enabled: false },
                 jobqueue: { enabled: true },

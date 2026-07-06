@@ -63,7 +63,9 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
                 // reconfigure LogTape with a console sink — which would reset the
                 // global mute installed in tests/setup.ts and leak JSON log lines
                 // from every later app.* logger (e.g. the rule engine).
-                config: process.env.NODE_ENV === 'test' ? { logging: { enabled: false } } : undefined,
+                // Outside test, enforce console off — all output goes to file.
+                config:
+                    process.env.NODE_ENV === 'test' ? { logging: { enabled: false } } : { logging: { console: false } },
                 services: { db },
                 async start(appRt: ApplicationRuntime<SpurAppConfig>) {
                     const context = createCliContext({

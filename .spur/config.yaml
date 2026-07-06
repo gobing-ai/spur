@@ -15,7 +15,7 @@ bootstrap:
     console: false
     json: false
     file: true
-    filePath: .spur/spur.log
+    filePath: .spur/logs/spur.log
   telemetry:
     enabled: false
     serviceName: spur

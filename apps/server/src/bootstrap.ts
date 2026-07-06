@@ -38,7 +38,7 @@ export function serverBootstrapConfig(env: Record<string, string | undefined>): 
               .filter((s) => s.length > 0)
         : [];
     return {
-        logging: { enabled: !isTest, level: (env.SPUR_LOG_LEVEL as LoggingOptions['level']) ?? 'info' },
+        logging: { enabled: !isTest, level: (env.SPUR_LOG_LEVEL as LoggingOptions['level']) ?? 'info', console: false },
         telemetry: { enabled: false },
         events: { enabled: true },
         jobqueue: { enabled: !isTest },

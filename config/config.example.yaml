@@ -15,7 +15,7 @@ bootstrap:
     console: false
     json: false
     file: true
-    filePath: .spur/spur.log # relative to project root
+    filePath: .spur/logs/spur.log # relative to project root
   telemetry:
     enabled: false # OFF by default for CLI (per-invocation latency)
     serviceName: spur

@@ -6,6 +6,7 @@ import {
     resolvePlanningFolders,
     type TaskActionJob,
 } from '@gobing-ai/spur-app';
+import { resolveConfigFile } from '@gobing-ai/spur-config/loader';
 import { SystemEventDao } from '@gobing-ai/spur-domain';
 import type { ApplicationRuntime, ApplicationStopReason } from '@gobing-ai/ts-infra/application';
 import { runNodeApplication } from '@gobing-ai/ts-infra/application-node';
@@ -49,6 +50,7 @@ export interface StartServerDeps {
     createServerContext: typeof createServerContext;
     createScheduler: () => Promise<ServerScheduler>;
     openUrl: typeof openUrl;
+    resolveConfigFile: typeof resolveConfigFile;
 }
 
 /** Default collaborators wiring the real implementations. Exported for coverage of the lazy scheduler import. */
@@ -64,6 +66,7 @@ export const defaultDeps: StartServerDeps = {
         return new NodeSchedulerAdapter();
     },
     openUrl,
+    resolveConfigFile,
 };
 
 /** Register built-in scheduled queue entries for the Bun serve runtime. */
@@ -167,9 +170,11 @@ async function resolveWebDistPath(configuredPath: string | null | undefined): Pr
 export async function startServer(options: StartServerOptions, deps: StartServerDeps = defaultDeps): Promise<void> {
     const env = process.env as Record<string, string | undefined>;
     const bootConfig = deps.serverBootstrapConfig(env);
+    const configFile = deps.resolveConfigFile();
 
     await deps.runNodeApplication({
         config: bootConfig,
+        configLoader: configFile ? { configFile, bootstrapSection: 'bootstrap' } : undefined,
         async start(appRt: ApplicationRuntime) {
             const fs = deps.createNodeFileSystem(process.cwd());
 

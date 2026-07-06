@@ -28,6 +28,11 @@ describe('serverBootstrapConfig', () => {
         const cfg = serverBootstrapConfig({});
         expect(cfg.logging.level).toBe('info');
     });
+
+    test('enforces console logging off', () => {
+        const cfg = serverBootstrapConfig({});
+        expect(cfg.logging.console).toBe(false);
+    });
     test('parses SPUR_TEAM_AUTOSTART into trimmed, non-empty ids', () => {
         const cfg = serverBootstrapConfig({ SPUR_TEAM_AUTOSTART: 'alpha , beta, ,gamma' });
         expect(cfg.teamAutostart).toEqual(['alpha', 'beta', 'gamma']);
