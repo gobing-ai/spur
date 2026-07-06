@@ -4,6 +4,40 @@
 
 _No changes yet._
 
+## [0.3.2] — 2026-07-05
+
+### Added
+
+- **Embedded job queue + scheduler (task 0190, waves 0200/0201).** `packages/app` gains `JobWorkerService` and `JobHandlerRegistry` (drain, process-once semantics); `apps/server` ships a jobs observability module (queue stats, worker drain) and `serve.ts` wires worker attach/detach with autostart. Backed by a new `runs.external_key` column migration (`drizzle/0007`).
+- **Observability board module (task 0189, waves 0198–0210).** New `system_events` append-only ledger DAO + tap in `packages/domain`; SSE-streamed planning events surfaced through `registerSystemEventTap()` with per-handler try/catch isolation. `apps/web` lands the observability shell with System Events, Inbox, Jobs, and Process List tabs (auto-discovery contract, polling refresh, accessible focus/keyboard nav).
+- **Cross-agent inbox IPC message bus (task 0193, waves 0204–0206).** Server `POST /api/messages` and `GET /api/messages/inbox` read APIs; `TeamService.listRecent()` cross-recipient newest-first feed via new `InboxRecentDao`. Message lifecycle (`message.sent`/`message.replied`) events wired to the SSE stream. New `spur message watch` CLI verb with configurable `--interval`; `apps/web` `InboxTab` live tail backed by message events.
+- **Team process supervision (task 0195, waves 0207–0210).** `SupervisorService` in `packages/app` (spawn/exit/stop events, autostart, SIGTERM→SIGKILL escalation, 60s exit cleanup) with 100% line coverage. Server team module mounts the supervisor; `apps/cli` ships `spur team start|stop <agent-id>` that POST to the running server (replacing Phase-4 daemon stubs); `apps/web` `ProcessListTab` lists supervised processes and subscribes to `process.*` SSE events. `SupervisorService.writeStdin` forwards lines to child stdin.
+- **Features board module (task 0194).** `packages/app` feature client + typed contracts for feature DTOs; `apps/web` tree view + detail panel + lifecycle actions. Server feature handlers wired into context and event names.
+- **Workspace web module (tasks 0196/0197).** Module structure under `apps/web/src/modules/observability/` per the auto-discovery contract; routing/keyboard/persistence notes backfilled in task 0199.
+- **Task-kanban web parity (task 0191, waves 0202/0203).** `NewTaskPanel` markdown editor and `TaskDetail` metadata render close the F7 parity gap; `task-service` + `task-check` refinements and task DTO updates in `packages/contracts`.
+- **`spur-init` rule glob adaptation (task 0188).** Replaces the "dogfood-artifact" excuse with Phase 1.6 — an LLM-as-judge pass that detects project layout (monorepo / single-package / flat / polyglot) and rewrites layout-dependent recommended-pre-check globs to match actual roots, writing adapted overlays to `.spur/rules/<category>/`. `spur rule run --preset recommended-pre-check` now reports zero `kind:'error'` findings on fresh scaffolds. Adds R45 structural test; extends the `04_DESIGN.md §1.1` ownership contract.
+- **`sp:dev-unit` file-focused workflow.** Test file naming convention, directory mirroring, iteration rules with max-3-pass escalation, coverage-gap diagnostic for V8 function coverage quirks, and a task-scoped Workflow B with status transition guard.
+- **Per-workspace lcov merge script (initial).** `scripts/merge-coverage.ts` runs each workspace's tests with coverage, resolves SF paths to repo-root-relative, deduplicates with max-hit per line, and writes `.coverage/lcov.info` for the coverage-gate rule. (Superseded by the native Bun cutover below.)
+
+### Changed
+
+- **Cutover to native Bun coverage gate; delete `merge-coverage.ts` (355 lines).** `package.json` test scripts rewired to a single-invocation native Bun runner producing one merged `.coverage/lcov.info` across all workspaces in ~15s. `bunfig.toml` keeps `coverageThreshold` at 0.9/0.9 (lines/functions) and adds `**/*.tsx` to `coveragePathIgnorePatterns` — React components are exercised via happy-dom integration tests, not unit tests. `AGENTS.md` coverage language synced. `_No changes yet._` placeholder retired.
+- **Task-kanban board refactor.** `TaskFilters` collapsed to a single dataset-keyed `onChange` handler (4 fns → 2; callback-identity exception to `ts-no-tiny-functions`); broken `fireEvent.change` happy-dom block dropped and tests consolidated around the api-mock harness.
+- **`startServer` DI refactor.** Server `index.ts` uses dependency injection for `startServer`, enabling direct testing of the `main()` bootstrap path without `mock.module` leaks (59% → 95.5% line coverage).
+- **`spur-init` ownership contract.** `init.test.ts` adds 4 tests (SSOT manifest↔TASK_VARIANTS invariant, source-resolution, task-create probe, brainstorm assertion); `04_DESIGN.md` fixes template inventory (default→standard, adds brainstorm); skill-structure test R43 scoped to Command index section.
+- **Command docs aligned with CLI source.** `cmd_feature.md` adds the `advance` subcommand and drops the phantom `migrate` entry; `plugins/sp/README.md` consolidates marketplace metadata, on-ramps, batch/parallel paths, and the full command index.
+- **Task lifecycle records refreshed.** Tasks 0188–0213 decomposed into wave sub-tasks; parent tasks moved todo → wip; feature rosters auto-generated via `spur task refresh-roster`; A1/0188 marked done. New planning record at `docs/plans/2026-07-03-feature-cycle-prioritization-brainstorm.md`.
+
+### Fixed
+
+- **JSON log-line output leak during multi-path test runs.** `apps/server/src/worker.ts` `defaultBootstrap` now falls back to `process.env.NODE_ENV` when the Cloudflare Worker `env` arg omits it, so `bun test` (NODE_ENV=test) flows into `serverBootstrapConfig` and disables logging — mirroring the CLI guard at `apps/cli/src/index.ts:66`. Previously `worker.fetch(req, {})` in tests reconfigured LogTape with a console sink (`initializeLogger({console:true,json:true})`), replacing the fatal-only mute from `tests/setup.ts` and bleeding 96 JSON `@timestamp` lines from `app.workflow`, `app.rule-engine`, and `app.ai-runner.shims` loggers during `bun test ./apps/cli ./apps/server ./apps/web ./packages ./plugins`. Verified: leak 96 → 0, full suite 2380 pass / 0 fail.
+- **Task-service `refresh` scope.** `resolveFolder()` now returns the resolved candidate path (was returning the raw input) and refresh scans all configured folders, not just `tasksDir`.
+- **Cross-workspace lcov phantom uncovered lines.** `scripts/merge-coverage.ts` filters lcov records by owning workspace so different workspaces instrumenting the same source file don't introduce phantom uncovered lines (drops phantom gaps 58 → 7 real).
+- **`spur-init` scaffold manifest SSOT (task 0188).** Enforces scaffold manifest↔`TASK_VARIANTS` invariant; dedupes the Implementation block; scopes R43 to Command index only.
+- **`sp-plugin` YAML frontmatter quoting.** 7 skill frontmatters had unquoted `: "` descriptions that YAML parsed as mapping pairs, breaking `superskill install` with "incomplete explicit mapping pair". Now wrapped in double quotes with inner `\"` escapes (code-implementation, code-testing, code-verification, spec-decomposition, spur-dev, doc-evolve, dogfood-testing).
+- **CLI coverage gaps.** `apps/cli/src/index.ts` extracts the `import.meta.main` block into exported `runCli()` for direct testing without `process.exit()` (88% → 95.3% line coverage); unused `cwd` variable removed from the runCli test.
+- **Lint warnings.** Unused imports, non-null assertions, and string-concat → template literals cleaned; `no-leaky-module-mocks.yaml` excludes `index.test.tsx` (uses `mock.module` for hooks + rpc-client proxy).
+
 ## [0.3.1] — 2026-07-03
 
 ### Added
