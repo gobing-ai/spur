@@ -8,14 +8,20 @@ type AppRuntime = ApplicationRuntime<unknown, InfraEvents>;
 /** Bootstraps the portable application from env. Overridable in tests. */
 export type BootstrapFn = (env: Record<string, string | undefined>) => Promise<AppRuntime>;
 
-const defaultBootstrap: BootstrapFn = (env) =>
-    runApplication({
-        config: serverBootstrapConfig(env),
+const defaultBootstrap: BootstrapFn = (env) => {
+    // The Cloudflare Worker `env` arg carries request bindings, not NODE_ENV.
+    // Fall back to the runtime env so `bun test` (NODE_ENV=test) disables
+    // logging — otherwise initializeLogger() reconfigures LogTape with a
+    // console sink and leaks JSON log lines from every later app.* logger.
+    const merged = env.NODE_ENV === undefined ? { ...env, NODE_ENV: process.env.NODE_ENV } : env;
+    return runApplication({
+        config: serverBootstrapConfig(merged),
         async start(_appRt: ApplicationRuntime) {
             // No server-level side effects — the app is created lazily on
             // first request and cached for the isolate's lifetime.
         },
     });
+};
 
 /** Cached bootstrap promise — initialized lazily on first request. */
 let rtPromise: Promise<AppRuntime> | undefined;
