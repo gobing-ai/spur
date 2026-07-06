@@ -54,6 +54,11 @@ never a legacy `tasks` CLI) is the SSOT in
 its own: **the verdict artifact is the contract.** `.spur/run/<wbs>-verdict.json` is the machine
 signal the workflow guard reads; always write it last, after the verdict is final.
 
+The universal honesty gate — **no "done / passing / fixed / works" claim without fresh, pasted
+verification evidence run this turn** — lives in that same file:
+[Verification Before Completion](../spur-dev/references/cross-cutting.md#verification-before-completion).
+The verify step is where it is enforced hardest: a PASS verdict is a completion claim, so it obeys the gate.
+
 ---
 
 ## Mode: verify (`/sp:dev-verify`)
@@ -188,7 +193,10 @@ Review the changed code across the `--focus` dimensions (default all): **S**ecur
 injection, unsafe input), **E**fficiency, **C**orrectness (null/edge handling, logic), **U**sability
 (API clarity, error messages), **A**rchitecture (module depth, seam placement, coupling, locality).
 Rank findings by severity (blocker / major / minor). See
-[references/secu-review.md](references/secu-review.md).
+[references/secu-review.md](references/secu-review.md). For review *depth* — structural remedies,
+change sizing, honesty/anti-sycophancy, dead-code hygiene, and dependency discipline — the SSOT is
+[code-review/references/review-lenses.md](../code-review/references/review-lenses.md); apply it here
+rather than restating it.
 
 When review exposes broader architecture friction rather than a localized defect, use
 [references/code-improvement.md](references/code-improvement.md) to frame follow-up candidates
@@ -305,6 +313,26 @@ via `$ARGUMENTS`) controls which agent executes the review. `auto` = resolve fro
 is not expressible on the pipeline surface.
 
 ---
+
+## Common Rationalizations
+
+| Rationalization | Reality |
+|---|---|
+| "The AC is obviously met — I can see it in the diff." | Seeing code is not evidence. An AC is met only when a command or test tied to it exited 0 **this run**; paste it, or the AC is UNVERIFIED. |
+| "All tests pass, so the verdict is PASS." | Green tests prove the suite's assertions, not that every AC has coverage. Map each AC to its evidence; an AC with no test is not covered by a passing suite. |
+| "The implementer reported it works — I'll trust the summary." | A subagent success report is a claim, not a verdict. Verification **re-runs** the check; trusting the report is skipping the gate you were asked to be. |
+| "It's a small diff, one AC — full traceability is overkill." | Diff size does not scale the honesty bar. Every AC gets a row in the traceability table regardless of diff size. |
+| "This objective AC reads fine — `llm-judge` can clear it." | Objective AC (a test exists, a command exits 0, a file contains X) cannot be cleared by judgment alone; it needs the literal command evidence. |
+| "PARTIAL is close enough to ship." | PARTIAL/FAIL leave the task at `testing` and surface to the operator. Rounding PARTIAL up to PASS is the exact dishonesty this gate exists to catch. |
+
+## Red Flags
+
+- A PASS verdict with no per-AC evidence column, or evidence that is a description rather than a pasted command + exit status.
+- Clearing an objective AC (`file exists`, `command exits 0`, `test named X passes`) with `llm-judge` instead of the literal check.
+- A verdict authored from the implementer's summary without independently re-running the gate.
+- Softening a FAIL to PARTIAL, or PARTIAL to PASS, to avoid surfacing to the operator.
+- Skipping `spur task check <wbs> --strict-core` because "it passed last run" — stale evidence is not evidence.
+- Findings written as "looks good" with no `file:line` anchor.
 
 ## When to use
 

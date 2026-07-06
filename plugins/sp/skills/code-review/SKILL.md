@@ -68,6 +68,26 @@ When you receive review findings:
 4. **Re-review:** After all P1/P2 fixes, request a follow-up review to confirm resolution.
 5. **File follow-up tasks** for deferred P3/P4 items via `spur task create --template review`.
 
+## Common Rationalizations
+
+| Rationalization | Reality |
+|---|---|
+| "It looks good to me — approve." | "LGTM" with no specific findings is not a review; it's a rubber stamp. State what you checked and what you found, with anchors. |
+| "It's a small diff, skim it." | Small diffs ship real bugs. Size does not lower the bar; run the same lenses regardless. |
+| "The author knows this area better — trust them." | Deference is not review. Your job is the independent second pair of eyes; verify, don't assume. |
+| "I'll soften this finding so it doesn't sound harsh." | Softening a real finding is dishonest and lets the defect through. State severity plainly; the diff, not the author, is under review. |
+| "There's dead code — I'll just delete it." | Deleting code you don't fully understand is risky. Identify it, list it, and ask before removing (Chesterton's Fence). |
+| "A new dependency is fine for this one helper." | Prefer stdlib / existing utilities. Flag every new dependency; a one-function import is rarely worth the supply-chain cost. |
+
+## Red Flags
+
+- An approval with no specific, anchored findings.
+- Findings phrased to spare feelings instead of stating severity and impact.
+- Rubber-stamping because the author is senior or the diff is small.
+- Proposing a rewrite far larger than the change under review (scope creep in the review itself).
+- Deleting flagged dead code without confirming it is truly unreachable.
+- Waving through a new third-party dependency without justification.
+
 ## When to use
 
 - Before committing changes.

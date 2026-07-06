@@ -97,6 +97,16 @@ on its internal HITL `approve` gate (under the default profile) is surfaced to t
 batch-level event: "task 0042 is awaiting approval — `spur workflow continue <run-id> --yes` to
 approve, or provide feedback". You do not answer the gate from inside a step.
 
+## Subagent execution disciplines
+
+When you fan out or dispatch a subagent, apply the four disciplines the SSOT
+[sp:parallel-execution](../skills/parallel-execution/SKILL.md) owns:
+
+- **File-handoffs** — hand the artifact as a file **path**, never bulk context pasted into the dispatch prompt (durable, re-readable after compaction).
+- **Durable progress ledger** — track per-item status + result location in a file/the batch report that survives compaction; working memory is not the source of truth.
+- **Per-role model selection** — pick the cheapest model that fits each role; a weak model on a judgment role is a false economy, the top model on every role is waste.
+- **Never pre-judge the reviewer** — a reviewer/skeptic gets artifact + contract only; no "don't flag X", no pre-rated severity. A steered reviewer confirms your framing instead of testing it.
+
 ## Rules
 
 ### Always

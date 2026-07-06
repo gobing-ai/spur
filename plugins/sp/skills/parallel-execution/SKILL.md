@@ -66,6 +66,39 @@ Parallel subagent outputs must be **synthesized**, not concatenated. The synthes
 
 Full synthesis methodology: [result-synthesis.md](references/result-synthesis.md).
 
+## Subagent execution disciplines
+
+When you dispatch work to a subagent — a fan-out worker, an adversarial reviewer, a research angle —
+four disciplines keep the dispatch reliable and cheap. They apply to every pattern above and are the
+SSOT the batch orchestrator (`sp:super-coder`) and [execution-batch.md](../spur-dev/references/execution-batch.md) point back to.
+
+### Hand artifacts as files, not pasted context
+
+Never paste bulk context into a dispatch prompt. Write the artifact — the diff, the file set, the
+spec excerpt, the data — to a file and hand the subagent the **path**. Pasting bulk text bloats the
+prompt, truncates unpredictably, and cannot be re-read after compaction. A file handoff is durable,
+re-readable, and keeps the dispatch prompt small enough to reason about.
+
+### Keep a durable progress ledger
+
+Maintain a progress ledger that survives compaction — a file (or the batch report table) recording,
+per dispatched item, its status (pending / running / done / failed) and its result location. When the
+session compacts or a run resumes, the ledger is the source of truth for what already ran; working
+memory is not. Update it as each item terminates, not in one batch at the end.
+
+### Select the cheapest model that fits each role
+
+Match the model to the role. A mechanical extraction or a structural check runs on a cheap model; a
+nuanced design review or a hard implementation wants a stronger one. Paying for the top model on every
+subagent role is waste; using a weak model on a judgment role is a false economy. Choose per role.
+
+### Never pre-judge the reviewer
+
+A reviewer/skeptic subagent must receive the artifact and the contract and nothing that steers its
+verdict. No "don't worry about X", no "this part is fine", no pre-rated severity, no "focus only on
+Y". A pre-judged reviewer confirms your framing instead of testing it — the exact failure the fan-out
+was meant to avoid. Let the reviewer reach its own conclusion.
+
 ## Integration with the spine
 
 - **`sp:spur-dev`** owns task selection and lifecycle. When a batch contains independent tasks, the spine consults this skill for the fan-out pattern.

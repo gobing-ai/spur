@@ -272,6 +272,10 @@ exist, so this is the cheapest point to catch a granularity or ordering mistake.
 3. <title> — blocked by: none — covers: R3 (user can reset password)
 ```
 
+Present the quiz as a decision brief — recommended breakdown + the trade-off of each alternative
+slicing, with an explicit recommendation — per the SSOT
+[spur-dev/references/decision-brief.md](../../spur-dev/references/decision-brief.md).
+
 **Quiz the operator on:**
 - **Granularity** — does any task look like a horizontal layer-task, a phase-split, or a
   <2h fragment that belongs in a Plan step instead?

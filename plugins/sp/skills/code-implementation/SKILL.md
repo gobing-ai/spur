@@ -60,6 +60,26 @@ When implementation hits a failing gate, a failing test, a runtime defect, or fl
 to the root-cause-first workflow: **[references/debugging.md](references/debugging.md)** —
 reproduce → isolate → minimal fix → regression guard.
 
+## Common Rationalizations
+
+| Rationalization | Reality |
+|---|---|
+| "The spec is clear — I don't need to read the callers." | Code that looks orthogonal is how regressions ship (R5). Read the exports you touch and their immediate callers before writing. |
+| "I'll add the tests in a follow-up." | Untested production code is unverified code. The task's test step is not optional; behavior ships with its test. |
+| "This abstraction will be useful later." | Speculative abstraction is complexity without a caller (R2). Build for the requirement in front of you; add the seam when the second use arrives. |
+| "Close enough to the AC — the intent is there." | "Close enough" is a FAIL at verify. Implement to the literal AC; if the AC is wrong, fix the AC, don't approximate it. |
+| "I'll improve this adjacent code while I'm here." | Drive-by edits widen the diff and the blast radius (R3). Stay in scope; split unrelated cleanup into its own task. |
+| "It compiles and runs, so it's done." | Compiling is not the bar. Done is the AC met, tests green, and the `## Solution` change-map written. |
+
+## Red Flags
+
+- Writing code without having read the immediate callers of what you're changing.
+- A `## Solution` section that lists files but not what changed or why.
+- A new abstraction with exactly one caller and no second use in sight.
+- The diff touches files unrelated to the task's scope.
+- "Done" claimed with no test run pasted.
+- Silently changing an AC's meaning to match what was built.
+
 ## Gotchas
 
 1. **The task is the scope.** Implement only what traces to AC/design; record adjacent cleanup as a
@@ -76,6 +96,7 @@ reproduce → isolate → minimal fix → regression guard.
 - **`sp:code-testing`** — coverage and test extension; owns the per-stack adapters.
 - **`sp:spur-tdd`** — the test-first discipline this skill composes with.
 - **`sp:sys-architecture`** — decide the design/shape before implementing it.
+- **[Verification Before Completion](../spur-dev/references/cross-cutting.md#verification-before-completion)** — no "done / passing / fixed" claim without fresh, pasted evidence run this turn.
 
 ## Platform Notes
 

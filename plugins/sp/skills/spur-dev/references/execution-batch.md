@@ -270,6 +270,16 @@ When a batch contains tasks with **zero dependency edges between them** and **no
 **See also:** `sp:parallel-execution` skill, `sp:super-coder` agent (parallel mode), `/sp:dev-parallel` command.
 
 
+## Subagent execution disciplines
+
+Parallel fan-out and any subagent dispatch obey the four disciplines owned by
+[sp:parallel-execution](../../parallel-execution/SKILL.md) (its "Subagent execution disciplines" section is the SSOT):
+
+- **File-handoffs** — pass the artifact as a file path, never bulk context in the dispatch prompt.
+- **Durable progress ledger** — per-task status + result location recorded in a file/the batch report so a resumed or compacted run knows what already ran.
+- **Per-role model selection** — the cheapest model that fits each role (`--agent` pins the executor; the discipline picks the model per role).
+- **Never pre-judge the reviewer** — verify/review subagents receive artifact + contract only; no pre-rated severity, no "do not flag X".
+
 ## Checkpoint read on batch resume
 
 When resuming an interrupted batch run, read the latest checkpoint from

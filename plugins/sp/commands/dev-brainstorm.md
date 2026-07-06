@@ -1,6 +1,6 @@
 ---
 description: Interactive solution design — heuristic discovery interview followed by structured ideation with trade-offs and confidence scoring
-argument-hint: "<topic> [--depth <basic|detailed|comprehensive>] [--options <n>] [--agent <name|auto>] [--skip-discovery] [--task [<feature-id>]] [--feature [<parent-id>]] [--next]"
+argument-hint: "<topic> [--depth <basic|detailed|comprehensive>] [--options <n>] [--agent <name|auto>] [--skip-discovery] [--wayfind] [--task [<feature-id>]] [--feature [<parent-id>]] [--next]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---
 
@@ -31,6 +31,7 @@ options" dump.
 | `--options <n>` | Number of solution approaches to generate (2-8) | 3 |
 | `--agent <name\|auto>` | Spawn the ideation/research steps under a specific agent via `spur agent run`. Omit (the default) to run them **in the current session** — no subprocess | (in-session) |
 | `--skip-discovery` | Skip the grilling interview — go straight to ideation from the topic alone | off |
+| `--wayfind` | After discovery, skip the scope-check prompt and escalate directly to `sp:wayfinder` charting. The discovery interview's decision tree seeds the map. **Mutually exclusive with `--task`, `--feature`, and `--skip-discovery`.** | off |
 | `--task [<feature-id>]` | After ideation, create a single task file from the recommended approach via `spur task create`. Optionally link to a feature. **Mutually exclusive with `--feature`.** | off |
 | `--feature [<parent-id>]` | After ideation, create a **feature** with BDD acceptance criteria derived from the decision trace, then run the `spur feature check` gate. Lands a validated feature ready for `/sp:dev-plan` decomposition. Optionally nest under a parent feature. **Mutually exclusive with `--task`.** | off |
 | `--next` | After a clean `feature check`, auto-invoke `/sp:dev-plan --feature <ID>` to decompose the feature into a task batch — no manual hand-off. Requires `--feature` (ignored with `--task`, which already lands its terminal artifact). | off |
@@ -99,6 +100,32 @@ operation, which generates `--options` solution approaches. Each approach includ
 - **Decision trace** — which Phase 1 decisions each approach depends on
 
 Output is written to `docs/plans/YYYY-MM-DD-<topic-slug>-brainstorm.md`.
+
+### Phase 2 alt: Wayfinding escalation (`--wayfind`)
+
+When `--wayfind` is set, Phase 2 does **not** run standard ideation. Instead, the command runs the
+scope check from `sp:brainstorm`'s Wayfinding Escalation section and — since `--wayfind` pre-approves
+the escalation — delegates directly to `sp:wayfinder` for charting:
+
+1. **Name the destination** — from the Phase 1 discovery interview's resolved decisions, distill a
+   one-line destination statement.
+2. **Map the frontier breadth-first** — fan out across the whole space, surfacing open decisions and
+   first takeable steps.
+3. **Create the map** as a `spur feature` with the five-section description (Destination, Notes,
+   Decisions so far, Not yet specified, Out of scope).
+4. **Create child tasks** for what's specifiable now, wire blocking edges.
+5. **Populate the fog** — everything not yet ticketable goes into **## Not yet specified**.
+6. **Stop** — charting is one session's work; do not also resolve tickets.
+
+Without `--wayfind`, the scope check still runs at the end of Phase 1. If the destination looks
+foggy, the operator is offered the escalation prompt (see `sp:brainstorm`'s Wayfinding Escalation
+section for the exact text). The operator must confirm before wayfinding begins.
+
+`--wayfind` is mutually exclusive with `--task`, `--feature`, and `--skip-discovery`:
+- `--task` and `--feature` produce terminal artifacts from standard ideation; wayfinding replaces
+  ideation with charting.
+- `--skip-discovery` skips the interview that seeds the map's Notes and initial fog — without it,
+  charting has no context to work from.
 
 ### `--task [<feature-id>]`
 
@@ -204,11 +231,15 @@ one-shot ideation. Use when:
 | `/sp:dev-brainstorm "User notification system" --feature` | Interview → ideation → create a top-level feature with BDD AC, gated by `feature check` (stops at the feature) |
 | `/sp:dev-brainstorm "Audit logging" --depth comprehensive --feature A` | Deep interview → feature nested under parent A, with AC from the decision trace |
 | `/sp:dev-brainstorm "Password reset via email" --feature --next` | Interview → feature with AC → gate → auto-invoke `/sp:dev-plan --feature <ID>` (decompose to tasks) |
+| `/sp:dev-brainstorm "Microservice boundaries" --wayfind` | Discovery interview → direct escalation to `sp:wayfinder` charting (no scope-check prompt) |
+| `/sp:dev-brainstorm "New auth framework" --depth comprehensive --wayfind` | Deep discovery interview → wayfinder map with comprehensive decision tree as seed context |
 
 ## Implementation
 
 The command owns Phase 1 (discovery interview) inline. Phase 2 delegates to **sp:brainstorm**'s
-`dev-brainstorm` operation. Phase 3 is the artifact exit — `--task` *or* `--feature`, never both.
+`dev-brainstorm` operation, OR to **sp:wayfinder**'s charting mode when `--wayfind` is set or the
+operator confirms the scope-check escalation. Phase 3 is the artifact exit — `--task` *or*
+`--feature`, never both (and neither when `--wayfind` is active — the map feature IS the artifact).
 
 **Agent override.** `--agent` is an **inline** command (per the two-surface contract in
 [cross-cutting.md](../skills/spur-dev/references/cross-cutting.md) § "Honor `--agent`"). The default
@@ -216,8 +247,11 @@ The command owns Phase 1 (discovery interview) inline. Phase 2 delegates to **sp
 `--agent <name>` or `--agent auto` spawns them via `spur agent run … --agent <value>` instead.
 
 ```
-# Phase 2 — Ideation
+# Phase 2 — Ideation (default)
 Skill(skill="sp:brainstorm", args="dev-brainstorm --context <decision-tree> --options <n>")
+
+# Phase 2 alt — Wayfinding escalation (--wayfind or operator-confirmed)
+Skill(skill="sp:wayfinder", args="chart --destination <destination> --context <decision-tree>")
 
 # Phase 3a — Task exit (only when --task is set)
 spur task create "<approach-name>" --feature <id> --template feature-impl
@@ -243,6 +277,9 @@ skips its own clarification step, going directly to structured ideation.
   with `--task`, which already lands a terminal artifact).
 - Passing both `--task` and `--feature` is an error — surface it and ask which artifact the operator
   wants.
+- Passing `--wayfind` with `--task`, `--feature`, or `--skip-discovery` is an error — `--wayfind`
+  replaces ideation (and its artifact exits) with charting; `--skip-discovery` would strip the
+  context charting needs.
 
 ## Platform Notes
 
@@ -255,6 +292,7 @@ skips its own clarification step, going directly to structured ideation.
 ## See Also
 
 - **sp:brainstorm** — the backing ideation skill (structured options, trade-offs, confidence)
+- **sp:wayfinder** — the wayfinding escalation target (multi-session investigation maps)
 - **sp:spur-dev** — convert brainstorm output to tasks via `/sp:dev-plan`
 - **sp:dev-plan** — the decomposition step `--feature --next` auto-invokes (feature with AC → task batch). Call it directly only when a feature already exists and just needs decomposing; otherwise enter through `dev-brainstorm`.
 - **feature-dev.yaml** — the bundled workflow that drives a whole feature end-to-end (brainstorm → plan → execute every task → feature-verify → done)

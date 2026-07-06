@@ -148,6 +148,37 @@ them; they live here because they cross every phase boundary.
    `bun run lint` output. Stale evidence from a prior run is not evidence — re-run the gate and
    paste the current output.
 
+## Verification Before Completion
+
+A universal honesty gate that applies to **every** completion claim, not only the pipeline verdict:
+**no "done / passing / fixed / works / ready" claim without fresh verification evidence** — the
+command *and* its output, run **this turn**. Iron Law 7 states the invariant for the corpus record;
+this section generalizes it to every claim an agent makes, in any skill, at any phase.
+
+**The rule.** Before you write or say a task or step is complete, working, or fixed:
+
+1. Run the check that proves it (the test, the build, the lint, the actual command).
+2. Paste the command and its real output (or the relevant tail) into your report.
+3. Only then make the claim — and phrase it against the pasted evidence, not against your expectation.
+
+"I ran it earlier" is stale. "It should pass" is a prediction, not a result. A subagent's "success"
+line is a claim to re-verify, not evidence to forward. Re-run and paste.
+
+**Red Flags — an unverified claim is usually hiding behind one of these:**
+
+| Red flag | What it usually means |
+|---|---|
+| "This should work" / "this will pass" / "probably fine" | You are predicting, not reporting. Run it and paste the result. |
+| Expressing satisfaction ("great, that's done!") before any check ran | Relief is not evidence — the check has not been run this turn. |
+| Forwarding a subagent's "success" without re-running its gate | You are trusting a claim, not verifying it. Re-run the check yourself. |
+| "Tests pass" with no pasted command + output | Unbacked. Stale or imagined green is the default failure mode. |
+| Marking done while any check was skipped, `.skip`'d, or commented out | A skipped check is an unknown, and "done with unknowns" is not done (fail loud). |
+| "I fixed it" from a single non-reproduced success | One lucky run is not a fix. Reproduce, fix, then re-verify. |
+
+This rule is behavioral, not CLI-enforced — the competency skills carry it into their own steps: the
+verify step (`sp:code-verification`) enforces it hardest, and the implement (`sp:code-implementation`)
+and test (`sp:code-testing`) steps apply it before claiming their work complete.
+
 ## Auto-Decision Principles
 
 Seven principles governing `--auto` mode. `--auto` sets `profile=auto` in the workflow vars; the

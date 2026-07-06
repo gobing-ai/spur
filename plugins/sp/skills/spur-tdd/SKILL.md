@@ -200,6 +200,26 @@ const mock = {
 };
 ```
 
+## Common Rationalizations
+
+| Rationalization | Reality |
+|---|---|
+| "I'll write the test after the code — same result, faster." | Test-after tests what the code *does*, not what it *should* do; it rubber-stamps bugs. Red-first is the only proof the test can fail. |
+| "This code is too obvious to need a test." | "Obvious" code is where off-by-one and null-path bugs hide. If it ships to a production path, it earns a behavior test. |
+| "I tested it manually, it works." | Manual checks are not repeatable and vanish at the next change. A regression test is the only durable proof. |
+| "The test is red for an unrelated reason — I'll implement anyway." | A test that fails for the wrong reason proves nothing. Make it fail for the *expected* reason before writing code. |
+| "Mocking the internal collaborator is easier." | Mocking internals tests the mock, not the system, and freezes the implementation shape. Mock only at true boundaries. |
+| "Coverage is high enough; skip the edge case." | Line coverage counts lines run, not behaviors verified. An untested error path is a bug waiting for the input that triggers it. |
+
+## Red Flags
+
+- Writing implementation before a failing test exists for the behavior.
+- A test that has never been observed to fail (it may be asserting nothing).
+- Editing a test to make it pass instead of fixing the code (or vice-versa without understanding why).
+- Assertions on internal calls / mock invocations instead of observable behavior.
+- "I'll add tests in a follow-up" on a production path.
+- A green suite with an obvious untested error/edge path.
+
 ## Verification checklist
 
 Before marking test-first work complete:

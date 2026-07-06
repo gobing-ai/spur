@@ -75,6 +75,7 @@ mechanics (commands, coverage parsing, idioms, gotchas) live in the adapters:
 - **`sp:code-implementation`** — writes the code this skill tests; consults these stack adapters.
 - **`sp:spur-tdd`** — the test-first discipline this skill composes with.
 - **`sp:code-verification`** — functional/requirements verification + review (a distinct gate).
+- **[Verification Before Completion](../spur-dev/references/cross-cutting.md#verification-before-completion)** — no "coverage met / tests pass" claim without fresh, pasted evidence run this turn.
 
 ## Platform Notes
 

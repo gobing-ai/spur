@@ -61,6 +61,24 @@ Validate locally against `apps/cli/schemas/task-batch.schema.json` (runtime SSOT
 `taskBatchSchema`) before invoking the CLI — a single violation rejects the entire batch. The gate is
 the only proof the decomposition is well-formed; never hand-write task files to bypass it.
 
+## Common Rationalizations
+
+| Rationalization | Reality |
+|---|---|
+| "One big task is simpler than splitting it." | An undifferentiated task can't be independently verified or reviewed. Split into vertical slices, each demoable on its own. |
+| "Layer tasks (all-schema, all-UI) are cleaner." | Horizontal layer-tasks are a named anti-pattern: none is shippable alone. Slice vertically through the layers, per behavior. |
+| "The parent task will implement the shared part." | A parent implements nothing itself — it's the abstraction over its children. Shared work is a child task, not parent body. |
+| "Skip per-task AC; the feature AC covers it." | A task with no AC has no verify gate. Every task carries the scenario(s) it satisfies, or it can't be closed honestly. |
+| "This is one concern — don't over-decompose." | Under-decomposition hides multiple review lenses in one diff. If it needs more than one AC or more than ~a day, it's more than one task. |
+
+## Red Flags
+
+- A task that can't be stated as an independently verifiable vertical slice.
+- Tasks named by layer (`schema`, `API`, `UI`) rather than by behavior.
+- A parent task with body work instead of a roster of children.
+- A task with zero acceptance criteria.
+- A batch where every task depends on every other (no real slicing).
+
 ## Gotchas
 
 1. **Decomposition precedes execution.** A task must be decomposed and batch-created before
