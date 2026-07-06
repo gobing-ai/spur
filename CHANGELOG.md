@@ -1,8 +1,21 @@
 # Changelog
 
-## [Unreleased]
+## [0.3.3] — 2026-07-06
 
-_No changes yet._
+### Added
+
+- **Subagent behavioral hardening (tasks 0214, 0215).** Anti-rationalization discipline, verification-before-completion guard, decision-brief enrichment, review-lens enrichment, and subagent discipline rules across the `sp` plugin skill set. New `sp:code-simplification` skill and `/sp:dev-simplify` command. Architecture-upkeep survey operation and `/sp:dev-arch` command. Doubt-driven development, source-driven development, and wayfinder navigation skills.
+- **Skill behavioral eval harness (task 0215 R2).** `plugins/sp/evals/` — a `bun:test`-based eval runner with LLM-as-judge scoring (`judge.ts`), scenario definitions (`scenarios.ts`), and a CLI entry (`run-eval.ts`). Scenarios test that skills produce expected behaviors under controlled inputs.
+- **Destructive-command guard hook (task 0215 R3).** `plugins/sp/hooks/careful-guard.ts` intercepts dangerous shell operations (`rm -rf`, `git push --force`, etc.) with a PreToolUse hook, requiring explicit operator confirmation before execution.
+
+### Changed
+
+- **Config enforcement: file-only logging with console off across CLI and server (task 0214/0215 program).** `apps/cli` and `apps/server` now default to file-only logging in production; the console sink is disabled outside development. `apps/server/src/worker.ts` `defaultBootstrap` falls back to `process.env.NODE_ENV` for test-environment detection, eliminating JSON log-line leaks during multi-path test runs.
+
+### Fixed
+
+- **Path convention: use `.spur/` runtime paths in agent instructions, not `config/` (task 0217).** 18 `plugins/sp/` files updated — `config/plugins`, `config/rules`, `config/tasks`, `config/templates`, `config/workflows` → `.spur/` equivalents. Build-time references in `apps/` and `packages/` rewritten to avoid the `config/...` literal pattern. New standing rule `sp-runtime-path.yaml` enforces zero `config/...` references at severity error. ADR-015 amendment documents the `config/` (build-time) vs `.spur/` (runtime) separation.
+- **Task list folder path resolution.** `task-service` now resolves the list folder path relative to the project root rather than `tasksDir` parent, fixing path drift when `tasksDir` is configured to a non-default location.
 
 ## [0.3.2] — 2026-07-05
 
