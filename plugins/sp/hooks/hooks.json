@@ -1,5 +1,5 @@
 {
-    "description": "Spur (sp) plugin hooks — task corpus write protection.",
+    "description": "Spur (sp) plugin hooks — task corpus write protection + destructive-command guard.",
     "hooks": {
         "PreToolUse": [
             {
