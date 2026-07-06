@@ -2,14 +2,42 @@ import type { Hono } from 'hono';
 import type { ServerContext } from '../../context';
 import type { ServerModule } from '../types';
 
+/** SSE heartbeat — enqueues a keepalive comment unless the stream is already closed. */
+export function sendHeartbeat(
+    closed: { current: boolean },
+    controller: ReadableStreamDefaultController,
+    encoder: TextEncoder,
+): void {
+    if (closed.current) return;
+    try {
+        controller.enqueue(encoder.encode(': keepalive\n\n'));
+    } catch {
+        // Controller already closed.
+    }
+}
+
+/** Enqueue a framed SSE `data:` payload; returns false when the controller is closed. */
+export function enqueueFrame(
+    closed: { current: boolean },
+    controller: ReadableStreamDefaultController,
+    encoder: TextEncoder,
+    frame: unknown,
+): boolean {
+    if (closed.current) return false;
+    try {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(frame)}\n\n`));
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 /**
- * Team process supervision module — task 0195/0208 (G2 wave B).
+ * Team process supervision module.
  *
- * Bun-gated: on Cloudflare Workers (ctx undefined) the module is a no-op.
- * Endpoints:
- *   - GET  /api/team/processes            — list supervised processes
- *   - GET  /api/team/processes/:id/stream  — SSE attach (ring-buffer replay + live tail)
- *   - POST /api/team/processes/:id/stdin   — forward a line to child stdin
+ * Mounts the `/v1/team` routes: start/stop agents, assign tasks, stream heartbeats
+ * via SSE, forward messages to the agent inbox, and replay buffered frames on
+ * reconnect.
  */
 export const teamModule: ServerModule = {
     name: 'team',
@@ -112,39 +140,24 @@ export const teamModule: ServerModule = {
                     }
                     signal.addEventListener('abort', teardown);
 
-                    // Heartbeat every 15 s
-                    heartbeatInterval = setInterval(() => {
-                        if (closed.current) return;
-                        try {
-                            controller.enqueue(encoder.encode(': keepalive\n\n'));
-                        } catch {
-                            /* closed */
-                        }
-                    }, 15_000);
+                    // Heartbeat every 15 s — body extracted to module-level `sendHeartbeat`.
+                    heartbeatInterval = setInterval(sendHeartbeat, 15_000, closed, controller, encoder);
 
                     // ── 1. Replay ring buffer frames (oldest-first) ──
                     const buffer = supervisor.getRingBuffer(id);
                     for (const frame of buffer) {
-                        if (closed.current) return;
-                        try {
-                            controller.enqueue(encoder.encode(`data: ${JSON.stringify(frame)}\n\n`));
-                        } catch {
-                            return;
-                        }
+                        if (!enqueueFrame(closed, controller, encoder, frame)) return;
                     }
 
                     // ── 2. Send a sync marker so the client knows replay is done ──
-                    if (!closed.current) {
-                        try {
-                            controller.enqueue(
-                                encoder.encode(
-                                    `data: ${JSON.stringify({ stream: 'meta', ts: new Date().toISOString(), line: '--replay-done--' })}\n\n`,
-                                ),
-                            );
-                        } catch {
-                            return;
-                        }
-                    }
+                    if (
+                        !enqueueFrame(closed, controller, encoder, {
+                            stream: 'meta',
+                            ts: new Date().toISOString(),
+                            line: '--replay-done--',
+                        })
+                    )
+                        return;
 
                     // ── 3. Live tail: poll the ring buffer for new frames ──
                     let cursor = buffer.length;
@@ -156,13 +169,9 @@ export const teamModule: ServerModule = {
                         const current = supervisor.getRingBuffer(id);
                         while (cursor < current.length) {
                             const frame = current[cursor];
-                            if (frame && !closed.current) {
-                                try {
-                                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(frame)}\n\n`));
-                                } catch {
-                                    clearInterval(pollInterval);
-                                    return;
-                                }
+                            if (frame && !enqueueFrame(closed, controller, encoder, frame)) {
+                                clearInterval(pollInterval);
+                                return;
                             }
                             cursor++;
                         }

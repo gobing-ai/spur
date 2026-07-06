@@ -220,7 +220,7 @@ If a check fails, fix the root cause. **Never** bypass with `--no-verify`, `--fo
 ## Testing
 
 - Tests live in `tests/` next to the code (`<workspace>/tests/**/*.test.ts`), using `bun:test`. `plugins/sp` tests run in the same gate via the chained `test` script.
-- Coverage target is **per file line >= 90% and function >= 90% in aggregate** (`bunfig.toml`).
+- Coverage target is **per file line >= 90% and function >= 90% in aggregate** (`bunfig.toml`); React `.tsx` components are excluded from the per-file gate (covered by happy-dom integration tests).
 - DAOs test against in-memory SQLite (`:memory:`); inject a fresh adapter per test.
 - Names describe behavior under a condition; assertions tie to the requirement, not the implementation.
 

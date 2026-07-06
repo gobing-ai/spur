@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { ProcessEntry, ProcessFrame } from '@gobing-ai/spur-app';
 import { Hono } from 'hono';
 import type { ServerContext } from '../../../src/context';
-import { teamModule } from '../../../src/modules/team';
+import { enqueueFrame, sendHeartbeat, teamModule } from '../../../src/modules/team';
 
 /**
  * Build a stub ServerContext whose supervisor returns canned process data and
@@ -396,5 +396,81 @@ describe('team module', () => {
         const app = new Hono();
         teamModule.mount(app, undefined);
         // Should not throw and should register no routes.
+    });
+});
+
+describe('sendHeartbeat', () => {
+    test('enqueues a keepalive comment when the stream is open', () => {
+        const closed = { current: false };
+        const enqueued: Uint8Array[] = [];
+        const controller = {
+            enqueue: (data: Uint8Array) => {
+                enqueued.push(data);
+            },
+        } as unknown as ReadableStreamDefaultController;
+        sendHeartbeat(closed, controller, new TextEncoder());
+        expect(enqueued.length).toBe(1);
+        expect(new TextDecoder().decode(enqueued[0])).toBe(': keepalive\n\n');
+    });
+
+    test('is a no-op when the stream is closed', () => {
+        const closed = { current: true };
+        const enqueued: Uint8Array[] = [];
+        const controller = {
+            enqueue: (data: Uint8Array) => {
+                enqueued.push(data);
+            },
+        } as unknown as ReadableStreamDefaultController;
+        sendHeartbeat(closed, controller, new TextEncoder());
+        expect(enqueued.length).toBe(0);
+    });
+
+    test('swallows the error when the controller is already torn down', () => {
+        const closed = { current: false };
+        const controller = {
+            enqueue: () => {
+                throw new TypeError('The controller is in a closed state.');
+            },
+        } as unknown as ReadableStreamDefaultController;
+        expect(() => sendHeartbeat(closed, controller, new TextEncoder())).not.toThrow();
+    });
+});
+
+describe('enqueueFrame', () => {
+    test('enqueues a JSON data frame and returns true when the stream is open', () => {
+        const closed = { current: false };
+        const enqueued: Uint8Array[] = [];
+        const controller = {
+            enqueue: (data: Uint8Array) => {
+                enqueued.push(data);
+            },
+        } as unknown as ReadableStreamDefaultController;
+        const ok = enqueueFrame(closed, controller, new TextEncoder(), { line: 'hello' });
+        expect(ok).toBe(true);
+        expect(new TextDecoder().decode(enqueued[0])).toBe('data: {"line":"hello"}\n\n');
+    });
+
+    test('returns false without enqueuing when the stream is already closed', () => {
+        const closed = { current: true };
+        const enqueued: Uint8Array[] = [];
+        const controller = {
+            enqueue: (data: Uint8Array) => {
+                enqueued.push(data);
+            },
+        } as unknown as ReadableStreamDefaultController;
+        const ok = enqueueFrame(closed, controller, new TextEncoder(), { line: 'late' });
+        expect(ok).toBe(false);
+        expect(enqueued.length).toBe(0);
+    });
+
+    test('returns false when enqueue throws on a torn-down controller', () => {
+        const closed = { current: false };
+        const controller = {
+            enqueue: () => {
+                throw new TypeError('ReadableStream is closed');
+            },
+        } as unknown as ReadableStreamDefaultController;
+        const ok = enqueueFrame(closed, controller, new TextEncoder(), { line: 'x' });
+        expect(ok).toBe(false);
     });
 });

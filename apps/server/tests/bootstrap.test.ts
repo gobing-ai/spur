@@ -28,6 +28,15 @@ describe('serverBootstrapConfig', () => {
         const cfg = serverBootstrapConfig({});
         expect(cfg.logging.level).toBe('info');
     });
+    test('parses SPUR_TEAM_AUTOSTART into trimmed, non-empty ids', () => {
+        const cfg = serverBootstrapConfig({ SPUR_TEAM_AUTOSTART: 'alpha , beta, ,gamma' });
+        expect(cfg.teamAutostart).toEqual(['alpha', 'beta', 'gamma']);
+    });
+
+    test('defaults teamAutostart to empty when env var is unset', () => {
+        const cfg = serverBootstrapConfig({});
+        expect(cfg.teamAutostart).toEqual([]);
+    });
 });
 
 describe('createApp', () => {
