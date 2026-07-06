@@ -78,7 +78,8 @@
         "test-pre-check:full": "bun run apps/cli/src/index.ts rule run --preset recommended-pre-check --fail-on warning --verbose",
         "test-post-check:full": "bun run apps/cli/src/index.ts rule run --preset recommended-post-check --fail-on warning --verbose",
         "check:full": "bun run lint && bun run test:full",
-        "spur-check:full": "bun run lint && bun run test-pre-check:full && bun run test:full && bun run test-post-check:full"
+        "spur-check:full": "bun run lint && bun run test-pre-check:full && bun run test:full && bun run test-post-check:full",
+        "eval": "bun run plugins/sp/evals/run-eval.ts"
     },
     "dependencies": {
         "@gobing-ai/ts-utils": "catalog:"
