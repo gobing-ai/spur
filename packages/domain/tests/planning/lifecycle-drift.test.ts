@@ -21,15 +21,15 @@ interface StateMachineDef {
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..');
 
 /** Load and parse a state-machine workflow YAML. */
-function loadLifecycleYaml(relPath: string): StateMachineDef {
-    const fullPath = join(REPO_ROOT, relPath);
+function loadLifecycleYaml(...segments: string[]): StateMachineDef {
+    const fullPath = join(REPO_ROOT, ...segments);
     const text = readFileSync(fullPath, 'utf-8');
     return parseYaml(text) as StateMachineDef;
 }
 
 describe('lifecycle workflow drift prevention (task 0046 R3)', () => {
     describe('task-lifecycle.yaml', () => {
-        const yaml = loadLifecycleYaml('config/workflows/task-lifecycle.yaml');
+        const yaml = loadLifecycleYaml('config', 'workflows', 'task-lifecycle.yaml');
 
         test('is a state-machine', () => {
             expect(yaml.kind).toBe('state-machine');
@@ -69,7 +69,7 @@ describe('lifecycle workflow drift prevention (task 0046 R3)', () => {
     });
 
     describe('feature-lifecycle.yaml', () => {
-        const yaml = loadLifecycleYaml('config/workflows/feature-lifecycle.yaml');
+        const yaml = loadLifecycleYaml('config', 'workflows', 'feature-lifecycle.yaml');
 
         test('is a state-machine', () => {
             expect(yaml.kind).toBe('state-machine');
@@ -132,7 +132,7 @@ interface PipelineDef {
 }
 
 describe('task-pipeline.yaml structure (task 0062)', () => {
-    const yaml = loadLifecycleYaml('config/workflows/task-pipeline.yaml') as unknown as PipelineDef;
+    const yaml = loadLifecycleYaml('config', 'workflows', 'task-pipeline.yaml') as unknown as PipelineDef;
     const stateIds = yaml.states.map((s) => s.id);
 
     test('R1: the design §6 pipeline states are present, vars.wbs declared', () => {
@@ -195,7 +195,7 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
 
     test('uses the resolvable @gobing-ai/spur schema ref (not the dead engine ref)', () => {
         const text = require('node:fs').readFileSync(
-            require('node:path').join(REPO_ROOT, 'config/workflows/task-pipeline.yaml'),
+            require('node:path').join(REPO_ROOT, 'config', 'workflows', 'task-pipeline.yaml'),
             'utf-8',
         ) as string;
         expect(text).toContain('@gobing-ai/spur/schemas/state-machine-workflow.schema.json');

@@ -24,7 +24,7 @@ function globalConfigRoot(context: CliContext): string {
 
 /**
  * Resolve the workflow YAML path for a given profile, in priority order:
- *   1. Bundled config root  (`config/workflows/<name>.yaml` in source / npm package)
+ *   1. Bundled config root  (shipped `workflows/<name>.yaml` in source / npm package)
  *   2. Project-local path   (`.spur/workflows/<name>.yaml` seeded by `spur init`)
  *   3. Global seeded config (`~/.config/spur/workflows/<name>.yaml` seeded by `spur init`)
  *

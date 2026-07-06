@@ -10,7 +10,7 @@ see_also:
 
 ```
 pick task (spur task list --json)
-  → spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"<wbs>"}'
+  → spur workflow run .spur/workflows/task-pipeline.yaml --vars '{"wbs":"<wbs>"}'
   → on HITL pause: surface to operator → spur workflow continue [run-id] [--yes]
 ```
 
@@ -93,7 +93,7 @@ the caller for the entire duration and risks an orphaned run if the caller is in
 
 ```bash
 # Async launch + trace polling (recommended)
-RUN=$(spur workflow run config/workflows/task-pipeline.yaml \
+RUN=$(spur workflow run .spur/workflows/task-pipeline.yaml \
   --vars '{"wbs":"<wbs>"}' --async --json | jq -r '.runId')
 spur workflow trace "$RUN" --json   # poll until status is terminal (done/failed)
 ```

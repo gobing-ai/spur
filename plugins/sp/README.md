@@ -391,7 +391,7 @@ graph TB
     subgraph "Corpus layer"
         CORPUS["docs/tasks/ + docs/features/<br/>markdown planning corpus"]
         RULES[".spur/rules/<br/>YAML constraint rules"]
-        WFS["config/workflows/<br/>YAML workflow definitions"]
+        WFS[".spur/workflows/<br/>YAML workflow definitions"]
     end
 
     CMD -->|"Skill(sp:spur-dev, ...)"| SKILL_DEV
@@ -439,7 +439,7 @@ graph TB
 
 1. User types `/sp:dev-run 0090`.
 2. **Command** delegates to `sp:spur-dev` skill (execution half).
-3. **Skill** reads the task, loads `config/workflows/task-pipeline.yaml`, and runs
+3. **Skill** reads the task, loads `.spur/workflows/task-pipeline.yaml`, and runs
    `spur workflow run` with HITL surfacing.
 4. **CLI** executes the workflow engine (`@gobing-ai/ts-dual-workflow-engine`), pauses at HITL gates,
    persists run state.
@@ -457,7 +457,7 @@ graph TB
 
 ### Workflow pipelines
 
-The plugin ships workflow YAMLs under `config/workflows/` (symlinked from `.spur/workflows/`). Each
+The plugin ships workflow YAMLs under `.spur/workflows/` (symlinked from `.spur/workflows/`). Each
 pipeline owns one lifecycle phase:
 
 | Workflow | Phase | Entry command |
@@ -502,3 +502,4 @@ root codex/opencode use in global mode.
 | `hooks/*.ts` | plugin hook runtime / compatibility copy | Copied alongside platform output only for environments that still invoke script paths directly |
 
 Each skill declares its own platform support in `metadata.platforms` frontmatter.
+

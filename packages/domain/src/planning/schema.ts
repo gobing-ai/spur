@@ -97,7 +97,7 @@ export type TaskType = (typeof TASK_TYPES)[number];
 /**
  * Canonical task TEMPLATE VARIANT vocabulary — the single axis that selects a
  * task's section layout (the `section-matrix.yaml` variant), its scaffold
- * template file (`config/templates/task/<variant>.md`), and its `template:`
+ * template file (shipped as `templates/task/<variant>.md`), and its `template:`
  * frontmatter value. `standard` is the workhorse; `brainstorm` is the minimal
  * idea-capture variant. SSOT: every consumer (matrix, template files, batch
  * schema, frontmatter, `--template` CLI) reads from this list.

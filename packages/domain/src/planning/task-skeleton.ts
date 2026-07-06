@@ -10,7 +10,7 @@
  *
  * Layering: this module renders the markdown for a *resolved* section list — it
  * does NOT read the matrix (config lives app-side). The caller resolves
- * status → sections from `config/tasks/section-matrix.yaml` and passes the
+ * status → sections from the shipped `tasks/section-matrix.yaml` and passes the
  * ordered list. Domain owns the vocabulary + the per-section guidance; the app
  * owns matrix resolution. Keeps domain free of app/config imports.
  */
@@ -38,7 +38,7 @@ export const matrixEntrySchema = z
 const matrixStatusSchema = z.enum(['backlog', 'todo', 'wip', 'testing', 'blocked', 'done', 'cancelled']);
 
 /**
- * Zod SSOT for `config/tasks/section-matrix.yaml`. Mirrors
+ * Zod SSOT for the shipped `tasks/section-matrix.yaml`. Mirrors
  * `apps/cli/schemas/section-matrix.schema.json` (the editor/CI aid). Validating
  * the matrix on load turns a typo'd section name or status key into a clear
  * error instead of a silently-ignored rule (the "dead rule" failure mode).
@@ -143,7 +143,7 @@ export function buildTaskSkeleton(options: TaskSkeletonOptions): string {
 
 /**
  * Extract per-section body overrides from a variant's scaffold template
- * (`config/templates/task/<variant>.md`). Returns only sections whose body has
+ * (`templates/task/<variant>.md` shipped with the CLI). Returns only sections whose body has
  * real content (e.g. `review.md`'s P1–P4 table, `issue.md`'s structure), so the
  * producer can seed variant-specific boilerplate while leaving everything else to
  * the matrix + guidance fallback. The template's `{{ BACKGROUND }}` placeholder

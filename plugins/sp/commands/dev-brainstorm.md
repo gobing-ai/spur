@@ -187,7 +187,7 @@ Phase 1 becomes one or more Gherkin scenarios:
 | A **deferred branch** ("out of scope for now") | A `## Scope` **Out** bullet — *not* a scenario |
 
 Number scenarios `R1, R2, …` sequentially, stable forever (the title is the traceability identity
-key). Use the Gherkin template at `config/templates/bdd/gherkin.md`. Full authoring rules:
+key). Use the Gherkin template at `.spur/templates/bdd/gherkin.md`. Full authoring rules:
 [ac-style-guide.md](../skills/spur-dev/references/ac-style-guide.md).
 
 **Why decomposition stays a distinct step** — even under `--next`, `--feature` does not *fold in*

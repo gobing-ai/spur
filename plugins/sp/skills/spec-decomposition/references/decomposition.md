@@ -46,7 +46,7 @@ rejected, and a single rejected item fails the whole batch (all-or-nothing).
 
 The `template` field is the **single variant axis** (TASK_VARIANTS): it selects the section
 layout (the `section-matrix.yaml` variant), the scaffold body file
-(`config/templates/task/<variant>.md`), and is written to the task's `template:` frontmatter.
+(`.spur/templates/task/<variant>.md`), and is written to the task's `template:` frontmatter.
 Which sections actually appear is **stage-driven** by the matrix (e.g. `Solution` only from `wip`),
 not a fixed list — pick the variant by *purpose*, not by a section checklist.
 
@@ -327,7 +327,7 @@ with research/design/implement/integrate/test as `## Plan` steps.
 A task created with a spec (a `--feature` link, or a batch item carrying `background`/
 `requirements`) lands at **`todo`** — "ready to execute" (§2.3). A bare capture lands at
 **`backlog`** — "still preparing". The Section-Status-Matrix
-(`config/tasks/section-matrix.yaml`) decides which sections a task carries at each stage; the
+(`.spur/tasks/section-matrix.yaml`) decides which sections a task carries at each stage; the
 producer renders them with invisible HTML guidance comments. You do **not** hand-build the section
 list — `spur task create` / `batch-create` does it from the matrix.
 

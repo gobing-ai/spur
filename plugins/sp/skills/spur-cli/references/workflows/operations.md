@@ -24,12 +24,12 @@ never diverges no matter which operation touches it. `add` additionally runs the
 Authored workflows default to a project-local directory, grouped by purpose:
 
 ```
-config/workflows/<name>.yaml          # project workflows (the convention)
+.spur/workflows/<name>.yaml          # project workflows (the convention)
 ```
 
 A `--file <path>` argument overrides the default. Keep one workflow per file, named for what it does
 (`approval.yaml`, `import-file.yaml`), not for its mode. The canonical example
-(`config/workflows/basic.yaml`) lives here; copy real schema shapes from it rather than from a
+(`.spur/workflows/basic.yaml`) lives here; copy real schema shapes from it rather than from a
 half-remembered snippet.
 
 ## Sub-procedure: mode-selection gate
@@ -65,7 +65,7 @@ Reconciliation core — run this **before authoring anything**. Authoring withou
 workflows breeds redundant, diverged definitions (two near-identical approval flows, an import flow
 re-implemented under a new name). Inputs: the clarified process intent. Steps:
 
-1. **Enumerate existing workflows** — list `config/workflows/*.yaml` (and any `--file`-adjacent
+1. **Enumerate existing workflows** — list `.spur/workflows/*.yaml` (and any `--file`-adjacent
    directory); read each one's `name`, `kind`, and the states/nodes it defines so matches are found by
    *substance*, not just by filename.
 2. **Classify the strongest match** against the new intent:
@@ -156,7 +156,7 @@ Turn a described process into a validated, dry-run-verified workflow in the righ
    transitions/edges with guards/conditions in the right declaration order, `iterationBound` for any
    loop, `env.allow` for any `${env.X}`, and a quoted `$schema`. For transition-flow, set
    `kind: transition-flow`.
-5. **Place the file** — default `config/workflows/<name>.yaml` (a `--file` arg overrides), named for
+5. **Place the file** — default `.spur/workflows/<name>.yaml` (a `--file` arg overrides), named for
    what the workflow does.
 6. **Verify** — run the [validate-and-dry-run core](#sub-procedure-validate-and-dry-run) with the
    expected terminal state. Not done until the definition validates AND the dry-run reaches it.

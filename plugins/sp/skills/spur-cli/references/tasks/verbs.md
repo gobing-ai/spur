@@ -120,7 +120,7 @@ transition. Collapses the pipeline's record step to one call.
 
 The four-layer validator (design §3): L1 frontmatter, L2 section-matrix, L3 structure/format, L4
 traceability. Bare = whole corpus; with a WBS = one task. The matrix is loaded from
-`config/tasks/section-matrix.yaml`.
+`.spur/tasks/section-matrix.yaml`.
 
 - **`--strict`** elevates *all* warnings to failures.
 - **`--strict-core`** is the `testing→done` gate variant: fails only on **hard-core errors** —

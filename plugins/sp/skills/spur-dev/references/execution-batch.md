@@ -16,7 +16,7 @@ report shape.
 
 Single-task execution is documented in **[execution-workflow.md](execution-workflow.md)** — this file
 extends that procedure to the batch case. Read that file first for the single-task pipeline contract;
-everything here assumes a task runs through `config/workflows/task-pipeline.yaml` unchanged.
+everything here assumes a task runs through `.spur/workflows/task-pipeline.yaml` unchanged.
 
 **Zero engine code, zero schema changes (ADR-022).** The batch is orchestration over existing seams —
 the status vocabulary (`packages/domain/src/planning/schema.ts`), the `dependencies[]` frontmatter
@@ -124,7 +124,7 @@ report = []
 for wbs in plan:                                       # default sequential mode
     if any dependency of wbs failed earlier in THIS batch:
         report += skipped(wbs, reason); continue       # only relevant under --keep-going
-    run: spur workflow run config/workflows/task-pipeline.yaml \
+    run: spur workflow run .spur/workflows/task-pipeline.yaml \
            --vars '{"wbs":"<wbs>","profile":"<auto|standard>","agent":"<value?>"}' --async --json
     poll spur workflow trace <run-id> --json until terminal (done | failed)
     inspect terminal state + .spur/run/<wbs>-verdict.json
@@ -143,7 +143,7 @@ conflicting tasks. If any decision-framework check fails, serialize and record t
 
 ### 3.1 Per-task execution reuses the pipeline verbatim (R4)
 
-Each task runs through the **standard single-task pipeline** — `config/workflows/task-pipeline.yaml`
+Each task runs through the **standard single-task pipeline** — `.spur/workflows/task-pipeline.yaml`
 — with no new FSM and no step edits. The batch driver invokes it and inspects the result; it never
 reaches into a step.
 
@@ -151,7 +151,7 @@ reaches into a step.
 `agent.run` stages runs for many minutes. Always use `--async` + `spur workflow trace` polling:
 
 ```bash
-RUN=$(spur workflow run config/workflows/task-pipeline.yaml \
+RUN=$(spur workflow run .spur/workflows/task-pipeline.yaml \
   --vars '{"wbs":"<wbs>","profile":"auto","agent":"claude"}' --async --json | jq -r '.runId')
 spur workflow trace "$RUN" --json   # poll until status is terminal (done/failed)
 ```

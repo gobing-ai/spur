@@ -367,7 +367,7 @@ Do **not** use this skill for:
   and the per-requirement aggregation rule.
 - [references/secu-review.md](references/secu-review.md) — the SECUA dimensions and finding-severity
   rubric.
-- `config/workflows/task-pipeline.yaml` — the `verify → record` gate that consumes the verdict.
+- `.spur/workflows/task-pipeline.yaml` — the `verify → record` gate that consumes the verdict.
 - **`sp:spur-dev`** — the execution-half umbrella that drives the pipeline this skill gates.
 - [references/code-improvement.md](references/code-improvement.md) — architecture-improvement lens
   for module depth, seam placement, locality, coupling, and testability.

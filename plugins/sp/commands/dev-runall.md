@@ -9,7 +9,7 @@ allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 Wraps the **sp:spur-dev** skill (execution half — batch operation).
 
 Run a **set** of task files through their pipelines in one operation, in dependency-correct order.
-Where `/sp:dev-run <wbs>` runs one task through `config/workflows/task-pipeline.yaml`, `/sp:dev-runall`
+Where `/sp:dev-run <wbs>` runs one task through `.spur/workflows/task-pipeline.yaml`, `/sp:dev-runall`
 runs N tasks through the same verbatim pipeline with set resolution, freeze, topological ordering,
 failure policy, and a batch report layered on top by the skill. The default is sequential; parallel
 mode is opt-in and only applies to an independent subset that passes the fan-out checks.

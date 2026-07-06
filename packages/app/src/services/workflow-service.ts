@@ -23,7 +23,7 @@ import { ObservableWorkflowAdapter, type WorkflowObservabilityBus } from '../wor
 import type { AgentService } from './agent-service';
 import type { RuleService } from './rule-service';
 
-/** Workflow name that triggers a pipeline run-link (matches `config/workflows/task-pipeline.yaml`). */
+/** Workflow name that triggers a pipeline run-link (matches the shipped `workflows/task-pipeline.yaml`). */
 const TASK_PIPELINE_WORKFLOW = 'task-pipeline';
 
 /**

@@ -2,7 +2,7 @@
     "$schema": "http://json-schema.org/draft-07/schema#",
     "$id": "https://gobing.ai/spur/schemas/section-matrix.schema.json",
     "title": "Section-Status-Matrix Schema",
-    "description": "Validates config/tasks/section-matrix.yaml — which sections are required/optional/forbidden per task status. Design §3.2. Authored for ts-runtime's loadStructuredConfig validator (supports properties/required/additionalProperties + $defs/$ref/enum; NOT patternProperties/uniqueItems).",
+    "description": "Validates the shipped section-matrix.yaml — which sections are required/optional/forbidden per task status. Design §3.2. Authored for ts-runtime's loadStructuredConfig validator (supports properties/required/additionalProperties + $defs/$ref/enum; NOT patternProperties/uniqueItems).",
     "type": "object",
     "required": ["variants"],
     "additionalProperties": false,

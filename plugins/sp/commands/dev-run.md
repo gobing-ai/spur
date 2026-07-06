@@ -9,7 +9,7 @@ allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 Wraps the **sp:spur-dev** skill (execution half).
 
 Pick a task and run it. Two modes:
-- **`full`** (default): Drive the complete pipeline via `config/workflows/task-pipeline.yaml` —
+- **`full`** (default): Drive the complete pipeline via `.spur/workflows/task-pipeline.yaml` —
   precheck, implement, test, review, HITL approval, verification, and record. The skill monitors
   the run, surfaces HITL gates to the operator, and handles continuation.
 - **`implement`**: Execute only the implement step — read the task's `## Requirements` / `## Design`

@@ -48,7 +48,7 @@ You own the spaces **between** task runs:
 - **Resolve + freeze** the task set from `--tasks <selector>` (Step 1 of execution-batch.md).
 - **Topologically order** the frozen set by `dependencies[]` (Step 2). Abort on cycle; pre-block
   unmet out-of-set deps.
-- **Run each task** through `config/workflows/task-pipeline.yaml` via `spur workflow run --async`
+- **Run each task** through `.spur/workflows/task-pipeline.yaml` via `spur workflow run --async`
   (Step 3). Poll `spur workflow trace` to terminal.
 - **Parallelize only when requested** by applying `sp:parallel-execution` to a proven-independent
   subset (Step 3 optional path). Serialize when dependency, file-overlap, or budget checks fail.
@@ -160,7 +160,7 @@ Invariant: zero `- [ ]` entries (real or placeholder) anywhere in a `done` task 
 Drive the real `task-pipeline.yaml` FSM where applicable:
 
 ```
-spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"<wbs>"}'
+spur workflow run .spur/workflows/task-pipeline.yaml --vars '{"wbs":"<wbs>"}'
 ```
 
 If you hand-walk lifecycle statuses (manual `spur task update <wbs> <status>` without the

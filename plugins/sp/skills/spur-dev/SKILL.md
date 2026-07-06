@@ -80,7 +80,7 @@ Full procedure: **[references/planning-workflow.md](references/planning-workflow
 
 ```
 pick task (spur task list --json)
-  → spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"<wbs>"}'
+  → spur workflow run .spur/workflows/task-pipeline.yaml --vars '{"wbs":"<wbs>"}'
   → on HITL pause (interactive profile): surface to operator → spur workflow continue [run-id] [--yes]
 ```
 
@@ -191,9 +191,9 @@ for "what's actually in file Y" or for resources that sit outside the step seque
 
 **Config & companions (no single pipeline step owns these):**
 
-- `config/workflows/task-pipeline.yaml` — the execution pipeline definition.
-- `config/workflows/planning-pipeline.yaml` — the front-half state machine.
-- `config/templates/bdd/gherkin.md` — the BDD scenario template.
+- `.spur/workflows/task-pipeline.yaml` — the execution pipeline definition.
+- `.spur/workflows/planning-pipeline.yaml` — the front-half state machine.
+- `.spur/templates/bdd/gherkin.md` — the BDD scenario template.
 
 ## Platform Notes
 

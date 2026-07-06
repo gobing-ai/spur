@@ -55,7 +55,7 @@ Gherkin template. Conventions:
   warnings — the permissive start, per DD-06). Mark edge-case scenarios explicitly.
 - **Scenario-title mapping:** the scenario title is the identity key for traceability edges
   to task files — keep them stable and unique.
-- Use `spur agent run` with the BDD template (`config/templates/bdd/gherkin.md`) for
+- Use `spur agent run` with the BDD template (`.spur/templates/bdd/gherkin.md`) for
   generation, or author directly if the feature is simple. **Thread `--agent` through** when the
   command forwarded one — see [cross-cutting.md → Honor `--agent`](cross-cutting.md).
 
@@ -220,7 +220,7 @@ that turns the `todo` HITL-review gate from a formality into a real one — a re
 *Design*, not an empty heading.
 
 **Check the variant before you write.** Which sections a task carries is decided by its `template:`
-frontmatter against `config/tasks/section-matrix.yaml` — NOT a fixed list. Before authoring any
+frontmatter against `.spur/tasks/section-matrix.yaml` — NOT a fixed list. Before authoring any
 section, run `spur task check <wbs> --json` and read `requiredSections` / the L2 findings: they tell
 you exactly what this variant allows at the current status. The default `standard` variant wants
 `Acceptance Criteria` + `Design` + `Plan` at `todo`, but other variants differ — e.g. the `review`

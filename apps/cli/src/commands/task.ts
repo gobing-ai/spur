@@ -629,7 +629,7 @@ const templateMissSet = new Set<string>();
  * Read a variant's template file and return its raw markdown content.
  * Resolution order:
  *   1. `.spur/tasks/templates/<variant>.md` (project-local, seeded by `spur init`)
- *   2. `config/templates/task/<variant>.md` (bundled fallback)
+ *   2. bundled template fallback (`templates/task/<variant>.md`)
  * Returns the raw file content (with `{{ PLACEHOLDERS }}` intact) so
  * `renderTaskTemplate` can substitute real values. Returns `undefined`
  * when no template file is found — callers fall back to the legacy
@@ -669,7 +669,7 @@ const templateBodiesCache = new Map<string, Partial<Record<TaskSection, string>>
  * Read a variant's scaffold template and extract its per-section bodies
  * (e.g. `review`'s P1–P4 table). Resolution order:
  *   1. `.spur/tasks/templates/<variant>.md` (project-local, seeded by `spur init`)
- *   2. `config/templates/task/<variant>.md` (bundled fallback)
+ *   2. bundled template fallback (`templates/task/<variant>.md`)
  * Returns `{}` when neither source is reachable — creation then falls back to
  * matrix + guidance only. Results are cached per process.
  */
@@ -683,7 +683,7 @@ function loadTemplateBodies(projectRoot: string, variant: string): Partial<Recor
     if (existsSync(localPath)) {
         bodies = extractTemplateBodies(readFileSync(localPath, 'utf8'));
     } else {
-        // 2. Bundled fallback: config/templates/task/<variant>.md
+        // 2. Bundled fallback: templates/task/<variant>.md
         const root = bundledConfigRoot();
         if (root !== null) {
             const templatePath = join(root, 'templates', 'task', `${variant}.md`);
@@ -739,7 +739,7 @@ async function runDoneGateCheck(
 /**
  * Load the Section-Status-Matrix (design §3.2, R2). Resolution order:
  *   1. `.spur/tasks/section-matrix.yaml` (project-local, seeded by `spur init`)
- *   2. `config/tasks/section-matrix.yaml` (bundled fallback)
+ *   2. bundled section-matrix fallback (`tasks/section-matrix.yaml`)
  * Falls back to a minimal permissive built-in only when both sources are
  * unreachable (e.g. a `bun build --compile` single binary with no project-local seed).
  */
@@ -765,7 +765,7 @@ async function loadSectionMatrixUncached(projectRoot: string): Promise<SectionMa
         });
         return data as unknown as SectionMatrix;
     }
-    // 2. Bundled fallback: config/tasks/section-matrix.yaml
+    // 2. Bundled fallback: tasks/section-matrix.yaml
     const root = bundledConfigRoot();
     if (root !== null) {
         const matrixPath = join(root, 'tasks', 'section-matrix.yaml');

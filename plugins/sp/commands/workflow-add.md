@@ -28,7 +28,7 @@ validate the file, and dry-run it to the expected terminal state before trusting
 |----------|-------------|---------|
 | `description` | The process the workflow should run (required, positional) | (required) |
 | `--kind <mode>` | Force the execution mode (`state-machine` / `transition-flow`); skips the recommend-and-confirm gate | (agent-recommended, confirmed) |
-| `--file <path>` | Output workflow file path | `config/workflows/<name>.yaml` |
+| `--file <path>` | Output workflow file path | `.spur/workflows/<name>.yaml` |
 
 ## Behavior
 

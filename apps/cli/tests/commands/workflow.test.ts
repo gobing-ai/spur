@@ -63,7 +63,7 @@ describe('workflow command (main)', () => {
         'feature-dev.yaml',
         'basic.yaml',
     ]) {
-        test(`bundled config/workflows/${wf} validates (schema resolves)`, async () => {
+        test(`bundled workflows/${wf} validates (schema resolves)`, async () => {
             // Isolate cwd to a temp dir with no .spur/config.yaml so main() takes
             // the lightweight no-config branch. Without this, cwd falls back to
             // process.cwd() (the repo root, which HAS a config), triggering full

@@ -361,6 +361,20 @@ only after Spur's centralization is green. Trust-ladder `bundled` plugins (ADR-0
 
 ---
 
+**Amendment (2026-07-06) — build-time `config/` vs runtime `.spur/` path convention (task 0217).**
+`config/` is the build-time bundled-asset source of truth: the `apps/cli` build copies
+`./config/{rules,workflows,plugins,tasks,templates}` into the distributable, and `bundledConfigRoot()`
+resolves them at runtime via an upward filesystem walk. `.spur/` is the **runtime configuration
+directory** that agent-facing instructions (`plugins/sp/`) and runtime source code (`apps/`, `packages/`)
+MUST reference when teaching or composing paths. The `config/(plugins|rules|tasks|templates|workflows)`
+literal is forbidden in scope — even in JSDoc and test fixtures — enforced by a standing spur rule
+(`config/rules/boundary/sp-runtime-path.yaml`, part of `recommended-pre-check`) at `severity: error`.
+The `.spur/ → config/` symlinks within the Spur repo are a development convenience only and do not
+change the convention. **Why.** A `plugins/sp/` skill that says `config/workflows/task-pipeline.yaml`
+teaches every project created via `/sp:spur-init` the wrong path; the confusion propagates to every
+downstream user. The rule turns the convention into an auto-enforced invariant so the mistake cannot
+recur.
+
 ## ADR-016: Slash Commands Only Where the LLM Adds Value Over the CLI
 
 **Status:** Accepted · **Date:** 2026-06-07

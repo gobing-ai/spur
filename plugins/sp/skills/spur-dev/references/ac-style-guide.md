@@ -76,7 +76,7 @@ scenario, it matches by title. Rules:
 
 ## Gherkin template
 
-Use the canonical BDD template at `config/templates/bdd/gherkin.md`. Key rules:
+Use the canonical BDD template at `.spur/templates/bdd/gherkin.md`. Key rules:
 
 - **Given** establishes preconditions (state, setup).
 - **When** describes the single action under test.

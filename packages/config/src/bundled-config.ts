@@ -86,7 +86,7 @@ function walk(dir: string, relPrefix: string, filter: RegExp = /\.(ya?ml|json)$/
 }
 
 /**
- * List the relative paths of every bundled template file (`.md` under `config/templates/`),
+ * List the relative paths of every bundled template file (`.md` under the shipped `templates/`),
  * each as a `/`-joined path relative to {@link bundledConfigRoot}.
  *
  * Intended for `spur init` to copy task templates, feature templates, and BDD

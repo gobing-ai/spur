@@ -95,7 +95,7 @@ Steps:
 4. **Write adapted overrides.** For each rule file with layout-dependent globs, copy the bundled
    content to `.spur/rules/<category>/<rule-file>.yaml`, then rewrite only the layout-dependent
    globs to match the detected roots. Preserve all non-layout globs (`**/*.ts`, `**/node_modules/**`,
-   `config/rules/**`), rule `id`s, evaluators, and severities verbatim. Write via the `Write` tool.
+   `.spur/rules/**`), rule `id`s, evaluators, and severities verbatim. Write via the `Write` tool.
 
 5. **Verify the adaptation.** Re-run the probe that motivated this phase:
    ```

@@ -216,7 +216,7 @@ export interface TaskListFilters {
 
 /**
  * Built-in section sets per creation status, used only when no Section-Status-
- * Matrix is injected (mirrors the shipped `config/tasks/section-matrix.yaml`
+ * Matrix is injected (mirrors the shipped `tasks/section-matrix.yaml`
  * standard variant — keep in sync). `History` is appended by the resolver.
  */
 const DEFAULT_CREATION_SECTIONS: Record<string, string[]> = {

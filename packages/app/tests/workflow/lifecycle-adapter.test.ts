@@ -10,7 +10,7 @@ import {
 } from '../../src/workflow/lifecycle-adapter';
 
 // The real task-lifecycle state-machine the adapter drives (repo-root config).
-const WORKFLOW_PATH = resolve(import.meta.dir, '../../../../config/workflows/task-lifecycle.yaml');
+const WORKFLOW_PATH = resolve(import.meta.dir, '..', '..', '..', '..', 'config', 'workflows', 'task-lifecycle.yaml');
 
 const makeRef = (wbs: string): EntityRef => ({
     kind: 'task',

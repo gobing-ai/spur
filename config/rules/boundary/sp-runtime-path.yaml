@@ -1,0 +1,31 @@
+# Runtime-path boundary rule (task 0217, R6) — zero `config/(plugins|rules|tasks|templates|workflows)`
+# references in agent-facing instructions and runtime source code. `config/` is the build-time
+# bundled-asset source-of-truth (ADR-015); `.spur/` is the runtime configuration directory that
+# agents and runtime code MUST reference. A `config/...` literal in scope teaches the wrong
+# convention and propagates confusion into every project created via `/sp:spur-init`.
+#
+# Blanket scope (all file types across apps/packages/plugins/sp) chosen deliberately:
+# even build-time JSDoc and test-fixture `config/` literals are caught, forcing rephrase rather
+# than false-positive triage. See task 0217 Design "Standing enforcement (R6)" for rationale.
+#
+# This is a STANDING gate (not transitional like rg-migration.yaml) — it runs on every pre-check.
+include:
+  - "apps/**"
+  - "packages/**"
+  - "plugins/sp/**"
+exclude:
+  - "**/node_modules/**"
+  - "**/dist/**"
+rules:
+  - id: sp-runtime-path
+    description: >
+      Use `.spur/` paths for runtime configuration references, not `config/`. `config/` is the
+      build-time bundled-asset source-of-truth (ADR-015); `.spur/` is the runtime directory.
+      Agent-facing instructions (`plugins/sp/`) and runtime code (`apps/`, `packages/`) MUST NOT
+      contain literal `config/plugins`, `config/rules`, `config/tasks`, `config/templates`, or
+      `config/workflows` path references.
+    severity: error
+    evaluator:
+      type: rg
+      config:
+        pattern: "config/(plugins|rules|tasks|templates|workflows)"

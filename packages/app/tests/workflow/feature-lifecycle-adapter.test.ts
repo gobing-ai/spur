@@ -10,7 +10,7 @@ import {
 } from '../../src/workflow/lifecycle-adapter';
 
 // The real feature-lifecycle state-machine the adapter drives (repo-root config).
-const WORKFLOW_PATH = resolve(import.meta.dir, '../../../../config/workflows/feature-lifecycle.yaml');
+const WORKFLOW_PATH = resolve(import.meta.dir, '..', '..', '..', '..', 'config', 'workflows', 'feature-lifecycle.yaml');
 
 const makeRef = (id: string): EntityRef => ({
     kind: 'feature',

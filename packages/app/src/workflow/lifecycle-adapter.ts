@@ -29,7 +29,7 @@ import type { EntityRef, LifecyclePort, TransitionResult } from '../services/pla
 export interface LifecycleProfile {
     /** Run-binding kind recorded in `task_run_links` (the generic entity-run link table). */
     linkKind: string;
-    /** Workflow definition name (matches the `config/workflows/<name>.yaml` filename). */
+    /** Workflow definition name (matches the shipped `workflows/<name>.yaml` filename). */
     workflowName: string;
     /** External-key prefix for the durable run binding, e.g. `task` → `task:<id>`. */
     entityPrefix: string;

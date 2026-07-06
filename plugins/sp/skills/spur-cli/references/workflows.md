@@ -50,7 +50,7 @@ ordered guards, and may loop back on itself (e.g. implement → check → fix �
 | Node typing | none (states are untyped) | `type: action\|gate\|parallel\|decision` |
 | Required keys | `name, initialState, states, transitions` | `kind, name, initialNode, nodes, edges` |
 | `kind` field | optional (defaults to state-machine) | **required** — `kind: transition-flow` |
-| Canonical example | implement→check→fix loop (`config/workflows/basic.yaml`) | read→validate→transform→write pipeline |
+| Canonical example | implement→check→fix loop (`.spur/workflows/basic.yaml`) | read→validate→transform→write pipeline |
 
 **Heuristic:** loops / retries / one-active-state → **state-machine**; pipeline / fan-out / action-per-node → **transition-flow**.
 
@@ -193,7 +193,7 @@ the workflow's actions (`shell`, custom runners) do that; this skill builds and 
    (Same trap as `spur rule`.)
 3. **Guard / edge declaration order matters.** The first passing guard (state-machine) or condition
    (transition-flow) wins. Order the specific case before the fallback — e.g. an `action-ok` guard
-   before the unconditional retry edge, so a passing check short-circuits (see `config/workflows/basic.yaml`).
+   before the unconditional retry edge, so a passing check short-circuits (see `.spur/workflows/basic.yaml`).
 4. **`env.allow` is an allowlist.** `${env.X}` resolves only if `X` is listed under `env.allow`;
    otherwise it resolves empty. A workflow that "loses" an environment value usually forgot to allow it.
 5. **Extensions are fail-closed.** Custom action/guard *modules* require `allowExtensions: true`; a
@@ -222,7 +222,7 @@ the workflow's actions (`shell`, custom runners) do that; this skill builds and 
   custom action/guard runners, the trust-gated extension loader, and CLI-vs-library capability gaps.
 - `@gobing-ai/ts-dual-workflow-engine` README — authoritative library reference (both drivers,
   RunLifecycle, persistence, the full event map, every built-in capability).
-- `config/workflows/basic.yaml` — the canonical state-machine implement→check→fix loop; copy real
+- `.spur/workflows/basic.yaml` — the canonical state-machine implement→check→fix loop; copy real
   shapes from here.
 
 ## Platform Notes
