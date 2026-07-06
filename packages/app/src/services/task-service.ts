@@ -5,7 +5,7 @@
  * PlanningWriteService. WBS allocation is race-safe under the create-lock.
  */
 
-import { dirname, isAbsolute, relative, resolve } from 'node:path';
+import { isAbsolute, relative, resolve } from 'node:path';
 import type { TaskFolderEntry, TaskFoldersConfig } from '@gobing-ai/spur-config/loader';
 import {
     atomicWriteAsync,
@@ -1094,8 +1094,8 @@ export class TaskService {
      */
     private resolveListDir(folder?: string): string {
         if (folder === undefined) return this.ctx.tasksDir;
-        const root = resolve(dirname(this.ctx.tasksDir));
-        const candidate = resolve(root, folder);
+        const root = this.ctx.fs.resolve('.');
+        const candidate = this.ctx.fs.resolve(folder);
         const rel = relative(root, candidate);
         if (rel.startsWith('..') || isAbsolute(rel)) {
             throw new Error(`Invalid folder: ${folder} escapes the planning workspace`);
