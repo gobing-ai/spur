@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Complete System Events upstream coverage and bus wiring"
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-07-07T17:44:59.381Z
-updated_at: "2026-07-07T17:44:59.383Z"
+updated_at: "2026-07-07T20:54:17.357Z"
 feature_id: J
 parent_wbs: "0220"
 ---
@@ -56,15 +56,15 @@ R8. Update authoritative docs for any changed event catalog, config/env toggle, 
 
 ### Acceptance Criteria
 
-- [ ] A checked-in inventory documents every production `.emit(` site from Spur and consumed `@gobing-ai/ts-*` sources, classified as `default`, `diagnostic`, or `out-of-scope`.
-- [ ] A server-context integration test proves one representative `rule.*` event is emitted through the canonical server bus and written to `system_events`.
-- [ ] A server-context integration test proves one representative `agent.*` or runtime `process.*` event is emitted through the canonical server bus and written to `system_events`.
-- [ ] A server-context integration test proves one representative upstream workflow-engine event is emitted through the canonical server bus and written to `system_events`.
-- [ ] The SSE endpoint streams cataloged `default` events in real time, with catalog metadata sufficient for UI filtering.
-- [ ] Diagnostic `bus.*` events are hidden by default and become visible only when the explicit diagnostic toggle is enabled.
-- [ ] The UI can filter expanded events by at least prefix and source without hardcoded stale event lists.
-- [ ] Sensitive payload fields are redacted in both history and SSE responses.
-- [ ] `bun run lint`, `bun run test`, `bun run test-cf`, `bun run build`, and the recommended post-check rule gate pass.
+- [x] A checked-in inventory documents every production `.emit(` site from Spur and consumed `@gobing-ai/ts-*` sources, classified as `default`, `diagnostic`, or `out-of-scope`.
+- [x] A server-context integration test proves one representative `rule.*` event is emitted through the canonical server bus and written to `system_events`.
+- [x] A server-context integration test proves one representative `agent.*` or runtime `process.*` event is emitted through the canonical server bus and written to `system_events`.
+- [x] A server-context integration test proves one representative upstream workflow-engine event is emitted through the canonical server bus and written to `system_events`.
+- [x] The SSE endpoint streams cataloged `default` events in real time, with catalog metadata sufficient for UI filtering.
+- [x] Diagnostic `bus.*` events are hidden by default and become visible only when the explicit diagnostic toggle is enabled.
+- [x] The UI can filter expanded events by at least prefix and source without hardcoded stale event lists.
+- [x] Sensitive payload fields are redacted in both history and SSE responses.
+- [x] `bun run lint`, `bun run test`, `bun run test-cf`, `bun run build`, and the recommended post-check rule gate pass.
 
 ### Q&A
 
@@ -126,14 +126,14 @@ Rejected alternatives:
 | File | Change |
 | --- | --- |
 | `docs/inventory/0221-emit-sites.md` | New inventory table classifying every production `EventBus.emit(` site in Spur and the consumed `@gobing-ai/ts-*` packages as `default`, `diagnostic`, or `out-of-scope` (R1). |
-| `packages/app/src/services/event-names.ts` | Added `agent`/`bus`/`api` source families, a `tier: 'default' \| 'diagnostic'` column on every catalog entry, and 30+ new entries for `agent.*`, `rule.*`, `workflow.*` (engine-native names; observability adapter's verb-form names keep their own distinct rows), `process.started`, `api.request.error`, and the `bus.*` diagnostic family (R2/R4/R5). |
-| `packages/app/src/services/system-event-tap.ts` | `registerSystemEventTap(bus, dao, logger, { diagnosticEnabled })` consults the catalog `tier` and the option so diagnostic events persist only when the toggle is on (R5). |
-| `apps/server/src/bootstrap.ts` | New `ServerBootConfig` type; `serverBootstrapConfig(env)` reads `SPUR_DIAGNOSTIC_EVENTS` into `events.diagnostic` (R5). |
+| `packages/app/src/services/event-names.ts:2-5,17` | Added `agent`/`bus`/`api` source families, a `tier: 'default' \| 'diagnostic'` column on every catalog entry, and 30+ new entries for `agent.*`, `rule.*`, `workflow.*` (engine-native names; observability adapter's verb-form names keep their own distinct rows), `process.started`, `api.request.error`, and the `bus.*` diagnostic family (R2/R4/R5). |
+| `packages/app/src/services/system-event-tap.ts:27` | `registerSystemEventTap(bus, dao, logger, { diagnosticEnabled })` consults the catalog `tier` and the option so diagnostic events persist only when the toggle is on (R5). |
+| `apps/server/src/bootstrap.ts:42` | New `ServerBootConfig` type; `serverBootstrapConfig(env)` reads `SPUR_DIAGNOSTIC_EVENTS` into `events.diagnostic` (R5). |
 | `apps/server/src/context.ts` | `ServerContext` gains `bootConfig(): ServerBootConfig`; `createServerContext` accepts `bootConfig?` with a sensible default for tests (R5). |
 | `apps/server/src/serve.ts` | Wires `bootConfig` into `createServerContext` and `registerSystemEventTap(...)`; the queued task-action `AgentService` now receives `events: ctx.eventBus()` (R3). |
 | `apps/server/src/modules/events/event-names.ts` | Re-exports `SYSTEM_EVENT_CATALOG`, `SYSTEM_EVENT_DEFAULT_NAMES`, `SYSTEM_EVENT_DIAGNOSTIC_NAMES`, and `SystemEventTier`/`SystemEventSource` types. |
 | `apps/server/src/modules/events/index.ts` | `/api/events/planning` SSE subscribes from a runtime-built stream-name list: `SYSTEM_EVENT_STREAMED_NAMES` (default tier) plus the diagnostic tier names when `ctx.bootConfig().events.diagnostic === true` (R5). |
-| `packages/app/src/services/agent-service.ts` | `AgentServiceContext.events?` opt-in; `bridgeAgentEvents` wraps the server bus as `AiRunner.events` + `processEvents` so `agent.invoke.*`, `agent.started`, `agent.stopped`, `agent.message.sent`, and `process.started`/`process.exited` reach the tap (R3). |
+| `packages/app/src/services/agent-service.ts:127,306-307` | `AgentServiceContext.events?` opt-in; `bridgeAgentEvents` wraps the server bus as `AiRunner.events` + `processEvents` so `agent.invoke.*`, `agent.started`, `agent.stopped`, `agent.message.sent`, and `process.started`/`process.exited` reach the tap (R3). |
 | `packages/app/src/services/rule-service.ts` | `RuleServiceContext.events?` opt-in; `evaluate()` passes `bridgeEvents(ctx.events)` as `RuleEngine.events`; `evaluateVerbose()` builds a local `EventBus<RuleEngineEvents>` and forwards all five rule-lifecycle keys to the server bus when one is provided (R3). |
 | `packages/app/src/services/workflow-service.ts` | `WorkflowAppServiceContext.events?` opt-in; `WorkflowAppService.run()` passes `bridgeEngineEvents(ctx.events())` as `EngineWorkflowService.runFile({ events })` — engine-native names (`workflow.run.started`, `workflow.action.start`, …) become the canonical board rows; the observability adapter's verb-form names retain their own distinct rows on the persistence mirror (R3/R4). |
 | `apps/web/src/modules/observability/SystemEventsTab.tsx` | Adds a tier `Select` filter independent of the existing prefix filter; tier metadata parsed from the catalog; new renderers for `agent`/`rule`/`bus`/`api`/`workflow-guard`/`workflow-custom` keys; the `generic` fallback still ships (R7). |
@@ -173,4 +173,4 @@ Rejected alternatives:
 ### History
 
 - `2026-07-07` — implementation complete: emit-site inventory, catalog expansion (R2), server-bus wiring for Rule/Agent/Workflow services (R3), diagnostic tier + boot-toggle (R5), bridge-and-alias policy for engine vs observability names (R4), payload-redaction via the existing `normalizeSystemEventPayload` (R6), UI tier filter + renderer registry (R7), design doc + this task-file Solution/Testing/Review (R8).
-
+- 2026-07-07T20:54:17.357Z todo → wip (system)
