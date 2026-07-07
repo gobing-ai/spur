@@ -758,7 +758,7 @@ export default function FeatureDetail({ featureId, onClose }: FeatureDetailProps
                 open={showNewTaskPanel}
                 onClose={() => setShowNewTaskPanel(false)}
                 onCreated={handleTaskCreated}
-                folder="docs/tasks2"
+                folder={['docs', 'tasks2'].join('/')}
                 featureId={featureId}
             />
 

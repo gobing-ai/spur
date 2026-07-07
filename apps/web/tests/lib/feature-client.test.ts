@@ -1,5 +1,17 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { checkFeature, loadFeatureShow, loadFeatures, transitionFeature } from '../../src/lib/feature-client';
+import {
+    checkFeature,
+    createChildFeature,
+    createFeatureTask,
+    createRootFeature,
+    dispatchFeatureAction,
+    linkTaskToFeature,
+    loadFeatureShow,
+    loadFeatures,
+    saveFeatureBody,
+    syncFeatureStatus,
+    transitionFeature,
+} from '../../src/lib/feature-client';
 import type { CheckResult, FeatureShowData, FeatureSummary } from '../../src/lib/feature-types';
 
 let originalFetch: typeof globalThis.fetch;
@@ -126,5 +138,114 @@ describe('checkFeature', () => {
     test('throws on invalid shape', async () => {
         setFetch(() => jsonResponse(200, { ok: true }));
         await expect(checkFeature('A', new AbortController().signal)).rejects.toThrow('invalid response shape');
+    });
+});
+
+describe('saveFeatureBody', () => {
+    test('sends patch request and resolves on 200', async () => {
+        setFetch(() => jsonResponse(200, { ok: true }));
+        await expect(saveFeatureBody({ id: 'A', body: 'new content' })).resolves.toBeUndefined();
+    });
+
+    test('throws on error status', async () => {
+        setFetch(() => jsonResponse(400, { error: { message: 'invalid body' } }));
+        await expect(saveFeatureBody({ id: 'A', body: '' })).rejects.toThrow('invalid body');
+    });
+
+    test('throws generic error when payload is empty', async () => {
+        setFetch(() => jsonResponse(500, {}));
+        await expect(saveFeatureBody({ id: 'A', body: '' })).rejects.toThrow('body update failed: 500');
+    });
+});
+
+describe('dispatchFeatureAction', () => {
+    test('sends post request and returns action response', async () => {
+        const responseData = { ok: true as const };
+        setFetch(() => jsonResponse(200, responseData));
+        const result = await dispatchFeatureAction({ id: 'A', action: 'plan' });
+        expect(result).toEqual(responseData);
+    });
+
+    test('throws on error status', async () => {
+        setFetch(() => jsonResponse(403, { error: { message: 'unauthorized' } }));
+        await expect(dispatchFeatureAction({ id: 'A', action: 'plan' })).rejects.toThrow('unauthorized');
+    });
+});
+
+describe('createChildFeature', () => {
+    test('sends post request and returns create child response', async () => {
+        const responseData = { ok: true as const, data: { id: 'A1', filePath: '/features/A1.md' } };
+        setFetch(() => jsonResponse(200, responseData));
+        const result = await createChildFeature({ id: 'A', name: 'Child A1' });
+        expect(result).toEqual(responseData);
+    });
+
+    test('throws on error status', async () => {
+        setFetch(() => jsonResponse(400, { error: { message: 'max depth reached' } }));
+        await expect(createChildFeature({ id: 'A', name: 'Child' })).rejects.toThrow('max depth reached');
+    });
+});
+
+describe('createRootFeature', () => {
+    test('sends post request and returns root feature details', async () => {
+        const data = { id: 'B', filePath: '/features/B.md' };
+        setFetch(() => jsonResponse(200, { ok: true, data }));
+        const result = await createRootFeature('Root Feature');
+        expect(result).toEqual(data);
+    });
+
+    test('throws on error status', async () => {
+        setFetch(() => jsonResponse(500, { error: { message: 'db error' } }));
+        await expect(createRootFeature('Root Feature')).rejects.toThrow('db error');
+    });
+
+    test('throws on invalid shape', async () => {
+        setFetch(() => jsonResponse(200, { ok: true }));
+        await expect(createRootFeature('Root Feature')).rejects.toThrow('create feature: invalid response shape');
+    });
+});
+
+describe('createFeatureTask', () => {
+    test('sends post request and returns create task response', async () => {
+        const responseData = { ok: true as const, data: { wbs: '1.1', filePath: '/tasks/1.1.md' } };
+        setFetch(() => jsonResponse(200, responseData));
+        const result = await createFeatureTask({ id: 'A', title: 'Task T1' });
+        expect(result).toEqual(responseData);
+    });
+
+    test('throws on error status', async () => {
+        setFetch(() => jsonResponse(400, { error: { message: 'task already exists' } }));
+        await expect(createFeatureTask({ id: 'A', title: 'Task T1' })).rejects.toThrow('task already exists');
+    });
+});
+
+describe('linkTaskToFeature', () => {
+    test('sends patch request and returns link response', async () => {
+        const responseData = { ok: true as const };
+        setFetch(() => jsonResponse(200, responseData));
+        const result = await linkTaskToFeature({ id: 'A', wbs: '1.1' });
+        expect(result).toEqual(responseData);
+    });
+
+    test('throws on error status', async () => {
+        setFetch(() => jsonResponse(404, { error: { message: 'task not found' } }));
+        await expect(linkTaskToFeature({ id: 'A', wbs: '1.1' })).rejects.toThrow('task not found');
+    });
+});
+
+describe('syncFeatureStatus', () => {
+    test('sends post request and returns sync response', async () => {
+        const responseData = {
+            ok: true as const,
+            data: { direction: 'pull' as const, affectedTasks: 1, newStatus: 'executing' },
+        };
+        setFetch(() => jsonResponse(200, responseData));
+        const result = await syncFeatureStatus({ id: 'A', direction: 'pull' });
+        expect(result).toEqual(responseData);
+    });
+
+    test('throws on error status', async () => {
+        setFetch(() => jsonResponse(500, { error: { message: 'sync failed' } }));
+        await expect(syncFeatureStatus({ id: 'A', direction: 'pull' })).rejects.toThrow('sync failed');
     });
 });
