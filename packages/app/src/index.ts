@@ -24,6 +24,24 @@ export type {
 } from './services/corpus-migrator';
 export { CorpusMigrator } from './services/corpus-migrator';
 export type {
+    SystemEventCatalogEntry,
+    SystemEventCatalogMetadata,
+    SystemEventName,
+    SystemEventPayloadPolicy,
+    SystemEventSource,
+} from './services/event-names';
+export {
+    normalizeSystemEventPayload,
+    PLANNING_EVENT_NAMES,
+    SYSTEM_EVENT_CATALOG,
+    SYSTEM_EVENT_CATALOG_METADATA,
+    SYSTEM_EVENT_NAMES,
+    SYSTEM_EVENT_PERSISTED_NAMES,
+    SYSTEM_EVENT_PREFIXES,
+    SYSTEM_EVENT_STREAMED_NAMES,
+    systemEventCatalogEntry,
+} from './services/event-names';
+export type {
     CheckFeatureFindings,
     CheckFeatureResult,
     CheckFeatureSeverity,
@@ -81,6 +99,13 @@ export {
 } from './services/rule-service';
 export type { ProcessEntry, ProcessFrame, SupervisorOptions } from './services/supervisor-service';
 export { SupervisorService } from './services/supervisor-service';
+export {
+    type PlanningEventBus,
+    registerSystemEventTap,
+    SYSTEM_EVENTS_CAP,
+    type SystemEventBus,
+    type SystemEventTap,
+} from './services/system-event-tap';
 export type { CheckFindings, CheckResult as TaskCheckResult, SectionMatrix } from './services/task-check';
 export { TaskCheckService } from './services/task-check';
 export type {
