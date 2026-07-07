@@ -1,8 +1,14 @@
+import { join } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
-import { buildConfigFromEnv } from '@gobing-ai/spur-config';
+import { buildConfigFromEnv, DEFAULT_DATABASE_URL } from '@gobing-ai/spur-config';
 import { startServer } from '@gobing-ai/spur-server';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
+
+/** Resolve the database URL used by `spur serve`, matching normal CLI DB defaults. */
+export function resolveServeDbUrl(cwd: string, env: Record<string, string | undefined>, configuredUrl: string): string {
+    return env.DATABASE_URL === undefined ? join(cwd, DEFAULT_DATABASE_URL) : configuredUrl;
+}
 
 /** Register `spur serve` command. */
 export function registerServeCommand(program: Command, context: CliContext): void {
@@ -21,6 +27,8 @@ export function registerServeCommand(program: Command, context: CliContext): voi
 
                 const port = options.port ?? config.server.port;
                 const host = options.host ?? config.server.host;
+                const cwd = options.cwd ?? context.cwd;
+                const dbUrl = resolveServeDbUrl(cwd, env, config.database.url);
                 if (options.json) {
                     context.output.write(toJson({ port, url: `http://${host}:${port}`, pid: process.pid }));
                     return;
@@ -31,6 +39,7 @@ export function registerServeCommand(program: Command, context: CliContext): voi
                 await startServer({
                     port,
                     host,
+                    dbUrl,
                     openBrowser: options.open ?? true,
                     webDistPath: config.server.webDistPath,
                 });

@@ -1,11 +1,10 @@
 import { dirname, join, resolve } from 'node:path';
 import { isatty } from 'node:tty';
 import { type AgentConfig, AgentService, RuleService } from '@gobing-ai/spur-app';
-import { buildConfigFromEnv } from '@gobing-ai/spur-config';
+import { buildConfigFromEnv, DEFAULT_DATABASE_URL, IN_MEMORY_DATABASE_URL } from '@gobing-ai/spur-config';
 import { createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
 import type { HitlResponder } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
-import { CLI_CONFIG } from './config';
 import type { CommandOutput } from './output';
 import { ClackHitlResponder } from './workflow/hitl/clack-responder';
 import { DefaultHitlResponder } from './workflow/hitl/default-responder';
@@ -83,9 +82,9 @@ export async function createMigratedDbAdapter(
     dbUrl?: string,
 ): Promise<DbAdapter> {
     const config = buildConfigFromEnv(env);
-    const configuredUrl = env.DATABASE_URL === undefined ? join(cwd, CLI_CONFIG.databaseFile) : config.database.url;
+    const configuredUrl = env.DATABASE_URL === undefined ? join(cwd, DEFAULT_DATABASE_URL) : config.database.url;
     const url = dbUrl ?? configuredUrl;
-    if (url !== ':memory:') {
+    if (url !== IN_MEMORY_DATABASE_URL) {
         await createNodeFileSystem().ensureDir(dirname(url));
     }
     return createMigratedDb({ url });

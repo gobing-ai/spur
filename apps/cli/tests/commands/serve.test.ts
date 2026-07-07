@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { registerServeCommand } from '../../src/commands/serve';
+import { registerServeCommand, resolveServeDbUrl } from '../../src/commands/serve';
 import type { CliContext } from '../../src/context';
 
 type ActionFn = (options: { port?: number; host?: string; open?: boolean; json?: boolean }) => Promise<void>;
@@ -99,6 +99,11 @@ describe('registerServeCommand', () => {
             if (prevPort === undefined) delete process.env.PORT;
             else process.env.PORT = prevPort;
         }
+    });
+
+    test('resolves serve DB to the project SQLite file when DATABASE_URL is absent', () => {
+        expect(resolveServeDbUrl('/tmp/project', {}, ':memory:')).toBe('/tmp/project/.spur/spur.db');
+        expect(resolveServeDbUrl('/tmp/project', { DATABASE_URL: 'custom.db' }, 'custom.db')).toBe('custom.db');
     });
 
     test('surfaces a startup error as a clean exit 1', async () => {
