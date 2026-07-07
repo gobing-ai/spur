@@ -6,13 +6,15 @@ import MarkdownBody from './MarkdownBody';
 import type { TaskSummary } from './types';
 import { useTasks } from './useTasks';
 
-/** Actions offered per task status. The server is the validation authority — this is UX only. */
+/** Actions offered per task status — workflow actions + explicit FSM transitions. */
 const STATUS_ACTIONS: Record<string, readonly string[]> = {
-    backlog: ['refine', 'plan'],
-    todo: ['plan', 'run', 'decompose'],
-    wip: ['run', 'verify', 'evaluate'],
-    testing: ['verify', 'evaluate'],
-    blocked: ['refine'],
+    backlog: ['refine', 'start', 'cancel'],
+    todo: ['plan', 'run', 'decompose', 'add-subtask', 'link-feature', 'block', 'cancel'],
+    wip: ['run', 'add-subtask', 'link-feature', 'block', 'cancel'],
+    testing: ['verify', 'complete', 'block', 'cancel'],
+    blocked: ['refine', 'unblock', 'cancel'],
+    done: ['reopen'],
+    cancelled: [],
 };
 
 /** Label for each action button. */
@@ -22,7 +24,24 @@ const ACTION_LABELS: Record<string, string> = {
     run: 'Run',
     verify: 'Verify',
     decompose: 'Decompose',
-    evaluate: 'Evaluate',
+    'add-subtask': '+ Subtask',
+    'link-feature': 'Link Feature',
+    start: 'Start',
+    complete: 'Complete',
+    reopen: 'Reopen',
+    block: 'Block',
+    unblock: 'Unblock',
+    cancel: 'Cancel',
+};
+
+/** FSM transition actions → target status. */
+const FSM_TRANSITIONS: Record<string, string> = {
+    start: 'todo',
+    complete: 'done',
+    reopen: 'wip',
+    block: 'blocked',
+    unblock: 'todo',
+    cancel: 'cancelled',
 };
 
 interface Props {
@@ -142,6 +161,19 @@ export default function TaskDetail({ task, onTransition, onClose }: Props) {
         }
     };
     const handleAction = (action: string) => {
+        // FSM transitions go through the existing onTransition callback
+        const targetStatus = FSM_TRANSITIONS[action];
+        if (targetStatus !== undefined) {
+            if (action === 'cancel' && task) {
+                setShowCancelModal(true);
+                return;
+            }
+            if (task) {
+                onTransition(task.wbs, targetStatus);
+            }
+            return;
+        }
+        // Workflow actions use the channel selector modal
         setActionModal(action);
     };
 
@@ -255,7 +287,7 @@ export default function TaskDetail({ task, onTransition, onClose }: Props) {
                     {(STATUS_ACTIONS[task.status] ?? []).map((action) => (
                         <Button
                             key={action}
-                            variant="accent"
+                            variant={action === 'cancel' ? 'error' : 'accent'}
                             size="xs"
                             onClick={() => handleAction(action)}
                             disabled={actionLoading === action}
@@ -264,16 +296,6 @@ export default function TaskDetail({ task, onTransition, onClose }: Props) {
                             {actionLoading === action ? '…' : ACTION_LABELS[action]}
                         </Button>
                     ))}
-                    {task.status !== 'cancelled' && task.status !== 'done' && (
-                        <Button
-                            variant="error"
-                            size="xs"
-                            onClick={() => setShowCancelModal(true)}
-                            data-testid="header-cancel"
-                        >
-                            Cancel
-                        </Button>
-                    )}
                     {onClose && (
                         <Button
                             variant="ghost"

@@ -70,6 +70,98 @@ export const featureTransitionResponseSchema = apiSuccessSchema(
     }),
 );
 
+// ─── New endpoints (0218) ───────────────────────────────────────────────────
+
+/** Body-update input (PATCH /features/{id}/body). */
+export const featureBodyUpdateInputSchema = z.object({
+    id: featureIdSchema,
+    body: z.string(),
+    actor: z.string().optional(),
+});
+
+/** Body-update response: `{ ok: true }`. */
+export const featureBodyUpdateResponseSchema = apiSuccessSchema(z.object({}));
+
+/** Supported feature workflow action names. */
+export const featureActionNameSchema = z.enum(['brainstorm', 'plan']);
+
+/** Agent channels accepted by feature workflow actions. */
+export const featureActionChannelSchema = z.enum([
+    'claude',
+    'codex',
+    'gemini',
+    'pi',
+    'opencode',
+    'antigravity',
+    'openclaw',
+]);
+
+/** Action input (POST /features/{id}/action). */
+export const featureActionInputSchema = z.object({
+    id: featureIdSchema,
+    action: featureActionNameSchema,
+    channel: featureActionChannelSchema.optional(),
+    skipDeps: z.boolean().optional(),
+});
+
+/** Action response: `{ ok: true }`. */
+export const featureActionResponseSchema = apiSuccessSchema(z.object({}));
+
+/** Create-child input (POST /features/{id}/children). */
+export const featureCreateChildInputSchema = z.object({
+    id: featureIdSchema,
+    name: z.string().min(1),
+});
+
+/** Create-child response: `{ ok: true, data: { id, filePath } }`. */
+export const featureCreateChildResponseSchema = apiSuccessSchema(
+    z.object({
+        id: z.string(),
+        filePath: z.string(),
+    }),
+);
+
+/** Create-task input (POST /features/{id}/tasks). */
+export const featureCreateTaskInputSchema = z.object({
+    id: featureIdSchema,
+    title: z.string().min(1),
+});
+
+/** Create-task response: `{ ok: true, data: { wbs, filePath } }`. */
+export const featureCreateTaskResponseSchema = apiSuccessSchema(
+    z.object({
+        wbs: z.string(),
+        filePath: z.string(),
+    }),
+);
+
+/** Link-task input (PATCH /features/{id}/link). */
+export const featureLinkTaskInputSchema = z.object({
+    id: featureIdSchema,
+    wbs: z.string().regex(/^\d{4}$/),
+});
+
+/** Link-task response: `{ ok: true }`. */
+export const featureLinkTaskResponseSchema = apiSuccessSchema(z.object({}));
+
+/** Sync-directions for POST /features/{id}/sync. */
+export const featureSyncDirectionSchema = z.enum(['pull', 'push']);
+
+/** Sync input (POST /features/{id}/sync). */
+export const featureSyncInputSchema = z.object({
+    id: featureIdSchema,
+    direction: featureSyncDirectionSchema,
+});
+
+/** Sync response: `{ ok: true, data: { direction, affectedTasks, newStatus? } }`. */
+export const featureSyncResponseSchema = apiSuccessSchema(
+    z.object({
+        direction: featureSyncDirectionSchema,
+        affectedTasks: z.number().int().nonnegative(),
+        newStatus: z.string().optional(),
+    }),
+);
+
 // ─── Contract ───────────────────────────────────────────────────────────────
 /** oRPC contract for the feature domain — list, show, create, transition, refresh. */
 export const featureContract = {
@@ -154,4 +246,64 @@ export const featureContract = {
                 }),
             ),
         ),
+
+    body: oc
+        .route({
+            method: 'PATCH',
+            path: '/features/{id}/body',
+            summary: 'Update feature body',
+            tags: ['feature'],
+        })
+        .input(featureBodyUpdateInputSchema)
+        .output(featureBodyUpdateResponseSchema),
+
+    action: oc
+        .route({
+            method: 'POST',
+            path: '/features/{id}/action',
+            summary: 'Run a feature workflow action',
+            tags: ['feature'],
+        })
+        .input(featureActionInputSchema)
+        .output(featureActionResponseSchema),
+
+    children: oc
+        .route({
+            method: 'POST',
+            path: '/features/{id}/children',
+            summary: 'Create a child feature',
+            tags: ['feature'],
+        })
+        .input(featureCreateChildInputSchema)
+        .output(featureCreateChildResponseSchema),
+
+    tasks: oc
+        .route({
+            method: 'POST',
+            path: '/features/{id}/tasks',
+            summary: 'Create a task linked to feature',
+            tags: ['feature'],
+        })
+        .input(featureCreateTaskInputSchema)
+        .output(featureCreateTaskResponseSchema),
+
+    link: oc
+        .route({
+            method: 'PATCH',
+            path: '/features/{id}/link',
+            summary: 'Link an existing task to feature',
+            tags: ['feature'],
+        })
+        .input(featureLinkTaskInputSchema)
+        .output(featureLinkTaskResponseSchema),
+
+    sync: oc
+        .route({
+            method: 'POST',
+            path: '/features/{id}/sync',
+            summary: 'Sync feature status with linked tasks',
+            tags: ['feature'],
+        })
+        .input(featureSyncInputSchema)
+        .output(featureSyncResponseSchema),
 };

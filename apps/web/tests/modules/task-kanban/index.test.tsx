@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { GlobalRegistrator } from '@happy-dom/global-registrator';
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { cleanup } from '@testing-library/react';
 
 // Must mock rpc-client before any module that transitively imports it
 // (index.tsx → useTaskParams/useTasks → rpc-client). resolveApiUrl reads
@@ -36,13 +36,11 @@ afterAll(teardownHappyDom);
 describe('TaskKanbanDetail', () => {
     afterEach(cleanup);
 
-    test('renders the right-panel container with a selected task', async () => {
+    test('task detail is shown via modal overlay, not rightPanelComponent', async () => {
         const mod = await import('../../../src/modules/task-kanban');
-        const Component = mod.module.rightPanelComponent;
-        if (!Component) throw new Error('rightPanelComponent not set');
-
-        const { container } = render(<Component />);
-        await waitFor(() => expect(container.textContent).toContain('Loading…'));
+        // rightPanelComponent is deliberately absent — task details are shown in the
+        // KanbanBoard popup overlay (auto-opened from URL WBS), not in the RightPanel.
+        expect(mod.module.rightPanelComponent).toBeUndefined();
     });
 });
 

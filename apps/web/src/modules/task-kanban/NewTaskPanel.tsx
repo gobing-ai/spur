@@ -13,6 +13,8 @@ interface Props {
     onClose: () => void;
     onCreated: () => void;
     folder: string;
+    /** Pre-link the new task to this feature (sets feature_id in frontmatter). */
+    featureId?: string;
 }
 
 type EditorMode = 'edit' | 'preview';
@@ -91,7 +93,7 @@ function MarkdownField({ id, label, placeholder, value, mode, onChange, onModeCh
  * `bodyUpdate` to seed the body. On success, closes the panel and triggers a
  * board refresh via `onCreated`.
  */
-export default function NewTaskPanel({ open, onClose, onCreated, folder }: Props) {
+export default function NewTaskPanel({ open, onClose, onCreated, folder, featureId }: Props) {
     const [name, setName] = useState('');
     const [background, setBackground] = useState('');
     const [requirements, setRequirements] = useState('');
@@ -142,7 +144,7 @@ export default function NewTaskPanel({ open, onClose, onCreated, folder }: Props
         setError('');
 
         try {
-            const res = await api.task.create({ title: trimmed, folder, template });
+            const res = await api.task.create({ title: trimmed, folder, template, featureId });
             const wbs = res.data.wbs;
 
             // If Background or Requirements were entered, seed the body via bodyUpdate
@@ -193,7 +195,7 @@ export default function NewTaskPanel({ open, onClose, onCreated, folder }: Props
             {/* Slide-out panel */}
             <div
                 className="fixed inset-y-0 right-0 max-w-[90vw] bg-spur-surface border-l border-spur-border z-50 flex shadow-2xl"
-                style={{ width: 'var(--new-task-panel-w)', minWidth: `${MIN_PANEL_WIDTH}px` }}
+                style={{ width: panelWidth, minWidth: MIN_PANEL_WIDTH }}
                 role="dialog"
                 aria-label="New Task"
             >

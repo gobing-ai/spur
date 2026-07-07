@@ -135,6 +135,12 @@ export class FeatureService {
         return this.ctx.writeService.updateSection(ref, sectionName, body);
     }
 
+    /** Replace the feature's body content (everything after frontmatter). */
+    async updateBody(id: string, body: string): Promise<WriteResult> {
+        const ref = await this.refFor(id);
+        return this.ctx.writeService.updateBody(ref, body);
+    }
+
     /** List features. */
     async list(): Promise<FeatureSummary[]> {
         const results: FeatureSummary[] = [];

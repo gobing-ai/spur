@@ -6,9 +6,11 @@ interface Props {
     onToggle: () => void;
     onMobileClose?: () => void;
     children?: ReactNode;
+    /** Optional action buttons rendered in the title bar. */
+    actions?: ReactNode;
 }
 
-export default function RightPanel({ collapsed, onToggle, onMobileClose, children }: Props) {
+export default function RightPanel({ collapsed, onToggle, onMobileClose, children, actions }: Props) {
     return (
         <aside className="flex flex-col bg-spur-surface border-l border-spur-border overflow-hidden">
             {/* Mobile drag handle — only visible <md */}
@@ -18,7 +20,10 @@ export default function RightPanel({ collapsed, onToggle, onMobileClose, childre
                 </div>
             )}
             <div className="flex items-center justify-between p-3 border-b border-spur-border shrink-0">
-                {!collapsed && <span className="text-sm font-semibold text-spur-text">Context</span>}
+                {!collapsed && (
+                    <span className="text-sm font-semibold text-spur-text">{children ? 'Context' : ''}</span>
+                )}
+                <div className="flex items-center gap-1">{actions}</div>
                 <div className="flex items-center gap-1">
                     {onMobileClose && (
                         <Button

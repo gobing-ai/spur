@@ -492,7 +492,7 @@ test('opens the real NewTaskPanel from the board toolbar', async () => {
 
 // ── onTransition: TaskDetail cancel fires transition callback ──
 test('TaskDetail cancel button fires onTransition to move card', async () => {
-    const { getByRole, getByTestId, getByText, container } = renderBoard();
+    const { getByRole, getByText, container } = renderBoard();
     await waitFor(() => expect(getByText('Alpha')).toBeDefined());
 
     // Make the cancelled column visible (hidden by default)
@@ -509,9 +509,9 @@ test('TaskDetail cancel button fires onTransition to move card', async () => {
 
     // Open detail panel
     fireEvent.click(getByText('Alpha'));
-    await waitFor(() => expect(getByTestId('header-cancel')).toBeDefined());
+    await waitFor(() => expect(getByText('Cancel')).toBeDefined());
 
-    fireEvent.click(getByTestId('header-cancel'));
+    fireEvent.click(getByText('Cancel'));
     await waitFor(() => expect(getByRole('dialog', { name: 'Confirm cancel task' })).toBeDefined());
     fireEvent.click(getByRole('button', { name: 'Cancel task' }));
 
@@ -529,7 +529,7 @@ test('onTransition catch handler dispatches api-error when transition fails', as
     transitionImpl = async () => {
         throw new Error('Server gone');
     };
-    const { getByRole, getByTestId, getByText, container } = renderBoard();
+    const { getByRole, getByText, container } = renderBoard();
     await waitFor(() => expect(getByText('Alpha')).toBeDefined());
 
     // Make cancelled column visible
@@ -546,14 +546,14 @@ test('onTransition catch handler dispatches api-error when transition fails', as
 
     // Open detail to capture onTransition
     fireEvent.click(getByText('Alpha'));
-    await waitFor(() => expect(getByTestId('header-cancel')).toBeDefined());
+    await waitFor(() => expect(getByText('Cancel')).toBeDefined());
 
     // Spy window.dispatchEvent
     const dispatchSpy = mock((_event: Event) => true);
     const origDispatch = window.dispatchEvent;
     window.dispatchEvent = dispatchSpy;
 
-    fireEvent.click(getByTestId('header-cancel'));
+    fireEvent.click(getByText('Cancel'));
     await waitFor(() => expect(getByRole('dialog', { name: 'Confirm cancel task' })).toBeDefined());
     fireEvent.click(getByRole('button', { name: 'Cancel task' }));
 

@@ -376,53 +376,46 @@ describe('TaskDetail — workflow action buttons', () => {
         expect(() => getByLabelText('Evaluate')).toThrow();
     });
 
-    test('R1 — renders Refine/Plan for backlog status', async () => {
+    test('R1 — renders Refine/Start/Cancel for backlog status', async () => {
         showImpl = async () => ({ data: { ...DEFAULT_SHOW_DATA, status: 'backlog' } });
         const { getByLabelText } = render(<TaskDetail task={{ ...task, status: 'backlog' }} onTransition={() => {}} />);
         await waitFor(() => expect(getByLabelText('Edit body')).toBeDefined());
 
         expect(getByLabelText('Refine')).toBeDefined();
-        expect(getByLabelText('Plan')).toBeDefined();
-        expect(() => getByLabelText('Run')).toThrow();
+        expect(getByLabelText('Start')).toBeDefined();
+        expect(getByLabelText('Cancel')).toBeDefined();
+        expect(() => getByLabelText('Plan')).toThrow();
     });
 
-    test('R1 — renders Run/Verify/Evaluate for wip status', async () => {
+    test('R1 — renders Run/Block/Cancel for wip status', async () => {
         showImpl = async () => ({ data: { ...DEFAULT_SHOW_DATA, status: 'wip' } });
         const { getByLabelText } = render(<TaskDetail task={{ ...task, status: 'wip' }} onTransition={() => {}} />);
         await waitFor(() => expect(getByLabelText('Edit body')).toBeDefined());
 
         expect(getByLabelText('Run')).toBeDefined();
-        expect(getByLabelText('Verify')).toBeDefined();
-        expect(getByLabelText('Evaluate')).toBeDefined();
-        expect(() => getByLabelText('Plan')).toThrow();
+        expect(getByLabelText('Block')).toBeDefined();
+        expect(getByLabelText('Cancel')).toBeDefined();
     });
 
-    test('R1 — renders Verify/Evaluate for testing status', async () => {
+    test('R1 — renders Verify/Complete/Block/Cancel for testing status', async () => {
         showImpl = async () => ({ data: { ...DEFAULT_SHOW_DATA, status: 'testing' } });
         const { getByLabelText } = render(<TaskDetail task={{ ...task, status: 'testing' }} onTransition={() => {}} />);
         await waitFor(() => expect(getByLabelText('Edit body')).toBeDefined());
 
         expect(getByLabelText('Verify')).toBeDefined();
-        expect(getByLabelText('Evaluate')).toBeDefined();
+        expect(getByLabelText('Complete')).toBeDefined();
+        expect(getByLabelText('Cancel')).toBeDefined();
         expect(() => getByLabelText('Run')).toThrow();
     });
 
-    test('R1 — renders Refine only for blocked status', async () => {
+    test('R1 — renders Refine/Unblock/Cancel for blocked status', async () => {
         showImpl = async () => ({ data: { ...DEFAULT_SHOW_DATA, status: 'blocked' } });
         const { getByLabelText } = render(<TaskDetail task={{ ...task, status: 'blocked' }} onTransition={() => {}} />);
         await waitFor(() => expect(getByLabelText('Edit body')).toBeDefined());
 
         expect(getByLabelText('Refine')).toBeDefined();
-        expect(() => getByLabelText('Plan')).toThrow();
-    });
-
-    test('R1 — renders no actions for done status', async () => {
-        showImpl = async () => ({ data: { ...DEFAULT_SHOW_DATA, status: 'done' } });
-        const { queryByText } = render(<TaskDetail task={{ ...task, status: 'done' }} onTransition={() => {}} />);
-        await waitFor(() => expect(queryByText('Body')).toBeDefined());
-
-        // "Actions" heading should not appear
-        expect(queryByText('Actions')).toBeNull();
+        expect(getByLabelText('Unblock')).toBeDefined();
+        expect(getByLabelText('Cancel')).toBeDefined();
     });
 
     test('R1 — renders no actions for cancelled status', async () => {
@@ -487,11 +480,10 @@ describe('TaskDetail — workflow action buttons', () => {
 
 describe('TaskDetail — cancel confirmation modal', () => {
     test('R4 — clicking the header Cancel button shows the modal', async () => {
-        const { getByText, getByRole, getByTestId } = renderDetail();
+        const { getByText, getByLabelText, getByRole } = renderDetail();
         await waitFor(() => expect(getByText('Edit')).toBeDefined());
 
-        // The header Cancel button opens the confirm modal.
-        fireEvent.click(getByTestId('header-cancel'));
+        fireEvent.click(getByLabelText('Cancel'));
 
         // Modal should appear — the dialog role confirms it's rendered
         expect(getByRole('dialog')).toBeDefined();
@@ -501,12 +493,12 @@ describe('TaskDetail — cancel confirmation modal', () => {
 
     test('R4 — "Keep" dismisses the modal without firing transition', async () => {
         const transitions: Array<{ wbs: string; status: string }> = [];
-        const { getByText, getByRole, getByTestId } = render(
+        const { getByText, getByLabelText, getByRole } = render(
             <TaskDetail task={task} onTransition={(w, s) => transitions.push({ wbs: w, status: s })} />,
         );
         await waitFor(() => expect(getByText('Edit')).toBeDefined());
 
-        fireEvent.click(getByTestId('header-cancel'));
+        fireEvent.click(getByLabelText('Cancel'));
         fireEvent.click(getByRole('button', { name: 'Keep' }));
 
         // No transition should have fired
@@ -515,12 +507,12 @@ describe('TaskDetail — cancel confirmation modal', () => {
 
     test('R4 — "Cancel task" fires the cancelled transition', async () => {
         const transitions: Array<{ wbs: string; status: string }> = [];
-        const { getByText, getByRole, getByTestId } = render(
+        const { getByText, getByLabelText, getByRole } = render(
             <TaskDetail task={task} onTransition={(w, s) => transitions.push({ wbs: w, status: s })} />,
         );
         await waitFor(() => expect(getByText('Edit')).toBeDefined());
 
-        fireEvent.click(getByTestId('header-cancel'));
+        fireEvent.click(getByLabelText('Cancel'));
         fireEvent.click(getByRole('button', { name: 'Cancel task' }));
 
         expect(transitions).toEqual([{ wbs: '0001', status: 'cancelled' }]);
@@ -528,12 +520,11 @@ describe('TaskDetail — cancel confirmation modal', () => {
 
     test('R4 — clicking the backdrop dismisses the modal', async () => {
         const transitions: Array<{ wbs: string; status: string }> = [];
-        const { getByText, getByTestId } = render(
+        const { getByLabelText } = render(
             <TaskDetail task={task} onTransition={(w, s) => transitions.push({ wbs: w, status: s })} />,
         );
-        await waitFor(() => expect(getByText('Edit')).toBeDefined());
 
-        fireEvent.click(getByTestId('header-cancel'));
+        fireEvent.click(getByLabelText('Cancel'));
 
         // Click the backdrop (role=presentation div)
         const backdrop = document.querySelector('[role="presentation"]');

@@ -86,6 +86,14 @@ export default function BoardLayout() {
 
     const RightPanelContent = activeModule?.rightPanelComponent;
 
+    // Auto-expand right panel when there's content to show (e.g. navigating to a task detail).
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useLayoutEffect(() => {
+        if (RightPanelContent && state.rightPanelCollapsed) {
+            setState((prev) => ({ ...prev, rightPanelCollapsed: false }));
+        }
+    }, [RightPanelContent, state.rightPanelCollapsed]);
+
     const mobileHeader = (
         <div className="mobile-bar">
             <Button

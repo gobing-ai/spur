@@ -41,7 +41,20 @@ describe('feature handlers', () => {
 
     test('returns expected route keys', () => {
         const handlers = createFeatureHandlers(makeCtx());
-        expect(Object.keys(handlers).sort()).toEqual(['check', 'create', 'list', 'refresh', 'show', 'transition']);
+        expect(Object.keys(handlers).sort()).toEqual([
+            'action',
+            'body',
+            'check',
+            'children',
+            'create',
+            'link',
+            'list',
+            'refresh',
+            'show',
+            'sync',
+            'tasks',
+            'transition',
+        ]);
     });
 
     test('list handler returns ok:true with data', async () => {

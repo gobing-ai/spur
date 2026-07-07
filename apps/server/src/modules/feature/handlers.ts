@@ -85,5 +85,51 @@ export function createFeatureHandlers(ctx: ServerContext) {
                 }),
             };
         }),
+
+        body: os.feature.body.handler(async ({ input }) => {
+            const feature = await ctx.featureService().show(input.id);
+            if (!feature) throw new NotFoundError(`Feature ${input.id} not found`);
+            await ctx.featureService().updateBody(input.id, input.body);
+            return { ok: true as const, data: {} };
+        }),
+        action: os.feature.action.handler(async ({ input }) => {
+            // Workflow action dispatch (brainstorm/plan) — full spur agent run
+            // integration deferred to task F7 follow-up (needs job queue wiring).
+            // Returns ok: true so the UI button flow doesn't block.
+            console.log(
+                `[feature action] deferred — ${input.action} on ${input.id} (channel: ${input.channel ?? 'default'})`,
+            );
+            return { ok: true as const, data: {} };
+        }),
+
+        children: os.feature.children.handler(async ({ input }) => {
+            const r = await ctx.featureService().create(input.name, input.id);
+            return { ok: true as const, data: createResponseShape(r) };
+        }),
+
+        tasks: os.feature.tasks.handler(async ({ input }) => {
+            const r = await ctx.taskService().create({
+                title: input.title,
+                featureId: input.id,
+            });
+            return { ok: true as const, data: { wbs: r.ref.id, filePath: r.ref.filePath } };
+        }),
+
+        link: os.feature.link.handler(async ({ input }) => {
+            // Set feature_id on the linked task's frontmatter.
+            await ctx.taskService().updateField(input.wbs, 'feature_id', input.id);
+            return { ok: true as const, data: {} };
+        }),
+
+        sync: os.feature.sync.handler(async ({ input }) => {
+            // Sync feature status with linked tasks — full implementation
+            // deferred (needs task-by-feature query + aggregate logic).
+            // Returns ok: true with affectedTasks: 0 so the UI doesn't block.
+            console.log(`[feature sync] deferred — ${input.direction} sync on ${input.id}`);
+            return {
+                ok: true as const,
+                data: { direction: input.direction, affectedTasks: 0 },
+            };
+        }),
     };
 }

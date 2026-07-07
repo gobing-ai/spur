@@ -1,6 +1,7 @@
 import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { TASK_STATUSES, taskStatusIcon } from '@gobing-ai/spur-domain/schema';
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { useLocation } from 'react-router';
 import { Button, Checkbox, Loading, Select } from '@/ui';
 import ResizeHandle from '../../components/ResizeHandle';
 import { api } from '../../lib/rpc-client';
@@ -116,6 +117,16 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
     }, [popupTaskWbs]);
+    const location = useLocation();
+    // Auto-popup task detail when arriving with a WBS in the URL path (e.g. from feature linked tasks).
+    useEffect(() => {
+        const parts = location.pathname.split('/');
+        const tasksIdx = parts.indexOf('tasks');
+        const pathWbs = tasksIdx >= 0 ? parts[tasksIdx + 1] : undefined;
+        if (pathWbs && /^\d{4}$/.test(pathWbs)) {
+            setPopupTaskWbs(pathWbs);
+        }
+    }, [location.pathname]);
     const pointerSensor = useSensor(PointerSensor, {
         activationConstraint: { distance: 5 },
     });

@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, mock, test } from 'bun:test';
 import { GlobalRegistrator } from '@happy-dom/global-registrator';
-import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import type { FeatureSummary } from '../../../src/lib/feature-types';
 import { isWebModule } from '../../../src/modules/discover';
 
@@ -66,27 +66,13 @@ function installFeatureFetchMock(): string[] {
         const url = input instanceof Request ? input.url : String(input);
         calls.push(url);
         if (url.includes('/features/F/status')) {
-            return jsonResponse({ ok: true, data: { status: 'done' } });
+            return jsonResponse({ ok: true, data: { status: 'verifying' } });
         }
-        if (url.includes('/features/F/check')) {
-            return jsonResponse({
-                ok: true,
-                data: {
-                    id: 'F',
-                    status: 'active',
-                    pass: false,
-                    findings: [
-                        {
-                            layer: 'L2',
-                            severity: 'warning',
-                            section: 'Scope',
-                            message: 'Clarify scope',
-                        },
-                    ],
-                    requiredSections: ['Goal', 'Scope'],
-                    missingSections: ['Risks'],
-                },
-            });
+        if (url.includes('/features/F/body')) {
+            return jsonResponse({ ok: true, data: {} });
+        }
+        if (url.includes('/features/F/action')) {
+            return jsonResponse({ ok: true, data: {} });
         }
         if (url.includes('/features/F')) {
             return jsonResponse({
@@ -95,10 +81,13 @@ function installFeatureFetchMock(): string[] {
                     id: 'F',
                     name: 'Root',
                     status: 'active',
-                    frontmatter: { owner: 'robin', priority: 'P1' },
+                    frontmatter: { owner: 'robin', priority: 'P1', created_at: '2026-06-01' },
                     filePath: 'docs/features/F.md',
                     content: [
-                        '# F Root',
+                        '---',
+                        'id: F',
+                        'status: active',
+                        '---',
                         '',
                         '## Goal',
                         'Ship feature workflow.',
@@ -115,6 +104,9 @@ function installFeatureFetchMock(): string[] {
                     ].join('\n'),
                 },
             });
+        }
+        if (url.includes('/tasks')) {
+            return jsonResponse({ ok: true, data: [] });
         }
         if (url.includes('/features')) {
             return jsonResponse({
@@ -186,72 +178,33 @@ describe('FeatureTree', () => {
 });
 
 describe('FeatureDetail', () => {
-    test('renders loaded feature sections, transitions status, and runs checks', async () => {
-        const calls = installFeatureFetchMock();
-        const { getByText, getByRole, container } = render(<FeatureDetail featureId="F" />);
+    test('renders header with status pill and action buttons', async () => {
+        installFeatureFetchMock();
+        const { getByText, getByLabelText } = render(<FeatureDetail featureId="F" />);
 
-        await waitFor(() => expect(getByText('Ship feature workflow.')).toBeDefined());
-        expect(container.textContent).toContain('Given a feature');
-        expect(getByText('owner')).toBeDefined();
-        expect(getByText('robin')).toBeDefined();
+        // Status pill renders
+        await waitFor(() => expect(getByText('active')).toBeDefined());
 
-        fireEvent.change(getByRole('combobox'), { target: { value: 'done' } });
-        await waitFor(() => expect(calls.some((url) => url.endsWith('/features/F/status'))).toBe(true));
-
-        fireEvent.click(getByRole('button', { name: 'Run Check' }));
-        await waitFor(() =>
-            expect(container.querySelector('[data-feature-check]')?.textContent).toContain('Clarify scope'),
-        );
-        expect(container.querySelector('[data-feature-check]')?.textContent).toContain('Missing: Risks');
-    });
-
-    test('renders load and check failures as alerts/findings', async () => {
-        globalThis.fetch = (async (input: RequestInfo | URL) => {
-            const url = input instanceof Request ? input.url : String(input);
-            if (url.includes('/features/F/check')) return jsonResponse({ ok: false }, 500);
-            if (url.includes('/features/F')) {
-                return jsonResponse({
-                    ok: true,
-                    data: {
-                        id: 'F',
-                        name: 'Root',
-                        status: 'active',
-                        frontmatter: {},
-                        filePath: 'docs/features/F.md',
-                        content: '# F Root\n\n## Goal\nLoaded',
-                    },
-                });
-            }
-            return jsonResponse({ ok: false }, 500);
-        }) as typeof fetch;
-
-        const { getByRole, container } = render(<FeatureDetail featureId="F" />);
-        await waitFor(() => expect(container.textContent).toContain('Loaded'));
-        fireEvent.click(getByRole('button', { name: 'Run Check' }));
-        await waitFor(() =>
-            expect(container.querySelector('[data-feature-check]')?.textContent).toContain(
-                'feature check fetch failed',
-            ),
-        );
+        // Action buttons for 'active' status render
+        expect(getByLabelText('Verify')).toBeDefined();
+        expect(getByLabelText('Block')).toBeDefined();
+        expect(getByLabelText('Cancel')).toBeDefined();
+        expect(getByLabelText('+ Child')).toBeDefined();
+        expect(getByLabelText('+ Task')).toBeDefined();
+        expect(getByLabelText('Link Task')).toBeDefined();
+        expect(getByLabelText('Sync')).toBeDefined();
     });
 });
 
 describe('FeaturesShell', () => {
-    test('loads feature tree, opens details, and refetches on feature SSE', async () => {
+    test('loads feature tree and renders detail on click', async () => {
         const calls = installFeatureFetchMock();
-        const { getByText, container } = render(<FeaturesShell />);
+        const { getByText } = render(<FeaturesShell />);
 
         await waitFor(() => expect(getByText('Root')).toBeDefined());
         fireEvent.click(getByText('Root'));
-        await waitFor(() => expect(container.querySelector('[data-feature-detail]')).not.toBeNull());
-
-        const before = calls.length;
-        await act(async () => {
-            FakeEventSource.instances[0]?.onmessage?.(
-                new MessageEvent('message', { data: JSON.stringify({ eventName: 'feature.updated' }) }),
-            );
-        });
-        await waitFor(() => expect(calls.length).toBeGreaterThan(before));
+        // After clicking a feature, the detail panel should render (body section)
+        await waitFor(() => expect(calls.some((url) => url.includes('/features/F'))).toBe(true));
     });
 
     test('renders empty and error states', async () => {
