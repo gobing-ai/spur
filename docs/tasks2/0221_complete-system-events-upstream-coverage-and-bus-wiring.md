@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Complete System Events upstream coverage and bus wiring"
-status: wip
+status: done
 template: feature-impl
 created_at: 2026-07-07T17:44:59.381Z
-updated_at: "2026-07-07T20:54:17.357Z"
+updated_at: "2026-07-07T20:54:57.917Z"
 feature_id: J
 parent_wbs: "0220"
 ---
@@ -174,3 +174,5 @@ Rejected alternatives:
 
 - `2026-07-07` — implementation complete: emit-site inventory, catalog expansion (R2), server-bus wiring for Rule/Agent/Workflow services (R3), diagnostic tier + boot-toggle (R5), bridge-and-alias policy for engine vs observability names (R4), payload-redaction via the existing `normalizeSystemEventPayload` (R6), UI tier filter + renderer registry (R7), design doc + this task-file Solution/Testing/Review (R8).
 - 2026-07-07T20:54:17.357Z todo → wip (system)
+- 2026-07-07T20:54:54.929Z wip → testing (system)
+- 2026-07-07T20:54:57.917Z testing → done (system)
