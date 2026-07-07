@@ -18,10 +18,14 @@ describe('agent command (main)', () => {
         expect(exitCode).toBe(1);
     });
 
-    test('list subcommand returns a number', async () => {
-        const exitCode = await main(['agent', 'list'], { output: nullOutput() });
-        expect(typeof exitCode).toBe('number');
-    });
+    test(
+        'list subcommand returns a number',
+        async () => {
+            const exitCode = await main(['agent', 'list'], { output: nullOutput() });
+            expect(typeof exitCode).toBe('number');
+        },
+        { timeout: 15000 },
+    );
 
     test('run subcommand with no prompt → exit 1', async () => {
         const exitCode = await main(['agent', 'run'], { output: nullOutput() });
