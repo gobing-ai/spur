@@ -32,6 +32,12 @@ export const DEFAULT_TASKS_DIR = 'docs/tasks';
  */
 export const DEFAULT_FEATURES_DIR = 'docs/features';
 
+/** Canonical default SQLite database path for local Spur projects. */
+export const DEFAULT_DATABASE_URL = '.spur/spur.db';
+
+/** Explicit in-memory SQLite URL. Intended for tests and caller-injected ephemeral runs only. */
+export const IN_MEMORY_DATABASE_URL = ':memory:';
+
 // ---- Shared config sub-schemas ----
 
 /** Zod schema for a single task-folder entry: base counter + optional label. */
@@ -191,9 +197,9 @@ export type SpurAppConfig = Pick<SpurConfig, 'version' | 'name' | 'agent' | 'rul
 export const configSchema = z.object({
     database: z
         .object({
-            url: z.string().default(':memory:'),
+            url: z.string().default(DEFAULT_DATABASE_URL),
         })
-        .default({ url: ':memory:' }),
+        .default({ url: DEFAULT_DATABASE_URL }),
     server: z
         .object({
             port: z.coerce.number().int().positive().default(3000),

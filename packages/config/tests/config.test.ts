@@ -4,7 +4,7 @@ import { buildConfigFromEnv, configSchema, parseEnvBoolean } from '../src';
 describe('config', () => {
     test('builds defaults for a development scaffold', () => {
         expect(configSchema.parse({})).toEqual({
-            database: { url: ':memory:' },
+            database: { url: '.spur/spur.db' },
             server: { port: 3000, host: 'localhost', openBrowser: true, webDistPath: null },
             telemetry: { enabled: false },
             logging: { level: 'info' },
