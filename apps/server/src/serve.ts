@@ -6,6 +6,7 @@ import {
     resolvePlanningFolders,
     type TaskActionJob,
 } from '@gobing-ai/spur-app';
+import { IN_MEMORY_DATABASE_URL } from '@gobing-ai/spur-config';
 import { resolveConfigFile } from '@gobing-ai/spur-config/loader';
 import { SystemEventDao } from '@gobing-ai/spur-domain';
 import type { ApplicationRuntime, ApplicationStopReason } from '@gobing-ai/ts-infra/application';
@@ -33,6 +34,8 @@ export interface StartServerOptions {
     port: number;
     host: string;
     openBrowser: boolean;
+    /** SQLite URL used by the server context. Omitted keeps createServerContext's test/Worker default. */
+    dbUrl?: string;
     webDistPath?: string | null;
     keepAlive?: boolean;
 }
@@ -177,6 +180,9 @@ export async function startServer(options: StartServerOptions, deps: StartServer
         configLoader: configFile ? { configFile, bootstrapSection: 'bootstrap' } : undefined,
         async start(appRt: ApplicationRuntime) {
             const fs = deps.createNodeFileSystem(process.cwd());
+            if (options.dbUrl && options.dbUrl !== IN_MEMORY_DATABASE_URL) {
+                await fs.ensureDir(dirname(options.dbUrl));
+            }
 
             // Platform-specific — scheduler-node doesn't exist on CF Workers.
             let scheduler: ServerScheduler | undefined;
@@ -187,6 +193,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
             const ctx: ServerContext = deps.createServerContext(appRt, {
                 cwd: process.cwd(),
                 fs,
+                dbUrl: options.dbUrl,
                 folders: await resolvePlanningFolders(fs),
                 webDistPath: await resolveWebDistPath(options.webDistPath),
                 jobQueueEnabled: bootConfig.jobqueue.enabled,

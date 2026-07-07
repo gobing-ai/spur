@@ -95,7 +95,7 @@ describe('health endpoints', () => {
         const { createNodeFileSystem } = await import('@gobing-ai/ts-runtime');
         const { createServerContext } = await import('../../src/context');
         const fs = createNodeFileSystem('/tmp/test');
-        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs });
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs, dbUrl: ':memory:' });
         const app = createApp(appRt, { fs, ctx });
         const res = await app.request('/api/health/ready');
         expect(res.status).toBe(200);

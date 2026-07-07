@@ -1,3 +1,4 @@
+import { dirname, join } from 'node:path';
 import type {
     FeatureService,
     PlanningEvent as PlanningEventType,
@@ -7,7 +8,10 @@ import type {
     TeamService,
 } from '@gobing-ai/spur-app';
 import {
+    BusPlanningEventEmitter,
+    type EventEmitter,
     FeatureService as FeatureServiceImpl,
+    type PlanningEventMap,
     PlanningWriteService as PlanningWriteServiceImpl,
     SupervisorService as SupervisorServiceImpl,
     TaskService as TaskServiceImpl,
@@ -16,11 +20,17 @@ import {
 // CF-safe core import: DEFAULT_* are plain string constants in the dependency-free core
 // entry of @gobing-ai/spur-config (no `yaml`/`node:fs`). This narrows the former inline-
 // literal exception to a "core import only" boundary (ADR-027, planning-folder-hardcode rule).
-import { DEFAULT_FEATURES_DIR, DEFAULT_TASKS_DIR } from '@gobing-ai/spur-config';
+import {
+    DEFAULT_DATABASE_URL,
+    DEFAULT_FEATURES_DIR,
+    DEFAULT_TASKS_DIR,
+    IN_MEMORY_DATABASE_URL,
+} from '@gobing-ai/spur-config';
 import {
     createMigratedDbViaRuntime,
     type DbAdapter,
     dbHealthCheck,
+    PlanningEventDao,
     type ServerQueueConsumer,
     SystemEventDao,
 } from '@gobing-ai/spur-domain';
@@ -30,6 +40,23 @@ import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { ProcessExecutor } from '@gobing-ai/ts-runtime';
 
 type ServerEventMap = Record<string, (detail: PlanningEventType | unknown) => void>;
+
+class LazyPlanningEventEmitter implements EventEmitter {
+    private delegate: EventEmitter | null = null;
+    constructor(
+        private readonly getDb: () => Promise<DbAdapter>,
+        private readonly bus: EventBus<ServerEventMap>,
+    ) {}
+
+    async emit(event: PlanningEventType): Promise<void> {
+        if (!this.delegate) {
+            const db = await this.getDb();
+            const dao = new PlanningEventDao(db);
+            this.delegate = new BusPlanningEventEmitter(this.bus as unknown as EventBus<PlanningEventMap>, dao);
+        }
+        await this.delegate.emit(event);
+    }
+}
 
 // Schema-default planning folders, used when serve.ts passes no resolved folders
 // (e.g. pure Workers bootstrap with no FS). Sourced from the config SSOT, not inlined.
@@ -166,7 +193,7 @@ class NotConfiguredError extends Error {
 export function createServerContext(appRt: ApplicationRuntime, options: CreateServerContextOptions): ServerContext {
     const cwd = options.cwd;
     const fs = options.fs;
-    const dbUrl = options.dbUrl ?? ':memory:';
+    const dbUrl = options.dbUrl ?? join(cwd, DEFAULT_DATABASE_URL);
     const eventsBus = options.eventsBus ?? (appRt.events as unknown as EventBus<ServerEventMap>);
     const jobQueueEnabled = options.jobQueueEnabled ?? false;
     // Planning folders (phase folders) come pre-resolved from `.spur/config.yaml` via
@@ -189,7 +216,12 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
         webDistPath: options.webDistPath,
 
         async getDb(): Promise<DbAdapter> {
-            dbPromise ??= createMigratedDbViaRuntime({ url: dbUrl });
+            dbPromise ??= (async () => {
+                if (dbUrl !== IN_MEMORY_DATABASE_URL) {
+                    await fs.ensureDir(dirname(dbUrl));
+                }
+                return createMigratedDbViaRuntime({ url: dbUrl });
+            })();
             return dbPromise;
         },
 
@@ -200,9 +232,10 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
 
         taskService(): TaskService {
             if (!taskSvc) {
+                const lazyEmitter = new LazyPlanningEventEmitter(() => this.getDb(), eventsBus);
                 taskSvc = new TaskServiceImpl({
                     fs,
-                    writeService: new PlanningWriteServiceImpl({ fs, projectName: 'spur' }),
+                    writeService: new PlanningWriteServiceImpl({ fs, projectName: 'spur', emitter: lazyEmitter }),
                     tasksDir: folders.tasksDir,
                     foldersConfig: folders.foldersConfig,
                     projectName: 'spur',
@@ -213,9 +246,10 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
 
         featureService(): FeatureService {
             if (!featureSvc) {
+                const lazyEmitter = new LazyPlanningEventEmitter(() => this.getDb(), eventsBus);
                 featureSvc = new FeatureServiceImpl({
                     fs,
-                    writeService: new PlanningWriteServiceImpl({ fs, projectName: 'spur' }),
+                    writeService: new PlanningWriteServiceImpl({ fs, projectName: 'spur', emitter: lazyEmitter }),
                     featuresDir: folders.featuresDir,
                     tasksDir: folders.tasksDir,
                     projectName: 'spur',

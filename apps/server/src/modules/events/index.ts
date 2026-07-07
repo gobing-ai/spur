@@ -2,7 +2,12 @@ import type { EventBus } from '@gobing-ai/ts-infra';
 import type { Hono } from 'hono';
 import type { ServerContext } from '../../context';
 import type { ServerModule } from '../types';
-import { PLANNING_EVENT_NAMES } from './event-names';
+import {
+    normalizeSystemEventPayload,
+    SYSTEM_EVENT_CATALOG_METADATA,
+    SYSTEM_EVENT_STREAMED_NAMES,
+    systemEventCatalogEntry,
+} from './event-names';
 
 /** SSE heartbeat keepalive — enqueues a comment frame unless the stream is closed. */
 export function sendKeepalive(
@@ -75,14 +80,17 @@ export const eventsModule: ServerModule = {
                     signal.addEventListener('abort', teardown);
 
                     heartbeatInterval = setInterval(sendKeepalive, 15_000, closed, controller, encoder);
-                    for (const name of PLANNING_EVENT_NAMES) {
+                    for (const name of SYSTEM_EVENT_STREAMED_NAMES) {
                         const handler = (event: unknown) => {
                             if (closed.current) return;
+                            const entry = systemEventCatalogEntry(name);
                             const envelope = {
                                 eventName: name,
                                 occurredAt: new Date().toISOString(),
                                 actor: null,
-                                payload: event as Record<string, unknown>,
+                                prefix: entry?.prefix ?? name.split('.')[0],
+                                renderer: entry?.renderer ?? 'generic',
+                                payload: entry ? normalizeSystemEventPayload(entry, event) : null,
                             };
                             try {
                                 controller.enqueue(encoder.encode(`data: ${JSON.stringify(envelope)}\n\n`));
@@ -143,9 +151,11 @@ export const eventsModule: ServerModule = {
                 eventName: row.event_name,
                 occurredAt: row.occurred_at,
                 actor: row.actor,
+                prefix: systemEventCatalogEntry(row.event_name)?.prefix ?? row.event_name.split('.')[0],
+                renderer: systemEventCatalogEntry(row.event_name)?.renderer ?? 'generic',
                 payload: row.payload_json ? JSON.parse(row.payload_json) : null,
             }));
-            return c.json({ events, count: events.length });
+            return c.json({ events, count: events.length, catalog: SYSTEM_EVENT_CATALOG_METADATA });
         });
     },
 };

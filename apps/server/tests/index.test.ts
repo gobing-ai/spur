@@ -33,6 +33,7 @@ describe('index main entry', () => {
         expect(captured()?.port).toBe(3456);
         expect(captured()?.host).toBe('0.0.0.0');
         expect(captured()?.openBrowser).toBe(false);
+        expect(captured()?.dbUrl).toBe(':memory:');
         expect(captured()?.webDistPath).toBeNull();
     });
 

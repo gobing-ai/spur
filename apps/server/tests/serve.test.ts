@@ -167,6 +167,36 @@ describe('startServer', () => {
         expect(capturedOptions?.webDistPath).toBe(webDistPath);
     });
 
+    test('passes dbUrl into ServerContext and ensures its parent directory', async () => {
+        origServe = Bun.serve;
+        Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
+
+        const dbDir = mkdtempSync(join(tmpdir(), 'spur-server-db-'));
+        const dbUrl = join(dbDir, 'nested', 'spur.db');
+        const ensured: string[] = [];
+        let capturedOptions: CreateServerContextOptions | undefined;
+
+        await startServer(
+            { port: 4302, host: 'localhost', openBrowser: false, dbUrl, keepAlive: false },
+            makeDeps({
+                createNodeFileSystem: () =>
+                    ({
+                        ...fakeFs,
+                        ensureDir: async (path: string) => {
+                            ensured.push(path);
+                        },
+                    }) as unknown as FileSystem,
+                createServerContext: ((_rt: ApplicationRuntime, options: CreateServerContextOptions) => {
+                    capturedOptions = options;
+                    return {};
+                }) as unknown as StartServerDeps['createServerContext'],
+            }),
+        );
+
+        expect(ensured).toEqual([join(dbDir, 'nested')]);
+        expect(capturedOptions?.dbUrl).toBe(dbUrl);
+    });
+
     test('falls back to undefined webDistPath when configured static board path is missing', async () => {
         origServe = Bun.serve;
         Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;

@@ -1,4 +1,8 @@
 import { describe, expect, test } from 'bun:test';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { PlanningEventBus } from '@gobing-ai/spur-app';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { createServerContext } from '../src/context';
 import { mockRuntime } from './middleware/helpers';
@@ -26,7 +30,7 @@ describe('createServerContext', () => {
         expect(ctx.webDistPath).toBe('/dist/web');
     });
 
-    test('getDb() returns a migrated in-memory DB adapter', async () => {
+    test('getDb() returns a migrated explicitly in-memory DB adapter', async () => {
         const appRt = makeAppRt();
         const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs, dbUrl: ':memory:' });
 
@@ -99,7 +103,7 @@ describe('createServerContext', () => {
 
     test('systemEventDao() returns a SystemEventDao backed by the migrated DB', async () => {
         const appRt = makeAppRt();
-        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs, dbUrl: ':memory:' });
 
         const dao = await ctx.systemEventDao();
         expect(dao).toBeDefined();
@@ -110,7 +114,7 @@ describe('createServerContext', () => {
 
     test('systemEventDao() caches the instance across calls', async () => {
         const appRt = makeAppRt();
-        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs, dbUrl: ':memory:' });
 
         const dao1 = await ctx.systemEventDao();
         const dao2 = await ctx.systemEventDao();
@@ -310,5 +314,66 @@ describe('createServerContext', () => {
         } finally {
             setLoggerMuted(false);
         }
+    });
+
+    test('taskService and featureService resolve and emit events via LazyPlanningEventEmitter', async () => {
+        const cwd = mkdtempSync(join(tmpdir(), 'spur-server-context-'));
+        const tasksDir = join(cwd, 'docs/tasks');
+        const featuresDir = join(cwd, 'docs/features');
+        const appRt = makeAppRt();
+        const realBus = new (await import('@gobing-ai/ts-infra')).EventBus();
+        const ctx = createServerContext(appRt, {
+            cwd,
+            fs: createNodeFileSystem(cwd),
+            dbUrl: ':memory:',
+            eventsBus: realBus as unknown as never,
+            folders: {
+                tasksDir,
+                featuresDir,
+                foldersConfig: { active_folder: tasksDir, folders: { [tasksDir]: { base_counter: 0 } } },
+            },
+        });
+
+        const taskSvc = ctx.taskService();
+        const featureSvc = ctx.featureService();
+        expect(taskSvc).toBeDefined();
+        expect(featureSvc).toBeDefined();
+
+        const db = await ctx.getDb();
+        const eventDao = new (await import('@gobing-ai/spur-domain')).PlanningEventDao(db);
+        const systemEventDao = new (await import('@gobing-ai/spur-domain')).SystemEventDao(db);
+
+        // Manually subscribe system event tap on the context's eventBus (mirroring serve.ts bootstrap behavior)
+        const tap = (await import('@gobing-ai/spur-app')).registerSystemEventTap(
+            ctx.eventBus() as unknown as PlanningEventBus,
+            systemEventDao,
+            { warn: () => {}, debug: () => {} },
+        );
+
+        // We can manually trigger an emit on the lazy emitter since it's wired into the services
+        // Let's create a task to trigger it
+        await taskSvc.create({ title: 'Test task' });
+
+        // Wait for the asynchronous tap persistence to settle
+        await tap.flush();
+
+        // Let's verify that a planning event was indeed recorded
+        const events = await eventDao.listAll(10);
+        expect(events.length).toBeGreaterThanOrEqual(1);
+        expect(events[0]?.event).toBe('task.created');
+
+        // Let's verify that the system event tap recorded the system event as well
+        const sysEvents = await systemEventDao.query({ limit: 10 });
+        expect(sysEvents.length).toBeGreaterThanOrEqual(1);
+        expect(sysEvents[0]?.event_name).toBe('task.created');
+
+        tap.unsubscribe();
+    });
+
+    test('supervisor() returns supervisor service instance', () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
+        const svc = ctx.supervisor();
+        expect(svc).toBeDefined();
     });
 });

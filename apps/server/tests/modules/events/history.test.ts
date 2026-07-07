@@ -36,16 +36,23 @@ describe('GET /api/events/history', () => {
 
         const res = await app.fetch(new Request('http://localhost/api/events/history'));
         expect(res.status).toBe(200);
-        const body = (await res.json()) as { count: number; events: Array<Record<string, unknown>> };
+        const body = (await res.json()) as {
+            count: number;
+            events: Array<Record<string, unknown>>;
+            catalog: Array<Record<string, unknown>>;
+        };
         expect(body.count).toBe(2);
         expect(body.events[0]).toEqual({
             id: 'sev-2',
             eventName: 'task.updated',
             occurredAt: '2026-07-04T10:00:01.000Z',
             actor: 'operator',
+            prefix: 'task',
+            renderer: 'planning',
             payload: { field: 'status' },
         });
         expect(body.events[1]?.payload).toBeNull();
+        expect(body.catalog.some((entry) => entry.name === 'task.updated' && entry.prefix === 'task')).toBe(true);
     });
 
     test('returns empty array when ledger is empty', async () => {

@@ -25,6 +25,7 @@ export async function main(
         port: config.server.port,
         host: config.server.host,
         openBrowser: false,
+        dbUrl: config.database.url,
         webDistPath: config.server.webDistPath,
     });
 }

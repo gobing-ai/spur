@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
 import type { ServerContext } from '../../../src/context';
 import { eventsModule, sendKeepalive } from '../../../src/modules/events';
-import { PLANNING_EVENT_NAMES } from '../../../src/modules/events/event-names';
+import { SYSTEM_EVENT_STREAMED_NAMES } from '../../../src/modules/events/event-names';
 
 describe('eventsModule', () => {
     test('is a valid ServerModule with name "events"', () => {
@@ -142,9 +142,9 @@ describe('eventsModule', () => {
         await reader.cancel();
 
         // After cancel, every registered event handler should be unsubscribed.
-        expect(offCalls.length).toBe(PLANNING_EVENT_NAMES.length);
+        expect(offCalls.length).toBe(SYSTEM_EVENT_STREAMED_NAMES.length);
         const offNames = offCalls.map((c) => c.name).sort();
-        expect(offNames).toEqual([...PLANNING_EVENT_NAMES].sort());
+        expect(offNames).toEqual([...SYSTEM_EVENT_STREAMED_NAMES].sort());
     });
 
     test('client disconnect (request abort) tears down subscriptions and closes the stream', async () => {
@@ -179,7 +179,7 @@ describe('eventsModule', () => {
         // The stream closes cleanly (no error), and all subscriptions are detached.
         const { done } = await reader.read();
         expect(done).toBe(true);
-        expect(offCalls.length).toBe(PLANNING_EVENT_NAMES.length);
+        expect(offCalls.length).toBe(SYSTEM_EVENT_STREAMED_NAMES.length);
     });
 
     test('does not double-tear-down when both abort and cancel fire', async () => {
@@ -205,7 +205,7 @@ describe('eventsModule', () => {
         // Abort then cancel — teardown is idempotent, so off() fires exactly once per registered event.
         controller.abort();
         await reader.cancel();
-        expect(offCalls.length).toBe(PLANNING_EVENT_NAMES.length);
+        expect(offCalls.length).toBe(SYSTEM_EVENT_STREAMED_NAMES.length);
     });
 
     test('SSE stream tears down immediately when signal is already aborted', async () => {
