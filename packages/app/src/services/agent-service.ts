@@ -15,8 +15,8 @@ import {
     TIER2_AGENTS,
     translateSlashCommand,
 } from '@gobing-ai/ts-ai-runner';
+import type { EventBus } from '@gobing-ai/ts-infra';
 import { NodeProcessExecutor, type OutputPolicy } from '@gobing-ai/ts-runtime';
-
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
@@ -98,6 +98,13 @@ export interface AgentServiceContext {
      * Tier-1 priority path with no config lookup.
      */
     agentConfig?: AgentConfig;
+    /**
+     * Optional canonical server EventBus. When provided, every `agent.invoke.*`
+     * and `agent.*` event emitted by the underlying AiRunner/TeamOrchestrator
+     * is also forwarded onto the bus so the system_events tap (R3) and SSE
+     * stream can observe it. Same shape as `SystemEventBus`.
+     */
+    events?: EventBus<Record<string, (event: unknown) => void>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -112,6 +119,24 @@ export class AgentService {
         this.ctx = ctx;
     }
 
+    /**
+     * Wrap a server EventBus into the loose shape the ai-runner emitters
+     * accept. The runner's `events` and `processEvents` are both loosely
+     * typed (string keys, unknown detail), so this just forwards calls.
+     */
+    private bridgeAgentEvents(
+        serverBus: EventBus<Record<string, (event: unknown) => void>>,
+    ): EventBus<Record<string, (event: unknown) => void>> {
+        const bridge = {
+            on: (event: string, listener: (event: unknown) => void) => serverBus.on(event, listener),
+            off: (event: string, listener: (event: unknown) => void) => serverBus.off(event, listener),
+            emit: (event: string, detail: unknown) => serverBus.emit(event, detail) as unknown as Promise<void>,
+        };
+        // The upstream ai-runner emitters only call `on`/`off`/`emit`; the
+        // extra EventBus members (job-queue wiring, async-handler ids) are
+        // inert for this bridge, so we widen once via `unknown` here.
+        return bridge as unknown as EventBus<Record<string, (event: unknown) => void>>;
+    }
     // -------------------------------------------------------------------------
     // Public: resolve
     // -------------------------------------------------------------------------
@@ -271,9 +296,17 @@ export class AgentService {
         const jsonOutput = silent || booleanFlag(flags, 'json');
         const outputPolicy: OutputPolicy = jsonOutput ? { mode: 'buffered' } : { mode: 'stream', isTTY: isatty(1) };
 
-        // deps or defaults
+        // deps or defaults. When the service has a server EventBus, thread it
+        // onto the runner so `agent.invoke.*` emits also reach the system_events
+        // tap (task 0221 R3).
         const runner =
-            deps?.runner ?? new AiRunner({ processExecutor: new NodeProcessExecutor({ output: outputPolicy }) });
+            deps?.runner ??
+            new AiRunner({
+                processExecutor: new NodeProcessExecutor({ output: outputPolicy }),
+                ...(this.ctx.events !== undefined ? { events: this.bridgeAgentEvents(this.ctx.events) } : {}),
+                ...(this.ctx.events !== undefined ? { processEvents: this.bridgeAgentEvents(this.ctx.events) } : {}),
+            });
+
         const detector = deps?.detector ?? new AgentDetector({ runner });
         const doctorRunner =
             deps?.doctorRunner ?? new DoctorRunner({ agentDetector: detector, runner, env: this.ctx.env });

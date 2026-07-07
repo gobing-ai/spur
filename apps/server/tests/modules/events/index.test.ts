@@ -239,6 +239,65 @@ describe('eventsModule', () => {
         // nothing to clean up (off() was never preceded by on()).
         expect(offCalls.length).toBe(0);
     });
+    test('mount subscribes the diagnostic tier when bootConfig.events.diagnostic is true', async () => {
+        const onCalls: string[] = [];
+        const app = new Hono();
+        const ctx = {
+            eventBus: () => ({
+                on: (event: string) => {
+                    onCalls.push(event);
+                },
+                off: () => {},
+            }),
+            bootConfig: () => ({
+                events: { enabled: true, diagnostic: true },
+            }),
+        } as unknown as ServerContext;
+
+        eventsModule.mount(app, ctx);
+
+        // Hit the SSE endpoint once so start() runs and subscribes the bus;
+        // read once and cancel to drive start() then let teardown close.
+        const req = new Request('http://localhost/api/events/planning');
+        const res = await app.fetch(req);
+        const reader = (res.body as ReadableStream<Uint8Array>).getReader();
+        await reader.read().catch(() => undefined);
+        reader.cancel();
+
+        // Diagnostic events like `bus.handler.error` should be subscribed
+        // alongside the default tier when the toggle is on.
+        expect(onCalls).toContain('bus.handler.error');
+        expect(onCalls).toContain('bus.emit.done');
+        // Sanity check: a default-tier event is also present.
+        const firstDefault = SYSTEM_EVENT_STREAMED_NAMES[0];
+        if (firstDefault) expect(onCalls).toContain(firstDefault);
+    });
+
+    test('mount skips the diagnostic tier when bootConfig is absent (test ctx fallback)', async () => {
+        const onCalls: string[] = [];
+        const app = new Hono();
+        const ctx = {
+            eventBus: () => ({
+                on: (event: string) => {
+                    onCalls.push(event);
+                },
+                off: () => {},
+            }),
+        } as unknown as ServerContext;
+
+        eventsModule.mount(app, ctx);
+
+        const req = new Request('http://localhost/api/events/planning');
+        const res = await app.fetch(req);
+        const reader = (res.body as ReadableStream<Uint8Array>).getReader();
+        await reader.read().catch(() => undefined);
+        reader.cancel();
+
+        expect(onCalls).not.toContain('bus.handler.error');
+        // Default-tier events are subscribed regardless.
+        const firstDefault = SYSTEM_EVENT_STREAMED_NAMES[0];
+        if (firstDefault) expect(onCalls).toContain(firstDefault);
+    });
 });
 
 describe('sendKeepalive', () => {

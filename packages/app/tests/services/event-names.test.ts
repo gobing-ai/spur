@@ -3,6 +3,8 @@ import {
     PLANNING_EVENT_NAMES,
     SYSTEM_EVENT_CATALOG,
     SYSTEM_EVENT_CATALOG_METADATA,
+    SYSTEM_EVENT_DEFAULT_NAMES,
+    SYSTEM_EVENT_DIAGNOSTIC_NAMES,
     SYSTEM_EVENT_NAMES,
     SYSTEM_EVENT_PERSISTED_NAMES,
     SYSTEM_EVENT_PREFIXES,
@@ -47,26 +49,103 @@ describe('SYSTEM_EVENT_CATALOG', () => {
         expect(SYSTEM_EVENT_NAMES).toContain('workflow.hitl.response');
     });
 
-    test('has unique names and derives every consumer list from the catalog', () => {
+    test('has unique names and exposes DEFAULT/DIAGNOSTIC partition from the catalog', () => {
         expect(SYSTEM_EVENT_CATALOG.length).toBeGreaterThan(0);
         expect(new Set(SYSTEM_EVENT_NAMES).size).toBe(SYSTEM_EVENT_NAMES.length);
-        expect(SYSTEM_EVENT_PERSISTED_NAMES).toEqual(SYSTEM_EVENT_NAMES);
-        expect(SYSTEM_EVENT_STREAMED_NAMES).toEqual(SYSTEM_EVENT_NAMES);
+        // Diagnostic events are excluded from the persisted/streamed sets so the
+        // tap and SSE filter them out by default (R5).
+        expect(SYSTEM_EVENT_PERSISTED_NAMES.length).toBeLessThan(SYSTEM_EVENT_NAMES.length);
+        expect(SYSTEM_EVENT_STREAMED_NAMES).toEqual(SYSTEM_EVENT_PERSISTED_NAMES);
         expect(PLANNING_EVENT_NAMES).toEqual(SYSTEM_EVENT_NAMES);
+        // Diagnostic tier names are non-empty and disjoint from defaults.
+        expect(SYSTEM_EVENT_DIAGNOSTIC_NAMES.length).toBeGreaterThan(0);
+        const defaultSet = new Set(SYSTEM_EVENT_DEFAULT_NAMES);
+        for (const name of SYSTEM_EVENT_DIAGNOSTIC_NAMES) expect(defaultSet.has(name)).toBe(false);
     });
 
-    test('exposes prefix and renderer metadata for the board', () => {
+    test('exposes prefix / renderer / tier metadata for the board', () => {
         expect(SYSTEM_EVENT_PREFIXES).toContain('task');
         expect(SYSTEM_EVENT_PREFIXES).toContain('workflow');
+        expect(SYSTEM_EVENT_PREFIXES).toContain('rule');
+        expect(SYSTEM_EVENT_PREFIXES).toContain('agent');
+        expect(SYSTEM_EVENT_PREFIXES).toContain('bus');
         expect(SYSTEM_EVENT_CATALOG_METADATA).toContainEqual({
             name: 'workflow.action.started',
             prefix: 'workflow',
             source: 'workflow',
+            tier: 'default',
             renderer: 'workflow-action',
+        });
+        expect(SYSTEM_EVENT_CATALOG_METADATA).toContainEqual({
+            name: 'bus.handler.error',
+            prefix: 'bus',
+            source: 'bus',
+            tier: 'diagnostic',
+            renderer: 'bus',
         });
         for (const entry of SYSTEM_EVENT_CATALOG) {
             expect(entry.prefix.length).toBeGreaterThan(0);
             expect(entry.renderer.length).toBeGreaterThan(0);
+            expect(entry.tier === 'default' || entry.tier === 'diagnostic').toBe(true);
+            // `persisted` and `streamed` flags now describe catalog capability
+            // (true for any tier that the runtime *can* persist or stream when
+            // its tier gate is on). Tier is the runtime switch — diagnostic
+            // entries' flags stay `true` so the tap can subscribe when the
+            // `SPUR_DIAGNOSTIC_EVENTS` toggle fires.
+            expect(entry.persisted).toBe(true);
+            expect(entry.streamed).toBe(true);
         }
+    });
+
+    test('covers the new agent / rule / workflow engine / diagnostic families (task 0221)', () => {
+        // agent.* (R3 producer wiring)
+        for (const name of [
+            'agent.invoke.start',
+            'agent.invoke.exit',
+            'agent.started',
+            'agent.stopped',
+            'agent.message.sent',
+        ]) {
+            expect(SYSTEM_EVENT_NAMES).toContain(name);
+        }
+        // rule.* (R3 producer wiring)
+        for (const name of [
+            'rule.run.start',
+            'rule.eval.start',
+            'rule.eval.done',
+            'rule.eval.error',
+            'rule.run.done',
+        ]) {
+            expect(SYSTEM_EVENT_NAMES).toContain(name);
+        }
+        // workflow.* native engine names (R4 alias policy)
+        for (const name of [
+            'workflow.run.started',
+            'workflow.run.done',
+            'workflow.run.failed',
+            'workflow.run.paused',
+            'workflow.run.resumed',
+            'workflow.run.reseeded',
+            'workflow.node.enter',
+            'workflow.node.transition',
+            'workflow.action.start',
+            'workflow.action.done',
+            'workflow.action.failed_continue',
+            'workflow.guard.evaluated',
+            'workflow.transition.requested',
+            'workflow.transition.denied',
+            'workflow.hitl.note',
+            'workflow.custom',
+        ]) {
+            expect(SYSTEM_EVENT_NAMES).toContain(name);
+        }
+        // process.started via runtime executor (R3 process wiring)
+        expect(SYSTEM_EVENT_NAMES).toContain('process.started');
+        // api + bus diagnostic entries
+        expect(SYSTEM_EVENT_NAMES).toContain('api.request.error');
+        expect(SYSTEM_EVENT_DIAGNOSTIC_NAMES).toContain('bus.handler.error');
+        expect(SYSTEM_EVENT_DIAGNOSTIC_NAMES).toContain('bus.emit.done');
+        expect(SYSTEM_EVENT_DIAGNOSTIC_NAMES).toContain('bus.emit.noop');
+        expect(SYSTEM_EVENT_DIAGNOSTIC_NAMES).toContain('bus.handler.async.enqueued');
     });
 });

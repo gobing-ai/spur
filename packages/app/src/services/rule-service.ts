@@ -66,6 +66,14 @@ export interface RuleServiceContext {
     output: RuleServiceOutput;
     /** Optional lazy DB adapter for persistence and trace queries. */
     getDb?: () => Promise<DbAdapter>;
+    /**
+     * Optional canonical server EventBus. When provided, every rule-engine
+     * emit (`rule.run.start`, `rule.eval.start`, etc.) is also forwarded onto
+     * this bus so the server's `system_events` tap/SSE stream can observe it.
+     * The bus shape matches the canonical server `Record<string, listener>`
+     * map, identical to the `SystemEventBus` in `system-event-tap.ts`.
+     */
+    events?: EventBus<Record<string, (event: unknown) => void>>;
 }
 
 /** Options for RuleService.evaluate(). */
@@ -179,6 +187,20 @@ interface RuleSourceLayer {
 export class RuleService {
     private readonly context: RuleServiceContext;
 
+    /**
+     * Wrap a server EventBus so it can be passed as `events` to a `RuleEngine`.
+     * Upstream `RuleEngineEvents` only emit on a fixed set of keys, so we just
+     * forward every emit through the server bus's loose `Record<...>` shape.
+     */
+    private bridgeEvents(serverBus: EventBus<Record<string, (event: unknown) => void>>): EventBus<RuleEngineEvents> {
+        const bridge = {
+            on: (event: string, listener: (event: unknown) => void) => serverBus.on(event, listener),
+            off: (event: string, listener: (event: unknown) => void) => serverBus.off(event, listener),
+            emit: (event: string, detail: unknown) => Promise.resolve(serverBus.emit(event, detail)),
+        };
+        return bridge as unknown as EventBus<RuleEngineEvents>;
+    }
+
     constructor(context: RuleServiceContext) {
         this.context = context;
     }
@@ -226,9 +248,14 @@ export class RuleService {
                 selectedRule === undefined ? { cwd: this.context.cwd } : { cwd: this.context.cwd, rule: selectedRule },
             ),
         };
-        const engineOptions = { persistence, runId, runMeta, fileSystem: this.context.fs };
+        const engineOptions = {
+            persistence,
+            runId,
+            runMeta,
+            fileSystem: this.context.fs,
+            ...(this.context.events !== undefined ? { events: this.bridgeEvents(this.context.events) } : {}),
+        };
         const engine = new RuleEngine(engineOptions);
-
         let result: RuleEngineResult;
         if (verbose && !json) {
             const [engineResult, enabled] = await this.evaluateVerbose(
@@ -467,8 +494,25 @@ export class RuleService {
         const enabledCount = enabledRules.length;
         const totalCount = rules.length;
 
-        const events = new EventBus<RuleEngineEvents>();
-        const engine = new RuleEngine({ ...engineOptions, events, fileSystem: this.context.fs });
+        const localBus = new EventBus<RuleEngineEvents>();
+        // When the rule service is constructed with a canonical server EventBus,
+        // forward every rule-engine emit onto it so the system_events tap (R3) and
+        // SSE stream can observe the same lifecycle events the engine produces.
+        if (this.context.events !== undefined) {
+            const serverBus = this.context.events;
+            for (const eventName of [
+                'rule.run.start',
+                'rule.eval.start',
+                'rule.eval.done',
+                'rule.eval.error',
+                'rule.run.done',
+            ] as const) {
+                localBus.on(eventName, (detail: unknown) => {
+                    void serverBus.emit(eventName, detail);
+                });
+            }
+        }
+        const engine = new RuleEngine({ ...engineOptions, events: localBus, fileSystem: this.context.fs });
 
         // Header: show total rule count (enabled + disabled).
         const noun = totalCount === 1 ? 'rule' : 'rules';
@@ -483,7 +527,7 @@ export class RuleService {
             this.context.output.error(`  ${color.dim('⊘ disabled')} — skipped`);
         }
 
-        events.on('rule.eval.start', ({ ruleId, index, total }) => {
+        localBus.on('rule.eval.start', ({ ruleId, index, total }) => {
             // Shift index past the disabled rules so counter is continuous across all rules.
             const shifted = index + disabledRules.length;
             const counter = color.dim(`[${shifted}/${total + disabledRules.length}]`);
@@ -492,7 +536,7 @@ export class RuleService {
             this.context.output.error(`${color.dim('▶')} ${counter} ${ruleId} ${type}`);
         });
 
-        events.on('rule.eval.done', ({ findings, durationMs, details }) => {
+        localBus.on('rule.eval.done', ({ findings, durationMs, details }) => {
             const elapsed = (durationMs / 1000).toFixed(2);
             if (findings === 0) {
                 this.context.output.error(`  ${color.green('✓ passed')} - ${elapsed}s`);
@@ -507,7 +551,7 @@ export class RuleService {
             }
         });
 
-        events.on('rule.eval.error', ({ ruleId, error }) => {
+        localBus.on('rule.eval.error', ({ ruleId, error }) => {
             // R6: surface evaluator crash distinctly from normal violation findings.
             this.context.output.error(`  ${color.yellow(`! evaluator error in ${ruleId}: ${error}`)}`);
         });

@@ -122,9 +122,11 @@ export async function runTaskActionJob(
     } = createTaskActionAgentService,
 ) {
     const job = parseTaskActionJob(payload);
+    const eventsBus = ctx.eventBus();
     const agentService = createAgentService({
         cwd: ctx.cwd,
         env,
+        events: eventsBus,
         output: {
             write: () => {},
             error: () => {},
@@ -199,6 +201,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 jobQueueEnabled: bootConfig.jobqueue.enabled,
                 scheduler,
                 teamAutostart: bootConfig.teamAutostart,
+                bootConfig,
             });
             let jobWorker: JobWorkerService<unknown> | undefined;
 
@@ -226,8 +229,12 @@ export async function startServer(options: StartServerOptions, deps: StartServer
             if (bootConfig.events.enabled) {
                 try {
                     const dao = new SystemEventDao(await ctx.getDb());
-                    registerSystemEventTap(ctx.eventBus(), dao, appRt.logger);
-                    appRt.logger.debug('system_events tap registered');
+                    registerSystemEventTap(ctx.eventBus(), dao, appRt.logger, {
+                        diagnosticEnabled: bootConfig.events.diagnostic === true,
+                    });
+                    appRt.logger.debug('system_events tap registered', {
+                        diagnostic: bootConfig.events.diagnostic === true,
+                    });
                 } catch (error) {
                     appRt.logger.warn('system_events tap registration failed', { error: String(error) });
                 }

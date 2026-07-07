@@ -60,7 +60,7 @@ function makeDeps(overrides: Partial<StartServerDeps> = {}): StartServerDeps {
         serverBootstrapConfig: () => ({
             logging: { enabled: false, level: 'info' as const, console: false },
             telemetry: { enabled: false },
-            events: { enabled: true },
+            events: { enabled: true, diagnostic: false },
             jobqueue: { enabled: false },
             scheduler: { enabled: false },
             teamAutostart: [],
@@ -269,7 +269,7 @@ describe('startServer', () => {
             serverBootstrapConfig: () => ({
                 logging: { enabled: false, level: 'info' as const, console: false },
                 telemetry: { enabled: false },
-                events: { enabled: true },
+                events: { enabled: true, diagnostic: false },
                 jobqueue: { enabled: false },
                 scheduler: { enabled: true },
                 teamAutostart: [],
@@ -354,7 +354,7 @@ describe('startServer', () => {
             serverBootstrapConfig: () => ({
                 logging: { enabled: false, level: 'info' as const, console: false },
                 telemetry: { enabled: false },
-                events: { enabled: false },
+                events: { enabled: false, diagnostic: false },
                 jobqueue: { enabled: true },
                 scheduler: { enabled: true },
                 teamAutostart: [],
@@ -458,7 +458,12 @@ describe('startServer', () => {
     test('runTaskActionJob dispatches the mapped command through AgentService and reports nonzero exits', async () => {
         const calls: Array<{ prompt: string; flags: Record<string, string | boolean> }> = [];
         const outputCalls: string[] = [];
-        const ctx = { cwd: '/tmp/spur-workspace' } as unknown as ServerContext;
+        const ctx = {
+            cwd: '/tmp/spur-workspace',
+            eventBus: () =>
+                ({ emit: () => {}, on: () => {}, off: () => {} }) as unknown as ReturnType<ServerContext['eventBus']>,
+        } as unknown as ServerContext;
+
         const createAgentService: Parameters<typeof runTaskActionJob>[3] = (options) => ({
             run: async (prompt: string, flags: Record<string, string | boolean>) => {
                 options.output.write('stdout');
@@ -468,7 +473,6 @@ describe('startServer', () => {
                 return 0;
             },
         });
-
         await runTaskActionJob(
             ctx,
             { SPUR_TEST: '1' },

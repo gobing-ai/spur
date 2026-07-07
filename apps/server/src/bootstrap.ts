@@ -19,16 +19,27 @@ declare module 'hono' {
 
 export type { ApplicationRuntime, LoggingOptions };
 
-/** Shared bootstrap configuration for the portable `runApplication` block. */
-export function serverBootstrapConfig(env: Record<string, string | undefined>): {
+/** Resolved server boot configuration read by the system-events tap and SSE. */
+export interface ServerBootConfig {
     logging: LoggingOptions;
     telemetry: { enabled: boolean };
-    events: { enabled: boolean };
+    events: { enabled: boolean; diagnostic: boolean };
     jobqueue: { enabled: boolean };
     scheduler: { enabled: boolean };
     /** Agent spec ids to autostart at serve boot (comma-separated, task 0195/0207). */
     teamAutostart: string[];
-} {
+}
+
+/**
+ * Shared bootstrap configuration for the portable `runApplication` block.
+ *
+ * Reads environment variables to produce a resolved {@link ServerBootConfig}:
+ * `NODE_ENV === 'test'` mutes logging and disables the job queue and scheduler;
+ * `SPUR_DIAGNOSTIC_EVENTS=1` enables the diagnostic system-events tier;
+ * `SPUR_TEAM_AUTOSTART` is a comma-separated list of agent spec ids autostarted
+ * at serve boot (task 0195/0207).
+ */
+export function serverBootstrapConfig(env: Record<string, string | undefined>): ServerBootConfig {
     const isTest = env.NODE_ENV === 'test';
     const raw = env.SPUR_TEAM_AUTOSTART;
     const teamAutostart = raw
@@ -37,10 +48,14 @@ export function serverBootstrapConfig(env: Record<string, string | undefined>): 
               .map((s) => s.trim())
               .filter((s) => s.length > 0)
         : [];
+    // SPUR_DIAGNOSTIC_EVENTS=1 turns on the diagnostic tier of system events
+    // (`bus.*`, `workflow.guard.evaluated`, `workflow.transition.*` internals).
+    // Off by default — they are noisy and recursive-prone.
+    const diagnosticEvents = env.SPUR_DIAGNOSTIC_EVENTS === '1' || env.SPUR_DIAGNOSTIC_EVENTS === 'true';
     return {
         logging: { enabled: !isTest, level: (env.SPUR_LOG_LEVEL as LoggingOptions['level']) ?? 'info', console: false },
         telemetry: { enabled: false },
-        events: { enabled: true },
+        events: { enabled: true, diagnostic: diagnosticEvents },
         jobqueue: { enabled: !isTest },
         scheduler: { enabled: !isTest },
         teamAutostart,

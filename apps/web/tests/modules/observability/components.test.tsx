@@ -174,14 +174,76 @@ describe('observability components', () => {
 
     test('system events tab derives prefix filters from catalog metadata', async () => {
         installObservabilityFetchMock();
-        const { getByText, getByRole, queryByText } = render(<SystemEventsTab />);
+        const { getByText, getAllByRole, queryByText } = render(<SystemEventsTab />);
 
         await waitFor(() => expect(getByText('task.created')).toBeDefined());
         expect(getByText('queue.job.completed')).toBeDefined();
 
-        fireEvent.change(getByRole('combobox'), { target: { value: 'queue' } });
+        // First combobox is the prefix filter (task 0221 R7 also adds a tier
+        // filter combobox — the second one).
+        const [prefixSelect] = getAllByRole('combobox');
+        if (!prefixSelect) throw new Error('prefix select not found');
+        fireEvent.change(prefixSelect, { target: { value: 'queue' } });
 
         expect(getByText('queue.job.completed')).toBeDefined();
+        expect(queryByText('task.created')).toBeNull();
+    });
+
+    test('system events tab filters by visibility tier (task 0221 R5/R7)', async () => {
+        // Catalog with one default + one diagnostic event so the tier filter
+        // can hide the diagnostic row.
+        globalThis.fetch = (async (input: RequestInfo | URL) => {
+            const url = String(input);
+            if (url.includes('/events/history')) {
+                return jsonResponse({
+                    events: [
+                        {
+                            id: 'evt-default',
+                            eventName: 'task.created',
+                            occurredAt: '2026-07-04T20:00:00.000Z',
+                            actor: 'operator',
+                            payload: {},
+                        },
+                        {
+                            id: 'evt-diagnostic',
+                            eventName: 'bus.handler.error',
+                            occurredAt: '2026-07-04T20:00:01.000Z',
+                            actor: null,
+                            payload: { event: 'rule.eval.error' },
+                        },
+                    ],
+                    count: 2,
+                    catalog: [
+                        {
+                            name: 'task.created',
+                            prefix: 'task',
+                            source: 'planning',
+                            tier: 'default',
+                            renderer: 'planning',
+                        },
+                        {
+                            name: 'bus.handler.error',
+                            prefix: 'bus',
+                            source: 'bus',
+                            tier: 'diagnostic',
+                            renderer: 'bus',
+                        },
+                    ],
+                });
+            }
+            return new Response('not found', { status: 404 });
+        }) as typeof fetch;
+        const { getByText, getAllByRole, queryByText } = render(<SystemEventsTab />);
+
+        await waitFor(() => expect(getByText('task.created')).toBeDefined());
+        expect(getByText('bus.handler.error')).toBeDefined();
+
+        const comboboxes = getAllByRole('combobox');
+        expect(comboboxes.length).toBeGreaterThanOrEqual(2);
+        const tierSelect = comboboxes[comboboxes.length - 1];
+        if (!tierSelect) throw new Error('tier select not found');
+        fireEvent.change(tierSelect, { target: { value: 'diagnostic' } });
+        expect(getByText('bus.handler.error')).toBeDefined();
         expect(queryByText('task.created')).toBeNull();
     });
 

@@ -38,6 +38,7 @@ import type { EventBus, JobQueue, SchedulerAdapter } from '@gobing-ai/ts-infra';
 import type { ApplicationRuntime } from '@gobing-ai/ts-infra/application';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { ProcessExecutor } from '@gobing-ai/ts-runtime';
+import type { ServerBootConfig } from './bootstrap';
 
 type ServerEventMap = Record<string, (detail: PlanningEventType | unknown) => void>;
 
@@ -143,6 +144,13 @@ export interface ServerContext {
      * no adapter is configured (the default).
      */
     scheduler(): ServerScheduler;
+
+    /**
+     * Resolved boot config (events enabled, diagnostic toggle, scheduling/queue
+     * toggles, etc.). The system-events tap (R3) and SSE module consult this to
+     * decide which catalog tier to consume.
+     */
+    bootConfig(): ServerBootConfig;
 }
 
 /** Options for `createServerContext`. */
@@ -170,9 +178,13 @@ export interface CreateServerContextOptions {
      * at serve boot; a missing spec id fails loud. Omitted → no autostart.
      */
     teamAutostart?: string[];
-}
 
-/** Error thrown when a disabled facility accessor is called. */
+    /**
+     * Resolved server boot config. Falls back to a sensible default when omitted
+     * (so tests/CF Workers that don't bootstrap through serve.ts keep working).
+     */
+    bootConfig?: ServerBootConfig;
+}
 class NotConfiguredError extends Error {
     constructor(facility: string) {
         super(`${facility} is not configured — enable it in the bootstrap/server config`);
@@ -199,7 +211,16 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
     // Planning folders (phase folders) come pre-resolved from `.spur/config.yaml` via
     // serve.ts — never hardcoded here. Fall back to schema defaults when absent.
     const folders = options.folders ?? DEFAULT_PLANNING_FOLDERS;
-
+    // Default boot config — matches `serverBootstrapConfig({})` with everything off
+    // except `events.enabled`. Tests pass a real config via the bootConfig option.
+    const bootConfig: ServerBootConfig = options.bootConfig ?? {
+        logging: { enabled: false, level: 'info', console: false },
+        telemetry: { enabled: false },
+        events: { enabled: true, diagnostic: false },
+        jobqueue: { enabled: jobQueueEnabled },
+        scheduler: { enabled: Boolean(options.scheduler) },
+        teamAutostart: options.teamAutostart ?? [],
+    };
     // ── Lazy caches ──
     let dbPromise: Promise<DbAdapter> | undefined;
     let taskSvc: TaskService | undefined;
@@ -334,6 +355,10 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                 return options.scheduler;
             }
             throw new NotConfiguredError('scheduler');
+        },
+
+        bootConfig(): ServerBootConfig {
+            return bootConfig;
         },
     };
 }

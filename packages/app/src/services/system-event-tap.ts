@@ -28,12 +28,18 @@ export function registerSystemEventTap(
     bus: SystemEventBus,
     dao: SystemEventDao,
     logger: Pick<Logger, 'warn' | 'debug'>,
+    options: { diagnosticEnabled?: boolean } = {},
 ): SystemEventTap {
     const handlers = new Map<string, (event: unknown) => void>();
     const inFlight = new Set<Promise<void>>();
 
+    const diagnosticEnabled = options.diagnosticEnabled === true;
     for (const entry of SYSTEM_EVENT_CATALOG) {
-        if (!entry.persisted) continue;
+        // Diagnostic entries only persist/stream when the toggle is on (R5).
+        // `persisted`/`streamed` flags are always `true` on the catalog entry
+        // (they describe capability, not active subscription); tier is the
+        // runtime switch — consult it, not the flags.
+        if (entry.tier === 'diagnostic' && !diagnosticEnabled) continue;
         const handler = (event: unknown) => {
             const occurredAt = new Date().toISOString();
             const payloadJson = safeStringify(normalizeSystemEventPayload(entry, event));
@@ -45,7 +51,6 @@ export function registerSystemEventTap(
         handlers.set(entry.name, handler);
         bus.on(entry.name, handler);
     }
-
     return {
         unsubscribe: () => {
             for (const [name, handler] of handlers) {

@@ -14,8 +14,10 @@ import {
     type HitlResponder,
     loadWorkflowDef,
     type WorkflowDef,
+    type WorkflowEngineEvents,
     type WorkflowPersistenceAdapter,
 } from '@gobing-ai/ts-dual-workflow-engine';
+import type { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem, parseYamlObject } from '@gobing-ai/ts-runtime';
 import type { HostAllowlist, HttpRequester } from '../workflow/actions/http-request';
 import { registerSpurBuiltins } from '../workflow/builtins';
@@ -269,6 +271,14 @@ export interface WorkflowAppServiceContext {
      */
     observabilityBus?(): WorkflowObservabilityBus;
     /**
+     * Optional canonical server EventBus. When provided, the engine's
+     * per-step lifecycle events (`workflow.run.started`, `workflow.action.start`,
+     * etc.) are forwarded to the system_events tap (R3) and SSE stream. Engine
+     * names are canonical — the observability adapter's verb-form names occupy
+     * the same lifecycle moment and do not produce duplicate rows.
+     */
+    events?(): EventBus<Record<string, (event: unknown) => void>>;
+    /**
      * Embedded Spur JSON schemas keyed by `schemas/<name>.schema.json` subpath. When
      * present, a bundled workflow's `$schema: "@gobing-ai/spur/schemas/..."` ref is
      * served from this map instead of resolved through `node_modules`. Required for
@@ -279,8 +289,6 @@ export interface WorkflowAppServiceContext {
     embeddedSchemas?(): ReadonlyMap<string, string>;
 }
 
-// ---------------------------------------------------------------------------
-// WorkflowAppService
 // ---------------------------------------------------------------------------
 
 /**
@@ -354,7 +362,11 @@ export class WorkflowAppService {
 
     /** Load and run a workflow file. Returns the engine run result. */
     async run(file: string, opts: WorkflowRunOptions = {}): Promise<WorkflowRunResult> {
-        const svc = await this.createEngineService({ recordSelfPid: opts.recordSelfPid === true });
+        const eventsBus = this.ctx.events?.();
+        const svc = await this.createEngineService({
+            recordSelfPid: opts.recordSelfPid === true,
+            events: eventsBus,
+        });
         const runId = opts.runId ?? crypto.randomUUID();
         const isDry = opts.dryRun === true;
         const result = await svc.runFile(file, {
@@ -362,6 +374,7 @@ export class WorkflowAppService {
             runId,
             ...(opts.vars ? { vars: opts.vars } : {}),
             ...(isDry ? { dryRun: true } : {}),
+            ...(eventsBus !== undefined ? { events: this.bridgeEngineEvents(eventsBus) } : {}),
         });
         // Stamp dryRun into metadata_json so trace can label dry runs
         if (isDry) {
@@ -654,7 +667,9 @@ export class WorkflowAppService {
         return { run, events };
     }
 
-    private async createEngineService(opts: { recordSelfPid?: boolean } = {}): Promise<EngineWorkflowService> {
+    private async createEngineService(
+        opts: { recordSelfPid?: boolean; events?: EventBus<Record<string, (event: unknown) => void>> } = {},
+    ): Promise<EngineWorkflowService> {
         const host = createDefaultWorkflowEngineHost();
         registerSpurBuiltins(host, {
             agentService: this.ctx.agentService(),
@@ -673,6 +688,26 @@ export class WorkflowAppService {
         const bus = this.ctx.observabilityBus?.();
         const adapter = bus ? new ObservableWorkflowAdapter(persistence, bus) : persistence;
         return new EngineWorkflowService(host, adapter);
+    }
+
+    /**
+     * Wrap the canonical server EventBus into the typed
+     * `EventBus<WorkflowEngineEvents>` shape the engine accepts. Engine names
+     * are the canonical names in `SYSTEM_EVENT_CATALOG` — no alias needed.
+     * R4 alias policy: the engine and the persistence-observability adapter
+     * emit at slightly different lifecycles (`workflow.action.start` vs
+     * `workflow.action.started`), so they occupy distinct board rows even
+     * though they describe the same moment.
+     */
+    private bridgeEngineEvents(
+        serverBus: EventBus<Record<string, (event: unknown) => void>>,
+    ): EventBus<WorkflowEngineEvents> {
+        const bridge = {
+            on: (event: string, listener: (event: unknown) => void) => serverBus.on(event, listener),
+            off: (event: string, listener: (event: unknown) => void) => serverBus.off(event, listener),
+            emit: (event: string, detail: unknown) => Promise.resolve(serverBus.emit(event, detail)),
+        };
+        return bridge as unknown as EventBus<WorkflowEngineEvents>;
     }
 }
 

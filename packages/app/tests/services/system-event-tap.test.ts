@@ -107,6 +107,7 @@ describe('registerSystemEventTap', () => {
                 name: 'task.updated',
                 prefix: 'task',
                 source: 'planning',
+                tier: 'default',
                 persisted: true,
                 streamed: true,
                 payloadPolicy: 'metadata-only',
@@ -115,6 +116,23 @@ describe('registerSystemEventTap', () => {
             'ok',
         );
         expect(payload).toEqual({ value: 'ok' });
+    });
+
+    test('redacts sensitive fields for the redacted payload policy', () => {
+        const payload = normalizeSystemEventPayload(
+            {
+                name: 'workflow.hitl.ask',
+                prefix: 'workflow',
+                source: 'workflow',
+                tier: 'default',
+                persisted: true,
+                streamed: true,
+                payloadPolicy: 'redacted',
+                renderer: 'workflow-hitl',
+            },
+            { runId: 'run-1', message: 'secret prompt text', node: 'review' },
+        );
+        expect(payload).toEqual({ runId: 'run-1', message: '[redacted]', node: 'review' });
     });
 
     test('persist failure is logged and does not reject bus.emit', async () => {

@@ -17,6 +17,8 @@ interface EventCatalogEntry {
     name: string;
     prefix: string;
     source: string;
+    /** Optional tier — only present when the server ships it (task 0221 R5). */
+    tier?: string;
     renderer: string;
 }
 
@@ -112,7 +114,15 @@ function parseCatalog(values: unknown[]): EventCatalogEntry[] | undefined {
         ) {
             return undefined;
         }
-        entries.push({ name: obj.name, prefix: obj.prefix, source: obj.source, renderer: obj.renderer });
+        const tier = typeof obj.tier === 'string' ? obj.tier : undefined;
+        const entry: EventCatalogEntry = {
+            name: obj.name,
+            prefix: obj.prefix,
+            source: obj.source,
+            renderer: obj.renderer,
+            ...(tier !== undefined ? { tier } : {}),
+        };
+        entries.push(entry);
     }
     return entries;
 }
@@ -285,17 +295,91 @@ function renderProcessDetails({ payload }: DetailContext) {
     );
 }
 
+function renderAgentDetails({ payload }: DetailContext) {
+    return (
+        <div className="text-xs space-y-1 mt-1 text-spur-text-muted">
+            <DetailRow label="Agent" value={payload.agent ?? payload.agentId ?? payload.agentType} />
+            <DetailRow label="Operation" value={payload.operation} />
+            <DetailRow label="Label" value={payload.label} />
+            <DetailRow label="PID" value={payload.pid} />
+            <DetailRow label="Exit" value={payload.exitCode} />
+            <DetailRow
+                label="Duration"
+                value={payload.durationMs !== undefined ? `${payload.durationMs}ms` : undefined}
+            />
+            <DetailRow label="OK" value={payload.ok} />
+            {payload.error !== undefined && (
+                <div className="text-error mt-1 bg-error/5 p-1.5 rounded border border-error/20 font-mono text-[10px] break-all">
+                    {formatVal(payload.error)}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function renderRuleDetails({ payload }: DetailContext) {
+    return (
+        <div className="text-xs space-y-1 mt-1 text-spur-text-muted">
+            <DetailRow label="Rule ID" value={payload.ruleId} />
+            <DetailRow label="Findings" value={payload.findings} />
+            <DetailRow
+                label="Duration"
+                value={payload.durationMs !== undefined ? `${payload.durationMs}ms` : undefined}
+            />
+            <DetailRow
+                label="Index"
+                value={payload.index !== undefined ? `${payload.index}/${payload.total}` : undefined}
+            />
+            {payload.error !== undefined && (
+                <div className="text-error mt-1 bg-error/5 p-1.5 rounded border border-error/20 font-mono text-[10px] break-all">
+                    {formatVal(payload.error)}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function renderBusDetails({ payload }: DetailContext) {
+    return (
+        <div className="text-xs space-y-1 mt-1 text-spur-text-muted">
+            <DetailRow label="Event" value={payload.event ?? payload.kind} />
+            <DetailRow label="Handlers" value={payload.handlerCount} />
+            <DetailRow
+                label="Duration"
+                value={payload.durationMs !== undefined ? `${payload.durationMs}ms` : undefined}
+            />
+        </div>
+    );
+}
+
+function renderApiDetails({ payload }: DetailContext) {
+    return (
+        <div className="text-xs space-y-1 mt-1 text-spur-text-muted">
+            <DetailRow label="Method" value={payload.method} />
+            <DetailRow label="URL" value={payload.url} />
+            <DetailRow label="Status" value={payload.status} />
+            <DetailRow label="Error" value={payload.error} />
+        </div>
+    );
+}
+
 const DETAIL_RENDERERS: Record<string, DetailRenderer> = {
     planning: renderPlanningDetails,
     queue: renderQueueDetails,
     scheduler: renderQueueDetails,
     message: renderMessageDetails,
     process: renderProcessDetails,
+    agent: renderAgentDetails,
+    rule: renderRuleDetails,
+    bus: renderBusDetails,
+    api: renderApiDetails,
     'workflow-run': renderWorkflowDetails,
     'workflow-phase': renderWorkflowDetails,
     'workflow-transition': renderWorkflowDetails,
     'workflow-action': renderWorkflowDetails,
     'workflow-hitl': renderWorkflowDetails,
+    'workflow-guard': renderWorkflowDetails,
+    'workflow-custom': renderWorkflowDetails,
 };
 
 function EventDetails({
@@ -332,6 +416,7 @@ export default function SystemEventsTab() {
     const [error, setError] = useState<string | null>(null);
     const [categoryFilter, setCategoryFilter] = useState<string>('all');
     const [searchQuery, setSearchQuery] = useState<string>('');
+    const [tierFilter, setTierFilter] = useState<string>('all');
 
     // Initial history fetch.
     useEffect(() => {
@@ -409,6 +494,17 @@ export default function SystemEventsTab() {
                 return false;
             }
         }
+        if (tierFilter !== 'all') {
+            const entryTier = catalog.find((entry) => entry.name === evt.eventName)?.tier;
+            if (entryTier !== tierFilter) {
+                // Unknown tier (e.g. legacy event) is treated as 'default' so
+                // the diagnostic filter is opt-in only — default events stay
+                // visible even when the catalog lacks the tier field.
+                if (!(tierFilter === 'default' && entryTier === undefined)) {
+                    return false;
+                }
+            }
+        }
         if (searchQuery.trim() !== '') {
             const query = searchQuery.toLowerCase();
             const matchesName = evt.eventName.toLowerCase().includes(query);
@@ -446,6 +542,18 @@ export default function SystemEventsTab() {
                         </option>
                     ))}
                 </Select>
+                <Select
+                    size="sm"
+                    variant="bordered"
+                    value={tierFilter}
+                    onChange={(e) => setTierFilter(e.target.value)}
+                    className="w-44"
+                    title="Filter by visibility tier; diagnostic events require SPUR_DIAGNOSTIC_EVENTS on the server."
+                >
+                    <option value="all">All Tiers</option>
+                    <option value="default">Default only</option>
+                    <option value="diagnostic">Diagnostic only</option>
+                </Select>
                 <Input
                     size="sm"
                     variant="bordered"
@@ -455,7 +563,6 @@ export default function SystemEventsTab() {
                     className="flex-1 min-w-[200px] input-sm"
                 />
             </div>
-
             {filteredEvents.length === 0 ? (
                 <div className="p-4 text-sm text-spur-text-muted italic flex-1 overflow-y-auto">
                     {events.length === 0

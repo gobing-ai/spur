@@ -4,6 +4,7 @@ import type { ServerContext } from '../../context';
 import type { ServerModule } from '../types';
 import {
     normalizeSystemEventPayload,
+    SYSTEM_EVENT_CATALOG,
     SYSTEM_EVENT_CATALOG_METADATA,
     SYSTEM_EVENT_STREAMED_NAMES,
     systemEventCatalogEntry,
@@ -35,6 +36,22 @@ export const eventsModule: ServerModule = {
     mount(app: Hono, ctx: ServerContext | undefined): void {
         if (!ctx) return;
 
+        // Build the SSE stream name list once per server boot, honoring the
+        // diagnostic tier toggle from bootConfig (R5). `STREAMED_NAMES` alone
+        // only covers `default`; diagnostic entries are appended when enabled.
+        // Defensive: tests and CF Workers may pass a partial `ctx` cast
+        // without `bootConfig`; fall back to "diagnostic disabled" when absent.
+        const baseNames: readonly string[] = SYSTEM_EVENT_STREAMED_NAMES;
+        const diagnosticEnabled =
+            typeof (ctx as { bootConfig?: () => unknown }).bootConfig === 'function' &&
+            (ctx as unknown as { bootConfig: () => { events: { diagnostic: boolean } } }).bootConfig().events
+                .diagnostic === true;
+        const diagnosticNames = diagnosticEnabled
+            ? SYSTEM_EVENT_CATALOG.filter((entry) => entry.tier === 'diagnostic' && entry.streamed).map(
+                  (entry) => entry.name,
+              )
+            : [];
+        const streamNames = [...baseNames, ...diagnosticNames];
         app.get('/api/events/planning', (c) => {
             const bus: EventBus<Record<string, (event: unknown) => void>> = ctx.eventBus();
             const closed = { current: false };
@@ -80,7 +97,7 @@ export const eventsModule: ServerModule = {
                     signal.addEventListener('abort', teardown);
 
                     heartbeatInterval = setInterval(sendKeepalive, 15_000, closed, controller, encoder);
-                    for (const name of SYSTEM_EVENT_STREAMED_NAMES) {
+                    for (const name of streamNames) {
                         const handler = (event: unknown) => {
                             if (closed.current) return;
                             const entry = systemEventCatalogEntry(name);

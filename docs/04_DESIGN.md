@@ -868,3 +868,56 @@ artifact via one of two **mutually exclusive** exits:
 **Pipeline step→command mapping (ADR-026):** `implement` → `/sp:dev-run --mode implement`, `test` → `/sp:dev-unit`,
 `review` → `/sp:dev-review`, `verify` → `/sp:dev-verify` (§7.5). The remaining commands are
 operator-invoked, not pipeline-driven.
+
+### 7.9 System Event catalog
+
+The `System Events` tab on the observability board subscribes to events on the
+canonical server `EventBus<ServerEventMap>` exposed by `ServerContext.eventBus()`.
+Only events registered in `SYSTEM_EVENT_CATALOG` (`packages/app/src/services/event-names.ts`)
+are persisted to `system_events` and pushed over `/api/events/planning`. The catalog
+is the single source of truth — both the tap (`registerSystemEventTap`) and the SSE
+module derive their subscriptions from it.
+
+**Tier rules (task 0221 R5).**
+
+| Tier        | Meaning                                                                                                           |
+| ----------- | ----------------------------------------------------------------------------------------------------------------- |
+| `default`   | Persisted and streamed on the SSE channel without extra runtime config.                                          |
+| `diagnostic` | Persisted and streamed only when `SPUR_DIAGNOSTIC_EVENTS=1` (or `true`) is set on the server runtime.            |
+| (out of catalog) | Emit is not part of the board contract — CLI-local buses, browser store notifications, raw Node signals.    |
+
+The `SPUR_DIAGNOSTIC_EVENTS` flag ships through `serverBootstrapConfig(env).events.diagnostic`
+(`apps/server/src/bootstrap.ts`) and is consulted in two places: the system-event tap
+(`registerSystemEventTap(bus, dao, logger, { diagnosticEnabled })`) and the SSE module when
+building the stream name list. Diagnostic entries remain in the catalog so the UI can
+filter them by `tier` once the toggle is enabled — no CLI restart required.
+
+**Source families (task 0221 R2).** `SystemEventSource` is the producer family
+(`planning | queue | scheduler | message | process | workflow | rule | agent | bus | api`).
+The catalog declaration order is the canonical order; `SYSTEM_EVENT_PREFIXES` is derived
+and powers the UI prefix filter.
+
+**Event-name alias policy (task 0221 R4).** Where upstream and canonical names diverge
+(e.g. engine `workflow.action.start` vs. observability adapter `workflow.action.started`),
+the engine-native names are catalog-canonical and the alternates get their own row — one
+per logical moment — to avoid silently collapsing two lifecycle moments into one row.
+The persistence-side `ObservableWorkflowAdapter` continues to feed live consumers via
+its own typed bus; it produces a separate `system_events` row only if the engine did not.
+
+**Producer invariant (R3).** Board-visible server work receives the canonical bus,
+directly or through a typed adapter. Each app service has an optional `events?()`:
+
+| Service                                          | Wiring                                                                                              |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `AgentService.run()` / `runCapture()` (0219 + 0221) | `AiRunner({ events: bridge(events), processEvents: bridge(events) })`                                 |
+| `RuleService.evaluate()` / `evaluateVerbose()`    | `RuleEngine({ events: bridge(events) })` plus a forwarding subscription over the verbose local bus. |
+| `WorkflowAppService.run()`                        | `EngineWorkflowService.runFile({ events: bridgeEngineEvents(events) })` via `createEngineService`. |
+| `TaskActionJob` (server-side queued job)         | `new AgentService({ events: ctx.eventBus(), ... })` in `serve.ts:runTaskActionJob`.                  |
+| `JobQueue` / `QueueConsumer` (0190)              | Already wired via `createServerContext` (forwards `queue.*`).                                       |
+
+**Server-context integration tests (0219 AC).** `apps/server/tests/context.test.ts`
+proves that `task.*` events flow through the canonical bus into `system_events`;
+analogous tests for `rule.run.start`, `agent.invoke.start`, and `workflow.run.started`
+are added in 0221 by emitting the upstream event through a service constructed with
+`events: ctx.eventBus()` and asserting `dao.query({ name })` returns a row.
+
