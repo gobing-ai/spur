@@ -18,17 +18,17 @@ structure wired up.
 
 ## Arguments
 
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `--name <name>` | Project name passed to `spur init` | current directory name |
-| `--minimal` | Only write the minimal `.spur` scaffold (skip docs + templates) | (off) |
-| `--force` | Recreate `.spur` config that already exists (docs are always preserved) | (off) |
-| `--skip-docs` | Skip the post-scaffold doc customization step | (off) |
+| Argument        | Description                                                             | Default                |
+| --------------- | ----------------------------------------------------------------------- | ---------------------- |
+| `--name <name>` | Project name passed to `spur init`                                      | current directory name |
+| `--minimal`     | Only write the minimal `.spur` scaffold (skip docs + templates)         | (off)                  |
+| `--force`       | Recreate `.spur` config that already exists (docs are always preserved) | (off)                  |
+| `--skip-docs`   | Skip the post-scaffold doc customization step                           | (off)                  |
 
 ## Behavior
 
 Two phases — deterministic scaffold first, then non-deterministic customization. **Ownership
-contract:** this command owns content *adaptation* only; `spur init` owns *file materialization*
+contract:** this command owns content _adaptation_ only; `spur init` owns _file materialization_
 (`04_DESIGN.md` §1.1 "Init ownership contract"). The command NEVER creates scaffold files
 itself — it edits content the CLI already wrote. Two probes sit between the phases: Phase 1.5
 (functional validation) confirms the fresh tree is immediately functional; Phase 1.6 (rule glob
@@ -42,8 +42,9 @@ spur init --name <name> [--minimal] [--force] --json
 ```
 
 This scaffolds (idempotent, never overwrites customized docs):
+
 - `.spur/config.yaml` — minimal project config.
-- `.spur/workflows/`, `.spur/rules/`, `.spur/templates/`, `.spur/tasks/templates/` — defaults
+- `.spur/workflows/`, `.spur/rules/`, `.spur/templates/`, `.spur/templates/task/` — defaults
   (one template per `TASK_VARIANTS` entry, driven by `SCAFFOLD_MANIFEST`).
 - `docs/99_PROJECT_CONSTITUTION.md` + `docs/00`–`docs/05` stubs — the doc structure.
 
@@ -138,10 +139,11 @@ Phase 1 runs `spur init` directly (Bash). Phase 1.5 runs the validation probes v
 halts on any failure. Phase 1.6 reads bundled rule files, detects the project layout, and writes
 adapted overrides under `.spur/rules/<category>/` via the Write tool (local-layer shadowing, not
 scaffold materialization). Phase 2 delegates to `sp:doc-evolve` for every doc touch.
+
 - **Other platforms:** `Skill()` and `$ARGUMENTS` are Claude-specific. Run `spur init` via Bash,
   then invoke the `sp:doc-evolve` skill's `customize` operation directly.
 
 ## See also
 
 - **sp:doc-evolve** — constitution-driven doc refresh; enforces §5 sync triggers on every doc touch.
-- **sp:spur-dev** — the SSOT for all dev-* operations (planning + execution pipeline); the natural next skill after initialization.
+- **sp:spur-dev** — the SSOT for all dev-\* operations (planning + execution pipeline); the natural next skill after initialization.
