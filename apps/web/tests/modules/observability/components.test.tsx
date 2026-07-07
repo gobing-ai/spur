@@ -84,6 +84,10 @@ function installObservabilityFetchMock(): string[] {
                     },
                 ],
                 count: 2,
+                catalog: [
+                    { name: 'task.created', prefix: 'task', source: 'planning', renderer: 'planning' },
+                    { name: 'queue.job.completed', prefix: 'queue', source: 'queue', renderer: 'queue' },
+                ],
             });
         }
         if (url.includes('/jobs/stats')) {
@@ -166,6 +170,19 @@ describe('observability components', () => {
         });
 
         await waitFor(() => expect(getByText('task.updated')).toBeDefined());
+    });
+
+    test('system events tab derives prefix filters from catalog metadata', async () => {
+        installObservabilityFetchMock();
+        const { getByText, getByRole, queryByText } = render(<SystemEventsTab />);
+
+        await waitFor(() => expect(getByText('task.created')).toBeDefined());
+        expect(getByText('queue.job.completed')).toBeDefined();
+
+        fireEvent.change(getByRole('combobox'), { target: { value: 'queue' } });
+
+        expect(getByText('queue.job.completed')).toBeDefined();
+        expect(queryByText('task.created')).toBeNull();
     });
 
     test('inbox tab renders sender recipient timestamp metadata and reply grouping', async () => {
