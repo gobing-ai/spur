@@ -21,13 +21,13 @@ async function isolatedOptions(cwd: string) {
 }
 
 describe('spur init template copy', () => {
-    test('templates are copied to .spur/tasks/templates/ and .spur/templates/', async () => {
+    test('templates are copied to .spur/templates/task/ and .spur/templates/', async () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
         expect(await main(['init'], options)).toBe(0);
 
-        // Task templates under .spur/tasks/templates/
+        // Task templates under .spur/templates/task/
         const tasksBase = join(cwd, '.spur', 'tasks', 'templates');
         expect(existsSync(join(tasksBase, 'standard.md'))).toBe(true);
         expect(existsSync(join(tasksBase, 'feature-impl.md'))).toBe(true);

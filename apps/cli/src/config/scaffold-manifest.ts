@@ -53,7 +53,7 @@ export const SCAFFOLD_MANIFEST: readonly ScaffoldEntry[] = [
     { source: 'workflows/wrapup-pipeline.yaml', target: 'workflows/wrapup-pipeline.yaml' },
     // Section matrix under .spur/tasks/
     { source: 'tasks/section-matrix.yaml', target: 'tasks/section-matrix.yaml' },
-    // Task templates under .spur/tasks/templates/
+    // Task templates under .spur/templates/task/
     { source: 'templates/task/standard.md', target: 'tasks/templates/standard.md' },
     { source: 'templates/task/feature-impl.md', target: 'tasks/templates/feature-impl.md' },
     { source: 'templates/task/issue.md', target: 'tasks/templates/issue.md' },

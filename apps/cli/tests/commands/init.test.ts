@@ -35,7 +35,7 @@ describe('init command', () => {
         // Team-mode agent specs directory is tracked via .gitkeep.
         expect(existsSync(join(cwd, '.spur', 'agents', '.gitkeep'))).toBe(true);
 
-        // Task templates under .spur/tasks/templates/
+        // Task templates under .spur/templates/task/
         expect(existsSync(join(cwd, '.spur', 'tasks', 'templates', 'standard.md'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'tasks', 'templates', 'feature-impl.md'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'tasks', 'templates', 'issue.md'))).toBe(true);

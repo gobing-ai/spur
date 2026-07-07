@@ -628,7 +628,7 @@ const templateMissSet = new Set<string>();
 /**
  * Read a variant's template file and return its raw markdown content.
  * Resolution order:
- *   1. `.spur/tasks/templates/<variant>.md` (project-local, seeded by `spur init`)
+ *   1. `.spur/templates/task/<variant>.md` (project-local, seeded by `spur init`)
  *   2. bundled template fallback (`templates/task/<variant>.md`)
  * Returns the raw file content (with `{{ PLACEHOLDERS }}` intact) so
  * `renderTaskTemplate` can substitute real values. Returns `undefined`
@@ -668,7 +668,7 @@ const templateBodiesCache = new Map<string, Partial<Record<TaskSection, string>>
 /**
  * Read a variant's scaffold template and extract its per-section bodies
  * (e.g. `review`'s P1–P4 table). Resolution order:
- *   1. `.spur/tasks/templates/<variant>.md` (project-local, seeded by `spur init`)
+ *   1. `.spur/templates/task/<variant>.md` (project-local, seeded by `spur init`)
  *   2. bundled template fallback (`templates/task/<variant>.md`)
  * Returns `{}` when neither source is reachable — creation then falls back to
  * matrix + guidance only. Results are cached per process.
@@ -678,7 +678,7 @@ function loadTemplateBodies(projectRoot: string, variant: string): Partial<Recor
     if (cached !== undefined) return cached;
     let bodies: Partial<Record<TaskSection, string>> = {};
 
-    // 1. Project-local: .spur/tasks/templates/<variant>.md
+    // 1. Project-local: .spur/templates/task/<variant>.md
     const localPath = join(projectRoot, '.spur', 'tasks', 'templates', `${variant}.md`);
     if (existsSync(localPath)) {
         bodies = extractTemplateBodies(readFileSync(localPath, 'utf8'));
