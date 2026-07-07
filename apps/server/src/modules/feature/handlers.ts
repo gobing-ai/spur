@@ -1,5 +1,4 @@
 import type { WriteResult } from '@gobing-ai/spur-app';
-import { FeatureCheckService } from '@gobing-ai/spur-app';
 import { contract } from '@gobing-ai/spur-contracts';
 import { normalizeFeatureStatus, PRIORITIES, type Priority } from '@gobing-ai/spur-domain/schema';
 import { NotFoundError } from '@gobing-ai/ts-utils';
@@ -76,6 +75,7 @@ export function createFeatureHandlers(ctx: ServerContext) {
             const folders = ctx.planningFolders();
             const feature = await ctx.featureService().show(input.id);
             if (!feature) throw new NotFoundError(`Feature ${input.id} not found`);
+            const { FeatureCheckService } = await import('@gobing-ai/spur-app/feature-check');
             const svc = new FeatureCheckService(ctx.fs);
             return {
                 ok: true as const,
@@ -92,13 +92,10 @@ export function createFeatureHandlers(ctx: ServerContext) {
             await ctx.featureService().updateBody(input.id, input.body);
             return { ok: true as const, data: {} };
         }),
-        action: os.feature.action.handler(async ({ input }) => {
+        action: os.feature.action.handler(async () => {
             // Workflow action dispatch (brainstorm/plan) — full spur agent run
             // integration deferred to task F7 follow-up (needs job queue wiring).
             // Returns ok: true so the UI button flow doesn't block.
-            console.log(
-                `[feature action] deferred — ${input.action} on ${input.id} (channel: ${input.channel ?? 'default'})`,
-            );
             return { ok: true as const, data: {} };
         }),
 
@@ -125,7 +122,6 @@ export function createFeatureHandlers(ctx: ServerContext) {
             // Sync feature status with linked tasks — full implementation
             // deferred (needs task-by-feature query + aggregate logic).
             // Returns ok: true with affectedTasks: 0 so the UI doesn't block.
-            console.log(`[feature sync] deferred — ${input.direction} sync on ${input.id}`);
             return {
                 ok: true as const,
                 data: { direction: input.direction, affectedTasks: 0 },

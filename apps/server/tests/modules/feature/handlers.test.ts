@@ -34,7 +34,14 @@ describe('feature handlers', () => {
                     ref: { id: 'A', filePath: '/test/A.md', kind: 'feature' as const, folder: '.' },
                 }),
                 refresh: async () => ({ index: '', tasksUpdated: 3 }),
+                updateBody: async () => {},
                 ...overrides,
+            }),
+            taskService: () => ({
+                create: async () => ({
+                    ref: { id: 'T1', filePath: '/test/T1.md' },
+                }),
+                updateField: async () => {},
             }),
         } as unknown as ServerContext;
     }
@@ -202,5 +209,95 @@ describe('feature handlers', () => {
         } finally {
             rmSync(root, { recursive: true, force: true });
         }
+    });
+
+    test('body handler updates feature body', async () => {
+        let updatedId = '';
+        let updatedBody = '';
+        const ctx = makeCtx({
+            updateBody: async (id: string, body: string) => {
+                updatedId = id;
+                updatedBody = body;
+            },
+        });
+        const handlers = createFeatureHandlers(ctx);
+        const fn = handlers.body['~orpc'].handler as unknown as (opts: {
+            input: { id: string; body: string };
+        }) => Promise<{ ok: boolean }>;
+        const result = await fn({ input: { id: 'F3', body: 'New Body Content' } });
+        expect(result.ok).toBe(true);
+        expect(updatedId).toBe('F3');
+        expect(updatedBody).toBe('New Body Content');
+    });
+
+    test('body handler throws NotFoundError when feature not found', async () => {
+        const ctx = makeCtx({ show: async () => null });
+        const handlers = createFeatureHandlers(ctx);
+        const fn = handlers.body['~orpc'].handler as unknown as (opts: {
+            input: { id: string; body: string };
+        }) => Promise<unknown>;
+        await expect(fn({ input: { id: 'F3', body: 'New Body Content' } })).rejects.toThrow('Feature F3 not found');
+    });
+
+    test('action handler returns ok true', async () => {
+        const handlers = createFeatureHandlers(makeCtx());
+        const fn = handlers.action['~orpc'].handler as unknown as (opts: {
+            input: { id: string; action: string; channel?: string };
+        }) => Promise<{ ok: boolean }>;
+        const result = await fn({ input: { id: 'F3', action: 'plan' } });
+        expect(result.ok).toBe(true);
+    });
+
+    test('children handler creates child feature', async () => {
+        let createdName = '';
+        let createdParentId = '';
+        const ctx = makeCtx({
+            create: async (name: string, parentId?: string) => {
+                createdName = name;
+                createdParentId = parentId ?? '';
+                return {
+                    ref: { id: 'F3.1', filePath: '/test/F3_1.md', kind: 'feature' as const, folder: '.' },
+                };
+            },
+        });
+        const handlers = createFeatureHandlers(ctx);
+        const fn = handlers.children['~orpc'].handler as unknown as (opts: {
+            input: { id: string; name: string };
+        }) => Promise<{ ok: boolean; data: unknown }>;
+        const result = await fn({ input: { id: 'F3', name: 'Child Feature' } });
+        expect(result.ok).toBe(true);
+        expect(createdName).toBe('Child Feature');
+        expect(createdParentId).toBe('F3');
+    });
+
+    test('tasks handler creates a task for feature', async () => {
+        const handlers = createFeatureHandlers(makeCtx());
+        const fn = handlers.tasks['~orpc'].handler as unknown as (opts: {
+            input: { id: string; title: string };
+        }) => Promise<{ ok: boolean; data: { wbs: string; filePath: string } }>;
+        const result = await fn({ input: { id: 'F3', title: 'Task Title' } });
+        expect(result.ok).toBe(true);
+        expect(result.data.wbs).toBe('T1');
+        expect(result.data.filePath).toBe('/test/T1.md');
+    });
+
+    test('link handler links task to feature', async () => {
+        const handlers = createFeatureHandlers(makeCtx());
+        const fn = handlers.link['~orpc'].handler as unknown as (opts: {
+            input: { id: string; wbs: string };
+        }) => Promise<{ ok: boolean }>;
+        const result = await fn({ input: { id: 'F3', wbs: 'T1' } });
+        expect(result.ok).toBe(true);
+    });
+
+    test('sync handler returns ok true', async () => {
+        const handlers = createFeatureHandlers(makeCtx());
+        const fn = handlers.sync['~orpc'].handler as unknown as (opts: {
+            input: { id: string; direction: 'up' | 'down' };
+        }) => Promise<{ ok: boolean; data: { direction: string; affectedTasks: number } }>;
+        const result = await fn({ input: { id: 'F3', direction: 'up' } });
+        expect(result.ok).toBe(true);
+        expect(result.data.direction).toBe('up');
+        expect(result.data.affectedTasks).toBe(0);
     });
 });
