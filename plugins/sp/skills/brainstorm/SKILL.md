@@ -83,7 +83,10 @@ directly. Ambiguous or insufficient input (short, missing context, undefined ter
 readings) gets one `AskUserQuestion` at a time, preferring multiple choice. Detection rule and
 trigger list: [references/workflows.md](references/workflows.md#phase-1-input-processing). Frame each
 clarification as a decision brief (question + stakes + recommendation + scored options): the SSOT is
-[spur-dev/references/decision-brief.md](../spur-dev/references/decision-brief.md).
+[spur-dev/references/decision-brief.md](../spur-dev/references/decision-brief.md). When a structured-input
+tool is available, call it directly with the decision-brief contents as its option array — do not
+render the brief as markdown text and also call the tool. One channel per question; the tool wins,
+markdown text is the fallback only.
 
 ### 2. Delegate Research
 

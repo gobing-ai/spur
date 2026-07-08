@@ -59,6 +59,11 @@ Option B — <name>   [kind-note: optimizes for X over Y, not "more/less complet
   review, or vice-versa).
 - **Plain English in the stakes.** The operator may not share the agent's context; state the cost in
   terms they can weigh without reading the code.
+- **Tool-call rendering where available.** Where a structured-input tool exists (`AskUserQuestion`
+  on Claude Code, or the platform equivalent), render the brief *as* the tool's option array —
+  recommendation → `recommended` field, options → `options[]`, scores / pros / cons folded into each
+  option's description. Do not double-render (markdown text + tool call) — pick one channel; the
+  tool wins. Render the markdown template above only when no structured-input tool is available.
 
 ## Where it is applied
 

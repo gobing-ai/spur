@@ -76,6 +76,13 @@ full decision space before ideation begins.
 
 **Alternatives considered:** <1-2 alternatives and why they rank lower>
 ```
+**Binding to a structured-input tool:** the question format above describes the *content* of each
+question. The *channel* is a structured-input tool call, not rendered markdown. When a
+structured-input tool (`AskUserQuestion` on Claude Code, or the platform equivalent) is available,
+invoke it with the recommended answer as the pre-selected / recommended option and the alternatives
+as the remaining options. Render the markdown block above only as a fallback when no such tool is
+available. Option content (question, stakes, recommendation, scored options with pros/cons) follows
+the decision-brief SSOT: [spur-dev/references/decision-brief.md](../skills/spur-dev/references/decision-brief.md).
 
 **Codebase-first rule:** Before asking about any decision that might be constrained by existing code,
 search the repo. If the answer is in the code, state it and skip the question. Examples of
