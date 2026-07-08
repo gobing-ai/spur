@@ -86,3 +86,18 @@
     max-width: 100%;
     height: auto;
 }
+
+/* Liveness indicator pulse for the System Events tab (task 0222 R1). The dot
+   uses a subtle scale + opacity loop so it reads as "alive" without flashing
+   distractingly at the corner of a dense observability view. */
+@keyframes spur-pulse {
+    0%,
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.45;
+        transform: scale(0.85);
+    }
+}

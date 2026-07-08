@@ -1,5 +1,5 @@
-import { type ReactNode, useEffect, useState } from 'react';
-import { Badge, Card, CardBody, Input, Loading, Select } from '@/ui';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Input, Loading } from '@/ui';
 import { resolveApiUrl } from '../../lib/rpc-client';
 
 /** Wire shape of a single system event row from the history endpoint. */
@@ -42,6 +42,73 @@ interface SseEnvelope {
 const HISTORY_URL = `${resolveApiUrl()}/events/history`;
 const SSE_URL = `${resolveApiUrl()}/events/planning`;
 const HISTORY_LIMIT = 100;
+
+/**
+ * Stable prefix → tailwind text-color mapping (task 0223 R4). Hand-curated so
+ * the color is deterministic across renders (not a hash of the event name) —
+ * every operator reading the same prefix sees the same color, and the prefix
+ * label is still rendered alongside so color is never the only signal (R5).
+ * Unknown prefixes fall back to the neutral `text-spur-text-muted` (R6).
+ */
+const PREFIX_COLOR_MAP: Record<string, string> = {
+    workflow: 'text-cyan-400',
+    task: 'text-emerald-400',
+    feature: 'text-emerald-400',
+    agent: 'text-amber-400',
+    rule: 'text-rose-400',
+    message: 'text-sky-400',
+    process: 'text-violet-400',
+    queue: 'text-orange-400',
+    bus: 'text-pink-400',
+    api: 'text-teal-400',
+};
+const FALLBACK_COLOR = 'text-spur-text-muted';
+
+function getPrefixColor(prefix: string | undefined): string {
+    if (!prefix) return FALLBACK_COLOR;
+    return PREFIX_COLOR_MAP[prefix] ?? FALLBACK_COLOR;
+}
+/**
+ * Tri-state SSE connection status surfaced by the liveness strip (task 0222 R1).
+ * `connecting` covers both initial mount before the first frame and any
+ * reconnect window; `errored` is reserved for explicit source failures; `live`
+ * is the steady state after at least one frame has been delivered.
+ */
+type SseStatus = 'connecting' | 'live' | 'errored';
+
+/**
+ * Trail of recent event timestamps used to compute the rolling
+ * "N events / 60s" rate. We keep absolute epoch ms so the rate stays correct
+ * across tab clock drift and is trivially sliceable for the trailing window.
+ */
+function useRollingEventRate(): { rate: number; recordEvent: () => void } {
+    const trailRef = useRef<number[]>([]);
+    const [rate, setRate] = useState(0);
+
+    // Re-tick every second so the rate reflects the *trailing* 60-second window
+    // (R2). The interval is a coarse timer; the actual rate may lag a frame
+    // behind the wall clock, which is fine — this is a human-facing indicator.
+    useEffect(() => {
+        const id = window.setInterval(() => {
+            const cutoff = Date.now() - 60_000;
+            const trail = trailRef.current.filter((ts) => ts >= cutoff);
+            trailRef.current = trail;
+            setRate(trail.length);
+        }, 1000);
+        return () => window.clearInterval(id);
+    }, []);
+
+    const recordEvent = useCallback(() => {
+        const now = Date.now();
+        const cutoff = now - 60_000;
+        const trail = trailRef.current.filter((ts) => ts >= cutoff);
+        trail.push(now);
+        trailRef.current = trail;
+        setRate(trail.length);
+    }, []);
+
+    return { rate, recordEvent };
+}
 
 /**
  * Runtime-narrow an unknown network payload into a `HistoryResponse`, or
@@ -170,231 +237,132 @@ function formatVal(val: unknown): string {
     return String(val);
 }
 
-interface DetailContext {
-    eventName: string;
-    payload: Record<string, unknown>;
+/** Format ISO timestamp to local "MMM D HH:mm:ss" (no year). */
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function formatLocalTime(iso: string): string {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso; // fallback for unparseable
+    const mo = MONTHS[d.getMonth()];
+    const day = d.getDate();
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    const ss = String(d.getSeconds()).padStart(2, '0');
+    return `${mo} ${day} ${hh}:${mm}:${ss}`;
 }
 
-type DetailRenderer = (ctx: DetailContext) => ReactNode;
-
-function DetailRow({ label, value }: { label: string; value: unknown }) {
-    if (value === undefined || value === null || value === '') return null;
-    return (
-        <div>
-            <span className="font-semibold text-spur-text">{label}:</span>{' '}
-            <span className="font-mono text-[11px] text-spur-text">{formatVal(value)}</span>
-        </div>
-    );
-}
-
-function renderGenericDetails({ payload }: DetailContext) {
-    const entries = Object.entries(payload).filter(([key]) => key !== 'entity' && key !== 'event' && key !== 'at');
-    if (entries.length === 0) return null;
-    return (
-        <div className="text-[11px] mt-1 space-y-0.5 text-spur-text-muted">
-            {entries.map(([key, value]) => (
-                <div key={key} className="flex gap-1.5">
-                    <span className="font-mono font-semibold text-spur-text w-24 shrink-0">{key}:</span>
-                    <span className="font-mono break-all">{formatVal(value)}</span>
-                </div>
-            ))}
-        </div>
-    );
-}
-
-function renderPlanningDetails({ payload }: DetailContext) {
-    const entity = payload.entity as Record<string, unknown> | undefined;
-    const metadata = payload.data as Record<string, unknown> | undefined;
-    const entityLabel = entity ? `${formatVal(entity.kind)}:${formatVal(entity.id)}` : payload.entityId || payload.wbs;
-    return (
-        <div className="text-xs space-y-1 mt-1 text-spur-text-muted">
-            <DetailRow label="Entity" value={entityLabel} />
-            {(payload.from !== undefined || payload.to !== undefined) && (
-                <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="font-semibold text-spur-text">Transition:</span>
-                    <span className="font-mono bg-base-300 px-1 rounded text-spur-text">
-                        {formatVal(payload.from ?? 'none')}
-                    </span>
-                    <span className="text-spur-text-muted">-&gt;</span>
-                    <span className="font-mono bg-base-300 px-1 rounded text-spur-text">
-                        {formatVal(payload.to ?? 'none')}
-                    </span>
-                </div>
-            )}
-            {metadata && Object.keys(metadata).length > 0 && <DetailRow label="Metadata" value={metadata} />}
-        </div>
-    );
-}
-
-function renderWorkflowDetails({ payload }: DetailContext) {
-    return (
-        <div className="text-xs space-y-1 mt-1 text-spur-text-muted">
-            <DetailRow label="Workflow" value={payload.workflowName} />
-            <DetailRow label="Run ID" value={payload.runId} />
-            <DetailRow label="Phase" value={payload.phase} />
-            <DetailRow label="Status" value={payload.status} />
-            <DetailRow label="Action" value={payload.actionId} />
-            <DetailRow label="Node" value={payload.node} />
-            <DetailRow label="Kind" value={payload.kind} />
-            <DetailRow
-                label="Duration"
-                value={payload.durationMs !== undefined ? `${payload.durationMs}ms` : undefined}
-            />
-            {(payload.from !== undefined || payload.to !== undefined) && (
-                <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="font-semibold text-spur-text">Transition:</span>
-                    <span className="font-mono bg-base-300 px-1 rounded text-spur-text">
-                        {formatVal(payload.from ?? 'none')}
-                    </span>
-                    <span className="text-spur-text-muted">-&gt;</span>
-                    <span className="font-mono bg-base-300 px-1 rounded text-spur-text">
-                        {formatVal(payload.to ?? 'none')}
-                    </span>
-                </div>
-            )}
-        </div>
-    );
-}
-
-function renderQueueDetails({ eventName, payload }: DetailContext) {
-    return (
-        <div className="text-xs space-y-1 mt-1 text-spur-text-muted">
-            <DetailRow label="Job Kind" value={payload.kind ?? payload.type ?? payload.name} />
-            <DetailRow label="Job ID" value={payload.jobId ?? payload.id} />
-            <DetailRow
-                label="Duration"
-                value={payload.durationMs !== undefined ? `${payload.durationMs}ms` : undefined}
-            />
-            {eventName.endsWith('.failed') && payload.error !== undefined && (
-                <div className="text-error mt-1 bg-error/5 p-1.5 rounded border border-error/20 font-mono text-[10px] break-all">
-                    {formatVal(payload.error)}
-                </div>
-            )}
-        </div>
-    );
-}
-
-function renderMessageDetails({ payload }: DetailContext) {
-    return (
-        <div className="text-xs space-y-1 mt-1 text-spur-text-muted">
-            <DetailRow label="Message ID" value={payload.msgId} />
-            <DetailRow label="Sender" value={payload.fromId ?? payload.from ?? payload.senderId} />
-            <DetailRow label="Recipient" value={payload.toId ?? payload.to ?? payload.recipientId} />
-            <DetailRow label="Thread" value={payload.threadId} />
-        </div>
-    );
-}
-
-function renderProcessDetails({ payload }: DetailContext) {
-    return (
-        <div className="text-xs space-y-1 mt-1 text-spur-text-muted">
-            <DetailRow label="Agent ID" value={payload.agentId} />
-            <DetailRow label="PID" value={payload.pid} />
-            <DetailRow label="Exit Code" value={payload.exitCode} />
-        </div>
-    );
-}
-
-function renderAgentDetails({ payload }: DetailContext) {
-    return (
-        <div className="text-xs space-y-1 mt-1 text-spur-text-muted">
-            <DetailRow label="Agent" value={payload.agent ?? payload.agentId ?? payload.agentType} />
-            <DetailRow label="Operation" value={payload.operation} />
-            <DetailRow label="Label" value={payload.label} />
-            <DetailRow label="PID" value={payload.pid} />
-            <DetailRow label="Exit" value={payload.exitCode} />
-            <DetailRow
-                label="Duration"
-                value={payload.durationMs !== undefined ? `${payload.durationMs}ms` : undefined}
-            />
-            <DetailRow label="OK" value={payload.ok} />
-            {payload.error !== undefined && (
-                <div className="text-error mt-1 bg-error/5 p-1.5 rounded border border-error/20 font-mono text-[10px] break-all">
-                    {formatVal(payload.error)}
-                </div>
-            )}
-        </div>
-    );
-}
-
-function renderRuleDetails({ payload }: DetailContext) {
-    return (
-        <div className="text-xs space-y-1 mt-1 text-spur-text-muted">
-            <DetailRow label="Rule ID" value={payload.ruleId} />
-            <DetailRow label="Findings" value={payload.findings} />
-            <DetailRow
-                label="Duration"
-                value={payload.durationMs !== undefined ? `${payload.durationMs}ms` : undefined}
-            />
-            <DetailRow
-                label="Index"
-                value={payload.index !== undefined ? `${payload.index}/${payload.total}` : undefined}
-            />
-            {payload.error !== undefined && (
-                <div className="text-error mt-1 bg-error/5 p-1.5 rounded border border-error/20 font-mono text-[10px] break-all">
-                    {formatVal(payload.error)}
-                </div>
-            )}
-        </div>
-    );
-}
-
-function renderBusDetails({ payload }: DetailContext) {
-    return (
-        <div className="text-xs space-y-1 mt-1 text-spur-text-muted">
-            <DetailRow label="Event" value={payload.event ?? payload.kind} />
-            <DetailRow label="Handlers" value={payload.handlerCount} />
-            <DetailRow
-                label="Duration"
-                value={payload.durationMs !== undefined ? `${payload.durationMs}ms` : undefined}
-            />
-        </div>
-    );
-}
-
-function renderApiDetails({ payload }: DetailContext) {
-    return (
-        <div className="text-xs space-y-1 mt-1 text-spur-text-muted">
-            <DetailRow label="Method" value={payload.method} />
-            <DetailRow label="URL" value={payload.url} />
-            <DetailRow label="Status" value={payload.status} />
-            <DetailRow label="Error" value={payload.error} />
-        </div>
-    );
-}
-
-const DETAIL_RENDERERS: Record<string, DetailRenderer> = {
-    planning: renderPlanningDetails,
-    queue: renderQueueDetails,
-    scheduler: renderQueueDetails,
-    message: renderMessageDetails,
-    process: renderProcessDetails,
-    agent: renderAgentDetails,
-    rule: renderRuleDetails,
-    bus: renderBusDetails,
-    api: renderApiDetails,
-    'workflow-run': renderWorkflowDetails,
-    'workflow-phase': renderWorkflowDetails,
-    'workflow-transition': renderWorkflowDetails,
-    'workflow-action': renderWorkflowDetails,
-    'workflow-hitl': renderWorkflowDetails,
-    'workflow-guard': renderWorkflowDetails,
-    'workflow-custom': renderWorkflowDetails,
-};
-
-function EventDetails({
-    eventName,
-    payload,
-    renderer,
-}: {
-    eventName: string;
-    payload: Record<string, unknown> | null;
-    renderer?: string;
-}) {
+/**
+ * Compact projection of a row's payload into 3–4 (label, value) pairs for the
+ * event-name hover/focus tooltip (task 0223 R8). The choice mirrors what the
+ * existing detail renderers surface — entities, IDs, status transitions,
+ * durations — so the tooltip is a useful at-a-glance hint rather than a
+ * mirror of the full detail block.
+ *
+ * `null`/empty payloads return `null` so the caller can skip the tooltip
+ * altogether (a row with no payload has nothing useful to summarize).
+ */
+function buildTooltipSummary(
+    eventName: string,
+    payload: Record<string, unknown> | null,
+    renderer?: string,
+): { label: string; value: string }[] | null {
     if (!payload || Object.keys(payload).length === 0) return null;
+
+    const pickString = (...keys: string[]): string | undefined => {
+        for (const key of keys) {
+            const value = payload[key];
+            if (typeof value === 'string' && value.length > 0) return value;
+            if (typeof value === 'number') return String(value);
+        }
+        return undefined;
+    };
+
+    const entity = payload.entity as Record<string, unknown> | undefined;
+    const entityLabel =
+        entity && typeof entity === 'object'
+            ? `${formatVal(entity.kind)}:${formatVal(entity.id)}`
+            : pickString('entityId', 'wbs', 'ruleId', 'msgId', 'jobId');
+    const transitionFrom = pickString('from');
+    const transitionTo = pickString('to');
+    const transition =
+        transitionFrom || transitionTo ? `${transitionFrom ?? 'none'} → ${transitionTo ?? 'none'}` : undefined;
+
+    // Renderer-aware primary fields. Falls through to the generic summary if
+    // the active renderer is unknown.
     const fallbackRenderer = eventName.startsWith('task.') || eventName.startsWith('feature.') ? 'planning' : 'generic';
-    const render = DETAIL_RENDERERS[renderer ?? fallbackRenderer] ?? renderGenericDetails;
-    return render({ eventName, payload });
+    const activeRenderer = renderer ?? fallbackRenderer;
+
+    const summary: { label: string; value: string }[] = [];
+    switch (activeRenderer) {
+        case 'planning':
+            if (entityLabel) summary.push({ label: 'Entity', value: entityLabel });
+            if (transition) summary.push({ label: 'Transition', value: transition });
+            break;
+        case 'queue':
+        case 'scheduler': {
+            const kind = pickString('kind', 'type', 'name');
+            if (kind) summary.push({ label: 'Job', value: kind });
+            const jobId = pickString('jobId', 'id');
+            if (jobId) summary.push({ label: 'ID', value: jobId });
+            break;
+        }
+        case 'message': {
+            const from = pickString('fromId', 'from', 'senderId');
+            const to = pickString('toId', 'to', 'recipientId');
+            if (from && to) summary.push({ label: 'Route', value: `${from} → ${to}` });
+            break;
+        }
+        case 'process':
+        case 'agent': {
+            const agentId = pickString('agentId', 'agent');
+            if (agentId) summary.push({ label: 'Agent', value: agentId });
+            const op = pickString('operation');
+            if (op) summary.push({ label: 'Op', value: op });
+            break;
+        }
+        case 'rule': {
+            const ruleId = pickString('ruleId');
+            if (ruleId) summary.push({ label: 'Rule', value: ruleId });
+            const findings = pickString('findings');
+            if (findings !== undefined) summary.push({ label: 'Findings', value: findings });
+            break;
+        }
+        case 'bus': {
+            const evt = pickString('event', 'kind');
+            if (evt) summary.push({ label: 'Bus event', value: evt });
+            break;
+        }
+        case 'api': {
+            const method = pickString('method');
+            const status = pickString('status');
+            if (method && status) summary.push({ label: 'HTTP', value: `${method} ${status}` });
+            break;
+        }
+        case 'workflow-run':
+        case 'workflow-phase':
+        case 'workflow-transition':
+        case 'workflow-action':
+        case 'workflow-hitl':
+        case 'workflow-guard':
+        case 'workflow-custom': {
+            const wf = pickString('workflowName');
+            if (wf) summary.push({ label: 'Workflow', value: wf });
+            const runId = pickString('runId');
+            if (runId) summary.push({ label: 'Run', value: runId });
+            break;
+        }
+        default:
+            // Generic: surface the first 3 non-empty scalar fields so the
+            // tooltip is still informative for events without a known renderer.
+            for (const [key, value] of Object.entries(payload)) {
+                if (summary.length >= 3) break;
+                if (value === null || value === undefined || value === '') continue;
+                if (typeof value === 'object') continue;
+                summary.push({ label: key, value: formatVal(value) });
+            }
+            break;
+    }
+
+    return summary.length > 0 ? summary.slice(0, 4) : null;
 }
 
 /**
@@ -414,9 +382,15 @@ export default function SystemEventsTab() {
     const [events, setEvents] = useState<SystemEventRow[] | null>(null);
     const [catalog, setCatalog] = useState<EventCatalogEntry[]>([]);
     const [error, setError] = useState<string | null>(null);
-    const [categoryFilter, setCategoryFilter] = useState<string>('all');
+    const [selectedPrefixes, setSelectedPrefixes] = useState<Set<string>>(new Set());
     const [searchQuery, setSearchQuery] = useState<string>('');
-    const [tierFilter, setTierFilter] = useState<string>('all');
+    const [searchScope, setSearchScope] = useState<'all' | 'name' | 'actor' | 'payload'>('all');
+    const [tierFilter, setTierFilter] = useState<'all' | 'default' | 'diagnostic'>('all');
+    const [timeWindow, setTimeWindow] = useState<'all' | '30s' | '5m'>('all');
+    // Liveness strip state (task 0222). `sseStatus` is tri-state so the
+    // indicator can render connecting/live/errored distinctly.
+    const [sseStatus, setSseStatus] = useState<SseStatus>('connecting');
+    const { rate, recordEvent } = useRollingEventRate();
 
     // Initial history fetch.
     useEffect(() => {
@@ -442,6 +416,14 @@ export default function SystemEventsTab() {
     useEffect(() => {
         if (typeof EventSource === 'undefined') return;
         const es = new EventSource(SSE_URL);
+        es.onopen = () => {
+            setSseStatus('live');
+        };
+        es.onerror = () => {
+            // EventSource auto-reconnects after transient errors, so an
+            // errored state is shown briefly while the browser retries.
+            setSseStatus('errored');
+        };
         es.onmessage = (msg) => {
             try {
                 const raw: unknown = JSON.parse(msg.data);
@@ -458,11 +440,84 @@ export default function SystemEventsTab() {
                     payload: envelope.payload,
                 };
                 setEvents((prev) => (prev ? [row, ...prev].slice(0, HISTORY_LIMIT) : [row]));
+                recordEvent();
             } catch {
                 // Drop malformed frames silently — a bad row must not break the live tail.
             }
         };
         return () => es.close();
+    }, [recordEvent]);
+
+    const prefixOptions = useMemo(
+        () =>
+            Array.from(
+                new Set([
+                    ...catalog.map((entry) => entry.prefix),
+                    ...(events ?? []).map((evt) => evt.prefix ?? evt.eventName.split('.')[0] ?? evt.eventName),
+                ]),
+            ).sort(),
+        [catalog, events],
+    );
+
+    // R6: clear-filters is visible iff at least one filter deviates from default.
+    const filtersActive =
+        selectedPrefixes.size > 0 ||
+        searchQuery.trim() !== '' ||
+        searchScope !== 'all' ||
+        tierFilter !== 'all' ||
+        timeWindow !== 'all';
+
+    const filteredEvents = useMemo(() => {
+        const list = events ?? [];
+        const windowMs = timeWindow === '30s' ? 30_000 : timeWindow === '5m' ? 5 * 60_000 : null;
+        const windowCutoff = windowMs !== null ? Date.now() - windowMs : null;
+
+        return list.filter((evt) => {
+            // Multi-select prefix (R2: empty set means "all").
+            if (selectedPrefixes.size > 0) {
+                const prefix = evt.prefix ?? evt.eventName.split('.')[0] ?? evt.eventName;
+                if (!selectedPrefixes.has(prefix)) return false;
+            }
+            if (tierFilter !== 'all') {
+                const entryTier = catalog.find((entry) => entry.name === evt.eventName)?.tier;
+                if (entryTier !== tierFilter) {
+                    if (!(tierFilter === 'default' && entryTier === undefined)) return false;
+                }
+            }
+            if (windowCutoff !== null) {
+                const ts = Date.parse(evt.occurredAt);
+                // Events without a parseable timestamp fall outside a strict window — drop them.
+                if (!Number.isFinite(ts) || ts < windowCutoff) return false;
+            }
+            if (searchQuery.trim() !== '') {
+                const query = searchQuery.toLowerCase();
+                const matchesName = evt.eventName.toLowerCase().includes(query);
+                const matchesActor = evt.actor?.toLowerCase().includes(query);
+                const matchesPayload = evt.payload && JSON.stringify(evt.payload).toLowerCase().includes(query);
+                if (searchScope === 'name' && !matchesName) return false;
+                if (searchScope === 'actor' && !matchesActor) return false;
+                if (searchScope === 'payload' && !matchesPayload) return false;
+                if (searchScope === 'all' && !matchesName && !matchesActor && !matchesPayload) return false;
+            }
+            return true;
+        });
+    }, [events, selectedPrefixes, tierFilter, catalog, timeWindow, searchQuery, searchScope]);
+
+    const clearFilters = useCallback(() => {
+        setSelectedPrefixes(new Set());
+        setSearchQuery('');
+        setSearchScope('all');
+        setTierFilter('all');
+        setTimeWindow('all');
+    }, []);
+
+    const togglePrefix = useCallback((prefix: string) => {
+        setSelectedPrefixes((prev) => {
+            const next = new Set(prev);
+            if (next.has(prefix)) next.delete(prefix);
+            else next.add(prefix);
+            return next;
+        });
     }, []);
 
     if (error) {
@@ -480,88 +535,114 @@ export default function SystemEventsTab() {
         );
     }
 
-    const prefixOptions = Array.from(
-        new Set([
-            ...catalog.map((entry) => entry.prefix),
-            ...events.map((evt) => evt.prefix ?? evt.eventName.split('.')[0] ?? evt.eventName),
-        ]),
-    ).sort();
-
-    const filteredEvents = events.filter((evt) => {
-        if (categoryFilter !== 'all') {
-            const prefix = evt.prefix ?? evt.eventName.split('.')[0] ?? evt.eventName;
-            if (prefix !== categoryFilter) {
-                return false;
-            }
-        }
-        if (tierFilter !== 'all') {
-            const entryTier = catalog.find((entry) => entry.name === evt.eventName)?.tier;
-            if (entryTier !== tierFilter) {
-                // Unknown tier (e.g. legacy event) is treated as 'default' so
-                // the diagnostic filter is opt-in only — default events stay
-                // visible even when the catalog lacks the tier field.
-                if (!(tierFilter === 'default' && entryTier === undefined)) {
-                    return false;
-                }
-            }
-        }
-        if (searchQuery.trim() !== '') {
-            const query = searchQuery.toLowerCase();
-            const matchesName = evt.eventName.toLowerCase().includes(query);
-            const matchesActor = evt.actor?.toLowerCase().includes(query);
-            const matchesPayload = evt.payload && JSON.stringify(evt.payload).toLowerCase().includes(query);
-            if (!matchesName && !matchesActor && !matchesPayload) {
-                return false;
-            }
-        }
-        return true;
-    });
-
     return (
         <div className="flex flex-col h-full overflow-hidden">
-            <div className="px-4 py-2 border-b border-spur-border bg-base-200 shrink-0 flex items-center justify-between">
-                <div>
+            <div className="px-4 py-2 border-b border-spur-border bg-base-200 shrink-0 flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold text-spur-text uppercase tracking-wide">System Events</span>
-                    <span className="ml-2 text-xs text-spur-text-muted">newest first · live tail</span>
+                    <span className="text-xs text-spur-text-muted">newest first · live tail</span>
                 </div>
+                {/* Liveness status strip (task 0222). Stays on the same header row so the
+                    existing layout is not pushed below the fold (R4). R1: tri-state indicator
+                    with color + text label (R6). R7: the rolling rate + count live in a polite
+                    aria-live region so screen readers announce updates without interrupting. */}
+                <LivenessStrip status={sseStatus} rate={rate} shown={filteredEvents.length} total={events.length} />
             </div>
 
-            {/* Filtering toolbar */}
-            <div className="px-4 py-2 border-b border-spur-border bg-base-100 shrink-0 flex flex-wrap gap-2 items-center">
-                <Select
-                    size="sm"
-                    variant="bordered"
-                    value={categoryFilter}
-                    onChange={(e) => setCategoryFilter(e.target.value)}
-                    className="w-44"
+            {/* Filter bar (task 0224). Three rows: prefix pill chips (R1/R2),
+                tier segmented toggle + time-window segmented toggle (R3/R5),
+                search input + scope toggle + clear + inline count (R4/R6/R7). */}
+            <div className="px-4 py-2 border-b border-spur-border bg-base-100 shrink-0 flex flex-col gap-2">
+                {/* R1/R2: prefix pill chips — multi-select, colored to match the table. */}
+                <fieldset
+                    className="flex flex-wrap items-center gap-1.5 border-0 p-0 m-0"
+                    aria-label="Filter by prefix"
                 >
-                    <option value="all">All Prefixes</option>
-                    {prefixOptions.map((prefix) => (
-                        <option key={prefix} value={prefix}>
-                            {prefix}.*
-                        </option>
-                    ))}
-                </Select>
-                <Select
-                    size="sm"
-                    variant="bordered"
-                    value={tierFilter}
-                    onChange={(e) => setTierFilter(e.target.value)}
-                    className="w-44"
-                    title="Filter by visibility tier; diagnostic events require SPUR_DIAGNOSTIC_EVENTS on the server."
-                >
-                    <option value="all">All Tiers</option>
-                    <option value="default">Default only</option>
-                    <option value="diagnostic">Diagnostic only</option>
-                </Select>
-                <Input
-                    size="sm"
-                    variant="bordered"
-                    placeholder="Search by event name, actor, or payload..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="flex-1 min-w-[200px] input-sm"
-                />
+                    <legend className="sr-only">Filter by prefix</legend>
+                    {prefixOptions.map((prefix) => {
+                        const active = selectedPrefixes.has(prefix);
+                        const colorClass = getPrefixColor(prefix);
+                        return (
+                            <button
+                                key={prefix}
+                                type="button"
+                                role="switch"
+                                aria-checked={active}
+                                aria-label={`Prefix ${prefix}${active ? ' (selected)' : ''}`}
+                                onClick={() => togglePrefix(prefix)}
+                                className={`px-2 py-0.5 rounded-full text-[11px] font-mono border transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-spur-text/40 ${
+                                    active
+                                        ? `${colorClass} border-current bg-base-200`
+                                        : 'text-spur-text-muted border-spur-border/40 hover:bg-base-200/60'
+                                }`}
+                            >
+                                {prefix}.*
+                            </button>
+                        );
+                    })}
+                </fieldset>
+                <div className="flex flex-wrap items-center gap-2">
+                    {/* R3: tier segmented toggle. */}
+                    <SegmentedToggle
+                        label="Tier"
+                        value={tierFilter}
+                        onChange={setTierFilter}
+                        options={[
+                            { value: 'all', label: 'All' },
+                            { value: 'default', label: 'Default' },
+                            { value: 'diagnostic', label: 'Diagnostic' },
+                        ]}
+                    />
+                    {/* R5: time-window quick filter. */}
+                    <SegmentedToggle
+                        label="Window"
+                        value={timeWindow}
+                        onChange={setTimeWindow}
+                        options={[
+                            { value: 'all', label: 'All' },
+                            { value: '30s', label: '30s' },
+                            { value: '5m', label: '5m' },
+                        ]}
+                    />
+                    {/* R4: search input with inline scope selector. */}
+                    <div className="flex items-center gap-1 flex-1 min-w-[220px]">
+                        <select
+                            value={searchScope}
+                            onChange={(e) => setSearchScope(e.target.value as typeof searchScope)}
+                            className="bg-base-200 border border-spur-border rounded px-1.5 py-0.5 text-[11px] text-spur-text focus:outline-none focus:ring-2 focus:ring-spur-text/40 cursor-pointer"
+                            aria-label="Search scope"
+                        >
+                            <option value="all">all</option>
+                            <option value="name">name</option>
+                            <option value="actor">actor</option>
+                            <option value="payload">payload</option>
+                        </select>
+                        <Input
+                            size="sm"
+                            variant="bordered"
+                            placeholder="Search…"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="flex-1 min-w-[120px] input-sm"
+                            aria-label={`Search ${searchScope}`}
+                        />
+                    </div>
+                    {/* R6: clear-filters button (visible iff filters active). */}
+                    {filtersActive && (
+                        <button
+                            type="button"
+                            onClick={clearFilters}
+                            className="text-[11px] text-spur-text-muted hover:text-error px-2 py-0.5 rounded border border-spur-border/40 hover:border-error/40 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-spur-text/40"
+                            aria-label="Clear all filters"
+                        >
+                            Clear
+                        </button>
+                    )}
+                    {/* R7: inline result count. */}
+                    <span aria-live="polite" className="text-[11px] font-mono text-spur-text-muted whitespace-nowrap">
+                        {filteredEvents.length} of {events.length}
+                    </span>
+                </div>
             </div>
             {filteredEvents.length === 0 ? (
                 <div className="p-4 text-sm text-spur-text-muted italic flex-1 overflow-y-auto">
@@ -570,65 +651,269 @@ export default function SystemEventsTab() {
                         : 'No events match the active filters.'}
                 </div>
             ) : (
-                <ul className="flex-1 overflow-y-auto p-2 space-y-2" data-system-events-tab>
-                    {filteredEvents.map((evt) => (
-                        <li key={evt.id}>
-                            <Card variant="compact" className="bg-base-200 border border-spur-border">
-                                <CardBody className="p-3 gap-1">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <Badge variant="outline" size="xs">
-                                            {evt.eventName}
-                                        </Badge>
-                                        {evt.actor && (
-                                            <span className="text-xs text-spur-text-muted">by {evt.actor}</span>
-                                        )}
-                                        <span
-                                            className="text-[10px] text-spur-text-muted ml-auto font-mono"
-                                            title={evt.occurredAt}
-                                        >
-                                            {evt.occurredAt}
-                                        </span>
-                                    </div>
-
-                                    {/* Human-readable formatted details */}
-                                    <EventDetails
-                                        eventName={evt.eventName}
-                                        payload={evt.payload}
-                                        renderer={evt.renderer}
-                                    />
-
-                                    {/* Collapsible raw JSON */}
-                                    {evt.payload !== null && Object.keys(evt.payload).length > 0 && (
-                                        <RawPayloadView payload={evt.payload} />
-                                    )}
-                                </CardBody>
-                            </Card>
-                        </li>
-                    ))}
-                </ul>
+                <SystemEventsTable rows={filteredEvents} catalog={catalog} />
             )}
         </div>
     );
 }
 
-function RawPayloadView({ payload }: { payload: Record<string, unknown> }) {
-    const [isOpen, setIsOpen] = useState(false);
+/**
+ * Liveness strip rendered in the System Events header (task 0222).
+ *
+ * Shows three pieces of operational telemetry in a single horizontal strip:
+ *   - SSE connection status (R1): a colored dot + text label. Color is
+ *     redundant with the label so a colorblind operator or screen-reader user
+ *     still gets the signal (R6).
+ *   - Rolling rate (R2): "N events / 60s" reflecting the trailing window.
+ *   - Filtered count (R3): "N of M shown" where M is the loaded total.
+ *
+ * The indicator dot is `role="status"` (live status, not a control), and the
+ * numeric values sit in an `aria-live="polite"` region so screen readers
+ * announce rate / count updates without interrupting (R7).
+ */
+function LivenessStrip({
+    status,
+    rate,
+    shown,
+    total,
+}: {
+    status: SseStatus;
+    rate: number;
+    shown: number;
+    total: number;
+}) {
+    const dotClass = useMemo(() => {
+        switch (status) {
+            case 'live':
+                return 'bg-success';
+            case 'connecting':
+                return 'bg-spur-text-muted';
+            case 'errored':
+                return 'bg-error';
+        }
+    }, [status]);
+
+    // Pulse keyframe only on the "live" dot — the connecting and errored
+    // states use a static dot to avoid implying healthy liveness.
+    const dotStyle = status === 'live' ? ({ animation: 'spur-pulse 1.6s ease-in-out infinite' } as const) : undefined;
+
     return (
-        <div className="mt-1.5 border border-spur-border/40 rounded overflow-hidden">
-            <button
-                type="button"
-                onClick={() => setIsOpen(!isOpen)}
-                className="w-full text-left text-[10px] text-spur-text-muted font-semibold py-1 px-3 bg-base-300/40 flex items-center justify-between cursor-pointer border-none hover:bg-base-300/60 transition-colors"
-                style={{ userSelect: 'none' }}
-            >
-                <span>Raw JSON Payload</span>
-                <span className="font-mono text-[8px]">{isOpen ? '▼' : '▶'}</span>
-            </button>
-            {isOpen && (
-                <pre className="text-[10px] text-spur-text-muted bg-base-300/80 p-2 overflow-x-auto m-0 leading-tight border-t border-spur-border/40">
-                    {JSON.stringify(payload, null, 2)}
-                </pre>
-            )}
+        <div className="flex items-center gap-3 text-[11px] text-spur-text-muted font-mono whitespace-nowrap">
+            <span role="status" aria-label={`SSE connection ${status}`} className="inline-flex items-center gap-1.5">
+                <span aria-hidden="true" className={`inline-block w-2 h-2 rounded-full ${dotClass}`} style={dotStyle} />
+                <span className="text-spur-text uppercase tracking-wide">{status}</span>
+            </span>
+            <span aria-live="polite" aria-atomic="true">
+                {rate} events / 60s
+            </span>
+            <span aria-live="polite" aria-atomic="true">
+                {shown} of {total} shown
+            </span>
         </div>
+    );
+}
+
+/**
+ * useMediaQuery — narrow-viewport detection for the responsive table
+ * collapse (task 0225 R1). SSR-safe: defaults to `false` so the server
+ * render and the first client render match; updates after mount.
+ */
+function useMediaQuery(query: string): boolean {
+    const [matches, setMatches] = useState(false);
+    useEffect(() => {
+        // Guard environments without matchMedia (jsdom test runs, SSR).
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+        const mql = window.matchMedia(query);
+        const onChange = () => setMatches(mql.matches);
+        onChange();
+        mql.addEventListener('change', onChange);
+        return () => mql.removeEventListener('change', onChange);
+    }, [query]);
+    return matches;
+}
+
+/**
+ * Dense table view (task 0223) replacing the previous card list.
+ *
+ * Layout: 5 columns (Time | Event | Actor | Prefix | Tier) with a sticky
+ * `<thead>` (R3) and compact rows (~28px) so at least 20 rows are visible
+ * on a standard viewport (R2). Each row is a single click/keyboard target
+ * that toggles an expanded panel below showing the typed EventDetails
+ * renderer output + RawPayloadView — no duplication of detail rendering (R9).
+ *
+ * The container is the vertical scroll host; sticky positioning is on the
+ * `<thead>` so the column labels stay visible regardless of scroll position.
+ */
+function SystemEventsTable({ rows, catalog }: { rows: SystemEventRow[]; catalog: EventCatalogEntry[] }) {
+    const tierByName = useMemo(() => {
+        const map = new Map<string, string>();
+        for (const entry of catalog) {
+            if (entry.tier) map.set(entry.name, entry.tier);
+        }
+        return map;
+    }, [catalog]);
+
+    // R1 (task 0225): under 640px the table collapses to a 2-column stacked
+    // layout (Time | Event + Actor). The Prefix / Tier columns are hidden
+    // and the Event cell stacks the actor below the event name so the row
+    // never exceeds the viewport width.
+    const isCompact = useMediaQuery('(max-width: 639px)');
+
+    return (
+        <section className="flex-1 overflow-y-auto" data-system-events-tab aria-label="System events">
+            <table className="w-full text-xs border-separate border-spacing-0 table-fixed">
+                <colgroup>
+                    <col className={isCompact ? 'w-24' : 'w-44'} />
+                    <col />
+                    {!isCompact && <col className="w-32" />}
+                    {!isCompact && <col className="w-24" />}
+                    {!isCompact && <col className="w-24" />}
+                </colgroup>
+                <thead className="sticky top-0 z-10 bg-base-200">
+                    <tr className="text-left text-spur-text-muted uppercase tracking-wide text-[10px]">
+                        <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
+                            Time
+                        </th>
+                        <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
+                            Event
+                        </th>
+                        {!isCompact && (
+                            <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
+                                Actor
+                            </th>
+                        )}
+                        {!isCompact && (
+                            <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
+                                Prefix
+                            </th>
+                        )}
+                        {!isCompact && (
+                            <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
+                                Tier
+                            </th>
+                        )}
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows.map((evt) => (
+                        <EventTableRow
+                            key={evt.id}
+                            event={evt}
+                            tier={tierByName.get(evt.eventName) ?? 'default'}
+                            compact={isCompact}
+                        />
+                    ))}
+                </tbody>
+            </table>
+        </section>
+    );
+}
+
+/**
+ * with the typed detail summary from the EventDetails renderers (R8) —
+ * replacing the former row-expand interaction. Time is shown in local
+ * "MMM D HH:mm:ss" format without the year.
+ */
+function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: string; compact: boolean }) {
+    const prefix = event.prefix ?? event.eventName.split('.')[0] ?? event.eventName;
+    const summary = useMemo(
+        () => buildTooltipSummary(event.eventName, event.payload, event.renderer),
+        [event.eventName, event.payload, event.renderer],
+    );
+    const colorClass = getPrefixColor(prefix);
+
+    return (
+        <tr className="group hover:bg-base-200/60 transition-colors" style={{ height: compact ? undefined : 28 }}>
+            <td className="px-3 py-1 border-b border-spur-border/40 font-mono text-spur-text-muted whitespace-nowrap align-top">
+                {formatLocalTime(event.occurredAt)}
+            </td>
+            <td className="px-3 py-1 border-b border-spur-border/40 relative align-top">
+                <div className="flex flex-col gap-0.5">
+                    <span className={`font-mono font-semibold break-all ${colorClass}`}>{event.eventName}</span>
+                    {compact && event.actor && (
+                        <span className="text-[10px] text-spur-text-muted">by {event.actor}</span>
+                    )}
+                </div>
+                {summary && (
+                    <div
+                        role="tooltip"
+                        className="pointer-events-none absolute left-0 top-full mt-1 z-20 hidden group-hover:block bg-base-300 border border-spur-border rounded shadow-lg p-2 text-[11px] text-spur-text min-w-[180px] max-w-[min(360px,90vw)] whitespace-normal"
+                    >
+                        <dl className="space-y-0.5">
+                            {summary.map((row) => (
+                                <div key={row.label} className="flex gap-2">
+                                    <dt className="text-spur-text-muted shrink-0">{row.label}:</dt>
+                                    <dd className="font-mono break-all">{row.value}</dd>
+                                </div>
+                            ))}
+                        </dl>
+                    </div>
+                )}
+            </td>
+            {!compact && (
+                <td className="px-3 py-0 border-b border-spur-border/40 text-spur-text-muted whitespace-nowrap align-top">
+                    {event.actor ?? '—'}
+                </td>
+            )}
+            {!compact && (
+                <td className="px-3 py-0 border-b border-spur-border/40 font-mono align-top">
+                    <span className={colorClass}>{prefix}</span>
+                </td>
+            )}
+            {!compact && (
+                <td className="px-3 py-0 border-b border-spur-border/40 text-spur-text-muted align-top">{tier}</td>
+            )}
+        </tr>
+    );
+}
+
+/**
+ * Three-button segmented toggle (task 0224 R3 / R5). Used twice in the
+ * filter bar: tier filter (All | Default | Diagnostic) and time-window
+ * filter (All | 30s | 5m).
+ *
+ * Built as a `role="group"` with a visually-hidden label and three
+ * `<button role="radio" aria-checked>` children — keyboard users can tab to
+ * the group and arrow between options.
+ */
+function SegmentedToggle<V extends string>({
+    label,
+    value,
+    onChange,
+    options,
+}: {
+    label: string;
+    value: V;
+    onChange: (next: V) => void;
+    options: { value: V; label: string }[];
+}) {
+    return (
+        <fieldset
+            aria-label={label}
+            className="inline-flex rounded border border-spur-border/40 overflow-hidden text-[11px] border-0 p-0 m-0"
+        >
+            <legend className="sr-only">{label}</legend>
+            {options.map((opt) => {
+                const active = opt.value === value;
+                return (
+                    <label
+                        key={opt.value}
+                        className={`px-2 py-0.5 font-mono cursor-pointer focus-within:ring-2 focus-within:ring-spur-text/40 transition-colors ${
+                            active ? 'bg-spur-text/15 text-spur-text' : 'text-spur-text-muted hover:bg-base-200/60'
+                        }`}
+                    >
+                        <input
+                            type="radio"
+                            name={label}
+                            value={opt.value}
+                            checked={active}
+                            onChange={() => onChange(opt.value)}
+                            className="sr-only"
+                        />
+                        {opt.label}
+                    </label>
+                );
+            })}
+        </fieldset>
     );
 }

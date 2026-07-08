@@ -68,6 +68,8 @@ Feature: Observabilities board module
 | 0189 | Observabilities board module v1: system_events persistence, Events + Inbox tabs | done |
 | 0198 | system_events domain, server tap, history + inbox read APIs (0189 wave A) | done |
 | 0199 | Observability web module: shell, tabs contract, Events + Inbox tabs (0189 wave B) | done |
+| 0220 | System Events completeness, real-time stream, filters, and extensible details | Done |
+| 0221 | Complete System Events upstream coverage and bus wiring | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

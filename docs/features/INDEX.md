@@ -28,4 +28,5 @@
     └── [backlog] **H3**: Prompt-skill moves ([H3_prompt-skill-moves.md](./H3_prompt-skill-moves.md))
 [done] **I**: sp plugin hands-off ready ([I_sp-plugin-hands-off-ready.md](./I_sp-plugin-hands-off-ready.md))
 [backlog] **J**: Observabilities board module ([J_observabilities-board-module.md](./J_observabilities-board-module.md))
+[backlog] **K**: Observability System Events Table Redesign ([K_observability-system-events-table-redesign.md](./K_observability-system-events-table-redesign.md))
 <!-- END AUTO-GENERATED -->
