@@ -397,9 +397,10 @@ describe('startServer', () => {
         expect(order).toEqual(['worker.start', 'scheduler.start', 'scheduler.stop', 'worker.stop', 'server.stop']);
     });
 
-    test('registerSchedulerEntries enqueues built-in prune and smoke jobs', async () => {
+    test('registerSchedulerEntries enqueues built-in prune and smoke jobs and emits scheduler events', async () => {
         const registered: Array<{ cron: string; action: () => Promise<void> }> = [];
         const enqueued: Array<{ type: string; payload: unknown }> = [];
+        const emitted: Array<{ name: string; payload: unknown }> = [];
         const scheduler = {
             register: (cron: string, action: () => Promise<void>) => {
                 registered.push({ cron, action });
@@ -414,6 +415,11 @@ describe('startServer', () => {
                     return `${type}-id`;
                 },
             }),
+            eventBus: () => ({
+                emit: (name: string, payload: unknown) => {
+                    emitted.push({ name, payload });
+                },
+            }),
         } as unknown as ServerContext;
 
         registerSchedulerEntries(scheduler, ctx);
@@ -422,6 +428,11 @@ describe('startServer', () => {
         await registered[1]?.action();
 
         expect(enqueued.map((job) => job.type)).toEqual(['system-events-prune', 'smoke']);
+        expect(emitted).toHaveLength(2);
+        expect(emitted.every((e) => e.name === 'scheduler.job.executed')).toBe(true);
+        expect(emitted[0]?.payload).toMatchObject({ kind: 'system-events-prune', cron: '300000' });
+        expect(emitted[1]?.payload).toMatchObject({ kind: 'smoke', cron: '600000' });
+        expect(typeof (emitted[0]?.payload as Record<string, unknown>)?.durationMs).toBe('number');
     });
 
     test('parseTaskActionJob validates payload shape and preserves optional routing fields', () => {

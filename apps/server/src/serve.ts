@@ -72,13 +72,25 @@ export const defaultDeps: StartServerDeps = {
     resolveConfigFile,
 };
 
-/** Register built-in scheduled queue entries for the Bun serve runtime. */
+/** Register built-in scheduled queue entries for the Bun serve runtime.
+ * Each scheduled action emits `scheduler.job.executed` to the server EventBus
+ * so the System Events tab surfaces scheduler activity alongside queue events. */
 export function registerSchedulerEntries(scheduler: ServerScheduler, ctx: ServerContext): void {
-    scheduler.register(SYSTEM_EVENTS_PRUNE_CRON, async () => {
+    const register = (cron: string, kind: string, action: () => Promise<void>): void => {
+        scheduler.register(cron, async () => {
+            const startedAt = Date.now();
+            try {
+                await action();
+            } finally {
+                ctx.eventBus().emit('scheduler.job.executed', { kind, cron, durationMs: Date.now() - startedAt });
+            }
+        });
+    };
+    register(SYSTEM_EVENTS_PRUNE_CRON, SYSTEM_EVENTS_PRUNE_JOB, async () => {
         const queue = await ctx.jobQueue();
         await queue.enqueue(SYSTEM_EVENTS_PRUNE_JOB, { source: 'scheduler' }, { maxRetries: 1 });
     });
-    scheduler.register(SMOKE_CRON, async () => {
+    register(SMOKE_CRON, SMOKE_JOB, async () => {
         const queue = await ctx.jobQueue();
         await queue.enqueue(SMOKE_JOB, { source: 'scheduler' }, { maxRetries: 1 });
     });
