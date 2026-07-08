@@ -744,8 +744,8 @@ files directly — `precheck` is a `spur task check <wbs>` shell guard; `impleme
 `spur task update --section`; `approve` is a `hitl.confirm` gate skippable with `--vars '{"profile":"auto"}'`.
 **Step→command mapping (ADR-026):** `implement` → `/sp:dev-run --mode implement` (NOT `/sp:dev-run --mode full` — that
 would drive this pipeline, so calling it in full mode inside recurses); `test` → `/sp:dev-unit`; `review` →
-`/sp:dev-review` (→ `sp:code-verification` review mode); `verify` → `/sp:dev-verify` (→
-`sp:code-verification` verify mode). **Completion gate (ADR-026):** the `verify` step emits
+`/sp:dev-review` (→ `sp:super-reviewer` → `sp:code-verification` + `sp:functional-review` + `sp:code-improvement`;
+the review step fans out to three dimensions — SECUA / functional / architecture — via the super-reviewer agent, task 0227); `verify` → `/sp:dev-verify` (→ `sp:code-verification` verify mode). **Completion gate (ADR-026):** the `verify` step emits
 `.spur/run/<wbs>-verdict.json`; the `verify → record` transition is a shell guard asserting
 `jq -r .verdict … = PASS`, with a sibling `verify → failed` on the negation — so a PARTIAL/FAIL/missing
 verdict blocks `done`. This is the spur-native replacement for rd3's default-on `--postflight-verify`.
@@ -839,15 +839,18 @@ Two primitives back the anti-hallucination migration (superskill task 0041):
 
 The `sp:dev-*` commands back onto the orchestration spine plus competency skills
 (`sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`,
-`sp:doc-evolve`, `sp:brainstorm`, `sp:dogfood-testing`) or define their procedure inline. The
+`sp:functional-review`, `sp:code-improvement`, `sp:doc-evolve`, `sp:brainstorm`, `sp:dogfood-testing`) or define their procedure inline. The
 authoritative reference for all 13 operations — purpose, inputs, backing, behavior contract — is
 [`plugins/sp/skills/spur-dev/references/dev-operations.md`](../plugins/sp/skills/spur-dev/references/dev-operations.md).
 The `runall` operation (#13) is the batch entry — it delegates the driver loop to the
 `sp:super-coder` agent per [`execution-batch.md`](../plugins/sp/skills/spur-dev/references/execution-batch.md).
+The `review` operation dispatches to the `sp:super-reviewer` agent (task 0227), which fans out to
+`sp:code-verification` (SECUA), `sp:functional-review` (requirements traceability), and
+`sp:code-improvement` (architectural deepening) — see [`dev-operations.md`](../plugins/sp/skills/spur-dev/references/dev-operations.md).
 
 | Pattern | Operations | Backing |
 |---------|-----------|---------|
-| `Skill()` delegation | implement, unit, review, verify, run, refine, plan, docs, brainstorm, dogfood, runall | `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:spur-dev`, `sp:doc-evolve`, `sp:brainstorm`, `sp:dogfood-testing` |
+| `Skill()` delegation | implement, unit, review, verify, run, refine, plan, docs, brainstorm, dogfood, runall | `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:functional-review`, `sp:code-improvement`, `sp:spur-dev`, `sp:doc-evolve`, `sp:brainstorm`, `sp:dogfood-testing` |
 | Inline procedure | changelog, gitmsg, fixall, handover | git CLI + `spur` CLI + agent reasoning |
 
 **Brainstorm artifact exits.** `dev-brainstorm` runs the grilling interview → ideation, then lands an

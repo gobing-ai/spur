@@ -53,7 +53,7 @@ and verification each became a standalone competency skill, leaving this spine t
 | Feature/spec → task batch | `sp:spec-decomposition` |
 | Implement to spec | `sp:code-implementation` |
 | Coverage / test extension | `sp:code-testing` |
-| Review / requirements verification | `sp:code-verification` |
+| Review (multi-dimensional) | `sp:code-verification` + `sp:functional-review` + `sp:code-improvement` |
 | Test-first discipline (composed in) | `sp:spur-tdd` |
 
 CLI verb usage for any `spur` noun lives in the `sp:spur-cli` facade. This spine owns only the
@@ -110,7 +110,7 @@ reference for the half you're operating; do not duplicate its content here.
 | Pipeline run | execution | `spur workflow run` | [execution-workflow.md](references/execution-workflow.md) |
 | Implement (dispatch) | execution | `sp:code-implementation` | competency skill — the spine dispatches, does not inline |
 | Test (dispatch) | execution | `sp:code-testing` | competency skill — the spine dispatches, does not inline |
-| Review / verify (dispatch) | execution | `sp:code-verification` | competency skill — the spine dispatches, does not inline |
+| Review / verify (dispatch) | execution | `sp:dev-review` → `sp:code-verification` + `sp:functional-review` + `sp:code-improvement` | competency skills — the spine dispatches, does not inline |
 | Operation catalog | execution | `sp:dev-*` operations | [dev-operations.md](references/dev-operations.md) (spine dispatch table) |
 | Continue | execution | `spur feature update` / `refresh` | [execution-workflow.md](references/execution-workflow.md) |
 | Batch run | execution | `sp:super-coder` + `spur workflow run` | [execution-batch.md](references/execution-batch.md) |
@@ -187,6 +187,9 @@ for "what's actually in file Y" or for resources that sit outside the step seque
 - **`sp:code-implementation`** owns `implementation-patterns.md`, `debugging.md`.
 - **`sp:code-testing`** owns `unit-testing.md` and the per-stack adapters (`stacks/`).
 - **`sp:spec-decomposition`** owns the granularity standard (scenario→task sizing).
+- **`sp:functional-review`** owns requirements traceability (R{n} → file:line evidence, per-requirement MET/PARTIAL/UNMET, FunctionalVerdict artifact). Phase 8b gate.
+- **`sp:code-improvement`** owns architectural deepening (5 signals: shallow module, tight coupling, wrong seam, weak locality, poor test surface; severity blocker/major/minor/advisory).
+
 - **`sp:spur-tdd`** — the test-first discipline `code-implementation` and `code-testing` compose with.
 
 **Config & companions (no single pipeline step owns these):**

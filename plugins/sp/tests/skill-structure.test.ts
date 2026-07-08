@@ -497,7 +497,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const ROUTER_SKILLS = new Set(['spur-dev', 'spur-cli']);
         const NON_ROUTER_BUDGET = 350;
         const ROUTER_BUDGET = 600;
-        const AGGREGATE_BUDGET = 5500; // scales with skill count (20 skills post-0216 wayfinder); per-skill caps below are the real bloat guard
+        const AGGREGATE_BUDGET = 6300; // scales with skill count (24 skills post-0227 review capability); per-skill caps below are the real bloat guard
 
         let aggregate = 0;
         const offenders: string[] = [];

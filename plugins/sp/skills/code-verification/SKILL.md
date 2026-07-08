@@ -4,6 +4,9 @@ description: "Verify a task's implementation against requirements and AC; SECUA 
 license: Apache-2.0
 metadata:
   author: spur
+  review_skills:
+    - functional-review
+    - code-improvement
   version: "1.0"
   platforms: "claude-code,codex,openclaw,opencode,antigravity"
   interactions:
@@ -371,6 +374,14 @@ Do **not** use this skill for:
 - **`sp:spur-dev`** — the execution-half umbrella that drives the pipeline this skill gates.
 - [references/code-improvement.md](references/code-improvement.md) — architecture-improvement lens
   for module depth, seam placement, locality, coupling, and testability.
+- **`sp:functional-review`** — a peer review skill for requirements traceability (R{n} → file:line
+  evidence, per-requirement MET/PARTIAL/UNMET, `FunctionalVerdict`). When the `review` dimension
+  needs functional traceability (not just SECUA), dispatch this skill; see
+  [../functional-review/SKILL.md](../functional-review/SKILL.md).
+- **`sp:code-improvement`** — a peer review skill for architectural deepening (5 signals: shallow
+  module, tight coupling, wrong seam, weak locality, poor test surface; severity
+  blocker/major/minor/advisory). When review findings expose structural friction rather than a
+  localized defect, dispatch this skill; see [../code-improvement/SKILL.md](../code-improvement/SKILL.md).
 
 ---
 
