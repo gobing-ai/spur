@@ -100,6 +100,7 @@ export {
 export type { ProcessEntry, ProcessFrame, SupervisorOptions } from './services/supervisor-service';
 export { SupervisorService } from './services/supervisor-service';
 export {
+    extractSystemEventActor,
     type PlanningEventBus,
     registerSystemEventTap,
     SYSTEM_EVENTS_CAP,

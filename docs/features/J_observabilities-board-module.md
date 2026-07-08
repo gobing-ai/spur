@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-07-03T23:28:28.509Z"
-updated_at: "2026-07-03T23:31:18.754Z"
+updated_at: "2026-07-08T04:54:32.081Z"
 ---
 
 # J: Observabilities board module
@@ -59,6 +59,34 @@ Feature: Observabilities board module
     Given the observability module directory exports a WebModule
     When the board builds
     Then the module appears in the sidebar and routes without manual registry edits
+
+  Scenario: Server-native planning write appears in System Events
+    Given spur serve has registered the system_events tap and SSE stream
+    When a task or feature mutation is executed through the server service/API
+    Then a task.* or feature.* event is persisted in system_events
+    And the same event is streamable through /api/events/planning
+
+  Scenario: Server-native rule run appears in System Events
+    Given a RuleService is obtained from the server context with the canonical server EventBus injected
+    When a real rule evaluation runs against a tiny fixture
+    Then rule.run.start and rule.run.done are persisted in system_events
+    And no direct test-only bus.emit call is needed
+
+  Scenario: Server-native workflow run appears in System Events
+    Given a WorkflowAppService is obtained from the server context with events wired to ctx.eventBus()
+    When a tiny workflow is run through that service
+    Then workflow.run.started and at least one workflow.action.* or workflow.run.* completion event are persisted
+
+  Scenario: Board-triggered queued action does not lose child-process events silently
+    Given a task action is queued through the board/server path
+    When the action dispatches an agent command or workflow command that runs in a child CLI process
+    Then the design explicitly either forwards child process events to the parent server bus or documents that only parent-level agent.invoke/process/queue events are observable
+    And tests assert the chosen behavior
+
+  Scenario: No queue-only false green
+    Given the System Events test suite runs
+    When only queue.* producers are wired correctly
+    Then at least one non-queue behavioral regression test fails
 ```
 ## Tasks
 

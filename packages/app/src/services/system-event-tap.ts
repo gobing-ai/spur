@@ -43,7 +43,7 @@ export function registerSystemEventTap(
         const handler = (event: unknown) => {
             const occurredAt = new Date().toISOString();
             const payloadJson = safeStringify(normalizeSystemEventPayload(entry, event));
-            const actor = extractActor(event);
+            const actor = extractSystemEventActor(event);
             const p = persist(dao, entry.name, occurredAt, actor, payloadJson, logger);
             inFlight.add(p);
             p.finally(() => inFlight.delete(p));
@@ -97,7 +97,13 @@ function safeStringify(event: unknown): string | null {
     }
 }
 
-function extractActor(event: unknown): string | null {
+/**
+ * Extract the `actor` field from a system event payload. Both the
+ * persistence tap and the SSE envelope use this — keeping a single
+ * implementation prevents the live SSE stream from hardcoding `actor: null`
+ * while the persisted history row carries the real value (task 0226 F5).
+ */
+export function extractSystemEventActor(event: unknown): string | null {
     if (event && typeof event === 'object') {
         const candidate = (event as Record<string, unknown>).actor;
         if (typeof candidate === 'string') return candidate;

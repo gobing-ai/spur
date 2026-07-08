@@ -1,8 +1,15 @@
 import { describe, expect, test } from 'bun:test';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { EventBus } from '@gobing-ai/ts-infra';
+import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { ConflictError, NotFoundError, ValidationError } from '@gobing-ai/ts-utils';
 import { Hono } from 'hono';
+import { createServerContext } from '../../src/context';
 import { GuardDeniedError, LockTimeoutError } from '../../src/errors';
 import { globalErrorHandler } from '../../src/middleware/error-handler';
+import { mockRuntime } from './helpers';
 
 function app() {
     const a = new Hono();
@@ -195,5 +202,60 @@ describe('globalErrorHandler', () => {
         expect(body.error).toBeDefined();
         expect(body.error.details).toBeDefined();
         expect(body.error.details.requestId).toBe('test-req-123');
+    });
+    // ── F7: api.request.error system event emission (task 0226) ──────────
+    test('[R8] emits api.request.error on the bus when ctx is available', async () => {
+        const cwd = mkdtempSync(join(tmpdir(), 'spur-f7-'));
+        const bus = new EventBus<Record<string, (event: unknown) => void>>();
+        const ctx = createServerContext(mockRuntime(), {
+            cwd,
+            fs: createNodeFileSystem('/tmp/test'),
+            dbUrl: ':memory:',
+            eventsBus: bus,
+        });
+        const emitted: { name: string; payload: Record<string, unknown> }[] = [];
+        bus.on('api.request.error', (payload: unknown) => {
+            emitted.push({ name: 'api.request.error', payload: payload as Record<string, unknown> });
+        });
+        const a = new Hono();
+        a.use('*', async (c, next) => {
+            c.set('requestId', 'f7-req-001');
+            c.set('ctx', ctx);
+            await next();
+        });
+        a.get('/api/test', () => {
+            throw new NotFoundError('resource gone');
+        });
+        a.onError(globalErrorHandler);
+        const res = await a.request('/api/test');
+        expect(res.status).toBe(404);
+        expect(emitted).toHaveLength(1);
+        const evt = emitted[0];
+        expect(evt).toBeDefined();
+        if (!evt) return;
+        expect(evt.name).toBe('api.request.error');
+        expect(evt.payload.method).toBe('GET');
+        expect(evt.payload.path).toBe('/api/test');
+        expect(evt.payload.status).toBe(404);
+        expect(evt.payload.code).toBe('NOT_FOUND');
+        expect(evt.payload.requestId).toBe('f7-req-001');
+    });
+
+    test('[R8] does NOT emit api.request.error when ctx is undefined (non-API route)', async () => {
+        const a = new Hono();
+        a.use('*', async (c, next) => {
+            c.set('requestId', 'f7-req-002');
+            await next();
+        });
+        a.get('/static/asset', () => {
+            throw new NotFoundError('no asset');
+        });
+        a.onError(globalErrorHandler);
+        const res = await a.request('/static/asset');
+        expect(res.status).toBe(404);
+        // No ctx on the Hono context → no bus emit. The response is still correct.
+        const body = await json(res);
+        expect(body.ok).toBe(false);
+        expect(body.error.code).toBe('NOT_FOUND');
     });
 });

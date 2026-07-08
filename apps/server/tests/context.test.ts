@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { PlanningEventBus } from '@gobing-ai/spur-app';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
-import { createServerContext } from '../src/context';
+import { createServerContext, NOOP_OUTPUT } from '../src/context';
 import { mockRuntime } from './middleware/helpers';
 
 const testFs = createNodeFileSystem('/tmp/test');
@@ -375,5 +375,77 @@ describe('createServerContext', () => {
         const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
         const svc = ctx.supervisor();
         expect(svc).toBeDefined();
+    });
+
+    // task 0226 F2 — server-native AgentService/RuleService/WorkflowAppService
+    // accessors. The accessor must return a service whose underlying bus is
+    // the canonical server EventBus, so rule.*/agent.*/workflow.* events
+    // reach the system_events tap. Each accessor is also cached.
+    test('agentService() builds and caches a server-bus-wired AgentService', () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
+        const svc1 = ctx.agentService();
+        const svc2 = ctx.agentService();
+        expect(svc1).toBe(svc2);
+        expect(typeof svc1.run).toBe('function');
+    });
+
+    test('ruleService() builds and caches a server-bus-wired RuleService', () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
+        const svc1 = ctx.ruleService();
+        const svc2 = ctx.ruleService();
+        expect(svc1).toBe(svc2);
+        expect(typeof svc1.evaluate).toBe('function');
+    });
+
+    test('workflowService() builds and caches a server-bus-wired WorkflowAppService', () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
+        const svc1 = ctx.workflowService();
+        const svc2 = ctx.workflowService();
+        expect(svc1).toBe(svc2);
+        expect(typeof svc1.run).toBe('function');
+    });
+
+    test('hitlResponder() auto-confirms with a no-op value', async () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
+        const responder = ctx.hitlResponder();
+        const result = await responder.respond({} as never);
+        expect(result.value).toBe('yes');
+    });
+
+    test('jobQueue() throws NotConfiguredError when not enabled', () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
+        expect(() => ctx.jobQueue()).toThrow('jobQueue');
+    });
+
+    test('queueConsumer() throws NotConfiguredError when not enabled', () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
+        expect(() => ctx.queueConsumer()).toThrow('queueConsumer');
+    });
+
+    test('scheduler() throws NotConfiguredError when not configured', () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
+        expect(() => ctx.scheduler()).toThrow('scheduler');
+    });
+
+    test('NOOP_OUTPUT sink accepts write and error without throwing', () => {
+        // R8: the headless output sink must silently absorb strings — server
+        // jobs run without a human-facing terminal, and a throw here would
+        // surface as an opaque service failure.
+        expect(() => NOOP_OUTPUT.write('payload')).not.toThrow();
+        expect(() => NOOP_OUTPUT.error('err-payload')).not.toThrow();
+    });
+
+    test('checkDbHealth() returns true for a healthy in-memory DB', async () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs, dbUrl: ':memory:' });
+        const healthy = await ctx.checkDbHealth();
+        expect(healthy).toBe(true);
     });
 });

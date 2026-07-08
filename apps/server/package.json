@@ -18,6 +18,7 @@
         "@gobing-ai/spur-contracts": "workspace:*",
         "@gobing-ai/spur-app": "workspace:*",
         "@gobing-ai/spur-domain": "workspace:*",
+        "@gobing-ai/ts-dual-workflow-engine": "catalog:",
         "@gobing-ai/ts-infra": "catalog:",
         "@gobing-ai/ts-runtime": "catalog:",
         "@orpc/openapi": "catalog:",

@@ -9,7 +9,7 @@ type: task
 feature-id: F-rule
 priority: medium
 estimated_hours: 10
-tags: ["rule-engine","cli","ts-libs","upstream","deferred-gaps"]
+tags: ["rule-engine", "cli", "ts-libs", "upstream", "deferred-gaps"]
 impl_progress:
   planning: done
   design: done
@@ -54,11 +54,11 @@ APIs on the CLI where the library already supports it (gaps 1–2 are Spur-side 
 
 **The three gaps (from validation-and-extension.md "Capability gaps" table):**
 
-| # | Gap | Layer | Status |
-|---|-----|-------|--------|
-| 1 | Apply fixes (`applyFixes`) — `run` only surfaces findings | Spur CLI | Library ready; CLI flag missing |
-| 2 | Fix authority `none`/`suggest`/`auto` (`min(rule, caller)`) — no caller flag | Spur CLI | Library ready; CLI flag missing |
-| 3 | Custom fixer providers via preset extension | ts-libs upstream | `extensions.fixers` host registry not implemented |
+| #   | Gap                                                                          | Layer            | Status                                            |
+| --- | ---------------------------------------------------------------------------- | ---------------- | ------------------------------------------------- |
+| 1   | Apply fixes (`applyFixes`) — `run` only surfaces findings                    | Spur CLI         | Library ready; CLI flag missing                   |
+| 2   | Fix authority `none`/`suggest`/`auto` (`min(rule, caller)`) — no caller flag | Spur CLI         | Library ready; CLI flag missing                   |
+| 3   | Custom fixer providers via preset extension                                  | ts-libs upstream | `extensions.fixers` host registry not implemented |
 
 Lower-priority gaps from the same table (`EventBus`/`durationMs` observability on the CLI, FP/FN tracking,
 rule-ID rename migration) are **explicitly out of scope** for this task — see Requirements R0.
@@ -79,7 +79,7 @@ does NOT change — this task adds flags to existing `rule run`, it does not add
 0023 and **released in `@gobing-ai/ts-rule-engine@0.3.4`** (the whole `@gobing-ai/ts-*` family is at 0.3.4).
 Spur currently pins `^0.3.3` in the root Bun catalog (`package.json` `workspaces.catalog`, lines 32-39).
 The blocking sequence is now clear: ts-libs 0023 ✅ landed → 0.3.4 ✅ released → **this task executes now**.
-Spur does NO upstream library work; gap 3 here is purely *bump the catalog + consume + document*.
+Spur does NO upstream library work; gap 3 here is purely _bump the catalog + consume + document_.
 
 ### Gap 1 + 2 — `spur rule run` applies fixes via a single `--fix-mode` flag (Spur-side)
 
@@ -91,6 +91,7 @@ since 0.3.3 and remain in 0.3.4.
 
 **R1 — `--fix-mode <mode>` is the sole fix control on `rule run`.** Add `--fix-mode none|suggest|auto`,
 default `none`:
+
 - `none` (default) — fixes not collected. **Byte-identical to today** (`engine.evaluate(...)`).
 - `suggest` — collect candidates, surface them (`fixes[]` in `--json`), **write nothing**.
 - `auto` — collect AND apply (write).
@@ -103,6 +104,7 @@ per-rule mode stays `min(rule.fix.mode, maxFixMode)` — library-enforced; `auto
 
 **R2 — Apply step + `--dry-run` preview.** Under `--fix-mode auto`, after findings are computed, call
 `engine.applyFixes(cwd, result.fixes, dryRun)`:
+
 - `auto` (no `--dry-run`) → `applyFixes(cwd, fixes, dryRun=false)` writes, then reports the `applied` block.
 - `auto --dry-run` → `applyFixes(cwd, fixes, dryRun=true)` prints the diff, writes NOTHING.
 - `suggest` → never calls `applyFixes`; reports candidates only.
@@ -172,6 +174,7 @@ land in either order relative to the catalog bump.
 _(Seed notes — two design questions already resolved; integration points verified 2026-06-07.)_
 
 **Resolved design decisions (do not relitigate):**
+
 1. **One fix flag, not two.** `--fix-mode none|suggest|auto` (+ `--dry-run`) is the entire surface. No
    `--apply-fixes`. Fix authority IS the apply decision; `suggest`=show, `auto`=write; a separate boolean
    only creates redundant/invalid combinations. Maps 1:1 to library `maxFixMode`.
@@ -185,6 +188,7 @@ _(Seed notes — two design questions already resolved; integration points verif
 independent of the catalog bump; gap 3 (R6/R7) is the bump + docs.
 
 **Exact insertion points (Spur-side, verified):**
+
 - CLI flag: `apps/cli/src/commands/rule.ts` `rule.command('run')` block (after line 23, `--json`). Parse
   `--fix-mode` like `--fail-on` (validate `none|suggest|auto`).
 - Service: `packages/app/src/services/rule-service.ts` — `evaluate()` at line 169; branch the engine call
@@ -213,6 +217,7 @@ All three gaps resolved in a single change set:
 - **Docs (R7):** `04_DESIGN.md` CLI surface updated. `validation-and-extension.md` gaps 1–3 → Yes. SKILL.md and operations.md updated to reverse the "CLI never applies fixes" invariant (lockstep with `--fix-mode auto`).
 
 **Files changed:**
+
 - `apps/cli/src/commands/rule.ts` — added `--fix-mode`, `--dry-run` flags + `parseFixMode()`
 - `packages/app/src/services/rule-service.ts` — `RuleEvaluateOptions` + `RuleEvaluationServiceResult` extended; `evaluate()` branched; `evaluateVerbose()` updated; `writeFixSummary()` added
 - `packages/app/tests/services/rule-service.test.ts` — 5 new tests for fix-mode
@@ -228,6 +233,7 @@ All three gaps resolved in a single change set:
 **Dependency:** ts-libs task 0023 ✅ landed, released in `@gobing-ai/ts-rule-engine@0.3.4`. No external blocker remains.
 
 **Phase A — Spur CLI `--fix-mode` (gaps 1–2, R1–R5)** — uses APIs present since 0.3.3
+
 - [x] Capture golden snapshots: `rule run --preset recommended-pre-check` (plain + `--json`) — R5 baseline
 - [x] Thread `fixMode`/`dryRun` through `RuleEvaluateOptions` (CLI → RuleService)
 - [x] Branch `RuleService.evaluate` → `evaluateWithFixes(..., maxFixMode, stopOnFirst)` when fixMode ≠ none (line 187)
@@ -239,11 +245,13 @@ All three gaps resolved in a single change set:
 - [x] Sub-phasing: ship `none|suggest` first (no reversal); ship `auto` + SKILL.md/operations.md/expert-rules "CLI never applies fixes" reversal as a deliberate second step (R7 lockstep)
 
 **Phase B — bump catalog + consume fixer extensions (gap 3, R6–R7)**
+
 - [x] Bump root Bun catalog `@gobing-ai/ts-*` `^0.3.3` → `^0.3.4` (lockstep, lines 32-39); `bun install`; remove any `bun link`
 - [x] Update skill `validation-and-extension.md` gaps 1–3 → Yes; document `fixers` as a loadable extension kind (preset OR rule file, allowExtensions-gated, keyed by evaluator type)
 - [x] Sanity-check: a project preset/rule-file with `extensions.fixers` loads against 0.3.4
 
 **Gate (Spur):**
+
 - [x] `bun run lint` + `bun run test` + `bun run test-cf` + `bun run build` pass
 - [x] `git status` shows only intentional changes; acceptance criteria met
 
@@ -261,16 +269,19 @@ operations.md, validation-and-extension.md).
 **Fix pass (`--fix all`):** no mechanical P1/P2 findings to apply — implementation already clean.
 
 ### P3 — Info
-| # | Title | Dimension | Location | Recommendation |
-|---|-------|-----------|----------|----------------|
-| 1 | Multiple `new RuleEngine()` per evaluate call | Efficiency | rule-service.ts:207,209,215,238 | Four fresh engines constructed in one `evaluate()` (collect, apply, format). Functionally correct (`applyFixes` is stateless over its args; line 238 formatter is pre-existing from 0dfec73), but a single engine instance reused across collect→apply→format would avoid redundant `registerBuiltins`/`builtInFixers` work. Non-blocking; consider a private `this.engine` or local `const engine` in a follow-up. |
+
+| #   | Title                                         | Dimension  | Location                        | Recommendation                                                                                                                                                                                                                                                                                                                                                                                                      |
+| --- | --------------------------------------------- | ---------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Multiple `new RuleEngine()` per evaluate call | Efficiency | rule-service.ts:207,209,215,238 | Four fresh engines constructed in one `evaluate()` (collect, apply, format). Functionally correct (`applyFixes` is stateless over its args; line 238 formatter is pre-existing from 0dfec73), but a single engine instance reused across collect→apply→format would avoid redundant `registerBuiltins`/`builtInFixers` work. Non-blocking; consider a private `this.engine` or local `const engine` in a follow-up. |
 
 ### P4 — Suggestions
-| # | Title | Dimension | Location | Recommendation |
-|---|-------|-----------|----------|----------------|
-| 2 | `--dry-run` silently inert under `suggest`/`none` | Usability | rule.ts:23 | `--dry-run` only affects `--fix-mode auto`; passing it with `suggest`/`none` is a no-op (both already write nothing). Acceptable per design (R2), but a one-line note in `--help` ("use with --fix-mode auto") is already present on the flag — good. No action required. |
+
+| #   | Title                                             | Dimension | Location   | Recommendation                                                                                                                                                                                                                                                            |
+| --- | ------------------------------------------------- | --------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2   | `--dry-run` silently inert under `suggest`/`none` | Usability | rule.ts:23 | `--dry-run` only affects `--fix-mode auto`; passing it with `suggest`/`none` is a no-op (both already write nothing). Acceptable per design (R2), but a one-line note in `--help` ("use with --fix-mode auto") is already present on the flag — good. No action required. |
 
 ### Phase 8 — Requirements Traceability
+
 - [x] **R1** `--fix-mode none|suggest|auto` sole control → **MET** | `rule.ts:22` flag (default none) + `parseFixMode` (`rule.ts:188-191`); service branches to `evaluateWithFixes` when ≠none (`rule-service.ts:207`). No `--apply-fixes` flag exists (verified absent).
 - [x] **R2** apply step + `--dry-run` → **MET** | `applyFixes(cwd, fixes, dryRun)` gated by `fixMode==='auto'` (`rule-service.ts:214-216`); `--dry-run` flag `rule.ts:23`; test "auto with dry-run previews diff without writing" (test:635).
 - [x] **R3** `--json` carries `fixes[]` + `applied` → **MET** | `serviceResult.fixes` + `applied` (rule-service.ts:222-224); JSON payload spreads `applied` (line 229); findings/exit contract unchanged.
@@ -280,6 +291,7 @@ operations.md, validation-and-extension.md).
 - [x] **R7** docs lockstep (same change set) → **MET** | `04_DESIGN.md` §1 (3 `--fix-mode` refs); SKILL.md gotcha reversed ("`--fix-mode auto` applies the fix", line 139); operations.md `run` procedure (3 refs); validation-and-extension.md gaps→Yes (2 refs). The "CLI never applies fixes" invariant correctly reversed.
 
 ### Notes
+
 - Both findings are non-blocking (P3/P4). `--fix all` produced no mechanical changes — the implementation
   matches the corrected single-flag design and the 0.3.4 consumer model with no defects.
 - The P3 multi-engine item is the only real cleanup candidate; left for a follow-up to keep this verify
@@ -288,6 +300,7 @@ operations.md, validation-and-extension.md).
 ### Testing
 
 5 new tests in `packages/app/tests/services/rule-service.test.ts`:
+
 1. `fix-mode none (default) does not populate fixes` — R5 byte-identical baseline
 2. `fix-mode suggest populates fixes[] in JSON and writes nothing` — R1/R3
 3. `fix-mode auto applies fixes and reports applied block` — R2/R3
@@ -298,8 +311,8 @@ All 554 tests pass. Coverage: `rule-service.ts` 95.17% lines, 98.63% functions.
 
 ### Artifacts
 
-| Type | Path | Agent | Date |
-| ---- | ---- | ----- | ---- |
+| Type | Path                                                             | Agent     | Date       |
+| ---- | ---------------------------------------------------------------- | --------- | ---------- |
 | test | `packages/app/tests/services/rule-service.test.ts` (5 new tests) | lord-robb | 2026-06-07 |
 
 ### References

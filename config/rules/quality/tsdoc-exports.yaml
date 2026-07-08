@@ -22,7 +22,7 @@ exclude:
 rules:
   - id: every-export-has-tsdoc
     description: >
-      Exported declarations must have a preceding TSDoc comment.
+      Exported declarations must have a preceding doc comment (JSDoc `/** */` or line `//`).
     severity: error
     enabled: true
     evaluator:

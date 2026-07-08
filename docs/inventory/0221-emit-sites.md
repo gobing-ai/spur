@@ -155,3 +155,66 @@ Sources: `~/xprojects/ts-libs/packages/infra/src/`.
 - `bus.emit.done`, `bus.emit.noop`, `bus.handler.error`, `bus.handler.async.enqueued`
 
 **Already in catalog and unchanged:** `task.*`, `feature.*`, `queue.*`, `scheduler.*`, `message.*`, `process.spawned`/`process.exited`/`process.stopped`, `workflow.run.started`, `workflow.run.finalized`, `workflow.phase`, `workflow.transition`, `workflow.action.started`, `workflow.action.finished`, `workflow.hitl.ask`, `workflow.hitl.response`.
+
+## I. Reachable-from-`spur serve` matrix (task 0226 F6)
+
+> Verified 2026-07-08 against production source after F2/F3/F4/F7 wiring.
+> Classification: **reachable** = server bus receives the emit via injected `events`/`eventBus`;
+> **unreachable** = no production emit callsite on the server bus; **diagnostic-only** = emitted
+> on a separate `lifecycleBus`, not the main server bus; **conditional** = requires a
+> registration that `spur serve` does not perform.
+
+### Server-bus-wired accessors (F2)
+
+| Accessor | Construction site | Bus injection |
+| --- | --- | --- |
+| `ctx.agentService()` | `context.ts:367` | `events: bridgeAgentEvents(eventsBus)`, `processEvents: same` |
+| `ctx.ruleService()` | `context.ts:382` | `events: eventsBus` |
+| `ctx.workflowService()` | `context.ts:394` | `events: () => eventsBus` |
+| `ctx.supervisor()` | `context.ts:355` | `eventBus: eventsBus` |
+| `ctx.teamService()` | `context.ts:346` | `eventBus: eventsBus` |
+| `ctx.jobQueue()` | `context.ts:442` | `events: eventsBus` |
+| `ctx.queueConsumer()` | `context.ts:454` | `config.events: eventsBus` |
+
+### Event-by-event classification
+
+| Event name | Emit site | Classification | Notes |
+| --- | --- | --- | --- |
+| `task.created`/`updated`/`transitioned` | `planning-events.ts` via `LazyPlanningEventEmitter` | reachable | `context.ts:313-328` wires `BusPlanningEventEmitter(bus, dao)` |
+| `feature.created`/`updated`/`transitioned` | same | reachable | same `LazyPlanningEventEmitter` path |
+| `queue.job.enqueued` | `db-job-queue.ts:30` | reachable | `ctx.jobQueue()` passes `events: eventsBus` |
+| `queue.job.completed`/`failed`/`retrying` | `db-job-queue.ts:189,206,218` | reachable | `ctx.queueConsumer()` passes `config.events: eventsBus` |
+| `queue.consumer.started`/`stopped` | `db-job-queue.ts:87,102` | reachable | same `DBQueueConsumer` |
+| `queue.stats` | `scheduler/action.ts:113` | **conditional** | `QueueStatsAction` requires `queueStatsDaoProvider`; `registerSchedulerEntries` does NOT use `createDefaultRegistry` with it — not wired |
+| `scheduler.job.executed` | `serve.ts:85` | reachable | `registerSchedulerEntries` emits on `ctx.eventBus()` |
+| `message.sent`/`replied` | `team-service.ts:357` | reachable | `ctx.teamService()` with `eventBus: eventsBus` |
+| `process.spawned`/`exited`/`stopped` | `supervisor-service.ts:167,179,209` | reachable | `ctx.supervisor()` with `eventBus: eventsBus` |
+| `process.started`/`exited` | `process-executor.ts:138,202,226,258` | reachable | `ctx.agentService()` threads `processEvents: bridgeAgentEvents(eventsBus)` into `NodeProcessExecutor` (`agent-service.ts:305-307`) |
+| `agent.invoke.start`/`exit` | `ai-runner.ts:138,156` | reachable | `ctx.agentService()` threads `events: bridgeAgentEvents(eventsBus)` |
+| `agent.started`/`stopped`/`message.sent` | `team-orchestrator.ts:73,86,98` | reachable | `AgentService` bridges via `ctx.events` |
+| `rule.run.start`/`eval.start`/`eval.done`/`eval.error`/`run.done` | `rule-engine/engine.ts:135,158,178,187,251` | reachable | `ctx.ruleService()` threads `events: eventsBus` |
+| `workflow.run.started`/`finalized`/`phase`/`transition`/`action.started` | `observability.ts:112-136` | reachable | `ctx.workflowService()` threads `events: () => eventsBus` |
+| `workflow.run.done`/`failed`/`paused`/`node.enter`/`node.transition`/`action.start`/`action.done`/`failed_continue` | `run-lifecycle.ts:195-297` | reachable | same `WorkflowAppService` → engine `events` path |
+| `workflow.hitl.note`/`custom` | `dual-workflow-engine/host.ts:113,130` | reachable | `ctx.workflowService()` → host `context.events` |
+| `workflow.hitl.ask`/`response` | `run-lifecycle.ts:320,325` | reachable | same |
+| `bus.emit.done`/`noop`/`handler.error`/`handler.async.enqueued` | `event-bus.ts:272,282,293,304` | **diagnostic-only** | emitted on internal `lifecycleBus`, NOT the main server bus; not captured by tap |
+| `api.request.error` | `error-handler.ts:176` | reachable | `globalErrorHandler` emits via `c.get('ctx')?.eventBus()?.emit(...)` (F7) |
+
+### Gaps requiring follow-up
+
+1. **`queue.stats` — conditional.** `QueueStatsAction` exists but `spur serve`'s
+   `registerSchedulerEntries` does not register it (no `createDefaultRegistry` call with
+   `queueStatsDaoProvider`). To activate, wire the DAO provider into the scheduler registry
+   and forward `eventsBus` as `systemBus`.
+2. **`bus.*` — diagnostic-only by design.** `lifecycleBus` is a separate internal bus
+   (`event-bus.ts:271-307`). These events are NOT on the main server bus and therefore NOT
+   captured by `registerSystemEventTap`. If board visibility is desired, a forwarder must
+   bridge `lifecycleBus` → main bus explicitly.
+3. **Child-process boundary — documented scope limit (F3).** Board-triggered task actions
+   run `/sp:dev-* --auto` as AI-driven slash commands via `ctx.agentService()`. Parent-level
+   `agent.invoke.*` and `process.started`/`process.exited` events ARE captured. Internal events
+   emitted inside the child agent's own session (e.g. `workflow.*`/`rule.*` if the agent
+   itself runs `spur workflow run`) do NOT cross the process boundary — the child's `EventBus`
+   is in-memory and process-local. This is a documented v1 scope limit: the Board observes
+   parent-level agent/process lifecycle; child-internal events require an explicit IPC bridge
+   (deferred).

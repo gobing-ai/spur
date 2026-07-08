@@ -124,7 +124,26 @@ export function createTaskActionAgentService(options: ConstructorParameters<type
     return new AgentService(options);
 }
 
-/** Execute a validated task-action job by dispatching its mapped command to the selected local agent. */
+/**
+ * Execute a validated task-action job by dispatching its mapped command to the
+ * selected local agent.
+ *
+ * Process boundary policy (task 0226 F3): all 6 current task actions
+ * (`refine`, `plan`, `run`, `verify`, `decompose`, `evaluate`) map to
+ * AI-driven agent slash commands (`/sp:dev-*`). The server's `AgentService`
+ * spawns a child CLI process to execute them. Parent-level `agent.invoke.*`
+ * and `process.*` events ARE captured on the server bus because
+ * `ctx.agentService()` threads `events: ctx.eventBus()` into the `AiRunner`.
+ * However, if the child agent internally runs `spur workflow run` or
+ * `spur rule run`, those nested CLI events happen in a separate process with
+ * its own process-local bus and do NOT cross back to the parent server bus.
+ *
+ * This is an intentional v1 scope limit: only parent-level agent/process/queue
+ * lifecycle events are board-observable for board-triggered task actions.
+ * Nested workflow/rule events require either server-native execution
+ * (`ctx.workflowService()` / `ctx.ruleService()` accessors, wired in F4) or
+ * an explicit IPC event bridge, both deferred to follow-up tasks.
+ */
 export async function runTaskActionJob(
     ctx: ServerContext,
     env: Record<string, string | undefined>,
@@ -134,16 +153,19 @@ export async function runTaskActionJob(
     } = createTaskActionAgentService,
 ) {
     const job = parseTaskActionJob(payload);
-    const eventsBus = ctx.eventBus();
-    const agentService = createAgentService({
-        cwd: ctx.cwd,
-        env,
-        events: eventsBus,
-        output: {
-            write: () => {},
-            error: () => {},
-        },
-    });
+    // Server-native jobs (task 0226 F2) use the canonical ctx.agentService()
+    // accessor so the server EventBus is the same one the system-events tap
+    // is subscribed to. Test/CF paths can still inject a custom
+    // `createAgentService` for the agent-run seam.
+    const agentService =
+        createAgentService === createTaskActionAgentService
+            ? ctx.agentService()
+            : createAgentService({
+                  cwd: ctx.cwd,
+                  env,
+                  events: ctx.eventBus(),
+                  output: { write: () => {}, error: () => {} },
+              });
     const flags: Record<string, string | boolean> = {
         cwd: ctx.cwd,
         json: true,

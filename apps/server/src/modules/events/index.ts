@@ -10,6 +10,21 @@ import {
     systemEventCatalogEntry,
 } from './event-names';
 
+/**
+ * Extract the `actor` field from a system event payload. Mirrors the shared
+ * helper in `packages/app/src/services/system-event-tap.ts` so the SSE envelope
+ * and the persistence tap agree on actor extraction (task 0226 F5). Inlined
+ * here — not imported from `@gobing-ai/spur-app` — to keep the Cloudflare
+ * Worker bundle free of the heavy `spur-app` runtime dependency.
+ */
+function extractSystemEventActor(event: unknown): string | null {
+    if (event && typeof event === 'object') {
+        const candidate = (event as Record<string, unknown>).actor;
+        if (typeof candidate === 'string') return candidate;
+    }
+    return null;
+}
+
 /** SSE heartbeat keepalive — enqueues a comment frame unless the stream is closed. */
 export function sendKeepalive(
     closed: { current: boolean },
@@ -101,10 +116,13 @@ export const eventsModule: ServerModule = {
                         const handler = (event: unknown) => {
                             if (closed.current) return;
                             const entry = systemEventCatalogEntry(name);
+                            // task 0226 F5: share the actor extractor with the
+                            // persistence tap so the live SSE envelope matches
+                            // the persisted history row.
                             const envelope = {
                                 eventName: name,
                                 occurredAt: new Date().toISOString(),
-                                actor: null,
+                                actor: extractSystemEventActor(event),
                                 prefix: entry?.prefix ?? name.split('.')[0],
                                 renderer: entry?.renderer ?? 'generic',
                                 payload: entry ? normalizeSystemEventPayload(entry, event) : null,
