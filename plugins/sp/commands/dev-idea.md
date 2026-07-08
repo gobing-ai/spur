@@ -1,7 +1,7 @@
 ---
 description: Turn a vague idea into a feature with AC and a decomposed task batch — discovery, feature-create, AC, feature-check, system-design, decompose, batch-create, handoff
 argument-hint: "\"<idea>\" [--auto] [--design] [--skip-design] [--design-approved]"
-allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
+allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill", "AskUserQuestion"]
 ---
 
 # Dev Idea
@@ -52,6 +52,10 @@ The `--design` / `--skip-design` flags control whether the `system-design` state
 | neither | `needs_design=false` | skip `system-design` |
 
 Ties lean design — when the signal is ambiguous, `system-design` runs.
+
+### Structured input binding
+
+When a structured-input tool (`AskUserQuestion` on Claude Code, or the platform equivalent) is available, the intake questionnaire (idea scope, target feature, design preference, and success criteria) is collected as a single call with multiple questions — each dimension is independent and can be presented simultaneously. This enables autonomous handoff to the planning skill without mid-stream pauses. Fall back to sequential prompts (rendered as markdown) only when no structured-input tool is available.
 
 ### HITL gates
 

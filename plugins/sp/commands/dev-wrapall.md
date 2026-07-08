@@ -1,7 +1,7 @@
 ---
 description: Wrap up a batch of completed tasks — learnings, metrics, doc-sync, feature transition, optional branch cleanup
 argument-hint: "[--since <iso-date>] [--feature <id>] [--status <s>] [--auto] [--merge] [--dry-run]"
-allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
+allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill", "AskUserQuestion"]
 ---
 
 # Dev Wrapall
@@ -57,6 +57,10 @@ Never `backlog|active -> done` directly. Task statuses are NOT mutated.
 
 `--merge` triggers the irreversible HITL gate. It always pauses — even under `--auto` — because
 branch operations are irreversible. The operator must explicitly confirm.
+
+### Structured input binding
+
+When a structured-input tool (`AskUserQuestion` on Claude Code, or the platform equivalent) is available, the batch branch-cleanup confirmation (merge strategy, target branch, cleanup scope, and feature-transition option) is presented via a single call with multiple questions. This is asked even under `--auto` because branch operations are irreversible — the operator must explicitly confirm all parameters before execution proceeds. Fall back to a single confirmation prompt (rendered as markdown) only when no structured-input tool is available.
 
 
 ### `--auto` behavior

@@ -1,7 +1,7 @@
 ---
 description: Refine task requirements via structured Q&A — clarify scope, elicit missing details, tighten acceptance criteria
 argument-hint: "<wbs> [--focus <mode>] [--description <text>] [--agent <name|auto>] [--auto] [--next]"
-allowed-tools: ["Bash", "Read", "Write", "Skill"]
+allowed-tools: ["Bash", "Read", "Write", "Skill", "AskUserQuestion"]
 ---
 
 # Dev Refine
@@ -67,6 +67,7 @@ the step via `spur agent run` instead. The default never shells out.
 1. **Load task** → Resolve the WBS to its file with `spur task path <wbs>` (or read a given path directly); `spur task show`/`check` also accept a bare WBS. The `spur task resolve` verb is the **inverse** (file-path → owning WBS), not the WBS→file lookup — don't use it here. Some file-read surfaces truncate long sections around 768 chars for display; `spur task check` reads the file directly, so treat visible truncation markers as display artifacts unless the file itself is truncated.
 2. **Analyze** → Check content for gaps and ambiguities against the focus bundle.
 3. **Question** → Generate targeted Q&A based on the expanded domain hints. Present each question as a decision brief — one-line question, plain-English stakes, an explicit recommendation, and scored options — per the SSOT [spur-dev/references/decision-brief.md](../skills/spur-dev/references/decision-brief.md).
+   - **Structured input binding** → When a structured-input tool (`AskUserQuestion` on Claude Code, or the platform equivalent) is available, present focus-bundle selection and any multi-option clarifications via a single call with multiple questions (one per focus dimension). Each question's `options` carry the scored choices from the decision brief. This collects all clarifications up front, enabling autonomous synthesis without mid-stream interruptions. Fall back to sequential decision briefs (rendered as markdown) only when no structured-input tool is available.
 4. **Synthesize** → Update Background, Requirements, Design, Acceptance Criteria, and Constraints sections via `spur task update --section <name> --from-file <path>`.
    - **Under `--auto`: pre-synthesis skip gate.** Before invoking synthesis, run `spur task check <wbs> --json`. Filter the findings to the target sections only ({Background, Requirements, Plan, Design, Acceptance Criteria}). If there are **no L3 findings for those sections** (regardless of whether the overall exit code is 0 — other sections' findings do not count), emit a SKIP result and stop — do not invoke synthesis:
      ```

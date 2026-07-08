@@ -1,7 +1,7 @@
 ---
 description: Wrap up a single completed task — learnings, metrics, doc-sync, optional feature transition and branch cleanup
 argument-hint: "<wbs> [--auto] [--merge] [--dry-run]"
-allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
+allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill", "AskUserQuestion"]
 ---
 
 # Dev Wrap
@@ -48,6 +48,10 @@ The pipeline runs: task-resolve -> doc-sync -> learning-capture -> metrics-recor
 - Task statuses are NOT mutated by wrap-up.
 - For feature transition, use `/sp:dev-wrapall --feature <id>` (batch wrap-up supports feature transition).
 - Branch cleanup (`--merge`) is an irreversible HITL gate — always pauses, even under `--auto`.
+
+### Structured input binding
+
+When a structured-input tool (`AskUserQuestion` on Claude Code, or the platform equivalent) is available, the branch-cleanup confirmation (merge strategy, target branch, and cleanup scope) is presented via a single call with multiple questions. This is asked even under `--auto` because branch operations are irreversible — the operator must explicitly confirm all parameters before execution proceeds. Fall back to a single confirmation prompt (rendered as markdown) only when no structured-input tool is available.
 
 
 ### `--auto` behavior

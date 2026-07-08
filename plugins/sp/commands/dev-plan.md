@@ -1,7 +1,7 @@
 ---
 description: Plan a feature from a description — intake → feature create → AC generation → feature check gate → decomposition → batch-create
 argument-hint: "\"<description>\" [--feature <id>] [--parent <feature-id>] [--agent <name|auto>] [--design] [--auto] [--design-approved]"
-allowed-tools: ["Bash", "Read", "Write", "Skill"]
+allowed-tools: ["Bash", "Read", "Write", "Skill", "AskUserQuestion"]
 ---
 
 # Dev Plan
@@ -66,6 +66,10 @@ duplicated (constitution §4.5 + sync trigger T9). Full procedure: skill Step 5.
 Thin wrapper: intake Q&A, feature creation/selection, AC generation, the two CLI gates,
 and decomposition are all owned by the skill. This command parameterizes the planning-half
 entry point.
+
+### Structured input binding
+
+When a structured-input tool (`AskUserQuestion` on Claude Code, or the platform equivalent) is available, the intake questionnaire (scope, constraints, success criteria, and design preference) is collected as a single call with multiple questions — each dimension is an independent axis, so all can be presented simultaneously. This enables autonomous handoff to the planning skill without mid-stream pauses. Fall back to sequential prompts (rendered as markdown) only when no structured-input tool is available.
 
 ### Agent override
 

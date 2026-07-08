@@ -72,3 +72,8 @@ Option B — <name>   [kind-note: optimizes for X over Y, not "more/less complet
 | `brainstorm` (dev-brainstorm Phase 1) | clarify ambiguous input | Each `AskUserQuestion` is framed as a decision brief — recommendation + option scores. |
 | `dev-refine` | targeted Q&A on gaps | Each refinement question presents the options as a brief so the operator picks with stakes visible. |
 | `spec-decomposition` pre-batch quiz | approve the task breakdown | The granularity / dependency quiz is a decision brief: recommended breakdown + the trade-off of each alternative slicing. |
+| `dev-plan` intake | scope, constraints, success, design | Single `AskUserQuestion` call with multiple questions — one per independent dimension. Recommendation and scored options per dimension. |
+| `dev-idea` intake | idea scope, feature, design, success | Single `AskUserQuestion` call with multiple questions — one per independent dimension. Recommendation and scored options per dimension. |
+| `dev-wrap` branch cleanup | merge strategy, target, cleanup scope | Single `AskUserQuestion` call — asked even under `--auto` (irreversible). Confirmation collects all parameters up front. |
+| `dev-wrapall` batch branch cleanup | merge strategy, target, scope, feature transition | Single `AskUserQuestion` call — asked even under `--auto` (irreversible). Confirmation collects all parameters up front. |
+| `dev-refine` focus selection | `--focus` bundle selection | Single `AskUserQuestion` call with one question per focus dimension. Scored choices from the decision brief become `options[]`. |
