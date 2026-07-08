@@ -37,7 +37,7 @@ each would be scope creep for one-liner procedures.
 | # | Operation | Command | Backing | Skill / Verb | Arg-hint |
 |---|-----------|---------|---------|--------------|----------|
 | 1 | unit | `dev-unit` | `Skill()` | `sp:code-testing` | `<target> [--coverage <pct>] [--agent <name\|auto>] [--auto]` |
-| 2 | review | `dev-review` | `Skill()` | `sp:code-verification` (`review`) | `<wbs> [--agent <name\|auto>] [--focus <lens>] [--fix <none\|blockers-first\|all>] [--auto]` |
+| 2 | review | `dev-review` | `Skill()` | `sp:code-verification` (`review`) + `sp:functional-review` + `sp:code-improvement` | `<wbs> [--agent <name\|auto>] [--focus <lens>] [--fix <none\|blockers-first\|all>] [--auto]` |
 | 3 | verify | `dev-verify` | `Skill()` | `sp:code-verification` (`verify`) | `<wbs> [--agent <name\|auto>] [--fix ...] [--focus <lens>] [--bdd] [--auto] [--force]` |
 | 4 | run | `dev-run` | `Skill()` | `sp:spur-dev` (`run` / `implement`) | `<wbs> [--mode <full\|implement>] [--agent <name\|auto>] [--auto]` |
 | 5 | refine | `dev-refine` | `Skill()` | `sp:spur-dev` (`refine`) | `<wbs> [--focus <mode>] [--description <text>] [--agent <name\|auto>] [--auto] [--next]` |
@@ -71,10 +71,10 @@ must not be changed without updating the backing skill.
 
 ### 2. review
 
-- **Purpose:** SECUA-framework code review of a task's diff — Security, Efficiency, Correctness, Usability, Architecture.
+- **Purpose:** Three-dimensional code review of a task's diff — (1) functional requirements traceability, (2) SECUA framework (Security, Efficiency, Correctness, Usability, Architecture), (3) architecture depth. Findings written to the task's `## Review` section.
 - **Inputs:** `<wbs>` (required). `--agent <name|auto>` is a **pipeline** override: omit (default) → the review runs under the configured default executor (`omp`); current-agent is **not expressible** (subprocess FSM). `<name>`/`auto` spawns that agent. `--focus <lens>` narrows to one SECUA dimension. `--fix <none|blockers-first|all>` controls auto-fix. `--auto` skips confirmations for review/fix passes.
-- **Backing:** `sp:code-verification` skill, `review` mode.
-- **Behavior:** Detect the diff scope → run SECUA analysis → rank findings P1–P4 → write findings to the task's `## Review` section. With `--fix`, applies fixes for the selected severity tier.
+- **Backing:** `sp:code-verification` skill, `review` mode (SECUA + architecture); `sp:functional-review` (requirements traceability); `sp:code-improvement` (architecture deepening opportunities).
+- **Behavior:** Detect the diff scope → run three-dimensional analysis (functional traceability + SECUA + architecture depth) → rank findings P1–P4 → write findings to the task's `## Review` section. With `--fix`, applies fixes for the selected severity tier.
 - **Delegation:** `Skill(skill="sp:code-verification", args="review $ARGUMENTS")`
 
 ### 3. verify

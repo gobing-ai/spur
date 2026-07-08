@@ -240,11 +240,11 @@ off* delivery is.
 
 ### Step 7 — Write findings to the task
 
-Write the per-requirement traceability table to the task's `## Testing` section via CLI verbs:
+Write the per-requirement traceability table to the task's `## Review` section via CLI verbs:
 
 ```bash
 printf '...' > /tmp/<wbs>-functional.md
-spur task update <wbs> --section Testing --from-file /tmp/<wbs>-functional.md
+spur task update <wbs> --section Review --from-file /tmp/<wbs>-functional.md
 rm /tmp/<wbs>-functional.md
 ```
 
@@ -269,7 +269,7 @@ Include the per-requirement traceability table:
 | R3  | UNMET  | no implementation found; searched src/api/, src/services/ |
 ```
 
-**Under the pipeline**, the `record` step transcribes this output into the task's `## Testing`
+**Under the pipeline**, the `record` step transcribes this output into the task's `## Review`
 section — keep the table structure stable.
 
 ---

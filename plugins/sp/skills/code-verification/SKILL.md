@@ -34,8 +34,8 @@ It backs two commands:
 
 | Command | Mode | Input | Output |
 |---------|------|-------|--------|
-| `/sp:dev-verify <wbs>` | **verify** | a task WBS | per-requirement verdict → `## Testing`; SECUA findings → `## Review`; `.spur/run/<wbs>-verdict.json` |
-| `/sp:dev-review <wbs>` | **review** | a task WBS (diff scope) | SECUA findings → `## Review` |
+| `/sp:dev-verify <wbs>` | **verify** | a task WBS | per-requirement verdict → `## Testing`; `.spur/run/<wbs>-verdict.json` |
+| `/sp:dev-review <wbs>` | **review** | a task WBS (diff scope) | three-dimensional findings → `## Review` (functional + SECUA + architecture) |
 
 The verify mode is the **completion gate's evidence source**: it emits a machine verdict the
 `task-pipeline.yaml` workflow reads before allowing `record → done`. A `PASS` clears the gate; a
@@ -228,11 +228,13 @@ Assemble the evidence and write via CLI verbs (temp-file → `--section`):
 # Testing section: per-requirement and per-AC verdict tables + evidence
 printf '...' > /tmp/<wbs>-testing.md
 spur task update <wbs> --section Testing --from-file /tmp/<wbs>-testing.md
-
-# Review section: SECUA findings ranked by severity
-printf '...' > /tmp/<wbs>-review.md
-spur task update <wbs> --section Review --from-file /tmp/<wbs>-review.md
 ```
+
+> **Do not write `## Review` directly in verify mode.** The `## Review` section is owned by the
+> `review` step (`/sp:dev-review`), which dispatches `functional-review` + `code-verification`
+> review mode + `code-improvement`. The `record` step backfills `## Review` from the verdict
+> artifact only if the section is bare (`sectionIsBare` guard, `task-service.ts:563`). Writing
+> `## Review` here bypasses that guard and destroys the review step's three-dimensional findings.
 
 Section bodies passed to `spur task update --section` must be **body-only**. Do not put a same-level
 heading inside any section body; the task writer strips same-level headings to prevent phantom
@@ -241,8 +243,6 @@ sections. Concretely:
 - **Testing section:** do not put `### Acceptance Criteria Verification`, `### Per-Requirement
   Traceability`, or any `###` heading inside the Testing body. Use bold labels
   (`**Acceptance Criteria Verification**`) or tables instead.
-- **Review section:** do not put `### SECUA Review` or any `###` heading inside the Review body.
-  Use a priority table or a bold label such as `**SECUA Review**` instead.
 
 ### Step 11 — State the verdict and hand off (the gate contract)
 
@@ -263,9 +263,10 @@ findings — this heading is an **answer-file contract only** (it must never app
 `.spur/run/<wbs>-verify-answer.txt`. A deterministic shell step then derives
 `.spur/run/<wbs>-verdict.json` from it plus an independent `spur task check` (R9; the agent
 reporting PASS in prose is necessary but not sufficient — the artifact is never left to the agent's
-discretion). The **record** step transcribes the answer file into the task: `## Testing` ← verdict +
-per-requirement/AC tables, `## Review` ← SECUA findings. Keep both structures stable — the record
-step extracts them mechanically.
+discretion). The **record** step transcribes only `## Testing` from the verdict — verdict + per-
+requirement/AC tables + evidence. `## Review` is owned by the review step (`/sp:dev-review`) and
+the record step's `sectionIsBare` guard (`task-service.ts:563`) preserves any non-bare Review
+content. Verify mode never writes `## Review`.
 
 **Standalone** (`/sp:dev-verify` outside the pipeline — no answer-file capture exists), write the
 artifact yourself; shape and field-by-field contract in

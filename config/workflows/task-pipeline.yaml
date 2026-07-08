@@ -120,7 +120,7 @@ states:
           command: "bun run lint"
 
   - id: review
-    description: SECUA-framework code review via /sp:dev-review (Security, Efficiency, Correctness, Usability, Architecture).
+    description: Three-dimensional code review via /sp:dev-review (functional requirements traceability + SECUA framework (Security, Efficiency, Correctness, Usability, Architecture) + architecture depth), findings written to `## Review`.
     onEnter:
       - kind: agent.run
         options:
