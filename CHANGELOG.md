@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.5] — 2026-07-09
+
+### Fixed
+
+- **CI-only task-kanban test failures (73 tests, 5 files).** Three root causes: (1) `useTasks.test.ts` imported the module-level `sharedStore` singleton without mocking `rpc-client`, capturing the real API and leaking state into every subsequent test file; (2) `components.test.tsx` and `new-task-panel.test.tsx` mocked `rpc-client` without `resolveApiUrl`, causing `useTasks.ts`'s `SSE_URL` computation to throw at module-eval time; (3) 15 test files called `GlobalRegistrator.register()` bare, causing double-registration failures when all tests ran together. All three issues only surfaced in the full CI suite (Linux), never locally (macOS) — classic file-ordering-dependent regressions.
+
+### Added
+
+- **Two `recommended-pre-check` rules to prevent CI-only regressions.** `no-unmocked-module-eval-side-effects` flags test files that import modules with module-evaluation side effects (singletons, import-time calls) without mocking the captured dependencies first. `guarded-happy-dom-register` requires `GlobalRegistrator.register()` to be wrapped in `try/catch`. Both run on every `spur rule run --preset recommended-pre-check`; 21 currently-compliant files excluded from each rule so the gate only catches new violations.
+
 ## [0.3.4] — 2026-07-09
 
 ### Added
