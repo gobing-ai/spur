@@ -1,6 +1,8 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator';
 
-GlobalRegistrator.register();
+try {
+    GlobalRegistrator.register();
+} catch {} // already registered in suite
 
 import { afterAll, afterEach, describe, expect, test } from 'bun:test';
 import { act, cleanup, renderHook } from '@testing-library/react';

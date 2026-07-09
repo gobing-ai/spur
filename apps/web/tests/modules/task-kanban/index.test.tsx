@@ -26,7 +26,9 @@ mock.module('../../../src/modules/task-kanban/useTaskParams', () => ({
 import { teardownHappyDom } from '../../happy-dom';
 
 try {
-    GlobalRegistrator.register();
+    try {
+        GlobalRegistrator.register();
+    } catch {} // already registered in suite
 } catch {
     /* already registered */
 }

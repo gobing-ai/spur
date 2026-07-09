@@ -1,6 +1,8 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator';
 
-GlobalRegistrator.register();
+try {
+    GlobalRegistrator.register();
+} catch {} // already registered in suite
 
 import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
@@ -93,6 +95,7 @@ mock.module('../../../src/lib/rpc-client', () => ({
             },
         },
     },
+    resolveApiUrl: () => 'http://localhost:3000/api',
 }));
 
 // Dynamic import so mocks intercept before real module loads
