@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.3.4] — 2026-07-09
+
+### Added
+
+- **System Events observability board (features K + tasks 0220–0225).** Server-side `SystemEventCatalog` with per-domain event names (agent, rule, workflow, API, bus tiers), `SystemEventTap` for SSE-streamed live events, and a filterable web UI table with color-coded event-name pills and responsive layout. Server wiring (task 0226) connects real producers — agent runs, rule evaluations, workflow transitions, job scheduling, and HTTP lifecycle — so the board shows live, not synthetic, data.
+
+- **Feature management web UI (tasks 0194, 0221).** Server feature body/action/sync handlers; typed contracts in `packages/contracts`; web tree view + detail panel with WBS-linked task roster, lifecycle actions, and folder fix for feature directory detection.
+
+- **Three-layer review architecture (`/sp:dev-review`, task 0227).** The review command now dispatches three dimensions: functional requirements traceability (`sp:functional-review`), SECUA code quality (security, efficiency, correctness, usability, architecture via `sp:code-verification`), and architectural depth (`sp:code-improvement`). New `super-reviewer` agent merges findings into a single ranked report with PASS/PARTIAL/FAIL verdict.
+
+- **Reverse-engineering skill and `/sp:dev-reverse` command (task 0231).** Depth-driven codebase analysis with orthogonal mode (briefing → full), focus (stack, dependencies, data, flows, API, security, quality, performance), and format (markdown/json/both) controls. Produces HLD documents, architecture diagrams, audit reports, and onboarding documentation from source evidence. The skill is a fidelity port of the rd3 `reverse-engineering` skill with all cross-plugin references normalized to `sp:` vocabulary.
+
+- **Structured-input tool bindings across dev commands (tasks 0229–0230).** `dev-brainstorm`, `dev-plan`, `dev-idea`, `dev-refine`, `dev-wrap`, `dev-wrapall`, and the brainstorming skill now use platform-agnostic structured-input tools (`AskUserQuestion` on Claude Code, or platform equivalents) with explicit markdown fallback. Intake Q&A is centralized into single up-front questionnaires so the operator fills one form and the remaining work proceeds autonomously.
+
+### Changed
+
+- **Default database URL to `.spur/spur.db`.** `spur serve` resolves the DB URL to the project-local SQLite file; no manual `DATABASE_URL` required for local development.
+- **Plugin README reconciled.** `plugins/sp/README.md` version 0.3.1 → 0.3.3, command count 23/24 → 26, `dev-reverse` added to command index, `reverse-engineering` added to directory layout tree and skill registry.
+- **`spur init` command docs updated.** Spur init scaffold instructions aligned with the current TASK_VARIANTS manifest and template inventory.
+
+### Fixed
+
+- **Testing/Review double-write bug (task 0228).** `functional-review` now writes its traceability table to `## Review` (not `## Testing`); `code-verification` verify mode no longer overwrites `## Review`, preserving the review step's three-dimensional findings. Pipeline YAML and `dev-operations.md` descriptions updated to reflect the three-layer architecture.
+
+- **Agent `idleTimeout` default.** Default timeout now correctly resolves to the configured agent duration rather than a hardcoded fallback.
+
+- **Scheduler events to EventBus.** `scheduler.job.executed` events now emit to the shared EventBus, closing a gap in the system-events producer coverage.
+
 ## [0.3.3] — 2026-07-06
 
 ### Added
