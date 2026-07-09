@@ -13,8 +13,8 @@ interface ProcessRow {
     exitCode: number | null;
 }
 
-const API = `${resolveApiUrl()}/team/processes`;
-const SSE_URL = `${resolveApiUrl()}/events/planning`;
+const apiUrl = () => `${resolveApiUrl()}/team/processes`;
+const sseUrl = () => `${resolveApiUrl()}/events/planning`;
 
 /**
  * Process List tab (task 0195/0210 wave D).
@@ -29,7 +29,7 @@ export default function ProcessListTab() {
 
     const load = useCallback(async (signal: AbortSignal) => {
         try {
-            const res = await fetch(`${API}`, { signal });
+            const res = await fetch(`${apiUrl()}`, { signal });
             if (!res.ok) throw new Error(`process list fetch failed: ${res.status}`);
             const json: unknown = await res.json();
             const body = json as { processes: ProcessRow[]; count: number };
@@ -50,7 +50,7 @@ export default function ProcessListTab() {
     // Live tail: refetch on process.* SSE events.
     useEffect(() => {
         if (typeof EventSource === 'undefined') return;
-        const es = new EventSource(SSE_URL);
+        const es = new EventSource(sseUrl());
         es.onmessage = (frame) => {
             try {
                 const raw: unknown = JSON.parse(frame.data);

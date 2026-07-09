@@ -16,11 +16,11 @@ import type {
 } from './feature-types';
 import { fetchWithTimeout, resolveApiUrl } from './rpc-client';
 
-const API = `${resolveApiUrl()}/features`;
+const apiBase = () => `${resolveApiUrl()}/features`;
 
 /** Fetch the feature list. */
 export async function loadFeatures(signal: AbortSignal): Promise<FeatureSummary[]> {
-    const res = await fetchWithTimeout(new Request(API, { signal }));
+    const res = await fetchWithTimeout(new Request(apiBase(), { signal }));
     if (!res.ok) throw new Error(`feature list fetch failed: ${res.status}`);
     const json: unknown = await res.json();
     const body = json as { ok?: boolean; data?: FeatureSummary[] };
@@ -30,7 +30,7 @@ export async function loadFeatures(signal: AbortSignal): Promise<FeatureSummary[
 
 /** Fetch a single feature's detail (id, name, status, frontmatter, content, filePath). */
 export async function loadFeatureShow(id: string, signal: AbortSignal): Promise<FeatureShowData> {
-    const res = await fetchWithTimeout(new Request(`${API}/${encodeURIComponent(id)}`, { signal }));
+    const res = await fetchWithTimeout(new Request(`${apiBase()}/${encodeURIComponent(id)}`, { signal }));
     if (!res.ok) throw new Error(`feature show fetch failed: ${res.status}`);
     const json: unknown = await res.json();
     const body = json as { ok?: boolean; data?: FeatureShowData };
@@ -41,7 +41,7 @@ export async function loadFeatureShow(id: string, signal: AbortSignal): Promise<
 /** Trigger a feature status transition. Returns the new status on success. */
 export async function transitionFeature(id: string, toStatus: string, signal: AbortSignal): Promise<string> {
     const res = await fetchWithTimeout(
-        new Request(`${API}/${encodeURIComponent(id)}/status`, {
+        new Request(`${apiBase()}/${encodeURIComponent(id)}/status`, {
             method: 'PATCH',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ id, toStatus }),
@@ -60,7 +60,7 @@ export async function transitionFeature(id: string, toStatus: string, signal: Ab
 /** Run a feature check and return the findings. */
 export async function checkFeature(id: string, signal: AbortSignal): Promise<CheckResult> {
     const res = await fetchWithTimeout(
-        new Request(`${API}/${encodeURIComponent(id)}/check`, {
+        new Request(`${apiBase()}/${encodeURIComponent(id)}/check`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ id }),
@@ -77,7 +77,7 @@ export async function checkFeature(id: string, signal: AbortSignal): Promise<Che
 /** Write feature body content. PATCH /features/{id}/body */
 export async function saveFeatureBody(input: FeatureBodyUpdateInput, signal?: AbortSignal): Promise<void> {
     const res = await fetchWithTimeout(
-        new Request(`${API}/${encodeURIComponent(input.id)}/body`, {
+        new Request(`${apiBase()}/${encodeURIComponent(input.id)}/body`, {
             method: 'PATCH',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify(input),
@@ -97,7 +97,7 @@ export async function dispatchFeatureAction(
     signal?: AbortSignal,
 ): Promise<FeatureActionResponse> {
     const res = await fetchWithTimeout(
-        new Request(`${API}/${encodeURIComponent(input.id)}/action`, {
+        new Request(`${apiBase()}/${encodeURIComponent(input.id)}/action`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify(input),
@@ -119,7 +119,7 @@ export async function createChildFeature(
     signal?: AbortSignal,
 ): Promise<FeatureCreateChildResponse> {
     const res = await fetchWithTimeout(
-        new Request(`${API}/${encodeURIComponent(input.id)}/children`, {
+        new Request(`${apiBase()}/${encodeURIComponent(input.id)}/children`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify(input),
@@ -138,7 +138,7 @@ export async function createChildFeature(
 /** Create a root feature (no parent). POST /features */
 export async function createRootFeature(name: string, signal?: AbortSignal): Promise<{ id: string; filePath: string }> {
     const res = await fetchWithTimeout(
-        new Request(API, {
+        new Request(apiBase(), {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ name }),
@@ -162,7 +162,7 @@ export async function createFeatureTask(
     signal?: AbortSignal,
 ): Promise<FeatureCreateTaskResponse> {
     const res = await fetchWithTimeout(
-        new Request(`${API}/${encodeURIComponent(input.id)}/tasks`, {
+        new Request(`${apiBase()}/${encodeURIComponent(input.id)}/tasks`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify(input),
@@ -184,7 +184,7 @@ export async function linkTaskToFeature(
     signal?: AbortSignal,
 ): Promise<FeatureLinkTaskResponse> {
     const res = await fetchWithTimeout(
-        new Request(`${API}/${encodeURIComponent(input.id)}/link`, {
+        new Request(`${apiBase()}/${encodeURIComponent(input.id)}/link`, {
             method: 'PATCH',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify(input),
@@ -203,7 +203,7 @@ export async function linkTaskToFeature(
 /** Sync feature status with linked tasks. POST /features/{id}/sync */
 export async function syncFeatureStatus(input: FeatureSyncInput, signal?: AbortSignal): Promise<FeatureSyncResponse> {
     const res = await fetchWithTimeout(
-        new Request(`${API}/${encodeURIComponent(input.id)}/sync`, {
+        new Request(`${apiBase()}/${encodeURIComponent(input.id)}/sync`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify(input),

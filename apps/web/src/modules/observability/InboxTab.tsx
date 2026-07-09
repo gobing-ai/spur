@@ -23,8 +23,8 @@ interface MessagesResponse {
     count: number;
 }
 
-const INBOX_URL = `${resolveApiUrl()}/messages/inbox`;
-const SSE_URL = `${resolveApiUrl()}/events/planning`;
+const inboxUrl = () => `${resolveApiUrl()}/messages/inbox`;
+const sseUrl = () => `${resolveApiUrl()}/events/planning`;
 const DEFAULT_AGENT = 'operator';
 const DEFAULT_LIMIT = 50;
 
@@ -111,7 +111,7 @@ export default function InboxTab() {
 
     const load = useCallback(async (signal: AbortSignal): Promise<void> => {
         try {
-            const url = `${INBOX_URL}?agent=${encodeURIComponent(DEFAULT_AGENT)}&limit=${DEFAULT_LIMIT}`;
+            const url = `${inboxUrl()}?agent=${encodeURIComponent(DEFAULT_AGENT)}&limit=${DEFAULT_LIMIT}`;
             const res = await fetch(url, { signal });
             if (!res.ok) throw new Error(`inbox fetch failed: ${res.status}`);
             const raw: unknown = await res.json();
@@ -145,7 +145,7 @@ export default function InboxTab() {
     // are metadata-only (no body), so refetch the full inbox rather than mutating.
     useEffect(() => {
         if (typeof EventSource === 'undefined') return;
-        const es = new EventSource(SSE_URL);
+        const es = new EventSource(sseUrl());
         es.onmessage = (frame) => {
             try {
                 const raw: unknown = JSON.parse(frame.data);

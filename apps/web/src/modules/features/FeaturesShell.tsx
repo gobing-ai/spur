@@ -7,7 +7,7 @@ import FeatureDetail from './FeatureDetail';
 import FeatureTree from './FeatureTree';
 import NewFeaturePanel from './NewFeaturePanel';
 
-const SSE_URL = `${resolveApiUrl()}/events/planning`;
+const sseUrl = () => `${resolveApiUrl()}/events/planning`;
 
 /**
  * Shell for the features board module (task 0194).
@@ -43,7 +43,7 @@ export default function FeaturesShell() {
     // Live tail: SSE-driven refetch on feature.* events.
     useEffect(() => {
         if (typeof EventSource === 'undefined') return;
-        const es = new EventSource(SSE_URL);
+        const es = new EventSource(sseUrl());
         es.onmessage = (frame) => {
             try {
                 const raw: unknown = JSON.parse(frame.data);

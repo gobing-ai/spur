@@ -1,0 +1,60 @@
+# Forbid calling imported functions at module-evaluation scope in source files.
+#
+# WHY: calling an imported function at module scope (outside any function/class
+# body) creates an evaluation-time side effect that captures the depencency
+# before any test mock can intercept it. If the first test file that evaluates
+# this module has a mock active, the module caches with that mock's state; in
+# CI (where test-file order differs from local), a different test may evaluate
+# it first with NO mock or a different mock, causing CI-only failures that pass
+# locally every time. Real incidents:
+#
+#   2026-07-09: useTasks.ts:6   — const SSE_URL = `${resolveApiUrl()}/...`  (73 failures)
+#   2026-07-09: SystemEventsTab.tsx:42-43 — const HISTORY_URL = `${resolveApiUrl()}/...`;
+#              const SSE_URL = `${resolveApiUrl()}/...`  (1 failure)
+#
+# The pattern is always the same: a top-level `const` or `let` whose initializer
+# calls a function imported from another module. Defer the call to a function:
+#
+#   // BEFORE (broken):
+#   const SSE_URL = `${resolveApiUrl()}/events/planning`;
+#
+#   // AFTER (fixed):
+#   const sseUrl = () => `${resolveApiUrl()}/events/planning`;
+#
+# FIX: wrap the initializer in an arrow function and call it lazily at the
+# point of use. If the value is used as a default parameter or a constant
+# reference, convert it to a getter function or compute it in the
+# constructor/init method.
+#
+# Severity: warning. A hit may pass locally but WILL fail in CI if a mock is
+# involved; justify with a comment or convert to lazy.
+include:
+  - "apps/**/src/**/*.ts"
+  - "apps/**/src/**/*.tsx"
+  - "packages/**/src/**/*.ts"
+  - "packages/**/src/**/*.tsx"
+exclude:
+  - "**/node_modules/**"
+  - "**/dist/**"
+  - "**/tests/**"
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+
+rules:
+  - id: no-module-scope-import-calls
+    description: >
+      Calling an imported function at module scope (outside any function or
+      class body) creates an evaluation-time side effect that captures the
+      dependency before any test mock can intercept it — a CI-only,
+      ordering-dependent failure. Defer the call: wrap the value in an arrow
+      function and call it lazily at the point of use. Real incidents:
+      useTasks.ts:6 (73 CI failures), SystemEventsTab.tsx:42 (1 CI failure),
+      2026-07-09.
+    severity: warning
+    evaluator:
+      type: rg
+      config:
+        # Match top-level const/let whose initializer is a template literal
+        # calling an import (e.g. resolveApiUrl(), api.*, ...).
+        # The pattern: line starts with `const`/`let`, contains `${...()}`.
+        pattern: "^(const|let)\\s+\\w+\\s*=\\s*`[^`]*\\$\\{[^}]*\\([^)]*\\)[^}]*\\}[^`]*`"
