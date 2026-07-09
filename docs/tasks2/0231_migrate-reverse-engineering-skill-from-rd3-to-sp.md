@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: ["0227"]
 created_at: "2026-07-08T23:45:00.000Z"
-updated_at: "2026-07-09T00:24:26.493Z"
+updated_at: "2026-07-09T00:32:32.851Z"
 ---
 
 ## 0231. migrate reverse-engineering skill and dev-reverse command from rd3 to sp
@@ -270,9 +270,36 @@ Verification:
 - `rg '\brd3\b' plugins/sp/skills/reverse-engineering/ plugins/sp/commands/dev-reverse.md` — zero matches.
 - `spur task check 0231 --strict` — PASS.
 ### Review
+## Verify Verdict — 0231
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**WBS:** 0231
+**Task:** migrate reverse-engineering skill and dev-reverse command from rd3 to sp
+**Verdict:** PASS
+**Date:** 2026-07-09
+**Mode:** standalone verify (`--force`, task already done)
 
+
+| AC | Status | Evidence |
+|----|--------|----------|
+| AC-1 — SKILL.md exists | **MET** | `plugins/sp/skills/reverse-engineering/SKILL.md` — 15,909 bytes, frontmatter `name: reverse-engineering` |
+| AC-2 — Zero rd3 in SKILL.md | **MET** | `rg '\brd3\b'` on the file → 0 matches |
+| AC-3 — see_also resolves | **MET** | `see_also: [sp:source-driven-development]` — single entry; `source-driven-development` exists under `plugins/sp/skills/` |
+| AC-4 — Three-control model preserved | **MET** | "Mode: Analysis Depth", "Focus: Analysis Lens", "Format: Output Encoding" all present. Six Phase headings (Orient → Audit) all present. "Evidence Rules", "Diagram Rules", "Indexed Context Integration" sections present. |
+| AC-5 — dev-reverse.md exists | **MET** | `plugins/sp/commands/dev-reverse.md` exists; 26 `.md` files in `commands/`; `allowed-tools: ["Read", "Write", "Edit", "Grep", "Glob", "Bash"]` |
+| AC-6 — Zero rd3 in dev-reverse.md | **MET** | `rg '\brd3\b'` on the file → 0 matches |
+| AC-7 — openai.yaml exists | **MET** | `plugins/sp/skills/reverse-engineering/agents/openai.yaml` — `name: reverse-engineering`, 0 `rd3` matches |
+| AC-8 — Structural invariants pass | **MET** | `bun test plugins/sp/tests/skill-structure.test.ts` → 38 pass, 0 fail, 248 expect(); R20 clean, R16b clean |
+| AC-9 — Lint + typecheck + full suite | **MET** | `bun run lint` exit 0 (biome + 7x tsc), `bun test ./apps/... ./packages ./plugins` → 2499 pass, 0 fail |
+| AC-10 — Same-commit README reconciliation | **MET** | Commit `8b67434` includes all four files + `plugins/sp/README.md`. README version `0.3.3`, command count `26` (three locations reconciled), `dev-reverse` in command index (line 126), `reverse-engineering/` in directory layout (lines 208-210), row in skill registry (line 272). |
+
+
+- No `rd3` substrings exist in any shipped sp plugin file (R20 gate confirmed by structural test and manual grep).
+- The ported SKILL.md maps all four `rd3:` cross-skill references in its Do-NOT-use list to sp equivalents (code-implementation, sys-debugging, spur-tdd). The `quick-grep` callout (no sp equivalent) was dropped per Q2 rationale.
+- README version reconciliation (0.3.1 → 0.3.3) and command count reconciliation (23/24 → 26) were bundled into the same commit per docs/99_PROJECT_CONSTITUTION.md sync rule.
+- Tier 2 and Tier 3 abandoned skills are not referenced anywhere in the migrated files.
+
+
+All 10 acceptance criteria are satisfied with concrete, reproducible evidence. Zero partials, zero failures. The migration is complete and verifiable.
 ### References
 
 - Feature: H1 (spur-dev umbrella skill)
