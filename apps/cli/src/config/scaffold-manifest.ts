@@ -89,4 +89,7 @@ export const SCAFFOLD_MANIFEST: readonly ScaffoldEntry[] = [
     { source: 'templates/docs/03_ARCHITECTURE.md', target: 'templates/docs/03_ARCHITECTURE.md' },
     { source: 'templates/docs/04_DESIGN.md', target: 'templates/docs/04_DESIGN.md' },
     { source: 'templates/docs/05_FEATURES.md', target: 'templates/docs/05_FEATURES.md' },
+    // AGENTS.md — agent entry point with indexed-context activation block (task 0232).
+    // Root-scoped and never overwritten — a customized AGENTS.md survives re-init.
+    { source: 'templates/AGENTS.md', target: 'AGENTS.md', root: true, preserve: true },
 ] as const;

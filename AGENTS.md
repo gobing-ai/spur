@@ -254,9 +254,16 @@ If a check fails, fix the root cause. **Never** bypass with `--no-verify`, `--fo
 
 ---
 
-## OpenWolf context
+## Indexed context
 
-@.wolf/OPENWOLF.md
+Project context lives in `.spur/context/` (gitignored) and is surfaced by the `sp:indexed-context` skill.
+Check it before re-reading files you may already have indexed:
 
-This project uses OpenWolf for context management. Read `.wolf/OPENWOLF.md` each session. Check
-`.wolf/cerebrum.md` before generating code. Check `.wolf/anatomy.md` before reading files.
+1. `.spur/context/anatomy.md` — one-line description + token estimate per file. Read before opening a file.
+2. `.spur/context/learnings.md` — project conventions, decisions, preferences. Read before generating code.
+3. `.spur/context/pitfalls.md` — dated "do-not-repeat" entries. Read before generating code.
+4. `.spur/context/buglog.md` — historical bug log. Read before fixing a bug.
+5. `.spur/context/memory.md` — session log. Append one line per significant action.
+6. `.spur/context/token-ledger.jsonl` — auto-tracked by hooks; never hand-edit.
+
+If `.spur/context/` is absent, proceed normally. Never block work on its absence.

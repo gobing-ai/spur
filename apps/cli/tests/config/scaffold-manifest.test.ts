@@ -43,8 +43,9 @@ describe('scaffold-manifest', () => {
     });
 
     test('has the expected entry count (updated when adding scaffolds)', () => {
-        // 16 original + 1 planning-pipeline + 2 idea/wrapup pipelines + 7 docs (root) + 7 docs templates + 1 brainstorm task template = 34
-        expect(SCAFFOLD_MANIFEST.length).toBe(34);
+        // 16 original + 1 planning-pipeline + 2 idea/wrapup pipelines + 7 docs (root) + 7 docs templates
+        // + 1 brainstorm task template + 1 AGENTS.md (root) = 35
+        expect(SCAFFOLD_MANIFEST.length).toBe(35);
     });
 
     test('docs entries are root-scoped and preserve-marked (R1 — task 0088)', () => {
@@ -56,10 +57,17 @@ describe('scaffold-manifest', () => {
         }
     });
 
-    test('non-docs entries are not root-scoped (target .spur/)', () => {
-        const nonDocs = SCAFFOLD_MANIFEST.filter((e) => !e.target.startsWith('docs/'));
+    test('non-docs entries are not root-scoped except AGENTS.md (task 0232)', () => {
+        const nonDocs = SCAFFOLD_MANIFEST.filter((e) => !e.target.startsWith('docs/') && e.target !== 'AGENTS.md');
         for (const entry of nonDocs) {
             expect(entry.root).not.toBe(true);
         }
+    });
+
+    test('AGENTS.md is root-scoped and preserve-marked (task 0232)', () => {
+        const agents = SCAFFOLD_MANIFEST.find((e) => e.target === 'AGENTS.md');
+        expect(agents).toBeDefined();
+        expect(agents?.root).toBe(true);
+        expect(agents?.preserve).toBe(true);
     });
 });

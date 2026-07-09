@@ -12,6 +12,9 @@ updated_at: 1970-01-01T00:00:00.000Z
 
 > Authoritative on **decisions**. Lower number wins — this doc overrides all others on decisions.
 > Each entry is append-only; supersession is by a new dated entry, never by editing an old one.
+> Only real cross-cutting decisions belong here — not implementation notes, not feature status, not
+> how-to guidance. Entries that grow past decision + reason are carrying mechanism that belongs in
+> `03`/`04`; link it instead of inlining it.
 
 ## ADR-001 — (example) Adopt this doc structure
 
@@ -24,4 +27,6 @@ updated_at: 1970-01-01T00:00:00.000Z
 <!--
 Add new ADRs here. Copy the entry shape above (Date, Status, Context, Decision, Reason).
 A decision that reverses a prior ADR adds a new entry that says "supersedes ADR-NNN".
+An Amendment records the decision delta + one-line reason — not the mechanism. Implementation
+paths, detailed semantics, and multi-paragraph rationale belong in 03/04, not in the amendment.
 -->

@@ -1,5 +1,5 @@
 {
-    "description": "Spur (sp) plugin hooks — task corpus write protection + destructive-command guard.",
+    "description": "Spur (sp) plugin hooks — task corpus write protection + indexed-context token-ledger tracking.",
     "hooks": {
         "PreToolUse": [
             {
@@ -9,6 +9,40 @@
                         "type": "command",
                         "command": "superskill hook run sp task-write-guard",
                         "timeout": 10
+                    }
+                ]
+            }
+        ],
+        "PostToolUse": [
+            {
+                "matcher": "Read|Write|Edit",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "superskill hook run sp context-post-tool",
+                        "timeout": 5
+                    }
+                ]
+            }
+        ],
+        "SessionStart": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "superskill hook run sp context-session-start",
+                        "timeout": 5
+                    }
+                ]
+            }
+        ],
+        "Stop": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "superskill hook run sp context-session-stop",
+                        "timeout": 5
                     }
                 ]
             }

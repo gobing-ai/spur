@@ -165,4 +165,114 @@ describe('spur init template copy', () => {
         expect(existsSync(join(tmplDir, '00_ADR.md'))).toBe(true);
         expect(existsSync(join(tmplDir, '05_FEATURES.md'))).toBe(true);
     });
+
+    test('AGENTS.md scaffold is copied to project root with indexed-context block (task 0232)', async () => {
+        const cwd = await createTempProject();
+        const { options } = await isolatedOptions(cwd);
+
+        expect(await main(['init'], options)).toBe(0);
+
+        const agentsPath = join(cwd, 'AGENTS.md');
+        expect(existsSync(agentsPath)).toBe(true);
+        const content = readFileSync(agentsPath, 'utf-8');
+        expect(content).toContain('.spur/context/');
+        expect(content).toContain('indexed-context');
+    });
+
+    test('AGENTS.md is preserved under --force (task 0232)', async () => {
+        const cwd = await createTempProject();
+        const { options } = await isolatedOptions(cwd);
+
+        expect(await main(['init'], options)).toBe(0);
+
+        const agentsPath = join(cwd, 'AGENTS.md');
+        writeFileSync(agentsPath, 'CUSTOM AGENTS — must survive re-init');
+
+        expect(await main(['init', '--force'], options)).toBe(0);
+        // Custom content is preserved (preserve: true — manifest never overwrites)
+        const afterForce = readFileSync(agentsPath, 'utf-8');
+        expect(afterForce).toContain('CUSTOM AGENTS — must survive re-init');
+        // Block injection still fires idempotently — appends the activation block
+        expect(afterForce).toContain('## Indexed context');
+    });
+
+    test('.gitignore gets .spur/context/ entry on init (task 0232)', async () => {
+        const cwd = await createTempProject();
+        const { options } = await isolatedOptions(cwd);
+
+        expect(await main(['init'], options)).toBe(0);
+
+        const gitignorePath = join(cwd, '.gitignore');
+        expect(existsSync(gitignorePath)).toBe(true);
+        const content = readFileSync(gitignorePath, 'utf-8');
+        expect(content).toContain('.spur/context/');
+    });
+
+    test('.gitignore append is idempotent — re-init does not duplicate entry (task 0232)', async () => {
+        const cwd = await createTempProject();
+        const { options } = await isolatedOptions(cwd);
+
+        expect(await main(['init'], options)).toBe(0);
+
+        // Manually re-run the append by calling init again with --force
+        expect(await main(['init', '--force'], options)).toBe(0);
+
+        const content = readFileSync(join(cwd, '.gitignore'), 'utf-8');
+        const matches = content.match(/\.spur\/context\//g) ?? [];
+        expect(matches.length).toBe(1);
+    });
+
+    test('--minimal mode still appends .spur/context/ to .gitignore (task 0232)', async () => {
+        const cwd = await createTempProject();
+        const { options } = await isolatedOptions(cwd);
+
+        expect(await main(['init', '--minimal'], options)).toBe(0);
+
+        const content = readFileSync(join(cwd, '.gitignore'), 'utf-8');
+        expect(content).toContain('.spur/context/');
+    });
+
+    test('existing AGENTS.md without indexed-context block gets block appended (task 0232)', async () => {
+        const cwd = await createTempProject();
+        // Pre-create AGENTS.md with custom content (no indexed-context block)
+        const agentsPath = join(cwd, 'AGENTS.md');
+        writeFileSync(agentsPath, '# My Project\n\nCustom content here.\n', 'utf-8');
+
+        const { options } = await isolatedOptions(cwd);
+        expect(await main(['init'], options)).toBe(0);
+
+        const content = readFileSync(agentsPath, 'utf-8');
+        // Original content preserved
+        expect(content).toContain('# My Project');
+        expect(content).toContain('Custom content here.');
+        // Block appended
+        expect(content).toContain('## Indexed context');
+        expect(content).toContain('.spur/context/anatomy.md');
+    });
+
+    test('existing AGENTS.md with indexed-context block is not duplicated (task 0232)', async () => {
+        const cwd = await createTempProject();
+        const agentsPath = join(cwd, 'AGENTS.md');
+        writeFileSync(agentsPath, '# My Project\n\n## Indexed context\n\nAlready has it.\n', 'utf-8');
+
+        const { options } = await isolatedOptions(cwd);
+        expect(await main(['init'], options)).toBe(0);
+
+        const content = readFileSync(agentsPath, 'utf-8');
+        const markerCount = (content.match(/## Indexed context/g) ?? []).length;
+        expect(markerCount).toBe(1);
+        expect(content).toContain('Already has it.');
+    });
+
+    test('--minimal mode still injects block into existing AGENTS.md (task 0232)', async () => {
+        const cwd = await createTempProject();
+        const agentsPath = join(cwd, 'AGENTS.md');
+        writeFileSync(agentsPath, '# Minimal Project\n', 'utf-8');
+
+        const { options } = await isolatedOptions(cwd);
+        expect(await main(['init', '--minimal'], options)).toBe(0);
+
+        const content = readFileSync(agentsPath, 'utf-8');
+        expect(content).toContain('## Indexed context');
+    });
 });

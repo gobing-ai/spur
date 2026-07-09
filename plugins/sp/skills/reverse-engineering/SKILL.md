@@ -56,7 +56,7 @@ Mode must not mix action verbs, subject areas, or serialization formats. For exa
 - Debugging a specific runtime failure. Use `sp:sys-debugging`.
 - Writing tests. Use `sp:spur-tdd`.
 - Quick structural code search. Use grep/glob tools directly.
-- Creating indexed context files. This skill may read `.wolf/` context, but it must not create or mutate it.
+- Creating indexed context files. This skill may read `.spur/context/` context, but it must not create or mutate it.
 
 ## Control Model
 
@@ -129,14 +129,14 @@ Execute phases in order. Stop at the phase boundary required by the selected mod
 ### Phase 1: Orient
 
 1. Identify project root and target path.
-2. Check whether `.wolf/anatomy.md` exists.
+2. Check whether `.spur/context/anatomy.md` exists.
 3. Locate manifests and config files: `package.json`, `bun.lockb`, `go.mod`, `Cargo.toml`, `pyproject.toml`, `requirements.txt`, `pom.xml`, `build.gradle`, Docker/Kubernetes files, CI files.
 4. Identify likely language, framework, package manager, runtime, and deploy model.
 5. Record uncertainty when inferred from naming or layout rather than manifest evidence.
 
 ### Phase 2: Index
 
-1. If `.wolf/anatomy.md` exists, use it to prioritize reads and reduce token usage.
+1. If `.spur/context/anatomy.md` exists, use it to prioritize reads and reduce token usage.
 2. Otherwise use file search to build a bounded map of source, config, tests, scripts, docs, migrations, and generated/vendor directories.
 3. Exclude or de-prioritize generated, vendored, build output, dependency cache, lockfile-only, binary-heavy, and snapshot-heavy paths unless they are directly relevant.
 4. For monorepos, identify packages/apps and either ask for scope or analyze each package at the requested depth if feasible.
@@ -324,14 +324,14 @@ Fallback behavior:
 
 ## Indexed Context Integration
 
-The OpenWolf-indexed-context layer is optional and opportunistic.
+The indexed-context layer is optional and opportunistic.
 
-1. If `.wolf/anatomy.md` exists, read it before raw file reads to prioritize high-value files.
-2. If `.wolf/cerebrum.md` exists, use it only for project preferences and known context.
-3. If `.wolf/buglog.json` exists, use it only as supporting evidence for known bug history.
-4. Do not create, update, or require `.wolf/` files.
+1. If `.spur/context/anatomy.md` exists, read it before raw file reads to prioritize high-value files.
+2. If `.spur/context/learnings.md` exists, use it only for project preferences and known context.
+3. If `.spur/context/buglog.md` exists, use it only as supporting evidence for known bug history.
+4. Do not create, update, or require `.spur/context/` files.
 5. Verify final claims against source files whenever source files are available.
-6. If `.wolf/` is absent, proceed normally without warning unless the user explicitly requested indexed context.
+6. If `.spur/context/` is absent, proceed normally without warning unless the user explicitly requested indexed context.
 
 ## Edge Cases
 

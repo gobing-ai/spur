@@ -167,7 +167,7 @@ pipeline step.
 
 ```
 plugins/sp/
-├── skills/                          # Domain knowledge + workflow docs (19 skills)
+├── skills/                          # Domain knowledge + workflow docs (20 skills)
 │   ├── brainstorm/                  # Structured ideation workflow
 │   │   ├── agents/openai.yaml
 │   │   ├── examples/ideation-example.md
@@ -190,6 +190,7 @@ plugins/sp/
 │   │   └── references/operations.md
 │   ├── dogfood-testing/             # Dogfood backbone — 4-phase protocol + report
 │   │   └── references/{monitor-ledger, report-template}.md
+│   ├── indexed-context/            # Cross-agent project context (anatomy, learnings, pitfalls, buglog, ledger)
 │   ├── parallel-execution/          # Fan-out decision framework + patterns
 │   │   └── references/{fan-out-patterns, result-synthesis}.md
 │   ├── spec-decomposition/          # Feature/spec → task-batch competency
@@ -215,7 +216,7 @@ plugins/sp/
 │   └── wayfinder/                   # Multi-session investigation maps (SKILL.md only)
 ├── commands/                        # 26 slash-command definitions
 ├── agents/                          # 2 specialist subagents (expert-spur, super-coder)
-├── hooks/                           # hooks.json + task-write-guard.{ts, test.ts}
+├── hooks/                           # hooks.json + task-write-guard.{ts,test.ts} + context-{session-start,post-tool,session-stop}.ts + context-hooks.test.ts
 ├── tests/                           # Plugin-structure tests (skill-structure.test.ts)
 ├── plugin.json                      # Marketplace entry
 └── README.md                        # This file
@@ -246,7 +247,7 @@ Tier 3 — Execution Layer (spur CLI + Guard Scripts)
 
 The single source of truth for domain knowledge and workflow documentation. Each skill is a
 self-contained knowledge module that teaches the agent how to operate one slice of the Spur CLI
-surface or run one workflow. All 19 skills target the same five platforms: `claude-code`, `codex`,
+surface or run one workflow. All 20 skills target the same five platforms: `claude-code`, `codex`,
 `antigravity`, `opencode`, `openclaw`.
 
 | Skill | Ver | Domain |
@@ -270,6 +271,7 @@ surface or run one workflow. All 19 skills target the same five platforms: `clau
 | `daily-summary` | 1.0.0 | Daily summary report generator — orchestrates ccusage CLI + git history into structured markdown summaries |
 | `doc-evolve` | 1.0 | Key-document evolution per `docs/99_PROJECT_CONSTITUTION.md` — drift audits, same-commit sync checks, frontmatter-contract verification, machine-appended lessons |
 | `reverse-engineering` | 1.1 | Codebase analysis / HLD generation / audit — depth-driven reverse engineering with orthogonal mode, focus, and format controls; backs `/sp:dev-reverse` |
+| `indexed-context` | 1.0 | Cross-agent project context — anatomy/learnings/pitfalls/buglog/memory in `.spur/context/`; hook-tracked token-ledger; graceful degradation on agents without hooks |
 
 Each skill directory contains:
 

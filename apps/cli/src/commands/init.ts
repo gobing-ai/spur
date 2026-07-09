@@ -21,6 +21,31 @@ const GLOBAL_CONFIG_EXAMPLE = 'config.example.yaml';
 /** Canonical global user config filename written into `~/.config/spur/`. */
 const GLOBAL_CONFIG_FILE = 'config.yaml';
 
+/** Idempotency marker — the heading searched for in an existing AGENTS.md. */
+const INDEXED_CONTEXT_MARKER = '## Indexed context';
+
+/**
+ * Activation block appended to an existing AGENTS.md when the marker is absent.
+ * Mirrors the block embedded in the bundled AGENTS.md template (see SCAFFOLD_MANIFEST).
+ */
+const INDEXED_CONTEXT_BLOCK = `
+---
+
+## Indexed context
+
+Project context lives in \`.spur/context/\` (gitignored) and is surfaced by the \`sp:indexed-context\` skill.
+Check it before re-reading files you may already have indexed:
+
+1. \`.spur/context/anatomy.md\` — one-line description + token estimate per file. Read before opening a file.
+2. \`.spur/context/learnings.md\` — project conventions, decisions, preferences. Read before generating code.
+3. \`.spur/context/pitfalls.md\` — dated "do-not-repeat" entries. Read before generating code.
+4. \`.spur/context/buglog.md\` — historical bug log. Read before fixing a bug.
+5. \`.spur/context/memory.md\` — session log. Append one line per significant action.
+6. \`.spur/context/token-ledger.jsonl\` — auto-tracked by hooks; never hand-edit.
+
+If \`.spur/context/\` is absent, proceed normally. Never block work on its absence.
+`;
+
 /** Files created or skipped during a scaffold, reported in the result envelope. */
 interface ScaffoldResult {
     created: string[];
@@ -181,6 +206,25 @@ export function registerInitCommand(program: Command, context: CliContext): void
             const agentsDir = join(context.cwd, CLI_CONFIG.configDir, 'agents');
             await context.fs.ensureDir(agentsDir);
             await writeIfNew(context, join(agentsDir, '.gitkeep'), '', force, result);
+            // Ensure `.spur/context/` (machine-generated state, written by indexed-context
+            // hooks) is gitignored. Runs in all modes — hooks create the dir regardless of --minimal.
+            // Idempotent: skips the append if the entry already exists (even inside a comment).
+            const gitignorePath = join(context.cwd, '.gitignore');
+            const contextEntry = '.spur/context/';
+            if (await context.fs.exists(gitignorePath)) {
+                const existing = await context.fs.readFile(gitignorePath);
+                if (!existing.includes(contextEntry)) {
+                    await context.fs.writeFile(
+                        gitignorePath,
+                        `${existing.trimEnd()}\n\n# Spur indexed-context (machine-generated)\n${contextEntry}\n`,
+                    );
+                }
+            } else {
+                await context.fs.writeFile(
+                    gitignorePath,
+                    `# Spur indexed-context (machine-generated)\n${contextEntry}\n`,
+                );
+            }
 
             if (!minimal) {
                 // Resolve the bundled config root once; fall back gracefully if absent
@@ -204,6 +248,18 @@ export function registerInitCommand(program: Command, context: CliContext): void
                             result,
                         );
                     }
+                }
+            }
+
+            // Idempotently inject the indexed-context activation block into an existing
+            // AGENTS.md that lacks it. Fresh projects already get it from the template;
+            // existing projects with a pre-existing AGENTS.md need the block appended.
+            const agentsMdPath = join(context.cwd, 'AGENTS.md');
+            if (await context.fs.exists(agentsMdPath)) {
+                const existing = await context.fs.readFile(agentsMdPath);
+                if (!existing.includes(INDEXED_CONTEXT_MARKER)) {
+                    await context.fs.writeFile(agentsMdPath, `${existing.trimEnd()}${INDEXED_CONTEXT_BLOCK}`);
+                    result.created.push(agentsMdPath);
                 }
             }
 

@@ -53,7 +53,7 @@ When a change touches one of these, the listed doc MUST be updated in the **same
 
 | ID | Trigger | Doc(s) |
 |----|---------|--------|
-| T1 | New cross-cutting decision | `00` first, then `03` mechanism |
+| T1 | New cross-cutting decision (entry = decision + one-line reason; amendment = decision delta only — mechanism goes in `03`/`04`, not the amendment) | `00` first, then `03` mechanism |
 | T3 | Command/flag/config/schema/DTO added/changed | `04` + `AGENTS.md` |
 | T4 | Feature ships or changes state | `05` row |
 | T6 | Scope added / cut / deferred | `01` |

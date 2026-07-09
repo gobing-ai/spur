@@ -246,6 +246,11 @@ Entry template:
 7. **Retrofit rule:** the entry template binds **new entries and amendments only**. Historical
    entries are never restructured to match it — append-only beats stylistic consistency. The
    non-entry preamble is normal editable text.
+8. **Amendments record the decision delta.** An `**Amendment**` block records *what changed about the
+   decision* — the new choice and its one-line reason — plus a `Detail:` pointer for mechanism.
+   Implementation file paths, detailed semantics, and multi-paragraph rationale belong in `03`/`04`,
+   not in the amendment body. If an amendment would carry more than a few lines of non-decision text,
+   the mechanism has leaked in; link it instead of inlining it.
 
 ### 6.2 `docs/01_PRD.md`
 

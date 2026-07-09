@@ -16,7 +16,9 @@ The single source of truth for Spur's cross-cutting **decisions**. Each `ADR-NNN
 decided* and *the one-line reason*; mechanism and consequences live in `03`/`04` via the `Detail:`
 pointer. Entry format and maintenance rules: `99 §6.1` (append-only; dated amendments and
 superseding entries only; gaps stubbed, never reused; the template binds new entries — historical
-entries are not restructured). There is no `06_DECISIONS.md`.
+entries are not restructured). There is no `06_DECISIONS.md`. Only real cross-cutting decisions
+belong here — not implementation notes, not feature status, not how-to guidance. Entries that grow
+past decision + reason are carrying mechanism that belongs in `03`/`04`; link it instead of inlining it.
 
 ---
 

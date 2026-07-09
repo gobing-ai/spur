@@ -54,6 +54,13 @@ rules:
     evaluator:
       type: rg
       config:
-        # Match imports from modules with known module-eval side effects.
-        # Add new patterns here as alternations (|) when new cases are discovered.
-        pattern: "from ['\"].*task-kanban/useTasks['\"]"
+        # Match imports from modules with KNOWN, ACTIVE module-eval side effects.
+        # IMPORTANT: this rule is INERT unless a pattern is present. When a new
+        # side-effect module is discovered (CI-only ordering failure traced to
+        # an import-time call), add its import pattern here as a string. Remove
+        # the pattern once the source module is fixed (side effects made lazy).
+        #
+        # RESOLVED modules (patterns removed after fix — kept as history):
+        #   - task-kanban/useTasks — fixed 2026-07-08, commit 3937d31
+        #     (resolveApiUrl/api.task.list converted to lazy dynamic imports)
+        pattern: "__no_active_side_effect_modules__"

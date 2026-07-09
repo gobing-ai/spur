@@ -140,7 +140,6 @@ docs/.ftree/
 .pi-lens/
 
 /docs/.workflow-runs
-.wolf/
 /.claude/last-session.json
 
 /docs/tasks/kanban.md
@@ -158,3 +157,5 @@ docs/.ftree/
 /docs/memo.md
 
 .scratch/
+# Spur indexed-context (machine-generated)
+.spur/context/
