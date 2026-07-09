@@ -10,7 +10,7 @@ lifecycle step a deterministic entry point.
 > orchestration, history analytics, and operational visibility. The `sp` plugin is the Claude Code
 > plugin surface for that toolkit.
 
-- **Marketplace entry:** `name: "sp"`, `version: "0.3.1"`, `source: "./plugins/sp"` (`plugin.json`,
+- **Marketplace entry:** `name: "sp"`, `version: "0.3.3"`, `source: "./plugins/sp"` (`plugin.json`,
   kept in sync with `.claude-plugin/marketplace.json`).
 - **Owner:** Robin Min.
 
@@ -122,7 +122,8 @@ list this README is checked against.
 | `dev-dogfood` | Dogfood an agent skill/command/CLI — drive it end-to-end with bounded auto-fix, self-monitor, and emit a comprehensive report |
 | `dev-fixall` | Fix all lint, type, and test errors systematically across the working tree |
 | `dev-simplify` | Simplify recently-changed code for clarity without changing behavior — incremental, test-after-each, revert on regression |
-| `dev-arch` | Survey a codebase (or module tree) for shallow modules and deepening opportunities — emit a ranked MARKDOWN candidate report that feeds the planning half; never auto-refactors |
+| `dev-arch` | Survey a codebase (or module tree) | for shallow modules and deepening opportunities — emit a ranked MARKDOWN candidate report that feeds the planning half; never auto-refactors |
+| `dev-reverse` | Reverse-engineer a codebase — analyze unfamiliar repos, generate HLD/architecture docs, audit quality/security, and produce onboarding documentation |
 | `dev-gitmsg` | Generate conventional commit message(s) from staged changes via per-file summarization, optionally commit |
 | `dev-changelog` | Generate changelog from git commits |
 
@@ -166,7 +167,7 @@ pipeline step.
 
 ```
 plugins/sp/
-├── skills/                          # Domain knowledge + workflow docs (18 skills)
+├── skills/                          # Domain knowledge + workflow docs (19 skills)
 │   ├── brainstorm/                  # Structured ideation workflow
 │   │   ├── agents/openai.yaml
 │   │   ├── examples/ideation-example.md
@@ -204,12 +205,15 @@ plugins/sp/
 │   │                      execution-workflow, feature-link-helper, gate-checklists, glossary,
 │   │                      planning-workflow, product-planning  (10 files)
 │   ├── spur-tdd/                    # TDD workflow companion (SKILL.md only)
+│   ├── reverse-engineering/         # Codebase reverse engineering / HLD / audit
+│   │   ├── agents/openai.yaml
+│   │   └── SKILL.md
 │   ├── sys-architecture/            # Architecture / ADR judgment competency
 │   │   └── references/decision-method.md
 │   ├── sys-debugging/               # Structured debugging protocol
 │   │   └── references/debugging-protocol.md
 │   └── wayfinder/                   # Multi-session investigation maps (SKILL.md only)
-├── commands/                        # 23 slash-command definitions
+├── commands/                        # 26 slash-command definitions
 ├── agents/                          # 2 specialist subagents (expert-spur, super-coder)
 ├── hooks/                           # hooks.json + task-write-guard.{ts, test.ts}
 ├── tests/                           # Plugin-structure tests (skill-structure.test.ts)
@@ -242,7 +246,7 @@ Tier 3 — Execution Layer (spur CLI + Guard Scripts)
 
 The single source of truth for domain knowledge and workflow documentation. Each skill is a
 self-contained knowledge module that teaches the agent how to operate one slice of the Spur CLI
-surface or run one workflow. All 18 skills target the same five platforms: `claude-code`, `codex`,
+surface or run one workflow. All 19 skills target the same five platforms: `claude-code`, `codex`,
 `antigravity`, `opencode`, `openclaw`.
 
 | Skill | Ver | Domain |
@@ -265,6 +269,7 @@ surface or run one workflow. All 18 skills target the same five platforms: `clau
 | `wayfinder` | 1.0.0 | Multi-session investigation maps — chart a spur feature as the map when the destination itself is foggy, then resolve one ticket per session until the route is clear |
 | `daily-summary` | 1.0.0 | Daily summary report generator — orchestrates ccusage CLI + git history into structured markdown summaries |
 | `doc-evolve` | 1.0 | Key-document evolution per `docs/99_PROJECT_CONSTITUTION.md` — drift audits, same-commit sync checks, frontmatter-contract verification, machine-appended lessons |
+| `reverse-engineering` | 1.1 | Codebase analysis / HLD generation / audit — depth-driven reverse engineering with orthogonal mode, focus, and format controls; backs `/sp:dev-reverse` |
 
 Each skill directory contains:
 
@@ -285,11 +290,11 @@ Skills contain zero validation logic — the CLI is the gate.
 
 Thin slash-command wrappers that parse user arguments and delegate to the corresponding skill. Each
 command is a user-facing entry point that bridges natural language to skill invocation. There are
-**24 commands** (see the Command index above for the full list), organized by the surface they wrap:
+**26 commands** (see the Command index above for the full list), organized by the surface they wrap:
 
 | Prefix | Count | Delegates to | Purpose |
 |--------|-------|-------------|---------|
-| `dev-*` | 18 | `sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:code-simplification`, `sp:brainstorm`, `sp:dogfood-testing`, `sp:parallel-execution`, inline | The dev-workflow surface — planning, execution, batch, wrap-up, review/verify, hygiene |
+| `dev-*` | 20 | `sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:code-simplification`, `sp:brainstorm`, `sp:dogfood-testing`, `sp:parallel-execution`, inline | The dev-workflow surface — planning, execution, batch, wrap-up, review/verify, hygiene |
 | `rule-*` | 3 | `sp:spur-cli` | The rule surface — `rule-add`, `rule-refine`, `rule-scan` |
 | `workflow-*` | 2 | `sp:spur-cli` | The workflow surface — `workflow-add`, `workflow-refine` |
 | `spur-init` | 1 | `sp:doc-evolve` | Project bootstrap (`spur init`) with doc-evolve integration |
@@ -363,7 +368,7 @@ the hard gate that the soft skill cannot enforce on its own.
 ```mermaid
 graph TB
     subgraph "User entry points"
-        CMD["Commands<br/>23 slash commands<br/>/sp:dev-plan, /sp:dev-runall, /sp:rule-add, ..."]
+        CMD["Commands<br/>26 slash commands<br/>/sp:dev-plan, /sp:dev-runall, /sp:rule-add, ..."]
         AGENT["Agents<br/>2 subagents<br/>expert-spur, super-coder"]
         HOOK["PreToolUse hook<br/>Write|Edit matcher"]
     end

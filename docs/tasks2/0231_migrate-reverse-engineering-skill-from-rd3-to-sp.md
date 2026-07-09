@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "migrate reverse-engineering skill and dev-reverse command from rd3 to sp"
 description: "Port the rd3 reverse-engineering skill into the sp plugin. Migrate three files (SKILL.md, commands/dev-reverse.md, agents/openai.yaml) with the structural invariants applied: no rd3 references (R20), no cross-skill sp: refs to non-existent skills (R16b), and all wording normalized to sp vocabulary. Update README.md command index and directory layout as part of the same commit."
-status: backlog
+status: done
 type: task
 profile: standard
 feature_id: H1
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: ["0227"]
 created_at: "2026-07-08T23:45:00.000Z"
-updated_at: "2026-07-08T23:45:00.000Z"
+updated_at: "2026-07-09T00:24:26.493Z"
 ---
 
 ## 0231. migrate reverse-engineering skill and dev-reverse command from rd3 to sp
@@ -232,15 +232,43 @@ A: Top-level plugin agents are subject to `super-coder` style composition — th
 
 ### Solution
 
-_Filled during implementation. Each step below cites file:line for traceability. **P1 — file ports executed** at `plugins/sp/skills/reverse-engineering/SKILL.md:1`, `plugins/sp/skills/reverse-engineering/agents/openai.yaml:1`, `plugins/sp/commands/dev-reverse.md:1`, with the README reconciliation at `plugins/sp/README.md:13`.
+**P1–P4 — three file ports + README reconciliation** executed in one sweep:
 
+- **SKILL.md** (`plugins/sp/skills/reverse-engineering/SKILL.md:1`): verbatim port of the rd3 source
+  with mechanical prefix updates. `see_also` reduced from 4 entries to 1 (`sp:source-driven-development`
+  at `plugins/sp/skills/reverse-engineering/SKILL.md:31`). Title heading `rd3:` → `sp:` at
+  `plugins/sp/skills/reverse-engineering/SKILL.md:36`. Do-NOT-use list mapped to sp equivalents
+  (`sp:code-implementation`, `sp:sys-debugging`, `sp:spur-tdd`) at lines 58-61; `rd3:quick-grep`
+  dropped. Additional Resources collapsed to one entry (`sp:source-driven-development`) at line 384.
+  Indexed Context section de-branded from `rd3:indexed-context` to generic framing at line 330.
+  `updated_at` timestamp bumped to 2026-07-09.
+
+- **openai.yaml** (`plugins/sp/skills/reverse-engineering/agents/openai.yaml:1`): verbatim port.
+  No `rd3` substrings in the source — no edits needed.
+
+- **dev-reverse.md** (`plugins/sp/commands/dev-reverse.md:1`): verbatim port with `allowed-tools`
+  extended to `["Read", "Write", "Edit", "Grep", "Glob", "Bash"]` (Bash added for CLI delegation
+  parity). All `rd3:reverse-engineering` → `sp:reverse-engineering`; delegation example updated to
+  `Skill(skill="sp:reverse-engineering", args="$ARGUMENTS")` at `plugins/sp/commands/dev-reverse.md:83`.
+  Quick Start examples `/rd3:dev-reverse` → `/sp:dev-reverse`.
+
+- **README.md** (`plugins/sp/README.md:13,212,245,288,366`): 10 edits. Version `0.3.1` → `0.3.3`
+  at line 13. Command count `23/24` → `26` at lines 212, 288, 366. dev-* count `18` → `20`.
+  Skill count `18` → `19`. Command index: `dev-reverse` row after `dev-arch` at line 126.
+  Directory layout: `reverse-engineering/` block at lines 208-210. Skill registry: row at line 272.
 
 ### Testing
 
-<!-- Coverage: N/A for documentation-only tasks; otherwise, line + branch coverage percentages. -->
+Coverage: N/A (documentation-only task — no code changes under test coverage scope).
 
-_Filled during implementation._
-
+Verification:
+- `bun test plugins/sp/tests/skill-structure.test.ts` — 38 pass, 0 fail, 248 expect() calls (R20, R16b, R16c, R16d all clean).
+- `bun run lint` + per-workspace typecheck — clean.
+- `bun run build` — exits 0 (cli + server + web).
+- `bun run test-cf` — exits 0 (Workers runtime tests).
+- `bun test ./apps/cli ./apps/server ./apps/web ./packages ./plugins` — 2499 pass, 0 fail, 6943 expect() calls.
+- `rg '\brd3\b' plugins/sp/skills/reverse-engineering/ plugins/sp/commands/dev-reverse.md` — zero matches.
+- `spur task check 0231 --strict` — PASS.
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
@@ -255,3 +283,9 @@ _Filled during implementation._
 - sp plugin README: `plugins/sp/README.md`
 - Super-reviewer (existing sp subagent with `openai.yaml` pattern precedent): `plugins/sp/skills/brainstorm/agents/openai.yaml`
 - Task 0227 (introduced three-dimensional review; found super-reviewer.md's `sp:anti-hallucination` is a latent dangling reference the current R16b doesn't catch): `docs/tasks2/0227_enhance-the-review-capability-in-plugin-sp.md`
+### History
+
+- 2026-07-09T00:19:54.049Z backlog → todo (system)
+- 2026-07-09T00:19:54.235Z todo → wip (system)
+- 2026-07-09T00:24:26.144Z wip → testing (system)
+- 2026-07-09T00:24:26.493Z testing → done (system)
