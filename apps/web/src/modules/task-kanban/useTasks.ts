@@ -3,8 +3,8 @@ import { api, resolveApiUrl } from '../../lib/rpc-client';
 import type { TaskSummary } from './types';
 
 const POLL_INTERVAL_MS = 5_000;
-const SSE_URL = `${resolveApiUrl()}/events/planning`;
 type ListFn = (query?: { folder?: string; status?: string; parent?: string }) => Promise<{ data: unknown }>;
+const sseUrl = () => `${resolveApiUrl()}/events/planning`;
 const defaultListTasks: ListFn = (query = {}) => api.task.list(query);
 
 /** Pure refresh factory — exported for unit testing without mocking the oRPC client. */
@@ -133,7 +133,7 @@ export class TaskStore {
         if (this.eventSource) return;
         if (typeof EventSource === 'undefined') return;
 
-        const es = new EventSource(SSE_URL);
+        const es = new EventSource(sseUrl());
         this.eventSource = es;
 
         es.onopen = this.handleSSEOpen;
@@ -156,7 +156,11 @@ export class TaskStore {
     }
 }
 
-const sharedStore = new TaskStore();
+let _sharedStore: TaskStore | null = null;
+function getSharedStore(): TaskStore {
+    if (!_sharedStore) _sharedStore = new TaskStore();
+    return _sharedStore;
+}
 
 /**
  * Hook for task data with SSE stream + polling fallback.
@@ -179,7 +183,7 @@ export function useTasks(listFn?: ListFn) {
     if (listFn && !localStore.current) {
         localStore.current = new TaskStore(listFn);
     }
-    const store = localStore.current ?? sharedStore;
+    const store = localStore.current ?? getSharedStore();
 
     useEffect(() => {
         if (listFn && localStore.current) {
