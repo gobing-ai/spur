@@ -23,17 +23,8 @@ mock.module('@uiw/react-md-editor', () => ({
         },
     ),
 }));
-mock.module('../../../src/lib/rpc-client', () => ({
-    api: {
-        task: {
-            show: async () => ({
-                data: { content: '', wbs: '0001', name: 'Test', status: 'todo', frontmatter: {}, filePath: 'a.md' },
-            }),
-        },
-    },
-    resolveApiUrl: () => 'http://localhost:3000/api',
-}));
-
+// Shared full-surface rpc-client mock — prevents "last mock wins" starvation
+import '../../test-helpers/rpc-client-mock';
 mock.module('@dnd-kit/core', () => ({
     DndContext: ({ children }: { children: unknown }) => children,
     DragOverlay: ({ children }: { children: unknown }) => children,

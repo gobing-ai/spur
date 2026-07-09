@@ -4,7 +4,7 @@ try {
     GlobalRegistrator.register();
 } catch {} // already registered in suite
 
-import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import type { TaskSummary } from '../../../src/modules/task-kanban/types';
@@ -99,14 +99,7 @@ mock.module('@dnd-kit/utilities', () => ({
 const KanbanBoard = (await import('../../../src/modules/task-kanban/KanbanBoard')).default;
 
 afterAll(teardownHappyDom);
-afterEach(() => {
-    cleanup();
-    transitionCalls.length = 0;
-    createCalls.length = 0;
-    actionCalls.length = 0;
-    transitionImpl = async () => ({ ok: true });
-    capturedOnDragStart = null;
-    // Restore the original rpc-client mock (sort/lane-defaults/error tests may have changed it)
+const restoreMock = () => {
     mock.module('../../../src/lib/rpc-client', () => ({
         api: {
             task: {
@@ -139,6 +132,20 @@ afterEach(() => {
         },
         resolveApiUrl: () => 'http://localhost:3000/api',
     }));
+};
+
+beforeEach(() => {
+    restoreMock();
+});
+
+afterEach(() => {
+    cleanup();
+    transitionCalls.length = 0;
+    createCalls.length = 0;
+    actionCalls.length = 0;
+    transitionImpl = async () => ({ ok: true });
+    capturedOnDragStart = null;
+    restoreMock();
 });
 
 function renderBoard(props: Partial<Parameters<typeof KanbanBoard>[0]> = {}) {

@@ -2,26 +2,8 @@ import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'b
 import { GlobalRegistrator } from '@happy-dom/global-registrator';
 import { cleanup } from '@testing-library/react';
 
-// Must mock rpc-client before any module that transitively imports it
-// (index.tsx → useTaskParams/useTasks → rpc-client). resolveApiUrl reads
-// location.origin, which happy-dom's URL() rejects at module-init time.
-mock.module('../../../src/lib/rpc-client', () => ({
-    resolveApiUrl: () => 'http://localhost:3000/api',
-    fetchWithTimeout: mock(async (_r: Request) => new Response()),
-    api: { task: { transition: mock(async () => {}) } },
-}));
-
-mock.module('../../../src/modules/task-kanban/TaskDetail', () => ({
-    default: () => null,
-}));
-
-mock.module('../../../src/modules/task-kanban/useTasks', () => ({
-    useTasks: () => ({ tasks: [{ wbs: 'A1', title: 'Test', status: 'todo' }], loading: false }),
-}));
-
-mock.module('../../../src/modules/task-kanban/useTaskParams', () => ({
-    useTaskParams: () => ({ selected: 'A1', selectTask: () => {}, filters: {}, setFilter: () => {} }),
-}));
+// Shared full-surface rpc-client mock — prevents "last mock wins" starvation
+import '../../test-helpers/rpc-client-mock';
 
 import { teardownHappyDom } from '../../happy-dom';
 

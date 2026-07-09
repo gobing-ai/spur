@@ -1,13 +1,11 @@
-import { afterAll, afterEach, beforeAll, describe, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { GlobalRegistrator } from '@happy-dom/global-registrator';
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import type { FeatureSummary } from '../../../src/lib/feature-types';
 import { isWebModule } from '../../../src/modules/discover';
 
-mock.module('../../../src/lib/rpc-client', () => ({
-    resolveApiUrl: () => 'http://localhost:3000/api',
-    fetchWithTimeout: (request: Request) => fetch(request),
-}));
+// Shared full-surface rpc-client mock — prevents "last mock wins" starvation
+import '../../test-helpers/rpc-client-mock';
 
 import FeatureDetail from '../../../src/modules/features/FeatureDetail';
 import FeaturesShell from '../../../src/modules/features/FeaturesShell';

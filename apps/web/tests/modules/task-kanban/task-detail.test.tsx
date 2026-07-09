@@ -4,7 +4,7 @@ try {
     GlobalRegistrator.register();
 } catch {} // already registered in suite
 
-import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import type { ComponentType } from 'react';
 import type { TaskSummary } from '../../../src/modules/task-kanban/types';
@@ -54,38 +54,45 @@ let bodyImpl: () => Promise<unknown> = async () => ({ data: { wbs: '0001', fileP
 let actionImpl: () => Promise<unknown> = async () => ({ data: { runId: 'r1', action: 'run', status: 'queued' } });
 let listImpl: () => Promise<unknown> = async () => ({ data: [] });
 
-mock.module('../../../src/lib/rpc-client', () => ({
-    api: {
-        task: {
-            show: (input: { wbs: string }) => {
-                showCalls.push(input.wbs);
-                return showImpl();
-            },
-            body: (input: { wbs: string; body: string }) => {
-                bodyCalls.push(input);
-                return bodyImpl();
-            },
-            action: (input: { wbs: string; action: string; channel?: string; skipDeps?: boolean }) => {
-                actionCalls.push(input);
-                return actionImpl();
-            },
-            list: () => {
-                listCalls.push(listCalls.length + 1);
-                return listImpl();
-            },
-        },
-    },
-    resolveApiUrl: () => 'http://localhost:3000/api',
-}));
+// Shared full-surface rpc-client mock — prevents "last mock wins" starvation
+import '../../test-helpers/rpc-client-mock';
+afterAll(teardownHappyDom);
 
 const actionCalls: Array<{ wbs: string; action: string; channel?: string; skipDeps?: boolean }> = [];
 const listCalls: number[] = [];
 
-import TaskDetail from '../../../src/modules/task-kanban/TaskDetail';
+const restoreMockTD = () => {
+    mock.module('../../../src/lib/rpc-client', () => ({
+        api: {
+            task: {
+                show: (input: { wbs: string }) => {
+                    showCalls.push(input.wbs);
+                    return showImpl();
+                },
+                body: (input: { wbs: string; body: string }) => {
+                    bodyCalls.push(input);
+                    return bodyImpl();
+                },
+                action: (input: { wbs: string; action: string; channel?: string; skipDeps?: boolean }) => {
+                    actionCalls.push(input);
+                    return actionImpl();
+                },
+                list: () => {
+                    listCalls.push(listCalls.length + 1);
+                    return listImpl();
+                },
+                // Inherit full-surface defaults for methods this file doesn't override
+                create: async () => ({ data: { wbs: '0003', filePath: 'c.md' } }),
+                transition: async () => ({ ok: true }),
+                folders: async () => ({ data: [] }),
+            },
+        },
+        resolveApiUrl: () => 'http://localhost:3000/api',
+    }));
+};
 
-afterAll(teardownHappyDom);
-
-afterEach(() => {
+beforeEach(() => {
+    restoreMockTD();
     cleanup();
     showCalls.length = 0;
     bodyCalls.length = 0;
@@ -97,6 +104,8 @@ afterEach(() => {
     actionImpl = async () => ({ data: { runId: 'r1', action: 'run', status: 'queued' } });
     listImpl = async () => ({ data: [] });
 });
+
+import TaskDetail from '../../../src/modules/task-kanban/TaskDetail';
 
 const task: TaskSummary = {
     wbs: '0001',
