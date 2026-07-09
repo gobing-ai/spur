@@ -39,8 +39,8 @@ interface SseEnvelope {
     payload: Record<string, unknown> | null;
 }
 
-const HISTORY_URL = `${resolveApiUrl()}/events/history`;
-const SSE_URL = `${resolveApiUrl()}/events/planning`;
+const sseUrl = () => `${resolveApiUrl()}/events/planning`;
+const historyUrl = (limit: number) => `${resolveApiUrl()}/events/history?limit=${limit}`;
 const HISTORY_LIMIT = 100;
 
 /**
@@ -397,7 +397,7 @@ export default function SystemEventsTab() {
         const controller = new AbortController();
         (async () => {
             try {
-                const res = await fetch(`${HISTORY_URL}?limit=${HISTORY_LIMIT}`, { signal: controller.signal });
+                const res = await fetch(historyUrl(HISTORY_LIMIT), { signal: controller.signal });
                 if (!res.ok) throw new Error(`history fetch failed: ${res.status}`);
                 const raw: unknown = await res.json();
                 const body = parseHistoryResponse(raw);
@@ -415,7 +415,7 @@ export default function SystemEventsTab() {
     // Live tail via SSE — appends each new event to the top of the list.
     useEffect(() => {
         if (typeof EventSource === 'undefined') return;
-        const es = new EventSource(SSE_URL);
+        const es = new EventSource(sseUrl());
         es.onopen = () => {
             setSseStatus('live');
         };
@@ -719,13 +719,18 @@ function LivenessStrip({
  * render and the first client render match; updates after mount.
  */
 function useMediaQuery(query: string): boolean {
-    const [matches, setMatches] = useState(false);
+    // useSyncExternalStore is not available — fall back to a state+listener
+    // pair. React 18's useSyncExternalStore would be ideal, but this module
+    // doesn't pull it in. Instead we use a manual subscription that updates
+    // state on query changes.
+    const [matches, setMatches] = useState(() => {
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+        return window.matchMedia(query).matches;
+    });
     useEffect(() => {
-        // Guard environments without matchMedia (jsdom test runs, SSR).
         if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
         const mql = window.matchMedia(query);
         const onChange = () => setMatches(mql.matches);
-        onChange();
         mql.addEventListener('change', onChange);
         return () => mql.removeEventListener('change', onChange);
     }, [query]);
