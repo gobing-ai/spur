@@ -544,328 +544,169 @@ Amends ADR-001's stale package inventory (four local packages: app, contracts, c
 
 ## ADR-022: Task & Feature Lifecycle Runs on `spur workflow`
 
-**Status:** Accepted (design) · **Date:** 2026-06-11
+**Status:** Accepted · **Date:** 2026-06-11
 
-**Decision.** Task and feature status lifecycles are workflow definitions executed through
-`spur workflow` (`@gobing-ai/ts-dual-workflow-engine`) — not a hand-rolled FSM or transition table
-inside the task domain. Lifecycle definitions are YAML under `./config/workflows` (ADR-015 home);
-gates (e.g. `spur task check` before Testing) are workflow guards; customization rides the
-engine's EventBus pub/sub seam (`on_transition` / `on_guard_fail` / `on_complete`) — balancing
-state mutation against maximal reuse of existing engine functionality. The planning layer is
-thereby the engine's **first demanding first-party consumer**: capability gaps (long-lived,
-externally-triggered lifecycles; pause/continue; HITL approval) are closed **upstream** per the
-shared-library evolution rule, never by re-implementing locally. One invariant: the markdown
-file's frontmatter `status` remains the single source of truth; engine persistence is derived and
-rehydratable from the files (no second authority).
+**Decision.** Task and feature status lifecycles are `spur workflow` YAML definitions backed by
+`@gobing-ai/ts-dual-workflow-engine` — not hand-rolled FSMs. Gates are workflow guards;
+customization rides the engine's EventBus. The markdown frontmatter `status` field remains the
+SSOT; engine state is derived and rehydratable.
 
-**Why.** Building a lifecycle engine beside an owned workflow engine would duplicate the exact
-capability the engine exists to provide — and being its first user is what pushes it to mature.
+**Why.** Building a lifecycle engine beside an owned workflow engine would duplicate the capability
+the engine exists to provide.
 
-**Detail:** `03 §12.2–12.3`; upstream gaps tracked as ts-libs tasks before the dependent waves.
+**Detail:** `03 §12.2–12.3`.
 
-**Addendum (2026-06-15): Pipeline-pause integration deferred.** The `task-pipeline.yaml` approve
-gate uses `hitl.confirm` (interactive), not `pause: true`. The workspace schema
-(`apps/cli/schemas/state-machine-workflow.schema.json:38`) already supports `pause: true`, and
-`spur workflow continue` + `WorkflowService.continuePaused` are shipped and tested (task 0063). The
-blocker is that a user's **globally installed** `@gobing-ai/spur` may be a stale version whose
-bundled schema lacks `pause` — adding `pause: true` to the shipped `task-pipeline.yaml` now would
-make `spur workflow validate` fail for those users. **Trigger to flip:** when the global
-`@gobing-ai/spur` package is refreshed to ship the `pause`-aware schema, change the `approve` state
-to `pause: true` and re-point the pipeline's HITL gate at `spur workflow continue`. Until then,
-the working `hitl.confirm` gate stays in place. Task 0071 R4 tracks this.
+**Amendment (2026-06-15) — pipeline-pause deferred.** The approve gate uses `hitl.confirm`, not
+`pause: true`. Flip when the globally-installed `@gobing-ai/spur` ships the pause-aware schema.
+Task 0071 R4.
 
-## ADR-023: rd3 Migration — Dividing Line, Fat Skills, Design Collectively / Implement in Phases
+---
+
+## ADR-023: rd3 Migration — Dividing Line, Fat Skills, Design Collectively
 
 **Status:** Accepted · **Date:** 2026-06-11
 
-**Decision.** Three rules govern the migration.
-**(1) Dividing line:** code that executes, validates, stores, or coordinates moves into Spur
-(`apps/`, `packages/`, ts-libs). Already replaced — never migrate: `rd3:orchestration-v2`,
-`rd3:verification-chain`, `rd3:run-acp` (→ `spur agent run` is the single LLM execution surface).
-**(2) Fat Skills, thin others:** agent-facing behavior centralizes in `plugins/sp` **skills**,
-which are the SSOT and may be arbitrarily rich — slash commands and subagents are thin wrappers
-*of skills* (extending ADR-016). Rationale: every supported coding agent understands skills, while
-command/subagent support varies — cross-agent portability forces centralization there. Skills
-delegate deterministic execution to CLI verbs where they exist, but are **not** limited to CLI
-wrapping.
-**(3) Working model:** all work — architecture adjustments and features, listed or not — is
-planned and **designed collectively first**, then **implemented in phases**. This supersedes the
-2026-06-10 "minimal structural change only" premise: the evidence review already demands redesign
-(schema, templates, write path, lifecycle), so porting first and re-foundationing later would pay
-the migration cost twice. Deferral of the meta-tooling/research/context groups stands — they stay
-live in cc-agents until the core stabilizes, so deferring them breaks nothing.
+**Decision.** Three rules: **(1)** Code that executes, validates, stores, or coordinates moves into
+Spur; already-replaced agents are never migrated. **(2)** Agent-facing behavior centralizes in
+`plugins/sp` skills (SSOT); slash commands and subagents are thin wrappers of skills (extending
+ADR-016). **(3)** All work is designed collectively first, then implemented in phases — superseding
+the "minimal structural change" premise.
 
-**Why.** The dividing line keeps scope refutable item-by-item; Fat Skills keeps one SSOT across
-seven agents; collective design prevents mechanically porting models the data already rejected.
+**Why.** Dividing line keeps scope refutable; Fat Skills gives one SSOT across agents; collective
+design prevents mechanically porting models the data rejected.
 
-**Detail:** triage in `docs/plans/2026-06-10-rd3-migration-feature-list.md`; phase placement in
-`02 §Phase 1.5`.
+**Detail:** `docs/plans/2026-06-10-rd3-migration-feature-list.md`; `02 §Phase 1.5`.
 
-## ADR-024: Anti-Hallucination Guard Engine Leaves Spur; Spur Adds `response.validate` Action and Answer Capture
-
-**Date:** 2026-06-18.
-
-**Decision.** The anti-hallucination guard engine (verification protocol, source-citation checks, confidence-level enforcement) is owned by the `superskill` repo (task 0041), not Spur. Spur provides two workflow primitives that 0041's re-developed launchers consume: (1) `AgentService.runCapture` — an opt-in capture path that returns `{ exitCode, answer }` without streaming or diagnostics; (2) `response.validate` — a workflow action that accepts a `ResponseValidateEngine` via constructor DI (same pattern as `rule.check`) and maps `{ ok, reason, issues }` to `ActionResult`. The engine is injected in `builtins.ts` via `SpurWorkflowBuiltinsOptions.responseValidateEngine`; the concrete engine is provided by the externally-installed `cc:anti-hallucination` skill (superskill 0041) and wired by the caller via a thin adapter over its published surface.
-
-**Amendment (2026-06-20).** The migration to superskill is complete: the in-repo copy `plugins/sp/skills/anti-hallucination/` has been **removed** from Spur. The skill is now `cc:anti-hallucination`, owned and installed externally. The `ResponseValidateEngine` seam in `builtins.ts` is unchanged (DI-only; the concrete wiring was always deferred to 0041 — never an in-repo import), so removal is non-breaking. References that previously pointed at `plugins/sp/skills/anti-hallucination/scripts/ah_guard.ts` now point at the installed `cc:anti-hallucination` skill.
-
-**Why.** The guard protocol is agentic answer-verification, not a dev-workflow — it belongs in superskill by charter. Spur's role is to provide the workflow primitives (capture + validate action) that the superskill workflow YAML assembles. This keeps the boundary explicit: Spur owns the harness plumbing, superskill owns the verification logic.
-
-**Detail:** `agent.run` action gains a `capture: true` option that switches to `runCapture` and surfaces `data.answer`. The `response.validate` action reads `text` from options (templated from prior step data, e.g. `{{ steps.generate.answer }}`). A transition-flow spike (`packages/app/tests/fixtures/anti-hallucination-spike.yaml`) confirms the engine can express validate → retry → deny with `iterationBound` as the backstop; a proper retry-count guard is future work (R3.1).
+**Amendment (2026-06-30) — ADR-028 refines (2).** "Fat Skills" means coherent competencies, not a
+single lifecycle monolith. See ADR-028.
 
 ---
 
-## ADR-025: Web Interaction Libraries — dnd-kit for DnD, @uiw/react-md-editor for Markdown Editing
+## ADR-024: Anti-Hallucination Guard Moves to Superskill; Spur Adds Capture + Validate Primitives
 
-**Date:** 2026-06-22.
+**Status:** Accepted · **Date:** 2026-06-18
 
-**Decision.** Adopt `@dnd-kit/core` + `@dnd-kit/sortable` as the drag-and-drop library and
-`@uiw/react-md-editor` as the markdown editor for the Spur web task-kanban board, both
-as apps/web-only package-private literals. Retain the Astro-island shell for the board.
+**Decision.** The anti-hallucination guard engine is owned by `superskill`, not Spur. Spur provides
+two workflow primitives: `AgentService.runCapture` (returns `{ exitCode, answer }`) and
+`response.validate` (DI-injected `ResponseValidateEngine`, same pattern as `rule.check`).
 
-**Why.**
-(a) **Astro-island shell retained** — the current Astro + React Island architecture (ADR-002, ADR-005)
-is stable and fit for purpose; no framework migration is warranted.
-(b) **dnd-kit over @hello-pangea/dnd** — dnd-kit is the actively-maintained successor, is lighter, has
-first-class keyboard/accessibility sensors (`KeyboardSensor`, `PointerSensor`), and renders cleanly
-inside React islands without the `@hello-pangea/dnd` style-wrapper constraints. The HTML5 native DnD
-currently on the board lacks animation primitives, drop-zone feedback, and overlay support — the exact
-gaps that task 0096 (DnD polish) must close (gap-analysis §2: Drag & Drop = Medium).
-(c) **@uiw/react-md-editor for markdown editing** — the legacy board used this editor for inline task
-body editing (live/preview modes with Save/Cancel). The migrated board hides the task body entirely
-(gap-analysis §2: Inline Editing = High). Tasks 0091 (inline editing) and 0093 (new-task panel) depend
-on this editor being present. A heavier full WYSIWYG is overkill for task-body markdown.
+**Why.** The guard protocol is agentic answer-verification — belongs in superskill by charter;
+Spur's role is the harness plumbing.
 
-**Cross-link:** `docs/analysis/task-kanban-gap-analysis.md` §1 (Technical Stack) and §3.1 (Wave 0).
+**Detail:** `packages/app/src/builtins.ts` (DI seam). The engine is wired by the installed
+`cc:anti-hallucination` skill.
 
-**Right-panel collapse bug (R5 triage).** The legacy breakdown referenced a right-panel collapse bug.
-Tested against the current board: collapse/expand toggle, resize persistence (`localStorage`),
-and restore-on-mount all pass (`apps/web/tests/components/BoardLayout.test.tsx`). Gap-analysis §2
-rates Task Detail Layout parity as **None** — the legacy fixed-modal overlay was replaced by the
-native resizable 3-column layout, which has no reproducible collapse defect. No fix is scheduled.
-
-**Detail:** Dependency versions in `apps/web/package.json`; version-SSOT rule per `AGENTS.md`:
-these are apps/web-only → package-private literals; promote to root `workspaces.catalog` only if a
-sibling workspace later needs them.
-
-**Consequence — single UI import seam (enforcement mechanism, not a new decision).** Because these
-libraries are apps/web-only, their imports are confined to a single seam: `apps/web/src/ui.ts`
-re-exports them (and the daisyUI component-class authoring is confined to `apps/web/src/components/ui/`).
-This boundary is enforced by the `config/rules/ui/` preset (tasks 0103 author@warning, 0104
-promote→error + wire into `recommended-pre-check`): `ui-import-seam-only` forbids raw UI-lib imports
-outside `ui.ts`; `no-daisyui-class-leak` forbids daisyUI component classes outside `components/ui/`.
-Mechanism detail: `docs/05_FEATURES.md §4`.
+**Amendment (2026-06-20) — migration complete.** In-repo `plugins/sp/skills/anti-hallucination/`
+removed. The `ResponseValidateEngine` DI seam is unchanged (never an in-repo import).
 
 ---
 
-## ADR-026: Verification Is a Companion Skill; the Pipeline Completion Gate Is a Workflow Guard
+## ADR-025: Web Interaction Libraries — dnd-kit and @uiw/react-md-editor
 
-**Date:** 2026-06-23.
+**Status:** Accepted · **Date:** 2026-06-22
 
-**Decision.** (a) Verify/review logic lives in a `sp:code-verification` companion skill (not the
-`sp:spur-dev` umbrella), backing `/sp:dev-verify` and `/sp:dev-review`. (b) The pipeline gates
-`verify → record` on a shell guard reading `.spur/run/<wbs>-verdict.json`: `verdict: PASS` clears to
-`done`, any non-PASS routes to `failed`. (c) The `implement` step calls `/sp:dev-run --mode implement`, never
-`/sp:dev-run` (which *drives* the pipeline).
+**Decision.** Adopt `@dnd-kit/core` + `@dnd-kit/sortable` for drag-and-drop and
+`@uiw/react-md-editor` for markdown editing on the task-kanban board. Both are apps/web-only
+package-private literals. Retain the Astro-island shell.
 
-**Why.** (a) Verification is a distinct concern from planning — keep it out of the fat skill (mirrors
-rd3 `task-runner`↔`code-verification`). (b) `spur task check` validates section *presence*, not
-content, so a FAIL must block `done` via an explicit verdict artifact — the spur-native replacement
-for rd3's `--postflight-verify`. (c) The loop is `task-pipeline.yaml`, not a ported `task-runner`
-(ADR-022); `implement` calling `/sp:dev-run` recursed, letting agents skip test/review/verify.
-Trigger: dogfood finding, task 0105 — the `sp` migration ported the command shells but dropped the
-backing skills.
+**Why.** dnd-kit is the actively-maintained successor to @hello-pangea/dnd with first-class
+keyboard/accessibility sensors; @uiw/react-md-editor is proven for inline markdown editing.
 
-**Relates:** extends ADR-022, ADR-023. Resolves SECU-backronym drift to rd3-canonical
-S/E/C/U (was "Security/Error-handling/Conventions/Untested-paths" in `dev-review.md`).
-
-**Detail:** `03`/`04_DESIGN.md §7.5`; verdict shape in
-`plugins/sp/skills/code-verification/references/verdict-schema.md`; status in `05_FEATURES.md §9`.
-
-**Amendment (2026-06-23) — done-gate + section-ownership (task 0106).** The `record → done`
-transition gate mirrors the `verify → record` verdict gate: a shell guard asserting `spur task check`
-(exit 0) with a `record → failed` sibling on negation — so `done` is certified only when the
-section-status matrix passes. Every `done`-required section ([Solution, Testing, Review]) is owned by
-a single pipeline step that has the knowledge to write it: implement owns `Solution` (change-map),
-record transcribes `Testing`/`Review` from the verify output. Section writes are idempotent (upsert)
-with a `sectionIsBare` detection predicate (absent, empty/whitespace, placeholder). A bare `Solution`
-is safety-net-backfilled from `git diff`. Trigger: dogfood finding, task 0106 — task 0101 reached
-`done` while FAILING its own `spur task check`. Relates: extends ADR-026; matches the verify→record
-guard pattern exactly.
-
-## ADR-027: Config Loading Is `spur-config`-Owned; Core/Loader Package Split; Legacy `docs/.tasks/config.jsonc` Retired
-
-**Date:** 2026-06-26.
-
-**Decision.** `.spur/config.yaml` has one loader: `loadSpurConfig` in `@gobing-ai/spur-config`. (a)
-The package splits into two entry points — a dependency-free **core** (`.`: schemas, `DEFAULT_TASKS_DIR`/
-`DEFAULT_FEATURES_DIR`, all config types) and a node-only **loader** (`./loader`: `loadSpurConfig`,
-`resolveConfigFile`, `resolvePlanningFolders`, embedded-schema resolution). (b) The merged
-`spurConfigSchema` owns every section (`tasks`, `features`, `agent`, `rules`, `workflows`,
-`redaction`) — the former CLI-local `SpurAppConfigSchema` is folded in. (c) Config shape types have a
-single owner: `TaskFoldersConfig`/`TaskFolderEntry` live in the loader; consumers re-export, never
-redefine. (d) The legacy rd3 `docs/.tasks/config.jsonc` read is removed; the server `task.folders`
-endpoint derives from `ctx.planningFolders()`.
-
-**Why.** `packages/config` shipped schemas but no loader, so each surface rolled its own (five
-parallel paths: CLI `loadStructuredConfig`, app raw-yaml `resolvePlanningFolders`, CLI
-`resolveConfigFile`, server inline literals, server JSONC read) — the drift behind the
-phase-folder bugs. The core/loader split is forced by the Cloudflare Workers bundle: importing
-`yaml`/`node:fs` crashes miniflare, so the server imports only the dependency-free core; that
-replaces the prior "inline the literals" hack with a real boundary. Blank/`null` folder values
-coerce to defaults (a broken config degrades, never wedges loading). Trigger: task 0129.
-
-**Relates:** completes ADR-015 (config Spur-owned at `./config`) and ADR-017 (bootstrap on
-ts-infra). Recurrence guarded by `config/rules/boundary/config-loading-ownership.yaml` (deferred to
-task 0129's remaining slice).
-
-**Detail:** loader shape + config keys in `04_DESIGN.md §2`; `spur-config` module boundary in
-`03_ARCHITECTURE.md`.
-
-## ADR-028: `plugins/sp` Skills Decompose by Function, Not into a Monolith; Thin Spine Dispatches Competencies
-
-**Status:** Accepted · **Date:** 2026-06-30.
-
-**Decision.** ADR-023 rule (2) ("Fat Skills, thin others") is **refined, not reversed**: skills remain
-the cross-agent SSOT and commands/subagents remain thin wrappers of skills — but a skill's *internal
-granularity* is decided by **function**, not by collapsing the whole lifecycle into one umbrella.
-`sp:spur-dev` grew into an all-in-one skill owning design, implementation, testing, decomposition, and
-review under one trigger; this ADR commits to decomposing it along the **functional axis** into deep
-competency skills behind a thin orchestration spine. Specifically:
-
-**(a) Competency skills (deep, functional, independently triggerable):** `sys-architecture`
-(system-design / ADR judgment), `code-implementation` (implement + stack patterns), `code-testing`
-(coverage / gap analysis / extension), `code-verification` (review/verify — already split, kept),
-`spec-decomposition` (feature/spec → task batch). `spur-tdd` stays a thin **discipline** skill
-referenced by `code-implementation` and `code-testing`, not absorbed.
-
-**(b) Thin spine.** `sp:spur-dev` shrinks to an orchestration spine that owns the lifecycle FSM, the
-gates, and the section-write contract, and **binds each pipeline phase to a competency skill** in
-`config/workflows/task-pipeline.yaml` (phase → skill). The spine dispatches competencies and **never
-inlines** them.
-
-**(c) CLI facade.** A single `sp:spur-cli` skill (router pattern) replaces the per-noun skills
-`spur-tasks`/`spur-features`/`spur-rules`/`spur-workflows`, carrying **one reference file per `spur`
-noun**; a new noun adds exactly one reference file. The facade is invocation/dispatch guidance only —
-it does not absorb competency logic. One subagent `expert-spur` (loading `spur-cli`) replaces the four
-per-noun expert subagents; `expert-dev` retires into `super-coder` (which gains the single-task
-lifecycle role alongside batch).
-
-**(d) Invariants.** `cross-cutting.md` stays single-SSOT (one physical copy; competencies link to it,
-never copy). Skill trigger descriptions must be **mutually disjoint** so routing is unambiguous
-(machine-asserted). The `/sp:dev-*` command surface stays byte-stable across the split. The shipped
-`plugins/sp` plugin is **self-contained**: no skill, agent, command, reference, or doc inside it may
-reference `vendors/` or the external `rd3` plugin (`~/projects/cc-agents/plugins/rd3/`) — those are
-research-time evidence only, never a runtime or documentation dependency.
-
-**Why.** The risk in the umbrella skill is **conceptual coupling under one trigger surface**, not
-runtime context size (progressive disclosure already bounds that). A phase split (planning vs.
-execution) was rejected: a phase boundary is *temporal*, so it relocates coupling into shallow modules
-with a fat shared interface rather than reducing it. The functional axis yields deep modules with
-narrow interfaces, each reused outside the pipeline. This is the decomposition the migration's own
-origin (`rd3`) used — ~50 functional competency skills with a thin `orchestration-v2` spine that binds
-phase → skill and never inlines — and the umbrella skill was a regression from it; `code-verification`
-was already split by function, so a phase split would have introduced a second, conflicting
-decomposition axis into the same plugin. The router-facade pattern (one suite router + per-topic
-references) and TDD-as-standalone-discipline are corroborated by external references reviewed at design
-time (`vendors/gstack`, `vendors/Superpowers`) — used as evidence only, per invariant (d).
-
-**Supersedes:** the monolith reading of **ADR-023 (2)** — skills stay the SSOT and stay rich, but
-"rich" means a coherent competency, not the whole lifecycle. Corrects the dangling "design §12.1"
-citation in `spur-dev`'s SKILL.md (§12.1 governs markdown-as-SSOT, not skill granularity).
-
-**Relates:** extends ADR-016 (commands only where the LLM adds value) and ADR-026 (verification is a
-companion skill — the first functional split). Realized by task 0161 (feature H1), waved: ADR → CLI
-facade + subagent cleanup → competency extraction + spine↔competency binding proof → spine shrink +
-composition extraction + command re-point.
-
-**Detail:** destination model + the spine↔competency binding in `03_ARCHITECTURE.md §12`; skill/agent
-inventory in `04_DESIGN.md`; status in `05_FEATURES.md §9`.
-
-## ADR-029: Planning-Pipeline Fate Deferred; `spur feature advance` Added for Lifecycle Walks
-
-**Status:** Accepted · **Date:** 2026-07-02.
-
-**Decision.** Two related decisions, captured together because the same audit wave produced both:
-
-(a) **Planning-pipeline fate deferred.** `config/workflows/planning-pipeline.yaml` overlaps
-substantially with `config/workflows/idea-pipeline.yaml` (the design-gen → design-approval → handoff
-tail is duplicated; the only planning-pipeline-unique state is `phasing`, which stages a possible
-`02_ROADMAP.md` edit). F9 of the 0176 audit framed this as "decide and record the fate of
-planning-pipeline before making broad edits to its behavior." This ADR records the **deferral**, not
-the fate: the operator call (retire / keep / fold into idea-pipeline) is reserved for a follow-up
-wave. F8c/d of task 0180 (minimal prompt + vars alignment) are non-fate-changing compatibility
-fixes that work under any of the three resolutions. A future operator decision supersedes this
-entry with the chosen resolution and the corresponding edit.
-
-(b) **`spur feature advance` added; `feature update` retains single-step semantics.** The
-`wrapup-pipeline.yaml` `feature-transition` state embedded a ~20-line shell status ladder
-(`backlog → active → verifying → done`) that called `spur feature check` + `spur feature update`
-`+` `spur feature show` per hop. R5 of 0180 said "promote to a CLI verb or explicitly defer with
-rationale." Decision: **promote** to a new CLI verb `spur feature advance <id> [--to <status>]`
-that walks the legal lifecycle path idempotently and verifies after every hop. Rationale for adding
-(not deferring): the embedded shell ladder was the substantive F9 finding, and a CLI verb
-centralizes the legal-edge walk in code (with tests) instead of re-implementing it in workflow YAML
-every time. `spur feature update <id> <status>` remains the single-step transition verb; the
-advance verb is for the multi-hop walk. Both share the same `FeatureService.transition` legal-edge
-guard.
-
-**Why.** The deferral (a) is honest: the planning-pipeline decision is a real product call that
-should not be made by a single audit wave. F8c/d's narrow fixes buy time without pre-judging. The
-advance verb (b) addresses the embedded-shell-ladder finding with the same 0108 precedent that
-introduced `spur task record` — replace a ~20-line shell block with a tested CLI verb. The legal-edge
-guard is already in `FeatureService.transition`; the verb just calls it in a loop with verification
-between hops.
-
-**Relates:** records the F9 outcome of the 0176 audit (Wave D, task 0180). Realized by task 0180
-(F9a deferral, F9b/c verb). Supersedes: the implicit "shell ladder in workflow YAML is fine"
-posture. Extends ADR-016 (commands only where the LLM adds value) — `spur feature advance` is a
-mechanical multi-hop walker, not an LLM surface.
-
-**Detail:** CLI surface row in `04_DESIGN.md §1`; the verb's implementation in
-`apps/cli/src/commands/feature.ts`.
+**Detail:** `apps/web/package.json`; `apps/web/src/ui.ts` (single import seam); UI rules in
+`config/rules/ui/`.
 
 ---
 
-## ADR-030: Bun mock.module Is Process-Global and Hoisted — Shared Full-Surface Mock Pattern
+## ADR-026: Verification Is a Companion Skill; Pipeline Gate Is a Workflow Guard
 
-**Status:** Accepted · **Date:** 2026-07-08.
+**Status:** Accepted · **Date:** 2026-06-23
 
-**Decision.** Bun's `mock.module()` is process-global, hoisted (evaluated before any test runs), and
-NOT reverted by `mock.restore()`. When multiple test files mock the same first-party module with
-*incompatible* API surfaces, the LAST mock registered wins globally — causing CI-only,
-file-ordering-dependent failures. This ADR codifies the fix pattern:
+**Decision.** (a) Verify/review lives in `sp:code-verification`, not the `sp:spur-dev` umbrella.
+(b) The pipeline gates `verify → record` on a verdict artifact: `PASS` clears to `done`,
+non-PASS routes to `failed`. (c) `implement` calls `/sp:dev-run --mode implement`, never the
+pipeline-driving `/sp:dev-run`.
 
-**(a) Shared full-surface mock helper.** For any first-party module mocked by ≥2 test files, create
-a single shared helper (`tests/test-helpers/<module>-mock.ts`) that calls `mock.module()` with the
-complete API surface. ALL test files import this shared helper instead of defining their own
-`mock.module()` for that module. Since every mock registration produces the same compatible surface,
-the "last mock wins" behavior is neutralized.
+**Why.** Verification is a distinct concern; the verdict artifact is the spur-native postflight
+gate (replacing rd3's `--postflight-verify`).
 
-**(b) beforeEach re-registration for custom behavior.** Tests that need custom mock data (e.g.,
-specific `list` return values) re-register `mock.module()` inside `beforeEach` with their custom
-surface atop the shared baseline. This overrides the shared mock for that file's tests only, and
-the file's `afterEach` restores the shared baseline.
+**Detail:** `03`/`04_DESIGN.md §7.5`; verdict schema in `code-verification/references/verdict-schema.md`.
 
-**(c) Never mock modules with dedicated test files.** If `useTaskParams.test.tsx` tests the real
-`useTaskParams` module, NO other test file may call `mock.module()` for `useTaskParams` — the
-leaked mock replaces the real implementation that the dedicated test depends on. For module-level
-exports only needed by a component's test, mock the component's *data dependency* (e.g.,
-`rpc-client`) instead of the component's sibling modules.
+**Amendment (2026-06-23) — done-gate.** `record → done` mirrors `verify → record`: a shell guard
+asserting `spur task check` before `done`. Each section is owned by one pipeline step. Trigger:
+task 0106 (task 0101 reached `done` while failing its own check).
 
-**Why.** The 73 CI failures (2026-07-08) were traced to six test files mocking `rpc-client` with
-incompatible surfaces — ranging from `features/components.test.tsx` (no `api` property at all) to
-`board.test.tsx` (full surface). On CI's Linux filesystem ordering, a minimal mock was "last" at
-hoisting time, starving all other tests of `api.task.list`, `api.task.folders`, etc. Additionally,
-`index.test.tsx` mocked `useTaskParams` and `useTasks` — modules that have dedicated test files —
-causing those dedicated tests to receive mock returns (`"A1"`, stale data) instead of real behavior.
-The shared-helper + beforeEach pattern eliminates both failure modes by ensuring every mock
-registration is compatible and customizations are file-scoped.
 
-**Relates:** Rule `no-leaky-module-mocks` enforces the "avoid first-party mock.module" guard.
-Rule `no-unmocked-module-eval-side-effects` addresses the mirror problem (unmocked imports
-capturing real state). The shared helper lives at
-`apps/web/tests/test-helpers/rpc-client-mock.ts`.
+---
+## ADR-027: Config Loading Is `spur-config`-Owned; Core/Loader Split; Legacy Config Retired
 
-**Detail:** `03_ARCHITECTURE.md` needs a new "Test Mock Strategy" section; the pattern is
-reusable for any first-party module needing multi-file mocks.
+**Status:** Accepted · **Date:** 2026-06-26
+
+**Decision.** `.spur/config.yaml` has one loader: `loadSpurConfig` in `@gobing-ai/spur-config`. The
+package splits into a dependency-free **core** (schemas, types) and a node-only **loader**
+(`loadSpurConfig`, file resolution) — forced by Cloudflare Workers (importing `yaml`/`node:fs`
+crashes miniflare). The merged `spurConfigSchema` owns every section; the legacy
+`docs/.tasks/config.jsonc` read is retired.
+
+**Why.** Five parallel config-loading paths across surfaces caused phase-folder drift bugs. The
+core/loader split gives the server a real boundary instead of inline-literal hacks.
+
+**Detail:** `04_DESIGN.md §2`; `03_ARCHITECTURE.md` (`spur-config` module).
+
+**Relates:** completes ADR-015, ADR-017. Trigger: task 0129.
+
+---
+
+## ADR-028: Skills Decompose by Function; Thin Spine Dispatches Competencies
+
+**Status:** Accepted · **Date:** 2026-06-30
+
+**Decision.** ADR-023 rule (2) refined: skills remain the SSOT, but "fat" means coherent
+competency, not lifecycle monolith. `sp:spur-dev` decomposes into functional competency skills
+(`sys-architecture`, `code-implementation`, `code-testing`, `code-verification`,
+`spec-decomposition`) behind a thin orchestration spine. A single `sp:spur-cli` router-facade
+replaces per-noun CLI skills. Subagent `expert-spur` replaces per-noun expert subagents.
+
+**Why.** Functional decomposition yields deep modules with narrow interfaces, reusable outside the
+pipeline — the model the rd3 migration's own origin used. The umbrella skill was a regression.
+
+**Detail:** `03_ARCHITECTURE.md §12`; `04_DESIGN.md` (skill/agent inventory); `05_FEATURES.md §9`.
+
+**Supersedes:** monolith reading of ADR-023 (2).
+
+---
+
+## ADR-029: Planning-Pipeline Fate Deferred; `spur feature advance` Added
+
+**Status:** Accepted · **Date:** 2026-07-02
+
+**Decision.** (a) The planning-pipeline's fate (retire / keep / fold into idea-pipeline) is
+deferred — an operator call, not resolvable by a single audit wave. (b) `spur feature advance`
+replaces a ~20-line shell status ladder in `wrapup-pipeline.yaml` with a tested CLI verb. The
+verb walks the legal lifecycle idempotently; `spur feature update` retains its single-step
+semantics. Both share `FeatureService.transition`.
+
+**Why.** The deferral is honest; the advance verb centralizes the multi-hop lifecycle walk in
+code instead of workflow YAML.
+
+**Detail:** `04_DESIGN.md §1`; `apps/cli/src/commands/feature.ts`.
+
+**Relates:** records F9 outcome of 0176 audit; extends ADR-016.
+
+---
+
+## ADR-030: Bun mock.module Is Process-Global — Shared Full-Surface Mock Pattern
+
+**Status:** Accepted · **Date:** 2026-07-08
+
+**Decision.** Bun's `mock.module()` is process-global, hoisted, and not reverted by
+`mock.restore()`. When multiple test files mock the same first-party module with incompatible
+surfaces, the last mock wins — causing CI-only, ordering-dependent failures. Three rules:
+(a) create a shared full-surface mock helper for any module mocked by ≥2 files; (b) use
+`beforeEach` to re-register custom behavior atop the shared baseline; (c) never mock a module
+that another test file tests directly.
+
+**Why.** 73 CI failures traced to six files mocking `rpc-client` with incompatible surfaces and
+`index.test.tsx` mocking `useTaskParams`/`useTasks` — modules with dedicated test files.
+
+**Detail:** `apps/web/tests/test-helpers/rpc-client-mock.ts`; rules `no-leaky-module-mocks`,
+`no-unmocked-module-eval-side-effects`.
