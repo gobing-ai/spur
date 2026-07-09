@@ -1,5 +1,28 @@
 # Changelog
 
+
+## [0.3.6] — 2026-07-09
+
+### Added
+
+- **`indexed-context` skill — lean replacement for OpenWolf (task 0232).** Cross-agent context-management skill with 6 data files under `.spur/context/`: `anatomy.md`, `learnings.md`, `pitfalls.md`, `buglog.md`, `memory.md`, and `token-ledger.jsonl`. Three fail-open hooks (`context-session-start`, `context-post-tool`, `context-session-stop`) auto-track token usage via JSONL append. Works on claude-code, codex, openclaw, opencode, and antigravity via skill description-match; hooks run wherever `superskill hook run` is supported. Cerebrum split into learnings + pitfalls (User Preferences dropped — duplicates CLAUDE.md/USER.md).
+
+- **`spur init` bundles AGENTS.md template with indexed-context activation block.** New projects scaffold an AGENTS.md with the 6-file context protocol inline. Existing AGENTS.md files get the block injected idempotently (checks for `## Indexed context` marker before appending). `.spur/context/` added to `.gitignore` in all init modes including `--minimal`.
+
+### Changed
+
+- **All shipped `.wolf/` references migrated to `.spur/context/`.** `AGENTS.md` activation block (150-line OpenWolf import → lean 6-rule section), `reverse-engineering` SKILL.md (6 locations), plugin README (skill count 19→20, directory layout updated).
+
+- **ADR governance constraints.** `00_ADR.md` preamble now emphasizes only real cross-cutting decisions belong here; entries growing past decision+reason should link to `03`/`04`. Constitution §6.1 rule 8 binds amendments forward to record decision delta only — mechanism goes in `03`/`04`. Both propagated to npm-released template files under `config/templates/docs/`.
+
+### Fixed
+
+- **Stale `no-unmocked-module-eval-side-effects` rule pattern.** Replaced the stale `useTasks` side-effect pattern with inert sentinel `"__no_active_side_effect_modules__"` — rule is ready for reactivation but no longer flags dead code.
+
+### Removed
+
+- **OpenWolf integration fully removed.** `.claude/settings.json` stripped of all 6 OpenWolf hooks; `.claude/rules/openwolf.md` deleted; `.wolf/` gitignore entry dropped. The `.wolf/` data directory is inert — users can `rm -rf .wolf/` after reinstalling the plugin.
+
 ## [0.3.5] — 2026-07-09
 
 ### Fixed
