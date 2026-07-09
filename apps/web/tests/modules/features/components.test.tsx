@@ -34,7 +34,9 @@ let originalFetch: typeof fetch;
 let originalEventSource: typeof EventSource | undefined;
 
 beforeAll(() => {
-    GlobalRegistrator.register();
+    try {
+        GlobalRegistrator.register();
+    } catch {} // already registered in suite
     originalFetch = globalThis.fetch;
     originalEventSource = globalThis.EventSource;
 });

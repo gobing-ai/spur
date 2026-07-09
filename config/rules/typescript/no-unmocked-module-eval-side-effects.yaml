@@ -1,0 +1,63 @@
+# Require test files to mock dependencies of modules with module-eval side effects.
+#
+# WHY (the general pattern): some source modules run code at module-evaluation
+# time — creating singletons, computing constants from imports, calling functions
+# from other modules at module scope (not inside a function/class body). When a
+# test file imports such a module, it triggers the side effect. If the dependency
+# modules are not mocked, the side effect captures the real API and that state
+# persists across the entire test suite — a CI-only, file-ordering-dependent
+# failure that never reproduces locally. The sibling rule `no-leaky-module-mocks`
+# handles the mirror problem (mock.module leaking into real-import readers).
+#
+# KNOWN MODULES WITH MODULE-EVAL SIDE EFFECTS:
+#
+#   1. src/modules/task-kanban/useTasks.ts
+#      - Line 6:  const SSE_URL = `${resolveApiUrl()}/events/planning`;  (calls import)
+#      - Line 159: const sharedStore = new TaskStore();  (singleton captures api)
+#      - Dependency: ../../lib/rpc-client
+#      - Fix: mock.module rpc-client with api.task.list + resolveApiUrl
+#      - Real incident: 73 CI failures, 2026-07-09
+#
+# To ADD a new module to this list when another CI-only failure is traced to a
+# module-eval side effect: append its import pattern to `rules[].evaluator.config.pattern`
+# (alternation) and add the corresponding entry above.
+#
+# FIX (general): before any import of a side-effect module, mock its dependencies
+# via mock.module(). Import `mock` from `bun:test` if not already imported.
+#
+# Severity warning: the file may pass locally but will fail in CI; fix before merge.
+
+include:
+  - "apps/**/tests/**/*.test.ts"
+  - "apps/**/tests/**/*.test.tsx"
+  - "packages/**/tests/**/*.test.ts"
+  - "packages/**/tests/**/*.test.tsx"
+exclude:
+  - "**/node_modules/**"
+  - "**/dist/**"
+  # These files already mock the dependency before importing the side-effect module.
+  - "apps/web/tests/modules/task-kanban/useTasks.test.ts"
+  - "apps/web/tests/modules/task-kanban/board.test.tsx"
+  - "apps/web/tests/modules/task-kanban/components.test.tsx"
+  - "apps/web/tests/modules/task-kanban/task-detail.test.tsx"
+  - "apps/web/tests/modules/task-kanban/index.test.tsx"
+  - "apps/web/tests/modules/task-kanban/new-task-panel.test.tsx"
+
+rules:
+  - id: no-unmocked-module-eval-side-effects
+    description: >
+      Test files that import a module with module-evaluation side effects
+      (singletons created at module scope, imports called at eval time, etc.)
+      MUST mock the dependency modules BEFORE the import. Without the mock,
+      the side effect captures the real API and leaks into every subsequent
+      test file — a CI-only, ordering-dependent failure. Add mock.module()
+      for the listed dependency before any import of the side-effect module.
+      See the file header for the list of known side-effect modules and their
+      dependencies. 73-real CI incidents (useTasks → rpc-client), 2026-07-09.
+    severity: warning
+    evaluator:
+      type: rg
+      config:
+        # Match imports from modules with known module-eval side effects.
+        # Add new patterns here as alternations (|) when new cases are discovered.
+        pattern: "from ['\"].*task-kanban/useTasks['\"]"

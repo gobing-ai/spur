@@ -1,7 +1,9 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator';
 
 try {
-    GlobalRegistrator.register();
+    try {
+        GlobalRegistrator.register();
+    } catch {} // already registered in suite
 } catch {
     /* already registered */
 }

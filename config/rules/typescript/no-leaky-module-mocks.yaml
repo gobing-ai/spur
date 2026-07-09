@@ -48,6 +48,7 @@ exclude:
   - "apps/web/tests/modules/features/components.test.tsx"
   - "apps/web/tests/modules/task-kanban/task-detail.test.tsx"
   - "apps/web/tests/modules/task-kanban/index.test.tsx"
+  - "apps/web/tests/modules/task-kanban/useTasks.test.ts"
 
 rules:
   - id: no-leaky-mock-module
