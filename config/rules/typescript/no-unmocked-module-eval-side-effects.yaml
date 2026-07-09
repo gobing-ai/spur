@@ -11,22 +11,23 @@
 #
 # KNOWN MODULES WITH MODULE-EVAL SIDE EFFECTS:
 #
-#   1. src/modules/task-kanban/useTasks.ts
-#      - Line 6:  const SSE_URL = `${resolveApiUrl()}/events/planning`;  (calls import)
-#      - Line 159: const sharedStore = new TaskStore();  (singleton captures api)
-#      - Dependency: ../../lib/rpc-client
-#      - Fix: mock.module rpc-client with api.task.list + resolveApiUrl
-#      - Real incident: 73 CI failures, 2026-07-09
+#   (None currently active — the useTasks.ts singleton side effect was fixed by
+#    commit 3937d31 which converted resolveApiUrl() and api.task.list() calls to
+#    lazy dynamic imports. The singleton _sharedStore = new TaskStore() no longer
+#    triggers an API call at module-eval time. When a new side-effect module is
+#    discovered, add it here with the pattern shown below.)
+#
+#   RESOLVED — src/modules/task-kanban/useTasks.ts (fixed 2026-07-08)
+#     - Line 6: was const SSE_URL = `${resolveApiUrl()}/events/planning`;
+#       → now: const sseUrl = async () => { const { resolveApiUrl } = await import(...); return ...; };
+#     - Line 159: was const sharedStore = new TaskStore(); (calls defaultListTasks
+#       which statically imported api.task.list) → now: defaultListTasks uses
+#       dynamic await import('../../lib/rpc-client'), so construction is lazy.
+#     - 73 CI failures, 2026-07-08. Fix: commit 3937d31.
 #
 # To ADD a new module to this list when another CI-only failure is traced to a
 # module-eval side effect: append its import pattern to `rules[].evaluator.config.pattern`
 # (alternation) and add the corresponding entry above.
-#
-# FIX (general): before any import of a side-effect module, mock its dependencies
-# via mock.module(). Import `mock` from `bun:test` if not already imported.
-#
-# Severity warning: the file may pass locally but will fail in CI; fix before merge.
-
 include:
   - "apps/**/tests/**/*.test.ts"
   - "apps/**/tests/**/*.test.tsx"
@@ -35,13 +36,8 @@ include:
 exclude:
   - "**/node_modules/**"
   - "**/dist/**"
-  # These files already mock the dependency before importing the side-effect module.
-  - "apps/web/tests/modules/task-kanban/useTasks.test.ts"
-  - "apps/web/tests/modules/task-kanban/board.test.tsx"
-  - "apps/web/tests/modules/task-kanban/components.test.tsx"
-  - "apps/web/tests/modules/task-kanban/task-detail.test.tsx"
-  - "apps/web/tests/modules/task-kanban/index.test.tsx"
-  - "apps/web/tests/modules/task-kanban/new-task-panel.test.tsx"
+  # All known side-effect modules are resolved. When a new one is discovered,
+  # exclude files that already mock the dependency before importing it.
 
 rules:
   - id: no-unmocked-module-eval-side-effects

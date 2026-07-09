@@ -34,22 +34,20 @@ include:
 exclude:
   - "**/node_modules/**"
   - "**/dist/**"
-  # These tests mock the FIRST-PARTY oRPC `api` client (`../../../src/lib/rpc-client`).
-  # That client is a callable Proxy, so spyOn cannot intercept it (the call regenerates
-  # and hits the network) — `mock.module()` is the only working mechanism. They are safe
-  # because they sort AFTER both rpc-client unit-test files (`lib/rpc-client.test.ts`,
-  # `rpc-client.test.ts`), so the override never leaks back into a real-import reader.
-  # Keep this list minimal: only files that mock a first-party module and have no
-  # spyOn-able alternative belong here. (markdown-body mocks only third-party modules —
-  # mermaid/dompurify — which the narrowed pattern no longer flags, so it is not listed.)
+  # Shared full-surface mock helpers are the CORRECT pattern — they ensure every
+  # test file registers the same compatible surface, neutralizing "last mock wins."
+  - "apps/web/tests/test-helpers/rpc-client-mock.ts"
+  # These files use beforeEach restoreMock() atop the shared baseline — the mock.module
+  # call is in a runtime function, not at module scope, and always registers the full surface.
   - "apps/web/tests/modules/task-kanban/board.test.tsx"
   - "apps/web/tests/modules/task-kanban/components.test.tsx"
   - "apps/web/tests/modules/task-kanban/new-task-panel.test.tsx"
   - "apps/web/tests/modules/features/components.test.tsx"
   - "apps/web/tests/modules/task-kanban/task-detail.test.tsx"
   - "apps/web/tests/modules/task-kanban/index.test.tsx"
+  # index.test.tsx no longer mocks useTasks/useTaskParams/TaskDetail; useTasks.test.ts
+  # uses custom listFn (isolated store), not mock.module for first-party modules.
   - "apps/web/tests/modules/task-kanban/useTasks.test.ts"
-
 rules:
   - id: no-leaky-mock-module
     description: >

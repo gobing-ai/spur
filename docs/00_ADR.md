@@ -824,3 +824,48 @@ mechanical multi-hop walker, not an LLM surface.
 
 **Detail:** CLI surface row in `04_DESIGN.md §1`; the verb's implementation in
 `apps/cli/src/commands/feature.ts`.
+
+---
+
+## ADR-030: Bun mock.module Is Process-Global and Hoisted — Shared Full-Surface Mock Pattern
+
+**Status:** Accepted · **Date:** 2026-07-08.
+
+**Decision.** Bun's `mock.module()` is process-global, hoisted (evaluated before any test runs), and
+NOT reverted by `mock.restore()`. When multiple test files mock the same first-party module with
+*incompatible* API surfaces, the LAST mock registered wins globally — causing CI-only,
+file-ordering-dependent failures. This ADR codifies the fix pattern:
+
+**(a) Shared full-surface mock helper.** For any first-party module mocked by ≥2 test files, create
+a single shared helper (`tests/test-helpers/<module>-mock.ts`) that calls `mock.module()` with the
+complete API surface. ALL test files import this shared helper instead of defining their own
+`mock.module()` for that module. Since every mock registration produces the same compatible surface,
+the "last mock wins" behavior is neutralized.
+
+**(b) beforeEach re-registration for custom behavior.** Tests that need custom mock data (e.g.,
+specific `list` return values) re-register `mock.module()` inside `beforeEach` with their custom
+surface atop the shared baseline. This overrides the shared mock for that file's tests only, and
+the file's `afterEach` restores the shared baseline.
+
+**(c) Never mock modules with dedicated test files.** If `useTaskParams.test.tsx` tests the real
+`useTaskParams` module, NO other test file may call `mock.module()` for `useTaskParams` — the
+leaked mock replaces the real implementation that the dedicated test depends on. For module-level
+exports only needed by a component's test, mock the component's *data dependency* (e.g.,
+`rpc-client`) instead of the component's sibling modules.
+
+**Why.** The 73 CI failures (2026-07-08) were traced to six test files mocking `rpc-client` with
+incompatible surfaces — ranging from `features/components.test.tsx` (no `api` property at all) to
+`board.test.tsx` (full surface). On CI's Linux filesystem ordering, a minimal mock was "last" at
+hoisting time, starving all other tests of `api.task.list`, `api.task.folders`, etc. Additionally,
+`index.test.tsx` mocked `useTaskParams` and `useTasks` — modules that have dedicated test files —
+causing those dedicated tests to receive mock returns (`"A1"`, stale data) instead of real behavior.
+The shared-helper + beforeEach pattern eliminates both failure modes by ensuring every mock
+registration is compatible and customizations are file-scoped.
+
+**Relates:** Rule `no-leaky-module-mocks` enforces the "avoid first-party mock.module" guard.
+Rule `no-unmocked-module-eval-side-effects` addresses the mirror problem (unmocked imports
+capturing real state). The shared helper lives at
+`apps/web/tests/test-helpers/rpc-client-mock.ts`.
+
+**Detail:** `03_ARCHITECTURE.md` needs a new "Test Mock Strategy" section; the pattern is
+reusable for any first-party module needing multi-file mocks.
