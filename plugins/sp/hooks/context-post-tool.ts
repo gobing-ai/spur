@@ -10,6 +10,9 @@
  *
  * Self-contained by design (task 0232). Installed hook configs use the portable
  * `superskill hook run sp context-post-tool` entrypoint.
+ *
+ * For the details of Claude Code, you can refer to [here](https://code.claude.com/docs/en/hooks#posttooluse-input).
+ *
  */
 
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';

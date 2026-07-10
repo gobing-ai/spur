@@ -234,6 +234,11 @@ Feature: spur-dev umbrella skill
 | 0142 | Batch execution v2 — parallel runs (worktree isolation) + interactive within-step escalation | blocked |
 | 0161 | Split sp:spur-dev at the lifecycle-half seam into planning (sp:spur-plan) and execution (sp:spur-dev) | done |
 | 0162 | Strengthen sp dev-verify with mandatory Acceptance Criteria guard | done |
+| 0227 | enhance the review capability in plugin sp | done |
+| 0228 | fix review section double-write and stale pipeline descriptions | done |
+| 0229 | bind structured-input tool calls in dev-brainstorm and brainstorm | done |
+| 0230 | bind structured-input tools and centralize up-front questionnaires across dev commands | done |
+| 0231 | migrate reverse-engineering skill and dev-reverse command from rd3 to sp | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
