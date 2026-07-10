@@ -25,6 +25,12 @@ rules:
           exclude:
             - "**/node_modules/**"
             - "**/tests/**"
+            # apps/cli/src/index.ts carries a side-effect import of ts-db as a
+            # bundler hint for Bun --compile. The import does not use ts-db APIs;
+            # it ensures the dynamic import('@gobing-ai/ts-db') calls from within
+            # ts-runtime resolve at runtime from the compiled binary's bunfs.
+            # Spur-domain still owns all functional ts-db usage.
+            - "apps/cli/src/index.ts"
 
   - id: drizzle-only-in-domain-schema
     description: >
