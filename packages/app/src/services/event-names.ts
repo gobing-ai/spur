@@ -115,8 +115,10 @@ export const SYSTEM_EVENT_CATALOG = [
     event('rule.run.done', 'rule', 'rule'),
 
     // ── workflow.* (task 0221 R2/R3/R4) ───────────────────────────────────
-    // Engine-native names; observability adapter's verb-form names collapse onto
-    // the same lifecycle moment and do not produce a duplicate `system_events` row.
+    // Engine-native names AND the ObservableWorkflowAdapter's verb-form names
+    // are both wired in the server context. `workflow.run.started` fires from
+    // both paths (engine bridge + adapter) — accepted as harmless v1 duplication;
+    // dedup deferred to a future refinement (task 0236).
     event('workflow.run.started', 'workflow', 'workflow-run'),
     event('workflow.run.done', 'workflow', 'workflow-run'),
     event('workflow.run.failed', 'workflow', 'workflow-run'),

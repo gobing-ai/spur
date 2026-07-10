@@ -98,6 +98,7 @@ Feature: Observabilities board module
 | 0199 | Observability web module: shell, tabs contract, Events + Inbox tabs (0189 wave B) | done |
 | 0220 | System Events completeness, real-time stream, filters, and extensible details | Done |
 | 0221 | Complete System Events upstream coverage and bus wiring | done |
+| 0226 | System Events real producer wiring review findings | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

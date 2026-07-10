@@ -76,13 +76,21 @@ export const defaultDeps: StartServerDeps = {
  * Each scheduled action emits `scheduler.job.executed` to the server EventBus
  * so the System Events tab surfaces scheduler activity alongside queue events. */
 export function registerSchedulerEntries(scheduler: ServerScheduler, ctx: ServerContext): void {
-    const register = (cron: string, kind: string, action: () => Promise<void>): void => {
+    const register = (cron: string, name: string, action: () => Promise<void>): void => {
         scheduler.register(cron, async () => {
             const startedAt = Date.now();
+            let error: unknown;
             try {
                 await action();
+            } catch (err) {
+                error = err;
+                throw err;
             } finally {
-                ctx.eventBus().emit('scheduler.job.executed', { kind, cron, durationMs: Date.now() - startedAt });
+                ctx.eventBus().emit('scheduler.job.executed', {
+                    name,
+                    durationMs: Date.now() - startedAt,
+                    ...(error !== undefined && { error: String(error) }),
+                });
             }
         });
     };

@@ -29,4 +29,5 @@
 [done] **I**: sp plugin hands-off ready ([I_sp-plugin-hands-off-ready.md](./I_sp-plugin-hands-off-ready.md))
 [backlog] **J**: Observabilities board module ([J_observabilities-board-module.md](./J_observabilities-board-module.md))
 [backlog] **K**: Observability System Events Table Redesign ([K_observability-system-events-table-redesign.md](./K_observability-system-events-table-redesign.md))
+[active] **L**: System Events Payload and Wiring Enrichment ([L_system-events-payload-and-wiring-enrichment.md](./L_system-events-payload-and-wiring-enrichment.md))
 <!-- END AUTO-GENERATED -->

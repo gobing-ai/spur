@@ -430,9 +430,48 @@ describe('startServer', () => {
         expect(enqueued.map((job) => job.type)).toEqual(['system-events-prune', 'smoke']);
         expect(emitted).toHaveLength(2);
         expect(emitted.every((e) => e.name === 'scheduler.job.executed')).toBe(true);
-        expect(emitted[0]?.payload).toMatchObject({ kind: 'system-events-prune', cron: '300000' });
-        expect(emitted[1]?.payload).toMatchObject({ kind: 'smoke', cron: '600000' });
-        expect(typeof (emitted[0]?.payload as Record<string, unknown>)?.durationMs).toBe('number');
+        // SchedulerJobExecutedDetail contract: { name, durationMs, error? }
+        const successPayload = emitted[0]?.payload as Record<string, unknown>;
+        expect(successPayload).toMatchObject({ name: 'system-events-prune' });
+        expect(successPayload).not.toHaveProperty('kind');
+        expect(successPayload).not.toHaveProperty('cron');
+        expect(successPayload).not.toHaveProperty('error');
+        expect(typeof successPayload.durationMs).toBe('number');
+        const smokePayload = emitted[1]?.payload as Record<string, unknown>;
+        expect(smokePayload).toMatchObject({ name: 'smoke' });
+    });
+
+    test('registerSchedulerEntries captures error on failure and re-throws after emitting', async () => {
+        const emitted: Array<{ name: string; payload: unknown }> = [];
+        const handlers: Array<() => Promise<void>> = [];
+        const ctxFailing = {
+            jobQueue: async () => ({
+                enqueue: async () => {
+                    throw new Error('timeout');
+                },
+            }),
+            eventBus: () => ({
+                emit: (name: string, payload: unknown) => {
+                    emitted.push({ name, payload });
+                },
+            }),
+        } as unknown as ServerContext;
+        registerSchedulerEntries(
+            {
+                register: (_cron: string, action: () => Promise<void>) => handlers.push(action),
+                start: async () => {},
+                stop: async () => {},
+            } as never,
+            ctxFailing,
+        );
+
+        // The first registered handler is the prune job; it enqueues, which throws.
+        await expect(handlers[0]?.()).rejects.toThrow('timeout');
+        expect(emitted).toHaveLength(1);
+        const failPayload = emitted[0]?.payload as Record<string, unknown>;
+        expect(failPayload.name).toBe('system-events-prune');
+        expect(failPayload.error).toContain('timeout');
+        expect(typeof failPayload.durationMs).toBe('number');
     });
 
     test('parseTaskActionJob validates payload shape and preserves optional routing fields', () => {

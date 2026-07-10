@@ -347,6 +347,10 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                     // system_events tap + SSE stream (task 0193/0204). Structurally
                     // compatible — both are Record<string, (event) => void> buses.
                     eventBus: eventsBus as unknown as never,
+                    // Wire the same bus as agent lifecycle events so
+                    // `agent.started`/`agent.stopped`/`agent.message.sent` reach the
+                    // system_events tap + SSE stream (task 0237).
+                    events: eventsBus as unknown as never,
                 });
             }
             return teamSvc;
@@ -399,6 +403,13 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                 agentService: this.agentService.bind(this),
                 ruleService: this.ruleService.bind(this),
                 hitlResponder: this.hitlResponder.bind(this),
+                // Wire both buses onto the canonical server EventBus so the
+                // system_events tap + SSE stream capture engine-native names
+                // (via `events` → bridgeEngineEvents) AND the adapter's richer
+                // verb-form events (via `observabilityBus` → ObservableWorkflowAdapter).
+                // `workflow.run.started` fires from both paths — harmless v1
+                // duplication; dedup deferred (task 0236 R3).
+                observabilityBus: () => eventsBus as unknown as never,
                 events: () => eventsBus as unknown as never,
             });
             return workflowSvc;

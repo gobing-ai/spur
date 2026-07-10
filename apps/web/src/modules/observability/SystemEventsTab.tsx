@@ -251,16 +251,16 @@ function formatLocalTime(iso: string): string {
 }
 
 /**
- * Compact projection of a row's payload into 3–4 (label, value) pairs for the
- * event-name hover/focus tooltip (task 0223 R8). The choice mirrors what the
- * existing detail renderers surface — entities, IDs, status transitions,
- * durations — so the tooltip is a useful at-a-glance hint rather than a
- * mirror of the full detail block.
- *
- * `null`/empty payloads return `null` so the caller can skip the tooltip
- * altogether (a row with no payload has nothing useful to summarize).
+ * Format milliseconds into a compact human-readable duration string.
+ * Returns null for non-numeric / non-finite values so callers can drop the pair.
  */
-function buildTooltipSummary(
+export function formatDuration(ms: unknown): string | null {
+    if (typeof ms !== 'number' || !Number.isFinite(ms)) return null;
+    if (ms < 1000) return `${ms}ms`;
+    return `${(ms / 1000).toFixed(1)}s`;
+}
+
+export function buildTooltipSummary(
     eventName: string,
     payload: Record<string, unknown> | null,
     renderer?: string,
@@ -275,6 +275,20 @@ function buildTooltipSummary(
         }
         return undefined;
     };
+    const pickNumber = (...keys: string[]): number | null => {
+        for (const key of keys) {
+            const value = payload[key];
+            if (typeof value === 'number' && Number.isFinite(value)) return value;
+        }
+        return null;
+    };
+    const pickBool = (...keys: string[]): string | undefined => {
+        for (const key of keys) {
+            const value = payload[key];
+            if (typeof value === 'boolean') return String(value);
+        }
+        return undefined;
+    };
 
     const entity = payload.entity as Record<string, unknown> | undefined;
     const entityLabel =
@@ -286,55 +300,71 @@ function buildTooltipSummary(
     const transition =
         transitionFrom || transitionTo ? `${transitionFrom ?? 'none'} → ${transitionTo ?? 'none'}` : undefined;
 
+    // Push a candidate pair only when value is non-empty (null/undefined/'' dropped).
+    const summary: { label: string; value: string }[] = [];
+    const push = (label: string, value: string | null | undefined): void => {
+        if (value !== null && value !== undefined && value !== '') summary.push({ label, value });
+    };
+
     // Renderer-aware primary fields. Falls through to the generic summary if
     // the active renderer is unknown.
     const fallbackRenderer = eventName.startsWith('task.') || eventName.startsWith('feature.') ? 'planning' : 'generic';
     const activeRenderer = renderer ?? fallbackRenderer;
 
-    const summary: { label: string; value: string }[] = [];
     switch (activeRenderer) {
         case 'planning':
-            if (entityLabel) summary.push({ label: 'Entity', value: entityLabel });
-            if (transition) summary.push({ label: 'Transition', value: transition });
+            if (entityLabel) push('Entity', entityLabel);
+            if (transition) push('Transition', transition);
             break;
         case 'queue':
-        case 'scheduler': {
-            const kind = pickString('kind', 'type', 'name');
-            if (kind) summary.push({ label: 'Job', value: kind });
-            const jobId = pickString('jobId', 'id');
-            if (jobId) summary.push({ label: 'ID', value: jobId });
+            push('Job', pickString('kind', 'type', 'name'));
+            push('ID', pickString('jobId', 'id'));
+            push('Duration', formatDuration(pickNumber('durationMs')));
+            push('Status', pickString('status', 'state'));
+            push('Error', pickString('error'));
             break;
-        }
+        case 'scheduler':
+            push('Job', pickString('name', 'kind'));
+            push('Duration', formatDuration(pickNumber('durationMs')));
+            push('Error', pickString('error'));
+            break;
         case 'message': {
             const from = pickString('fromId', 'from', 'senderId');
             const to = pickString('toId', 'to', 'recipientId');
-            if (from && to) summary.push({ label: 'Route', value: `${from} → ${to}` });
+            if (from && to) push('Route', `${from} → ${to}`);
+            else push('Route', pickString('route', 'direction', 'type'));
+            push('OK', pickBool('ok', 'success'));
+            push('Subject', pickString('subject', 'topic'));
             break;
         }
         case 'process':
-        case 'agent': {
-            const agentId = pickString('agentId', 'agent');
-            if (agentId) summary.push({ label: 'Agent', value: agentId });
-            const op = pickString('operation');
-            if (op) summary.push({ label: 'Op', value: op });
+        case 'agent':
+            push('Command', pickString('command', 'cmd', 'agent', 'name'));
+            push('Exit', pickString('exitCode', 'code'));
+            push('Duration', formatDuration(pickNumber('durationMs')));
+            push('Op', pickString('op', 'action', 'event', 'type'));
+            push('PID', pickString('pid'));
             break;
-        }
-        case 'rule': {
-            const ruleId = pickString('ruleId');
-            if (ruleId) summary.push({ label: 'Rule', value: ruleId });
-            const findings = pickString('findings');
-            if (findings !== undefined) summary.push({ label: 'Findings', value: findings });
+        case 'rule':
+            push('Rule', pickString('rule', 'ruleId', 'name'));
+            push('Severity', pickString('severity'));
+            push('Findings', pickString('count', 'findings', 'total'));
             break;
-        }
         case 'bus': {
             const evt = pickString('event', 'kind');
-            if (evt) summary.push({ label: 'Bus event', value: evt });
+            if (evt) push('Bus event', evt);
             break;
         }
         case 'api': {
             const method = pickString('method');
             const status = pickString('status');
-            if (method && status) summary.push({ label: 'HTTP', value: `${method} ${status}` });
+            if (method && status) push('HTTP', `${method} ${status}`);
+            else {
+                push('HTTP', method);
+                push('HTTP', status);
+            }
+            push('Path', pickString('path'));
+            push('Error', pickString('error'));
             break;
         }
         case 'workflow-run':
@@ -344,10 +374,12 @@ function buildTooltipSummary(
         case 'workflow-hitl':
         case 'workflow-guard':
         case 'workflow-custom': {
-            const wf = pickString('workflowName');
-            if (wf) summary.push({ label: 'Workflow', value: wf });
-            const runId = pickString('runId');
-            if (runId) summary.push({ label: 'Run', value: runId });
+            push('Workflow', pickString('workflow', 'workflowName', 'name'));
+            push('Run', pickString('runId', 'run', 'id'));
+            // First non-null of phase/transition/action becomes a single labeled pair.
+            push('Phase', pickString('phase'));
+            push('Transition', pickString('transition'));
+            push('Action', pickString('action', 'kind'));
             break;
         }
         default:

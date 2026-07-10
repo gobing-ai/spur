@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { type DbAdapter, InboxMessageDao, InboxRecentDao, MarkdownDocument } from '@gobing-ai/spur-domain';
 import {
+    type AgentEvents,
     type AgentSpec,
     buildIdentityPreamble,
     deleteAgentSpec as deleteAgentSpecFile,
@@ -39,6 +40,13 @@ export interface TeamServiceContext {
      * SSE streams the events (single emission point, identical CLI/server behavior).
      */
     eventBus?: MessageEventBus;
+    /**
+     * Optional EventBus for agent lifecycle events (`agent.started`,
+     * `agent.stopped`, `agent.invoke.*`, `agent.message.sent`). When absent,
+     * TeamOrchestrator runs without publishing — the server injects its bus
+     * so the system_events tap persists and SSE streams agent lifecycle.
+     */
+    events?: EventBus<AgentEvents>;
 }
 
 /**
@@ -369,7 +377,9 @@ export class TeamService {
     }
 
     private orchestrator(): Promise<TeamOrchestrator> {
-        this.orchestratorPromise ??= this.inboxDao().then((dao) => new TeamOrchestrator(this.configDir, dao));
+        this.orchestratorPromise ??= this.inboxDao().then(
+            (dao) => new TeamOrchestrator(this.configDir, dao, { events: this.ctx.events }),
+        );
         return this.orchestratorPromise;
     }
 
