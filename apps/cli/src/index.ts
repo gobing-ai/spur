@@ -1,4 +1,9 @@
 #!/usr/bin/env bun
+// Force ts-db into the --compile static bundle so that string-literal
+// import('@gobing-ai/ts-db') calls (in ts-runtime and spur-domain)
+// resolve at runtime from bunfs. Without a static reference, Bun treats
+// the package as external when it resolves through the .bun store.
+import '@gobing-ai/ts-db';
 import { Command } from '@commander-js/extra-typings';
 import { type SpurAppConfig, spurConfigSchema } from '@gobing-ai/spur-config';
 import { loadSpurConfig, resolveConfigFile } from '@gobing-ai/spur-config/loader';

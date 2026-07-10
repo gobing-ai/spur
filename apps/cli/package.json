@@ -53,6 +53,7 @@
         "@gobing-ai/spur-config": "workspace:0.1.0",
         "@gobing-ai/spur-server": "workspace:*",
         "@gobing-ai/spur-domain": "workspace:0.1.0",
+        "@gobing-ai/ts-db": "catalog:",
         "@gobing-ai/ts-ai-runner": "catalog:",
         "@gobing-ai/ts-dual-workflow-engine": "catalog:",
         "@gobing-ai/ts-infra": "catalog:",
