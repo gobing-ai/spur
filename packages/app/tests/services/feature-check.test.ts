@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
@@ -1039,5 +1039,375 @@ describe('FeatureCheckService', () => {
         expect(l2Errors.length).toBeGreaterThan(0);
         expect(result.missingSections).toContain('Goal');
         expect(result.missingSections).toContain('Notes');
+    });
+
+    // ── P3: Mandatory dogfood for self-referential workflow changes ──
+
+    test('P3: warning when verifying feature touches self-ref paths with no dogfood artifact', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-p3-sr-'));
+        const featuresDir = join(dir, 'features');
+        const tasksDir = join(dir, 'tasks');
+        mkdirSync(featuresDir, { recursive: true });
+        mkdirSync(tasksDir, { recursive: true });
+
+        // Feature at verifying status
+        writeFileSync(
+            join(featuresDir, 'L_sr.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'id: "L"',
+                'name: "Self-Ref Feature"',
+                'status: verifying',
+                'priority: P1',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# L: Self-Ref Feature',
+                '',
+                '## Goal',
+                '',
+                'g',
+                '',
+                '## Scope',
+                '',
+                'In scope: x',
+                '',
+                '## Acceptance Criteria',
+                '',
+                'Feature: L',
+                '',
+                '  Scenario: self-ref',
+                '    Given x',
+            ].join('\n'),
+        );
+
+        // Task that touches self-referential path in Solution
+        writeFileSync(
+            join(tasksDir, '0001_sr.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'name: "Self-ref task"',
+                'status: done',
+                'feature_id: L',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '## 0001. Self-ref task',
+                '',
+                '### Solution',
+                '',
+                'Modified packages/app/src/workflow/lifecycle-adapter.ts to add gate.',
+            ].join('\n'),
+        );
+
+        const svc = new FeatureCheckService(createNodeFileSystem());
+        const result = await svc.check(join(featuresDir, 'L_sr.md'), 'L', {
+            featuresDir,
+            tasksDir,
+            dogfoodDir: join(dir, 'dogfood'),
+        });
+        rmSync(dir, { recursive: true, force: true });
+
+        const dogfoodFindings = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('dogfood'));
+        expect(dogfoodFindings).toHaveLength(1);
+        expect(dogfoodFindings[0]?.severity).toBe('warning');
+        expect(dogfoodFindings[0]?.message).toContain('dogfood');
+    });
+
+    test('P3: no finding when dogfood artifact exists for self-ref feature', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-p3-ok-'));
+        const featuresDir = join(dir, 'features');
+        const tasksDir = join(dir, 'tasks');
+        const dogfoodDir = join(dir, 'dogfood');
+        mkdirSync(featuresDir, { recursive: true });
+        mkdirSync(tasksDir, { recursive: true });
+        mkdirSync(dogfoodDir, { recursive: true });
+
+        writeFileSync(
+            join(featuresDir, 'M_ok.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'id: "M"',
+                'name: "Dogfood OK"',
+                'status: verifying',
+                'priority: P1',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# M: Dogfood OK',
+                '',
+                '## Goal',
+                '',
+                'g',
+                '',
+                '## Scope',
+                '',
+                'In scope: x',
+                '',
+                '## Acceptance Criteria',
+                '',
+                'Feature: M',
+                '',
+                '  Scenario: dogfood',
+                '    Given x',
+            ].join('\n'),
+        );
+
+        writeFileSync(
+            join(tasksDir, '0001_ok.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'name: "self-ref task"',
+                'status: done',
+                'feature_id: M',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '## 0001. self-ref task',
+                '',
+                '### Solution',
+                '',
+                'Touched .spur/workflows/task-pipeline.yaml.',
+            ].join('\n'),
+        );
+
+        // Dogfood artifact exists and mentions the feature ID
+        writeFileSync(join(dogfoodDir, '2026-07-10-M-dogfood.md'), '# Dogfood for M');
+
+        const svc = new FeatureCheckService(createNodeFileSystem());
+        const result = await svc.check(join(featuresDir, 'M_ok.md'), 'M', {
+            featuresDir,
+            tasksDir,
+            dogfoodDir,
+        });
+        rmSync(dir, { recursive: true, force: true });
+
+        const dogfoodFindings = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('dogfood'));
+        expect(dogfoodFindings).toHaveLength(0);
+    });
+
+    test('P3: no finding when tasks do not touch self-referential paths', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-p3-nosr-'));
+        const featuresDir = join(dir, 'features');
+        const tasksDir = join(dir, 'tasks');
+        mkdirSync(featuresDir, { recursive: true });
+        mkdirSync(tasksDir, { recursive: true });
+
+        writeFileSync(
+            join(featuresDir, 'N_no.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'id: "N"',
+                'name: "No Self-Ref"',
+                'status: verifying',
+                'priority: P1',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# N: No Self-Ref',
+                '',
+                '## Goal',
+                '',
+                'g',
+                '',
+                '## Scope',
+                '',
+                'In scope: x',
+                '',
+                '## Acceptance Criteria',
+                '',
+                'Feature: N',
+                '',
+                '  Scenario: normal',
+                '    Given x',
+            ].join('\n'),
+        );
+
+        // Task Solution does NOT mention self-ref paths
+        writeFileSync(
+            join(tasksDir, '0001_nosr.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'name: "normal task"',
+                'status: done',
+                'feature_id: N',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '## 0001. normal task',
+                '',
+                '### Solution',
+                '',
+                'Added a utility function in packages/app/src/services/agent-service.ts.',
+            ].join('\n'),
+        );
+
+        const svc = new FeatureCheckService(createNodeFileSystem());
+        const result = await svc.check(join(featuresDir, 'N_no.md'), 'N', {
+            featuresDir,
+            tasksDir,
+            dogfoodDir: join(dir, 'dogfood'),
+        });
+        rmSync(dir, { recursive: true, force: true });
+
+        const dogfoodFindings = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('dogfood'));
+        expect(dogfoodFindings).toHaveLength(0);
+    });
+
+    test('P3: --strict elevates dogfood warning to error', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-p3-strict-'));
+        const featuresDir = join(dir, 'features');
+        const tasksDir = join(dir, 'tasks');
+        mkdirSync(featuresDir, { recursive: true });
+        mkdirSync(tasksDir, { recursive: true });
+
+        writeFileSync(
+            join(featuresDir, 'P_strict.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'id: "P"',
+                'name: "Strict Dogfood"',
+                'status: verifying',
+                'priority: P1',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# P: Strict Dogfood',
+                '',
+                '## Goal',
+                '',
+                'g',
+                '',
+                '## Scope',
+                '',
+                'In scope: x',
+                '',
+                '## Acceptance Criteria',
+                '',
+                'Feature: P',
+                '',
+                '  Scenario: strict',
+                '    Given x',
+            ].join('\n'),
+        );
+
+        writeFileSync(
+            join(tasksDir, '0001_strict.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'name: "self-ref strict"',
+                'status: done',
+                'feature_id: P',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '## 0001. self-ref strict',
+                '',
+                '### Solution',
+                '',
+                'Updated plugins/sp/spur-dev/skills/spur-dev/workflow.md.',
+            ].join('\n'),
+        );
+
+        const svc = new FeatureCheckService(createNodeFileSystem());
+        // With --strict: dogfood warning is elevated to error.
+        const result = await svc.check(join(featuresDir, 'P_strict.md'), 'P', {
+            strict: true,
+            featuresDir,
+            tasksDir,
+            dogfoodDir: join(dir, 'dogfood'),
+        });
+        rmSync(dir, { recursive: true, force: true });
+
+        const dogfoodFindings = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('dogfood'));
+        expect(dogfoodFindings).toHaveLength(1);
+        expect(dogfoodFindings[0]?.severity).toBe('error'); // elevated by --strict
+    });
+
+    test('P3: no dogfood check for non-verifying/done statuses', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-p3-backlog-'));
+        const featuresDir = join(dir, 'features');
+        const tasksDir = join(dir, 'tasks');
+        mkdirSync(featuresDir, { recursive: true });
+        mkdirSync(tasksDir, { recursive: true });
+
+        writeFileSync(
+            join(featuresDir, 'Q_backlog.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'id: "Q"',
+                'name: "Backlog Self-Ref"',
+                'status: backlog',
+                'priority: P1',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# Q: Backlog Self-Ref',
+                '',
+                '## Goal',
+                '',
+                'g',
+                '',
+                '## Scope',
+                '',
+                'In scope: x',
+                '',
+                '## Acceptance Criteria',
+                '',
+                'Feature: Q',
+                '',
+                '  Scenario: backlog',
+                '    Given x',
+            ].join('\n'),
+        );
+
+        writeFileSync(
+            join(tasksDir, '0001_bl.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'name: "self-ref backlog"',
+                'status: done',
+                'feature_id: Q',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '## 0001. self-ref backlog',
+                '',
+                '### Solution',
+                '',
+                'Changed packages/app/src/workflow/lifecycle-adapter.ts.',
+            ].join('\n'),
+        );
+
+        const svc = new FeatureCheckService(createNodeFileSystem());
+        const result = await svc.check(join(featuresDir, 'Q_backlog.md'), 'Q', {
+            featuresDir,
+            tasksDir,
+            dogfoodDir: join(dir, 'dogfood'),
+        });
+        rmSync(dir, { recursive: true, force: true });
+
+        const dogfoodFindings = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('dogfood'));
+        expect(dogfoodFindings).toHaveLength(0);
     });
 });

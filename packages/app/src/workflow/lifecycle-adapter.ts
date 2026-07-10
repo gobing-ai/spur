@@ -103,6 +103,35 @@ export class LifecycleAdapter implements LifecyclePort {
         const externalKey = `${profile.entityPrefix}:${ref.id}`;
         const now = new Date().toISOString();
 
+        // ── P2: provenance gate — task transitions to `done` must have a
+        // pipeline run recorded (or an explicit auditable bypass) ──
+        if (to === 'done' && profile.entityPrefix === 'task') {
+            const links = await this.opts.taskRunLinkDao(db).listByWbs(ref.id, 20);
+            const hasPipelineRun = links.some((l) => l.kind === 'pipeline');
+            const hasPriorBypass = links.some((l) => l.kind === 'provenance_bypass');
+            if (!hasPipelineRun && !hasPriorBypass) {
+                if (process.env.SPUR_PROVENANCE_OVERRIDE === '1') {
+                    await this.opts.taskRunLinkDao(db).insert({
+                        id: createId('trl'),
+                        wbs: ref.id,
+                        run_id: 'manual',
+                        kind: 'provenance_bypass',
+                        created_at: now,
+                    });
+                } else {
+                    return {
+                        allowed: false,
+                        from: currentStatus,
+                        to,
+                        report:
+                            `No pipeline run recorded for ${ref.id}. Run the pipeline first (` +
+                            `spur workflow run task-pipeline.yaml --vars '{"wbs":"${ref.id}"}'), ` +
+                            'or set SPUR_PROVENANCE_OVERRIDE=1 to bypass (recorded).',
+                    };
+                }
+            }
+        }
+
         // ── R1: create-or-attach the durable named run ──
         const existing = await svc.findRunByKey(profile.workflowName, externalKey);
         const runId = existing?.id ?? createId('run');

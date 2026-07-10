@@ -7,6 +7,7 @@
  * L4: Traceability (warning-first, feature_id edge validation).
  */
 
+import { dirname, join } from 'node:path';
 import {
     checkAcCoverage,
     featureFrontmatterSchema,
@@ -103,7 +104,7 @@ export class FeatureCheckService extends PlanningCheckService {
     async check(
         filePath: string,
         featureId: string,
-        options?: { strict?: boolean; featuresDir?: string; tasksDir?: string },
+        options?: { strict?: boolean; featuresDir?: string; tasksDir?: string; dogfoodDir?: string },
     ): Promise<CheckFeatureResult> {
         const strict = options?.strict === true;
         const raw = await this.fs.readFile(filePath);
@@ -132,7 +133,9 @@ export class FeatureCheckService extends PlanningCheckService {
         }
 
         // ── L4: Traceability — incoming feature_id edges + orphan scenarios ──
-        await this.runL4(doc, featureId, status, options?.tasksDir, findings);
+        const dogfoodDir =
+            options?.dogfoodDir ?? (options?.featuresDir ? join(dirname(options.featuresDir), 'dogfood') : undefined);
+        await this.runL4(doc, featureId, status, options?.tasksDir, dogfoodDir, findings);
 
         return { id: featureId, ...this.summarizeWithStatus(status, findings, strict) };
     }
@@ -307,12 +310,12 @@ export class FeatureCheckService extends PlanningCheckService {
         }
     }
 
-    // ── L4: Traceability — incoming feature_id edges + orphan scenarios ──
     private async runL4(
         doc: MarkdownDocument,
         featureId: string,
         status: string,
         tasksDir: string | undefined,
+        dogfoodDir: string | undefined,
         findings: CheckFeatureFindings[],
     ): Promise<void> {
         if (tasksDir === undefined) return;
@@ -323,6 +326,7 @@ export class FeatureCheckService extends PlanningCheckService {
         let linkedTasks = 0;
         const incompleteTasks: string[] = [];
         const linkedTaskAc: string[] = [];
+        const linkedTaskSolutions: string[] = [];
         try {
             const entries = await this.fs.readDir(tasksDir);
             for (const entry of entries) {
@@ -340,6 +344,7 @@ export class FeatureCheckService extends PlanningCheckService {
                     }
                     const tac = stripAcFence(taskDoc.getSection('Acceptance Criteria') ?? '');
                     if (tac.trim().length > 0) linkedTaskAc.push(tac);
+                    linkedTaskSolutions.push(taskDoc.getSection('Solution') ?? '');
                 } catch {
                     // A task that references this feature but fails to parse is a
                     // dangling edge — surface it as a traceability warning.
@@ -405,6 +410,43 @@ export class FeatureCheckService extends PlanningCheckService {
                 section: '',
                 message: `Feature "${featureId}" is verifying but ${incompleteTasks.length} linked task(s) are not done/cancelled: ${incompleteTasks.join(', ')}`,
             });
+        }
+
+        // ── P3: Dogfood requirement for self-referential workflow changes ──
+        // When a feature touches Spur's own workflow infrastructure, a dogfood
+        // artifact must exist in docs/dogfood/ before the feature can be marked
+        // done. Fires as a warning; elevated to error by --strict during the
+        // verifying→done lifecycle guard.
+        if (status === 'verifying' || status === 'done') {
+            const SELF_REFERENTIAL_PATTERNS = [
+                /\.spur\/workflows\//,
+                /plugins\/sp\//,
+                /packages\/app\/src\/services\/\w*workflow/i,
+                /packages\/app\/src\/workflow\//,
+            ];
+            const touchesSelfRef = linkedTaskSolutions.some((sol) =>
+                SELF_REFERENTIAL_PATTERNS.some((p) => p.test(sol)),
+            );
+            if (touchesSelfRef && dogfoodDir !== undefined) {
+                let hasDogfood = false;
+                try {
+                    const entries = await this.fs.readDir(dogfoodDir);
+                    hasDogfood = entries.some((f) => f.includes(featureId));
+                } catch {
+                    // Directory doesn't exist — no dogfood artifact.
+                }
+                if (!hasDogfood) {
+                    findings.push({
+                        layer: 'L4',
+                        severity: 'warning',
+                        section: 'Dogfood',
+                        message:
+                            `Feature "${featureId}" touches self-referential workflow infrastructure ` +
+                            'but no dogfood artifact exists in docs/dogfood/. ' +
+                            'Run the dogfood workflow and write a report before marking the feature done.',
+                    });
+                }
+            }
         }
     }
 }
