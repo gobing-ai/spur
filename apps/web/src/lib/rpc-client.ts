@@ -5,6 +5,21 @@ import type { JsonifiedClient } from '@orpc/openapi-client';
 import { OpenAPILink } from '@orpc/openapi-client/fetch';
 import { onError } from '@orpc/shared';
 
+// ── Injectable fetch seam for tests ───────────────────────────────────
+// Tests inject a mock fetch via setFetchForTesting instead of mutating
+// globalThis.fetch. This keeps the no-globalthis-fetch-mutation rule
+// enforceable (http-boundaries.yaml strict preset). ADR-005 §4 Type Seam.
+let _testFetch: typeof fetch | undefined;
+
+/** Replace the fetch implementation for the current test. Call resetFetchForTesting in afterEach. */
+export function setFetchForTesting(fn: typeof fetch): void {
+    _testFetch = fn;
+}
+
+/** Restore the platform fetch after a test. */
+export function resetFetchForTesting(): void {
+    _testFetch = undefined;
+}
 /**
  * Resolve the public API URL for browser, SSR, and test contexts.
  *
@@ -20,7 +35,7 @@ export function resolveApiUrl(
     _isDev = import.meta.env.DEV,
 ): string {
     if (envUrl) return envUrl;
-    return origin ? new URL('/api', origin).toString() : 'http://localhost:3000/api';
+    return origin && origin !== 'null' ? new URL('/api', origin).toString() : 'http://localhost:3000/api';
 }
 
 /**
@@ -29,8 +44,15 @@ export function resolveApiUrl(
 export function fetchWithTimeout(request: Request, ms = 10_000): Promise<Response> {
     const controller = new AbortController();
     const handle = setTimeout(() => controller.abort(), ms);
+    // Race: if the original request has an abort signal (e.g. useEffect cleanup),
+    // forward it to our controller so the fetch is aborted on either signal.
+    const origSignal = request.signal;
+    if (origSignal) {
+        origSignal.addEventListener('abort', () => controller.abort(), { once: true });
+    }
     const req = new Request(request, { signal: controller.signal });
-    return fetch(req).finally(() => clearTimeout(handle));
+    const fetcher = _testFetch ?? fetch;
+    return fetcher(req).finally(() => clearTimeout(handle));
 }
 
 /**

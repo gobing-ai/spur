@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Badge, Card, CardBody, Loading } from '@/ui';
-import { resolveApiUrl } from '../../lib/rpc-client';
+import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 import type { SystemEventRow } from './SystemEventsTab';
 
 interface JobStats {
@@ -98,8 +98,10 @@ export default function JobsTab() {
         (async () => {
             try {
                 const [statsRes, eventsRes] = await Promise.all([
-                    fetch(JOB_STATS_URL, { signal: controller.signal }),
-                    fetch(`${EVENTS_HISTORY_URL}?limit=${JOB_HISTORY_LIMIT}`, { signal: controller.signal }),
+                    fetchWithTimeout(new Request(JOB_STATS_URL, { signal: controller.signal })),
+                    fetchWithTimeout(
+                        new Request(`${EVENTS_HISTORY_URL}?limit=${JOB_HISTORY_LIMIT}`, { signal: controller.signal }),
+                    ),
                 ]);
                 if (!statsRes.ok) throw new Error(`job stats fetch failed: ${statsRes.status}`);
                 if (!eventsRes.ok) throw new Error(`job history fetch failed: ${eventsRes.status}`);

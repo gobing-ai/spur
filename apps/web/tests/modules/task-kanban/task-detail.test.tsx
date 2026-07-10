@@ -55,40 +55,42 @@ let actionImpl: () => Promise<unknown> = async () => ({ data: { runId: 'r1', act
 let listImpl: () => Promise<unknown> = async () => ({ data: [] });
 
 // Shared full-surface rpc-client mock — prevents "last mock wins" starvation
-import '../../test-helpers/rpc-client-mock';
+import { buildFullRpcMock } from '../../test-helpers/rpc-client-mock';
+
 afterAll(teardownHappyDom);
 
 const actionCalls: Array<{ wbs: string; action: string; channel?: string; skipDeps?: boolean }> = [];
 const listCalls: number[] = [];
 
 const restoreMockTD = () => {
-    mock.module('../../../src/lib/rpc-client', () => ({
-        api: {
-            task: {
-                show: (input: { wbs: string }) => {
-                    showCalls.push(input.wbs);
-                    return showImpl();
+    mock.module('../../../src/lib/rpc-client', () =>
+        buildFullRpcMock({
+            api: {
+                task: {
+                    show: (input: { wbs: string }) => {
+                        showCalls.push(input.wbs);
+                        return showImpl();
+                    },
+                    body: (input: { wbs: string; body: string }) => {
+                        bodyCalls.push(input);
+                        return bodyImpl();
+                    },
+                    action: (input: { wbs: string; action: string; channel?: string; skipDeps?: boolean }) => {
+                        actionCalls.push(input);
+                        return actionImpl();
+                    },
+                    list: () => {
+                        listCalls.push(listCalls.length + 1);
+                        return listImpl();
+                    },
+                    // Inherit full-surface defaults for methods this file doesn't override
+                    create: async () => ({ data: { wbs: '0003', filePath: 'c.md' } }),
+                    transition: async () => ({ ok: true }),
+                    folders: async () => ({ data: [] }),
                 },
-                body: (input: { wbs: string; body: string }) => {
-                    bodyCalls.push(input);
-                    return bodyImpl();
-                },
-                action: (input: { wbs: string; action: string; channel?: string; skipDeps?: boolean }) => {
-                    actionCalls.push(input);
-                    return actionImpl();
-                },
-                list: () => {
-                    listCalls.push(listCalls.length + 1);
-                    return listImpl();
-                },
-                // Inherit full-surface defaults for methods this file doesn't override
-                create: async () => ({ data: { wbs: '0003', filePath: 'c.md' } }),
-                transition: async () => ({ ok: true }),
-                folders: async () => ({ data: [] }),
             },
-        },
-        resolveApiUrl: () => 'http://localhost:3000/api',
-    }));
+        }),
+    );
 };
 
 beforeEach(() => {

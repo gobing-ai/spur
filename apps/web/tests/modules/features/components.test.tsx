@@ -2,10 +2,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test
 import { GlobalRegistrator } from '@happy-dom/global-registrator';
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import type { FeatureSummary } from '../../../src/lib/feature-types';
+import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
 import { isWebModule } from '../../../src/modules/discover';
-
-// Shared full-surface rpc-client mock — prevents "last mock wins" starvation
-import '../../test-helpers/rpc-client-mock';
 
 import FeatureDetail from '../../../src/modules/features/FeatureDetail';
 import FeaturesShell from '../../../src/modules/features/FeaturesShell';
@@ -28,21 +26,19 @@ class FakeEventSource {
     }
 }
 
-let originalFetch: typeof fetch;
 let originalEventSource: typeof EventSource | undefined;
 
 beforeAll(() => {
     try {
         GlobalRegistrator.register();
     } catch {} // already registered in suite
-    originalFetch = globalThis.fetch;
     originalEventSource = globalThis.EventSource;
 });
 
 afterEach(() => {
     cleanup();
     FakeEventSource.instances = [];
-    globalThis.fetch = originalFetch;
+    resetFetchForTesting();
     Object.defineProperty(globalThis, 'EventSource', {
         configurable: true,
         value: originalEventSource,
@@ -62,7 +58,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 function installFeatureFetchMock(): string[] {
     const calls: string[] = [];
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
+    setFetchForTesting((async (input: RequestInfo | URL) => {
         const url = input instanceof Request ? input.url : String(input);
         calls.push(url);
         if (url.includes('/features/F/status')) {
@@ -118,7 +114,7 @@ function installFeatureFetchMock(): string[] {
             });
         }
         return jsonResponse({ ok: false, error: { message: 'not found' } }, 404);
-    }) as typeof fetch;
+    }) as unknown as typeof fetch);
     Object.defineProperty(globalThis, 'EventSource', {
         configurable: true,
         value: FakeEventSource,
@@ -208,12 +204,12 @@ describe('FeaturesShell', () => {
     });
 
     test('renders empty and error states', async () => {
-        globalThis.fetch = (async () => jsonResponse({ ok: true, data: [] })) as unknown as typeof fetch;
+        setFetchForTesting((async () => jsonResponse({ ok: true, data: [] })) as unknown as typeof fetch);
         const empty = render(<FeaturesShell />);
         await waitFor(() => expect(empty.getByText('No features found.')).toBeDefined());
         empty.unmount();
 
-        globalThis.fetch = (async () => jsonResponse({ ok: false }, 500)) as unknown as typeof fetch;
+        setFetchForTesting((async () => jsonResponse({ ok: false }, 500)) as unknown as typeof fetch);
         const failed = render(<FeaturesShell />);
         await waitFor(() => expect(failed.getByRole('alert').textContent).toContain('Failed to load features'));
     });

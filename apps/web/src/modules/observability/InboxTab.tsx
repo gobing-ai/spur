@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Badge, Card, CardBody, Loading } from '@/ui';
-import { resolveApiUrl } from '../../lib/rpc-client';
+import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 
 /**
  * Wire shape of one inbox message from the `/api/messages/inbox` and
@@ -112,7 +112,7 @@ export default function InboxTab() {
     const load = useCallback(async (signal: AbortSignal): Promise<void> => {
         try {
             const url = `${inboxUrl()}?agent=${encodeURIComponent(DEFAULT_AGENT)}&limit=${DEFAULT_LIMIT}`;
-            const res = await fetch(url, { signal });
+            const res = await fetchWithTimeout(new Request(url, { signal }));
             if (!res.ok) throw new Error(`inbox fetch failed: ${res.status}`);
             const raw: unknown = await res.json();
             const body = parseMessagesResponse(raw);

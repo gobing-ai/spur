@@ -9,6 +9,7 @@ import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router';
 import BoardLayout from '../../src/components/BoardLayout';
 import { resetLayoutState } from '../../src/lib/layout-state';
+import { resetFetchForTesting, setFetchForTesting } from '../../src/lib/rpc-client';
 import { modules } from '../../src/modules/registry';
 import type { WebModule } from '../../src/modules/types';
 import { createAppRouter, routes } from '../../src/router';
@@ -22,14 +23,16 @@ const TASKS_MODULE: WebModule | undefined = modules.find((m) => m.id === 'tasks'
 // to `http://localhost:3000/api` (the no-origin fallback), which happy-dom blocks and logs as
 // "Cross-Origin Request Blocked" — passing tests, but leaked stderr noise.
 //
-// We stub `globalThis.fetch` rather than `mock.module('rpc-client')`: bun's module mocks are
-// process-global and are NOT reverted by `mock.restore()`, so mocking the client here would
-// leak into `lib/rpc-client.test.ts` (which sorts *after* this file and asserts the REAL
-// client). A fetch override is file-local and fully restored in afterAll. Spur API responses
-// are oRPC envelopes; an empty-array `{}` body keeps the board mounting with zero rows.
-const realFetch = globalThis.fetch;
+// We inject a mock fetch via setFetchForTesting (the rpc-client's test seam)
+// rather than `mock.module('rpc-client')`: bun's module mocks are process-global
+// and are NOT reverted by `mock.restore()`, so mocking the client here would
+// leak into `lib/rpc-client.test.ts` (which sorts *after* this file and asserts
+// the REAL client). The injection seam is file-local and fully reset in
+// afterAll/afterEach via resetFetchForTesting. Spur API responses are oRPC
+// envelopes; an empty-array `{}` body keeps the board mounting with zero rows.
+const platformFetch = fetch.bind(globalThis);
 function installSilentApiFetch(): void {
-    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    setFetchForTesting((async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
         if (url.includes('/api/features/F/status')) {
             return new Response(JSON.stringify({ ok: true, data: { status: 'done' } }), {
@@ -109,8 +112,8 @@ function installSilentApiFetch(): void {
         if (url.includes('/api/')) {
             return new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } });
         }
-        return realFetch(input as RequestInfo, init);
-    }) as typeof fetch;
+        return platformFetch(input as RequestInfo, init);
+    }) as typeof fetch);
 }
 
 function renderBoard() {
@@ -121,11 +124,11 @@ function renderBoard() {
     );
 }
 
-// File-scoped teardown: restore the real fetch, then unregister only after BOTH describe blocks
+// File-scoped teardown: reset the injected fetch, then unregister only after BOTH describe blocks
 // finish, so the second suite still has a DOM (a describe-scoped afterAll would tear down
 // happy-dom before the router suite runs).
 afterAll(async () => {
-    globalThis.fetch = realFetch;
+    resetFetchForTesting();
     await teardownHappyDom();
 });
 
@@ -138,7 +141,7 @@ describe('BoardLayout', () => {
 
     afterEach(() => {
         cleanup();
-        globalThis.fetch = realFetch;
+        resetFetchForTesting();
         localStorage.clear();
     });
 
@@ -233,7 +236,7 @@ describe('router + module wiring', () => {
 
     afterEach(() => {
         cleanup();
-        globalThis.fetch = realFetch;
+        resetFetchForTesting();
     });
 
     function renderAt(initialPath: string) {

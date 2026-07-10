@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { GlobalRegistrator } from '@happy-dom/global-registrator';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
-
+import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
 import InboxTab from '../../../src/modules/observability/InboxTab';
 import ObservabilityShell from '../../../src/modules/observability/ObservabilityShell';
 import ProcessListTab from '../../../src/modules/observability/ProcessListTab';
@@ -32,14 +32,12 @@ function jsonResponse(body: unknown): Response {
     });
 }
 
-let originalFetch: typeof fetch;
 let originalEventSource: typeof EventSource | undefined;
 
 beforeAll(() => {
     try {
         GlobalRegistrator.register();
     } catch {} // already registered in suite
-    originalFetch = globalThis.fetch;
     originalEventSource = globalThis.EventSource;
 });
 
@@ -53,7 +51,7 @@ beforeEach(() => {
 
 afterEach(() => {
     cleanup();
-    globalThis.fetch = originalFetch;
+    resetFetchForTesting();
     Object.defineProperty(globalThis, 'EventSource', {
         configurable: true,
         value: originalEventSource,
@@ -66,8 +64,8 @@ afterAll(async () => {
 
 function installObservabilityFetchMock(): string[] {
     const calls: string[] = [];
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
-        const url = String(input);
+    setFetchForTesting((async (input: RequestInfo | URL) => {
+        const url = input instanceof Request ? input.url : String(input);
         calls.push(url);
         if (url.includes('/events/history')) {
             return jsonResponse({
@@ -125,7 +123,7 @@ function installObservabilityFetchMock(): string[] {
             });
         }
         return new Response('not found', { status: 404 });
-    }) as typeof fetch;
+    }) as unknown as typeof fetch);
     return calls;
 }
 
@@ -303,8 +301,8 @@ describe('observability components', () => {
     test('system events tab filters by visibility tier (task 0221 R5/R7)', async () => {
         // Catalog with one default + one diagnostic event so the tier filter
         // can hide the diagnostic row.
-        globalThis.fetch = (async (input: RequestInfo | URL) => {
-            const url = String(input);
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
             if (url.includes('/events/history')) {
                 return jsonResponse({
                     events: [
@@ -343,7 +341,7 @@ describe('observability components', () => {
                 });
             }
             return new Response('not found', { status: 404 });
-        }) as typeof fetch;
+        }) as unknown as typeof fetch);
         const { queryAllByText, getByRole } = render(<SystemEventsTab />);
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
@@ -427,8 +425,8 @@ describe('observability components', () => {
         const now = Date.now();
         const recentIso = new Date(now - 5_000).toISOString();
         const oldIso = new Date(now - 10 * 60_000).toISOString();
-        globalThis.fetch = (async (input: RequestInfo | URL) => {
-            const url = String(input);
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
             if (url.includes('/events/history')) {
                 return jsonResponse({
                     events: [
@@ -455,7 +453,7 @@ describe('observability components', () => {
                 });
             }
             return new Response('not found', { status: 404 });
-        }) as typeof fetch;
+        }) as unknown as typeof fetch);
         const { queryAllByText, container } = render(<SystemEventsTab />);
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
@@ -610,8 +608,8 @@ describe('observability components', () => {
         // so the refetch triggered by the message.sent event surfaces the new row.
         let secondMessageVisible = false;
         const inboxCalls: string[] = [];
-        globalThis.fetch = (async (input: RequestInfo | URL) => {
-            const url = String(input);
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
             if (url.includes('/messages/inbox')) {
                 inboxCalls.push(url);
                 const messages = [
@@ -641,7 +639,7 @@ describe('observability components', () => {
                 return jsonResponse({ messages, count: messages.length });
             }
             return new Response('not found', { status: 404 });
-        }) as typeof fetch;
+        }) as unknown as typeof fetch);
 
         const { getByText, container } = render(<InboxTab />);
 
@@ -680,8 +678,8 @@ describe('observability components', () => {
 
     test('inbox tab ignores non-message SSE events (no spurious refetch)', async () => {
         const inboxCalls: string[] = [];
-        globalThis.fetch = (async (input: RequestInfo | URL) => {
-            const url = String(input);
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
             if (url.includes('/messages/inbox')) {
                 inboxCalls.push(url);
                 return jsonResponse({
@@ -700,7 +698,7 @@ describe('observability components', () => {
                 });
             }
             return new Response('not found', { status: 404 });
-        }) as typeof fetch;
+        }) as unknown as typeof fetch);
 
         const { container } = render(<InboxTab />);
         await waitFor(() => expect(container.querySelector('[data-inbox-tab]')).not.toBeNull());
@@ -741,14 +739,14 @@ describe('observability components', () => {
             },
         ];
         const processCalls: string[] = [];
-        globalThis.fetch = (async (input: RequestInfo | URL) => {
-            const url = String(input);
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
             if (url.includes('/team/processes')) {
                 processCalls.push(url);
                 return jsonResponse({ processes: rows, count: rows.length });
             }
             return new Response('not found', { status: 404 });
-        }) as typeof fetch;
+        }) as unknown as typeof fetch);
 
         const { getByText, container } = render(<ProcessListTab />);
         await waitFor(() => expect(getByText('planner')).toBeDefined());
@@ -780,12 +778,12 @@ describe('observability components', () => {
     });
 
     test('process list renders empty and error states', async () => {
-        globalThis.fetch = (async () => jsonResponse({ processes: [], count: 0 })) as unknown as typeof fetch;
+        setFetchForTesting((async () => jsonResponse({ processes: [], count: 0 })) as unknown as typeof fetch);
         const empty = render(<ProcessListTab />);
         await waitFor(() => expect(empty.getByText(/No supervised processes/)).toBeDefined());
         empty.unmount();
 
-        globalThis.fetch = (async () => new Response('nope', { status: 503 })) as unknown as typeof fetch;
+        setFetchForTesting((async () => new Response('nope', { status: 503 })) as unknown as typeof fetch);
         const failed = render(<ProcessListTab />);
         await waitFor(() => expect(failed.getByRole('alert').textContent).toContain('process list fetch failed: 503'));
     });

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import {
     checkFeature,
     createChildFeature,
@@ -13,16 +13,7 @@ import {
     transitionFeature,
 } from '../../src/lib/feature-client';
 import type { CheckResult, FeatureShowData, FeatureSummary } from '../../src/lib/feature-types';
-
-let originalFetch: typeof globalThis.fetch;
-
-beforeEach(() => {
-    originalFetch = globalThis.fetch;
-});
-
-afterEach(() => {
-    globalThis.fetch = originalFetch;
-});
+import { resetFetchForTesting, setFetchForTesting } from '../../src/lib/rpc-client';
 
 function jsonResponse(status: number, body: unknown): Response {
     return new Response(JSON.stringify(body), {
@@ -32,8 +23,12 @@ function jsonResponse(status: number, body: unknown): Response {
 }
 
 function setFetch(handler: () => Response): void {
-    globalThis.fetch = (() => Promise.resolve(handler())) as unknown as typeof globalThis.fetch;
+    setFetchForTesting((() => Promise.resolve(handler())) as unknown as typeof fetch);
 }
+
+afterEach(() => {
+    resetFetchForTesting();
+});
 
 describe('loadFeatures', () => {
     test('returns data array on success', async () => {

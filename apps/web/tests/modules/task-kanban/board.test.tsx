@@ -9,6 +9,7 @@ import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import type { TaskSummary } from '../../../src/modules/task-kanban/types';
 import { teardownHappyDom } from '../../happy-dom';
+import { buildFullRpcMock } from '../../test-helpers/rpc-client-mock';
 
 // ── api stub: the board imports `{ api }` from lib/rpc-client directly, so mock the module. ──
 const transitionCalls: Array<{ wbs: string; toStatus: string }> = [];
@@ -21,38 +22,37 @@ const tasks: TaskSummary[] = [
     { wbs: '0002', name: 'Beta', status: 'wip', priority: 'P2', featureId: 'W4', filePath: 'b.md' },
 ];
 
-mock.module('../../../src/lib/rpc-client', () => ({
-    api: {
-        task: {
-            list: async () => ({ data: tasks }),
-            transition: (input: { wbs: string; toStatus: string }) => {
-                transitionCalls.push(input);
-                return transitionImpl();
-            },
-            create: (input: { title: string; folder?: string; template?: string }) => {
-                createCalls.push(input);
-                return Promise.resolve({ data: { wbs: '0003', filePath: 'c.md' } });
-            },
-            show: async () => ({
-                data: {
-                    wbs: '0001',
-                    name: 'Alpha',
-                    status: 'todo',
-                    frontmatter: {},
-                    content: '## Body',
-                    filePath: 'a.md',
-                },
-            }),
-            body: async () => ({ data: { wbs: '0001', filePath: 'a.md' } }),
-            action: (input: { wbs: string; action: string; channel?: string; skipDeps?: boolean }) => {
-                actionCalls.push(input);
-                return Promise.resolve({ data: { runId: 'r1', action: input.action, status: 'queued' } });
-            },
-            folders: async () => ({ data: [{ path: 'docs/tasks', label: 'Primary' }] }),
+const defaultBoardApi = {
+    task: {
+        list: async () => ({ data: tasks }),
+        transition: (input: { wbs: string; toStatus: string }) => {
+            transitionCalls.push(input);
+            return transitionImpl();
         },
+        create: (input: { title: string; folder?: string; template?: string }) => {
+            createCalls.push(input);
+            return Promise.resolve({ data: { wbs: '0003', filePath: 'c.md' } });
+        },
+        show: async () => ({
+            data: {
+                wbs: '0001',
+                name: 'Alpha',
+                status: 'todo',
+                frontmatter: {},
+                content: '## Body',
+                filePath: 'a.md',
+            },
+        }),
+        body: async () => ({ data: { wbs: '0001', filePath: 'a.md' } }),
+        action: (input: { wbs: string; action: string; channel?: string; skipDeps?: boolean }) => {
+            actionCalls.push(input);
+            return Promise.resolve({ data: { runId: 'r1', action: input.action, status: 'queued' } });
+        },
+        folders: async () => ({ data: [{ path: 'docs/tasks', label: 'Primary' }] }),
     },
-    resolveApiUrl: () => 'http://localhost:3000/api',
-}));
+};
+
+mock.module('../../../src/lib/rpc-client', () => buildFullRpcMock({ api: defaultBoardApi }));
 
 // Capture the onDragEnd callback so tests can simulate dnd-kit drops.
 let capturedOnDragEnd:
@@ -100,38 +100,7 @@ const KanbanBoard = (await import('../../../src/modules/task-kanban/KanbanBoard'
 
 afterAll(teardownHappyDom);
 const restoreMock = () => {
-    mock.module('../../../src/lib/rpc-client', () => ({
-        api: {
-            task: {
-                list: async () => ({ data: tasks }),
-                transition: (input: { wbs: string; toStatus: string }) => {
-                    transitionCalls.push(input);
-                    return transitionImpl();
-                },
-                create: (input: { title: string; folder?: string; template?: string }) => {
-                    createCalls.push(input);
-                    return Promise.resolve({ data: { wbs: '0003', filePath: 'c.md' } });
-                },
-                show: async () => ({
-                    data: {
-                        wbs: '0001',
-                        name: 'Alpha',
-                        status: 'todo',
-                        frontmatter: {},
-                        content: '## Body',
-                        filePath: 'a.md',
-                    },
-                }),
-                body: async () => ({ data: { wbs: '0001', filePath: 'a.md' } }),
-                action: (input: { wbs: string; action: string; channel?: string; skipDeps?: boolean }) => {
-                    actionCalls.push(input);
-                    return Promise.resolve({ data: { runId: 'r1', action: input.action, status: 'queued' } });
-                },
-                folders: async () => ({ data: [{ path: 'docs/tasks', label: 'Primary' }] }),
-            },
-        },
-        resolveApiUrl: () => 'http://localhost:3000/api',
-    }));
+    mock.module('../../../src/lib/rpc-client', () => buildFullRpcMock({ api: defaultBoardApi }));
 };
 
 beforeEach(() => {
@@ -217,26 +186,27 @@ describe('KanbanBoard', () => {
             { wbs: '0001', name: 'Alpha', status: 'todo', filePath: 'a.md' },
             { wbs: '0002', name: 'Beta', status: 'todo', filePath: 'b.md' },
         ];
-        mock.module('../../../src/lib/rpc-client', () => ({
-            api: {
-                task: {
-                    list: async () => ({ data: tasksForSort }),
-                    transition: () => transitionImpl(),
-                    show: async () => ({
-                        data: {
-                            wbs: '0001',
-                            name: 'Alpha',
-                            status: 'todo',
-                            frontmatter: {},
-                            content: '## Body',
-                            filePath: 'a.md',
-                        },
-                    }),
-                    body: async () => ({ data: { wbs: '0001', filePath: 'a.md' } }),
+        mock.module('../../../src/lib/rpc-client', () =>
+            buildFullRpcMock({
+                api: {
+                    task: {
+                        list: async () => ({ data: tasksForSort }),
+                        transition: () => transitionImpl(),
+                        show: async () => ({
+                            data: {
+                                wbs: '0001',
+                                name: 'Alpha',
+                                status: 'todo',
+                                frontmatter: {},
+                                content: '## Body',
+                                filePath: 'a.md',
+                            },
+                        }),
+                        body: async () => ({ data: { wbs: '0001', filePath: 'a.md' } }),
+                    },
                 },
-            },
-            resolveApiUrl: () => 'http://localhost:3000/api',
-        }));
+            }),
+        );
         const KanbanBoardReload = (await import('../../../src/modules/task-kanban/KanbanBoard')).default;
 
         const { getByLabelText, container } = render(
@@ -261,17 +231,18 @@ describe('KanbanBoard', () => {
             { wbs: '0003', name: 'Gamma', status: 'todo', filePath: 'c.md' },
             { wbs: '0002', name: 'Beta', status: 'todo', filePath: 'b.md' },
         ];
-        mock.module('../../../src/lib/rpc-client', () => ({
-            api: {
-                task: {
-                    list: async () => ({ data: tasksForOrder }),
-                    transition: () => transitionImpl(),
-                    show: async () => ({ data: { ...tasksForOrder[0], frontmatter: {}, content: '## Body' } }),
-                    body: async () => ({ data: { wbs: '0001', filePath: 'a.md' } }),
+        mock.module('../../../src/lib/rpc-client', () =>
+            buildFullRpcMock({
+                api: {
+                    task: {
+                        list: async () => ({ data: tasksForOrder }),
+                        transition: () => transitionImpl(),
+                        show: async () => ({ data: { ...tasksForOrder[0], frontmatter: {}, content: '## Body' } }),
+                        body: async () => ({ data: { wbs: '0001', filePath: 'a.md' } }),
+                    },
                 },
-            },
-            resolveApiUrl: () => 'http://localhost:3000/api',
-        }));
+            }),
+        );
         const KanbanBoardReload = (await import('../../../src/modules/task-kanban/KanbanBoard')).default;
 
         const { container, getByText } = render(
@@ -624,29 +595,30 @@ test('resize handle saves detail width to localStorage on pointer up', async () 
 });
 // ── error state: failed fetch shows error message ──
 test('shows error message when task list fetch fails', async () => {
-    mock.module('../../../src/lib/rpc-client', () => ({
-        api: {
-            task: {
-                list: async () => {
-                    throw new Error('Network Error');
-                },
-                transition: () => transitionImpl(),
-                show: async () => ({
-                    data: {
-                        wbs: '0001',
-                        name: 'Alpha',
-                        status: 'todo',
-                        frontmatter: {},
-                        content: '## Body',
-                        filePath: 'a.md',
+    mock.module('../../../src/lib/rpc-client', () =>
+        buildFullRpcMock({
+            api: {
+                task: {
+                    list: async () => {
+                        throw new Error('Network Error');
                     },
-                }),
-                body: async () => ({ data: { wbs: '0001', filePath: 'a.md' } }),
-                folders: async () => ({ data: [{ path: 'docs/tasks', label: 'Primary' }] }),
+                    transition: () => transitionImpl(),
+                    show: async () => ({
+                        data: {
+                            wbs: '0001',
+                            name: 'Alpha',
+                            status: 'todo',
+                            frontmatter: {},
+                            content: '## Body',
+                            filePath: 'a.md',
+                        },
+                    }),
+                    body: async () => ({ data: { wbs: '0001', filePath: 'a.md' } }),
+                    folders: async () => ({ data: [{ path: 'docs/tasks', label: 'Primary' }] }),
+                },
             },
-        },
-        resolveApiUrl: () => 'http://localhost:3000/api',
-    }));
+        }),
+    );
     const KanbanBoardReload = (await import('../../../src/modules/task-kanban/KanbanBoard')).default;
 
     const { getByText } = render(

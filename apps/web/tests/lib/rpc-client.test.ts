@@ -3,7 +3,15 @@ import { contract } from '@gobing-ai/spur-contracts';
 import { createORPCClient } from '@orpc/client';
 import { OpenAPILink } from '@orpc/openapi-client/fetch';
 import { onError } from '@orpc/shared';
-import { api, apiFetchWithTimeout, fetchWithTimeout, logTransportError, resolveApiUrl } from '../../src/lib/rpc-client';
+import {
+    api,
+    apiFetchWithTimeout,
+    fetchWithTimeout,
+    logTransportError,
+    resetFetchForTesting,
+    resolveApiUrl,
+    setFetchForTesting,
+} from '../../src/lib/rpc-client';
 
 describe('rpc client', () => {
     test('resolveApiUrl returns default URL', () => {
@@ -40,7 +48,6 @@ describe('rpc client', () => {
     });
 
     test('fetchWithTimeout aborts on timeout', async () => {
-        const origFetch = globalThis.fetch;
         let aborted = false;
         const mock = (url: RequestInfo | URL): Promise<Response> => {
             return new Promise((_resolve, reject) => {
@@ -57,14 +64,14 @@ describe('rpc client', () => {
                 });
             });
         };
-        globalThis.fetch = mock as unknown as typeof fetch;
+        setFetchForTesting(mock as unknown as typeof fetch);
         try {
             await expect(fetchWithTimeout(new Request('http://localhost/test'), 1)).rejects.toThrow(
                 'The operation was aborted',
             );
             expect(aborted).toBe(true);
         } finally {
-            globalThis.fetch = origFetch;
+            resetFetchForTesting();
         }
     });
 

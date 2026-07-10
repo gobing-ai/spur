@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Input, Loading } from '@/ui';
-import { resolveApiUrl } from '../../lib/rpc-client';
+import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 
 /** Wire shape of a single system event row from the history endpoint. */
 export interface SystemEventRow {
@@ -429,7 +429,9 @@ export default function SystemEventsTab() {
         const controller = new AbortController();
         (async () => {
             try {
-                const res = await fetch(historyUrl(HISTORY_LIMIT), { signal: controller.signal });
+                const res = await fetchWithTimeout(
+                    new Request(historyUrl(HISTORY_LIMIT), { signal: controller.signal }),
+                );
                 if (!res.ok) throw new Error(`history fetch failed: ${res.status}`);
                 const raw: unknown = await res.json();
                 const body = parseHistoryResponse(raw);

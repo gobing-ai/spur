@@ -83,39 +83,40 @@ let createImpl: () => Promise<unknown> = async () => ({ data: { wbs: '0009', fil
 let bodyImpl: () => Promise<unknown> = async () => ({ data: { wbs: '0009', filePath: 'a.md' } });
 
 // Shared full-surface rpc-client mock — prevents "last mock wins" starvation
-import '../../test-helpers/rpc-client-mock';
+import { buildFullRpcMock } from '../../test-helpers/rpc-client-mock';
 
 const restoreMockNP = () => {
-    mock.module('../../../src/lib/rpc-client', () => ({
-        api: {
-            task: {
-                create: (input: { title: string; folder?: string; template?: string }) => {
-                    createCalls.push(input);
-                    return createImpl();
-                },
-                body: (input: { wbs: string; body: string }) => {
-                    bodyCalls.push(input);
-                    return bodyImpl();
-                },
-                // Inherit shared full-surface defaults for methods this file doesn't override
-                list: async () => ({ data: [] }),
-                transition: async () => ({ ok: true }),
-                show: async () => ({
-                    data: {
-                        wbs: '0001',
-                        name: 'Test',
-                        status: 'todo',
-                        frontmatter: {},
-                        content: 'body',
-                        filePath: 'a.md',
+    mock.module('../../../src/lib/rpc-client', () =>
+        buildFullRpcMock({
+            api: {
+                task: {
+                    create: (input: { title: string; folder?: string; template?: string }) => {
+                        createCalls.push(input);
+                        return createImpl();
                     },
-                }),
-                action: async () => ({ data: { runId: 'r1', action: 'run', status: 'queued' } }),
-                folders: async () => ({ data: [] }),
+                    body: (input: { wbs: string; body: string }) => {
+                        bodyCalls.push(input);
+                        return bodyImpl();
+                    },
+                    // Inherit shared full-surface defaults for methods this file doesn't override
+                    list: async () => ({ data: [] }),
+                    transition: async () => ({ ok: true }),
+                    show: async () => ({
+                        data: {
+                            wbs: '0001',
+                            name: 'Test',
+                            status: 'todo',
+                            frontmatter: {},
+                            content: 'body',
+                            filePath: 'a.md',
+                        },
+                    }),
+                    action: async () => ({ data: { runId: 'r1', action: 'run', status: 'queued' } }),
+                    folders: async () => ({ data: [] }),
+                },
             },
-        },
-        resolveApiUrl: () => 'http://localhost:3000/api',
-    }));
+        }),
+    );
 };
 
 // Dynamic import so mocks intercept before real module loads

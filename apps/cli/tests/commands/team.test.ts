@@ -3,19 +3,19 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { main } from '../../src';
+import { resetTeamFetchForTesting, setTeamFetchForTesting } from '../../src/commands/team';
 import { type CapturedOutput, createCapturedOutput } from '../helpers';
 
-/** Replace `globalThis.fetch` with a stub for one test, restoring the previous value. */
+/** Replace fetch with a stub for one test, restoring via resetTeamFetchForTesting. */
 async function withMockedFetch(
     stub: (...args: Parameters<typeof fetch>) => Promise<Response>,
     fn: () => Promise<void>,
 ): Promise<void> {
-    const original = globalThis.fetch;
-    globalThis.fetch = stub as typeof fetch;
+    setTeamFetchForTesting(stub as typeof fetch);
     try {
         await fn();
     } finally {
-        globalThis.fetch = original;
+        resetTeamFetchForTesting();
     }
 }
 

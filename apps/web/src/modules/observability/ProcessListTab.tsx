@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Badge, Loading } from '@/ui';
-import { resolveApiUrl } from '../../lib/rpc-client';
+import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 
 /**
  * Wire shape of a process entry from GET /api/team/processes.
@@ -29,7 +29,7 @@ export default function ProcessListTab() {
 
     const load = useCallback(async (signal: AbortSignal) => {
         try {
-            const res = await fetch(`${apiUrl()}`, { signal });
+            const res = await fetchWithTimeout(new Request(apiUrl(), { signal }));
             if (!res.ok) throw new Error(`process list fetch failed: ${res.status}`);
             const json: unknown = await res.json();
             const body = json as { processes: ProcessRow[]; count: number };

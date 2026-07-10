@@ -3,6 +3,24 @@ import { TeamService, type TeamStatusEntry } from '@gobing-ai/spur-app';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
 
+// ── Injectable fetch seam for tests ───────────────────────────────────
+let _testFetch: typeof fetch | undefined;
+
+/** Replace the fetch implementation for the current test. Call resetTeamFetchForTesting in cleanup. */
+export function setTeamFetchForTesting(fn: typeof fetch): void {
+    _testFetch = fn;
+}
+
+/** Restore the platform fetch after a test. */
+export function resetTeamFetchForTesting(): void {
+    _testFetch = undefined;
+}
+
+function teamFetch(url: string, init: RequestInit): Promise<Response> {
+    const fetcher = _testFetch ?? fetch;
+    return fetcher(url, init);
+}
+
 /** Default server API URL for team start/stop (requires spur serve). */
 const DEFAULT_SERVER = 'http://localhost:3000/api';
 
@@ -98,7 +116,7 @@ async function performTeamStart(
 > {
     try {
         const url = `${options.server}/team/agents/${encodeURIComponent(agentId)}/start`;
-        const res = await fetch(url, { method: 'POST' });
+        const res = await teamFetch(url, { method: 'POST' });
         const body = (await res.json()) as StartResponse;
         if (res.ok) return { ok: true, body };
         return { ok: false, error: body.error ?? `start failed: ${res.status}`, status: res.status };
@@ -144,7 +162,7 @@ async function performTeamStop(
 > {
     try {
         const url = `${options.server}/team/agents/${encodeURIComponent(agentId)}/stop`;
-        const res = await fetch(url, { method: 'POST' });
+        const res = await teamFetch(url, { method: 'POST' });
         const body = (await res.json()) as StopResponse;
         if (res.ok) return { ok: true, body };
         return { ok: false, error: body.error ?? `stop failed: ${res.status}`, status: res.status };

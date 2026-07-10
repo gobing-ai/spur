@@ -27,12 +27,31 @@ rules:
 
   - id: no-globalthis-fetch
     description: "Avoid globalThis.fetch(...); route HTTP through a client seam when one exists."
-    severity: warning
+    severity: error
     evaluator:
       type: rg
       config:
         pattern: "globalThis\\.fetch\\("
+    include:
+      - "apps/**/src/**/*.ts"
+      - "packages/**/src/**/*.ts"
+      - "apps/**/tests/**/*.ts"
+      - "apps/**/tests/**/*.tsx"
+      - "packages/**/tests/**/*.ts"
+      - "packages/**/tests/**/*.tsx"
 
+  - id: no-globalthis-fetch-mutation
+    description: "Avoid mutating globalThis.fetch in tests; use the injectable fetch seam (rpc-client.ts setFetchForTesting / resetFetchForTesting)."
+    severity: error
+    evaluator:
+      type: rg
+      config:
+        pattern: "globalThis\\.fetch\\s*="
+    include:
+      - "apps/**/tests/**/*.ts"
+      - "apps/**/tests/**/*.tsx"
+      - "packages/**/tests/**/*.ts"
+      - "packages/**/tests/**/*.tsx"
   - id: no-xml-http-request
     description: "Do not use XMLHttpRequest in a Bun/Node codebase."
     severity: error
