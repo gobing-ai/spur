@@ -51,10 +51,10 @@ agent:
       agent: claude
   default-by-phase:
     dev-brainstorm: claude
-    dev-fixall: omp-zai-volc
+    dev-fixall: omp-zai
     dev-plan: claude
-    dev-run: omp-zai-volc
-    dev-changelog: omp-zai-volc
+    dev-run: omp-zai
+    dev-changelog: omp-zai
     dev-gitmsg: minimax
     dev-review: claude
     dev-verify: claude
