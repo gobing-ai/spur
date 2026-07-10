@@ -26,7 +26,7 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .option('--json', 'Output machine-readable JSON')
         .argument('[agent]', 'Agent to check')
         .action(async (agentName, options) => {
-            const svc = new AgentService({ cwd: context.cwd, env: context.env, output: context.output });
+            const svc = context.agentService();
             const code = await svc.doctor({ json: options.json === true, agent: agentName }, undefined);
             context.setExitCode(code);
         });

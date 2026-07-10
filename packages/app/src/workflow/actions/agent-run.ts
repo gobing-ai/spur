@@ -128,7 +128,7 @@ export class AgentRunActionRunner implements ActionRunner {
                 }
             }
             if (!ok) {
-                await writePartialWorkArtifact(context, agentLabel, captured, cwd);
+                await writePartialWorkArtifact(context, agentLabel, model, captured, cwd);
             }
             return {
                 ok,
@@ -194,6 +194,7 @@ function asOptionalNumber(value: unknown): number | undefined {
 async function writePartialWorkArtifact(
     context: ActionRunContext,
     agentLabel: string,
+    model: string | undefined,
     captured: AgentRunCaptureResult,
     cwd: string,
 ): Promise<void> {
@@ -205,11 +206,14 @@ async function writePartialWorkArtifact(
         const diffStat = await gitDiffStat(cwd);
         const stdoutTail = tail(captured.answer, PARTIAL_ARTIFACT_TAIL_CHARS);
         const stderrTail = tail(captured.stderr ?? '', PARTIAL_ARTIFACT_TAIL_CHARS);
+        const headerLine = model !== undefined ? `${agentLabel} (model: ${model})` : agentLabel;
         const body = [
-            `# Partial-work handoff — ${agentLabel}`,
+            `# Partial-work handoff — ${headerLine}`,
             '',
             `- run: ${context.runId}`,
             `- state: ${context.stateOrNodeId}`,
+            `- agent: ${agentLabel}`,
+            `- model: ${model ?? '(default)'}`,
             `- exit reason: ${exitReason}`,
             `- elapsed: ${captured.durationMs ?? 'unknown'}ms`,
             '',

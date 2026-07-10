@@ -9,6 +9,7 @@ import {
     DoctorRunner,
     getAgentShim,
     isClaudeStyleSlashCommand,
+    type ModelHealthResult,
     type PromptOptions,
     resolveAgentName,
     TIER1_PRIORITY,
@@ -180,11 +181,30 @@ export class AgentService {
     // -------------------------------------------------------------------------
 
     async doctor(args: { json: boolean; agent?: string }, deps?: AgentRunDeps): Promise<number> {
-        const doctorRunner = deps?.doctorRunner ?? new DoctorRunner({ env: this.ctx.env });
+        const executors = this.ctx.agentConfig?.executors;
+        const doctorRunner = deps?.doctorRunner ?? new DoctorRunner({ env: this.ctx.env, executors });
         const results =
             args.agent === undefined ? await doctorRunner.runAll() : [await doctorRunner.runOne(args.agent)];
+        // R6/AC5: warn (not block) when an executor's model is quota_exhausted or unavailable.
+        const modelByExecutor = new Map(
+            (executors ?? []).filter((e) => e.model !== undefined).map((e) => [e.name, e.model as string]),
+        );
+        for (const result of results) {
+            if (
+                result.modelStatus &&
+                (result.modelStatus.status === 'quota_exhausted' || result.modelStatus.status === 'unavailable')
+            ) {
+                const model = modelByExecutor.get(result.agent) ?? '(unknown)';
+                this.ctx.output.error(
+                    `Warning: executor ${result.agent} (model ${model}) reports ${result.modelStatus.status}. Consider \`--agent <alt>\` or check token quota.`,
+                );
+            }
+        }
         if (args.json) {
             this.ctx.output.write(toJson({ agents: results }));
+        } else if (args.agent !== undefined) {
+            // Single-executor mode: show full model detail when available.
+            this.ctx.output.write(renderDoctorDetail(results[0] ?? null));
         } else {
             this.ctx.output.write(renderDoctorTable(results));
         }
@@ -609,7 +629,6 @@ function renderAuth(authenticated: AuthState): string {
     if (authenticated === 'unauthenticated') return 'no';
     return '?';
 }
-
 /** The doctor-result fields the text table reads (structural subset — display-only). */
 type DoctorRow = {
     agent: string;
@@ -617,12 +636,27 @@ type DoctorRow = {
     tier: number;
     authenticated: AuthState;
     version: string | null;
+    modelStatus?: ModelHealthResult | null;
 };
+
+/** Compact model-status label for the doctor text table (display-only). */
+function renderModelStatus(status: ModelHealthResult | null | undefined): string {
+    if (status === null || status === undefined) return '—';
+    const labels: Record<string, string> = {
+        available: 'ok',
+        quota_exhausted: 'quota',
+        rate_limited: 'rate',
+        unavailable: 'down',
+        unknown: '?',
+    };
+    return labels[status.status] ?? status.status;
+}
 
 /**
  * Render the `spur agent doctor` text output as an aligned table with a header,
  * a ✓/✗ state glyph, and a tier-1 summary footer. `--json` output is unaffected.
  * A missing agent (no version) renders `—` for both auth and version.
+ * The MODEL column shows compact model health when a probe was run.
  */
 function renderDoctorTable(results: DoctorRow[]): string {
     const dash = '—';
@@ -636,19 +670,29 @@ function renderDoctorTable(results: DoctorRow[]): string {
             // A missing agent has nothing meaningful to report for auth/version.
             auth: usable ? renderAuth(result.authenticated) : dash,
             version: result.version ?? dash,
+            model: renderModelStatus(result.modelStatus),
         };
     });
 
-    const header = { glyph: ' ', state: 'STATUS', agent: 'AGENT', tier: 'TIER', auth: 'AUTH', version: 'VERSION' };
+    const header = {
+        glyph: ' ',
+        state: 'STATUS',
+        agent: 'AGENT',
+        tier: 'TIER',
+        auth: 'AUTH',
+        version: 'VERSION',
+        model: 'MODEL',
+    };
     const all = [header, ...rows];
     const width = (key: keyof typeof header) => Math.max(...all.map((row) => row[key].length));
     const wState = width('state');
     const wAgent = width('agent');
     const wTier = width('tier');
     const wAuth = width('auth');
+    const wVersion = width('version');
 
     const line = (row: (typeof all)[number]) =>
-        `${row.glyph} ${row.state.padEnd(wState)}  ${row.agent.padEnd(wAgent)}  ${row.tier.padEnd(wTier)}  ${row.auth.padEnd(wAuth)}  ${row.version}`.trimEnd();
+        `${row.glyph} ${row.state.padEnd(wState)}  ${row.agent.padEnd(wAgent)}  ${row.tier.padEnd(wTier)}  ${row.auth.padEnd(wAuth)}  ${row.version.padEnd(wVersion)}  ${row.model}`.trimEnd();
 
     const usableCount = rows.filter((row) => row.state === 'usable').length;
     const missingTier1 = results.filter((result) => !result.usable && result.tier === 1).length;
@@ -658,6 +702,29 @@ function renderDoctorTable(results: DoctorRow[]): string {
             : `${usableCount} usable, ${rows.length - usableCount} missing`;
 
     return [line(header), ...rows.map(line), '', footer].join('\n');
+}
+
+/**
+ * Render a single doctor result in detail mode — used when `spur agent doctor <name>`
+ * is invoked for a specific executor. Shows the full model health status with
+ * endpoint and detail fields, not just the compact table column.
+ */
+function renderDoctorDetail(result: DoctorRow | null): string {
+    if (result === null) return 'No result.';
+    const lines: string[] = [];
+    const glyph = result.usable ? '✓' : '✗';
+    lines.push(`${glyph} ${result.agent}  (tier ${result.tier})`);
+    lines.push(`  status:     ${result.usable ? 'usable' : 'missing'}`);
+    lines.push(`  version:    ${result.version ?? '—'}`);
+    lines.push(`  auth:       ${renderAuth(result.authenticated)}`);
+    if (result.modelStatus) {
+        lines.push(`  model:      ${result.modelStatus.status}`);
+        lines.push(`  checked:    ${result.modelStatus.checkedAt}`);
+        if (result.modelStatus.detail) {
+            lines.push(`  detail:     ${result.modelStatus.detail}`);
+        }
+    }
+    return lines.join('\n');
 }
 
 function stringFlag(flags: Record<string, string | boolean>, name: string, fallback: string): string {

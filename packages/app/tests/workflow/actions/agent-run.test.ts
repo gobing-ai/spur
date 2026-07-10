@@ -499,4 +499,42 @@ describe('AgentRunActionRunner partial-work handoff artifact', () => {
         const artifactPath = join(dir, '.spur', 'run', 'run-plain-implement-partial.md');
         expect(existsSync(artifactPath)).toBe(false);
     });
+
+    // Task 0239 (case 17): partial-work artifact includes executor and model
+    // info in the header when a model was specified.
+    test('captured failure with model includes agent and model in artifact header', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
+        const svc = {
+            runCapture: async () => ({ exitCode: 1, answer: 'crashed', durationMs: 500 }),
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        await runner.execute(
+            { input: 'test', capture: true, agent: 'omp-zai', model: 'zai/glm-5.2' },
+            makeCtx({ runId: 'run-model', stateOrNodeId: 'implement', workdir: dir }),
+        );
+
+        const artifactPath = join(dir, '.spur', 'run', 'run-model-implement-partial.md');
+        const artifact = readFileSync(artifactPath, 'utf8');
+        expect(artifact).toContain('omp-zai');
+        expect(artifact).toContain('zai/glm-5.2');
+        expect(artifact).toContain('agent: omp-zai');
+        expect(artifact).toContain('model: zai/glm-5.2');
+    });
+
+    test('captured failure without model shows (default) in artifact', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-'));
+        const svc = {
+            runCapture: async () => ({ exitCode: 1, answer: 'crashed', durationMs: 500 }),
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        await runner.execute(
+            { input: 'test', capture: true, agent: 'omp' },
+            makeCtx({ runId: 'run-nomodel', stateOrNodeId: 'implement', workdir: dir }),
+        );
+
+        const artifactPath = join(dir, '.spur', 'run', 'run-nomodel-implement-partial.md');
+        const artifact = readFileSync(artifactPath, 'utf8');
+        expect(artifact).toContain('agent: omp');
+        expect(artifact).toContain('model: (default)');
+    });
 });

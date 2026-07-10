@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from 'bun:test';
 import type { AgentName, AgentRunResult, AuthState } from '@gobing-ai/ts-ai-runner';
 import { TIER1_PRIORITY } from '@gobing-ai/ts-ai-runner';
-import { type AgentRunDeps, AgentService, type AgentServiceOutput } from '../../src/index';
+import { type AgentConfig, type AgentRunDeps, AgentService, type AgentServiceOutput } from '../../src/index';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -41,6 +41,7 @@ function mockDoctorResult(
         authenticated: AuthState;
         usable: boolean;
         tier: 1 | 2;
+        modelStatus: { status: string; detail?: string; checkedAt: string };
     }> = {},
 ) {
     return {
@@ -52,6 +53,7 @@ function mockDoctorResult(
         tier: (overrides.tier ?? 1) as 1 | 2,
         channels: [],
         error: null,
+        ...(overrides.modelStatus !== undefined ? { modelStatus: overrides.modelStatus } : {}),
     };
 }
 
@@ -139,8 +141,8 @@ function makeSimpleDeps(_agent: AgentName): { runPromptCommand: ReturnType<typeo
     return { runPromptCommand, runner, detector, doctorRunner };
 }
 
-function makeService(env: Record<string, string | undefined> = {}, output = nullOutput()) {
-    return new AgentService({ cwd: process.cwd(), env, output });
+function makeService(env: Record<string, string | undefined> = {}, output = nullOutput(), agentConfig?: AgentConfig) {
+    return new AgentService({ cwd: process.cwd(), env, output, agentConfig });
 }
 
 // ---------------------------------------------------------------------------
@@ -264,6 +266,206 @@ describe('AgentService.doctor', () => {
         expect(lines.some((l) => /\bclaude\b/.test(l) && /\byes\b/.test(l))).toBe(true);
         expect(lines.some((l) => /\bomp\b/.test(l) && /\bno\b/.test(l))).toBe(true);
         expect(lines.some((l) => /\bopencode\b/.test(l) && /\?/.test(l))).toBe(true);
+    });
+
+    // --- Task 0239: model health probe integration (cases 11–16) ---
+
+    test('text table renders MODEL column header', async () => {
+        const { lines, output } = captureOutput();
+        const svc = makeService({}, output);
+        const doctorRunner = {
+            runAll: mock(() => Promise.resolve([mockDoctorResult({ agent: 'omp-zai' })])),
+            runOne: mock(() => Promise.resolve(mockDoctorResult())),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        await svc.doctor({ json: false }, { doctorRunner });
+        expect(lines.some((l) => l.includes('MODEL'))).toBe(true);
+    });
+
+    test('text table renders — in MODEL column for executor with no model override (AC2)', async () => {
+        const { lines, output } = captureOutput();
+        const svc = makeService({}, output);
+        const doctorRunner = {
+            runAll: mock(() =>
+                Promise.resolve([
+                    mockDoctorResult({ agent: 'omp' }),
+                    mockDoctorResult({
+                        agent: 'omp-zai',
+                        modelStatus: { status: 'available', checkedAt: '2026-07-09T00:00:00Z' },
+                    }),
+                ]),
+            ),
+            runOne: mock(() => Promise.resolve(mockDoctorResult())),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        await svc.doctor({ json: false }, { doctorRunner });
+        const text = lines.join('\n');
+        // The "omp" row (without -zai suffix) must show — for its MODEL column.
+        const ompRow = text.split('\n').find((l) => /\bomp\b/.test(l) && !l.includes('omp-zai'));
+        expect(ompRow).toBeDefined();
+        expect(ompRow).toContain('—');
+    });
+
+    test('text table renders compact model status label for available model', async () => {
+        const { lines, output } = captureOutput();
+        const svc = makeService({}, output);
+        const doctorRunner = {
+            runAll: mock(() =>
+                Promise.resolve([
+                    mockDoctorResult({
+                        agent: 'omp-zai',
+                        modelStatus: { status: 'available', checkedAt: '2026-07-09T00:00:00Z' },
+                    }),
+                ]),
+            ),
+            runOne: mock(() => Promise.resolve(mockDoctorResult())),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        await svc.doctor({ json: false }, { doctorRunner });
+        expect(lines.some((l) => l.includes('ok'))).toBe(true);
+    });
+
+    test('text table renders quota label for quota_exhausted model', async () => {
+        const { lines, output } = captureOutput();
+        const svc = makeService({}, output);
+        const doctorRunner = {
+            runAll: mock(() =>
+                Promise.resolve([
+                    mockDoctorResult({
+                        agent: 'omp-zai',
+                        modelStatus: {
+                            status: 'quota_exhausted',
+                            detail: 'insufficient_quota',
+                            checkedAt: '2026-07-09T00:00:00Z',
+                        },
+                    }),
+                ]),
+            ),
+            runOne: mock(() => Promise.resolve(mockDoctorResult())),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        await svc.doctor({ json: false }, { doctorRunner });
+        expect(lines.some((l) => l.includes('quota'))).toBe(true);
+    });
+
+    test('--json includes modelStatus in the output envelope', async () => {
+        const { lines, output } = captureOutput();
+        const svc = makeService({}, output);
+        const doctorRunner = {
+            runAll: mock(() =>
+                Promise.resolve([
+                    mockDoctorResult({
+                        agent: 'omp-zai',
+                        modelStatus: {
+                            status: 'rate_limited',
+                            detail: 'rate_limit_exceeded',
+                            checkedAt: '2026-07-09T00:00:00Z',
+                        },
+                    }),
+                ]),
+            ),
+            runOne: mock(() => Promise.resolve(mockDoctorResult())),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        await svc.doctor({ json: true }, { doctorRunner });
+        const jsonLine = lines.find((l) => l.includes('"agents"'));
+        expect(jsonLine).toBeDefined();
+        const parsed = JSON.parse(jsonLine ?? '');
+        expect(parsed.agents[0].modelStatus).toBeDefined();
+        expect(parsed.agents[0].modelStatus.status).toBe('rate_limited');
+    });
+
+    test('single executor detail mode shows full model status', async () => {
+        const { lines, output } = captureOutput();
+        const svc = makeService({}, output);
+        const doctorRunner = {
+            runAll: mock(() => Promise.resolve([mockDoctorResult()])),
+            runOne: mock(() =>
+                Promise.resolve(
+                    mockDoctorResult({
+                        agent: 'omp-zai',
+                        modelStatus: {
+                            status: 'available',
+                            checkedAt: '2026-07-09T12:00:00Z',
+                        },
+                    }),
+                ),
+            ),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        await svc.doctor({ json: false, agent: 'omp-zai' }, { doctorRunner });
+        const text = lines.join('\n');
+        expect(text).toContain('omp-zai');
+        expect(text).toContain('model:');
+        expect(text).toContain('available');
+        expect(text).toContain('checked:');
+    });
+
+    test('doctor passes executors from agentConfig to DoctorRunner', async () => {
+        // R1: when agentConfig.executors is present, doctor must thread them
+        // to DoctorRunner so runAll() probes each executor's model health.
+        const svc = makeService({}, nullOutput(), {
+            executors: [
+                { name: 'omp-zai', agent: 'omp', model: 'zai/glm-5.2' },
+                { name: 'omp-deepseek', agent: 'omp', model: 'deepseek/deepseek-v4-pro' },
+            ],
+        });
+        // The deps.doctorRunner mock bypasses real construction, but the
+        // doctor() method still reads this.ctx.agentConfig?.executors —
+        // verify it doesn't throw and produces exit 0 for usable agents.
+        const doctorRunner = {
+            runAll: mock(() => Promise.resolve([mockDoctorResult({ agent: 'omp-zai' })])),
+            runOne: mock(() => Promise.resolve(mockDoctorResult())),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        const exitCode = await svc.doctor({ json: false }, { doctorRunner });
+        expect(exitCode).toBe(0);
+    });
+
+    test('warns on quota_exhausted model status (AC5)', async () => {
+        // AC5: when an executor's modelStatus is quota_exhausted, the doctor
+        // command emits a warning to stderr naming the executor and model.
+        const { errors, output } = captureOutput();
+        const svc = makeService({}, output, {
+            executors: [{ name: 'omp-zai-volc', agent: 'omp', model: 'volc/glm-5.2' }],
+        });
+        const doctorRunner = {
+            runAll: mock(() =>
+                Promise.resolve([
+                    mockDoctorResult({
+                        agent: 'omp-zai-volc',
+                        modelStatus: {
+                            status: 'quota_exhausted',
+                            detail: 'insufficient_quota',
+                            checkedAt: '2026-07-09T00:00:00Z',
+                        },
+                    }),
+                ]),
+            ),
+            runOne: mock(() => Promise.resolve(mockDoctorResult())),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        await svc.doctor({ json: false }, { doctorRunner });
+        const warningText = errors.join('\n');
+        expect(warningText).toContain('omp-zai-volc');
+        expect(warningText).toContain('volc/glm-5.2');
+        expect(warningText).toContain('quota_exhausted');
+        expect(warningText).toContain('--agent');
+    });
+
+    test('does not warn when model status is available (AC5)', async () => {
+        // AC5: no warning when the executor's model is available.
+        const { errors, output } = captureOutput();
+        const svc = makeService({}, output, {
+            executors: [{ name: 'omp-zai', agent: 'omp', model: 'zai/glm-5.2' }],
+        });
+        const doctorRunner = {
+            runAll: mock(() =>
+                Promise.resolve([
+                    mockDoctorResult({
+                        agent: 'omp-zai',
+                        modelStatus: { status: 'available', checkedAt: '2026-07-09T00:00:00Z' },
+                    }),
+                ]),
+            ),
+            runOne: mock(() => Promise.resolve(mockDoctorResult())),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        await svc.doctor({ json: false }, { doctorRunner });
+        const warningText = errors.join('\n');
+        expect(warningText).not.toContain('quota_exhausted');
+        expect(warningText).not.toContain('unavailable');
     });
 });
 
@@ -1195,8 +1397,6 @@ describe('AgentService.resolve', () => {
 // These exercise the `run`/`executeRun` path (the only path that threads the
 // prompt → phase). The resolved agent + model are observed via the agent name
 // passed to runPromptCommand and the model in PromptOptions.
-
-import type { AgentConfig } from '../../src/index';
 
 /** Build a service with an `agent` config block threaded in. */
 function makeConfiguredService(agentConfig: AgentConfig, env: Record<string, string | undefined> = {}) {
