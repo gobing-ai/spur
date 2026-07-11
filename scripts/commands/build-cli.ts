@@ -1,16 +1,17 @@
 /**
  * Build the Spur CLI binary with `bun build --compile`.
  *
- * ts-runtime@0.4.6 uses `const spec = '@gobing-ai/ts-db'; await import(spec)`
- * (variable specifier) to avoid TS2307 when ts-db's dist doesn't exist yet in CI.
+ * ts-runtime uses a variable-specifier dynamic import (`const spec = '@gobing-ai/ts-db';
+ * await import(spec)`) to avoid TS2307 when ts-db's dist doesn't exist yet in CI.
  * Bun `--compile` can only resolve string-literal dynamic imports at runtime because
  * only those are registered in the bunfs module map. Variable-specifier imports are
  * not registered, so they fail with `Cannot find module '@gobing-ai/ts-db'`.
  *
  * This module patches the variable specifier back to a string literal in ts-runtime's
  * compiled dist before bundling, then restores the original afterward. The patch is
- * idempotent — if the pattern isn't found, it warns and proceeds (the build may still
- * succeed via the side-effect import in `apps/cli/src/index.ts`).
+ * resilient to variable-name changes across ts-runtime versions: it detects the
+ * `const <var> = '@gobing-ai/ts-db'` declaration, captures the identifier, and
+ * rewrites `await import(<var>)` → `await import('@gobing-ai/ts-db')`.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -26,19 +27,35 @@ function resolveTsRuntimeDist(): string {
     const pkgPath = req.resolve('@gobing-ai/ts-runtime/package.json');
     return resolve(pkgPath, '..', 'dist', 'runtime-node-bun.js');
 }
-
 /**
- * Patch `import(moduleSpecifier)` → `import('@gobing-ai/ts-db')` in ts-runtime dist.
+ * Patch the variable-specifier dynamic import in ts-runtime's compiled dist back to
+ * a string literal so Bun `--compile` can resolve it at runtime.
+ *
+ * The patch is resilient to variable-name changes: it detects the
+ * `const <var> = '@gobing-ai/ts-db'` declaration and rewrites
+ * `await import(<var>)` → `await import('@gobing-ai/ts-db')`.
+ *
  * Returns a restore function, or a no-op if no patch was needed.
  */
 export function patchTsRuntimeImport(): () => void {
     const distFile = resolveTsRuntimeDist();
     const original = readFileSync(distFile, 'utf-8');
-    const patched = original.replace(/await import\(moduleSpecifier\)/g, "await import('@gobing-ai/ts-db')");
+
+    // Legacy fallback: the 0.4.6 dist used the identifier `moduleSpecifier`.
+    let patched = original.replace(/await import\(moduleSpecifier\)/g, "await import('@gobing-ai/ts-db')");
+
+    // Version-agnostic: detect `const <var> = '@gobing-ai/ts-db'` and rewrite
+    // `await import(<var>)` → `await import('@gobing-ai/ts-db')`.
+    const declMatch = original.match(/const\s+(\w+)\s*=\s*'@gobing-ai\/ts-db'/);
+    if (declMatch) {
+        const varName = declMatch[1];
+        const importRegex = new RegExp(`await import\\(${varName}\\)`, 'g');
+        patched = patched.replace(importRegex, "await import('@gobing-ai/ts-db')");
+    }
 
     if (patched === original) {
         console.warn(
-            'build-cli: WARNING — could not find import(moduleSpecifier) in ts-runtime dist. The pattern may have changed.',
+            'build-cli: WARNING — could not find a variable-specifier ts-db import in ts-runtime dist. The pattern may have changed.',
         );
         return () => {};
     }
