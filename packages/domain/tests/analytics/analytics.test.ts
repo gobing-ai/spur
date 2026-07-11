@@ -263,6 +263,8 @@ function createMockDb(rows: Array<{ payload_json: string }>): DbAdapter {
         run: async () => {},
         queryFirst: async <T>() => undefined as T | undefined,
         queryAll: async <T>() => rows as T[],
+        // ts-db 0.4.7 requires batch() on DbAdapter; unused by analytics.
+        batch: async () => {},
         close: () => {},
     };
 }

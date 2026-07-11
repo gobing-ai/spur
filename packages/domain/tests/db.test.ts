@@ -22,6 +22,7 @@ function mockDb(shouldThrow: boolean): DbAdapter {
         queryAll: async () => [],
         exec: async () => {},
         run: async () => {},
+        batch: async () => {},
         close: () => {},
     } as unknown as DbAdapter;
 }
