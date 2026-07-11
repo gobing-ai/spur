@@ -130,6 +130,27 @@ export class ObservableWorkflowAdapter implements WorkflowPersistenceAdapter {
         await this.inner.saveTransition(runId, from, to, trigger);
         await this.bus.emit('workflow.transition', { runId, from, to, trigger, at: now() });
     }
+    /**
+     * Atomic equivalent of saveTransition + saveWorkflowState (+ optional savePhase):
+     * delegate to inner, then emit the same observability events those individual
+     * methods would have emitted — transition always, phase only when provided.
+     * Mirrors the engine's commitHop semantics (ts-dual-workflow-engine 0.4.7, ADR-020).
+     */
+    async commitTransition(
+        runId: string,
+        from: string,
+        to: string,
+        trigger: string | null,
+        _state: string,
+        _data: Record<string, unknown>,
+        phase?: { phase: string; status: WorkflowStatus },
+    ): Promise<void> {
+        await this.inner.commitTransition(runId, from, to, trigger, _state, _data, phase);
+        await this.bus.emit('workflow.transition', { runId, from, to, trigger, at: now() });
+        if (phase) {
+            await this.bus.emit('workflow.phase', { runId, phase: phase.phase, status: phase.status, at: now() });
+        }
+    }
 
     async saveActionStart(runId: string, node: string, kind: string): Promise<string> {
         const actionId = await this.inner.saveActionStart(runId, node, kind);

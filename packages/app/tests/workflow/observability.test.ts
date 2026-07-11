@@ -21,6 +21,9 @@ function stubAdapter(): { adapter: WorkflowPersistenceAdapter; calls: string[] }
         async saveTransition() {
             calls.push('saveTransition');
         },
+        async commitTransition() {
+            calls.push('commitTransition');
+        },
         async saveActionStart() {
             calls.push('saveActionStart');
             return 'action-1';
@@ -90,6 +93,28 @@ describe('ObservableWorkflowAdapter', () => {
 
         expect(calls).toContain('saveTransition');
         expect(seen).toEqual([{ from: 'verify', to: 'record', trigger: 'shell' }]);
+    });
+
+    test('commitTransition: delegates AND emits workflow.transition, workflow.phase when phase present', async () => {
+        const { adapter, calls } = stubAdapter();
+        const bus = new EventBus<WorkflowObservabilityEventMap>();
+        const transitions: Array<{ from: string; to: string; trigger: string | null }> = [];
+        const phases: Array<{ phase: string; status: string }> = [];
+        bus.on('workflow.transition', (e) => transitions.push({ from: e.from, to: e.to, trigger: e.trigger }));
+        bus.on('workflow.phase', (e) => phases.push({ phase: e.phase, status: e.status }));
+
+        const dec = new ObservableWorkflowAdapter(adapter, bus);
+        // With phase: emits both transition and phase.
+        await dec.commitTransition('run-1', 's1', 's2', 'guard', 's2', { x: 1 }, { phase: 's2', status: 'running' });
+        // Without phase: emits transition only.
+        await dec.commitTransition('run-1', 's2', 's3', null, 's3', { x: 2 });
+
+        expect(calls.filter((c) => c === 'commitTransition')).toHaveLength(2);
+        expect(transitions).toEqual([
+            { from: 's1', to: 's2', trigger: 'guard' },
+            { from: 's2', to: 's3', trigger: null },
+        ]);
+        expect(phases).toEqual([{ phase: 's2', status: 'running' }]);
     });
 
     test('action start/finish: returns the inner actionId AND emits both action events', async () => {
