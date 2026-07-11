@@ -40,7 +40,7 @@
     },
     "scripts": {
         "dev": "bun run src/index.ts",
-        "build": "bun build src/index.ts --compile --outfile ../../dist/cli/spur",
+        "build": "bun run ../../scripts/spur-dev.ts build-cli",
         "build:binaries": "bun run ../../scripts/spur-dev.ts build-binaries",
         "build:bundle": "bun build src/index.ts --target=bun --outfile spur.js && bun run ../../scripts/spur-dev.ts bundle-config spur-cli/config",
         "test": "bun test tests --coverage --coverage-dir=../../.coverage --pass-with-no-tests",

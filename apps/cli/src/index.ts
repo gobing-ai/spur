@@ -1,8 +1,13 @@
 #!/usr/bin/env bun
-// Force ts-db into the --compile static bundle so that string-literal
-// import('@gobing-ai/ts-db') calls (in ts-runtime and spur-domain)
-// resolve at runtime from bunfs. Without a static reference, Bun treats
-// the package as external when it resolves through the .bun store.
+// Force ts-db into the --compile static bundle so that dynamic
+// import('@gobing-ai/ts-db') calls in ts-runtime resolve at runtime.
+// Bun --compile bundles only the static import graph into bunfs;
+// string-literal dynamic imports resolve from the bundled graph,
+// but variable-specifier imports (ts-runtime@0.4.6 uses
+// `const spec = '@gobing-ai/ts-db'; await import(spec)`) do not.
+// The side-effect import below forces ts-db into the static graph.
+// `spur-dev.ts build-cli` patches the variable specifier in ts-runtime's
+// dist to a string literal at build time so it resolves at runtime.
 import '@gobing-ai/ts-db';
 import { Command } from '@commander-js/extra-typings';
 import { type SpurAppConfig, spurConfigSchema } from '@gobing-ai/spur-config';

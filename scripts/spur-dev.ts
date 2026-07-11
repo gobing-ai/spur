@@ -12,18 +12,18 @@
  *   publish <package-dir>                       resolve deps + npm publish (OIDC)
  *   bundle-config <out-dir>                     copy config/ into a tarball dir
  *   build-binaries                              cross-compile per-platform spur
+ *   build-cli                                  patch ts-runtime + compile local `spur` binary
  *   dev-all                                     run server + web under one supervisor
  */
 import { buildBinaries } from './commands/build-binaries';
+import { buildCli } from './commands/build-cli';
 import { bundleConfig } from './commands/bundle-config';
 import { devAll } from './commands/dev-all';
 import { publish } from './commands/publish';
 import { bumpVer, dropTags } from './commands/release';
 
 function usage(message?: string): never {
-    if (message) console.error(`error: ${message}\n`);
-    console.error('Usage: bun scripts/spur-dev.ts <command> [args...]');
-    console.error('Commands: bump-ver, drop-tags, publish, bundle-config, build-binaries, dev-all');
+    console.error('Commands: bump-ver, drop-tags, publish, bundle-config, build-binaries, build-cli, dev-all');
     process.exit(message ? 1 : 0);
 }
 
@@ -51,6 +51,9 @@ try {
             );
             break;
         }
+        case 'build-cli':
+            await buildCli();
+            break;
         case 'build-binaries':
             await buildBinaries();
             break;

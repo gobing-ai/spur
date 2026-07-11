@@ -7,6 +7,7 @@
  * `scripts/install.sh` downloads.
  */
 import { mkdir } from 'node:fs/promises';
+import { patchTsRuntimeImport } from './build-cli';
 
 const CLI_ENTRY = new URL('../../apps/cli/src/index.ts', import.meta.url).pathname;
 const OUT_DIR = new URL('../../dist/cli', import.meta.url).pathname;
@@ -23,18 +24,23 @@ const TARGETS: Record<string, string> = {
 export async function buildBinaries(): Promise<void> {
     await mkdir(OUT_DIR, { recursive: true });
 
+    const restore = patchTsRuntimeImport();
     let failed = false;
-    for (const [suffix, target] of Object.entries(TARGETS)) {
-        const outfile = `${OUT_DIR}/spur-${suffix}`;
-        console.log(`Compiling ${target} -> ${outfile}`);
-        const result = Bun.spawnSync(
-            ['bun', 'build', CLI_ENTRY, '--compile', `--target=${target}`, '--outfile', outfile],
-            { stdio: ['ignore', 'inherit', 'inherit'] },
-        );
-        if (result.exitCode !== 0) {
-            console.error(`  failed: ${target}`);
-            failed = true;
+    try {
+        for (const [suffix, target] of Object.entries(TARGETS)) {
+            const outfile = `${OUT_DIR}/spur-${suffix}`;
+            console.log(`Compiling ${target} -> ${outfile}`);
+            const result = Bun.spawnSync(
+                ['bun', 'build', CLI_ENTRY, '--compile', `--target=${target}`, '--outfile', outfile],
+                { stdio: ['ignore', 'inherit', 'inherit'] },
+            );
+            if (result.exitCode !== 0) {
+                console.error(`  failed: ${target}`);
+                failed = true;
+            }
         }
+    } finally {
+        restore();
     }
 
     if (failed) throw new Error('one or more targets failed to compile');
