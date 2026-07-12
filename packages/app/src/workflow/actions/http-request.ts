@@ -171,10 +171,15 @@ export class HttpRequestActionRunner implements ActionRunner {
                 if (!HEADER_NAME_RE.test(key)) {
                     throw new Error(`invalid header name: ${JSON.stringify(key)}`);
                 }
-                if (!HEADER_VALUE_RE.test(value)) {
+                // Validate AFTER template resolution — the injected var, not the
+                // template, is what reaches the wire (a var containing CR/LF would
+                // otherwise smuggle a header past this gate). The error names only
+                // the key: the resolved value may carry a secret.
+                const resolved = resolveTemplate(value, context.vars);
+                if (!HEADER_VALUE_RE.test(resolved)) {
                     throw new Error(`invalid header value for ${JSON.stringify(key)}`);
                 }
-                headers[key] = resolveTemplate(value, context.vars);
+                headers[key] = resolved;
             }
         } catch (err) {
             return { ok: false, error: `http.request: ${(err as Error).message}` };

@@ -1,5 +1,11 @@
 import { join } from 'node:path';
-import { type DbAdapter, InboxMessageDao, InboxRecentDao, MarkdownDocument } from '@gobing-ai/spur-domain';
+import {
+    atomicWriteAsync,
+    type DbAdapter,
+    InboxMessageDao,
+    InboxRecentDao,
+    MarkdownDocument,
+} from '@gobing-ai/spur-domain';
 import {
     type AgentEvents,
     type AgentSpec,
@@ -283,7 +289,8 @@ export class TeamService {
         const source = await fs.readFile(path);
         const doc = MarkdownDocument.parse(source, 'task');
         doc.setFrontmatterField('assignee', agentId);
-        await fs.writeFile(path, doc.serialize());
+        // Atomic temp+rename: a raw writeFile can leave a torn SSOT task file on crash.
+        await atomicWriteAsync(path, doc.serialize(), taskId, fs);
     }
 
     // -------------------------------------------------------------------------

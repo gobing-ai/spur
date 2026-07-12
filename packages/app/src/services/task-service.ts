@@ -45,7 +45,8 @@ function patchFrontmatterField(rendered: string, key: string, value: string): st
     // The caller owns YAML formatting (formatYamlValue) — do NOT re-format here.
     const existingRe = new RegExp(`^(?=\\s*${escapeRegex(key)}:)`, 'm');
     if (existingRe.test(rendered)) {
-        return rendered.replace(new RegExp(`^${escapeRegex(key)}:.*$`, 'm'), `${key}: ${value}`);
+        // Replacer function: a value containing `$&`/`$1` must stay literal.
+        return rendered.replace(new RegExp(`^${escapeRegex(key)}:.*$`, 'm'), () => `${key}: ${value}`);
     }
     // Key not present — append before the closing `---` fence
     return rendered.replace(/^---\n/m, `---\n${key}: ${value}\n`);

@@ -102,9 +102,19 @@ export class FeatureService {
     /**
      * Update a feature's scalar frontmatter field (e.g. `priority`) via the
      * shared write path (R2). Status changes go through {@link transition} so
-     * the lifecycle guard runs; this is for non-lifecycle fields.
+     * the lifecycle guard runs; this is for non-lifecycle fields. Machine-owned
+     * keys are rejected so `--field status` cannot bypass the lifecycle FSM,
+     * the History append, and the `feature.transitioned` event (mirrors
+     * `TaskService.updateField`'s guard).
      */
     async update(id: string, key: string, value: string): Promise<WriteResult> {
+        const protectedKeys = new Set(['status', 'id', 'schema_version', 'created_at', 'updated_at']);
+        if (protectedKeys.has(key)) {
+            throw new Error(
+                `Field "${key}" is not settable via update — status changes go through the lifecycle ` +
+                    `transition (spur feature update ${id} <status>); id and timestamps are machine-owned.`,
+            );
+        }
         const ref = await this.refFor(id);
         return this.ctx.writeService.updateFrontmatter(ref, key, value);
     }

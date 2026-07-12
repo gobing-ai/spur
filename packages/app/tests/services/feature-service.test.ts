@@ -109,6 +109,22 @@ describe('FeatureService', () => {
         test('update throws for an unknown feature ID', async () => {
             await expect(svc.update('ZZZZZ', 'priority', 'P0')).rejects.toThrow(/not found/);
         });
+
+        test('rejects status via --field so the lifecycle guard cannot be bypassed', async () => {
+            const created = await svc.create('Guarded Feature');
+            // A status write through updateFrontmatter would skip the FSM guard,
+            // the History append, and the feature.transitioned event.
+            await expect(svc.update(created.ref.id, 'status', 'done')).rejects.toThrow(/not settable via update/);
+            const shown = await svc.show(created.ref.id);
+            expect(shown?.status).toBe('backlog');
+        });
+
+        test('rejects machine-owned keys (id, timestamps, schema_version)', async () => {
+            const created = await svc.create('Machine Keys Feature');
+            for (const key of ['id', 'schema_version', 'created_at', 'updated_at']) {
+                await expect(svc.update(created.ref.id, key, 'x')).rejects.toThrow(/not settable via update/);
+            }
+        });
     });
 
     describe('updateSection', () => {

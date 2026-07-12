@@ -9,6 +9,12 @@ export interface ProcessFrame {
     stream: 'stdout' | 'stderr';
     ts: string;
     line: string;
+    /**
+     * Monotonic sequence stamped at push time. Ring-buffer overflow splices
+     * old frames from the front, so an array index is not a stable cursor —
+     * live tails must track the last seq they delivered instead.
+     */
+    seq: number;
 }
 
 /** Registry entry for a supervised process. */
@@ -81,6 +87,7 @@ export class SupervisorService {
     private readonly processes = new Map<string, { handle: PipeProcess; entry: ProcessEntry }>();
     private readonly ringBuffers = new Map<string, ProcessFrame[]>();
     private specsPromise?: Promise<AgentSpec[]>;
+    private frameSeq = 0;
 
     constructor(options: SupervisorOptions) {
         this.processExecutor = options.processExecutor;
@@ -274,8 +281,8 @@ export class SupervisorService {
         pump();
     }
 
-    private pushFrame(frames: ProcessFrame[], frame: ProcessFrame): void {
-        frames.push(frame);
+    private pushFrame(frames: ProcessFrame[], frame: Omit<ProcessFrame, 'seq'>): void {
+        frames.push({ ...frame, seq: this.frameSeq++ });
         if (frames.length > this.ringBufferSize) {
             frames.splice(0, frames.length - this.ringBufferSize);
         }

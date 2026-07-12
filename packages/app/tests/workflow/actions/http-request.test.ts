@@ -286,6 +286,24 @@ describe('HttpRequestActionRunner', () => {
         expect(result.error).toContain('invalid header value');
     });
 
+    test('rejects a header whose RESOLVED value smuggles CR/LF via a template var', async () => {
+        const { runner, fake } = newRunner();
+
+        // The raw template passes the value regex; the injected var is what
+        // must be validated — otherwise a var carries header injection to the wire.
+        const headerTemplate = `$${'{vars.token}'}`;
+        const result = await runner.execute(
+            { url: 'https://api.example.com/data', headers: { 'X-Token': headerTemplate } },
+            makeContext({ token: 'abc\r\nX-Injected: 1' }),
+        );
+
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('invalid header value');
+        // The secret-bearing resolved value must not leak into the error.
+        expect(result.error).not.toContain('abc');
+        expect(fake.calls.length).toBe(0);
+    });
+
     // --- Error handling ---
 
     test('network error returns ok:false with redacted message', async () => {
