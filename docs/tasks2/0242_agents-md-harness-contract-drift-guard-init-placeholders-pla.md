@@ -3,7 +3,7 @@ template: standard
 schema_version: 1
 name: "AGENTS.md harness contract: drift guard, init placeholders, platform fallback, long-tail routing"
 description: ""
-status: testing
+status: done
 type: task
 profile: standard
 feature_id: A1
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-12T05:45:32.524Z"
-updated_at: "2026-07-12T05:52:57.624Z"
+updated_at: "2026-07-12T05:52:59.668Z"
 ---
 
 ## 0242. AGENTS.md harness contract: drift guard, init placeholders, platform fallback, long-tail routing
@@ -317,3 +317,4 @@ Disposition: implement complete; verify PASS artifact at `.spur/run/0242-verdict
 - 2026-07-12T05:46:24.319Z backlog → todo (system)
 - 2026-07-12T05:52:10.424Z todo → wip (system)
 - 2026-07-12T05:52:32.405Z wip → testing (system)
+- 2026-07-12T05:52:59.668Z testing → done (system)
