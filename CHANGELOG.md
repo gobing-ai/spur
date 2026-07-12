@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **`spur serve` board 404 after global install.** The published `@gobing-ai/spur` package did not ship the Astro board static assets, so `http://localhost:<port>/board` returned `{"error":"Not Found"}` from any non-monorepo cwd (e.g. after `bun i -g @gobing-ai/spur`). `build:bundle` now runs `bundle-web` (copies `dist/web` → `apps/cli/web`), `package.json` `files` includes `web/`, and `resolveWebDistPath` looks next to the bundled `spur.js` / binary. Missing assets log a warning and browser-open falls back to `/api/health` instead of a JSON 404.
+
+- **Restore package-root `config/` in the npm release (ADR-015).** After the bin moved to package-root `spur.js` (2026-06-09), default config assets were nested under the leftover `spur-cli/config/` path and docs still said `dist/config`. Releases now ship top-level `config/` (via `bundle-config config` + `files: ["config", …]`); `bundledConfigRoot()` still accepts legacy `spur-cli/config`. **`spur init` full-tree seeds** every bundled asset into project `.spur/` (rules/**, workflows/**, tasks/**, templates/**, plugins/**), then applies the scaffold manifest for remaps and root-scoped docs/AGENTS — matching the monorepo symlink intent with real copies for end-user projects.
 
 ## [0.3.7] — 2026-07-12
 
