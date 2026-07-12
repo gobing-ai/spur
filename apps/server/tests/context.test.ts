@@ -370,6 +370,15 @@ describe('createServerContext', () => {
         tap.unsubscribe();
     });
 
+    test('processInventory() returns inventory service with serve root', async () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
+        const snap = await ctx.processInventory().snapshot();
+        expect(snap.rootPid).toBe(process.pid);
+        expect(snap.processes.some((p) => p.pid === process.pid && p.source === 'serve')).toBe(true);
+        expect(snap.capturedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    });
+
     test('supervisor() returns supervisor service instance', () => {
         const appRt = makeAppRt();
         const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });

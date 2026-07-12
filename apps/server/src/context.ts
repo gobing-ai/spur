@@ -4,6 +4,7 @@ import type {
     FeatureService,
     PlanningEvent as PlanningEventType,
     PlanningFolders,
+    ProcessInventoryService,
     RuleService,
     SupervisorService,
     TaskService,
@@ -14,11 +15,13 @@ import {
     AgentService as AgentServiceImpl,
     BusPlanningEventEmitter,
     bridgeEventBus,
+    createPsProcessInspector,
     type EventEmitter,
     FeatureService as FeatureServiceImpl,
     hitlConfirmDefault,
     type PlanningEventMap,
     PlanningWriteService as PlanningWriteServiceImpl,
+    ProcessInventoryService as ProcessInventoryServiceImpl,
     RuleService as RuleServiceImpl,
     SupervisorService as SupervisorServiceImpl,
     TaskService as TaskServiceImpl,
@@ -128,6 +131,12 @@ export interface ServerContext {
 
     /** Lazy, cached SupervisorService (process supervision, task 0195/0207). */
     supervisor(): SupervisorService;
+
+    /**
+     * Lazy, cached serve-rooted process inventory (task 0243).
+     * OS tree walk + supervisor overlay for Observability → Processes.
+     */
+    processInventory(): ProcessInventoryService;
 
     /**
      * Lazy, cached AgentService. The server-side bus is threaded in as
@@ -276,6 +285,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
     let featureSvc: FeatureService | undefined;
     let teamSvc: TeamService | undefined;
     let supervisorSvc: SupervisorService | undefined;
+    let processInventorySvc: ProcessInventoryService | undefined;
     let agentSvc: AgentService | undefined;
     let ruleSvc: RuleService | undefined;
     let workflowSvc: WorkflowAppService | undefined;
@@ -365,6 +375,17 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                 });
             }
             return supervisorSvc;
+        },
+
+        processInventory(): ProcessInventoryService {
+            if (!processInventorySvc) {
+                processInventorySvc = new ProcessInventoryServiceImpl({
+                    inspector: createPsProcessInspector(),
+                    rootPid: process.pid,
+                    listSupervised: () => this.supervisor().list(),
+                });
+            }
+            return processInventorySvc;
         },
 
         agentService(): AgentService {

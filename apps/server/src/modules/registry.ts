@@ -5,6 +5,7 @@ import { featureModule } from './feature';
 import { healthModule } from './health';
 import { jobsModule } from './jobs';
 import { messagesModule } from './messages';
+import { observabilityModule } from './observability';
 import { taskModule } from './task';
 import { teamModule } from './team';
 import type { ServerModule } from './types';
@@ -28,6 +29,7 @@ const builtins: ServerModule[] = [
     messagesModule,
     jobsModule,
     teamModule,
+    observabilityModule,
 ];
 
 /**
