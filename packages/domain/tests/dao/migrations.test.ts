@@ -187,7 +187,11 @@ describe('db migrations', () => {
             await applyCliMigrations(adapter, [{ id: '0000_spur_cli_foundation', sql: CLI_SCHEMA_SQL }]);
 
             const applied = await applyCliMigrations(adapter, [
-                { id: '0007_spur_cli_runs_external_key', sql: RUNS_EXTERNAL_KEY_COLUMN_SCHEMA_SQL },
+                {
+                    id: '0007_spur_cli_runs_external_key',
+                    sql: RUNS_EXTERNAL_KEY_COLUMN_SCHEMA_SQL,
+                    addColumnIfMissing: { table: 'runs', column: 'external_key' },
+                },
             ]);
 
             expect(applied).toBe(1);

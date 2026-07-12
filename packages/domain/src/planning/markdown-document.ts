@@ -493,24 +493,9 @@ export class MarkdownDocument {
      * @param key - frontmatter key (matched at line start, before the first `:`)
      * @param value - scalar value to write after `<key>: `
      */
-    /**
-     * Write `value` as a YAML-safe scalar, quoting when the raw string would be
-     * misinterpreted (ISO 8601 timestamps that contain `:`, numeric-looking
-     * strings like WBS `0042`, bare YAML literals like `null`/`true`/`false`,
-     * and strings with special characters). This keeps the round-tripped
-     * frontmatter valid across parse → serialize → parse cycles.
-     */
-    private yamlSafeValue(value: string): string {
-        // Already double-quoted by the caller — don't wrap again.
-        if (value.startsWith('"') && value.endsWith('"')) return value;
-        if (/[:{}[\],&*?|>!%@`#"'\\\n\r]/.test(value)) return `"${value}"`;
-        if (/^(null|true|false|yes|no|on|off)$/i.test(value)) return `"${value}"`;
-        if (/^\d/.test(value) && !/^\d{4}-\d{2}-\d{2}/.test(value)) return `"${value}"`;
-        return value;
-    }
 
     setFrontmatterField(key: string, value: string): void {
-        const fieldLine = `${key}: ${this.yamlSafeValue(value)}`;
+        const fieldLine = `${key}: ${escapeYamlValue(value)}`;
 
         if (this._frontmatter === null) {
             const raw = fieldLine;
@@ -555,4 +540,26 @@ export class MarkdownDocument {
         }
         return result;
     }
+}
+
+/**
+ * Write `value` as a YAML-safe scalar, quoting when the raw string would be
+ * misinterpreted (ISO 8601 timestamps that contain `:`, numeric-looking
+ * strings like WBS `0042`, bare YAML literals like `null`/`true`/`false`,
+ * and strings with special characters). This keeps the round-tripped
+ * frontmatter valid across parse → serialize → parse cycles.
+ *
+ * When quoting, embedded backslashes and double quotes are escaped
+ * so the result is valid YAML double-quoted string syntax.
+ */
+export function escapeYamlValue(value: string): string {
+    // Already double-quoted by the caller — don't wrap again.
+    if (value.startsWith('"') && value.endsWith('"')) return value;
+    if (/[:{}[\],&*?|>!%@`#"'\\\n\r]/.test(value)) {
+        const escaped = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        return `"${escaped}"`;
+    }
+    if (/^(null|true|false|yes|no|on|off)$/i.test(value)) return `"${value}"`;
+    if (/^\d/.test(value) && !/^\d{4}-\d{2}-\d{2}/.test(value)) return `"${value}"`;
+    return value;
 }

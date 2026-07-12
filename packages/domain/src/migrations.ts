@@ -162,7 +162,11 @@ export const CLI_MIGRATIONS: CliMigration[] = [
     { id: '0002_spur_cli_rule_history', sql: RULE_ENGINE_SCHEMA_SQL },
     { id: '0003_spur_cli_planning', sql: PLANNING_SCHEMA_SQL },
     { id: '0004_spur_cli_queue_jobs', sql: QUEUE_JOBS_SCHEMA_SQL },
-    { id: '0005_spur_cli_run_pid', sql: RUN_PID_COLUMN_SCHEMA_SQL },
+    {
+        id: '0005_spur_cli_run_pid',
+        sql: RUN_PID_COLUMN_SCHEMA_SQL,
+        addColumnIfMissing: { table: 'runs', column: 'pid' },
+    },
     { id: '0006_spur_cli_system_events', sql: SYSTEM_EVENTS_SCHEMA_SQL },
     {
         id: '0007_spur_cli_runs_external_key',
@@ -188,7 +192,7 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
         );
         if (existing != null) continue;
 
-        const addColumnGuard = migration.addColumnIfMissing ?? builtInAddColumnGuard(migration.id);
+        const addColumnGuard = migration.addColumnIfMissing;
         const shouldApplySql =
             addColumnGuard === undefined || !(await columnExists(adapter, addColumnGuard.table, addColumnGuard.column));
 
@@ -226,11 +230,6 @@ export async function loadSqlMigrations(folder: string): Promise<CliMigration[]>
 async function columnExists(adapter: DbAdapter, table: string, column: string): Promise<boolean> {
     const rows = await adapter.queryAll<{ name: string }>(`PRAGMA table_info("${table}")`);
     return rows.some((row) => row.name === column);
-}
-
-function builtInAddColumnGuard(id: string): CliMigration['addColumnIfMissing'] | undefined {
-    if (id === '0007_spur_cli_runs_external_key') return { table: 'runs', column: 'external_key' };
-    return undefined;
 }
 
 function splitSqlStatements(sql: string): string[] {

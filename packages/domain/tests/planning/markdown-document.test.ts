@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { MarkdownDocument } from '@gobing-ai/spur-domain';
+import { escapeYamlValue, MarkdownDocument } from '@gobing-ai/spur-domain';
 
 // ---------------------------------------------------------------------------
 // Fixture: representative task file (design §2.1 — `##` title, `###` sections)
@@ -519,6 +519,62 @@ describe('MarkdownDocument', () => {
             doc.setFrontmatterField('assignee', 'planner');
             const out = doc.serialize();
             expect(out.slice(out.indexOf('## 0050.'))).toBe(bodyBefore);
+        });
+    });
+
+    // -----------------------------------------------------------------------
+    // escapeYamlValue() — YAML value quoting with embedded character escaping
+    // -----------------------------------------------------------------------
+
+    describe('escapeYamlValue()', () => {
+        test('leaves simple strings unquoted', () => {
+            expect(escapeYamlValue('hello')).toBe('hello');
+            expect(escapeYamlValue('backlog')).toBe('backlog');
+            expect(escapeYamlValue('wip')).toBe('wip');
+        });
+
+        test('quotes numeric-looking strings', () => {
+            expect(escapeYamlValue('0042')).toBe('"0042"');
+            expect(escapeYamlValue('1.0')).toBe('"1.0"');
+        });
+
+        test('quotes YAML literal keywords', () => {
+            expect(escapeYamlValue('null')).toBe('"null"');
+            expect(escapeYamlValue('true')).toBe('"true"');
+            expect(escapeYamlValue('yes')).toBe('"yes"');
+            expect(escapeYamlValue('no')).toBe('"no"');
+            expect(escapeYamlValue('on')).toBe('"on"');
+            expect(escapeYamlValue('off')).toBe('"off"');
+        });
+
+        test('ISO 8601 timestamps are quoted because they contain ":"', () => {
+            expect(escapeYamlValue('2026-06-13T00:00:00.000Z')).toBe('"2026-06-13T00:00:00.000Z"');
+        });
+
+        test('escapes embedded backslashes when quoting', () => {
+            // backslash is a special char that triggers quoting
+            expect(escapeYamlValue('a\\b')).toBe('"a\\\\b"');
+        });
+
+        test('escapes embedded double quotes when quoting', () => {
+            expect(escapeYamlValue('say "hello"')).toBe('"say \\"hello\\""');
+        });
+
+        test('escapes both backslashes and double quotes together', () => {
+            expect(escapeYamlValue('\\"foo\\"')).toBe('"\\\\\\"foo\\\\\\""');
+        });
+
+        test('passes already-double-quoted strings through unchanged', () => {
+            expect(escapeYamlValue('"already quoted"')).toBe('"already quoted"');
+        });
+
+        test('values with special chars survive a round-trip through YAML parse', () => {
+            const doc = MarkdownDocument.parse('', 'task');
+            const tricky = 'value with "quotes" and \\backslash';
+            doc.setFrontmatterField('desc', tricky);
+            const serialized = doc.serialize();
+            const reparsed = MarkdownDocument.parse(serialized, 'task');
+            expect(reparsed.frontmatterData?.desc).toBe(tricky);
         });
     });
     // -----------------------------------------------------------------------
