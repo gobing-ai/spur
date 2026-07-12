@@ -14,8 +14,8 @@ updated_at: 2026-06-18T00:00:00.000Z
 
 This is the **constitution** for the project's key files: an accumulated, machine-maintained set
 of rules and lessons for running the same file structure across different projects and
-cooperating with multiple coding agents (Claude Code, Codex, Gemini CLI, pi, Antigravity,
-OpenCode, OpenClaw, ...).
+cooperating with multiple coding agents (Claude Code, Codex, Gemini CLI, pi, omp, Antigravity,
+OpenCode, OpenClaw, Hermes, Grok, ...).
 
 - One copy lives in every project at `docs/99_PROJECT_CONSTITUTION.md`.
 - It is **byte-identical across projects** except the Lessons sections (§8) and the tool-binding

@@ -26,8 +26,11 @@ as the single source of truth, a spec-driven pipeline from vague description to 
 features and linked tasks, and — shape pending the server/web design task (ADR-021) — a local
 kanban board as the operator's review surface.
 
-Supported agents: **Claude Code, Codex, Gemini CLI, Antigravity, pi, OpenCode, OpenClaw.** Pi is
-the default when Spur runs an agent itself.
+Supported agents (canonical ids from `@gobing-ai/ts-ai-runner` `DISPLAY_ORDER`, 0.4.8+): **Claude
+Code (`claude`), Codex (`codex`), Gemini CLI (`gemini`), pi (`pi`), omp (`omp`), OpenCode
+(`opencode`), Antigravity (`antigravity-cli`), OpenClaw (`openclaw`), Hermes (`hermes`), Grok
+(`grok`).** Auto-selection uses Tier-1 priority (not a fixed default agent); configure
+`agent.default` / executors to pin a preferred runner (e.g. `omp` or `grok`).
 
 ## 2. Problem Statement
 

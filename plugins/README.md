@@ -1,6 +1,6 @@
 # Plugin `sp`
 
-> **Spur** — a local-first harness engineering toolkit that wraps mainstream coding agents (Claude Code, Codex, Gemini CLI, Antigravity, pi, OpenCode, OpenClaw) with constraint checking, workflow orchestration, history analytics, and operational visibility.
+> **Spur** — a local-first harness engineering toolkit that wraps mainstream coding agents (Claude Code, Codex, Gemini CLI, pi, omp, OpenCode, Antigravity, OpenClaw, Hermes, Grok) with constraint checking, workflow orchestration, history analytics, and operational visibility.
 
 The `sp` plugin is the Claude Code plugin surface for the Spur toolkit. It provides a full planning-to-execution pipeline — convert a vague feature description into a CLI-validated feature file with BDD acceptance criteria, decompose it into a task batch, run those tasks through execution workflows with human-in-the-loop gating — plus constraint-rule and dual-mode workflow engines, daily analytics, and document-drift enforcement. Every write to the task/feature corpus goes through a `spur` CLI verb that validates before writing; the plugin entities contain zero validation logic of their own.
 
@@ -321,7 +321,7 @@ Tier 3 — Execution Layer (spur CLI + Guard Scripts)
 
 ## Platform Compatibility
 
-The `sp` plugin is authored in Claude Code native format. On other platforms (Codex, Gemini CLI, Antigravity, pi, OpenCode, OpenClaw), translation scripts adapt plugin entities to platform-native locations. OpenClaw is implicitly supported — it reads skills from `~/.agents/skills/`, the same root codex/opencode use in global mode.
+The `sp` plugin is authored in Claude Code native format. On other platforms (Codex, Gemini CLI, Antigravity, pi, omp, OpenCode, OpenClaw, Hermes, Grok), translation scripts adapt plugin entities to platform-native locations where those adapters exist. OpenClaw is implicitly supported — it reads skills from `~/.agents/skills/`, the same root codex/opencode use in global mode. Grok is a first-class **runtime** agent via `spur agent run --agent grok` (`ts-ai-runner` 0.4.8+); plugin-entity emit for Grok follows the same Skills 2.0 path as other non–Claude Code agents when an adapter is configured.
 
 | Plugin Entity | Claude Code | Other Platforms |
 |--------------|-------------|-----------------|

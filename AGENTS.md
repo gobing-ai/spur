@@ -14,9 +14,9 @@ self-contained for agents; keep portable wording aligned with that template when
 ## Project
 
 **Spur** — local-first harness toolkit for mainstream coding agents (Claude Code, Codex, Gemini CLI,
-Antigravity, pi, OpenCode, OpenClaw). Not a coding agent and not a BYOK LLM platform: it wraps
-agents you already run, adding discipline, constraints, workflows, history analytics, and ops
-visibility.
+pi, omp, OpenCode, Antigravity, OpenClaw, Hermes, Grok). Not a coding agent and not a BYOK LLM
+platform: it wraps agents you already run, adding discipline, constraints, workflows, history
+analytics, and ops visibility.
 
 **This monorepo is Spur.** Develop it **with** Spur: `spur` CLI + `/sp:dev-*` commands + `sp:*`
 subagents/skills are first-class for planning, execution, constraints, and docs hygiene.

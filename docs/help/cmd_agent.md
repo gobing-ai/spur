@@ -46,7 +46,7 @@ spur agent run [options] <prompt>
 `--agent` (default `auto`) resolves via the `agent` config block:
 
 1. The prompt's slash command yields a **phase** — recognized in every per-agent surface form
-   (`/sp:dev-run` claude, `/sp-dev-run` opencode/gemini, `/skill:sp-dev-run` pi/omp,
+   (`/sp:dev-run` claude, `/sp-dev-run` opencode/gemini/hermes/grok, `/skill:sp-dev-run` pi/omp,
    `$sp-dev-run` codex, plus the `rd3` variants → all `dev-run`).
 2. A configured `agent.default-by-phase[phase]` selects a named `agent.executors` profile
    (`{ name, agent, model? }`) — its `model` becomes the run's model **unless** the user
@@ -73,6 +73,7 @@ spur agent run "Add a login endpoint to src/auth/"
 spur agent run "Fix the failing test" --agent codex
 spur agent run "Continue" --continue
 spur agent run "Refactor the DB layer" --agent gemini --model gemini-2.0-flash
+spur agent run "Summarize the diff" --agent grok
 spur agent run "Generate a summary" --mode json --json
 spur agent run "Run the tests" --cwd ./packages/domain
 spur agent run "Work on task 0089" --agent reviewer --drain
@@ -102,8 +103,10 @@ spur agent list [options]
 | `--specs` | List team specs under `.spur/agents/` instead of detected agents |
 | `--json` | Output machine-readable JSON |
 
-Detected agents: `claude`, `codex`, `gemini`, `pi`, `opencode`, `antigravity`, `openclaw`
-(per `ts-ai-runner` `AgentDetector`). Text mode prints `ok|missing <name> [version]`.
+Detected agents (canonical ids from `ts-ai-runner` `DISPLAY_ORDER`, 0.4.8+): `claude`, `codex`,
+`gemini`, `pi`, `omp`, `opencode`, `antigravity-cli`, `openclaw`, `hermes`, `grok`.
+(`antigravity` is a deprecated alias of `antigravity-cli`.) Text mode prints
+`ok|missing <name> [version]`.
 
 ### JSON shape
 
@@ -157,7 +160,7 @@ spur agent create [options] <id>
 
 | Flag | Description |
 |---|---|
-| `--type <agent-type>` | Agent spec type (required — `claude`/`codex`/`gemini`/…) |
+| `--type <agent-type>` | Agent spec type (required — any canonical coding-agent id: `claude`/`codex`/`gemini`/`pi`/`omp`/`opencode`/`antigravity-cli`/`openclaw`/`hermes`/`grok`/…) |
 | `--name <name>` | Agent name |
 | `--workspace <path>` | Workspace path |
 | `--purpose <text>` | Team identity purpose (defaults to `"<type> agent"` if empty) |
@@ -177,6 +180,7 @@ Writes the spec to `.spur/agents/<id>.yaml`. The id is validated
 
 ```bash
 spur agent create reviewer --type codex --purpose "Code review specialist" --tags review,quality
+spur agent create builder --type grok --purpose "Implementation agent"
 ```
 
 ## spur agent edit

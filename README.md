@@ -7,10 +7,10 @@
 **Local-first harness engineering toolkit for mainstream coding agents.**
 
 Spur is **not** a coding agent and **not** a BYOK LLM platform. It assumes you already have coding
-agents installed and authenticated (Claude Code, Codex, Gemini CLI, Antigravity, pi, OpenCode,
-OpenClaw), then wraps them with execution discipline: agent detection and health checks, constraint
-checking, workflow orchestration, conversation-history import and analytics, and operational
-visibility — all behind one CLI.
+agents installed and authenticated (Claude Code, Codex, Gemini CLI, pi, omp, OpenCode, Antigravity,
+OpenClaw, Hermes, Grok), then wraps them with execution discipline: agent detection and health
+checks, constraint checking, workflow orchestration, conversation-history import and analytics, and
+operational visibility — all behind one CLI.
 
 ---
 

@@ -5,9 +5,9 @@
 ### What's Spur?
 
 Spur is a **local-first harness engineering toolkit** for mainstream coding agents (Claude Code,
-Codex, Gemini CLI, Antigravity, pi, OpenCode, OpenClaw). It wraps agents you already have installed
-and authenticated, adding execution discipline, constraint checking, workflow orchestration, task &
-feature management, history analytics, and team coordination.
+Codex, Gemini CLI, pi, omp, OpenCode, Antigravity, OpenClaw, Hermes, Grok). It wraps agents you
+already have installed and authenticated, adding execution discipline, constraint checking, workflow
+orchestration, task & feature management, history analytics, and team coordination.
 
 It is **not** a coding agent and **not** a BYOK LLM platform. Spur owns no model-reaching path other
 than `spur agent run` (delegated to the installed agent).
@@ -85,7 +85,7 @@ graph TB
         Claude[Claude Code]
         Codex[Codex]
         Gemini[Gemini CLI]
-        Others[pi, OpenCode,<br/>Antigravity, OpenClaw]
+        Others[pi, omp, OpenCode,<br/>Antigravity, OpenClaw,<br/>Hermes, Grok]
     end
 
     CLI --> AgentSvc & RuleSvc & WorkflowSvc & TaskSvc & FeatureSvc & HistorySvc & TeamSvc

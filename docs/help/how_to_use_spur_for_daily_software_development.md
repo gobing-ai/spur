@@ -11,8 +11,9 @@
 ## 1. What Is Spur?
 
 Spur is a **local-first harness engineering toolkit** for mainstream coding agents (Claude Code,
-Codex, Gemini CLI, Antigravity, pi, OpenCode, OpenClaw). It is **not** a coding agent and **not** a
-BYOK LLM platform. It wraps agents you already have installed and authenticated, adding:
+Codex, Gemini CLI, pi, omp, OpenCode, Antigravity, OpenClaw, Hermes, Grok). It is **not** a coding
+agent and **not** a BYOK LLM platform. It wraps agents you already have installed and authenticated,
+adding:
 
 - **Execution discipline** — run any supported agent with a single command, capture structured output.
 - **Constraint checking** — enforce architecture, style, and quality rules before code ships.
@@ -301,6 +302,7 @@ spur agent run "Add a login endpoint to src/auth/"
 
 # Run with a specific agent
 spur agent run "Fix the failing test" --agent codex
+spur agent run "Summarize the diff" --agent grok
 
 # Resume the previous session
 spur agent run "Continue" --continue
@@ -308,7 +310,7 @@ spur agent run "Continue" --continue
 # Specify a model (explicit --model wins over the configured one)
 spur agent run "Refactor the DB layer" --agent gemini --model gemini-2.0-flash
 
-# Output mode (text|json)
+# Output mode (text|json) — Grok maps text → --output-format plain
 spur agent run "Generate a summary" --mode json --json
 
 # Working directory for agent execution
@@ -321,16 +323,22 @@ spur agent run "Work on task 0089" --agent reviewer --drain
 **Exit codes** for `spur agent run`: 0 success · 1 agent-not-found / known-but-unusable ·
 2 invalid arguments / unknown executor · 3 agent execution failure.
 
+Canonical coding-agent ids (`ts-ai-runner` 0.4.8+): `claude`, `codex`, `gemini`, `pi`, `omp`,
+`opencode`, `antigravity-cli`, `openclaw`, `hermes`, `grok`. Grok auth uses `XAI_API_KEY` and/or
+`~/.grok/auth.json` (no CLI auth-status verb).
+
 **Agent management:**
 
 ```bash
-spur agent list             # list detected coding agents
+spur agent list             # list detected coding agents (includes grok when installed)
 spur agent list --specs     # list team agent specs (.spur/agents/*.yaml)
 spur agent doctor           # check readiness of all agents
 spur agent doctor claude    # check one agent
+spur agent doctor grok      # Grok: version + XAI_API_KEY / ~/.grok/auth.json
 
 # Create a team agent spec
 spur agent create reviewer --type codex --purpose "Code review specialist" --tags review,quality
+spur agent create builder --type grok --purpose "Implementation agent"
 
 # Edit a spec (opens $EDITOR, or prints the path)
 spur agent edit reviewer

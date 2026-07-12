@@ -127,19 +127,21 @@ one place, and is the seam where a future remote/SSE execution channel attaches 
 Execute a prompt or slash command via a coding agent. `--agent` (default `auto`) resolves via the
 `agent` config block (0126): the prompt's slash command yields a **phase** — recognized in every
 per-agent surface form, since `spur agent run` may receive an already-translated prompt (`/sp:dev-run`
-claude, `/sp-dev-run` opencode/gemini, `/skill:sp-dev-run` pi/omp, `$sp-dev-run` codex, plus the `rd3`
-variants → all `dev-run`); a configured `agent.default-by-phase[phase]` selects a
-named `agent.executors` profile (`{ name, agent, model? }`) — its `model` becomes the run's model
-**unless** the user passed an explicit `--model` (explicit wins). A configured phase mapping is
+claude, `/sp-dev-run` opencode/gemini/hermes/grok (default dialect), `/skill:sp-dev-run` pi/omp,
+`$sp-dev-run` codex, plus the `rd3` variants → all `dev-run`); a configured `agent.default-by-phase[phase]`
+selects a named `agent.executors` profile (`{ name, agent, model? }`) — its `model` becomes the run's
+model **unless** the user passed an explicit `--model` (explicit wins). A configured phase mapping is
 authoritative: an unknown executor exits 2, a known-but-unusable executor exits 1, and neither falls
 back. With no phase match, `agent.default` is resolved as an executor selector (then a legacy agent
 name); on miss, the static Tier-1 priority resolver picks the first usable Tier-1 agent — the legacy
 behavior preserved when no `agent` config is present. `current` reads `SPUR_AGENT` env var; an
 explicit name resolves directly and never consults phase config.
 `--continue` resumes the previous session. `--mode text|json` (default `text`) passes output format
-to the agent CLI. `--cwd` sets the working directory. `--json` emits a machine-readable envelope
+to the agent CLI (Grok maps `text` → `--output-format plain`). `--cwd` sets the working directory.
+`--json` emits a machine-readable envelope
 (`{ exitCode: number|null, stdout, stderr, signal?, durationMs }`). Slash commands like
-`/plugin:command` are translated per-agent (claude pass-through, codex `$`, pi `/skill:`).
+`/plugin:command` are translated per-agent (claude pass-through, codex `$`, pi/omp `/skill:…`,
+others including grok/hermes/opencode → `/plugin-command`).
 Team identity (purpose, tags, system prompt) is sourced from the agent **spec** (`agent create`
 flags below), not from `run` flags. `--drain` resolves the addressed `--agent <id>` as an **agent
 spec id** (a different namespace from the coding-agent type), folds that spec's pending inbox
@@ -149,23 +151,27 @@ Exit 0 on success, 1 on agent-not-found, 2 on invalid arguments, 3 on agent exec
 
 #### `spur agent list [--json] [--specs]`
 Detect installed agents; prints `ok|missing <name> [version]`. Backed by `ts-ai-runner`
-`AgentDetector`. Agents: claude, codex, gemini, pi, opencode, antigravity, openclaw. With `--specs`,
-lists the team agent specs under `.spur/agents/` instead (`<id> <type> <purpose>`; `--json` includes
-the spec path).
+`AgentDetector` / `DISPLAY_ORDER`. Canonical agents (0.4.8+): `claude`, `codex`, `gemini`, `pi`,
+`omp`, `opencode`, `antigravity-cli`, `openclaw`, `hermes`, `grok` (`antigravity` is a deprecated
+alias of `antigravity-cli`). With `--specs`, lists the team agent specs under `.spur/agents/` instead
+(`<id> <type> <purpose>`; `--json` includes the spec path).
 
 #### `spur agent doctor [agent] [--json]`
-Readiness check per agent. Text mode prints an aligned table — `<✓|✗> <usable|missing> <agent>
-<tier> <auth:yes|no|?> <version>` with a `STATUS AGENT TIER AUTH VERSION` header and an
-`N usable, M missing (tier-1)` footer; `--json` emits `{ agents: [...] }`. Auth is informational
-(its own column, not a state label — liveness-only gate, ADR/0127). Exit 1 if any **tier-1** agent
-is not usable. Backed by `ts-ai-runner` `DoctorRunner`.
+Readiness check per agent (same `DISPLAY_ORDER` as list). Text mode prints an aligned table —
+`<✓|✗> <usable|missing> <agent> <tier> <auth:yes|no|?> <version>` with a
+`STATUS AGENT TIER AUTH VERSION` header and an `N usable, M missing (tier-1)` footer; `--json`
+emits `{ agents: [...] }`. Auth is informational (its own column, not a state label —
+liveness-only gate, ADR/0127). For **grok**, auth is tri-state from `XAI_API_KEY` and/or
+non-empty `~/.grok/auth.json` (no CLI auth-status verb). Exit 1 if any **tier-1** agent is not
+usable. Backed by `ts-ai-runner` `DoctorRunner`.
 
 #### `spur agent create <id> --type <agent-type> [--json] [flags]` · `spur agent edit <id>` · `spur agent delete <id> [--force]`
 Manage team agent specs under `.spur/agents/<id>.yaml` (backed by `ts-ai-runner` agent-spec helpers
 and the app-layer `TeamService`).
-- `create` — write a spec. Flags: `--name`, `--workspace`, `--purpose`, `--tags <a,b>`, `--model`,
-  `--autonomy`, `--system-prompt`, `--no-identity-preamble`, `--auto-start`. The id is validated
-  (`[a-z][a-z0-9_-]{1,63}`); a duplicate id is refused. An empty `--purpose` falls back to
+- `create` — write a spec. `--type` is a canonical coding-agent id (e.g. `claude`, `codex`, `omp`,
+  `grok`, … — same set as list/doctor). Flags: `--name`, `--workspace`, `--purpose`, `--tags <a,b>`,
+  `--model`, `--autonomy`, `--system-prompt`, `--no-identity-preamble`, `--auto-start`. The id is
+  validated (`[a-z][a-z0-9_-]{1,63}`); a duplicate id is refused. An empty `--purpose` falls back to
   `"<type> agent"` so the written YAML round-trips. `--json` emits `{ ok, spec }`.
 - `edit` — open the spec in `$EDITOR`, or print its path when `$EDITOR` is unset. Errors if missing.
 - `delete` — remove the spec; refuses (exit 2) without `--force`; errors (exit 1) if missing.
@@ -875,6 +881,25 @@ artifact via one of two **mutually exclusive** exits:
 **Pipeline step→command mapping (ADR-026):** `implement` → `/sp:dev-run --mode implement`, `test` → `/sp:dev-unit`,
 `review` → `/sp:dev-review`, `verify` → `/sp:dev-verify` (§7.5). The remaining commands are
 operator-invoked, not pipeline-driven.
+
+### 7.8a Process inventory (Observability → Processes)
+
+Task **0243**. The Processes tab is a **read-only** serve-rooted runtime inventory — not the
+team control plane (`/api/team/*`).
+
+| Surface | Contract |
+| --- | --- |
+| `GET /api/observability/processes` | Snapshot of the serve PID tree + supervisor overlay |
+| Success body | `{ processes: ProcessInventoryRow[], rootPid: number, capturedAt: string }` |
+| Row fields | `pid`, `ppid`, `depth`, `source` (`serve` \| `supervisor` \| `descendant`), `label`, optional `agentId`, `command` (may be truncated), `status`, `rssBytes`, `elapsedSeconds`, `startedAt` |
+| Unsupported OS | `501` + `{ error, code: "UNSUPPORTED_PLATFORM" }` (macOS + Linux only in v1) |
+| Team APIs | Unchanged — `GET /api/team/processes` remains supervised-agents-only for control clients |
+
+**Mechanism:** `ProcessInventoryService` (`packages/app`) walks OS processes via a
+`ProcessInspector` port (default: `ps -axo pid=,ppid=,rss=,etime=,command=`), filters to
+descendants of `process.pid`, and overlays `SupervisorService.list()` by pid for agent labels.
+Board UI polls every ~3s. Threads/%CPU, host-wide shell `spur` CLIs, and ProcessExecutor live
+registry enrichment are deferred.
 
 ### 7.9 System Event catalog
 

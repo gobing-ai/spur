@@ -1,9 +1,9 @@
 # @gobing-ai/spur
 
 **The `spur` command** — a local-first harness for mainstream coding agents (Claude Code, Codex,
-Gemini CLI, Antigravity, pi, OpenCode, OpenClaw). Spur is **not** a coding agent; it wraps the agents
-you already have with constraint checking, workflow orchestration, agent health checks, and
-conversation-history analytics.
+Gemini CLI, pi, omp, OpenCode, Antigravity, OpenClaw, Hermes, Grok). Spur is **not** a coding agent;
+it wraps the agents you already have with constraint checking, workflow orchestration, agent health
+checks, and conversation-history analytics.
 
 ## Install
 
