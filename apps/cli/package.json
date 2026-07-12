@@ -28,8 +28,9 @@
     },
     "files": [
         "spur.js",
-        "spur-cli",
+        "config",
         "schemas",
+        "web",
         "README.md"
     ],
     "engines": {
@@ -42,7 +43,7 @@
         "dev": "bun run src/index.ts",
         "build": "bun run ../../scripts/spur-dev.ts build-cli",
         "build:binaries": "bun run ../../scripts/spur-dev.ts build-binaries",
-        "build:bundle": "bun build src/index.ts --target=bun --outfile spur.js && bun run ../../scripts/spur-dev.ts bundle-config spur-cli/config",
+        "build:bundle": "bun run ../../scripts/spur-dev.ts bundle-web && bun build src/index.ts --target=bun --outfile spur.js && bun run ../../scripts/spur-dev.ts bundle-config config",
         "test": "bun test tests --coverage --coverage-dir=../../.coverage --pass-with-no-tests",
         "typecheck": "tsc --noEmit",
         "prepublishOnly": "bun run build:bundle"
