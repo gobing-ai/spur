@@ -14,6 +14,7 @@ import { MarkdownDocument } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { PlanningWriteService } from '../../src/services/planning-write-service';
 import {
+    escapeTablePipe,
     gitDiffU0,
     parseVerdict,
     renderReview,
@@ -49,6 +50,20 @@ async function createTask(svc: TaskService): Promise<string> {
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────
+
+describe('escapeTablePipe', () => {
+    test('escapes pipe characters with backslash', () => {
+        expect(escapeTablePipe('a|b')).toBe('a\\|b');
+        expect(escapeTablePipe('no pipes here')).toBe('no pipes here');
+        expect(escapeTablePipe('')).toBe('');
+        expect(escapeTablePipe('a|b|c')).toBe('a\\|b\\|c');
+    });
+
+    test('does not escape already-escaped pipes', () => {
+        // Only unescaped `|` should get a backslash prefix.
+        expect(escapeTablePipe('a\\|b')).toBe('a\\\\|b');
+    });
+});
 
 describe('parseVerdict', () => {
     test('parses a valid PASS verdict', () => {
@@ -203,6 +218,16 @@ describe('renderTesting', () => {
         expect(afterHeader).not.toContain('\nline2');
     });
 
+    test('escapes pipe characters in evidence', () => {
+        const v = makeVerdict({
+            requirements: [{ id: 'R1', status: 'PASS', evidence: 'has | pipe | chars' }],
+        });
+        const out = renderTesting(v);
+        expect(out).toContain('has \\| pipe \\| chars');
+        // Unescaped pipe would break the table
+        expect(out).not.toMatch(/\| has \| pipe \| chars \|/);
+    });
+
     test('renders acceptance criteria evidence table when present', () => {
         const v = makeVerdict({
             acceptanceCriteria: [
@@ -217,6 +242,23 @@ describe('renderTesting', () => {
         const out = renderTesting(v);
         expect(out).toContain('| Acceptance Criteria | Status | Evidence Type | Evidence |');
         expect(out).toContain('| Scenario: CLI emits JSON | MET | command | spur task show 0001 --json |');
+    });
+
+    test('escapes pipe characters in acceptance criteria evidence', () => {
+        const v = makeVerdict({
+            acceptanceCriteria: [
+                {
+                    id: 'Scenario: pipe in output',
+                    status: 'MET',
+                    evidenceType: 'command',
+                    evidence: 'echo "a|b"',
+                },
+            ],
+        });
+        const out = renderTesting(v);
+        expect(out).toContain('echo "a\\|b"');
+        // Unescaped pipe would break the table
+        expect(out).not.toMatch(/\| echo "a\|b" \|/);
     });
 });
 
@@ -243,6 +285,16 @@ describe('renderReview', () => {
         });
         const out = renderReview(v);
         expect(out).toContain('a b c');
+    });
+
+    test('escapes pipe characters in findings evidence', () => {
+        const v = makeVerdict({
+            checks: [{ name: 'S', status: 'P1', evidence: 'config|secret|key' }],
+        });
+        const out = renderReview(v);
+        expect(out).toContain('config\\|secret\\|key');
+        // Unescaped pipe would break the table
+        expect(out).not.toMatch(/\| config\|secret\|key \|/);
     });
 
     test('maps pass/fail status to P4/P1 when status is not already P1-P4', () => {

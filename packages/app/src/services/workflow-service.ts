@@ -1,5 +1,5 @@
 import type { Stats } from 'node:fs';
-import { access, readdir, readFile, realpath, stat } from 'node:fs/promises';
+import { access, lstat, readdir, readFile, realpath } from 'node:fs/promises';
 
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -14,7 +14,6 @@ import {
     type HitlResponder,
     loadWorkflowDef,
     type WorkflowDef,
-    type WorkflowEngineEvents,
     type WorkflowPersistenceAdapter,
 } from '@gobing-ai/ts-dual-workflow-engine';
 import type { EventBus } from '@gobing-ai/ts-infra';
@@ -23,6 +22,7 @@ import type { HostAllowlist, HttpRequester } from '../workflow/actions/http-requ
 import { registerSpurBuiltins } from '../workflow/builtins';
 import { ObservableWorkflowAdapter, type WorkflowObservabilityBus } from '../workflow/observability';
 import type { AgentService } from './agent-service';
+import { bridgeEventBus } from './event-bridge';
 import type { RuleService } from './rule-service';
 
 /** Workflow name that triggers a pipeline run-link (matches the shipped `workflows/task-pipeline.yaml`). */
@@ -374,7 +374,7 @@ export class WorkflowAppService {
             runId,
             ...(opts.vars ? { vars: opts.vars } : {}),
             ...(isDry ? { dryRun: true } : {}),
-            ...(eventsBus !== undefined ? { events: this.bridgeEngineEvents(eventsBus) } : {}),
+            ...(eventsBus !== undefined ? { events: bridgeEventBus(eventsBus) } : {}),
         });
         // Stamp dryRun into metadata_json so trace can label dry runs
         if (isDry) {
@@ -689,26 +689,6 @@ export class WorkflowAppService {
         const adapter = bus ? new ObservableWorkflowAdapter(persistence, bus) : persistence;
         return new EngineWorkflowService(host, adapter);
     }
-
-    /**
-     * Wrap the canonical server EventBus into the typed
-     * `EventBus<WorkflowEngineEvents>` shape the engine accepts. Engine names
-     * are the canonical names in `SYSTEM_EVENT_CATALOG` — no alias needed.
-     * R4 alias policy: the engine and the persistence-observability adapter
-     * emit at slightly different lifecycles (`workflow.action.start` vs
-     * `workflow.action.started`), so they occupy distinct board rows even
-     * though they describe the same moment.
-     */
-    private bridgeEngineEvents(
-        serverBus: EventBus<Record<string, (event: unknown) => void>>,
-    ): EventBus<WorkflowEngineEvents> {
-        const bridge = {
-            on: (event: string, listener: (event: unknown) => void) => serverBus.on(event, listener),
-            off: (event: string, listener: (event: unknown) => void) => serverBus.off(event, listener),
-            emit: (event: string, detail: unknown) => Promise.resolve(serverBus.emit(event, detail)),
-        };
-        return bridge as unknown as EventBus<WorkflowEngineEvents>;
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -733,7 +713,7 @@ async function scanWorkflowFiles(rootPath: string, source: 'project' | 'global')
 
     let rootStat: Stats;
     try {
-        rootStat = await stat(rootPath);
+        rootStat = await lstat(rootPath);
     } catch {
         return entries; // path doesn't exist — empty
     }

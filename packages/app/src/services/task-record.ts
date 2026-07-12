@@ -14,6 +14,14 @@
 import { execSync } from 'node:child_process';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 
+/**
+ * Escape pipe characters in a string so they don't break markdown table cells.
+ * Renders `|` as `\|` — the escape sequence that markdown table parsers accept.
+ */
+export function escapeTablePipe(s: string): string {
+    return s.replace(/\|/g, '\\|');
+}
+
 // ─── Types ──────────────────────────────────────────────────────────────
 
 /** Verdict from the verify pipeline step (`.spur/run/<wbs>-verdict.json`). */
@@ -184,7 +192,7 @@ export function renderTesting(v: VerifyVerdict): string {
         lines.push('| Requirement | Status | Evidence |');
         lines.push('|-------------|--------|----------|');
         for (const req of v.requirements) {
-            const evidence = req.evidence.replace(/\n/g, ' ');
+            const evidence = escapeTablePipe(req.evidence.replace(/\n/g, ' '));
             lines.push(`| ${req.id} | ${req.status} | ${evidence} |`);
         }
     }
@@ -194,7 +202,7 @@ export function renderTesting(v: VerifyVerdict): string {
         lines.push('| Acceptance Criteria | Status | Evidence Type | Evidence |');
         lines.push('|---------------------|--------|---------------|----------|');
         for (const ac of v.acceptanceCriteria ?? []) {
-            const evidence = ac.evidence.replace(/\n/g, ' ');
+            const evidence = escapeTablePipe(ac.evidence.replace(/\n/g, ' '));
             lines.push(`| ${ac.id} | ${ac.status} | ${ac.evidenceType} | ${evidence} |`);
         }
     }
@@ -224,7 +232,7 @@ export function renderReview(v: VerifyVerdict): string {
         lines.push(`| P4 | — | — | No P1–P3 findings; verify verdict ${v.verdict} |`);
     } else {
         for (const check of v.checks) {
-            const finding = check.evidence.replace(/\n/g, ' ');
+            const finding = escapeTablePipe(check.evidence.replace(/\n/g, ' '));
             // Map check status to P1–P4 severity so the L3 regex /P[1-4]/ matches.
             // If status is already P1–P4, use it directly; otherwise map pass/fail.
             const priority = /^P[1-4]$/.test(check.status) ? check.status : check.status === 'fail' ? 'P1' : 'P4';

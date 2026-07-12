@@ -11,6 +11,7 @@ import {
     atomicWriteAsync,
     buildTaskSkeleton,
     DEFAULT_TASK_VARIANT,
+    escapeYamlValue,
     MarkdownDocument,
     renderTaskTemplate,
     type TaskBatchItem,
@@ -21,6 +22,7 @@ import type { FileSystem } from '@gobing-ai/ts-runtime';
 import type { SectionMatrix } from './planning-check-base';
 import type { EntityRef, PlanningWriteService, WriteResult } from './planning-write-service';
 import {
+    escapeTablePipe,
     gitDiffU0,
     type RecordOptions,
     type RecordResult,
@@ -42,7 +44,7 @@ import {
  */
 function patchFrontmatterField(rendered: string, key: string, value: string): string {
     // Replace an existing key at line start (YAML frontmatter only).
-    // The caller owns YAML formatting (formatYamlValue) — do NOT re-format here.
+    // The caller owns YAML formatting (escapeYamlValue) — do NOT re-format here.
     const existingRe = new RegExp(`^(?=\\s*${escapeRegex(key)}:)`, 'm');
     if (existingRe.test(rendered)) {
         // Replacer function: a value containing `$&`/`$1` must stay literal.
@@ -57,15 +59,59 @@ function escapeRegex(s: string): string {
 }
 
 /**
- * Wrap a value in double quotes when YAML would misinterpret it.
- * Covers: special characters, numeric-looking strings (e.g. WBS `0042`
- * would be parsed as octal), and the bare `null`/`true`/`false` literals.
+ * Render a new task file from the skeleton template + post-render
+ * frontmatter patching. Used by both {@link TaskService.create} and
+ * {@link TaskService.createBatchItem} to avoid duplicating the
+ * template-render → patch flow (~80 lines each).
+ *
+ * Callers own the legacy `buildTaskSkeleton` fallback when no template
+ * resolver is configured.
  */
-function formatYamlValue(value: string): string {
-    if (/[:{}[\],&*?|>!%@`#"'\\\n\r]/.test(value)) return `"${value}"`;
-    if (/^(null|true|false|yes|no|on|off)$/i.test(value)) return `"${value}"`;
-    if (/^\d/.test(value) && !/^\d{4}-\d{2}-\d{2}/.test(value)) return `"${value}"`;
-    return value;
+function renderCreatedTaskContent(params: {
+    rawTemplate: string;
+    name: string;
+    wbs: string;
+    background: string;
+    createdAt: string;
+    status: string;
+    variant: string;
+    featureId?: string;
+    parentWbs?: string;
+    priority?: string;
+    tags?: string[];
+    requirements?: string;
+}): string {
+    let content = renderTaskTemplate(params.rawTemplate, {
+        NAME: params.name,
+        WBS: params.wbs,
+        BACKGROUND: params.background,
+        CREATED_AT: params.createdAt,
+        ...(params.featureId !== undefined ? { FEATURE_ID: params.featureId } : {}),
+    });
+    content = patchFrontmatterField(content, 'status', params.status);
+    content = patchFrontmatterField(content, 'template', params.variant);
+    if (params.featureId !== undefined) {
+        content = patchFrontmatterField(content, 'feature_id', escapeYamlValue(params.featureId));
+    }
+    if (params.parentWbs !== undefined) {
+        content = patchFrontmatterField(content, 'parent_wbs', escapeYamlValue(params.parentWbs));
+    }
+    if (params.priority !== undefined) {
+        content = patchFrontmatterField(content, 'priority', params.priority);
+    }
+    if (params.tags !== undefined && params.tags.length > 0) {
+        content = patchFrontmatterField(
+            content,
+            'tags',
+            `[${params.tags.map((tag) => JSON.stringify(tag)).join(', ')}]`,
+        );
+    }
+    if ((params.requirements ?? '').trim() !== '') {
+        const doc = MarkdownDocument.parse(content, 'task');
+        doc.replaceSection('Requirements', bulletizeRequirements(params.requirements ?? ''));
+        content = doc.serialize();
+    }
+    return content;
 }
 
 // ─── Sub-task roster (0123) ───────────────────────────────────────────────
@@ -79,7 +125,7 @@ const ROSTER_REGION_RE = /<!--[ \t]*AUTO-GENERATED[^>]*-->[\s\S]*?<!--[ \t]*END[
 /** Render the sub-task roster table — one row per child (WBS · title · status). */
 function renderRosterTable(rows: { wbs: string; name: string; status: string }[]): string {
     const header = '| WBS | Sub-task | Status |\n| --- | -------- | ------ |';
-    const body = rows.map((r) => `| ${r.wbs} | ${r.name.replace(/\|/g, '\\|')} | ${r.status} |`).join('\n');
+    const body = rows.map((r) => `| ${r.wbs} | ${escapeTablePipe(r.name)} | ${r.status} |`).join('\n');
     return `${header}\n${body}`;
 }
 
@@ -367,24 +413,17 @@ export class TaskService {
             // ── template-as-skeleton path (preferred) ──
             const rawTemplate = this.ctx.resolveTemplate?.(variant);
             if (rawTemplate !== undefined) {
-                let content = renderTaskTemplate(rawTemplate, {
-                    NAME: params.title,
-                    WBS: wbs,
-                    BACKGROUND: background,
-                    CREATED_AT: now,
-                    ...(params.featureId !== undefined ? { FEATURE_ID: params.featureId } : {}),
+                const content = renderCreatedTaskContent({
+                    rawTemplate,
+                    name: params.title,
+                    wbs,
+                    background,
+                    createdAt: now,
+                    status,
+                    variant,
+                    featureId: params.featureId,
+                    parentWbs: params.parentWbs,
                 });
-                // Post-render frontmatter patching: the template carries defaults
-                // (status: backlog, feature_id: null, etc.) — override with the
-                // values determined by the create path.
-                content = patchFrontmatterField(content, 'status', status);
-                content = patchFrontmatterField(content, 'template', variant);
-                if (params.featureId !== undefined) {
-                    content = patchFrontmatterField(content, 'feature_id', formatYamlValue(params.featureId));
-                }
-                if (params.parentWbs !== undefined) {
-                    content = patchFrontmatterField(content, 'parent_wbs', formatYamlValue(params.parentWbs));
-                }
                 const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder };
                 return { ref, content };
             }
@@ -738,38 +777,20 @@ export class TaskService {
             // ── template-as-skeleton path (preferred) ──
             const rawTemplate = this.ctx.resolveTemplate?.(variant);
             if (rawTemplate !== undefined) {
-                let content = renderTaskTemplate(rawTemplate, {
-                    NAME: item.name,
-                    WBS: wbs,
-                    BACKGROUND: background,
-                    CREATED_AT: now,
-                    ...(item.feature_id !== undefined && item.feature_id !== null
-                        ? { FEATURE_ID: item.feature_id }
-                        : {}),
+                const content = renderCreatedTaskContent({
+                    rawTemplate,
+                    name: item.name,
+                    wbs,
+                    background,
+                    createdAt: now,
+                    status,
+                    variant,
+                    featureId: item.feature_id ?? undefined,
+                    parentWbs: item.parent_wbs ?? undefined,
+                    priority: item.priority,
+                    tags: item.tags,
+                    requirements: item.requirements,
                 });
-                content = patchFrontmatterField(content, 'status', status);
-                content = patchFrontmatterField(content, 'template', variant);
-                if (item.feature_id !== undefined && item.feature_id !== null) {
-                    content = patchFrontmatterField(content, 'feature_id', formatYamlValue(item.feature_id));
-                }
-                if (item.parent_wbs !== undefined && item.parent_wbs !== null) {
-                    content = patchFrontmatterField(content, 'parent_wbs', formatYamlValue(item.parent_wbs));
-                }
-                if (item.priority !== undefined && item.priority !== null) {
-                    content = patchFrontmatterField(content, 'priority', item.priority);
-                }
-                if (item.tags !== undefined && item.tags.length > 0) {
-                    content = patchFrontmatterField(
-                        content,
-                        'tags',
-                        `[${item.tags.map((tag) => JSON.stringify(tag)).join(', ')}]`,
-                    );
-                }
-                if ((item.requirements ?? '').trim() !== '') {
-                    const doc = MarkdownDocument.parse(content, 'task');
-                    doc.replaceSection('Requirements', bulletizeRequirements(item.requirements ?? ''));
-                    content = doc.serialize();
-                }
                 const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder };
                 return { ref, content };
             }
@@ -1033,23 +1054,32 @@ export class TaskService {
 
     /** Resolve a WBS to its absolute file path. Returns `null` when not found. */
     async getFilePath(wbs: string): Promise<string | null> {
-        const fileName = await this.findTaskFileName(wbs);
-        if (!fileName) return null;
-        const slug = fileName.replace(/^\d{4}_/, '').replace(/\.md$/, '');
-        return this.resolveTaskPath(wbs, slug);
+        const result = await this.findTaskFileName(wbs);
+        if (!result) return null;
+        return result.filePath;
     }
 
     private async resolveTaskFile(wbs: string): Promise<string> {
-        const fileName = await this.findTaskFileName(wbs);
-        if (!fileName) throw new Error(`Task ${wbs} not found in ${this.ctx.tasksDir}`);
-        const slug = fileName.replace(/^\d{4}_/, '').replace(/\.md$/, '');
-        return this.resolveTaskPath(wbs, slug);
+        const result = await this.findTaskFileName(wbs);
+        if (!result) throw new Error(`Task ${wbs} not found in any registered task folder`);
+        return result.filePath;
     }
 
-    private async findTaskFileName(wbs: string): Promise<string | null> {
-        const entries = await this.ctx.fs.readDir(this.ctx.tasksDir);
-        for (const name of entries) {
-            if (name.startsWith(`${wbs}_`) && name.endsWith('.md')) return name;
+    /** Search all registered task folders for the task file matching `wbs`. */
+    private async findTaskFileName(wbs: string): Promise<{ name: string; filePath: string } | null> {
+        const prefix = `${wbs}_`;
+        for (const dir of this.allFolderDirs()) {
+            let entries: string[];
+            try {
+                entries = await this.ctx.fs.readDir(dir);
+            } catch {
+                continue;
+            }
+            for (const name of entries) {
+                if (name.startsWith(prefix) && name.endsWith('.md')) {
+                    return { name, filePath: `${dir}/${name}` };
+                }
+            }
         }
         return null;
     }

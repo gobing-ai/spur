@@ -18,6 +18,7 @@ import {
 } from '@gobing-ai/ts-ai-runner';
 import type { EventBus } from '@gobing-ai/ts-infra';
 import { NodeProcessExecutor, type OutputPolicy } from '@gobing-ai/ts-runtime';
+import { bridgeEventBus } from './event-bridge';
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
@@ -120,25 +121,6 @@ export class AgentService {
         this.ctx = ctx;
     }
 
-    /**
-     * Wrap a server EventBus into the loose shape the ai-runner emitters
-     * accept. The runner's `events` and `processEvents` are both loosely
-     * typed (string keys, unknown detail), so this just forwards calls.
-     */
-    private bridgeAgentEvents(
-        serverBus: EventBus<Record<string, (event: unknown) => void>>,
-    ): EventBus<Record<string, (event: unknown) => void>> {
-        const bridge = {
-            on: (event: string, listener: (event: unknown) => void) => serverBus.on(event, listener),
-            off: (event: string, listener: (event: unknown) => void) => serverBus.off(event, listener),
-            emit: (event: string, detail: unknown) => serverBus.emit(event, detail) as unknown as Promise<void>,
-        };
-        // The upstream ai-runner emitters only call `on`/`off`/`emit`; the
-        // extra EventBus members (job-queue wiring, async-handler ids) are
-        // inert for this bridge, so we widen once via `unknown` here.
-        return bridge as unknown as EventBus<Record<string, (event: unknown) => void>>;
-    }
-    // -------------------------------------------------------------------------
     // Public: resolve
     // -------------------------------------------------------------------------
 
@@ -305,6 +287,9 @@ export class AgentService {
 
         // extract --timeout
         const timeoutMs = numberFlag(flags, 'timeout');
+        if (timeoutMs === undefined && typeof flags.timeout === 'string') {
+            return { ok: false, exitCode: 2, message: `Invalid --timeout=${flags.timeout}: must be a number` };
+        }
 
         // require prompt (except codex --continue)
         const continueFlag = booleanFlag(flags, 'continue');
@@ -323,8 +308,8 @@ export class AgentService {
             deps?.runner ??
             new AiRunner({
                 processExecutor: new NodeProcessExecutor({ output: outputPolicy }),
-                ...(this.ctx.events !== undefined ? { events: this.bridgeAgentEvents(this.ctx.events) } : {}),
-                ...(this.ctx.events !== undefined ? { processEvents: this.bridgeAgentEvents(this.ctx.events) } : {}),
+                ...(this.ctx.events !== undefined ? { events: bridgeEventBus(this.ctx.events) } : {}),
+                ...(this.ctx.events !== undefined ? { processEvents: bridgeEventBus(this.ctx.events) } : {}),
             });
 
         const detector = deps?.detector ?? new AgentDetector({ runner });
@@ -739,7 +724,10 @@ function booleanFlag(flags: Record<string, string | boolean>, name: string): boo
 function numberFlag(flags: Record<string, string | boolean>, name: string): number | undefined {
     const value = flags[name];
     if (value === undefined) return undefined;
-    return typeof value === 'string' ? Number(value) : typeof value === 'number' ? value : undefined;
+    if (typeof value !== 'string') return undefined;
+    const n = Number(value);
+    if (Number.isNaN(n)) return undefined;
+    return n;
 }
 
 /** Parse the comma-separated `--tags` flag into trimmed, non-empty tags, or undefined when absent. */

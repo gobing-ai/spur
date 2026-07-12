@@ -100,9 +100,9 @@ function redactHeaders(message: string): string {
  * - Rejects URLs with embedded credentials.
  * - Blocks private/loopback/link-local hosts unless explicitly allowed.
  * - Never logs or emits request headers (auth tokens).
- * - Rejects `redirect: 'follow'` — auto-following escapes the allowlist /
- *   private-host gate, which only validates the initial URL (SSRF guard).
- *   Callers re-issue the request per hop so every host is re-validated.
+ * - Rejects `redirect: 'follow'` — auto-following escapes the host allowlist
+ *   gate (which only validates the initial URL), creating an SSRF risk.
+ *   Callers must re-issue per hop so every host is re-validated.
  *
  * Options:
  * - `url` (string, required): the target URL, may contain `${vars.*}` templates.

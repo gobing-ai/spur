@@ -26,6 +26,7 @@ import {
     type RulePersistenceAdapter,
 } from '@gobing-ai/ts-rule-engine';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+import { bridgeEventBus } from './event-bridge';
 
 /** Local project rules root, relative to the working directory. */
 const LOCAL_RULES_DIR = join('.spur', 'rules');
@@ -187,20 +188,6 @@ interface RuleSourceLayer {
 export class RuleService {
     private readonly context: RuleServiceContext;
 
-    /**
-     * Wrap a server EventBus so it can be passed as `events` to a `RuleEngine`.
-     * Upstream `RuleEngineEvents` only emit on a fixed set of keys, so we just
-     * forward every emit through the server bus's loose `Record<...>` shape.
-     */
-    private bridgeEvents(serverBus: EventBus<Record<string, (event: unknown) => void>>): EventBus<RuleEngineEvents> {
-        const bridge = {
-            on: (event: string, listener: (event: unknown) => void) => serverBus.on(event, listener),
-            off: (event: string, listener: (event: unknown) => void) => serverBus.off(event, listener),
-            emit: (event: string, detail: unknown) => Promise.resolve(serverBus.emit(event, detail)),
-        };
-        return bridge as unknown as EventBus<RuleEngineEvents>;
-    }
-
     constructor(context: RuleServiceContext) {
         this.context = context;
     }
@@ -253,7 +240,7 @@ export class RuleService {
             runId,
             runMeta,
             fileSystem: this.context.fs,
-            ...(this.context.events !== undefined ? { events: this.bridgeEvents(this.context.events) } : {}),
+            ...(this.context.events !== undefined ? { events: bridgeEventBus(this.context.events) } : {}),
         };
         const engine = new RuleEngine(engineOptions);
         let result: RuleEngineResult;

@@ -391,6 +391,48 @@ describe('SupervisorService', () => {
             expect(buffer).toHaveLength(3);
             expect(buffer.map((f) => f.line)).toEqual(['l2', 'l3', 'l4']);
         });
+
+        test('catches stream read errors and records an error frame', async () => {
+            const stdout = new ReadableStream<Uint8Array>({
+                start(controller) {
+                    controller.error(new Error('Boom!'));
+                },
+            });
+
+            const { promise: exited, resolve: resolveExit } = Promise.withResolvers<number | null>();
+            const proc = {
+                pid: 20002,
+                stdout,
+                stderr: null,
+                exited,
+                writeStdin: () => {},
+                endStdin: () => {},
+                kill: () => {
+                    resolveExit(0);
+                },
+            } as unknown as PipeProcess;
+            const executor = { runStreaming: (): PipeProcess => proc } as unknown as ProcessExecutor;
+            const { bus } = createMockBus();
+            const svc = new SupervisorService({
+                processExecutor: executor,
+                eventBus: bus,
+                configDir: '/tmp',
+                agentSpecs: [makeSpec({ id: 'alpha', command: ['echo'] })],
+            });
+
+            await svc.start('alpha');
+
+            // Pump microtasks until the error frame lands.
+            for (let i = 0; i < 30; i++) {
+                if (svc.getRingBuffer('alpha').length >= 1) break;
+                await Promise.resolve();
+            }
+
+            const buffer = svc.getRingBuffer('alpha');
+            expect(buffer).toHaveLength(1);
+            expect(buffer[0]?.stream).toBe('stdout');
+            expect(buffer[0]?.line).toBe('[stream error: Boom!]');
+        });
     });
 
     describe('exit cleanup', () => {

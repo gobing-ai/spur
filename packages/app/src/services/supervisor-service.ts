@@ -267,16 +267,26 @@ export class SupervisorService {
         const decoder = new TextDecoder();
         let partial = '';
         const pump = (): void => {
-            void reader.read().then(({ done, value }) => {
-                if (done) return;
-                partial += decoder.decode(value, { stream: true });
-                const lines = partial.split('\n');
-                partial = lines.pop() ?? '';
-                for (const line of lines) {
-                    this.pushFrame(frames, { stream: name, ts: new Date().toISOString(), line });
-                }
-                pump();
-            });
+            void reader
+                .read()
+                .then(({ done, value }) => {
+                    if (done) return;
+                    partial += decoder.decode(value, { stream: true });
+                    const lines = partial.split('\n');
+                    partial = lines.pop() ?? '';
+                    for (const line of lines) {
+                        this.pushFrame(frames, { stream: name, ts: new Date().toISOString(), line });
+                    }
+                    pump();
+                })
+                .catch((err) => {
+                    const message = err instanceof Error ? err.message : String(err);
+                    this.pushFrame(frames, {
+                        stream: name,
+                        ts: new Date().toISOString(),
+                        line: `[stream error: ${message}]`,
+                    });
+                });
         };
         pump();
     }
