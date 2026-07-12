@@ -294,10 +294,10 @@ describe('spur feature CLI', () => {
         const cOut = createCapturedOutput();
         await main(['feature', 'create', 'Advance Unreachable'], { cwd, output: cOut });
         const id = createdId(cOut);
-        await main(['feature', 'update', id, '--field', 'status', '--value', 'blocked'], {
-            cwd,
-            output: createCapturedOutput(),
-        });
+        // Reach `blocked` through the legal path (backlog → active → blocked) —
+        // `--field status` is rejected so the lifecycle guard cannot be bypassed.
+        await main(['feature', 'update', id, 'active'], { cwd, output: createCapturedOutput() });
+        await main(['feature', 'update', id, 'blocked'], { cwd, output: createCapturedOutput() });
 
         const output = createCapturedOutput();
         const exitCode = await main(['feature', 'advance', id, '--to', 'done'], { cwd, output });
