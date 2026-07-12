@@ -178,6 +178,27 @@ export type {
 } from './services/team-service';
 export { TeamService } from './services/team-service';
 export type {
+    TokenLedgerServiceOptions,
+    ToolUseEvent,
+    ToolUseEventType,
+    ToolUseSnapshot,
+    ToolUseSnapshotOptions,
+} from './services/token-ledger-service';
+export {
+    clampToolUseLimit,
+    parseLedgerLine,
+    TOKEN_LEDGER_DEFAULT_LIMIT,
+    TOKEN_LEDGER_MAX_LIMIT,
+    TOKEN_LEDGER_RELATIVE_PATH,
+    TokenLedgerService,
+    tailTokenLedgerFile,
+} from './services/token-ledger-service';
+export type {
+    TokenLedgerWatcherOptions,
+    TokenLedgerWatchListener,
+} from './services/token-ledger-watcher';
+export { TokenLedgerWatcher } from './services/token-ledger-watcher';
+export type {
     CleanedRun,
     PausedRun,
     TimelineEvent,
