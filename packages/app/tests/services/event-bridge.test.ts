@@ -32,9 +32,9 @@ describe('bridgeEventBus', () => {
         bridged.on('task.created', listener);
 
         expect(calls).toHaveLength(1);
-        expect(calls[0]!.method).toBe('on');
-        expect(calls[0]!.event).toBe('task.created');
-        expect(calls[0]!.args[0]).toBe(listener);
+        expect(calls[0]?.method).toBe('on');
+        expect(calls[0]?.event).toBe('task.created');
+        expect(calls[0]?.args[0]).toBe(listener);
     });
 
     test('forwards off() to the server bus', () => {
@@ -45,9 +45,9 @@ describe('bridgeEventBus', () => {
         bridged.off('task.created', listener);
 
         expect(calls).toHaveLength(1);
-        expect(calls[0]!.method).toBe('off');
-        expect(calls[0]!.event).toBe('task.created');
-        expect(calls[0]!.args[0]).toBe(listener);
+        expect(calls[0]?.method).toBe('off');
+        expect(calls[0]?.event).toBe('task.created');
+        expect(calls[0]?.args[0]).toBe(listener);
     });
 
     test('forwards emit() to the server bus and wraps in Promise.resolve', async () => {
@@ -60,16 +60,13 @@ describe('bridgeEventBus', () => {
         await result;
 
         expect(calls).toHaveLength(1);
-        expect(calls[0]!.method).toBe('emit');
-        expect(calls[0]!.event).toBe('task.created');
-        expect(calls[0]!.args[0]).toEqual({ wbs: '0042' });
+        expect(calls[0]?.method).toBe('emit');
+        expect(calls[0]?.event).toBe('task.created');
+        expect(calls[0]?.args[0]).toEqual({ wbs: '0042' });
     });
 
     test('bridged bus carries the expected type parameter', () => {
-        interface MyEvents {
-            'foo.created': (e: { id: string }) => void;
-            'bar.updated': (e: { id: string }) => void;
-        }
+        type MyEvents = Record<string, (event: unknown) => void>;
 
         const { bus } = stubEventBus();
         const bridged = bridgeEventBus<MyEvents>(bus);
