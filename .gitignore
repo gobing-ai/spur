@@ -153,7 +153,9 @@ docs/.ftree/
 
 /apps/web/coverage
 /apps/web/.coverage
-/docs/dogfood
+# Local dogfood run reports (gitignored); keep README tracked for always-on delivery docs
+/docs/dogfood/*
+!/docs/dogfood/README.md
 /docs/memo.md
 
 .scratch/

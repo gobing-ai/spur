@@ -301,7 +301,7 @@ captured the learnings and synced the docs.
 /sp:dev-fixall "bun run check"       # loop lint+type+test until green
 /sp:dev-handover "Blocked: the upstream rate-limiter has no test hook"  # honest handover when stuck
 /sp:dev-changelog --version 0.3.0    # changelog from commit history
-/sp:dev-dogfood "/sp:dev-run 0042 --auto" --max-retry 0 --save  # observe-only dogfood + report
+/sp:dev-dogfood "/sp:dev-run 0042 --auto" --max-retry 0  # observe-only; report always written (live + docs/dogfood)
 ```
 
 ---
