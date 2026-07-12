@@ -77,6 +77,12 @@ out
 .nuxt
 spur.js
 /spur-cli
+# Legacy bundle layout (pre package-root config/); may still appear from old builds
+/apps/cli/spur-cli
+# Bundled default config copied into the CLI package for npm publish (bundle-config)
+/apps/cli/config
+# Board static assets copied into the CLI package for npm publish (bundle-web)
+/apps/cli/web
 dist
 # Gatsby files
 .cache/

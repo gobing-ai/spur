@@ -11,6 +11,7 @@
  *   drop-tags <pkg|--all> <version> [--remote] delete release tag(s)
  *   publish <package-dir>                       resolve deps + npm publish (OIDC)
  *   bundle-config <out-dir>                     copy config/ into a tarball dir
+ *   bundle-web [out-dir]                        copy dist/web into apps/cli/web for npm
  *   build-binaries                              cross-compile per-platform spur
  *   build-cli                                  patch ts-runtime + compile local `spur` binary
  *   dev-all                                     run server + web under one supervisor
@@ -18,12 +19,15 @@
 import { buildBinaries } from './commands/build-binaries';
 import { buildCli } from './commands/build-cli';
 import { bundleConfig } from './commands/bundle-config';
+import { bundleWeb } from './commands/bundle-web';
 import { devAll } from './commands/dev-all';
 import { publish } from './commands/publish';
 import { bumpVer, dropTags } from './commands/release';
 
 function usage(message?: string): never {
-    console.error('Commands: bump-ver, drop-tags, publish, bundle-config, build-binaries, build-cli, dev-all');
+    console.error(
+        'Commands: bump-ver, drop-tags, publish, bundle-config, bundle-web, build-binaries, build-cli, dev-all',
+    );
     process.exit(message ? 1 : 0);
 }
 
@@ -49,6 +53,11 @@ try {
             console.log(
                 `Bundled config -> ${result.target} (fixtures/OS junk excluded, ${result.injected} $schema directives injected)`,
             );
+            break;
+        }
+        case 'bundle-web': {
+            const result = await bundleWeb(args[0]);
+            console.log(`Bundled board assets ${result.source} -> ${result.target}`);
             break;
         }
         case 'build-cli':

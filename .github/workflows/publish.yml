@@ -50,8 +50,27 @@ jobs:
                   fi
                   echo "Publishing @gobing-ai/spur@${CLI_VERSION}"
 
+            # build:bundle runs bundle-web + bundle-config so the tarball ships:
+            #   config/  (ADR-015 defaults for spur init)
+            #   web/     (Spur Board SPA for spur serve)
             - name: Build
               run: (cd apps/cli && bun run build:bundle)
+
+            - name: Verify release assets
+              run: |
+                  set -euo pipefail
+                  test -f apps/cli/spur.js
+                  test -f apps/cli/config/rules/recommended-pre-check.yaml
+                  test -f apps/cli/config/workflows/basic.yaml
+                  test -f apps/cli/config/templates/task/standard.md
+                  test -f apps/cli/web/index.html
+                  # Pack must list package-root config/ and web/ (not legacy spur-cli/ only).
+                  cd apps/cli
+                  PACK_LIST=$(npm pack --dry-run 2>&1)
+                  echo "$PACK_LIST" | grep -q 'config/rules/recommended-pre-check.yaml'
+                  echo "$PACK_LIST" | grep -q 'web/index.html'
+                  ! echo "$PACK_LIST" | grep -q 'spur-cli/config'
+                  echo "Release assets OK (config/ + web/ present in pack)"
 
             - name: Publish spur-cli
               run: bun scripts/spur-dev.ts publish apps/cli
