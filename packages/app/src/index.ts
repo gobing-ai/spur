@@ -86,6 +86,25 @@ export type {
 } from './services/planning-write-service';
 export { PlanningWriteService } from './services/planning-write-service';
 export { type PluginListEntry, PluginService } from './services/plugin-service';
+export type {
+    OsProcessRow,
+    ProcessInspector,
+} from './services/process-inspector';
+export {
+    createPsProcessInspector,
+    PS_LIST_ARGV,
+    parseEtimeToSeconds,
+    parsePsOutput,
+    UnsupportedProcessPlatformError,
+} from './services/process-inspector';
+export type {
+    ProcessInventoryRow,
+    ProcessInventoryServiceOptions,
+    ProcessInventorySnapshot,
+    ProcessInventorySource,
+    SupervisorOverlayEntry,
+} from './services/process-inventory-service';
+export { ProcessInventoryService } from './services/process-inventory-service';
 export {
     type Colorize,
     type FailOnSeverity,
