@@ -3,6 +3,7 @@ import InboxTab from './InboxTab';
 import JobsTab from './JobsTab';
 import ProcessListTab from './ProcessListTab';
 import SystemEventsTab from './SystemEventsTab';
+import ToolUsingTab from './ToolUsingTab';
 
 /**
  * Tab contract for the observability module (task 0189 R6).
@@ -26,4 +27,5 @@ export const OBSERVABILITY_TABS: readonly ObservabilityTab[] = [
     { id: 'inbox', label: 'Inbox Messages', component: InboxTab },
     { id: 'jobs', label: 'Jobs', component: JobsTab },
     { id: 'process-list', label: 'Processes', component: ProcessListTab },
+    { id: 'tool-using', label: 'Tool Using', component: ToolUsingTab },
 ];

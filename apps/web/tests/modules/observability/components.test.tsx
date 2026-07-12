@@ -6,6 +6,7 @@ import InboxTab from '../../../src/modules/observability/InboxTab';
 import ObservabilityShell from '../../../src/modules/observability/ObservabilityShell';
 import ProcessListTab from '../../../src/modules/observability/ProcessListTab';
 import SystemEventsTab from '../../../src/modules/observability/SystemEventsTab';
+import ToolUsingTab from '../../../src/modules/observability/ToolUsingTab';
 import { teardownHappyDom } from '../../happy-dom';
 
 class FakeEventSource {
@@ -805,5 +806,243 @@ describe('observability components', () => {
         await waitFor(() =>
             expect(failed.getByRole('alert').textContent).toContain('process inventory fetch failed: 503'),
         );
+    });
+
+    test('tool using tab renders events newest-first with Live toggle', async () => {
+        const events = [
+            {
+                seq: 0,
+                ts: '2026-07-12T12:02:00.000Z',
+                session: 'session-a',
+                type: 'write',
+                file: '/Users/robin/proj/src/a.ts',
+                tokens: 5000,
+                action: 'edit',
+                agent: 'claude',
+            },
+            {
+                seq: 1,
+                ts: '2026-07-12T12:01:00.000Z',
+                session: 'session-a',
+                type: 'read',
+                file: '/Users/robin/proj/src/a.ts',
+                tokens: 10,
+            },
+            {
+                seq: 2,
+                ts: '2026-07-12T12:00:00.000Z',
+                session: 'session-a',
+                type: 'session_start',
+            },
+        ];
+        const calls: string[] = [];
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/observability/tool-use')) {
+                calls.push(url);
+                return jsonResponse({
+                    events,
+                    count: events.length,
+                    limit: 200,
+                    truncated: true,
+                    path: '/proj/.spur/context/token-ledger.jsonl',
+                    capturedAt: new Date().toISOString(),
+                    sparseToolActivity: false,
+                    nextBefore: '2026-07-12T12:00:00.000Z',
+                });
+            }
+            return new Response('not found', { status: 404 });
+        }) as unknown as typeof fetch);
+
+        const view = render(<ToolUsingTab />);
+        await waitFor(() => expect(view.getByText('write')).toBeDefined());
+        expect(view.container.querySelector('[data-tool-using-tab]')?.textContent).toContain('a.ts');
+        expect(view.container.querySelector('[data-live-toggle]')).toBeDefined();
+        expect(view.getByText('session_start')).toBeDefined();
+        expect(view.getByText('read')).toBeDefined();
+        // Column order: Type then Target (file basename or summary — task 0248)
+        const header = view.container.querySelector('thead')?.textContent ?? '';
+        expect(header.indexOf('Type')).toBeLessThan(header.indexOf('Target'));
+        expect(header.indexOf('Target')).toBeLessThan(header.indexOf('Action'));
+        // Thousands separator for tokens
+        expect(view.container.textContent).toMatch(/5[,.]?000/);
+        expect(view.getByText('claude')).toBeDefined();
+        expect(view.container.querySelectorAll('[data-event-seq]').length).toBe(3);
+        expect(calls.length).toBeGreaterThanOrEqual(1);
+        // Load more control when nextBefore set
+        expect(view.container.querySelector('[data-load-more]')).toBeDefined();
+
+        // Live off closes SSE (FakeEventSource) — toggle off and ensure no crash.
+        const toggle = view.container.querySelector('[data-live-toggle]') as HTMLInputElement;
+        await act(async () => {
+            fireEvent.click(toggle);
+        });
+        expect(toggle.checked).toBe(false);
+        view.unmount();
+    });
+
+    test('tool using tab shows sparse banner when only session markers', async () => {
+        setFetchForTesting((async () =>
+            jsonResponse({
+                events: [
+                    { seq: 0, ts: '2026-07-12T12:00:00.000Z', session: 's', type: 'session_end' },
+                    { seq: 1, ts: '2026-07-12T11:00:00.000Z', session: 's', type: 'session_start' },
+                ],
+                count: 2,
+                limit: 200,
+                truncated: false,
+                path: '/proj/.spur/context/token-ledger.jsonl',
+                capturedAt: new Date().toISOString(),
+                sparseToolActivity: true,
+                nextBefore: null,
+            })) as unknown as typeof fetch);
+        const view = render(<ToolUsingTab />);
+        await waitFor(() => expect(view.container.querySelector('[data-sparse-banner]')).toBeDefined());
+        expect(view.container.querySelector('[data-sparse-banner]')?.textContent).toMatch(
+            /Limited recent tool activity/,
+        );
+        view.unmount();
+    });
+
+    test('tool using tab Live SSE prepends tool-use frames', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/observability/tool-use') && !url.includes('stream')) {
+                return jsonResponse({
+                    events: [
+                        {
+                            seq: 0,
+                            ts: '2026-07-12T12:00:00.000Z',
+                            session: 's',
+                            type: 'read',
+                            file: '/x.ts',
+                            tokens: 1,
+                        },
+                    ],
+                    count: 1,
+                    limit: 200,
+                    truncated: false,
+                    path: '/p/token-ledger.jsonl',
+                    capturedAt: new Date().toISOString(),
+                    sparseToolActivity: false,
+                    nextBefore: null,
+                });
+            }
+            return new Response('not found', { status: 404 });
+        }) as unknown as typeof fetch);
+
+        FakeEventSource.instances = [];
+        const view = render(<ToolUsingTab />);
+        await waitFor(() => expect(view.getByText('read')).toBeDefined());
+        await waitFor(() => expect(FakeEventSource.instances.length).toBeGreaterThanOrEqual(1));
+        const es = FakeEventSource.instances[FakeEventSource.instances.length - 1];
+        expect(es).toBeDefined();
+        await act(async () => {
+            es?.onopen?.(new Event('open'));
+            es?.onmessage?.(
+                new MessageEvent('message', {
+                    data: JSON.stringify({
+                        type: 'tool-use',
+                        event: {
+                            ts: '2026-07-12T12:01:00.000Z',
+                            session: 's',
+                            type: 'write',
+                            file: '/y.ts',
+                            action: 'create',
+                            tokens: 2,
+                        },
+                    }),
+                }),
+            );
+        });
+        await waitFor(() => expect(view.getByText('write')).toBeDefined());
+        view.unmount();
+        expect(es?.closed).toBe(true);
+    });
+
+    test('tool using tab load more fetches before cursor', async () => {
+        const calls: string[] = [];
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            calls.push(url);
+            if (url.includes('before=')) {
+                return jsonResponse({
+                    events: [
+                        {
+                            seq: 0,
+                            ts: '2026-07-12T11:00:00.000Z',
+                            session: 's',
+                            type: 'read',
+                            file: '/older.ts',
+                            tokens: 1,
+                        },
+                    ],
+                    count: 1,
+                    limit: 200,
+                    truncated: false,
+                    path: '/p/token-ledger.jsonl',
+                    capturedAt: new Date().toISOString(),
+                    sparseToolActivity: false,
+                    nextBefore: null,
+                });
+            }
+            return jsonResponse({
+                events: [
+                    {
+                        seq: 0,
+                        ts: '2026-07-12T12:00:00.000Z',
+                        session: 's',
+                        type: 'read',
+                        file: '/newer.ts',
+                        tokens: 1,
+                    },
+                ],
+                count: 1,
+                limit: 200,
+                truncated: true,
+                path: '/p/token-ledger.jsonl',
+                capturedAt: new Date().toISOString(),
+                sparseToolActivity: false,
+                nextBefore: '2026-07-12T12:00:00.000Z',
+            });
+        }) as unknown as typeof fetch);
+
+        const view = render(<ToolUsingTab />);
+        await waitFor(() => expect(view.getByText('newer.ts')).toBeDefined());
+        const btn = view.container.querySelector('[data-load-more]') as HTMLButtonElement;
+        expect(btn).toBeDefined();
+        await act(async () => {
+            fireEvent.click(btn);
+        });
+        await waitFor(() => expect(view.getByText('older.ts')).toBeDefined());
+        expect(
+            calls.some(
+                (u) =>
+                    u.includes('before=2026-07-12T12%3A00%3A00.000Z') || u.includes('before=2026-07-12T12:00:00.000Z'),
+            ),
+        ).toBe(true);
+        view.unmount();
+    });
+
+    test('tool using tab shows calm empty state', async () => {
+        setFetchForTesting((async () =>
+            jsonResponse({
+                events: [],
+                count: 0,
+                limit: 200,
+                truncated: false,
+                path: '/proj/.spur/context/token-ledger.jsonl',
+                capturedAt: new Date().toISOString(),
+            })) as unknown as typeof fetch);
+        const view = render(<ToolUsingTab />);
+        await waitFor(() => expect(view.getByText(/No tool-use events yet/)).toBeDefined());
+        expect(view.queryByRole('alert')).toBeNull();
+        view.unmount();
+    });
+
+    test('tool using tab renders hard error when no snapshot yet', async () => {
+        setFetchForTesting((async () => new Response('nope', { status: 503 })) as unknown as typeof fetch);
+        const failed = render(<ToolUsingTab />);
+        await waitFor(() => expect(failed.getByRole('alert').textContent).toContain('tool-use fetch failed: 503'));
     });
 });

@@ -29,6 +29,7 @@ describe('OBSERVABILITY_TABS', () => {
         expect(ids).toContain('inbox');
         expect(ids).toContain('jobs');
         expect(ids).toContain('process-list');
+        expect(ids).toContain('tool-using');
     });
 
     test('component fields are resolvable React component types', () => {
