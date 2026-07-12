@@ -304,7 +304,7 @@ describe('AgentService.doctor', () => {
         expect(ompRow).toContain('—');
     });
 
-    test('text table renders compact model status label for available model', async () => {
+    test('text table renders full model status for available model (R4/AC1)', async () => {
         const { lines, output } = captureOutput();
         const svc = makeService({}, output);
         const doctorRunner = {
@@ -319,10 +319,10 @@ describe('AgentService.doctor', () => {
             runOne: mock(() => Promise.resolve(mockDoctorResult())),
         } as unknown as AgentRunDeps['doctorRunner'];
         await svc.doctor({ json: false }, { doctorRunner });
-        expect(lines.some((l) => l.includes('ok'))).toBe(true);
+        expect(lines.some((l) => l.includes('available'))).toBe(true);
     });
 
-    test('text table renders quota label for quota_exhausted model', async () => {
+    test('text table renders full quota_exhausted status (R4/AC1)', async () => {
         const { lines, output } = captureOutput();
         const svc = makeService({}, output);
         const doctorRunner = {
@@ -341,7 +341,7 @@ describe('AgentService.doctor', () => {
             runOne: mock(() => Promise.resolve(mockDoctorResult())),
         } as unknown as AgentRunDeps['doctorRunner'];
         await svc.doctor({ json: false }, { doctorRunner });
-        expect(lines.some((l) => l.includes('quota'))).toBe(true);
+        expect(lines.some((l) => l.includes('quota_exhausted'))).toBe(true);
     });
 
     test('--json includes modelStatus in the output envelope', async () => {

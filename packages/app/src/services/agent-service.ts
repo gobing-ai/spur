@@ -624,17 +624,10 @@ type DoctorRow = {
     modelStatus?: ModelHealthResult | null;
 };
 
-/** Compact model-status label for the doctor text table (display-only). */
+/** Model-status label for the doctor text table (R4/AC1 — full status enum or —). */
 function renderModelStatus(status: ModelHealthResult | null | undefined): string {
     if (status === null || status === undefined) return '—';
-    const labels: Record<string, string> = {
-        available: 'ok',
-        quota_exhausted: 'quota',
-        rate_limited: 'rate',
-        unavailable: 'down',
-        unknown: '?',
-    };
-    return labels[status.status] ?? status.status;
+    return status.status;
 }
 
 /**
