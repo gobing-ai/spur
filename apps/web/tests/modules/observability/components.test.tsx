@@ -722,69 +722,88 @@ describe('observability components', () => {
         expect(container.querySelector('[data-inbox-unread]')).toBeNull();
     });
 
-    test('process list renders rows and refetches on process SSE events', async () => {
-        let rows: {
-            agentId: string;
-            pid: number | null;
-            status: string;
-            startedAt: string;
-            exitCode: number | null;
-        }[] = [
+    test('process list renders inventory rows from observability endpoint', async () => {
+        const processes = [
             {
-                agentId: 'planner',
-                pid: 123,
+                pid: 100,
+                ppid: 1,
+                depth: 0,
+                source: 'serve' as const,
+                label: 'spur serve',
+                command: 'bun apps/cli serve --port 8787',
                 status: 'running',
+                rssBytes: 50 * 1024 * 1024,
+                elapsedSeconds: 120,
+                startedAt: new Date(Date.now() - 120_000).toISOString(),
+            },
+            {
+                pid: 123,
+                ppid: 100,
+                depth: 1,
+                source: 'supervisor' as const,
+                label: 'planner',
+                agentId: 'planner',
+                command: 'bun agent run --agent planner',
+                status: 'running',
+                rssBytes: 20 * 1024 * 1024,
+                elapsedSeconds: 90,
                 startedAt: new Date(Date.now() - 90_000).toISOString(),
-                exitCode: null,
             },
         ];
         const processCalls: string[] = [];
         setFetchForTesting((async (input: RequestInfo | URL) => {
             const url = input instanceof Request ? input.url : String(input);
-            if (url.includes('/team/processes')) {
+            if (url.includes('/observability/processes')) {
                 processCalls.push(url);
-                return jsonResponse({ processes: rows, count: rows.length });
+                return jsonResponse({
+                    processes,
+                    rootPid: 100,
+                    capturedAt: new Date().toISOString(),
+                });
             }
             return new Response('not found', { status: 404 });
         }) as unknown as typeof fetch);
 
         const { getByText, container } = render(<ProcessListTab />);
         await waitFor(() => expect(getByText('planner')).toBeDefined());
-        expect(getByText('pid=123')).toBeDefined();
+        expect(getByText('spur serve')).toBeDefined();
+        expect(container.querySelector('[data-process-list-tab]')?.textContent).toContain('root pid=100');
         expect(container.querySelector('[data-process-list-tab]')?.textContent).toContain('running');
-
-        rows = [
-            ...rows,
-            {
-                agentId: 'reviewer',
-                pid: null,
-                status: 'exited',
-                startedAt: new Date(Date.now() + 1_000).toISOString(),
-                exitCode: 0,
-            },
-        ];
-        const before = processCalls.length;
-        await act(async () => {
-            FakeEventSource.instances[0]?.onmessage?.(
-                new MessageEvent('message', {
-                    data: JSON.stringify({ eventName: 'process.exited' }),
-                }),
-            );
-        });
-
-        await waitFor(() => expect(getByText('reviewer')).toBeDefined());
-        expect(processCalls.length).toBeGreaterThan(before);
-        expect(getByText('pid=?')).toBeDefined();
+        expect(processCalls.length).toBeGreaterThanOrEqual(1);
     });
 
-    test('process list renders empty and error states', async () => {
-        setFetchForTesting((async () => jsonResponse({ processes: [], count: 0 })) as unknown as typeof fetch);
-        const empty = render(<ProcessListTab />);
-        await waitFor(() => expect(empty.getByText(/No supervised processes/)).toBeDefined());
-        empty.unmount();
+    test('process list shows serve root even without supervised agents', async () => {
+        setFetchForTesting((async () =>
+            jsonResponse({
+                processes: [
+                    {
+                        pid: 42,
+                        ppid: 1,
+                        depth: 0,
+                        source: 'serve',
+                        label: 'spur serve',
+                        command: 'bun apps/cli serve',
+                        status: 'running',
+                        rssBytes: 1024,
+                        elapsedSeconds: 10,
+                        startedAt: null,
+                    },
+                ],
+                rootPid: 42,
+                capturedAt: new Date().toISOString(),
+            })) as unknown as typeof fetch);
+        const view = render(<ProcessListTab />);
+        await waitFor(() => expect(view.getByText('spur serve')).toBeDefined());
+        expect(view.container.querySelector('[data-process-list-tab]')?.textContent).toContain('root pid=42');
+        expect(view.queryByText(/No supervised processes/)).toBeNull();
+        view.unmount();
+    });
 
+    test('process list renders error state on fetch failure', async () => {
         setFetchForTesting((async () => new Response('nope', { status: 503 })) as unknown as typeof fetch);
         const failed = render(<ProcessListTab />);
-        await waitFor(() => expect(failed.getByRole('alert').textContent).toContain('process list fetch failed: 503'));
+        await waitFor(() =>
+            expect(failed.getByRole('alert').textContent).toContain('process inventory fetch failed: 503'),
+        );
     });
 });

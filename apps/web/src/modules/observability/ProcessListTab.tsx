@@ -3,37 +3,62 @@ import { Badge, Loading } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 
 /**
- * Wire shape of a process entry from GET /api/team/processes.
+ * Wire shape of a process row from GET /api/observability/processes (task 0243).
  */
-interface ProcessRow {
-    agentId: string;
-    pid: number | null;
+interface ProcessInventoryRow {
+    pid: number;
+    ppid: number;
+    depth: number;
+    source: 'serve' | 'supervisor' | 'descendant';
+    label: string;
+    agentId?: string;
+    command: string;
     status: string;
-    startedAt: string;
-    exitCode: number | null;
+    rssBytes: number;
+    elapsedSeconds: number | null;
+    startedAt: string | null;
 }
 
-const apiUrl = () => `${resolveApiUrl()}/team/processes`;
-const sseUrl = () => `${resolveApiUrl()}/events/planning`;
+interface ProcessInventorySnapshot {
+    processes: ProcessInventoryRow[];
+    rootPid: number;
+    capturedAt: string;
+}
+
+const POLL_MS = 3_000;
+const apiUrl = () => `${resolveApiUrl()}/observability/processes`;
 
 /**
- * Process List tab (task 0195/0210 wave D).
+ * Process List tab (task 0243).
  *
- * Lists supervised agent processes from the team module's `/api/team/processes`
- * endpoint. Subscribes to `process.*` SSE events for live updates. Each row
- * shows agent id, pid, status badge, and uptime.
+ * Lists the spur serve process tree (OS walk + supervisor overlay) from
+ * GET /api/observability/processes. Polls every 3s while mounted. Read-only.
  */
 export default function ProcessListTab() {
-    const [processes, setProcesses] = useState<ProcessRow[] | null>(null);
+    const [snapshot, setSnapshot] = useState<ProcessInventorySnapshot | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     const load = useCallback(async (signal: AbortSignal) => {
         try {
             const res = await fetchWithTimeout(new Request(apiUrl(), { signal }));
-            if (!res.ok) throw new Error(`process list fetch failed: ${res.status}`);
+            if (!res.ok) {
+                let detail = `process inventory fetch failed: ${res.status}`;
+                try {
+                    const body: unknown = await res.json();
+                    const msg = (body as { error?: string }).error;
+                    if (msg) detail = msg;
+                } catch {
+                    /* ignore non-JSON error body */
+                }
+                throw new Error(detail);
+            }
             const json: unknown = await res.json();
-            const body = json as { processes: ProcessRow[]; count: number };
-            setProcesses(body.processes ?? []);
+            const body = json as ProcessInventorySnapshot;
+            setSnapshot({
+                processes: body.processes ?? [],
+                rootPid: body.rootPid,
+                capturedAt: body.capturedAt,
+            });
             setError(null);
         } catch (err) {
             if (signal.aborted) return;
@@ -44,73 +69,109 @@ export default function ProcessListTab() {
     useEffect(() => {
         const controller = new AbortController();
         void load(controller.signal);
-        return () => controller.abort();
-    }, [load]);
-
-    // Live tail: refetch on process.* SSE events.
-    useEffect(() => {
-        if (typeof EventSource === 'undefined') return;
-        const es = new EventSource(sseUrl());
-        es.onmessage = (frame) => {
-            try {
-                const raw: unknown = JSON.parse(frame.data);
-                const name = (raw as { eventName?: string }).eventName;
-                if (!name?.startsWith('process.')) return;
-                void load(new AbortController().signal);
-            } catch {
-                // Malformed frame — drop silently.
-            }
+        const timer = setInterval(() => {
+            void load(new AbortController().signal);
+        }, POLL_MS);
+        return () => {
+            controller.abort();
+            clearInterval(timer);
         };
-        return () => es.close();
     }, [load]);
 
-    if (error) {
+    if (error && !snapshot) {
         return (
             <div className="p-4 text-sm text-error" role="alert">
                 Failed to load processes: {error}
             </div>
         );
     }
-    if (processes === null) {
+    if (snapshot === null) {
         return (
             <div className="flex items-center justify-center h-32 text-spur-text-muted text-sm">
                 <Loading size="sm" /> Loading processes…
             </div>
         );
     }
-    if (processes.length === 0) {
-        return (
-            <div className="p-4 text-sm text-spur-text-muted italic">
-                No supervised processes. Use `spur serve` with `SPUR_TEAM_AUTOSTART` or `spur team start &lt;id&gt;` to
-                launch agents.
-            </div>
-        );
-    }
+
+    const { processes } = snapshot;
 
     return (
         <div className="flex flex-col h-full overflow-hidden" data-process-list-tab>
-            <div className="px-4 py-2 border-b border-spur-border bg-base-200 shrink-0">
-                <span className="text-xs font-semibold text-spur-text uppercase tracking-wide">
-                    Supervised Processes
+            <div className="px-4 py-2 border-b border-spur-border bg-base-200 shrink-0 flex items-center gap-2">
+                <span className="text-xs font-semibold text-spur-text uppercase tracking-wide">Runtime Processes</span>
+                <span className="text-xs text-spur-text-muted">{processes.length} process(es)</span>
+                <span className="text-[10px] text-spur-text-muted ml-auto font-mono" title={snapshot.capturedAt}>
+                    root pid={snapshot.rootPid}
                 </span>
-                <span className="ml-2 text-xs text-spur-text-muted">{processes.length} process(es)</span>
             </div>
-            <ul className="flex-1 overflow-y-auto p-2 space-y-1">
-                {processes.map((p) => (
-                    <li
-                        key={p.agentId}
-                        className="flex items-center gap-2 px-3 py-1.5 rounded bg-base-200 border border-spur-border"
-                    >
-                        <span className="text-sm font-medium text-spur-text">{p.agentId}</span>
-                        <span className="text-xs text-spur-text-muted font-mono">pid={p.pid ?? '?'}</span>
-                        <StatusBadge status={p.status} />
-                        <span className="text-[10px] text-spur-text-muted ml-auto font-mono" title={p.startedAt}>
-                            {formatUptime(p.startedAt)}
-                        </span>
-                    </li>
-                ))}
-            </ul>
+            {error ? (
+                <div className="px-4 py-1 text-xs text-warning" role="status">
+                    Refresh warning: {error}
+                </div>
+            ) : null}
+            {processes.length === 0 ? (
+                <div className="p-4 text-sm text-spur-text-muted italic">
+                    No processes in inventory (unexpected — serve root should always appear).
+                </div>
+            ) : (
+                <div className="flex-1 overflow-auto">
+                    <table className="table table-xs table-pin-rows w-full">
+                        <thead>
+                            <tr className="text-[10px] uppercase text-spur-text-muted">
+                                <th>PID</th>
+                                <th>PPID</th>
+                                <th>Source</th>
+                                <th>Name</th>
+                                <th>Status</th>
+                                <th>Memory</th>
+                                <th>Duration</th>
+                                <th>Command</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {processes.map((p) => (
+                                <tr key={`${p.pid}-${p.ppid}`} className="border-spur-border">
+                                    <td className="font-mono text-xs">{p.pid}</td>
+                                    <td className="font-mono text-xs text-spur-text-muted">{p.ppid}</td>
+                                    <td>
+                                        <SourceBadge source={p.source} />
+                                    </td>
+                                    <td
+                                        className="text-sm font-medium text-spur-text max-w-[10rem] truncate"
+                                        style={{ paddingLeft: `${0.5 + p.depth * 0.75}rem` }}
+                                        title={p.agentId ?? p.label}
+                                    >
+                                        {p.label}
+                                    </td>
+                                    <td>
+                                        <StatusBadge status={p.status} />
+                                    </td>
+                                    <td className="font-mono text-xs whitespace-nowrap">{formatRss(p.rssBytes)}</td>
+                                    <td className="font-mono text-xs whitespace-nowrap">
+                                        {formatElapsed(p.elapsedSeconds, p.startedAt)}
+                                    </td>
+                                    <td
+                                        className="font-mono text-[10px] text-spur-text-muted max-w-[20rem] truncate"
+                                        title={p.command}
+                                    >
+                                        {p.command}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
         </div>
+    );
+}
+
+function SourceBadge({ source }: { source: ProcessInventoryRow['source'] }) {
+    const variant = source === 'serve' ? 'primary' : source === 'supervisor' ? 'secondary' : 'ghost';
+    return (
+        <Badge variant={variant} size="xs">
+            {source}
+        </Badge>
     );
 }
 
@@ -123,10 +184,26 @@ function StatusBadge({ status }: { status: string }) {
     );
 }
 
-function formatUptime(startedAt: string): string {
-    const ms = Date.now() - new Date(startedAt).getTime();
-    if (ms < 0) return '0s';
-    if (ms < 60_000) return `${Math.floor(ms / 1000)}s`;
-    if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m`;
-    return `${Math.floor(ms / 3_600_000)}h`;
+function formatRss(bytes: number): string {
+    if (!Number.isFinite(bytes) || bytes <= 0) return '—';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function formatElapsed(elapsedSeconds: number | null, startedAt: string | null): string {
+    if (elapsedSeconds != null && elapsedSeconds >= 0) {
+        if (elapsedSeconds < 60) return `${Math.floor(elapsedSeconds)}s`;
+        if (elapsedSeconds < 3600) return `${Math.floor(elapsedSeconds / 60)}m`;
+        return `${Math.floor(elapsedSeconds / 3600)}h`;
+    }
+    if (startedAt) {
+        const ms = Date.now() - new Date(startedAt).getTime();
+        if (ms < 0) return '0s';
+        if (ms < 60_000) return `${Math.floor(ms / 1000)}s`;
+        if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m`;
+        return `${Math.floor(ms / 3_600_000)}h`;
+    }
+    return '—';
 }
