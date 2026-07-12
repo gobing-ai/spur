@@ -28,6 +28,7 @@
     },
     "devDependencies": {
         "@cloudflare/vitest-pool-workers": "0.16.10",
+        "@gobing-ai/ts-ai-runner": "catalog:",
         "@hono/vite-build": "1.11.1",
         "@hono/vite-dev-server": "0.24.1",
         "@types/bun": "catalog:",

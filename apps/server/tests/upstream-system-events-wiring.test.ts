@@ -42,6 +42,10 @@ async function loadTap(
 class FakeTeamAgentProcess extends TeamAgentProcess {
     private fakeStatus: 'running' | 'stopped' | 'errored' = 'stopped';
 
+    constructor(options: AgentProcessOptions) {
+        super(options);
+    }
+
     override async start(): Promise<void> {
         this.fakeStatus = 'running';
     }
