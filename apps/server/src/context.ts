@@ -294,12 +294,21 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
         webDistPath: options.webDistPath,
 
         async getDb(): Promise<DbAdapter> {
-            dbPromise ??= (async () => {
-                if (dbUrl !== IN_MEMORY_DATABASE_URL) {
-                    await fs.ensureDir(dirname(dbUrl));
-                }
-                return createMigratedDbViaRuntime({ url: dbUrl });
-            })();
+            if (!dbPromise) {
+                const created = (async () => {
+                    if (dbUrl !== IN_MEMORY_DATABASE_URL) {
+                        await fs.ensureDir(dirname(dbUrl));
+                    }
+                    return createMigratedDbViaRuntime({ url: dbUrl });
+                })();
+                // Do not cache a rejection: a transient first-touch failure must not
+                // brick every later request of a long-lived server (same pattern as
+                // the config loader's cache).
+                created.catch(() => {
+                    if (dbPromise === created) dbPromise = undefined;
+                });
+                dbPromise = created;
+            }
             return dbPromise;
         },
 

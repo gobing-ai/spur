@@ -144,9 +144,14 @@ export const teamModule: ServerModule = {
                     heartbeatInterval = setInterval(sendHeartbeat, 15_000, closed, controller, encoder);
 
                     // ── 1. Replay ring buffer frames (oldest-first) ──
+                    // Track the last delivered seq, not an array index: overflow
+                    // splices old frames from the front, so indices shift under a
+                    // live cursor and frames would be silently skipped.
+                    let lastSeq = -1;
                     const buffer = supervisor.getRingBuffer(id);
                     for (const frame of buffer) {
                         if (!enqueueFrame(closed, controller, encoder, frame)) return;
+                        lastSeq = frame.seq;
                     }
 
                     // ── 2. Send a sync marker so the client knows replay is done ──
@@ -159,21 +164,19 @@ export const teamModule: ServerModule = {
                     )
                         return;
 
-                    // ── 3. Live tail: poll the ring buffer for new frames ──
-                    let cursor = buffer.length;
+                    // ── 3. Live tail: poll the ring buffer for frames past the watermark ──
                     const pollInterval = setInterval(() => {
                         if (closed.current) {
                             clearInterval(pollInterval);
                             return;
                         }
-                        const current = supervisor.getRingBuffer(id);
-                        while (cursor < current.length) {
-                            const frame = current[cursor];
-                            if (frame && !enqueueFrame(closed, controller, encoder, frame)) {
+                        for (const frame of supervisor.getRingBuffer(id)) {
+                            if (frame.seq <= lastSeq) continue;
+                            if (!enqueueFrame(closed, controller, encoder, frame)) {
                                 clearInterval(pollInterval);
                                 return;
                             }
-                            cursor++;
+                            lastSeq = frame.seq;
                         }
                     }, 500);
 

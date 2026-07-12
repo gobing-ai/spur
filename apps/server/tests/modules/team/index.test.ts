@@ -178,8 +178,8 @@ describe('team module', () => {
 
         test('returns text/event-stream and replays ring buffer', async () => {
             const frames: ProcessFrame[] = [
-                { stream: 'stdout', ts: '2026-07-05T00:00:01.000Z', line: 'starting up' },
-                { stream: 'stderr', ts: '2026-07-05T00:00:02.000Z', line: 'warning: low memory' },
+                { stream: 'stdout', ts: '2026-07-05T00:00:01.000Z', line: 'starting up', seq: 0 },
+                { stream: 'stderr', ts: '2026-07-05T00:00:02.000Z', line: 'warning: low memory', seq: 1 },
             ];
             const entry: ProcessEntry = {
                 agentId: 'planner',
@@ -304,7 +304,7 @@ describe('team module', () => {
                 }
                 expect(replayDone).toBe(true);
                 // Now the stream is in live-tail phase; push a frame and wait for it.
-                liveBuffer.push({ stream: 'stdout', ts: '2026-07-05T00:00:05.000Z', line: 'tail frame' });
+                liveBuffer.push({ stream: 'stdout', ts: '2026-07-05T00:00:05.000Z', line: 'tail frame', seq: 0 });
                 while (Date.now() - start < 2000) {
                     const { value, done } = await reader.read();
                     if (done) break;
@@ -321,6 +321,62 @@ describe('team module', () => {
                 await reader.cancel();
             }
             expect(true).toBe(true);
+        });
+
+        test('live tail survives ring-buffer overflow (seq watermark, not array index)', async () => {
+            // Regression: the old index cursor pointed past the array after an
+            // overflow splice shifted frames left, silently skipping new frames.
+            // Simulate: replay [seq 0, seq 1], then overflow drops seq 0 and
+            // appends seq 2 — the tail must still deliver seq 2.
+            const liveBuffer: ProcessFrame[] = [
+                { stream: 'stdout', ts: '2026-07-05T00:00:01.000Z', line: 'frame zero', seq: 0 },
+                { stream: 'stdout', ts: '2026-07-05T00:00:02.000Z', line: 'frame one', seq: 1 },
+            ];
+            const entry: ProcessEntry = {
+                agentId: 'planner',
+                pid: 99,
+                status: 'running',
+                startedAt: '2026-07-05T00:00:00.000Z',
+                exitCode: null,
+                ringBuffer: liveBuffer,
+            };
+            const { ctx } = ctxWithStubs({ get: entry, getRingBufferFn: () => liveBuffer });
+            const app = new Hono();
+            teamModule.mount(app, ctx);
+            const res = await app.fetch(new Request('http://localhost/api/team/processes/planner/stream'));
+            const reader = res.body?.getReader();
+            expect(reader).toBeDefined();
+            if (reader) {
+                const decoder = new TextDecoder();
+                const start = Date.now();
+                let text = '';
+                while (Date.now() - start < 1000 && !text.includes('--replay-done--')) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    if (value) text += decoder.decode(value);
+                }
+                expect(text).toContain('--replay-done--');
+                // Overflow: drop the oldest frame, append a new one. The buffer
+                // length is back to 2 — an index cursor (2) would skip it forever.
+                liveBuffer.shift();
+                liveBuffer.push({ stream: 'stdout', ts: '2026-07-05T00:00:05.000Z', line: 'post-overflow', seq: 2 });
+                let delivered = false;
+                while (Date.now() - start < 2000) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    if (value) {
+                        text += decoder.decode(value);
+                        if (text.includes('post-overflow')) {
+                            delivered = true;
+                            break;
+                        }
+                    }
+                }
+                expect(delivered).toBe(true);
+                // Already-replayed frames must not repeat past the watermark.
+                expect(text.split('frame one').length - 1).toBe(1);
+                await reader.cancel();
+            }
         });
     });
 
