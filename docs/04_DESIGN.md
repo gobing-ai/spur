@@ -92,7 +92,11 @@ clobbering a configured project. `--json` emits
   `bundledConfigRoot()` to `.spur/` (and the `docs/` stubs to the project root). Idempotent;
   `--force` overwrites non-preserve entries, never overwrites preserve-marked docs; `--minimal`
   skips `.spur/rules` + `.spur/workflows`. The manifest is pure data — adding a default is a
-  one-line edit, no control-flow change.
+  one-line edit, no control-flow change. **AGENTS.md** (`preserve: true`): when scaffolding a
+  *new* file from `config/templates/AGENTS.md`, init substitutes `{project-name}` (from `--name`
+  or cwd basename) and `{project-description}` (stub: `local Spur project`) so fresh projects
+  never ship residual brace tokens (task 0242). Existing customized AGENTS.md is never overwritten.
+
 - **`/sp:spur-init` owns content adaptation only.** Calls `spur init` as its first step, then
   performs three classes of adaptation. Two probes sit between scaffold and customization:
   - *Functional probe (Phase 1.5):* `spur status`, `spur task create`, `spur workflow validate`.

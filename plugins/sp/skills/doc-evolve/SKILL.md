@@ -65,12 +65,19 @@ project's actual stack and scope. Invoked by `sp:spur-init` after scaffolding.
 
 **Procedure:**
 1. Read the project's `package.json`, `tsconfig.json`, `biome.json`, and any existing config.
-2. Read each doc in `docs/00`–`05` and `AGENTS.md` for template markers (`{{ NAME }}`,
-   `{{ STACK }}`, `{{ DESCRIPTION }}`, etc.).
-3. Replace template markers with project-specific values derived from the config files.
-4. Update `AGENTS.md` with the detected stack, commands, and conventions.
+2. Read each doc in `docs/00`–`05` for any remaining template markers.
+3. For **`AGENTS.md`**, use the **`{kebab-case}`** token scheme only (task 0242). Do **not** use
+   `{{ MUSTACHE }}` for AGENTS:
+   - `{project-name}` / `{project-description}` — already filled by `spur init` when scaffolding a
+     fresh file; do not leave these braces after customize.
+   - Project-specific body slots (`## Stack & layout`, build commands, conventions) use HTML
+     comments + human stubs in the **bundled AGENTS seed** (spur init template) — replace those
+     stubs with stack/layout and lint/test/build commands detected from the project manifests.
+4. Keep portable harness sections aligned with the bundled AGENTS seed (H2 set + Harness tool
+   routing Need keys — see `apps/cli/tests/fixtures/agents-md-portable-contract.ts`).
 
-**Done when:** all template markers are replaced and `bun run lint` passes.
+**Done when:** no residual `{project-name}` / `{project-description}` in AGENTS.md; stack/build
+stubs filled or deliberately documented; `bun run lint` passes where applicable.
 
 ## drift-audit (§7)
 
