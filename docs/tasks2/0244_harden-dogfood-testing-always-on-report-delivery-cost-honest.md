@@ -12,7 +12,7 @@ priority: P1
 tags: []
 dependencies: []
 created_at: "2026-07-12T18:21:58.680Z"
-updated_at: "2026-07-12T18:27:20.339Z"
+updated_at: "2026-07-12T18:30:08.264Z"
 ---
 
 ## 0244. Harden dogfood-testing: always-on report delivery, cost honesty, minimal report upgrades
@@ -287,7 +287,7 @@ protocol: sp:dogfood-testing@1.1
 | `plugins/sp/skills/dogfood-testing/SKILL.md:55` | `--save` back-compat no-op; always-on dual write. |
 | `plugins/sp/skills/dogfood-testing/SKILL.md:80-88` | Phase 1 opens live + docs/dogfood skeleton with `status: running` and protocol@1.1. |
 | `plugins/sp/skills/dogfood-testing/SKILL.md:109-140` | Phase 3 dual-write + Phase 4 non-skippable finalize-or-abort checklist. |
-| `plugins/sp/skills/dogfood-testing/SKILL.md:194-260` | Platform notes restate dual-path, status, Cost, footer with Live+Report paths. |
+| `plugins/sp/skills/dogfood-testing/SKILL.md:194-280` | Platform notes restate dual-path, status, Cost, footer with Live+Report paths. |
 | `plugins/sp/skills/dogfood-testing/references/report-template.md:19-47` | Always-on dual artifacts + frontmatter schema. |
 | `plugins/sp/skills/dogfood-testing/references/report-template.md:109-125` | Cost block multi-source honesty rules. |
 | `plugins/sp/skills/dogfood-testing/references/report-template.md:239-280` | Footer always prints `[Live:]` + `[Report:]`. |
@@ -297,6 +297,7 @@ protocol: sp:dogfood-testing@1.1
 | `plugins/sp/agents/super-coder.md:198-260` | Dogfood mode dual artifacts; terminal gate #5 adds status frontmatter. |
 | `docs/dogfood/README.md:1-32` | Operator-facing always-on delivery notes. |
 | `docs/help/how_to_use_dev_slash_commands_for_daily_software_development.md:304` | Help example no longer implies `--save` is required for a report. |
+| `.gitignore:156-158` | **Post-verify fix:** ignore report files under `docs/dogfood/*` but track `README.md` so R12 hygiene ships. |
 
 **R10 proof run** (observe-only, **without** `--save`):
 - Live: `.spur/run/dogfood/0244-proof-20260712T112609.md`
@@ -304,36 +305,64 @@ protocol: sp:dogfood-testing@1.1
 - Testee: `spur task check 0244 --json`
 - Verified: `### 3. Monitor Ledger`, `── Dogfood Summary ──`, `status: complete`, `#### Cost`, `[Live:]`, `[Report:]`
 ### Testing
-**Verdict: PASS** (requirements + AC traceability; docs/protocol task — unit suite N/A)
+**Re-verify:** `/sp:dev-verify 0244 --auto --focus all --fix all --force` (2026-07-12)
+**Verdict: PASS** (post-fix)
+**Coverage:** N/A (documentation-only / skill-protocol change; no runtime code path added).
 
-| Req / AC | Status | Evidence |
-|----------|--------|----------|
-| R1 dual artifacts Phase 1 | MET | `SKILL.md:80-88` open both paths with `status: running` |
-| R2 disk dual-write every step | MET | `monitor-ledger.md:17-35` Disk SSOT + dual-write live-first |
-| R3 partial status model | MET | `report-template.md:37,66` status enum + incomplete markers |
-| R4 finalize-or-abort | MET | `SKILL.md:124-140` non-skippable checklist |
-| R5 minimal structure | MET | frontmatter + Repro + Cost in `report-template.md:19-125` |
-| R6 Cost honesty | MET | Method/confidence/Meter rules; multi-source table `monitor-ledger.md:75-90` |
-| R7 `--save` no-op | MET | `dev-dogfood.md:36-42`, `SKILL.md:55` |
-| R8 surface sync | MET | SKILL + report-template + monitor-ledger + dev-dogfood updated |
-| R9 consumer gate | MET | `super-coder.md:260` status complete\|aborted check |
-| R10 dogfood proof | MET | Live `.spur/run/dogfood/0244-proof-20260712T112609.md` + Report `docs/dogfood/2026-07-12-spur-task-check-0244-contract-smoke-dogfood.md` without `--save`; structural rg counts ≥1 for ledger, footer, status complete, Cost |
-| R11 out of scope | N/A | No scripts/, no CLI verb, no apps/ changes (verified by scope of diff) |
-| R12 docs hygiene | MET | `docs/dogfood/README.md`, help line 304 updated |
-| AC R1 dual open | MET | Protocol + proof run opened both files |
-| AC R2 ledger on resolve | MET | Protocol mandates; proof wrote row before finalize |
-| AC R4 footer both paths | MET | Proof footer `[Live:]` + `[Report:]` |
-| AC R3 incomplete markers | MET | Template contract `⚠ incomplete — not reached` |
-| AC R6 Cost honest | MET | Proof Cost block Method LOW + Meter n/a |
-| AC R7 no --save | MET | Proof omitted `--save`; report exists |
-| AC R10 proof | MET | Same as R10 |
+**Per-requirement traceability**
 
-**Commands:**
-- `spur task check 0244 --json` → pass:true (L4 feature_id advisory only)
-- Structural rg on proof report → ledger/footer/status/Cost present
-- Unit tests: **N/A** (markdown protocol surfaces only; no TS production paths)
+| Req | Status | Evidence type | Evidence |
+|-----|--------|---------------|----------|
+| R1 dual artifacts Phase 1 | MET | static-ref | `plugins/sp/skills/dogfood-testing/SKILL.md:80-88` — open live + docs/dogfood, `status: running` |
+| R2 disk dual-write every step | MET | static-ref | `monitor-ledger.md:17-35` Disk SSOT; `SKILL.md:109-116` mirror row to report path |
+| R3 partial status model | MET | static-ref | `report-template.md:37` status enum; `:66` incomplete markers |
+| R4 finalize-or-abort | MET | static-ref | `SKILL.md:124-140`; `report-template.md:241` non-skippable gate |
+| R5 minimal structure | MET | static-ref | frontmatter + protocol@1.1 + **Repro** (`report-template.md:86`) + `#### Cost` (`:109`) |
+| R6 Cost honesty | MET | static-ref | Method/confidence/Meter rules `report-template.md:111-122`; multi-source table `monitor-ledger.md:79-90` |
+| R7 `--save` no-op | MET | static-ref | `dev-dogfood.md:36-42`; `SKILL.md:55`; gotcha #8 `:209` |
+| R8 surface sync | MET | command | surfaces present: SKILL, report-template, monitor-ledger, dev-dogfood; platform notes restate dual-path (`SKILL.md:234-280`) |
+| R9 consumer gate | MET | static-ref | `super-coder.md:260` rg status complete\|aborted + ledger + footer |
+| R10 dogfood proof | MET | command | Live `.spur/run/dogfood/0244-proof-20260712T112609.md` + Report `docs/dogfood/2026-07-12-spur-task-check-0244-contract-smoke-dogfood.md` without `--save`; rg counts: ledger=1 footer=1 status=1 cost=1 Live=1 Report=1 Meter=1 |
+| R11 out of scope | N/A | command | no `dogfood-testing/scripts/`; apps/packages dirty count=0; no runner language in skill |
+| R12 docs hygiene | MET | static-ref + command | help `docs/help/...:304` always-on wording; README trackable after `.gitignore` un-ignore `!/docs/dogfood/README.md` (post-fix); reports still ignored via `/docs/dogfood/*` |
 
-**Coverage claim:** N/A (docs/skill protocol)
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: R1 dual artifacts open at plan time | MET | static-ref + command | Protocol `SKILL.md:80-88`; proof files both exist |
+| Scenario: R2 ledger row written on each step resolve | MET | static-ref | Dual-write rules; proof ledger has step row before finalize |
+| Scenario: R4 terminal gate footer both paths | MET | command | Proof contains `[Live:]` and `[Report:]` and summary footer |
+| Scenario: R3 partial report incomplete markers | MET | static-ref | `report-template.md:66,175` incomplete markers (contract; no live abort this run) |
+| Scenario: R6 cost block is honest | MET | command | Proof Cost Method LOW + Meter n/a |
+| Scenario: R7 save not required for delivery | MET | command | Proof report exists; body notes open without --save |
+| Scenario: R10 dogfood-of-dogfood proof | MET | command | Same as R10 |
+
+**Design conformance**
+
+| Claim | Status | Evidence |
+|-------|--------|----------|
+| Approach 1 skill+template only | DONE | No scripts/, no apps/packages, no new CLI verb |
+| Live `.spur/run/dogfood/` + always docs/dogfood | DONE | SKILL Phase 1 + proof artifacts |
+| Partial-OK status model | DONE | report-template status enum |
+| Multi-source Cost + confidence | DONE | Cost block + monitor-ledger table |
+| Terminal finalize-or-abort checklist | DONE | Phase 4 + gotchas 7–8 |
+| `--save` back-compat no-op | DONE | command + skill args |
+| Deferred Approach 2/3 | DONE | R11 N/A + explicit out-of-scope |
+
+**Fix pass (`--fix all`)**
+
+| Issue | Severity | Fix |
+|-------|----------|-----|
+| R12 README under `/docs/dogfood` was fully gitignored → always-on operator note could not ship | major (R12 PARTIAL) | `.gitignore`: `/docs/dogfood/*` + `!/docs/dogfood/README.md`; README now untracked-visible; report files still ignored |
+
+**Commands run this verify**
+
+```
+spur task check 0244 --json          → pass:true (L4 feature_id advisory)
+rg / ls evidence sweeps              → R1–R12 as tabled
+git check-ignore docs/dogfood/*      → reports ignored; README not (after fix)
+```
 ### Review
 | Priority | Finding | Status | Notes |
 |----------|---------|--------|-------|

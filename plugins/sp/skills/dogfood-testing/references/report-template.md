@@ -1,20 +1,77 @@
 ---
 name: report-template
-description: "The dogfood report section contract + mandatory summary footer + the --task sink L3 rule. The report is assembled from the live ledger and is designed to be actionable — a reader should be able to fine-tune the testee from the report alone."
+description: "The dogfood report section contract + dual-path always-on delivery + mandatory summary footer + the --task sink L3 rule. The report is assembled from the on-disk live ledger and is designed to be actionable — a reader should be able to fine-tune the testee from the report alone."
 see_also:
   - dogfood-testing
   - monitor-ledger
+protocol: sp:dogfood-testing@1.1
 ---
 
 # Dogfood Report Template
 
-The report is the deliverable. It is assembled from the live ledger (never reconstructed from
-memory) and is designed so a reader can **fine-tune the testee from the report alone** — every
+The report is the deliverable. It is assembled from the **on-disk** live ledger (never reconstructed
+from memory) and is designed so a reader can **fine-tune the testee from the report alone** — every
 finding carries a location and a recommended action, not just an observation.
+
+**Protocol version:** `sp:dogfood-testing@1.1` — dual-path always-on delivery, status model, Cost
+block with multi-source honesty. Bump this field when the contract changes.
+
+## Always-on dual artifacts (delivery contract)
+
+Every dogfood run **always** writes **two** files — with or without `--save`:
+
+| Artifact | Path | Role |
+|----------|------|------|
+| **Live** | `.spur/run/dogfood/<run_id>.md` | Mid-run SSOT; opened in Phase 1; ledger rows appended on every step resolve |
+| **Report** | `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md` | Operator artifact; same content promoted on open + every step + finalize |
+
+`--save` is **back-compat no-op** for delivery: it still documents/prints the report path but is
+**not required** to create the file. A run that ends with no file under `docs/dogfood/` (and no live
+file under `.spur/run/dogfood/`) has failed the dogfood delivery contract.
+
+### Frontmatter (canonical — every artifact MUST open with this)
+
+```yaml
+---
+run_id: <uuid-or-timestamp-slug>
+status: running | aborted | complete
+testee: "<exact invocation string>"
+classification: slash-command | agent-skill | cli
+mode: observe-only | fix
+max_retry: <n>
+testee_agent: omitted | <name>
+started_at: <ISO-8601>
+finished_at: <ISO-8601 or null while running>
+live_path: .spur/run/dogfood/<run_id>.md
+report_path: docs/dogfood/YYYY-MM-DD-<slug>-dogfood.md
+protocol: sp:dogfood-testing@1.1
+---
+```
+
+### Status model (partial-OK)
+
+| `status` | When |
+|----------|------|
+| `running` | Phase 1 opened; steps still in progress |
+| `aborted` | Finalize-or-abort after mid-run stop / incomplete narrative |
+| `complete` | Phase 4 finished a normal end-of-run report |
+
+A mid-run death that left only a live file with `status: running` and ledger rows is still valid
+partial evidence. On any intentional stop, the driver MUST run finalize-or-abort and set
+`complete` or `aborted` — never leave a deliberate stop at `running`.
+
+Unfinished narrative sections (What We Did / Issues / Findings) use:
+
+```
+⚠ incomplete — not reached
+```
+
+Never invent narrative for steps that did not run.
 
 ## Section contract
 
 Emit these sections in order. Headings are fixed (machine-parseable); never rename or drop one.
+Skeleton is written in Phase 1; filled as the run progresses; finalized in Phase 4.
 
 ### 1. Testee
 
@@ -26,9 +83,17 @@ Emit these sections in order. Headings are fixed (machine-parseable); never rena
 - **Command:** `<slash command or CLI invocation>`
 - **Classification:** `slash command` | `agent skill` | `CLI invocation`
 - **Exact invocation:** the underlying `Skill()` call or shell command
+- **Repro:** `<exact string an operator can re-run>`
 - **Testee agent:** `<value forwarded via --agent>` | `omitted (testee runs in current session)`
 - **Mode:** `observe-only (--max-retry 0)` | `fix (--max-retry N)`
 - **Task under test:** WBS + title (if applicable)
+- **Run id:** `<run_id>` · **Live:** `<live_path>` · **Report:** `<report_path>`
+```
+
+When `status` is `aborted` or the report is partial, add under §1:
+
+```
+- **Delivery status:** aborted | partial  ⚠ incomplete run
 ```
 
 ### 2. Execution Summary
@@ -38,10 +103,25 @@ Emit these sections in order. Headings are fixed (machine-parseable); never rena
 
 - **Result:** PASS / PARTIAL / FAIL  `(N fixed, N unresolved, N findings)`
 - **Wall-clock:** ~N min  `[~estimate]`
-- **~Token cost:** ~N total | ~N cached (~X% hit rate)  `[~estimate]`
 - **Steps:** N derived, N executed, N N/A
 - **Fix attempts:** N (one brief label per fix)
+
+#### Cost
+- **Ledger estimate:** ~N total | ~N cached (~X% hit rate)  `[~estimate]`
+- **Method:** chars/4 heuristic (monitor-ledger.md); confidence: LOW
+- **Meter:** n/a
 ```
+
+**Cost honesty rules:**
+
+- Always include ledger-derived `~estimate` total / cached / cache% with a **Method** line and
+  **confidence** (`LOW` when estimate-only; `MEDIUM` when a real meter is also present).
+- Optional meters when available (never invent):
+  - `ccusage` session/daily delta — label scope (`day` / `session`), **not** per-step
+  - agent usage fields if present in tool results
+- If no meter: print `Meter: n/a` explicitly.
+- Never present an unsubstantiated precise integer as billed/metered cost.
+- Aggregate cache% MUST equal the ledger formula (see §3); otherwise the report is invalid.
 
 **Verdict rule** — `PASS` = every step ran and no unresolved issue; `PARTIAL` = ran to the end but
 ≥1 unresolved issue; `FAIL` = the run could not complete (a step blocked all downstream steps). A
@@ -55,7 +135,8 @@ never in the verdict value. Only `PASS` / `PARTIAL` / `FAIL` are legal values.
 ### 3. Monitor Ledger
 
 The report MUST include the live ledger table before the narrative. Do not summarize the ledger away:
-it is the audit trail for step outcomes, fix attempts, findings, and cache math.
+it is the audit trail for step outcomes, fix attempts, findings, and cache math. Rows are written to
+**disk** (both artifacts) when each step resolves — see [monitor-ledger.md](monitor-ledger.md).
 
 ```
 ### 3. Monitor Ledger
@@ -69,12 +150,12 @@ it is the audit trail for step outcomes, fix attempts, findings, and cache math.
 
 Ledger rules:
 
-- Every executed step gets exactly one row, recorded when the step resolves.
+- Every executed step gets exactly one row, recorded when the step resolves (**on disk**, both files).
 - `Fresh Tokens` and `Cached Tokens` must be numbers with `~` prefixes; `Cache %` must be computed
   from those two cells, not guessed.
 - `Basis` is mandatory. It names the observable inputs used for the estimate: command output,
   previously-read file reused from context, generated report text, or similar.
-- The aggregate cache line in `### 2. Execution Summary` must equal the ledger formula above. If it
+- The aggregate cache line in `#### Cost` under §2 must equal the ledger formula above. If it
   does not, the report is invalid.
 - If the driver cannot make a defensible estimate for a row, write `~0` cached and explain the
   missing basis in `Basis`; do not invent a stable percentage.
@@ -90,6 +171,8 @@ references. Someone should understand the run without reading the ledger.
 1. **Action label** — what happened, what was observed, the decision made.
 2. **Action label** — …
 ```
+
+If the run aborted before narrative was written: `⚠ incomplete — not reached`.
 
 ### 5. Issues
 
@@ -147,16 +230,29 @@ Severity scale:
 
 **Cache-health rule** (from [monitor-ledger.md](monitor-ledger.md)): if aggregate cache% < 50% or any
 step < 40%, emit a **P3** — "Low cache hit rate — candidate for context-window or prompt trimming"
-with the offending step(s).
+with the offending step(s). Absolute token totals from the heuristic are trend-only (`[unverifiable]`
+as billable cost proof is expected).
 
 **Migration grep rule.** When dogfooding migrations or retired surfaces, distinguish intentional
 legacy-term mentions in guidance from live routed surfaces. Pair any broad grep for old skill or
 command names with a live-surface grep over the command and agent roots before filing a stale-routing
 finding. A deliberate rejection note in a reference file is not a live surface.
 
+## Phase 4 — finalize-or-abort (non-skippable terminal gate)
+
+Before the skill may stop (success, partial, fail, observe-only end, or abort), the driver MUST:
+
+1. Set frontmatter `status: complete` or `status: aborted` (and `finished_at`).
+2. Ensure all six mandatory section headings exist; unfinished narrative uses incomplete markers.
+3. Write the Cost block (method + confidence + Meter).
+4. Sync final content to **both** live and report paths.
+5. Print the mandatory summary footer with **both** paths always.
+
+Any early-exit path still runs this checklist. Stopping without it is a **driver contract violation**.
+
 ## Mandatory Summary Footer
 
-Print **after every run, inline, regardless of `--save`** — it is the last thing the user sees.
+Print **after every run, inline, always** — it is the last thing the user sees.
 
 ```
 ── Dogfood Summary ──
@@ -172,7 +268,8 @@ Unresolved issues:
 Findings (P1+P2):
   • P? — <label>   (or: (none))
 
-[Report: <path>]   ← only with --save
+[Live: .spur/run/dogfood/<run_id>.md]
+[Report: docs/dogfood/YYYY-MM-DD-<slug>-dogfood.md]
 [Task: <wbs>]      ← only with --task
 ```
 
@@ -182,7 +279,8 @@ Rules:
 - With `--full`, Findings include P3+P4.
 - If PASS with zero issues and zero findings: collapse to one line `Result: PASS — no issues, no
   findings.` (still print the Tokens line).
-- Print `--save` path and `--task` WBS **after** the write/creation, as the last lines.
+- **`[Live:]` and `[Report:]` are always printed** after a normal stop (not gated on `--save`).
+- Print `--task` WBS only when that sink ran.
 
 ## Task sink — the `task check` L3 contract
 

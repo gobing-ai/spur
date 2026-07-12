@@ -33,12 +33,13 @@ report of what happened, what broke, was fixed, and should be improved.
 | `testee` | What to exercise — a slash command, agent skill, or CLI invocation (positional, required). Quote it if it contains flags. | (required) |
 | `--agent <name\|auto>` | **Testee-scoped:** the agent the **testee** runs under (forwarded into the testee invocation). The driver always runs in the current session. **Omit it** to forward nothing — the testee runs under its own default. | (omitted → forward nothing) |
 | `--max-retry <n>` | Fix attempts per failed step. The **default is `2`** (fix mode): apply `Edit`/`Write` fixes to the working tree, up to 2 attempts per step. For pipeline-driving testees (`--next`, `run`, `runall`, `wrap`, `idea`), omission is refused: pass `--max-retry 0` for observe-only, or explicit `--max-retry N` to acknowledge mutation risk. | `2` unless the testee is pipeline-driving |
-| `--save` | Write the report to `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md`. | off |
+| `--save` | **Back-compat no-op for delivery.** Reports are **always** written to `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md` and a live file under `.spur/run/dogfood/<run_id>.md`. The flag still documents/prints the report path. | always-on (flag optional) |
 | `--task` | File the findings as a review-template task via `spur task create --template review`. | off |
 | `--full` | Include **all** severity findings (P1–P4) in the report and `--task` output. Default filters to P1+P2 only. | off |
 
-`--save` and `--task` are independent and composable. A **mandatory Monitor Ledger section** and a
-**mandatory summary footer** (result + issues + findings) are always emitted regardless of `--save`.
+`--task` is independent and composable with always-on report files. A **mandatory dual-path write**
+(live + `docs/dogfood/`), **Monitor Ledger**, **Cost block**, and **summary footer** (result +
+issues + findings + `[Live:]` + `[Report:]`) are always emitted — not gated on `--save`.
 
 > **Testee-scoped `--agent`.** Unlike the other `/sp:dev-*` commands (where `--agent` picks the agent
 > doing the work), here the driver is always the current session; `--agent` sets the agent the
@@ -48,9 +49,10 @@ report of what happened, what broke, was fixed, and should be improved.
 
 ## Behavior
 
-Thin wrapper: the 4-phase protocol (Plan → Execute+fix → Monitor → Report), the live ledger,
-cache-calculation method, report template, and the `--save`/`--task` sinks are all owned by the
-skill. This command parameterizes the testee, the retry budget, the testee agent, and the sinks.
+Thin wrapper: the 4-phase protocol (Plan → Execute+fix → Monitor → Report), dual-path always-on
+artifacts, on-disk live ledger, cache/Cost calculation, report template, finalize-or-abort terminal
+gate, and the `--task` sink are all owned by the skill. This command parameterizes the testee, the
+retry budget, the testee agent, and optional sinks.
 
 Pipeline-driving ambiguity is rejected by the backing skill before planning. If the testee contains
 `--next`, `run`, `runall`, `wrap`, or `idea` and this command omits `--max-retry`, it exits non-zero

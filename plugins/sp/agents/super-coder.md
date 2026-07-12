@@ -211,22 +211,29 @@ contract even if the underlying task is `done`.
 Do this by delegating report generation to the SSOT skill rather than inventing a report format:
 
 ```
-Skill(skill="sp:dogfood-testing", args="<testee> --save")
+Skill(skill="sp:dogfood-testing", args="<testee>")
 ```
 
-This writes `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md` using the skill's report template —
-identical to invoking `/sp:dev-dogfood "<testee>" --save`. The skill owns the 4-phase protocol
-(Plan → Execute+fix → Monitor → Report), the live ledger, the report template, and the
-`--save`/`--task` sinks; do not duplicate that format here.
+(Optional: pass `--save` for back-compat; delivery is always-on either way.)
+
+This always writes dual artifacts using the skill's report template (`protocol:
+sp:dogfood-testing@1.1`) — identical to invoking `/sp:dev-dogfood "<testee>"`:
+
+- Live: `.spur/run/dogfood/<run_id>.md`
+- Report: `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md`
+
+The skill owns the 4-phase protocol (Plan → Execute+fix → Monitor → finalize-or-abort Report),
+on-disk dual-write ledger, Cost block, and `--task` sink; do not duplicate that format here.
 
 Invariants for a dogfood-mode run:
 
 - The report file exists under `docs/dogfood/` at the standard `YYYY-MM-DD-<testee-slug>-dogfood.md`
   path **before** you report done. Verify with `ls docs/dogfood/`; name the path in your final message.
+- Frontmatter `status` is `complete` or `aborted` (not left as `running` after a deliberate stop).
 - Mutation discipline follows the skill: observe-only (`--max-retry 0`) is the safe default; opt into
   fixes with `--max-retry 2` only when the operator authorized repo mutation.
-- The mandatory inline summary footer (result + issues + findings) is still printed — `--save`
-  persists, it does not replace the inline footer.
+- The mandatory inline summary footer (result + issues + findings + `[Live:]` + `[Report:]`) is
+  always printed — dual-path files do not replace the inline footer.
 
 If the testee is this agent itself (self-dogfood), the self-observation findings still belong in the
 persisted report, not only in chat.
@@ -250,7 +257,7 @@ command printing `0`.
 | 2 | F2 — honest transition | (state it) | named a pipeline run-id, OR "manual + `spur task check <wbs> --strict-core` PASS" |
 | 3 | F4 — gate evidence | (recall change type) | raw gate tails pasted if code/test/infra touched; one-liner only if pure-doc |
 | 4 | F5 — no `/tmp` residue | `ls /tmp/<wbs>-* 2>/dev/null \| wc -l` | output is `0` |
-| 5 | Dogfood (only if in dogfood mode) | `rg -c '^### 3\. Monitor Ledger' <report> && rg -c '── Dogfood Summary ──' <report>` | both counts are `>= 1` (report exists under `docs/dogfood/` AND carries the mandatory ledger section AND the mandatory summary footer — not just any file matching the slug) |
+| 5 | Dogfood (only if in dogfood mode) | `rg -c '^### 3\. Monitor Ledger' <report> && rg -c '── Dogfood Summary ──' <report> && rg -c '^status: (complete\|aborted)' <report>` | all three counts are `>= 1` (report exists under `docs/dogfood/` AND carries the mandatory ledger section AND the mandatory summary footer AND terminal frontmatter status — not just any file matching the slug) |
 
 If check #1 prints anything other than `0`, you are **not done**: find each `- [ ]` line and either
 check it (real completed work), replace it with a real item, or remove it (stray placeholder in an

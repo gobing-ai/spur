@@ -1,24 +1,38 @@
 ---
 name: monitor-ledger
-description: "The dogfood monitor methodology + live ledger column contract + token/cache estimation heuristic + the cache-health finding rule. The ledger is the single source of truth the report is assembled from — recorded live, per step, never reconstructed."
+description: "The dogfood monitor methodology + on-disk live ledger column contract + dual-write + token/cache estimation heuristic + the cache-health finding rule. The on-disk ledger is the single source of truth the report is assembled from — recorded live, per step, never reconstructed."
 see_also:
   - dogfood-testing
   - report-template
+protocol: sp:dogfood-testing@1.1
 ---
 
 # Monitor + Ledger
 
-The ledger is the **single source of truth** for the report. It is recorded **live** — one row per
-step, written the moment the step resolves — never reconstructed from memory at the end.
+The ledger is the **single source of truth** for the report. It is recorded **live on disk** — one
+row per step, written the moment the step resolves — never reconstructed from memory at the end.
 Reconstruction produces fiction: it cannot honestly distinguish a step that passed first-try from
 one that took three attempts, and it loses the per-step signal that drives testee refinement.
 
+**Disk SSOT (protocol @1.1).** Working-memory-only ledgers are a contract violation. The ledger
+lives in the dual artifacts (see [report-template.md](report-template.md) → Always-on dual
+artifacts):
+
+| File | Path |
+|------|------|
+| Live | `.spur/run/dogfood/<run_id>.md` |
+| Report | `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md` |
+
 ## The live-ledger rule
 
-1. **Open the ledger in Phase 1**, before the first step runs.
+1. **Open both artifacts in Phase 1**, before the first step runs (frontmatter `status: running` +
+   empty ledger table in each).
 2. **Write a row the instant a step resolves** (pass, fixed, unresolved, or N/A) — not after the run.
-3. **The report reads the ledger, not your memory.** Every number in the report traces to a ledger
-   row. If it is not in the ledger, it does not go in the report.
+3. **Dual-write every step:** append/update the row on the **live** file first, then mirror to the
+   **report** path. Do not batch rows until Phase 4. If the report write fails, continue with live
+   as SSOT, emit a P2 finding, and retry promote on finalize.
+4. **The report reads the on-disk ledger, not your memory.** Every number in the report traces to a
+   ledger row on disk. If it is not in the ledger file, it does not go in the report.
 
 ## Column contract
 
@@ -61,6 +75,20 @@ reusing context efficiently; falling cache% = context bloat creeping in.
 
 > Never print a precise token number you cannot substantiate. The numbers exist to show a *trend*,
 > not to bill anyone.
+
+### Multi-source Cost block (report §2)
+
+Ledger estimates alone are **confidence: LOW**. When assembling the report Cost block
+([report-template.md](report-template.md) §2):
+
+| Source | When to use | Confidence | Scope label |
+|--------|-------------|------------|-------------|
+| Ledger `chars/4` heuristic | Always | LOW | per-step trend |
+| `ccusage` daily/session | If CLI available and returns data | MEDIUM | day or session — **not** per-step |
+| Agent usage fields in tool results | If present (never invent) | MEDIUM | as reported by the tool |
+
+If no external meter is available, print `Meter: n/a`. Never merge a day-level meter into a
+per-step ledger cell as if it were measured per step.
 
 ## Anti-fiction rule
 

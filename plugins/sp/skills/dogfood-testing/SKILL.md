@@ -4,7 +4,8 @@ description: "Drive a testee (skill/command/CLI) end-to-end as a real user, fix 
 license: Apache-2.0
 metadata:
   author: spur
-  version: "1.0"
+  version: "1.1"
+  protocol: "sp:dogfood-testing@1.1"
   platforms: "claude-code,codex,openclaw,opencode,antigravity"
   interactions:
     - pipeline
@@ -36,10 +37,10 @@ sinks; this skill owns the protocol.
 
 ```
 testee (a /sp:... command, Skill(...), or shell CLI invocation)
-  → PLAN     classify + derive ordered steps + open the live ledger
+  → PLAN     classify + derive steps + open dual artifacts (live + docs/dogfood) with status:running
   → EXECUTE  run each step as a user; on failure, bounded diagnose→fix→re-run (or observe-only)
-  → MONITOR  update the ledger live, per step — never reconstruct from memory at the end
-  → REPORT   assemble the report from the ledger, including the mandatory Monitor Ledger section
+  → MONITOR  dual-write ledger row to disk on every step resolve — never reconstruct from memory
+  → REPORT   finalize-or-abort (non-skippable): status complete|aborted, Cost block, both paths, footer
 ```
 
 ## Arguments
@@ -51,7 +52,7 @@ The command forwards these via `$ARGUMENTS`:
 | `testee` | What to exercise — a slash command, agent skill, or CLI invocation (positional, required). Quote it if it contains flags. | (required) |
 | `--agent <name\|auto>` | **Testee-scoped** agent: the agent the **testee** runs under, forwarded into the testee invocation. The driver (this skill) always runs in the current session. **Omit it** to forward nothing — the testee runs under its own default. See [§Testee-scoped agent](#testee-scoped-agent). | (omitted → forward nothing) |
 | `--max-retry <n>` | Fix attempts per failed step. The **default is `2`** (fix mode): apply `Edit`/`Write` fixes to the working tree, up to 2 attempts per step. For pipeline-driving testees, this flag is mandatory: pass `--max-retry 0` for **observe-only**, or `--max-retry N` to acknowledge fix-mode mutation risk. | `2` unless the testee is pipeline-driving |
-| `--save` | Write the report to `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md`. | off |
+| `--save` | **Back-compat no-op for delivery.** Reports are always written to `docs/dogfood/…` and `.spur/run/dogfood/<run_id>.md`. The flag still documents/prints the report path. | always-on (flag optional) |
 | `--task` | File findings as a review-template task via `spur task create --template review`. | off |
 | `--full` | Include all severity findings (P1–P4). Default: P1+P2 only. | off |
 
@@ -76,8 +77,16 @@ The command forwards these via `$ARGUMENTS`:
    carries its own flags, it must be quoted.
 2. **Derive ordered steps** from the testee's own docstring / `argument-hint` / workflow. If no step
    list can be derived, treat the whole invocation as one step.
-3. **Open the live ledger** (working memory) — see [monitor-ledger.md](references/monitor-ledger.md)
-   for the exact column contract and cache calculation methodology.
+3. **Open dual artifacts (always-on delivery — not gated on `--save`).**
+   - Generate `run_id` (uuid or timestamp-slug).
+   - `mkdir -p .spur/run/dogfood docs/dogfood`.
+   - Write **both** files with identical YAML frontmatter (`status: running`, testee, mode,
+     timestamps, paths, `protocol: sp:dogfood-testing@1.1`) + six section heading stubs + empty
+     Monitor Ledger table:
+     - Live: `.spur/run/dogfood/<run_id>.md`
+     - Report: `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md`
+   - Canonical frontmatter and skeleton: [report-template.md](references/report-template.md).
+   - Column contract + dual-write: [monitor-ledger.md](references/monitor-ledger.md).
 
 ## Phase 2 — Execute + bounded fix
 
@@ -97,22 +106,41 @@ a **finding**, not a fix.
 
 ## Phase 3 — Monitor
 
-The ledger is updated **live** in Phase 2 and is the single source of truth for the report — the
-report is assembled from it, not from memory. The final report MUST include a `### 3. Monitor
-Ledger` section containing the ledger rows. Full methodology, column contract, token/cache
-estimation, the cache-health finding rule, and the **cache-conservation discipline** (reuse CLI
-output already in context; don't re-ground scaffolding per step; prefer `--json` + targeted
-fields) live in **[monitor-ledger.md](references/monitor-ledger.md)**. Apply the conservation
-discipline while monitoring — low cache% is usually the driver re-fetching data it already holds.
+The ledger is updated **live on disk** during Phase 2 and is the single source of truth for the
+report — the report is assembled from the files, not from memory.
 
-## Phase 4 — Report
+On **every** step resolve:
 
-Assemble the report from the ledger using the fixed template, then print the mandatory summary footer
-(always, regardless of `--save`). Full section contract and the footer spec:
+1. Append/update the ledger row on the **live** file first.
+2. Mirror the same row to the **report** path under `docs/dogfood/`.
+3. Do **not** batch rows until Phase 4.
+
+The final report MUST include a `### 3. Monitor Ledger` section containing those rows. Full
+methodology, column contract, token/cache estimation, multi-source Cost honesty, the cache-health
+finding rule, and the **cache-conservation discipline** live in
+**[monitor-ledger.md](references/monitor-ledger.md)**. Apply the conservation discipline while
+monitoring — low cache% is usually the driver re-fetching data it already holds.
+
+## Phase 4 — Report (finalize-or-abort — non-skippable)
+
+**Terminal gate.** Before this skill may stop (PASS / PARTIAL / FAIL / observe-only end / abort /
+any early exit), the driver MUST run the finalize-or-abort checklist. Skipping it is a **driver
+contract violation**.
+
+1. Set frontmatter `status: complete` or `status: aborted` and `finished_at`.
+2. Ensure all six mandatory section headings exist. Unfinished narrative sections:
+   `⚠ incomplete — not reached` — never invent What-We-Did / Issues / Findings fiction.
+3. Write the **Cost** block under §2 (ledger `~estimate` + Method + confidence; `Meter: n/a` or
+   optional ccusage/agent usage when real).
+4. Sync final content to **both** live and report paths (always — not gated on `--save`).
+5. Print the mandatory summary footer with **both** `[Live: …]` and `[Report: …]` always.
+
+Full section contract, frontmatter, Cost shape, and footer:
 **[report-template.md](references/report-template.md)**.
 
 **Sinks** (composable):
-- `--save` → write the full report to `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md`.
+- **Always-on report files** → live + `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md` (see Phase 1).
+- `--save` → no-op for delivery; still print/document the report path (back-compat).
 - `--task` → file findings as a review task (`spur task create --template review`), writing the
   **Findings** into the task's `#### Review Findings` table under `### Background`. See
   [report-template.md → Task sink](references/report-template.md) for the `task check` L3 contract.
@@ -158,19 +186,27 @@ Do **not** use this skill for:
    the working tree. Against any testee you don't own or fully trust — or one that drives a long,
    mutating pipeline — pass `--max-retry 0` first and inspect the findings before letting it apply
    fixes.
-2. **The ledger is live, not reconstructed.** Honest fixed-vs-unresolved accounting depends on
-   recording each step *as it happens*. Reconstructing at the end produces fiction.
+2. **The ledger is live on disk, not reconstructed.** Honest fixed-vs-unresolved accounting depends
+   on dual-writing each step *as it happens* to both artifacts. Reconstructing at the end produces
+   fiction. Working-memory-only ledgers are a contract violation.
 3. **A hiding fix is a finding.** If "fixing" a step would mask the bug, log it as a finding and
    leave the step unresolved.
 4. **Token numbers are estimates, but cache math is not free-form.** A skill cannot read its own
-   exact token meter, so label numbers `~estimate`; however, cache% must be recomputable from
-   Monitor Ledger row sums. Never invent or reuse a fixed percentage.
+   exact token meter, so label numbers `~estimate` and put Method + confidence in the Cost block;
+   however, cache% must be recomputable from Monitor Ledger row sums. Never invent or reuse a fixed
+   percentage. Optional meters (`ccusage`, agent usage) are session/day scope — never fake per-step.
 5. **Testee-scoped `--agent`.** Don't confuse the driver agent (always current) with the testee
    agent (the forwarded value).
 6. **Stale command snapshot.** Slash-command definitions are snapshotted at session start. If you
    just edited the testee command's own `.md` (or this command's), invoking it in the **same
    session** may run the **old** body. Verify in a fresh session, or invoke the backing skill
-   directly, before trusting an in-session dogfood of a command you just changed.
+   directly, before trusting an in-session dogfood of a command you just changed. Note same-session
+   edits under §1 Testee when relevant.
+7. **Finalize-or-abort is non-skippable.** Ending a run without updating `status`, syncing both
+   paths, and printing the footer with `[Live:]` + `[Report:]` fails the delivery contract — even if
+   the testee itself passed.
+8. **`--save` is not required for a file.** Dual artifacts are always-on. Do not skip writing
+   `docs/dogfood/` because the operator omitted `--save`.
 
 ## Additional Resources
 
@@ -195,21 +231,35 @@ A session on these platforms never sees `Skill()` reference-file expansion, so t
 is restated here **verbatim** rather than by pointer — do not fall back to a looser ad hoc report
 shape just because `report-template.md` wasn't auto-loaded.
 
+**Always-on dual artifacts (not gated on `--save`).** Every run MUST open and maintain:
+
+- Live: `.spur/run/dogfood/<run_id>.md`
+- Report: `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md`
+
+Both start with YAML frontmatter including `status: running | aborted | complete`, `run_id`,
+`protocol: sp:dogfood-testing@1.1`, and paths. Dual-write a ledger row to both files on every step
+resolve. On stop, set `status` to `complete` or `aborted` (finalize-or-abort — non-skippable).
+
 **The six mandatory section headings** (in order, each report MUST contain all six):
 
-1. `### 1. Testee`
-2. `### 2. Execution Summary`
+1. `### 1. Testee` (include **Repro:** line)
+2. `### 2. Execution Summary` (include `#### Cost` with Method, confidence, Meter)
 3. `### 3. Monitor Ledger`
 4. `### 4. What We Did`
 5. `### 5. Issues`
 6. `### 6. Findings`
 
-**The ledger requirement.** `### 3. Monitor Ledger` MUST contain the live per-step ledger table
-(populated during Phase 2/3 as steps run, never reconstructed from memory at the end) — this is
-the section [monitor-ledger.md](references/monitor-ledger.md) governs in full.
+Unfinished narrative sections after abort: `⚠ incomplete — not reached` (never invent).
 
-**The footer requirement.** Every report — saved or not — MUST end by printing this exact block
-(verdict is strictly `PASS` / `PARTIAL` / `FAIL`, grading the testee, not the surrounding task):
+**The ledger requirement.** `### 3. Monitor Ledger` MUST contain the live per-step ledger table
+populated on disk during Phase 2/3 as steps run, never reconstructed from memory at the end.
+
+**Cost honesty.** Ledger totals are `~estimate` with Method + confidence LOW unless a real meter
+(`ccusage` day/session, agent usage fields) is also present (then MEDIUM). If no meter:
+`Meter: n/a`. Never invent billed precision.
+
+**The footer requirement.** Every report MUST end by printing this exact block (verdict is strictly
+`PASS` / `PARTIAL` / `FAIL`, grading the testee, not the surrounding task):
 
 ```
 ── Dogfood Summary ──
@@ -225,9 +275,11 @@ Unresolved issues:
 Findings (P1+P2):
   • P? — <label>   (or: (none))
 
-[Report: <path>]   ← only with --save
+[Live: .spur/run/dogfood/<run_id>.md]
+[Report: docs/dogfood/YYYY-MM-DD-<slug>-dogfood.md]
 [Task: <wbs>]      ← only with --task
 ```
 
-A report missing any of the six headings, the live ledger, or this footer does not satisfy the
-dogfood contract on this platform, regardless of `Skill()` availability.
+A report missing any of the six headings, the on-disk live ledger, dual paths, terminal `status`,
+the Cost block, or this footer does not satisfy the dogfood contract on this platform, regardless
+of `Skill()` availability.
