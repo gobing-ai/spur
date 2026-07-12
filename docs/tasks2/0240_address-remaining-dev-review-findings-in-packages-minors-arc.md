@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-11T22:56:19.099Z"
-updated_at: "2026-07-11T22:58:21.926Z"
+updated_at: "2026-07-12T03:07:53.386Z"
 ---
 
 ## 0240. Address remaining dev-review findings in packages (minors + architecture)
@@ -61,9 +61,23 @@ A full `/sp:dev-review packages --focus all` (2026-07-11) swept `packages/{app,c
 <!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
 
 ### Solution
+⚠️ **PARTIAL — R11 (single-mutation-path consolidation) deferred to follow-up task.** This task ships R1–R10, R12, R13, and R14. R11 is a load-bearing architecture refactor that the task itself recommends decomposing separately.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| File | Lines | What / Why |
+|------|-------|-----------|
+| `packages/app/src/workflow/actions/http-request.ts` | 236–242 − | **R1:** Removed dead private-host gate — allowlist gate already returns before it, so `!allowlist.has(…)` is always false. Security property preserved by allowlist gate. |
+| `packages/app/src/services/task-service.ts` | 43–58 | **R2:** Constrained `patchFrontmatterField` regex to frontmatter block only (indexOf `---` bounds) so body text with `key:`-shaped lines isn't patched. Fixed stale comment ("append before closing fence" → "after opening fence"). |
+| `packages/domain/src/planning/markdown-document.ts` | 555–565 + | **R3:** Extracted `escapeYamlValue()` export — escapes `\\` and `"` in double-quoted YAML values. Replaced domain-private `yamlSafeValue` and app-local `formatYamlValue` with single canonical helper. |
+| `packages/app/src/services/agent-service.ts` | 739–743 | **R4:** Removed dead `typeof value === 'number'` branch in `numberFlag` (flags are always `string \| boolean`). Added `Number.isNaN()` guard so non-numeric `--timeout` produces a clear error instead of silent NaN propagation. |
+| `packages/app/src/services/planning-write-service.ts` | 66–70 | **R5:** Fixed `SchemaLifecyclePort` docstring — it rejects same-status transitions only, not vocabulary validation (that's Zod at step 4). |
+| `packages/app/src/services/workflow-service.ts` | 736 | **R6:** Replaced `stat()` with `lstat()` in `scanWorkflowFiles` so `rootStat.isSymbolicLink()` correctly detects symlinks. |
+| `packages/app/src/services/supervisor-service.ts` | 269–281 | **R7:** Added `.catch()` to `pipeStream` reader chain — stream read errors now record `[stream error: ...]` frames instead of surfacing as unhandled rejections. |
+| `packages/domain/src/migrations.ts` | 165, 231–233 − | **R8:** Added `addColumnIfMissing: { table: 'runs', column: 'pid' }` to migration 0005. Removed dead `builtInAddColumnGuard` function (0007 already has its own explicit guard). |
+| `packages/config/src/loader.ts` | 214–216 | **R9:** Cache key now includes file `mtimeMs` so config edits are picked up. Exported `invalidateSpurConfig(path?)` for explicit invalidation. |
+| `packages/app/src/services/task-record.ts` | 82, 187, 197, 227 | **R10:** Extracted shared `escapeTablePipe()` helper; applied to evidence cells in `renderTesting` (req + AC) and `renderReview` (findings), plus `renderRosterTable` task names. |
+| `packages/app/src/services/task-service.ts` | 61–115 + | **R12:** Extracted `renderCreatedTaskContent()` — shared template-render → frontmatter-patch flow for `create` and `createBatchItem` (was ~80-line near-duplicate). |
+| `packages/app/src/services/event-bridge.ts` | 1–21 ✨ | **R13:** New shared `bridgeEventBus<T>()` helper. Replaced three identical on/off/emit bridge methods in `AgentService`, `RuleService`, `WorkflowService`. |
+| `packages/app/src/services/task-service.ts` | 1035–1065 | **R14:** `findTaskFileName` now searches all registered task folders rather than only `tasksDir`, so `spur task show <wbs>` resolves any task that `spur task resolve` finds. |
 ### Testing
 
 <!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
