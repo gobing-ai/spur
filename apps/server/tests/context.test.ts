@@ -379,6 +379,17 @@ describe('createServerContext', () => {
         expect(snap.capturedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     });
 
+    test('tokenLedger() returns empty snapshot when ledger missing', () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test-no-ledger-0245', fs: testFs });
+        const snap = ctx.tokenLedger().snapshot(10);
+        expect(snap.events).toEqual([]);
+        expect(snap.count).toBe(0);
+        expect(snap.limit).toBe(10);
+        expect(snap.path).toContain('token-ledger.jsonl');
+        expect(ctx.tokenLedger()).toBe(ctx.tokenLedger()); // cached
+    });
+
     test('supervisor() returns supervisor service instance', () => {
         const appRt = makeAppRt();
         const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });

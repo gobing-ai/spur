@@ -9,6 +9,7 @@ import type {
     SupervisorService,
     TaskService,
     TeamService,
+    TokenLedgerService,
     WorkflowAppService,
 } from '@gobing-ai/spur-app';
 import {
@@ -26,6 +27,7 @@ import {
     SupervisorService as SupervisorServiceImpl,
     TaskService as TaskServiceImpl,
     TeamService as TeamServiceImpl,
+    TokenLedgerService as TokenLedgerServiceImpl,
     WorkflowAppService as WorkflowAppServiceImpl,
 } from '@gobing-ai/spur-app';
 // CF-safe core import: DEFAULT_* are plain string constants in the dependency-free core
@@ -137,6 +139,12 @@ export interface ServerContext {
      * OS tree walk + supervisor overlay for Observability → Processes.
      */
     processInventory(): ProcessInventoryService;
+
+    /**
+     * Lazy, cached token-ledger tail reader (task 0245).
+     * Observability → Tool Using over `.spur/context/token-ledger.jsonl`.
+     */
+    tokenLedger(): TokenLedgerService;
 
     /**
      * Lazy, cached AgentService. The server-side bus is threaded in as
@@ -286,6 +294,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
     let teamSvc: TeamService | undefined;
     let supervisorSvc: SupervisorService | undefined;
     let processInventorySvc: ProcessInventoryService | undefined;
+    let tokenLedgerSvc: TokenLedgerService | undefined;
     let agentSvc: AgentService | undefined;
     let ruleSvc: RuleService | undefined;
     let workflowSvc: WorkflowAppService | undefined;
@@ -386,6 +395,13 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                 });
             }
             return processInventorySvc;
+        },
+
+        tokenLedger(): TokenLedgerService {
+            if (!tokenLedgerSvc) {
+                tokenLedgerSvc = new TokenLedgerServiceImpl({ cwd });
+            }
+            return tokenLedgerSvc;
         },
 
         agentService(): AgentService {
