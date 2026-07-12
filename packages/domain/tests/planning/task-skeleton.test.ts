@@ -174,4 +174,17 @@ describe('renderTaskTemplate', () => {
         });
         expect(result).toBe('Bob');
     });
+
+    test('keeps $-sequences in values literal (user text is not a replacement pattern)', () => {
+        // `$&` re-inserts the match and `$1` names a capture group in a string
+        // replacement — a title like "Fix $& handling" must survive verbatim.
+        const result = renderTaskTemplate('# {{ NAME }}\n{{ BACKGROUND }}', {
+            NAME: 'Fix $& handling',
+            WBS: '01',
+            BACKGROUND: "Costs $1 and $' per run",
+            CREATED_AT: 'now',
+        });
+        expect(result).toContain('# Fix $& handling');
+        expect(result).toContain("Costs $1 and $' per run");
+    });
 });

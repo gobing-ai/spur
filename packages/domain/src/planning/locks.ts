@@ -16,9 +16,13 @@
  *
  * File I/O through `@gobing-ai/ts-runtime` FileSystem (H12 — no parallel fs wrapper).
  * `renameSync` from `node:fs` is used directly because the `FileSystem` interface does not
- * expose `rename` (atomic rename is a local-filesystem primitive).
+ * expose `rename` (atomic rename is a local-filesystem primitive). Lock-file I/O likewise
+ * uses `node:fs` sync primitives directly: exclusive create (`O_EXCL`) is the only sound
+ * mutual-exclusion primitive and the port has no equivalent — and the port's
+ * sync-or-async method contract would silently defeat a sync lock if an async
+ * implementation were injected.
  */
-import { closeSync, fsyncSync, openSync, renameSync } from 'node:fs';
+import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 
@@ -92,9 +96,9 @@ function isStale(meta: LockMetadata, ttlMs: number): boolean {
 /**
  * Acquire an entity lock for read-modify-write on a single task/feature file.
  *
- * Uses a blocking retry loop with `EXCL`-style creation: writes `{pid,ts}` and
- * verifies it wasn't clobbered. If the existing lock is stale (dead PID or TTL
- * exceeded), it is broken with a warning.
+ * Uses exclusive creation (`O_EXCL`) so two racing acquirers cannot both
+ * succeed. If the existing lock is stale (dead PID or TTL exceeded), it is
+ * broken with a warning and the exclusive create is retried once.
  *
  * @param folder  Directory containing the entity file.
  * @param entityId  WBS or feature ID (e.g. `'0044'`, `'A1'`).
@@ -125,7 +129,16 @@ export function acquireCreateLock(folder: string, fs: FileSystem, ttlMs: number 
     return acquireLock(createLockPath(folder), fs, ttlMs, 'create allocation');
 }
 
-function acquireLock(path: string, fs: FileSystem, ttlMs: number, label: string): LockResult {
+/** Read a lock file's content, or `null` when it does not exist (racer released it). */
+function readLockFileSync(path: string): string | null {
+    try {
+        return readFileSync(path, 'utf-8');
+    } catch {
+        return null;
+    }
+}
+
+function acquireLock(path: string, _fs: FileSystem, ttlMs: number, label: string): LockResult {
     const pid = process.pid;
     const ts = Date.now();
     const content = serializeLockMetadata({ pid, ts });
@@ -133,42 +146,65 @@ function acquireLock(path: string, fs: FileSystem, ttlMs: number, label: string)
     let staleWarning: string | undefined;
     let released = false;
 
-    // Single attempt: check, break-if-stale, write.
-    if (fs.exists(path)) {
-        const raw = fs.readFile(path) as string;
-        const existing = parseLockContent(raw);
-
-        if (!isStale(existing, ttlMs)) {
-            throw new Error(
-                `Cannot acquire ${label} lock at ${path}: held by pid ${existing.pid} (age ${Date.now() - existing.ts}ms)`,
-            );
-        }
-
-        staleWarning = `Broke stale ${label} lock at ${path} (pid ${existing.pid}, age ${Date.now() - existing.ts}ms)`;
-    }
-
-    // Write our lock content. On POSIX this is atomic enough for local single-machine use;
-    // the design (§4.2) explicitly preserves legacy semantics.
-    fs.writeFile(path, content);
-
-    return {
+    const makeResult = (): LockResult => ({
         release: () => {
             if (released) return;
             released = true;
             // Only delete if we own it (content matches).
             try {
-                if (fs.exists(path)) {
-                    const current = fs.readFile(path) as string;
-                    if (current === content) {
-                        fs.deleteFile(path);
-                    }
+                const current = readLockFileSync(path);
+                if (current === content) {
+                    unlinkSync(path);
                 }
             } catch {
                 // Best-effort cleanup; lock will break via staleness on next acquire.
             }
         },
         staleWarning,
-    };
+    });
+
+    // The folder may not exist yet (fresh scaffold, first allocation) — the old
+    // FileSystem.writeFile contract created parents, so preserve that here.
+    mkdirSync(dirname(path), { recursive: true });
+
+    // Exclusive create (O_EXCL) is the mutual-exclusion primitive: two racers
+    // cannot both succeed, unlike a check-then-write sequence. Lock-file I/O
+    // uses node:fs directly for the same reason as renameSync/fsyncSync — the
+    // FileSystem port has no exclusive-create, and a lock is a local-filesystem
+    // concept. Two attempts: the second runs after breaking a stale lock; a
+    // second EEXIST means live contention.
+    for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+            const fd = openSync(path, 'wx');
+            try {
+                writeSync(fd, content);
+            } finally {
+                closeSync(fd);
+            }
+            return makeResult();
+        } catch (err) {
+            if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+        }
+
+        // Lock file exists — stale-check it. A vanished file (owner released
+        // between our create attempt and this read) counts as stale.
+        const raw = readLockFileSync(path);
+        const existing = raw === null ? { pid: 0, ts: 0 } : parseLockContent(raw);
+        if (raw !== null && !isStale(existing, ttlMs)) {
+            throw new Error(
+                `Cannot acquire ${label} lock at ${path}: held by pid ${existing.pid} (age ${Date.now() - existing.ts}ms)`,
+            );
+        }
+
+        staleWarning = `Broke stale ${label} lock at ${path} (pid ${existing.pid}, age ${Date.now() - existing.ts}ms)`;
+        try {
+            unlinkSync(path);
+        } catch {
+            // Already gone — the exclusive create on the next attempt decides ownership.
+        }
+    }
+
+    throw new Error(`Cannot acquire ${label} lock at ${path}: contention persisted after breaking a stale lock`);
 }
 
 // ── Atomic write (DD-05) ─────────────────────────────────────────────────

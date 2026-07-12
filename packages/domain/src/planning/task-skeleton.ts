@@ -200,8 +200,10 @@ export function renderTaskTemplate(templateContent: string, vars: TaskTemplateVa
 
     for (const [key, value] of Object.entries(vars)) {
         if (value === undefined) continue;
-        // Match {{KEY}} or {{ KEY }} (with optional spaces inside braces)
-        rendered = rendered.replace(new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g'), value);
+        // Match {{KEY}} or {{ KEY }} (with optional spaces inside braces).
+        // Replacer function: a literal value containing `$&`/`$1` must not be
+        // interpreted as a replacement pattern (titles/backgrounds are user text).
+        rendered = rendered.replace(new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g'), () => value);
     }
 
     // Clean up any remaining unmatched {{ ... }} placeholders
