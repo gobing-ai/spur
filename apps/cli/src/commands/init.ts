@@ -25,6 +25,16 @@ const GLOBAL_CONFIG_FILE = 'config.yaml';
 const INDEXED_CONTEXT_MARKER = '## Indexed context';
 
 /**
+ * Substitute AGENTS.md template tokens when scaffolding a fresh file (task 0242).
+ * Only `{project-name}` and `{project-description}` are substituted at init time.
+ * Remaining project-specific slots use HTML comments + human stubs (no brace tokens).
+ */
+export function substituteAgentsMdTemplate(content: string, projectName: string): string {
+    const description = 'local Spur project';
+    return content.replaceAll('{project-name}', projectName).replaceAll('{project-description}', description);
+}
+
+/**
  * Activation block appended to an existing AGENTS.md when the marker is absent.
  * Mirrors the block embedded in the bundled AGENTS.md template (see SCAFFOLD_MANIFEST).
  */
@@ -240,13 +250,12 @@ export function registerInitCommand(program: Command, context: CliContext): void
                         await context.fs.ensureDir(join(targetPath, '..'));
                         // preserve-marked entries are never overwritten, even with --force
                         const entryForce = entry.preserve === true ? false : force;
-                        await writeIfNew(
-                            context,
-                            targetPath,
-                            await context.fs.readFile(sourcePath),
-                            entryForce,
-                            result,
-                        );
+                        let body = await context.fs.readFile(sourcePath);
+                        // AGENTS.md: fill init-time tokens so new projects never ship `{project-name}`.
+                        if (entry.target === 'AGENTS.md') {
+                            body = substituteAgentsMdTemplate(body, projectName);
+                        }
+                        await writeIfNew(context, targetPath, body, entryForce, result);
                     }
                 }
             }

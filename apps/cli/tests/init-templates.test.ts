@@ -179,6 +179,24 @@ describe('spur init template copy', () => {
         expect(content).toContain('indexed-context');
     });
 
+    test('AGENTS.md substitutes {project-name} from --name and leaves no brace tokens (task 0242)', async () => {
+        const cwd = await createTempProject();
+        const { options } = await isolatedOptions(cwd);
+
+        expect(await main(['init', '--name', 'MyApp'], options)).toBe(0);
+
+        const content = readFileSync(join(cwd, 'AGENTS.md'), 'utf-8');
+        expect(content).toContain('MyApp');
+        expect(content).not.toContain('{project-name}');
+        expect(content).not.toContain('{project-description}');
+        // No residual kebab-case brace tokens after init (R2 locked decision).
+        expect(content.match(/\{[a-z0-9-]+\}/g)).toBeNull();
+        expect(content).toContain('## Indexed context');
+        expect(content).toContain('## Harness-first contract');
+        expect(content).toContain('### Harness tool routing');
+        expect(content).toContain('**Platform fallback:**');
+    });
+
     test('AGENTS.md is preserved under --force (task 0232)', async () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
