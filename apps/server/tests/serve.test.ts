@@ -10,6 +10,7 @@ import {
     defaultDeps,
     parseTaskActionJob,
     registerSchedulerEntries,
+    resolveWebDistPath,
     runTaskActionJob,
     type StartServerDeps,
     startServer,
@@ -129,13 +130,16 @@ describe('startServer', () => {
         expect(body.status).toBe('ok');
     });
 
-    test('opens the browser when openBrowser is true', async () => {
+    test('opens the browser to /board when openBrowser is true and web dist exists', async () => {
         origServe = Bun.serve;
         Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
 
+        const webDistPath = mkdtempSync(join(tmpdir(), 'spur-web-dist-open-'));
+        writeFileSync(join(webDistPath, 'index.html'), '<html>board</html>');
+
         let openedUrl: string | undefined;
         await startServer(
-            { port: 4100, host: 'localhost', openBrowser: true, keepAlive: false },
+            { port: 4100, host: 'localhost', openBrowser: true, webDistPath, keepAlive: false },
             makeDeps({
                 openUrl: async (url: string) => {
                     openedUrl = url;
@@ -144,6 +148,29 @@ describe('startServer', () => {
         );
 
         expect(openedUrl).toBe('http://localhost:4100/board');
+    });
+
+    test('opens /api/health when openBrowser is true but board assets are missing', async () => {
+        origServe = Bun.serve;
+        Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
+
+        let openedUrl: string | undefined;
+        await startServer(
+            {
+                port: 4101,
+                host: 'localhost',
+                openBrowser: true,
+                webDistPath: join(tmpdir(), 'spur-web-dist-absent-open'),
+                keepAlive: false,
+            },
+            makeDeps({
+                openUrl: async (url: string) => {
+                    openedUrl = url;
+                },
+            }),
+        );
+
+        expect(openedUrl).toBe('http://localhost:4101/api/health');
     });
 
     test('passes resolved webDistPath into ServerContext for static board serving', async () => {
@@ -219,6 +246,16 @@ describe('startServer', () => {
         );
 
         expect(capturedOptions?.webDistPath).toBeUndefined();
+    });
+
+    test('resolveWebDistPath returns configured absolute path when index.html exists', async () => {
+        const webDistPath = mkdtempSync(join(tmpdir(), 'spur-web-dist-resolve-'));
+        writeFileSync(join(webDistPath, 'index.html'), '<html>board</html>');
+        expect(await resolveWebDistPath(webDistPath)).toBe(webDistPath);
+    });
+
+    test('resolveWebDistPath returns undefined when configured path is missing', async () => {
+        expect(await resolveWebDistPath(join(tmpdir(), 'spur-web-dist-nope'))).toBeUndefined();
     });
 
     test('does not open the browser when openBrowser is false (--no-open)', async () => {

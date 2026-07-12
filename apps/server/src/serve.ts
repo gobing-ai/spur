@@ -185,13 +185,29 @@ export async function runTaskActionJob(
     }
 }
 
-async function resolveWebDistPath(configuredPath: string | null | undefined): Promise<string | undefined> {
+/**
+ * Resolve the directory that holds the built Spur Board (Astro) static assets.
+ *
+ * Search order when no explicit path is configured:
+ * 1. `cwd/dist/web` — monorepo / local `bun run build` output
+ * 2. `import.meta.dir/web` — npm package layout (`web/` next to bundled `spur.js`)
+ * 3. `dirname(process.execPath)/web` — standalone binary with sibling `web/`
+ * 4. `dirname(process.execPath)/../web` — binary under `bin/` with `web/` as sibling of parent
+ * 5. `import.meta.dir/../../../dist/web` — unbundled server source under `apps/server/src`
+ *
+ * When a configured path is set, only that path is tried (absolute, or relative to cwd).
+ */
+export async function resolveWebDistPath(configuredPath: string | null | undefined): Promise<string | undefined> {
     const candidates =
         configuredPath && configuredPath.trim() !== ''
             ? [isAbsolute(configuredPath) ? configuredPath : join(process.cwd(), configuredPath)]
             : [
                   join(process.cwd(), 'dist/web'),
+                  // npm global/local install: package ships `web/` next to spur.js
+                  join(import.meta.dir, 'web'),
+                  join(dirname(process.execPath), 'web'),
                   join(dirname(process.execPath), '../web'),
+                  // monorepo: apps/server/src → ../../../dist/web
                   join(import.meta.dir, '../../../dist/web'),
               ];
 
@@ -234,12 +250,21 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 scheduler = await deps.createScheduler();
             }
 
+            const webDistPath = await resolveWebDistPath(options.webDistPath);
+            if (!webDistPath) {
+                appRt.logger.warn(
+                    'Board UI static assets not found — /board will return 404. ' +
+                        'Reinstall a package that includes the web board, or set server.webDistPath ' +
+                        'to a built dist/web directory (index.html).',
+                );
+            }
+
             const ctx: ServerContext = deps.createServerContext(appRt, {
                 cwd: process.cwd(),
                 fs,
                 dbUrl: options.dbUrl,
                 folders: await resolvePlanningFolders(fs),
-                webDistPath: await resolveWebDistPath(options.webDistPath),
+                webDistPath,
                 jobQueueEnabled: bootConfig.jobqueue.enabled,
                 scheduler,
                 teamAutostart: bootConfig.teamAutostart,
@@ -333,10 +358,16 @@ export async function startServer(options: StartServerOptions, deps: StartServer
 
             const url = `http://${options.host}:${options.port}`;
 
-            appRt.logger.info('Server started', { port: options.port, host: options.host });
+            appRt.logger.info('Server started', {
+                port: options.port,
+                host: options.host,
+                board: webDistPath ? `${url}/board` : null,
+            });
 
             if (options.openBrowser) {
-                await deps.openUrl(`${url}/board`);
+                // Only open the board when static assets resolved; otherwise the
+                // browser lands on a JSON 404 that looks like a broken install.
+                await deps.openUrl(webDistPath ? `${url}/board` : `${url}/api/health`);
             }
 
             if (options.keepAlive !== false) {

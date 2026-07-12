@@ -6,7 +6,7 @@ export { generateOpenApiSpec } from './openapi';
 export type { AppRouter } from './router';
 export { createRouter } from './router';
 export type { StartServerOptions } from './serve';
-export { startServer } from './serve';
+export { resolveWebDistPath, startServer } from './serve';
 export { default as worker } from './worker';
 
 /** Injectable collaborators for {@link main}. Tests pass fakes here to avoid mock.module leaks. */
