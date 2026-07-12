@@ -12,7 +12,7 @@ priority: P3
 tags: ["observability", "docs", "audit"]
 dependencies: []
 created_at: "2026-07-09T23:04:54.457Z"
-updated_at: "2026-07-10T00:52:05.977Z"
+updated_at: "2026-07-12T04:16:48.897Z"
 ---
 
 ## 0235. Produce refreshed system-events producer-audit table
@@ -59,19 +59,79 @@ Feature: Produce refreshed system-events producer-audit table
 <!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
 
 ### Solution
-Created `docs/inventory/system-events-producer-audit.md` as the canonical producer-audit inventory, superseding the scattered 0226 findings and the older `0221-emit-sites.md`.
+Created `docs/inventory/system-events-producer-audit.md` as the canonical producer-audit inventory (58 rows = full `SYSTEM_EVENT_CATALOG` in `packages/app/src/services/event-names.ts`), superseding task 0226 findings and `docs/inventory/0221-emit-sites.md`.
 
-The doc contains one row per `SYSTEM_EVENT_CATALOG` entry (52 total) with columns: Catalog entry | Emit site (file:line) | Bus path to tap | Status. All emit-site line numbers verified against current source.
+Columns: Catalog entry | Emit site (file:line) | Bus path to tap | Status. Legend covers reachable (✅), nested-CLI deferred (⚠️), unwired (❌), plus diagnostic-only (🔬) and conditional (◐) for honest edge cases.
 
-Summary counts: 52 reachable (✅), 1 conditional (◐ — `queue.stats` requires `QueueStatsAction` registration that `registerSchedulerEntries` does not perform), 5 diagnostic-only (bus.* events emitted by the tap subscription mechanism itself), 0 unwired (❌).
+Key verified cites (re-checked 2026-07-11):
+- `agent.started` / `agent.stopped` / `agent.message.sent` — `team-orchestrator.ts:73/86/98` via `team-service.ts:388` + `context.ts:362`
+- `process.started` — `process-executor.ts:138,202,271`
+- `process.spawned/exited/stopped` — `supervisor-service.ts:174/186/216`
+- `scheduler.job.executed` — `serve.ts:89` (`registerSchedulerEntries`)
+- `message.sent/replied` — `team-service.ts:177` → `:371`
+- `api.request.error` — `error-handler.ts:176`
+- Nested-CLI residual — footer + legend referencing `serve.ts:137–145` (⚠️ deferred, not ❌)
+- Single-queue note — footer §2 (`serve.ts:279–294`; `type` is the discriminator; no `queueName`)
 
-Supersede note added referencing both task 0226 and the older `0221-emit-sites.md` inventory.
+Summary: 52 ✅ reachable, 1 ◐ conditional (`queue.stats`), 5 🔬 diagnostic-only, 0 ❌ unwired.
 ### Testing
-Doc-only task — no code changes, no test changes.
+**Verify run:** 2026-07-11 — `/sp:dev-verify 0235 --auto --focus all --fix all --force` (standalone re-audit of `done` task).
 
-Verification: row count cross-checked against `SYSTEM_EVENT_CATALOG` length (52 entries). All emit-site line numbers verified against current source via grep/read of the actual emit sites in `packages/app/src/workflow/observability.ts`, `packages/app/src/services/team-service.ts`, `@gobing-ai/ts-ai-runner` TeamOrchestrator and ProcessExecutor, and `apps/server/src/serve.ts`.
+**Coverage:** N/A (documentation-only change; no runtime code path added).
 
-Full gate: `bun run lint` clean, `bun run test` 2545 pass / 0 fail.
+**Command / static evidence (this run):**
+```
+# Catalog length vs audit row completeness
+python3: SYSTEM_EVENT_CATALOG event() count = 58
+audit table data rows = 58
+missing = []  extra = []  dups = []
+```
+
+**`--fix all` applied this run:**
+1. Refreshed drifted emit-site line numbers in `docs/inventory/system-events-producer-audit.md` (scheduler `serve.ts:89`, message `team-service.ts:177`, process supervisor `174/186/216`).
+2. Solution section rewritten with `file:line` citations (strict-core L3).
+3. Testing section expanded with deterministic catalog-crosscheck evidence.
+
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `docs/inventory/system-events-producer-audit.md` exists; 58 rows match catalog |
+| R2 | MET | Columns present on every data row: Catalog entry, Emit site, Bus path to tap, Status |
+| R3 | MET | Legend defines ✅ / ⚠️ / ❌ (plus 🔬 / ◐ extensions); all three required statuses used/documented |
+| R4 | MET | Emit sites re-verified against current source (ts-libs team-orchestrator/process-executor + app supervisor/team-service + serve/error-handler); line numbers refreshed this run |
+| R5 | MET | Nested-CLI marked ⚠️ deferred with `serve.ts:137–145` reason (footer + legend); not ❌ unwired |
+| R6 | MET | `agent.invoke.start/exit` recorded as ✅ reachable via production `ai-runner.ts:138/156` (not test-only — honest because production path exists) |
+| R7 | MET | Footer §2 single-queue / no `queueName` / `type` discriminator (`serve.ts:279–294`) |
+| R8 | MET | Header + footer §3 supersede notes reference task 0226 |
+| R9 | MET | Doc-only deliverable; completeness via catalog count cross-check (58=58) |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: Refreshed producer-audit table exists and is accurate — every catalog entry has a row | MET | command | Catalog 58 == audit rows 58; set equality empty missing/extra |
+| … each row records emit site, bus path, status | MET | static-ref | Table schema enforced; empty-column scan found none |
+| … agent.started reachable with team-orchestrator.ts | MET | static-ref | Row 23 + `team-orchestrator.ts:73` live emit confirmed |
+| … process.started reachable with process-executor.ts | MET | static-ref | Row 20 + `process-executor.ts:138,202,271` live emit confirmed |
+| … nested-CLI-context marked deferred not unwired | MET | static-ref | Legend ⚠️ + footer §1; ❌ count = 0 |
+| … no queueName threaded (single-queue, type discriminator) | MET | static-ref | Footer §2 |
+| … supersede note references task 0226 | MET | static-ref | Header lines 4–6 + footer §3 |
+
+**Design conformance:** task `### Design` empty; deliverable matches design plan §4 (new inventory file, columns, supersede 0226). Claims DONE.
+
+**SECUA Review (answer-file; Review section owned by `/sp:dev-review`)**
+
+| Sev | Dim | Finding |
+|-----|-----|---------|
+| — | S | Doc-only; no secrets, no executable surface. |
+| minor | C | Line numbers will drift as sources edit — documented residual; refreshed critical cites this run. |
+| — | U | Status legend + gaps section make operator interpretation explicit. |
+| — | A | Single SSOT inventory superseding 0226/0221 scatter. |
+
+No blocker/major findings.
+
+**Verdict:** PASS — all R1–R9 and AC MET (doc-only, deterministic catalog completeness + emit-site spot-checks).
 ### Review
 PASS. Audit table complete: all 52 catalog entries have rows with verified emit sites. No entries marked unwired. The `queue.stats` conditional status is correctly documented with its reason (QueueStatsAction not registered). The supersede note correctly references both 0226 and 0221-emit-sites.md.
 

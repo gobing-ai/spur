@@ -12,7 +12,7 @@ priority: P1
 tags: ["observability", "workflow", "wiring", "server"]
 dependencies: []
 created_at: "2026-07-10T00:02:02.992Z"
-updated_at: "2026-07-10T00:52:06.146Z"
+updated_at: "2026-07-12T04:23:04.758Z"
 ---
 
 ## 0236. Wire observabilityBus in server context to enable verb-form workflow events
@@ -56,19 +56,70 @@ R5. Search for and update any test files that assert on the current (unwired) be
 <!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
 
 ### Solution
-Added `observabilityBus: () => eventsBus as unknown as never` to the `workflowService()` accessor in `apps/server/src/context.ts` (line 412). This is the same `as unknown as never` cast pattern already used for the `events` field in the same accessor.
+Wired `observabilityBus` onto the canonical server `eventsBus` so `ObservableWorkflowAdapter` emits verb-form workflow events into the system_events tap.
 
-The cast bridges the type mismatch: the server's `eventsBus` is `EventBus<SystemEventBus>` while `observabilityBus` expects `WorkflowObservabilityBus`. At runtime both are the same singleton bus instance — the cast is sound because the adapter only emits events whose payload shapes are compatible with SystemEventBus entries.
-
-When `observabilityBus` is provided, `createEngineService` (`packages/app/src/services/workflow-service.ts:688-689`) wraps the persistence adapter with `ObservableWorkflowAdapter`, which emits the 6 verb-form workflow events through its lifecycle callbacks.
-
-Note on R3 (catalog comment re: `workflow.run.started` duplication): the catalog comment in `event-names.ts` was not modified — the duplication is benign and self-evident from the audit table. Leaving the comment untouched to keep the change surgical.
+- `apps/server/src/context.ts:415-422` — `workflowService()` passes `observabilityBus: () => eventsBus as unknown as never` and `events: () => eventsBus as unknown as never` (same cast pattern as other server bus handoffs). Inline comment documents dual-path `workflow.run.started` (task 0236 R3).
+- `packages/app/src/services/workflow-service.ts:688-689` — when `observabilityBus` is present, wraps persistence with `ObservableWorkflowAdapter`.
+- `packages/app/src/services/event-names.ts:117-121` — catalog comment acknowledges dual `workflow.run.started` emit; dedup deferred (R3).
+- `packages/app/src/workflow/observability.ts:110-169` — adapter emits verb-form names (`run.finalized`, `phase`, `transition`, `action.started`/`finished`).
+- `apps/server/tests/upstream-system-events-wiring.test.ts` — `[0236 R2]` integration test: `ctx.workflowService().run` persists all five required verb-form events via the tap.
 ### Testing
-Typecheck: `bun run typecheck` — `@gobing-ai/spur-server` typecheck clean (exit 0). The `as unknown as never` cast is structurally sound — verified the bus instance identity: `eventsBus` in context.ts is the same singleton that the system event tap subscribes to at serve.ts:274.
+**Verify run:** 2026-07-11 — `/sp:dev-verify 0236 --auto --focus all --fix all --force` (standalone re-audit of `done` task).
 
-Full gate: `bun run lint` clean, `bun run typecheck` clean across all 7 workspaces, `bun run test` 2545 pass / 0 fail, `bun run test-cf` 1 pass / 0 fail.
+**Coverage:** N/A as monorepo aggregate. Focused:
+- `packages/app/src/workflow/observability.ts` under unit suite: **100% funcs / 100% lines**
+- Server wiring path covered by integration test below
 
-No existing tests asserted on the unwired behavior — no test updates needed (R5 clear).
+**Command evidence (this run):**
+```
+bun test packages/app/tests/workflow/observability.test.ts
+7 pass, 0 fail
+
+bun test apps/server/tests/upstream-system-events-wiring.test.ts -t "0236 R2"
+1 pass, 0 fail  — asserts system_events rows for:
+  workflow.run.finalized, workflow.phase, workflow.transition,
+  workflow.action.started, workflow.action.finished
+
+bunx tsc --noEmit -p apps/server
+exit 0
+```
+
+**`--fix all` applied this run:**
+1. Added `[0236 R2] ctx.workflowService() produces adapter verb-form workflow events` in `upstream-system-events-wiring.test.ts` (prior suite only checked `workflow.run.started`).
+2. Corrected Solution (stale claim that R3 catalog comment was skipped — comment is present at `event-names.ts:117-121`).
+3. Expanded Testing with command + coverage evidence.
+
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `context.ts:421` `observabilityBus: () => eventsBus as unknown as never` |
+| R2 | MET | Integration test `[0236 R2]` — all 5 verb-form names persisted after `ctx.workflowService().run`; unit suite covers adapter emit paths |
+| R3 | MET | `event-names.ts:117-121` dual-fire note + `context.ts:419-420` comment |
+| R4 | MET | `bunx tsc --noEmit -p apps/server` exit 0; cast pattern matches sibling `events` field |
+| R5 | MET | No prior tests asserted unwired behavior; new R2 test added for the wired path |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| (section empty / placeholder comments only) | N/A | n/a | No checklist or Gherkin AC present; requirements R1–R5 are the verification targets |
+
+**Design conformance:** task `### Design` empty; implementation matches Background two-bus architecture (events + observabilityBus → same eventsBus). DONE.
+
+**SECUA Review (answer-file; Review section owned by `/sp:dev-review`)**
+
+| Sev | Dim | Finding |
+|-----|-----|---------|
+| — | S | No new trust boundary; bus already trusted; metadata-only workflow events. |
+| — | E | Dual `workflow.run.started` is accepted v1 cost; no other fan-out. |
+| — | C | Adapter only wraps when bus present; cast mirrors existing server pattern. |
+| — | U | Catalog comment documents dual-fire for operators reading event-names. |
+| — | A | Wiring stays in server context accessor; adapter remains decorator in app layer. |
+
+No blocker/major findings.
+
+**Verdict:** PASS — R1–R5 MET with executable evidence for R2 after this verify's test addition.
 ### Review
 PASS. The wiring is correct: `observabilityBus` now points to the same canonical `eventsBus` that the tap subscribes to. The `ObservableWorkflowAdapter` will now instantiate and emit the 6 verb-form workflow events on every server-driven workflow run.
 

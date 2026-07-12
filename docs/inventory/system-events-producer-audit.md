@@ -47,7 +47,7 @@ Source of truth: `SYSTEM_EVENT_CATALOG` in `packages/app/src/services/event-name
 
 | # | Catalog entry | Emit site | Bus path to tap | Status |
 | --- | --- | --- | --- | --- |
-| 14 | `scheduler.job.executed` | `serve.ts:85` (`registerSchedulerEntries`) | emits on `ctx.eventBus()` directly | ✅ reachable |
+| 14 | `scheduler.job.executed` | `serve.ts:89` (`registerSchedulerEntries`) | emits on `ctx.eventBus()` directly | ✅ reachable |
 
 > **Payload note (task 0233).** The emit site now produces `{ name, durationMs, error? }` — `name` (not `kind`), no `cron`, and `error` is captured via try/catch and re-thrown. Matches the catalog type contract.
 
@@ -55,8 +55,8 @@ Source of truth: `SYSTEM_EVENT_CATALOG` in `packages/app/src/services/event-name
 
 | # | Catalog entry | Emit site | Bus path to tap | Status |
 | --- | --- | --- | --- | --- |
-| 15 | `message.sent` | `team-service.ts:171` (`emitMessageEvent`) | `ctx.teamService()` → `eventBus: eventsBus` | ✅ reachable |
-| 16 | `message.replied` | `team-service.ts:171` | same | ✅ reachable |
+| 15 | `message.sent` | `team-service.ts:177` (`emitMessageEvent` → `:371`) | `ctx.teamService()` → `eventBus: eventsBus` | ✅ reachable |
+| 16 | `message.replied` | `team-service.ts:177` (`emitMessageEvent` → `:371`) | same | ✅ reachable |
 
 > Payload is metadata-only (`MessageEventPayload`); body is never included.
 
@@ -64,9 +64,9 @@ Source of truth: `SYSTEM_EVENT_CATALOG` in `packages/app/src/services/event-name
 
 | # | Catalog entry | Emit site | Bus path to tap | Status |
 | --- | --- | --- | --- | --- |
-| 17 | `process.spawned` | `supervisor-service.ts:167` | `ctx.supervisor()` → `eventBus: eventsBus` | ✅ reachable |
-| 18 | `process.exited` | `supervisor-service.ts:179` | same | ✅ reachable |
-| 19 | `process.stopped` | `supervisor-service.ts:209` | same | ✅ reachable |
+| 17 | `process.spawned` | `supervisor-service.ts:174` | `ctx.supervisor()` → `eventBus: eventsBus` | ✅ reachable |
+| 18 | `process.exited` | `supervisor-service.ts:186` | same | ✅ reachable |
+| 19 | `process.stopped` | `supervisor-service.ts:216` | same | ✅ reachable |
 | 20 | `process.started` | `process-executor.ts:138,202,271` (ts-runtime) | `ctx.agentService()` → `processEvents: bridgeAgentEvents(eventsBus)` → `NodeProcessExecutor` | ✅ reachable |
 
 ### Agent (agent.\*)
