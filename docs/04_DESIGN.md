@@ -903,6 +903,32 @@ descendants of `process.pid`, and overlays `SupervisorService.list()` by pid for
 Board UI polls every ~3s. Threads/%CPU, host-wide shell `spur` CLIs, and ProcessExecutor live
 registry enrichment are deferred.
 
+### 7.8b Tool-use ledger (Observability → Tool Using)
+
+Tasks **0245** / **0246** / **0247** / **0248**. The Tool Using tab is a **read-only** tail of the
+project token ledger written by indexed-context hooks (task 0232) — not a second event store and not
+a control plane.
+
+| Surface | Contract |
+| --- | --- |
+| `GET /api/observability/tool-use?limit=&before=` | Newest-first page; `before` = exclusive ISO cursor for older pages |
+| Query | `limit` default **200** max **1000**; optional `before` |
+| Success body | `{ events, count, limit, truncated, path, capturedAt, sparseToolActivity, nextBefore }` |
+| `nextBefore` | Oldest `ts` in page when more older events exist; else `null` (load-more cursor) |
+| Event fields | `seq` (0=newest in page), `ts`, `session`, `type`, optional `file`, `summary`, `tokens`, `action`, `totals`, `sessionId`, `agent`, `model` |
+| Types | `session_start` / `session_end` / `read` / `write` / `bash` / `grep` / `glob` (Edit → `write` + `action=edit`) |
+| Token semantics | Present only when estimated; **omit** when unknown (UI shows `—`). Cascade: response → Write input → Edit strings → Read stat; Bash/Grep/Glob from **capped** response size only |
+| Capture tools | PostToolUse matcher `Bash\|Grep\|Glob\|Read\|Write\|Edit` — no `*` / MCP without allowlist |
+| Redaction | Summary only (command / pattern / glob, ≤~200 chars); never full stdout; cap estimate input **4 KiB**; strip secret-like patterns |
+| `GET /api/observability/tool-use/stream` | SSE: `connected` then `tool-use` frames when the JSONL grows (`fs.watch` + byte poll) |
+| Missing file | `200` + empty `events` (calm empty UI — not an error) |
+| Hard I/O failure | `500` + `{ error }` |
+| Write path | Hooks append JSONL only; Board never writes; no HTTP from hooks |
+| UI | Live prefers **SSE** (poll fallback if `EventSource` missing); **Load older** uses `before=nextBefore`; columns Time \| Type \| **Target** (file basename or summary) \| Action \| Tokens \| Session \| Agent? \| Model? |
+
+**Mechanism:** `TokenLedgerService` reverse-tails with optional `before` filter; `TokenLedgerWatcher`
+fans out appends to SSE subscribers. Hooks stay file-append only with privacy default **summary over body**.
+
 ### 7.9 System Event catalog
 
 The `System Events` tab on the observability board subscribes to events on the
