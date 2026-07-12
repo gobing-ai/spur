@@ -327,6 +327,61 @@ describe('TaskService', () => {
             expect(parentsWired[0]?.errors.length).toBeGreaterThan(0);
         });
 
+        test('does not rewrite body lines that look like frontmatter keys (R2)', async () => {
+            // WHY: patchFrontmatterField once matched the whole file; a body line
+            // `priority: must-not-be-patched` would be rewritten when the key was
+            // absent from frontmatter. Matching is constrained to the FM block.
+            const root = mkdtempSync(join(tmpdir(), 'spur-task-svc-r2-'));
+            const dir = join(root, 'tasks');
+            const isolateFs = createNodeFileSystem(root);
+            await isolateFs.ensureDir(dir);
+            const writeService = new PlanningWriteService({ fs: isolateFs });
+            const rawTemplate = [
+                '---',
+                'schema_version: 1',
+                'name: "{{ NAME }}"',
+                'description: ""',
+                'status: backlog',
+                'type: task',
+                'template: standard',
+                'feature_id: null',
+                'parent_wbs: null',
+                'tags: []',
+                'dependencies: []',
+                'created_at: "{{ CREATED_AT }}"',
+                'updated_at: "{{ CREATED_AT }}"',
+                '---',
+                '',
+                '### Background',
+                '{{ BACKGROUND }}',
+                '',
+                '### Requirements',
+                'priority: must-not-be-patched',
+                '',
+            ].join('\n');
+            const isolateSvc = new TaskService({
+                fs: isolateFs,
+                tasksDir: dir,
+                writeService,
+                resolveTemplate: () => rawTemplate,
+            });
+
+            try {
+                const batchFile = join(dir, 'batch-r2.json');
+                await isolateFs.writeFile(batchFile, JSON.stringify([{ name: 'R2 body-key guard', priority: 'P0' }]));
+                const { children } = await isolateSvc.batchCreate(batchFile);
+                expect(children).toHaveLength(1);
+                const first = children[0];
+                if (first === undefined) throw new Error('expected batch child');
+                const raw = await isolateFs.readFile(first.ref.filePath);
+                expect(raw).toContain('priority: must-not-be-patched');
+                const doc = MarkdownDocument.parse(raw, 'task');
+                expect(doc.frontmatterData?.priority).toBe('P0');
+            } finally {
+                rmSync(root, { recursive: true, force: true });
+            }
+        });
+
         test('rolls back all tasks on partial failure', async () => {
             // Use a fresh temp dir to avoid pollution from shared beforeAll state
             const root = mkdtempSync(join(tmpdir(), 'spur-task-svc-rb-'));
@@ -646,6 +701,83 @@ describe('TaskService', () => {
                 expect(result.folders).toBe(2);
                 expect(await isolateFs.exists(`${primary}/kanban.md`)).toBe(false);
                 expect(await isolateFs.exists(`${archive}/kanban.md`)).toBe(false);
+            } finally {
+                rmSync(root, { recursive: true, force: true });
+            }
+        });
+    });
+
+    describe('show across registered folders (R14)', () => {
+        test('show resolves a task that lives only in a non-active folder', async () => {
+            // WHY: AC R14 — spur task show must find any task that resolve finds
+            // across all registered folders, not only tasksDir.
+            const root = mkdtempSync(join(tmpdir(), 'spur-task-svc-r14-'));
+            const primary = join(root, 'tasks');
+            const archive = join(root, 'archive');
+            const isolateFs = createNodeFileSystem(root);
+            await isolateFs.ensureDir(primary);
+            await isolateFs.ensureDir(archive);
+            const writeService = new PlanningWriteService({ fs: isolateFs });
+            const isolateSvc = new TaskService({
+                fs: isolateFs,
+                tasksDir: primary,
+                writeService,
+                foldersConfig: {
+                    active_folder: primary,
+                    folders: {
+                        [primary]: { base_counter: 0 },
+                        [archive]: { base_counter: 0 },
+                    },
+                },
+            });
+
+            const now = new Date().toISOString();
+            const wbs = '9876';
+            const archivePath = join(archive, `${wbs}_secondary-only.md`);
+            const body = [
+                '---',
+                'schema_version: 1',
+                'name: "Secondary only"',
+                'description: ""',
+                'status: backlog',
+                'type: task',
+                'template: standard',
+                'feature_id: null',
+                'parent_wbs: null',
+                'priority: P2',
+                'tags: []',
+                'dependencies: []',
+                `created_at: "${now}"`,
+                `updated_at: "${now}"`,
+                '---',
+                '',
+                `## ${wbs}. Secondary only`,
+                '',
+                '### Background',
+                '',
+                'Lives only in archive folder.',
+                '',
+                '### History',
+                '',
+            ].join('\n');
+
+            try {
+                await isolateFs.writeFile(archivePath, body);
+
+                // resolve by absolute path (Strategy 1 across all folders)
+                const resolved = await isolateSvc.resolve(archivePath);
+                expect(resolved).not.toBeNull();
+                expect(resolved?.wbs).toBe(wbs);
+                expect(resolved?.filePath).toBe(archivePath);
+
+                // show / getFilePath must agree (both use multi-folder findTaskFileName)
+                const shown = await isolateSvc.show(wbs);
+                expect(shown.wbs).toBe(wbs);
+                expect(shown.name).toBe('Secondary only');
+                expect(shown.filePath).toBe(archivePath);
+
+                const pathOnly = await isolateSvc.getFilePath(wbs);
+                expect(pathOnly).toBe(archivePath);
             } finally {
                 rmSync(root, { recursive: true, force: true });
             }

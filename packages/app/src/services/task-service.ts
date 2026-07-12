@@ -38,20 +38,35 @@ import {
  * `status: backlog`); this patches them to the create-time resolved values
  * before the file is written.
  *
- * YAML-aware: key must appear at line-start (no leading whitespace) so it
- * doesn't match inside a section body. A `null` default is replaced; a
- * non-existent key is appended before the closing `---` fence.
+ * Matching is constrained to the YAML frontmatter block (between the opening
+ * and closing `---` fences) so a `key:`-shaped line in the rendered body is
+ * never rewritten. A missing key is inserted after the opening fence.
+ * The caller owns YAML formatting ({@link escapeYamlValue}) — do not re-format here.
  */
 function patchFrontmatterField(rendered: string, key: string, value: string): string {
-    // Replace an existing key at line start (YAML frontmatter only).
-    // The caller owns YAML formatting (escapeYamlValue) — do NOT re-format here.
-    const existingRe = new RegExp(`^(?=\\s*${escapeRegex(key)}:)`, 'm');
-    if (existingRe.test(rendered)) {
+    const openIdx = rendered.indexOf('---');
+    if (openIdx === -1) return rendered;
+
+    // Content after the opening fence line (`---` + optional newline).
+    let fmStart = openIdx + 3;
+    if (rendered[fmStart] === '\r') fmStart += 1;
+    if (rendered[fmStart] === '\n') fmStart += 1;
+
+    const closeRel = rendered.indexOf('\n---', fmStart);
+    if (closeRel === -1) return rendered;
+
+    const before = rendered.slice(0, fmStart);
+    const fm = rendered.slice(fmStart, closeRel);
+    const after = rendered.slice(closeRel); // starts with \n---
+
+    const existingRe = new RegExp(`^${escapeRegex(key)}:.*$`, 'm');
+    if (existingRe.test(fm)) {
         // Replacer function: a value containing `$&`/`$1` must stay literal.
-        return rendered.replace(new RegExp(`^${escapeRegex(key)}:.*$`, 'm'), () => `${key}: ${value}`);
+        const newFm = fm.replace(existingRe, () => `${key}: ${value}`);
+        return before + newFm + after;
     }
-    // Key not present — append before the closing `---` fence
-    return rendered.replace(/^---\n/m, `---\n${key}: ${value}\n`);
+    // Key not present — insert after the opening fence.
+    return `${before}${key}: ${value}\n${fm}${after}`;
 }
 
 function escapeRegex(s: string): string {

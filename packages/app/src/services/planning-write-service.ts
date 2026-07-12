@@ -56,17 +56,18 @@ export interface TransitionResult {
  * Injected port for lifecycle transitions (step 5).
  *
  * The 0055/0059 engine adapter implements this against the real workflow
- * engine. Until then, {@link SchemaLifecyclePort} validates status values
- * against the canonical vocabulary only — sufficient for W1 verbs to work.
+ * engine. Until then, {@link SchemaLifecyclePort} is a same-status guard only
+ * (vocabulary checks live at the write-service Zod step).
  */
 export interface LifecyclePort {
     requestTransition(ref: EntityRef, currentStatus: string, to: string): TransitionResult | Promise<TransitionResult>;
 }
 
 /**
- * Schema-only lifecycle stub. Validates that the target status is in the
- * canonical vocabulary and is different from the current status. No
- * state-machine graph enforcement — that arrives with 0055/0059.
+ * Schema-only lifecycle stub. Rejects same-status transitions only; it does
+ * **not** validate that `to` is in the canonical status vocabulary (Zod at
+ * the write-service step does that). No state-machine graph enforcement —
+ * that arrives with 0055/0059.
  */
 export class SchemaLifecyclePort implements LifecyclePort {
     constructor() {}

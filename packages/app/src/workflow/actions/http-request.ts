@@ -50,20 +50,6 @@ const DEFAULT_MAX_RESPONSE_BYTES = 1_048_576; // 1 MiB
 const HEADER_NAME_RE = /^[!#$%&'*+\-.^_`|~0-9a-zA-Z]+$/;
 const HEADER_VALUE_RE = /^[ \t]*[!-~\x80-\xff][\t -~\x80-\xff]*$/;
 
-/** Private/loopback/link-local IP ranges blocked unless explicitly allowed. */
-const PRIVATE_IP_PATTERNS: readonly RegExp[] = [
-    /^127\./, // loopback 127.0.0.0/8
-    /^10\./, // private 10.0.0.0/8
-    /^172\.(1[6-9]|2\d|3[01])\./, // private 172.16.0.0/12
-    /^192\.168\./, // private 192.168.0.0/16
-    /^169\.254\./, // link-local
-    /^0\./, // "this" network
-    /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./, // carrier-grade NAT 100.64.0.0/10
-    /^fc|^fd|^fe80:/i, // IPv6 unique local + link-local
-    /^::1$/, // IPv6 loopback
-    /^::$/, // IPv6 unspecified
-];
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -73,12 +59,6 @@ function resolveTemplate(value: string, vars: Vars): string {
     return value.replace(/\$\{(vars\.)?(\w+)\}/g, (_match, _prefix, key: string) => {
         return vars[key] ?? '';
     });
-}
-
-/** Check if a hostname is a private/loopback/link-local IP. */
-function isPrivateHost(hostname: string): boolean {
-    const normalized = hostname.startsWith('[') ? hostname.slice(1, -1) : hostname;
-    return PRIVATE_IP_PATTERNS.some((re) => re.test(normalized));
 }
 
 /** Strip header values from error messages (auth tokens must not leak to logs). */
@@ -96,9 +76,10 @@ function redactHeaders(message: string): string {
  *
  * Security properties:
  * - Rejects non-http(s) schemes.
- * - Default-deny host allowlist: empty allowlist → action fails.
+ * - Default-deny host allowlist: empty allowlist → action fails. Private /
+ *   loopback / link-local hosts are not special-cased — they succeed only when
+ *   explicitly present on the allowlist (same property as any other host).
  * - Rejects URLs with embedded credentials.
- * - Blocks private/loopback/link-local hosts unless explicitly allowed.
  * - Never logs or emits request headers (auth tokens).
  * - Rejects `redirect: 'follow'` — auto-following escapes the host allowlist
  *   gate (which only validates the initial URL), creating an SSRF risk.
@@ -230,14 +211,6 @@ export class HttpRequestActionRunner implements ActionRunner {
             return {
                 ok: false,
                 error: `http.request: host not in allowlist: ${hostname}`,
-            };
-        }
-
-        // --- Private-host gate ---
-        if (isPrivateHost(hostname) && !this.allowlist.has(hostname) && !this.allowlist.has(origin)) {
-            return {
-                ok: false,
-                error: `http.request: private/internal host not allowed unless explicitly in allowlist: ${hostname}`,
             };
         }
 

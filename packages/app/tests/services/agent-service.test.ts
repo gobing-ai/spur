@@ -1227,6 +1227,20 @@ describe('AgentService.run --timeout flag', () => {
         const callArgs = runner.runPromptCommand.mock.calls[0] as [string, unknown, { cwd?: string; timeout?: number }];
         expect(callArgs[2].timeout).toBeUndefined();
     });
+
+    test('non-numeric --timeout returns exit 2 and does not invoke runner (R4)', async () => {
+        // WHY: pre-fix code forwarded Number('abc') === NaN to the runner; the
+        // validation path must reject with exit 2 before any spawn.
+        const { output, errors } = captureOutput();
+        const svc = makeService({}, output);
+        const { deps, runner } = mockDeps();
+
+        const code = await svc.run('hello', { agent: 'pi', timeout: 'not-a-number' }, deps);
+
+        expect(code).toBe(2);
+        expect(errors.some((e) => e.includes('Invalid --timeout=not-a-number'))).toBe(true);
+        expect(runner.runPromptCommand.mock.calls.length).toBe(0);
+    });
 });
 
 // ---------------------------------------------------------------------------
