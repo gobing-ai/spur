@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
@@ -13,6 +13,7 @@ import {
     WorkflowsConfigSchema,
 } from '../src/index';
 import {
+    invalidateSpurConfig,
     loadSpurConfig,
     loadStructuredSpurConfig,
     type PlanningFolders,
@@ -538,5 +539,38 @@ describe('loadStructuredSpurConfig', () => {
         // createNodeFileSystem().readFile throws on a missing path — surfaces as a FS error,
         // not a silent empty result.
         await expect(loadStructuredSpurConfig(join(tmpCwd, 'nope.yaml'))).rejects.toThrow();
+    });
+});
+
+// ---- Cache invalidation (mtime-based + explicit) ----
+
+describe('spurConfigCache invalidation', () => {
+    test('picks up config file edits via mtime-based cache key', async () => {
+        await writeConfig(tmpCwd, CONFIG_YAML);
+        const first = await loadSpurConfig(tmpCwd);
+        expect(first.name).toBe('test-project');
+
+        // Rewrite the config with a different name and bump mtime forward
+        const configPath = join(tmpCwd, '.spur', 'config.yaml');
+        const updated = CONFIG_YAML.replace('name: test-project', 'name: updated-project');
+        await writeFile(configPath, updated);
+        const now = new Date();
+        // Advance mtime by 2s so the cache key changes
+        await utimes(configPath, now, new Date(now.getTime() + 2000));
+        const second = await loadSpurConfig(tmpCwd);
+        expect(second.name).toBe('updated-project');
+    });
+
+    test('invalidateSpurConfig() clears the entire cache', async () => {
+        await writeConfig(tmpCwd, CONFIG_YAML);
+        const first = await loadSpurConfig(tmpCwd);
+        expect(first.name).toBe('test-project');
+
+        invalidateSpurConfig();
+        // After clearing, a re-load must hit the filesystem again
+        const updated = CONFIG_YAML.replace('name: test-project', 'name: after-clear');
+        await writeConfig(tmpCwd, updated);
+        const second = await loadSpurConfig(tmpCwd);
+        expect(second.name).toBe('after-clear');
     });
 });

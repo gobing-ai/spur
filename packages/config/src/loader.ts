@@ -13,7 +13,7 @@
  * - Re-exports of bundled-config / template-renderer (moved here from the core so the
  *   core stays CF-safe — they use `node:fs`).
  */
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -211,14 +211,36 @@ export async function loadSpurConfig(cwd: string = process.cwd(), opts?: LoadSpu
     }
 
     const validateJsonSchema = opts?.validateJsonSchema ?? process.env.NODE_ENV !== 'test';
-    const key = cacheKey(configPath, opts, validateJsonSchema);
+    const mtimeMs = statSync(configPath).mtimeMs;
+    const key = `${cacheKey(configPath, opts, validateJsonSchema)}\0${mtimeMs}`;
     const cached = spurConfigCache.get(key);
     if (cached !== undefined) return cached;
-
     const promise = loadSpurConfigFile(configPath, opts, validateJsonSchema);
     spurConfigCache.set(key, promise);
     promise.catch(() => spurConfigCache.delete(key));
     return promise;
+}
+
+/**
+ * Invalidate the cached {@link SpurConfig} for one config path or the entire cache.
+ *
+ * {@link loadSpurConfig} includes the file's mtime in its cache key so stale entries
+ * naturally expire after an edit. Call this function when you need to force a reload
+ * without waiting for the next file stat (e.g. after a programmatic config update that
+ * hasn't yet been flushed to disk).
+ *
+ * @param configPath - Optional path to invalidate; clears the entire cache when omitted.
+ */
+export function invalidateSpurConfig(configPath?: string): void {
+    if (configPath === undefined) {
+        spurConfigCache.clear();
+        return;
+    }
+    for (const key of spurConfigCache.keys()) {
+        if (key.startsWith(`${configPath}\0`)) {
+            spurConfigCache.delete(key);
+        }
+    }
 }
 
 async function loadSpurConfigFile(
