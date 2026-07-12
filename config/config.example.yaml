@@ -39,6 +39,9 @@ agent:
   # `default` is the executor selector for `--agent auto` (resolved as an executor
   # name first, then a legacy agent name). Keep it simple, or define richer profiles:
   default: omp
+  # Canonical coding-agent ids (ts-ai-runner DISPLAY_ORDER, 0.4.8+):
+  #   claude, codex, gemini, pi, omp, opencode, antigravity-cli, openclaw, hermes, grok
+  # Grok auth: non-empty XAI_API_KEY and/or ~/.grok/auth.json (no CLI auth-status verb).
   # Named executor profiles: pair a canonical agent with an optional opaque model
   # override. Referenced by name from `default` and `default-by-phase`.
   # executors:
@@ -49,12 +52,16 @@ agent:
   #     model: zai//glm-5.2
   #   - name: claude
   #     agent: claude
+  #   - name: grok
+  #     agent: grok
+  #     # model: grok-…   # optional; passed as grok -m <model>
   # Per-phase auto routing — a MAP of dev phase → executor selector. A configured
   # phase mapping is authoritative: a broken mapping fails fast (unknown executor →
   # exit 2; unusable agent → exit 1) and does NOT fall back to `default`.
   # default-by-phase:
   #   dev-run: omp-zai
   #   dev-review: claude
+  #   # dev-run: grok
 
 rules:
   paths:
