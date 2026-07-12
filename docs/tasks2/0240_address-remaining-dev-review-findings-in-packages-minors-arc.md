@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-11T22:56:19.099Z"
-updated_at: "2026-07-12T03:07:53.386Z"
+updated_at: "2026-07-12T03:09:23.698Z"
 ---
 
 ## 0240. Address remaining dev-review findings in packages (minors + architecture)
@@ -79,9 +79,11 @@ A full `/sp:dev-review packages --focus all` (2026-07-11) swept `packages/{app,c
 | `packages/app/src/services/event-bridge.ts` | 1–21 ✨ | **R13:** New shared `bridgeEventBus<T>()` helper. Replaced three identical on/off/emit bridge methods in `AgentService`, `RuleService`, `WorkflowService`. |
 | `packages/app/src/services/task-service.ts` | 1035–1065 | **R14:** `findTaskFileName` now searches all registered task folders rather than only `tasksDir`, so `spur task show <wbs>` resolves any task that `spur task resolve` finds. |
 ### Testing
-
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
-
+- `bun run lint`: pass (0 errors, 0 warnings) — Biome + per-workspace `tsc --noEmit` clean
+- `bun run test`: 2588 pass, 0 fail across 178 files — all existing tests green; regression tests added for R3 (escapeYamlValue round-trip), R7 (pipeStream error catch), R8 (migration 0005 idempotency), R9 (config cache invalidation), R10 (pipe escape in evidence cells)
+- `bun run test-cf`: 1 pass (server Workers runtime)
+- `bun run build`: all workspaces (cli/server/web) build clean
+- Coverage: pre-existing thresholds (some files at 96.77% function coverage, within 90% aggregate target)
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
