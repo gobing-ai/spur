@@ -24,26 +24,43 @@ fail-loud).
 ## `show <id>` / `list`
 
 - `show <id>` prints frontmatter + body.
-- `list` filters by `--status <s>`. `--json` emits an array.
+- `list` filters by `--status <s>` and/or `--priority <p>`. `--json` emits an array.
 
-## `update <id> [status] | --field <key> --value <v>`
+## `update <id> [status] | --field <key> --value <v> | --section <name> --from-file <path>`
 
-Dual-mode, mutually exclusive. **No `--section`** — feature body sections are hand-edited in the
-file.
+Multi-mode. At least one of status, field pair, or section pair is required (exit `2` otherwise).
 
 - **Status** (positional): legal transition over `backlog → active → verifying → blocked → done →
   cancelled`. `verifying` is the AC-traceability gate. **One active goal** corpus-wide (enforced by
   `check`).
 - **Field** (`--field` requires `--value`): set a single frontmatter scalar, e.g.
   `--field priority --value P1`.
+- **Section** (`--section` **requires** `--from-file`): replace the entire named section body from a
+  file (same file-wins contract as `spur task update --section`).
 
-Exit `2` when neither a status nor a complete `--field/--value` pair is given.
+## `advance <id>`
+
+Walk the legal **forward** lifecycle path hop-by-hop until a target status.
+
+| Flag | Effect |
+| ---- | ------ |
+| `--to <status>` | Target status (default `done`). Forward path: `backlog → active → verifying → done`. |
+| `--folder <path>` | Custom features folder. |
+| `--json` | Emit `{ id, status, hops: [{ from, to }, …] }`. |
+
+No-op (success) when already at the target. Exit `1` if the feature is missing or a hop is illegal.
 
 ## `move <id>`
 
 Re-parent a subtree. `--parent <new>` cascade-renames `<id>` and **every descendant** to the new
 position; omit `--parent` to lift the subtree to a top-level group. Use this for any structural
 change — never hand-edit an ID, which would orphan descendants and break edges.
+
+| Flag | Effect |
+| ---- | ------ |
+| `--parent <id>` | New parent (omit → top-level group). |
+| `--dry-run` | Show old→new ID map + affected tasks without writing. |
+| `--folder` / `--json` | Standard. |
 
 ## `refresh`
 
@@ -65,3 +82,16 @@ to failures. `--json` emits per-feature findings.
 A finding carries `{ layer: 'L1'|'L2'|'L3'|'L4', section, severity, message }`. Parse the JSON to
 answer "is H2 ready for `verifying`?" or "which scenarios have no task?" — the rules are CLI code,
 not prose to restate. This is the gate `sp:spur-dev`'s planning half loops on.
+
+## Command surface (quick)
+
+```
+spur feature create  <name> [--parent <id>] [--folder] [--json]
+spur feature show    <id> [--folder] [--json]
+spur feature update  <id> [status] [--field <k> --value <v>] [--section <n> --from-file <p>] [--folder] [--json]
+spur feature advance <id> [--to <status>] [--folder] [--json]
+spur feature list    [--status <s>] [--priority <p>] [--folder] [--json]
+spur feature move    <id> [--parent <id>] [--dry-run] [--folder] [--json]
+spur feature refresh [--folder] [--json]
+spur feature check   [id] [--strict] [--folder] [--json]
+```

@@ -7,9 +7,9 @@ see_also:
 
 # Operations
 
-The skill's operations as discrete procedures. The deterministic ones (`run`, `validate`, `list`) are
-direct CLI verbs — documented briefly here for completeness, but you run them straight (no slash
-command). The agent-driven ones (`scan`, `add`, `refine`) convert fuzzy intent into a reliable
+The skill's operations as discrete procedures. The deterministic ones (`run`, `validate`, `list`,
+`trace`) are direct CLI verbs — documented briefly here for completeness, but you run them straight
+(no slash command). The agent-driven ones (`scan`, `add`, `refine`) convert fuzzy intent into a reliable
 sequence and are what the slash commands delegate to; their full steps live below.
 
 A rule you have not watched fire is a rule you do not trust. So both `add` and `refine` end in the

@@ -23,9 +23,10 @@ what* or *how to write a scenario*, this skill.
 | ---- | ------- | --------- |
 | `create <name>` | Allocate a feature; assigns a hierarchical ID under the create-lock | `--parent <id>` `--folder` `--json` |
 | `show <id>` | Print one feature's frontmatter + body | `--folder` `--json` |
-| `update <id> [status]` | Lifecycle transition **or** a scalar field set | `--field <key> --value <v>` `--folder` `--json` |
-| `list` | List features, filtered | `--status <s>` `--folder` `--json` |
-| `move <id>` | Re-parent a subtree (cascade-rename of descendants) | `--parent <id>` `--folder` `--json` |
+| `update <id> [status]` | Lifecycle transition, scalar field set, **or** section replace | `--field <k> --value <v>` `--section <n> --from-file <p>` `--folder` `--json` |
+| `advance <id>` | Walk forward along the legal lifecycle path to a target status | `--to <status>` (default `done`) `--folder` `--json` |
+| `list` | List features, filtered | `--status <s>` `--priority <p>` `--folder` `--json` |
+| `move <id>` | Re-parent a subtree (cascade-rename of descendants) | `--parent <id>` `--dry-run` `--folder` `--json` |
 | `refresh` | Rebuild INDEX + tree + each feature's `## Tasks` (files win) | `--folder` `--json` |
 | `check [id]` | Validate one feature / the tree; the 4-layer gate | `--strict` `--folder` `--json` |
 
@@ -50,10 +51,10 @@ spur feature create "Task CLI" --parent H1            # → H1<n>
 To restructure, use `move` — never hand-edit an ID. `move <id> --parent <new>` re-parents the
 subtree and **cascade-renames** every descendant; omit `--parent` to lift it to a top-level group.
 
-## Editing a feature: status, fields, and body
+## Editing a feature: status, fields, and sections
 
-`update` is dual-mode, and narrower than the task CLI — **there is no `--section` on
-`feature update`.**
+`update` is multi-mode (status, field, and/or section — not all require mutual exclusion, but each
+mode needs its own required args).
 
 **Lifecycle transition** (positional status):
 
@@ -71,13 +72,26 @@ enforces legal transitions; `verifying` is the gate where AC traceability must h
 spur feature update H2 --field priority --value P1
 ```
 
-`--field` requires `--value`. This sets a single frontmatter scalar (e.g. `priority`), not a body
-section.
+`--field` requires `--value`. This sets a single frontmatter scalar (e.g. `priority`).
 
-**Body sections** — `Goal`, `Scope (In/Out)`, `Acceptance Criteria`, `Tasks`, `Notes` — are edited
-**by hand in the feature file.** There is no section-replace verb for features; the CLI owns status,
-fields, IDs, and the `## Tasks` block (rebuilt by `refresh`), while you own the prose. Edit the
-file directly, then run `spur feature check <id>` to gate it.
+**Section replace** (file-wins, same contract as `spur task update --section`):
+
+```bash
+spur feature update H2 --section "Acceptance Criteria" --from-file /tmp/ac.md
+```
+
+`--section` **requires** `--from-file` (exit `2` otherwise). Replaces the whole named section body.
+The `## Tasks` block is still rebuilt by `refresh` (files win for that region).
+
+**Advance** (multi-hop forward walk):
+
+```bash
+spur feature advance H2              # walk forward until done (default)
+spur feature advance H2 --to verifying
+```
+
+Walks the legal forward path (`backlog → active → verifying → done`) hop-by-hop until `--to`
+(default `done`). No-op when already at the target.
 
 ## Acceptance criteria conventions
 

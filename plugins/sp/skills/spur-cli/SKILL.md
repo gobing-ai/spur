@@ -33,7 +33,7 @@ Pick the noun, read its reference. Each reference owns that noun's full verb cat
 
 | Noun | Operate | Reference |
 |------|---------|-----------|
-| **task** | The task corpus: create (template variants), edit sections, status lifecycle, record pipeline verdicts, the four-layer readiness matrix (`check --json`), regenerate `kanban.md` | [references/tasks.md](references/tasks.md) |
+| **task** | The task corpus: create (template variants), edit sections, status lifecycle, record/verdict pipeline artifacts, the four-layer readiness matrix (`check --json`), corpus scan | [references/tasks.md](references/tasks.md) |
 | **feature** | The feature tree: author with hierarchical IDs (DD-14), write acceptance criteria, drive the lifecycle, move subtrees, keep traceability honest | [references/features.md](references/features.md) |
 | **rule** | The constraint quality gate: run presets, author rules, fine-tune, validate rule files/presets, extend the engine | [references/rules.md](references/rules.md) |
 | **workflow** | The dual-mode workflow runtime: choose mode, author state-machine / transition-flow workflows, validate, run, read traces, refine | [references/workflows.md](references/workflows.md) |

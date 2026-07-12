@@ -27,6 +27,8 @@ blocking retry).
 | `--folder <path>` | Target a non-default tasks folder. |
 | `--json` | Emit `{ ref: { id, filePath } }`. |
 
+(See also the full verb map in [tasks.md](../tasks.md).)
+
 **Template variants** (`TASK_VARIANTS`): `standard`, `feature-impl`, `issue`, `review`, `meta`,
 `brainstorm`. The variant chooses which sections the new file carries (via the Section-Status-Matrix)
 and its scaffold body. **Default:** `feature-impl` when `--feature` is given, else `standard`. An
@@ -39,8 +41,8 @@ at **`backlog`** ("still preparing"). `Solution` first appears at `wip`.
 ## `show <wbs>` / `list`
 
 - `show <wbs>` prints one task's frontmatter + body. With `--json`, frontmatter is a top-level field.
-- `list` filters: `--status <s>` (or legacy `--phase <p>`), `--parent <wbs>`. `--json` emits an
-  array.
+- `list` filters: `--status <s>` (or legacy `--phase <p>`), `--parent <wbs>`, `--feature <id>`
+  (linked `feature_id` edge). `--json` emits an array.
 
 ## `update <wbs> [status] | --section <name> --from-file <path> | --feature/--priority`
 
@@ -50,6 +52,8 @@ frontmatter scalar.
 - **Status** (positional): legal transition over `backlog → todo → wip → testing → blocked → done →
   cancelled`. Two transitions run a `check` guard (§7.5): `wip→testing` → `spur task check <wbs>`;
   `testing→done` → `spur task check <wbs> --strict-core`. A failing gate blocks the transition.
+- **`--no-lifecycle`**: suppress lifecycle workflow run creation (use inside pipeline runs to avoid
+  orphaned nested lifecycle runs).
 - **Section** (`--section` **requires** `--from-file`): replaces the entire named section body from
   the file. No inline-body flag. Section names: `Background`, `Acceptance Criteria`, `Plan`,
   `Solution`, `Testing`, `Review`, `References`, `History`.
@@ -156,9 +160,20 @@ Parse this matrix to answer readiness questions — don't re-implement the check
 
 ## `refresh`
 
-Regenerate `kanban.md` from the files on disk — a pure, deterministic function (A06): same corpus →
-same board ordering, every time. **Files win** — never writes a task file from the board. Run after
-hand-edits or when the board looks stale.
+Re-scan the task corpus and report counts (`{ folders, tasks }` with `--json`). Human output:
+`Corpus scanned — N tasks across M folder(s)`. **`kanban.md` generation is retired** (A17 cutover) —
+the web Task Kanban board is the daily driver. Does not write task files.
+
+## `migrate`
+
+One-time A17 task corpus normalization pass (`CorpusMigrator`). Normalizes live corpus files under
+the active tasks folder (or `--folder`).
+
+| Flag | Effect |
+| ---- | ------ |
+| `--dry-run` | Full report without writing files. |
+| `--folder <path>` | Custom tasks folder. |
+| `--json` | Machine-readable report envelope. |
 
 ## `resolve <file-path>`
 
@@ -227,7 +242,20 @@ Resolve a WBS to its absolute task file path. Inverse of `resolve <file-path>`.
 Human output: the absolute path on stdout. Exit `1` with `Task <wbs> not found` when the WBS is
 unallocated.
 
-## Reserved
+## Command surface (quick)
 
-- `spur task migrate` — reserved (A17): one-time corpus normalization pass, gated on the board
-  cutover. Not yet wired.
+```
+spur task create   <title> [--feature <id>] [--parent <wbs>] [--template <v>] [--folder] [--json]
+spur task show     <wbs> [--folder] [--json]
+spur task update   <wbs> [status] [--section <n> --from-file <p>] [--feature <id>] [--priority <p>] [--no-lifecycle] [--folder] [--json]
+spur task list     [--status <s>] [--phase <p>] [--parent <wbs>] [--feature <id>] [--folder] [--json]
+spur task refresh  [--folder] [--json]
+spur task migrate  [--dry-run] [--folder] [--json]
+spur task refresh-roster <wbs> [--folder] [--json]
+spur task batch-create --file <path> [--folder] [--json]
+spur task record   <wbs> [--verdict-file <p>] [--solution-from-diff] [--transition <s>] [--folder] [--json]
+spur task verdict  <wbs> [--from-answer <p>] [--folder] [--json]
+spur task check    [wbs] [--strict] [--strict-core] [--folder] [--json]
+spur task resolve  <file-path> [--strict] [--folder] [--json]
+spur task path     <wbs> [--folder] [--json]
+```

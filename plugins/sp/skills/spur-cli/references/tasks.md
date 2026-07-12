@@ -1,6 +1,6 @@
 ---
 name: spur-cli-tasks
-description: "spur-cli noun reference: operate `spur task` as the project's task-file CLI — create tasks (with template variants), edit sections, drive the status lifecycle, record pipeline verdicts, query the four-layer readiness matrix via `check --json`, and regenerate `kanban.md`. The committed-corpus side of the planning layer that the spine orchestrates against."
+description: "spur-cli noun reference: operate `spur task` as the project's task-file CLI — create tasks (with template variants), edit sections, drive the status lifecycle, record pipeline verdicts, derive verdicts, query the four-layer readiness matrix via `check --json`, and re-scan the corpus. The committed-corpus side of the planning layer that the spine orchestrates against."
 see_also:
   - spur-cli
 ---
@@ -24,13 +24,17 @@ does what*, this skill.
 | ---- | ------- | --------- |
 | `create <title>` | Allocate a new task (race-safe WBS) | `--feature <id>` `--parent <wbs>` `--template <variant>` `--folder` `--json` |
 | `show <wbs>` | Print one task's frontmatter + body | `--folder` `--json` |
-| `update <wbs> [status]` | Lifecycle transition, section replace, **or** frontmatter set | `--section <name> --from-file <path>` `--feature <id>` `--priority <p>` `--folder` `--json` |
-| `list` | List tasks, filtered | `--status <s>` `--phase <p>` `--parent <wbs>` `--folder` `--json` |
-| `refresh` | Regenerate `kanban.md` from files (deterministic) | `--folder` `--json` |
+| `update <wbs> [status]` | Lifecycle transition, section replace, **or** frontmatter set | `--section <name> --from-file <path>` `--feature <id>` `--priority <p>` `--no-lifecycle` `--folder` `--json` |
+| `list` | List tasks, filtered | `--status <s>` `--phase <p>` `--parent <wbs>` `--feature <id>` `--folder` `--json` |
+| `refresh` | Re-scan the corpus and report counts (**`kanban.md` retired** — web Task Kanban is SSOT) | `--folder` `--json` |
+| `migrate` | One-time A17 corpus normalization pass | `--dry-run` `--folder` `--json` |
+| `refresh-roster <wbs>` | Regenerate a parent task's sub-task roster block in `## Plan` | `--folder` `--json` |
 | `batch-create` | Create many tasks from a validated JSON array | `--file <path>` `--folder` `--json` |
 | `record <wbs>` | Write Testing/Review from a verify verdict; optional Solution + transition | `--verdict-file <path>` `--solution-from-diff` `--transition <status>` `--folder` `--json` |
+| `verdict <wbs>` | Derive PASS/PARTIAL/FAIL/UNKNOWN from verify answer text → verdict JSON | `--from-answer <path>` `--folder` `--json` |
 | `check [wbs]` | Four-layer validation; the readiness matrix | `--strict` `--strict-core` `--folder` `--json` |
-| `resolve <file-path>` | Map a file path to its owning task WBS | `--folder` `--json` |
+| `resolve <file-path>` | Map a file path to its owning task WBS | `--strict` `--folder` `--json` |
+| `path <wbs>` | Map a WBS to its absolute task file path (inverse of `resolve`) | `--folder` `--json` |
 
 All verbs accept `--json` for machine consumption and `--folder <path>` to target a non-default
 tasks folder. **Exit codes:** `0` success, `1` error, `2` invalid usage.
@@ -74,6 +78,9 @@ Valid statuses: `backlog · todo · wip · testing · blocked · done · cancell
 enforces legal transitions). Two transitions are **guarded by `check`**: `wip→testing` runs
 `spur task check <wbs>`, and `testing→done` runs `spur task check <wbs> --strict-core` — a failing
 gate blocks the transition (§7.5).
+
+**`--no-lifecycle`** suppresses lifecycle workflow run creation (use during pipeline-driven
+transitions so nested lifecycle runs are not orphaned).
 
 **Section replace** (file-wins, crash-safe):
 
@@ -149,27 +156,28 @@ The two flags are distinct gate profiles:
 
 See [tasks/verbs.md](tasks/verbs.md) for the JSON shape per finding.
 
-## Keeping the board honest — `refresh`
+## Corpus scan — `refresh` (kanban.md retired)
 
 ```bash
 spur task refresh
 ```
 
-Regenerates `kanban.md` from the files on disk — a **pure, deterministic function** (A06): same
-corpus → same board, every time. **Files win** — `refresh` never writes a task file from the board;
-it rebuilds the board from the files. Run it after hand-editing task files outside the CLI, or when
-the board looks stale.
+Re-scans the task corpus and reports counts (`Corpus scanned — N tasks across M folder(s)`). With
+`--json`, emits `{ folders, tasks }`. **`kanban.md` generation is retired** (A17 cutover) — the web
+Task Kanban board is the daily driver. `refresh` does not write task files.
 
-## Resolving a path to its task — `resolve`
+## Path resolution — `resolve` / `path`
 
 ```bash
 spur task resolve docs/tasks/0040_add-email-validation.md
 spur task resolve src/lib/validation.ts --json
+spur task path 0040 --json
 ```
 
-`resolve <file-path>` maps a file path to its **owning task** (returns WBS + file). Resolution
-strategies, tried in order: direct task-file match, filename WBS parse, then walk-up the tree (A10).
-Returns exit `1` when no task owns the path.
+- `resolve <file-path>` maps a file path to its **owning task** (returns WBS + file). Strategies, in
+  order: direct task-file match, filename WBS parse, then walk-up the tree (A10). `--strict` disables
+  basename-WBS fallback. Exit `1` when no task owns the path.
+- `path <wbs>` is the inverse — absolute task file path for a WBS.
 
 ## What this skill is NOT
 

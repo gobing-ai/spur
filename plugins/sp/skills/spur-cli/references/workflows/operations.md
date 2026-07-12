@@ -1,16 +1,16 @@
 ---
 name: operations
-description: Named operation procedures (validate/run/list/add/refine), the mode-selection gate, and the shared find-existing-workflow and validate-and-dry-run cores that back the spur workflow slash commands.
+description: Named operation procedures (validate/run/list/trace/continue/cancel/clean/add/refine), the mode-selection gate, and the shared find-existing-workflow and validate-and-dry-run cores that back the spur workflow slash commands.
 see_also:
   - spur-cli
 ---
 
 # Operations
 
-The skill's operations as discrete procedures. The deterministic ones (`validate`, `run`, `list`) are
-direct CLI verbs — documented briefly here for completeness, but you run them straight (no slash
-command). The agent-driven ones (`add`, `refine`) convert fuzzy intent into a reliable sequence and are
-what the slash commands delegate to; their full steps live below.
+The skill's operations as discrete procedures. The deterministic ones (`validate`, `run`, `list`,
+`trace`, `continue`, `cancel`, `clean`) are direct CLI verbs — documented briefly here for completeness,
+but you run them straight (no slash command). The agent-driven ones (`add`, `refine`) convert fuzzy
+intent into a reliable sequence and are what the slash commands delegate to; their full steps live below.
 
 A workflow you have not watched run is a workflow you do not trust. So both `add` and `refine` end in
 the same verification core ([validate-and-dry-run](#sub-procedure-validate-and-dry-run)) — that shared
@@ -93,7 +93,7 @@ The shared verification core. Inputs: a workflow file path + the expected termin
    On error, surface root-cause + fix (see [validate](#validate--list-direct-cli)); stop until clean.
    The most common errors are an unquoted `$schema` (`@` is YAML-reserved) and a missing
    `kind: transition-flow` on a flow definition.
-2. **Dry-run** — `spur workflow run <file> --run-id dryrun-<unique> --json`. Use a throwaway, unique
+2. **Dry-run** — `spur workflow run <file> --dry-run --run-id dryrun-<unique> --json`. Use a throwaway, unique
    `--run-id` (a duplicate raises `RunCollisionError`). **Expect `status: 'done'` and
    `finalState === <expected>`.** A `status: 'failed'` or a wrong `finalState` means the workflow does
    not behave as intended — read the trace.
@@ -108,7 +108,7 @@ The shared verification core. Inputs: a workflow file path + the expected termin
 > idempotent and side-effect-light, or stub them with a `note` action while verifying shape, then
 > swap the real command in once the path is proven. Never point a dry-run at a destructive command.
 
-## validate / list (direct CLI — no command, no procedure)
+## validate / list / trace / continue / cancel / clean (direct CLI)
 
 Deterministic single-verb CLI calls. Run them straight; the skill interprets results when asked.
 
@@ -118,23 +118,35 @@ Deterministic single-verb CLI calls. Run them straight; the skill interprets res
   state that doesn't exist, a terminal state is unreachable, a `${vars.x}` with no matching var, an
   `${env.X}` not in `env.allow`). The `validate-and-dry-run` core calls this as step 1. `--no-schema`
   skips only the `$schema` ref resolution, keeping the structural + semantic checks.
-- `spur workflow list --json` — persisted run records (`id`, `status`, `workflow_name`). Use it to see
-  what has run and the outcome of prior runs before assuming state.
+- `spur workflow list --json` — available **workflow YAML definition files** on disk (not run history).
+- `spur workflow trace [run-id] [--workflow <n>] [--status <s>] [--since <iso>] [--last <n>] --json` —
+  persisted run history (list filters) or a single-run timeline when `run-id` is given. Use this to
+  inspect prior outcomes; do **not** use `list` for that.
+- `spur workflow continue [run-id] [--yes] --json` — resume a paused HITL run (omit id → most recent
+  paused).
+- `spur workflow cancel <run-id> --json` — mark one non-terminal run failed (SIGTERM async worker
+  process group when live).
+- `spur workflow clean [--older-than <min>] [--force] [--dry-run] --json` — bulk-finalize stale
+  `running`/`pending` runs (default age threshold 30 minutes; `--force` ignores age).
 
-## run (direct CLI — the dry-run / execution verb)
+## run (direct CLI — dry-run / execution / async)
 
 `spur workflow run` is a direct CLI verb; there is no slash command for it. The skill drives it as the
 dry-run step of the harness loop, and operators run it directly to execute a real workflow. Procedure:
 
-1. `spur workflow run <file> [--run-id <id>] --json`.
-2. Read `status` (`done` | `failed`) and `finalState` from the JSON. Exit code is non-zero unless
-   `status === 'done'`.
-3. On `failed`, read the run trace (states/nodes entered, transitions taken) to locate the offending
+1. `spur workflow run <file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] --json`.
+2. Sync path: read `status` (`done` | `failed` | …) and `finalState` from the JSON. Exit code is
+   non-zero unless `status === 'done'`.
+3. `--dry-run`: walk transitions without executing actions (preferred for the authoring harness loop).
+4. `--async`: spawn a detached worker, exit immediately with `runId`; monitor via
+   `spur workflow trace <run-id>`. Cancel with `spur workflow cancel <run-id>`.
+5. On `failed`, read the run trace (states/nodes entered, transitions taken) to locate the offending
    step — a failed action, a guard with no passing transition, an exhausted `iterationBound`.
-4. A failed run is data, not an exception — the run record is preserved. Fix the definition (for the
+6. A failed run is data, not an exception — the run record is preserved. Fix the definition (for the
    dry-run loop) or the environment/action (for a real run), then re-run with a fresh `--run-id`.
 
-Output contract: `status` + `finalState` + parsed trace + the offending-step diagnosis on failure.
+Output contract (sync): `status` + `finalState` + parsed trace + the offending-step diagnosis on failure.
+Async: `{ runId, status: 'started', workflowName }`.
 
 ## add
 

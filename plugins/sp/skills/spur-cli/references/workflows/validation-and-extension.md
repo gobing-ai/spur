@@ -109,17 +109,18 @@ trust, and never enable `allowExtensions` for paths derived from untrusted input
 
 ## CLI vs. library capability gaps
 
-The `spur workflow` CLI surfaces the lifecycle verbs (`validate`, `run`, `list`) over the
-default-host engine. Several engine capabilities are **library-only** — reach for the library
-(`@gobing-ai/ts-dual-workflow-engine`) directly when you need them:
+The `spur workflow` CLI surfaces the lifecycle verbs (`validate`, `run`, `list`, `trace`, `continue`,
+`cancel`, `clean`) over the default-host engine. Several engine capabilities are **library-only** —
+reach for the library (`@gobing-ai/ts-dual-workflow-engine`) directly when you need them:
 
 | Capability | CLI | Library |
 | ---------- | --- | ------- |
-| Validate / run / list runs | ✅ | ✅ |
+| Validate / run / list definitions | ✅ | ✅ |
+| Trace run history / continue HITL / cancel / clean orphans | ✅ | ✅ |
 | Custom action/guard runners | ✅ (built-ins only) | ✅ (`registerAction`/`registerGuard`) |
 | Extension modules | — | ✅ (`loadWorkflowExtensionsIntoHost`) |
-| DB persistence + `listRuns()` history | (via configured adapter) | ✅ (`DbWorkflowPersistenceAdapter`) |
-| Event-bus observability (progress bars, dashboards) | — | ✅ (`WorkflowEngineEvents` via `WorkflowRunOptions.events`) |
+| DB persistence + programmatic `listRuns()` | (via configured adapter + `trace`) | ✅ (`DbWorkflowPersistenceAdapter`) |
+| Event-bus observability (progress bars, dashboards) | partial (CLI step reporter on sync human runs) | ✅ (`WorkflowEngineEvents` via `WorkflowRunOptions.events`) |
 | OTel traces / structured logs | (emitted) | ✅ (`RunLifecycle`) |
 | Programmatic schema parsing | — | ✅ (`WorkflowDefSchema`, `validateWorkflowDef`) |
 

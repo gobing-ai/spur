@@ -77,10 +77,10 @@ Use this skill to:
 
 The skill's logic divides by **whether the LLM adds value**:
 
-- **Direct CLI** (`validate`, `run`, `list`) — deterministic, single-verb commands. Run them straight:
-  `spur workflow validate`, `spur workflow run`, `spur workflow list`. A slash-command wrapper would
-  only forward flags and add drift; **there is no command for these — use the CLI**. The skill still
-  drives them in natural language (interpreting a failed validate, reading a run trace).
+- **Direct CLI** (`validate`, `run`, `list`, `trace`, `continue`, `cancel`, `clean`) — deterministic,
+  single-verb commands. Run them straight. A slash-command wrapper would only forward flags and add
+  drift; **there is no command for these — use the CLI**. The skill still drives them in natural
+  language (interpreting a failed validate, reading a run trace).
 - **Agent-driven** (`add`, `refine`) — convert fuzzy human intent into a reliable sequence the CLI
   cannot express as one verb. `add` chooses the mode and authors a new workflow; `refine` tunes an
   existing one. These are the operations worth a slash command, and the skill owns all their logic.
@@ -89,8 +89,12 @@ The skill's logic divides by **whether the LLM adds value**:
 | Operation | Backed by | Input | Output (done-when) |
 | --------- | --------- | ----- | ------------------ |
 | `validate` | `spur workflow validate` (CLI) | `<file> [--no-schema]` | Schema + semantic verdict |
-| `run` | `spur workflow run` (CLI) | `<file> [--run-id <id>]` | Terminal state reached; trace read |
-| `list` | `spur workflow list` (CLI) | — | Persisted run records |
+| `run` | `spur workflow run` (CLI) | `<file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan]` | Terminal state reached (sync) or run started (async); trace readable |
+| `continue` | `spur workflow continue` (CLI) | `[run-id] [--yes]` | Resume a paused HITL run (omit id → most recent paused) |
+| `cancel` | `spur workflow cancel` (CLI) | `<run-id>` | Single non-terminal run marked failed (SIGTERM async worker when live) |
+| `clean` | `spur workflow clean` (CLI) | `[--older-than <min>] [--force] [--dry-run]` | Bulk-finalize stale `running`/`pending` runs as failed |
+| `list` | `spur workflow list` (CLI) | — | Available workflow **YAML definition files** (not run records) |
+| `trace` | `spur workflow trace` (CLI) | `[run-id] [--workflow <n>] [--status <s>] [--since <iso>] [--last <n>]` | Run history list or per-run timeline |
 | `add` | agent procedure | `"<nl-description>" [--kind <state-machine\|transition-flow>] [--file <path>]` | **Mode chosen (confirmed)** → first reconciled against existing workflows (extend an existing flow rather than duplicate) → YAML authored in real schema shape → **validated AND dry-run** (reaches the expected terminal state) → [add](workflows/operations.md#add) |
 | `refine` | agent procedure | `<workflow-file> [--intent "<goal>"] [--dry-run]` | Smallest change meeting the intent, re-validated and re-dry-run; `--dry-run` emits a diff only → [refine](workflows/operations.md#refine) |
 
@@ -116,7 +120,7 @@ spur workflow validate <file> --json          ← schema + semantic gate
    valid? ──no──▶ read errors → fix the definition → re-validate
         │ yes
         ▼
-spur workflow run <file> --run-id <throwaway> --json   ← dry-run
+spur workflow run <file> --dry-run --run-id <throwaway> --json   ← dry-run
         │
    status === 'done' AND finalState === <expected>? ──no──▶ read trace,
         │ yes                                                 fix the offending
@@ -125,9 +129,9 @@ spur workflow run <file> --run-id <throwaway> --json   ← dry-run
 ```
 
 Two signals, two purposes: `validate` proves the definition is *well-formed and self-consistent*;
-`run` proves it *behaves* — reaching the intended terminal state along the intended path. A workflow
-you have not watched run is a workflow you do not trust. Always use `--json` when an agent consumes the
-result.
+`run --dry-run` proves it *walks* — reaching the intended terminal state along the intended path
+without executing side-effecting actions. A workflow you have not dry-run is a workflow you do not
+trust. Always use `--json` when an agent consumes the result.
 
 ### Step 1: Validate
 
@@ -143,12 +147,13 @@ definition, not the runner.
 ### Step 2: Dry-run
 
 ```bash
-spur workflow run ./workflows/approval.yaml --run-id dryrun-$(date +%s) --json
+spur workflow run ./workflows/approval.yaml --dry-run --run-id dryrun-$(date +%s) --json
 ```
 
-Use a throwaway `--run-id` so the dry-run does not collide with a real run (duplicate ids raise
-`RunCollisionError`). Read `status` and `finalState` from the JSON. A failed run returns
-`status: 'failed'` in the result — it does **not** throw; read the trace to find the offending step.
+Prefer **`--dry-run`** so actions are not executed. Use a throwaway `--run-id` so the dry-run does
+not collide with a real run (duplicate ids raise `RunCollisionError`). Read `status` and `finalState`
+from the JSON. A failed run returns `status: 'failed'` in the result — it does **not** throw; read
+the trace (`spur workflow trace <run-id>`) to find the offending step.
 
 ### Step 3: Read the trace and fix
 
@@ -161,22 +166,33 @@ restructuring — then re-run. Loop until the run reaches the expected terminal 
 
 ```
 spur workflow validate <file> [--no-schema] [--json]
-spur workflow run      <file> [--run-id <id>] [--vars <json>] [--json]
+spur workflow run      <file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--json]
+spur workflow continue [run-id] [--yes] [--json]
+spur workflow cancel   <run-id> [--json]
+spur workflow clean    [--older-than <minutes>] [--force] [--dry-run] [--json]
 spur workflow list     [--json]
+spur workflow trace    [run-id] [--workflow <name>] [--status <s>] [--since <iso>] [--last <n>] [--json]
 ```
 
-`--vars` takes a JSON object of per-run variable overrides (e.g. `--vars '{"taskId":"0042"}'`),
-merged over the workflow's `vars` so one parameterized workflow serves many inputs without editing the
-YAML. Values must be strings (workflow vars are `string→string`).
+| Flag (on `run`) | Effect |
+| --------------- | ------ |
+| `--vars <json>` | Per-run variable overrides (JSON object). Merged over the workflow's `vars`. Values must be strings. User vars win over injected defaults (`spurBin`). |
+| `--dry-run` | Validate and walk transitions **without** executing actions. |
+| `--async` | Start in the background and exit with `runId`; monitor via `spur workflow trace <run-id>`. |
+| `--no-plan` | Suppress the human run-start plan preview (sync human runs only; ignored under `--json`/`--async`). |
 
 `validate` and `run` exit non-zero on failure (`run` exits non-zero when the final status is not
-`done`). `list` prints persisted run records (`<id> <status> <workflow-name>`). Inspect what has run
-before assuming state:
+`done`). `list` prints **workflow definition files** available on disk. For run history use `trace`:
 
 ```bash
 spur workflow list --json
+spur workflow trace --last 10 --json
+spur workflow trace <run-id> --json
 ```
 
+HITL pause/resume: a run that hits a HITL action pauses; resume with `spur workflow continue [run-id]`
+(`--yes` skips confirmation). Cancel one live/paused run with `cancel <run-id>`; bulk-finalize
+orphans stuck in `running`/`pending` with `clean` (`--older-than` default 30 minutes, or `--force`).
 ## Behavior
 
 This skill behaves as an **author** (choose mode → write a correct definition → prove it runs) feeding

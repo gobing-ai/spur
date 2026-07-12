@@ -54,9 +54,10 @@ The skill's logic divides by **whether the LLM adds value**:
 
 | Operation | Backed by | Input | Output (done-when) |
 | --------- | --------- | ----- | ------------------ |
-| `run` | `spur rule run` (CLI) | `[--preset <name>] [--rule <id>] [--file <path>] [--fail-on <sev>] [--stop-on-first [<sev>]]` | Gate to exit 0; findings interpreted, code fixed, re-run clean (the harness loop below) |
-| `validate` | `spur rule validate` (CLI) | `<file-or-preset> [--no-schema]` | Schema + Zod verdict |
+| `run` | `spur rule run` (CLI) | `[--preset <name>] [--rule <id>] [--file <path>] [--fail-on <sev>] [--stop-on-first [<sev>]] [--fix-mode none\|suggest\|auto] [--dry-run] [--verbose]` | Gate to exit 0; findings interpreted, code fixed, re-run clean (the harness loop below) |
+| `validate` | `spur rule validate` (CLI) | `[file-or-preset] [--file <path>] [--preset <name>] [--kind file\|preset] [--no-schema]` | Schema + Zod verdict |
 | `list` | `spur rule list` (CLI) | `[--preset <name>]` | Discovered files + source layer, or resolved rules for a preset |
+| `trace` | `spur rule trace` (CLI) | `[run-id] [--preset <name>] [--status done\|failed] [--since <iso>] [--last <n>]` | Persisted rule-run history / per-run detail |
 | `scan` | agent procedure | `[<path-or-glob>]` | **Propose-only** discovery: surveys code for recurring anti-patterns, clusters them, filters against the catalog, and reports ranked rule candidates (`add` new / `refine`-extend / already-covered). Authors nothing → [scan](rules/operations.md#scan) |
 | `add` | agent procedure | `"<nl-description>" [--file <path>] [--preset <target>]` | **First reconciles against the existing catalog** (extend/refine an existing rule rather than duplicate, on confirmation); only a genuinely new concern is authored, then **validated AND smoke-tested both directions** (fires on bad, quiet on good); optionally wired into a preset → [add](rules/operations.md#add) |
 | `refine` | agent procedure | `<rule-file-or-preset> [--intent "<goal>"] [--severity <sev>] [--scope <glob>] [--exempt <path>] [--disable <id>] [--override <id>] [--dry-run]` | Smallest change meeting the intent, re-validated and re-smoke-tested; `--dry-run` emits a diff only → [refine](rules/operations.md#refine) |
@@ -128,8 +129,9 @@ surfaces candidate fixes in `--json` output without writing.
 
 ```
 spur rule run      [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <sev>] [--stop-on-first [<sev>]] [--fix-mode <none|suggest|auto>] [--dry-run] [--verbose] [--json]
-spur rule validate [--file <path>|--preset <name>|<path>] [--no-schema] [--json]
+spur rule validate [file-or-preset] [--file <path>] [--preset <name>] [--kind file|preset] [--no-schema] [--json]
 spur rule list     [--preset <name>] [--json]
+spur rule trace    [run-id] [--preset <name>] [--status done|failed] [--since <iso-date>] [--last <n>] [--json]
 ```
 
 Default preset is `recommended-pre-check`. `--fail-on`/`--stop-on-first` take `error|warning|info`.
@@ -138,6 +140,8 @@ List what is actually enforced before assuming — presets are layered (project 
 ```bash
 spur rule list --json                                    # discovered files + source layer
 spur rule list --preset recommended-pre-check --json     # resolved rules for one preset
+spur rule trace --last 10 --json                         # recent rule runs
+spur rule trace <run-id> --json                          # per-run detail
 ```
 
 Repo presets: `recommended-pre-check` (inner loop), `recommended-post-check` (final, adds coverage),
