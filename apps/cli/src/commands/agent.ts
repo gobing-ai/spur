@@ -195,6 +195,14 @@ function buildAgentConfig(flags: Record<string, string | boolean>, systemPrompt:
     return config;
 }
 
+/**
+ * Split `$EDITOR` into argv tokens so multi-word values (`code -w`, `vim -f`)
+ * spawn correctly. Whitespace-only input yields `[]`.
+ */
+export function splitEditorCommand(editor: string): string[] {
+    return editor.trim().split(/\s+/).filter(Boolean);
+}
+
 /** `spur agent edit <id>` — open the spec in $EDITOR or print its path. */
 async function runAgentEdit(id: string | undefined, context: CliContext): Promise<number> {
     if (id === undefined) {
@@ -213,7 +221,12 @@ async function runAgentEdit(id: string | undefined, context: CliContext): Promis
         context.output.write(path);
         return 0;
     }
-    const proc = Bun.spawn([editor, path], { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
+    const editorArgv = splitEditorCommand(editor);
+    if (editorArgv.length === 0) {
+        context.output.write(path);
+        return 0;
+    }
+    const proc = Bun.spawn([...editorArgv, path], { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
     return await proc.exited;
 }
 

@@ -6,7 +6,7 @@ import { TeamService } from '@gobing-ai/spur-app';
 import type { DoctorResult } from '@gobing-ai/ts-ai-runner';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { main } from '../../src';
-import { type AgentRunDeps, runAgentRun } from '../../src/commands/agent';
+import { type AgentRunDeps, runAgentRun, splitEditorCommand } from '../../src/commands/agent';
 import { type CliContext, createCliContext } from '../../src/context';
 import { createCapturedOutput } from '../helpers';
 
@@ -182,6 +182,22 @@ describe('spur agent edit', () => {
         } finally {
             await cleanup();
         }
+    });
+});
+
+describe('splitEditorCommand (R6 multi-word $EDITOR)', () => {
+    test('code -w splits into three argv tokens when path is appended', () => {
+        // WHY: Bun.spawn([ "code -w", path ]) looks for a binary named "code -w".
+        expect(splitEditorCommand('code -w')).toEqual(['code', '-w']);
+        expect([...splitEditorCommand('code -w'), '/tmp/x.yaml']).toEqual(['code', '-w', '/tmp/x.yaml']);
+    });
+
+    test('single-word EDITOR is unchanged', () => {
+        expect(splitEditorCommand('vim')).toEqual(['vim']);
+    });
+
+    test('whitespace-only EDITOR yields empty argv', () => {
+        expect(splitEditorCommand('   ')).toEqual([]);
     });
 });
 

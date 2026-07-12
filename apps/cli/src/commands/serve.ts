@@ -30,7 +30,16 @@ export function registerServeCommand(program: Command, context: CliContext): voi
                 const cwd = options.cwd ?? context.cwd;
                 const dbUrl = resolveServeDbUrl(cwd, env, config.database.url);
                 if (options.json) {
-                    context.output.write(toJson({ port, url: `http://${host}:${port}`, pid: process.pid }));
+                    // --json is a dry machine-readable probe: no server is started, so
+                    // pid would be this CLI process (misleading). Omit pid; report ready=false.
+                    context.output.write(
+                        toJson({
+                            port,
+                            url: `http://${host}:${port}`,
+                            pid: null,
+                            running: false,
+                        }),
+                    );
                     return;
                 }
 

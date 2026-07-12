@@ -22,6 +22,6 @@ describe('context', () => {
         const ctx = createCliContext({ output: nullOutput() });
         const responder = ctx.hitlResponder(true);
         const answer = await responder.respond({ kind: 'confirm', prompt: 'x', runId: 'r', node: 'n' });
-        expect(answer.value).toBe('yes'); // DefaultHitlResponder's confirm default
+        expect(answer.value).toBe('no'); // DefaultHitlResponder deny-by-default
     });
 });

@@ -56,7 +56,7 @@ describe('registerServeCommand', () => {
         expect(cmds).toContain('serve');
     });
 
-    test('--json prints { port, url, pid } and does not start the server', async () => {
+    test('--json prints { port, url, pid: null, running: false } and does not start the server', async () => {
         const { ctx, writes } = makeCtx();
         const { action } = captureServe(ctx);
 
@@ -65,7 +65,9 @@ describe('registerServeCommand', () => {
         const payload = JSON.parse(writes.at(-1) ?? '{}');
         expect(payload.port).toBe(4321);
         expect(payload.url).toBe('http://127.0.0.1:4321');
-        expect(payload.pid).toBe(process.pid);
+        // No server started — pid must not claim the CLI process is a server.
+        expect(payload.pid).toBeNull();
+        expect(payload.running).toBe(false);
     });
 
     test('--port flag overrides the PORT env var (flag > env precedence)', async () => {

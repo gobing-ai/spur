@@ -68,8 +68,12 @@ describe('DesktopNotifierHitlResponder', () => {
         const linux = (config?: Record<string, unknown>) =>
             new DesktopNotifierHitlResponder({ ...config, platform: 'linux' });
 
-        test('confirm returns the configured default', async () => {
-            expect(await linux({ confirmDefault: 'no' }).respond(req('confirm'))).toEqual({ value: 'no' });
+        test('confirm returns no by default (deny)', async () => {
+            expect(await linux().respond(req('confirm'))).toEqual({ value: 'no' });
+        });
+
+        test('confirm returns the configured default when set', async () => {
+            expect(await linux({ confirmDefault: 'yes' }).respond(req('confirm'))).toEqual({ value: 'yes' });
         });
 
         test('select returns the configured index', async () => {

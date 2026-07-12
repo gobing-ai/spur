@@ -67,8 +67,12 @@ export function createCliContext(options: {
         getDb,
         agentService: () => new AgentService({ cwd, env, output: options.output, agentConfig: options.agentConfig }),
         ruleService: () => new RuleService({ cwd, env, fs, output: options.output, getDb }),
-        hitlResponder: (json?: boolean) =>
-            isatty(1) && json !== true ? new ClackHitlResponder() : new DefaultHitlResponder(),
+        hitlResponder: (json?: boolean) => {
+            if (isatty(1) && json !== true) return new ClackHitlResponder();
+            // Default-deny for headless/json; SPUR_HITL_AUTO_APPROVE=1 opts in.
+            const confirmDefault = env.SPUR_HITL_AUTO_APPROVE === '1' ? 'yes' : 'no';
+            return new DefaultHitlResponder({ confirmDefault });
+        },
     };
 }
 

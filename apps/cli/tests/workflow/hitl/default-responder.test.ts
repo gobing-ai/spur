@@ -2,10 +2,10 @@ import { describe, expect, test } from 'bun:test';
 import { DefaultHitlResponder } from '../../../src/workflow/hitl/default-responder';
 
 describe('DefaultHitlResponder', () => {
-    test('confirm returns yes by default', async () => {
+    test('confirm returns no by default (deny unless opted in)', async () => {
         const r = new DefaultHitlResponder();
         const answer = await r.respond({ kind: 'confirm', prompt: 'Proceed?', runId: 'r1', node: 's1' });
-        expect(answer.value).toBe('yes');
+        expect(answer.value).toBe('no');
     });
 
     test('confirm returns configured default', async () => {

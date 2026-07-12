@@ -8,7 +8,7 @@ import { desktopNotify } from './desktop-notify';
 
 /** Configuration for DesktopNotifierHitlResponder. */
 export interface DesktopNotifierHitlResponderConfig {
-    /** confirm fallback: 'yes' | 'no' | 'cancel' (default 'yes'). */
+    /** confirm fallback: 'yes' | 'no' | 'cancel' (default 'no' — deny). */
     confirmDefault?: string;
     /** select fallback: index into options (default 0). */
     selectDefaultIndex?: number;
@@ -54,7 +54,7 @@ export class DesktopNotifierHitlResponder implements HitlResponder {
         this.runOsascript = config?.runOsascript ?? runOsascriptDefault;
         this.notifyFn = config?.notify ?? desktopNotify;
         this.defaults = {
-            confirm: config?.confirmDefault ?? 'yes',
+            confirm: config?.confirmDefault ?? 'no',
             selectIndex: config?.selectDefaultIndex ?? 0,
             input: config?.inputDefault ?? '',
         };

@@ -503,18 +503,16 @@ terminalStates:
         await main(['workflow', 'run', '--run-id', 'pause-1', workflowFile], { output: out1, cwd: dir, dbUrl });
 
         // Now continue without --yes — the HITL responder should fire.
-        // The default responder uses process.stdin.isTTY to decide.
-        // Without a real TTY it returns 'yes' by default, which won't hit the abort path.
-        // We need a controlled test environment. Use --json which makes the
-        // hitlResponder auto-accept (no prompt), so we can verify the resume path
-        // at least is hit. For the rejection path (lines 148-152), we'd need a
-        // custom responder — test below covers the --json auto-accept path instead.
+        // --json selects DefaultHitlResponder (no interactive prompt). Confirm
+        // defaults to deny unless SPUR_HITL_AUTO_APPROVE=1 opts in (task 0241 R1).
+        // This path verifies resume with explicit headless auto-approve.
 
         const contOut = createCapturedOutput();
         const contExit = await main(['workflow', 'continue', '--json'], {
             output: contOut,
             cwd: dir,
             dbUrl,
+            env: { SPUR_HITL_AUTO_APPROVE: '1' },
         });
         expect(contExit).toBe(0);
         expect(JSON.parse(contOut.messages[0] ?? '{}')).toMatchObject({ status: 'done' });
