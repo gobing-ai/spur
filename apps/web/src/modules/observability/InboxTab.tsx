@@ -125,17 +125,24 @@ export default function InboxTab() {
     }, []);
 
     // Initial load + 15 s safety-net poll + focus refetch.
+    // One AbortController at a time: abort previous in-flight before a new load so
+    // unmount / overlapping poll / focus never leave dangling requests (R5).
     useEffect(() => {
-        const controller = new AbortController();
-        void load(controller.signal);
-        const interval = setInterval(() => void load(new AbortController().signal), 15_000);
+        let active: AbortController | null = null;
+        const startLoad = () => {
+            active?.abort();
+            active = new AbortController();
+            void load(active.signal);
+        };
+        startLoad();
+        const interval = setInterval(startLoad, 15_000);
         const onFocus = () => {
             setUnreadCount(0);
-            void load(new AbortController().signal);
+            startLoad();
         };
         globalThis.addEventListener?.('focus', onFocus);
         return () => {
-            controller.abort();
+            active?.abort();
             clearInterval(interval);
             globalThis.removeEventListener?.('focus', onFocus);
         };
@@ -145,6 +152,7 @@ export default function InboxTab() {
     // are metadata-only (no body), so refetch the full inbox rather than mutating.
     useEffect(() => {
         if (typeof EventSource === 'undefined') return;
+        let active: AbortController | null = null;
         const es = new EventSource(sseUrl());
         es.onmessage = (frame) => {
             try {
@@ -154,12 +162,17 @@ export default function InboxTab() {
                 // The tab is hidden (not focused) OR the SSE arrival itself means a new
                 // message — bump unread and refetch. Reset is handled by the focus listener.
                 setUnreadCount((n) => n + 1);
-                void load(new AbortController().signal);
+                active?.abort();
+                active = new AbortController();
+                void load(active.signal);
             } catch {
                 // Malformed frame — drop silently.
             }
         };
-        return () => es.close();
+        return () => {
+            active?.abort();
+            es.close();
+        };
     }, [load]);
 
     // When focus returns to the tab, clear unread (handled in the focus listener above).

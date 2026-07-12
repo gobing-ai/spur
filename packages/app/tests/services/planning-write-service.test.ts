@@ -425,7 +425,7 @@ describe('PlanningWriteService', () => {
             // Capture the original content to prove byte-identical on abort
             const original = await readBack(ref);
 
-            await expect(svc.transition(ref, 'todo')).rejects.toThrow('Lifecycle transition denied');
+            await expect(svc.transition(ref, 'todo')).rejects.toThrow(/Lifecycle transition denied/);
 
             // File must be byte-identical — zero partial writes (R3)
             const after = await readBack(ref);

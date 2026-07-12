@@ -26,8 +26,21 @@ import {
     UNIVERSAL_SECTIONS,
 } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+import { GuardDeniedError, LockTimeoutError } from '../errors';
 
 // ─── Entity reference ───────────────────────────────────────────────────
+
+/** Re-throw lock-contention Errors as {@link LockTimeoutError} for the HTTP mapper. */
+function acquireOrTimeout<T>(acquire: () => T): T {
+    try {
+        return acquire();
+    } catch (err) {
+        if (err instanceof Error && err.message.includes('Cannot acquire') && err.message.includes('lock')) {
+            throw new LockTimeoutError(err.message);
+        }
+        throw err;
+    }
+}
 
 /** Identifies a task or feature file for the write service. */
 export interface EntityRef {
@@ -229,7 +242,7 @@ export class PlanningWriteService {
         folder: string,
         allocate: () => Promise<{ ref: EntityRef; content: string }>,
     ): Promise<WriteResult> {
-        const lock = acquireCreateLock(folder, this.fs);
+        const lock = acquireOrTimeout(() => acquireCreateLock(folder, this.fs));
         try {
             const { ref, content } = await allocate();
             // Lock already held — run the pipeline steps without re-acquiring it.
@@ -301,7 +314,9 @@ export class PlanningWriteService {
     private async executePipeline(ref: EntityRef, mutation: MutationDescriptor): Promise<WriteResult> {
         // ── Step 1: acquire lock ──
         const isCreate = mutation.kind === 'create';
-        const lock = isCreate ? acquireCreateLock(ref.folder, this.fs) : acquireEntityLock(ref.folder, ref.id, this.fs);
+        const lock = acquireOrTimeout(() =>
+            isCreate ? acquireCreateLock(ref.folder, this.fs) : acquireEntityLock(ref.folder, ref.id, this.fs),
+        );
 
         try {
             return await this.runSteps(ref, mutation);
@@ -383,8 +398,9 @@ export class PlanningWriteService {
             const result = this.lifecycle.requestTransition(ref, currentStatus, newStatus);
             const resolved = result instanceof Promise ? await result : result;
             if (!resolved.allowed) {
-                // Guard failure → abort with zero partial writes (R3).
-                throw new Error(
+                // Guard failure → abort with zero partial writes (R3). Typed so the
+                // server error-handler can match via instanceof GuardDeniedError.
+                throw new GuardDeniedError(
                     `Lifecycle transition denied for ${ref.kind} ${ref.id}: ${resolved.report ?? `${currentStatus} → ${newStatus}`}`,
                 );
             }

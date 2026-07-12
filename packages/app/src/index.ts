@@ -4,6 +4,12 @@
 export type { RuleEvalRunRow, RuleRunRow } from '@gobing-ai/spur-domain';
 export type { PlanningFolders } from './config/planning-folders';
 export { resolvePlanningFolders } from './config/planning-folders';
+export {
+    GuardDeniedError,
+    hitlAutoApproveEnabled,
+    hitlConfirmDefault,
+    LockTimeoutError,
+} from './errors';
 export type {
     AgentConfig,
     AgentExecutorConfig,
@@ -23,6 +29,7 @@ export type {
     MigrationReport,
 } from './services/corpus-migrator';
 export { CorpusMigrator } from './services/corpus-migrator';
+export { bridgeEventBus } from './services/event-bridge';
 export type {
     SystemEventCatalogEntry,
     SystemEventCatalogMetadata,

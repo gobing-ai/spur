@@ -1,4 +1,4 @@
-import type { EventBus } from '@gobing-ai/ts-infra';
+import type { EventBus, EventMap } from '@gobing-ai/ts-infra';
 
 /**
  * Wrap a server EventBus into a typed EventBus shape.
@@ -10,7 +10,7 @@ import type { EventBus } from '@gobing-ai/ts-infra';
  * @param serverBus — the canonical EventBus injected into the service context.
  * @returns a typed EventBus that forwards every call through `serverBus`.
  */
-export function bridgeEventBus<T extends Record<string, (event: unknown) => void>>(
+export function bridgeEventBus<T extends EventMap>(
     serverBus: EventBus<Record<string, (event: unknown) => void>>,
 ): EventBus<T> {
     const bridge = {
@@ -18,5 +18,6 @@ export function bridgeEventBus<T extends Record<string, (event: unknown) => void
         off: (event: string, listener: (event: unknown) => void) => serverBus.off(event, listener),
         emit: (event: string, detail: unknown) => Promise.resolve(serverBus.emit(event, detail)),
     };
+    // Single cast site for all EventBus structural mismatches (server→service maps).
     return bridge as unknown as EventBus<T>;
 }

@@ -2,6 +2,11 @@ import { describe, expect, test } from 'bun:test';
 import type { EventBus } from '@gobing-ai/ts-infra';
 import { bridgeEventBus } from '../../src/services/event-bridge';
 
+/** Event map for bridge tests — concrete payload types (not the open `EventMap` never default). */
+type TestEvents = {
+    'task.created': (event: { wbs: string }) => void;
+};
+
 /** Minimal stub EventBus that records calls for assertion. */
 function stubEventBus(): {
     bus: EventBus<Record<string, (event: unknown) => void>>;
@@ -26,9 +31,9 @@ function stubEventBus(): {
 describe('bridgeEventBus', () => {
     test('forwards on() to the server bus', () => {
         const { bus, calls } = stubEventBus();
-        const bridged = bridgeEventBus(bus);
+        const bridged = bridgeEventBus<TestEvents>(bus);
 
-        const listener = (_e: unknown) => {};
+        const listener = (_e: { wbs: string }) => {};
         bridged.on('task.created', listener);
 
         expect(calls).toHaveLength(1);
@@ -39,9 +44,9 @@ describe('bridgeEventBus', () => {
 
     test('forwards off() to the server bus', () => {
         const { bus, calls } = stubEventBus();
-        const bridged = bridgeEventBus(bus);
+        const bridged = bridgeEventBus<TestEvents>(bus);
 
-        const listener = (_e: unknown) => {};
+        const listener = (_e: { wbs: string }) => {};
         bridged.off('task.created', listener);
 
         expect(calls).toHaveLength(1);
@@ -52,7 +57,7 @@ describe('bridgeEventBus', () => {
 
     test('forwards emit() to the server bus and wraps in Promise.resolve', async () => {
         const { bus, calls } = stubEventBus();
-        const bridged = bridgeEventBus(bus);
+        const bridged = bridgeEventBus<TestEvents>(bus);
 
         const result = bridged.emit('task.created', { wbs: '0042' });
 
@@ -66,10 +71,8 @@ describe('bridgeEventBus', () => {
     });
 
     test('bridged bus carries the expected type parameter', () => {
-        type MyEvents = Record<string, (event: unknown) => void>;
-
         const { bus } = stubEventBus();
-        const bridged = bridgeEventBus<MyEvents>(bus);
+        const bridged = bridgeEventBus<TestEvents>(bus);
 
         // The bridged bus is an object with on/off/emit — structural check.
         expect(typeof bridged.on).toBe('function');
