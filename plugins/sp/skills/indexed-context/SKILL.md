@@ -134,17 +134,28 @@ At the **end of significant work** (milestone, PR, session wrap-up), append to
 
 ## Token ledger — automatic via hooks
 
-`token-ledger.jsonl` is written by hooks, not by the agent. One event per line:
+`token-ledger.jsonl` is written by hooks, not by the agent. One event per line.
+
+**PostToolUse matcher:** `Bash|Grep|Glob|Read|Write|Edit` (plugin `hooks.json` +
+`context-post-tool` allowlist). Unknown tools fail open (exit 0, no write). No `*` / MCP without
+an explicit allowlist entry.
+
+**Privacy:** store a short **summary** (truncated command / pattern / glob) — never full stdout or
+env dumps. Token estimates for Bash/Grep/Glob use response size **after a 4 KiB cap** and secret
+scrub; omit `tokens` when unknown (never `0`).
 
 ```jsonl
 {"ts":"2026-07-09T14:23:01Z","session":"session-2026-07-09-1423","type":"session_start"}
 {"ts":"2026-07-09T14:23:15Z","session":"session-2026-07-09-1423","type":"read","file":"src/dao.ts","tokens":648}
 {"ts":"2026-07-09T14:24:00Z","session":"session-2026-07-09-1423","type":"write","file":"src/dao.ts","tokens":222,"action":"edit"}
+{"ts":"2026-07-12T15:00:00Z","session":"session-2026-07-12-1500","type":"bash","summary":"ls -la","tokens":12}
+{"ts":"2026-07-12T15:00:01Z","session":"session-2026-07-12-1500","type":"grep","summary":"/TODO/ src"}
+{"ts":"2026-07-12T15:00:02Z","session":"session-2026-07-12-1500","type":"glob","summary":"**/*.test.ts"}
 {"ts":"2026-07-09T14:30:00Z","session":"session-2026-07-09-1423","type":"session_end","totals":{"reads":5,"writes":19,"tokens":2783}}
 ```
 
-**Never edit `token-ledger.jsonl` by hand.** It feeds a future tool-use monitoring tool. On
-agents without hook support, the ledger simply doesn't accumulate — graceful degradation.
+**Never edit `token-ledger.jsonl` by hand.** It feeds the Board **Observability → Tool Using** tab.
+On agents without hook support, the ledger simply doesn't accumulate — graceful degradation.
 
 ## Graceful degradation
 

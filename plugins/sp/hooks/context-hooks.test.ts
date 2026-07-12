@@ -171,16 +171,88 @@ describe('context-post-tool — event recording', () => {
         }
     });
 
-    test('fails open (exit 0, no event) for a non-Read/Write/Edit tool', async () => {
+    test('records bash event with truncated command summary (task 0248)', async () => {
+        const dir = makeTempProject();
+        try {
+            await runHook(START_HOOK, dir, {});
+            const { exitCode } = await runHook(POST_TOOL_HOOK, dir, {
+                tool_name: 'Bash',
+                tool_input: { command: 'ls -la' },
+                tool_response: { content: 'file.txt\n' },
+            });
+            expect(exitCode).toBe(0);
+            const events = readLedger(dir).filter((e) => e.type === 'bash');
+            expect(events).toHaveLength(1);
+            expect(events[0]?.summary).toBe('ls -la');
+            expect(events[0]?.file).toBeUndefined();
+            expect(events[0]?.tokens).toBe(Math.ceil(new TextEncoder().encode('file.txt\n').length / 4));
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('records grep and glob events without full dumps (task 0248)', async () => {
+        const dir = makeTempProject();
+        try {
+            await runHook(START_HOOK, dir, {});
+            await runHook(POST_TOOL_HOOK, dir, {
+                tool_name: 'Grep',
+                tool_input: { pattern: 'TODO', path: 'src', glob: '*.ts' },
+                tool_response: { content: 'src/a.ts:1:TODO' },
+            });
+            await runHook(POST_TOOL_HOOK, dir, {
+                tool_name: 'Glob',
+                tool_input: { pattern: '**/*.test.ts', path: 'packages' },
+                tool_response: { content: 'packages/app/a.test.ts\n' },
+            });
+            const ledger = readLedger(dir);
+            const grep = ledger.filter((e) => e.type === 'grep');
+            const glob = ledger.filter((e) => e.type === 'glob');
+            expect(grep).toHaveLength(1);
+            expect(String(grep[0]?.summary)).toContain('TODO');
+            expect(glob).toHaveLength(1);
+            expect(String(glob[0]?.summary)).toContain('**/*.test.ts');
+            // Must not store multi-line full dumps as file
+            expect(grep[0]?.file).toBeUndefined();
+            expect(glob[0]?.file).toBeUndefined();
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('caps large Bash stdout for token estimate and never stores body (task 0248)', async () => {
+        const dir = makeTempProject();
+        try {
+            await runHook(START_HOOK, dir, {});
+            const huge = 'x'.repeat(20_000);
+            const { exitCode } = await runHook(POST_TOOL_HOOK, dir, {
+                tool_name: 'Bash',
+                tool_input: { command: 'cat big.log' },
+                tool_response: { content: huge },
+            });
+            expect(exitCode).toBe(0);
+            const events = readLedger(dir).filter((e) => e.type === 'bash');
+            expect(events).toHaveLength(1);
+            // tokens reflect 4 KiB cap, not full 20k
+            expect(events[0]?.tokens).toBe(Math.ceil(4096 / 4));
+            const line = JSON.stringify(events[0]);
+            expect(line.includes(huge)).toBe(false);
+            expect(events[0]?.summary).toBe('cat big.log');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('fails open (exit 0, no event) for tools outside the allowlist (task 0248)', async () => {
         const dir = makeTempProject();
         try {
             await runHook(START_HOOK, dir, {});
             const before = readLedger(dir).length;
 
             const { exitCode } = await runHook(POST_TOOL_HOOK, dir, {
-                tool_name: 'Bash',
-                tool_input: { command: 'ls' },
-                tool_response: { content: 'file.txt' },
+                tool_name: 'ToolX',
+                tool_input: { command: 'nope' },
+                tool_response: { content: 'secret' },
             });
             expect(exitCode).toBe(0);
             expect(readLedger(dir)).toHaveLength(before);
@@ -210,6 +282,67 @@ describe('context-post-tool — event recording', () => {
             await runHook(START_HOOK, dir, {});
             const { exitCode } = await runHook(POST_TOOL_HOOK, dir, {}, 'not json');
             expect(exitCode).toBe(0);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('token cascade uses Write tool_input.content when response content empty', async () => {
+        const dir = makeTempProject();
+        try {
+            await runHook(START_HOOK, dir, {});
+            const body = 'y'.repeat(400);
+            const { exitCode } = await runHook(POST_TOOL_HOOK, dir, {
+                tool_name: 'Write',
+                tool_input: { file_path: '/out.ts', content: body },
+                tool_response: {},
+            });
+            expect(exitCode).toBe(0);
+            const events = readLedger(dir).filter((e) => e.type === 'write');
+            expect(events[0]?.tokens).toBe(100);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('omits tokens when unknown (does not store 0)', async () => {
+        const dir = makeTempProject();
+        try {
+            await runHook(START_HOOK, dir, {});
+            await runHook(POST_TOOL_HOOK, dir, {
+                tool_name: 'Edit',
+                tool_input: { file_path: '/missing-no-stat-content.ts' },
+                tool_response: {},
+            });
+            const events = readLedger(dir).filter((e) => e.type === 'write');
+            expect(events).toHaveLength(1);
+            expect(events[0]?.tokens).toBeUndefined();
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('copies session_id from payload and agent from session file', async () => {
+        const dir = makeTempProject();
+        try {
+            await runHook(START_HOOK, dir, {});
+            // Enrich session file as SessionStart with agent would.
+            const sessionPath = join(dir, '.spur', 'context', '.session.json');
+            const session = JSON.parse(readFileSync(sessionPath, 'utf-8')) as Record<string, unknown>;
+            session.agent = 'claude';
+            session.model = 'test-model';
+            writeFileSync(sessionPath, JSON.stringify(session));
+
+            await runHook(POST_TOOL_HOOK, dir, {
+                session_id: 'platform-sess-1',
+                tool_name: 'Read',
+                tool_input: { file_path: '/a.ts' },
+                tool_response: { content: 'hi' },
+            });
+            const events = readLedger(dir).filter((e) => e.type === 'read');
+            expect(events[0]?.sessionId).toBe('platform-sess-1');
+            expect(events[0]?.agent).toBe('claude');
+            expect(events[0]?.model).toBe('test-model');
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }

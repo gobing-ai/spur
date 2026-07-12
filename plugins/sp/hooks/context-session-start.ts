@@ -4,56 +4,92 @@
  *
  * Generates a session ID, writes `.spur/context/.session.json` (tracking the current session
  * for PostToolUse and Stop hooks), and appends a `session_start` event to
- * `token-ledger.jsonl`.
+ * `token-ledger.jsonl`. Task 0246: best-effort agent/model hints on session file + event.
  *
- * **Fail-open contract:** every error path — unparseable payload, missing `.spur/context/`,
- * write failure — exits 0 with no output. A broken context hook must never wedge an agent.
+ * **Fail-open contract:** every error path exits 0 with no output.
  *
- * Self-contained by design (task 0232). Installed hook configs use the portable
- * `superskill hook run sp context-session-start` entrypoint.
+ * Self-contained by design (task 0232/0246).
  */
 
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-function contextDir(): string {
-    return join(process.env.CLAUDE_PROJECT_DIR ?? process.cwd(), '.spur', 'context');
+/** Best-effort agent name from env (never required). */
+export function resolveAgentHint(env: NodeJS.ProcessEnv = process.env): string | undefined {
+    const candidates = [env.SPUR_AGENT, env.CLAUDE_CODE_ENTRYPOINT, env.TERM_PROGRAM, env.SPUR_DEFAULT_AGENT];
+    for (const c of candidates) {
+        if (typeof c === 'string' && c.trim()) return c.trim();
+    }
+    return undefined;
 }
 
-function exitOk(): never {
-    process.exit(0);
+/** Best-effort model id from env (never required). */
+export function resolveModelHint(env: NodeJS.ProcessEnv = process.env): string | undefined {
+    const candidates = [env.SPUR_MODEL, env.ANTHROPIC_MODEL, env.OPENAI_MODEL, env.CLAUDE_MODEL];
+    for (const c of candidates) {
+        if (typeof c === 'string' && c.trim()) return c.trim();
+    }
+    return undefined;
 }
 
-async function main(): Promise<void> {
-    const dir = contextDir();
-
-    // Ensure the directory exists; fail-open if we can't create it.
+/**
+ * Core session-start path (testable). Returns session id on success, null on I/O failure.
+ */
+export function recordSessionStart(
+    dir: string,
+    env: NodeJS.ProcessEnv = process.env,
+    now: () => Date = () => new Date(),
+): string | null {
     try {
         mkdirSync(dir, { recursive: true });
     } catch {
-        exitOk();
+        return null;
     }
 
-    const now = new Date();
+    const at = now();
     const pad = (n: number) => String(n).padStart(2, '0');
-    const sessionId = `session-${now.toISOString().slice(0, 10)}-${pad(now.getHours())}${pad(now.getMinutes())}`;
-    const ts = now.toISOString();
+    const sessionId = `session-${at.toISOString().slice(0, 10)}-${pad(at.getHours())}${pad(at.getMinutes())}`;
+    const ts = at.toISOString();
+    const agent = resolveAgentHint(env);
+    const model = resolveModelHint(env);
+
+    const sessionBody: Record<string, unknown> = {
+        session: sessionId,
+        started: ts,
+        reads: 0,
+        writes: 0,
+        tokens: 0,
+    };
+    if (agent) sessionBody.agent = agent;
+    if (model) sessionBody.model = model;
 
     const sessionFile = join(dir, '.session.json');
     try {
-        writeFileSync(sessionFile, JSON.stringify({ session: sessionId, started: ts, reads: 0, writes: 0, tokens: 0 }));
+        writeFileSync(sessionFile, JSON.stringify(sessionBody));
     } catch {
-        exitOk();
+        return null;
     }
+
+    const startEvent: Record<string, unknown> = { ts, session: sessionId, type: 'session_start' };
+    if (agent) startEvent.agent = agent;
+    if (model) startEvent.model = model;
 
     const ledgerPath = join(dir, 'token-ledger.jsonl');
     try {
-        appendFileSync(ledgerPath, `${JSON.stringify({ ts, session: sessionId, type: 'session_start' })}\n`);
+        appendFileSync(ledgerPath, `${JSON.stringify(startEvent)}\n`);
     } catch {
-        exitOk();
+        return null;
     }
 
-    exitOk();
+    return sessionId;
 }
 
-void main().catch(exitOk);
+// Entrypoint — kept minimal so unit coverage focuses on pure helpers above.
+if (import.meta.main) {
+    try {
+        recordSessionStart(join(process.env.CLAUDE_PROJECT_DIR ?? process.cwd(), '.spur', 'context'));
+    } catch {
+        /* fail-open */
+    }
+    process.exit(0);
+}
