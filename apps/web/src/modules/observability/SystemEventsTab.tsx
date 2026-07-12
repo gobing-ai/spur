@@ -376,10 +376,14 @@ export function buildTooltipSummary(
         case 'workflow-custom': {
             push('Workflow', pickString('workflow', 'workflowName', 'name'));
             push('Run', pickString('runId', 'run', 'id'));
-            // First non-null of phase/transition/action becomes a single labeled pair.
-            push('Phase', pickString('phase'));
-            push('Transition', pickString('transition'));
-            push('Action', pickString('action', 'kind'));
+            // R10 / design §2.2: first non-null of phase → transition → action
+            // becomes a single labeled pair (not all three).
+            const phase = pickString('phase');
+            const transition = pickString('transition');
+            const action = pickString('action', 'kind');
+            if (phase) push('Phase', phase);
+            else if (transition) push('Transition', transition);
+            else if (action) push('Action', action);
             break;
         }
         default:

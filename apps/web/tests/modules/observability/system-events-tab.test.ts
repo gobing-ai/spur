@@ -107,6 +107,33 @@ describe('buildTooltipSummary', () => {
                 // Error would be pair #5, dropped by the 4-pair cap.
             ]);
         });
+
+        // AC: Queue renderer surfaces status, duration, and error (type key, 150ms)
+        test('AC fixture: type+jobId+status+durationMs within 4-pair cap', () => {
+            const summary = buildTooltipSummary(
+                'queue.job.completed',
+                { jobId: 'j1', type: 'smoke', status: 'completed', durationMs: 150 },
+                'queue',
+            );
+            expect(summary).toEqual([
+                { label: 'Job', value: 'smoke' },
+                { label: 'ID', value: 'j1' },
+                { label: 'Duration', value: '150ms' },
+                { label: 'Status', value: 'completed' },
+            ]);
+            expect(summary?.length).toBeLessThanOrEqual(4);
+        });
+
+        // AC: Queue renderer surfaces error on a failed job (no duration → Error fits)
+        test('AC fixture: failed job surfaces Status and Error', () => {
+            const summary = buildTooltipSummary(
+                'queue.job.failed',
+                { jobId: 'j2', type: 'smoke', status: 'failed', error: 'boom', attempt: 3 },
+                'queue',
+            );
+            expect(summary).toContainEqual({ label: 'Error', value: 'boom' });
+            expect(summary).toContainEqual({ label: 'Status', value: 'failed' });
+        });
     });
 
     describe('scheduler renderer', () => {
@@ -130,6 +157,21 @@ describe('buildTooltipSummary', () => {
             );
             expect(summary).toContainEqual({ label: 'Error', value: 'boom' });
         });
+
+        // AC: Scheduler renderer surfaces duration and error, not cron
+        test('AC fixture: name + 3.2s duration + error; no cron pair', () => {
+            const summary = buildTooltipSummary(
+                'scheduler.job.executed',
+                { name: 'system-events-prune', durationMs: 3200, error: 'timeout', cron: '*/5 * * * *' },
+                'scheduler',
+            );
+            expect(summary).toEqual([
+                { label: 'Job', value: 'system-events-prune' },
+                { label: 'Duration', value: '3.2s' },
+                { label: 'Error', value: 'timeout' },
+            ]);
+            expect((summary ?? []).map((p) => p.label)).not.toContain('Cron');
+        });
     });
 
     describe('message renderer', () => {
@@ -148,6 +190,20 @@ describe('buildTooltipSummary', () => {
             expect(summary).toContainEqual({ label: 'Route', value: 'outbound' });
             expect(summary).toContainEqual({ label: 'Subject', value: 'hello' });
         });
+
+        // AC: Message renderer surfaces route, ok flag, and subject
+        test('AC fixture: route + ok + subject', () => {
+            const summary = buildTooltipSummary(
+                'message.sent',
+                { route: 'inbox', ok: true, subject: 're: plan' },
+                'message',
+            );
+            expect(summary).toEqual([
+                { label: 'Route', value: 'inbox' },
+                { label: 'OK', value: 'true' },
+                { label: 'Subject', value: 're: plan' },
+            ]);
+        });
     });
 
     describe('process / agent renderer', () => {
@@ -163,6 +219,21 @@ describe('buildTooltipSummary', () => {
                 { label: 'Duration', value: '12.0s' },
             ]);
         });
+
+        // AC: Process/agent surfaces command, exit, duration, and pid
+        test('AC fixture: command + exit + 42.0s + pid within 4-pair budget', () => {
+            const summary = buildTooltipSummary(
+                'process.exited',
+                { command: 'spur agent run', exitCode: 0, durationMs: 42_000, pid: 12_345 },
+                'process',
+            );
+            expect(summary).toEqual([
+                { label: 'Command', value: 'spur agent run' },
+                { label: 'Exit', value: '0' },
+                { label: 'Duration', value: '42.0s' },
+                { label: 'PID', value: '12345' },
+            ]);
+        });
     });
 
     describe('rule renderer', () => {
@@ -176,6 +247,20 @@ describe('buildTooltipSummary', () => {
                 { label: 'Rule', value: 'no-console' },
                 { label: 'Severity', value: 'warn' },
                 { label: 'Findings', value: '3' },
+            ]);
+        });
+
+        // AC: Rule renderer surfaces severity and findings count
+        test('AC fixture: rule + severity + numeric findings count', () => {
+            const summary = buildTooltipSummary(
+                'rule.run.completed',
+                { rule: 'no-any', severity: 'error', count: 7 },
+                'rule',
+            );
+            expect(summary).toEqual([
+                { label: 'Rule', value: 'no-any' },
+                { label: 'Severity', value: 'error' },
+                { label: 'Findings', value: '7' },
             ]);
         });
     });
@@ -197,6 +282,20 @@ describe('buildTooltipSummary', () => {
 
             const onlyStatus = buildTooltipSummary('api.request', { status: '500' }, 'api');
             expect(onlyStatus).toContainEqual({ label: 'HTTP', value: '500' });
+        });
+
+        // AC: Api renderer surfaces method+status, path, and error
+        test('AC fixture: combined HTTP + path + error (numeric status)', () => {
+            const summary = buildTooltipSummary(
+                'api.request.error',
+                { method: 'POST', status: 500, path: '/api/tasks', error: 'db locked' },
+                'api',
+            );
+            expect(summary).toEqual([
+                { label: 'HTTP', value: 'POST 500' },
+                { label: 'Path', value: '/api/tasks' },
+                { label: 'Error', value: 'db locked' },
+            ]);
         });
     });
 
@@ -221,6 +320,35 @@ describe('buildTooltipSummary', () => {
                 'workflow-transition',
             );
             expect(summary).toContainEqual({ label: 'Transition', value: 'implement→test' });
+        });
+
+        // AC + R10: first non-null of phase/transition/action only
+        test('AC fixture: first non-null phase wins over co-present action', () => {
+            const summary = buildTooltipSummary(
+                'workflow.phase.entered',
+                {
+                    workflow: 'idea-pipeline',
+                    runId: 'r9',
+                    phase: 'ac-generate',
+                    action: 'agent.run',
+                },
+                'workflow-phase',
+            );
+            expect(summary).toEqual([
+                { label: 'Workflow', value: 'idea-pipeline' },
+                { label: 'Run', value: 'r9' },
+                { label: 'Phase', value: 'ac-generate' },
+            ]);
+            expect((summary ?? []).map((p) => p.label)).not.toContain('Action');
+        });
+
+        test('falls through to Action when phase and transition absent', () => {
+            const summary = buildTooltipSummary(
+                'workflow.action',
+                { workflow: 'idea-pipeline', runId: 'r9', action: 'agent.run' },
+                'workflow-action',
+            );
+            expect(summary).toContainEqual({ label: 'Action', value: 'agent.run' });
         });
     });
 
