@@ -12,7 +12,7 @@ priority: P2
 tags: ["observability", "web", "tooltip"]
 dependencies: []
 created_at: "2026-07-09T23:04:54.456Z"
-updated_at: "2026-07-09T23:06:16.358Z"
+updated_at: "2026-07-12T04:11:55.835Z"
 ---
 
 ## 0234. Enrich buildTooltipSummary so every renderer surfaces high-value diagnostic fields
@@ -128,11 +128,74 @@ Rewrote `buildTooltipSummary` (`apps/web/src/modules/observability/SystemEventsT
 - `apps/web/tests/modules/observability/system-events-tab.test.ts` — 23 tests: `formatDuration` boundary (null/NaN/Infinity/0/999/1000/1500/65000), null-payload, 4-pair cap, drop-missing, and one fixture per renderer branch.
 
 ### Testing
+**Verify run:** 2026-07-11 — `/sp:dev-verify 0234 --auto --focus all --fix all --force` (standalone re-audit of `done` task).
 
-`bun test tests/modules/observability/system-events-tab.test.ts` — 23 pass, 0 fail, 42 expect() calls.
-Full web suite: `bun test` — 399 pass, 0 fail, 1103 expect() calls across 27 files.
-Typecheck: `bunx tsc --noEmit` — clean.
+**Command evidence (this run, post-fix):**
+```
+cd apps/web && bun test tests/modules/observability/system-events-tab.test.ts
+32 pass, 0 fail, 55 expect() calls
+```
 
+**Coverage:** N/A as monorepo aggregate % (happy-dom unit file only). Focused path coverage: `formatDuration` + every `buildTooltipSummary` renderer branch exercised by the 32 tests above (including one AC fixture per Gherkin scenario).
+
+**`--fix all` applied this run:**
+1. **R10 code fix** — workflow branch now first-non-null of phase → transition → action (was pushing all three). `SystemEventsTab.tsx:379-387`.
+2. **AC fixture tests** — added exact Gherkin payloads for queue (2), scheduler, message, process+pid, rule, api+error, workflow first-non-null (+ action fallthrough). Suite 23 → 32 tests.
+
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `formatDuration` `SystemEventsTab.tsx:257-261`; boundary tests 999→`999ms`, 1000→`1.0s`, 65000→`65.0s`, non-finite→null |
+| R2 | MET | `pickNumber` closure `SystemEventsTab.tsx:278-284` (finite number only; null otherwise) |
+| R3 | MET | `push` drops null/empty (`:305-307`); `.slice(0,4)` (`:397`); tests cap + drop-missing |
+| R4 | MET | queue branch `:319-325`; AC fixtures type/jobId/status/duration + failed+error |
+| R5 | MET | scheduler `:326-330` name-first, no cron; AC fixture 3200→`3.2s` + error, cron key ignored |
+| R6 | MET | process/agent `:340-347`; AC fixture command/exit/42.0s/pid |
+| R7 | MET | message `:331-338` Route/OK/Subject (+ from→to enrichment when both present); AC fixture route/ok/subject |
+| R8 | MET | rule `:348-351`; AC fixture rule/severity/count:7 |
+| R9 | MET | api `:358-369` combined HTTP when both present else individual; AC fixture POST 500 + path + error |
+| R10 | MET | workflow first-non-null phase→transition→action `:379-387` (fixed this verify); AC fixture phase wins over action |
+| R11 | MET | `system-events-tab.test.ts` — per-renderer fixtures + formatDuration boundaries |
+| R12 | MET | static-ref: change limited to tooltip helpers + tests; DETAIL_RENDERERS / EventDetails / SSE parsers not rewritten for this task |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: Queue renderer surfaces status, duration, and error | MET | test | `AC fixture: type+jobId+status+durationMs…` — Job=smoke, ID=j1, Duration=150ms, Status=completed, ≤4 pairs |
+| Scenario: Queue renderer surfaces error on a failed job | MET | test | `AC fixture: failed job surfaces Status and Error` — Error=boom, Status=failed |
+| Scenario: Scheduler renderer surfaces duration and error, not cron | MET | test | `AC fixture: name + 3.2s…` — Job, Duration=3.2s, Error=timeout; no Cron label |
+| Scenario: Process/agent renderer surfaces command, exit code, duration, and pid | MET | test | `AC fixture: command + exit + 42.0s + pid…` |
+| Scenario: Message renderer surfaces route, ok flag, and subject | MET | test | `AC fixture: route + ok + subject` |
+| Scenario: Rule renderer surfaces severity and findings count | MET | test | `AC fixture: rule + severity + numeric findings count` |
+| Scenario: Api renderer surfaces method+status, path, and error | MET | test | `AC fixture: combined HTTP + path + error (numeric status)` |
+| Scenario: Workflow renderer surfaces phase, transition, and action when present | MET | test | `AC fixture: first non-null phase wins…` + action fallthrough test |
+| Scenario: Duration is formatted human-readably across the boundary | MET | test | `formatDuration` suite: 999→999ms, 1000→1.0s, 65000→65.0s |
+
+**Design conformance** (task `### Design` + design plan §2):
+
+| Claim | Status | Evidence |
+|-------|--------|----------|
+| formatDuration 2-branch ms/s | DONE | `tsx:257-261` |
+| 4-pair cap + null drop | DONE | push + slice |
+| Per-renderer priority budgets R4–R10 | DONE | switch cases match design §2.2 (R10 aligned this run) |
+| No new runtime dependency | DONE | plain TS only |
+| No DETAIL_RENDERERS / SSE / history rewrite | DONE | R12 |
+
+**SECUA Review (answer-file; Review section owned by `/sp:dev-review`)**
+
+| Sev | Dim | Finding |
+|-----|-----|---------|
+| — | S | Pure presentation of already-trusted event payloads; no HTML injection path in pair projection (values rendered as text in tooltip). |
+| — | E | O(keys) per payload; capped at 4 pairs — fine for hover path. |
+| — | C | R10 first-non-null corrected; duration finite check; 0 exitCode / numeric status coerced via pickString. |
+| — | U | Priority budgets surface diagnostic fields; auto-drop missing values. |
+| — | A | Helpers local to module; exports only for tests; no cross-layer leakage. |
+
+No blocker/major findings after fix.
+
+**Verdict:** PASS — all core R1–R12 and AC MET with executable test evidence.
 ### Review
 
 P4 (informational): the workflow branch surfaces phase/transition/action as separate candidate pairs rather than "first non-null wins" — if a payload carries two, both appear (within the 4-pair cap). This is more informative than the spec's single-pair rule and within the cap, so acceptable. No P1–P3 findings.
