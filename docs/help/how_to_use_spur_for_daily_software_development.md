@@ -98,7 +98,7 @@ What `init` creates under `.spur/`:
 > **Re-init guard:** `spur init` refuses (exit 1) when `.spur/config.yaml` already exists,
 > unless `--force` is given — preventing a stray `init` from clobbering a configured project.
 
-On first run, `spur init` also seeds `~/.config/spur/` from the bundled `dist/config` assets
+On first run, `spur init` also seeds `~/.config/spur/` from the bundled package-root `config/` assets
 (existing files are never overwritten), so `spur rule run` resolves a real ruleset from any
 project. `--json` output:
 

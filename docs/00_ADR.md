@@ -324,13 +324,19 @@ recorded in task 0021's Design section; the catalog dependency add is the intend
 
 **Status:** Accepted · **Date:** 2026-06-07
 
-**Decision.** Repo-root `./config/{rules,workflows,plugins}` is the **single source of truth** for all
-Spur default config files, separating config assets from source code. The build copies `./config` into
-`apps/cli/dist/config` and ships it via the package `files` array; runtime resolves bundled defaults
-from `dist/config`, lazily seeds them into `~/.config/spur/` on first `spur init` (never overwriting),
-and `spur init` scaffolds a project's `.spur/` from that seeded layer. The three-layer resolution model
-(`bundled` > global `~/.config/spur` > local `.spur`) is unchanged; **no symlinks** participate in the
-install or init flow.
+**Decision.** Repo-root `./config/{rules,workflows,plugins,tasks,templates}` is the **single source of
+truth** for all Spur default config files, separating config assets from source code. The build copies
+`./config` into the published package as top-level `config/` (via `bundle-config` → `apps/cli/config`,
+listed in the package `files` array); runtime resolves bundled defaults from that tree, lazily seeds
+them into `~/.config/spur/` on first `spur init` (never overwriting), and `spur init` scaffolds a
+project's `.spur/` with a **full-tree copy** of the bundled assets (plus a manifest pass for remaps
+and root-scoped docs/AGENTS). The three-layer resolution model (`bundled` > global `~/.config/spur` >
+local `.spur`) is unchanged; **no symlinks** participate in the install or init flow.
+
+> **Layout history.** Early releases shipped config as `dist/config`; mid-era packages nested it under
+> `spur-cli/config` after the bin moved to package-root `spur.js`. Current releases restore package-root
+> `config/` so the install tree matches the monorepo SSOT name. `bundledConfigRoot()` still accepts
+> `spur-cli/config` for already-installed legacy packages.
 
 Ownership splits by concern:
 - **`@gobing-ai/ts-rule-engine` keeps only generic demo rules** — one example per builtin evaluator
@@ -353,8 +359,8 @@ independent of any preset name and is retained — only the spur-specific *files
 name* change.
 
 **`--compile` caveat.** The `bun build --compile` binary (`dist/cli/spur`) cannot read a sibling
-`dist/config`; it relies on the `~/.config/spur` seed. The published global install
-(`bun install -g`, runs `dist/index.js`) reads `dist/config` directly, so this is the primary path.
+package `config/`; it relies on the `~/.config/spur` seed. The published global install
+(`bun install -g`, runs `spur.js`) reads package-root `config/` directly, so this is the primary path.
 
 **Detail:** asset layout, init flow, and preset vocabulary in `04 §2.3 Default config assets` and
 `04 §1.1` (`spur init`, `spur rule run`); cross-repo cleanup sequenced so ts-libs preset deletion lands

@@ -81,7 +81,7 @@ Scaffold a local Spur project. Writes `.spur/config.yaml` (§2.1) and records th
 The set of scaffolded files is an explicit reviewed manifest (`scaffold-manifest.ts`) — adding a default
 is a one-line manifest edit, not new control flow. Files are read from the resolved config source, not
 embedded as string literals. Always creates `.spur/agents/` (with a `.gitkeep`) for team-mode agent
-specs, regardless of `--minimal`. On first run it seeds `~/.config/spur/` from the bundled `dist/config`
+specs, regardless of `--minimal`. On first run it seeds `~/.config/spur/` from the bundled package-root `config/`
 assets (existing files are never overwritten), so `spur rule run` resolves a real ruleset from any
 project. Re-running is blocked (exit 1) unless `--force` is given, preventing a stray `init` from
 clobbering a configured project. `--json` emits
@@ -275,7 +275,7 @@ stabilize before the report implementation is designed.
 | Command | Behavior |
 |---------|----------|
 | `spur status [path] [--json]` | Project health: config present, package.json present, git context, team agent spec ids found under `.spur/agents/`; optional path metadata (size, isFile, isDirectory). |
-| `spur serve [--port <n>] [--host <addr>] [--no-open] [--cwd <path>] [--json]` | Start the web server (local fallback). Options: `--port` (env PORT, default 3000), `--host` (env HOST, default localhost), `--no-open` skip browser, `--json` print {port,url,pid}. |
+| `spur serve [--port <n>] [--host <addr>] [--no-open] [--cwd <path>] [--json]` | Start the web server (local fallback) and serve the Spur Board SPA when static assets resolve. Options: `--port` (env PORT, default 3000), `--host` (env HOST, default localhost), `--no-open` skip browser, `--json` print {port,url,pid}. Board assets ship in the npm package as `web/` next to `spur.js` (`resolveWebDistPath`); without them `/board` returns JSON 404 and the server logs a warning. |
 | `spur migrate [--json]` | Temporary helper: apply CLI-owned schema migrations; reports `{ ok, applied }`. |
 | `spur --help` / `spur --version` | Commander-rendered usage / binary version (ADR-014). |
 
@@ -346,7 +346,7 @@ Env-derived config (`ln(env)`), consumed by both the CLI context and the server 
 | `server.port` | `PORT` | `3000` |
 | `server.host` | `HOST` | `localhost` |
 | `server.openBrowser` | — | `true` (spur serve only) |
-| `server.webDistPath` | — | `null` (S5 local static path) |
+| `server.webDistPath` | — | `null` (auto-resolve: cwd `dist/web`, package `web/` next to `spur.js`, binary-adjacent `web/`, monorepo `dist/web`) |
 | `telemetry.enabled` | `SPUR_TELEMETRY_ENABLED` | `false` |
 | `telemetry.endpoint` | `SPUR_TELEMETRY_ENDPOINT` | — |
 | `logging.level` | `SPUR_LOG_LEVEL` | `info` (debug\|info\|warn\|error) |
@@ -385,21 +385,23 @@ config/
 
 | Stage | Action |
 |-------|--------|
-| Build (`build:bundle`) | Copy `./config` → `apps/cli/dist/config`; shipped via the package `files` array. |
-| Install (`bun install -g`) | `dist/config` ships inside the package — no `postinstall` (unreliable for global installs). |
-| First run / `spur init` | `seedGlobalConfig()` copies `dist/config/{rules,workflows}` → `~/.config/spur/` (never overwrites). |
-| `spur init` scaffold | Per the `scaffold-manifest.ts` list, copy resolved defaults → `.spur/` (and `docs/` stubs — task 0088) unless present. `docs/` entries are `preserve`-marked: never overwritten, even with `--force`. |
-| Runtime resolution | `bundled` (`dist/config` + ts-rule-engine demo rules) > global (`~/.config/spur`) > local (`.spur`). |
+| Build (`build:bundle`) | Copy repo-root `./config` → package-root `apps/cli/config` via `bundle-config`; shipped via the package `files` array as top-level `config/`. |
+| Install (`bun install -g`) | Package-root `config/` ships inside `@gobing-ai/spur` — no `postinstall` (unreliable for global installs). Legacy installs may still have `spur-cli/config/` (pre-0.3.9); `bundledConfigRoot()` accepts both. |
+| First run / `spur init` | `seedGlobalConfig()` copies bundled `config/{rules,workflows,tasks,…}` (YAML/JSON) → `~/.config/spur/` (never overwrites). |
+| `spur init` scaffold | Full-tree seed of every bundled asset into project `.spur/` (natural paths: `rules/**`, `workflows/**`, `tasks/**`, `templates/**`, `plugins/**`), then the `scaffold-manifest.ts` pass for remaps (`templates/task` → `tasks/templates`), root-scoped `docs/` + `AGENTS.md`, and `preserve`-marked entries (never overwritten, even with `--force`). |
+| Runtime resolution | `bundled` (package `config/` + ts-rule-engine demo rules) > global (`~/.config/spur`) > local (`.spur`). |
 
 **Ownership split.** `@gobing-ai/ts-rule-engine` ships only generic demo rules (one per builtin
 evaluator) + a generic `example.yaml` preset for its own tests. Spur owns its presets and workflows
 here. The bare `recommended` preset is removed; `recommended-pre-check` is the default (BREAKING, ADR-015).
 
-**`--compile` caveat.** The compiled binary (`dist/cli/spur`) cannot read a sibling `dist/config`; it
-relies on the `~/.config/spur` seed. The published global install (`dist/index.js`) reads `dist/config`
-directly and is the primary path.
+**`--compile` caveat.** The compiled binary (`dist/cli/spur`) cannot read a sibling package `config/`;
+it relies on the `~/.config/spur` seed. The published global install (`spur.js` + package-root
+`config/`) reads the bundled tree directly and is the primary path.
 
-No symlinks participate in install or init — config propagates by copy-and-resolve only.
+No symlinks participate in install or init — config propagates by copy-and-resolve only. (The
+monorepo may symlink `.spur/{rules,workflows,…}` → repo-root `config/` to avoid duplication during
+Spur's own development; that is a monorepo convenience only.)
 
 ### 2.4 Config loader — single facade in `@gobing-ai/spur-config` (ADR-027)
 
