@@ -53,6 +53,28 @@ describe('init command', () => {
         expect(existsSync(join(cwd, '.spur', 'workflows', 'task-pipeline.yaml'))).toBe(true);
     });
 
+    test('full-tree seed copies the entire bundled rules/workflows/templates tree into .spur/', async () => {
+        // Monorepo convenience: .spur/{rules,workflows,…} may symlink into the repo-root
+        // SSOT tree. End-user projects must get real copies of the full tree, not only
+        // SCAFFOLD_MANIFEST presets.
+        const cwd = await createTempProject();
+        const { options } = await isolatedOptions(cwd);
+
+        expect(await main(['init'], options)).toBe(0);
+
+        // Nested rule categories (full tree)
+        expect(existsSync(join(cwd, '.spur', 'rules', 'typescript', 'no-debugger.yaml'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'rules', 'boundary', 'dao-boundary.yaml'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'rules', 'quality', 'coverage-gate.yaml'))).toBe(true);
+        // Natural template path (full-tree) AND remapped tasks/templates path (manifest)
+        expect(existsSync(join(cwd, '.spur', 'templates', 'task', 'standard.md'))).toBe(true);
+        expect(existsSync(join(cwd, '.spur', 'tasks', 'templates', 'standard.md'))).toBe(true);
+        // Plugins placeholder
+        expect(existsSync(join(cwd, '.spur', 'plugins', '.gitkeep'))).toBe(true);
+        // Extra workflows beyond the original curated subset
+        expect(existsSync(join(cwd, '.spur', 'workflows', 'docs-pipeline.yaml'))).toBe(true);
+    });
+
     test('seeds the global rules directory from the bundled presets', async () => {
         const cwd = await createTempProject();
         const { options, globalDir } = await isolatedOptions(cwd);

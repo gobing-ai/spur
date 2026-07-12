@@ -35,6 +35,7 @@ import {
 export {
     bundledConfigRoot,
     listBundledConfigFiles,
+    listBundledProjectSeedFiles,
     listBundledTemplateFiles,
     resetBundledConfigCache,
 } from './bundled-config';

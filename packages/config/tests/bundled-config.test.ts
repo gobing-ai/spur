@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
     bundledConfigRoot,
     listBundledConfigFiles,
+    listBundledProjectSeedFiles,
     listBundledTemplateFiles,
     resetBundledConfigCache,
 } from '../src/loader';
@@ -68,5 +69,18 @@ describe('bundled-config', () => {
         const files = listBundledTemplateFiles();
         const sorted = [...files].sort();
         expect(files).toEqual(sorted);
+    });
+
+    test('listBundledProjectSeedFiles includes rules, workflows, templates, and plugins', () => {
+        const files = listBundledProjectSeedFiles();
+        expect(files.length).toBeGreaterThan(listBundledConfigFiles().length);
+        // Full rule tree (not just presets) — monorepo .spur/rules symlink parity
+        expect(files).toContain('rules/typescript/no-debugger.yaml');
+        expect(files).toContain('rules/boundary/dao-boundary.yaml');
+        expect(files).toContain('workflows/basic.yaml');
+        expect(files).toContain('templates/task/standard.md');
+        expect(files).toContain('plugins/.gitkeep');
+        // Example is never project-seeded under its .example name
+        expect(files).not.toContain('config.example.yaml');
     });
 });

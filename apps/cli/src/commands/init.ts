@@ -1,7 +1,7 @@
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
-import { bundledConfigRoot, listBundledConfigFiles } from '@gobing-ai/spur-config/loader';
+import { bundledConfigRoot, listBundledConfigFiles, listBundledProjectSeedFiles } from '@gobing-ai/spur-config/loader';
 import { ArtifactDao } from '@gobing-ai/spur-domain';
 import { bundledRulesRoot, listBundledRuleFiles } from '@gobing-ai/ts-rule-engine';
 import { CLI_CONFIG } from '../config';
@@ -109,10 +109,11 @@ async function seedGlobalRules(context: CliContext): Promise<number> {
 }
 
 /**
- * Copy the default config assets bundled in `dist/config/` (or `config/` in dev)
- * into the user's global config directory on first run. Seeds both `rules/` and
- * `workflows/` subdirectories. Existing files are never overwritten, preserving
- * user customizations. Returns the number of files written.
+ * Copy the default config assets bundled with the CLI package (package-root
+ * `config/`, or repo-root `config/` in dev) into the user's global config
+ * directory on first run. Seeds `rules/`, `workflows/`, and other YAML/JSON
+ * assets. Existing files are never overwritten, preserving user customizations.
+ * Returns the number of files written.
  */
 async function seedGlobalConfig(context: CliContext): Promise<number> {
     const source = bundledConfigRoot();
@@ -241,10 +242,26 @@ export function registerInitCommand(program: Command, context: CliContext): void
                 // (e.g. compiled binary without sibling config/ directory).
                 const configRoot = bundledConfigRoot();
                 if (configRoot !== null) {
+                    // Full-tree seed: copy every bundled asset (rules/**, workflows/**,
+                    // tasks/**, templates/**, plugins/**) into `.spur/` at its natural
+                    // relative path. Mirrors the monorepo convention where `.spur/{rules,
+                    // workflows, …}` are symlinks into repo-root `config/` — end-user
+                    // projects get real copies instead of links (ADR-015: no symlinks in
+                    // install/init). Never overwrites without --force.
+                    for (const relPath of listBundledProjectSeedFiles()) {
+                        const sourcePath = join(configRoot, relPath);
+                        if (!(await context.fs.exists(sourcePath))) continue;
+                        const targetPath = join(context.cwd, CLI_CONFIG.configDir, relPath);
+                        await context.fs.ensureDir(join(targetPath, '..'));
+                        await writeIfNew(context, targetPath, await context.fs.readFile(sourcePath), force, result);
+                    }
+
+                    // Manifest pass: remaps (e.g. templates/task → tasks/templates),
+                    // root-scoped docs/AGENTS.md, and preserve-marked entries.
                     for (const entry of SCAFFOLD_MANIFEST) {
                         const sourcePath = join(configRoot, entry.source);
                         if (!(await context.fs.exists(sourcePath))) continue;
-                        // root-scoped entries (docs/) resolve against the project root, not .spur/
+                        // root-scoped entries (docs/, AGENTS.md) resolve against the project root
                         const baseDir = entry.root === true ? context.cwd : join(context.cwd, CLI_CONFIG.configDir);
                         const targetPath = join(baseDir, entry.target);
                         await context.fs.ensureDir(join(targetPath, '..'));

@@ -3,8 +3,11 @@ import { dirname, join } from 'node:path';
 
 /**
  * Directory names to search for bundled config assets, tried at each filesystem
- * level. `config` is the repo-root layout; `spur-cli/config` is the npm package
- * layout produced by the `build:bundle` script.
+ * level (first match wins):
+ *   - `config` — repo-root SSOT (dev) AND the npm package layout produced by
+ *     `build:bundle` (`apps/cli/config` shipped as package-root `config/`)
+ *   - `spur-cli/config` — legacy npm layout (0.2.x–0.3.x before the restore of
+ *     package-root `config/`); kept so already-installed packages still resolve
  */
 const BUNDLED_CONFIG_DIRS = ['config', 'spur-cli/config'];
 
@@ -16,9 +19,10 @@ let cachedRoot: string | null | undefined;
  *
  * Walks up from this module's location, trying each of {@link BUNDLED_CONFIG_DIRS}
  * at each level, until it finds one containing `rules/` + `workflows/`. This
- * handles the two runtimes that ship a sibling `config/` tree:
- *   - source: `bun run apps/cli/src/index.ts` → finds repo-root `config/`
- *   - npm package: `spur.js` + `spur-cli/config/` → finds `spur-cli/config/`
+ * handles the runtimes that ship a sibling config tree:
+ *   - source: `bun run apps/cli/src/index.ts` → repo-root `config/`
+ *   - npm package (current): `spur.js` + package-root `config/`
+ *   - npm package (legacy): `spur.js` + `spur-cli/config/`
  *
  * Returns `null` when no matching directory is reachable. NOTE: a `bun build
  * --compile` single binary has no sibling filesystem, so this returns `null`
@@ -99,6 +103,33 @@ export function listBundledTemplateFiles(): string[] {
     const templatesDir = join(root, 'templates');
     if (!existsSync(templatesDir) || !statSync(templatesDir).isDirectory()) return [];
     return walk(templatesDir, 'templates', /\.md$/i).sort();
+}
+
+/**
+ * Extensions copied into a project's `.spur/` on `spur init` (full-tree seed).
+ * Includes rule/workflow YAML, templates (`.md`), and plugin placeholders (`.gitkeep`).
+ * Excludes the example config filename — that is seeded as project/global `config.yaml`
+ * under a different name, never as a live `.example` file.
+ */
+const PROJECT_SEED_FILTER = /\.(ya?ml|json|md|gitkeep)$/i;
+
+/** Bundled example filename — never copied into project `.spur/` as-is. */
+const BUNDLED_CONFIG_EXAMPLE = 'config.example.yaml';
+
+/**
+ * List every bundled asset that should land under a project's `.spur/` on init.
+ *
+ * Unlike {@link listBundledConfigFiles} (YAML/JSON only, for `~/.config/spur/`) this
+ * includes markdown templates and `.gitkeep` placeholders so the project scaffold
+ * mirrors the full monorepo `config/` tree (rules, workflows, tasks, templates,
+ * plugins). `config.example.yaml` is omitted.
+ */
+export function listBundledProjectSeedFiles(): string[] {
+    const root = bundledConfigRoot();
+    if (root === null) return [];
+    return walk(root, '', PROJECT_SEED_FILTER)
+        .filter((rel) => rel !== BUNDLED_CONFIG_EXAMPLE)
+        .sort();
 }
 
 /**
