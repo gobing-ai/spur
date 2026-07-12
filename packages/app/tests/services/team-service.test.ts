@@ -2,7 +2,14 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
+import { createMigratedDb, type DbAdapter, InboxMessageDao } from '@gobing-ai/spur-domain';
+import {
+    type AgentEvents,
+    type AgentProcessOptions,
+    saveAgentSpec,
+    TeamAgentProcess,
+    TeamOrchestrator,
+} from '@gobing-ai/ts-ai-runner';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { type MessageEventBus, type MessageEventPayload, TeamService, type TeamServiceContext } from '../../src/index';
@@ -18,6 +25,7 @@ function nullOutput() {
 /** Build a TeamService over a temp project dir + a shared in-memory database. */
 async function makeService(
     bus?: MessageEventBus,
+    events?: EventBus<AgentEvents>,
 ): Promise<{ svc: TeamService; cwd: string; db: DbAdapter; cleanup: () => Promise<void> }> {
     const cwd = await mkdtemp(join(tmpdir(), 'spur-team-'));
     const db = await createMigratedDb({ url: ':memory:' });
@@ -28,6 +36,7 @@ async function makeService(
         getDb: async () => db,
         fs: createNodeFileSystem(cwd),
         ...(bus ? { eventBus: bus } : {}),
+        ...(events ? { events } : {}),
     };
     return {
         svc: new TeamService(ctx),
@@ -38,6 +47,39 @@ async function makeService(
             await rm(cwd, { recursive: true, force: true });
         },
     };
+}
+
+/** Minimal process double so TeamOrchestrator start/stop/send never spawns a real agent. */
+class FakeTeamAgentProcess extends TeamAgentProcess {
+    private fakeStatus: 'running' | 'stopped' | 'errored' = 'stopped';
+
+    constructor(options: AgentProcessOptions) {
+        super(options);
+    }
+
+    override async start(): Promise<void> {
+        this.fakeStatus = 'running';
+    }
+
+    override async stop(): Promise<void> {
+        this.fakeStatus = 'stopped';
+    }
+
+    override async send(_message: string): Promise<{ ok: boolean }> {
+        return { ok: true };
+    }
+
+    override getStatus(): 'running' | 'stopped' | 'errored' {
+        return this.fakeStatus;
+    }
+
+    override getPid(): number | null {
+        return this.fakeStatus === 'running' ? 4242 : null;
+    }
+
+    override getExitCode(): number | null {
+        return null;
+    }
 }
 
 /** Build a fresh EventBus and capture every emitted payload by event name. */
@@ -449,6 +491,90 @@ describe('TeamService status & assignment', () => {
             expect(updated).toContain('name: "Cost $1.00 and $& literal"');
             expect(updated).toContain('assignee: planner');
             expect(updated).toContain('status: Todo');
+        } finally {
+            await cleanup();
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Task 0237 — TeamOrchestrator events bus wiring
+// ---------------------------------------------------------------------------
+
+describe('TeamService agent lifecycle bus (task 0237)', () => {
+    test('R5: message.sent still fires when both eventBus and events are wired', async () => {
+        // Two independent bus fields must not interfere: TeamService messaging uses
+        // eventBus; TeamOrchestrator lifecycle uses events.
+        const { bus, events: msgEvents } = makeCapturingBus();
+        const agentBus = new EventBus<AgentEvents>();
+        const agentSeen: string[] = [];
+        agentBus.on('agent.started', (e) => agentSeen.push(e.agentId));
+
+        const { svc, cleanup } = await makeService(bus, agentBus);
+        try {
+            const result = await svc.sendMessage('coder', 'planner', 'hello body');
+            expect(msgEvents.get('message.sent')?.length).toBe(1);
+            expect(msgEvents.get('message.sent')?.[0]?.msgId).toBe(result.msgId);
+            // Messaging must not emit agent.* (different path / different event names).
+            expect(agentSeen).toEqual([]);
+            expect(JSON.stringify(msgEvents.get('message.sent')?.[0])).not.toContain('hello body');
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('R4: TeamOrchestrator with events bus emits agent.started/stopped/message.sent', async () => {
+        // Mirrors TeamService.orchestrator(): `new TeamOrchestrator(configDir, dao, { events })`.
+        // processFactory is test-only (TeamService does not inject it) so we never spawn a real agent.
+        const cwd = await mkdtemp(join(tmpdir(), 'spur-team-orch-'));
+        const db = await createMigratedDb({ url: ':memory:' });
+        const configDir = join(cwd, '.spur', 'agents');
+        await createNodeFileSystem(cwd).ensureDir(configDir);
+        await saveAgentSpec(
+            {
+                id: 'coder',
+                name: 'coder',
+                type: 'codex',
+                workspace: cwd,
+                purpose: 'Implement',
+                tags: [],
+                config: {},
+            },
+            configDir,
+        );
+
+        const agentBus = new EventBus<AgentEvents>();
+        const seen: string[] = [];
+        agentBus.on('agent.started', (e) => seen.push(`started:${e.agentId}`));
+        agentBus.on('agent.stopped', (e) => seen.push(`stopped:${e.agentId}`));
+        agentBus.on('agent.message.sent', (e) => seen.push(`message:${e.agentId}:${e.ok}`));
+
+        const inbox = new InboxMessageDao(db);
+        const orchestrator = new TeamOrchestrator(configDir, inbox, {
+            events: agentBus,
+            processFactory: (options) => new FakeTeamAgentProcess(options),
+        });
+
+        try {
+            await orchestrator.startAgent('coder');
+            await orchestrator.sendMessage('planner', 'coder', 'live ping');
+            await orchestrator.stopAgent('coder');
+
+            expect(seen).toContain('started:coder');
+            expect(seen).toContain('stopped:coder');
+            expect(seen).toContain('message:coder:true');
+        } finally {
+            db.close();
+            await rm(cwd, { recursive: true, force: true });
+        }
+    });
+
+    test('R6: TeamServiceContext without events still constructs (optional field)', async () => {
+        const { svc, cleanup } = await makeService();
+        try {
+            // getStatus touches orchestrator(); CLI path omits events → throwaway bus.
+            const status = await svc.getStatus();
+            expect(Array.isArray(status.agents)).toBe(true);
         } finally {
             await cleanup();
         }
