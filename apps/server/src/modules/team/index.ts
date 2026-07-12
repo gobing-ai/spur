@@ -1,35 +1,25 @@
 import type { Hono } from 'hono';
 import type { ServerContext } from '../../context';
+import { enqueueSseFrame, sendSseKeepalive } from '../sse/stream-helpers';
 import type { ServerModule } from '../types';
 
-/** SSE heartbeat — enqueues a keepalive comment unless the stream is already closed. */
+/** Team SSE heartbeat — delegates to the shared SSE helper (task 0241 R8). */
 export function sendHeartbeat(
     closed: { current: boolean },
     controller: ReadableStreamDefaultController,
     encoder: TextEncoder,
 ): void {
-    if (closed.current) return;
-    try {
-        controller.enqueue(encoder.encode(': keepalive\n\n'));
-    } catch {
-        // Controller already closed.
-    }
+    sendSseKeepalive(closed, controller, encoder);
 }
 
-/** Enqueue a framed SSE `data:` payload; returns false when the controller is closed. */
+/** Team SSE data frame — delegates to the shared SSE helper (task 0241 R8). */
 export function enqueueFrame(
     closed: { current: boolean },
     controller: ReadableStreamDefaultController,
     encoder: TextEncoder,
     frame: unknown,
 ): boolean {
-    if (closed.current) return false;
-    try {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(frame)}\n\n`));
-        return true;
-    } catch {
-        return false;
-    }
+    return enqueueSseFrame(closed, controller, encoder, frame);
 }
 
 /**

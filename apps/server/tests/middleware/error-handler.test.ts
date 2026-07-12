@@ -84,28 +84,27 @@ describe('globalErrorHandler', () => {
         expect(body.error.code).toBe('LOCK_TIMEOUT');
     });
 
-    test('"Lifecycle transition denied" message → 409 GUARD_DENIED', async () => {
+    test('generic Error is no longer string-matched to GUARD_DENIED (use GuardDeniedError)', async () => {
         const a = app();
         a.get('/test', () => {
             throw new Error('Lifecycle transition denied for task 0001: wip → done');
         });
         const res = await a.request('/test');
-        expect(res.status).toBe(409);
+        // String matching removed — only instanceof GuardDeniedError maps to 409.
+        expect(res.status).toBe(500);
         const body = await json(res);
-        expect(body.ok).toBe(false);
-        expect(body.error.code).toBe('GUARD_DENIED');
+        expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
-    test('"Cannot acquire … lock" message → 503 LOCK_TIMEOUT', async () => {
+    test('generic Error is no longer string-matched to LOCK_TIMEOUT (use LockTimeoutError)', async () => {
         const a = app();
         a.get('/test', () => {
             throw new Error('Cannot acquire create allocation lock at /tmp/.create.lock: held by pid 12345');
         });
         const res = await a.request('/test');
-        expect(res.status).toBe(503);
+        expect(res.status).toBe(500);
         const body = await json(res);
-        expect(body.ok).toBe(false);
-        expect(body.error.code).toBe('LOCK_TIMEOUT');
+        expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
     test('unknown error → 500 INTERNAL_ERROR', async () => {
@@ -202,6 +201,40 @@ describe('globalErrorHandler', () => {
         expect(body.error).toBeDefined();
         expect(body.error.details).toBeDefined();
         expect(body.error.details.requestId).toBe('test-req-123');
+    });
+
+    test('production non-500 envelopes use status-appropriate messages (R2)', async () => {
+        const prev = process.env.NODE_ENV;
+        process.env.NODE_ENV = 'production';
+        try {
+            const a404 = app();
+            a404.get('/n', () => {
+                throw new NotFoundError('secret path');
+            });
+            const r404 = await a404.request('/n');
+            expect(r404.status).toBe(404);
+            expect((await json(r404)).error.message).toBe('Not found');
+
+            const a422 = app();
+            a422.get('/v', () => {
+                throw new (class extends Error {
+                    status = 422;
+                })('field X invalid');
+            });
+            const r422 = await a422.request('/v');
+            expect(r422.status).toBe(422);
+            expect((await json(r422)).error.message).toBe('Bad request');
+
+            const a500 = app();
+            a500.get('/e', () => {
+                throw new Error('stack should not leak');
+            });
+            const r500 = await a500.request('/e');
+            expect(r500.status).toBe(500);
+            expect((await json(r500)).error.message).toBe('Internal server error');
+        } finally {
+            process.env.NODE_ENV = prev;
+        }
     });
     // ── F7: api.request.error system event emission (task 0226) ──────────
     test('[R8] emits api.request.error on the bus when ctx is available', async () => {

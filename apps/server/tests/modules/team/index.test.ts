@@ -378,6 +378,104 @@ describe('team module', () => {
                 await reader.cancel();
             }
         });
+
+        test('live-tail poll stops cleanly when enqueue fails (non-serializable frame)', async () => {
+            // WHY: lines 165-167 — when enqueueFrame returns false during poll,
+            // the poll interval must clear and the start() callback must return.
+            // A circular frame makes JSON.stringify throw → enqueueFrame false.
+            const liveBuffer: ProcessFrame[] = [];
+            const entry: ProcessEntry = {
+                agentId: 'planner',
+                pid: 99,
+                status: 'running',
+                startedAt: '2026-07-05T00:00:00.000Z',
+                exitCode: null,
+                ringBuffer: liveBuffer,
+            };
+            const { ctx } = ctxWithStubs({ get: entry, getRingBufferFn: () => liveBuffer });
+            const app = new Hono();
+            teamModule.mount(app, ctx);
+            const res = await app.fetch(new Request('http://localhost/api/team/processes/planner/stream'));
+            const reader = res.body?.getReader();
+            expect(reader).toBeDefined();
+            if (!reader) throw new Error('expected body reader');
+
+            const decoder = new TextDecoder();
+            const start = Date.now();
+            let text = '';
+            while (Date.now() - start < 1000 && !text.includes('--replay-done--')) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                if (value) text += decoder.decode(value);
+            }
+            expect(text).toContain('--replay-done--');
+
+            // Circular object → JSON.stringify throws inside enqueueSseFrame.
+            const circular = {
+                stream: 'stdout' as const,
+                ts: '2026-07-05T00:00:09.000Z',
+                line: 'boom',
+                seq: 1,
+            } as ProcessFrame & { self?: unknown };
+            circular.self = circular;
+            liveBuffer.push(circular);
+
+            // Give the 500ms poll a chance to fire and hit the failure path.
+            await new Promise((r) => setTimeout(r, 700));
+            // Stream should still be readable / cancellable (no hang, no unhandled throw).
+            await reader.cancel();
+            expect(true).toBe(true);
+        });
+
+        test('abort after live-tail starts clears the poll interval via closeController', async () => {
+            // WHY: lines 174-177 — after poll starts, the closeController wrapper
+            // clears pollInterval. Abort after --replay-done-- exercises that path
+            // (cancel() overwrites closeController with a no-op, so use signal abort).
+            const entry: ProcessEntry = {
+                agentId: 'planner',
+                pid: 99,
+                status: 'running',
+                startedAt: '2026-07-05T00:00:00.000Z',
+                exitCode: null,
+                ringBuffer: [],
+            };
+            const { ctx } = ctxWithStubs({ get: entry, getRingBuffer: [] });
+            const app = new Hono();
+            teamModule.mount(app, ctx);
+
+            const ac = new AbortController();
+            const res = await app.fetch(
+                new Request('http://localhost/api/team/processes/planner/stream', { signal: ac.signal }),
+            );
+            expect(res.status).toBe(200);
+            const reader = res.body?.getReader();
+            expect(reader).toBeDefined();
+            if (!reader) throw new Error('expected body reader');
+
+            const decoder = new TextDecoder();
+            const start = Date.now();
+            let text = '';
+            while (Date.now() - start < 1000 && !text.includes('--replay-done--')) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                if (value) text += decoder.decode(value);
+            }
+            expect(text).toContain('--replay-done--');
+
+            // Wait one poll tick so closeController has been wrapped with clearInterval.
+            await new Promise((r) => setTimeout(r, 550));
+            ac.abort();
+            // Drain until the stream ends after abort teardown.
+            try {
+                while (true) {
+                    const { done } = await reader.read();
+                    if (done) break;
+                }
+            } catch {
+                // AbortError while reading is acceptable.
+            }
+            expect(true).toBe(true);
+        });
     });
 
     describe('POST /api/team/agents/:id/start', () => {

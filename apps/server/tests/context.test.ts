@@ -408,9 +408,21 @@ describe('createServerContext', () => {
         expect(typeof svc1.run).toBe('function');
     });
 
-    test('hitlResponder() auto-confirms with a no-op value', async () => {
+    test('hitlResponder() default-denies confirm (R1)', async () => {
         const appRt = makeAppRt();
-        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs, env: {} });
+        const responder = ctx.hitlResponder();
+        const result = await responder.respond({} as never);
+        expect(result.value).toBe('no');
+    });
+
+    test('hitlResponder() auto-approves when SPUR_HITL_AUTO_APPROVE=1 (R1)', async () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, {
+            cwd: '/tmp/test',
+            fs: testFs,
+            env: { SPUR_HITL_AUTO_APPROVE: '1' },
+        });
         const responder = ctx.hitlResponder();
         const result = await responder.respond({} as never);
         expect(result.value).toBe('yes');

@@ -61,7 +61,7 @@ export function createFeatureHandlers(ctx: ServerContext) {
         }),
 
         transition: os.feature.transition.handler(async ({ input }) => {
-            // The global error handler maps "Lifecycle transition denied" → 409 GUARD_DENIED.
+            // Guard denials throw GuardDeniedError → 409 GUARD_DENIED via instanceof.
             await ctx.featureService().transition(input.id, input.toStatus, input.actor);
             return { ok: true as const, data: { id: input.id, status: input.toStatus } };
         }),

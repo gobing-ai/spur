@@ -13,8 +13,10 @@ import type {
 import {
     AgentService as AgentServiceImpl,
     BusPlanningEventEmitter,
+    bridgeEventBus,
     type EventEmitter,
     FeatureService as FeatureServiceImpl,
+    hitlConfirmDefault,
     type PlanningEventMap,
     PlanningWriteService as PlanningWriteServiceImpl,
     RuleService as RuleServiceImpl,
@@ -57,14 +59,6 @@ export const NOOP_OUTPUT = { write: (_s: string) => {}, error: (_s: string) => {
     error: (s: string) => void;
 };
 
-// V8 coverage tallies every function-shaped construct. This no-op class is
-// instantiated once at module load so its constructor registers as a hit,
-// keeping per-file function coverage over the 90% gate without exercising
-// dead error/throw paths.
-class _CoverageAnchor {
-    constructor() {}
-}
-void new _CoverageAnchor();
 type ServerEventMap = Record<string, (detail: PlanningEventType | unknown) => void>;
 
 class LazyPlanningEventEmitter implements EventEmitter {
@@ -78,7 +72,7 @@ class LazyPlanningEventEmitter implements EventEmitter {
         if (!this.delegate) {
             const db = await this.getDb();
             const dao = new PlanningEventDao(db);
-            this.delegate = new BusPlanningEventEmitter(this.bus as unknown as EventBus<PlanningEventMap>, dao);
+            this.delegate = new BusPlanningEventEmitter(bridgeEventBus<PlanningEventMap>(this.bus), dao);
         }
         await this.delegate.emit(event);
     }
@@ -353,13 +347,9 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                     fs,
                     getDb: this.getDb.bind(this),
                     // Wire the server bus so message lifecycle events flow to the
-                    // system_events tap + SSE stream (task 0193/0204). Structurally
-                    // compatible — both are Record<string, (event) => void> buses.
-                    eventBus: eventsBus as unknown as never,
-                    // Wire the same bus as agent lifecycle events so
-                    // `agent.started`/`agent.stopped`/`agent.message.sent` reach the
-                    // system_events tap + SSE stream (task 0237).
-                    events: eventsBus as unknown as never,
+                    // system_events tap + SSE stream (task 0193/0204 / 0237).
+                    eventBus: bridgeEventBus(eventsBus),
+                    events: bridgeEventBus(eventsBus),
                 });
             }
             return teamSvc;
@@ -370,7 +360,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                 const pe = new ProcessExecutor();
                 supervisorSvc = new SupervisorServiceImpl({
                     processExecutor: pe,
-                    eventBus: eventsBus as unknown as never,
+                    eventBus: bridgeEventBus(eventsBus),
                     configDir: `${cwd}/.spur/agents`,
                 });
             }
@@ -385,7 +375,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                 cwd,
                 env: options.env ?? {},
                 output: NOOP_OUTPUT,
-                events: eventsBus as unknown as never,
+                events: bridgeEventBus(eventsBus),
             });
             return agentSvc;
         },
@@ -397,7 +387,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                 fs,
                 output: NOOP_OUTPUT,
                 getDb: this.getDb.bind(this),
-                events: eventsBus as unknown as never,
+                events: bridgeEventBus(eventsBus),
             });
             return ruleSvc;
         },
@@ -418,19 +408,18 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                 // verb-form events (via `observabilityBus` → ObservableWorkflowAdapter).
                 // `workflow.run.started` fires from both paths — harmless v1
                 // duplication; dedup deferred (task 0236 R3).
-                observabilityBus: () => eventsBus as unknown as never,
-                events: () => eventsBus as unknown as never,
+                observabilityBus: () => bridgeEventBus(eventsBus),
+                events: () => bridgeEventBus(eventsBus),
             });
             return workflowSvc;
         },
 
         hitlResponder(): HitlResponder {
-            // Default server-side HITL responder: auto-confirm with a no-op
-            // value. Server-native jobs (rule/workflow/agent) should not block
-            // on operator input; if a future server job needs real HITL, the
-            // bootstrap will inject a richer responder.
+            // Default-deny: server HITL never auto-approves unless the operator
+            // opts in with SPUR_HITL_AUTO_APPROVE=1 (headless/CI explicit consent).
+            const confirm = hitlConfirmDefault(options.env ?? process.env);
             return {
-                respond: async () => ({ value: 'yes' }),
+                respond: async () => ({ value: confirm }),
             };
         },
         async systemEventDao(): Promise<SystemEventDao> {

@@ -1,6 +1,7 @@
 import type { EventBus } from '@gobing-ai/ts-infra';
 import type { Hono } from 'hono';
 import type { ServerContext } from '../../context';
+import { sendSseKeepalive } from '../sse/stream-helpers';
 import type { ServerModule } from '../types';
 import {
     normalizeSystemEventPayload,
@@ -25,18 +26,13 @@ function extractSystemEventActor(event: unknown): string | null {
     return null;
 }
 
-/** SSE heartbeat keepalive — enqueues a comment frame unless the stream is closed. */
+/** Events SSE keepalive — delegates to the shared SSE helper (task 0241 R8). */
 export function sendKeepalive(
     closed: { current: boolean },
     controller: ReadableStreamDefaultController,
     encoder: TextEncoder,
 ): void {
-    if (closed.current) return;
-    try {
-        controller.enqueue(encoder.encode(': keepalive\n\n'));
-    } catch {
-        // Controller already closed.
-    }
+    sendSseKeepalive(closed, controller, encoder);
 }
 
 /**
