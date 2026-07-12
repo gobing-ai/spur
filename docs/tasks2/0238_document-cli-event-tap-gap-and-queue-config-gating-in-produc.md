@@ -12,7 +12,7 @@ priority: P2
 tags: ["observability", "documentation", "audit"]
 dependencies: []
 created_at: "2026-07-10T00:02:02.996Z"
-updated_at: "2026-07-10T00:52:06.481Z"
+updated_at: "2026-07-12T04:37:24.764Z"
 ---
 
 ## 0238. Document CLI event-tap gap and queue config gating in producer audit
@@ -52,27 +52,72 @@ R4. Verify the audit table's supersede note correctly references task 0226.
 <!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
 
 ### Solution
-Added "Systemic Observability Gaps" section to `docs/inventory/system-events-producer-audit.md` (produced by task 0235). The section documents four architectural constraints that affect observability completeness but are not bugs:
+Documented systemic observability gaps in the producer-audit inventory (task 0235 deliverable).
 
-1. **CLI event-tap gap**: `registerSystemEventTap` is called only at `apps/server/src/serve.ts:274`. The CLI runtime (`apps/cli/src/`) has no tap registration. CLI-driven work (`spur task create`, `spur rule run`, etc.) operates outside the Board by design.
-
-2. **Queue config gating**: `queue.*` events (8 catalog entries) require `jobqueue.enabled=true` in boot config. Default is `false` (`context.ts:265`: `jobQueueEnabled = options.jobQueueEnabled ?? false`), so zero queue events fire unless explicitly opted in.
-
-3. **`process.started` side-channel**: Emitted by `NodeProcessExecutor` in `ts-runtime` during agent runs (`agent-service.ts:304-308`). `SupervisorService` uses `process.spawned` as its canonical process-birth event. `process.started` is a side-channel reachable only during agent runs.
-
-4. **Nested-CLI deferred context**: Rule/workflow runs inside a child agent process have their own event buses, not connected to the server's bus. These are correctly marked "deferred" per task-0226 scope, not "unwired."
-
-All four claims source-verified with exact line numbers.
+- `docs/inventory/system-events-producer-audit.md:153–198` — **Systemic Observability Gaps** section (Gaps 1–4).
+- Gap 1 CLI event-tap: `registerSystemEventTap` only at `apps/server/src/serve.ts:274`; no CLI registration under `apps/cli/src/`.
+- Gap 2 queue gating: `jobQueueEnabled` default false at `context.ts:265`; throws at `context.ts:450–451` / `468–469`; wired via `createQueueConsumer` at `context.ts:472–474` when `bootConfig.jobqueue.enabled` (`serve.ts:243`, `287`).
+- Gap 3 `process.started` side-channel: `agent-service.ts:312` `processEvents` wiring; supervisor uses `process.spawned` instead.
+- Gap 4 nested-CLI: child process-local bus; marked ⚠️ deferred (not ❌ unwired) in legend + Gap 4 + footer §1 (`serve.ts:137–145`).
+- Prefix-family observability path table under Gap 1 (R2).
+- Supersede note header + footer §3 references task 0226 (R4).
 ### Testing
-Doc-only task — no code changes, no test changes.
+**Verify run:** 2026-07-11 — `/sp:dev-verify 0238 --auto --focus all --fix all --force` (standalone re-audit of `done` task).
 
-Verification: all four gap claims source-verified via grep/read of the actual gating code:
-- CLI tap gap: confirmed only one `registerSystemEventTap` call site (serve.ts:274), no equivalent in `apps/cli/src/`.
-- Queue config gating: confirmed `context.ts:265` default and `serve.ts:243` wiring.
-- `process.started` side-channel: confirmed emit site in `ts-runtime` and the agent-service wiring.
-- Nested-CLI: confirmed CLI context (`apps/cli/src/context.ts`) builds only agentService/ruleService/hitlResponder with no bus tap.
+**Coverage:** N/A (documentation-only change; no runtime code path added).
 
-Full gate: `bun run lint` clean, `bun run test` 2545 pass / 0 fail.
+**Command / static evidence (this run):**
+```
+# Section presence + required claims
+Systemic Observability Gaps: present (Gaps 1–4)
+CLI event-tap / jobqueue.enabled / process.started side-channel / nested-CLI deferred: present
+Prefix-family observability path table: present
+Supersede task 0226: present (header + footer §3)
+
+# Source re-verification
+serve.ts:274 registerSystemEventTap  — OK
+apps/cli/src: no registerSystemEventTap — OK
+context.ts:265 jobQueueEnabled default false — OK
+context.ts:450–451 / 468–469 NotConfiguredError when disabled — OK
+context.ts:472–474 createQueueConsumer — OK
+agent-service.ts:312 processEvents bridge — OK
+SYSTEM_EVENT_CATALOG queue.* count = 7 — OK
+```
+
+**`--fix all` applied this run:**
+1. Refreshed drifted line numbers in Gaps 2–3 (`context.ts` job-queue accessors, `agent-service.ts:312`).
+2. Corrected section intro "Three" → "Four" architectural constraints (Gaps 1–4).
+3. Testing expanded with deterministic verification evidence; Solution given `file:line` cites.
+
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | Gaps section documents (a) CLI tap gap, (b) queue config gating, (c) process.started side-channel (+ Gap 4 nested-CLI) |
+| R2 | MET | Prefix-family path table under Gap 1: server-API / config-gated / agent-run side-channel classifications |
+| R3 | MET | Nested-CLI marked ⚠️ deferred in legend, Gap 4, footer §1 — not ❌ unwired |
+| R4 | MET | Header supersedes + footer §3 reference task 0226 |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| (section empty / placeholder only) | N/A | n/a | No checklist/Gherkin AC; verified via R1–R4 |
+
+**Design conformance:** task `### Design` empty; matches Background architectural-constraint framing. DONE.
+
+**SECUA Review (answer-file; Review section owned by `/sp:dev-review`)**
+
+| Sev | Dim | Finding |
+|-----|-----|---------|
+| — | S | Doc-only; no executable surface. |
+| minor | C | Line numbers will drift as sources edit — refreshed this run. |
+| — | U | Gap section framed as non-bugs with activation paths for operators. |
+| — | A | Single inventory SSOT continues from 0235. |
+
+No blocker/major findings.
+
+**Verdict:** PASS — R1–R4 MET (doc-only, source-verified).
 ### Review
 PASS. All four systemic gaps are documented with source-verified line numbers. The section is clearly framed as architectural constraints, not bugs.
 

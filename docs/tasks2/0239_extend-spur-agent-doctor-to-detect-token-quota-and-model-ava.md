@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-10T04:06:28.214Z"
-updated_at: "2026-07-10T04:12:49.155Z"
+updated_at: "2026-07-12T04:39:51.967Z"
 ---
 
 ## 0239. Extend spur agent doctor to detect token quota and model availability
@@ -56,120 +56,89 @@ R10. All new code is tested against in-memory mocks; no real API calls in the te
 <!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
 
 ### Solution
-## Approach
+Cross-repo feature: model-level doctor health for executors with a `model` override.
 
-Enhance `DoctorRunner` in `ts-ai-runner` (`~/xprojects/ts-libs/packages/ai-runner/src/doctor-runner.ts`) to probe model health for executors that specify a `model` override. The change spans two repos: `ts-libs` (the probe infrastructure) and `spur-new` (the CLI surface and pipeline precheck).
+**ts-ai-runner (`@gobing-ai/ts-ai-runner` ≥0.4.7):**
+- `packages/ai-runner/src/model-health-probe.ts` — `ModelHealthResult`, `ModelHealthProbe`, `ModelHealthProbeRegistry`, `OmpModelProbe` (1-token ping; 200/429/4xx/5xx/timeout mapping; default timeout 10s).
+- `packages/ai-runner/src/doctor-runner.ts` — `DoctorResult.modelStatus`; executor-aware `runAll`/`runOne`; `probeModel()` with no-probe → `unknown` and missing-key → `unknown`.
 
+**Spur:**
+- `packages/app/src/services/agent-service.ts:165-193` — doctor threads `agentConfig.executors`; MODEL table column; single-executor detail (`status`/`detail`/`checkedAt`); stderr warning on `quota_exhausted|unavailable` with `--agent` suggestion (R6/AC5).
+- `packages/app/src/services/agent-service.ts:627-631` — MODEL column renders full status enum (R4/AC1).
+- `packages/app/src/workflow/actions/agent-run.ts:188-237` — partial-work artifact includes agent + model on captured failure/timeout (R7/AC6).
+- `config/workflows/task-pipeline.yaml:62` — precheck still runs `spur agent doctor ${vars.agent}` (warnings surface via doctor, non-blocking).
 
-**New file**: `ts-libs/packages/ai-runner/src/model-health-probe.ts`
-
-```typescript
-export interface ModelHealthResult {
-    status: 'available' | 'quota_exhausted' | 'rate_limited' | 'unavailable' | 'unknown';
-    detail?: string;
-    checkedAt: string; // ISO 8601
-}
-
-export interface ModelHealthProbe {
-    probe(provider: string, model: string, config: ProbeConfig): Promise<ModelHealthResult>;
-}
-
-export interface ProbeConfig {
-    apiKey: string;
-    timeoutMs: number; // default 10000
-    endpoint?: string; // provider-specific override
-}
-```
-
-**Registry** (same file or adjacent `model-health-registry.ts`):
-
-```typescript
-export class ModelHealthProbeRegistry {
-    private probes = new Map<string, ModelHealthProbe>();
-
-    register(providerPrefix: string, probe: ModelHealthProbe): void {
-        this.probes.set(providerPrefix, probe);
-    }
-
-    resolve(model: string): ModelHealthProbe | null {
-        const provider = model.split('/')[0];
-        return this.probes.get(provider) ?? null;
-    }
-}
-```
-
-**OmpModelProbe** (new file: `omp-model-probe.ts`): Issues a minimal completion request to the provider's API. For `omp` executors, the model string format is `provider/model-name` (e.g. `volc/glm-5.2`, `zai/glm-5.2`, `deepseek/deepseek-v4-pro`). The probe:
-1. Extracts provider prefix and model name.
-2. Looks up the API key from env (`VOLC_API_KEY`, `ZAI_API_KEY`, `DEEPSEEK_API_KEY`, etc. — the same env vars the `omp` binary uses).
-3. Issues a 1-token completion request (`messages: [{role: 'user', content: 'ping'}]`, `max_tokens: 1`).
-4. Interprets response: 200 → `available`; 429 + quota body → `quota_exhausted`; 429 + rate-limit body → `rate_limited`; 4xx/5xx → `unavailable`; AbortController timeout → `unknown`.
-
-**DoctorRunner changes** (`doctor-runner.ts`):
-- `DoctorResult` gains: `modelStatus?: ModelHealthResult | null`.
-- In `buildResult()`, after the existing installation/version/auth checks, if the executor config includes a `model` override, resolve a probe from the registry and run it. Store the result in `modelStatus`.
-- If no probe is registered for the provider prefix, `modelStatus = { status: 'unknown', detail: 'no probe registered for provider '<prefix>'', checkedAt: now }`.
-- The probe runs with a bounded timeout (default 10s via `AbortController`); a probe timeout → `unknown`.
-- `usable` field stays as-is (`installed && version !== null`) — model health is advisory, not a hard gate. The CLI surface decides how to present it.
-
-**Executor config access**: `DoctorRunner.runAll()` currently iterates `DISPLAY_ORDER` (agent binary names). To probe model health, it needs access to executor configs from `.spur/config.yaml`. Add an optional `executors?: ExecutorConfig[]` parameter to `runAll()` / constructor. When provided, match executors to agents by `agent` field and probe their `model` overrides.
-
-
-**`apps/cli/src/commands/agent/doctor.ts`** (or wherever the doctor command lives):
-- Load executor configs from `.spur/config.yaml`.
-- Pass them to `DoctorRunner.runAll(executors)`.
-- Table output gains a `MODEL` column: shows `modelStatus.status` for executors with a model override, `—` for those without.
-- Single-executor mode (`spur agent doctor <name>`) shows full detail: `status`, `detail`, `checkedAt`.
-
-**JSON output** (`--json`): includes `modelStatus` per executor in the results array.
-
-
-**`task-pipeline.yaml`** (line 62 area): The `spur agent doctor` precheck step already runs. Enhance the doctor command to emit warnings when a phase executor has `modelStatus = quota_exhausted | unavailable`. The pipeline precheck step should:
-- Run `spur agent doctor --json`.
-- Parse results for any executor with failing model status.
-- If the failing executor matches the current task's phase executor (from `default-by-phase`), emit a warning with a suggestion: "Executor <name> (model <model>) reports <status>. Consider `--agent <alt>` or check token quota."
-- Does NOT hard-block (R6) — the operator may override.
-
-
-**`packages/app/src/workflow/actions/agent-run.ts:53`**: When `agent.run` times out (non-zero exit / timeout), include executor name and model in the partial-work artifact. The runner already has access to the executor config via the workflow context. Add `executor` and `model` fields to the artifact's diagnostic section.
-
-- Provider probes for non-omp agents (claude, codex, gemini) — these have their own auth flows and doctor checks; can be added incrementally.
-- Automatic executor failover — the pipeline warns but does not switch. Operator decides.
-- Quota amount reporting (e.g. "47% remaining") — only available/unavailable, not percentage.
+Tests: `ts-libs/.../model-health-probe.test.ts`, `doctor-runner.test.ts` (modelStatus cases); `packages/app/tests/services/agent-service.test.ts` (MODEL/AC2/AC5/json/detail); `agent-run.test.ts` (model in partial artifact).
 ### Testing
-## Testing Strategy
+**Verify run:** 2026-07-11 — `/sp:dev-verify 0239 --auto --focus all --fix all --force` (standalone re-audit of `done` task).
 
-**Coverage target:** Per-file line ≥ 90%, function ≥ 90% for all new files (per `bunfig.toml`).
+**Coverage (focused suites this run):**
+- `ts-libs` `model-health-probe.ts`: **91.67% funcs / 100% lines**
+- `spur` `agent-run.ts` under its suite: **100% funcs / 100% lines**
 
+**Command evidence (this run):**
+```
+# ts-libs
+bun test packages/ai-runner/tests/model-health-probe.test.ts packages/ai-runner/tests/doctor-runner.test.ts
+33 pass, 0 fail
 
-**New test file**: `model-health-probe.test.ts`
+# spur
+bun test packages/app/tests/services/agent-service.test.ts packages/app/tests/workflow/actions/agent-run.test.ts
+115 pass, 0 fail
 
-1. `OmpModelProbe — available`: Mock fetch returning 200 with a valid completion body → `status: 'available'`.
-2. `OmpModelProbe — quota_exhausted`: Mock fetch returning 429 with body `{ error: { type: 'insufficient_quota' } }` → `status: 'quota_exhausted'`, `detail` contains error message.
-3. `OmpModelProbe — rate_limited`: Mock fetch returning 429 with body `{ error: { type: 'rate_limit_exceeded' } }` → `status: 'rate_limited'`.
-4. `OmpModelProbe — unavailable`: Mock fetch returning 500 → `status: 'unavailable'`.
-5. `OmpModelProbe — timeout → unknown`: Mock fetch with delay > timeoutMs → `status: 'unknown'`, probe resolves within `timeoutMs + 100ms`.
-6. `OmpModelProbe — missing API key → unknown`: No env var set → `status: 'unknown'`, `detail: 'API key not found'`.
-7. `ModelHealthProbeRegistry — resolve`: Register probes for `volc`, `zai`, `deepseek`; verify `resolve('volc/glm-5.2')` returns the volc probe, `resolve('unknown/model')` returns null.
-8. `DoctorRunner — modelStatus populated for executor with model override`: Provide `executors: [{ name: 'omp-zai-volc', agent: 'omp', model: 'volc/glm-5.2' }]` → result includes `modelStatus` with probed status.
-9. `DoctorRunner — modelStatus null for executor without model override`: Provide `executors: [{ name: 'omp', agent: 'omp' }]` (no model) → `modelStatus: null`.
-10. `DoctorRunner — unknown provider → unknown status`: Executor with `model: 'foo/bar'`, no probe registered → `modelStatus: { status: 'unknown', detail: "no probe registered for provider 'foo'" }`.
+# post-fix doctor MODEL labels
+bun test packages/app/tests/services/agent-service.test.ts -t "MODEL|modelStatus|quota|detail mode|available model|full"
+7 pass, 0 fail
+```
 
-All tests mock `fetch` via `globalThis.fetch = mockFetch`. No real API calls.
+**`--fix all` applied this run:**
+1. MODEL column now prints full status enum (`available`, `quota_exhausted`, …) instead of compact `ok`/`quota` — aligns R4/AC1.
+2. Updated agent-service doctor tests accordingly.
+3. Solution/Testing rewritten as implementation evidence (prior bodies were design drafts).
 
+**Per-Requirement Traceability**
 
-11. `spur agent doctor — table includes MODEL column`: Run doctor with a mock `DoctorRunner` returning `modelStatus` → table output includes `MODEL` header and status values.
-12. `spur agent doctor — single executor shows detail`: `spur agent doctor omp-zai-volc` → output includes `status`, `detail`, `checkedAt` for the model probe.
-13. `spur agent doctor --json — includes modelStatus`: JSON output array entries include `modelStatus` field.
-14. `spur agent doctor — no model override shows —`: Executor without model → `MODEL` column shows `—`.
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `DoctorResult.modelStatus` in ts-ai-runner doctor-runner; null when no model override (doctor-runner tests) |
+| R2 | MET | `ModelHealthProbe` + `ModelHealthResult` in model-health-probe.ts |
+| R3 | MET | `OmpModelProbe` 200/429-quota/429-rate/500/timeout cases (model-health-probe.test.ts) |
+| R4 | MET | MODEL column + full status strings (agent-service render + tests post-fix) |
+| R5 | MET | `renderDoctorDetail` shows status/detail/checkedAt; single-executor test |
+| R6 | MET | doctor stderr warning on quota_exhausted/unavailable; pipeline precheck invokes doctor |
+| R7 | MET | agent-run partial artifact includes agent + model (agent-run.test.ts) |
+| R8 | MET | default 10s timeout; timeout → unknown (probe tests) |
+| R9 | MET | `ModelHealthProbeRegistry` register/resolve; pluggable probes |
+| R10 | MET | All suites mock fetch / DoctorRunner; no live API in tests |
 
+**Acceptance Criteria Verification**
 
-15. `task-pipeline precheck — warns on quota_exhausted`: Mock doctor returning `quota_exhausted` for the task's phase executor → precheck output includes warning naming executor + model.
-16. `task-pipeline precheck — no warning when available`: Mock doctor returning `available` → no warning emitted.
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| AC1 MODEL column with health status | MET | test | agent-service.test.ts MODEL header + full `available`/`quota_exhausted` |
+| AC2 no model → — | MET | test | `text table renders — in MODEL column…` |
+| AC3 429 quota → quota_exhausted | MET | test | OmpModelProbe quota case + doctor-runner |
+| AC4 timeout → unknown | MET | test | OmpModelProbe timeout → unknown |
+| AC5 precheck warning | MET | test | `warns on quota_exhausted model status (AC5)` |
+| AC6 timeout artifact has executor+model | MET | test | agent-run partial artifact with model |
+| AC7 unregistered provider → unknown | MET | test | doctor-runner no probe registered detail |
+| AC8 tests pass, no real API | MET | command | 33 + 115 pass; mocks only |
 
+**Design conformance:** task `### Design` empty; Solution design intent implemented across ts-ai-runner + spur surfaces. DONE (with R4 display-label fix this run).
 
-17. `agent-run timeout — artifact includes executor and model`: Mock `agent.run` timing out → partial-work artifact includes `executor` and `model` fields.
+**SECUA Review (answer-file; Review section owned by `/sp:dev-review`)**
 
-Verifies: R1–R10 (probe interface, registry, doctor integration, CLI surface, pipeline precheck, agent-run diagnostic, bounded timeout, pluggability, mock-only tests).
+| Sev | Dim | Finding |
+|-----|-----|---------|
+| — | S | API keys from env only; detail sanitized; not logged in doctor output. |
+| — | E | Bounded probe timeout; parallel executor probes via doctor path. |
+| — | C | modelStatus advisory (usable gate unchanged); timeout→unknown not available. |
+| — | U | Full status strings in table; warnings suggest `--agent`. |
+| — | A | Probe registry open-closed; DoctorRunner DI for testability. |
+
+No blocker/major findings after R4 fix.
+
+**Verdict:** PASS — R1–R10 and AC1–AC8 MET with executable evidence.
 ### Review
 ## Review Checklist
 

@@ -152,7 +152,7 @@ Source of truth: `SYSTEM_EVENT_CATALOG` in `packages/app/src/services/event-name
 
 ## Systemic Observability Gaps
 
-Three architectural constraints affect observability completeness but are **not bugs** — they are deliberate scope boundaries. Documented here so operators interpret "missing" events correctly.
+Four architectural constraints affect observability completeness but are **not bugs** — they are deliberate scope boundaries. Documented here so operators interpret "missing" events correctly.
 
 ### Gap 1 — CLI event-tap gap (CLI-driven work is invisible to the Board)
 
@@ -177,7 +177,7 @@ The `system_events` persistence tap (`registerSystemEventTap`) is registered **o
 
 ### Gap 2 — Queue config gating (`queue.*` events require `jobqueue.enabled: true`)
 
-All seven `queue.*` catalog entries are wired through `createQueueConsumer` (`context.ts:458–468`), which passes `{ events: eventsBus }`. But both `jobQueue()` and `queueConsumer()` throw `NotConfiguredError` when `jobQueueEnabled` is false (`context.ts:441–442`, `459–460`). The flag defaults to **false** (`context.ts:265`) and is only set true when `bootConfig.jobqueue.enabled` is true (`serve.ts:243`, `287`).
+All seven `queue.*` catalog entries are wired through `createQueueConsumer` (`context.ts:472–474`), which passes `{ events: eventsBus }`. But both `jobQueue()` and `queueConsumer()` throw `NotConfiguredError` when `jobQueueEnabled` is false (`context.ts:450–451`, `468–469`). The flag defaults to **false** (`context.ts:265`) and is only set true when `bootConfig.jobqueue.enabled` is true (`serve.ts:243`, `287`).
 
 **Consequence:** with the default single-operator config (`jobqueue.enabled: false`), zero `queue.*` events fire — the queue consumer never starts, so no jobs are enqueued, completed, failed, or retried. This is correct: there is no queue to observe. The events become reachable only when an operator opts into the embedded job queue.
 
@@ -187,7 +187,7 @@ All seven `queue.*` catalog entries are wired through `createQueueConsumer` (`co
 
 ### Gap 3 — `process.started` is a side-channel (reachable only during agent runs)
 
-`process.started` is emitted by `NodeProcessExecutor` in `ts-runtime` when wired with a `processEvents` bus. `AgentService.run()` wires this bus (`agent-service.ts:304–308` via `bridgeAgentEvents`), so `process.started` fires during agent invocations. But `SupervisorService` — the canonical process-lifecycle observer — uses `process.spawned`/`process.exited`/`process.stopped` as **its** lifecycle names, not `process.started`.
+`process.started` is emitted by `NodeProcessExecutor` in `ts-runtime` when wired with a `processEvents` bus. `AgentService.run()` wires this bus (`agent-service.ts:312` via `bridgeEventBus` as `processEvents`), so `process.started` fires during agent invocations. But `SupervisorService` — the canonical process-lifecycle observer — uses `process.spawned`/`process.exited`/`process.stopped` as **its** lifecycle names, not `process.started`.
 
 **Consequence:** `process.started` appears in system_events only when an agent run triggers a subprocess via `NodeProcessExecutor`. It does NOT fire for supervisor-managed agent spawns (those emit `process.spawned`). Operators filtering for "process started" should use `process.spawned` as the authoritative process-birth event; `process.started` is a secondary signal correlated to agent-run subprocesses.
 
