@@ -204,7 +204,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(verdictSchema).toContain("evidenceType: 'test' | 'command' | 'static-ref'");
     });
 
-    test('R22 — dogfood reports include a mandatory ledger and computed cache methodology', () => {
+    test('R22 — dogfood reports include always-on dual-path delivery, mandatory ledger, and computed cache methodology', () => {
         const command = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-dogfood.md'), 'utf8');
         const skill = readFileSync(join(SKILLS_DIR, 'dogfood-testing', 'SKILL.md'), 'utf8');
         const reportTemplate = readFileSync(
@@ -216,12 +216,21 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             'utf8',
         );
 
-        expect(command).toContain('mandatory Monitor Ledger section');
+        // Protocol @1.1 — always-on dual artifacts + ledger (not gated on --save).
+        expect(command).toContain('mandatory dual-path write');
+        expect(command).toContain('**Monitor Ledger**');
+        expect(command).toContain('[Live:]');
+        expect(command).toContain('[Report:]');
         expect(skill).toContain('Monitor Ledger');
+        expect(skill).toContain('finalize-or-abort');
+        expect(skill).toContain('.spur/run/dogfood/');
         expect(skill).toContain('recomputable from');
         expect(reportTemplate).toContain('### 3. Monitor Ledger');
+        expect(reportTemplate).toContain('Always-on dual artifacts');
         expect(reportTemplate).toContain('aggregate cache% = round((sum(Cached Tokens)');
+        expect(reportTemplate).toContain('#### Cost');
         expect(monitorLedger).toContain('Anti-fiction rule');
+        expect(monitorLedger).toContain('Disk SSOT');
         expect(monitorLedger).toContain('Cache % = round(Cached Tokens / (Fresh Tokens + Cached Tokens) * 100)');
         expect(monitorLedger).toContain('aggregate cache% = round(sum(Cached Tokens)');
     });
