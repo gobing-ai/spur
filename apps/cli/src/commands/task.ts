@@ -24,6 +24,7 @@ import { type Colorize, makeColorize, shouldColor } from '../colors';
 import { EMBEDDED_SPUR_SCHEMAS } from '../config/embedded-schemas';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
+import { makePlanningEmitter } from '../planning-emitter';
 import { makeLifecycleAdapter } from '../workflow/make-lifecycle-adapter';
 
 /** Per-status column title for the human-readable board. */
@@ -608,6 +609,7 @@ async function makeService(context: CliContext, folderOverride?: string, noLifec
     const writeService = new PlanningWriteService({
         fs: context.fs,
         ...(lifecycle ? { lifecycle } : {}),
+        emitter: makePlanningEmitter(context),
     });
     return new TaskService({
         fs: context.fs,

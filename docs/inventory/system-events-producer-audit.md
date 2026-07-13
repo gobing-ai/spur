@@ -24,12 +24,12 @@ Source of truth: `SYSTEM_EVENT_CATALOG` in `packages/app/src/services/event-name
 
 | # | Catalog entry | Emit site | Bus path to tap | Status |
 | --- | --- | --- | --- | --- |
-| 1 | `task.created` | `planning-events.ts:50` | `LazyPlanningEventEmitter` → `eventsBus` (`context.ts:313–328`) | ✅ reachable |
-| 2 | `task.updated` | `planning-events.ts:50` | same | ✅ reachable |
-| 3 | `task.transitioned` | `planning-events.ts:50` | same | ✅ reachable |
-| 4 | `feature.created` | `planning-events.ts:50` | same | ✅ reachable |
-| 5 | `feature.updated` | `planning-events.ts:50` | same | ✅ reachable |
-| 6 | `feature.transitioned` | `planning-events.ts:50` | same | ✅ reachable |
+| 1 | `task.created` | `planning-events.ts:50` | **Board:** `LazyPlanningEventEmitter` → `eventsBus` (`context.ts:313–328`). **CLI:** `SystemEventEmitter` → `SystemEventDao` (`task.ts:612`, `feature.ts:366`; emitter from `makePlanningEmitter` in `planning-emitter.ts`) — task 0249 | ✅ Board **and** CLI reachable |
+| 2 | `task.updated` | `planning-events.ts:50` | same | ✅ Board **and** CLI reachable |
+| 3 | `task.transitioned` | `planning-events.ts:50` | same | ✅ Board **and** CLI reachable |
+| 4 | `feature.created` | `planning-events.ts:50` | same | ✅ Board **and** CLI reachable |
+| 5 | `feature.updated` | `planning-events.ts:50` | same | ✅ Board **and** CLI reachable |
+| 6 | `feature.transitioned` | `planning-events.ts:50` | same | ✅ Board **and** CLI reachable |
 
 ### Queue (queue.\*)
 
@@ -154,19 +154,21 @@ Source of truth: `SYSTEM_EVENT_CATALOG` in `packages/app/src/services/event-name
 
 Four architectural constraints affect observability completeness but are **not bugs** — they are deliberate scope boundaries. Documented here so operators interpret "missing" events correctly.
 
-### Gap 1 — CLI event-tap gap (CLI-driven work is invisible to the Board)
+### Gap 1 — CLI event-tap gap (CLI-driven work is invisible to the Board; `task.*`/`feature.*` closed by task 0249)
 
 The `system_events` persistence tap (`registerSystemEventTap`) is registered **only** in `apps/server/src/serve.ts:274`, gated by `bootConfig.events.enabled`. The CLI runtime (`apps/cli/src/context.ts`) constructs no tap — it builds only `agentService`, `ruleService`, and `hitlResponder` on a CLI-local bus that is never persisted.
 
-**Consequence:** when an operator runs `spur task create`, `spur feature update`, `spur rule run`, `spur workflow run` directly from the shell, the services emit events on a process-local `EventBus` that dies with the process. Those events never appear in Board system_events. The Board is a **server-side observability surface**; CLI-driven work operates outside it by design.
+**Consequence:** when an operator runs `spur rule run`, `spur workflow run` directly from the shell, the services emit events on a process-local `EventBus` that dies with the process. Those events never appear in Board system_events. The Board is a **server-side observability surface**; CLI-driven work operates outside it by design.
 
-**Affected prefixes:** all catalog entries, but only when driven from the CLI rather than the Board's server-side API. The events themselves are correctly emitted — there is simply no persistent tap on the CLI path.
+**Affected prefixes:** `rule.*`, `workflow.*`, `agent.*`, `message.*`, `process.*` — all catalog entries **except** `task.*` / `feature.*`, which now have a CLI-durable path (task 0249, see below). The events themselves are correctly emitted — there is simply no persistent tap on the CLI path for these remaining families.
+
+**Task 0249 — Planning CLI durability (ts-libs 0049 handoff).** `task.*` / `feature.*` now persist on the CLI mutation path via a durable `SystemEventEmitter` wired into `task.ts:612` and `feature.ts:366` (`makePlanningEmitter` in `planning-emitter.ts`). The emitter writes straight into the shared `system_events` ledger through `SystemEventDao`, reusing the same `normalizeSystemEventPayload` / `extractSystemEventActor` as the server tap (one canonical serialization, not a fork). Sink failures are logged and swallowed (R5) so the file mutation never aborts. No double-write on the Board path: the CLI emitter is wired only in the CLI `makeService` builders, not the server (R6). Originating handoff: ts-libs [0049](../../../xprojects/ts-libs/docs/tasks/0049_diagnosis_fix_missing_system_events_in_observability_tabview.md).
 
 **Observability path classification:**
 
 | Prefix family | Path | Board-visible? |
 | --- | --- | --- |
-| `task.*`, `feature.*` | server API → `planningBus` → tap | ✅ when Board-driven; ❌ when CLI-driven |
+| `task.*`, `feature.*` | **Board:** server API → `planningBus` → tap. **CLI:** `SystemEventEmitter` → `SystemEventDao` (task 0249) | ✅ Board **and** CLI reachable |
 | `rule.*` | server API → `RuleService.events` → tap | ✅ when Board-driven; ❌ when CLI-driven |
 | `workflow.*` | server API → engine bridge + `observabilityBus` → tap | ✅ when Board-driven; ❌ when CLI-driven |
 | `message.*` | server API → `TeamService.eventBus` → tap | ✅ when Board-driven; ❌ when CLI-driven |

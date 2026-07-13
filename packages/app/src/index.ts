@@ -125,6 +125,8 @@ export {
 } from './services/rule-service';
 export type { ProcessEntry, ProcessFrame, SupervisorOptions } from './services/supervisor-service';
 export { SupervisorService } from './services/supervisor-service';
+export type { SystemEventEmitterLogger } from './services/system-event-emitter';
+export { SystemEventEmitter } from './services/system-event-emitter';
 export {
     extractSystemEventActor,
     type PlanningEventBus,

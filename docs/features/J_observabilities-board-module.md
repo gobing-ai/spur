@@ -2,11 +2,11 @@
 schema_version: 1
 id: "J"
 name: "Observabilities board module"
-status: backlog
+status: active
 priority: P2
 tags: []
 created_at: "2026-07-03T23:28:28.509Z"
-updated_at: "2026-07-08T04:54:32.081Z"
+updated_at: "2026-07-13T23:29:36.969Z"
 ---
 
 # J: Observabilities board module
@@ -104,3 +104,4 @@ Feature: Observabilities board module
 ## Notes
 
 ## History
+- 2026-07-13T23:29:36.969Z backlog → active (system)

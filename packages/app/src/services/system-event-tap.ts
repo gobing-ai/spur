@@ -89,7 +89,7 @@ async function persist(
     }
 }
 
-function safeStringify(event: unknown): string | null {
+export function safeStringify(event: unknown): string | null {
     try {
         return JSON.stringify(event ?? null);
     } catch {

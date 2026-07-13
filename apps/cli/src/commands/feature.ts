@@ -9,6 +9,7 @@ import {
 } from '@gobing-ai/spur-app';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
+import { makePlanningEmitter } from '../planning-emitter';
 import { makeLifecycleAdapter } from '../workflow/make-lifecycle-adapter';
 
 /** Register the `spur feature` command and its subcommands on the CLI program. */
@@ -362,6 +363,7 @@ async function makeService(context: CliContext, folderOverride?: string): Promis
     const writeService = new PlanningWriteService({
         fs: context.fs,
         ...(lifecycle ? { lifecycle } : {}),
+        emitter: makePlanningEmitter(context),
     });
     return new FeatureService({ fs: context.fs, writeService, featuresDir, tasksDir });
 }
