@@ -89,6 +89,11 @@ async function persist(
     }
 }
 
+/**
+ * Safely serialize an event to JSON, returning `null` on failure (e.g. circular
+ * references). Shared by the persistence tap and the CLI planning emitter so
+ * both produce identical canonical payloads.
+ */
 export function safeStringify(event: unknown): string | null {
     try {
         return JSON.stringify(event ?? null);
