@@ -10,8 +10,8 @@
  */
 import { describe, expect, test } from 'bun:test';
 import type { EventEmitter, PlanningEvent } from '@gobing-ai/spur-app';
-import { makePlanningEmitter } from '../../src/planning-emitter';
-import { type CapturedOutput, createCapturedOutput } from '../helpers';
+import { makePlanningEmitter } from '../src/planning-emitter';
+import { type CapturedOutput, createCapturedOutput } from './helpers';
 
 /** Minimal fake CliContext — only `output` and `getDb` are touched by the emitter. */
 function fakeContext(opts: { getDb?: () => Promise<unknown> } = {}): {
