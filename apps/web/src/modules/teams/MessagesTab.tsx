@@ -14,6 +14,10 @@ interface MsgRow {
 
 const inboxUrl = (agent: string) => `${resolveApiUrl()}/messages/inbox?agent=${encodeURIComponent(agent)}`;
 const sendUrl = () => `${resolveApiUrl()}/messages`;
+const sseUrl = () => `${resolveApiUrl()}/events/planning`;
+
+/** SSE event names that signal a new inbox message (metadata-only payloads). */
+const MESSAGE_EVENT_NAMES = new Set(['message.sent', 'message.replied']);
 
 /** Messages tab — selected member's inbox + dispatch composer (R6). */
 export default function MessagesTab() {
@@ -41,6 +45,29 @@ export default function MessagesTab() {
         void load(selectedMemberId);
         const interval = setInterval(() => void load(selectedMemberId), 10_000);
         return () => clearInterval(interval);
+    }, [selectedMemberId, load]);
+
+    // Live tail (R6/AC5, InboxTab pattern): refetch the selected member's inbox
+    // on a `message.*` SSE event. Payloads are metadata-only (no body), so a
+    // matching event triggers a refetch rather than an in-place append. The 10 s
+    // poll above remains the safety net when SSE is unavailable.
+    useEffect(() => {
+        if (!selectedMemberId) return;
+        if (typeof EventSource === 'undefined') return;
+        const es = new EventSource(sseUrl());
+        es.onmessage = (frame) => {
+            try {
+                const raw: unknown = JSON.parse(frame.data);
+                if (raw === null || typeof raw !== 'object') return;
+                const name = (raw as { eventName?: unknown }).eventName;
+                if (typeof name === 'string' && MESSAGE_EVENT_NAMES.has(name)) {
+                    void load(selectedMemberId);
+                }
+            } catch {
+                // Malformed frame — drop silently.
+            }
+        };
+        return () => es.close();
     }, [selectedMemberId, load]);
 
     const send = useCallback(async () => {

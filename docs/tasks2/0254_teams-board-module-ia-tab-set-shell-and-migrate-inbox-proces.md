@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-14T04:29:07.281Z"
-updated_at: "2026-07-14T18:32:00.323Z"
+updated_at: "2026-07-14T22:58:15.630Z"
 ---
 
 ## 0254. Teams Board module IA: tab set + shell, and migrate Inbox/Process tabs out of Observability
@@ -129,21 +129,40 @@ Each entry cites the first changed line per file (`file:line`).
 | `packages/app/src/services/team-service.ts:566` |
 | `packages/app/src/services/team-service.ts:627` |
 ### Testing
-**Pipeline verify results**
+**Post-fix verify (`/sp:dev-verify 0254 --force --fix all`) — Verdict: PASS**
 
-- Verdict: PASS (from verdict artifact)
+Re-verified independently against the diff (commit `d33745c` + working-tree fixes). The prior "all R1–R8 MET" was inaccurate: R7 shipped as a placeholder stub and R6 lacked the AC5-required EventSource. Both were repaired in this fix pass; the evidence below is from tests run this session.
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | `apps/web/src/modules/teams/{index.tsx,tabs.ts,TeamsShell.tsx}` exist; `index.tsx` exports a `WebModule` (id:'teams', route:'teams', sidebarLabel:'Teams') auto-discovered via `discover.ts` import.meta.glob; `TeamsShell` maps over the `TEAMS_TABS` data array mirroring `observability/`. |
-| R2 | MET | `apps/web/src/modules/teams/tabs.ts` declares `TEAMS_TABS` with exactly the 4 v1 tabs and stable ids: roster, terminal, messages, activity (append-only/id-stable contract). |
-| R3 | MET | `RosterTab.tsx` consumes `GET /api/team/teams`, renders per-member status (running\|stopped\|errored\|exited) + per-member start/stop + per-team up/down controls (0256 endpoints); selecting a member sets shared selection. Lint fix applied: clickable divs → native `<button>` elements. |
-| R4 | MET | `TeamsContext.tsx` provides `{ selectedTeamId, selectedMemberId, select() }` shared selection state, driving Terminal + Messages tabs. |
-| R5 | MET | `TerminalTab.tsx` wraps 0255 `MemberTerminal` for the selected member (empty state when none selected). |
-| R6 | MET | `MessagesTab.tsx` adapts the `observability/InboxTab.tsx` fetch+EventSource pattern for the selected member with a dispatch composer (`POST /api/messages`); live-invalidated via EventSource. |
-| R7 | MET | `ActivityTab.tsx` adapts `observability/SystemEventsTab.tsx`, filtered to team/message events. |
-| R8 | MET | `inbox` + `process-list` removed from `OBSERVABILITY_TABS` (`apps/web/src/modules/observability/tabs.ts`) — now system-events/jobs/tool-using only. Per DD-4 the literal 'move same ids' was superseded: the Teams module covers the same functionality via Roster/Messages/Activity tabs. `InboxTab.tsx`/`ProcessListTab.tsx` retained in observability (still imported by direct-render tests, not dead imports — AC6). Observability tests updated to the post-migration telemetry-only contract. |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `teams/index.tsx` exports a WebModule (id/route `teams`, sidebarLabel `Teams`) auto-discovered via `discover.ts`; `TeamsShell` maps `TEAMS_TABS`. Test: `components.test.tsx` "renders exactly the 4 v1 tabs" (AC1). |
+| R2 | MET | `teams/tabs.ts` — 4 stable ids `roster/terminal/messages/activity`. Test: `tabs.test.ts` "contains the 4 v1 tabs in stable order". |
+| R3 | MET | `RosterTab.tsx` — GET `/team/teams`, per-member status + start/stop + per-team up/down (0256), member select. Test: `components.test.tsx` AC2 (Up POSTs `/team/alpha/up`). |
+| R4 | MET | `TeamsContext.tsx` shared selection. Test: AC3 (select → Messages inbox fetch for member). |
+| R5 | MET | `TerminalTab.tsx` empty state + MemberTerminal for the selection. Test: R5 empty-state + selected. |
+| R6 | MET (fixed) | `MessagesTab.tsx` inbox + composer POST `/api/messages` + **EventSource `message.*` live-invalidate added this pass** (was 10s poll only). Test: AC5 SSE refetch + composer POST. |
+| R7 | MET (fixed) | `ActivityTab.tsx` **rewritten from a placeholder stub to a real timeline**: fetch `/events/history`, filter to agent/message/team/supervisor events, SSE prepend. Test: R7 filter + live-prepend. |
+| R8 | MET (documented deviation) | `inbox`/`process-list` removed from `OBSERVABILITY_TABS`; Observability retains system-events/jobs/tool-using. Per DD-4 the literal "same ids" clause was superseded — Teams covers the functionality via Roster/Messages/Activity. Test: `observability/tabs.test.ts` post-migration assertion. |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| AC1 | MET | test | `components.test.tsx`: TeamsShell renders exactly the 4 tabs |
+| AC2 | MET | test | Roster lists teams; Up button POSTs `/team/alpha/up` |
+| AC3 | MET | test | select member → Messages inbox fetched with `agent=planner` |
+| AC4 | MET (documented) | test + static-ref | `observability/tabs.ts` no longer lists inbox/process-list; DD-4 supersedes the "same ids" clause |
+| AC5 | MET (fixed) | test | composer POSTs `/api/messages`; inbox live-updates on `message.sent` SSE |
+| AC6 | MET | static-ref | `apps/web/package.json` unchanged (no new dep); no dead imports |
+| AC7 | MET | command | `bunx biome check` clean; `tsc --noEmit` exit 0; `bun test tests/modules/teams` = 38 pass / 0 fail |
+
+**Fix pass (this session)**: `ActivityTab.tsx` (stub → real fetch+filter+SSE timeline); `MessagesTab.tsx` (+EventSource `message.*` live-invalidate, +Send button — native `<input>`/`<button>` matching the sibling MemberTerminal composer); new `tests/modules/teams/components.test.tsx` (9 tests: AC1/AC2/AC3/AC5/R5/R7); `tests/modules/teams/MemberTerminal.test.tsx` (await the async happy-dom teardown — fixes a latent cross-file DOM-teardown race that the new tests exposed).
+
+**Suite note (honesty)**: full `apps/web` suite = 451 pass / 2 fail. The 2 failures (`rpc client > fetchWithTimeout resolves`, `apiFetchWithTimeout delegates`) are PRE-EXISTING — reproduced identically (442 pass / 2 fail) with all 0254 changes stashed. They are an environmental React-19 + happy-dom scheduler/teardown race, not introduced by this task.
+
+Coverage: N/A (verdict-based verify; teams module tests green — 38 pass / 0 fail).
 ### Review
 **SECU findings** (pipeline verify step — verdict: PASS)
 
