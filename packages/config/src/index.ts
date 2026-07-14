@@ -113,32 +113,183 @@ export const AgentExecutorConfigSchema = z.object({
 /** A single executor profile entry. */
 export type AgentExecutorConfig = z.infer<typeof AgentExecutorConfigSchema>;
 
+// ---- Team config (feature M) ----
+
+/**
+ * Agent-id format mirrored from `@gobing-ai/ts-ai-runner` `validateAgentId`
+ * (`agent-spec.ts`: `^[a-z][a-z0-9_-]{1,63}$`). Mirrored — not imported — to keep this
+ * CF-safe core free of a ts-ai-runner dependency (ADR-027). Keep in sync if the
+ * runner's id format ever changes.
+ */
+const AGENT_ID_REGEX = /^[a-z][a-z0-9_-]{1,63}$/;
+
+/**
+ * Schema for a single team member reference under `agent.team.<id>.members`.
+ *
+ * A bare string (`- claude`) is shorthand for `{ executor: "claude" }`, normalized by
+ * {@link normalizeMember}. The object form carries per-member overrides.
+ */
+export const TeamMemberConfigSchema = z.union([
+    z.string().min(1),
+    z.object({
+        executor: z.string().min(1),
+        id: z.string().min(1).optional(),
+        purpose: z.string().optional(),
+        workspace: z.string().min(1).optional(),
+        model: z.string().min(1).optional(),
+        autonomy: z.string().optional(),
+        systemPrompt: z.string().optional(),
+        command: z.array(z.string().min(1)).optional(),
+        autostart: z.boolean().optional(),
+    }),
+]);
+
+/** Inferred type for {@link TeamMemberConfigSchema}. */
+export type TeamMemberConfig = z.infer<typeof TeamMemberConfigSchema>;
+
+/**
+ * Schema for one team under `agent.team.<teamId>`.
+ *
+ * `name` is the human label; `work_dir` is the default member workspace (tilde-expanded
+ * at load); `members` is the roster (≥ 1). Member-id uniqueness and the composed-id
+ * `<teamId>-<localId>` charset/length are validated in {@link AgentConfigSchema}'s
+ * `superRefine` — the composed id needs the `teamId` map key (finalized by 0251).
+ */
+export const TeamConfigSchema = z.object({
+    name: z.string().min(1),
+    work_dir: z.string().min(1),
+    autostart: z.boolean().optional(),
+    members: z.array(TeamMemberConfigSchema).min(1),
+});
+
+/** Inferred type for {@link TeamConfigSchema}. */
+export type TeamConfig = z.infer<typeof TeamConfigSchema>;
+
+/** A team member in its normalized object form (shorthand string expanded). */
+export interface NormalizedTeamMember {
+    executor: string;
+    id?: string;
+    purpose?: string;
+    workspace?: string;
+    model?: string;
+    autonomy?: string;
+    systemPrompt?: string;
+    command?: string[];
+    autostart?: boolean;
+}
+
+/**
+ * Normalize a team member reference to its object form. A bare string `"claude"`
+ * becomes `{ executor: "claude" }`; an object is returned as a shallow copy. The
+ * local id is `member.id ?? executor` (0251).
+ */
+export function normalizeMember(member: TeamMemberConfig): NormalizedTeamMember {
+    return typeof member === 'string' ? { executor: member } : { ...member };
+}
+
+/** A resolved executor: a canonical agent plus an optional model override. */
+export interface ResolvedExecutor {
+    agent: string;
+    model?: string;
+}
+
+/** Options for {@link resolveExecutor}. */
+export interface ResolveExecutorOptions {
+    /**
+     * Predicate recognizing a raw canonical agent type (e.g. `claude`, `codex`).
+     * Injected rather than hardcoded: the Spur monorepo deliberately keeps a single
+     * canonical-agent list in `@gobing-ai/ts-ai-runner` and consumes it from there, so
+     * the CF-safe config core stays free of any duplicate list.
+     *
+     * When omitted, any non-empty name is accepted as a raw agent and no "unknown
+     * reference" error is raised — canonical validation is the caller's job (the
+     * materialization layer in 0258 injects `isAgentName` from ts-ai-runner). Inject
+     * the predicate to fail unknown references at the config boundary.
+     */
+    isCanonicalAgent?: (name: string) => boolean;
+}
+
+/**
+ * Resolve a member's `executor` to `{ agent, model? }` (0250 R5).
+ *
+ * Executors-first: a name matching `agent.executors[].name` returns that entry's
+ * `{ agent, model? }`. Otherwise the name is treated as a raw canonical agent type and
+ * returned as `{ agent: name }` (model omitted). When `isCanonicalAgent` is provided
+ * and returns `false` for an unmatched name, this throws — the name is neither a
+ * configured executor nor a known agent.
+ */
+export function resolveExecutor(
+    name: string,
+    agentConfig: AgentConfig | undefined,
+    opts?: ResolveExecutorOptions,
+): ResolvedExecutor {
+    const exec = agentConfig?.executors?.find((entry) => entry.name === name);
+    if (exec !== undefined) return { agent: exec.agent, model: exec.model };
+    if (opts?.isCanonicalAgent === undefined || opts.isCanonicalAgent(name)) {
+        return { agent: name };
+    }
+    throw new Error(`Unknown executor or agent reference: "${name}"`);
+}
+
 /**
  * Schema for the `agent` section.
  *
  * - `default` — executor selector first, legacy direct agent name second.
  * - `executors` — named `{ name, agent, model? }` profiles; names must be unique.
  * - `default-by-phase` — a `Record<phase, executorSelector>` **map**.
+ * - `team` — a `Record<teamId, TeamConfig>` map of declarative agent teams (feature M).
  */
 export const AgentConfigSchema = z
     .object({
         default: z.string().optional(),
         executors: z.array(AgentExecutorConfigSchema).optional(),
         'default-by-phase': z.record(z.string(), z.string()).optional(),
+        team: z.record(z.string(), TeamConfigSchema).optional(),
     })
     .superRefine((value, ctx) => {
         const executors = value.executors;
-        if (executors === undefined) return;
-        const seen = new Set<string>();
-        for (const [index, executor] of executors.entries()) {
-            if (seen.has(executor.name)) {
-                ctx.addIssue({
-                    code: z.ZodIssueCode.custom,
-                    message: `Duplicate executor name: ${executor.name}`,
-                    path: ['executors', index, 'name'],
-                });
+        if (executors !== undefined) {
+            const seen = new Set<string>();
+            for (const [index, executor] of executors.entries()) {
+                if (seen.has(executor.name)) {
+                    ctx.addIssue({
+                        code: z.ZodIssueCode.custom,
+                        message: `Duplicate executor name: ${executor.name}`,
+                        path: ['executors', index, 'name'],
+                    });
+                }
+                seen.add(executor.name);
             }
-            seen.add(executor.name);
+        }
+
+        // Team validation (feature M). The composed agent id `<teamId>-<localId>`
+        // (finalized by 0251 — always prefixed) needs the `teamId` map key, so the
+        // dup-localId + composed-id charset/length checks live here on the agent
+        // schema rather than on TeamConfigSchema (which has no access to the key).
+        const team = value.team;
+        if (team === undefined) return;
+        for (const [teamId, teamConfig] of Object.entries(team)) {
+            const seenLocal = new Set<string>();
+            teamConfig.members.forEach((member, index) => {
+                const ref = normalizeMember(member);
+                const localId = ref.id ?? ref.executor;
+                if (seenLocal.has(localId)) {
+                    ctx.addIssue({
+                        code: z.ZodIssueCode.custom,
+                        message: `Duplicate team member id: ${localId} in team "${teamId}"`,
+                        path: ['team', teamId, 'members', index],
+                    });
+                }
+                seenLocal.add(localId);
+                const composedId = `${teamId}-${localId}`;
+                if (!AGENT_ID_REGEX.test(composedId)) {
+                    ctx.addIssue({
+                        code: z.ZodIssueCode.custom,
+                        message: `Invalid composed agent id "${composedId}": team key "${teamId}" + member "${localId}" must match ^[a-z][a-z0-9_-]{1,63}$ (2-64 chars, lowercase).`,
+                        path: ['team', teamId, 'members', index],
+                    });
+                }
+            });
         }
     });
 

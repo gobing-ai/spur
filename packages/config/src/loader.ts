@@ -27,6 +27,7 @@ import {
     folderConfigSchema,
     type SpurConfig,
     spurConfigSchema,
+    type TeamConfig,
     tasksConfigSchema,
 } from './index';
 
@@ -244,6 +245,42 @@ export function invalidateSpurConfig(configPath?: string): void {
     }
 }
 
+// ---- Tilde expansion (Node-only; the CF-safe core can't touch node:os) ----
+
+/**
+ * Expand a leading `~` to the user's home directory. Returns the path unchanged for
+ * anything that isn't `~` or `~/…` (no expansion of `~user`, no mid-path `~`). Used
+ * for team `work_dir` and per-member `workspace` at config load (0257 R5).
+ */
+function expandTilde(path: string): string {
+    if (path === '~') return homedir();
+    if (path.startsWith('~/')) return join(homedir(), path.slice(2));
+    return path;
+}
+
+/**
+ * Return a copy of `config` with every team's `work_dir` and each member's `workspace`
+ * tilde-expanded. Members left as bare strings (no `workspace`) and members whose
+ * `workspace` is unset are passed through untouched. No-op when there is no `team` block.
+ */
+function expandTeamTildes(config: SpurConfig): SpurConfig {
+    const teams = config.agent?.team;
+    if (teams === undefined) return config;
+    const expanded: Record<string, TeamConfig> = {};
+    for (const [teamId, team] of Object.entries(teams)) {
+        expanded[teamId] = {
+            ...team,
+            work_dir: expandTilde(team.work_dir),
+            members: team.members.map((member) =>
+                typeof member === 'string' || member.workspace === undefined
+                    ? member
+                    : { ...member, workspace: expandTilde(member.workspace) },
+            ),
+        };
+    }
+    return { ...config, agent: { ...config.agent, team: expanded } };
+}
+
 async function loadSpurConfigFile(
     configPath: string,
     opts: LoadSpurConfigOptions | undefined,
@@ -276,7 +313,7 @@ async function loadSpurConfigFile(
         raw = parseYaml(text) ?? {};
     }
 
-    return spurConfigSchema.parse(raw);
+    return expandTeamTildes(spurConfigSchema.parse(raw));
 }
 
 /**

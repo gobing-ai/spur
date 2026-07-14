@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import {
@@ -572,5 +572,86 @@ describe('spurConfigCache invalidation', () => {
         await writeConfig(tmpCwd, updated);
         const second = await loadSpurConfig(tmpCwd);
         expect(second.name).toBe('after-clear');
+    });
+});
+
+// ---- agent.team tilde expansion (R5 / AC4) ----
+
+describe('agent.team tilde expansion', () => {
+    test('AC4: work_dir "~/x" resolves to an absolute path under home', async () => {
+        await writeConfig(
+            tmpCwd,
+            'version: "1"\nname: t\nagent:\n  team:\n    devops-01:\n      name: "Dev Ops 01"\n      work_dir: "~/x"\n      members:\n        - claude\n        - executor: omp-zai\n          workspace: "~/y"\n          purpose: reviewer\n',
+        );
+        const config = await loadSpurConfig(tmpCwd);
+        const team = config.agent?.team?.['devops-01'];
+        expect(team?.work_dir).toBe(join(homedir(), 'x'));
+        // bare-string member is untouched (no workspace to expand)
+        expect(team?.members[0]).toBe('claude');
+        // object member's workspace is expanded
+        const member1 = team?.members[1];
+        expect(typeof member1).toBe('object');
+        if (typeof member1 === 'object') {
+            expect(member1.workspace).toBe(join(homedir(), 'y'));
+            expect(member1.purpose).toBe('reviewer');
+        }
+    });
+
+    test('a non-tilde work_dir is left unchanged', async () => {
+        await writeConfig(
+            tmpCwd,
+            'version: "1"\nname: t\nagent:\n  team:\n    devops-01:\n      name: "Dev Ops 01"\n      work_dir: "/abs/path"\n      members:\n        - claude\n',
+        );
+        const config = await loadSpurConfig(tmpCwd);
+        expect(config.agent?.team?.['devops-01']?.work_dir).toBe('/abs/path');
+    });
+});
+
+// ---- agent.team backward-compat at the loader (R7 / AC6) ----
+
+describe('agent.team backward-compat', () => {
+    test('AC6: a config with no agent.team block loads exactly as today', async () => {
+        await writeConfig(tmpCwd, CONFIG_YAML);
+        const config = await loadSpurConfig(tmpCwd);
+        expect(config.agent?.team).toBeUndefined();
+        expect(config.agent?.default).toBe('codex');
+        expect(config.agent?.executors?.[0]?.model).toBe('gpt-5');
+        expect(config.tasks?.active).toBe('docs/tasks2');
+    });
+});
+
+// ---- agent.team JSON schema round-trip (R6 / AC7) ----
+
+describe('agent.team JSON schema round-trip', () => {
+    // The runtime SSOT is the zod; this is the editor/CI aid that must stay in sync.
+    const schemaPath = join(import.meta.dir, '..', '..', '..', 'apps', 'cli', 'schemas', 'spur-config.schema.json');
+
+    test('AC7: a valid team config is accepted by both zod and the JSON schema', async () => {
+        await writeConfig(
+            tmpCwd,
+            `version: "1"\nname: t\n$schema: "${schemaPath}"\nagent:\n  team:\n    devops-01:\n      name: "Dev Ops 01"\n      work_dir: "~/x"\n      members:\n        - claude\n        - executor: omp-zai\n          purpose: reviewer\n`,
+        );
+        const viaJsonSchema = await loadSpurConfig(tmpCwd, { validateJsonSchema: true });
+        expect(viaJsonSchema.agent?.team?.['devops-01']?.members?.length).toBe(2);
+        const viaZod = await loadSpurConfig(tmpCwd, { validateJsonSchema: false });
+        expect(viaZod.agent?.team?.['devops-01']?.members?.length).toBe(2);
+    });
+
+    test('AC7: an empty members roster is rejected by both', async () => {
+        await writeConfig(
+            tmpCwd,
+            `version: "1"\nname: t\n$schema: "${schemaPath}"\nagent:\n  team:\n    devops-01:\n      name: "Dev Ops 01"\n      work_dir: "~/x"\n      members: []\n`,
+        );
+        await expect(loadSpurConfig(tmpCwd, { validateJsonSchema: true })).rejects.toThrow();
+        await expect(loadSpurConfig(tmpCwd, { validateJsonSchema: false })).rejects.toThrow();
+    });
+
+    test('AC7: a member object missing executor is rejected by both', async () => {
+        await writeConfig(
+            tmpCwd,
+            `version: "1"\nname: t\n$schema: "${schemaPath}"\nagent:\n  team:\n    devops-01:\n      name: "Dev Ops 01"\n      work_dir: "~/x"\n      members:\n        - purpose: reviewer\n`,
+        );
+        await expect(loadSpurConfig(tmpCwd, { validateJsonSchema: true })).rejects.toThrow();
+        await expect(loadSpurConfig(tmpCwd, { validateJsonSchema: false })).rejects.toThrow();
     });
 });
