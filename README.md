@@ -73,7 +73,7 @@ spur init       # seed ~/.config/spur/ — idempotent
 
 ## Quick Start
 
-> For **developing Spur itself** (running from source). To just *use* the tool, see
+> For **developing Spur itself** (running from source). To just _use_ the tool, see
 > [Install](#install) above.
 
 ```bash
@@ -132,15 +132,15 @@ via the oRPC client and never reaches into server internals.
 Consumed from the separate [`ts-libs`](https://github.com/gobing-ai/ts-libs) repository by semver,
 centralized in the root Bun catalog.
 
-| Package | Role |
-|---------|------|
-| [`@gobing-ai/ts-utils`][utils] | output, errors, api-response, cursor, date, access helpers |
-| [`@gobing-ai/ts-infra`][infra] | logger, EventBus, telemetry, scheduler, job-queue interfaces |
-| [`@gobing-ai/ts-runtime`][runtime] | runtime context, FileSystem, ProcessExecutor, config loader |
-| [`@gobing-ai/ts-db`][db] | DbAdapter, BaseDao, migrations, QueueJobDao |
-| [`@gobing-ai/ts-ai-runner`][ai] | `AgentDetector`, `DoctorRunner`, `AiRunner` (backs `spur agent`) |
-| [`@gobing-ai/ts-rule-engine`][rule] | `RuleEngine`, evaluators, presets, formatters (backs `spur rule`) |
-| [`@gobing-ai/ts-dual-workflow-engine`][wf] | FSM + transition-flow engine (backs `spur workflow`) |
+| Package                                    | Role                                                               |
+| ------------------------------------------ | ------------------------------------------------------------------ |
+| [`@gobing-ai/ts-utils`][utils]             | output, errors, api-response, cursor, date, access helpers         |
+| [`@gobing-ai/ts-infra`][infra]             | logger, EventBus, telemetry, scheduler, job-queue interfaces       |
+| [`@gobing-ai/ts-runtime`][runtime]         | runtime context, FileSystem, ProcessExecutor, config loader        |
+| [`@gobing-ai/ts-db`][db]                   | DbAdapter, BaseDao, migrations, QueueJobDao                        |
+| [`@gobing-ai/ts-ai-runner`][ai]            | `AgentDetector`, `DoctorRunner`, `AiRunner` (backs `spur agent`)   |
+| [`@gobing-ai/ts-rule-engine`][rule]        | `RuleEngine`, evaluators, presets, formatters (backs `spur rule`)  |
+| [`@gobing-ai/ts-dual-workflow-engine`][wf] | FSM + transition-flow engine (backs `spur workflow`)               |
 | [`@gobing-ai/ts-llm-jsonl-importer`][hist] | `runJsonlImport`, SourceDefinition pipeline (backs `spur history`) |
 
 ---
@@ -175,19 +175,19 @@ detail.
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|------------|
-| Runtime / package manager / test runner | [Bun](https://bun.sh/) `1.3.14` (prefer `bun:*` over `node:*`) |
-| Language | TypeScript (strict) |
-| Lint + format | [Biome](https://biomejs.dev/) `2.4.16` (no ESLint, no Prettier) |
-| Type seam | [oRPC](https://orpc.unnoq.com/) `1.14.x` (contract-first, OpenAPI generated) |
-| HTTP | [Hono](https://hono.dev/) on `Bun.serve` / Cloudflare Workers |
-| Web | [Astro](https://astro.build/) + Cloudflare adapter |
-| DB | SQLite via `@gobing-ai/ts-db` |
-| Validation | [Zod](https://zod.dev/) 4 |
-| Tool versions | pinned in `.prototools` ([proto](https://moonrepo.dev/proto)) |
-| Hooks | [Lefthook](https://github.com/evilmartians/lefthook) |
-| Deploy | Cloudflare Workers (server), Cloudflare (web) |
+| Layer                                   | Technology                                                                   |
+| --------------------------------------- | ---------------------------------------------------------------------------- |
+| Runtime / package manager / test runner | [Bun](https://bun.sh/) `1.3.14` (prefer `bun:*` over `node:*`)               |
+| Language                                | TypeScript (strict)                                                          |
+| Lint + format                           | [Biome](https://biomejs.dev/) `2.4.16` (no ESLint, no Prettier)              |
+| Type seam                               | [oRPC](https://orpc.unnoq.com/) `1.14.x` (contract-first, OpenAPI generated) |
+| HTTP                                    | [Hono](https://hono.dev/) on `Bun.serve` / Cloudflare Workers                |
+| Web                                     | [Astro](https://astro.build/) + Cloudflare adapter                           |
+| DB                                      | SQLite via `@gobing-ai/ts-db`                                                |
+| Validation                              | [Zod](https://zod.dev/) 4                                                    |
+| Tool versions                           | pinned in `.prototools` ([proto](https://moonrepo.dev/proto))                |
+| Hooks                                   | [Lefthook](https://github.com/evilmartians/lefthook)                         |
+| Deploy                                  | Cloudflare Workers (server), Cloudflare (web)                                |
 
 ---
 
@@ -243,14 +243,14 @@ exits non-zero (a gate that checks nothing is not a pass).
 Read the doc that governs your change before editing code. On conflict, **lower number wins**
 (`00_ADR` is binding and overrides all others).
 
-| Document | Purpose | Authority |
-|----------|---------|-----------|
-| [`docs/00_ADR.md`](docs/00_ADR.md) | *Why* — binding architecture decisions | Authoritative (wins all conflicts) |
-| [`docs/01_PRD.md`](docs/01_PRD.md) | *What* — product, scope, in/out of scope | Authoritative for scope |
-| [`docs/02_ROADMAP.md`](docs/02_ROADMAP.md) | *When* — phases, current vs deferred work | Derived |
-| [`docs/03_ARCHITECTURE.md`](docs/03_ARCHITECTURE.md) | *How* — module boundaries, data flow, invariants | Derived (ADR wins) |
-| [`docs/04_DESIGN.md`](docs/04_DESIGN.md) | Concrete surface — every CLI command, config schema, data shapes | Derived |
-| [`docs/05_FEATURES.md`](docs/05_FEATURES.md) | Feature decomposition + status (✅/🔶/⏳/💤) | Derived |
+| Document                                             | Purpose                                                          | Authority                          |
+| ---------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------- |
+| [`docs/00_ADR.md`](docs/00_ADR.md)                   | _Why_ — binding architecture decisions                           | Authoritative (wins all conflicts) |
+| [`docs/01_PRD.md`](docs/01_PRD.md)                   | _What_ — product, scope, in/out of scope                         | Authoritative for scope            |
+| [`docs/02_ROADMAP.md`](docs/02_ROADMAP.md)           | _When_ — phases, current vs deferred work                        | Derived                            |
+| [`docs/03_ARCHITECTURE.md`](docs/03_ARCHITECTURE.md) | _How_ — module boundaries, data flow, invariants                 | Derived (ADR wins)                 |
+| [`docs/04_DESIGN.md`](docs/04_DESIGN.md)             | Concrete surface — every CLI command, config schema, data shapes | Derived                            |
+| [`docs/05_FEATURES.md`](docs/05_FEATURES.md)         | Feature decomposition + status (✅/🔶/⏳/💤)                     | Derived                            |
 
 Agent-facing guidance for working in this repo lives in [`AGENTS.md`](AGENTS.md) (`CLAUDE.md` /
 `GEMINI.md` symlink to it).
@@ -280,6 +280,7 @@ Agent-facing guidance for working in this repo lives in [`AGENTS.md`](AGENTS.md)
 Apache-2.0 © [Robin Min](mailto:minlongbing@gmail.com)
 
 <!-- ts-* package links -->
+
 [utils]: https://github.com/gobing-ai/ts-libs/tree/main/packages/utils
 [infra]: https://github.com/gobing-ai/ts-libs/tree/main/packages/infra
 [runtime]: https://github.com/gobing-ai/ts-libs/tree/main/packages/runtime
@@ -290,6 +291,10 @@ Apache-2.0 © [Robin Min](mailto:minlongbing@gmail.com)
 [hist]: https://github.com/gobing-ai/ts-libs/tree/main/packages/llm-jsonl-importer
 
 ## References
+
 - [codex-usage-tracker](https://github.com/douglasmonsky/codex-usage-tracker)
 - [superset](https://github.com/superset-sh/superset)
-
+- [antigravity plugin](https://antigravity.google/docs/cli/plugins)
+- [claude code plugin](https://code.claude.com/docs/en/plugins)
+- [codex plugin](https://learn.chatgpt.com/docs/build-plugins)
+- [omp plugin](https://omp.sh/docs/plugins)
