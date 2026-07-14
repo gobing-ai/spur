@@ -67,6 +67,7 @@ Feature: Init scaffold ownership contract
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0188 | Fix spur init + /sp:spur-init: full package scaffold and ownership contract | done |
+| 0242 | AGENTS.md harness contract: drift guard, init placeholders, platform fallback, long-tail routing | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

@@ -128,6 +128,12 @@ Feature: Observabilities board module
 | 0220 | System Events completeness, real-time stream, filters, and extensible details | Done |
 | 0221 | Complete System Events upstream coverage and bus wiring | done |
 | 0226 | System Events real producer wiring review findings | done |
+| 0243 | Observability Processes: serve-rooted runtime tree inventory | done |
+| 0245 | Observability Tool Using tab: token-ledger tail API + Live table | done |
+| 0246 | Tool Using v1.1: capture correctness, token cascade, agent fields, UI polish | done |
+| 0247 | Tool Using live: SSE stream + cursor pagination (replace Live poll) | done |
+| 0248 | Tool Using hooks: expand matchers to Bash/Grep/Glob with redaction | done |
+| 0249 | Surface CLI-driven feature.* / task.* status changes in System Events tabview | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

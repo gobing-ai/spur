@@ -27,7 +27,8 @@
     ├── [backlog] **H2**: Companion skills and write guard ([H2_companions-and-guard.md](./H2_companions-and-guard.md))
     └── [backlog] **H3**: Prompt-skill moves ([H3_prompt-skill-moves.md](./H3_prompt-skill-moves.md))
 [done] **I**: sp plugin hands-off ready ([I_sp-plugin-hands-off-ready.md](./I_sp-plugin-hands-off-ready.md))
-[backlog] **J**: Observabilities board module ([J_observabilities-board-module.md](./J_observabilities-board-module.md))
+[active] **J**: Observabilities board module ([J_observabilities-board-module.md](./J_observabilities-board-module.md))
 [backlog] **K**: Observability System Events Table Redesign ([K_observability-system-events-table-redesign.md](./K_observability-system-events-table-redesign.md))
 [active] **L**: System Events Payload and Wiring Enrichment ([L_system-events-payload-and-wiring-enrichment.md](./L_system-events-payload-and-wiring-enrichment.md))
+[backlog] **M**: Teams: declarative agent teams + Board module over existing message/drain/supervisor backbones ([M_teams-declarative-agent-teams-board-module-over-existing-message-drain-supervisor-backbones.md](./M_teams-declarative-agent-teams-board-module-over-existing-message-drain-supervisor-backbones.md))
 <!-- END AUTO-GENERATED -->
