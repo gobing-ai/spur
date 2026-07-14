@@ -243,7 +243,7 @@ transitions:
   # ── approve: HITL gate (reached only when profile != auto). Routed by the
   # operator's captured answer (R1, bug-750) — three ordered guards, declaration
   # order matters (yes first, then no, then cancel), mirroring idea-pipeline's
-  # design-approval gate (config/workflows/idea-pipeline.yaml:352-366). No
+  # design-approval gate (.spur/workflows/idea-pipeline.yaml:352-366). No
   # `always` edge remains out of `approve`. ──
   - from: approve
     to: verify

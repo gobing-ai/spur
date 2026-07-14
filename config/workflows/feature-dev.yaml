@@ -72,7 +72,7 @@ states:
             Run every pending task under feature ${vars.featureId} to done. Enumerate with
             `${vars.spurBin} task list --feature ${vars.featureId} --status todo --json`; then
             for each WBS run the standard single-task pipeline VERBATIM:
-            `${vars.spurBin} workflow run config/workflows/task-pipeline.yaml --vars
+            `${vars.spurBin} workflow run .spur/workflows/task-pipeline.yaml --vars
             '{"wbs":"<wbs>","profile":"${vars.profile}","agent":"${vars.agent}"}' --async --json`,
             polling `${vars.spurBin} workflow trace <run-id>` until terminal and inspecting
             `.spur/run/<wbs>-verdict.json`. Stop and report on the first non-PASS verdict

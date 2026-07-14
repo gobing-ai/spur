@@ -83,7 +83,8 @@ spur.js
 /apps/cli/config
 # Board static assets copied into the CLI package for npm publish (bundle-web)
 /apps/cli/web
-dist
+dist/
+.pi-lens/
 # Gatsby files
 .cache/
 # vuepress build output
