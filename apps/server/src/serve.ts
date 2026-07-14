@@ -3,11 +3,12 @@ import {
     AgentService,
     JobHandlerRegistry,
     JobWorkerService,
+    resolveAutostartSet,
     resolvePlanningFolders,
     type TaskActionJob,
 } from '@gobing-ai/spur-app';
 import { IN_MEMORY_DATABASE_URL } from '@gobing-ai/spur-config';
-import { resolveConfigFile } from '@gobing-ai/spur-config/loader';
+import { loadSpurConfig, resolveConfigFile } from '@gobing-ai/spur-config/loader';
 import { SystemEventDao } from '@gobing-ai/spur-domain';
 import type { ApplicationRuntime, ApplicationStopReason } from '@gobing-ai/ts-infra/application';
 import { runNodeApplication } from '@gobing-ai/ts-infra/application-node';
@@ -272,13 +273,16 @@ export async function startServer(options: StartServerOptions, deps: StartServer
             });
             let jobWorker: JobWorkerService<unknown> | undefined;
 
-            // Team process autostart (task 0195/0207): spawn supervised agents listed
-            // in SPUR_TEAM_AUTOSTART at serve boot. Fails loud on unknown spec ids.
-            if (bootConfig.teamAutostart.length > 0) {
+            // Team process autostart (0195/0207 + 0258 R8): members whose effective
+            // autostart is true across `agent.team.*`, unioned with the SPUR_TEAM_AUTOSTART
+            // env. `resolveAutostartSet` handles both; a load failure degrades to env-only.
+            const autostartConfig = await loadSpurConfig(process.cwd()).catch(() => null);
+            const autostartIds = resolveAutostartSet(autostartConfig, env.SPUR_TEAM_AUTOSTART);
+            if (autostartIds.length > 0) {
                 try {
                     const supervisor = ctx.supervisor();
-                    await supervisor.startAutostart(bootConfig.teamAutostart);
-                    appRt.logger.info('Autostart agents spawned', { ids: bootConfig.teamAutostart });
+                    await supervisor.startAutostart(autostartIds);
+                    appRt.logger.info('Autostart agents spawned', { ids: autostartIds });
                 } catch (error) {
                     appRt.logger.error(
                         'Autostart failed — server will continue but supervised agents are not running',

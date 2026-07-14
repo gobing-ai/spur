@@ -49,6 +49,26 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         });
 
     agent
+        .command('loop')
+        .description('Run the persistent self-draining loop for a team member (used by the supervisor).')
+        .requiredOption('--agent <id>', 'Agent spec id / message recipient')
+        .option('--poll <ms>', 'Idle poll interval in milliseconds', String(DEFAULT_LOOP_POLL_MS))
+        .action(async (options) => {
+            const controller = new AbortController();
+            const onSignal = () => controller.abort();
+            process.on('SIGINT', onSignal);
+            process.on('SIGTERM', onSignal);
+            try {
+                const flags = commanderOptionsToFlags(options);
+                const code = await runAgentLoop(context, flags, { signal: controller.signal });
+                context.setExitCode(code);
+            } finally {
+                process.off('SIGINT', onSignal);
+                process.off('SIGTERM', onSignal);
+            }
+        });
+
+    agent
         .command('create')
         .description('Write a team agent spec to .spur/agents/<id>.yaml.')
         .option('--type <agent-type>', 'Agent spec type for create')
@@ -307,4 +327,81 @@ async function drainIntoPrompt(
     const block = `Pending messages:\n${header}`;
     const merged = prompt === undefined ? block : `${block}\n\n${prompt}`;
     return { prompt: merged, flags: flagsOut };
+}
+
+/** Default idle poll interval for `spur agent loop` (ms). */
+const DEFAULT_LOOP_POLL_MS = 2000;
+
+/** Injectable knobs for {@link runAgentLoop} — tests pass maxIterations/sleep to avoid real waits. */
+export interface AgentLoopRuntime {
+    /** Aborting ends the loop cleanly (SIGINT/SIGTERM in the CLI action). */
+    signal?: AbortSignal;
+    /** Hard cap on iterations (tests only); undefined = run until aborted. */
+    maxIterations?: number;
+    /** Sleep override; defaults to a cancellable setTimeout. */
+    sleep?: (ms: number) => Promise<void>;
+}
+
+/** Parse the `--poll` flag; falls back to the default for non-positive/non-numeric input. */
+function parseLoopPoll(raw: string | boolean | undefined): number {
+    if (typeof raw !== 'string') return DEFAULT_LOOP_POLL_MS;
+    const n = Number.parseInt(raw, 10);
+    return Number.isFinite(n) && n > 0 ? n : DEFAULT_LOOP_POLL_MS;
+}
+
+/** Cancellable sleep; resolves immediately if the signal is already aborted. */
+function loopSleep(ms: number, signal?: AbortSignal): Promise<void> {
+    return new Promise((resolve) => {
+        if (signal?.aborted) {
+            resolve();
+            return;
+        }
+        const timer = setTimeout(resolve, ms);
+        signal?.addEventListener(
+            'abort',
+            () => {
+                clearTimeout(timer);
+                resolve();
+            },
+            { once: true },
+        );
+    });
+}
+
+/**
+ * `spur agent loop --agent <id> [--poll <ms>]` — the persistent self-draining wrapper
+ * the supervisor spawns (0258 R6). Each iteration consumes the inbox via `drainPending`;
+ * if messages were drained it runs the agent with them prepended, otherwise it
+ * idle-sleeps `--poll` ms. This is the long-lived, attachable process — the member no
+ * longer dies after one successful drain. Exits cleanly on abort (SIGINT/SIGTERM);
+ * crash-restart is the supervisor's job.
+ */
+export async function runAgentLoop(
+    context: CliContext,
+    flags: Record<string, string | boolean>,
+    runtime: AgentLoopRuntime = {},
+    deps?: AgentRunDeps,
+): Promise<number> {
+    const recipient = typeof flags.agent === 'string' ? flags.agent : '';
+    if (recipient === '' || recipient === 'auto') {
+        context.output.error('agent loop requires an explicit --agent <id>');
+        return 2;
+    }
+    const pollMs = parseLoopPoll(flags.poll);
+    const sleep = runtime.sleep ?? ((ms: number) => loopSleep(ms, runtime.signal));
+    const svc = context.agentService();
+
+    let iteration = 0;
+    while (!runtime.signal?.aborted && (runtime.maxIterations === undefined || iteration < runtime.maxIterations)) {
+        // Consume this member's inbox (queued → injected). A non-empty drain yields a
+        // prompt to run the agent on; an empty drain yields `undefined` → idle-sleep.
+        const { prompt, flags: rewritten } = await drainIntoPrompt(undefined, context, { ...flags, drain: true });
+        if (prompt !== undefined) {
+            await svc.run(prompt, rewritten, deps);
+        } else {
+            await sleep(pollMs);
+        }
+        iteration++;
+    }
+    return 0;
 }

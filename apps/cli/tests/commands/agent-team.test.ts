@@ -6,7 +6,7 @@ import { TeamService } from '@gobing-ai/spur-app';
 import type { DoctorResult } from '@gobing-ai/ts-ai-runner';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { main } from '../../src';
-import { type AgentRunDeps, runAgentRun, splitEditorCommand } from '../../src/commands/agent';
+import { type AgentRunDeps, runAgentLoop, runAgentRun, splitEditorCommand } from '../../src/commands/agent';
 import { type CliContext, createCliContext } from '../../src/context';
 import { createCapturedOutput } from '../helpers';
 
@@ -183,6 +183,32 @@ describe('spur agent edit', () => {
             await cleanup();
         }
     });
+
+    test('prints the spec path when $EDITOR is whitespace-only (empty-argv fallback, no spawn)', async () => {
+        // WHY: a set-but-whitespace $EDITOR is neither undefined nor '' (so it
+        // passes the first guard), yet splitEditorCommand trims/splits it to [] —
+        // runAgentEdit then prints the path and returns instead of spawning.
+        const { cwd, out, cleanup } = await makeCtx();
+        try {
+            await main(['agent', 'create', 'coder', '--type', 'codex'], {
+                cwd,
+                output: out,
+                dbUrl: ':memory:',
+                env: { EDITOR: '   ' },
+            });
+            out.messages.length = 0;
+            const code = await main(['agent', 'edit', 'coder'], {
+                cwd,
+                output: out,
+                dbUrl: ':memory:',
+                env: { EDITOR: '   ' },
+            });
+            expect(code).toBe(0);
+            expect(out.messages.at(-1)).toContain(join(cwd, '.spur', 'agents', 'coder.yaml'));
+        } finally {
+            await cleanup();
+        }
+    });
 });
 
 describe('splitEditorCommand (R6 multi-word $EDITOR)', () => {
@@ -326,6 +352,148 @@ describe('spur agent run --drain', () => {
             // Drain warns + no-ops; run proceeds via auto resolution, so exit is 0.
             expect(code).toBe(0);
             expect(out.errors.join('\n')).toMatch(/--drain requires an explicit --agent/);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    // ── agent loop — the persistent self-draining wrapper (0258 R6) ──
+
+    test('loop drains the inbox, runs the agent, and consumes the message (idempotent)', async () => {
+        const { ctx, cleanup } = await makeCtx();
+        try {
+            const team = new TeamService(ctx);
+            await team.createAgentSpec({ id: 'planner', type: 'claude' });
+            await team.sendMessage('operator', 'planner', 'loop message');
+
+            let receivedInput = '';
+            const deps = {
+                runner: {
+                    runPromptCommand: async (_agent: unknown, opts: { input?: string }) => {
+                        receivedInput = opts.input ?? '';
+                        return { exitCode: 0, stdout: '', stderr: '', durationMs: 1 };
+                    },
+                } as MockRunner,
+                detector: { detectOne: async () => ({ version: '1' }) } as MockDetector,
+                doctorRunner: fakeDoctor() as MockDoctor,
+            } as unknown as AgentRunDeps;
+
+            const code = await runAgentLoop(
+                ctx,
+                { agent: 'planner' },
+                { maxIterations: 1, sleep: async () => {} },
+                deps,
+            );
+            expect(code).toBe(0);
+            expect(receivedInput).toContain('loop message');
+
+            // drainPending (queued→injected) consumed it: a follow-up drain is empty — the
+            // loop won't re-prepend the same message next iteration (the idempotency fix).
+            const after = await team.drainPending('planner');
+            expect(after.count).toBe(0);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('loop idle-sleeps when the inbox is empty (never runs the agent) and honors maxIterations', async () => {
+        const { ctx, cleanup } = await makeCtx();
+        try {
+            const team = new TeamService(ctx);
+            await team.createAgentSpec({ id: 'planner', type: 'claude' });
+
+            let runs = 0;
+            let sleeps = 0;
+            const deps = {
+                runner: {
+                    runPromptCommand: async () => {
+                        runs++;
+                        return { exitCode: 0, stdout: '', stderr: '', durationMs: 1 };
+                    },
+                } as MockRunner,
+                detector: { detectOne: async () => ({ version: '1' }) } as MockDetector,
+                doctorRunner: fakeDoctor() as MockDoctor,
+            } as unknown as AgentRunDeps;
+
+            const code = await runAgentLoop(
+                ctx,
+                { agent: 'planner' },
+                {
+                    maxIterations: 3,
+                    sleep: async () => {
+                        sleeps++;
+                    },
+                },
+                deps,
+            );
+            expect(code).toBe(0);
+            expect(runs).toBe(0); // nothing to drain → never ran the agent
+            expect(sleeps).toBe(3); // idle-slept each of the 3 iterations
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('loop requires an explicit --agent (rejects auto)', async () => {
+        const { ctx, cleanup } = await makeCtx();
+        try {
+            const code = await runAgentLoop(ctx, { agent: 'auto' }, { maxIterations: 1 });
+            expect(code).toBe(2);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('loop honors a numeric --poll as the sleep interval (parseLoopPoll valid path)', async () => {
+        // parseLoopPoll('500') returns 500 (not the default) — the injected sleep
+        // receives the parsed value, proving the finite-positive branch ran.
+        const { ctx, cleanup } = await makeCtx();
+        try {
+            let slept = 0;
+            const code = await runAgentLoop(
+                ctx,
+                { agent: 'planner', poll: '500' },
+                {
+                    maxIterations: 1,
+                    sleep: async (ms) => {
+                        slept = ms;
+                    },
+                },
+            );
+            expect(code).toBe(0);
+            expect(slept).toBe(500);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('loopSleep waits the poll interval via a real timer when no sleep is injected', async () => {
+        // No injected sleep + no signal → runAgentLoop calls the real loopSleep,
+        // which schedules setTimeout(resolve, poll) and resolves after it fires.
+        // poll='1' keeps the real wait to 1ms.
+        const { ctx, cleanup } = await makeCtx();
+        try {
+            const code = await runAgentLoop(ctx, { agent: 'planner', poll: '1' }, { maxIterations: 1 });
+            expect(code).toBe(0);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('loopSleep resolves early when the abort signal fires mid-sleep', async () => {
+        // poll='5000' would wait 5s; aborting after 10ms exercises loopSleep's
+        // signal abort listener (clearTimeout + resolve), then the loop exits on
+        // the next while-condition check. No maxIterations — the signal is the stop.
+        const { ctx, cleanup } = await makeCtx();
+        try {
+            const ac = new AbortController();
+            const timer = setTimeout(() => ac.abort(), 10);
+            try {
+                const code = await runAgentLoop(ctx, { agent: 'planner', poll: '5000' }, { signal: ac.signal });
+                expect(code).toBe(0);
+            } finally {
+                clearTimeout(timer);
+            }
         } finally {
             await cleanup();
         }

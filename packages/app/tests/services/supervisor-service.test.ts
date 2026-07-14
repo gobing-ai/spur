@@ -149,7 +149,7 @@ describe('SupervisorService', () => {
             await expect(svc.start('nonexistent')).rejects.toThrow('No agent spec found for "nonexistent"');
         });
 
-        test('uses default wrapper argv when spec has no command', async () => {
+        test('uses the default agent-loop wrapper argv when spec has no command (0258 R6)', async () => {
             const { executor, calls } = createMockExecutor();
             const { bus } = createMockBus();
             const svc = new SupervisorService({
@@ -161,11 +161,31 @@ describe('SupervisorService', () => {
 
             await svc.start('alpha');
 
+            // The wrapper is now the persistent `agent loop` (drains internally), not the
+            // single-shot `agent run --drain --continue` — so one clean drain no longer ends the member.
             expect(calls[0]?.command).toBe(process.execPath);
             expect(calls[0]?.args).toContain('agent');
+            expect(calls[0]?.args).toContain('loop');
             expect(calls[0]?.args).toContain('alpha');
-            expect(calls[0]?.args).toContain('--drain');
-            expect(calls[0]?.args).toContain('--continue');
+            expect(calls[0]?.args).not.toContain('--continue');
+        });
+
+        test('prefers config.command over the default wrapper (0258 R9 round-trip)', async () => {
+            const { executor, calls } = createMockExecutor();
+            const { bus } = createMockBus();
+            const svc = new SupervisorService({
+                processExecutor: executor,
+                eventBus: bus,
+                configDir: '/tmp',
+                // command lives in config (the field saveAgentSpec/loadAgentSpecs round-trip),
+                // NOT top-level — this is the shape materializeTeam actually writes.
+                agentSpecs: [makeSpec({ id: 'alpha', config: { command: ['echo', 'hi'] } })],
+            });
+
+            await svc.start('alpha');
+
+            expect(calls[0]?.command).toBe('echo');
+            expect(calls[0]?.args).toEqual(['hi']);
         });
     });
 

@@ -1,5 +1,11 @@
 import type { Command } from '@commander-js/extra-typings';
-import { TeamService, type TeamStatusEntry } from '@gobing-ai/spur-app';
+import {
+    type MaterializeResult,
+    type TeamListing,
+    TeamService,
+    type TeamStatusEntry,
+    type TeardownResult,
+} from '@gobing-ai/spur-app';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
 
@@ -38,10 +44,35 @@ export function registerTeamCommand(program: Command, context: CliContext): void
         });
 
     noun.command('status')
-        .description('List agent specs and their run status.')
+        .description('List agent specs and their run status; --by-team groups by team (0258 R4).')
         .option('--json', 'Output machine-readable JSON')
+        .option('--by-team', 'Group specs by their agent.team.<id> membership')
         .action(async (options) => {
-            const code = await runTeamStatus(options, context);
+            const code = options.byTeam
+                ? await runTeamStatusGrouped(options, context)
+                : await runTeamStatus(options, context);
+            context.setExitCode(code);
+        });
+
+    noun.command('up')
+        .description('Materialize a team roster into agent specs; best-effort start when spur serve is reachable.')
+        .argument('<team>', 'Team id (agent.team.<team>)')
+        .option('--check', 'Dry-run: show the add/prune diff without writing')
+        .option('--server <url>', 'Server API URL', DEFAULT_SERVER)
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (team, options) => {
+            const code = await runTeamUp(team, options, context);
+            context.setExitCode(code);
+        });
+
+    noun.command('down')
+        .description('Tear down a team: stop members; --purge also removes generated specs.')
+        .argument('<team>', 'Team id')
+        .option('--purge', 'Also delete spur:generated specs (never manual / ref:)')
+        .option('--server <url>', 'Server API URL', DEFAULT_SERVER)
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (team, options) => {
+            const code = await runTeamDown(team, options, context);
             context.setExitCode(code);
         });
 
@@ -201,4 +232,94 @@ async function runTeamStop(
 function formatStatusLine(agent: TeamStatusEntry): string {
     const pid = agent.pid === undefined ? '' : ` pid=${agent.pid}`;
     return `${agent.status}\t${agent.id}\t${agent.type}\t${agent.purpose}${pid}`;
+}
+
+/** `spur team status --by-team` — group specs by their `team:<id>` membership (0258 R4). */
+async function runTeamStatusGrouped(options: { json?: boolean }, context: CliContext): Promise<number> {
+    const teams = await new TeamService(context).listTeams();
+    if (options.json === true) {
+        context.output.write(toJson({ teams }));
+        return 0;
+    }
+    if (teams.length === 0) {
+        context.output.write('No teams or agent specs found');
+        return 0;
+    }
+    context.output.write(teams.map(formatTeamBlock).join('\n'));
+    return 0;
+}
+
+/** Render one team as a header line plus one indented row per spec. */
+function formatTeamBlock(team: TeamListing): string {
+    const header = team.name && team.name !== team.teamId ? `# ${team.teamId} (${team.name})` : `# ${team.teamId}`;
+    const rows = team.specs.map((spec) => `  ${spec.id}\t${spec.type}\t${spec.purpose}`);
+    return [header, ...rows].join('\n');
+}
+
+/** `spur team up <team> [--check] [--server <url>] [--json]` — materialize + best-effort start. */
+async function runTeamUp(
+    team: string,
+    options: { check?: boolean; server: string; json?: boolean },
+    context: CliContext,
+): Promise<number> {
+    const svc = new TeamService(context);
+    let result: MaterializeResult;
+    try {
+        result = await svc.materializeTeam(team, { check: options.check === true });
+    } catch (error) {
+        context.output.error(error instanceof Error ? error.message : String(error));
+        return 1;
+    }
+
+    // Best-effort start of autostart members when the server is reachable (0252 up-scope).
+    const started: string[] = [];
+    if (options.check !== true && result.upserted.length > 0) {
+        const specs = await svc.listAgentSpecs();
+        const autostart = specs.filter((spec) => spec.autoStart === true && result.upserted.includes(spec.id));
+        for (const spec of autostart) {
+            const res = await performTeamStart(spec.id, { server: options.server });
+            if ('ok' in res && res.ok === true) started.push(spec.id);
+        }
+    }
+
+    if (options.json === true) {
+        context.output.write(toJson({ ...result, started }));
+    } else {
+        const verb = options.check === true ? 'would materialize' : 'materialized';
+        const startNote = started.length > 0 ? `, started ${started.length}` : '';
+        context.output.write(
+            `team ${team}: ${verb} ${result.upserted.length} member(s), prune ${result.orphaned.length}${startNote}`,
+        );
+    }
+    return 0;
+}
+
+/** `spur team down <team> [--purge] [--server <url>] [--json]` — teardown + best-effort stop. */
+async function runTeamDown(
+    team: string,
+    options: { purge?: boolean; server: string; json?: boolean },
+    context: CliContext,
+): Promise<number> {
+    const svc = new TeamService(context);
+    let result: TeardownResult;
+    try {
+        result = await svc.teardownTeam(team, { purge: options.purge === true });
+    } catch (error) {
+        context.output.error(error instanceof Error ? error.message : String(error));
+        return 1;
+    }
+
+    // Best-effort stop of the team's members when the server is reachable.
+    const stopped: string[] = [];
+    for (const id of result.stopped) {
+        const res = await performTeamStop(id, { server: options.server });
+        if ('ok' in res && res.ok === true) stopped.push(id);
+    }
+
+    if (options.json === true) {
+        context.output.write(toJson({ ...result, stopped }));
+    } else {
+        context.output.write(`team ${team}: stopped ${stopped.length}, purged ${result.purged.length}`);
+    }
+    return 0;
 }

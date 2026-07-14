@@ -322,3 +322,193 @@ describe('spur team start/stop happy paths (coverage)', () => {
         );
     });
 });
+
+describe('spur team up/down/status --by-team (0258 R4)', () => {
+    const TEAM_CONFIG = [
+        'agent:',
+        '  team:',
+        '    alpha:',
+        '      name: Alpha',
+        '      work_dir: /tmp/alpha-ws',
+        '      members:',
+        '        - claude',
+        '        - executor: codex',
+        '          id: reviewer',
+        '',
+    ].join('\n');
+
+    async function seedTeam(cwd: string): Promise<void> {
+        await mkdir(join(cwd, '.spur', 'agents'), { recursive: true });
+        await writeFile(join(cwd, '.spur', 'config.yaml'), TEAM_CONFIG);
+    }
+
+    test('team up --check reports the diff without writing specs', async () => {
+        const { cwd, out, cleanup } = await makeCtx();
+        try {
+            await seedTeam(cwd);
+            const code = await main(['team', 'up', 'alpha', '--check', '--json'], {
+                cwd,
+                output: out,
+                dbUrl: ':memory:',
+            });
+            expect(code).toBe(0);
+            const payload = JSON.parse(out.messages.join('')) as { upserted: string[]; written: boolean };
+            expect(payload.written).toBe(false);
+            expect(payload.upserted.sort()).toEqual(['alpha-claude', 'alpha-reviewer']);
+            expect(
+                await readFile(join(cwd, '.spur', 'agents', 'alpha-claude.yaml'), 'utf8').catch(() => null),
+            ).toBeNull();
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('team up materializes generated specs (no autostart → no server call)', async () => {
+        const { cwd, out, cleanup } = await makeCtx();
+        try {
+            await seedTeam(cwd);
+            const code = await main(['team', 'up', 'alpha', '--json'], { cwd, output: out, dbUrl: ':memory:' });
+            expect(code).toBe(0);
+            const yaml = await readFile(join(cwd, '.spur', 'agents', 'alpha-claude.yaml'), 'utf8');
+            expect(yaml).toContain('id: alpha-claude');
+            expect(yaml).toContain('spur:generated');
+            expect(yaml).toContain('team:alpha');
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('team status --by-team groups specs under their team', async () => {
+        const { cwd, out, cleanup } = await makeCtx();
+        try {
+            await seedTeam(cwd);
+            await main(['team', 'up', 'alpha', '--json'], { cwd, output: out, dbUrl: ':memory:' });
+            out.messages.length = 0;
+            const code = await main(['team', 'status', '--by-team', '--json'], { cwd, output: out, dbUrl: ':memory:' });
+            expect(code).toBe(0);
+            const payload = JSON.parse(out.messages.join('')) as {
+                teams: Array<{ teamId: string; specs: Array<{ id: string }> }>;
+            };
+            const alpha = payload.teams.find((t) => t.teamId === 'alpha');
+            expect(alpha).toBeDefined();
+            expect(alpha?.specs.map((s) => s.id).sort()).toEqual(['alpha-claude', 'alpha-reviewer']);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('team down --purge removes generated specs (stop is best-effort)', async () => {
+        const { cwd, out, cleanup } = await makeCtx();
+        try {
+            await seedTeam(cwd);
+            await main(['team', 'up', 'alpha', '--json'], { cwd, output: out, dbUrl: ':memory:' });
+            await withMockedFetch(
+                async () => jsonResponse(200, { ok: true }),
+                async () => {
+                    const code = await main(['team', 'down', 'alpha', '--purge', '--json'], {
+                        cwd,
+                        output: out,
+                        dbUrl: ':memory:',
+                    });
+                    expect(code).toBe(0);
+                },
+            );
+            expect(
+                await readFile(join(cwd, '.spur', 'agents', 'alpha-claude.yaml'), 'utf8').catch(() => null),
+            ).toBeNull();
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('team up on an unknown team surfaces the materialize error (catch path)', async () => {
+        const { cwd, out, cleanup } = await makeCtx();
+        try {
+            await seedTeam(cwd);
+            const code = await main(['team', 'up', 'ghost', '--json'], { cwd, output: out, dbUrl: ':memory:' });
+            expect(code).toBe(1);
+            expect(out.errors.join('\n')).toMatch(/not found in agent.team config/);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('team up best-effort-starts autostart members and prints a plain-text summary', async () => {
+        const AUTOSTART_CONFIG = [
+            'agent:',
+            '  team:',
+            '    alpha:',
+            '      name: Alpha',
+            '      work_dir: /tmp/alpha-ws',
+            '      members:',
+            '        - executor: claude',
+            '          autostart: true',
+            '',
+        ].join('\n');
+        const { cwd, out, cleanup } = await makeCtx();
+        try {
+            await mkdir(join(cwd, '.spur', 'agents'), { recursive: true });
+            await writeFile(join(cwd, '.spur', 'config.yaml'), AUTOSTART_CONFIG);
+            await withMockedFetch(
+                async () => jsonResponse(201, { ok: true, pid: 99, status: 'running' }),
+                async () => {
+                    const code = await main(['team', 'up', 'alpha'], { cwd, output: out, dbUrl: ':memory:' });
+                    expect(code).toBe(0);
+                    const text = out.messages.join('\n');
+                    // Plain-text verb (not --check) + the autostart start note.
+                    expect(text).toMatch(/materialized 1 member\(s\), prune 0, started 1/);
+                },
+            );
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('team status --by-team prints a plain-text grouped block (formatTeamBlock)', async () => {
+        const { cwd, out, cleanup } = await makeCtx();
+        try {
+            await seedTeam(cwd);
+            await main(['team', 'up', 'alpha', '--json'], { cwd, output: out, dbUrl: ':memory:' });
+            out.messages.length = 0;
+            const code = await main(['team', 'status', '--by-team'], { cwd, output: out, dbUrl: ':memory:' });
+            expect(code).toBe(0);
+            const text = out.messages.join('\n');
+            // Header carries the configured name; rows list the materialized specs.
+            expect(text).toContain('# alpha (Alpha)');
+            expect(text).toContain('alpha-claude');
+            expect(text).toContain('alpha-reviewer');
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('team status --by-team reports an empty project plainly', async () => {
+        const { cwd, out, cleanup } = await makeCtx();
+        try {
+            const code = await main(['team', 'status', '--by-team'], { cwd, output: out, dbUrl: ':memory:' });
+            expect(code).toBe(0);
+            expect(out.messages.join('\n')).toMatch(/No teams or agent specs found/);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('team stop surfaces a transport error when the server is unreachable', async () => {
+        const { cwd, out, cleanup } = await makeCtx();
+        await withMockedFetch(
+            async () => {
+                throw new Error('ECONNREFUSED');
+            },
+            async () => {
+                try {
+                    const code = await main(['team', 'stop', 'planner'], { cwd, output: out, dbUrl: ':memory:' });
+                    expect(code).toBe(1);
+                    expect(out.errors.join('\n')).toMatch(/Cannot reach server/);
+                    expect(out.errors.join('\n')).toMatch(/ECONNREFUSED/);
+                } finally {
+                    await cleanup();
+                }
+            },
+        );
+    });
+});

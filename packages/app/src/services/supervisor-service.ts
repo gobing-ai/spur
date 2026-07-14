@@ -62,13 +62,16 @@ const MAX_RESTART_BACKOFF = 30_000;
 // ── Default wrapper helper ──
 
 /**
- * Build the default drain-loop wrapper argv for agents without `command` (option c).
- * Uses the current Bun runtime to run `spur agent run --agent <id> --drain --continue`.
+ * Build the default wrapper argv for agents without `command` (option c).
+ * Spawns the persistent self-draining loop `spur agent loop --agent <id>` (0258 R6):
+ * the process stays alive, drains its inbox each iteration, and idle-sleeps when empty —
+ * so a single successful drain does not end the member. Crash-restart stays with the
+ * supervisor's exit handler (R7).
  */
 function defaultWrapperArgv(agentId: string): { command: string; args: string[] } {
     return {
         command: process.execPath,
-        args: [process.argv[1] ?? 'apps/cli/src/index.ts', 'agent', 'run', '--agent', agentId, '--drain', '--continue'],
+        args: [process.argv[1] ?? 'apps/cli/src/index.ts', 'agent', 'loop', '--agent', agentId],
     };
 }
 
@@ -78,9 +81,10 @@ function defaultWrapperArgv(agentId: string): { command: string; args: string[] 
  * Process supervisor (task 0195/0207).
  *
  * Manages supervised agent processes spawned from `.spur/agents/<id>.yaml` specs.
- * Supports option (c): spec-declared `command` wins when present; absent → the
- * spur-provided drain-loop wrapper. No auto-restart in v1 — exits are recorded,
- * not retried. Emits `process.spawned|exited|stopped` lifecycle events.
+ * Supports option (c): a `config.command` (or legacy top-level `command`) wins when
+ * present; absent → the spur-provided `agent loop` self-draining wrapper. Abnormal
+ * exits are restarted with bounded backoff, then marked `errored` (0258 R7). Emits
+ * `process.spawned|exited|stopped` lifecycle events.
  */
 export class SupervisorService {
     private readonly processExecutor: ProcessExecutor;
@@ -296,7 +300,12 @@ export class SupervisorService {
     }
 
     private resolveCommand(spec: AgentSpec): { command: string; args: string[] } {
-        const raw = (spec as AgentSpec & { command?: string[] }).command;
+        // Prefer `config.command` — the field materializeTeam writes and that
+        // saveAgentSpec/loadAgentSpecs round-trip (0258 R9). Fall back to a top-level
+        // `command` for in-memory / legacy specs (serializeAgentSpec drops top-level).
+        const configCommand = Array.isArray(spec.config?.command) ? (spec.config.command as string[]) : undefined;
+        const topLevel = (spec as AgentSpec & { command?: string[] }).command;
+        const raw = configCommand ?? topLevel;
         if (raw && raw.length > 0) {
             return { command: raw[0] ?? '', args: raw.slice(1) };
         }
