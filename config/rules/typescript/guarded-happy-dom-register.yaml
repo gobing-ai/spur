@@ -39,6 +39,7 @@ exclude:
   - "apps/web/tests/lib/theme.test.ts"
   - "apps/web/tests/components/BoardLayout.test.tsx"
   - "apps/web/tests/modules/observability/components.test.tsx"
+  - "apps/web/tests/modules/teams/MemberTerminal.test.tsx"
   - "apps/web/tests/components/ThemeToggle.test.tsx"
   - "apps/web/tests/components/ResponsiveAndTheme.test.tsx"
 

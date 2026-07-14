@@ -1,7 +1,5 @@
 import type { ComponentType } from 'react';
-import InboxTab from './InboxTab';
 import JobsTab from './JobsTab';
-import ProcessListTab from './ProcessListTab';
 import SystemEventsTab from './SystemEventsTab';
 import ToolUsingTab from './ToolUsingTab';
 
@@ -21,11 +19,14 @@ export interface ObservabilityTab {
     readonly component: ComponentType;
 }
 
-/** Built-in tabs shipped in v1 of the observability module. */
+/** Built-in tabs shipped in v1 of the observability module.
+ *
+ * 0254 migration: `inbox` and `process-list` tabs moved to the Teams module
+ * (Messages + Roster tabs cover the same functionality). Observability keeps
+ * system-wide telemetry: system events, jobs, tool using.
+ */
 export const OBSERVABILITY_TABS: readonly ObservabilityTab[] = [
     { id: 'system-events', label: 'System Events', component: SystemEventsTab },
-    { id: 'inbox', label: 'Inbox Messages', component: InboxTab },
     { id: 'jobs', label: 'Jobs', component: JobsTab },
-    { id: 'process-list', label: 'Processes', component: ProcessListTab },
     { id: 'tool-using', label: 'Tool Using', component: ToolUsingTab },
 ];

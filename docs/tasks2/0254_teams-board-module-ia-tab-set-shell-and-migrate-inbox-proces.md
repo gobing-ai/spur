@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Teams Board module IA: tab set + shell, and migrate Inbox/Process tabs out of Observability"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: M
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-14T04:29:07.281Z"
-updated_at: "2026-07-14T06:45:20.633Z"
+updated_at: "2026-07-14T18:32:00.323Z"
 ---
 
 ## 0254. Teams Board module IA: tab set + shell, and migrate Inbox/Process tabs out of Observability
@@ -90,17 +90,66 @@ TerminalTab.tsx, MessagesTab.tsx, ActivityTab.tsx}`; edits to `observability/tab
 
 **Depends on:** 0256 (routes) + 0255 (`MemberTerminal`). Implement last.
 ### Solution
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| Change (`file:line`) |
+|----------------------|
+| `apps/cli/src/commands/agent.ts:303` |
+| `apps/server/src/modules/team/index.ts:192` |
+| `apps/web/src/modules/observability/tabs.ts:1` |
+| `apps/web/src/modules/observability/tabs.ts:2` |
+| `apps/web/src/modules/observability/tabs.ts:22` |
+| `apps/web/src/modules/observability/tabs.ts:29` |
+| `apps/web/src/modules/observability/tabs.ts:30` |
+| `apps/web/tests/modules/observability/components.test.tsx:132` |
+| `apps/web/tests/modules/observability/components.test.tsx:138` |
+| `apps/web/tests/modules/observability/components.test.tsx:142` |
+| `apps/web/tests/modules/observability/tabs.test.ts:26` |
+| `apps/web/tests/modules/observability/tabs.test.ts:31` |
+| `apps/web/tests/modules/observability/tabs.test.ts:32` |
+| `apps/web/tests/modules/observability/tabs.test.ts:34` |
+| `packages/app/src/index.ts:172` |
+| `packages/app/src/index.ts:177` |
+| `packages/app/src/index.ts:182` |
+| `packages/app/src/index.ts:184` |
+| `packages/app/src/services/supervisor-service.ts:173` |
+| `packages/app/src/services/supervisor-service.ts:182` |
+| `packages/app/src/services/supervisor-service.ts:184` |
+| `packages/app/src/services/supervisor-service.ts:186` |
+| `packages/app/src/services/supervisor-service.ts:24` |
+| `packages/app/src/services/supervisor-service.ts:247` |
+| `packages/app/src/services/supervisor-service.ts:281` |
+| `packages/app/src/services/supervisor-service.ts:58` |
+| `packages/app/src/services/supervisor-service.ts:94` |
+| `packages/app/src/services/team-service.ts:124` |
+| `packages/app/src/services/team-service.ts:2` |
+| `packages/app/src/services/team-service.ts:230` |
+| `packages/app/src/services/team-service.ts:411` |
+| `packages/app/src/services/team-service.ts:566` |
+| `packages/app/src/services/team-service.ts:627` |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `apps/web/src/modules/teams/{index.tsx,tabs.ts,TeamsShell.tsx}` exist; `index.tsx` exports a `WebModule` (id:'teams', route:'teams', sidebarLabel:'Teams') auto-discovered via `discover.ts` import.meta.glob; `TeamsShell` maps over the `TEAMS_TABS` data array mirroring `observability/`. |
+| R2 | MET | `apps/web/src/modules/teams/tabs.ts` declares `TEAMS_TABS` with exactly the 4 v1 tabs and stable ids: roster, terminal, messages, activity (append-only/id-stable contract). |
+| R3 | MET | `RosterTab.tsx` consumes `GET /api/team/teams`, renders per-member status (running\|stopped\|errored\|exited) + per-member start/stop + per-team up/down controls (0256 endpoints); selecting a member sets shared selection. Lint fix applied: clickable divs → native `<button>` elements. |
+| R4 | MET | `TeamsContext.tsx` provides `{ selectedTeamId, selectedMemberId, select() }` shared selection state, driving Terminal + Messages tabs. |
+| R5 | MET | `TerminalTab.tsx` wraps 0255 `MemberTerminal` for the selected member (empty state when none selected). |
+| R6 | MET | `MessagesTab.tsx` adapts the `observability/InboxTab.tsx` fetch+EventSource pattern for the selected member with a dispatch composer (`POST /api/messages`); live-invalidated via EventSource. |
+| R7 | MET | `ActivityTab.tsx` adapts `observability/SystemEventsTab.tsx`, filtered to team/message events. |
+| R8 | MET | `inbox` + `process-list` removed from `OBSERVABILITY_TABS` (`apps/web/src/modules/observability/tabs.ts`) — now system-events/jobs/tool-using only. Per DD-4 the literal 'move same ids' was superseded: the Teams module covers the same functionality via Roster/Messages/Activity tabs. `InboxTab.tsx`/`ProcessListTab.tsx` retained in observability (still imported by direct-render tests, not dead imports — AC6). Observability tests updated to the post-migration telemetry-only contract. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (pipeline verify step — verdict: PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed (strict-core PASS; WARN prose-mirror notes for 0255/0256 prerequisites are non-blocking) |
 ### References
 
 M
@@ -108,3 +157,6 @@ M
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-07-14T17:25:25.232Z todo → wip (system)
+- 2026-07-14T18:31:20.887Z wip → testing (system)
+- 2026-07-14T18:32:00.323Z testing → done (system)

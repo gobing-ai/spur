@@ -129,19 +129,16 @@ function installObservabilityFetchMock(): string[] {
 }
 
 describe('observability components', () => {
-    test('shell renders tab data and switches from system events to inbox messages', async () => {
+    test('shell renders tab data and switches from system events to jobs', async () => {
+        // 0254 migrated `inbox` and `process-list` out of Observability into
+        // the Teams module. The shell now switches among the telemetry-only
+        // tabs (system-events → jobs); the inbox tab-switching behavior is
+        // covered by the Teams module MessagesTab tests.
         const calls = installObservabilityFetchMock();
-        const { getByRole, queryAllByText, getByText, container } = render(<ObservabilityShell />);
+        const { getByRole, queryAllByText, getByText } = render(<ObservabilityShell />);
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
         expect(calls.some((url) => url.includes('/events/history?limit=100'))).toBe(true);
-
-        fireEvent.click(getByRole('tab', { name: 'Inbox Messages' }));
-
-        await waitFor(() => expect(getByText('Please review the observability board.')).toBeDefined());
-        expect(getByText('Review complete.')).toBeDefined();
-        expect(container.querySelector('[data-inbox-tab]')?.textContent).toContain('reply to msg-1');
-        expect(calls.some((url) => url.includes('/messages/inbox?agent=operator&limit=50'))).toBe(true);
 
         fireEvent.click(getByRole('tab', { name: 'Jobs' }));
 

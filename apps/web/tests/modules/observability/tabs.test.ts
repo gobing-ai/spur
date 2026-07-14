@@ -23,13 +23,16 @@ describe('OBSERVABILITY_TABS', () => {
         expect(new Set(ids).size).toBe(ids.length);
     });
 
-    test('contains the built-in v1 tabs', () => {
+    test('contains the post-0254 telemetry-only tabs', () => {
+        // 0254 migrated `inbox` and `process-list` out of Observability into the
+        // Teams module (Messages + Roster tabs). Observability now keeps
+        // system-wide telemetry only.
         const ids = OBSERVABILITY_TABS.map((t) => t.id);
         expect(ids).toContain('system-events');
-        expect(ids).toContain('inbox');
         expect(ids).toContain('jobs');
-        expect(ids).toContain('process-list');
         expect(ids).toContain('tool-using');
+        expect(ids).not.toContain('inbox');
+        expect(ids).not.toContain('process-list');
     });
 
     test('component fields are resolvable React component types', () => {
