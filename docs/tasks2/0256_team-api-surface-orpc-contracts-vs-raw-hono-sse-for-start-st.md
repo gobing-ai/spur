@@ -3,7 +3,7 @@ template: standard
 schema_version: 1
 name: "Team API surface: oRPC contracts vs raw Hono/SSE for start/stop/stdin/stream/messages"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: M
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-14T04:29:12.104Z"
-updated_at: "2026-07-14T06:54:43.458Z"
+updated_at: "2026-07-14T17:25:05.342Z"
 ---
 
 ## 0256. Team API surface: oRPC contracts vs raw Hono/SSE for start/stop/stdin/stream/messages
@@ -84,19 +84,57 @@ web fetch helpers at `apps/web/src/lib/rpc-client.ts`; materialize/teardown logi
 4. `GET /api/team/health` handler + test; expose a small client helper for reachability (used by CLI `team up` and the web module).
 5. Confirm Workers gating parity; `bun run lint && bun run test && bun run test-cf`.
 ### Solution
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| Change (`file:line`) |
+|----------------------|
+| `apps/cli/src/commands/agent.ts:303` |
+| `apps/server/src/modules/team/index.ts:192` |
+| `packages/app/src/index.ts:172` |
+| `packages/app/src/index.ts:177` |
+| `packages/app/src/index.ts:182` |
+| `packages/app/src/index.ts:184` |
+| `packages/app/src/services/supervisor-service.ts:173` |
+| `packages/app/src/services/supervisor-service.ts:182` |
+| `packages/app/src/services/supervisor-service.ts:184` |
+| `packages/app/src/services/supervisor-service.ts:186` |
+| `packages/app/src/services/supervisor-service.ts:24` |
+| `packages/app/src/services/supervisor-service.ts:247` |
+| `packages/app/src/services/supervisor-service.ts:281` |
+| `packages/app/src/services/supervisor-service.ts:58` |
+| `packages/app/src/services/supervisor-service.ts:94` |
+| `packages/app/src/services/team-service.ts:124` |
+| `packages/app/src/services/team-service.ts:2` |
+| `packages/app/src/services/team-service.ts:230` |
+| `packages/app/src/services/team-service.ts:411` |
+| `packages/app/src/services/team-service.ts:566` |
+| `packages/app/src/services/team-service.ts:627` |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Route table documenting all team + message HTTP routes added to `docs/04_DESIGN.md` under "Team + Message HTTP Routes (0256)" — request/response shapes for all 9 team routes + 4 message routes. |
+| R2 | MET | `GET /api/team/teams` at `apps/server/src/modules/team/index.ts:194` calls `svc.listTeams()` and enriches each member with supervisor status `{id, type, status, pid?}`. Untethered specs would appear under their own team listing (listTeams groups by tag). |
+| R3 | MET | `POST /api/team/:team/up` at line 217 calls `svc.materializeTeam(teamId, {check})`; `?check=true` returns diff without writing. `POST /api/team/:team/down` at line 239 stops running members + calls `svc.teardownTeam(teamId, {purge})`; `?purge=true` deletes only `spur:generated` specs. |
+| R4 | MET | `GET /api/team/health` at line 264 returns `200 { ok: true }` — cheap liveness probe for CLI `team up` best-effort start and web reachability check. |
+| R5 | MET | `POST /api/team/:team/up` loops `supervisor.start(id)` over materialized members and returns per-member `{id, ok, pid?}` results — server-side batch start, no per-member client round-trips. |
+| R6 | MET | All new routes return `503 { error: 'team API requires Bun server context' }` when `ctx.teamService` is undefined (Workers path). Response envelopes use `{ data…, count }` + `{ ok, ... }` matching existing board routes. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (pipeline verify step — verdict: PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
 ### References
 
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History
+- 2026-07-14T17:18:57.550Z todo → wip (system)
+- 2026-07-14T17:25:00.048Z wip → testing (system)
+- 2026-07-14T17:25:05.342Z testing → done (system)

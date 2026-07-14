@@ -981,3 +981,36 @@ analogous tests for `rule.run.start`, `agent.invoke.start`, and `workflow.run.st
 are added in 0221 by emitting the upstream event through a service constructed with
 `events: ctx.eventBus()` and asserting `dao.query({ name })` returns a row.
 
+
+## Team + Message HTTP Routes (0256)
+
+The board's team supervision and inter-agent messaging surface is **raw Hono handlers** (not oRPC).
+oRPC stays the planning-CRUD convention; the live board/streaming surface is raw + SSE (which oRPC
+can't express). Web consumes via `fetchWithTimeout` + `resolveApiUrl` and native `EventSource`.
+
+### Team routes (`apps/server/src/modules/team/index.ts`)
+
+| Method | Path | Body / Query | Response | Notes |
+|--------|------|-------------|----------|-------|
+| GET | `/api/team/processes` | — | `{ processes: [{agentId, pid, status, startedAt, exitCode}], count }` | List supervised processes (0243). |
+| POST | `/api/team/agents/:id/start` | — | `{ ok, pid, status }` (201) or `{ error }` (400) | Spawn a supervised agent. |
+| POST | `/api/team/agents/:id/stop` | — | `{ ok }` or `{ error }` (400) | Stop a supervised agent. |
+| POST | `/api/team/processes/:id/stdin` | `{ line: string }` | `{ ok }` or `{ error }` (400) | Forward a line to the process stdin. |
+| GET | `/api/team/processes/:id/stream` | — | SSE stream of `{stream, ts, line, seq}` frames | Ring-buffer replay + live tail. Heartbeat every 15s. |
+| GET | `/api/team/teams` | — | `{ teams: [{teamId, name, members: [{id, type, status, pid?}]}], count }` | Teams grouped by `team:<id>` tag + config (0256 R2). |
+| POST | `/api/team/:team/up` | `?check=true` (dry-run) | `{ materialized: {upserted, orphaned, written}, started: [{id, ok, pid?}] }` | Materialize + best-effort start (0256 R3/R5). |
+| POST | `/api/team/:team/down` | `?purge=true` | `{ stopped: string[], purged: string[] }` | Stop members + optional purge (0256 R3). |
+| GET | `/api/team/health` | — | `{ ok: true }` | Liveness probe for CLI `team up` best-effort start (0256 R4). |
+
+### Message routes (`apps/server/src/modules/messages/index.ts`)
+
+| Method | Path | Body / Query | Response | Notes |
+|--------|------|-------------|----------|-------|
+| GET | `/api/messages/inbox` | `?agent=<id>&limit=<n>` | `{ messages: [{id, fromId, body, status, createdAt, inReplyTo}], count }` | One agent's inbox queue. |
+| GET | `/api/messages` | `?limit=<n>` | `{ messages: [...], count }` | Global message feed (all agents). |
+| POST | `/api/messages` | `{ fromId, toId, body, inReplyTo? }` | `{ msgId, toId, status: 'queued' }` (201) | Enqueue a message. |
+| POST | `/api/messages/:id/reply` | `{ fromId, body }` | `{ msgId, toId, status: 'queued' }` (201) | Reply to a message. |
+
+**Convention:** response envelopes use `{ data…, count }` for lists and `{ ok, ... }` for mutations,
+matching the existing board routes. Error shape: `{ error: string }` with the appropriate HTTP status.
+All team routes are Bun-gated (require `ServerContext`); they return 503 on the Cloudflare Workers path.

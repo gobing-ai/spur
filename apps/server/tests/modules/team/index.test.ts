@@ -1,8 +1,25 @@
 import { describe, expect, test } from 'bun:test';
-import type { ProcessEntry, ProcessFrame } from '@gobing-ai/spur-app';
+import type { MaterializeResult, ProcessEntry, ProcessFrame, TeamListing, TeardownResult } from '@gobing-ai/spur-app';
 import { Hono } from 'hono';
 import type { ServerContext } from '../../../src/context';
 import { enqueueFrame, sendHeartbeat, teamModule } from '../../../src/modules/team';
+
+/** Minimal TeamService stub surface — the module only calls these three methods. */
+interface TeamServiceStub {
+    listTeams(): Promise<TeamListing[]>;
+    materializeTeam(teamId: string, opts?: { check?: boolean }): Promise<MaterializeResult>;
+    teardownTeam(teamId: string, opts?: { purge?: boolean }): Promise<TeardownResult>;
+}
+
+/** Build a complete TeamServiceStub from a partial — defaults are type-correct no-ops. */
+function teamServiceStub(overrides: Partial<TeamServiceStub>): TeamServiceStub {
+    return {
+        listTeams: async () => [],
+        materializeTeam: async () => ({ teamId: '', upserted: [], orphaned: [], written: false }),
+        teardownTeam: async () => ({ teamId: '', purged: [], stopped: [] }),
+        ...overrides,
+    };
+}
 
 /**
  * Build a stub ServerContext whose supervisor returns canned process data and
@@ -12,11 +29,13 @@ import { enqueueFrame, sendHeartbeat, teamModule } from '../../../src/modules/te
 function ctxWithStubs(opts: {
     list?: ProcessEntry[];
     get?: ProcessEntry | undefined;
+    getFn?: (id: string) => ProcessEntry | undefined;
     getRingBuffer?: ProcessFrame[];
     getRingBufferFn?: () => ProcessFrame[];
     writeStdinThrows?: Error;
     start?: (id: string) => Promise<ProcessEntry>;
     stop?: (id: string) => Promise<void>;
+    teamService?: TeamServiceStub;
 }): {
     ctx: ServerContext;
     stdinCalls: Array<{ agentId: string; line: string }>;
@@ -46,7 +65,7 @@ function ctxWithStubs(opts: {
         });
     const supervisor = {
         list: () => opts.list ?? [],
-        get: () => opts.get,
+        get: (id?: string) => (opts.getFn && id ? opts.getFn(id) : opts.get),
         getRingBuffer: opts.getRingBufferFn ?? (() => opts.getRingBuffer ?? []),
 
         writeStdin: (agentId: string, line: string) => {
@@ -56,7 +75,10 @@ function ctxWithStubs(opts: {
         start,
         stop,
     };
-    const ctx = { supervisor: () => supervisor } as unknown as ServerContext;
+    const ctx = {
+        supervisor: () => supervisor,
+        ...(opts.teamService ? { teamService: () => opts.teamService } : {}),
+    } as unknown as ServerContext;
     return { ctx, stdinCalls, startCalls, stopCalls };
 }
 
@@ -543,6 +565,334 @@ describe('team module', () => {
             expect(res.status).toBe(400);
             const body = (await res.json()) as { error: string };
             expect(body.error).toContain('not running');
+        });
+    });
+
+    // ── 0256 routes: teams / up / down / health ──
+
+    /** Minimal team-member spec factory (typed via TeamListing's specs element). */
+    function spec(id: string, type = 'claude'): TeamListing['specs'][number] {
+        return {
+            id,
+            name: id,
+            type,
+            workspace: '/tmp',
+            purpose: 'test',
+            tags: ['team:devops', 'spur:generated'],
+            config: {},
+        };
+    }
+
+    describe('GET /api/team/teams', () => {
+        test('returns 503 when teamService is unavailable (Cloudflare Workers gate)', async () => {
+            // No teamService on the ctx → the Bun-only gate fires.
+            const { ctx } = ctxWithStubs({});
+            const app = new Hono();
+            teamModule.mount(app, ctx);
+
+            const res = await app.fetch(new Request('http://localhost/api/team/teams'));
+            expect(res.status).toBe(503);
+            const body = (await res.json()) as { error: string };
+            expect(body.error).toContain('Bun server context');
+        });
+
+        test('enriches members with running status and pid from the supervisor', async () => {
+            const team: TeamListing = {
+                teamId: 'devops',
+                name: 'DevOps',
+                members: [],
+                specs: [spec('planner'), spec('reviewer')],
+            };
+            const teamService = teamServiceStub({ listTeams: async () => [team] });
+            const list: ProcessEntry[] = [
+                {
+                    agentId: 'planner',
+                    pid: 4242,
+                    status: 'running',
+                    startedAt: '2026-07-05T00:00:00.000Z',
+                    exitCode: null,
+                    ringBuffer: [],
+                },
+            ];
+            const { ctx } = ctxWithStubs({ list, teamService });
+            const app = new Hono();
+            teamModule.mount(app, ctx);
+
+            const res = await app.fetch(new Request('http://localhost/api/team/teams'));
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as {
+                teams: Array<{
+                    teamId: string;
+                    members: Array<{ id: string; type: string; status: string; pid?: number }>;
+                }>;
+                count: number;
+            };
+            expect(body.count).toBe(1);
+            const members = body.teams[0]?.members ?? [];
+            // Running member carries pid + status; the un-supervised one falls back to 'unknown'.
+            const planner = members.find((m) => m.id === 'planner');
+            expect(planner?.status).toBe('running');
+            expect(planner?.pid).toBe(4242);
+            const reviewer = members.find((m) => m.id === 'reviewer');
+            expect(reviewer?.status).toBe('unknown');
+            expect(reviewer?.pid).toBeUndefined();
+        });
+    });
+
+    describe('POST /api/team/:team/up', () => {
+        test('returns 503 when teamService is unavailable', async () => {
+            const { ctx } = ctxWithStubs({});
+            const app = new Hono();
+            teamModule.mount(app, ctx);
+
+            const res = await app.fetch(new Request('http://localhost/api/team/devops/up', { method: 'POST' }));
+            expect(res.status).toBe(503);
+        });
+
+        test('check=true dry-run returns the materialize diff without starting members', async () => {
+            let checkArg: { check?: boolean } | undefined;
+            const materialized: MaterializeResult = {
+                teamId: 'devops',
+                upserted: ['planner', 'reviewer'],
+                orphaned: ['stale-1'],
+                written: false,
+            };
+            const teamService = teamServiceStub({
+                listTeams: async () => [],
+                materializeTeam: async (_id, opts) => {
+                    checkArg = opts;
+                    return materialized;
+                },
+            });
+            const { ctx, startCalls } = ctxWithStubs({ teamService });
+            const app = new Hono();
+            teamModule.mount(app, ctx);
+
+            const res = await app.fetch(
+                new Request('http://localhost/api/team/devops/up?check=true', { method: 'POST' }),
+            );
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as { materialized: MaterializeResult; started: unknown[] };
+            expect(body.materialized).toEqual(materialized);
+            expect(body.started).toEqual([]);
+            expect(checkArg).toEqual({ check: true });
+            expect(startCalls).toEqual([]); // dry-run must not start anything
+        });
+
+        test('best-effort starts each upserted member and reports per-member ok/pid', async () => {
+            const materialized: MaterializeResult = {
+                teamId: 'devops',
+                upserted: ['planner', 'reviewer'],
+                orphaned: [],
+                written: true,
+            };
+            const teamService = teamServiceStub({
+                listTeams: async () => [],
+                materializeTeam: async () => materialized,
+            });
+            const { ctx, startCalls } = ctxWithStubs({ teamService });
+            const app = new Hono();
+            teamModule.mount(app, ctx);
+
+            const res = await app.fetch(new Request('http://localhost/api/team/devops/up', { method: 'POST' }));
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as {
+                materialized: MaterializeResult;
+                started: Array<{ id: string; ok: boolean; pid?: number }>;
+            };
+            expect(startCalls).toEqual(['planner', 'reviewer']);
+            expect(body.started).toHaveLength(2);
+            expect(body.started.every((s) => s.ok === true)).toBe(true);
+            expect(body.started[0]?.pid).toBe(1000);
+        });
+
+        test('records ok=false (no pid) for members that fail to start', async () => {
+            const materialized: MaterializeResult = {
+                teamId: 'devops',
+                upserted: ['planner', 'reviewer'],
+                orphaned: [],
+                written: true,
+            };
+            const teamService = teamServiceStub({
+                listTeams: async () => [],
+                materializeTeam: async () => materialized,
+            });
+            const { ctx } = ctxWithStubs({
+                teamService,
+                start: async (id) => {
+                    if (id === 'reviewer') throw new Error('spawn failed');
+                    return {
+                        agentId: id,
+                        pid: 700,
+                        status: 'running',
+                        startedAt: '2026-07-05T00:00:00.000Z',
+                        exitCode: null,
+                        ringBuffer: [],
+                    };
+                },
+            });
+            const app = new Hono();
+            teamModule.mount(app, ctx);
+
+            const res = await app.fetch(new Request('http://localhost/api/team/devops/up', { method: 'POST' }));
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as {
+                started: Array<{ id: string; ok: boolean; pid?: number }>;
+            };
+            const reviewer = body.started.find((s) => s.id === 'reviewer');
+            expect(reviewer?.ok).toBe(false);
+            expect(reviewer?.pid).toBeUndefined();
+            const planner = body.started.find((s) => s.id === 'planner');
+            expect(planner?.ok).toBe(true);
+            expect(planner?.pid).toBe(700);
+        });
+
+        test('omits pid when supervisor.start returns a null pid', async () => {
+            const materialized: MaterializeResult = {
+                teamId: 'devops',
+                upserted: ['planner'],
+                orphaned: [],
+                written: true,
+            };
+            const teamService = teamServiceStub({
+                listTeams: async () => [],
+                materializeTeam: async () => materialized,
+            });
+            const { ctx } = ctxWithStubs({
+                teamService,
+                start: async (id) => ({
+                    agentId: id,
+                    pid: null,
+                    status: 'running',
+                    startedAt: '2026-07-05T00:00:00.000Z',
+                    exitCode: null,
+                    ringBuffer: [],
+                }),
+            });
+            const app = new Hono();
+            teamModule.mount(app, ctx);
+
+            const res = await app.fetch(new Request('http://localhost/api/team/devops/up', { method: 'POST' }));
+            const body = (await res.json()) as { started: Array<{ id: string; ok: boolean; pid?: number }> };
+            expect(body.started[0]?.ok).toBe(true);
+            expect(body.started[0]?.pid).toBeUndefined();
+        });
+    });
+
+    describe('POST /api/team/:team/down', () => {
+        test('returns 503 when teamService is unavailable', async () => {
+            const { ctx } = ctxWithStubs({});
+            const app = new Hono();
+            teamModule.mount(app, ctx);
+
+            const res = await app.fetch(new Request('http://localhost/api/team/devops/down', { method: 'POST' }));
+            expect(res.status).toBe(503);
+        });
+
+        test('stops running members and tears the team down without purging by default', async () => {
+            const team: TeamListing = {
+                teamId: 'devops',
+                name: 'DevOps',
+                members: [],
+                specs: [spec('planner'), spec('reviewer')],
+            };
+            let purgeArg: { purge?: boolean } | undefined;
+            const teamService = teamServiceStub({
+                listTeams: async () => [team],
+                teardownTeam: async (_id, opts) => {
+                    purgeArg = opts;
+                    return { teamId: 'devops', purged: [], stopped: [] };
+                },
+            });
+            const { ctx, stopCalls } = ctxWithStubs({
+                teamService,
+                getFn: (id) =>
+                    id === 'planner'
+                        ? {
+                              agentId: id,
+                              pid: 1,
+                              status: 'running',
+                              startedAt: '2026-07-05T00:00:00.000Z',
+                              exitCode: null,
+                              ringBuffer: [],
+                          }
+                        : {
+                              agentId: id,
+                              pid: 2,
+                              status: 'stopped',
+                              startedAt: '2026-07-05T00:00:00.000Z',
+                              exitCode: 0,
+                              ringBuffer: [],
+                          },
+            });
+            const app = new Hono();
+            teamModule.mount(app, ctx);
+
+            const res = await app.fetch(new Request('http://localhost/api/team/devops/down', { method: 'POST' }));
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as { stopped: string[]; purged: string[] };
+            // Only the running member ('planner') is stopped; 'reviewer' was already stopped.
+            expect(body.stopped).toEqual(['planner']);
+            expect(body.purged).toEqual([]);
+            expect(purgeArg).toEqual({ purge: false }); // default: no purge
+            expect(stopCalls).toEqual(['planner']);
+        });
+
+        test('purge=true passes purge through to teardownTeam', async () => {
+            const team: TeamListing = {
+                teamId: 'devops',
+                name: 'DevOps',
+                members: [],
+                specs: [spec('planner')],
+            };
+            let purgeArg: { purge?: boolean } | undefined;
+            const teamService = teamServiceStub({
+                listTeams: async () => [team],
+                teardownTeam: async (_id, opts) => {
+                    purgeArg = opts;
+                    return { teamId: 'devops', purged: ['planner'], stopped: [] };
+                },
+            });
+            const { ctx } = ctxWithStubs({ teamService });
+            const app = new Hono();
+            teamModule.mount(app, ctx);
+
+            const res = await app.fetch(
+                new Request('http://localhost/api/team/devops/down?purge=true', { method: 'POST' }),
+            );
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as { purged: string[] };
+            expect(body.purged).toEqual(['planner']);
+            expect(purgeArg).toEqual({ purge: true });
+        });
+
+        test('returns empty stopped list when the team is unknown', async () => {
+            const teamService = teamServiceStub({
+                listTeams: async () => [], // no teams → the team is not found
+                teardownTeam: async () => ({ teamId: 'ghost', purged: [], stopped: [] }),
+            });
+            const { ctx, stopCalls } = ctxWithStubs({ teamService });
+            const app = new Hono();
+            teamModule.mount(app, ctx);
+
+            const res = await app.fetch(new Request('http://localhost/api/team/ghost/down', { method: 'POST' }));
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as { stopped: string[] };
+            expect(body.stopped).toEqual([]);
+            expect(stopCalls).toEqual([]);
+        });
+    });
+
+    describe('GET /api/team/health', () => {
+        test('returns 200 ok liveness probe', async () => {
+            const { ctx } = ctxWithStubs({});
+            const app = new Hono();
+            teamModule.mount(app, ctx);
+
+            const res = await app.fetch(new Request('http://localhost/api/team/health'));
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as { ok: boolean };
+            expect(body.ok).toBe(true);
         });
     });
 
