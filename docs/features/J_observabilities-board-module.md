@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-07-03T23:28:28.509Z"
-updated_at: "2026-07-13T23:29:36.969Z"
+updated_at: "2026-07-14T00:24:03.447Z"
 ---
 
 # J: Observabilities board module
@@ -87,6 +87,35 @@ Feature: Observabilities board module
     Given the System Events test suite runs
     When only queue.* producers are wired correctly
     Then at least one non-queue behavioral regression test fails
+
+  # ── CLI-driven planning events (task 0249) — the CLI counterpart of the
+  #    server-native planning scenario above; ts-libs 0049 consumer-owned work. ──
+
+  Scenario: CLI task transition is persisted to system_events
+    Given a migrated Spur workspace database
+    And spur serve is NOT running
+    When the operator runs a CLI task status transition
+    Then a task.transitioned (or task.updated) system_events row is written with source planning and a from -> to payload
+
+  Scenario: CLI feature transition is persisted to system_events
+    Given a migrated Spur workspace database
+    When the operator runs a CLI feature status transition
+    Then a feature.transitioned system_events row is written
+
+  Scenario: The tabview history surfaces CLI-originated rows
+    Given task/feature status was changed via the CLI while the server was down
+    When the server later serves the System Events history endpoint
+    Then the CLI-originated task.* / feature.* rows are returned and render under the planning renderer
+
+  Scenario: Sink failure never breaks the mutation
+    Given the system_events write will fail
+    When the operator runs a CLI task status transition
+    Then the task file transition still succeeds and the persistence error is logged, not thrown
+
+  Scenario: No duplicate row on the Board-driven path
+    Given the server system-event tap is active
+    When a task status change flows through the server API
+    Then exactly one system_events row is written for that change
 ```
 ## Tasks
 
