@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Button } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 import { useTeamsSelection } from './TeamsContext';
 
@@ -108,6 +109,16 @@ export default function MessagesTab() {
                     className="flex-1 input input-sm"
                     data-messages-composer
                 />
+                <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    onClick={() => void send()}
+                    disabled={compose.length === 0}
+                    data-messages-send
+                >
+                    Send
+                </Button>
             </div>
         </div>
     );

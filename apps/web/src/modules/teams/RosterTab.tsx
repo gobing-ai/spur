@@ -85,28 +85,29 @@ export default function RosterTab() {
                             const isSelected = selectedMemberId === m.id;
                             return (
                                 <li key={m.id}>
-                                    <button
-                                        type="button"
+                                    <div
                                         className={`flex w-full items-center gap-2 px-2 py-1 rounded text-xs ${
                                             isSelected ? 'bg-spur-accent text-white' : 'hover:bg-base-300'
                                         }`}
-                                        onClick={() => select(team.teamId, m.id)}
-                                        data-member-row={m.id}
                                     >
-                                        <span className="font-mono">{m.id}</span>
-                                        <span className="text-spur-text-muted">{m.type}</span>
-                                        <Badge variant={m.status === 'running' ? 'success' : 'ghost'} size="xs">
-                                            {m.status}
-                                        </Badge>
-                                        <div className="ml-auto flex gap-1">
+                                        <button
+                                            type="button"
+                                            className="flex flex-1 items-center gap-2 text-left"
+                                            onClick={() => select(team.teamId, m.id)}
+                                            data-member-row={m.id}
+                                        >
+                                            <span className="font-mono">{m.id}</span>
+                                            <span className="text-spur-text-muted">{m.type}</span>
+                                            <Badge variant={m.status === 'running' ? 'success' : 'ghost'} size="xs">
+                                                {m.status}
+                                            </Badge>
+                                        </button>
+                                        <div className="flex gap-1">
                                             <Button
                                                 type="button"
                                                 variant="ghost"
                                                 size="xs"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    void act(startUrl(m.id));
-                                                }}
+                                                onClick={() => void act(startUrl(m.id))}
                                                 disabled={m.status === 'running'}
                                             >
                                                 Start
@@ -115,16 +116,13 @@ export default function RosterTab() {
                                                 type="button"
                                                 variant="ghost"
                                                 size="xs"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    void act(stopUrl(m.id));
-                                                }}
+                                                onClick={() => void act(stopUrl(m.id))}
                                                 disabled={m.status !== 'running'}
                                             >
                                                 Stop
                                             </Button>
                                         </div>
-                                    </button>
+                                    </div>
                                 </li>
                             );
                         })}
