@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Implement agent.team config schema + parsing (0250): zod, member union, executor resolution, validation"
 description: ""
-status: wip
+status: done
 type: task
 profile: standard
 feature_id: M
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-14T06:50:47.941Z"
-updated_at: "2026-07-14T07:35:32.149Z"
+updated_at: "2026-07-14T16:19:16.873Z"
 ---
 
 ## 0257. Implement agent.team config schema + parsing (0250): zod, member union, executor resolution, validation
@@ -77,17 +77,43 @@ charset reuse is a small **MEDIUM** decision (reuse vs mirror).
 6. Tests: valid parse + string-normalization, dup-localId error, charset/length error, tilde expansion, `resolveExecutor` cases, no-`team` backward-compat, JSON-schema round-trip.
 7. `bun run lint && bun run test`.
 ### Solution
+**Location:** `packages/config/src/index.ts` — added `TeamMemberConfigSchema` (string|object union), `TeamConfigSchema` ({name, work_dir, autostart?, members min(1)}), `normalizeMember` + `resolveExecutor` helpers, and `team: z.record(z.string(), TeamConfigSchema).optional()` on `AgentConfigSchema` with a `superRefine` for member-id uniqueness + composed-id charset/length.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**Change map:**
+- `packages/config/src/index.ts:116` — `AGENT_ID_REGEX` mirrored from ts-ai-runner `validateAgentId` (ADR-027: keep CF-safe core free of ts-ai-runner dep).
+- `packages/config/src/index.ts:126` — `TeamMemberConfigSchema = z.union([z.string().min(1), z.object({...})])`; bare string normalizes via `normalizeMember`.
+- `packages/config/src/index.ts:151` — `TeamConfigSchema` with `members: z.array(...).min(1)`, non-empty `name`/`work_dir`.
+- `packages/config/src/index.ts:170` — `normalizeMember(member)` exported for 0258.
+- `packages/config/src/index.ts:193` — `resolveExecutor(name, agentConfig, opts)` exported; executors-first, raw-agent fallback, optional `isCanonicalAgent` predicate (injected by 0258).
+- `packages/config/src/index.ts:215` — `team` field added to `AgentConfigSchema`; `superRefine` checks dup-localId + composed-id `AGENT_ID_REGEX`.
+- `packages/config/src/loader.ts:253` — `expandTilde` (Node-only; `~`/`~/` via `node:os` homedir).
+- `packages/config/src/loader.ts:269` — `expandTeamTildes` applies to `work_dir` + per-member `workspace`; wired into `loadSpurConfigFile` return at `loader.ts:316`.
+- `apps/cli/schemas/spur-config.schema.json` — JSON schema synced with team/member/work_dir/executor defs (zod is SSOT).
+- `packages/config/tests/team-config.test.ts` — 22 tests covering AC1-AC6 (parse, normalize, dup-id, charset/length, resolveExecutor, backward-compat).
+- `packages/config/tests/loader.test.ts` — AC4 (tilde), AC6 (no-team backward-compat), AC7 (JSON-schema round-trip).
 
+**Rationale:** schema shape specified verbatim in 0250 `### Design`; the config→ai-runner charset reuse was resolved by mirroring the regex (ADR-027) rather than importing, keeping the config package CF-safe. `resolveExecutor`'s `isCanonicalAgent` predicate is injected by the 0258 materialization layer so canonical-agent validation stays a single source in ts-ai-runner.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `TeamMemberConfigSchema = z.union([z.string().min(1), z.object({...})])` at packages/config/src/index.ts; `normalizeMember` expands bare string to `{executor}`. AC1 test confirms. |
+| R2 | MET | `TeamConfigSchema = z.object({ name: z.string().min(1), work_dir: z.string().min(1), autostart: z.boolean().optional(), members: z.array(...).min(1) })`; `team: z.record(z.string(), TeamConfigSchema).optional()` added to `AgentConfigSchema`. |
+| R3 | MET | `normalizeMember(member)` and `resolveExecutor(name, agentConfig, opts)` both exported from packages/config/src/index.ts; resolveExecutor is executors-first with raw-agent fallback, returns `{agent, model?}`. |
+| R4 | MET | `superRefine` on AgentConfigSchema checks duplicate localId (`member.id ?? executor`) and composed id `<teamId>-<localId>` against `AGENT_ID_REGEX = /^[a-z][a-z0-9_-]{1,63}$/`; TeamConfigSchema enforces name/work_dir non-empty + members min(1). AC2/AC3 tests confirm. |
+| R5 | MET | `expandTilde` + `expandTeamTildes` in packages/config/src/loader.ts, wired into `loadSpurConfigFile` return. Expands `work_dir` and per-member `workspace`. AC4 test confirms. |
+| R6 | MET | `apps/cli/schemas/spur-config.schema.json` updated with team/member/work_dir/executor definitions matching the zod. AC7 round-trip tests confirm both accept valid + reject empty members / missing executor. |
+| R7 | MET | `team` field is `.optional()`; a config with no `agent.team` loads unchanged. AC6 backward-compat test confirms executors + specs untouched. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (pipeline verify step — verdict: PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
 ### References
 
 M
@@ -96,3 +122,5 @@ M
 
 ### History
 - 2026-07-14T07:15:58.316Z todo → wip (system)
+- 2026-07-14T16:19:06.923Z wip → testing (system)
+- 2026-07-14T16:19:16.873Z testing → done (system)
