@@ -169,16 +169,19 @@ export type {
     AgentSpecInput,
     InboxEntry,
     InboxResult,
+    MaterializeResult,
     MessageEventBus,
     MessageEventPayload,
     RecentMessagesResult,
     SendResult,
+    TeamListing,
     TeamServiceContext,
     TeamServiceOutput,
     TeamStatusEntry,
     TeamStatusResult,
+    TeardownResult,
 } from './services/team-service';
-export { TeamService } from './services/team-service';
+export { resolveAutostartSet, TeamService } from './services/team-service';
 export type {
     TokenLedgerServiceOptions,
     ToolUseEvent,

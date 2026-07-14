@@ -12,11 +12,13 @@ import {
 interface MockPipeHandle {
     process: PipeProcess;
     killCalls: string[];
+    stdinWrites: string[];
     resolveExit: (code: number | null) => void;
 }
 
 function createMockPipeProcess(pid: number): MockPipeHandle {
     const killCalls: string[] = [];
+    const stdinWrites: string[] = [];
     let resolveExit!: (code: number | null) => void;
     const exited = new Promise<number | null>((resolve) => {
         resolveExit = resolve;
@@ -28,14 +30,16 @@ function createMockPipeProcess(pid: number): MockPipeHandle {
         stdout: null,
         stderr: null,
         exited,
-        writeStdin: () => {},
+        writeStdin: (data: string) => {
+            stdinWrites.push(data);
+        },
         endStdin: () => {},
         kill: (signal?: string) => {
             killCalls.push(signal ?? 'default');
             resolveExit(0);
         },
     } as unknown as PipeProcess;
-    return { process, killCalls, resolveExit };
+    return { process, killCalls, stdinWrites, resolveExit };
 }
 
 interface MockExecutor {
@@ -537,6 +541,101 @@ describe('SupervisorService', () => {
             expect(killCalls).toContain('SIGKILL');
             expect(svc.get('alpha')?.status).toBe('stopped');
             expect(emits.some((e) => e.event === 'process.stopped')).toBe(true);
+
+            vi.useRealTimers();
+        });
+    });
+
+    describe('writeStdin', () => {
+        test('forwards a line with a trailing newline to the running process stdin', async () => {
+            const { executor, pipes } = createMockExecutor();
+            const { bus } = createMockBus();
+            const svc = new SupervisorService({
+                processExecutor: executor,
+                eventBus: bus,
+                configDir: '/tmp',
+                agentSpecs: [makeSpec({ id: 'alpha', command: ['echo'] })],
+            });
+
+            await svc.start('alpha');
+            svc.writeStdin('alpha', 'hello agent');
+
+            expect(pipes[0]?.stdinWrites).toEqual(['hello agent\n']);
+        });
+
+        test('throws when the agent id is unknown (not running)', async () => {
+            const { executor } = createMockExecutor();
+            const { bus } = createMockBus();
+            const svc = new SupervisorService({
+                processExecutor: executor,
+                eventBus: bus,
+                configDir: '/tmp',
+                agentSpecs: [makeSpec({ id: 'alpha' })],
+            });
+
+            expect(() => svc.writeStdin('ghost', 'hi')).toThrow('Agent "ghost" is not running');
+        });
+
+        test('throws when the agent is no longer running (stopped)', async () => {
+            const { executor, pipes } = createMockExecutor();
+            const { bus } = createMockBus();
+            const svc = new SupervisorService({
+                processExecutor: executor,
+                eventBus: bus,
+                configDir: '/tmp',
+                agentSpecs: [makeSpec({ id: 'alpha', command: ['echo'] })],
+            });
+
+            await svc.start('alpha');
+            await svc.stop('alpha'); // status → 'stopped'
+            expect(() => svc.writeStdin('alpha', 'hi')).toThrow('Agent "alpha" is not running');
+            // Must not have written anything during the rejected call.
+            expect(pipes[0]?.stdinWrites).toEqual([]);
+        });
+    });
+
+    describe('restart backoff', () => {
+        test('restarts the agent after the backoff delay on an abnormal exit', async () => {
+            vi.useFakeTimers();
+
+            const { executor, pipes } = createMockExecutor();
+            const { bus, emits } = createMockBus();
+            const svc = new SupervisorService({
+                processExecutor: executor,
+                eventBus: bus,
+                configDir: '/tmp',
+                agentSpecs: [makeSpec({ id: 'alpha', command: ['echo'] })],
+            });
+
+            await svc.start('alpha');
+            expect(pipes).toHaveLength(1);
+
+            // Abnormal exit (non-zero) triggers the restart-backoff path (R7).
+            pipes[0]?.resolveExit(1);
+            await Promise.resolve();
+            await Promise.resolve();
+
+            // Marked errored, but not yet restarted — the backoff timer is pending.
+            expect(svc.get('alpha')?.status).toBe('errored');
+            expect(emits.some((e) => e.event === 'process.exited')).toBe(true);
+
+            // First backoff slot is 1000ms (RESTART_BACKOFF_SCHEDULE[0]); before it
+            // elapses, no restart has happened.
+            vi.advanceTimersByTime(999);
+            expect(pipes).toHaveLength(1);
+
+            // Elapsing the backoff fires the restart setTimeout callback, which
+            // calls start() (async — awaits loadSpecs). Flush microtasks so the
+            // restart completes and the new entry is recorded.
+            vi.advanceTimersByTime(1);
+            for (let i = 0; i < 6; i++) await Promise.resolve();
+
+            expect(pipes).toHaveLength(2);
+            expect(svc.get('alpha')?.status).toBe('running');
+            expect(svc.get('alpha')?.pid).toBe(10_001);
+            // A second process.spawned event confirms the restart actually ran.
+            const spawned = emits.filter((e) => e.event === 'process.spawned');
+            expect(spawned).toHaveLength(2);
 
             vi.useRealTimers();
         });

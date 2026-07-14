@@ -21,7 +21,7 @@ export interface ProcessFrame {
 export interface ProcessEntry {
     agentId: string;
     pid: number | null;
-    status: 'running' | 'stopped' | 'exited';
+    status: 'running' | 'stopped' | 'exited' | 'errored';
     startedAt: string;
     exitCode?: number | null;
     /** Ring buffer of recent output frames (bounded, oldest-first). */
@@ -55,6 +55,9 @@ export interface SupervisorOptions {
 // ── Constants ──
 
 const DEFAULT_RING_BUFFER_SIZE = 500;
+const MAX_RESTART_ATTEMPTS = 5;
+const RESTART_BACKOFF_SCHEDULE = [1000, 2000, 4000, 8000, 16_000];
+const MAX_RESTART_BACKOFF = 30_000;
 
 // ── Default wrapper helper ──
 
@@ -88,6 +91,8 @@ export class SupervisorService {
     private readonly ringBuffers = new Map<string, ProcessFrame[]>();
     private specsPromise?: Promise<AgentSpec[]>;
     private frameSeq = 0;
+    private readonly restartAttempts = new Map<string, number>();
+    private readonly restartTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
     constructor(options: SupervisorOptions) {
         this.processExecutor = options.processExecutor;
@@ -165,6 +170,7 @@ export class SupervisorService {
         };
 
         this.processes.set(agentId, { handle, entry });
+        this.restartAttempts.delete(agentId);
 
         // Feed stdout/stderr frames into the ring buffer.
         this.pipeStream(handle.stdout, 'stdout', agentId, frames);
@@ -173,17 +179,42 @@ export class SupervisorService {
         // Spawn event
         this.emit('process.spawned', { agentId, pid });
 
-        // Watch for exit
-        void handle.exited.then((code) => {
-            entry.status = 'exited';
+        // Watch for exit — restart on abnormal exit (0253 R3)
+        void handle.exited.then(async (code) => {
             entry.exitCode = code;
-            const keepForMs = 60_000;
-            setTimeout(() => {
-                if (this.processes.get(agentId)?.entry === entry) {
-                    this.processes.delete(agentId);
-                }
-            }, keepForMs);
             this.emit('process.exited', { agentId, pid, exitCode: code });
+
+            // Normal exit (code 0) or stop-initiated: record and clean up.
+            if (code === 0 || entry.status === 'stopped') {
+                entry.status = 'exited';
+                this.scheduleCleanup(agentId, entry);
+                return;
+            }
+
+            // Abnormal exit — restart with backoff (R7)
+            const attempts = (this.restartAttempts.get(agentId) ?? 0) + 1;
+            this.restartAttempts.set(agentId, attempts);
+
+            if (attempts > MAX_RESTART_ATTEMPTS) {
+                entry.status = 'errored';
+                this.scheduleCleanup(agentId, entry);
+                return;
+            }
+
+            entry.status = 'errored';
+            const delay =
+                attempts >= RESTART_BACKOFF_SCHEDULE.length
+                    ? MAX_RESTART_BACKOFF
+                    : (RESTART_BACKOFF_SCHEDULE[attempts - 1] ?? 1000);
+            this.restartTimers.set(
+                agentId,
+                setTimeout(() => {
+                    this.restartTimers.delete(agentId);
+                    void this.start(agentId).catch(() => {
+                        // Restart failed — will be retried on next exit or marked errored.
+                    });
+                }, delay),
+            );
         });
 
         return entry;
@@ -213,6 +244,12 @@ export class SupervisorService {
         }
 
         proc.entry.status = 'stopped';
+        const timer = this.restartTimers.get(agentId);
+        if (timer) {
+            clearTimeout(timer);
+            this.restartTimers.delete(agentId);
+        }
+        this.restartAttempts.delete(agentId);
         this.emit('process.stopped', { agentId, pid: proc.entry.pid });
     }
 
@@ -239,6 +276,16 @@ export class SupervisorService {
             (id) => this.processes.get(id)?.entry.status === 'running',
         );
         await Promise.all(running.map((id) => this.stop(id)));
+    }
+
+    /** Schedule removal of a process entry after a keep window. */
+    private scheduleCleanup(agentId: string, entry: ProcessEntry): void {
+        const keepForMs = 60_000;
+        setTimeout(() => {
+            if (this.processes.get(agentId)?.entry === entry) {
+                this.processes.delete(agentId);
+            }
+        }, keepForMs);
     }
 
     // ── Private helpers ──

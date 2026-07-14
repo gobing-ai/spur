@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Implement team backend runtime (0251/0252/0253): materialize service methods, lifecycle loop+restart, team up/down/status CLI, drain idempotency"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: M
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-14T06:50:50.344Z"
-updated_at: "2026-07-14T06:52:48.448Z"
+updated_at: "2026-07-14T17:18:26.249Z"
 ---
 
 ## 0258. Implement team backend runtime (0251/0252/0253): materialize service methods, lifecycle loop+restart, team up/down/status CLI, drain idempotency
@@ -88,17 +88,51 @@ restart-during-attach interplay **MEDIUM** (dogfood with 0255); backoff constant
 
 **Depends on:** 0257 (schema/helpers). **Blocks:** 0256 (its routes wrap these methods).
 ### Solution
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| Change (`file:line`) |
+|----------------------|
+| `apps/cli/src/commands/agent.ts:303` |
+| `packages/app/src/index.ts:181` |
+| `packages/app/src/services/supervisor-service.ts:173` |
+| `packages/app/src/services/supervisor-service.ts:182` |
+| `packages/app/src/services/supervisor-service.ts:184` |
+| `packages/app/src/services/supervisor-service.ts:186` |
+| `packages/app/src/services/supervisor-service.ts:24` |
+| `packages/app/src/services/supervisor-service.ts:247` |
+| `packages/app/src/services/supervisor-service.ts:281` |
+| `packages/app/src/services/supervisor-service.ts:58` |
+| `packages/app/src/services/supervisor-service.ts:94` |
+| `packages/app/src/services/team-service.ts:124` |
+| `packages/app/src/services/team-service.ts:2` |
+| `packages/app/src/services/team-service.ts:230` |
+| `packages/app/src/services/team-service.ts:411` |
+| `packages/app/src/services/team-service.ts:566` |
+| `packages/app/src/services/team-service.ts:627` |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `TeamService.listTeams()` at `team-service.ts` groups `loadAgentSpecs()` by `team:<id>` tag, cross-referenced with `loadSpurConfig().agent.team`. Untethered specs grouped separately. |
+| R2 | MET | `TeamService.materializeTeam(teamId, {check})` at `team-service.ts` upserts one `spur:generated`-tagged spec per member via `saveAgentSpec` (upsert, not create-only); prunes orphaned generated specs; skips `ref:`/hand-authored specs (checks `spur:generated` tag); `{check:true}` returns diff without writing. Uses `resolveExecutor` from 0257 for executor resolution. |
+| R3 | MET | `TeamService.teardownTeam(teamId, {purge})` at `team-service.ts` deletes only `spur:generated` specs for the team when `purge` is true; hand-authored specs never touched. |
+| R4 | MET | `spur team up/down/status` CLI verbs added at `apps/cli/src/commands/team.ts`; `up` materializes + best-effort starts via server API; `down` tears down + optional purge; `status` groups by team (existing). |
+| R5 | MET | `agent.ts:303` drain rewired from non-consuming `getInbox` to consuming `drainPending` (queued→injected). `TeamService.drainPending(agentId)` delegates to `InboxMessageDao.drainPending`; `TeamService.countPending(agentId)` delegates to `InboxMessageDao.countPending`. Second immediate drain returns 0 (idempotent). |
+| R6 | MET | `SupervisorService.defaultWrapperArgv` at `supervisor-service.ts:65` already uses the drain-loop wrapper (`agent run --drain --continue`). The drain rewire (R5) makes the loop consume via `drainPending` and idle via `countPending`. |
+| R7 | MET | Supervisor restart policy at `supervisor-service.ts:177`: on abnormal exit (code !== 0), restarts with exponential backoff (1s→2s→4s→8s→16s, cap 30s); max 5 consecutive failures → `errored` status; `restartAttempts` reset on successful start; `restartTimers` cleared on stop. `ProcessEntry.status` extended with `'errored'`. |
+| R8 | MET | `resolveAutostartSet(config, envAutostart)` at `team-service.ts` — exported pure function; effective autostart = `member.autostart ?? team.autostart ?? false`; `SPUR_TEAM_AUTOSTART` env unions in. 8 tests covering all branches. |
+| R9 | MET | `SupervisorService.resolveCommand` at `supervisor-service.ts:251` already reads `spec.config.command` (via `(spec as AgentSpec & { command?: string[] }).command`); `materializeTeam` routes member `command` into `spec.config.command`. Fallback = drain-loop wrapper via `defaultWrapperArgv`. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (pipeline verify step — verdict: PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
 ### References
 
 M
@@ -106,3 +140,6 @@ M
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-07-14T17:06:06.031Z todo → wip (system)
+- 2026-07-14T17:18:05.602Z wip → testing (system)
+- 2026-07-14T17:18:26.249Z testing → done (system)

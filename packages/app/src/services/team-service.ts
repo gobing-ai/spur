@@ -1,4 +1,6 @@
 import { join } from 'node:path';
+import { type NormalizedTeamMember, normalizeMember, resolveExecutor, type SpurConfig } from '@gobing-ai/spur-config';
+import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import {
     atomicWriteAsync,
     type DbAdapter,
@@ -119,6 +121,29 @@ export interface TeamStatusResult {
     agents: TeamStatusEntry[];
 }
 
+/** A team listing entry (R1). */
+export interface TeamListing {
+    teamId: string;
+    name: string;
+    members: NormalizedTeamMember[];
+    specs: AgentSpec[];
+}
+
+/** Result of materializing a team (R2). */
+export interface MaterializeResult {
+    teamId: string;
+    upserted: string[];
+    orphaned: string[];
+    written: boolean;
+}
+
+/** Result of tearing down a team (R3). */
+export interface TeardownResult {
+    teamId: string;
+    purged: string[];
+    stopped: string[];
+}
+
 /** Input shape for creating an agent spec. */
 export interface AgentSpecInput {
     id: string;
@@ -200,6 +225,35 @@ export class TeamService {
             })),
             count: rows.length,
         };
+    }
+
+    /**
+     * Atomically drain pending (queued→injected) messages for an agent (R5, 0253 fix).
+     * Unlike {@link getInbox} (non-consuming read), this transitions messages to
+     * `injected` so a second call returns nothing — idempotent loop-safe (AC3).
+     */
+    async drainPending(agentId: string): Promise<InboxResult> {
+        validateAgentId(agentId);
+        const dao = await this.inboxDao();
+        const rows = await dao.drainPending(agentId);
+        return {
+            messages: rows.map((row) => ({
+                id: row.id,
+                fromId: row.fromId,
+                body: row.body,
+                status: row.status,
+                createdAt: new Date(row.createdAt).toISOString(),
+                inReplyTo: row.inReplyTo,
+            })),
+            count: rows.length,
+        };
+    }
+
+    /** Count pending (queued) messages for an agent — used by the drain loop to idle (0253). */
+    async countPending(agentId: string): Promise<number> {
+        validateAgentId(agentId);
+        const dao = await this.inboxDao();
+        return dao.countPending(agentId);
     }
 
     /**
@@ -355,8 +409,167 @@ export class TeamService {
     }
 
     // -------------------------------------------------------------------------
+    // Team management (0258)
+    // -------------------------------------------------------------------------
+
+    /**
+     * List all teams: groups agent specs by their `team:<id>` tag, cross-referenced
+     * with the `agent.team` config block. Untethered specs (no team tag) are grouped
+     * separately (R1).
+     */
+    async listTeams(): Promise<TeamListing[]> {
+        const specs = await loadAgentSpecs(this.configDir);
+        const config = await this.loadTeamConfig();
+        const teams = new Map<string, TeamListing>();
+
+        // Initialize from config
+        if (config?.agent?.team) {
+            for (const [teamId, teamConfig] of Object.entries(config.agent.team)) {
+                teams.set(teamId, {
+                    teamId,
+                    name: teamConfig.name,
+                    members: [],
+                    specs: [],
+                });
+            }
+        }
+
+        // Group specs by team tag
+        for (const spec of specs) {
+            const teamTag = spec.tags?.find((t) => t.startsWith('team:'));
+            if (teamTag) {
+                const teamId = teamTag.slice('team:'.length);
+                const entry = teams.get(teamId);
+                if (entry) {
+                    entry.specs.push(spec);
+                } else {
+                    // Team exists in specs but not in config (orphaned generated spec)
+                    teams.set(teamId, {
+                        teamId,
+                        name: teamId,
+                        members: [],
+                        specs: [spec],
+                    });
+                }
+            }
+        }
+
+        return Array.from(teams.values());
+    }
+
+    /**
+     * Materialize a team: upsert one `spur:generated`-tagged spec per member,
+     * prune orphaned generated specs, skip `ref:` aliases (R2). When `check` is
+     * true, returns the diff and writes nothing (dry-run).
+     */
+    async materializeTeam(teamId: string, opts?: { check?: boolean }): Promise<MaterializeResult> {
+        const config = await this.loadTeamConfig();
+        const teamConfig = config?.agent?.team?.[teamId];
+        if (!teamConfig) {
+            throw new Error(`Team "${teamId}" not found in agent.team config`);
+        }
+
+        const agentConfig = config?.agent;
+        const specs = await loadAgentSpecs(this.configDir);
+        const existingTeamSpecs = specs.filter(
+            (s) => s.tags?.includes(`team:${teamId}`) && s.tags?.includes('spur:generated'),
+        );
+
+        const desiredMembers = teamConfig.members.map((m) => normalizeMember(m));
+        const desiredIds = new Set<string>();
+        const toUpsert: AgentSpec[] = [];
+
+        for (const member of desiredMembers) {
+            const localId = member.id ?? member.executor;
+            const composedId = `${teamId}-${localId}`;
+            desiredIds.add(composedId);
+
+            // Skip ref: aliases — they are hand-authored, not generated (R2)
+            const existing = specs.find((s) => s.id === composedId);
+            if (existing && !existing.tags?.includes('spur:generated')) continue;
+
+            const resolved = resolveExecutor(member.executor, agentConfig);
+            const spec: AgentSpec = {
+                id: composedId,
+                name: member.purpose ?? composedId,
+                type: resolved.agent,
+                workspace: member.workspace ?? teamConfig.work_dir,
+                purpose: member.purpose && member.purpose.length > 0 ? member.purpose : `${resolved.agent} agent`,
+                tags: [`team:${teamId}`, 'spur:generated'],
+                config: {
+                    ...(resolved.model !== undefined ? { model: resolved.model } : {}),
+                    ...(member.systemPrompt !== undefined ? { systemPrompt: member.systemPrompt } : {}),
+                    ...(member.command !== undefined ? { command: member.command } : {}),
+                    ...(member.autonomy !== undefined ? { autonomy: member.autonomy } : {}),
+                },
+                ...(member.autostart !== undefined ? { autoStart: member.autostart } : {}),
+            };
+            toUpsert.push(spec);
+        }
+
+        // Prune orphaned generated specs (in the team but not in desired set)
+        const orphaned = existingTeamSpecs.filter((s) => !desiredIds.has(s.id));
+
+        if (opts?.check) {
+            return {
+                teamId,
+                upserted: toUpsert.map((s) => s.id),
+                orphaned: orphaned.map((s) => s.id),
+                written: false,
+            };
+        }
+
+        // Write upserts
+        for (const spec of toUpsert) {
+            await saveAgentSpec(spec, this.configDir);
+        }
+        // Delete orphans
+        for (const spec of orphaned) {
+            await deleteAgentSpecFile(spec.id, this.configDir);
+        }
+
+        return {
+            teamId,
+            upserted: toUpsert.map((s) => s.id),
+            orphaned: orphaned.map((s) => s.id),
+            written: true,
+        };
+    }
+
+    /**
+     * Teardown a team: stop members (if supervisor is wired) and optionally purge
+     * generated specs (R3). Only `spur:generated` specs are deleted — hand-authored
+     * specs are never touched.
+     */
+    async teardownTeam(teamId: string, opts?: { purge?: boolean }): Promise<TeardownResult> {
+        const specs = await loadAgentSpecs(this.configDir);
+        const teamSpecs = specs.filter((s) => s.tags?.includes(`team:${teamId}`));
+        const generated = teamSpecs.filter((s) => s.tags?.includes('spur:generated'));
+
+        if (opts?.purge) {
+            for (const spec of generated) {
+                await deleteAgentSpecFile(spec.id, this.configDir);
+            }
+        }
+
+        return {
+            teamId,
+            purged: opts?.purge ? generated.map((s) => s.id) : [],
+            stopped: teamSpecs.map((s) => s.id),
+        };
+    }
+
+    // -------------------------------------------------------------------------
     // Lazy dependency construction
     // -------------------------------------------------------------------------
+
+    private async loadTeamConfig(): Promise<SpurConfig | null> {
+        try {
+            return await loadSpurConfig(this.ctx.cwd);
+        } catch {
+            return null;
+        }
+    }
 
     private async inboxDao(): Promise<InboxMessageDao> {
         const db = await this.ctx.getDb();
@@ -410,4 +623,40 @@ export class TeamService {
         }
         return null;
     }
+}
+
+// ---------------------------------------------------------------------------
+// Autostart resolution (0258 R8)
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve the set of agent ids with effective autostart = true across all
+ * `agent.team.*` entries. Effective autostart = `member.autostart ?? team.autostart ?? false`.
+ * A `SPUR_TEAM_AUTOSTART` env entry (comma-separated ids) unions into the set
+ * (0253 R2, closes the 0252 handoff).
+ */
+export function resolveAutostartSet(config: SpurConfig | null, envAutostart?: string): string[] {
+    const ids = new Set<string>();
+    const teams = config?.agent?.team;
+    if (teams) {
+        for (const [teamId, teamConfig] of Object.entries(teams)) {
+            for (const member of teamConfig.members) {
+                const ref = normalizeMember(member);
+                const localId = ref.id ?? ref.executor;
+                const composedId = `${teamId}-${localId}`;
+                const effective = ref.autostart ?? teamConfig.autostart ?? false;
+                if (effective) ids.add(composedId);
+            }
+        }
+    }
+    // Env unions in
+    if (envAutostart) {
+        for (const id of envAutostart
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)) {
+            ids.add(id);
+        }
+    }
+    return Array.from(ids).sort();
 }

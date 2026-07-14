@@ -1,11 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createMigratedDb, type DbAdapter, InboxMessageDao } from '@gobing-ai/spur-domain';
 import {
     type AgentEvents,
     type AgentProcessOptions,
+    type AgentSpec,
+    loadAgentSpecs,
     saveAgentSpec,
     TeamAgentProcess,
     TeamOrchestrator,
@@ -575,6 +577,360 @@ describe('TeamService agent lifecycle bus (task 0237)', () => {
             // getStatus touches orchestrator(); CLI path omits events → throwaway bus.
             const status = await svc.getStatus();
             expect(Array.isArray(status.agents)).toBe(true);
+        } finally {
+            await cleanup();
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Team management (0258 R1-R3): listTeams / materializeTeam / teardownTeam
+// ---------------------------------------------------------------------------
+
+/** Write a `.spur/config.yaml` with the given YAML body under cwd. */
+async function writeConfig(cwd: string, yaml: string): Promise<void> {
+    await mkdir(join(cwd, '.spur'), { recursive: true });
+    await writeFile(join(cwd, '.spur', 'config.yaml'), yaml, 'utf8');
+}
+
+/** Save a spec with the given tags under `.spur/agents/`. */
+async function seedSpec(configDir: string, id: string, tags: string[], type = 'claude'): Promise<void> {
+    await saveAgentSpec(
+        {
+            id,
+            name: id,
+            type,
+            workspace: '/tmp',
+            purpose: 'seeded',
+            tags,
+            config: {},
+        },
+        configDir,
+    );
+}
+
+const DEVOPS_CONFIG = `agent:
+  team:
+    devops:
+      name: DevOps
+      work_dir: /tmp/devops
+      members:
+        - executor: claude
+          purpose: plan work
+        - executor: codex
+`;
+
+describe('TeamService team management (0258)', () => {
+    describe('listTeams (R1)', () => {
+        test('returns config-declared teams with empty specs when no specs exist', async () => {
+            const { svc, cwd, cleanup } = await makeService();
+            try {
+                await writeConfig(cwd, DEVOPS_CONFIG);
+                const teams = await svc.listTeams();
+                expect(teams).toHaveLength(1);
+                expect(teams[0]?.teamId).toBe('devops');
+                expect(teams[0]?.name).toBe('DevOps');
+                expect(teams[0]?.specs).toEqual([]);
+            } finally {
+                await cleanup();
+            }
+        });
+
+        test('groups specs under their team: tag and merges with config', async () => {
+            const { svc, cwd, cleanup } = await makeService();
+            try {
+                await writeConfig(cwd, DEVOPS_CONFIG);
+                const configDir = join(cwd, '.spur', 'agents');
+                await seedSpec(configDir, 'devops-claude', ['team:devops', 'spur:generated']);
+                await seedSpec(configDir, 'devops-codex', ['team:devops', 'spur:generated'], 'codex');
+
+                const teams = await svc.listTeams();
+                expect(teams).toHaveLength(1);
+                const ids = teams[0]?.specs.map((s) => s.id).sort();
+                expect(ids).toEqual(['devops-claude', 'devops-codex']);
+            } finally {
+                await cleanup();
+            }
+        });
+
+        test('groups orphaned specs (team tag not in config) under a synthesized entry', async () => {
+            const { svc, cwd, cleanup } = await makeService();
+            try {
+                await writeConfig(cwd, DEVOPS_CONFIG);
+                const configDir = join(cwd, '.spur', 'agents');
+                // 'ghost' team is not declared in config — synthesized entry uses teamId as name.
+                await seedSpec(configDir, 'ghost-x', ['team:ghost', 'spur:generated']);
+
+                const teams = await svc.listTeams();
+                const byId = new Map(teams.map((t) => [t.teamId, t]));
+                expect(byId.has('devops')).toBe(true);
+                expect(byId.has('ghost')).toBe(true);
+                const ghost = byId.get('ghost');
+                expect(ghost?.name).toBe('ghost'); // synthesized name = teamId
+                expect(ghost?.specs.map((s) => s.id)).toEqual(['ghost-x']);
+            } finally {
+                await cleanup();
+            }
+        });
+
+        test('returns empty list when no config and no specs exist', async () => {
+            const { svc, cleanup } = await makeService();
+            try {
+                const teams = await svc.listTeams();
+                expect(teams).toEqual([]);
+            } finally {
+                await cleanup();
+            }
+        });
+    });
+
+    describe('materializeTeam (R2)', () => {
+        test('throws when the team is not declared in config', async () => {
+            const { svc, cwd, cleanup } = await makeService();
+            try {
+                await writeConfig(cwd, DEVOPS_CONFIG);
+                await expect(svc.materializeTeam('unknown')).rejects.toThrow(
+                    'Team "unknown" not found in agent.team config',
+                );
+            } finally {
+                await cleanup();
+            }
+        });
+
+        test('check=true returns the diff and writes nothing', async () => {
+            const { svc, cwd, cleanup } = await makeService();
+            try {
+                await writeConfig(cwd, DEVOPS_CONFIG);
+                const configDir = join(cwd, '.spur', 'agents');
+
+                const result = await svc.materializeTeam('devops', { check: true });
+                expect(result.written).toBe(false);
+                expect(result.upserted).toEqual(['devops-claude', 'devops-codex']);
+                expect(result.orphaned).toEqual([]);
+                // Dry-run must not have written any spec files.
+                const specs = await loadAgentSpecs(configDir);
+                expect(specs).toEqual([]);
+            } finally {
+                await cleanup();
+            }
+        });
+
+        test('writes one generated spec per member and reports written=true', async () => {
+            const { svc, cwd, cleanup } = await makeService();
+            try {
+                await writeConfig(cwd, DEVOPS_CONFIG);
+                const configDir = join(cwd, '.spur', 'agents');
+
+                const result = await svc.materializeTeam('devops');
+                expect(result.written).toBe(true);
+                expect(result.upserted).toEqual(['devops-claude', 'devops-codex']);
+
+                const specs = await loadAgentSpecs(configDir);
+                const byId = new Map(specs.map((s) => [s.id, s]));
+                expect(byId.has('devops-claude')).toBe(true);
+                expect(byId.has('devops-codex')).toBe(true);
+                const claude = byId.get('devops-claude');
+                // Member purpose is preserved; type comes from resolveExecutor('claude', undefined).
+                expect(claude?.purpose).toBe('plan work');
+                expect(claude?.type).toBe('claude');
+                expect(claude?.workspace).toBe('/tmp/devops');
+                expect(claude?.tags).toContain('spur:generated');
+                expect(claude?.tags).toContain('team:devops');
+            } finally {
+                await cleanup();
+            }
+        });
+
+        test('prunes orphaned generated specs that are no longer desired', async () => {
+            const { svc, cwd, cleanup } = await makeService();
+            try {
+                await writeConfig(cwd, DEVOPS_CONFIG);
+                const configDir = join(cwd, '.spur', 'agents');
+                // A previously-generated member that is no longer in the config's member list.
+                await seedSpec(configDir, 'devops-stale', ['team:devops', 'spur:generated']);
+
+                const result = await svc.materializeTeam('devops');
+                expect(result.orphaned).toEqual(['devops-stale']);
+                // The orphan is deleted from disk.
+                const specs = await loadAgentSpecs(configDir);
+                expect(specs.find((s) => s.id === 'devops-stale')).toBeUndefined();
+            } finally {
+                await cleanup();
+            }
+        });
+
+        test('skips hand-authored (ref:) specs — never overwrites them', async () => {
+            const { svc, cwd, cleanup } = await makeService();
+            try {
+                await writeConfig(cwd, DEVOPS_CONFIG);
+                const configDir = join(cwd, '.spur', 'agents');
+                // A hand-authored spec occupying devops-claude (team tag but NOT generated).
+                await seedSpec(configDir, 'devops-claude', ['team:devops'], 'handauth');
+
+                const result = await svc.materializeTeam('devops');
+                // devops-claude is hand-authored → skipped (not in upserted, not orphaned).
+                expect(result.upserted).toEqual(['devops-codex']);
+                expect(result.orphaned).toEqual([]);
+                // The hand-authored spec is untouched (type preserved, not overwritten).
+                const specs = await loadAgentSpecs(configDir);
+                const claude = specs.find((s) => s.id === 'devops-claude');
+                expect(claude?.type).toBe('handauth');
+                expect(claude?.tags).not.toContain('spur:generated');
+            } finally {
+                await cleanup();
+            }
+        });
+
+        test('falls back to a type-derived purpose when the member omits purpose', async () => {
+            const { svc, cwd, cleanup } = await makeService();
+            try {
+                await writeConfig(cwd, DEVOPS_CONFIG);
+                const configDir = join(cwd, '.spur', 'agents');
+
+                await svc.materializeTeam('devops');
+                const specs = await loadAgentSpecs(configDir);
+                // codex member has no purpose → falls back to "<agent> agent".
+                const codex = specs.find((s) => s.id === 'devops-codex');
+                expect(codex?.purpose).toBe('codex agent');
+            } finally {
+                await cleanup();
+            }
+        });
+    });
+
+    describe('teardownTeam (R3)', () => {
+        test('without purge returns stopped ids for all team specs and deletes nothing', async () => {
+            const { svc, cwd, cleanup } = await makeService();
+            try {
+                await writeConfig(cwd, DEVOPS_CONFIG);
+                const configDir = join(cwd, '.spur', 'agents');
+                await seedSpec(configDir, 'devops-claude', ['team:devops', 'spur:generated']);
+                await seedSpec(configDir, 'devops-handauth', ['team:devops'], 'handauth');
+
+                const result = await svc.teardownTeam('devops');
+                expect(result.purged).toEqual([]);
+                expect(result.stopped.sort()).toEqual(['devops-claude', 'devops-handauth']);
+                // No deletion without purge.
+                const specs = await loadAgentSpecs(configDir);
+                expect(specs).toHaveLength(2);
+            } finally {
+                await cleanup();
+            }
+        });
+
+        test('with purge deletes only generated specs and never hand-authored ones', async () => {
+            const { svc, cwd, cleanup } = await makeService();
+            try {
+                await writeConfig(cwd, DEVOPS_CONFIG);
+                const configDir = join(cwd, '.spur', 'agents');
+                await seedSpec(configDir, 'devops-claude', ['team:devops', 'spur:generated']);
+                await seedSpec(configDir, 'devops-codex', ['team:devops', 'spur:generated'], 'codex');
+                await seedSpec(configDir, 'devops-handauth', ['team:devops'], 'handauth');
+
+                const result = await svc.teardownTeam('devops', { purge: true });
+                expect(result.purged.sort()).toEqual(['devops-claude', 'devops-codex']);
+                // Hand-authored spec survives the purge.
+                const specs = await loadAgentSpecs(configDir);
+                const ids = specs.map((s) => s.id);
+                expect(ids).toEqual(['devops-handauth']);
+            } finally {
+                await cleanup();
+            }
+        });
+
+        test('returns empty stopped list when the team has no specs', async () => {
+            const { svc, cwd, cleanup } = await makeService();
+            try {
+                await writeConfig(cwd, DEVOPS_CONFIG);
+                const result = await svc.teardownTeam('devops', { purge: true });
+                expect(result.purged).toEqual([]);
+                expect(result.stopped).toEqual([]);
+            } finally {
+                await cleanup();
+            }
+        });
+    });
+
+    describe('buildIdentity', () => {
+        test('builds a preamble listing workspace peers (excluding self)', async () => {
+            const { svc, cwd, cleanup } = await makeService();
+            try {
+                const configDir = join(cwd, '.spur', 'agents');
+                await seedSpec(configDir, 'planner', [], 'claude');
+                await seedSpec(configDir, 'reviewer', [], 'codex');
+                await seedSpec(configDir, 'loner', [], 'omp');
+                // 'loner' has a different workspace (/tmp) but the seeds all use /tmp,
+                // so all three share the workspace — planner's peers are reviewer + loner.
+
+                const specs = await loadAgentSpecs(configDir);
+                const planner = specs.find((s) => s.id === 'planner') as AgentSpec;
+                const preamble = await svc.buildIdentity(planner, '0258', 'Team runtime');
+                expect(preamble).toContain('planner');
+                // Peers are included; self is not duplicated as a peer.
+                expect(preamble).toContain('reviewer');
+                expect(preamble).toContain('loner');
+            } finally {
+                await cleanup();
+            }
+        });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Drain loop (0253 R5/AC3): drainPending + countPending
+// ---------------------------------------------------------------------------
+
+describe('TeamService drain loop (0253)', () => {
+    test('drainPending consumes queued messages and marks them injected', async () => {
+        const { svc, cleanup } = await makeService();
+        try {
+            await svc.sendMessage('operator', 'planner', 'one');
+            await svc.sendMessage('operator', 'planner', 'two');
+
+            const drained = await svc.drainPending('planner');
+            expect(drained.count).toBe(2);
+            // Every drained row is now in the injected state (consumed, not just read).
+            expect(drained.messages.every((m) => m.status === 'injected')).toBe(true);
+            const bodies = drained.messages.map((m) => m.body).sort();
+            expect(bodies).toEqual(['one', 'two']);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('drainPending is idempotent — a second call returns nothing', async () => {
+        const { svc, cleanup } = await makeService();
+        try {
+            await svc.sendMessage('operator', 'planner', 'one');
+            await svc.drainPending('planner');
+            const second = await svc.drainPending('planner');
+            expect(second.count).toBe(0);
+            expect(second.messages).toEqual([]);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('countPending reports queued messages and drops to zero after drain', async () => {
+        const { svc, cleanup } = await makeService();
+        try {
+            expect(await svc.countPending('planner')).toBe(0);
+            await svc.sendMessage('operator', 'planner', 'one');
+            await svc.sendMessage('operator', 'planner', 'two');
+            expect(await svc.countPending('planner')).toBe(2);
+
+            await svc.drainPending('planner');
+            expect(await svc.countPending('planner')).toBe(0);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('drainPending and countPending reject an invalid agent id', async () => {
+        const { svc, cleanup } = await makeService();
+        try {
+            await expect(svc.drainPending('Bad ID')).rejects.toThrow();
+            await expect(svc.countPending('Bad ID')).rejects.toThrow();
         } finally {
             await cleanup();
         }

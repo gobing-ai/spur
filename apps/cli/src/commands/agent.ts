@@ -300,7 +300,7 @@ async function drainIntoPrompt(
     // Map spec id → coding-agent type so AgentService can resolve the runner.
     const flagsOut = spec === undefined ? flags : { ...flags, agent: spec.type };
 
-    const inbox = await team.getInbox(recipient);
+    const inbox = await team.drainPending(recipient);
     if (inbox.count === 0) return { prompt, flags: flagsOut };
 
     const header = inbox.messages.map((m) => `- ${m.fromId ?? 'operator'}: ${m.body}`).join('\n');
