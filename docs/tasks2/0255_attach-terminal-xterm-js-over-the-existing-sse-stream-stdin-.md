@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Attach terminal: xterm.js over the existing SSE stream + stdin POST endpoints"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: M
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-14T04:29:09.688Z"
-updated_at: "2026-07-14T06:44:22.059Z"
+updated_at: "2026-07-14T17:05:35.915Z"
 ---
 
 ## 0255. Attach terminal: xterm.js over the existing SSE stream + stdin POST endpoints
@@ -86,17 +86,38 @@ small 0256 addition — flagged; client-dedupe is the fallback); reconnect-acros
 **Depends on:** 0256's stream + stdin routes (already exist); a `?sinceSeq` query on the stream is a
 nice-to-have (client-dedupe otherwise).
 ### Solution
+**Component:** `apps/web/src/modules/teams/MemberTerminal.tsx` — a minimal, no-dependency terminal view rendering ring-buffer frames from the existing SSE stream, plus an input line POSTing to stdin. No xterm.js (per DD-3: attach is line-framed, not a raw TTY). Reuses the observability `EventSource` + `fetchWithTimeout`/`resolveApiUrl` pattern from `InboxTab.tsx`.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**Change map:**
+- `apps/web/src/modules/teams/MemberTerminal.tsx:1` — new file: `MemberTerminal` React component + exported pure helpers (`parseFrame`, `parseProcessList`, `appendFrame`, `nextBackoff`, `stdinUrl`, `streamUrl`).
+- `apps/web/src/modules/teams/MemberTerminal.tsx:33` — `parseFrame(value)`: runtime-narrows untrusted SSE payloads into `Frame | null` (R1, R6).
+- `apps/web/src/modules/teams/MemberTerminal.tsx:57` — `parseProcessList(value)`: runtime-narrows the `/api/team/processes` response (R5).
+- `apps/web/src/modules/teams/MemberTerminal.tsx:107` — `appendFrame(frames, frame, lastSeq)`: seq-cursor dedup (drops `seq <= lastSeq`), caps buffer at `MAX_FRAMES=1000`, always passes meta frames (R6).
+- `apps/web/src/modules/teams/MemberTerminal.tsx:131` — `nextBackoff(attempt)`: exponential backoff schedule 1s→2s→4s→8s→15s cap (R4).
+- `apps/web/src/modules/teams/MemberTerminal.tsx:140` — `MemberTerminal` component: EventSource subscribe at line 189, frame rendering in `<pre>` with stdout/stderr distinction, auto-scroll, status poll every 3s, stdin POST on Enter, reconnect with backoff on error.
+- `apps/web/tests/modules/teams/MemberTerminal.test.tsx:1` — new test file: 24 tests covering pure functions (parseFrame, parseProcessList, appendFrame, nextBackoff, stdinUrl, streamUrl) + component rendering (AC1, AC3, AC4, AC5, AC6, AC2 input-enabled, DOM order).
 
+**Rationale:** the `seq` is the stable cursor — array index is NOT (ring-buffer overflow splices from front, `supervisor-service.ts:14`). The client tracks `lastSeq` via a ref and dedupes frames with `seq <= lastSeq`. Reconnect resumes from `lastSeqRef.current` via `streamUrl(agentId, sinceSeq)`. The `?sinceSeq=` parameter is constructed for backend resume support (0256 may add this); client-side dedup is the fallback.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `MemberTerminal` component subscribes to `GET /api/team/processes/:id/stream` via `EventSource` at `MemberTerminal.tsx:189`, renders frames in a scrolling `<pre>` with stdout/stderr visually distinguished (`text-error` class for stderr, `data-stream` attribute), tracks `lastSeq` via `lastSeqRef`. `parseFrame` runtime-narrows untrusted SSE payloads. |
+| R2 | MET | Input line at `MemberTerminal.tsx:265` POSTs `{line}` to `.../stdin` via `fetchWithTimeout` on Enter (`sendInput` callback at `MemberTerminal.tsx:243`); cleared on 200 success (`setInput('')` at line 255); failed POST surfaces error without losing typed text (error path retains `input` state); disabled unless `status === 'running'` (`disabled={!isRunning}`). |
+| R3 | MET | `useEffect` at line 223 opens `EventSource` on mount, `es.close()` on unmount (cleanup at line 228). Backfill is handled by the server's SSE endpoint replaying the ring buffer (server `GET /api/team/processes/:id/stream` sends ring-buffer frames oldest-first, then `--replay-done--` marker). |
+| R4 | MET | `es.onerror` at `MemberTerminal.tsx:210` closes the EventSource, schedules reconnect with `nextBackoff(attempt)` (1s→2s→4s→8s→15s cap), and resumes from `lastSeqRef.current` via `streamUrl(agentId, lastSeqRef.current)` — no duplicate lines (seq dedup in `appendFrame`). |
+| R5 | MET | Member status polled every 3s from `GET /api/team/processes` at `MemberTerminal.tsx:155`; `running` enables input; `stopped`/`exited`/`errored` disables input and shows status banner (`data-status-banner` div at line 276). |
+| R6 | MET | `appendFrame` at `MemberTerminal.tsx:107` drops frames with `seq <= lastSeq` (dedup); tolerates ring-buffer overflow by capping UI buffer at `MAX_FRAMES=1000` (splice from front); meta frames (no seq) always pass through. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (pipeline verify step — verdict: PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
 ### References
 
 M
@@ -104,3 +125,8 @@ M
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-07-14T16:21:34.168Z todo → wip (system)
+- 2026-07-14T16:29:56.274Z wip → blocked (system)
+- 2026-07-14T16:44:54.445Z blocked → wip (system)
+- 2026-07-14T17:05:30.800Z wip → testing (system)
+- 2026-07-14T17:05:35.915Z testing → done (system)
