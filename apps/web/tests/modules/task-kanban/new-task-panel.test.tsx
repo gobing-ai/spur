@@ -1,8 +1,4 @@
-import { GlobalRegistrator } from '@happy-dom/global-registrator';
-
-try {
-    GlobalRegistrator.register();
-} catch {} // already registered in suite
+registerHappyDom();
 
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
@@ -10,7 +6,7 @@ import type { ComponentType } from 'react';
 import React from 'react';
 // Grab real Button and Select before mocking @/ui
 import { Button, Select } from '@/ui';
-import { teardownHappyDom } from '../../happy-dom';
+import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 // ── Mock MDEditor ────────────────────────────────────────────────────────────
 interface MockEditorProps {

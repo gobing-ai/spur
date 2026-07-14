@@ -1,14 +1,10 @@
-import { GlobalRegistrator } from '@happy-dom/global-registrator';
-
-try {
-    GlobalRegistrator.register();
-} catch {} // already registered in suite
+registerHappyDom();
 
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import type { ComponentType } from 'react';
 import type { TaskSummary } from '../../../src/modules/task-kanban/types';
-import { teardownHappyDom } from '../../happy-dom';
+import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 // ── Mock @uiw/react-md-editor: the real MDEditor's internal event system does
 //    not fire onChange under happy-dom + React 19. The mock exposes its onChange

@@ -1,5 +1,4 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
-import { GlobalRegistrator } from '@happy-dom/global-registrator';
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import type { FeatureSummary } from '../../../src/lib/feature-types';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
@@ -9,7 +8,7 @@ import FeatureDetail from '../../../src/modules/features/FeatureDetail';
 import FeaturesShell from '../../../src/modules/features/FeaturesShell';
 import FeatureTree from '../../../src/modules/features/FeatureTree';
 import { module } from '../../../src/modules/features/index';
-import { teardownHappyDom } from '../../happy-dom';
+import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 class FakeEventSource {
     static instances: FakeEventSource[] = [];
@@ -29,9 +28,7 @@ class FakeEventSource {
 let originalEventSource: typeof EventSource | undefined;
 
 beforeAll(() => {
-    try {
-        GlobalRegistrator.register();
-    } catch {} // already registered in suite
+    registerHappyDom();
     originalEventSource = globalThis.EventSource;
 });
 

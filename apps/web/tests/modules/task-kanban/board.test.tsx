@@ -1,14 +1,10 @@
-import { GlobalRegistrator } from '@happy-dom/global-registrator';
-
-try {
-    GlobalRegistrator.register();
-} catch {} // already registered in suite
+registerHappyDom();
 
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import type { TaskSummary } from '../../../src/modules/task-kanban/types';
-import { teardownHappyDom } from '../../happy-dom';
+import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 import { buildFullRpcMock } from '../../test-helpers/rpc-client-mock';
 
 // ── api stub: the board imports `{ api }` from lib/rpc-client directly, so mock the module. ──

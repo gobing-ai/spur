@@ -1,14 +1,10 @@
-import { GlobalRegistrator } from '@happy-dom/global-registrator';
-
-try {
-    GlobalRegistrator.register();
-} catch {} // already registered in suite
+registerHappyDom();
 
 import { afterAll, describe, expect, test } from 'bun:test';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { TaskSummary } from '../../../src/modules/task-kanban/types';
 import { createRefresh, TaskStore, useTasks } from '../../../src/modules/task-kanban/useTasks';
-import { teardownHappyDom } from '../../happy-dom';
+import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 describe('createRefresh', () => {
     test('success: sets tasks and clears error', async () => {

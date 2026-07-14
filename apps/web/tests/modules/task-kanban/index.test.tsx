@@ -1,19 +1,12 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { GlobalRegistrator } from '@happy-dom/global-registrator';
 import { cleanup } from '@testing-library/react';
 
 // Shared full-surface rpc-client mock — prevents "last mock wins" starvation
 import '../../test-helpers/rpc-client-mock';
 
-import { teardownHappyDom } from '../../happy-dom';
+import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
-try {
-    try {
-        GlobalRegistrator.register();
-    } catch {} // already registered in suite
-} catch {
-    /* already registered */
-}
+registerHappyDom();
 
 afterAll(teardownHappyDom);
 

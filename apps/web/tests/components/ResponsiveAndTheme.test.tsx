@@ -1,19 +1,11 @@
-import { GlobalRegistrator } from '@happy-dom/global-registrator';
-
-try {
-    try {
-        GlobalRegistrator.register();
-    } catch {} // already registered in suite
-} catch {
-    /* already registered */
-}
+registerHappyDom();
 
 import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import BoardLayout from '../../src/components/BoardLayout';
 import { resetLayoutState } from '../../src/lib/layout-state';
-import { teardownHappyDom } from '../happy-dom';
+import { registerHappyDom, teardownHappyDom } from '../happy-dom';
 
 afterAll(teardownHappyDom);
 

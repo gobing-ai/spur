@@ -1,8 +1,4 @@
-import { GlobalRegistrator } from '@happy-dom/global-registrator';
-
-try {
-    GlobalRegistrator.register();
-} catch {} // already registered in suite
+registerHappyDom();
 
 import { afterAll, describe, expect, test } from 'bun:test';
 import { act, render, waitFor } from '@testing-library/react';
@@ -17,7 +13,7 @@ import MemberTerminal, {
     stdinUrl,
     streamUrl,
 } from '../../../src/modules/teams/MemberTerminal';
-import { teardownHappyDom } from '../../happy-dom';
+import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 /** Cast a mock fetch fn to typeof fetch (the real fetch has preconnect etc). */
 function mockFetch(fn: (req: Request) => Promise<Response>): typeof fetch {
@@ -208,8 +204,11 @@ describe('stdinUrl / streamUrl', () => {
 // ── Component rendering tests ─────────────────────────────────────────
 
 describe('MemberTerminal (component)', () => {
-    afterAll(() => {
-        teardownHappyDom();
+    afterAll(async () => {
+        // Must await: teardownHappyDom unregisters happy-dom asynchronously, and an
+        // un-awaited teardown lets the unregister call land inside the next test
+        // file, tearing its DOM out mid-run (tests/happy-dom.ts).
+        await teardownHappyDom();
         restoreEventSource();
     });
 

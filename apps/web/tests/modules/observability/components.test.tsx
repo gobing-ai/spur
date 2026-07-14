@@ -1,5 +1,4 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
-import { GlobalRegistrator } from '@happy-dom/global-registrator';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
 import InboxTab from '../../../src/modules/observability/InboxTab';
@@ -7,7 +6,7 @@ import ObservabilityShell from '../../../src/modules/observability/Observability
 import ProcessListTab from '../../../src/modules/observability/ProcessListTab';
 import SystemEventsTab from '../../../src/modules/observability/SystemEventsTab';
 import ToolUsingTab from '../../../src/modules/observability/ToolUsingTab';
-import { teardownHappyDom } from '../../happy-dom';
+import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 class FakeEventSource {
     static instances: FakeEventSource[] = [];
@@ -36,9 +35,7 @@ function jsonResponse(body: unknown): Response {
 let originalEventSource: typeof EventSource | undefined;
 
 beforeAll(() => {
-    try {
-        GlobalRegistrator.register();
-    } catch {} // already registered in suite
+    registerHappyDom();
     originalEventSource = globalThis.EventSource;
 });
 

@@ -1,4 +1,4 @@
-# Require try/catch guard around GlobalRegistrator.register() in web tests.
+# Forbid raw GlobalRegistrator.register() in web tests — use the shared helper.
 #
 # WHY: GlobalRegistrator.register() sets up happy-dom globals (window, document,
 # etc.). In a full bun test suite, multiple test files call it. The first call
@@ -8,12 +8,10 @@
 # `bun test ./apps/web/`), not when a single file runs in isolation.
 # Real incident: 52 CI-only failures across 4 test files, 2026-07-09.
 #
-# FIX: wrap in try/catch:
-#
-#   try { GlobalRegistrator.register(); } catch {} // already registered in suite
-#
-# The teardown helper (apps/web/tests/happy-dom.ts) is the sanctioned unregister
-# caller (see happy-dom-teardown.yaml). This rule guards the register side.
+# FIX: call `registerHappyDom()` from apps/web/tests/happy-dom.ts, which wraps
+# the register() in try/catch internally. It is the sanctioned caller and the
+# single exclude below. The teardown side is symmetric: `teardownHappyDom` is
+# the only sanctioned unregister() caller (see happy-dom-teardown.yaml).
 #
 # Severity warning: the file may pass in isolation but will fail in the full
 # suite; fix before merge.
@@ -23,42 +21,21 @@ include:
 exclude:
   - "**/node_modules/**"
   - "**/dist/**"
-  # Helper that manages happy-dom lifecycle — not a raw register call.
+  # The shared helper is the one legitimate caller of register().
   - "apps/web/tests/happy-dom.ts"
-  # These files already wrap register() in try/catch; they are compliant.
-  - "apps/web/tests/modules/task-kanban/board.test.tsx"
-  - "apps/web/tests/modules/task-kanban/components.test.tsx"
-  - "apps/web/tests/modules/task-kanban/task-detail.test.tsx"
-  - "apps/web/tests/modules/task-kanban/index.test.tsx"
-  - "apps/web/tests/modules/task-kanban/new-task-panel.test.tsx"
-  - "apps/web/tests/modules/task-kanban/markdown-body.test.tsx"
-  - "apps/web/tests/modules/task-kanban/useTaskParams.test.tsx"
-  - "apps/web/tests/modules/task-kanban/task-filters.test.tsx"
-  - "apps/web/tests/modules/task-kanban/useTasks.test.ts"
-  - "apps/web/tests/modules/features/components.test.tsx"
-  - "apps/web/tests/lib/theme.test.ts"
-  - "apps/web/tests/components/BoardLayout.test.tsx"
-  - "apps/web/tests/modules/observability/components.test.tsx"
-  - "apps/web/tests/modules/teams/MemberTerminal.test.tsx"
-  - "apps/web/tests/components/ThemeToggle.test.tsx"
-  - "apps/web/tests/components/ResponsiveAndTheme.test.tsx"
 
 rules:
   - id: guarded-happy-dom-register
     description: >
-      GlobalRegistrator.register() must be wrapped in try/catch — without
-      it, the second test file that calls it throws "already been globally
-      registered" and all tests in that file are lost (a CI-only failure
-      that never reproduces when a single file runs in isolation). Wrap:
-      `try { GlobalRegistrator.register(); } catch {}`. 52-real CI incidents,
-      2026-07-09.
+      Do not call `GlobalRegistrator.register()` directly in a web test — a
+      second caller in the same suite throws "already been globally registered"
+      and loses every test in that file (a CI-only failure that never reproduces
+      in isolation). Use `registerHappyDom()` from apps/web/tests/happy-dom.ts,
+      which guards the call; it is the single sanctioned register() caller.
+      52-real CI incidents, 2026-07-09.
     severity: warning
     evaluator:
       type: rg
       config:
-        # Match bare GlobalRegistrator.register() — NOT inside try/catch
-        # Negative lookbehind: line does NOT start with "try" before the call
+        # Match the raw call anywhere; the helper is excluded by path.
         pattern: "GlobalRegistrator\\.register\\(\\)"
-        # Only flag lines where the call is NOT preceded by try{ on the same line
-        # (the fixed version is `try { GlobalRegistrator.register(); } catch {}`)
-        # We match the call itself and let the description guide the fix

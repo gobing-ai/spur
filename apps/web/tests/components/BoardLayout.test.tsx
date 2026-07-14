@@ -1,8 +1,4 @@
-import { GlobalRegistrator } from '@happy-dom/global-registrator';
-
-try {
-    GlobalRegistrator.register();
-} catch {} // already registered in suite
+registerHappyDom();
 
 import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
@@ -13,7 +9,7 @@ import { resetFetchForTesting, setFetchForTesting } from '../../src/lib/rpc-clie
 import { modules } from '../../src/modules/registry';
 import type { WebModule } from '../../src/modules/types';
 import { createAppRouter, routes } from '../../src/router';
-import { teardownHappyDom } from '../happy-dom';
+import { registerHappyDom, teardownHappyDom } from '../happy-dom';
 
 /** The Tasks module is the contract for the kanban-board data-attribute assertions below. */
 const TASKS_MODULE: WebModule | undefined = modules.find((m) => m.id === 'tasks');

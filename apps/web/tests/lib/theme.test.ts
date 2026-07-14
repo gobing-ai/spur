@@ -1,16 +1,8 @@
-import { GlobalRegistrator } from '@happy-dom/global-registrator';
-
-try {
-    try {
-        GlobalRegistrator.register();
-    } catch {} // already registered in suite
-} catch {
-    /* already registered */
-}
+registerHappyDom();
 
 import { afterAll, afterEach, describe, expect, test } from 'bun:test';
 import { applyTheme, resolveTheme, toggleTheme } from '../../src/lib/theme';
-import { teardownHappyDom } from '../happy-dom';
+import { registerHappyDom, teardownHappyDom } from '../happy-dom';
 
 afterAll(teardownHappyDom);
 

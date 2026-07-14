@@ -16,6 +16,27 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator';
 import { cleanup } from '@testing-library/react';
 
+/**
+ * Register happy-dom globals idempotently. Safe to call from every React test
+ * file — the first call sets up `window`/`document`; later calls are no-ops,
+ * since `GlobalRegistrator.register()` throws "already been globally registered"
+ * once another file in the same suite has registered, and that error is swallowed
+ * here. Without this guard, the second test file to call `register()` loses every
+ * test in it (52-real CI incident, 2026-07-09).
+ *
+ * This is the sanctioned `register()` caller — the `guarded-happy-dom-register`
+ * rule forbids raw `GlobalRegistrator.register()` outside this helper. Mirror of
+ * `teardownHappyDom`; call at module top level (or in `beforeAll`) of every web
+ * React test, paired with `afterAll(teardownHappyDom)`.
+ */
+export function registerHappyDom(): void {
+    try {
+        GlobalRegistrator.register();
+    } catch {
+        // Already registered by an earlier test file in the same suite.
+    }
+}
+
 /** Yield a macrotask, letting the React scheduler's posted message run to completion. */
 function flushMacrotask(): Promise<void> {
     return new Promise((res) => setTimeout(res, 0));

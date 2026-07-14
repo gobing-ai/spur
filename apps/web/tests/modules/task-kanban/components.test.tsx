@@ -1,13 +1,9 @@
-import { GlobalRegistrator } from '@happy-dom/global-registrator';
-
-try {
-    GlobalRegistrator.register();
-} catch {} // already registered in suite
+registerHappyDom();
 
 import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import type { TaskSummary } from '../../../src/modules/task-kanban/types';
-import { teardownHappyDom } from '../../happy-dom';
+import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 // Prevent mock leakage from other test files: TaskDetail calls api.task.show on mount
 // and imports @uiw/react-md-editor (which has heavy scheduler usage in test environments).

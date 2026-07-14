@@ -1,14 +1,10 @@
-import { GlobalRegistrator } from '@happy-dom/global-registrator';
-
-try {
-    GlobalRegistrator.register();
-} catch {} // already registered in suite
+registerHappyDom();
 
 import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
 import { cleanup, render } from '@testing-library/react';
 import type { InputHTMLAttributes } from 'react';
 import TaskFilters from '../../../src/modules/task-kanban/TaskFilters';
-import { teardownHappyDom } from '../../happy-dom';
+import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 // Mock `@/ui` so we can capture the onChange handler that TaskFilters wires to each Input,
 // bypassing the happy-dom + React 19 incompatibility that prevents fireEvent.change from

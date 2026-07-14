@@ -1,13 +1,9 @@
-import { GlobalRegistrator } from '@happy-dom/global-registrator';
-
-try {
-    GlobalRegistrator.register();
-} catch {} // already registered in suite
+registerHappyDom();
 
 import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
 import { cleanup, render, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
-import { teardownHappyDom } from '../../happy-dom';
+import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 // Mock mermaid: its real ESM render path needs a full DOM + worker support that
 // happy-dom lacks. The mock returns a deterministic SVG so we can assert routing.
