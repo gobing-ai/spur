@@ -194,6 +194,23 @@ describe('AgentConfigSchema team validation', () => {
         });
         expect(result.success).toBe(true);
     });
+
+    test('composed ids that collide ACROSS teams (hyphenated key overlap) → error', () => {
+        // team `web-01` + member `claude`  → web-01-claude
+        // team `web`    + member `01-claude` → web-01-claude  (same composed id)
+        const result = AgentConfigSchema.safeParse({
+            team: {
+                'web-01': { name: 'A', work_dir: '~/x', members: ['claude'] },
+                web: { name: 'B', work_dir: '~/x', members: [{ executor: 'codex', id: '01-claude' }] },
+            },
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            const issue = result.error.issues.find((i) => i.message.includes('collides across teams'));
+            expect(issue).toBeDefined();
+            expect(issue?.message).toContain('web-01-claude');
+        }
+    });
 });
 
 // ---- resolveExecutor (R3 / AC5) ----

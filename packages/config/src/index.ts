@@ -268,6 +268,13 @@ export const AgentConfigSchema = z
         // schema rather than on TeamConfigSchema (which has no access to the key).
         const team = value.team;
         if (team === undefined) return;
+        // Composed ids must be globally unique. The `<teamId>-<localId>` join uses `-`,
+        // which BOTH parts may contain, so it is not injective: team `web-01` member
+        // `claude` and team `web` member `01-claude` both yield `web-01-claude`. 0251
+        // assumed cross-team uniqueness "by construction"; enforce it here so a collision
+        // fails at config-load with a clear message, not later at `spur team up` (where
+        // loadAgentSpecs throws a duplicate-id error far from the config).
+        const seenComposed = new Set<string>();
         for (const [teamId, teamConfig] of Object.entries(team)) {
             const seenLocal = new Set<string>();
             teamConfig.members.forEach((member, index) => {
@@ -289,6 +296,14 @@ export const AgentConfigSchema = z
                         path: ['team', teamId, 'members', index],
                     });
                 }
+                if (seenComposed.has(composedId)) {
+                    ctx.addIssue({
+                        code: z.ZodIssueCode.custom,
+                        message: `Composed agent id "${composedId}" collides across teams — every <teamId>-<localId> must be globally unique (a hyphenated team key can overlap another team's member id).`,
+                        path: ['team', teamId, 'members', index],
+                    });
+                }
+                seenComposed.add(composedId);
             });
         }
     });
