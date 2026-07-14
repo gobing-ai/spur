@@ -1,14 +1,16 @@
 import { describe, expect, test } from 'bun:test';
 import type { MaterializeResult, ProcessEntry, ProcessFrame, TeamListing, TeardownResult } from '@gobing-ai/spur-app';
+import type { AgentSpec } from '@gobing-ai/ts-ai-runner';
 import { Hono } from 'hono';
 import type { ServerContext } from '../../../src/context';
 import { enqueueFrame, sendHeartbeat, teamModule } from '../../../src/modules/team';
 
-/** Minimal TeamService stub surface — the module only calls these three methods. */
+/** Minimal TeamService stub surface — the module only calls these methods. */
 interface TeamServiceStub {
     listTeams(): Promise<TeamListing[]>;
     materializeTeam(teamId: string, opts?: { check?: boolean }): Promise<MaterializeResult>;
     teardownTeam(teamId: string, opts?: { purge?: boolean }): Promise<TeardownResult>;
+    listAgentSpecs(): Promise<AgentSpec[]>;
 }
 
 /** Build a complete TeamServiceStub from a partial — defaults are type-correct no-ops. */
@@ -17,8 +19,14 @@ function teamServiceStub(overrides: Partial<TeamServiceStub>): TeamServiceStub {
         listTeams: async () => [],
         materializeTeam: async () => ({ teamId: '', upserted: [], orphaned: [], written: false }),
         teardownTeam: async () => ({ teamId: '', purged: [], stopped: [] }),
+        listAgentSpecs: async () => [],
         ...overrides,
     };
+}
+
+/** A minimal AgentSpec for the up-route autostart filter (0256 R3/R5). */
+function autostartSpec(id: string, autoStart = true): AgentSpec {
+    return { id, name: id, type: 'claude', workspace: '/w', purpose: 'member', tags: [], config: {}, autoStart };
 }
 
 /**
@@ -689,6 +697,7 @@ describe('team module', () => {
             const teamService = teamServiceStub({
                 listTeams: async () => [],
                 materializeTeam: async () => materialized,
+                listAgentSpecs: async () => [autostartSpec('planner'), autostartSpec('reviewer')],
             });
             const { ctx, startCalls } = ctxWithStubs({ teamService });
             const app = new Hono();
@@ -706,6 +715,29 @@ describe('team module', () => {
             expect(body.started[0]?.pid).toBe(1000);
         });
 
+        test('starts only autostart members — a materialized autoStart=false member is skipped (0256 R3/R5)', async () => {
+            const materialized: MaterializeResult = {
+                teamId: 'devops',
+                upserted: ['planner', 'reviewer'],
+                orphaned: [],
+                written: true,
+            };
+            const teamService = teamServiceStub({
+                materializeTeam: async () => materialized,
+                // reviewer opted out of autostart → must be created but NOT started.
+                listAgentSpecs: async () => [autostartSpec('planner'), autostartSpec('reviewer', false)],
+            });
+            const { ctx, startCalls } = ctxWithStubs({ teamService });
+            const app = new Hono();
+            teamModule.mount(app, ctx);
+
+            const res = await app.fetch(new Request('http://localhost/api/team/devops/up', { method: 'POST' }));
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as { started: Array<{ id: string }> };
+            expect(startCalls).toEqual(['planner']);
+            expect(body.started.map((s) => s.id)).toEqual(['planner']);
+        });
+
         test('records ok=false (no pid) for members that fail to start', async () => {
             const materialized: MaterializeResult = {
                 teamId: 'devops',
@@ -716,6 +748,7 @@ describe('team module', () => {
             const teamService = teamServiceStub({
                 listTeams: async () => [],
                 materializeTeam: async () => materialized,
+                listAgentSpecs: async () => [autostartSpec('planner'), autostartSpec('reviewer')],
             });
             const { ctx } = ctxWithStubs({
                 teamService,
@@ -757,6 +790,7 @@ describe('team module', () => {
             const teamService = teamServiceStub({
                 listTeams: async () => [],
                 materializeTeam: async () => materialized,
+                listAgentSpecs: async () => [autostartSpec('planner'), autostartSpec('reviewer')],
             });
             const { ctx } = ctxWithStubs({
                 teamService,

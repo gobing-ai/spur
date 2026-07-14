@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-14T04:29:12.104Z"
-updated_at: "2026-07-14T17:25:05.342Z"
+updated_at: "2026-07-14T22:06:44.301Z"
 ---
 
 ## 0256. Team API surface: oRPC contracts vs raw Hono/SSE for start/stop/stdin/stream/messages
@@ -111,25 +111,33 @@ Each entry cites the first changed line per file (`file:line`).
 | `packages/app/src/services/team-service.ts:566` |
 | `packages/app/src/services/team-service.ts:627` |
 ### Testing
-**Pipeline verify results**
+**Verify verdict: PASS** (`.spur/run/0256-verdict.json`) — re-verified 2026-07-14 after the operator-approved fix of two deviations (the first re-verify was PARTIAL; the delegated verdict was PASS with `acceptanceCriteria: []`).
 
-- Verdict: PASS (from verdict artifact)
+All **6 requirements** and **8 AC** MET.
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | Route table documenting all team + message HTTP routes added to `docs/04_DESIGN.md` under "Team + Message HTTP Routes (0256)" — request/response shapes for all 9 team routes + 4 message routes. |
-| R2 | MET | `GET /api/team/teams` at `apps/server/src/modules/team/index.ts:194` calls `svc.listTeams()` and enriches each member with supervisor status `{id, type, status, pid?}`. Untethered specs would appear under their own team listing (listTeams groups by tag). |
-| R3 | MET | `POST /api/team/:team/up` at line 217 calls `svc.materializeTeam(teamId, {check})`; `?check=true` returns diff without writing. `POST /api/team/:team/down` at line 239 stops running members + calls `svc.teardownTeam(teamId, {purge})`; `?purge=true` deletes only `spur:generated` specs. |
-| R4 | MET | `GET /api/team/health` at line 264 returns `200 { ok: true }` — cheap liveness probe for CLI `team up` best-effort start and web reachability check. |
-| R5 | MET | `POST /api/team/:team/up` loops `supervisor.start(id)` over materialized members and returns per-member `{id, ok, pid?}` results — server-side batch start, no per-member client round-trips. |
-| R6 | MET | All new routes return `503 { error: 'team API requires Bun server context' }` when `ctx.teamService` is undefined (Workers path). Response envelopes use `{ data…, count }` + `{ ok, ... }` matching existing board routes. |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+| R | Status | AC | Status |
+|---|--------|----|--------|
+| R1 docs table | MET | AC1 teams + untethered | MET |
+| R2 GET /teams (+untethered) | MET (fixed) | AC2 up materialize+start | MET |
+| R3 up/down | MET (fixed) | AC3 down stop+purge | MET |
+| R4 GET /health | MET | AC4 health 200 | MET |
+| R5 server-side batch start | MET (fixed) | AC5 stream/stdin regression | MET |
+| R6 envelope + Bun gate | MET | AC6 Workers 503 | MET · AC7 docs · AC8 suites |
+
+**Fixes this pass:**
+- **R2/AC1** — `listTeams` now surfaces specs with no `team:` tag under an `__untethered__` group (+ app test).
+- **R3/R5** — `POST /up` starts **autostart members only** (filters via `listAgentSpecs`), not all upserted — aligning the impl with R3/R5, the docs table, and the CLI `team up` (+ stub `listAgentSpecs` + an autostart-skip test).
+
+**Verification:** app+server+cli suites green **except** the pre-existing sandbox `ps` EPERM test (`context.test.ts`, task 0243, untouched). app+server typecheck clean; biome clean. Fix uncommitted in the working tree.
 ### Review
-**SECU findings** (pipeline verify step — verdict: PASS)
+**Re-review after fix, 2026-07-14.** First re-verify found 2 deviations under a rubber-stamped PASS (`acceptanceCriteria: []`); both resolved on operator request.
 
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
+| Priority | Finding | Disposition |
+| P2 | R2/AC1 — `listTeams` dropped specs with no team tag (no `__untethered__` group). | **FIXED** — untethered group added + test. |
+| P2 | R3/R5 — `POST /up` started ALL `materialized.upserted` members, not autostart-only — contradicts R3/R5, the docs table ("best-effort start (R3/R5)"), and the CLI `team up` (which filters autostart). Would start an `autoStart=false` member on explicit `up`. | **FIXED** — filters to autostart members via `listAgentSpecs`; stub + autostart-skip test added. |
+| P3 | Delegated self-verify rubber-stamped PASS with empty AC. | Recorded — independent verify is the guard (same pattern as 0258). |
+
+**Residual:** one sandbox-only failure (`ps` EPERM), unrelated. Fix uncommitted in the working tree.
 ### References
 
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
@@ -138,3 +146,6 @@ Each entry cites the first changed line per file (`file:line`).
 - 2026-07-14T17:18:57.550Z todo → wip (system)
 - 2026-07-14T17:25:00.048Z wip → testing (system)
 - 2026-07-14T17:25:05.342Z testing → done (system)
+- 2026-07-14T22:01:20.382Z done → wip (system)
+- 2026-07-14T22:06:41.790Z wip → testing (system)
+- 2026-07-14T22:06:44.301Z testing → done (system)

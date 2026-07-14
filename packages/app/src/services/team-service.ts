@@ -434,7 +434,8 @@ export class TeamService {
             }
         }
 
-        // Group specs by team tag
+        // Group specs by team tag; collect specs with no team tag for the untethered group.
+        const untethered: AgentSpec[] = [];
         for (const spec of specs) {
             const teamTag = spec.tags?.find((t) => t.startsWith('team:'));
             if (teamTag) {
@@ -451,7 +452,19 @@ export class TeamService {
                         specs: [spec],
                     });
                 }
+            } else {
+                untethered.push(spec);
             }
+        }
+
+        // Surface specs with no `team:<id>` tag under a synthetic `__untethered__` group (0256 R2).
+        if (untethered.length > 0) {
+            teams.set('__untethered__', {
+                teamId: '__untethered__',
+                name: 'Untethered',
+                members: [],
+                specs: untethered,
+            });
         }
 
         return Array.from(teams.values());

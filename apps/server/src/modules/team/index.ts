@@ -223,10 +223,16 @@ export const teamModule: ServerModule = {
             if (check) {
                 return c.json({ materialized, started: [] });
             }
-            // Best-effort start of autostart members
+            // Best-effort start of AUTOSTART members only (0256 R3/R5 + 0252 up-scope;
+            // consistent with the CLI `team up`). A materialized member with autoStart=false
+            // is created but NOT started here — start-all would ignore the per-member opt-out.
             const supervisor = ctx.supervisor();
+            const autostartIds = new Set(
+                (await svc.listAgentSpecs()).filter((spec) => spec.autoStart === true).map((spec) => spec.id),
+            );
             const started: Array<{ id: string; ok: boolean; pid?: number }> = [];
             for (const id of materialized.upserted) {
+                if (!autostartIds.has(id)) continue;
                 try {
                     const entry = await supervisor.start(id);
                     started.push({ id, ok: true, ...(entry.pid !== null ? { pid: entry.pid } : {}) });

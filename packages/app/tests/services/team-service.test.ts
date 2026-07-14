@@ -673,6 +673,26 @@ describe('TeamService team management (0258)', () => {
             }
         });
 
+        test('surfaces specs with no team tag under the __untethered__ group (0256 R2)', async () => {
+            const { svc, cwd, cleanup } = await makeService();
+            try {
+                await writeConfig(cwd, DEVOPS_CONFIG);
+                const configDir = join(cwd, '.spur', 'agents');
+                await seedSpec(configDir, 'devops-claude', ['team:devops', 'spur:generated']);
+                await seedSpec(configDir, 'lonely', []); // hand-authored spec, no team tag
+
+                const teams = await svc.listTeams();
+                const byId = new Map(teams.map((t) => [t.teamId, t]));
+                const untethered = byId.get('__untethered__');
+                expect(untethered).toBeDefined();
+                expect(untethered?.specs.map((s) => s.id)).toEqual(['lonely']);
+                // The tethered spec stays under its team, not double-counted.
+                expect(byId.get('devops')?.specs.map((s) => s.id)).toEqual(['devops-claude']);
+            } finally {
+                await cleanup();
+            }
+        });
+
         test('returns empty list when no config and no specs exist', async () => {
             const { svc, cleanup } = await makeService();
             try {
