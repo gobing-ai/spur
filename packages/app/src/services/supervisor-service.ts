@@ -156,6 +156,9 @@ export class SupervisorService {
             command,
             args,
             label: `agent:${agentId}`,
+            // Tag for ProcessRegistry watch list (ts-runtime 0.4.10 / spur#0264).
+            source: 'supervisor',
+            agentId,
             env: Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== undefined)) as Record<
                 string,
                 string

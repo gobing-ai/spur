@@ -17,7 +17,7 @@ import {
     translateSlashCommand,
 } from '@gobing-ai/ts-ai-runner';
 import type { EventBus } from '@gobing-ai/ts-infra';
-import { NodeProcessExecutor, type OutputPolicy } from '@gobing-ai/ts-runtime';
+import { NodeProcessExecutor, type OutputPolicy, type ProcessRegistry } from '@gobing-ai/ts-runtime';
 import { bridgeEventBus } from './event-bridge';
 // ---------------------------------------------------------------------------
 // Public types
@@ -107,6 +107,12 @@ export interface AgentServiceContext {
      * stream can observe it. Same shape as `SystemEventBus`.
      */
     events?: EventBus<Record<string, (event: unknown) => void>>;
+    /**
+     * Optional shared ProcessRegistry (ts-runtime 0.4.10 / spur#0264). When set,
+     * one-shot agent runs appear in the serve-local process watch list alongside
+     * supervisor loops. CLI callers leave this unset.
+     */
+    processRegistry?: ProcessRegistry;
 }
 
 // ---------------------------------------------------------------------------
@@ -127,7 +133,13 @@ export class AgentService {
     async resolve(flags: Record<string, string | boolean>, deps?: AgentRunDeps): Promise<AgentResolveResult> {
         const outputPolicy: OutputPolicy = { mode: 'buffered' };
         const runner =
-            deps?.runner ?? new AiRunner({ processExecutor: new NodeProcessExecutor({ output: outputPolicy }) });
+            deps?.runner ??
+            new AiRunner({
+                processExecutor: new NodeProcessExecutor({
+                    output: outputPolicy,
+                    ...(this.ctx.processRegistry !== undefined ? { registry: this.ctx.processRegistry } : {}),
+                }),
+            });
         const detector = deps?.detector ?? new AgentDetector({ runner });
         const doctorRunner =
             deps?.doctorRunner ?? new DoctorRunner({ agentDetector: detector, runner, env: this.ctx.env });
@@ -307,7 +319,10 @@ export class AgentService {
         const runner =
             deps?.runner ??
             new AiRunner({
-                processExecutor: new NodeProcessExecutor({ output: outputPolicy }),
+                processExecutor: new NodeProcessExecutor({
+                    output: outputPolicy,
+                    ...(this.ctx.processRegistry !== undefined ? { registry: this.ctx.processRegistry } : {}),
+                }),
                 ...(this.ctx.events !== undefined ? { events: bridgeEventBus(this.ctx.events) } : {}),
                 ...(this.ctx.events !== undefined ? { processEvents: bridgeEventBus(this.ctx.events) } : {}),
             });
