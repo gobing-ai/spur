@@ -75,6 +75,19 @@ function resetMockSources(): void {
     mockSources = [];
 }
 
+/**
+ * Read a node's React fiber props (`onChange`, `onKeyDown`, …) and invoke the
+ * handler directly. happy-dom + React 19 do not deliver `fireEvent.change` to a
+ * controlled input's onChange (capricorn86/happy-dom#856), so — matching the
+ * sibling `components.test.tsx` convention — the test bypasses DOM dispatch and
+ * reads the handler off the real node.
+ */
+function reactProps(el: Element): Record<string, unknown> | undefined {
+    const holder = el as unknown as Record<string, Record<string, unknown> | undefined>;
+    const key = Object.keys(holder).find((k) => k.startsWith('__reactProps$'));
+    return key ? holder[key] : undefined;
+}
+
 function findByText(container: HTMLElement, text: string): HTMLElement | null {
     const all = container.querySelectorAll('*');
     for (const el of Array.from(all)) {
@@ -386,6 +399,124 @@ describe('MemberTerminal (component)', () => {
 
         const secondEs = mockSources[1] as MockEventSource;
         expect(secondEs.url).toContain('/team/processes/reconnect-test/stream');
+
+        resetFetchForTesting();
+        restoreEventSource();
+        resetMockSources();
+    });
+
+    test('AC2: typing a line + Enter POSTs {line} to stdin and clears input on 200', async () => {
+        installMockEventSource();
+        resetMockSources();
+        const posted: { url: string; method: string; body: string }[] = [];
+        setFetchForTesting(
+            mockFetch(async (req: Request) => {
+                if (req.method === 'POST') {
+                    posted.push({ url: req.url, method: req.method, body: await req.text() });
+                    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+                }
+                return new Response(
+                    JSON.stringify({
+                        processes: [
+                            { agentId: 'send-agent', pid: 1, status: 'running', startedAt: 'x', exitCode: null },
+                        ],
+                    }),
+                    { status: 200 },
+                );
+            }),
+        );
+
+        const { container } = render(React.createElement(MemberTerminal, { agentId: 'send-agent' }));
+
+        // Wait for the status poll to enable the input (member is running).
+        let input!: HTMLInputElement;
+        await waitFor(() => {
+            input = container.querySelector('[data-terminal-input]') as HTMLInputElement;
+            expect(input).not.toBeNull();
+            expect(input.disabled).toBe(false);
+        });
+
+        act(() => {
+            (reactProps(input)?.onChange as (e: { target: { value: string } }) => void)?.({
+                target: { value: 'ls -la' },
+            });
+        });
+        await act(async () => {
+            const fresh = container.querySelector('[data-terminal-input]') as HTMLInputElement;
+            (reactProps(fresh)?.onKeyDown as (e: { key: string; preventDefault: () => void }) => void)?.({
+                key: 'Enter',
+                preventDefault() {},
+            });
+        });
+
+        // The POST fired to the stdin endpoint with the typed line as {line}.
+        await waitFor(() => expect(posted.length).toBe(1));
+        expect(posted[0]?.method).toBe('POST');
+        expect(posted[0]?.url).toContain('/team/processes/send-agent/stdin');
+        expect(JSON.parse(posted[0]?.body ?? '{}')).toEqual({ line: 'ls -la' });
+
+        // Input clears on a 200 (R2 clear-on-success).
+        await waitFor(() => {
+            const el = container.querySelector('[data-terminal-input]') as HTMLInputElement;
+            expect(el.value).toBe('');
+        });
+
+        resetFetchForTesting();
+        restoreEventSource();
+        resetMockSources();
+    });
+
+    test('AC2: on a failed stdin POST, the typed text is retained and an error is shown', async () => {
+        installMockEventSource();
+        resetMockSources();
+        setFetchForTesting(
+            mockFetch(async (req: Request) => {
+                if (req.method === 'POST') {
+                    return new Response(JSON.stringify({ error: 'process not writable' }), { status: 500 });
+                }
+                return new Response(
+                    JSON.stringify({
+                        processes: [
+                            { agentId: 'fail-agent', pid: 1, status: 'running', startedAt: 'x', exitCode: null },
+                        ],
+                    }),
+                    { status: 200 },
+                );
+            }),
+        );
+
+        const { container } = render(React.createElement(MemberTerminal, { agentId: 'fail-agent' }));
+
+        let input!: HTMLInputElement;
+        await waitFor(() => {
+            input = container.querySelector('[data-terminal-input]') as HTMLInputElement;
+            expect(input).not.toBeNull();
+            expect(input.disabled).toBe(false);
+        });
+
+        act(() => {
+            (reactProps(input)?.onChange as (e: { target: { value: string } }) => void)?.({
+                target: { value: 'broken cmd' },
+            });
+        });
+        await act(async () => {
+            const fresh = container.querySelector('[data-terminal-input]') as HTMLInputElement;
+            (reactProps(fresh)?.onKeyDown as (e: { key: string; preventDefault: () => void }) => void)?.({
+                key: 'Enter',
+                preventDefault() {},
+            });
+        });
+
+        // The server error surfaces to the operator (R2 error shown).
+        await waitFor(() => {
+            const err = container.querySelector('[data-input-error]');
+            expect(err).not.toBeNull();
+            expect(err?.textContent).toContain('process not writable');
+        });
+
+        // The typed text is NOT lost on failure (R2 retain-on-failure).
+        const el = container.querySelector('[data-terminal-input]') as HTMLInputElement;
+        expect(el.value).toBe('broken cmd');
 
         resetFetchForTesting();
         restoreEventSource();
