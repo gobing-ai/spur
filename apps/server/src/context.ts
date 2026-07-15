@@ -50,8 +50,8 @@ import {
 import type { HitlResponder } from '@gobing-ai/ts-dual-workflow-engine';
 import type { EventBus, JobQueue, SchedulerAdapter } from '@gobing-ai/ts-infra';
 import type { ApplicationRuntime } from '@gobing-ai/ts-infra/application';
-import type { FileSystem } from '@gobing-ai/ts-runtime';
-import { ProcessExecutor } from '@gobing-ai/ts-runtime';
+import type { FileSystem, ProcessRegistry } from '@gobing-ai/ts-runtime';
+import { createInMemoryProcessRegistry, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { ServerBootConfig } from './bootstrap';
 
 /**
@@ -139,6 +139,13 @@ export interface ServerContext {
      * OS tree walk + supervisor overlay for Observability → Processes.
      */
     processInventory(): ProcessInventoryService;
+
+    /**
+     * Shared ProcessExecutor registry for this serve process (ts-runtime 0.4.10 /
+     * spur#0264). Injected into supervisor + AgentService executors so the Teams
+     * Processes tab can list all harness-launched runs, not only supervisor rows.
+     */
+    processRegistry(): ProcessRegistry;
 
     /**
      * Lazy, cached token-ledger tail reader (task 0245).
@@ -294,6 +301,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
     let teamSvc: TeamService | undefined;
     let supervisorSvc: SupervisorService | undefined;
     let processInventorySvc: ProcessInventoryService | undefined;
+    let processRegistrySvc: ProcessRegistry | undefined;
     let tokenLedgerSvc: TokenLedgerService | undefined;
     let agentSvc: AgentService | undefined;
     let ruleSvc: RuleService | undefined;
@@ -374,9 +382,14 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
             return teamSvc;
         },
 
+        processRegistry(): ProcessRegistry {
+            processRegistrySvc ??= createInMemoryProcessRegistry();
+            return processRegistrySvc;
+        },
+
         supervisor(): SupervisorService {
             if (!supervisorSvc) {
-                const pe = new ProcessExecutor();
+                const pe = new NodeProcessExecutor({ registry: this.processRegistry() });
                 supervisorSvc = new SupervisorServiceImpl({
                     processExecutor: pe,
                     eventBus: bridgeEventBus(eventsBus),
@@ -413,6 +426,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                 env: options.env ?? {},
                 output: NOOP_OUTPUT,
                 events: bridgeEventBus(eventsBus),
+                processRegistry: this.processRegistry(),
             });
             return agentSvc;
         },

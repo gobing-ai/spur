@@ -35,7 +35,9 @@ export const teamModule: ServerModule = {
     mount(app: Hono, ctx: ServerContext | undefined): void {
         if (!ctx) return;
 
-        // ── GET /api/team/processes — list supervised processes ──
+        // ── GET /api/team/processes — supervised list + ProcessRegistry snapshot ──
+        // `processes` remains the supervisor-controlled list (start/stop/attach).
+        // `executions` is the full ts-runtime ProcessRegistry watch list (spur#0264).
         app.get('/api/team/processes', (c) => {
             const supervisor = ctx.supervisor();
             const processes = supervisor.list().map((p) => ({
@@ -45,7 +47,29 @@ export const teamModule: ServerModule = {
                 startedAt: p.startedAt,
                 exitCode: p.exitCode ?? null,
             }));
-            return c.json({ processes, count: processes.length });
+            const executions = ctx
+                .processRegistry()
+                .listExecutions()
+                .map((e) => ({
+                    id: e.id,
+                    label: e.label ?? e.command,
+                    command: e.command,
+                    args: [...e.args],
+                    pid: e.pid ?? null,
+                    status: e.status,
+                    startedAt: e.startedAt,
+                    exitedAt: e.exitedAt ?? null,
+                    exitCode: e.exitCode ?? null,
+                    source: e.source,
+                    teamId: e.teamId ?? null,
+                    agentId: e.agentId ?? null,
+                }));
+            return c.json({
+                processes,
+                count: processes.length,
+                executions,
+                executionsCount: executions.length,
+            });
         });
 
         // ── POST /api/team/agents/:id/start — spawn a supervised agent ──

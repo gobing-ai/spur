@@ -85,6 +85,16 @@ function ctxWithStubs(opts: {
     };
     const ctx = {
         supervisor: () => supervisor,
+        // Empty registry by default — routes that read processRegistry() must not throw.
+        processRegistry: () => ({
+            listExecutions: () => [],
+            getExecution: () => undefined,
+            subscribe: () => () => {},
+            begin: () => '',
+            update: () => {},
+            complete: () => {},
+            clear: () => {},
+        }),
         ...(opts.teamService ? { teamService: () => opts.teamService } : {}),
     } as unknown as ServerContext;
     return { ctx, stdinCalls, startCalls, stopCalls };
@@ -99,9 +109,16 @@ describe('team module', () => {
 
             const res = await app.fetch(new Request('http://localhost/api/team/processes'));
             expect(res.status).toBe(200);
-            const body = (await res.json()) as { processes: unknown[]; count: number };
+            const body = (await res.json()) as {
+                processes: unknown[];
+                count: number;
+                executions: unknown[];
+                executionsCount: number;
+            };
             expect(body.processes).toEqual([]);
             expect(body.count).toBe(0);
+            expect(body.executions).toEqual([]);
+            expect(body.executionsCount).toBe(0);
         });
 
         test('returns process entries with id, pid, status, startedAt', async () => {
@@ -125,6 +142,57 @@ describe('team module', () => {
             expect(body.processes[0]?.pid).toBe(12345);
             expect(body.processes[0]?.status).toBe('running');
             expect(body.processes[0]?.startedAt).toBe('2026-07-05T00:00:00.000Z');
+        });
+
+        test('includes ProcessRegistry executions alongside supervised list (0264)', async () => {
+            const entry: ProcessEntry = {
+                agentId: 'planner',
+                pid: 12345,
+                status: 'running',
+                startedAt: '2026-07-05T00:00:00.000Z',
+                exitCode: null,
+                ringBuffer: [],
+            };
+            const { ctx } = ctxWithStubs({ list: [entry] });
+            // Override registry with a one-shot execution.
+            (ctx as { processRegistry: () => unknown }).processRegistry = () => ({
+                listExecutions: () => [
+                    {
+                        id: 'pe_1',
+                        label: 'git.status',
+                        command: 'git',
+                        args: ['status'],
+                        pid: 99,
+                        startedAt: '2026-07-05T01:00:00.000Z',
+                        exitedAt: '2026-07-05T01:00:01.000Z',
+                        exitCode: 0,
+                        source: 'one-shot' as const,
+                        status: 'exited' as const,
+                    },
+                ],
+                getExecution: () => undefined,
+                subscribe: () => () => {},
+                begin: () => '',
+                update: () => {},
+                complete: () => {},
+                clear: () => {},
+            });
+            const app = new Hono();
+            teamModule.mount(app, ctx);
+
+            const res = await app.fetch(new Request('http://localhost/api/team/processes'));
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as {
+                processes: unknown[];
+                count: number;
+                executions: Array<Record<string, unknown>>;
+                executionsCount: number;
+            };
+            expect(body.count).toBe(1);
+            expect(body.executionsCount).toBe(1);
+            expect(body.executions[0]?.id).toBe('pe_1');
+            expect(body.executions[0]?.source).toBe('one-shot');
+            expect(body.executions[0]?.command).toBe('git');
         });
     });
 

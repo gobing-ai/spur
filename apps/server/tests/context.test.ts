@@ -397,6 +397,19 @@ describe('createServerContext', () => {
         expect(svc).toBeDefined();
     });
 
+    test('processRegistry() is shared and cached (0264)', () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
+        const r1 = ctx.processRegistry();
+        const r2 = ctx.processRegistry();
+        expect(r1).toBe(r2);
+        expect(typeof r1.listExecutions).toBe('function');
+        expect(r1.listExecutions()).toEqual([]);
+        // Trigger supervisor so it binds the same registry via NodeProcessExecutor.
+        expect(ctx.supervisor()).toBeDefined();
+        expect(ctx.processRegistry()).toBe(r1);
+    });
+
     // task 0226 F2 — server-native AgentService/RuleService/WorkflowAppService
     // accessors. The accessor must return a service whose underlying bus is
     // the canonical server EventBus, so rule.*/agent.*/workflow.* events
