@@ -6,6 +6,7 @@ const VARIANT_CLASSES = {
     error: 'btn-error',
     outline: 'btn-outline',
     accent: 'btn-accent',
+    warning: 'btn-warning',
 } as const;
 
 const SIZE_CLASSES = {
