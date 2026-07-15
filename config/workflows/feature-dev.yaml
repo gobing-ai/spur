@@ -60,10 +60,10 @@ states:
 
   - id: execute-tasks
     description: >
-      Drive EVERY pending task under the feature to done. The agent enumerates the work with
-      `spur task list --feature ${featureId} --status todo --json`, then runs each task through
-      task-pipeline.yaml (precheck → implement → test → review → approve → verify → record → done). It
-      stops and reports on the first non-PASS verdict — a failing task fails the feature.
+      Drive EVERY pending task under the feature to done (e.g. `/sp:dev-runall --feature ${featureId} --auto`).
+      The agent enumerates the work with `spur task list --feature ${featureId} --status todo --json`,
+      then runs each task through task-pipeline.yaml (precheck → implement → test → review → approve → verify → record → done).
+      It stops and reports on the first non-PASS verdict — a failing task fails the feature.
     onEnter:
       - kind: agent.run
         options:

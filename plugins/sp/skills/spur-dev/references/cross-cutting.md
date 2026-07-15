@@ -232,7 +232,7 @@ invariants that keep the pipeline set coherent as new ones are added.
 | `planning-pipeline.yaml` | Design (known slug/task → design handoff) | `/sp:dev-plan` | `handoff`, `cancelled` |
 | `task-pipeline.yaml` | Execution (one task → done) | `/sp:dev-run` | `done`, `failed` |
 | `wrapup-pipeline.yaml` | Wrap-up (completed tasks → learning + metrics + doc-sync) | `/sp:dev-wrap`, `/sp:dev-wrapall` | `done`, `skipped` |
-| `feature-dev.yaml` | Umbrella (brainstorm → plan → execute → feature-verify) | `/sp:dev-runall --feature` | `done`, `failed` |
+| `feature-dev.yaml` | Umbrella (brainstorm → plan → execute → feature-verify) | `/sp:dev-runall --feature <id>` (or `--tasks feature:<id>`) | `done`, `failed` |
 | `basic.yaml` | Simple (generic implement/check/fix loop) | direct `spur workflow run` | `done`, `failed` |
 | `feature-lifecycle.yaml` | Feature status FSM (entity lifecycle, not a phase pipeline) | `spur feature update` | `done`, `cancelled` |
 | `task-lifecycle.yaml` | Task status FSM (entity lifecycle, not a phase pipeline) | `spur task update` | `done`, `cancelled` |

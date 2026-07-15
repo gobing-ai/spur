@@ -102,7 +102,7 @@ On HITL pause, surface the run id and continue instruction:
 `spur workflow continue <run-id> --yes` to approve, or provide feedback.
 
 The pipeline outputs at handoff: feature id, task WBS list, and the next command to run
-(`/sp:dev-run <first-wbs>` or `/sp:dev-runall --tasks feature:<id>`).
+(`/sp:dev-run <first-wbs>` or `/sp:dev-runall --feature <id>` (or `--tasks feature:<id>`)).
 
 ## Platform Notes
 

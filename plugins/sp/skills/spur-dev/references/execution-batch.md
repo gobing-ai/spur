@@ -40,13 +40,37 @@ state, decide continue/halt, and emit the batch report. It does **not** decide h
 
 ## Step 1 — Selector resolution (R1)
 
-`--tasks <value>` resolves to a frozen set of task WBS numbers. Resolution happens **once, at
+The batch accepts either `--tasks <value>` or the convenience `--feature <id>`.
+
+**Normalization helper (pseudo-code / comment for implementers):**
+
+```ts
+// In command layer or batch resolver (before passing to super-coder)
+function normalizeArgs(raw: Args): Args {
+  const args = { ...raw };
+  if (args.feature && !args.tasks) {
+    args.tasks = `feature:${args.feature}`;
+    // optional: delete args.feature; or keep for reporting
+  }
+  if (args.feature && args.tasks) {
+    // explicit --tasks wins (per Option A)
+    console.warn(`--feature ignored because --tasks was provided`);
+  }
+  return args;
+}
+```
+
+**Normalization rules (performed by the command layer before the skill sees $ARGUMENTS, or by the batch resolver):**
+- If `--feature FOO` is present and `--tasks` is absent, treat the effective selector as `feature:FOO`.
+- If both are present, `--tasks` wins (with a one-line note in the batch report).
+
+`--tasks <value>` (or the effective value after normalization) resolves to a frozen set of task WBS numbers. Resolution happens **once, at
 kickoff** — the driver never re-queries `spur task list` to recompute membership mid-batch (R2.1).
 
 | Selector form | Regex / match | Resolution |
 |---|---|---|
 | Explicit WBS list | `^[0-9, ]+$` | Split on comma; validate each token is a 4-digit WBS; collect the explicit set. (R1.1) |
-| `feature:<id>` | literal `feature:` prefix | `spur task list --feature <id> --json`; collect `wbs` from each row. (R1.3) |
+| `feature:<id>` (via `--tasks` or `--feature <id>`) | literal `feature:` prefix or `--feature` flag | `spur task list --feature <id> --json`; collect `wbs` from each row. The `--feature` flag is sugar that becomes `--tasks feature:<id>` at the command layer. (R1.3) |
 | `ready` | literal `ready` | Resolve the union of `spur task list --status todo --json` + `spur task list --status backlog --json`, drop tasks with open children (R1.5, umbrella-parent exclusion below), then keep only tasks whose every `dependencies[]` entry resolves to `status == done` (via `spur task show <dep> --json`). Report each excluded task with its unmet dependency. (R1.4) |
 | Status pseudo-list | `todo` \| `backlog` \| `wip` \| `blocked` \| `testing` | `spur task list --status <value> --json`; collect `wbs` from each row. (R1.2) |
 | *(else)* | no match | Error: "unknown selector `<value>`" — list the valid forms and halt before running anything. |

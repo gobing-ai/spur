@@ -202,12 +202,12 @@ states:
   - id: handoff
     description: >
       Terminal — idea pipeline complete. Output: feature id, task WBS list, and
-      the next command to run (/sp:dev-run <first-wbs> or /sp:dev-runall --tasks feature:<id>).
+      the next command to run (/sp:dev-run <first-wbs> or /sp:dev-runall --feature <id> or --tasks feature:<id>).
       No task execution — the pipeline stops here.
     onEnter:
       - kind: note
         options:
-          message: "Idea pipeline handoff. Feature: ${vars.featureId}. Tasks created. Next: /sp:dev-runall --tasks feature:${vars.featureId}"
+          message: "Idea pipeline handoff. Feature: ${vars.featureId}. Tasks created. Next: /sp:dev-runall --feature ${vars.featureId}"
       # Checkpoint write: record session state for resume (Phase 4, task 0171 R3)
       - kind: shell
         options:

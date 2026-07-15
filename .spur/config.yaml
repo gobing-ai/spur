@@ -36,6 +36,12 @@ agent:
     - name: omp-zai
       agent: omp
       model: zai/glm-5.2
+    - name: omp-xf
+      agent: omp
+      model: astron-code-latest
+    - name: pi-xf
+      agent: pi
+      model: astron-code-latest
     - name: omp-zai-volc
       agent: omp
       model: volc/glm-5.2
@@ -49,15 +55,18 @@ agent:
       agent: codex
     - name: claude
       agent: claude
+    - name: grok
+      agent: grok
   default-by-phase:
-    dev-brainstorm: claude
-    dev-fixall: omp-zai
-    dev-plan: claude
-    dev-run: omp-zai
-    dev-changelog: omp-zai
+    dev-brainstorm: grok
+    dev-fixall: omp-xf
+    dev-plan: grok
+    dev-run: omp-xf
+    dev-runall: omp-xf
+    dev-changelog: omp-xf
     dev-gitmsg: minimax
-    dev-review: claude
-    dev-verify: claude
+    dev-review: grok
+    dev-verify: grok
 
   # ── Teams (feature M) — declarative rosters materialized by `spur team up` ──
   # A sample team so the Teams board tabs (Roster / Messages / Activity /

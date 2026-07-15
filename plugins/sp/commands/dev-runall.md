@@ -1,6 +1,6 @@
 ---
 description: Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via task-pipeline.yaml, emit a batch report
-argument-hint: "--tasks <selector> [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <name|auto>] [--json] [--wrap] [--continue]"
+argument-hint: "--tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <name|auto>] [--json] [--wrap] [--continue]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 ---
 
@@ -16,7 +16,7 @@ mode is opt-in and only applies to an independent subset that passes the fan-out
 
 ## When to use
 
-- A feature's task batch is ready to execute end-to-end ("run all todo tasks in feature A1").
+- A feature's task batch is ready to execute end-to-end (`/sp:dev-runall --feature A1` or `--tasks feature:A1`).
 - A dependency-ordered sweep is needed ("run every `ready` task").
 - The operator says "run the batch", "execute these tasks", or "runall todo".
 
@@ -27,7 +27,8 @@ contract.
 
 | Argument | Description | Default |
 |----------|-------------|---------|
-| `--tasks <selector>` | The task set to run (required). See selector grammar below. | (required) |
+| `--tasks <selector>` | The task set to run. See selector grammar below. Mutually exclusive with `--feature` in the simple case (see below). | (required unless `--feature`) |
+| `--feature <id>` | Convenience shorthand for `--tasks feature:<id>`. If `--tasks` is also supplied, the explicit `--tasks` wins. | (none) |
 | `--mode <sequential\|parallel>` | Batch execution mode. `sequential` runs the topo-ordered plan one task at a time. `parallel` first applies the `sp:parallel-execution` dependency/file-overlap/token-budget checks, then fans out only the safe independent subset. | `sequential` |
 | `--keep-going` | On a failed task, skip its in-batch dependents and continue independents. Default halts on first failure. | off (stop-the-batch) |
 | `--auto` | Skip the HITL approve gate on each per-task run (sets `profile=auto` in each pipeline's `--vars`). Propagates to every task in the batch. | off |
@@ -36,15 +37,25 @@ contract.
 | `--wrap` | Trigger `wrapup-pipeline.yaml` after the batch completes. Equivalent to running `/sp:dev-wrapall` after execution. Does not change the execution pipeline. | off |
 | `--continue` | Resume an interrupted batch: read the latest checkpoint from `.spur/memory/sessions/` and surface its `next_action` before resuming. See "Resume from checkpoint" below. | off |
 
-### Selector grammar (`--tasks <value>`)
+### Selector grammar
+
+You can specify the set in two equivalent ways:
+
+- `--tasks <value>` (full power)
+- `--feature <id>` (convenience for the common case)
+
+When `--feature M1` is used without `--tasks`, it is treated exactly as `--tasks feature:M1`.
 
 | Form | Example | Resolves to |
 |---|---|---|
 | Explicit WBS list | `--tasks 0040,0042,0051` | Exactly those tasks (comma-separated, order irrelevant — the driver re-orders by dependency). |
 | Status pseudo-list | `--tasks todo` | Every task with that status via `spur task list --status todo --json`. Valid: `todo`, `backlog`, `wip`, `blocked`, `testing`. |
-| Feature-scoped | `--tasks feature:A1` | Every task whose `feature_id` edge is A1 via `spur task list --feature A1 --json`. |
+| Feature-scoped (via `--tasks`) | `--tasks feature:A1` | Every task whose `feature_id` edge is A1 via `spur task list --feature A1 --json`. |
+| Feature shorthand | `--feature A1` | Same as `--tasks feature:A1`. |
 | `ready` | `--tasks ready` | Tasks in `todo`/`backlog` whose every `dependencies[]` entry resolves to `done`. Reports each excluded task with its unmet dependency. |
 | *(unknown)* | `--tasks bogus` | Error: lists the valid forms and halts before running anything. |
+
+**Precedence:** If both `--feature` and `--tasks` are supplied, the explicit `--tasks` value is used (the `--feature` is ignored with a note in the report for clarity). This keeps the general selector mechanism authoritative.
 
 Resolution happens **once, at kickoff** — the set is frozen and never re-queried mid-batch.
 

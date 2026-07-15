@@ -15,15 +15,15 @@ table is the index; the per-operation sections below are the detail.
 
 | Pattern | Meaning | Commands |
 |---------|---------|----------|
-| `Skill()` | Delegates to a backing skill via `Skill(skill="<skill>", args="<op> $ARGUMENTS")`. The skill owns the procedure; the command is a thin entry point. | implement, unit, review, verify, run, refine, plan, brainstorm, runall, wrap, wrapall, idea |
+| `Skill()` | Delegates to a backing skill via `Skill(skill="<skill>", args="<op> $ARGUMENTS")`. The skill owns the procedure; the command is a thin entry point. | implement, unit, review, verify, verifyall, run, refine, plan, brainstorm, runall, parallel, wrap, wrapall, idea |
 | `inline` | The procedure is defined directly in the command file. No `Skill()` delegation — the command carries its own steps. | changelog, gitmsg, fixall, handover |
 
-The `Skill()` commands back onto five skills: `sp:spur-dev` (planning + execution workflow + batch),
+The `Skill()` commands back onto six skills: `sp:spur-dev` (planning + execution workflow + batch),
 `sp:code-implementation` (single implement step), `sp:code-testing` (unit/coverage work),
-`sp:code-verification` (SECUA review + traceability), and `sp:brainstorm` (structured ideation). The
-`runall` operation (#13) is `sp:spur-dev`'s batch entry — it delegates the driver loop to the
+`sp:code-verification` (SECUA review + traceability), `sp:parallel-execution` (fan-out / parallel batch),
+and `sp:brainstorm` (structured ideation). The `runall` operation (#13) is `sp:spur-dev`'s batch entry — it delegates the driver loop to the
 `sp:super-coder` agent (the batch orchestrator) per [execution-batch.md](execution-batch.md).
-`dev-brainstorm` carries the two artifact exits — `--task` (one task) and `--feature` (validated
+`dev-parallel` (#13a) is the parallel counterpart. `dev-brainstorm` carries the two artifact exits — `--task` (one task) and `--feature` (validated
 feature with BDD AC; the front-half entry that hands off to `dev-plan`). The 4 `inline` commands
 cover git tooling and operational utilities that have no natural skill home — creating a skill for
 each would be scope creep for one-liner procedures.
@@ -39,6 +39,7 @@ each would be scope creep for one-liner procedures.
 | 1 | unit | `dev-unit` | `Skill()` | `sp:code-testing` | `<target> [--coverage <pct>] [--agent <name\|auto>] [--auto]` |
 | 2 | review | `dev-review` | `Skill()` | `sp:code-verification` (`review`) + `sp:functional-review` + `sp:code-improvement` | `<wbs> [--agent <name\|auto>] [--focus <lens>] [--fix <none\|blockers-first\|all>] [--auto]` |
 | 3 | verify | `dev-verify` | `Skill()` | `sp:code-verification` (`verify`) | `<wbs> [--agent <name\|auto>] [--fix ...] [--focus <lens>] [--bdd] [--auto] [--force]` |
+| 3a | verifyall | `dev-verifyall` | `Skill()` → agent | `sp:spur-dev` (`verifyall`) | `--tasks <selector> [--feature <id>] [--agent <name\|auto>] [--fix ...] [--focus <lens>] [--bdd] [--auto] [--force] [--json]` |
 | 4 | run | `dev-run` | `Skill()` | `sp:spur-dev` (`run` / `implement`) | `<wbs> [--mode <full\|implement>] [--agent <name\|auto>] [--auto]` |
 | 5 | refine | `dev-refine` | `Skill()` | `sp:spur-dev` (`refine`) | `<wbs> [--focus <mode>] [--description <text>] [--agent <name\|auto>] [--auto] [--next]` |
 | 6 | plan | `dev-plan` | `Skill()` | `sp:spur-dev` (`plan`) | `"<description>" [--feature <id>] [--parent <feature-id>] [--agent <name\|auto>] [--design] [--auto]` |
@@ -48,7 +49,8 @@ each would be scope creep for one-liner procedures.
 | 10 | fixall | `dev-fixall` | `inline` | lint + test fix loop | `[--scope <path>]` |
 | 11 | handover | `dev-handover` | `inline` | structured doc generation | `"<blocker description>"` |
 | 12 | brainstorm | `dev-brainstorm` | `Skill()` | `sp:brainstorm` (`dev-brainstorm`) | `"<topic>" [--depth <basic\|detailed\|comprehensive>] [--options <n>] [--agent <name\|auto>] [--skip-discovery] [--task [<feature-id>]] [--feature [<parent-id>]] [--next]` |
-| 13 | runall | `dev-runall` | `Skill()` → agent | `sp:spur-dev` (`runall`) → `sp:super-coder` | `--tasks <selector> [--keep-going] [--auto] [--agent <name\|auto>] [--json]` |
+| 13 | runall | `dev-runall` | `Skill()` → agent | `sp:spur-dev` (`runall`) → `sp:super-coder` | `--tasks <selector> [--feature <id>] [--keep-going] [--auto] [--agent <name\|auto>] [--json] [--wrap] [--continue]` |
+| 13a | parallel | `dev-parallel` | `Skill()` | `sp:parallel-execution` | `--tasks <selector> [--feature <id>] [--mode <fan-out\|review-panel\|investigation>] [--agent <name\|auto>] [--json]` |
 | 14 | wrap | `dev-wrap` | `Skill()` | `spur workflow run` (wrapup-pipeline) | `<wbs> [--auto] [--merge]` |
 | 15 | wrapall | `dev-wrapall` | `Skill()` | `spur workflow run` (wrapup-pipeline) | `[--since <iso>] [--feature <id>] [--status <s>] [--auto] [--merge]` |
 | 16 | idea | `dev-idea` | `Skill()` | `spur workflow run` (idea-pipeline) | `"<idea>" [--auto] [--design] [--skip-design]` |
@@ -84,6 +86,14 @@ must not be changed without updating the backing skill.
 - **Backing:** `sp:code-verification` skill, `verify` mode.
 - **Behavior:** Status guard → change-scope detection → requirements traceability → SECUA review → verdict aggregation → findings write-back → verdict-artifact emission → optional `--fix` pass. The verdict gates the pipeline's `done` transition. With `--next`: the (post-`--fix`) PASS verdict → transition to `done` (FSM guard honored); PARTIAL/FAIL → stop and surface verdict.
 - **Delegation:** `Skill(skill="sp:code-verification", args="verify $ARGUMENTS")`
+
+### 3a. verifyall
+
+- **Purpose:** Batch verification of a set of tasks (or all tasks under a feature) against their requirements and AC. Produces per-task verdicts + a summary report with aggregate statistics (counts, table, overall batch verdict).
+- **Inputs:** `--tasks <selector>` (required unless `--feature`). `--feature <id>` (convenience for `--tasks feature:<id>`). Shared verify flags from `dev-verify` (`--agent`, `--fix`, `--focus`, `--bdd`, `--auto`, `--force`). `--json` for machine-readable summary report.
+- **Backing:** `sp:spur-dev` skill, `verifyall` operation (resolves the set using the shared selector grammar, dispatches per-task verify via `sp:code-verification` verify mode, writes per-task artifacts, aggregates and emits the batch summary report).
+- **Behavior:** Resolve + freeze the set (supports `--feature` sugar). For each task: apply status guard, requirements traceability + AC + SECUA review, write `## Testing` + verdict.json. After the batch, emit a structured summary report (markdown or `--json`). Per-task behavior matches single `dev-verify`. Overall batch verdict: any FAIL → FAIL, any PARTIAL → PARTIAL, all PASS → PASS.
+- **Delegation:** `Skill(skill="sp:spur-dev", args="verifyall $ARGUMENTS")`
 
 ### 4. run
 

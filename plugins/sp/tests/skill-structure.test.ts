@@ -297,6 +297,8 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(superCoder).not.toContain('Never run tasks in parallel (v1)');
         expect(executionBatch).toContain('optional parallel fan-out');
         expect(devRunall).toContain('--mode <sequential\\|parallel>');
+        expect(devRunall).toContain('--feature <id>');
+        expect(devParallel).toContain('--feature <id>');
         expect(devParallel).toContain('args="$ARGUMENTS"');
     });
 

@@ -1,6 +1,6 @@
 ---
 description: Fan out independent tasks or investigations in parallel via subagents — choose the right pattern and synthesize results
-argument-hint: "--tasks <selector> [--mode <fan-out|review-panel|investigation>] [--agent <name|auto>] [--json]"
+argument-hint: "--tasks <selector> [--feature <id>] [--mode <fan-out|review-panel|investigation>] [--agent <name|auto>] [--json]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 ---
 
@@ -21,7 +21,8 @@ Fan out independent work across subagents. Choose the right fan-out pattern for 
 
 | Argument | Description | Default |
 |----------|-------------|---------|
-| `--tasks <selector>` | Task selector — same syntax as `dev-runall` (`feature:<id>`, `status:<s>`, comma-separated WBS list) | (required) |
+| `--tasks <selector>` | The task set to fan out. See selector grammar (or use `--feature`). | (required unless `--feature`) |
+| `--feature <id>` | Convenience shorthand for `--tasks feature:<id>`. If `--tasks` is also supplied, the explicit `--tasks` wins. | (none) |
 | `--mode <fan-out\|review-panel\|investigation>` | Fan-out pattern. `fan-out`: independent-task batch (default). `review-panel`: competency-lens review. `investigation`: N-way investigation. | `fan-out` |
 | `--agent <name\|auto>` | Spawn each subagent under this agent. Omit → each subagent uses the configured default executor. | (configured default) |
 | `--json` | Output machine-readable JSON | off |
@@ -32,7 +33,7 @@ Thin wrapper: delegates to `sp:parallel-execution` which owns the decision frame
 
 ### Fan-out mode (default)
 
-1. Resolve `--tasks` selector to a task set via `spur task list --json`.
+1. Resolve the selector: `--feature <id>` is normalized to `--tasks feature:<id>` (or use `--tasks` directly). Then resolve to a task set via `spur task list --json`.
 2. Topo-sort by dependencies; identify the independent subset (zero dependency edges, no file-overlap).
 3. Dispatch each independent task to a subagent via `spur agent run`.
 4. Synthesize subagent outputs per the [result-synthesis contract](../skills/parallel-execution/references/result-synthesis.md).

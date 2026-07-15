@@ -1,7 +1,7 @@
 ---
 name: super-coder
 description: |
-  Task pipeline driver — runs a single task end-to-end through its pipeline, OR a set of tasks in dependency-correct order, OR fans out independent tasks in parallel via the sp:parallel-execution decision framework. Drives the pipeline run + the batch driver loop defined in sp:spur-dev (single task: pipeline run → verdict inspect; sequential batch: resolve+freeze → topo-sort → per-task pipeline run → verdict inspect → continue/halt → batch report; parallel batch: resolve+freeze → topo-sort → identify independent subset → fan out via sp:parallel-execution patterns → synthesize results → batch report). Use PROACTIVELY when the operator asks to "run this task end to end", "drive task 0042 through the pipeline", or runs "/sp:dev-runall" / asks to "run all tasks", "run the batch", "execute the todo set", "runall", "fan out", "run in parallel", "parallel tasks".
+  Task pipeline driver — runs a single task end-to-end through its pipeline, OR a set of tasks in dependency-correct order, OR fans out independent tasks in parallel via the sp:parallel-execution decision framework. Drives the pipeline run + the batch driver loop defined in sp:spur-dev (single task: pipeline run → verdict inspect; sequential batch: resolve+freeze → topo-sort → per-task pipeline run → verdict inspect → continue/halt → batch report; parallel batch: resolve+freeze → topo-sort → identify independent subset → fan out via sp:parallel-execution patterns → synthesize results → batch report). Use PROACTIVELY when the operator asks to "run this task end to end", "drive task 0042 through the pipeline", or runs "/sp:dev-runall --feature M1" (or "/sp:dev-runall --tasks feature:M1", "/sp:dev-parallel --feature M1") / asks to "run all tasks", "run the batch", "execute the todo set", "runall", "fan out", "run in parallel", "parallel tasks".
 
   <example>
   Context: Single-task end-to-end lifecycle run
@@ -13,7 +13,7 @@ description: |
   <example>
   Context: Batch execution of a feature's task set
   user: "Run all todo tasks in feature A1."
-  assistant: "Delegating to sp:super-coder — resolving the feature:A1 set, topo-sorting by dependencies, running each through task-pipeline.yaml, emitting a batch report."
+  assistant: "Delegating to sp:super-coder — resolving the feature:A1 set (via --feature or --tasks feature:A1), topo-sorting by dependencies, running each through task-pipeline.yaml, emitting a batch report."
   <commentary>A batch of tasks needs the orchestrator's between-runs judgment: set resolution, dependency ordering, failure policy, continue/halt decisions.</commentary>
   </example>
 tools: [Read, Grep, Glob, Bash, Skill]
@@ -45,7 +45,10 @@ This agent is the **executor of that reference**; the reference is the SSOT for 
 
 You own the spaces **between** task runs:
 
-- **Resolve + freeze** the task set from `--tasks <selector>` (Step 1 of execution-batch.md).
+- **Resolve + freeze** the task set:
+    - from `--tasks <selector>`, or
+    - from the convenience `--feature <id>` (normalized by the command layer / resolver to `feature:<id>` per execution-batch.md Step 1).
+  (See also dev-runall and dev-parallel which now both accept `--feature`.)
 - **Topologically order** the frozen set by `dependencies[]` (Step 2). Abort on cycle; pre-block
   unmet out-of-set deps.
 - **Run each task** through `.spur/workflows/task-pipeline.yaml` via `spur workflow run --async`
@@ -67,9 +70,9 @@ You explicitly do **NOT** own step-level execution:
 
 ## When to use
 
-- `/sp:dev-runall --tasks <selector>` is invoked.
-- The operator asks to "run all tasks", "run the batch", "execute the todo set", "runall ready".
-- A feature's task batch is decomposed and ready for end-to-end execution.
+- `/sp:dev-runall --feature <id>` (or `--tasks feature:<id>`) , `/sp:dev-parallel --feature <id>` , or equivalent is invoked.
+- The operator asks to "run all tasks", "run the batch", "execute the todo set", "runall ready", or "fan out tasks for feature X".
+- A feature's task batch is decomposed and ready for end-to-end (sequential or parallel) execution.
 
 ## Skill invocation
 
@@ -78,7 +81,7 @@ routes to you. On other platforms, invoke this agent directly when the batch dri
 
 | Platform | Invocation |
 |----------|-----------|
-| Claude Code | Spawned by `/sp:dev-runall` → `Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")` → this agent |
+| Claude Code | Spawned by `/sp:dev-runall --feature <id>` (or `--tasks ...`) → `Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")` → this agent (also handles parallel via dev-parallel) |
 | Other platforms | Spawn this agent directly; read execution-batch.md and drive the loop |
 
 ## Decision autonomy
