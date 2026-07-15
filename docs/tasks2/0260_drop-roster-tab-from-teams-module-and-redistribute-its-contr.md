@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-15T05:35:23.327Z"
-updated_at: "2026-07-15T18:19:59.823Z"
+updated_at: "2026-07-15T21:17:57.104Z"
 ---
 
 ## 0260. Drop Roster tab from Teams module and redistribute its controls
@@ -168,9 +168,88 @@ This task is a pure removal + hygiene change. The interesting new UI lives in 02
 | `apps/web/tests/modules/teams/components.test.tsx:201` | 201–210 | Update TeamsShell test: 3 tabs not 4, remove `'Roster'` from expected labels, count `3`. |
 | `apps/web/tests/modules/teams/components.test.tsx:211–348` | removed | Delete 3 `RosterTab` tests (AC2, hint UX, autostart hint) and the `selecting a member drives Messages` test (depends on Roster default tab). |
 ### Testing
+Verified 2026-07-15 via `/sp:dev-verify 0260 --auto --focus all --fix all --force` (re-audit of a
+`done` task). Initial verdict **FAIL**; **PASS** after the `--fix all` pass.
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Verdict: PASS** (post-fix)
 
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 Remove Roster from `TEAMS_TABS` + import | MET | `apps/web/src/modules/teams/tabs.ts:13` — import and `{ id: 'roster' }` entry gone; survivors keep ids/order (commit `a70165f1`). `apps/web/tests/modules/teams/tabs.test.ts` green. |
+| R2 Default `activeId` no longer Roster | MET | `apps/web/src/modules/teams/TeamsShell.tsx:7` — `useState<string>('terminal')` (was `TEAMS_TABS[0]?.id`). |
+| R3 Remove/nullify Roster-driven `useTeamsSelection` | MET *(fixed this run)* | Was **UNMET**: `MessagesTab` still filtered on `selectedMemberId`, whose only writer (`RosterTab.tsx:171`) was deleted → tab permanently stuck on its empty state. Fixed: `MessagesTab.tsx` now reads the unfiltered `GET /api/messages` feed and imports no context. `rg 'select\(' apps/web/src` → no production writer remains. |
+| R4 Audit/remove RosterTab references | MET *(fixed this run)* | `RosterTab.tsx` deleted; `rg 'data-roster-'` → none. Fixed this run: user-facing string "Select a member from the Roster…" (`MessagesTab.tsx:93`), plus stale comments in `TerminalTab.tsx:7,86,92`, `TeamsContext.tsx:3,13`, `index.tsx:8`, `observability/tabs.ts:25`, `observability/tabs.test.ts:28`. |
+| R5 Document redistribution | MET | Solution change-map (this file); `0262` Q&A "documented in 0260 redistribution"; `0259:104` records selection moving to the Terminal toolbar; M1 R4 AC carries `# Covered by task 0260`. |
+| R6 No compile/runtime breakage | MET *(fixed this run)* | Was **PARTIAL**: compile was clean but the Messages tab was unusable at runtime. `bun run lint` (biome + 7× tsc) exit 0; `bun test apps/web/tests/modules/teams/` → 42 pass / 0 fail. |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| @core R4 Roster tab completely removed; ids exactly `["terminal","messages","activity"]`; default `"terminal"` | MET | test | `apps/web/tests/modules/teams/tabs.test.ts:27`; `components.test.tsx:204` "renders exactly the 3 v1 tabs" — 42 pass / 0 fail. |
+| @core No runtime or compile breakage; `bun run check` passes; no `RosterTab` / `data-roster-*` in the delivered bundle | MET | command + test | `bun run lint` exit 0; `bun run test` → 2858 pass / 3 fail (3 are pre-existing sandbox port-bind + `ps` EPERM denials in `rpc-client`/server-context — untouched by this task; error: `Failed to start server. Is port 0 in use?`, syscall `listen`). `rg 'data-roster-'` → none; no `RosterTab` identifier in `src/`. |
+| @edge Redistribution notes in 0259 / 0262 + M1 R4 AC points here | MET | static-ref | `docs/tasks2/0262…md:78` ("documented in 0260 redistribution"), `:90`, `:121`; `docs/tasks2/0259…md:104`; M1 R4 scenario comment `# Covered by task 0260`. |
+
+**Regression guard proven, not assumed**
+
+The pre-existing Messages tests passed *only* because a test-only harness (`SelectOnMount`) called
+`select()` — injecting a state production could no longer produce. Green tests therefore masked a
+dead tab. The harness is deleted and replaced with tests that render `<MessagesTab />` exactly as the
+shell does (no provider, no preset selection). Confirmed these fail against the pre-fix component:
+
+```
+(fail) MessagesTab renders the global feed with no selection present (0260 R3)
+(fail) MessagesTab reads the unfiltered feed, not a per-agent inbox (0260 R3)
+error: useTeamsSelection must be used within TeamsProvider
+```
+
+**Commands run this turn**
+
+```
+bun run lint                                   → exit 0 (biome 487 files; 7 workspaces tsc)
+bun test apps/web/tests/modules/teams/         → 42 pass, 0 fail
+bun run test                                   → 2858 pass, 3 fail (pre-existing sandbox denials)
+```
+
+Coverage: N/A for the per-file gate — the change is React `.tsx` surface, excluded from the
+`bunfig.toml` per-file threshold (happy-dom). Behavior is covered by the three MessagesTab tests
+above; `tabs.ts` reports 100% line/function.
+
+**Residual risks (not blocking)**
+
+1. `TerminalTab restores persisted team+member from localStorage on mount (R6)` is **flaky** —
+   3/6 failures at `HEAD` vs 1/5 with this change, so it is pre-existing and not caused by 0260.
+   It is task **0263**'s surface (localStorage persistence), left unfixed here to avoid scope creep.
+2. `TeamsContext` / `TeamsProvider` now has **zero production consumers** (test-only). Retained
+   deliberately per this task's Q&A deferral; delete after 0261 lands. Comments updated to say so.
+3. The Messages composer was removed: it could only send to `selectedMemberId`, so it was
+   unreachable dead code once Roster was deleted. The operator→member send path is 0261's Terminal
+   input per M1. This supersedes 0254 AC5's composer — flagged for operator confirmation.
+
+**Confidence calibration**
+
+| Claim | Confidence | Basis |
+|-------|-----------|-------|
+| Roster was the sole writer of the `TeamsContext` selection | **HIGH** | Direct: `git show a70165f1~1:…/RosterTab.tsx` → `select(...)` at :171; `rg "\bselect\(\|\bclear\("` over `apps/web/src` → zero production callers now. |
+| Pre-fix, Messages was permanently stuck on its placeholder | **HIGH** (code-deduction, **not** browser-observed) | Chain, each link file-referenced: `TeamsShell.tsx:12` renders a real `<TeamsProvider>`; `TeamsContext.tsx:15-16` inits `selectedMemberId = null`; sole writer deleted; old `MessagesTab.tsx:90` returns the placeholder when falsy. Production therefore rendered the placeholder — it did **not** throw. |
+| The two new regression tests fail against the pre-fix component | **HIGH** | Observed this run: both `(fail)` with `useTeamsSelection must be used within TeamsProvider`. Note this exercises the *no-provider* path, which proves the coupling exists but is **not** the production path (see row above). |
+| Post-fix Messages renders the unfiltered feed correctly | **MEDIUM-HIGH** | Deterministic: 42 pass / 0 fail; lint + 7× tsc exit 0; response shape matched to `team-service.ts:266-281` (`listRecent`). **Not** browser-verified — see limitation below. |
+| The 3 full-suite failures are environmental, not regressions | **HIGH** | Observed: `Failed to start server. Is port 0 in use?`, syscall `listen`; in `rpc-client`/server-context files untouched by this task. |
+| The TerminalTab localStorage flake is pre-existing | **HIGH** | Measured: 3/6 failures on stashed `HEAD` vs 1/5 with this change. |
+
+**Verification limitation (explicit)**
+
+This change is UI surface and was **not** exercised in a browser. Browser/manual smoke — item 6 of this
+task's own Design ("Manual smoke in the board: Roster tab gone, default tab is Terminal") — could not
+be run here: this sandbox denies port binding, verified directly via
+`Bun.serve({port:0})` → `BIND DENIED: Failed to start server`. The same denial produces the 3 suite
+failures above. The PASS verdict rests on deterministic test/lint/typecheck evidence plus the
+code-deduction chain, which is what this task's AC actually demands (`bun run check` passes; no
+`RosterTab` / `data-roster-*` in the bundle) — no AC requires browser evidence, so the verdict is not
+downgraded. **Recommended before merge:** one manual smoke on a machine that can bind a port —
+confirm the Messages tab lists traffic across members instead of an empty state.
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
