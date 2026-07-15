@@ -1,11 +1,10 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import type React from 'react';
-import { type ReactNode, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
 import ActivityTab from '../../../src/modules/teams/ActivityTab';
 import MessagesTab from '../../../src/modules/teams/MessagesTab';
-import { TeamsProvider, useTeamsSelection } from '../../../src/modules/teams/TeamsContext';
 import TeamsShell from '../../../src/modules/teams/TeamsShell';
 import TerminalTab from '../../../src/modules/teams/TerminalTab';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
@@ -141,30 +140,6 @@ function jsonResponse(body: unknown): Response {
     });
 }
 
-/** Preset the shared Teams selection so a downstream tab can be tested in
- * isolation without driving the Roster round-trip. */
-function SelectOnMount({ teamId, memberId, children }: { teamId: string; memberId: string; children: ReactNode }) {
-    const { select } = useTeamsSelection();
-    useEffect(() => {
-        select(teamId, memberId);
-    }, [teamId, memberId, select]);
-    return <>{children}</>;
-}
-
-/**
- * Read a controlled input's React `onChange` off its fiber props and invoke it
- * directly. happy-dom + React 19 do not deliver `fireEvent.change`/`.input` to a
- * controlled input's onChange (capricorn86/happy-dom#856), so — like
- * task-kanban/task-filters.test.tsx bypasses dispatch by capturing onChange from
- * a mocked `@/ui`, this bypasses dispatch by reading the prop off the real node.
- */
-type OnChangeHolder = Record<string, { onChange?: (e: { target: { value: string } }) => void } | undefined>;
-function getReactOnChange(el: Element): ((e: { target: { value: string } }) => void) | undefined {
-    const holder = el as unknown as OnChangeHolder;
-    const key = Object.keys(holder).find((k) => k.startsWith('__reactProps$'));
-    return key ? holder[key]?.onChange : undefined;
-}
-
 let originalEventSource: typeof EventSource | undefined;
 
 beforeAll(() => {
@@ -211,17 +186,70 @@ describe('teams module components', () => {
         // The shell renders no more and no fewer than the 3 declared tabs.
         expect(container.querySelectorAll('[role="tab"]').length).toBe(3);
     });
-    test('MessagesTab refetches the inbox on a message.sent SSE event (0254 AC5/R6)', async () => {
-        let secondVisible = false;
-        const inboxCalls: string[] = [];
+    // Regression guard for the 0260 Roster removal: RosterTab was the only writer of
+    // the shared TeamsContext selection, so a MessagesTab that filters on that
+    // selection can never leave its empty state in production. This renders the tab
+    // exactly as the shell does — no provider, no preset selection — so a
+    // reintroduced selection gate fails here instead of shipping a dead tab.
+    test('MessagesTab renders the global feed with no selection present (0260 R3)', async () => {
         setFetchForTesting((async (input: RequestInfo | URL) => {
             const url = input instanceof Request ? input.url : String(input);
-            if (url.includes('/messages/inbox')) {
-                inboxCalls.push(url);
+            if (url.includes('/messages')) {
+                return jsonResponse({
+                    messages: [
+                        {
+                            id: 'm1',
+                            fromId: 'op',
+                            toId: 'planner',
+                            body: 'across-members',
+                            status: 'sent',
+                            createdAt: '2026-07-14T00:00:00.000Z',
+                            inReplyTo: null,
+                        },
+                    ],
+                    count: 1,
+                });
+            }
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { getByText, queryByText } = render(<MessagesTab />);
+
+        await waitFor(() => expect(getByText('across-members')).toBeDefined());
+        // The dead-end placeholder pointed at a tab that no longer exists.
+        expect(queryByText(/Select a member from the Roster/)).toBeNull();
+        // Feed spans recipients, so each row must name who it was addressed to.
+        expect(getByText('op → planner')).toBeDefined();
+    });
+
+    test('MessagesTab reads the unfiltered feed, not a per-agent inbox (0260 R3)', async () => {
+        const urls: string[] = [];
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            urls.push(url);
+            return jsonResponse({ messages: [], count: 0 });
+        }) as unknown as typeof fetch);
+
+        render(<MessagesTab />);
+
+        await waitFor(() => expect(urls.length).toBeGreaterThan(0));
+        // An `?agent=` query would re-couple the tab to a per-member selection.
+        expect(urls.some((u) => u.includes('/messages/inbox'))).toBe(false);
+        expect(urls.some((u) => u.includes('agent='))).toBe(false);
+    });
+
+    test('MessagesTab refetches the global feed on a message.sent SSE event (0254 AC5/R6)', async () => {
+        let secondVisible = false;
+        const feedCalls: string[] = [];
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/messages')) {
+                feedCalls.push(url);
                 const messages = [
                     {
                         id: 'm1',
                         fromId: 'op',
+                        toId: 'planner',
                         body: 'first',
                         status: 'sent',
                         createdAt: '2026-07-14T00:00:00.000Z',
@@ -232,6 +260,7 @@ describe('teams module components', () => {
                               {
                                   id: 'm2',
                                   fromId: 'op',
+                                  toId: 'builder',
                                   body: 'live-arrived',
                                   status: 'sent',
                                   createdAt: '2026-07-14T00:01:00.000Z',
@@ -245,16 +274,10 @@ describe('teams module components', () => {
             return jsonResponse({ ok: true });
         }) as unknown as typeof fetch);
 
-        const { getByText } = render(
-            <TeamsProvider>
-                <SelectOnMount teamId="alpha" memberId="planner">
-                    <MessagesTab />
-                </SelectOnMount>
-            </TeamsProvider>,
-        );
+        const { getByText } = render(<MessagesTab />);
 
         await waitFor(() => expect(getByText('first')).toBeDefined());
-        const before = inboxCalls.length;
+        const before = feedCalls.length;
         expect(FakeEventSource.instances.length).toBeGreaterThan(0);
 
         // A new message lands server-side; fire the SSE event the board emits.
@@ -273,39 +296,7 @@ describe('teams module components', () => {
         });
 
         await waitFor(() => expect(getByText('live-arrived')).toBeDefined());
-        expect(inboxCalls.length).toBeGreaterThan(before);
-    });
-
-    test('MessagesTab composer POSTs /api/messages for the selected member (0254 AC5)', async () => {
-        const posts: string[] = [];
-        setFetchForTesting((async (input: RequestInfo | URL) => {
-            const req = input instanceof Request ? input : new Request(String(input));
-            if (req.url.includes('/messages/inbox')) return jsonResponse({ messages: [], count: 0 });
-            if (req.method === 'POST') {
-                posts.push(await req.text());
-                return jsonResponse({ ok: true });
-            }
-            return jsonResponse({ ok: true });
-        }) as unknown as typeof fetch);
-
-        const { getByPlaceholderText, getByRole } = render(
-            <TeamsProvider>
-                <SelectOnMount teamId="alpha" memberId="planner">
-                    <MessagesTab />
-                </SelectOnMount>
-            </TeamsProvider>,
-        );
-
-        // Type into the composer (fiber onChange — see getReactOnChange), then Send.
-        const input = await waitFor(() => getByPlaceholderText('Type a message and press Enter…'));
-        act(() => {
-            getReactOnChange(input)?.({ target: { value: 'hello' } });
-        });
-        fireEvent.click(getByRole('button', { name: 'Send' }));
-
-        await waitFor(() => expect(posts.length).toBeGreaterThan(0));
-        expect(posts[0]).toContain('"toId":"planner"');
-        expect(posts[0]).toContain('"body":"hello"');
+        expect(feedCalls.length).toBeGreaterThan(before);
     });
 
     test('TerminalTab shows the no-teams empty state when config has no teams (R7)', async () => {

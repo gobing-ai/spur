@@ -21,9 +21,10 @@ export interface ObservabilityTab {
 
 /** Built-in tabs shipped in v1 of the observability module.
  *
- * 0254 migration: `inbox` and `process-list` tabs moved to the Teams module
- * (Messages + Roster tabs cover the same functionality). Observability keeps
- * system-wide telemetry: system events, jobs, tool using.
+ * 0254 migration: `inbox` and `process-list` tabs moved to the Teams module.
+ * `inbox` is covered by the Messages tab; `process-list` is covered by Terminal
+ * status plus the Processes watch list (0262) after Roster was dropped in 0260.
+ * Observability keeps system-wide telemetry: system events, jobs, tool using.
  */
 export const OBSERVABILITY_TABS: readonly ObservabilityTab[] = [
     { id: 'system-events', label: 'System Events', component: SystemEventsTab },

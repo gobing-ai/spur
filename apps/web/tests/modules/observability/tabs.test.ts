@@ -25,8 +25,8 @@ describe('OBSERVABILITY_TABS', () => {
 
     test('contains the post-0254 telemetry-only tabs', () => {
         // 0254 migrated `inbox` and `process-list` out of Observability into the
-        // Teams module (Messages + Roster tabs). Observability now keeps
-        // system-wide telemetry only.
+        // Teams module (Messages tab; Processes watch list per 0262 after the
+        // 0260 Roster drop). Observability now keeps system-wide telemetry only.
         const ids = OBSERVABILITY_TABS.map((t) => t.id);
         expect(ids).toContain('system-events');
         expect(ids).toContain('jobs');

@@ -4,8 +4,8 @@ import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 import MemberTerminal from './MemberTerminal';
 
 // ── Team/member shapes returned by GET /api/team/teams (0256 R2) ──
-// Kept local to the Terminal tab for v1 (RosterTab duplicates the same shape);
-// a shared `useTeamsData` hook is a deferred follow-up per Design Tradeoffs.
+// Kept local to the Terminal tab for v1; a shared `useTeamsData` hook is a
+// deferred follow-up per Design Tradeoffs (0262's Processes tab will want it too).
 interface TeamMember {
     id: string;
     type: string;
@@ -83,13 +83,14 @@ function writePersistedSelection(selection: PersistedSelection): void {
     }
 }
 
-/** Reconnect-after-respawn poll interval (ms) — matches RosterTab's cadence. */
+/** Reconnect-after-respawn poll interval (ms) for the team/member status refresh. */
 const TEAMS_POLL_MS = 5000;
 
 /**
  * Terminal tab — owns its own team/member pickers (R1–R7) per the M1 wayfind
  * decision: selection is local to this view and does not route through the
- * shared `TeamsContext` used by Roster/Messages.
+ * shared `TeamsContext` (which lost its only writer when Roster was removed in
+ * 0260, and whose remaining selection state is slated for deletion after 0261).
  *
  * The toolbar renders Team → Member cascading dropdowns with live status
  * badges, a toggle control that confirms before stopping a running member,
