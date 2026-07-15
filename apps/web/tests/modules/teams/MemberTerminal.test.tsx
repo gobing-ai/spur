@@ -449,17 +449,35 @@ describe('MemberTerminal (component)', () => {
             });
         });
 
-        // The POST fired to the stdin endpoint with the typed line as {line}.
-        await waitFor(() => expect(posted.length).toBe(1));
-        expect(posted[0]?.method).toBe('POST');
-        expect(posted[0]?.url).toContain('/team/processes/send-agent/stdin');
-        expect(JSON.parse(posted[0]?.body ?? '{}')).toEqual({ line: 'ls -la' });
+        // Two POSTs fire: stdin + messages (0261 R2).
+        await waitFor(() => expect(posted.length).toBeGreaterThanOrEqual(1));
+        await waitFor(() => expect(posted.length).toBe(2));
+
+        // Stdin POST.
+        const stdinPost = posted.find((p) => p.url.includes('/stdin'));
+        expect(stdinPost?.method).toBe('POST');
+        expect(stdinPost?.url).toContain('/team/processes/send-agent/stdin');
+        expect(JSON.parse(stdinPost?.body ?? '{}')).toEqual({ line: 'ls -la' });
+
+        // Message POST (0261 R2).
+        const msgPost = posted.find((p) => p.url.includes('/messages'));
+        expect(msgPost?.method).toBe('POST');
+        expect(JSON.parse(msgPost?.body ?? '{}')).toEqual({
+            from: 'terminal',
+            to: 'send-agent',
+            body: 'ls -la',
+        });
 
         // Input clears on a 200 (R2 clear-on-success).
         await waitFor(() => {
             const el = container.querySelector('[data-terminal-input]') as HTMLInputElement;
             expect(el.value).toBe('');
         });
+
+        // R1/R3: local echo meta frame appears immediately.
+        const echoEl = container.querySelector('[data-stream="meta"]');
+        expect(echoEl).not.toBeNull();
+        expect(echoEl?.textContent).toBe('> ls -la');
 
         resetFetchForTesting();
         restoreEventSource();

@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Implement local echo + message-enqueue behavior for Terminal input (loop agents)"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: M1
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-15T05:35:23.418Z"
-updated_at: "2026-07-15T05:58:41.637Z"
+updated_at: "2026-07-15T21:36:49.244Z"
 ---
 
 ## 0261. Implement local echo + message-enqueue behavior for Terminal input (loop agents)
@@ -164,13 +164,41 @@ Invariants:
 7. Coordinate with 0259 (Terminal toolbar) and 0260 (Roster removal) for end-to-end flow.
 
 ### Solution
-
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| File | Lines | What / Why |
+|------|-------|------------|
+| `apps/web/src/modules/teams/MemberTerminal.tsx:128` | 128–129 | Add `messagesUrl()` helper — `POST /api/messages` endpoint for loop-agent message enqueue. |
+| `apps/web/src/modules/teams/MemberTerminal.tsx:239` | 239–290 | Rewrite `sendInput`: append local echo meta frame `> ${line}` immediately on submit (R1/R3), then POST to stdin + fire-and-forget POST to messages endpoint with `{ from: 'terminal', to: agentId, body: line }` (R2). Keep existing guards, error handling, and retain-on-failure (R4). |
+| `apps/web/tests/modules/teams/MemberTerminal.test.tsx:458` | 458–480 | Update AC2 test: expect 2 POSTs (stdin + messages), assert message body shape `{ from, to, body }`. Add echo assertion verifying meta frame `> ls -la` in terminal output. |
 ### Testing
+**Verify run:** 2026-07-15 — `/sp:dev-verify 0261 --auto --focus all --fix all --force` (standalone; status was `done`, forced re-audit)
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Commands**
+- `bun test apps/web/tests/modules/teams/MemberTerminal.test.tsx` → 26 pass, 0 fail, exit 0
+- `spur task check 0261 --json` → pass: true
 
+**Coverage:** N/A for React `.tsx` per monorepo gate (happy-dom / per-file gate excluded). Targeted suite green; no new runtime package path outside web MemberTerminal.
+
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 local echo `> ${line}` as meta frame | MET | `MemberTerminal.tsx:249-259` appends `stream:'meta'` frame; test asserts `data-stream=meta` text `> ls -la` at `MemberTerminal.test.tsx:477-480` |
+| R2 message enqueue for loop members | MET | `MemberTerminal.tsx:270-281` POST `messagesUrl()` body `{ from:'terminal', to:agentId, body:line }` matching server `POST /api/messages` (`messages/index.ts:48-62`); test `MemberTerminal.test.tsx:462-469` |
+| R3 echo immediate client-side | MET | Echo applied via `setFrames` before awaits (`MemberTerminal.tsx:249-259`); same test echo assertion |
+| R4 isRunning guard + retain on failure | MET | `onKeyDown` only when `isRunning` (`:297-301`); input `disabled={!isRunning}`; failure test retains text (`MemberTerminal.test.tsx:487-541`) |
+| R5 no agent-loop change | MET | Diff scope is web client only (`MemberTerminal.tsx` + test); no `agent.ts` / loop edits |
+| R6 update terminal input tests | MET | `MemberTerminal.test.tsx:452-480` expects 2 POSTs (stdin + messages) + echo |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: R3 Terminal input produces visible local echo | MET | test | `MemberTerminal.test.tsx:477-480` — meta frame `> ls -la` in output |
+| Scenario: R3 + R2 line delivered as message for loop agents | MET | test | `MemberTerminal.test.tsx:452-469` — POST `/messages` with `{ from, to, body }`; server path already exists (`messages/index.ts:50-62`) |
+
+**Design conformance:** 5/5 DONE (local meta echo; dual delivery stdin+messages; preserve writeStdin; always-enqueue v1; no backend change). R2 prose used `fromId`/`toId`; implementation + Solution correctly use server wire `{ from, to, body }` (CHANGED vs Requirements wording, aligned with `POST /api/messages`).
+
+**SECUA (all):** no blockers/majors. Minor advisory only: optional extract of shared send helper with MessagesTab deferred; message POST is fire-and-forget after stdin returns (including non-OK) which matches Q&A "always send for now".
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
@@ -182,3 +210,6 @@ M1
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-07-15T21:28:28.918Z todo → wip (system)
+- 2026-07-15T21:28:30.288Z wip → testing (system)
+- 2026-07-15T21:28:35.303Z testing → done (system)

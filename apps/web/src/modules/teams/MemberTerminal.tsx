@@ -119,6 +119,9 @@ export const streamUrl = (agentId: string, sinceSeq?: number) =>
 
 export const stdinUrl = (agentId: string) => `${resolveApiUrl()}/team/processes/${encodeURIComponent(agentId)}/stdin`;
 
+/** POST /api/messages — enqueue a message for the agent loop to drain (0261 R2). */
+export const messagesUrl = () => `${resolveApiUrl()}/messages`;
+
 const processesUrl = () => `${resolveApiUrl()}/team/processes`;
 
 /**
@@ -237,10 +240,24 @@ export default function MemberTerminal({ agentId }: { agentId: string }) {
     }, [frames]);
 
     // ── Input: POST to stdin on Enter, clear on success, retain on failure ──
+    // R1/R3: always echo locally as 'meta' frame for instant feedback.
     const sendInput = useCallback(async () => {
         const line = input;
         if (line.length === 0) return;
         setInputError(null);
+
+        // Local echo — appears immediately in the output buffer (R1, R3).
+        const echo: Frame = {
+            stream: 'meta',
+            ts: new Date().toISOString(),
+            line: `> ${line}`,
+        };
+        setFrames((prev) => {
+            const next = [...prev, echo];
+            if (next.length > MAX_FRAMES) next.splice(0, next.length - MAX_FRAMES);
+            return next;
+        });
+
         try {
             const res = await fetchWithTimeout(
                 new Request(stdinUrl(agentId), {
@@ -249,6 +266,20 @@ export default function MemberTerminal({ agentId }: { agentId: string }) {
                     body: JSON.stringify({ line }),
                 }),
             );
+
+            // R2: for default loop-agent members, also enqueue as a message so the
+            // agent drains it on the next iteration. The POST is fire-and-forget —
+            // its failure must not block stdin delivery or input clearing.
+            fetchWithTimeout(
+                new Request(messagesUrl(), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ from: 'terminal', to: agentId, body: line }),
+                }),
+            ).catch(() => {
+                // Non-blocking — stdin was already delivered.
+            });
+
             if (!res.ok) {
                 const body: unknown = await res.json().catch(() => null);
                 const msg = (body as { error?: string } | null)?.error ?? `stdin POST failed: ${res.status}`;
