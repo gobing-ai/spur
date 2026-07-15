@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Drop Roster tab from Teams module and redistribute its controls"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: M1
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-15T05:35:23.327Z"
-updated_at: "2026-07-15T05:57:35.807Z"
+updated_at: "2026-07-15T18:19:59.823Z"
 ---
 
 ## 0260. Drop Roster tab from Teams module and redistribute its controls
@@ -159,9 +159,14 @@ This task is a pure removal + hygiene change. The interesting new UI lives in 02
 6. Run `bun run check` (or equivalent lint+test for web) and `spur task check 0260`.
 7. Update M1 feature AC comments to mark R4 as covered by this task.
 ### Solution
-
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| File | Lines | What / Why |
+|------|-------|------------|
+| `apps/web/src/modules/teams/tabs.ts:1` | 1–18 | Remove `RosterTab` import and `roster` entry from `TEAMS_TABS` array. Survivors (`terminal`, `messages`, `activity`) keep their ids and order (append-only contract respected). |
+| `apps/web/src/modules/teams/TeamsShell.tsx:6` | 6 | Change default tab from `TEAMS_TABS[0]?.id` (was `roster`) to stable literal `'terminal'`. |
+| `apps/web/src/modules/teams/RosterTab.tsx` | deleted | Roster tab control surface removed per M1 decision. Functions redistributed: per-member selection → Terminal toolbar (0259), bulk controls → Processes tab (0262). |
+| `apps/web/tests/modules/teams/tabs.test.ts:26` | 26–30 | Update expected tab ids from `['roster', 'terminal', 'messages', 'activity']` to `['terminal', 'messages', 'activity']`. |
+| `apps/web/tests/modules/teams/components.test.tsx:201` | 201–210 | Update TeamsShell test: 3 tabs not 4, remove `'Roster'` from expected labels, count `3`. |
+| `apps/web/tests/modules/teams/components.test.tsx:211–348` | removed | Delete 3 `RosterTab` tests (AC2, hint UX, autostart hint) and the `selecting a member drives Messages` test (depends on Roster default tab). |
 ### Testing
 
 <!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
@@ -177,3 +182,6 @@ M1
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-07-15T18:19:28.465Z todo → wip (system)
+- 2026-07-15T18:19:33.130Z wip → testing (system)
+- 2026-07-15T18:19:59.823Z testing → done (system)

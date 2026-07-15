@@ -90,7 +90,7 @@ list this README is checked against.
 #### Lifecycle — planning
 
 | Command | What it does |
-|---|---|
+| --- | --- |
 | `dev-idea` | Turn a vague idea into a feature with AC and a decomposed task batch — discovery, feature-create, AC, feature-check, system-design, decompose, batch-create, handoff |
 | `dev-plan` | Plan a feature from a written description — intake → feature create → AC generation → feature check gate → decomposition → batch-create |
 | `dev-brainstorm` | Interactive solution design — heuristic discovery interview followed by structured ideation with trade-offs and confidence scoring |
@@ -99,7 +99,7 @@ list this README is checked against.
 #### Lifecycle — execution
 
 | Command | What it does |
-|---|---|
+| --- | --- |
 | `dev-run` | Run a task — full pipeline (precheck→implement→test→review→approve→verify→record→done) or single-step (implement) |
 | `dev-review` | Review code for a task — SECUA framework review across Security, Efficiency, Correctness, Usability, and Architecture |
 | `dev-verify` | Verify a task against its requirements and Acceptance Criteria — traceability check producing a PASS/PARTIAL/FAIL verdict with evidence |
@@ -109,15 +109,16 @@ list this README is checked against.
 #### Lifecycle — batch and parallel
 
 | Command | What it does |
-|---|---|
+| --- | --- |
 | `dev-runall` | Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via task-pipeline.yaml, emit a batch report |
 | `dev-parallel` | Fan out independent tasks or investigations in parallel via subagents — choose the right pattern and synthesize results |
+| `dev-verifyall` | Batch-verify tasks against requirements and AC — resolves a set, runs per-task verification, produces consolidated PASS/PARTIAL/FAIL summary report |
 | `dev-wrapall` | Wrap up a batch of completed tasks — learnings, metrics, doc-sync, feature transition, optional branch cleanup |
 
 #### Lifecycle — operations and hygiene
 
 | Command | What it does |
-|---|---|
+| --- | --- |
 | `dev-handover` | Generate a structured handover document when blocked — captures goal, progress, blocker, rejected approaches, and next steps |
 | `dev-dogfood` | Dogfood an agent skill/command/CLI — drive it end-to-end with bounded auto-fix, self-monitor, and emit a comprehensive report |
 | `dev-fixall` | Fix all lint, type, and test errors systematically across the working tree |
@@ -130,7 +131,7 @@ list this README is checked against.
 #### Rule authoring
 
 | Command | What it does |
-|---|---|
+| --- | --- |
 | `rule-scan` | Discover recurring anti-patterns worth codifying as rules |
 | `rule-add` | Author a validated, smoke-tested constraint rule |
 | `rule-refine` | Refine a constraint rule or preset, then re-verify it |
@@ -138,7 +139,7 @@ list this README is checked against.
 #### Workflow authoring
 
 | Command | What it does |
-|---|---|
+| --- | --- |
 | `workflow-add` | Author a validated, dry-run-verified workflow in the right execution mode |
 | `workflow-refine` | Refine an existing workflow, then re-validate and re-dry-run it |
 
@@ -251,7 +252,7 @@ surface or run one workflow. All 20 skills target the same five platforms: `clau
 `antigravity`, `opencode`, `openclaw`.
 
 | Skill | Ver | Domain |
-|-------|-----|--------|
+| ------- | ----- | -------- |
 | `spur-dev` | 1.1 | Thin orchestration spine — drives planning→execution, gates, HITL, and dispatches competencies; never inlines implementation/testing/decomposition/review |
 | `spur-cli` | 1.0 | CLI facade — one reference per `spur` noun (`task`, `feature`, `rule`, `workflow`), each with verb tables, flag guides, `--json` shapes, and write-contract rules |
 | `sys-architecture` | 1.0 | Architecture / ADR judgment — module boundaries, data flow, transport/storage/auth choices, build-vs-extend decisions |
@@ -295,7 +296,7 @@ command is a user-facing entry point that bridges natural language to skill invo
 **26 commands** (see the Command index above for the full list), organized by the surface they wrap:
 
 | Prefix | Count | Delegates to | Purpose |
-|--------|-------|-------------|---------|
+| -------- | ------- | ------------- | --------- |
 | `dev-*` | 20 | `sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:code-simplification`, `sp:brainstorm`, `sp:dogfood-testing`, `sp:parallel-execution`, inline | The dev-workflow surface — planning, execution, batch, wrap-up, review/verify, hygiene |
 | `rule-*` | 3 | `sp:spur-cli` | The rule surface — `rule-add`, `rule-refine`, `rule-scan` |
 | `workflow-*` | 2 | `sp:spur-cli` | The workflow surface — `workflow-add`, `workflow-refine` |
@@ -468,7 +469,7 @@ The plugin ships workflow YAMLs under `.spur/workflows/` (symlinked from `.spur/
 pipeline owns one lifecycle phase:
 
 | Workflow | Phase | Entry command |
-|---|---|---|
+| --- | --- | --- |
 | `basic.yaml` | Generic implement/check/fix | direct `spur workflow run` |
 | `feature-lifecycle.yaml` | Feature status FSM | `spur feature update` |
 | `task-lifecycle.yaml` | Task status FSM | `spur task update` |
@@ -483,7 +484,7 @@ pipeline owns one lifecycle phase:
 All planning entities (tasks and features) share a common lifecycle, managed by the `spur` CLI:
 
 | Operation | Task verb | Feature verb | Quality gate |
-|-----------|-----------|-------------|--------------|
+| ----------- | ----------- | ------------- | -------------- |
 | **create** | `spur task create` / `batch-create` | `spur feature create` | Structural validation (WBS race-safe, ID hierarchical) |
 | **check** | `spur task check` | `spur feature check` | 4-layer readiness matrix (schema, sections, traceability, AC) |
 | **update** | `spur task update <wbs> [status]` | `spur feature update <id> [status]` | Lifecycle transition or scalar field set |
@@ -501,7 +502,7 @@ locations. OpenClaw is implicitly supported — it reads skills from `~/.agents/
 root codex/opencode use in global mode.
 
 | Plugin entity | Claude Code | Other platforms |
-|--------------|-------------|-----------------|
+| -------------- | ------------- | ----------------- |
 | `skills/*.md` | `~/.claude/skills/` | Adapted as Skills 2.0 skill directories — all platforms receive skills uniformly |
 | `commands/*.md` | `~/.claude/commands/` | Adapted as Skills 2.0 skill entries (`disable-model-invocation: true`) |
 | `agents/*.md` | `~/.claude/agents/` | Adapted as Skills 2.0 skill entries (model-invocable); Pi additionally gets native agent format |
@@ -509,4 +510,3 @@ root codex/opencode use in global mode.
 | `hooks/*.ts` | plugin hook runtime / compatibility copy | Copied alongside platform output only for environments that still invoke script paths directly |
 
 Each skill declares its own platform support in `metadata.platforms` frontmatter.
-
