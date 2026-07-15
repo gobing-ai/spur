@@ -31,5 +31,6 @@
 [backlog] **K**: Observability System Events Table Redesign ([K_observability-system-events-table-redesign.md](./K_observability-system-events-table-redesign.md))
 [active] **L**: System Events Payload and Wiring Enrichment ([L_system-events-payload-and-wiring-enrichment.md](./L_system-events-payload-and-wiring-enrichment.md))
 [backlog] **M**: Teams: declarative agent teams + Board module over existing message/drain/supervisor backbones ([M_teams-declarative-agent-teams-board-module-over-existing-message-drain-supervisor-backbones.md](./M_teams-declarative-agent-teams-board-module-over-existing-message-drain-supervisor-backbones.md))
-    └── [backlog] **M1**: Fine-tune Teams module (Roster drop, Terminal UX, Processes watchlist, input) ([M1_fine-tune-teams-module-roster-drop-terminal-ux-processes-watchlist-input.md](./M1_fine-tune-teams-module-roster-drop-terminal-ux-processes-watchlist-input.md))
+    ├── [done] **M1**: Fine-tune Teams module (Roster drop, Terminal UX, Processes watchlist, input) ([M1_fine-tune-teams-module-roster-drop-terminal-ux-processes-watchlist-input.md](./M1_fine-tune-teams-module-roster-drop-terminal-ux-processes-watchlist-input.md))
+    └── [backlog] **M2**: Teams residual polish for release (post-M1) ([M2_teams-residual-polish-for-release-post-m1.md](./M2_teams-residual-polish-for-release-post-m1.md))
 <!-- END AUTO-GENERATED -->
