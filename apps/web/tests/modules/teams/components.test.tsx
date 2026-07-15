@@ -709,10 +709,7 @@ describe('teams module components', () => {
 
     test('TerminalTab rejects stale localStorage selection and clears it (0263 R2)', async () => {
         const key = 'spur:board:teams:lastTerminal';
-        globalThis.localStorage?.setItem(
-            key,
-            JSON.stringify({ teamId: 'alpha', memberId: 'ghost-member' }),
-        );
+        globalThis.localStorage?.setItem(key, JSON.stringify({ teamId: 'alpha', memberId: 'ghost-member' }));
 
         setFetchForTesting((async (input: RequestInfo | URL) => {
             const req = input instanceof Request ? input : new Request(String(input));
