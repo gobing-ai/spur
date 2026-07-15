@@ -5,7 +5,6 @@ import { type ReactNode, useEffect, useRef } from 'react';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
 import ActivityTab from '../../../src/modules/teams/ActivityTab';
 import MessagesTab from '../../../src/modules/teams/MessagesTab';
-import RosterTab from '../../../src/modules/teams/RosterTab';
 import { TeamsProvider, useTeamsSelection } from '../../../src/modules/teams/TeamsContext';
 import TeamsShell from '../../../src/modules/teams/TeamsShell';
 import TerminalTab from '../../../src/modules/teams/TerminalTab';
@@ -59,6 +58,9 @@ mock.module('@/ui', () => {
         }
         rest.ref = ref;
         rest.value = props.value;
+        // Pass a no-op onChange to suppress React's "value without onChange"
+        // warning. The real onChange is captured via ref above.
+        rest.onChange = () => {};
 
         return <select {...rest}>{props.children as React.ReactNode}</select>;
     }
@@ -186,7 +188,7 @@ afterEach(async () => {
         configurable: true,
         value: originalEventSource,
     });
-    // These tests mount polling components (Roster/Messages) and MemberTerminal,
+    // These tests mount polling components (Messages) and MemberTerminal,
     // which leave React 19 scheduler work queued on a macrotask. Drain it now,
     // while `window` still exists, so no deferred render fires after this file's
     // afterAll unregisters happy-dom and crashes the next file (tests/happy-dom.ts).
@@ -199,154 +201,16 @@ afterAll(async () => {
 });
 
 describe('teams module components', () => {
-    test('TeamsShell renders exactly the 4 v1 tabs with stable labels (0254 AC1)', async () => {
+    test('TeamsShell renders exactly the 3 v1 tabs with stable labels (0260)', async () => {
         setFetchForTesting((async () => jsonResponse({ teams: [] })) as unknown as typeof fetch);
         const { getByRole, container } = render(<TeamsShell />);
 
-        for (const label of ['Roster', 'Terminal', 'Messages', 'Activity']) {
+        for (const label of ['Terminal', 'Messages', 'Activity']) {
             expect(getByRole('tab', { name: label })).toBeDefined();
         }
-        // The shell renders no more and no fewer than the 4 declared tabs.
-        expect(container.querySelectorAll('[role="tab"]').length).toBe(4);
+        // The shell renders no more and no fewer than the 3 declared tabs.
+        expect(container.querySelectorAll('[role="tab"]').length).toBe(3);
     });
-
-    test('RosterTab lists teams and the Up control POSTs the up URL (0254 AC2)', async () => {
-        const calls: { url: string; method: string }[] = [];
-        setFetchForTesting((async (input: RequestInfo | URL) => {
-            const req = input instanceof Request ? input : new Request(String(input));
-            calls.push({ url: req.url, method: req.method });
-            if (req.url.includes('/team/teams')) {
-                return jsonResponse({
-                    teams: [
-                        {
-                            teamId: 'alpha',
-                            name: 'Alpha',
-                            members: [{ id: 'planner', type: 'claude', status: 'running' }],
-                        },
-                    ],
-                });
-            }
-            return jsonResponse({ ok: true });
-        }) as unknown as typeof fetch);
-
-        const { getByText, getByRole } = render(
-            <TeamsProvider>
-                <RosterTab />
-            </TeamsProvider>,
-        );
-
-        await waitFor(() => expect(getByText('Alpha')).toBeDefined());
-        expect(getByText('planner')).toBeDefined();
-
-        fireEvent.click(getByRole('button', { name: 'Up' }));
-
-        await waitFor(() =>
-            expect(calls.some((c) => c.method === 'POST' && c.url.includes('/team/alpha/up'))).toBe(true),
-        );
-    });
-
-    test('RosterTab shows an autostart hint and Up feedback when no member is autostart (hint UX)', async () => {
-        setFetchForTesting((async (input: RequestInfo | URL) => {
-            const req = input instanceof Request ? input : new Request(String(input));
-            if (req.url.includes('/team/teams')) {
-                return jsonResponse({
-                    teams: [
-                        {
-                            teamId: 'alpha',
-                            name: 'Alpha',
-                            members: [{ id: 'planner', type: 'claude', status: 'stopped', autoStart: false }],
-                        },
-                    ],
-                });
-            }
-            // Up response: materialized but 0 started (no autostart members).
-            if (req.url.includes('/team/alpha/up')) {
-                return jsonResponse({
-                    materialized: { teamId: 'alpha', upserted: ['planner'], orphaned: [], written: true },
-                    started: [],
-                });
-            }
-            return jsonResponse({ ok: true });
-        }) as unknown as typeof fetch);
-
-        const { getByText, getByRole, queryByText } = render(
-            <TeamsProvider>
-                <RosterTab />
-            </TeamsProvider>,
-        );
-
-        await waitFor(() => expect(getByText('Alpha')).toBeDefined());
-
-        // Proactive hint: no member has autostart → explain Up before the user clicks.
-        await waitFor(() => expect(getByText(/Up starts only members with autostart/)).toBeDefined());
-        expect(queryByText(/none here/)).not.toBeNull();
-
-        // Reactive feedback: clicking Up surfaces "0 members started" instead of a silent no-op.
-        fireEvent.click(getByRole('button', { name: 'Up' }));
-        await waitFor(() => expect(getByText(/0 members started/)).toBeDefined());
-    });
-
-    test('RosterTab hides the autostart hint when a member has autostart enabled', async () => {
-        setFetchForTesting((async (input: RequestInfo | URL) => {
-            const req = input instanceof Request ? input : new Request(String(input));
-            if (req.url.includes('/team/teams')) {
-                return jsonResponse({
-                    teams: [
-                        {
-                            teamId: 'beta',
-                            name: 'Beta',
-                            members: [{ id: 'runner', type: 'omp', status: 'stopped', autoStart: true }],
-                        },
-                    ],
-                });
-            }
-            return jsonResponse({ ok: true });
-        }) as unknown as typeof fetch);
-
-        const { getByText, queryByText } = render(
-            <TeamsProvider>
-                <RosterTab />
-            </TeamsProvider>,
-        );
-        await waitFor(() => expect(getByText('Beta')).toBeDefined());
-        // A member with autostart → no "Up starts only … none here" hint.
-        expect(queryByText(/Up starts only members with autostart/)).toBeNull();
-    });
-
-    test('selecting a member drives the Messages tab inbox fetch downstream (0254 AC3)', async () => {
-        const inboxCalls: string[] = [];
-        setFetchForTesting((async (input: RequestInfo | URL) => {
-            const url = input instanceof Request ? input.url : String(input);
-            if (url.includes('/team/teams')) {
-                return jsonResponse({
-                    teams: [
-                        {
-                            teamId: 'alpha',
-                            name: 'Alpha',
-                            members: [{ id: 'planner', type: 'claude', status: 'running' }],
-                        },
-                    ],
-                });
-            }
-            if (url.includes('/messages/inbox')) {
-                inboxCalls.push(url);
-                return jsonResponse({ messages: [], count: 0 });
-            }
-            return jsonResponse({ ok: true });
-        }) as unknown as typeof fetch);
-
-        const { getByRole, getByText } = render(<TeamsShell />);
-
-        // Roster is the default tab; select the member.
-        await waitFor(() => expect(getByText('planner')).toBeDefined());
-        fireEvent.click(getByText('planner'));
-
-        // Switch to Messages — the selected member id must drive its inbox fetch.
-        fireEvent.click(getByRole('tab', { name: 'Messages' }));
-
-        await waitFor(() => expect(inboxCalls.some((url) => url.includes('agent=planner'))).toBe(true));
-    });
-
     test('MessagesTab refetches the inbox on a message.sent SSE event (0254 AC5/R6)', async () => {
         let secondVisible = false;
         const inboxCalls: string[] = [];

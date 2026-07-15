@@ -4,7 +4,7 @@ import { TEAMS_TABS, type TeamsTab } from './tabs';
 
 /** Shell for the Teams board module (0254 R1). Mirrors ObservabilityShell. */
 export default function TeamsShell() {
-    const [activeId, setActiveId] = useState<string>(TEAMS_TABS[0]?.id ?? '');
+    const [activeId, setActiveId] = useState<string>('terminal');
     const active: TeamsTab | undefined = TEAMS_TABS.find((t) => t.id === activeId);
     const Active = active?.component;
 
