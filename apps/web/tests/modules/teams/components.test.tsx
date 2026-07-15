@@ -192,7 +192,7 @@ describe('teams module components', () => {
         expect(container.querySelectorAll('[role="tab"]').length).toBe(4);
     });
 
-    // ── ProcessesTab (0262 R1–R5) ──────────────────────────────────────────
+    // ── ProcessesTab (0262 + 0264 registry) ────────────────────────────────
     test('ProcessesTab renders supervised process rows from /api/team/processes (0262 AC)', async () => {
         const processCalls: string[] = [];
         setFetchForTesting((async (input: RequestInfo | URL) => {
@@ -217,6 +217,8 @@ describe('teams module components', () => {
                         },
                     ],
                     count: 2,
+                    executions: [],
+                    executionsCount: 0,
                 });
             }
             return jsonResponse({ ok: true });
@@ -230,30 +232,92 @@ describe('teams module components', () => {
         expect(getByText('4243')).toBeDefined();
         expect(getByText('running')).toBeDefined();
         expect(getByText('exited')).toBeDefined();
-        // Header labels v1 supervisor scope (AC: "Supervised Processes (v1)" or equivalent).
+        // Header labels process watch list (registry-backed after 0264).
         const root = container.querySelector('[data-processes-tab]');
-        expect(root?.textContent).toContain('Supervised Processes');
-        expect(root?.textContent).toContain('v1 supervisor only');
-        expect(root?.textContent).toContain('0264');
-        // Polled supervisor endpoint, not the full observability tree.
+        expect(root?.textContent).toContain('Process watch list');
+        expect(root?.textContent).toContain('ProcessExecutor registry');
+        // Polled team processes endpoint, not the full observability tree.
         expect(processCalls.some((u) => u.includes('/team/processes'))).toBe(true);
         expect(processCalls.some((u) => u.includes('/observability/processes'))).toBe(false);
-        // Attach action present on each row.
+        // Attach action present on each supervised row.
         expect(container.querySelectorAll('[data-processes-attach-btn]').length).toBe(2);
     });
 
-    test('ProcessesTab shows empty state when no supervised processes (0262 edge)', async () => {
+    test('ProcessesTab shows registry one-shots alongside supervised rows (0264)', async () => {
         setFetchForTesting((async (input: RequestInfo | URL) => {
             const url = input instanceof Request ? input.url : String(input);
             if (url.includes('/team/processes')) {
-                return jsonResponse({ processes: [], count: 0 });
+                return jsonResponse({
+                    processes: [
+                        {
+                            agentId: 'planner',
+                            pid: 4242,
+                            status: 'running',
+                            startedAt: '2026-07-15T12:00:00.000Z',
+                            exitCode: null,
+                        },
+                    ],
+                    count: 1,
+                    executions: [
+                        {
+                            id: 'pe_1',
+                            label: 'git.status',
+                            command: 'git',
+                            args: ['status'],
+                            pid: 99,
+                            status: 'exited',
+                            startedAt: '2026-07-15T12:01:00.000Z',
+                            exitedAt: '2026-07-15T12:01:01.000Z',
+                            exitCode: 0,
+                            source: 'one-shot',
+                            teamId: null,
+                            agentId: null,
+                        },
+                        // Duplicate of supervised agent — should be de-duped by agentId.
+                        {
+                            id: 'pe_2',
+                            label: 'agent:planner',
+                            command: 'bun',
+                            args: [],
+                            pid: 4242,
+                            status: 'running',
+                            startedAt: '2026-07-15T12:00:00.000Z',
+                            exitedAt: null,
+                            exitCode: null,
+                            source: 'supervisor',
+                            teamId: null,
+                            agentId: 'planner',
+                        },
+                    ],
+                    executionsCount: 2,
+                });
             }
             return jsonResponse({ ok: true });
         }) as unknown as typeof fetch);
 
         const { getByText, container } = render(<ProcessesTab />);
 
-        await waitFor(() => expect(getByText(/No supervised processes/)).toBeDefined());
+        await waitFor(() => expect(getByText('planner')).toBeDefined());
+        expect(getByText('git.status')).toBeDefined();
+        expect(getByText('one-shot')).toBeDefined();
+        // Supervised row still has Start/Stop; one-shot has no control buttons.
+        expect(container.querySelectorAll('[data-processes-toggle-btn]').length).toBe(1);
+        // Only supervised agent gets Attach.
+        expect(container.querySelectorAll('[data-processes-attach-btn]').length).toBe(1);
+    });
+
+    test('ProcessesTab shows empty state when no supervised processes (0262 edge)', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/team/processes')) {
+                return jsonResponse({ processes: [], count: 0, executions: [], executionsCount: 0 });
+            }
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { getByText, container } = render(<ProcessesTab />);
+
+        await waitFor(() => expect(getByText(/No processes/)).toBeDefined());
         // 0263 R3: empty copy includes actionable guidance (no stale Roster refs).
         expect(getByText(/spur team start/)).toBeDefined();
         expect(container.querySelector('[data-processes-tab-empty]')).not.toBeNull();
@@ -653,9 +717,13 @@ describe('teams module components', () => {
         const { container, queryByText } = render(<TerminalTab />);
 
         // After the first teams load, the persisted selection auto-restores.
-        await waitFor(() => expect(queryByText('Choose a team and member above to open a terminal.')).toBeNull());
-        const memberSelect = container.querySelector('[data-terminal-member-select]') as HTMLSelectElement;
-        expect((memberSelect as HTMLSelectElement).value).toBe('planner');
+        // Assert via MemberTerminal mount + prompt dismissal — happy-dom controlled
+        // <select>.value is unreliable under the @/ui Select mock.
+        await waitFor(() => {
+            expect(queryByText('Choose a team and member above to open a terminal.')).toBeNull();
+            expect(container.querySelector('[data-member-terminal="planner"]')).not.toBeNull();
+        });
+        expect(container.querySelector('[data-terminal-member-select]')?.innerHTML).toContain('planner');
 
         // Restore the original localStorage state.
         if (stored === null || stored === undefined) {

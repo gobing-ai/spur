@@ -1,19 +1,52 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Badge, Button, Loading } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 
-// ── Shape from GET /api/team/processes (supervisor list, also used by MemberTerminal) ──
-interface ProcessRow {
+// ── Wire shapes from GET /api/team/processes ──
+
+/** Supervisor-controlled row (start/stop/attach). */
+interface SupervisedProcessRow {
     agentId: string;
-    pid: number;
+    pid: number | null;
     status: string;
     startedAt: string;
     exitCode: number | null;
 }
 
+/** ProcessRegistry execution row (ts-runtime 0.4.10 / spur#0264). */
+interface RegistryExecutionRow {
+    id: string;
+    label: string;
+    command: string;
+    args: string[];
+    pid: number | null;
+    status: string;
+    startedAt: string;
+    exitedAt: string | null;
+    exitCode: number | null;
+    source: string;
+    teamId: string | null;
+    agentId: string | null;
+}
+
 interface ProcessesSnapshot {
-    processes: ProcessRow[];
+    processes: SupervisedProcessRow[];
     count: number;
+    executions: RegistryExecutionRow[];
+    executionsCount: number;
+}
+
+/** Unified table row for the Processes watch list. */
+interface WatchRow {
+    key: string;
+    label: string;
+    agentId?: string;
+    pid: number | null;
+    status: string;
+    startedAt: string;
+    source: string;
+    canControl: boolean;
+    canAttach: boolean;
 }
 
 const POLL_MS = 3_000;
@@ -22,16 +55,50 @@ const processesUrl = () => `${resolveApiUrl()}/team/processes`;
 const startUrl = (id: string) => `${resolveApiUrl()}/team/agents/${encodeURIComponent(id)}/start`;
 const stopUrl = (id: string) => `${resolveApiUrl()}/team/agents/${encodeURIComponent(id)}/stop`;
 
-// TODO(task 0264): switch data source to full ProcessExecutor registry when available.
-// v1 uses the supervisor-only /api/team/processes endpoint.
+/**
+ * Build a unified watch list: supervisor rows first (with controls), then
+ * registry executions that are not already covered by a supervised agent/pid.
+ */
+export function buildWatchRows(processes: SupervisedProcessRow[], executions: RegistryExecutionRow[]): WatchRow[] {
+    const rows: WatchRow[] = processes.map((p) => ({
+        key: `sup:${p.agentId}`,
+        label: p.agentId,
+        agentId: p.agentId,
+        pid: p.pid,
+        status: p.status,
+        startedAt: p.startedAt,
+        source: 'supervisor',
+        canControl: true,
+        canAttach: true,
+    }));
+
+    const coveredAgents = new Set(processes.map((p) => p.agentId));
+    const coveredPids = new Set(processes.map((p) => p.pid).filter((p): p is number => p != null));
+
+    for (const e of executions) {
+        if (e.agentId && coveredAgents.has(e.agentId)) continue;
+        if (e.pid != null && coveredPids.has(e.pid)) continue;
+        rows.push({
+            key: `reg:${e.id}`,
+            label: e.label || e.command,
+            agentId: e.agentId ?? undefined,
+            pid: e.pid,
+            status: e.status,
+            startedAt: e.startedAt,
+            source: e.source,
+            canControl: false,
+            canAttach: Boolean(e.agentId),
+        });
+    }
+    return rows;
+}
 
 /**
- * Processes tab — v1 supervisor-focused watch list of team agent processes (0262 R1-R5).
+ * Processes tab — process watch list for Teams (0262 + 0264).
  *
- * Polls GET /api/team/processes every 3s. Renders a table with agentId, pid, status
- * badge, startedAt, and per-row actions (Attach + Start/Stop). The "Attach" button
- * signals the agentId for Terminal tab's local selection (loose coupling — to be wired
- * once 0259 selector is stable).
+ * Polls GET /api/team/processes every 3s. Renders supervisor-managed members
+ * (with Attach + Start/Stop) plus other ProcessExecutor registry runs
+ * (one-shots / other) from the shared serve-local registry.
  */
 export default function ProcessesTab() {
     const [snapshot, setSnapshot] = useState<ProcessesSnapshot | null>(null);
@@ -44,11 +111,13 @@ export default function ProcessesTab() {
             const res = await fetchWithTimeout(new Request(processesUrl(), { signal }));
             if (!res.ok) throw new Error(`processes fetch failed: ${res.status}`);
             const json: unknown = await res.json();
-            const body = json as ProcessesSnapshot;
+            const body = json as Partial<ProcessesSnapshot>;
             if (mountedRef.current) {
                 setSnapshot({
                     processes: body.processes ?? [],
                     count: body.count ?? 0,
+                    executions: body.executions ?? [],
+                    executionsCount: body.executionsCount ?? 0,
                 });
                 setError(null);
             }
@@ -95,7 +164,6 @@ export default function ProcessesTab() {
                 setError(err instanceof Error ? err.message : String(err));
             } finally {
                 setActionPending(null);
-                // Refresh immediately after a toggle.
                 const ctrl = new AbortController();
                 void load(ctrl.signal);
             }
@@ -103,17 +171,20 @@ export default function ProcessesTab() {
         [load],
     );
 
-    // ── Attach: signal Terminal tab's local selection (loose coupling) ──
-    // TODO(0262+0259): wire to TerminalTab local state once the selector is stable.
-    // For now, dispatch a custom event that TerminalTab can listen for.
+    // Attach: signal Terminal tab's local selection (loose coupling).
     const attachToTerminal = useCallback((agentId: string) => {
         if (typeof globalThis.CustomEvent !== 'undefined') {
             globalThis.dispatchEvent(new CustomEvent('teams:attach-process', { detail: { agentId } }));
         }
     }, []);
 
+    const watchRows = useMemo(
+        () => (snapshot ? buildWatchRows(snapshot.processes, snapshot.executions) : []),
+        [snapshot],
+    );
+
     // ── Empty / error states ──
-    if (error && (!snapshot || snapshot.processes.length === 0)) {
+    if (error && (!snapshot || watchRows.length === 0)) {
         return (
             <div className="p-4 text-sm text-error" role="alert" data-processes-tab-error>
                 Failed to load processes: {error}
@@ -129,26 +200,36 @@ export default function ProcessesTab() {
         );
     }
 
-    if (snapshot.processes.length === 0) {
+    if (watchRows.length === 0) {
         return (
             <div className="p-4 text-sm text-spur-text-muted" data-processes-tab-empty>
-                No supervised processes. Start a team agent from the Terminal tab or via{' '}
+                No processes. Start a team agent from the Terminal tab or via{' '}
                 <code className="font-mono">spur team start</code>.
             </div>
         );
     }
 
+    const supervisedCount = snapshot.processes.length;
+    const otherCount = Math.max(0, watchRows.length - supervisedCount);
+
     return (
         <div className="p-3 overflow-auto h-full" data-processes-tab>
             <div className="flex items-center gap-2 mb-2 text-xs text-spur-text-muted">
-                <span>Supervised Processes ({snapshot.count})</span>
-                <span className="italic">— v1 supervisor only (full ProcessExecutor registry: task 0264)</span>
+                <span data-processes-header>
+                    Process watch list ({watchRows.length}
+                    {supervisedCount > 0 || otherCount > 0
+                        ? ` · ${supervisedCount} supervised${otherCount > 0 ? ` · ${otherCount} other` : ''}`
+                        : ''}
+                    )
+                </span>
+                <span className="italic">— ProcessExecutor registry (ts-runtime)</span>
             </div>
 
             <table className="table table-xs">
                 <thead>
                     <tr>
-                        <th>Agent</th>
+                        <th>Name</th>
+                        <th>Source</th>
                         <th>PID</th>
                         <th>Status</th>
                         <th>Started</th>
@@ -156,12 +237,15 @@ export default function ProcessesTab() {
                     </tr>
                 </thead>
                 <tbody>
-                    {snapshot.processes.map((p) => {
+                    {watchRows.map((p) => {
                         const running = p.status === 'running';
                         return (
-                            <tr key={p.agentId}>
-                                <td className="font-mono text-xs">{p.agentId}</td>
-                                <td className="font-mono text-xs text-spur-text-muted">{p.pid}</td>
+                            <tr key={p.key} data-processes-row={p.key}>
+                                <td className="font-mono text-xs">{p.label}</td>
+                                <td className="text-xs text-spur-text-muted" data-process-source={p.source}>
+                                    {p.source}
+                                </td>
+                                <td className="font-mono text-xs text-spur-text-muted">{p.pid ?? '—'}</td>
                                 <td>
                                     <Badge variant={running ? 'success' : 'ghost'} size="xs">
                                         {p.status}
@@ -172,25 +256,29 @@ export default function ProcessesTab() {
                                 </td>
                                 <td>
                                     <div className="flex items-center gap-1">
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="xs"
-                                            onClick={() => attachToTerminal(p.agentId)}
-                                            data-processes-attach-btn
-                                        >
-                                            Attach
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            variant={running ? 'warning' : 'primary'}
-                                            size="xs"
-                                            disabled={actionPending === p.agentId}
-                                            onClick={() => void toggleStatus(p.agentId, running)}
-                                            data-processes-toggle-btn
-                                        >
-                                            {running ? 'Stop' : 'Start'}
-                                        </Button>
+                                        {p.canAttach && p.agentId ? (
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="xs"
+                                                onClick={() => attachToTerminal(p.agentId as string)}
+                                                data-processes-attach-btn
+                                            >
+                                                Attach
+                                            </Button>
+                                        ) : null}
+                                        {p.canControl && p.agentId ? (
+                                            <Button
+                                                type="button"
+                                                variant={running ? 'warning' : 'primary'}
+                                                size="xs"
+                                                disabled={actionPending === p.agentId}
+                                                onClick={() => void toggleStatus(p.agentId as string, running)}
+                                                data-processes-toggle-btn
+                                            >
+                                                {running ? 'Stop' : 'Start'}
+                                            </Button>
+                                        ) : null}
                                     </div>
                                 </td>
                             </tr>

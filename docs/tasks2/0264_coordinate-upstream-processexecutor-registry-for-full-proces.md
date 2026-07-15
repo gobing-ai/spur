@@ -3,7 +3,7 @@ template: meta
 schema_version: 1
 name: "Coordinate upstream ProcessExecutor registry for full process watch list (ts-runtime / ts-ai-runner)"
 description: ""
-status: todo
+status: done
 type: meta
 profile: standard
 feature_id: M1
@@ -12,7 +12,7 @@ priority: P2
 tags: ["meta"]
 dependencies: []
 created_at: "2026-07-15T05:35:35.523Z"
-updated_at: "2026-07-15T06:04:03.161Z"
+updated_at: "2026-07-15T22:54:16.776Z"
 ---
 
 ## 0264. Coordinate upstream ProcessExecutor registry for full process watch list (ts-runtime / ts-ai-runner)
@@ -152,19 +152,53 @@ This task is complete when:
 6. Verify: task check passes, no breakage to existing v1 paths.
 7. Close coordination when ts-libs ticket is accepted (or this task marked ready).
 ### Solution
-
-<!-- Filled during implementation: changed files/sections and concise rationale. -->
-
+| File | Lines | What / Why |
+|------|-------|------------|
+| `@gobing-ai/ts-runtime@0.4.10` | — | Upstream ProcessRegistry released (catalog pin). |
+| `apps/server/src/context.ts:385` | 385–393, 429 | Shared `processRegistry()`; supervisor `NodeProcessExecutor({ registry })`; AgentService injects same registry. |
+| `packages/app/src/services/supervisor-service.ts:160` | 159–161 | Tag `source:'supervisor'` + `agentId` on runStreaming for registry. |
+| `packages/app/src/services/agent-service.ts:115` | 115, 140, 324 | Optional `processRegistry` on context; wire into NodeProcessExecutor. |
+| `apps/server/src/modules/team/index.ts:50` | 38–72 | GET `/api/team/processes` adds `executions` + `executionsCount`. |
+| `apps/web/src/modules/teams/ProcessesTab.tsx:62` | 62–95, 182 | Unified watch list (`buildWatchRows`); header + registry rows. |
 ### Testing
+**Verify run (re-audit after Spur consumption):** 2026-07-15 — ts-runtime **0.4.10** released; Spur wired consumer.
 
-<!-- Filled during verification: commands/checks run, outcomes, coverage claim or N/A. -->
+**Upstream (ts-libs `@gobing-ai/ts-runtime@0.4.10`)**
+- `ProcessRegistry` + `InMemoryProcessRegistry` / `createInMemoryProcessRegistry()`
+- `NodeProcessExecutor` optional `registry` + `source`/`teamId`/`agentId` on options
 
+**Spur consumption (this monorepo)**
+- Shared registry: `ServerContext.processRegistry()` → inject into supervisor + AgentService executors
+- Supervisor tags `source: 'supervisor'` + `agentId` on `runStreaming`
+- `GET /api/team/processes` returns `processes` (supervisor) + `executions` (registry snapshot)
+- ProcessesTab unified watch list (supervisor controls + other registry rows, de-duped)
+
+**Commands**
+- `bun test apps/server/tests/modules/team/index.test.ts apps/server/tests/context.test.ts apps/web/tests/modules/teams/components.test.tsx packages/app/tests/services/supervisor-service.test.ts` → green
+- `tsc --noEmit` for packages/app, apps/server, apps/web → clean
+
+**Coverage:** N/A for React `.tsx` per monorepo gate; server/app paths covered by targeted suites.
+
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 metadata contract | MET | Design + ts-runtime `ProcessExecution` |
+| R2 upstream work item | MET | Released `@gobing-ai/ts-runtime@0.4.10` |
+| R3 Spur prepared + consuming | MET | context + team module + ProcessesTab |
+| R4 v1 supervisor remains | MET | `processes` array still supervisor-controlled; controls intact |
+
+**Acceptance Criteria:** all MET (contract, upstream release, Spur hooks + live API, v1 path preserved).
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
 
 ### References
-
-<!-- Links to docs, tasks, decisions, or external references. -->
-
+- Feature: M1 (Teams Processes watch list)
+- Related Spur: 0262 (ProcessesTab v1)
+- Upstream: `@gobing-ai/ts-runtime@0.4.10` — `ProcessRegistry` / `createInMemoryProcessRegistry`
+- Catalog pin: root `package.json` workspaces.catalog `"@gobing-ai/ts-runtime": "^0.4.10"`
 ### History
+- 2026-07-15T22:02:51.758Z todo → wip (system)
+- 2026-07-15T22:02:53.199Z wip → testing (system)
+- 2026-07-15T22:02:54.626Z testing → done (system)
