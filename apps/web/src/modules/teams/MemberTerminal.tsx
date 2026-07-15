@@ -305,6 +305,7 @@ export default function MemberTerminal({ agentId }: { agentId: string }) {
         <div className="flex flex-col h-full overflow-hidden" data-member-terminal={agentId}>
             <div className="px-4 py-2 border-b border-spur-border bg-base-200 shrink-0 flex items-center gap-2">
                 <span className="text-xs font-semibold text-spur-text uppercase tracking-wide">Terminal</span>
+                <span className="font-mono text-xs text-spur-text-muted">{agentId}</span>
                 <Badge variant={isRunning ? 'success' : 'ghost'} size="xs" data-terminal-status>
                     {status}
                 </Badge>
@@ -329,7 +330,7 @@ export default function MemberTerminal({ agentId }: { agentId: string }) {
                 data-terminal-output
             >
                 {frames.length === 0 ? (
-                    <span className="text-spur-text-muted italic">No output yet.</span>
+                    <span className="text-spur-text-muted italic">Waiting for output from {agentId}…</span>
                 ) : (
                     frames.map((f, i) => (
                         <div

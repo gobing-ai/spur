@@ -83,6 +83,14 @@ function writePersistedSelection(selection: PersistedSelection): void {
     }
 }
 
+function clearPersistedSelection(): void {
+    try {
+        globalThis.localStorage?.removeItem(LAST_SELECTION_KEY);
+    } catch {
+        // Non-fatal: storage may be unavailable (private mode / quota).
+    }
+}
+
 /** Reconnect-after-respawn poll interval (ms) for the team/member status refresh. */
 const TEAMS_POLL_MS = 5000;
 
@@ -127,7 +135,7 @@ export default function TerminalTab() {
         return () => clearInterval(interval);
     }, [load]);
 
-    // ── Restore last persisted selection once after the first teams load (R6) ──
+    // ── Restore last persisted selection once after the first teams load (0263 R2) ──
     useEffect(() => {
         if (restoredRef.done) return;
         if (teams.length === 0) return;
@@ -135,9 +143,12 @@ export default function TerminalTab() {
         const persisted = readPersistedSelection();
         if (!persisted) return;
         const team = teamsRef.current.find((t) => t.teamId === persisted.teamId);
-        if (!team) return;
-        const member = team.members.find((m) => m.id === persisted.memberId);
-        if (!member) return;
+        const member = team?.members.find((m) => m.id === persisted.memberId);
+        if (!team || !member) {
+            // Stale entry (team/member gone from config) — drop it so reloads stay clean.
+            clearPersistedSelection();
+            return;
+        }
         setTeamId(persisted.teamId);
         setMemberId(persisted.memberId);
     }, [teams, restoredRef]);

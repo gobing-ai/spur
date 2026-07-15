@@ -254,6 +254,8 @@ describe('teams module components', () => {
         const { getByText, container } = render(<ProcessesTab />);
 
         await waitFor(() => expect(getByText(/No supervised processes/)).toBeDefined());
+        // 0263 R3: empty copy includes actionable guidance (no stale Roster refs).
+        expect(getByText(/spur team start/)).toBeDefined();
         expect(container.querySelector('[data-processes-tab-empty]')).not.toBeNull();
         expect(container.querySelector('[data-processes-tab-loading]')).toBeNull();
     });
@@ -626,7 +628,7 @@ describe('teams module components', () => {
         );
     });
 
-    test('TerminalTab restores persisted team+member from localStorage on mount (R6)', async () => {
+    test('TerminalTab restores persisted team+member from localStorage on mount (0263 R2)', async () => {
         const key = 'spur:board:teams:lastTerminal';
         const stored = globalThis.localStorage?.getItem(key);
         globalThis.localStorage?.setItem(key, JSON.stringify({ teamId: 'alpha', memberId: 'planner' }));
@@ -661,6 +663,82 @@ describe('teams module components', () => {
         } else {
             globalThis.localStorage?.setItem(key, stored);
         }
+    });
+
+    test('TerminalTab persists selection to localStorage on change (0263 R1)', async () => {
+        const key = 'spur:board:teams:lastTerminal';
+        globalThis.localStorage?.removeItem(key);
+
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const req = input instanceof Request ? input : new Request(String(input));
+            if (req.url.includes('/team/teams')) {
+                return jsonResponse({
+                    teams: [
+                        {
+                            teamId: 'alpha',
+                            name: 'Alpha',
+                            members: [{ id: 'planner', type: 'claude', status: 'running' }],
+                        },
+                    ],
+                });
+            }
+            if (req.url.includes('/team/processes')) return jsonResponse({ processes: [] });
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { container } = render(<TerminalTab />);
+
+        await waitFor(() => {
+            expect(container.querySelector('[data-terminal-team-select]')).not.toBeNull();
+        });
+        act(() => getSelectOnChange('team')?.({ target: { value: 'alpha' } }));
+        await waitFor(() => {
+            const el = container.querySelector('[data-terminal-member-select]') as HTMLSelectElement | null;
+            expect(el?.options.length).toBeGreaterThan(1);
+        });
+        act(() => getSelectOnChange('member')?.({ target: { value: 'planner' } }));
+
+        await waitFor(() => {
+            const raw = globalThis.localStorage?.getItem(key);
+            expect(raw).not.toBeNull();
+            expect(JSON.parse(raw ?? '{}')).toEqual({ teamId: 'alpha', memberId: 'planner' });
+        });
+
+        globalThis.localStorage?.removeItem(key);
+    });
+
+    test('TerminalTab rejects stale localStorage selection and clears it (0263 R2)', async () => {
+        const key = 'spur:board:teams:lastTerminal';
+        globalThis.localStorage?.setItem(
+            key,
+            JSON.stringify({ teamId: 'alpha', memberId: 'ghost-member' }),
+        );
+
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const req = input instanceof Request ? input : new Request(String(input));
+            if (req.url.includes('/team/teams')) {
+                return jsonResponse({
+                    teams: [
+                        {
+                            teamId: 'alpha',
+                            name: 'Alpha',
+                            members: [{ id: 'planner', type: 'claude', status: 'running' }],
+                        },
+                    ],
+                });
+            }
+            if (req.url.includes('/team/processes')) return jsonResponse({ processes: [] });
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { getByText, container } = render(<TerminalTab />);
+
+        // Invalid member is not restored — prompt remains.
+        await waitFor(() => expect(getByText('Choose a team and member above to open a terminal.')).toBeDefined());
+        const memberSelect = container.querySelector('[data-terminal-member-select]') as HTMLSelectElement | null;
+        expect(memberSelect?.value ?? '').toBe('');
+        // Stale entry is cleared so the next reload stays clean.
+        await waitFor(() => expect(globalThis.localStorage?.getItem(key)).toBeNull());
     });
 
     test('ActivityTab renders team/message events and filters out unrelated telemetry (0254 R7)', async () => {

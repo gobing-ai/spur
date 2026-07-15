@@ -132,7 +132,8 @@ export default function ProcessesTab() {
     if (snapshot.processes.length === 0) {
         return (
             <div className="p-4 text-sm text-spur-text-muted" data-processes-tab-empty>
-                No supervised processes.
+                No supervised processes. Start a team agent from the Terminal tab or via{' '}
+                <code className="font-mono">spur team start</code>.
             </div>
         );
     }

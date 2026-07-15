@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Persist Terminal selection in localStorage and improve empty states / headers"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: M1
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-15T05:35:26.848Z"
-updated_at: "2026-07-15T06:03:09.711Z"
+updated_at: "2026-07-15T21:54:04.063Z"
 ---
 
 ## 0263. Persist Terminal selection in localStorage and improve empty states / headers
@@ -156,13 +156,47 @@ This is pure polish on top of the structural changes in 0259/0260/0262. It makes
 
 7. Ensure consistency with any header changes in 0259/0262.
 ### Solution
+R1/R2 (localStorage persist/restore) already implemented during task 0259 and committed. This task only adds the remaining polish items.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| File | Lines | What / Why |
+|------|-------|------------|
+| `apps/web/src/modules/teams/MemberTerminal.tsx:307` | 307–308 | R4: surface composed agentId in Terminal header (`Terminal · name`), giving operator identity context. |
+| `apps/web/src/modules/teams/MemberTerminal.tsx:332` | 332 | R3: improve empty output message from generic "No output yet" to context-aware "Waiting for output from {agentId}…". |
+| `apps/web/src/modules/teams/ProcessesTab.tsx:135` | 135 | R3: improve empty state with actionable guidance ("Start a team agent from the Terminal tab or via `spur team start`"). |
 ### Testing
+**Verify run:** 2026-07-15 — `/sp:dev-verify 0263 --auto --focus all --fix all --force` (standalone; status was `done`, forced re-audit)
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**`--fix all` applied:**
+1. Clear stale `localStorage` on invalid restore (`clearPersistedSelection` in `TerminalTab.tsx`) — design claimed clear; implementation was missing.
+2. Tests for persist-on-change, stale-restore reject+clear, MemberTerminal header/empty copy, Processes empty guidance.
 
+**Commands**
+- `bun test apps/web/tests/modules/teams/components.test.tsx apps/web/tests/modules/teams/MemberTerminal.test.tsx` → **43 pass, 0 fail, exit 0**
+- `spur task check 0263 --json` → pass: true
+
+**Coverage:** N/A for React `.tsx` per monorepo gate. Targeted teams suites green.
+
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 persist `{teamId,memberId}` | MET | `TerminalTab.tsx:78-84,155-160` key `spur:board:teams:lastTerminal`; test “persists selection… on change” |
+| R2 restore + validate on mount | MET | `TerminalTab.tsx:130-146` restore with team/member validation + clear stale; tests restore + “rejects stale…” |
+| R3 empty/loading polish | MET | Terminal no-teams (`:197-203`); MemberTerminal waiting copy (`:333`); Processes guidance (`:134-137`); tests cover all three |
+| R4 header agent identity | MET | `MemberTerminal.tsx:308` agentId in header; status + connected retained; test “0263 R4: header surfaces…” |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: Terminal selection is persisted and restored | MET | test | persist-on-change + restore-on-mount tests in `components.test.tsx` |
+| Scenario: Restore is validated and falls back gracefully | MET | test | “rejects stale localStorage selection and clears it” — prompt remains, key removed |
+| Scenario: Improved empty states are shown | MET | test | Terminal no-teams; Processes empty + `spur team start`; MemberTerminal waiting copy |
+| Scenario: Terminal header shows useful identity | MET | test | `MemberTerminal.test.tsx` 0263 R4 — agentId + status + connected |
+
+**Design conformance:** DONE — safe get/set/clear, validate-on-restore, clear stale, empty-state polish, agentId header. Optional source badge N/A (no source field in teams payload; Q&A allows id-only).
+
+**SECUA (all):** no blockers/majors. Persistence try/catch degrades silently. No Roster wording left in Terminal/Processes empty states.
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
@@ -174,3 +208,6 @@ M1
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-07-15T21:51:39.316Z todo → wip (system)
+- 2026-07-15T21:51:40.983Z wip → testing (system)
+- 2026-07-15T21:51:46.572Z testing → done (system)

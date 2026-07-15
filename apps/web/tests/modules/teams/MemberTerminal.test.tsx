@@ -249,6 +249,32 @@ describe('MemberTerminal (component)', () => {
         resetMockSources();
     });
 
+    test('0263 R4: header surfaces composed agentId; empty output is context-aware (R3)', async () => {
+        installMockEventSource();
+        resetMockSources();
+        setFetchForTesting(mockFetch(async () => new Response(JSON.stringify({ processes: [] }), { status: 200 })));
+
+        const { container } = render(React.createElement(MemberTerminal, { agentId: 'alpha-claude' }));
+
+        // Header shows the composed agent id next to Terminal label.
+        await waitFor(() => {
+            const root = container.querySelector('[data-member-terminal="alpha-claude"]');
+            expect(root).not.toBeNull();
+            expect(root?.textContent).toContain('alpha-claude');
+        });
+        // Status + connected indicators remain present.
+        expect(container.querySelector('[data-terminal-status]')).not.toBeNull();
+        expect(container.querySelector('[data-terminal-connected]')).not.toBeNull();
+        // Empty buffer copy is agent-specific (not the old generic "No output yet.").
+        const out = container.querySelector('[data-terminal-output]');
+        expect(out?.textContent).toContain('Waiting for output from alpha-claude');
+        expect(out?.textContent).not.toContain('No output yet.');
+
+        resetFetchForTesting();
+        restoreEventSource();
+        resetMockSources();
+    });
+
     test('AC6: stderr frames are styled distinctly from stdout', async () => {
         installMockEventSource();
         resetMockSources();
