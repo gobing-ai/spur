@@ -77,7 +77,7 @@ Feature: Batch task execution via /sp:dev-runall
 
   Scenario: R1.3 Run a feature-scoped selection
     Given feature A1 has linked tasks
-    When the operator runs "/sp:dev-runall --tasks feature:A1"
+    When the operator runs "/sp:dev-runall --feature A1" (or the equivalent --tasks form)
     Then the batch resolves every task whose feature_id edge is A1
 
   Scenario: R1.4 Run the "ready" pseudo-list

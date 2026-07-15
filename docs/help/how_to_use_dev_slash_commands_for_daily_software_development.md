@@ -113,12 +113,12 @@ Use this when you don't want to think about the brainstorm/plan split. `/sp:dev-
 runs the full idea-pipeline in one command — brainstorm → feature-create → AC →
 feature-check → system-design (conditional) → design-approval → decompose → batch-create
 → handoff. It **stops at handoff** — tasks are created but not executed. Pick up with
-`/sp:dev-runall --tasks feature:<id>` or `/sp:dev-run <wbs>`.
+`/sp:dev-runall --feature <id>` (or `--tasks feature:<id>`) or `/sp:dev-run <wbs>`.
 
 ```bash
 /sp:dev-idea "add a --dry-run flag to spur history import" --auto
 # → emits feature id + task WBS list at handoff
-# → next: /sp:dev-runall --tasks feature:<id>  OR  /sp:dev-run <first-wbs>
+# → next: /sp:dev-runall --feature <id>  OR  /sp:dev-run <first-wbs>
 ```
 
 `--design` forces the system-design step; `--skip-design` skips it (brainstorm design
@@ -216,10 +216,10 @@ ordering, failure policy), never the steps inside a single task:
 /sp:dev-runall --tasks ready
 
 # Run a feature's tasks unattended, skipping the per-task HITL gate.
-/sp:dev-runall --tasks feature:A1 --auto
+/sp:dev-runall --feature A1 --auto
 
 # Run a batch unattended, then wrap up the whole batch (with optional branch cleanup).
-/sp:dev-runall --tasks feature:A1 --auto --wrap --merge
+/sp:dev-runall --feature A1 --auto --wrap --merge
 ```
 
 ---
