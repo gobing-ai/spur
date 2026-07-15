@@ -23,10 +23,10 @@ describe('TEAMS_TABS', () => {
         expect(new Set(ids).size).toBe(ids.length);
     });
 
-    test('contains the 3 v1 tabs in stable order', () => {
+    test('contains the 4 v1 tabs in stable order', () => {
         // 0260: Roster removed per M1. Terminal, Messages, Activity — append-only/id-stable.
         const ids = TEAMS_TABS.map((t) => t.id);
-        expect(ids).toEqual(['terminal', 'messages', 'activity']);
+        expect(ids).toEqual(['terminal', 'processes', 'messages', 'activity']);
     });
 
     test('component fields are resolvable React component types', () => {

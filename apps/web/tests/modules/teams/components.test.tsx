@@ -5,6 +5,7 @@ import { useEffect, useRef } from 'react';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
 import ActivityTab from '../../../src/modules/teams/ActivityTab';
 import MessagesTab from '../../../src/modules/teams/MessagesTab';
+import ProcessesTab from '../../../src/modules/teams/ProcessesTab';
 import TeamsShell from '../../../src/modules/teams/TeamsShell';
 import TerminalTab from '../../../src/modules/teams/TerminalTab';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
@@ -90,6 +91,10 @@ mock.module('@/ui', () => {
         return <span {...rest}>{props.children as React.ReactNode}</span>;
     }
 
+    function Loading(_props: Record<string, unknown>) {
+        return <span data-loading>Loading…</span>;
+    }
+
     function Modal(props: Record<string, unknown>) {
         if (!props.open) return null;
         const rest: Record<string, unknown> = {};
@@ -113,7 +118,7 @@ mock.module('@/ui', () => {
         );
     }
 
-    return { Select, Button, Badge, Modal };
+    return { Select, Button, Badge, Loading, Modal };
 });
 
 class FakeEventSource {
@@ -176,16 +181,123 @@ afterAll(async () => {
 });
 
 describe('teams module components', () => {
-    test('TeamsShell renders exactly the 3 v1 tabs with stable labels (0260)', async () => {
+    test('TeamsShell renders exactly the 4 v1 tabs with stable labels (0262)', async () => {
         setFetchForTesting((async () => jsonResponse({ teams: [] })) as unknown as typeof fetch);
         const { getByRole, container } = render(<TeamsShell />);
 
-        for (const label of ['Terminal', 'Messages', 'Activity']) {
+        for (const label of ['Terminal', 'Processes', 'Messages', 'Activity']) {
             expect(getByRole('tab', { name: label })).toBeDefined();
         }
-        // The shell renders no more and no fewer than the 3 declared tabs.
-        expect(container.querySelectorAll('[role="tab"]').length).toBe(3);
+        // The shell renders no more and no fewer than the 4 declared tabs.
+        expect(container.querySelectorAll('[role="tab"]').length).toBe(4);
     });
+
+    // ── ProcessesTab (0262 R1–R5) ──────────────────────────────────────────
+    test('ProcessesTab renders supervised process rows from /api/team/processes (0262 AC)', async () => {
+        const processCalls: string[] = [];
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/team/processes')) {
+                processCalls.push(url);
+                return jsonResponse({
+                    processes: [
+                        {
+                            agentId: 'planner',
+                            pid: 4242,
+                            status: 'running',
+                            startedAt: '2026-07-15T12:00:00.000Z',
+                            exitCode: null,
+                        },
+                        {
+                            agentId: 'builder',
+                            pid: 4243,
+                            status: 'exited',
+                            startedAt: '2026-07-15T11:00:00.000Z',
+                            exitCode: 0,
+                        },
+                    ],
+                    count: 2,
+                });
+            }
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { getByText, container } = render(<ProcessesTab />);
+
+        await waitFor(() => expect(getByText('planner')).toBeDefined());
+        expect(getByText('builder')).toBeDefined();
+        expect(getByText('4242')).toBeDefined();
+        expect(getByText('4243')).toBeDefined();
+        expect(getByText('running')).toBeDefined();
+        expect(getByText('exited')).toBeDefined();
+        // Header labels v1 supervisor scope (AC: "Supervised Processes (v1)" or equivalent).
+        const root = container.querySelector('[data-processes-tab]');
+        expect(root?.textContent).toContain('Supervised Processes');
+        expect(root?.textContent).toContain('v1 supervisor only');
+        expect(root?.textContent).toContain('0264');
+        // Polled supervisor endpoint, not the full observability tree.
+        expect(processCalls.some((u) => u.includes('/team/processes'))).toBe(true);
+        expect(processCalls.some((u) => u.includes('/observability/processes'))).toBe(false);
+        // Attach action present on each row.
+        expect(container.querySelectorAll('[data-processes-attach-btn]').length).toBe(2);
+    });
+
+    test('ProcessesTab shows empty state when no supervised processes (0262 edge)', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/team/processes')) {
+                return jsonResponse({ processes: [], count: 0 });
+            }
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { getByText, container } = render(<ProcessesTab />);
+
+        await waitFor(() => expect(getByText(/No supervised processes/)).toBeDefined());
+        expect(container.querySelector('[data-processes-tab-empty]')).not.toBeNull();
+        expect(container.querySelector('[data-processes-tab-loading]')).toBeNull();
+    });
+
+    test('ProcessesTab Attach dispatches teams:attach-process with agentId (0262 AC)', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/team/processes')) {
+                return jsonResponse({
+                    processes: [
+                        {
+                            agentId: 'attach-me',
+                            pid: 99,
+                            status: 'running',
+                            startedAt: '2026-07-15T12:00:00.000Z',
+                            exitCode: null,
+                        },
+                    ],
+                    count: 1,
+                });
+            }
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const seen: string[] = [];
+        const listener = (ev: Event) => {
+            const detail = (ev as CustomEvent<{ agentId: string }>).detail;
+            seen.push(detail.agentId);
+        };
+        globalThis.addEventListener('teams:attach-process', listener);
+
+        const { getByText, container } = render(<ProcessesTab />);
+        await waitFor(() => expect(getByText('attach-me')).toBeDefined());
+
+        const btn = container.querySelector('[data-processes-attach-btn]') as HTMLButtonElement;
+        expect(btn).not.toBeNull();
+        act(() => {
+            fireEvent.click(btn);
+        });
+
+        expect(seen).toEqual(['attach-me']);
+        globalThis.removeEventListener('teams:attach-process', listener);
+    });
+
     // Regression guard for the 0260 Roster removal: RosterTab was the only writer of
     // the shared TeamsContext selection, so a MessagesTab that filters on that
     // selection can never leave its empty state in production. This renders the tab

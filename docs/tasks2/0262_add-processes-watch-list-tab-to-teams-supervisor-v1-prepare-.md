@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Add Processes watch-list tab to Teams (supervisor v1, prepare for full ProcessExecutor registry)"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: M1
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-15T05:35:26.619Z"
-updated_at: "2026-07-15T06:00:32.866Z"
+updated_at: "2026-07-15T21:46:18.350Z"
 ---
 
 ## 0262. Add Processes watch-list tab to Teams (supervisor v1, prepare for full ProcessExecutor registry)
@@ -173,13 +173,46 @@ No changes to server, supervisor, or upstream ProcessExecutor yet (that's 0264).
 
 8. Coordinate with 0260 (Roster removal) and 0259 (Terminal) so controls and attach make sense together.
 ### Solution
-
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| File | Lines | What / Why |
+|------|-------|------------|
+| `apps/web/src/modules/teams/ProcessesTab.tsx:1` | 1–180 | New Processes watch-list tab (v1 supervisor-only). Polls `/api/team/processes` every 3s, renders table with agentId, pid, status Badge, startedAt, per-row Attach + Start/Stop buttons. TODO for 0264 full ProcessExecutor registry. |
+| `apps/web/src/modules/teams/tabs.ts:1` | 1–20 | Register ProcessesTab import + `id: 'processes'` entry in TEAMS_TABS (order: terminal, processes, messages, activity). |
+| `apps/web/tests/modules/teams/tabs.test.ts:26` | 26–30 | Update expected tab ids to include `'processes'`. |
+| `apps/web/tests/modules/teams/components.test.tsx:179` | 179–189 | Update TeamsShell test: 4 tabs including 'Processes'. |
 ### Testing
+**Verify run:** 2026-07-15 — `/sp:dev-verify 0262 --auto --focus all --fix all --force` (standalone; status was `done`, forced re-audit)
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**`--fix all` applied:** added missing ProcessesTab component tests (mount/list, empty, Attach event) and hardened Start/Stop error body parse (null-safe).
 
+**Commands**
+- `bun test apps/web/tests/modules/teams/components.test.tsx apps/web/tests/modules/teams/tabs.test.ts` → **19 pass, 0 fail, exit 0**
+- `spur task check 0262 --json` → pass: true
+
+**Coverage:** N/A for React `.tsx` per monorepo gate. Targeted teams suite green.
+
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 TEAMS_TABS entry `processes` | MET | `tabs.ts:17`; `tabs.test.ts:26-29` expects `['terminal','processes','messages','activity']` |
+| R2 ProcessesTab table (agentId, pid, status, startedAt, actions) | MET | `ProcessesTab.tsx:138-197`; test `components.test.tsx` “renders supervised process rows” |
+| R3 supervisor-focused v1 label/filter | MET | Header “Supervised Processes” + “v1 supervisor only” (`ProcessesTab.tsx:140-141`); polls `/team/processes` only |
+| R4 Attach loose coupling | MET | `attachToTerminal` dispatches `teams:attach-process` (`ProcessesTab.tsx:106-110`); test “Attach dispatches…” |
+| R5 0264 extension points | MET | TODO comments `ProcessesTab.tsx:25-26`, header note `:141` |
+| R6 shell/module registration | MET | `tabs.ts` + TeamsShell dynamic map; shell test 4 tabs including Processes |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: R5 Processes tab renders watch list of supervised processes (v1) | MET | test | `components.test.tsx` ProcessesTab rows test — agentId/pid/status, Supervised Processes header, Badge via status text |
+| Scenario: Attach action available (loose coupling to Terminal) | MET | test | `components.test.tsx` Attach dispatches `teams:attach-process` with agentId |
+| Scenario: Empty state when no supervised processes | MET | test | `components.test.tsx` empty state — “No supervised processes”, `[data-processes-tab-empty]` |
+| Scenario: Preparation for full registry visible | MET | static-ref + test | `ProcessesTab.tsx:25-26` TODO 0264; header + test asserts “0264” / “v1 supervisor only” |
+
+**Design conformance:** DONE — new ProcessesTab, TEAMS_TABS registration (terminal first), poll 3s, Badge status, Attach custom event, Start/Stop actions, no server changes, 0264 TODOs.
+
+**SECUA (all):** fixed major C — null body cast on start/stop error path (`ProcessesTab.tsx` toggleStatus). No remaining blockers/majors. Minor: Terminal listener for attach still TODO (by design / 0259 follow-up).
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
@@ -191,3 +224,6 @@ M1
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-07-15T21:43:57.563Z todo → wip (system)
+- 2026-07-15T21:43:59.071Z wip → testing (system)
+- 2026-07-15T21:44:04.075Z testing → done (system)
