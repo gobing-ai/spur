@@ -631,7 +631,7 @@ describe('team module', () => {
             const body = (await res.json()) as {
                 teams: Array<{
                     teamId: string;
-                    members: Array<{ id: string; type: string; status: string; pid?: number }>;
+                    members: Array<{ id: string; type: string; status: string; pid?: number; autoStart: boolean }>;
                 }>;
                 count: number;
             };
@@ -644,6 +644,30 @@ describe('team module', () => {
             const reviewer = members.find((m) => m.id === 'reviewer');
             expect(reviewer?.status).toBe('unknown');
             expect(reviewer?.pid).toBeUndefined();
+            // autoStart is surfaced (defaults to false when the spec has none) so the
+            // Roster can hint when no member is autostart.
+            expect(planner?.autoStart).toBe(false);
+            expect(reviewer?.autoStart).toBe(false);
+        });
+
+        test('surfaces autoStart=true for autostart members', async () => {
+            const team: TeamListing = {
+                teamId: 'devops',
+                name: 'DevOps',
+                members: [],
+                specs: [autostartSpec('runner', true), autostartSpec('idle', false)],
+            };
+            const teamService = teamServiceStub({ listTeams: async () => [team] });
+            const { ctx } = ctxWithStubs({ teamService });
+            const app = new Hono();
+            teamModule.mount(app, ctx);
+
+            const res = await app.fetch(new Request('http://localhost/api/team/teams'));
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as { teams: Array<{ members: Array<{ id: string; autoStart: boolean }> }> };
+            const members = body.teams[0]?.members ?? [];
+            expect(members.find((m) => m.id === 'runner')?.autoStart).toBe(true);
+            expect(members.find((m) => m.id === 'idle')?.autoStart).toBe(false);
         });
     });
 

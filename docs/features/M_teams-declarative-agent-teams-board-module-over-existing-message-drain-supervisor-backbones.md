@@ -38,11 +38,11 @@ plus a Teams Board module — a capstone over existing machinery, not a rebuild.
 | 0251 | Member identity: unify member id across inbox recipient, agent spec id, and supervised process id | done |
 | 0252 | spur team up/down: materialize roster into .spur/agents specs; reconcile with existing team start/stop | done |
 | 0253 | Team lifecycle over supervisor: self-drain keep-alive, autostart, and the no-auto-restart gap | done |
-| 0254 | Teams Board module IA: tab set + shell, and migrate Inbox/Process tabs out of Observability | todo |
-| 0255 | Attach terminal: xterm.js over the existing SSE stream + stdin POST endpoints | todo |
-| 0256 | Team API surface: oRPC contracts vs raw Hono/SSE for start/stop/stdin/stream/messages | todo |
-| 0257 | Implement agent.team config schema + parsing (0250): zod, member union, executor resolution, validation | todo |
-| 0258 | Implement team backend runtime (0251/0252/0253): materialize service methods, lifecycle loop+restart, team up/down/status CLI, drain idempotency | todo |
+| 0254 | Teams Board module IA: tab set + shell, and migrate Inbox/Process tabs out of Observability | done |
+| 0255 | Attach terminal: xterm.js over the existing SSE stream + stdin POST endpoints | done |
+| 0256 | Team API surface: oRPC contracts vs raw Hono/SSE for start/stop/stdin/stream/messages | done |
+| 0257 | Implement agent.team config schema + parsing (0250): zod, member union, executor resolution, validation | done |
+| 0258 | Implement team backend runtime (0251/0252/0253): materialize service methods, lifecycle loop+restart, team up/down/status CLI, drain idempotency | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

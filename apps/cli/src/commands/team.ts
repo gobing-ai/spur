@@ -47,6 +47,7 @@ export function registerTeamCommand(program: Command, context: CliContext): void
         .description('List agent specs and their run status; --by-team groups by team (0258 R4).')
         .option('--json', 'Output machine-readable JSON')
         .option('--by-team', 'Group specs by their agent.team.<id> membership')
+        .option('--server <url>', 'Server API URL for live run status', DEFAULT_SERVER)
         .action(async (options) => {
             const code = options.byTeam
                 ? await runTeamStatusGrouped(options, context)
@@ -105,17 +106,37 @@ async function runTeamAssign(taskId: string, agentId: string, context: CliContex
     return 0;
 }
 
-/** `spur team status [--json]` */
-async function runTeamStatus(options: { json?: boolean }, context: CliContext): Promise<number> {
+/** `spur team status [--json] [--server <url>]` */
+async function runTeamStatus(options: { json?: boolean; server: string }, context: CliContext): Promise<number> {
     const svc = new TeamService(context);
     const json = options.json === true;
     const status = await svc.getStatus();
-    if (json) {
-        context.output.write(toJson(status));
-        return 0;
-    }
     if (status.agents.length === 0) {
         context.output.write('No agent specs found in .spur/agents/');
+        return 0;
+    }
+    // The local TeamOrchestrator `getStatus` consults is always empty in the CLI
+    // process — agents are spawned by `spur serve`'s SupervisorService, which the
+    // CLI can only observe via the HTTP API. Fetch live run status from the server
+    // and merge it onto the local specs so `status` agrees with the board's Roster.
+    // When the server is unreachable, fall back to the local specs (all `stopped`)
+    // so offline `status` still lists the specs.
+    const live = await fetchServerProcesses(options.server);
+    if (live === null) {
+        context.output.error(
+            `Cannot reach server at ${options.server} — showing local specs as stopped. Is spur serve running?`,
+        );
+    } else {
+        for (const agent of status.agents) {
+            const proc = live.get(agent.id);
+            if (proc) {
+                agent.status = proc.status;
+                agent.pid = proc.pid ?? undefined;
+            }
+        }
+    }
+    if (json) {
+        context.output.write(toJson(status));
         return 0;
     }
     context.output.write(status.agents.map(formatStatusLine).join('\n'));
@@ -134,6 +155,57 @@ interface StartResponse {
 interface StopResponse {
     ok?: boolean;
     error?: string;
+}
+
+/** A supervised-process row from `GET /api/team/processes`. */
+interface ServerProcess {
+    agentId: string;
+    pid: number | null;
+    status: string;
+}
+
+/** Response shape of `GET /api/team/processes`. */
+interface ProcessesResponse {
+    processes: ServerProcess[];
+    count: number;
+}
+
+/** Map a `SupervisorService` process status onto the `TeamStatusEntry` status union. */
+function mapServerStatus(status: string): TeamStatusEntry['status'] {
+    switch (status) {
+        case 'running':
+            return 'running';
+        case 'errored':
+            return 'errored';
+        case 'stopped':
+        case 'exited':
+            return 'stopped';
+        default:
+            return 'unknown';
+    }
+}
+
+/**
+ * Fetch live run status from the server supervisor (`GET /api/team/processes`).
+ * Returns a `Map<agentId, { status, pid }>`, or `null` when the server is
+ * unreachable / returns a non-OK response — callers fall back to local specs.
+ */
+async function fetchServerProcesses(
+    server: string,
+): Promise<Map<string, { status: TeamStatusEntry['status']; pid: number | null }> | null> {
+    try {
+        const url = `${server}/team/processes`;
+        const res = await teamFetch(url, { method: 'GET' });
+        if (!res.ok) return null;
+        const body = (await res.json()) as ProcessesResponse;
+        const map = new Map<string, { status: TeamStatusEntry['status']; pid: number | null }>();
+        for (const proc of body.processes ?? []) {
+            map.set(proc.agentId, { status: mapServerStatus(proc.status), pid: proc.pid ?? null });
+        }
+        return map;
+    } catch {
+        return null;
+    }
 }
 
 /** Send `spur team start <agent-id>` to the server and translate the response. */
@@ -235,7 +307,10 @@ function formatStatusLine(agent: TeamStatusEntry): string {
 }
 
 /** `spur team status --by-team` — group specs by their `team:<id>` membership (0258 R4). */
-async function runTeamStatusGrouped(options: { json?: boolean }, context: CliContext): Promise<number> {
+async function runTeamStatusGrouped(
+    options: { json?: boolean; server?: string },
+    context: CliContext,
+): Promise<number> {
     const teams = await new TeamService(context).listTeams();
     if (options.json === true) {
         context.output.write(toJson({ teams }));

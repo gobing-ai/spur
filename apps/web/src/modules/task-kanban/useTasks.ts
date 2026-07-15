@@ -1,16 +1,11 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { api, resolveApiUrl } from '../../lib/rpc-client';
 import type { TaskSummary } from './types';
 
 const POLL_INTERVAL_MS = 5_000;
 type ListFn = (query?: { folder?: string; status?: string; parent?: string }) => Promise<{ data: unknown }>;
-const sseUrl = async () => {
-    const { resolveApiUrl } = await import('../../lib/rpc-client');
-    return `${resolveApiUrl()}/events/planning`;
-};
-const defaultListTasks: ListFn = async (query = {}) => {
-    const { api } = await import('../../lib/rpc-client');
-    return api.task.list(query);
-};
+const sseUrl = () => `${resolveApiUrl()}/events/planning`;
+const defaultListTasks: ListFn = async (query = {}) => api.task.list(query);
 
 /** Pure refresh factory — exported for unit testing without mocking the oRPC client. */
 export function createRefresh(
@@ -138,7 +133,7 @@ export class TaskStore {
         if (this.eventSource) return;
         if (typeof EventSource === 'undefined') return;
 
-        const es = new EventSource(await sseUrl());
+        const es = new EventSource(sseUrl());
         this.eventSource = es;
 
         es.onopen = this.handleSSEOpen;

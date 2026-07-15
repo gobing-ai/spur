@@ -139,6 +139,74 @@ describe('teams module components', () => {
         );
     });
 
+    test('RosterTab shows an autostart hint and Up feedback when no member is autostart (hint UX)', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const req = input instanceof Request ? input : new Request(String(input));
+            if (req.url.includes('/team/teams')) {
+                return jsonResponse({
+                    teams: [
+                        {
+                            teamId: 'alpha',
+                            name: 'Alpha',
+                            members: [{ id: 'planner', type: 'claude', status: 'stopped', autoStart: false }],
+                        },
+                    ],
+                });
+            }
+            // Up response: materialized but 0 started (no autostart members).
+            if (req.url.includes('/team/alpha/up')) {
+                return jsonResponse({
+                    materialized: { teamId: 'alpha', upserted: ['planner'], orphaned: [], written: true },
+                    started: [],
+                });
+            }
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { getByText, getByRole, queryByText } = render(
+            <TeamsProvider>
+                <RosterTab />
+            </TeamsProvider>,
+        );
+
+        await waitFor(() => expect(getByText('Alpha')).toBeDefined());
+
+        // Proactive hint: no member has autostart → explain Up before the user clicks.
+        await waitFor(() => expect(getByText(/Up starts only members with autostart/)).toBeDefined());
+        expect(queryByText(/none here/)).not.toBeNull();
+
+        // Reactive feedback: clicking Up surfaces "0 members started" instead of a silent no-op.
+        fireEvent.click(getByRole('button', { name: 'Up' }));
+        await waitFor(() => expect(getByText(/0 members started/)).toBeDefined());
+    });
+
+    test('RosterTab hides the autostart hint when a member has autostart enabled', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const req = input instanceof Request ? input : new Request(String(input));
+            if (req.url.includes('/team/teams')) {
+                return jsonResponse({
+                    teams: [
+                        {
+                            teamId: 'beta',
+                            name: 'Beta',
+                            members: [{ id: 'runner', type: 'omp', status: 'stopped', autoStart: true }],
+                        },
+                    ],
+                });
+            }
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { getByText, queryByText } = render(
+            <TeamsProvider>
+                <RosterTab />
+            </TeamsProvider>,
+        );
+        await waitFor(() => expect(getByText('Beta')).toBeDefined());
+        // A member with autostart → no "Up starts only … none here" hint.
+        expect(queryByText(/Up starts only members with autostart/)).toBeNull();
+    });
+
     test('selecting a member drives the Messages tab inbox fetch downstream (0254 AC3)', async () => {
         const inboxCalls: string[] = [];
         setFetchForTesting((async (input: RequestInfo | URL) => {

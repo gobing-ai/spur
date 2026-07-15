@@ -206,6 +206,9 @@ export const teamModule: ServerModule = {
                         id: spec.id,
                         type: spec.type,
                         status: proc?.status ?? 'unknown',
+                        // Surfaced so the Roster can show a hint when no member is
+                        // autostart (the Up button starts only autostart members).
+                        autoStart: spec.autoStart === true,
                         ...(proc?.pid !== undefined ? { pid: proc.pid } : {}),
                     };
                 }),

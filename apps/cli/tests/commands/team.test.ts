@@ -82,21 +82,26 @@ describe('spur team assign', () => {
 describe('spur team status', () => {
     test('lists created specs as stopped', async () => {
         const { cwd, out, cleanup } = await makeCtx();
-        try {
-            await main(['agent', 'create', '--type', 'claude-code', '--purpose', 'plan it', 'planner'], {
-                cwd,
-                output: out,
-                dbUrl: ':memory:',
-            });
-            const code = await main(['team', 'status', '--json'], { cwd, output: out, dbUrl: ':memory:' });
-            expect(code).toBe(0);
-            const payload = JSON.parse(out.messages.at(-1) ?? '{}');
-            expect(payload.agents).toHaveLength(1);
-            expect(payload.agents[0].id).toBe('planner');
-            expect(payload.agents[0].status).toBe('stopped');
-        } finally {
-            await cleanup();
-        }
+        await withMockedFetch(
+            async () => jsonResponse(200, { processes: [], count: 0 }),
+            async () => {
+                try {
+                    await main(['agent', 'create', '--type', 'claude-code', '--purpose', 'plan it', 'planner'], {
+                        cwd,
+                        output: out,
+                        dbUrl: ':memory:',
+                    });
+                    const code = await main(['team', 'status', '--json'], { cwd, output: out, dbUrl: ':memory:' });
+                    expect(code).toBe(0);
+                    const payload = JSON.parse(out.messages.at(-1) ?? '{}');
+                    expect(payload.agents).toHaveLength(1);
+                    expect(payload.agents[0].id).toBe('planner');
+                    expect(payload.agents[0].status).toBe('stopped');
+                } finally {
+                    await cleanup();
+                }
+            },
+        );
     });
 
     test('reports no specs on an empty project', async () => {
@@ -112,22 +117,82 @@ describe('spur team status', () => {
 
     test('plain-text status formats one row per spec', async () => {
         const { cwd, out, cleanup } = await makeCtx();
-        try {
-            await main(['agent', 'create', '--type', 'codex', '--purpose', 'write code', 'coder'], {
-                cwd,
-                output: out,
-                dbUrl: ':memory:',
-            });
-            const code = await main(['team', 'status'], { cwd, output: out, dbUrl: ':memory:' });
-            expect(code).toBe(0);
-            const line = out.messages.at(-1) ?? '';
-            // status \t id \t type \t purpose
-            expect(line).toContain('stopped');
-            expect(line).toContain('coder');
-            expect(line).toContain('write code');
-        } finally {
-            await cleanup();
-        }
+        await withMockedFetch(
+            async () => jsonResponse(200, { processes: [], count: 0 }),
+            async () => {
+                try {
+                    await main(['agent', 'create', '--type', 'codex', '--purpose', 'write code', 'coder'], {
+                        cwd,
+                        output: out,
+                        dbUrl: ':memory:',
+                    });
+                    const code = await main(['team', 'status'], { cwd, output: out, dbUrl: ':memory:' });
+                    expect(code).toBe(0);
+                    const line = out.messages.at(-1) ?? '';
+                    // status \t id \t type \t purpose
+                    expect(line).toContain('stopped');
+                    expect(line).toContain('coder');
+                    expect(line).toContain('write code');
+                } finally {
+                    await cleanup();
+                }
+            },
+        );
+    });
+
+    test('reflects live run status from the server supervisor', async () => {
+        const { cwd, out, cleanup } = await makeCtx();
+        await withMockedFetch(
+            async () =>
+                jsonResponse(200, {
+                    processes: [{ agentId: 'planner', pid: 4242, status: 'running', startedAt: 'x', exitCode: null }],
+                    count: 1,
+                }),
+            async () => {
+                try {
+                    await main(['agent', 'create', '--type', 'claude-code', '--purpose', 'plan it', 'planner'], {
+                        cwd,
+                        output: out,
+                        dbUrl: ':memory:',
+                    });
+                    out.messages.length = 0;
+                    const code = await main(['team', 'status', '--json'], { cwd, output: out, dbUrl: ':memory:' });
+                    expect(code).toBe(0);
+                    const payload = JSON.parse(out.messages.at(-1) ?? '{}');
+                    expect(payload.agents[0].id).toBe('planner');
+                    expect(payload.agents[0].status).toBe('running');
+                    expect(payload.agents[0].pid).toBe(4242);
+                } finally {
+                    await cleanup();
+                }
+            },
+        );
+    });
+
+    test('falls back to local specs (stopped) when the server is unreachable', async () => {
+        const { cwd, out, cleanup } = await makeCtx();
+        await withMockedFetch(
+            async () => {
+                throw new Error('ECONNREFUSED');
+            },
+            async () => {
+                try {
+                    await main(['agent', 'create', '--type', 'claude-code', '--purpose', 'plan it', 'planner'], {
+                        cwd,
+                        output: out,
+                        dbUrl: ':memory:',
+                    });
+                    out.messages.length = 0;
+                    const code = await main(['team', 'status'], { cwd, output: out, dbUrl: ':memory:' });
+                    expect(code).toBe(0);
+                    // Local spec still lists, but stays stopped without a live source.
+                    expect(out.messages.join('\n')).toContain('stopped');
+                    expect(out.errors.join('\n')).toMatch(/Cannot reach server/);
+                } finally {
+                    await cleanup();
+                }
+            },
+        );
     });
 });
 

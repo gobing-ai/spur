@@ -59,6 +59,24 @@ agent:
     dev-review: claude
     dev-verify: claude
 
+  # ── Teams (feature M) — declarative rosters materialized by `spur team up` ──
+  # A sample team so the Teams board tabs (Roster / Messages / Activity /
+  # Terminal) have data to render. `spur team up demo` writes agent specs to
+  # .spur/agents/<teamId>-<localId>.yaml; members are NOT autostarted (autostart
+  # defaults to false) — start one explicitly with `spur team start <agent-id>`
+  # to populate Terminal / Messages / Activity with live data.
+  team:
+    demo:
+      name: "Sample team"
+      work_dir: ~/xprojects/spur-new
+      members:
+        - executor: claude
+          purpose: "Lead — planning & review"
+        - executor: omp-zai
+          purpose: "Implementer — code generation"
+        - executor: codex
+          purpose: "Verifier — second opinion"
+
 rules:
   paths:
     - .spur/rules/**/*.yaml
