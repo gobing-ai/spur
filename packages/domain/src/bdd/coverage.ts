@@ -129,11 +129,21 @@ function parseForCoverage(content: string): string[] {
 /**
  * Lightweight feature parse — uses the full parser if content looks like Gherkin.
  * Returns null for non-Gherkin content.
+ *
+ * Task ACs often ship bare `Scenario:` blocks without a `Feature:` header (the
+ * feature file owns the Feature line). The Gherkin parser requires `Feature:`,
+ * so we synthesize a minimal wrapper when only scenarios are present — otherwise
+ * DD-09 coverage treats every task as covering nothing and all feature scenarios
+ * look like orphans.
  */
 function tryParseFeature(content: string): ParsedFeature | null {
     if (!content.includes('Feature:') && !content.includes('Scenario:')) {
         return null;
     }
+    const toParse =
+        content.includes('Feature:') || !content.includes('Scenario:')
+            ? content
+            : `Feature: __coverage_wrapper__\n\n${content}`;
     // Delegate to the real parser
-    return parseFeatureInternal(content);
+    return parseFeatureInternal(toParse);
 }

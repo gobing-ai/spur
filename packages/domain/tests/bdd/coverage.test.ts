@@ -142,4 +142,17 @@ describe('checkAcCoverage', () => {
         const result = checkAcCoverage(featureAc, taskAc);
         expect(result.covered).toBe(true);
     });
+
+    test('bare task Scenario blocks without Feature: still cover (task AC style)', () => {
+        // Tasks often omit the Feature: header; only the feature file owns it.
+        const taskAc = `@core
+Scenario: User can log in
+  Given a registered user
+  When they submit credentials
+  Then they are authenticated`;
+        const result = checkAcCoverage(featureAc, taskAc);
+        expect(result.covered).toBe(true);
+        expect(result.orphans).toEqual(['User can reset password']);
+        expect(result.uncovered).toHaveLength(0);
+    });
 });
