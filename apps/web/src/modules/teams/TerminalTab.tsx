@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Badge, Button, Modal, Select } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
+import { ATTACH_EVENT, consumePendingAttach } from './attach-bus';
 import MemberTerminal from './MemberTerminal';
 
 // ── Team/member shapes returned by GET /api/team/teams (0256 R2) ──
@@ -135,11 +136,25 @@ export default function TerminalTab() {
         return () => clearInterval(interval);
     }, [load]);
 
+    /** Resolve `agentId` to its team and select it. False when no loaded team owns it. */
+    const applyAttach = useCallback((agentId: string): boolean => {
+        const team = teamsRef.current.find((t) => t.members.some((m) => m.id === agentId));
+        if (!team) return false;
+        setTeamId(team.teamId);
+        setMemberId(agentId);
+        // R5 persist is handled by the existing [teamId, memberId] effect below.
+        return true;
+    }, []);
+
     // ── Restore last persisted selection once after the first teams load (0263 R2) ──
     useEffect(() => {
         if (restoredRef.done) return;
         if (teams.length === 0) return;
         restoredRef.done = true;
+        // An Attach clicked in Processes outranks the persisted selection: it is the
+        // operator's most recent intent, and it is why this tab just became visible.
+        const pending = consumePendingAttach();
+        if (pending && applyAttach(pending)) return;
         const persisted = readPersistedSelection();
         if (!persisted) return;
         const team = teamsRef.current.find((t) => t.teamId === persisted.teamId);
@@ -151,7 +166,25 @@ export default function TerminalTab() {
         }
         setTeamId(persisted.teamId);
         setMemberId(persisted.memberId);
-    }, [teams, restoredRef]);
+    }, [teams, restoredRef, applyAttach]);
+
+    // ── Listen for Attach while already mounted (0265 R1–R3) ──
+    // Covers the operator re-attaching once Terminal is the active tab. The mount-time
+    // consume above covers the usual path (Attach clicked while Terminal is unmounted).
+    useEffect(() => {
+        const onAttach = (event: Event) => {
+            const detail = (event as CustomEvent<{ agentId?: unknown }>).detail;
+            const agentId = detail?.agentId;
+            if (typeof agentId !== 'string' || !agentId) return;
+            // Unknown agentId leaves the intent pending and selection unchanged (edge
+            // scenario, no crash); a later teams load resolves it or drops it on consume.
+            if (applyAttach(agentId)) consumePendingAttach();
+        };
+        globalThis.addEventListener(ATTACH_EVENT, onAttach);
+        return () => {
+            globalThis.removeEventListener(ATTACH_EVENT, onAttach);
+        };
+    }, [applyAttach]);
 
     // ── Cascade: when team changes, reset the member pick if it's no longer valid ──
     const currentTeam = teams.find((t) => t.teamId === teamId);

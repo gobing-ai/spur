@@ -806,6 +806,159 @@ describe('teams module components', () => {
         await waitFor(() => expect(globalThis.localStorage?.getItem(key)).toBeNull());
     });
 
+    test('TerminalTab listens for teams:attach-process and selects the member (0265 R1-R3, R5)', async () => {
+        const key = 'spur:board:teams:lastTerminal';
+        globalThis.localStorage?.removeItem(key);
+
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const req = input instanceof Request ? input : new Request(String(input));
+            if (req.url.includes('/team/teams')) {
+                return jsonResponse({
+                    teams: [
+                        {
+                            teamId: 'alpha',
+                            name: 'Alpha',
+                            members: [
+                                { id: 'planner', type: 'claude', status: 'running' },
+                                { id: 'coder', type: 'codex', status: 'stopped' },
+                            ],
+                        },
+                    ],
+                });
+            }
+            if (req.url.includes('/team/processes')) return jsonResponse({ processes: [] });
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { container, queryByText } = render(<TerminalTab />);
+
+        // Wait for teams to load so the listener has a snapshot to resolve against.
+        await waitFor(() => {
+            expect(container.querySelector('[data-terminal-team-select]')).not.toBeNull();
+        });
+
+        // No selection yet — prompt is visible.
+        expect(queryByText('Choose a team and member above to open a terminal.')).not.toBeNull();
+
+        // ProcessesTab dispatches this event; simulate it here.
+        act(() => {
+            globalThis.dispatchEvent(new CustomEvent('teams:attach-process', { detail: { agentId: 'planner' } }));
+        });
+
+        // MemberTerminal mounts for the attached agentId (R3).
+        await waitFor(() => {
+            expect(container.querySelector('[data-member-terminal="planner"]')).not.toBeNull();
+        });
+
+        // Selection persisted to localStorage (R5 — handled by existing persist effect).
+        await waitFor(() => {
+            const raw = globalThis.localStorage?.getItem(key);
+            expect(raw).not.toBeNull();
+            const parsed = JSON.parse(raw ?? '{}') as { teamId: string; memberId: string };
+            expect(parsed).toEqual({ teamId: 'alpha', memberId: 'planner' });
+        });
+    });
+
+    test('TerminalTab ignores teams:attach-process for unknown agentId (0265 edge, no crash)', async () => {
+        const key = 'spur:board:teams:lastTerminal';
+        globalThis.localStorage?.removeItem(key);
+
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const req = input instanceof Request ? input : new Request(String(input));
+            if (req.url.includes('/team/teams')) {
+                return jsonResponse({
+                    teams: [
+                        {
+                            teamId: 'alpha',
+                            name: 'Alpha',
+                            members: [{ id: 'planner', type: 'claude', status: 'running' }],
+                        },
+                    ],
+                });
+            }
+            if (req.url.includes('/team/processes')) return jsonResponse({ processes: [] });
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { container, queryByText } = render(<TerminalTab />);
+
+        await waitFor(() => {
+            expect(container.querySelector('[data-terminal-team-select]')).not.toBeNull();
+        });
+
+        // Dispatch for an agentId that is not in any team.
+        expect(() => {
+            act(() => {
+                globalThis.dispatchEvent(
+                    new CustomEvent('teams:attach-process', { detail: { agentId: 'ghost-agent' } }),
+                );
+            });
+        }).not.toThrow();
+
+        // Selection unchanged — prompt still visible, no MemberTerminal mounted.
+        expect(queryByText('Choose a team and member above to open a terminal.')).not.toBeNull();
+        expect(container.querySelector('[data-member-terminal]')).toBeNull();
+        expect(globalThis.localStorage?.getItem(key)).toBeNull();
+    });
+
+    // Regression: the listener lives in TerminalTab, but TeamsShell renders only the
+    // active tab — so Terminal is unmounted exactly when Attach is clicked in Processes.
+    // Mounting TerminalTab directly hides that gap; this drives the operator's real path.
+    test('Attach in Processes opens that member in Terminal via the shell (0265 @core AC)', async () => {
+        globalThis.localStorage?.removeItem('spur:board:teams:lastTerminal');
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/team/teams')) {
+                return jsonResponse({
+                    teams: [
+                        {
+                            teamId: 'alpha',
+                            name: 'Alpha',
+                            members: [{ id: 'planner', type: 'claude', status: 'running' }],
+                        },
+                    ],
+                });
+            }
+            if (url.includes('/team/processes')) {
+                return jsonResponse({
+                    processes: [
+                        {
+                            agentId: 'planner',
+                            pid: 4242,
+                            status: 'running',
+                            startedAt: '2026-07-15T12:00:00.000Z',
+                            exitCode: null,
+                        },
+                    ],
+                    count: 1,
+                    executions: [],
+                    executionsCount: 0,
+                });
+            }
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { getByRole, container } = render(<TeamsShell />);
+
+        // Attach only exists on the Processes tab, so the operator must be there to click it.
+        fireEvent.click(getByRole('tab', { name: 'Processes' }));
+        await waitFor(() => expect(container.querySelector('[data-processes-attach-btn]')).not.toBeNull());
+
+        fireEvent.click(container.querySelector('[data-processes-attach-btn]') as Element);
+
+        // Attach reveals the Terminal tab (R4) rather than leaving the operator on Processes.
+        await waitFor(() => expect(getByRole('tab', { name: 'Terminal' }).getAttribute('aria-selected')).toBe('true'));
+
+        // "Then Terminal shows that team and member selected / And MemberTerminal mounts".
+        await waitFor(() => expect(container.querySelector('[data-member-terminal="planner"]')).not.toBeNull());
+
+        // R5: the attached selection persists like any other.
+        await waitFor(() => {
+            const raw = globalThis.localStorage?.getItem('spur:board:teams:lastTerminal');
+            expect(JSON.parse(raw ?? '{}')).toEqual({ teamId: 'alpha', memberId: 'planner' });
+        });
+    });
+
     test('ActivityTab renders team/message events and filters out unrelated telemetry (0254 R7)', async () => {
         setFetchForTesting((async (input: RequestInfo | URL) => {
             const url = input instanceof Request ? input.url : String(input);

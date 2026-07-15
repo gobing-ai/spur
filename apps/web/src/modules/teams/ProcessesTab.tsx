@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Badge, Button, Loading } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
+import { requestAttach } from './attach-bus';
 
 // ── Wire shapes from GET /api/team/processes ──
 
@@ -171,11 +172,9 @@ export default function ProcessesTab() {
         [load],
     );
 
-    // Attach: signal Terminal tab's local selection (loose coupling).
+    // Attach: signal Terminal tab's local selection (loose coupling via attach-bus).
     const attachToTerminal = useCallback((agentId: string) => {
-        if (typeof globalThis.CustomEvent !== 'undefined') {
-            globalThis.dispatchEvent(new CustomEvent('teams:attach-process', { detail: { agentId } }));
-        }
+        requestAttach(agentId);
     }, []);
 
     const watchRows = useMemo(

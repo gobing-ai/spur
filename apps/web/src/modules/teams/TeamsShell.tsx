@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { ATTACH_EVENT } from './attach-bus';
 import { TeamsProvider } from './TeamsContext';
 import { TEAMS_TABS, type TeamsTab } from './tabs';
 
@@ -7,6 +8,17 @@ export default function TeamsShell() {
     const [activeId, setActiveId] = useState<string>('terminal');
     const active: TeamsTab | undefined = TEAMS_TABS.find((t) => t.id === activeId);
     const Active = active?.component;
+
+    // Attach from Processes reveals the Terminal tab (0265 R4). Only this shell owns
+    // tab state, and mounting Terminal is what lets it consume the pending intent —
+    // without the switch, Attach would resolve into a tab the operator cannot see.
+    useEffect(() => {
+        const onAttach = () => setActiveId('terminal');
+        globalThis.addEventListener(ATTACH_EVENT, onAttach);
+        return () => {
+            globalThis.removeEventListener(ATTACH_EVENT, onAttach);
+        };
+    }, []);
 
     return (
         <TeamsProvider>
