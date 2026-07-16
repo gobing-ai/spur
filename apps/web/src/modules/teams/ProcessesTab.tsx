@@ -159,7 +159,7 @@ function ProcessFilterControls({
                 <select
                     value={filters.source}
                     onChange={(e) => onFilters({ ...filters, source: e.target.value })}
-                    className="select select-xs"
+                    className="border border-spur-border rounded px-1 py-0.5 bg-spur-bg text-spur-text"
                     data-processes-filter-source
                     aria-label="Source filter"
                 >
@@ -174,7 +174,7 @@ function ProcessFilterControls({
                 <select
                     value={filters.team}
                     onChange={(e) => onFilters({ ...filters, team: e.target.value })}
-                    className="select select-xs"
+                    className="border border-spur-border rounded px-1 py-0.5 bg-spur-bg text-spur-text"
                     data-processes-filter-team
                     aria-label="Team filter"
                 >
@@ -190,7 +190,7 @@ function ProcessFilterControls({
 
             <button
                 type="button"
-                className="btn btn-ghost btn-xs"
+                className="border border-spur-border rounded px-2 py-0.5 text-spur-text hover:bg-base-200 transition-colors cursor-pointer"
                 onClick={() => onFilters({ runningOnly: false, source: 'all', team: 'all' })}
                 data-processes-filter-clear
             >
