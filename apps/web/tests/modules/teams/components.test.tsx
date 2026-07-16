@@ -300,7 +300,8 @@ describe('teams module components', () => {
 
         await waitFor(() => expect(getByText('planner')).toBeDefined());
         expect(getByText('git.status')).toBeDefined();
-        expect(getByText('one-shot')).toBeDefined();
+        // Source cell for the one-shot row (filter dropdown also labels "one-shot").
+        expect(container.querySelector('[data-process-source="one-shot"]')).not.toBeNull();
         // Supervised row still has Start/Stop; one-shot has no control buttons.
         expect(container.querySelectorAll('[data-processes-toggle-btn]').length).toBe(1);
         // Only supervised agent gets Attach.
@@ -1472,7 +1473,7 @@ describe('buildWatchRows + filterWatchRows (0267)', () => {
             startedAt: '2026-07-15T00:00:00Z',
             exitedAt: null,
             exitCode: null,
-            source: 'registry',
+            source: 'one-shot',
             teamId: 'blue',
             agentId: null,
         },
@@ -1486,7 +1487,7 @@ describe('buildWatchRows + filterWatchRows (0267)', () => {
             startedAt: '2026-07-15T00:00:00Z',
             exitedAt: null,
             exitCode: null,
-            source: 'registry',
+            source: 'serve',
             teamId: null,
             agentId: 'gamma',
         },
@@ -1512,18 +1513,25 @@ describe('buildWatchRows + filterWatchRows (0267)', () => {
         expect(keys).not.toContain('sup:beta');
     });
 
-    test('source=supervisor hides registry rows', () => {
+    test('source=supervisor hides non-supervisor rows', () => {
         const rows = buildWatchRows(supervised, executions);
         const filtered = filterWatchRows(rows, { runningOnly: false, source: 'supervisor', team: 'all' });
         const keys = filtered.map((r) => r.key);
         expect(keys).toEqual(['sup:alpha', 'sup:beta']);
     });
 
-    test('source=registry hides supervised rows', () => {
+    test('source=one-shot keeps only one-shot registry rows', () => {
         const rows = buildWatchRows(supervised, executions);
-        const filtered = filterWatchRows(rows, { runningOnly: false, source: 'registry', team: 'all' });
+        const filtered = filterWatchRows(rows, { runningOnly: false, source: 'one-shot', team: 'all' });
         const keys = filtered.map((r) => r.key);
-        expect(keys).toEqual(['reg:e1', 'reg:e2']);
+        expect(keys).toEqual(['reg:e1']);
+    });
+
+    test('source=other keeps rows that are neither supervisor nor one-shot', () => {
+        const rows = buildWatchRows(supervised, executions);
+        const filtered = filterWatchRows(rows, { runningOnly: false, source: 'other', team: 'all' });
+        const keys = filtered.map((r) => r.key);
+        expect(keys).toEqual(['reg:e2']);
     });
 
     test('team filter narrows to a specific team', () => {

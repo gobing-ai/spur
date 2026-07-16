@@ -12,7 +12,7 @@ priority: P2
 tags: ["teams", "process-registry"]
 dependencies: []
 created_at: "2026-07-15T23:03:21.136Z"
-updated_at: "2026-07-16T01:28:04.572Z"
+updated_at: "2026-07-16T02:56:41.873Z"
 ---
 
 ## 0267. Process watch list filters and teamId tagging
@@ -58,8 +58,6 @@ Scenario: Supervised spawns carry teamId when team membership is known
 3. Tests for filters and teamId tag.
 4. Update empty-state copy for "no matches".
 ### Solution
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
 **Backend (teamId tagging — R1):**
 - `packages/app/src/services/supervisor-service.ts:29-30` — Added `teamId?: string | null` to `ProcessEntry` interface.
 - `packages/app/src/services/supervisor-service.ts:154-157` — `start()` resolves `teamId` from `spec.tags` (`team:<id>` prefix). First matching tag wins; null if no team tag.
@@ -70,34 +68,65 @@ Scenario: Supervised spawns carry teamId when team membership is known
 **Frontend (filters + empty state — R2, R3, R4):**
 - `apps/web/src/modules/teams/ProcessesTab.tsx:52` — Added `teamId: string | null` to `WatchRow` interface.
 - `apps/web/src/modules/teams/ProcessesTab.tsx:65-98` — `buildWatchRows` sets `teamId` on supervised rows (`p.teamId ?? null`) and registry rows (`e.teamId ?? null`).
-- `apps/web/src/modules/teams/ProcessesTab.tsx:100-122` — `WatchFilters` interface + `filterWatchRows()` pure helper (runningOnly, source, team filters; `unassigned` sentinel for null teamId).
-- `apps/web/src/modules/teams/ProcessesTab.tsx:131-204` — `ProcessFilterControls` component with native `<select>`/`<input type="checkbox">` (avoids `@/ui` Select mock issues under happy-dom). Data attributes: `data-processes-filters`, `data-processes-filter-running-input`, `data-processes-filter-source`, `data-processes-filter-team`, `data-processes-filter-clear`, `data-processes-filter-count`.
-- `apps/web/src/modules/teams/ProcessesTab.tsx:213-260` — `ProcessesTab` body: `useState<WatchFilters>` (ephemeral, R3), `useMemo` for `filteredRows` and `teamIds`.
-- `apps/web/src/modules/teams/ProcessesTab.tsx:270-290` — R4 empty state: renders `ProcessFilterControls` + "No processes match the current filters" with `data-processes-tab-filtered-empty` / `data-processes-tab-no-matches` when `filteredRows.length === 0` but `watchRows.length > 0`.
-- `apps/web/src/modules/teams/ProcessesTab.tsx:380-420` — Team column added to table (`<th>Team</th>` + `<td data-process-team={p.teamId ?? ''}>`).
+- `apps/web/src/modules/teams/ProcessesTab.tsx:102-130` — `WatchFilters` + `filterWatchRows()` pure helper (runningOnly; source `all|supervisor|one-shot|other`; team / `unassigned`).
+- `apps/web/src/modules/teams/ProcessesTab.tsx:131-204` — `ProcessFilterControls` with native checkbox/selects. Source options: all / supervisor / one-shot / other (R2).
+- `apps/web/src/modules/teams/ProcessesTab.tsx:218+` — ephemeral `useState<WatchFilters>` (R3); filtered empty state (R4).
+- Team column on table (`data-process-team`).
 
 **Tests (R5):**
-- `packages/app/tests/services/supervisor-service.test.ts:123-175` — 2 tests: teamId tagged from `team:red-squad` tag; teamId null when no team tag.
-- `apps/web/tests/modules/teams/components.test.tsx:1288-1380` — 8 `filterWatchRows`/`buildWatchRows` unit tests: teamId threading, runningOnly, source=supervisor, source=registry, team filter, unassigned filter, combined filters, all-pass.
-- `apps/web/tests/modules/teams/components.test.tsx:368-488` — 4 ProcessesTab component tests: filter controls + team column render; running-only hides non-running; team filter narrows rows; no-matches empty state (R4).
+- `packages/app/tests/services/supervisor-service.test.ts` — 2 teamId tagging tests.
+- `apps/web/tests/modules/teams/components.test.tsx` — 9 pure-helper tests (incl. one-shot/other) + 4 filter UI tests.
 
 **Key decisions:**
-- teamId resolved from `spec.tags` inside `SupervisorService.start()` — no new service dependency, no breaking signature change.
-- `filterWatchRows` exported as pure function for unit testability (`.tsx` exempt from require-corresponding-test rule, but R5 explicitly requires it).
-- Native HTML controls instead of `@/ui` Select — happy-dom + React 19 doesn't fire `change` on controlled selects.
-### Testing
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- teamId from `spec.tags` inside `SupervisorService.start()` — no new service dependency.
+- `filterWatchRows` exported for unit testability.
+- Native HTML controls for happy-dom + React 19.
 
-**Commands run:**
-- `bun run lint` — clean (Biome 0 errors, typecheck 0 errors across 7 workspaces).
-- `bun run test` — 2901 pass, 0 fail, 8252 expect() calls across 197 files. +14 new tests vs baseline (2887).
-- `bun run build` — green (all workspaces + Astro web build).
-- `bun run test-cf` — pre-existing failure (WebSocket env issue on clean main), unrelated to 0267.
+**Verify fix (`--fix all`, 2026-07-15):** Source dropdown used `registry`, which never matched production row sources (`one-shot`). Aligned to R2 (`supervisor|one-shot|other`); `other` excludes supervisor and one-shot. Adjusted fixtures + 0264 assertion (dropdown label collision).
+### Testing
+**Verify run:** 2026-07-15 (standalone `/sp:dev-verify 0267 --auto --focus all --fix all --force --next`)
+
+**Commands run (this verify):**
+- `bun test packages/app/tests/services/supervisor-service.test.ts apps/web/tests/modules/teams/components.test.tsx` — **64 pass, 0 fail** (post-fix).
+- `spur task check 0267 --strict-core` — **pass** (warning only: AC scenario not in M2 feature AC subset, DD-09).
+- Prior implementer suite: `bun run lint` / `bun run test` / `bun run build` reported green at done transition.
 
 **Coverage:**
-- `packages/app/src/services/supervisor-service.ts`: 100% lines, 92.11% functions.
-- `apps/web/src/modules/teams/ProcessesTab.tsx`: covered via component tests (`.tsx` excluded from per-file gate per bunfig.toml).
-- New `filterWatchRows` / `buildWatchRows` helpers: 8 unit tests covering all filter branches + teamId threading.
+- `packages/app/src/services/supervisor-service.ts`: 100% lines / 92.11% functions (in scoped test run).
+- `apps/web/src/modules/teams/ProcessesTab.tsx`: covered via component + pure-helper tests (`.tsx` excluded from per-file gate).
+- Coverage: N/A for full monorepo aggregate this run; scoped evidence above.
+
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 Supervisor start tags teamId when agent has known team | MET | `supervisor-service.ts:154-169,185`; tests `resolves teamId from spec.tags` + `leaves teamId null` (`supervisor-service.test.ts:124-162`); API maps `teamId` (`apps/server/src/modules/team/index.ts:49,65`) |
+| R2 ProcessesTab filters: running-only, source (supervisor\|one-shot\|other), optional team | MET | `filterWatchRows` + `ProcessFilterControls` (`ProcessesTab.tsx:102-196`); UI options all/supervisor/one-shot/other; component tests + 9 pure-helper tests |
+| R3 Filter state ephemeral (no persistence) | MET | `useState<WatchFilters>` only (`ProcessesTab.tsx:218`); no localStorage for filters |
+| R4 Empty state when filters hide all rows | MET | filtered-empty branch + copy (`ProcessesTab.tsx:335-350`); test `filters hiding all rows show the no-matches empty state` |
+| R5 Tests for filter logic + API teamId | MET | 9 `filterWatchRows`/`buildWatchRows` unit tests + 4 ProcessesTab filter UI tests + 2 supervisor teamId tests |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: Process watch list can focus running registry executions (@core) | MET | test | `running-only checkbox hides non-running rows`; `runningOnly filter hides non-running rows` — 64/64 green this run |
+| Scenario: Supervised spawns carry teamId when team membership is known (@edge) | MET | test | `resolves teamId from spec.tags (team:<id>) and tags the process entry` — expect `entry.teamId` + `calls[0].teamId` = `red-squad` |
+
+**Design conformance**
+
+| Claim | Status | Notes |
+|-------|--------|-------|
+| UI toggle/selects (running-only, source) | DONE | Single-select (not multi-select) — goal-equivalent; Solution documents native controls |
+| Pure helper `filterWatchRows` | DONE | Exported + unit-tested |
+| teamId into PipeProcessOptions on supervisor start | DONE | From `spec.tags` `team:<id>` (CHANGED from TeamService map; Solution documents) |
+| Ambiguous multi-team: first or unset | DONE | First `team:` tag wins; code comment + prior Review P3 |
+
+**Fix pass (`--fix all`):** Source filter offered `registry`, which does not match production row sources (`one-shot`). Aligned options to R2 (`supervisor` / `one-shot` / `other`); `other` = neither supervisor nor one-shot. Updated unit fixtures + 0264 `getByText('one-shot')` collision with dropdown label.
+
+**SECUA (post-fix):** No blockers/majors. Residual: multi-team first-tag only (accepted P3); `test-cf` pre-existing WebSocket env failure on main (N/A to 0267).
+
+**Verdict:** PASS
 ### Review
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
 

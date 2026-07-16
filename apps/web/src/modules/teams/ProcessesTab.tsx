@@ -102,7 +102,10 @@ export function buildWatchRows(processes: SupervisedProcessRow[], executions: Re
 export interface WatchFilters {
     /** When true, hide rows whose status is not `running`. */
     runningOnly: boolean;
-    /** Source filter: `all` | `supervisor` | `registry` | arbitrary source string. */
+    /**
+     * Source filter: `all` | `supervisor` | `one-shot` | `other`.
+     * `other` matches any source that is neither `supervisor` nor `one-shot`.
+     */
     source: string;
     /** Team filter: `all` | team id. `unassigned` selects rows with null teamId. */
     team: string;
@@ -112,7 +115,11 @@ export interface WatchFilters {
 export function filterWatchRows(rows: WatchRow[], filters: WatchFilters): WatchRow[] {
     return rows.filter((row) => {
         if (filters.runningOnly && row.status !== 'running') return false;
-        if (filters.source !== 'all' && row.source !== filters.source) return false;
+        if (filters.source === 'other') {
+            if (row.source === 'supervisor' || row.source === 'one-shot') return false;
+        } else if (filters.source !== 'all' && row.source !== filters.source) {
+            return false;
+        }
         if (filters.team === 'unassigned') {
             if (row.teamId != null) return false;
         } else if (filters.team !== 'all') {
@@ -165,7 +172,8 @@ function ProcessFilterControls({
                 >
                     <option value="all">all</option>
                     <option value="supervisor">supervisor</option>
-                    <option value="registry">registry</option>
+                    <option value="one-shot">one-shot</option>
+                    <option value="other">other</option>
                 </select>
             </label>
 
