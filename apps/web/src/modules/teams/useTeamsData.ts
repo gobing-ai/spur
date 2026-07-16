@@ -10,6 +10,7 @@ export interface TeamMember {
     status: string;
 }
 
+/** A team and its members as surfaced by GET /api/team/teams. */
 export interface TeamGroup {
     teamId: string;
     name: string;
@@ -44,6 +45,7 @@ const teamsUrl = () => `${resolveApiUrl()}/team/teams`;
 /** Reconnect-after-respawn poll interval (ms) for the team/member status refresh. */
 const TEAMS_POLL_MS = 5000;
 
+/** Result of `useTeamsData`: live teams, last error, and an imperative refetch. */
 export interface UseTeamsDataResult {
     teams: TeamGroup[];
     error: string | null;
