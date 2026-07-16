@@ -26,6 +26,8 @@ export interface ProcessEntry {
     exitCode?: number | null;
     /** Ring buffer of recent output frames (bounded, oldest-first). */
     ringBuffer: ProcessFrame[];
+    /** Team the agent belongs to, resolved from spec.tags (`team:<id>`) at start (spur#0267). */
+    teamId?: string | null;
 }
 
 /** Payload for process lifecycle events. Metadata only — no output body. */
@@ -149,6 +151,10 @@ export class SupervisorService {
         }
 
         const { command, args } = this.resolveCommand(spec);
+        // Resolve teamId from spec.tags (`team:<id>`) for registry grouping (spur#0267 R1).
+        // If the agent belongs to multiple teams, the first `team:` tag wins.
+        const teamTag = spec.tags.find((t) => t.startsWith('team:'));
+        const teamId = teamTag ? teamTag.slice('team:'.length) : null;
         const frames: ProcessFrame[] = [];
         this.ringBuffers.set(agentId, frames);
 
@@ -159,6 +165,8 @@ export class SupervisorService {
             // Tag for ProcessRegistry watch list (ts-runtime 0.4.10 / spur#0264).
             source: 'supervisor',
             agentId,
+            // Thread teamId into ProcessRegistry execution row (spur#0267 R1).
+            ...(teamId ? { teamId } : {}),
             env: Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== undefined)) as Record<
                 string,
                 string
@@ -174,6 +182,7 @@ export class SupervisorService {
             status: 'running',
             startedAt: new Date().toISOString(),
             ringBuffer: frames,
+            teamId,
         };
 
         this.processes.set(agentId, { handle, entry });

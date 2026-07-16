@@ -46,6 +46,7 @@ export const teamModule: ServerModule = {
                 status: p.status,
                 startedAt: p.startedAt,
                 exitCode: p.exitCode ?? null,
+                teamId: p.teamId ?? null,
             }));
             const executions = ctx
                 .processRegistry()

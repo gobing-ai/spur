@@ -5,7 +5,7 @@ import { useEffect, useRef } from 'react';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
 import ActivityTab from '../../../src/modules/teams/ActivityTab';
 import MessagesTab from '../../../src/modules/teams/MessagesTab';
-import ProcessesTab from '../../../src/modules/teams/ProcessesTab';
+import ProcessesTab, { buildWatchRows, filterWatchRows } from '../../../src/modules/teams/ProcessesTab';
 import TeamControlStrip from '../../../src/modules/teams/TeamControlStrip';
 import TeamsShell from '../../../src/modules/teams/TeamsShell';
 import TerminalTab from '../../../src/modules/teams/TerminalTab';
@@ -363,6 +363,167 @@ describe('teams module components', () => {
 
         expect(seen).toEqual(['attach-me']);
         globalThis.removeEventListener('teams:attach-process', listener);
+    });
+
+    // ── ProcessesTab filter UI (0267 R2, R4) ───────────────────────────────
+
+    test('ProcessesTab renders filter controls and team column (0267 R2)', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/team/processes')) {
+                return jsonResponse({
+                    processes: [
+                        {
+                            agentId: 'alpha',
+                            pid: 1,
+                            status: 'running',
+                            startedAt: '2026-07-15T12:00:00Z',
+                            exitCode: null,
+                            teamId: 'red',
+                        },
+                    ],
+                    count: 1,
+                    executions: [],
+                    executionsCount: 0,
+                });
+            }
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { container } = render(<ProcessesTab />);
+
+        await waitFor(() => expect(container.querySelector('[data-processes-tab]')).not.toBeNull());
+        // Filter controls present.
+        expect(container.querySelector('[data-processes-filters]')).not.toBeNull();
+        expect(container.querySelector('[data-processes-filter-running-input]')).not.toBeNull();
+        expect(container.querySelector('[data-processes-filter-source]')).not.toBeNull();
+        expect(container.querySelector('[data-processes-filter-team]')).not.toBeNull();
+        // Team column shows the teamId.
+        expect(container.querySelector('[data-process-team="red"]')).not.toBeNull();
+    });
+
+    test('running-only checkbox hides non-running rows (0267 R2)', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/team/processes')) {
+                return jsonResponse({
+                    processes: [
+                        {
+                            agentId: 'runner',
+                            pid: 1,
+                            status: 'running',
+                            startedAt: '2026-07-15T12:00:00Z',
+                            exitCode: null,
+                            teamId: null,
+                        },
+                        {
+                            agentId: 'stopped',
+                            pid: 2,
+                            status: 'exited',
+                            startedAt: '2026-07-15T12:00:00Z',
+                            exitCode: 0,
+                            teamId: null,
+                        },
+                    ],
+                    count: 2,
+                    executions: [],
+                    executionsCount: 0,
+                });
+            }
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { container } = render(<ProcessesTab />);
+
+        await waitFor(() => expect(container.querySelector('[data-processes-row="sup:runner"]')).not.toBeNull());
+        expect(container.querySelector('[data-processes-row="sup:stopped"]')).not.toBeNull();
+
+        // Toggle running-only.
+        const checkbox = container.querySelector('[data-processes-filter-running-input]') as HTMLInputElement;
+        act(() => fireEvent.click(checkbox));
+
+        // stopped row hidden, runner still visible.
+        await waitFor(() => expect(container.querySelector('[data-processes-row="sup:stopped"]')).toBeNull());
+        expect(container.querySelector('[data-processes-row="sup:runner"]')).not.toBeNull();
+    });
+
+    test('team filter narrows rows to the selected team (0267 R2)', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/team/processes')) {
+                return jsonResponse({
+                    processes: [
+                        {
+                            agentId: 'alpha',
+                            pid: 1,
+                            status: 'running',
+                            startedAt: '2026-07-15T12:00:00Z',
+                            exitCode: null,
+                            teamId: 'red',
+                        },
+                        {
+                            agentId: 'beta',
+                            pid: 2,
+                            status: 'running',
+                            startedAt: '2026-07-15T12:00:00Z',
+                            exitCode: null,
+                            teamId: 'blue',
+                        },
+                    ],
+                    count: 2,
+                    executions: [],
+                    executionsCount: 0,
+                });
+            }
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { container } = render(<ProcessesTab />);
+
+        await waitFor(() => expect(container.querySelector('[data-processes-row="sup:alpha"]')).not.toBeNull());
+
+        // Select team=red via native select.
+        const select = container.querySelector('[data-processes-filter-team]') as HTMLSelectElement;
+        act(() => fireEvent.change(select, { target: { value: 'red' } }));
+
+        await waitFor(() => expect(container.querySelector('[data-processes-row="sup:beta"]')).toBeNull());
+        expect(container.querySelector('[data-processes-row="sup:alpha"]')).not.toBeNull();
+    });
+
+    test('filters hiding all rows show the no-matches empty state (0267 R4)', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/team/processes')) {
+                return jsonResponse({
+                    processes: [
+                        {
+                            agentId: 'alpha',
+                            pid: 1,
+                            status: 'exited',
+                            startedAt: '2026-07-15T12:00:00Z',
+                            exitCode: 0,
+                            teamId: null,
+                        },
+                    ],
+                    count: 1,
+                    executions: [],
+                    executionsCount: 0,
+                });
+            }
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { container } = render(<ProcessesTab />);
+
+        await waitFor(() => expect(container.querySelector('[data-processes-row="sup:alpha"]')).not.toBeNull());
+
+        // Toggle running-only — the only row is exited, so nothing matches.
+        const checkbox = container.querySelector('[data-processes-filter-running-input]') as HTMLInputElement;
+        act(() => fireEvent.click(checkbox));
+
+        await waitFor(() => expect(container.querySelector('[data-processes-tab-no-matches]')).not.toBeNull());
+        // Filter controls still visible so the user can widen.
+        expect(container.querySelector('[data-processes-filters]')).not.toBeNull();
     });
 
     // Regression guard for the 0260 Roster removal: RosterTab was the only writer of
@@ -1283,5 +1444,114 @@ describe('teams module components', () => {
                 'agent binary not found',
             ),
         );
+    });
+});
+
+// ── filterWatchRows / buildWatchRows unit tests (spur#0267 R5) ──
+
+describe('buildWatchRows + filterWatchRows (0267)', () => {
+    const supervised = [
+        {
+            agentId: 'alpha',
+            pid: 100,
+            status: 'running',
+            startedAt: '2026-07-15T00:00:00Z',
+            exitCode: null,
+            teamId: 'red',
+        },
+        { agentId: 'beta', pid: 101, status: 'exited', startedAt: '2026-07-15T00:00:00Z', exitCode: 0, teamId: null },
+    ];
+    const executions = [
+        {
+            id: 'e1',
+            label: 'one-shot',
+            command: 'run',
+            args: [],
+            pid: 200,
+            status: 'running',
+            startedAt: '2026-07-15T00:00:00Z',
+            exitedAt: null,
+            exitCode: null,
+            source: 'registry',
+            teamId: 'blue',
+            agentId: null,
+        },
+        {
+            id: 'e2',
+            label: 'sidecar',
+            command: 'run',
+            args: [],
+            pid: 201,
+            status: 'running',
+            startedAt: '2026-07-15T00:00:00Z',
+            exitedAt: null,
+            exitCode: null,
+            source: 'registry',
+            teamId: null,
+            agentId: 'gamma',
+        },
+    ];
+
+    test('buildWatchRows threads teamId from both supervised and registry rows', () => {
+        const rows = buildWatchRows(supervised, executions);
+        const byKey = new Map(rows.map((r) => [r.key, r]));
+        expect(byKey.get('sup:alpha')?.teamId).toBe('red');
+        expect(byKey.get('sup:beta')?.teamId).toBeNull();
+        expect(byKey.get('reg:e1')?.teamId).toBe('blue');
+        expect(byKey.get('reg:e2')?.teamId).toBeNull();
+    });
+
+    test('runningOnly filter hides non-running rows', () => {
+        const rows = buildWatchRows(supervised, executions);
+        const filtered = filterWatchRows(rows, { runningOnly: true, source: 'all', team: 'all' });
+        const keys = filtered.map((r) => r.key);
+        expect(keys).toContain('sup:alpha');
+        expect(keys).toContain('reg:e1');
+        expect(keys).toContain('reg:e2');
+        // beta is exited — filtered out.
+        expect(keys).not.toContain('sup:beta');
+    });
+
+    test('source=supervisor hides registry rows', () => {
+        const rows = buildWatchRows(supervised, executions);
+        const filtered = filterWatchRows(rows, { runningOnly: false, source: 'supervisor', team: 'all' });
+        const keys = filtered.map((r) => r.key);
+        expect(keys).toEqual(['sup:alpha', 'sup:beta']);
+    });
+
+    test('source=registry hides supervised rows', () => {
+        const rows = buildWatchRows(supervised, executions);
+        const filtered = filterWatchRows(rows, { runningOnly: false, source: 'registry', team: 'all' });
+        const keys = filtered.map((r) => r.key);
+        expect(keys).toEqual(['reg:e1', 'reg:e2']);
+    });
+
+    test('team filter narrows to a specific team', () => {
+        const rows = buildWatchRows(supervised, executions);
+        const filtered = filterWatchRows(rows, { runningOnly: false, source: 'all', team: 'red' });
+        expect(filtered.map((r) => r.key)).toEqual(['sup:alpha']);
+    });
+
+    test('team=unassigned selects only rows with null teamId', () => {
+        const rows = buildWatchRows(supervised, executions);
+        const filtered = filterWatchRows(rows, { runningOnly: false, source: 'all', team: 'unassigned' });
+        const keys = filtered.map((r) => r.key);
+        expect(keys).toContain('sup:beta');
+        expect(keys).toContain('reg:e2');
+        expect(keys).not.toContain('sup:alpha');
+        expect(keys).not.toContain('reg:e1');
+    });
+
+    test('combined runningOnly + team filter intersects correctly', () => {
+        const rows = buildWatchRows(supervised, executions);
+        const filtered = filterWatchRows(rows, { runningOnly: true, source: 'all', team: 'unassigned' });
+        // Only reg:e2 is both running AND unassigned (beta is exited).
+        expect(filtered.map((r) => r.key)).toEqual(['reg:e2']);
+    });
+
+    test('all-pass filter returns every row unchanged', () => {
+        const rows = buildWatchRows(supervised, executions);
+        const filtered = filterWatchRows(rows, { runningOnly: false, source: 'all', team: 'all' });
+        expect(filtered).toHaveLength(rows.length);
     });
 });

@@ -121,6 +121,46 @@ describe('SupervisorService', () => {
             expect(spawned?.payload.agentId).toBe('alpha');
         });
 
+        test('resolves teamId from spec.tags (team:<id>) and tags the process entry (spur#0267 R1)', async () => {
+            const { executor, calls } = createMockExecutor();
+            const { bus } = createMockBus();
+            const svc = new SupervisorService({
+                processExecutor: executor,
+                eventBus: bus,
+                configDir: '/tmp',
+                agentSpecs: [
+                    makeSpec({
+                        id: 'team-alpha',
+                        command: ['echo'],
+                        tags: ['team:red-squad', 'role:worker'],
+                    }),
+                ],
+            });
+
+            const entry = await svc.start('team-alpha');
+
+            // teamId resolved from the first `team:` tag.
+            expect(entry.teamId).toBe('red-squad');
+            // Threaded into PipeProcessOptions so the registry row carries it too.
+            expect(calls[0]?.teamId).toBe('red-squad');
+        });
+
+        test('leaves teamId null when spec has no team tag (spur#0267 R1)', async () => {
+            const { executor, calls } = createMockExecutor();
+            const { bus } = createMockBus();
+            const svc = new SupervisorService({
+                processExecutor: executor,
+                eventBus: bus,
+                configDir: '/tmp',
+                agentSpecs: [makeSpec({ id: 'solo', command: ['echo'], tags: ['role:worker'] })],
+            });
+
+            const entry = await svc.start('solo');
+
+            expect(entry.teamId).toBeNull();
+            expect(calls[0]?.teamId).toBeUndefined();
+        });
+
         test('returns existing entry when already running', async () => {
             const { executor } = createMockExecutor();
             const { bus } = createMockBus();
