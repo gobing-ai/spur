@@ -20,13 +20,53 @@
 
 - **System Events producer audit doc reflects narrowed CLI gap.** `docs/inventory/system-events-producer-audit.md` now shows planning events as Board+CLI reachable, with the Gap 1 path table updated to mark the CLI path as wired through `makePlanningEmitter(context)`.
 
-## Unreleased
+## [0.3.11] — 2026-07-16
+
+### Added
+
+- **Teams board — a full module for managing agent teams from the web.** `spur team up` / `spur team down` / `spur team status` CLI verbs drive a persistent agent loop that the supervisor self-drains. A new web module (board) hosts four tabs: **Terminal** (team → member cascading dropdowns with live status badges, localStorage-persisted selection, start/stop with confirmation modal, stdin POST, local echo, and message enqueue for loop agents), **Processes** (live watch list with team / source / running-only filters and a per-row Attach button that jumps to the member's terminal), **Messages** (per-member inbox with `EventSource` live-tail that refetches on `message.sent` / `message.replied`), and **Activity** (timeline of team / message / agent / supervisor events). A bulk Up/Down control strip sits above the tabs and replaces the prior Roster surface (M1).
+
+- **Cross-process registry exposes every harness-launched run.** A new `ProcessRegistry` records supervisor-tracked processes **and** one-shot agent executions. `apps/server` now injects the registry into the team module so `GET /api/team/processes` returns the full inventory — supervisor-tracked rows, ad-hoc `spur agent` runs, and descendants — with a `teamId` tag derived from `spec.tags.team:<id>` for grouping.
+
+- **`spur agent loop` — a persistent agent loop the supervisor self-drains.** Long-running members stay alive between requests without per-call spawn overhead. `SupervisorService.defaultWrapperArgv` switches to `agent loop` and boot-time autostart resolves via `resolveAutostartSet` across `agent.team.*` config and `SPUR_TEAM_AUTOSTART`.
+
+- **`spur init` substitutes AGENTS.md placeholders at scaffold time.** New projects no longer ship `{project-name}` / `{project-description}` placeholder tokens — `init` resolves them at write time. The bundled template is split into a **portable** `config/templates/AGENTS.md` (seeded by `spur init`) and a **monorepo-instance** root `AGENTS.md`, with a new alignment test that enforces the portable contract.
+
+- **Declarative team config schema.** New `parseTeamConfig()` validates `.spur/config.yaml` `agent.team.*` blocks (collision rejection across composed ids), and a sample team ships in the bundled config so the Teams board has data to render on a fresh init.
+
+- **`/sp:dev-verifyall` slash command.** Batch verification across a feature's task set — runs `/sp:dev-verify` over each member and emits a per-task PASS / PARTIAL / FAIL summary.
+
+- **Tooltips in observability tabs surface more diagnostic fields.** Each renderer in `buildTooltipSummary` now shows 2–4 high-value fields instead of 1, with a shared `formatDuration` / `pickNumber` helper pair. The `workflow` renderer collapses `phase / transition / action` into one labeled pair (not three redundant ones).
+
+- **Server error envelopes use status-specific messages in production.** Non-500 errors (404 / 409 / 422 / 503) now carry a client-safe message that corresponds to the status code instead of the generic "Internal server error". 500 errors still return the generic message with no stack leak.
+
+### Changed
+
+- **HITL default behavior is now deny, opt-in to approve.** The server-side default HITL responder never auto-approves unless the operator opts in via `SPUR_HITL_AUTO_APPROVE=1` (or the equivalent config key). The CLI desktop-notifier responder's non-macOS / osascript-error fallback also defaults to `no`. Eliminates the foot-gun where a missing interactive operator would silently approve work.
+
+- **Model-status doctor column renders the full enum.** `spur agent doctor` shows the full status string (`available | quota_exhausted | rate_limited | unavailable | unknown`) instead of 3-char abbreviations.
+
+- **Tool selection tab now lists `omp`, `Hermes`, and `Grok`** alongside the prior agents. Codex is removed from the supported list.
+
+- **Tailwind 4.3.2** — bumped `tailwindcss` and `@tailwindcss/vite` to 4.3.2.
 
 ### Fixed
 
 - **`spur serve` board 404 after global install.** The published `@gobing-ai/spur` package did not ship the Astro board static assets, so `http://localhost:<port>/board` returned `{"error":"Not Found"}` from any non-monorepo cwd (e.g. after `bun i -g @gobing-ai/spur`). `build:bundle` now runs `bundle-web` (copies `dist/web` → `apps/cli/web`), `package.json` `files` includes `web/`, and `resolveWebDistPath` looks next to the bundled `spur.js` / binary. Missing assets log a warning and browser-open falls back to `/api/health` instead of a JSON 404.
 
-- **Restore package-root `config/` in the npm release (ADR-015).** After the bin moved to package-root `spur.js` (2026-06-09), default config assets were nested under the leftover `spur-cli/config/` path and docs still said `dist/config`. Releases now ship top-level `config/` (via `bundle-config config` + `files: ["config", …]`); `bundledConfigRoot()` still accepts legacy `spur-cli/config`. **`spur init` full-tree seeds** every bundled asset into project `.spur/` (rules/**, workflows/**, tasks/**, templates/**, plugins/**), then applies the scaffold manifest for remaps and root-scoped docs/AGENTS — matching the monorepo symlink intent with real copies for end-user projects.
+- **Restore package-root `config/` in the npm release (ADR-015).** After the bin moved to package-root `spur.js`, default config assets were nested under the leftover `spur-cli/config/` path and docs still said `dist/config`. Releases now ship top-level `config/` (via `bundle-config config` + `files: ["config", …]`); `bundledConfigRoot()` still accepts legacy `spur-cli/config`. **`spur init` full-tree seeds** every bundled asset into project `.spur/` (rules/**, workflows/**, tasks/**, templates/**, plugins/**), then applies the scaffold manifest for remaps and root-scoped docs/AGENTS — matching the monorepo symlink intent with real copies for end-user projects.
+
+- **`POST /:team/up` now starts only `autoStart=true` members.** Prior implementation started every materialized member regardless of the spec's autoStart flag — contradicting the docs, the CLI, and the team definition. Routes now filter via `listAgentSpecs` so an `autoStart=false` member is created but not started.
+
+- **Cross-team composed-id collisions are rejected.** Two teams that would compose to the same `<team>:<member>` id now fail config parse instead of silently shadowing each other.
+
+- **ProcessesTab source filter aligns to production sources.** Dropdown now offers `supervisor` / `one-shot` / `other` (the labels actually produced) instead of `supervisor` / `registry` (the latter never matched production rows).
+
+- **ProcessesTab filters use utility-only tokens.** Replaced DaisyUI `select` / `btn` classes with `bg-base-200` / `border-spur-border` / `text-spur-text` to satisfy the no-daisyui-class-leak rule.
+
+- **Nested `<button>` removed from Roster member rows.** Restructured row to a styled `<div>` so Start / Stop are sibling buttons (no more invalid HTML or happy-dom hydration warning leak). MessagesTab uses the shared `<Button>` wrapper.
+
+- **Terminal input no longer silently swallows stdin for loop agents.** Lines submitted while the active member is a loop agent now produce a local echo frame and a fire-and-forget POST to `/api/messages`, in parallel with stdin (for agents that do consume stdin).
 
 ## [0.3.7] — 2026-07-12
 
