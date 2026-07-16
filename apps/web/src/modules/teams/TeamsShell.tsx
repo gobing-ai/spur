@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ATTACH_EVENT } from './attach-bus';
+import TeamControlStrip from './TeamControlStrip';
 import { TeamsProvider } from './TeamsContext';
 import { TEAMS_TABS, type TeamsTab } from './tabs';
 
@@ -50,6 +51,7 @@ export default function TeamsShell() {
                         );
                     })}
                 </div>
+                <TeamControlStrip />
                 <div
                     role="tabpanel"
                     id={`teams-tab-panel-${activeId}`}

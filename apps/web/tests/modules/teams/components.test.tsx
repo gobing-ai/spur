@@ -6,6 +6,7 @@ import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-c
 import ActivityTab from '../../../src/modules/teams/ActivityTab';
 import MessagesTab from '../../../src/modules/teams/MessagesTab';
 import ProcessesTab from '../../../src/modules/teams/ProcessesTab';
+import TeamControlStrip from '../../../src/modules/teams/TeamControlStrip';
 import TeamsShell from '../../../src/modules/teams/TeamsShell';
 import TerminalTab from '../../../src/modules/teams/TerminalTab';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
@@ -52,7 +53,7 @@ mock.module('@/ui', () => {
 
         const rest: Record<string, unknown> = {};
         for (const key of Object.keys(props)) {
-            if (key.startsWith('data-') || key === 'disabled' || key === 'className') {
+            if (key.startsWith('data-') || key === 'disabled' || key === 'className' || key === 'aria-label') {
                 rest[key] = props[key];
             }
         }
@@ -1042,5 +1043,245 @@ describe('teams module components', () => {
             );
         });
         expect(queryByText('task.updated')).toBeNull();
+    });
+
+    // ── TeamControlStrip (0266) ────────────────────────────────────────────
+    test('TeamControlStrip renders nothing when no teams exist (0266 R1)', async () => {
+        setFetchForTesting((async () => jsonResponse({ teams: [] })) as unknown as typeof fetch);
+        const { container } = render(<TeamControlStrip />);
+        await waitFor(() => expect(container.querySelector('[data-team-control-strip]')).toBeNull());
+    });
+
+    test('TeamControlStrip renders team picker + Up/Down buttons after loading teams (0266 R1)', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const req = input instanceof Request ? input : new Request(String(input));
+            if (req.url.includes('/team/teams')) {
+                return jsonResponse({
+                    teams: [
+                        {
+                            teamId: 'alpha',
+                            name: 'Alpha',
+                            members: [{ id: 'planner', type: 'codex', status: 'running' }],
+                        },
+                    ],
+                });
+            }
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { container } = render(<TeamControlStrip />);
+
+        const strip = await waitFor(() => {
+            const el = container.querySelector('[data-team-control-strip]');
+            expect(el).not.toBeNull();
+            return el as HTMLElement;
+        });
+        expect(strip.textContent).toContain('Team');
+        // Select a team so the Up/Down controls materialize.
+        act(() => getSelectOnChange('team-control')?.({ target: { value: 'alpha' } }));
+        await waitFor(() => expect(container.querySelector('[data-team-control-up]')).not.toBeNull());
+        expect(container.querySelector('[data-team-control-down]')).not.toBeNull();
+        // Down button is enabled — members are present.
+        const downBtn = container.querySelector('[data-team-control-down]') as HTMLButtonElement | null;
+        expect(downBtn?.disabled).toBe(false);
+    });
+
+    test('TeamControlStrip Up button POSTs /up immediately and shows success notice (0266 R2)', async () => {
+        const posts: { url: string; method: string }[] = [];
+        let teamsGets = 0;
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const req = input instanceof Request ? input : new Request(String(input));
+            if (req.url.includes('/team/teams')) {
+                teamsGets += 1;
+                return jsonResponse({
+                    teams: [
+                        {
+                            teamId: 'alpha',
+                            name: 'Alpha',
+                            members: [{ id: 'planner', type: 'codex', status: 'stopped' }],
+                        },
+                    ],
+                });
+            }
+            if (req.method === 'POST') posts.push({ url: req.url, method: req.method });
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { container } = render(<TeamControlStrip />);
+
+        // Wait for teams to load, then select a team.
+        await waitFor(() => expect(container.querySelector('[data-team-control-select]')).not.toBeNull());
+        act(() => getSelectOnChange('team-control')?.({ target: { value: 'alpha' } }));
+
+        const upBtn = await waitFor(() => {
+            const el = container.querySelector('[data-team-control-up]') as HTMLButtonElement | null;
+            expect(el).not.toBeNull();
+            return el as HTMLButtonElement;
+        });
+        act(() => fireEvent.click(upBtn));
+
+        await waitFor(() =>
+            expect(posts.some((p) => p.url.includes('/team/alpha/up') && p.method === 'POST')).toBe(true),
+        );
+        // `?check=true` makes the server treat /up as a dry-run that starts nothing
+        // (apps/server/src/modules/team/index.ts:250), so Up must post a bare URL.
+        const upPost = posts.find((p) => p.url.includes('/team/alpha/up'));
+        expect(new URL(upPost?.url ?? '').search).toBe('');
+        await waitFor(() => expect(container.querySelector('[data-team-control-notice]')).not.toBeNull());
+        expect(container.querySelector('[data-team-control-notice]')?.textContent).toContain('materialized');
+        // AC "process/team status refreshes": load() runs on the success path only
+        // (TeamControlStrip.tsx:119) — a refetch beyond the mount GET proves it, and the
+        // 5s poll is far outside this test's window so it cannot account for the second GET.
+        await waitFor(() => expect(teamsGets).toBeGreaterThan(1));
+        // No confirm modal for Up — only Down requires it (R2).
+        expect(container.querySelector('[data-team-down-confirm-modal]')).toBeNull();
+    });
+
+    test('TeamControlStrip Down opens confirm modal; cancel sends no POST (0266 R2)', async () => {
+        const posts: { url: string; method: string }[] = [];
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const req = input instanceof Request ? input : new Request(String(input));
+            if (req.url.includes('/team/teams')) {
+                return jsonResponse({
+                    teams: [
+                        {
+                            teamId: 'alpha',
+                            name: 'Alpha',
+                            members: [{ id: 'planner', type: 'codex', status: 'running' }],
+                        },
+                    ],
+                });
+            }
+            if (req.method === 'POST') posts.push({ url: req.url, method: req.method });
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { container } = render(<TeamControlStrip />);
+
+        await waitFor(() => expect(container.querySelector('[data-team-control-select]')).not.toBeNull());
+        act(() => getSelectOnChange('team-control')?.({ target: { value: 'alpha' } }));
+
+        const downBtn = await waitFor(() => {
+            const el = container.querySelector('[data-team-control-down]') as HTMLButtonElement | null;
+            expect(el).not.toBeNull();
+            return el as HTMLButtonElement;
+        });
+        act(() => fireEvent.click(downBtn));
+
+        // Modal opens, no POST yet.
+        const modal = await waitFor(() => {
+            const el = container.querySelector('[data-team-down-confirm-modal]');
+            expect(el).not.toBeNull();
+            return el as HTMLElement;
+        });
+        expect(modal.textContent).toContain('Stop team?');
+        expect(posts.filter((p) => p.url.includes('/down'))).toHaveLength(0);
+
+        // Cancel closes the modal with no side effects.
+        const cancelBtn = await waitFor(() => {
+            const el = container.querySelector('[data-team-down-confirm-cancel]') as HTMLButtonElement | null;
+            expect(el).not.toBeNull();
+            return el as HTMLButtonElement;
+        });
+        act(() => fireEvent.click(cancelBtn));
+        await waitFor(() => expect(container.querySelector('[data-team-down-confirm-modal]')).toBeNull());
+        expect(posts.filter((p) => p.url.includes('/down'))).toHaveLength(0);
+    });
+
+    test('TeamControlStrip Down confirm POSTs /down and shows success notice (0266 R2+R3)', async () => {
+        const posts: { url: string; method: string }[] = [];
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const req = input instanceof Request ? input : new Request(String(input));
+            if (req.url.includes('/team/teams')) {
+                return jsonResponse({
+                    teams: [
+                        {
+                            teamId: 'alpha',
+                            name: 'Alpha',
+                            members: [{ id: 'planner', type: 'codex', status: 'running' }],
+                        },
+                    ],
+                });
+            }
+            if (req.method === 'POST') posts.push({ url: req.url, method: req.method });
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { container } = render(<TeamControlStrip />);
+
+        await waitFor(() => expect(container.querySelector('[data-team-control-select]')).not.toBeNull());
+        act(() => getSelectOnChange('team-control')?.({ target: { value: 'alpha' } }));
+
+        const downBtn = await waitFor(() => {
+            const el = container.querySelector('[data-team-control-down]') as HTMLButtonElement | null;
+            expect(el).not.toBeNull();
+            return el as HTMLButtonElement;
+        });
+        act(() => fireEvent.click(downBtn));
+
+        const confirmBtn = await waitFor(() => {
+            const el = container.querySelector('[data-team-down-confirm-confirm]') as HTMLButtonElement | null;
+            expect(el).not.toBeNull();
+            return el as HTMLButtonElement;
+        });
+        act(() => fireEvent.click(confirmBtn));
+
+        await waitFor(() =>
+            expect(posts.some((p) => p.url.includes('/team/alpha/down') && p.method === 'POST')).toBe(true),
+        );
+        // `?purge=true` would additionally tear down member specs
+        // (apps/server/src/modules/team/index.ts:293); the confirm modal only warns
+        // about stopping processes, so Down must post a bare URL.
+        const downPost = posts.find((p) => p.url.includes('/team/alpha/down'));
+        expect(new URL(downPost?.url ?? '').search).toBe('');
+        await waitFor(() => expect(container.querySelector('[data-team-control-notice]')).not.toBeNull());
+        expect(container.querySelector('[data-team-control-notice]')?.textContent).toContain('stopped');
+    });
+
+    test('TeamControlStrip shows error inline when /up returns non-OK (0266 R3)', async () => {
+        const posts: { url: string; method: string }[] = [];
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const req = input instanceof Request ? input : new Request(String(input));
+            if (req.url.includes('/team/teams')) {
+                return jsonResponse({
+                    teams: [
+                        {
+                            teamId: 'alpha',
+                            name: 'Alpha',
+                            members: [{ id: 'planner', type: 'codex', status: 'stopped' }],
+                        },
+                    ],
+                });
+            }
+            if (req.method === 'POST' && req.url.includes('/up')) {
+                posts.push({ url: req.url, method: req.method });
+                return new Response(JSON.stringify({ error: 'agent binary not found' }), {
+                    status: 500,
+                    headers: { 'content-type': 'application/json' },
+                });
+            }
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { container } = render(<TeamControlStrip />);
+
+        await waitFor(() => expect(container.querySelector('[data-team-control-select]')).not.toBeNull());
+        act(() => getSelectOnChange('team-control')?.({ target: { value: 'alpha' } }));
+
+        const upBtn = await waitFor(() => {
+            const el = container.querySelector('[data-team-control-up]') as HTMLButtonElement | null;
+            expect(el).not.toBeNull();
+            return el as HTMLButtonElement;
+        });
+        act(() => fireEvent.click(upBtn));
+
+        await waitFor(() =>
+            expect(posts.some((p) => p.url.includes('/team/alpha/up') && p.method === 'POST')).toBe(true),
+        );
+        await waitFor(() =>
+            expect(container.querySelector('[data-team-control-error-inline]')?.textContent).toContain(
+                'agent binary not found',
+            ),
+        );
     });
 });
