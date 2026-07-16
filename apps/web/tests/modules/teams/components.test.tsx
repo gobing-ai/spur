@@ -4,6 +4,7 @@ import type React from 'react';
 import { useEffect, useRef } from 'react';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
 import ActivityTab from '../../../src/modules/teams/ActivityTab';
+import { consumePendingAttach } from '../../../src/modules/teams/attach-bus';
 import MessagesTab from '../../../src/modules/teams/MessagesTab';
 import ProcessesTab, { buildWatchRows, filterWatchRows } from '../../../src/modules/teams/ProcessesTab';
 import TeamControlStrip from '../../../src/modules/teams/TeamControlStrip';
@@ -155,6 +156,8 @@ beforeAll(() => {
 
 beforeEach(() => {
     FakeEventSource.instances = [];
+    // Drain attach intent so a prior Processes→Terminal test cannot hijack restore.
+    consumePendingAttach();
     Object.defineProperty(globalThis, 'EventSource', {
         configurable: true,
         value: FakeEventSource,
@@ -165,6 +168,7 @@ afterEach(async () => {
     cleanup();
     resetFetchForTesting();
     capturedSelects.length = 0;
+    consumePendingAttach();
     Object.defineProperty(globalThis, 'EventSource', {
         configurable: true,
         value: originalEventSource,
@@ -857,8 +861,9 @@ describe('teams module components', () => {
 
     test('TerminalTab restores persisted team+member from localStorage on mount (0263 R2)', async () => {
         const key = 'spur:board:teams:lastTerminal';
-        const stored = globalThis.localStorage?.getItem(key);
+        // Seed a known selection; do not restore prior value mid-suite — always clear after.
         globalThis.localStorage?.setItem(key, JSON.stringify({ teamId: 'alpha', memberId: 'planner' }));
+        expect(globalThis.localStorage?.getItem(key)).toContain('planner');
 
         setFetchForTesting((async (input: RequestInfo | URL) => {
             const req = input instanceof Request ? input : new Request(String(input));
@@ -877,28 +882,22 @@ describe('teams module components', () => {
             return jsonResponse({ ok: true });
         }) as unknown as typeof fetch);
 
-        const { container, queryByText } = render(<TerminalTab />);
+        const { container } = render(<TerminalTab />);
 
-        // After the first teams load, the persisted selection auto-restores.
-        // Assert via MemberTerminal mount + prompt dismissal — happy-dom controlled
-        // <select>.value is unreliable under the @/ui Select mock.
+        // Positive assertion first: wait for MemberTerminal for the restored member.
+        // CI (ubuntu) can exceed the default 1000ms waitFor budget for the React 19 chain
+        // useTeamsData fetch → setState → restore effect → setTeamId/setMemberId → remount.
+        // Prefer data attributes over queryByText (empty-state copy is brittle under timeout noise).
         await waitFor(
             () => {
-                expect(queryByText('Choose a team and member above to open a terminal.')).toBeNull();
+                expect(container.querySelector('[data-member-terminal="planner"]')).not.toBeNull();
             },
-            { timeout: 3000 },
+            { timeout: 5000 },
         );
-        await waitFor(() => {
-            expect(container.querySelector('[data-member-terminal="planner"]')).not.toBeNull();
-        });
+        expect(container.querySelector('[data-terminal-tab-prompt]')).toBeNull();
         expect(container.querySelector('[data-terminal-member-select]')?.innerHTML).toContain('planner');
 
-        // Restore the original localStorage state.
-        if (stored === null || stored === undefined) {
-            globalThis.localStorage?.removeItem(key);
-        } else {
-            globalThis.localStorage?.setItem(key, stored);
-        }
+        globalThis.localStorage?.removeItem(key);
     });
 
     test('TerminalTab persists selection to localStorage on change (0263 R1)', async () => {
