@@ -882,8 +882,13 @@ describe('teams module components', () => {
         // After the first teams load, the persisted selection auto-restores.
         // Assert via MemberTerminal mount + prompt dismissal — happy-dom controlled
         // <select>.value is unreliable under the @/ui Select mock.
+        await waitFor(
+            () => {
+                expect(queryByText('Choose a team and member above to open a terminal.')).toBeNull();
+            },
+            { timeout: 3000 },
+        );
         await waitFor(() => {
-            expect(queryByText('Choose a team and member above to open a terminal.')).toBeNull();
             expect(container.querySelector('[data-member-terminal="planner"]')).not.toBeNull();
         });
         expect(container.querySelector('[data-terminal-member-select]')?.innerHTML).toContain('planner');
