@@ -3,46 +3,12 @@ import { Badge, Button, Modal, Select } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 import { ATTACH_EVENT, consumePendingAttach } from './attach-bus';
 import MemberTerminal from './MemberTerminal';
+import { type TeamGroup, useTeamsData } from './useTeamsData';
 
-// ── Team/member shapes returned by GET /api/team/teams (0256 R2) ──
-// Kept local to the Terminal tab for v1; a shared `useTeamsData` hook is a
-// deferred follow-up per Design Tradeoffs (0262's Processes tab will want it too).
-interface TeamMember {
-    id: string;
-    type: string;
-    status: string;
-}
+// Team/member shapes and the polling fetch live in useTeamsData (0268 R1).
+// This file owns only Terminal-scoped concerns: start/stop URLs, persisted
+// selection, attach handling, and the team/member pickers.
 
-interface TeamGroup {
-    teamId: string;
-    name: string;
-    members: TeamMember[];
-}
-
-/** Narrow an untrusted JSON body into the `{ teams: TeamGroup[] }` shape, or `null`. */
-function parseTeamsResponse(body: unknown): TeamGroup[] | null {
-    if (!body || typeof body !== 'object' || !('teams' in body)) return null;
-    const raw = (body as { teams: unknown }).teams;
-    if (!Array.isArray(raw)) return null;
-    const teams: TeamGroup[] = [];
-    for (const entry of raw) {
-        if (!entry || typeof entry !== 'object') continue;
-        const e = entry as Record<string, unknown>;
-        if (typeof e.teamId !== 'string' || typeof e.name !== 'string') continue;
-        if (!Array.isArray(e.members)) continue;
-        const members: TeamMember[] = [];
-        for (const m of e.members) {
-            if (!m || typeof m !== 'object') continue;
-            const r = m as Record<string, unknown>;
-            if (typeof r.id !== 'string' || typeof r.type !== 'string' || typeof r.status !== 'string') continue;
-            members.push({ id: r.id, type: r.type, status: r.status });
-        }
-        teams.push({ teamId: e.teamId, name: e.name, members });
-    }
-    return teams;
-}
-
-const teamsUrl = () => `${resolveApiUrl()}/team/teams`;
 const startUrl = (id: string) => `${resolveApiUrl()}/team/agents/${encodeURIComponent(id)}/start`;
 const stopUrl = (id: string) => `${resolveApiUrl()}/team/agents/${encodeURIComponent(id)}/stop`;
 
@@ -92,49 +58,29 @@ function clearPersistedSelection(): void {
     }
 }
 
-/** Reconnect-after-respawn poll interval (ms) for the team/member status refresh. */
-const TEAMS_POLL_MS = 5000;
-
 /**
  * Terminal tab — owns its own team/member pickers (R1–R7) per the M1 wayfind
- * decision: selection is local to this view and does not route through the
- * shared `TeamsContext` (which lost its only writer when Roster was removed in
- * 0260, and whose remaining selection state is slated for deletion after 0261).
+ * decision: selection is local to this view and never routes through a shared
+ * selection context. (The old `TeamsContext` selection was removed in 0268 once
+ * its last writer — Roster — was gone in 0260 and the 0261 local-selection
+ * work landed.)
  *
  * The toolbar renders Team → Member cascading dropdowns with live status
  * badges, a toggle control that confirms before stopping a running member,
  * and persists the last selection to localStorage.
  */
 export default function TerminalTab() {
-    const [teams, setTeams] = useState<TeamGroup[]>([]);
-    const [error, setError] = useState<string | null>(null);
+    const { teams, error, reload: load } = useTeamsData();
     const [teamId, setTeamId] = useState<string>('');
     const [memberId, setMemberId] = useState<string>('');
+    const [actionError, setActionError] = useState<string | null>(null);
     const [confirmStopFor, setConfirmStopFor] = useState<string | null>(null);
     const [actionPending, setActionPending] = useState(false);
     const [restoredRef] = useState<{ done: boolean }>({ done: false });
 
-    // Latest teams snapshot available to the restore validator.
+    // Latest teams snapshot available to the attach validator (0268 R3).
     const teamsRef = useRef<TeamGroup[]>([]);
     teamsRef.current = teams;
-
-    const load = useCallback(async () => {
-        try {
-            const res = await fetchWithTimeout(new Request(teamsUrl()));
-            if (!res.ok) throw new Error(`teams fetch failed: ${res.status}`);
-            const body: unknown = await res.json();
-            const parsed = parseTeamsResponse(body);
-            if (parsed) setTeams(parsed);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
-        }
-    }, []);
-
-    useEffect(() => {
-        void load();
-        const interval = setInterval(load, TEAMS_POLL_MS);
-        return () => clearInterval(interval);
-    }, [load]);
 
     /** Resolve `agentId` to its team and select it. False when no loaded team owns it. */
     const applyAttach = useCallback((agentId: string): boolean => {
@@ -218,10 +164,10 @@ export default function TerminalTab() {
                         typeof (body as Record<string, unknown>).error === 'string'
                             ? ((body as Record<string, unknown>).error as string)
                             : `request failed (${res.status})`;
-                    setError(msg);
+                    setActionError(msg);
                 }
             } catch (err) {
-                setError(err instanceof Error ? err.message : String(err));
+                setActionError(err instanceof Error ? err.message : String(err));
             } finally {
                 setActionPending(false);
                 void load();
@@ -321,6 +267,11 @@ export default function TerminalTab() {
                     </>
                 )}
             </div>
+            {actionError && (
+                <div className="px-3 py-1 text-xs text-error" role="alert" data-terminal-tab-action-error>
+                    {actionError}
+                </div>
+            )}
 
             {memberId && currentMember ? (
                 <MemberTerminal agentId={memberId} />

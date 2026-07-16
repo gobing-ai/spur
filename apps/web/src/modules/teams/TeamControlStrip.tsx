@@ -1,49 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Badge, Button, Modal, Select } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
+import { useTeamsData } from './useTeamsData';
 
-// ── Team shapes returned by GET /api/team/teams (0256 R2) ──
-// Local to this strip for v1; task 0268 will extract a shared useTeamsData hook.
-interface TeamMember {
-    id: string;
-    type: string;
-    status: string;
-}
-
-interface TeamGroup {
-    teamId: string;
-    name: string;
-    members: TeamMember[];
-}
-
-/** Narrow an untrusted JSON body into the `{ teams: TeamGroup[] }` shape, or `null`. */
-function parseTeamsResponse(body: unknown): TeamGroup[] | null {
-    if (!body || typeof body !== 'object' || !('teams' in body)) return null;
-    const raw = (body as { teams: unknown }).teams;
-    if (!Array.isArray(raw)) return null;
-    const teams: TeamGroup[] = [];
-    for (const entry of raw) {
-        if (!entry || typeof entry !== 'object') continue;
-        const e = entry as Record<string, unknown>;
-        if (typeof e.teamId !== 'string' || typeof e.name !== 'string') continue;
-        if (!Array.isArray(e.members)) continue;
-        const members: TeamMember[] = [];
-        for (const m of e.members) {
-            if (!m || typeof m !== 'object') continue;
-            const r = m as Record<string, unknown>;
-            if (typeof r.id !== 'string' || typeof r.type !== 'string' || typeof r.status !== 'string') continue;
-            members.push({ id: r.id, type: r.type, status: r.status });
-        }
-        teams.push({ teamId: e.teamId, name: e.name, members });
-    }
-    return teams;
-}
-
-const teamsUrl = () => `${resolveApiUrl()}/team/teams`;
 const teamUpUrl = (teamId: string) => `${resolveApiUrl()}/team/${encodeURIComponent(teamId)}/up`;
 const teamDownUrl = (teamId: string) => `${resolveApiUrl()}/team/${encodeURIComponent(teamId)}/down`;
-
-const TEAMS_POLL_MS = 5000;
 
 /**
  * Team control strip — team-scoped bulk Up/Down (0266 R1–R5).
@@ -54,40 +15,12 @@ const TEAMS_POLL_MS = 5000;
  * gated by a confirm modal mirroring TerminalTab's stop-confirm pattern.
  */
 export default function TeamControlStrip() {
-    const [teams, setTeams] = useState<TeamGroup[]>([]);
+    const { teams, error, reload: load } = useTeamsData();
     const [teamId, setTeamId] = useState<string>('');
-    const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
+    const [actionError, setActionError] = useState<string | null>(null);
     const [actionPending, setActionPending] = useState(false);
     const [confirmDownFor, setConfirmDownFor] = useState<string | null>(null);
-    const mountedRef = useRef(true);
-
-    const load = useCallback(async () => {
-        try {
-            const res = await fetchWithTimeout(new Request(teamsUrl()));
-            if (!res.ok) throw new Error(`teams fetch failed: ${res.status}`);
-            const body: unknown = await res.json();
-            const parsed = parseTeamsResponse(body);
-            if (parsed && mountedRef.current) {
-                setTeams(parsed);
-                setError(null);
-            }
-        } catch (err) {
-            if (mountedRef.current) {
-                setError(err instanceof Error ? err.message : String(err));
-            }
-        }
-    }, []);
-
-    useEffect(() => {
-        mountedRef.current = true;
-        void load();
-        const interval = setInterval(load, TEAMS_POLL_MS);
-        return () => {
-            mountedRef.current = false;
-            clearInterval(interval);
-        };
-    }, [load]);
 
     const currentTeam = teams.find((t) => t.teamId === teamId) ?? null;
     const runningCount = currentTeam ? currentTeam.members.filter((m) => m.status === 'running').length : 0;
@@ -97,6 +30,7 @@ export default function TeamControlStrip() {
         async (id: string, action: 'up' | 'down') => {
             setActionPending(true);
             setNotice(null);
+            setActionError(null);
             try {
                 const url = action === 'up' ? teamUpUrl(id) : teamDownUrl(id);
                 const res = await fetchWithTimeout(new Request(url, { method: 'POST' }));
@@ -109,16 +43,15 @@ export default function TeamControlStrip() {
                         typeof (body as Record<string, unknown>).error === 'string'
                             ? ((body as Record<string, unknown>).error as string)
                             : `request failed (${res.status})`;
-                    setError(msg);
+                    setActionError(msg);
                     return;
                 }
-                setError(null);
                 setNotice(
                     action === 'up' ? `Team ${id} materialized + best-effort start issued` : `Team ${id} stopped`,
                 );
                 void load();
             } catch (err) {
-                setError(err instanceof Error ? err.message : String(err));
+                setActionError(err instanceof Error ? err.message : String(err));
             } finally {
                 setActionPending(false);
             }
@@ -198,14 +131,14 @@ export default function TeamControlStrip() {
                 </>
             )}
 
-            {notice && !error && (
+            {notice && !actionError && (
                 <span className="text-xs text-success" data-team-control-notice>
                     {notice}
                 </span>
             )}
-            {error && (
+            {actionError && (
                 <span className="text-xs text-error" data-team-control-error-inline>
-                    {error}
+                    {actionError}
                 </span>
             )}
 
