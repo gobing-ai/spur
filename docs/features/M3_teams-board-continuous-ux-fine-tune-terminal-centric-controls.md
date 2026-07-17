@@ -1,0 +1,156 @@
+---
+schema_version: 1
+id: "M3"
+name: "Teams board continuous UX fine-tune (Terminal-centric controls)"
+status: backlog
+priority: P2
+tags: []
+created_at: "2026-07-16T18:17:26.784Z"
+updated_at: "2026-07-16T18:18:26.698Z"
+---
+
+# M3: Teams board continuous UX fine-tune (Terminal-centric controls)
+
+## Goal
+Close residual Teams UX friction after M1/M2 by making Terminal the sole control surface, Process a read-only system watch list, and Message/Activity identity-rich global timelines — with backend DTO enrichment where the UI cannot join safely alone.
+## Scope
+**In scope:**
+- Remove shared `TeamControlStrip` from `TeamsShell` (no team control chrome on Process / Message / Activity).
+- Terminal-only unified toolbar: left focus (team, member, optional model, status, Start/Stop) + right roster chips (click-to-select) + Up/Down; visual separator.
+- Member dropdown labels: member id + coding-agent type only (no status in the option text).
+- Process tab: system-wide watch list remains; drop per-row Attach / Start / Stop; filters stay.
+- Terminal team+member selection is the only attach path (detach old stream, attach new).
+- Confirm modals (Cancel default) on member Stop and team Down only.
+- Message cards: team / member / agent identity + delivery chip + reply-thread badge.
+- Activity: include `process.*` events; enrich team / member / agent columns when resolvable.
+- Tab labels: Processes → Process, Messages → Message.
+- Backend: extend `GET /api/team/teams` with optional `model`; enrich `GET /api/messages` with identity + reply signals; prefer actor/payload enrichment for process events when cheap.
+
+**Out of scope:**
+- Full PTY redesign / deep stdin agent-loop work.
+- Observability board process-tree inventory redesign.
+- Per-member Message filter UI (still deferred until volume justifies).
+- Collapsing Message feed into nested thread trees (reply badge is enough for v1).
+- Confirm on Start / Up.
+- Remote/multi-host process tracking.
+## Acceptance Criteria
+```gherkin
+Feature: Teams board continuous UX fine-tune (Terminal-centric controls)
+
+  @core
+  Scenario: Shared team control strip is gone from non-Terminal tabs
+    Given the Teams board is open
+    When the operator switches among Process, Message, and Activity
+    Then no team-select / Up / Down control strip is rendered above those tabs
+    And those controls appear only on the Terminal tab toolbar
+
+  @core
+  Scenario: Terminal toolbar splits focus left and roster right
+    Given a configured team with at least two members
+    When the operator opens Terminal and selects a team
+    Then the left area shows team select, member select (id + agent type, no status), optional model when present, status badge, and Start/Stop for the focused member
+    And the right area shows one status chip per member with tooltip member+agent, plus Up and Down
+    And clicking a roster chip focuses that member and opens its terminal
+
+  @core
+  Scenario: Process tab is a read-only system watch list
+    Given supervised and registry processes exist
+    When the operator opens Process
+    Then rows list processes across the system with filters available
+    And no Attach, Start, or Stop button appears on any row
+
+  @core
+  Scenario: Terminal selection attaches the member stream
+    Given member A is focused in Terminal
+    When the operator selects member B
+    Then the previous MemberTerminal stream is detached and B is attached
+    And no Process-row Attach control is required
+
+  @core
+  Scenario: Destructive stops require confirm with Cancel default
+    Given a running focused member
+    When the operator clicks Stop
+    Then a confirm modal appears with Cancel as the safe default action
+    And the same Cancel-default pattern applies to team Down
+
+  @core
+  Scenario: Message cards show identity, delivery, and reply state
+    Given messages exist across multiple teams
+    When the operator opens Message
+    Then each card shows team, member, and coding-agent identity for participants when known
+    And each card shows a delivery chip (queued or injected)
+    And each card shows Replied or Awaiting reply based on in_reply_to relationships
+
+  @core
+  Scenario: Activity includes process lifecycle and identity columns
+    Given agent, message, and process events have occurred
+    When the operator opens Activity
+    Then process.spawned, process.exited, process.stopped, and process.started rows appear when present
+    And rows show team, member, and agent identity when resolvable
+
+  @core
+  Scenario: Tab labels use singular Process and Message
+    Given the Teams shell tab list
+    When rendered
+    Then the second tab is labeled Process and the third Message
+
+  @edge
+  Scenario: Model field is hidden when unspecified
+    Given a focused member whose model is not set
+    When Terminal toolbar renders
+    Then no empty model field is shown
+```
+## Tasks
+
+<!-- AUTO-GENERATED by spur feature refresh -->
+| WBS | Task | Status |
+| --- | ---- | ------ |
+| 0269 | Fine-tune Teams module UI and supporting APIs | todo |
+<!-- END AUTO-GENERATED -->
+
+## Notes
+### Destination
+
+Ship a Terminal-centric Teams board: one refined Terminal toolbar (left focus + right roster), read-only system-wide Process watch list, global Message/Activity feeds with team·member·agent identity, confirm-gated destructive stops, and the small API enrichments those surfaces need.
+
+### Decisions so far
+
+- D1 — Control surface: Terminal-only unified toolbar; remove shell `TeamControlStrip`.
+- D2 — Right-area chips are clickable and set the focused member (same as left Member select).
+- D3 — Process is read-only system-wide watch list; no row Attach/Start/Stop; Terminal selection is attach.
+- D4 — Confirm only on member Stop and team Down (Cancel default).
+- D5 — Message cards: identity line + delivery chip (`queued`/`injected`) + thread badge (`Replied` / `Awaiting reply` via `in_reply_to`).
+- D6 — Activity: add `process.*` prefix; columns Time | Event | Team | Member | Agent | Actor.
+- D7 — Backend: extend existing `teams` + `messages` endpoints; UI fallback join via `useTeamsData` where needed.
+- D8 — Packaging: wayfind map M3 + single comprehensive impl task 0269.
+
+### Not yet specified
+
+- Exact visual weight of the left/right separator (border vs spacer vs muted label) — pick during implementation to match board chrome.
+- Whether `hasReply` / `replyCount` is computed only within the current `limit` window or via a dedicated count query when the reply is older than the window.
+- How completely process event emit sites already stamp `agentId` / `teamId` on payloads for Activity enrichment (may need a quick emit-site audit inside 0269).
+- Whether `attach-bus` is deleted entirely or retained as a thin internal helper after Processes Attach UI is removed (no production UI producer left).
+- Display string for "member name": composed agent id vs local id (`member.id ?? executor`) — confirm against real multi-member configs during impl.
+
+### Out of scope
+
+- Nested message thread UI (parent/child collapse).
+- Per-member or per-team filter chrome on Message / Activity (global feeds only for this effort).
+- Reintroducing Roster tab.
+- Confirm dialogs on Start / Up.
+- Observability OS-tree inventory work (lives under Observability / J-series features).
+- Full PTY / remote multi-host process tracking.
+
+### Domain context
+
+- Module: `apps/web/src/modules/teams/` (`TeamsShell`, `TeamControlStrip`, `TerminalTab`, `ProcessesTab`, `MessagesTab`, `ActivityTab`, `useTeamsData`, `attach-bus`).
+- Parent lineage: feature M → M1 → M2 residual polish; this map is M3 continuous fine-tune.
+- Catalog already has `process.spawned|exited|stopped|started` (`packages/app/src/services/event-names.ts`); Activity filter today omits `process.`.
+- Message status is delivery (`queued`|`injected`), not "has reply" — reply state comes from `in_reply_to` graph.
+- Member model lives on config/spec (`NormalizedTeamMember.model`, materialize path) but is not returned by `GET /api/team/teams` yet.
+
+### Skills for implementers
+
+- `sp:spur-cli` for corpus updates; `sp:code-implementation` / `/sp:dev-run 0269` for execution.
+- Prefer existing UI primitives (`Badge`, `Button`, `Modal`, `Select` from `@/ui`).
+## History
