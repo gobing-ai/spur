@@ -43,4 +43,34 @@ export class InboxRecentDao {
             throw error;
         }
     }
+
+    /**
+     * Count replies (children) for each of the given message ids, scoped to the
+     * `inbox_messages` table. Returns a `Map<msgId, count>` — ids with zero replies
+     * are omitted from the map. The reply graph is `in_reply_to` → parent id.
+     * Returns an empty map when the table is absent.
+     */
+    async countReplies(ids: string[]): Promise<Map<string, number>> {
+        const result = new Map<string, number>();
+        if (ids.length === 0) return result;
+        const placeholders = ids.map((_, i) => `?${i + 1}`).join(', ');
+        try {
+            const rows = await this.db.queryAll<{ in_reply_to: string; n: number }>(
+                `SELECT in_reply_to, COUNT(*) AS n
+                 FROM inbox_messages
+                 WHERE in_reply_to IS NOT NULL AND in_reply_to IN (${placeholders})
+                 GROUP BY in_reply_to`,
+                ...ids,
+            );
+            for (const row of rows) {
+                result.set(row.in_reply_to, row.n);
+            }
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('no such table: inbox_messages')) {
+                return result;
+            }
+            throw error;
+        }
+        return result;
+    }
 }

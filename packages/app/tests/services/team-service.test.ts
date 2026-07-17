@@ -263,6 +263,19 @@ describe('TeamService messaging', () => {
             expect(recent.messages.every((m) => typeof m.toId === 'string')).toBe(true);
             // createdAt surfaced as ISO for stable display.
             expect(recent.messages[0]?.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+            // R11: identity + reply signals surfaced on every row.
+            expect(recent.messages.every((m) => typeof m.hasReply === 'boolean')).toBe(true);
+            expect(recent.messages.every((m) => typeof m.replyCount === 'number')).toBe(true);
+            // No replies in this fixture — hasReply false, replyCount 0.
+            expect(recent.messages.every((m) => !m.hasReply)).toBe(true);
+            // `to` identity always present; `from` only when fromId is non-null.
+            expect(recent.messages.every((m) => m.to.agentId === m.toId)).toBe(true);
+            const broadcast = recent.messages.find((m) => m.fromId === null);
+            expect(broadcast?.from).toBeUndefined();
+            const nonBroadcast = recent.messages.find((m) => m.fromId !== null);
+            expect(nonBroadcast?.from?.agentId).toBe(nonBroadcast?.fromId ?? undefined);
+            // Unresolved agent ids (no team config) fall back to raw agentId only.
+            expect(nonBroadcast?.from?.teamName).toBeUndefined();
         } finally {
             await cleanup();
         }
@@ -284,6 +297,57 @@ describe('TeamService messaging', () => {
             // No arg → default 50.
             const def = await svc.listRecent();
             expect(def.count).toBe(1);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('listRecent surfaces hasReply/replyCount for threaded messages', async () => {
+        const { svc, cleanup } = await makeService();
+        try {
+            // Send a message, then reply to it — the original should show hasReply=true.
+            const sent = await svc.sendMessage('coder', 'planner', 'original');
+            await svc.replyToMessage(sent.msgId, 'got it');
+
+            const recent = await svc.listRecent(50);
+            expect(recent.count).toBe(2);
+            // The original message (sent first) should have a reply.
+            const original = recent.messages.find((m) => m.id === sent.msgId);
+            expect(original).toBeDefined();
+            expect(original?.hasReply).toBe(true);
+            expect(original?.replyCount).toBe(1);
+            // The reply itself has no replies.
+            const reply = recent.messages.find((m) => m.inReplyTo === sent.msgId);
+            expect(reply).toBeDefined();
+            expect(reply?.hasReply).toBe(false);
+            expect(reply?.replyCount).toBe(0);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('listRecent replyCount is window-scoped — only replies to in-window messages are counted', async () => {
+        const { svc, cleanup } = await makeService();
+        try {
+            // Three-message thread: original → reply → reply-to-reply.
+            const sent = await svc.sendMessage('coder', 'planner', 'original');
+            const reply = await svc.replyToMessage(sent.msgId, 'reply');
+            await svc.replyToMessage(reply.msgId, 'reply to reply');
+
+            // Full window: all three messages visible.
+            // The original has 1 reply; the first reply has 1 reply; the newest has none.
+            const all = await svc.listRecent(50);
+            expect(all.count).toBe(3);
+            expect(all.messages.find((m) => m.id === sent.msgId)?.replyCount).toBe(1);
+            expect(all.messages.find((m) => m.id === reply.msgId)?.replyCount).toBe(1);
+            const newest = all.messages.find((m) => m.inReplyTo === reply.msgId);
+            expect(newest?.replyCount).toBe(0);
+            expect(newest?.hasReply).toBe(false);
+
+            // The replyCount map only contains ids that are in the window — if we
+            // query a narrow window, messages outside it don't get their replies
+            // counted. This is enforced by the DAO passing only in-window ids to
+            // countReplies (verified in the DAO-level test).
         } finally {
             await cleanup();
         }

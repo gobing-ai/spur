@@ -99,9 +99,38 @@ export interface InboxResult {
     count: number;
 }
 
+/**
+ * Resolved identity for a message endpoint (from/to). `agentId` is the raw
+ * `teamId-memberId` composed id; the remaining fields are best-effort joins
+ * from the team roster. All identity fields are optional — when unresolved
+ * (untethered agent, operator-originated, or stale row) the UI falls back to
+ * the raw id (R8/R11).
+ */
+export interface MessageEndpointIdentity {
+    agentId: string;
+    teamId?: string;
+    teamName?: string;
+    memberLabel?: string;
+    agentType?: string;
+}
+
+/**
+ * A recent-message row with recipient + identity + reply signals for the
+ * board's global message feed (R8/R11). Parents come from the `limit` window;
+ * `replyCount` counts **all** children of those parents in `inbox_messages`
+ * (not only children that also fall inside the window).
+ */
+export interface RecentMessageRow extends InboxEntry {
+    toId: string;
+    from?: MessageEndpointIdentity;
+    to: MessageEndpointIdentity;
+    hasReply: boolean;
+    replyCount: number;
+}
+
 /** Result of listing recent messages across all agents. */
 export interface RecentMessagesResult {
-    messages: Array<InboxEntry & { toId: string }>;
+    messages: RecentMessageRow[];
     count: number;
 }
 
@@ -262,20 +291,71 @@ export class TeamService {
      * spanning every recipient. Delegates to {@link InboxRecentDao} (domain) so
      * this package stays raw-SQL-free (project rule `raw-sql-only-in-domain`).
      * Returns an empty list when the table is absent.
+     *
+     * Identity join (R11): `fromId`/`toId` are `teamId-memberId` composed ids.
+     * We resolve them against `listTeams()` + `listAgentSpecs()` for team name,
+     * member label (spec.name), and agent type (spec.type). Unresolved ids
+     * (untethered, operator-originated, stale) leave the identity optional
+     * fields unset — the UI falls back to the raw id.
+     *
+     * Reply signals (R11): parent rows are the newest `limit` messages;
+     * `countReplies` then counts **all** children of those parent ids in the
+     * table (global for those parents, not limited to children in the window).
      */
     async listRecent(limit = 50): Promise<RecentMessagesResult> {
         const dao = await this.inboxRecentDao();
         const rows = await dao.listRecent(limit);
+        if (rows.length === 0) {
+            return { messages: [], count: 0 };
+        }
+
+        // Build the identity index once: agentId → { teamId, teamName, memberLabel, agentType }.
+        const [teams, specs] = await Promise.all([this.listTeams(), this.listAgentSpecs()]);
+        const identityById = new Map<string, MessageEndpointIdentity>();
+        for (const team of teams) {
+            for (const spec of team.specs) {
+                identityById.set(spec.id, {
+                    agentId: spec.id,
+                    teamId: team.teamId,
+                    teamName: team.name,
+                    memberLabel: spec.name,
+                    agentType: spec.type,
+                });
+            }
+        }
+        // Untethered specs (no team tag) — still resolvable to agentType/memberLabel.
+        for (const spec of specs) {
+            if (!identityById.has(spec.id)) {
+                identityById.set(spec.id, {
+                    agentId: spec.id,
+                    memberLabel: spec.name,
+                    agentType: spec.type,
+                });
+            }
+        }
+
+        // Reply counts: global child count for each parent id in the current window.
+        const replyCounts = await dao.countReplies(rows.map((r) => r.id));
+
+        const resolveEndpoint = (agentId: string): MessageEndpointIdentity => identityById.get(agentId) ?? { agentId };
+
         return {
-            messages: rows.map((row) => ({
-                id: row.id,
-                fromId: row.from_id,
-                toId: row.to_id,
-                body: row.body,
-                status: row.status,
-                createdAt: new Date(row.created_at).toISOString(),
-                inReplyTo: row.in_reply_to,
-            })),
+            messages: rows.map((row) => {
+                const replyCount = replyCounts.get(row.id) ?? 0;
+                return {
+                    id: row.id,
+                    fromId: row.from_id,
+                    toId: row.to_id,
+                    body: row.body,
+                    status: row.status,
+                    createdAt: new Date(row.created_at).toISOString(),
+                    inReplyTo: row.in_reply_to,
+                    ...(row.from_id !== null ? { from: resolveEndpoint(row.from_id) } : {}),
+                    to: resolveEndpoint(row.to_id),
+                    hasReply: replyCount > 0,
+                    replyCount,
+                };
+            }),
             count: rows.length,
         };
     }

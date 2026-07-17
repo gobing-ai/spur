@@ -9,15 +9,17 @@ async function insertInbox(
     toId: string,
     body: string,
     createdAtMs: number,
+    inReplyTo: string | null = null,
 ): Promise<void> {
     await adapter.run(
-        `INSERT INTO inbox_messages (id, from_id, to_id, body, status, created_at, updated_at, inject_attempts)
-         VALUES (?1, ?2, ?3, ?4, 'queued', ?5, ?5, 0)`,
+        `INSERT INTO inbox_messages (id, from_id, to_id, body, status, created_at, updated_at, inject_attempts, in_reply_to)
+         VALUES (?1, ?2, ?3, ?4, 'queued', ?5, ?5, 0, ?6)`,
         crypto.randomUUID(),
         fromId,
         toId,
         body,
         createdAtMs,
+        inReplyTo,
     );
 }
 
@@ -81,6 +83,50 @@ describe('InboxRecentDao', () => {
 
         const rows = await dao.listRecent(10);
         expect(rows).toEqual([]);
+
+        adapter.close();
+    });
+
+    test('countReplies returns reply counts for given message ids', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new InboxRecentDao(adapter);
+
+        // m1 has two replies, m2 has one, m3 has none.
+        await insertInbox(adapter, 'alice', 'bob', 'm1', 1000);
+        await insertInbox(adapter, 'carol', 'bob', 'm2', 2000);
+        await insertInbox(adapter, 'dave', 'bob', 'm3', 3000);
+        await insertInbox(adapter, 'bob', 'alice', 'reply to m1', 4000, 'm1');
+        await insertInbox(adapter, 'bob', 'carol', 'another reply to m1', 5000, 'm1');
+        await insertInbox(adapter, 'bob', 'carol', 'reply to m2', 6000, 'm2');
+
+        const counts = await dao.countReplies(['m1', 'm2', 'm3', 'nonexistent']);
+        expect(counts.get('m1')).toBe(2);
+        expect(counts.get('m2')).toBe(1);
+        expect(counts.has('m3')).toBe(false);
+        expect(counts.has('nonexistent')).toBe(false);
+        expect(counts.size).toBe(2);
+
+        adapter.close();
+    });
+
+    test('countReplies returns empty map for empty input', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new InboxRecentDao(adapter);
+
+        const counts = await dao.countReplies([]);
+        expect(counts.size).toBe(0);
+
+        adapter.close();
+    });
+
+    test('countReplies returns empty map when table is absent', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        const dao = new InboxRecentDao(adapter);
+
+        const counts = await dao.countReplies(['m1']);
+        expect(counts.size).toBe(0);
 
         adapter.close();
     });
