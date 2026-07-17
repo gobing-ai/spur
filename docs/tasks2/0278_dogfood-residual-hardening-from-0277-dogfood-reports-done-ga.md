@@ -12,7 +12,7 @@ priority: P1
 tags: []
 dependencies: ["0276", "0277"]
 created_at: "2026-07-17T06:11:43.445Z"
-updated_at: "2026-07-17T06:22:34.515Z"
+updated_at: "2026-07-17T06:25:41.965Z"
 ---
 
 ## 0278. Dogfood residual hardening from 0277 dogfood reports (done-gate, cost, self-validate)
@@ -164,29 +164,41 @@ Scenario: Chained cost row is honest
 | `Agents.md` | Local `spur` CLI on PATH: `bun link` + `build:bundle`. |
 | `docs/tasks2/0277_*.md` | Review/Testing residual: W8 + detector marked closed (d357faf). |
 ### Testing
-**Commands run (implement 0278, 2026-07-17):**
+**Verification:** `/sp-dev-verify 0278 --auto --next` re-run 2026-07-17 (standalone; task already `done` — gate re-validated, no status write).
 
-- `bun test packages/app/tests/workflow/lifecycle-adapter.test.ts` → **12 pass / 0 fail** (includes 0278 R1/R2 Review L3 gate tests).
-- `bun test plugins/sp/tests/dogfood-testing/` → **52 pass / 0 fail** (§-style fail + validate CLI + detector suite).
-- Coverage: `lifecycle-adapter.ts` 100% fn/lines in focused run; `validate-report.ts` 100% fn / ~99% lines; `detect-pipeline-driving.ts` 100% fn.
-
-**Per-requirement:**
+**Per-Requirement Traceability**
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | MET | lifecycle-adapter Review L3 gate after provenance; denial message cites P1–P4 / strict-core |
-| R2 | MET | tests: prose-only denies; populated table passes Review gate (shell may still deny missing file) |
-| R3 | MET | SKILL Phase 4 + monitor-ledger chained row MUST emit P3; no invented totals |
-| R4 | MET | SKILL §Step-splitting recipe with three concrete dogfood invocations |
-| R5 | MET | Agents.md "Local spur CLI on PATH" bun link + build:bundle |
-| R6 | MET | validate-report CLI + Phase 4 step 7; test non-@1.2 §-style fails |
-| R7 | MET | monitor-ledger driver cache checklist table |
-| R8 | MET | 0277 Review/Testing residual wording updated via CLI |
-| R9 | MET | suites above green |
+| R1 | MET | `lifecycle-adapter.ts:148` `checkReviewReadyForDone` after provenance; denies missing populated P1–P4 (`:235`) |
+| R2 | MET | `lifecycle-adapter.test.ts` — prose-only Review denies with Review L3 message; populated table passes Review gate (shell may still deny) |
+| R3 | MET | `monitor-ledger.md` chained unobservable MUST `P3 — chained-step cost not observable`; SKILL Phase 4 step 4 |
+| R4 | MET | `SKILL.md` §Step-splitting recipe — three concrete dogfood invocations |
+| R5 | MET | `Agents.md:168` Local spur CLI — `bun link` + `build:bundle` |
+| R6 | MET | `validate-report.ts` CLI + SKILL Phase 4 step 7; `bun …/validate-report.ts --file report-complete.md` → exit 0; empty file → missing_footer/sections |
+| R7 | MET | `monitor-ledger.md` Driver cache checklist table (5 actions) |
+| R8 | MET | 0277 Review residual marks W8/detector closed (d357faf) |
+| R9 | MET | This run: lifecycle-adapter **12 pass**; dogfood-testing **52 pass** |
 
-**Coverage:** N/A for skill markdown; TS helpers at 100% fn on focused files.
+**Acceptance Criteria Verification**
 
-Verdict: implement complete — ready for review/verify.
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: Done refuses prose-only Review | MET | test | lifecycle test 0278 R1 — `allowed: false`, report matches Review L3 / P1–P4 |
+| Scenario: Done allows valid Review + provenance | MET | test | lifecycle test 0278 R2 — Review gate passed (report not Review L3); pipeline run-link present on real done path |
+| Scenario: Finalize aborts on invalid report shape | MET | test | `validator — non-@1.2 §-style` + validate CLI exit 2 |
+| Scenario: Implement-heavy advisory links to step-split recipe | MET | static-ref | `SKILL.md` §Step-splitting recipe cross-linked from advisory |
+| Scenario: Chained cost row is honest | MET | static-ref | monitor-ledger MUST P3 + no invent totals |
+
+**Design conformance:** DONE — lifecycle choke-point after provenance; dogfood protocol docs; validate CLI mirrors detector pattern. No silent deviation.
+
+**SECUA:** no blockers/majors. Minor: content gate skips when markdown unreadable (relies on shell strict-core) — intentional for test inject + missing files.
+
+**Coverage:** validate-report 100% fn / ~99% lines; detect-pipeline 100% fn; lifecycle-adapter 100% in focused run.
+
+**Fix pass:** none required (`--fix` omitted).
+
+Verdict: PASS
 ### Review
 **Review scope:** lifecycle done-gate (R1–R2), dogfood Phase 4 self-validate (R6), protocol docs (R3–R4,R7), AGENTS PATH (R5), 0277 residual (R8). In-session implement review for `/sp-dev-run 0278 --auto --next`.
 

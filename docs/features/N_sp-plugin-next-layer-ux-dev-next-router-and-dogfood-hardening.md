@@ -183,7 +183,7 @@ Feature: sp plugin next-layer UX — wayfinder map N
 | 0275 | Ship /sp:dev-next command and sp:next-router skill | done |
 | 0276 | Dogfood @1.2 contract enforcement (finalize, fixtures, tests) | done |
 | 0277 | Dogfood @1.2 meta-run detector and token policy | done |
-| 0278 | Dogfood residual hardening from 0277 dogfood reports (done-gate, cost, self-validate) | todo |
+| 0278 | Dogfood residual hardening from 0277 dogfood reports (done-gate, cost, self-validate) | done |
 <!-- END AUTO-GENERATED -->
 
 ## History
