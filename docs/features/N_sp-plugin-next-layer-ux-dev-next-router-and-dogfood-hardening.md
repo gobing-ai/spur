@@ -9,7 +9,7 @@ tags:
   - sp-plugin
   - meta
 created_at: "2026-07-17T00:53:58.309Z"
-updated_at: "2026-07-17T06:13:05.577Z"
+updated_at: "2026-07-17T06:35:57.975Z"
 ---
 
 # N: sp plugin next-layer UX — dev-next router and dogfood hardening
@@ -169,6 +169,38 @@ Feature: sp plugin next-layer UX — wayfinder map N
     Given a dogfood run with a chained implement step without a visible token meter
     When Cost and ledger are finalized
     Then the chained row uses ~unknown and a P3 finding is present
+
+  # Super-coder × next-router light empowerment (task 0279)
+  @core
+  Scenario: Super-coder still drives the pipeline for ready tasks
+    Given a frozen batch with a ready todo task
+    When super-coder runs the batch
+    Then ready tasks use task-pipeline.yaml and not a dev-next loop as the happy path
+
+  @core
+  Scenario: Preflight skips unmet dependencies
+    Given a todo task with a non-done dependency
+    When super-coder preflights before pipeline launch
+    Then no workflow run starts for that WBS and the batch report records the skip
+
+  @core
+  Scenario: One-shot recovery after FAIL
+    Given a batch task ends non-PASS
+    When recovery is enabled
+    Then next-router is consulted at most once for that WBS
+
+  @core
+  Scenario: Boundary is explicit in agent docs
+    Given super-coder.md and execution-batch.md after task 0279
+    When an operator reads the orchestrator boundary
+    Then batch orchestration and status-routing are complementary
+    And deep-merge via looping dev-next is forbidden
+
+  @edge
+  Scenario: Multi-candidate router stop is not auto-picked
+    Given recovery or preflight would yield more than one candidate hop
+    When super-coder handles that case
+    Then it stops with a HITL style message and does not silent-pick under --auto
 ```
 ## Tasks
 
@@ -184,6 +216,7 @@ Feature: sp plugin next-layer UX — wayfinder map N
 | 0276 | Dogfood @1.2 contract enforcement (finalize, fixtures, tests) | done |
 | 0277 | Dogfood @1.2 meta-run detector and token policy | done |
 | 0278 | Dogfood residual hardening from 0277 dogfood reports (done-gate, cost, self-validate) | done |
+| 0279 | Wire next-router into super-coder (preflight + one-shot recovery) | todo |
 <!-- END AUTO-GENERATED -->
 
 ## History
