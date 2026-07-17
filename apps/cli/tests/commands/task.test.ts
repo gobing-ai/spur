@@ -1246,4 +1246,30 @@ describe('spur task CLI', () => {
         expect(exitCode).toBe(1);
         expect(output.errors.length).toBeGreaterThan(0);
     });
+
+    // ── run-link ────────────────────────────────────────────────────
+    test('run-link inserts a pipeline provenance link', async () => {
+        const output = createCapturedOutput();
+        await main(['task', 'create', 'run-link test'], { cwd, output });
+        const wbs = createdWbs(output);
+        const exitCode = await main(['task', 'run-link', wbs, '--source', 'next-auto', '--json'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const jsonMsg = output.messages.filter((m) => m.trim()).pop() ?? '';
+        const result = JSON.parse(jsonMsg);
+        expect(result.kind).toBe('pipeline');
+        expect(result.runId).toMatch(/^chain:next-auto:/);
+    });
+    test('run-link is idempotent', async () => {
+        const output = createCapturedOutput();
+        await main(['task', 'create', 'run-link idempotent'], { cwd, output });
+        const wbs = createdWbs(output);
+        // First call inserts.
+        await main(['task', 'run-link', wbs, '--source', 'next-auto', '--json'], { cwd, output });
+        // Second call returns existed:true.
+        const exitCode = await main(['task', 'run-link', wbs, '--source', 'next-auto', '--json'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const jsonMsg = output.messages.filter((m) => m.trim()).pop() ?? '';
+        const result = JSON.parse(jsonMsg);
+        expect(result.existed).toBe(true);
+    });
 });

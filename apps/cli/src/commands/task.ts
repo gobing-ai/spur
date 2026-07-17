@@ -14,9 +14,11 @@ import {
 } from '@gobing-ai/spur-app';
 import { bundledConfigRoot, loadStructuredSpurConfig } from '@gobing-ai/spur-config/loader';
 import {
+    createId,
     extractTemplateBodies,
     TASK_STATUSES,
     TASK_VARIANTS,
+    TaskRunLinkDao,
     type TaskSection,
     taskStatusIcon,
 } from '@gobing-ai/spur-domain';
@@ -594,6 +596,59 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 } else {
                     context.output.error(`Task ${wbs} not found`);
                     context.setExitCode(1);
+                }
+            } catch (err) {
+                context.output.error(String(err));
+                context.setExitCode(1);
+            }
+        });
+
+    // ── run-link ──
+    task.command('run-link')
+        .summary(
+            'Record a pipeline provenance link for a task (used by --next auto chains to satisfy testing→done guard).',
+        )
+        .argument('<wbs>', 'Task WBS number')
+        .option('--source <source>', 'Link source identifier (e.g. next-auto)', 'chain')
+        .option('--run-id <id>', 'Explicit run_id (auto-generated when omitted)')
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (wbs, options) => {
+            try {
+                const db = await context.getDb();
+                const dao = new TaskRunLinkDao(db);
+                // Idempotent: skip if any pipeline link already exists for this WBS.
+                const existing = await dao.listByWbs(wbs, 20);
+                if (existing.some((row) => row.kind === 'pipeline')) {
+                    const entry = existing.find((row) => row.kind === 'pipeline');
+                    if (!entry) {
+                        context.output.error(`Pipeline link lookup inconsistent for ${wbs}`);
+                        context.setExitCode(1);
+                        return;
+                    }
+                    const result = {
+                        id: entry.id,
+                        wbs: entry.wbs,
+                        runId: entry.run_id,
+                        kind: entry.kind,
+                        existed: true,
+                    };
+                    if (options.json) {
+                        context.output.write(toJson(result));
+                    } else {
+                        context.output.write(`Pipeline run-link already exists for ${wbs} (${entry.id}). Skipped.`);
+                    }
+                    return;
+                }
+                const id = createId('trl');
+                const runId = options.runId ?? `chain:${options.source}:${wbs}:${Date.now()}`;
+                await dao.insert({ id, wbs, run_id: runId, kind: 'pipeline', created_at: new Date().toISOString() });
+                const result = { id, wbs, runId, kind: 'pipeline' };
+                if (options.json) {
+                    context.output.write(toJson(result));
+                } else {
+                    context.output.write(
+                        `Recorded pipeline run-link ${id} for task ${wbs} (source: ${options.source})`,
+                    );
                 }
             } catch (err) {
                 context.output.error(String(err));
