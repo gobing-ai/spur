@@ -36,6 +36,12 @@ each would be scope creep for one-liner procedures.
 > **`sp:next-router`** skill — a status→command *meta-router* that dispatches into the operations
 > above (refine/run/verify/unit/wrap/…) via TABLE A/B/C; it never implements an operation itself.
 > See `plugins/sp/skills/next-router/references/routing-table.md` for the routing SSOT.
+>
+> **Batch consumer (task 0279):** `sp:super-coder` / `/sp:dev-runall` **consumes** TABLE A STOP rows
+> for preflight + one-shot recovery (`plugins/sp/scripts/batch-preflight.ts`) but keeps
+> `task-pipeline.yaml` as the happy path. Do **not** deep-merge batch orchestration into a loop of
+> `/sp:dev-next`. Single-task "what's next?" stays `/sp:dev-next`; multi-task execution stays
+> `/sp:dev-runall` → super-coder.
 
 ## Operation map
 

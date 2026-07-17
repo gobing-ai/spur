@@ -140,6 +140,29 @@ execute work whose ordering is undefined.
 The ordered execution plan: a WBS-ascending-topological list of tasks to run, plus a `blocked` list
 (with unmet-dep reasons) and (on cycle) an `aborted` flag with the cycle path.
 
+### 2.6 Preflight — TABLE A STOP rows (task 0279 / next-router consumer)
+
+**Before** each `spur workflow run` for a WBS still on the plan, re-check readiness with the pure
+helper (preferred) or `sp:next-router` dry-run:
+
+```bash
+bun plugins/sp/scripts/batch-preflight.ts \
+  --wbs <wbs> --status <status> \
+  --deps <comma-deps> --dep-status <wbs:status,...> --json
+```
+
+| Result | Batch action |
+|--------|----------------|
+| `action: run` | Launch `task-pipeline.yaml` for this WBS (happy path **unchanged**) |
+| `action: skip` code **A2** | Do not launch; report `preflight-skip` + unmet deps (mirrors TABLE A2) |
+| `action: skip` code **A7** | Do not launch; report blocked (handover is operator-side) |
+| `action: skip` code **A8**/**A9** | Do not launch; already done / cancelled |
+
+**Invariants:** Preflight never replaces the pipeline with a loop of `/sp:dev-next`. TABLES A/B/C
+remain SSOT in `next-router/references/routing-table.md`. Step 2.3 already pre-blocks many unmet
+out-of-set deps; 2.6 is belt-and-braces for status STOP rows and a uniform report shape
+(`dev-next:`-style reasons). Parallel mode: preflight each WBS before fan-out.
+
 ## Step 3 — The driver loop (R3, R4)
 
 ```
@@ -148,22 +171,29 @@ report = []
 for wbs in plan:                                       # default sequential mode
     if any dependency of wbs failed earlier in THIS batch:
         report += skipped(wbs, reason); continue       # only relevant under --keep-going
+    preflight = batch-preflight(wbs)                   # Step 2.6 — TABLE A STOP
+    if preflight.action == skip:
+        report += preflight-skip(wbs, preflight); continue
     run: spur workflow run .spur/workflows/task-pipeline.yaml \
            --vars '{"wbs":"<wbs>","profile":"<auto|standard>","agent":"<value?>"}' --async --json
     poll spur workflow trace <run-id> --json until terminal (done | failed)
     inspect terminal state + .spur/run/<wbs>-verdict.json
     report += outcome(wbs)
+    if terminal == failed OR stuck status:
+        recovery = recoveryHint(status, wbs)           # Step 3.3b — at most once
+        report += recovery-hint(wbs, recovery)
+        # optional: if batch --auto and cardinality==1, dispatch recovery.command once
     if terminal == failed:
         if --keep-going: mark wbs + in-batch dependents as failed/skipped; continue
         else:            HALT; remaining → not-attempted; break    # stop-the-batch default (R3.1)
-emit batch report (per-task outcome + batch verdict)
+emit batch report (per-task outcome + preflight skips + recovery hints + batch verdict)
 ```
 
 Parallel mode keeps the same lifecycle but swaps the inner loop for the independent-task batch
 pattern in [sp:parallel-execution](../../parallel-execution/SKILL.md): identify a zero-edge,
-non-overlapping subset; run each selected task's `task-pipeline.yaml` invocation in its own
-subagent/worktree-safe context; synthesize outcomes; then continue sequentially for dependent or
-conflicting tasks. If any decision-framework check fails, serialize and record the reason.
+non-overlapping subset; **preflight each** selected task; run each ready task's `task-pipeline.yaml`
+invocation in its own subagent/worktree-safe context; synthesize outcomes; recovery stays
+**sequential** (one WBS). If any decision-framework check fails, serialize and record the reason.
 
 ### 3.1 Per-task execution reuses the pipeline verbatim (R4)
 
@@ -203,6 +233,27 @@ Each pipeline run ends in one of two terminal states:
 - **`failed`** → the pipeline hit a gate failure (precheck, verify verdict ≠ PASS, or an
   `onEnter` exception). Record `failed` with the blocking reason from the trace. This triggers the
   failure policy.
+
+### 3.3b One-shot recovery (task 0279 — next-router consumer)
+
+After a non-PASS terminal state (or when the task status is stuck at `wip`/`testing` without a clean
+verdict), consult **one** recovery hop:
+
+```bash
+bun plugins/sp/scripts/batch-preflight.ts --wbs <wbs> --status <status> --recovery
+# → e.g. /sp:dev-verify 0042 --auto --next
+```
+
+| Rule | Detail |
+|------|--------|
+| Budget | **≤ 1** recovery consult per WBS per batch — never loop until done |
+| Default | Print the exact child command in the batch report |
+| `--auto` batch | May dispatch the child **once** when cardinality is 1 and the hop is a single lifecycle command |
+| Multi-candidate | HITL stop — do not silent-pick (batch `--auto` does not break ties) |
+| Forbidden | Replacing the whole batch with repeated `/sp:dev-next` (deep-merge) |
+
+Helper: `recoveryHint(status, wbs)` in `plugins/sp/scripts/batch-preflight.ts`. Tables remain SSOT
+in next-router; this only maps status → primary TABLE A hop for recovery.
 
 ## Step 4 — Failure policy (R3)
 

@@ -216,7 +216,7 @@ Feature: sp plugin next-layer UX — wayfinder map N
 | 0276 | Dogfood @1.2 contract enforcement (finalize, fixtures, tests) | done |
 | 0277 | Dogfood @1.2 meta-run detector and token policy | done |
 | 0278 | Dogfood residual hardening from 0277 dogfood reports (done-gate, cost, self-validate) | done |
-| 0279 | Wire next-router into super-coder (preflight + one-shot recovery) | todo |
+| 0279 | Wire next-router into super-coder (preflight + one-shot recovery) | done |
 <!-- END AUTO-GENERATED -->
 
 ## History

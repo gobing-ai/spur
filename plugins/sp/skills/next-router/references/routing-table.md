@@ -11,6 +11,16 @@ The v1 routing table is the SSOT for `/sp:dev-next`. The router is a pure status
 dispatcher: resolve target → load corpus → apply primary table → optional light-gate short-circuit
 → single dispatch or HITL stop → optional chain.
 
+## Batch consumers (task 0279)
+
+`sp:super-coder` (via `/sp:dev-runall`) **reads** TABLE A STOP preconditions for:
+
+1. **Preflight** — skip pipeline launch when A2/A7/A8/A9 would stop `dev-next` (`batch-preflight.ts`).
+2. **One-shot recovery** — after a failed pipeline, map status → primary hop (A1/A3/A5/A6/A7) at most once.
+
+It does **not** reimplement TABLES or replace `task-pipeline.yaml` with a `dev-next` loop. Keep this
+file as the only SSOT for row semantics; batch helpers must stay aligned with A2/A7/A8/A9 codes.
+
 ## 0. Algorithm (deterministic)
 
 ```

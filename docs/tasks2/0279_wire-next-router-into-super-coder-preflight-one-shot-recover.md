@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Wire next-router into super-coder (preflight + one-shot recovery)"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: N
@@ -12,7 +12,7 @@ priority: P1
 tags: []
 dependencies: ["0275"]
 created_at: "2026-07-17T06:34:53.279Z"
-updated_at: "2026-07-17T06:35:56.465Z"
+updated_at: "2026-07-17T06:41:21.827Z"
 ---
 
 ## 0279. Wire next-router into super-coder (preflight + one-shot recovery)
@@ -37,15 +37,15 @@ updated_at: "2026-07-17T06:35:56.465Z"
 - Changing TABLE A/B/C semantics (consume as SSOT; do not fork tables into super-coder).
 - Auto-approving HITL multi-candidate router stops inside the batch (still surface to operator).
 ### Requirements
-- [ ] R1. **Document the boundary** in `super-coder.md`: super-coder owns batch between-run orchestration; next-router owns single-WBS step selection; happy path remains `spur workflow run task-pipeline.yaml` per frozen WBS.
-- [ ] R2. **Skill wiring:** add `sp:next-router` to super-coder frontmatter `skills:` (and description triggers only if needed). Do not remove existing skills.
-- [ ] R3. **Preflight (default on for batch):** before launching each per-task pipeline, apply TABLE A preconditions (or invoke `sp:next-router` / equivalent with dry-run semantics) using `spur task show --json` (+ deps). If the row is a hard STOP (A2 unmet deps, A9 cancelled, A7 blocked without recovery policy), **do not** start the pipeline; mark the WBS pre-blocked/skipped in the batch report with the same rationale shape as `dev-next:` messages.
-- [ ] R4. **Preflight does not rewrite happy path:** when TABLE A says refine/run/verify chain would apply, still launch the **full task-pipeline** (or existing runall path) for that WBS — preflight is readiness/skip only, not a substitute for the pipeline.
-- [ ] R5. **One-shot recovery (optional, default on after FAIL):** when a per-task pipeline ends non-PASS (or status stuck at wip/testing with no path forward in the batch report), consult next-router once for that WBS. If cardinality=1 and the dispatch is a single lifecycle hop (e.g. verify, implement chain), either (a) print the exact child command for the operator, or (b) dispatch once under explicit `--auto` when the batch was started with `--auto`. Never loop recovery.
-- [ ] R6. **Parallel mode:** preflight still runs per WBS before fan-out; recovery remains sequential (one WBS) to avoid concurrent corpus mutation from dual recovery dispatches.
-- [ ] R7. **Cross-doc:** add a short subsection to `execution-batch.md` (and optionally `dev-operations.md`) pointing at preflight + recovery and forbidding deep-merge.
-- [ ] R8. **Non-regression:** `dev-next` / next-router behavior and TABLES unchanged except optional explicit "batch consumer" note. No change required to TABLE rows unless a bug is found.
-- [ ] R9. Tests or dogfood: at least one automated or scripted check that preflight skips unmet-deps (A2) without calling `workflow run`; document manual dogfood of `/sp:dev-runall` on a tiny fixture set if unit harness is thin for agents.
+- [x] R1. **Document the boundary** in `super-coder.md`: super-coder owns batch between-run orchestration; next-router owns single-WBS step selection; happy path remains `spur workflow run task-pipeline.yaml` per frozen WBS.
+- [x] R2. **Skill wiring:** add `sp:next-router` to super-coder frontmatter `skills:` (and description triggers only if needed). Do not remove existing skills.
+- [x] R3. **Preflight (default on for batch):** before launching each per-task pipeline, apply TABLE A preconditions (or invoke `sp:next-router` / equivalent with dry-run semantics) using `spur task show --json` (+ deps). If the row is a hard STOP (A2 unmet deps, A9 cancelled, A7 blocked without recovery policy), **do not** start the pipeline; mark the WBS pre-blocked/skipped in the batch report with the same rationale shape as `dev-next:` messages.
+- [x] R4. **Preflight does not rewrite happy path:** when TABLE A says refine/run/verify chain would apply, still launch the **full task-pipeline** (or existing runall path) for that WBS — preflight is readiness/skip only, not a substitute for the pipeline.
+- [x] R5. **One-shot recovery (optional, default on after FAIL):** when a per-task pipeline ends non-PASS (or status stuck at wip/testing with no path forward in the batch report), consult next-router once for that WBS. If cardinality=1 and the dispatch is a single lifecycle hop (e.g. verify, implement chain), either (a) print the exact child command for the operator, or (b) dispatch once under explicit `--auto` when the batch was started with `--auto`. Never loop recovery.
+- [x] R6. **Parallel mode:** preflight still runs per WBS before fan-out; recovery remains sequential (one WBS) to avoid concurrent corpus mutation from dual recovery dispatches.
+- [x] R7. **Cross-doc:** add a short subsection to `execution-batch.md` (and optionally `dev-operations.md`) pointing at preflight + recovery and forbidding deep-merge.
+- [x] R8. **Non-regression:** `dev-next` / next-router behavior and TABLES unchanged except optional explicit "batch consumer" note. No change required to TABLE rows unless a bug is found.
+- [x] R9. Tests or dogfood: at least one automated or scripted check that preflight skips unmet-deps (A2) without calling `workflow run`; document manual dogfood of `/sp:dev-runall` on a tiny fixture set if unit harness is thin for agents.
 ### Acceptance Criteria
 ```gherkin
 @core
@@ -134,25 +134,64 @@ Scenario: Multi-candidate router stop is not auto-picked
 7. Run unit tests / manual dry-run of preflight against a fixture WBS; paste evidence in Testing.
 8. Solution change-map; leave task at `testing` for review/verify chain.
 ### Solution
-**Pre-implementation target map (rewrite after code lands):**
-
-| File | Planned change |
-|------|----------------|
-| `plugins/sp/agents/super-coder.md:22-40` | Add `sp:next-router` to `skills:`; document boundary + preflight/recovery Always rules; Never deep-merge |
-| `plugins/sp/skills/spur-dev/references/execution-batch.md:1-100` | Step 2.5 preflight; Step 3.3 one-shot recovery; report fields for skip |
-| `plugins/sp/skills/next-router/references/routing-table.md:1-50` | Optional § Batch consumers (super-coder consumes TABLE A STOP rows) |
-| `plugins/sp/skills/spur-dev/references/dev-operations.md:25-40` | Cross-link runall ↔ dev-next complementarity |
-| Pure preflight helper (if TS): `plugins/sp/scripts/…` + tests | A2 unmet-deps skip without workflow run |
-
-⚠️ Target map only until implement.
+| File | Change |
+|------|--------|
+| `plugins/sp/scripts/batch-preflight.ts:1-210` | Pure `preflightTask` (A2/A7/A8/A9 STOP) + `recoveryHint` + CLI for agents |
+| `plugins/sp/tests/batch-preflight.test.ts:1-130` | 12 tests: A2 skip, ready run, recovery hops, CLI exit codes |
+| `plugins/sp/agents/super-coder.md:22-140` | skills + next-router; boundary; Always preflight/recovery; Never deep-merge |
+| `plugins/sp/skills/spur-dev/references/execution-batch.md:138-230` | Step 2.6 preflight; loop + 3.3b one-shot recovery |
+| `plugins/sp/skills/spur-dev/references/dev-operations.md:35-45` | Batch consumer note for dev-next |
+| `plugins/sp/skills/next-router/references/routing-table.md:10-25` | § Batch consumers |
 ### Testing
+**Commands (implement 0279):**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+```
+bun test plugins/sp/tests/batch-preflight.test.ts
+# 12 pass / 0 fail; batch-preflight.ts 100% fn / ~93% lines
+```
 
+**CLI smoke:**
+
+```
+bun plugins/sp/scripts/batch-preflight.ts --wbs 0279 --status todo --deps 0275 --dep-status 0275:todo --json
+# exit 2, action skip A2
+
+bun plugins/sp/scripts/batch-preflight.ts --wbs 0279 --status todo --deps 0275 --dep-status 0275:done
+# exit 0, run:
+```
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | super-coder.md boundary + complementarity |
+| R2 | MET | skills: includes sp:next-router |
+| R3 | MET | preflightTask A2/A7/A8/A9 + tests |
+| R4 | MET | ready todo → run (pipeline still happy path); docs say never substitute |
+| R5 | MET | recoveryHint + CLI --recovery; budget ≤1 in docs |
+| R6 | MET | execution-batch parallel: preflight per WBS; recovery sequential |
+| R7 | MET | execution-batch + dev-operations cross-links |
+| R8 | MET | routing-table Batch consumers note; tables not forked |
+| R9 | MET | batch-preflight.test.ts 12 pass |
+
+Coverage: N/A for markdown agent docs; TS helper ≥90% lines.
+
+Verdict: implement complete.
 ### Review
+**Review scope:** batch-preflight helper + super-coder / execution-batch / next-router docs (task 0279 light empowerment).
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Functional:** R1–R9 MET (see Testing). AC: pipeline happy path preserved; A2 preflight skip tested; recovery one-shot documented + recoveryHint tested; boundary explicit; multi-candidate HITL forbidden in Never rules.
 
+**Priority findings (P1–P4)**
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|---------|
+| P1 | — | — | none |
+| P2 | — | — | none |
+| P3 | architecture | batch-preflight.ts | Pure helper mirrors A2/A7/A8/A9 only — light-gate TABLE C probes not duplicated (acceptable; full probe stays on live dev-next). |
+| P4 | usability | recovery dispatch | Auto-dispatch of recovery under batch `--auto` is policy in docs; no separate flag to disable recovery (default on) — operators can ignore printed hints. |
+
+**SECUA / Architecture:** PASS — no secrets; pure status logic; SSOT tables remain in next-router.
+
+**Disposition:** PASS
 ### References
 - Feature: [N](../features/N_sp-plugin-next-layer-ux-dev-next-router-and-dogfood-hardening.md)
 - Dep: [0275 Ship /sp:dev-next](./0275_ship-sp-dev-next-command-and-sp-next-router-skill.md)
@@ -160,3 +199,6 @@ Scenario: Multi-candidate router stop is not auto-picked
 - Router: `plugins/sp/skills/next-router/`, `plugins/sp/commands/dev-next.md`
 - Batch SSOT: `plugins/sp/skills/spur-dev/references/execution-batch.md`
 ### History
+- 2026-07-17T06:41:15.668Z todo → wip (system)
+- 2026-07-17T06:41:17.283Z wip → testing (system)
+- 2026-07-17T06:41:21.827Z testing → done (system)
