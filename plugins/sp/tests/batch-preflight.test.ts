@@ -1,9 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-    preflightTask,
-    recoveryHint,
-    runPreflightCli,
-} from '../scripts/batch-preflight';
+import { preflightTask, recoveryHint, runPreflightCli } from '../scripts/batch-preflight';
 
 describe('batch-preflight — TABLE A STOP evaluation (task 0279)', () => {
     test('A2 — todo with unmet dep is skipped (no pipeline launch)', () => {
@@ -85,12 +81,8 @@ describe('batch-preflight — TABLE A STOP evaluation (task 0279)', () => {
     });
 
     test('wip and testing → run (pipeline / verify still via pipeline path)', () => {
-        expect(
-            preflightTask({ wbs: '1', status: 'wip', dependencies: [], depStatuses: {} }).action,
-        ).toBe('run');
-        expect(
-            preflightTask({ wbs: '1', status: 'testing', dependencies: [], depStatuses: {} }).action,
-        ).toBe('run');
+        expect(preflightTask({ wbs: '1', status: 'wip', dependencies: [], depStatuses: {} }).action).toBe('run');
+        expect(preflightTask({ wbs: '1', status: 'testing', dependencies: [], depStatuses: {} }).action).toBe('run');
     });
 
     test('recoveryHint — one hop per status (never a loop)', () => {

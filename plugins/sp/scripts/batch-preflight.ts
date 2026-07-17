@@ -10,15 +10,7 @@
  * per TABLE A; the batch driver prints or dispatches at most once per WBS.
  */
 
-export type TaskStatus =
-    | 'backlog'
-    | 'todo'
-    | 'wip'
-    | 'testing'
-    | 'blocked'
-    | 'done'
-    | 'cancelled'
-    | string;
+export type TaskStatus = 'backlog' | 'todo' | 'wip' | 'testing' | 'blocked' | 'done' | 'cancelled' | string;
 
 export interface PreflightInput {
     wbs: string;
@@ -141,7 +133,13 @@ export function parsePreflightCliArgs(argv: string[]): PreflightCliArgs {
         else if (a === '--status') status = argv[++i] ?? null;
         else if (a === '--deps') {
             const raw = argv[++i] ?? '';
-            deps = raw.length === 0 ? [] : raw.split(',').map((s) => s.trim()).filter(Boolean);
+            deps =
+                raw.length === 0
+                    ? []
+                    : raw
+                          .split(',')
+                          .map((s) => s.trim())
+                          .filter(Boolean);
         } else if (a === '--dep-status') {
             // format: 0275:done,0276:todo
             const raw = argv[++i] ?? '';
