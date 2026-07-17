@@ -51,8 +51,8 @@
       "Bash(sqlite3 .spur/spur.db *)",
       "Read(//tmp/**)",
       "Read(//private/tmp/**)",
-      "Write(//tmp/**)",
-      "Write(//private/tmp/**)"
+      "Edit(//tmp/**)",
+      "Edit(//private/tmp/**)"
     ]
   }
 }
