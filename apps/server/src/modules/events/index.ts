@@ -12,16 +12,16 @@ import {
 } from './event-names';
 
 /**
- * Extract the `actor` field from a system event payload. Mirrors the shared
- * helper in `packages/app/src/services/system-event-tap.ts` so the SSE envelope
- * and the persistence tap agree on actor extraction (task 0226 F5). Inlined
- * here — not imported from `@gobing-ai/spur-app` — to keep the Cloudflare
- * Worker bundle free of the heavy `spur-app` runtime dependency.
+ * Extract the actor for SSE envelopes. Mirrors `packages/app` system-event-tap
+ * (task 0226 F5 + 0269 agentId fallback). Inlined — not imported from
+ * `@gobing-ai/spur-app` — to keep the Cloudflare Worker bundle free of the
+ * heavy spur-app runtime dependency.
  */
 function extractSystemEventActor(event: unknown): string | null {
     if (event && typeof event === 'object') {
-        const candidate = (event as Record<string, unknown>).actor;
-        if (typeof candidate === 'string') return candidate;
+        const obj = event as Record<string, unknown>;
+        if (typeof obj.actor === 'string' && obj.actor.length > 0) return obj.actor;
+        if (typeof obj.agentId === 'string' && obj.agentId.length > 0) return obj.agentId;
     }
     return null;
 }

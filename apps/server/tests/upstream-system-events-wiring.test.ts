@@ -574,5 +574,9 @@ describe('upstream system event wiring (task 0221 R3 + task 0226 R8)', () => {
         expect(nullish).toBeNull();
         const wrongType = extractSystemEventActor({ actor: 42 });
         expect(wrongType).toBeNull();
+        // 0269: process lifecycle payloads use agentId, not actor.
+        expect(extractSystemEventActor({ agentId: 'alpha-planner', pid: 1 })).toBe('alpha-planner');
+        // Explicit actor wins over agentId.
+        expect(extractSystemEventActor({ actor: 'op', agentId: 'alpha-planner' })).toBe('op');
     });
 });
