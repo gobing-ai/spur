@@ -840,4 +840,39 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             expect(table, `routing-table.md must contain ${marker}`).toContain(marker);
         }
     });
+
+    test('R53 — skills carry prompts only; scripts/tests live at plugin level (ADR-031)', () => {
+        // The prompts-vs-code split: a skill directory holds SKILL.md + prompt-side companions
+        // (references/, agents/, examples/) — never executable trees. Embedded scripts/tests
+        // re-created a second layout convention twice (daily-summary, dogfood-testing) before the
+        // split; this guard fails the moment a skill dir grows one again.
+        const offenders: string[] = [];
+        for (const skill of skillDirs) {
+            for (const forbidden of ['scripts', 'tests']) {
+                try {
+                    statSync(join(SKILLS_DIR, skill, forbidden));
+                    offenders.push(`skills/${skill}/${forbidden}/`);
+                } catch {
+                    // absent — expected
+                }
+            }
+        }
+        expect(offenders).toEqual([]);
+
+        // Plugin-level trees exist and pair by skill name: scripts/<skill>/ code is exercised by
+        // tests/<skill>/ (coverage gate alone can't prove the suite sits in the right tree).
+        const scriptDirs = readdirSync(join(PLUGIN_ROOT, 'scripts'), { withFileTypes: true })
+            .filter((e) => e.isDirectory())
+            .map((e) => e.name);
+        const testsDir = join(PLUGIN_ROOT, 'tests');
+        const missingSuite: string[] = [];
+        for (const name of scriptDirs) {
+            try {
+                statSync(join(testsDir, name));
+            } catch {
+                missingSuite.push(`scripts/${name}/ has no tests/${name}/ suite`);
+            }
+        }
+        expect(missingSuite).toEqual([]);
+    });
 });

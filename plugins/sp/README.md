@@ -169,7 +169,7 @@ pipeline step.
 
 ```
 plugins/sp/
-├── skills/                          # Domain knowledge + workflow docs (20 skills)
+├── skills/                          # Domain knowledge + workflow docs (24 skills)
 │   ├── brainstorm/                  # Structured ideation workflow
 │   │   ├── agents/openai.yaml
 │   │   ├── examples/ideation-example.md
@@ -185,9 +185,7 @@ plugins/sp/
 │   ├── code-verification/           # Verify + SECUA review
 │   │   └── references/{code-improvement, secu-review, verdict-schema}.md
 │   ├── daily-summary/               # Daily summary report generator
-│   │   ├── agents/openai.yaml
-│   │   ├── scripts/{daily-summary, logger}.ts
-│   │   └── tests/daily-summary.test.ts
+│   │   └── agents/openai.yaml
 │   ├── doc-evolve/                  # Key-document evolution per constitution
 │   │   └── references/operations.md
 │   ├── dogfood-testing/             # Dogfood backbone — 4-phase protocol + report
@@ -216,10 +214,11 @@ plugins/sp/
 │   ├── sys-debugging/               # Structured debugging protocol
 │   │   └── references/debugging-protocol.md
 │   └── wayfinder/                   # Multi-session investigation maps (SKILL.md only)
-├── commands/                        # 26 slash-command definitions
+├── commands/                        # 28 slash-command definitions
 ├── agents/                          # 2 specialist subagents (expert-spur, super-coder)
 ├── hooks/                           # hooks.json + task-write-guard.{ts,test.ts} + context-{session-start,post-tool,session-stop}.ts + context-hooks.test.ts
-├── tests/                           # Plugin-structure tests (skill-structure.test.ts)
+├── scripts/                         # Executable helpers, split from prompts — scripts/<skill>/ (daily-summary, dogfood-testing)
+├── tests/                           # Plugin tests — skill-structure.test.ts + per-skill suites (daily-summary, dogfood-testing + fixtures)
 ├── plugin.json                      # Marketplace entry
 └── README.md                        # This file
 ```
@@ -284,7 +283,8 @@ Each skill directory contains:
   CLI noun plus per-noun sub-references for verbs, authoring, and operations; `spur-dev` carries
   planning, execution, batch, gate-checklist, and glossary references; `code-testing` ships
   per-stack adapters.
-- Some skills (`daily-summary`) ship executable TypeScript under `scripts/` for data collection.
+- Executable TypeScript helpers live under plugin-level `scripts/<skill>/` (e.g. `daily-summary`,
+  `dogfood-testing`) — split from the prompt layer (`skills/`), with their suites in `tests/<skill>/`.
 - Some skills (`brainstorm`, `daily-summary`) carry `agents/openai.yaml` for multi-model dispatch.
 
 **Design principle:** Skills are **knowledge, not execution**. They describe *what to do and why*;

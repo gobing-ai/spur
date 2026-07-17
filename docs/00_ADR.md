@@ -718,3 +718,29 @@ that another test file tests directly.
 
 **Detail:** `apps/web/tests/test-helpers/rpc-client-mock.ts`; rules `no-leaky-module-mocks`,
 `no-unmocked-module-eval-side-effects`.
+
+## ADR-031: Plugin `sp` Splits Prompts from Executable Code — `scripts/<skill>/` and `tests/<skill>/` at Plugin Level
+
+**Status:** Accepted · **Date:** 2026-07-17
+
+**Decision.** Inside `plugins/sp/`, prompt-layer artifacts (`skills/`, `commands/`, `agents/`) and
+executable code are separate trees. Executable TypeScript helpers live at plugin level under
+`scripts/<skill>/` (e.g. `scripts/daily-summary/`, `scripts/dogfood-testing/`); their suites live
+under `tests/<skill>/` (fixtures included). A skill directory carries `SKILL.md` + prompt-side
+companions only (`references/`, `agents/`, `examples/`) — **never** `scripts/` or `tests/`.
+
+**Why.** Two skills had grown embedded `scripts/`+`tests/` (`daily-summary`, then `dogfood-testing`
+shipped the same shape in 0276), creating a second layout convention beside the plugin-level
+`tests/` tree the README already documented. Embedded code in a prompt directory is wrong on three
+axes: (a) the Tier-2 knowledge layer (skills = knowledge, not execution) silently gains an
+execution payload with no tier of its own; (b) test discovery, coverage ignores, and rule scopes
+must special-case per-skill paths instead of one plugin-level root; (c) a future packaging step
+(prompt-only distribution) would have to hunt code out of every skill dir. One convention, one
+root per concern.
+
+**Detail:** layout + prose in `plugins/sp/README.md` (Directory layout); enforcement via structural
+test `R53` in `plugins/sp/tests/skill-structure.test.ts` (no `scripts/`/`tests/` under
+`plugins/sp/skills/*/`).
+
+**Relates:** complements ADR-028 (skill *content* decomposition; this ADR owns artifact *placement*);
+ADR-016 extends the same "code where determinism, prompts where judgment" line to file layout.
