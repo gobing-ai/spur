@@ -1,16 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Badge, Button, Modal, Select } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
-import { ATTACH_EVENT, consumePendingAttach } from './attach-bus';
 import MemberTerminal from './MemberTerminal';
-import { type TeamGroup, useTeamsData } from './useTeamsData';
+import { useTeamsData } from './useTeamsData';
 
 // Team/member shapes and the polling fetch live in useTeamsData (0268 R1).
 // This file owns only Terminal-scoped concerns: start/stop URLs, persisted
-// selection, attach handling, and the team/member pickers.
+// selection, and the team/member pickers. Up/Down merged from TeamControlStrip (0269 R3).
 
 const startUrl = (id: string) => `${resolveApiUrl()}/team/agents/${encodeURIComponent(id)}/start`;
 const stopUrl = (id: string) => `${resolveApiUrl()}/team/agents/${encodeURIComponent(id)}/stop`;
+
+const teamUpUrl = (teamId: string) => `${resolveApiUrl()}/team/${encodeURIComponent(teamId)}/up`;
+const teamDownUrl = (teamId: string) => `${resolveApiUrl()}/team/${encodeURIComponent(teamId)}/down`;
 
 /** localStorage key shared with the 0263 polish — stable across reloads. */
 const LAST_SELECTION_KEY = 'spur:board:teams:lastTerminal';
@@ -75,35 +77,18 @@ export default function TerminalTab() {
     const [memberId, setMemberId] = useState<string>('');
     const [actionError, setActionError] = useState<string | null>(null);
     const [confirmStopFor, setConfirmStopFor] = useState<string | null>(null);
+    const [confirmDownFor, setConfirmDownFor] = useState<string | null>(null);
     const [actionPending, setActionPending] = useState(false);
     const [restoredRef] = useState<{ done: boolean }>({ done: false });
-
-    // Latest teams snapshot available to the attach validator (0268 R3).
-    const teamsRef = useRef<TeamGroup[]>([]);
-    teamsRef.current = teams;
-
-    /** Resolve `agentId` to its team and select it. False when no loaded team owns it. */
-    const applyAttach = useCallback((agentId: string): boolean => {
-        const team = teamsRef.current.find((t) => t.members.some((m) => m.id === agentId));
-        if (!team) return false;
-        setTeamId(team.teamId);
-        setMemberId(agentId);
-        // R5 persist is handled by the existing [teamId, memberId] effect below.
-        return true;
-    }, []);
 
     // ── Restore last persisted selection once after the first teams load (0263 R2) ──
     useEffect(() => {
         if (restoredRef.done) return;
         if (teams.length === 0) return;
         restoredRef.done = true;
-        // An Attach clicked in Processes outranks the persisted selection: it is the
-        // operator's most recent intent, and it is why this tab just became visible.
-        const pending = consumePendingAttach();
-        if (pending && applyAttach(pending)) return;
         const persisted = readPersistedSelection();
         if (!persisted) return;
-        const team = teamsRef.current.find((t) => t.teamId === persisted.teamId);
+        const team = teams.find((t) => t.teamId === persisted.teamId);
         const member = team?.members.find((m) => m.id === persisted.memberId);
         if (!team || !member) {
             // Stale entry (team/member gone from config) — drop it so reloads stay clean.
@@ -112,25 +97,7 @@ export default function TerminalTab() {
         }
         setTeamId(persisted.teamId);
         setMemberId(persisted.memberId);
-    }, [teams, restoredRef, applyAttach]);
-
-    // ── Listen for Attach while already mounted (0265 R1–R3) ──
-    // Covers the operator re-attaching once Terminal is the active tab. The mount-time
-    // consume above covers the usual path (Attach clicked while Terminal is unmounted).
-    useEffect(() => {
-        const onAttach = (event: Event) => {
-            const detail = (event as CustomEvent<{ agentId?: unknown }>).detail;
-            const agentId = detail?.agentId;
-            if (typeof agentId !== 'string' || !agentId) return;
-            // Unknown agentId leaves the intent pending and selection unchanged (edge
-            // scenario, no crash); a later teams load resolves it or drops it on consume.
-            if (applyAttach(agentId)) consumePendingAttach();
-        };
-        globalThis.addEventListener(ATTACH_EVENT, onAttach);
-        return () => {
-            globalThis.removeEventListener(ATTACH_EVENT, onAttach);
-        };
-    }, [applyAttach]);
+    }, [teams, restoredRef]);
 
     // ── Cascade: when team changes, reset the member pick if it's no longer valid ──
     const currentTeam = teams.find((t) => t.teamId === teamId);
@@ -176,6 +143,40 @@ export default function TerminalTab() {
         [load],
     );
 
+    // ── Team-scoped Up/Down (from former TeamControlStrip, 0269 R3) ──
+    const sendTeamAction = useCallback(
+        async (id: string, action: 'up' | 'down') => {
+            setActionPending(true);
+            setActionError(null);
+            try {
+                const url = action === 'up' ? teamUpUrl(id) : teamDownUrl(id);
+                const res = await fetchWithTimeout(new Request(url, { method: 'POST' }));
+                if (!res.ok) {
+                    const body: unknown = await res.json().catch(() => null);
+                    const msg =
+                        body &&
+                        typeof body === 'object' &&
+                        'error' in body &&
+                        typeof (body as Record<string, unknown>).error === 'string'
+                            ? ((body as Record<string, unknown>).error as string)
+                            : `request failed (${res.status})`;
+                    setActionError(msg);
+                }
+            } catch (err) {
+                setActionError(err instanceof Error ? err.message : String(err));
+            } finally {
+                setActionPending(false);
+                void load();
+            }
+        },
+        [load],
+    );
+
+    // ── Roster chip click sets focused member (0269 R4) ──
+    const handleChipClick = useCallback((id: string) => {
+        setMemberId(id);
+    }, []);
+
     // ── Empty / error states (R7) ──
     if (error && teams.length === 0) {
         return (
@@ -198,74 +199,125 @@ export default function TerminalTab() {
     return (
         <div className="flex flex-col h-full overflow-hidden" data-terminal-tab>
             <div
-                className="px-3 py-2 border-b border-spur-border bg-base-200 shrink-0 flex flex-wrap items-center gap-2"
+                className="px-3 py-2 border-b border-spur-border bg-base-200 shrink-0 flex items-center justify-between"
                 data-terminal-toolbar
             >
-                <label className="flex items-center gap-1 text-xs" htmlFor="terminal-team-select">
-                    <span className="text-spur-text-muted">Team</span>
-                    <Select
-                        id="terminal-team-select"
-                        variant="bordered"
-                        size="sm"
-                        value={teamId}
-                        onChange={(e) => {
-                            setTeamId(e.target.value);
-                            setMemberId('');
-                        }}
-                        data-terminal-team-select
-                    >
-                        <option value="">Select team…</option>
-                        {teams.map((t) => (
-                            <option key={t.teamId} value={t.teamId}>
-                                {t.name}
-                            </option>
-                        ))}
-                    </Select>
-                </label>
-
-                <label className="flex items-center gap-1 text-xs" htmlFor="terminal-member-select">
-                    <span className="text-spur-text-muted">Member</span>
-                    <Select
-                        id="terminal-member-select"
-                        variant="bordered"
-                        size="sm"
-                        value={memberId}
-                        onChange={(e) => setMemberId(e.target.value)}
-                        disabled={!currentTeam}
-                        data-terminal-member-select
-                    >
-                        <option value="">Select member…</option>
-                        {currentTeam?.members.map((m) => (
-                            <option key={m.id} value={m.id}>
-                                {m.id} · {m.type} · {m.status}
-                            </option>
-                        ))}
-                    </Select>
-                </label>
-
-                {currentMember && (
-                    <>
-                        <Badge variant={isRunning ? 'success' : 'ghost'} size="xs" data-terminal-status-badge>
-                            {currentMember.status}
-                        </Badge>
-                        <Button
-                            type="button"
-                            variant={isRunning ? 'warning' : 'primary'}
-                            size="xs"
-                            disabled={actionPending}
-                            onClick={() => {
-                                if (isRunning) {
-                                    setConfirmStopFor(currentMember.id);
-                                } else {
-                                    void toggleMemberStatus(currentMember.id, false);
-                                }
+                {/* LEFT: data-terminal-focus */}
+                <div className="flex items-center gap-2" data-terminal-focus>
+                    <label className="flex items-center gap-1 text-xs" htmlFor="terminal-team-select">
+                        <span className="text-spur-text-muted">Team</span>
+                        <Select
+                            id="terminal-team-select"
+                            variant="bordered"
+                            size="sm"
+                            value={teamId}
+                            onChange={(e) => {
+                                setTeamId(e.target.value);
+                                setMemberId('');
                             }}
-                            data-terminal-toggle-btn
+                            data-terminal-team-select
                         >
-                            {isRunning ? 'Stop' : 'Start'}
-                        </Button>
-                    </>
-                )}
+                            <option value="">Select team…</option>
+                            {teams.map((t) => (
+                                <option key={t.teamId} value={t.teamId}>
+                                    {t.name}
+                                </option>
+                            ))}
+                        </Select>
+                    </label>
+
+                    <label className="flex items-center gap-1 text-xs" htmlFor="terminal-member-select">
+                        <span className="text-spur-text-muted">Member</span>
+                        <Select
+                            id="terminal-member-select"
+                            variant="bordered"
+                            size="sm"
+                            value={memberId}
+                            onChange={(e) => setMemberId(e.target.value)}
+                            disabled={!currentTeam}
+                            data-terminal-member-select
+                        >
+                            <option value="">Select member…</option>
+                            {currentTeam?.members.map((m) => (
+                                <option key={m.id} value={m.id}>
+                                    {m.id} · {m.type}
+                                </option>
+                            ))}
+                        </Select>
+                    </label>
+
+                    {currentMember?.model ? (
+                        <span className="text-xs text-spur-text-muted font-mono" data-terminal-model>
+                            {currentMember.model}
+                        </span>
+                    ) : null}
+
+                    {currentMember && (
+                        <>
+                            <Badge variant={isRunning ? 'success' : 'ghost'} size="xs" data-terminal-status-badge>
+                                {currentMember.status}
+                            </Badge>
+                            <Button
+                                type="button"
+                                variant={isRunning ? 'warning' : 'primary'}
+                                size="xs"
+                                disabled={actionPending}
+                                onClick={() => {
+                                    if (isRunning) {
+                                        setConfirmStopFor(currentMember.id);
+                                    } else {
+                                        void toggleMemberStatus(currentMember.id, false);
+                                    }
+                                }}
+                                data-terminal-toggle-btn
+                            >
+                                {isRunning ? 'Stop' : 'Start'}
+                            </Button>
+                        </>
+                    )}
+                </div>
+
+                {/* RIGHT: data-terminal-roster */}
+                <div className="flex items-center gap-2" data-terminal-roster>
+                    {currentTeam?.members.map((m) => (
+                        <button
+                            key={m.id}
+                            type="button"
+                            title={`${m.id} · ${m.type}`}
+                            onClick={() => handleChipClick(m.id)}
+                            className="cursor-pointer p-0 bg-transparent border-0"
+                            data-terminal-roster-chip
+                        >
+                            <Badge
+                                variant={m.id === memberId ? 'accent' : m.status === 'running' ? 'success' : 'ghost'}
+                                size="xs"
+                            >
+                                {m.id}
+                            </Badge>
+                        </button>
+                    ))}
+                    <div className="border-l border-spur-border mx-1 h-5" aria-hidden="true" />
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        disabled={actionPending || !currentTeam}
+                        onClick={() => currentTeam && sendTeamAction(currentTeam.teamId, 'up')}
+                        data-terminal-up-btn
+                    >
+                        Up
+                    </Button>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        disabled={actionPending || !currentTeam}
+                        onClick={() => currentTeam && setConfirmDownFor(currentTeam.teamId)}
+                        data-terminal-down-btn
+                    >
+                        Down
+                    </Button>
+                </div>
             </div>
             {actionError && (
                 <div className="px-3 py-1 text-xs text-error" role="alert" data-terminal-tab-action-error>
@@ -316,6 +368,44 @@ export default function TerminalTab() {
                         data-stop-confirm-confirm
                     >
                         Stop
+                    </Button>
+                </div>
+            </Modal>
+
+            <Modal
+                open={confirmDownFor !== null}
+                variant="warning"
+                onClose={() => setConfirmDownFor(null)}
+                data-down-confirm-modal
+            >
+                <h3 className="text-lg font-bold text-warning">Bring team down?</h3>
+                <p className="py-3 text-sm text-spur-text">
+                    This will stop all running members of <span className="font-mono">{confirmDownFor}</span>.
+                </p>
+                <div className="flex justify-end gap-2">
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setConfirmDownFor(null)}
+                        data-down-confirm-cancel
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        type="button"
+                        variant="warning"
+                        size="sm"
+                        disabled={actionPending}
+                        onClick={() => {
+                            if (!confirmDownFor) return;
+                            const id = confirmDownFor;
+                            setConfirmDownFor(null);
+                            void sendTeamAction(id, 'down');
+                        }}
+                        data-down-confirm-confirm
+                    >
+                        Bring Down
                     </Button>
                 </div>
             </Modal>

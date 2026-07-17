@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Badge, Button, Loading } from '@/ui';
+import { Badge, Loading } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
-import { requestAttach } from './attach-bus';
 
 // ── Wire shapes from GET /api/team/processes ──
 
@@ -38,7 +37,7 @@ interface ProcessesSnapshot {
     executionsCount: number;
 }
 
-/** Unified table row for the Processes watch list. */
+/** Unified table row for the Processes watch list (read-only; no row actions). */
 interface WatchRow {
     key: string;
     label: string;
@@ -47,20 +46,17 @@ interface WatchRow {
     status: string;
     startedAt: string;
     source: string;
-    canControl: boolean;
-    canAttach: boolean;
     teamId: string | null;
 }
 
 const POLL_MS = 3_000;
 
 const processesUrl = () => `${resolveApiUrl()}/team/processes`;
-const startUrl = (id: string) => `${resolveApiUrl()}/team/agents/${encodeURIComponent(id)}/start`;
-const stopUrl = (id: string) => `${resolveApiUrl()}/team/agents/${encodeURIComponent(id)}/stop`;
 
 /**
- * Build a unified watch list: supervisor rows first (with controls), then
+ * Build a unified watch list: supervisor rows first, then
  * registry executions that are not already covered by a supervised agent/pid.
+ * Rows are read-only — Terminal tab supplies all controls per 0269 Plan 4.
  */
 export function buildWatchRows(processes: SupervisedProcessRow[], executions: RegistryExecutionRow[]): WatchRow[] {
     const rows: WatchRow[] = processes.map((p) => ({
@@ -71,8 +67,6 @@ export function buildWatchRows(processes: SupervisedProcessRow[], executions: Re
         status: p.status,
         startedAt: p.startedAt,
         source: 'supervisor',
-        canControl: true,
-        canAttach: true,
         teamId: p.teamId ?? null,
     }));
 
@@ -90,8 +84,6 @@ export function buildWatchRows(processes: SupervisedProcessRow[], executions: Re
             status: e.status,
             startedAt: e.startedAt,
             source: e.source,
-            canControl: false,
-            canAttach: Boolean(e.agentId),
             teamId: e.teamId ?? null,
         });
     }
@@ -215,13 +207,11 @@ function ProcessFilterControls({
  * Processes tab — process watch list for Teams (0262 + 0264).
  *
  * Polls GET /api/team/processes every 3s. Renders supervisor-managed members
- * (with Attach + Start/Stop) plus other ProcessExecutor registry runs
- * (one-shots / other) from the shared serve-local registry.
+ * plus other ProcessExecutor registry runs (read-only — controls live in Terminal).
  */
 export default function ProcessesTab() {
     const [snapshot, setSnapshot] = useState<ProcessesSnapshot | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const [actionPending, setActionPending] = useState<string | null>(null);
     // Ephemeral filter state (spur#0267 R3) — not persisted across remounts.
     const [filters, setFilters] = useState<WatchFilters>({ runningOnly: false, source: 'all', team: 'all' });
     const mountedRef = useRef(true);
@@ -266,35 +256,6 @@ export default function ProcessesTab() {
         };
     }, [load]);
 
-    const toggleStatus = useCallback(
-        async (agentId: string, running: boolean) => {
-            setActionPending(agentId);
-            try {
-                const url = running ? stopUrl(agentId) : startUrl(agentId);
-                const res = await fetchWithTimeout(new Request(url, { method: 'POST' }));
-                if (!res.ok) {
-                    const body: unknown = await res.json().catch(() => null);
-                    const msg =
-                        body && typeof body === 'object' && 'error' in body && typeof body.error === 'string'
-                            ? body.error
-                            : undefined;
-                    setError(msg ?? `request failed (${res.status})`);
-                }
-            } catch (err) {
-                setError(err instanceof Error ? err.message : String(err));
-            } finally {
-                setActionPending(null);
-                const ctrl = new AbortController();
-                void load(ctrl.signal);
-            }
-        },
-        [load],
-    );
-
-    // Attach: signal Terminal tab's local selection (loose coupling via attach-bus).
-    const attachToTerminal = useCallback((agentId: string) => {
-        requestAttach(agentId);
-    }, []);
     const watchRows = useMemo(
         () => (snapshot ? buildWatchRows(snapshot.processes, snapshot.executions) : []),
         [snapshot],
@@ -390,7 +351,6 @@ export default function ProcessesTab() {
                         <th>PID</th>
                         <th>Status</th>
                         <th>Started</th>
-                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -416,33 +376,6 @@ export default function ProcessesTab() {
                                 </td>
                                 <td className="text-xs text-spur-text-muted">
                                     {new Date(p.startedAt).toLocaleTimeString()}
-                                </td>
-                                <td>
-                                    <div className="flex items-center gap-1">
-                                        {p.canAttach && p.agentId ? (
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="xs"
-                                                onClick={() => attachToTerminal(p.agentId as string)}
-                                                data-processes-attach-btn
-                                            >
-                                                Attach
-                                            </Button>
-                                        ) : null}
-                                        {p.canControl && p.agentId ? (
-                                            <Button
-                                                type="button"
-                                                variant={running ? 'warning' : 'primary'}
-                                                size="xs"
-                                                disabled={actionPending === p.agentId}
-                                                onClick={() => void toggleStatus(p.agentId as string, running)}
-                                                data-processes-toggle-btn
-                                            >
-                                                {running ? 'Stop' : 'Start'}
-                                            </Button>
-                                        ) : null}
-                                    </div>
                                 </td>
                             </tr>
                         );

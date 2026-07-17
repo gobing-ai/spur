@@ -2,12 +2,18 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 
 // ── Team/member shapes returned by GET /api/team/teams (0256 R2) ──
-// Shared by TerminalTab and TeamControlStrip after 0268 extracted the
-// duplicated polling + parsing out of each component.
+// Shared by TerminalTab, ActivityTab, and other Teams surfaces after 0268
+// extracted the duplicated polling + parsing out of each consumer.
 export interface TeamMember {
     id: string;
     type: string;
     status: string;
+    /** Optional model override surfaced by GET /api/team/teams (R11). Omitted when unset. */
+    model?: string;
+    /** Surfaced so the Roster can hint when no member is autostart. */
+    autoStart?: boolean;
+    /** Process pid when the member is running. */
+    pid?: number;
 }
 
 /** A team and its members as surfaced by GET /api/team/teams. */
@@ -33,7 +39,14 @@ function parseTeamsResponse(body: unknown): TeamGroup[] | null {
             if (!m || typeof m !== 'object') continue;
             const r = m as Record<string, unknown>;
             if (typeof r.id !== 'string' || typeof r.type !== 'string' || typeof r.status !== 'string') continue;
-            members.push({ id: r.id, type: r.type, status: r.status });
+            members.push({
+                id: r.id,
+                type: r.type,
+                status: r.status,
+                ...(typeof r.model === 'string' && r.model.length > 0 ? { model: r.model } : {}),
+                ...(typeof r.autoStart === 'boolean' ? { autoStart: r.autoStart } : {}),
+                ...(typeof r.pid === 'number' ? { pid: r.pid } : {}),
+            });
         }
         teams.push({ teamId: e.teamId, name: e.name, members });
     }

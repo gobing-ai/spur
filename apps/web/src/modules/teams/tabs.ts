@@ -14,7 +14,7 @@ export interface TeamsTab {
 /** v1 tabs: Terminal, Processes, Messages, Activity (0262 — Processes added per M1 R5). */
 export const TEAMS_TABS: readonly TeamsTab[] = [
     { id: 'terminal', label: 'Terminal', component: TerminalTab },
-    { id: 'processes', label: 'Processes', component: ProcessesTab },
-    { id: 'messages', label: 'Messages', component: MessagesTab },
+    { id: 'processes', label: 'Process', component: ProcessesTab },
+    { id: 'messages', label: 'Message', component: MessagesTab },
     { id: 'activity', label: 'Activity', component: ActivityTab },
 ];

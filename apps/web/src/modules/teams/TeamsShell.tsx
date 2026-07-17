@@ -1,6 +1,4 @@
-import { useEffect, useState } from 'react';
-import { ATTACH_EVENT } from './attach-bus';
-import TeamControlStrip from './TeamControlStrip';
+import { useState } from 'react';
 import { TEAMS_TABS, type TeamsTab } from './tabs';
 
 /** Shell for the Teams board module (0254 R1). Mirrors ObservabilityShell. */
@@ -8,17 +6,6 @@ export default function TeamsShell() {
     const [activeId, setActiveId] = useState<string>('terminal');
     const active: TeamsTab | undefined = TEAMS_TABS.find((t) => t.id === activeId);
     const Active = active?.component;
-
-    // Attach from Processes reveals the Terminal tab (0265 R4). Only this shell owns
-    // tab state, and mounting Terminal is what lets it consume the pending intent —
-    // without the switch, Attach would resolve into a tab the operator cannot see.
-    useEffect(() => {
-        const onAttach = () => setActiveId('terminal');
-        globalThis.addEventListener(ATTACH_EVENT, onAttach);
-        return () => {
-            globalThis.removeEventListener(ATTACH_EVENT, onAttach);
-        };
-    }, []);
 
     return (
         <div className="flex flex-col h-full overflow-hidden" data-teams-shell>
@@ -49,7 +36,6 @@ export default function TeamsShell() {
                     );
                 })}
             </div>
-            <TeamControlStrip />
             <div
                 role="tabpanel"
                 id={`teams-tab-panel-${activeId}`}
