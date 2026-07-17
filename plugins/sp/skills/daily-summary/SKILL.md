@@ -51,13 +51,13 @@ The daily-summary skill:
 
 ```bash
 # Generate summary for today
-bun plugins/sp/skills/daily-summary/scripts/daily-summary.ts
+bun plugins/sp/scripts/daily-summary/daily-summary.ts
 
 # Generate summary for a specific date
-bun plugins/sp/skills/daily-summary/scripts/daily-summary.ts --date 2026-04-17
+bun plugins/sp/scripts/daily-summary/daily-summary.ts --date 2026-04-17
 
 # Show summary without writing file
-bun plugins/sp/skills/daily-summary/scripts/daily-summary.ts --dry-run
+bun plugins/sp/scripts/daily-summary/daily-summary.ts --dry-run
 ```
 
 ## Workflows

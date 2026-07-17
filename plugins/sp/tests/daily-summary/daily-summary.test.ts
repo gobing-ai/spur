@@ -20,8 +20,8 @@ import {
     promptUser,
     todayLocal,
     writeSummary,
-} from '../scripts/daily-summary';
-import { enableLogger } from '../scripts/logger';
+} from '../../scripts/daily-summary/daily-summary';
+import { enableLogger } from '../../scripts/daily-summary/logger';
 
 beforeAll(() => {
     enableLogger(false, false);
