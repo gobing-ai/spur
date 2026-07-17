@@ -100,6 +100,7 @@ list this README is checked against.
 
 | Command | What it does |
 | --- | --- |
+| `dev-next` | Status-aware router — inspect a task (or next frontier under a feature), dispatch the best existing `/sp:dev-*` command, chain on clean success |
 | `dev-run` | Run a task — full pipeline (precheck→implement→test→review→approve→verify→record→done) or single-step (implement) |
 | `dev-review` | Review code for a task — SECUA framework review across Security, Efficiency, Correctness, Usability, and Architecture |
 | `dev-verify` | Verify a task against its requirements and Acceptance Criteria — traceability check producing a PASS/PARTIAL/FAIL verdict with evidence |
@@ -248,7 +249,7 @@ Tier 3 — Execution Layer (spur CLI + Guard Scripts)
 
 The single source of truth for domain knowledge and workflow documentation. Each skill is a
 self-contained knowledge module that teaches the agent how to operate one slice of the Spur CLI
-surface or run one workflow. All 20 skills target the same five platforms: `claude-code`, `codex`,
+surface or run one workflow. All skills target the same five platforms: `claude-code`, `codex`,
 `antigravity`, `opencode`, `openclaw`.
 
 | Skill | Ver | Domain |
@@ -263,6 +264,7 @@ surface or run one workflow. All 20 skills target the same five platforms: `clau
 | `code-review` | 1.0 | Pre-commit self-review checklist (6 categories, catches 60-80% of issues) + SECUA review lenses + findings processing |
 | `code-simplification` | 1.0 | Behavior-preserving simplification — Chesterton's Fence, signal tables, incremental change + test-after-each, scope-to-changed |
 | `dogfood-testing` | 1.0 | Dogfood backbone — drives a testee end-to-end with bounded auto-fix, a live monitor ledger, and a structured report; backs `/sp:dev-dogfood` |
+| `next-router` | 1.0 | Status→command router — resolve a task WBS or feature frontier, TABLE A/B/C lookup with light-gate short-circuit, single dispatch or HITL stop; backs `/sp:dev-next` |
 | `parallel-execution` | 1.0 | Fan-out decision framework — when to parallelize, four proven fan-out patterns, and result synthesis; backs `/sp:dev-parallel` |
 | `sys-debugging` | 1.0 | Structured debugging protocol — reproduce→isolate→root cause→fix→regression test; "ask the debugger before the LLM" principle |
 | `branch-workflow` | 1.0 | Branch-lifecycle discipline — create→worktree→commit→self-review→merge→cleanup; git worktree patterns for parallel branches |

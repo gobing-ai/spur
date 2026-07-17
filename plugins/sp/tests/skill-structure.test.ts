@@ -508,7 +508,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const ROUTER_SKILLS = new Set(['spur-dev', 'spur-cli']);
         const NON_ROUTER_BUDGET = 350;
         const ROUTER_BUDGET = 600;
-        const AGGREGATE_BUDGET = 6600; // scales with skill count (20 skills post-0232 indexed-context); per-skill caps below are the real bloat guard
+        const AGGREGATE_BUDGET = 7000; // scales with skill count (24 skills post-0275 next-router); per-skill caps below are the real bloat guard
 
         let aggregate = 0;
         const offenders: string[] = [];
@@ -816,5 +816,28 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
 
         // R5: wayfinder carries the anti-rationalization anatomy (checked by R46 load-bearing list).
         // No vendors/ reference anywhere in the shipped files (checked by R20).
+    });
+
+    test('R52 — dev-next command wires to sp:next-router skill with routing-table reference (task 0275)', () => {
+        // Command is a thin Skill() wrapper — the pass-through principle (README) forbids domain
+        // logic in commands, so the wiring string + file existence is the structural contract.
+        const command = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-next.md'), 'utf8');
+        expect(command).toContain('Skill(skill="sp:next-router", args="$ARGUMENTS")');
+        // Exact stop/plan message ids (0272 R3) — all prefixed `dev-next:`.
+        for (const id of ['U1', 'U2', 'U3', 'U4', 'U-HITL', 'U-GUARD', 'P1', 'P2', 'P3', 'W-FULL']) {
+            expect(command, `dev-next.md must document message ${id}`).toContain(`### ${id} `);
+            expect(command).toContain('dev-next:');
+        }
+
+        const skill = readFileSync(join(SKILLS_DIR, 'next-router', 'SKILL.md'), 'utf8');
+        const frontmatter = skill.split('---')[1] ?? '';
+        expect(frontmatter).toContain('name: next-router');
+        // Platform Notes for non-Claude platforms (read SKILL + spur --json; no Skill() required).
+        expect(skill).toContain('## Platform Notes');
+
+        const table = readFileSync(join(SKILLS_DIR, 'next-router', 'references', 'routing-table.md'), 'utf8');
+        for (const marker of ['TABLE A', 'TABLE B', 'TABLE C', 'Non-routes', 'frontier']) {
+            expect(table, `routing-table.md must contain ${marker}`).toContain(marker);
+        }
     });
 });

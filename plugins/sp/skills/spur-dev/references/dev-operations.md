@@ -32,6 +32,11 @@ each would be scope creep for one-liner procedures.
 > backbone skill (which owns the 4-phase dogfood protocol, the live ledger, and the report template);
 > it does not map to a numbered dev-* operation. See its command file and the backing skill for details.
 
+> **`dev-next`** is likewise not a numbered spine operation. It is a thin `Skill()` wrapper over the
+> **`sp:next-router`** skill — a status→command *meta-router* that dispatches into the operations
+> above (refine/run/verify/unit/wrap/…) via TABLE A/B/C; it never implements an operation itself.
+> See `plugins/sp/skills/next-router/references/routing-table.md` for the routing SSOT.
+
 ## Operation map
 
 | # | Operation | Command | Backing | Skill / Verb | Arg-hint |
