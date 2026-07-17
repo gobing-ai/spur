@@ -12,7 +12,7 @@ priority: P1
 tags: ["workstream:dogfood", "impl", "dogfood-1.2"]
 dependencies: ["0276"]
 created_at: "2026-07-17T01:13:59.542Z"
-updated_at: "2026-07-17T05:13:23.945Z"
+updated_at: "2026-07-17T05:51:04.485Z"
 ---
 
 ## 0277. Dogfood @1.2 meta-run detector and token policy
@@ -72,35 +72,57 @@ Scenario: Implement-heavy pipeline dogfood warns
 - `plugins/sp/skills/dogfood-testing/references/monitor-ledger.md:97-112` — chained-step rows subsection.
 - `plugins/sp/commands/dev-dogfood.md` Arguments `--max-retry` row + Behavior section.
 ### Testing
-**Commands run (post-implementation, 2026-07-17):**
+**Verification:** `/sp-dev-verify 0277 --auto --next --force --focus all --fix all` dogfood re-run 2026-07-17 (standalone path; task already `done` — `--force` re-audit).
 
-- `bun test plugins/sp/tests/dogfood-testing/` — **42/42 pass** (30 new pipeline-detect + 12 existing report-contract), 76 expect() calls, 100% line+function coverage on `detect-pipeline-driving.ts` and `validate-report.ts`.
-- `bun run lint` (= `biome check . --error-on-warnings` + per-workspace `tsc --noEmit`) — **green**, 493 files checked, all 7 workspaces typecheck clean.
-- `bun run test` — **2954/2954 pass**, 0 fail, 8423 expect() calls across 199 files. 0276 fixtures (report-contract.test.ts) unaffected; no regression.
+**Per-Requirement Traceability**
 
-**Coverage claim:** `detect-pipeline-driving.ts` 100% line + 100% function (bunfig.toml in-file gate met).
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `detect-pipeline-driving.ts:37-76` word-boundary `(?<![\w-])…(?![\w-])`; tokens include `--next`, `dev-run*`, bare `run`/`wrap`/`idea`. Slash form `/sp:dev-run` detected without leading space. |
+| R2 | MET | `pipeline-detect.test.ts` — 30 tests: positives, true negatives, false-positive guards, leading-space invariance, PIPELINE_TOKENS pin. `bun test plugins/sp/tests/dogfood-testing/` → 42/42 this run. |
+| R3 | MET | `SKILL.md:112-118` Phase 2 implement-heavy advisory; Gotcha 9 (`SKILL.md:235-243`) recommend observe-only or step-split. |
+| R4 | MET | `SKILL.md:253-274` Cost segmentation table (driver vs chained-step); `report-template.md:129-133`; `monitor-ledger.md:97-112` chained-step rows. |
+| R5 | MET | `SKILL.md:276-302` `--next` chain stop-at-testing when provenance missing; no lifecycle code changed (R5). |
+| R6 | MET | `bun test plugins/sp/tests/dogfood-testing/` 42 pass; `bun test plugins/sp` 219 pass; 0276 report-contract fixtures still green. |
 
-**Acceptance Criteria verification:**
+**Acceptance Criteria Verification**
 
-- *Detector catches dev-run without leading space* (`@core`): verified by `pipeline-detect.test.ts` "matches '/sp:dev-run'" — testee with no leading space before `dev-run` still matches. ✓
-- *Implement-heavy pipeline dogfood warns* (`@core`): verified structurally — SKILL.md Phase 2 "Implement-heavy derived steps" advisory + Cost segmentation section + Gotcha 9 + report-template.md / monitor-ledger.md mirrors all present and cross-linked. (The advisory is documentation-time, not runtime — the warning surfaces when the operator reads the skill while planning the run, which is the design intent per W8.) ✓
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: Detector catches dev-run without leading space | MET | test | `positive: dev-run slash form` + leading-space-invariant — `detectPipelineDriving('/sp:dev-run 0125 --auto')===true`; refuse prose `SKILL.md:72-77` when `--max-retry` omitted |
+| Scenario: Implement-heavy pipeline dogfood warns | MET | static-ref | Advisory at plan/execute time by design (W8): `SKILL.md:112-118`, Gotcha 9, Cost segmentation — not a runtime emit (documented P3 residual) |
+
+**Design conformance:** `### Design` bare; Solution maps to 0274 W7–W9. Claims DONE: detector helper, tests, meta-run policy prose, cost segmentation, stop-at-testing docs. No silent deviation.
+
+**SECUA (focus=all):** pure detector + docs. No secrets/injection. Lookbehind regex ES2018+ (Bun OK). No blockers/majors. Advisory: detector is unit-tested but agent-invoked by prose (not auto-imported into a CLI gate) — intentional for 0277 protocol layer.
+
+**Coverage:** `detect-pipeline-driving.ts` 100% fn/lines this run.
+
+**Fix pass (`--fix all`):** R/AC all MET. Gate residual: L3 Review lacked populated P1–P4 table (blocks `--next` strict-core) — fixed in dogfood fix-pass (Review rewrite); see Issues in dogfood report.
+
+Verdict: PASS
 ### Review
-**Reviewer:** self-review under sp-dev-verify lens, 2026-07-17.
+**Review scope:** detector helper + tests + dogfood skill/command prose (0277 W7–W9). Re-audited during `/sp-dev-verify 0277 --force` dogfood (2026-07-17). Prior Review was prose-only without a populated P1–P4 table — L3 strict-core failed until this rewrite.
 
-**P1 (blocker):** none.
+**Functional traceability:** R1–R6 MET (see Testing). AC scenarios MET (detector tests + policy static-ref).
 
-**P2 (should fix):** none.
+**Priority findings (P1–P4)**
 
-**P3 (improvement):**
-- The W8 meta-run warning is documentation-time, not runtime. A future task could surface it as a Phase 1 emit at step-derivation time (e.g. the skill's Phase 1 could call `detectPipelineDriving` on the testee AND scan derived steps for implement-heaviness, then print the advisory inline). Out of scope for 0277 — the task says "policy" and "guidance", not "automation".
-- The detector is currently only invoked by tests, not wired into any runtime path. This is correct for 0277 (the task is protocol-layer), but a future task should wire it into the dev-dogfood command's Phase 1.0 refuse-ambiguous gate so the prose pointer becomes a live call.
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|---------|
+| P1 | — | — | none — no blockers |
+| P2 | — | — | none — no majors |
+| P3 | usability | `SKILL.md` W8 | Meta-run implement-heavy warning is documentation-time, not a Phase-1 runtime emit. Acceptable for 0277 "policy/guidance"; future task may wire `detectPipelineDriving` + step scan to print advisory inline. |
+| P3 | architecture | `detect-pipeline-driving.ts` | Detector is machine-checked by tests but only agent-invoked via prose (not a CLI/import gate). Intentional protocol-layer scope; wire into live Phase 1.0 in a follow-up if agents skip the skill body. |
+| P4 | correctness | `PIPELINE_TOKENS` order | Token order pinned by test for stable diagnostics; matcher is order-independent. |
 
-**P4 (nit):**
-- `PIPELINE_TOKENS` is ordered flag-first then dev-forms (longer first) then bare nouns (longer first) — the ordering is pinned by a test but isn't semantically load-bearing (the matcher is order-independent). Documented in test commentary.
+**SECUA:** PASS — pure string matchers; no I/O; ES lookbehind OK under Bun.
 
-**Residual risk:** low. No lifecycle code changed; blast radius is the dogfood-testing skill prose + one new pure function. No public API surface touched.
+**Architecture:** PASS — pure helper, 100% coverage, zero coupling.
 
-**Final disposition: PASS** — all six requirements (R1–R6) met; both `@core` acceptance scenarios verified; full repo test suite green.
+**Residual risk:** low. No lifecycle code changed (R5). Blast radius = dogfood skill prose + one pure function.
+
+**Disposition:** PASS — requirements + AC verified; L3 Review table restored for strict-core.
 ### References
 
 N
