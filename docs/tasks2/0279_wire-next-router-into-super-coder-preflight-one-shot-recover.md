@@ -12,7 +12,7 @@ priority: P1
 tags: []
 dependencies: ["0275"]
 created_at: "2026-07-17T06:34:53.279Z"
-updated_at: "2026-07-17T06:41:21.827Z"
+updated_at: "2026-07-17T06:43:49.588Z"
 ---
 
 ## 0279. Wire next-router into super-coder (preflight + one-shot recovery)
@@ -143,38 +143,51 @@ Scenario: Multi-candidate router stop is not auto-picked
 | `plugins/sp/skills/spur-dev/references/dev-operations.md:35-45` | Batch consumer note for dev-next |
 | `plugins/sp/skills/next-router/references/routing-table.md:10-25` | § Batch consumers |
 ### Testing
-**Commands (implement 0279):**
+**Verification:** `/sp-dev-verify 0279 --auto --next` re-run 2026-07-17 (standalone; status already `done` — strict-core re-validated).
 
-```
-bun test plugins/sp/tests/batch-preflight.test.ts
-# 12 pass / 0 fail; batch-preflight.ts 100% fn / ~93% lines
-```
+**Fresh commands this run:**
 
-**CLI smoke:**
+| Command | Result |
+|---------|--------|
+| `bun test plugins/sp/tests/batch-preflight.test.ts` | **12 pass / 0 fail** (100% fn / ~93% lines on helper) |
+| `batch-preflight … --status todo --deps 0275 --dep-status 0275:todo --json` | exit **2**, `action: skip`, code **A2**, unmetDeps `["0275"]` |
+| `batch-preflight … --dep-status 0275:done` | exit **0**, `run: preflight clear — launch task-pipeline` |
+| `batch-preflight --status testing --recovery` | exit **0**, `/sp:dev-verify 0042 --auto --next` |
+| `spur task check 0279 --strict-core` | **pass**, no errors |
 
-```
-bun plugins/sp/scripts/batch-preflight.ts --wbs 0279 --status todo --deps 0275 --dep-status 0275:todo --json
-# exit 2, action skip A2
-
-bun plugins/sp/scripts/batch-preflight.ts --wbs 0279 --status todo --deps 0275 --dep-status 0275:done
-# exit 0, run:
-```
+**Per-Requirement Traceability**
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | MET | super-coder.md boundary + complementarity |
-| R2 | MET | skills: includes sp:next-router |
-| R3 | MET | preflightTask A2/A7/A8/A9 + tests |
-| R4 | MET | ready todo → run (pipeline still happy path); docs say never substitute |
-| R5 | MET | recoveryHint + CLI --recovery; budget ≤1 in docs |
+| R1 | MET | `super-coder.md` boundary: batch vs status-routing; pipeline happy path; deep-merge forbidden |
+| R2 | MET | `super-coder.md:22` `skills: […, sp:next-router]` |
+| R3 | MET | `preflightTask` A2/A7/A8/A9 + test "A2 — todo with unmet dep is skipped"; CLI exit 2 this run |
+| R4 | MET | ready todo → `action: run` (test + CLI); docs: never substitute pipeline with dev-next loop |
+| R5 | MET | `recoveryHint` + CLI `--recovery`; execution-batch §3.3b budget ≤1 |
 | R6 | MET | execution-batch parallel: preflight per WBS; recovery sequential |
-| R7 | MET | execution-batch + dev-operations cross-links |
-| R8 | MET | routing-table Batch consumers note; tables not forked |
-| R9 | MET | batch-preflight.test.ts 12 pass |
+| R7 | MET | execution-batch Step 2.6/3.3b; dev-operations batch consumer note |
+| R8 | MET | routing-table.md § Batch consumers; tables not forked into super-coder |
+| R9 | MET | batch-preflight.test.ts 12 pass this run |
 
-Coverage: N/A for markdown agent docs; TS helper ≥90% lines.
+**Acceptance Criteria Verification**
 
-Verdict: implement complete.
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Super-coder still drives the pipeline for ready tasks | MET | test + static-ref | ready → run; super-coder/execution-batch keep task-pipeline happy path |
+| Preflight skips unmet dependencies | MET | test + command | A2 unit test + CLI exit 2 this run with unmet 0275 |
+| One-shot recovery after FAIL | MET | test + command | recoveryHint + CLI prints single `/sp:dev-verify …`; §3.3b never loop |
+| Boundary is explicit in agent docs | MET | static-ref | super-coder.md orchestrator boundary + Never deep-merge |
+| Multi-candidate router stop is not auto-picked | MET | static-ref | super-coder Never: multi-candidate HITL; --auto does not break ties |
+
+**Design conformance:** DONE — light empowerment (option B): pure helper preferred; pipeline unchanged; recovery print-first.
+
+**SECUA:** no blockers/majors. Advisory P3 (TABLE C probes not in preflight) accepted — live dev-next owns light gates.
+
+**Coverage:** `batch-preflight.ts` 100% functions / ~93% lines (bun coverage this run).
+
+**Fix pass:** none (`--fix` omitted).
+
+Verdict: PASS
 ### Review
 **Review scope:** batch-preflight helper + super-coder / execution-batch / next-router docs (task 0279 light empowerment).
 
