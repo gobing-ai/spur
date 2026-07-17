@@ -227,6 +227,8 @@ export const teamModule: ServerModule = {
                 name: team.name,
                 members: team.specs.map((spec) => {
                     const proc = processes.find((p) => p.agentId === spec.id);
+                    // R11: surface optional `model` from the resolved spec config (omit when unset).
+                    const configModel = spec.config?.model;
                     return {
                         id: spec.id,
                         type: spec.type,
@@ -234,6 +236,7 @@ export const teamModule: ServerModule = {
                         // Surfaced so the Roster can show a hint when no member is
                         // autostart (the Up button starts only autostart members).
                         autoStart: spec.autoStart === true,
+                        ...(typeof configModel === 'string' && configModel.length > 0 ? { model: configModel } : {}),
                         ...(proc?.pid !== undefined ? { pid: proc.pid } : {}),
                     };
                 }),
