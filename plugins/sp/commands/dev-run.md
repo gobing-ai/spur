@@ -114,9 +114,14 @@ When `--next` is set and implementation succeeds:
 1. **Transition through the FSM (guards honored — no `--no-lifecycle`):**
    - `spur task update <wbs> wip` — the `todo → wip` guard is `always`; passes.
    - `spur task update <wbs> testing` — the `wip → testing` guard runs `spur task check <wbs>`.
-2. **On a clean transition:** invoke `/sp:dev-verify <wbs> --auto --next` (`--auto` propagates down
-   the whole chain).
-3. **On a guard failure — stop as review-pending:** leave the task at its current status, surface
+2. **Record provenance** — `spur task run-link <wbs> --source next-auto --json`. Writes a
+   `kind: pipeline` entry into `task_run_links` so the `testing → done` provenance guard
+   (lifecycle-adapter.ts L106-131) accepts the in-session implementation path. Idempotent:
+   safe to call even when a pipeline link already exists.
+3. **On a clean transition:** invoke `/sp:dev-verify <wbs> --auto --next` (`--auto` propagates
+   down the whole chain). The verify step's `--next` transition to `done` now passes the
+   provenance guard because step 2 recorded the link.
+4. **On a guard failure — stop as review-pending:** leave the task at its current status, surface
    the blocking reason (e.g. a missing `## Solution` section that fails `spur task check`), and do
    NOT invoke dev-verify. The chain halts here for the operator to resolve, exactly like the
    pipeline's precheck/HITL gates.
