@@ -4,7 +4,7 @@ description: "The dogfood report section contract + dual-path always-on delivery
 see_also:
   - dogfood-testing
   - monitor-ledger
-protocol: sp:dogfood-testing@1.1
+protocol: sp:dogfood-testing@1.2
 ---
 
 # Dogfood Report Template
@@ -13,8 +13,12 @@ The report is the deliverable. It is assembled from the **on-disk** live ledger 
 from memory) and is designed so a reader can **fine-tune the testee from the report alone** — every
 finding carries a location and a recommended action, not just an observation.
 
-**Protocol version:** `sp:dogfood-testing@1.1` — dual-path always-on delivery, status model, Cost
-block with multi-source honesty. Bump this field when the contract changes.
+**Protocol version:** `sp:dogfood-testing@1.2` — dual-path always-on delivery, status model, Cost
+block with multi-source honesty. Bump this field when the contract changes. **@1.2 changes:**
+finalize hard structure (unique §1–§6 headings; Issues requires `#### Fixed` + `#### Unresolved`);
+mandatory summary footer mirrored at the report end (footer missing ⇒ `status: complete` refused);
+ledger cardinality (data rows == declared executed steps); protocol string normalized to the
+colon form — the dash form `sp-dogfood-testing@…` is rejected in new runs.
 
 ## Always-on dual artifacts (delivery contract)
 
@@ -44,7 +48,7 @@ started_at: <ISO-8601>
 finished_at: <ISO-8601 or null while running>
 live_path: .spur/run/dogfood/<run_id>.md
 report_path: docs/dogfood/YYYY-MM-DD-<slug>-dogfood.md
-protocol: sp:dogfood-testing@1.1
+protocol: sp:dogfood-testing@1.2
 ---
 ```
 
@@ -157,6 +161,9 @@ Ledger rules:
   previously-read file reused from context, generated report text, or similar.
 - The aggregate cache line in `#### Cost` under §2 must equal the ledger formula above. If it
   does not, the report is invalid.
+- **Cardinality (@1.2):** the number of ledger data rows MUST equal the `Steps: N executed`
+  declared in §2. Steps marked N/A are documented explicitly as their own rows (`Outcome: N/A`);
+  an unaccounted step or an extra row refuses `status: complete` at finalize.
 - If the driver cannot make a defensible estimate for a row, write `~0` cached and explain the
   missing basis in `Basis`; do not invent a stable percentage.
 
@@ -243,10 +250,19 @@ finding. A deliberate rejection note in a reference file is not a live surface.
 Before the skill may stop (success, partial, fail, observe-only end, or abort), the driver MUST:
 
 1. Set frontmatter `status: complete` or `status: aborted` (and `finished_at`).
-2. Ensure all six mandatory section headings exist; unfinished narrative uses incomplete markers.
-3. Write the Cost block (method + confidence + Meter).
-4. Sync final content to **both** live and report paths.
-5. Print the mandatory summary footer with **both** paths always.
+2. **Structure scrub (@1.2):** all six mandatory section headings exist **exactly once each**
+   (`### 1.` … `### 6.` — a duplicated heading refuses `complete`); §5 Issues carries both
+   `#### Fixed` and `#### Unresolved` (`(none)` when empty); unfinished narrative uses
+   `⚠ incomplete — not reached`; no leftover "run in progress" markers survive finalization.
+3. **Ledger cardinality (@1.2):** Monitor Ledger data rows == the `Steps: N executed` declared in
+   §2 (N/A steps documented explicitly as rows). A mismatch refuses `complete`.
+4. Write the Cost block (method + confidence + Meter).
+5. Sync final content to **both** live and report paths.
+6. **Footer mandatory (@1.2):** print the mandatory summary footer with **both** paths always,
+   and mirror the footer block at the **end of the report file**. A report whose body lacks the
+   footer cannot set `status: complete`.
+7. **Refusal rule (@1.2):** when any check above fails, set `status: aborted` and list every
+   failed check under §5 `#### Unresolved` — never force `complete`.
 
 Any early-exit path still runs this checklist. Stopping without it is a **driver contract violation**.
 

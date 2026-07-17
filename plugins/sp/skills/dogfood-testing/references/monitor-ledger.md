@@ -4,7 +4,7 @@ description: "The dogfood monitor methodology + on-disk live ledger column contr
 see_also:
   - dogfood-testing
   - report-template
-protocol: sp:dogfood-testing@1.1
+protocol: sp:dogfood-testing@1.2
 ---
 
 # Monitor + Ledger
@@ -14,7 +14,7 @@ row per step, written the moment the step resolves — never reconstructed from 
 Reconstruction produces fiction: it cannot honestly distinguish a step that passed first-try from
 one that took three attempts, and it loses the per-step signal that drives testee refinement.
 
-**Disk SSOT (protocol @1.1).** Working-memory-only ledgers are a contract violation. The ledger
+**Disk SSOT (protocol @1.2).** Working-memory-only ledgers are a contract violation. The ledger
 lives in the dual artifacts (see [report-template.md](report-template.md) → Always-on dual
 artifacts):
 
@@ -33,6 +33,10 @@ artifacts):
    as SSOT, emit a P2 finding, and retry promote on finalize.
 4. **The report reads the on-disk ledger, not your memory.** Every number in the report traces to a
    ledger row on disk. If it is not in the ledger file, it does not go in the report.
+5. **Cardinality (@1.2).** The ledger's data-row count MUST equal the `Steps: N executed` declared
+   in the report's §2 Execution Summary. N/A steps are not dropped — each gets its own row with
+   `Outcome: N/A`. A count mismatch refuses `status: complete` at finalize (see
+   [report-template.md](report-template.md) → Phase 4).
 
 ## Column contract
 

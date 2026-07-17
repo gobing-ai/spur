@@ -4,8 +4,8 @@ description: "Drive a testee (skill/command/CLI) end-to-end as a real user, fix 
 license: Apache-2.0
 metadata:
   author: spur
-  version: "1.1"
-  protocol: "sp:dogfood-testing@1.1"
+  version: "1.2"
+  protocol: "sp:dogfood-testing@1.2"
   platforms: "claude-code,codex,openclaw,opencode,antigravity"
   interactions:
     - pipeline
@@ -81,7 +81,7 @@ The command forwards these via `$ARGUMENTS`:
    - Generate `run_id` (uuid or timestamp-slug).
    - `mkdir -p .spur/run/dogfood docs/dogfood`.
    - Write **both** files with identical YAML frontmatter (`status: running`, testee, mode,
-     timestamps, paths, `protocol: sp:dogfood-testing@1.1`) + six section heading stubs + empty
+     timestamps, paths, `protocol: sp:dogfood-testing@1.2`) + six section heading stubs + empty
      Monitor Ledger table:
      - Live: `.spur/run/dogfood/<run_id>.md`
      - Report: `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md`
@@ -115,7 +115,10 @@ On **every** step resolve:
 2. Mirror the same row to the **report** path under `docs/dogfood/`.
 3. Do **not** batch rows until Phase 4.
 
-The final report MUST include a `### 3. Monitor Ledger` section containing those rows. Full
+The final report MUST include a `### 3. Monitor Ledger` section containing those rows, and the
+ledger's data-row count MUST equal the `Steps: N executed` declared in §2 of the report (N/A steps
+documented explicitly as rows) — the cardinality rule in
+[monitor-ledger.md](references/monitor-ledger.md). Full
 methodology, column contract, token/cache estimation, multi-source Cost honesty, the cache-health
 finding rule, and the **cache-conservation discipline** live in
 **[monitor-ledger.md](references/monitor-ledger.md)**. Apply the conservation discipline while
@@ -128,12 +131,21 @@ any early exit), the driver MUST run the finalize-or-abort checklist. Skipping i
 contract violation**.
 
 1. Set frontmatter `status: complete` or `status: aborted` and `finished_at`.
-2. Ensure all six mandatory section headings exist. Unfinished narrative sections:
-   `⚠ incomplete — not reached` — never invent What-We-Did / Issues / Findings fiction.
-3. Write the **Cost** block under §2 (ledger `~estimate` + Method + confidence; `Meter: n/a` or
+2. **Structure scrub (@1.2).** All six mandatory section headings exist **exactly once each**
+   (`### 1.` … `### 6.` — duplicates refuse `complete`). §5 Issues carries both `#### Fixed` and
+   `#### Unresolved` (with `(none)` when empty). Unfinished narrative sections:
+   `⚠ incomplete — not reached` — never invent What-We-Did / Issues / Findings fiction, and no
+   leftover "run in progress" markers may survive finalization.
+3. **Ledger cardinality (@1.2).** Monitor Ledger data rows MUST equal the `Steps: N executed`
+   declared in §2 (N/A steps documented explicitly as rows). A mismatch refuses `complete`.
+4. Write the **Cost** block under §2 (ledger `~estimate` + Method + confidence; `Meter: n/a` or
    optional ccusage/agent usage when real).
-4. Sync final content to **both** live and report paths (always — not gated on `--save`).
-5. Print the mandatory summary footer with **both** `[Live: …]` and `[Report: …]` always.
+5. Sync final content to **both** live and report paths (always — not gated on `--save`).
+6. **Footer mandatory (@1.2).** Print the mandatory summary footer with **both** `[Live: …]` and
+   `[Report: …]` always, **and mirror the footer block at the end of the report file**. A report
+   without the footer cannot set `status: complete`.
+7. **Refusal rule (@1.2).** If any check above fails, set `status: aborted` (never `complete`) and
+   list each failed check under §5 `#### Unresolved`.
 
 Full section contract, frontmatter, Cost shape, and footer:
 **[report-template.md](references/report-template.md)**.
@@ -237,7 +249,7 @@ shape just because `report-template.md` wasn't auto-loaded.
 - Report: `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md`
 
 Both start with YAML frontmatter including `status: running | aborted | complete`, `run_id`,
-`protocol: sp:dogfood-testing@1.1`, and paths. Dual-write a ledger row to both files on every step
+`protocol: sp:dogfood-testing@1.2`, and paths. Dual-write a ledger row to both files on every step
 resolve. On stop, set `status` to `complete` or `aborted` (finalize-or-abort — non-skippable).
 
 **The six mandatory section headings** (in order, each report MUST contain all six):
