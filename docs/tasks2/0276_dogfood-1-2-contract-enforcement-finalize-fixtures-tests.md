@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Dogfood @1.2 contract enforcement (finalize, fixtures, tests)"
 description: ""
-status: testing
+status: done
 type: task
 profile: standard
 feature_id: N
@@ -12,7 +12,7 @@ priority: P1
 tags: ["workstream:dogfood", "impl", "dogfood-1.2"]
 dependencies: ["0274"]
 created_at: "2026-07-17T01:13:58.102Z"
-updated_at: "2026-07-17T03:34:32.586Z"
+updated_at: "2026-07-17T04:41:39.119Z"
 ---
 
 ## 0276. Dogfood @1.2 contract enforcement (finalize, fixtures, tests)
@@ -84,33 +84,35 @@ Shipped dogfood `sp:dogfood-testing@1.2` contract enforcement (Impl A of 0274: W
 - `bunx biome check plugins/sp/skills/dogfood-testing/` → clean.
 - `spur rule run --preset recommended-pre-check --fail-on warning` → all 33 rules passed.
 ### Testing
-**Verification:** `/sp-dev-verify 0276 --auto --next` run in-session (standalone path — verdict artifact written by verifier).
+**Verification:** `/sp-dev-verify 0276 --auto --next --force --focus all --fix all` re-run 2026-07-16 (standalone path — independent re-evidence this turn).
 
 **Per-Requirement Traceability**
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | MET | `SKILL.md:7-8` version/protocol @1.2; `report-template.md` + `monitor-ledger.md` frontmatter protocol @1.2; `dogfood-protocol-string` test green |
-| R2 | MET | `SKILL.md:131-145` Phase 4 — footer mandatory + mirrored at report end; unique `### 1.`–`### 6.`; `#### Fixed`/`#### Unresolved` required; refusal rule (complete blocked when checks fail) |
-| R3 | MET | `monitor-ledger.md:36-40` cardinality rule; `SKILL.md:120`; `report-template.md` §3 |
-| R4 | MET | `tests/fixtures/report-complete.md` (pass) + `tests/fixtures/report-missing-footer.md` (fail) |
-| R5 | MET | `tests/report-contract.test.ts` — `bun test` → 12 pass / 0 fail |
-| R6 | MET | `scripts/validate-report.ts:44` pure helper, used by the test file |
-| R7 | MET | R22 prose gate green; preserve-list sections untouched (188/188 suite) |
-| R8 | MET | `bun test plugins/sp` → 188 pass / 0 fail; `spur rule run --preset recommended-pre-check` → 33/33 |
+| R1 | MET | `SKILL.md:7-8` `version: "1.2"` + `protocol: "sp:dogfood-testing@1.2"`; `report-template.md:7,16-21,51` + `monitor-ledger.md:7`; `dogfood-protocol-string` test green. `dev-dogfood.md` has no protocol string (rg) — N/A bump surface. |
+| R2 | MET | `SKILL.md:127-148` Phase 4: structure scrub (unique `### 1.`–`### 6.`; Issues `#### Fixed`/`#### Unresolved`); footer mandatory + mirrored; refusal rule blocks `complete` on fail. Mirrored in `report-template.md` Phase 4. |
+| R3 | MET | `monitor-ledger.md:36-39` cardinality rule 5; `SKILL.md:118-120`; `report-template.md` §3 + Phase 4 check 3; validator `ledger_cardinality` tests green. |
+| R4 | MET | Pass + fail fixtures at `plugins/sp/tests/dogfood-testing/fixtures/{report-complete,report-missing-footer}.md` (monorepo test layout; Solution change-map). |
+| R5 | MET | `bun test plugins/sp/tests/dogfood-testing/report-contract.test.ts` → 12 pass / 0 fail this run (`dogfood-fixture-pass` + `dogfood-fixture-fail-footer`). |
+| R6 | MET | `plugins/sp/scripts/dogfood-testing/validate-report.ts:44` pure `validateReport`; imported by test file. |
+| R7 | MET | Dual artifacts / live ledger / cache% formula / testee-scoped `--agent` / verdict-grades-testee still present (rg + suite); `bun test plugins/sp` 189/189 green (no R22 regression). |
+| R8 | MET | `bun test plugins/sp` → 189 pass / 0 fail across 8 files this run; biome clean on new TS. |
 
 **Acceptance Criteria Verification**
 
 | AC | Status | Evidence Type | Evidence |
 |----|--------|---------------|----------|
-| Scenario: Complete requires footer | MET | test | `dogfood-fixture-fail-footer` — validator rejects with `missing_footer`; Phase 4 refusal rule (`SKILL.md:144-145`) blocks `status: complete` |
-| Scenario: Pass fixture is green | MET | test | `dogfood-fixture-pass` — `validateReport(report-complete.md)` → `{ok: true, errors: []}` + golden-shape assertions |
+| Scenario: Complete requires footer | MET | test | `dogfood-fixture-fail-footer` — `validateReport(report-missing-footer.md)` → errors include `missing_footer` (+ live/report paths); Phase 4 refusal `SKILL.md:147-148` |
+| Scenario: Pass fixture is green | MET | test | `dogfood-fixture-pass` — `validateReport(report-complete.md)` → `{ok:true, errors:[]}` + golden-shape; 12/12 suite green |
 
-**Design conformance:** task `### Design` is bare; implementation followed 0274 W1–W6 as the design input. W6 choice: standalone `scripts/validate-report.ts` over inline-in-test (0274 lists both as acceptable; script form enables agent reuse later). No silent deviation.
+**Design conformance:** task `### Design` bare; implementation follows 0274 W1–W6 (Solution change-map). W6 chose standalone script over inline (both acceptable). Fixtures path under `plugins/sp/tests/` (not skill-local `tests/`) for bun workspace layout — goal-equivalent, documented in Solution. Claims: DONE (W1–W6).
 
-**SECUA:** 1 minor (regex `/m` lookahead truncating ledger capture) — fixed before commit, regression-covered; 1 advisory (validator scope = complete reports) — documented. No blockers/majors.
+**SECUA (focus=all):** no blockers/majors this re-verify. Prior minor (`/m` regex lookahead ledger truncate) fixed pre-ship at `validate-report.ts:24-37` + regression covered. Advisory: complete-report scope only — documented module header. Pure string checks; no secrets/injection surface.
 
-**Coverage:** `validate-report.ts` 100% functions / 100% lines (bun coverage report this run); fixtures coverage-ignored per `bunfig.toml` `coveragePathIgnorePatterns`.
+**Coverage:** `validate-report.ts` 100% functions / 100% lines (bun coverage this run). Fixtures markdown coverage-ignored per bunfig.
+
+**Fix pass (`--fix all`):** nothing to repair — all R/AC MET; no major SECUA findings.
 
 Verdict: PASS
 ### Review
@@ -172,3 +174,4 @@ N
 ### History
 - 2026-07-17T02:54:04.467Z todo → wip (system)
 - 2026-07-17T02:55:28.428Z wip → testing (system)
+- 2026-07-17T04:41:39.119Z testing → done (system)
