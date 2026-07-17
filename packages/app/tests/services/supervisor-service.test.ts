@@ -123,7 +123,7 @@ describe('SupervisorService', () => {
 
         test('resolves teamId from spec.tags (team:<id>) and tags the process entry (spur#0267 R1)', async () => {
             const { executor, calls } = createMockExecutor();
-            const { bus } = createMockBus();
+            const { bus, emits } = createMockBus();
             const svc = new SupervisorService({
                 processExecutor: executor,
                 eventBus: bus,
@@ -133,6 +133,7 @@ describe('SupervisorService', () => {
                         id: 'team-alpha',
                         command: ['echo'],
                         tags: ['team:red-squad', 'role:worker'],
+                        type: 'claude',
                     }),
                 ],
             });
@@ -141,8 +142,14 @@ describe('SupervisorService', () => {
 
             // teamId resolved from the first `team:` tag.
             expect(entry.teamId).toBe('red-squad');
+            expect(entry.agentType).toBe('claude');
             // Threaded into PipeProcessOptions so the registry row carries it too.
             expect(calls[0]?.teamId).toBe('red-squad');
+            // 0269: process lifecycle events stamp identity for Activity.
+            const spawned = emits.find((e) => e.event === 'process.spawned');
+            expect(spawned?.payload.teamId).toBe('red-squad');
+            expect(spawned?.payload.agentType).toBe('claude');
+            expect(spawned?.payload.agentId).toBe('team-alpha');
         });
 
         test('leaves teamId null when spec has no team tag (spur#0267 R1)', async () => {

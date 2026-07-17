@@ -28,6 +28,8 @@ export interface ProcessEntry {
     ringBuffer: ProcessFrame[];
     /** Team the agent belongs to, resolved from spec.tags (`team:<id>`) at start (spur#0267). */
     teamId?: string | null;
+    /** Coding-agent type from the agent spec at start (0269 process event identity). */
+    agentType?: string;
 }
 
 /** Payload for process lifecycle events. Metadata only — no output body. */
@@ -35,6 +37,10 @@ export interface ProcessEventPayload {
     agentId: string;
     pid: number | null;
     exitCode?: number | null;
+    /** Team id from `team:<id>` tag when known (0269 Activity identity). */
+    teamId?: string | null;
+    /** Coding-agent type from the agent spec when known. */
+    agentType?: string;
 }
 
 /** Bus shape for process lifecycle events consumed by SupervisorService. */
@@ -183,6 +189,7 @@ export class SupervisorService {
             startedAt: new Date().toISOString(),
             ringBuffer: frames,
             teamId,
+            agentType: spec.type,
         };
 
         this.processes.set(agentId, { handle, entry });
@@ -192,13 +199,24 @@ export class SupervisorService {
         this.pipeStream(handle.stdout, 'stdout', agentId, frames);
         this.pipeStream(handle.stderr, 'stderr', agentId, frames);
 
-        // Spawn event
-        this.emit('process.spawned', { agentId, pid });
+        // Spawn event — stamp team/agent identity for Activity board (0269 P4).
+        this.emit('process.spawned', {
+            agentId,
+            pid,
+            teamId,
+            agentType: spec.type,
+        });
 
         // Watch for exit — restart on abnormal exit (0253 R3)
         void handle.exited.then(async (code) => {
             entry.exitCode = code;
-            this.emit('process.exited', { agentId, pid, exitCode: code });
+            this.emit('process.exited', {
+                agentId,
+                pid,
+                exitCode: code,
+                teamId: entry.teamId ?? null,
+                ...(entry.agentType ? { agentType: entry.agentType } : {}),
+            });
 
             // Normal exit (code 0) or stop-initiated: record and clean up.
             if (code === 0 || entry.status === 'stopped') {
@@ -266,7 +284,12 @@ export class SupervisorService {
             this.restartTimers.delete(agentId);
         }
         this.restartAttempts.delete(agentId);
-        this.emit('process.stopped', { agentId, pid: proc.entry.pid });
+        this.emit('process.stopped', {
+            agentId,
+            pid: proc.entry.pid,
+            teamId: proc.entry.teamId ?? null,
+            ...(proc.entry.agentType ? { agentType: proc.entry.agentType } : {}),
+        });
     }
 
     /** Start every agent in the autostart list. */
