@@ -9,7 +9,7 @@ tags:
   - sp-plugin
   - meta
 created_at: "2026-07-17T00:53:58.309Z"
-updated_at: "2026-07-17T06:04:44.328Z"
+updated_at: "2026-07-17T06:13:05.577Z"
 ---
 
 # N: sp plugin next-layer UX — dev-next router and dogfood hardening
@@ -138,6 +138,37 @@ Feature: sp plugin next-layer UX — wayfinder map N
     Given a pipeline-driving testee whose derived steps include full implement
     When Phase 1 completes step derivation
     Then an advisory recommends observe-only or step-split
+
+  # Residual hardening (task 0278) — from 0277 dogfood reports
+  @core
+  Scenario: Done refuses prose-only Review
+    Given a task at status testing whose Review has no populated P1-P4 table
+    When transition to done is requested without lifecycle bypass
+    Then the transition is denied citing Review or strict-core
+
+  @core
+  Scenario: Done allows valid Review + provenance
+    Given a task at testing with populated P1-P4 Review and a pipeline run-link
+    When transition to done is requested
+    Then the transition succeeds
+
+  @core
+  Scenario: Finalize aborts on invalid report shape
+    Given a dogfood report missing mandatory sections or Dogfood Summary footer
+    When Phase 4 finalize runs the validator
+    Then status complete is refused and errors are listed under Unresolved
+
+  @core
+  Scenario: Implement-heavy advisory links to step-split recipe
+    Given the dogfood skill documents the implement-heavy advisory
+    When an operator follows the step-split link
+    Then a worked recipe shows at least two separate dogfood invocations
+
+  @core
+  Scenario: Chained cost row is honest
+    Given a dogfood run with a chained implement step without a visible token meter
+    When Cost and ledger are finalized
+    Then the chained row uses ~unknown and a P3 finding is present
 ```
 ## Tasks
 
@@ -152,6 +183,7 @@ Feature: sp plugin next-layer UX — wayfinder map N
 | 0275 | Ship /sp:dev-next command and sp:next-router skill | done |
 | 0276 | Dogfood @1.2 contract enforcement (finalize, fixtures, tests) | done |
 | 0277 | Dogfood @1.2 meta-run detector and token policy | done |
+| 0278 | Dogfood residual hardening from 0277 dogfood reports (done-gate, cost, self-validate) | todo |
 <!-- END AUTO-GENERATED -->
 
 ## History
