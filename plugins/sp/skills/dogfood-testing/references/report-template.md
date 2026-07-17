@@ -266,7 +266,11 @@ Before the skill may stop (success, partial, fail, observe-only end, or abort), 
 6. **Footer mandatory (@1.2):** print the mandatory summary footer with **both** paths always,
    and mirror the footer block at the **end of the report file**. A report whose body lacks the
    footer cannot set `status: complete`.
-7. **Refusal rule (@1.2):** when any check above fails, set `status: aborted` and list every
+7. **Self-validate (task 0278 R6):** run
+   `bun plugins/sp/scripts/dogfood-testing/validate-report.ts --file <report-path>` before
+   claiming `status: complete`. Exit 2 → `status: aborted` + list error codes under
+   `#### Unresolved` (never force complete on a non-@1.2 shape).
+8. **Refusal rule (@1.2):** when any check above fails, set `status: aborted` and list every
    failed check under §5 `#### Unresolved` — never force `complete`.
 
 Any early-exit path still runs this checklist. Stopping without it is a **driver contract violation**.

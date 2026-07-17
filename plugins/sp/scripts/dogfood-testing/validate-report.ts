@@ -7,7 +7,11 @@
  * mandatory summary footer with both delivery paths, frontmatter protocol string,
  * and ledger↔declared-steps cardinality. Aborted/partial reports are out of scope —
  * they legitimately lack the footer and Steps line.
+ *
+ * CLI (task 0278 R6): `bun …/validate-report.ts --file <report.md> [--json]`
  */
+
+import { readFileSync } from 'node:fs';
 
 export interface ReportValidation {
     ok: boolean;
@@ -79,4 +83,83 @@ export function validateReport(markdown: string): ReportValidation {
     }
 
     return { ok: errors.length === 0, errors };
+}
+
+// ── CLI entry (Phase 4 self-validate — task 0278 R6) ─────────────────────────
+
+export interface ValidateCliArgs {
+    file: string | null;
+    json: boolean;
+    help: boolean;
+}
+
+export function parseValidateCliArgs(argv: string[]): ValidateCliArgs {
+    let file: string | null = null;
+    let json = false;
+    let help = false;
+    for (let i = 0; i < argv.length; i++) {
+        const a = argv[i];
+        if (a === '--help' || a === '-h') help = true;
+        else if (a === '--json') json = true;
+        else if (a === '--file') file = argv[++i] ?? null;
+        else if (!a.startsWith('-') && file === null) file = a;
+    }
+    return { file, json, help };
+}
+
+export const VALIDATE_CLI_USAGE = `Usage:
+  bun plugins/sp/scripts/dogfood-testing/validate-report.ts --file <report.md> [--json]
+
+Exit codes:
+  0  report validates clean (complete-report shape)
+  2  validation failed (errors on stdout / --json)
+  1  usage error
+
+Phase 4 finalize MUST run this before status: complete (task 0278 R6).
+On exit 2: set status: aborted and list error codes under #### Unresolved.`;
+
+export function runValidateCli(
+    argv: string[],
+    readFile: (path: string) => string,
+): { exitCode: number; stdout: string; stderr: string } {
+    const { file, json, help } = parseValidateCliArgs(argv);
+    if (help) return { exitCode: 0, stdout: '', stderr: VALIDATE_CLI_USAGE };
+    if (file === null || file.length === 0) {
+        return { exitCode: 1, stdout: '', stderr: VALIDATE_CLI_USAGE };
+    }
+    let markdown: string;
+    try {
+        markdown = readFile(file);
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { exitCode: 1, stdout: '', stderr: `Failed to read ${file}: ${msg}` };
+    }
+    const result = validateReport(markdown);
+    if (json) {
+        return {
+            exitCode: result.ok ? 0 : 2,
+            stdout: `${JSON.stringify(result, null, 2)}\n`,
+            stderr: '',
+        };
+    }
+    if (result.ok) {
+        return { exitCode: 0, stdout: 'ok\n', stderr: '' };
+    }
+    return {
+        exitCode: 2,
+        stdout: `${result.errors.join('\n')}\n`,
+        stderr: '',
+    };
+}
+
+/** CLI entry for Phase 4 self-validate (import.meta.main). */
+export function mainCli(argv: string[] = Bun.argv.slice(2)): number {
+    const { exitCode, stdout, stderr } = runValidateCli(argv, (p) => readFileSync(p, 'utf8'));
+    if (stdout) process.stdout.write(stdout);
+    if (stderr) process.stderr.write(`${stderr}\n`);
+    return exitCode;
+}
+
+if (import.meta.main) {
+    process.exit(mainCli());
 }

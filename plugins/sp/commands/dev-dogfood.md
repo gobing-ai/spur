@@ -67,7 +67,9 @@ Detection is word-boundary, not leading-space substring (contract unit-checked b
 testee is pipeline-driving → refuse with:
 `⚠ pipeline-driving testee detected; pass --max-retry 0 (observe-only) or --max-retry N (fix mode, tree mutation acknowledged)`.
 Any explicit `--max-retry` proceeds. After step derivation, the same CLI with `--steps` may emit the
-implement-heavy advisory (W8); prefer observe-only or step-split, operator override still proceeds.
+implement-heavy advisory (W8); prefer observe-only or step-split (see skill §Step-splitting recipe),
+operator override still proceeds. Phase 4 must self-validate with
+`bun plugins/sp/scripts/dogfood-testing/validate-report.ts --file <report>` before `status: complete`.
 
 ## Implementation
 

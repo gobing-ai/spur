@@ -165,6 +165,21 @@ bun run check      # lint + test
 bun run dev        # all workspace dev
 ```
 
+### Local `spur` CLI on PATH (dev)
+
+Published npm `spur` can lag this monorepo (missing new verbs like `task run-link`). While developing
+Spur itself, point PATH at the monorepo CLI:
+
+```bash
+# from repo root
+cd apps/cli && bun link                  # registers @gobing-ai/spur
+bun run --filter @gobing-ai/spur build:bundle   # rebuild apps/cli/spur.js after CLI source changes
+spur task run-link --help                # smoke: new verbs must appear
+```
+
+If `spur task …` still looks stale: confirm `which spur` resolves under the linked package, re-run
+`build:bundle`, or fall back to `bun run apps/cli/src/index.ts …` for the current tree.
+
 ---
 
 ## Spur CLI surface

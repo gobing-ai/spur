@@ -71,7 +71,13 @@ function isPlaceholderBody(body: string): boolean {
  * populated table. Requiring a populated cell closes that false-pass so a review
  * task can't reach `wip` with an empty findings table.
  */
-function hasPopulatedPriorityTable(body: string): boolean {
+/**
+ * True when Review body has at least one `| P1|…|P4 |` row with a non-empty
+ * non-severity cell. Exported for the lifecycle done-gate (task 0278 R1) so
+ * `testing→done` can refuse prose-only Reviews in-process — defense-in-depth
+ * when PATH `spur task check --strict-core` is stale or unreachable.
+ */
+export function hasPopulatedPriorityTable(body: string): boolean {
     for (const line of body.split('\n')) {
         const cells = line.split('|');
         if (cells.length < 3) continue; // not a table row
@@ -81,6 +87,15 @@ function hasPopulatedPriorityTable(body: string): boolean {
         if (hasContent) return true;
     }
     return false;
+}
+
+/**
+ * Extract the `### Review` section body from a task markdown document.
+ * Returns null when the section is absent.
+ */
+export function extractReviewSectionBody(markdown: string): string | null {
+    const match = markdown.match(/^### Review[ \t]*\n([\s\S]*?)(?=^### |Z)/m);
+    return match ? (match[1] ?? '') : null;
 }
 
 /**

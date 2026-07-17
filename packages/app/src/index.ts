@@ -136,7 +136,11 @@ export {
     type SystemEventTap,
 } from './services/system-event-tap';
 export type { CheckFindings, CheckResult as TaskCheckResult, SectionMatrix } from './services/task-check';
-export { TaskCheckService } from './services/task-check';
+export {
+    extractReviewSectionBody,
+    hasPopulatedPriorityTable,
+    TaskCheckService,
+} from './services/task-check';
 export type {
     RecordOptions,
     RecordResult,

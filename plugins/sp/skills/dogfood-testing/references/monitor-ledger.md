@@ -104,8 +104,8 @@ step stays on the driver's own row.
 - Observable chained usage (subagent output in driver context, or the operator explicitly provided
   the artifact) → estimate Fresh/Cached from that output normally.
 - Unobservable chained usage (subagent ran in a different session, usage data never surfaced) →
-  label Fresh `~unknown`, Cached `~0`, Basis `chained-leg usage not observable from driver`. Emit a
-  P3 finding: "chained-step cost not observable — candidate for surfacing subagent usage."
+  label Fresh `~unknown`, Cached `~0`, Basis `chained-leg usage not observable from driver`. **MUST**
+  emit a P3 finding: `P3 — chained-step cost not observable` (task 0278 R3). Do not invent totals.
 
 Never fold a chained row into the driver's row; the whole point of dogfooding a pipeline-driving
 testee is to see the testee's own cost separately from the driver's monitoring cost. See
@@ -134,6 +134,18 @@ These feed the report's §6 Findings (see [report-template.md](report-template.m
 The cache-health rule above *detects* waste; this section is the mitigation. The dogfooding driver
 (the agent running Phase 2/3) controls most of the cache% it later reports — low cache% is usually
 the driver re-fetching data it already holds. Apply these while monitoring each step:
+
+### Driver cache checklist (task 0278 R7)
+
+When aggregate cache% risks falling under 50%, apply this checklist **before** re-reading:
+
+| # | Action | Why |
+|---|--------|-----|
+| 1 | Reuse the Step-1 `spur task show --json` capture for the rest of the run | Avoids re-tokenizing the full task body |
+| 2 | Do not re-Read SKILL.md / report-template after Phase 1 loaded them | Skill body is large; keep one copy in context |
+| 3 | Prefer `--json` CLI over re-parsing freeform prose | Smaller, stable payloads |
+| 4 | Dual-write ledger rows without re-reading the whole report each step | Append/patch; don't full-file re-load |
+| 5 | Skip redundant `bun test` full suite between steps when a focused file suite already green | Run the broad suite once at the end |
 
 1. **Reuse CLI output already in context.** If a prior step (or a prior tool call this step)
    captured `spur task show`/`check`/`list` output, do **not** re-invoke the same command for that

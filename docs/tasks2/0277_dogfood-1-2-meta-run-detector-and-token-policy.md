@@ -12,7 +12,7 @@ priority: P1
 tags: ["workstream:dogfood", "impl", "dogfood-1.2"]
 dependencies: ["0276"]
 created_at: "2026-07-17T01:13:59.542Z"
-updated_at: "2026-07-17T05:51:04.485Z"
+updated_at: "2026-07-17T06:21:22.517Z"
 ---
 
 ## 0277. Dogfood @1.2 meta-run detector and token policy
@@ -90,7 +90,7 @@ Scenario: Implement-heavy pipeline dogfood warns
 | AC | Status | Evidence Type | Evidence |
 |----|--------|---------------|----------|
 | Scenario: Detector catches dev-run without leading space | MET | test | `positive: dev-run slash form` + leading-space-invariant — `detectPipelineDriving('/sp:dev-run 0125 --auto')===true`; refuse prose `SKILL.md:72-77` when `--max-retry` omitted |
-| Scenario: Implement-heavy pipeline dogfood warns | MET | static-ref | Advisory at plan/execute time by design (W8): `SKILL.md:112-118`, Gotcha 9, Cost segmentation — not a runtime emit (documented P3 residual) |
+| Scenario: Implement-heavy pipeline dogfood warns | MET | static-ref | Advisory via Phase 1.2b live CLI (`detect-pipeline-driving.ts --steps`); closed d357faf / reinforced 0278 |
 
 **Design conformance:** `### Design` bare; Solution maps to 0274 W7–W9. Claims DONE: detector helper, tests, meta-run policy prose, cost segmentation, stop-at-testing docs. No silent deviation.
 
@@ -112,8 +112,8 @@ Verdict: PASS
 |----------|-----------|----------|---------|
 | P1 | — | — | none — no blockers |
 | P2 | — | — | none — no majors |
-| P3 | usability | `SKILL.md` W8 | Meta-run implement-heavy warning is documentation-time, not a Phase-1 runtime emit. Acceptable for 0277 "policy/guidance"; future task may wire `detectPipelineDriving` + step scan to print advisory inline. |
-| P3 | architecture | `detect-pipeline-driving.ts` | Detector is machine-checked by tests but only agent-invoked via prose (not a CLI/import gate). Intentional protocol-layer scope; wire into live Phase 1.0 in a follow-up if agents skip the skill body. |
+| P3 | usability | `SKILL.md` W8 | **Closed in d357faf / 0278:** Phase 1.2b CLI emits implement-heavy advisory after step derivation (`--steps`). Residual: step-split recipe + self-validate landed in 0278. |
+| P3 | architecture | `detect-pipeline-driving.ts` | **Closed in d357faf:** live CLI gate `bun …/detect-pipeline-driving.ts` is Phase 1.0 SSOT (not prose-only). |
 | P4 | correctness | `PIPELINE_TOKENS` order | Token order pinned by test for stable diagnostics; matcher is order-independent. |
 
 **SECUA:** PASS — pure string matchers; no I/O; ES lookbehind OK under Bun.

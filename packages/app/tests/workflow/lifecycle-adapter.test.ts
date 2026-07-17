@@ -184,4 +184,80 @@ describe('LifecycleAdapter (engine integration)', () => {
         expect(bypass).toHaveLength(1);
         db.close();
     });
+
+    // ── 0278 R1–R2: Review L3 content gate on testing→done ──
+
+    test('0278 R1: denies done when Review is prose-only (no populated P1–P4 table)', async () => {
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        await new TaskRunLinkDao(db).insert({
+            id: 'trl_r1',
+            wbs: '0278a',
+            run_id: 'run_pipe',
+            kind: 'pipeline',
+            created_at: new Date().toISOString(),
+        });
+        const proseOnly = [
+            '---',
+            'status: testing',
+            '---',
+            '### Review',
+            'Looks good. No structured findings table here.',
+            '### Testing',
+            'n/a',
+        ].join('\n');
+        const adapter = new LifecycleAdapter({
+            profile: TASK_LIFECYCLE_PROFILE,
+            getDb: async () => db,
+            taskRunLinkDao: (a) => new TaskRunLinkDao(a),
+            workflowPath: WORKFLOW_PATH,
+            cwd: process.cwd(),
+            spurBin: 'spur',
+            readTaskMarkdown: async () => proseOnly,
+        });
+        const result = await adapter.requestTransition(makeRef('0278a'), 'testing', 'done');
+        expect(result.allowed).toBe(false);
+        if (result.allowed) throw new Error('expected Review L3 denial');
+        expect(result.report ?? '').toMatch(/Review L3 gate|P1–P4|strict-core/i);
+        db.close();
+    });
+
+    test('0278 R2: allows past Review gate when P1–P4 table is populated (shell may still deny)', async () => {
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        await new TaskRunLinkDao(db).insert({
+            id: 'trl_r2',
+            wbs: '0278b',
+            run_id: 'run_pipe',
+            kind: 'pipeline',
+            created_at: new Date().toISOString(),
+        });
+        const withTable = [
+            '---',
+            'status: testing',
+            '---',
+            '### Review',
+            '| Priority | Dimension | Location | Finding |',
+            '|----------|-----------|----------|---------|',
+            '| P4 | — | — | No P1–P3 findings; verify PASS |',
+            '### Testing',
+            'Coverage: N/A',
+        ].join('\n');
+        const adapter = new LifecycleAdapter({
+            profile: TASK_LIFECYCLE_PROFILE,
+            getDb: async () => db,
+            taskRunLinkDao: (a) => new TaskRunLinkDao(a),
+            workflowPath: WORKFLOW_PATH,
+            cwd: process.cwd(),
+            spurBin: 'spur',
+            readTaskMarkdown: async () => withTable,
+        });
+        const result = await adapter.requestTransition(makeRef('0278b'), 'testing', 'done');
+        // Review L3 passes in-process; shell guard still runs against a non-file wbs → deny via guard.
+        expect(result.allowed).toBe(false);
+        if (result.allowed) throw new Error('expected shell guard denial after Review pass');
+        expect(result.report ?? '').toMatch(/guard/i);
+        expect(result.report ?? '').not.toMatch(/Review L3 gate/i);
+        db.close();
+    });
 });

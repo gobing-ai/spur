@@ -175,12 +175,24 @@ contract violation**.
 3. **Ledger cardinality (@1.2).** Monitor Ledger data rows MUST equal the `Steps: N executed`
    declared in §2 (N/A steps documented explicitly as rows). A mismatch refuses `complete`.
 4. Write the **Cost** block under §2 (ledger `~estimate` + Method + confidence; `Meter: n/a` or
-   optional ccusage/agent usage when real).
+   optional ccusage/agent usage when real). For any `chained:<step>` ledger row whose meter is not
+   observable, Fresh/Cached MUST be `~unknown` (or Cached `~0` with Basis `unobservable`) **and**
+   emit finding `P3 — chained-step cost not observable` — never invent chained totals.
 5. Sync final content to **both** live and report paths (always — not gated on `--save`).
 6. **Footer mandatory (@1.2).** Print the mandatory summary footer with **both** `[Live: …]` and
    `[Report: …]` always, **and mirror the footer block at the end of the report file**. A report
    without the footer cannot set `status: complete`.
-7. **Refusal rule (@1.2).** If any check above fails, set `status: aborted` (never `complete`) and
+7. **Self-validate (task 0278 R6 — non-skippable).** Run the machine checker on the report body
+   **before** claiming `status: complete`:
+
+   ```bash
+   bun plugins/sp/scripts/dogfood-testing/validate-report.ts --file <report-path>
+   ```
+
+   Exit **0** → proceed. Exit **2** → set `status: aborted`, list every error code under §5
+   `#### Unresolved`, do **not** claim complete (closes non-@1.2 shapes like `## §1` without
+   `### 1.`–`### 6.` / footer). Exit **1** → usage/IO failure; fix path and re-run.
+8. **Refusal rule (@1.2).** If any check above fails, set `status: aborted` (never `complete`) and
    list each failed check under §5 `#### Unresolved`.
 
 Full section contract, frontmatter, Cost shape, and footer:
@@ -288,6 +300,36 @@ bun plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts --testee "<tes
 `plugins/sp/tests/dogfood-testing/pipeline-detect.test.ts`. Helpers:
 `detectPipelineDriving`, `isImplementHeavyStep`, `detectImplementHeavy`, `evaluateDogfoodGate` in
 [`detect-pipeline-driving.ts`](../../scripts/dogfood-testing/detect-pipeline-driving.ts).
+
+## Step-splitting recipe (implement-heavy pipeline dogfoods)
+
+When the Phase 1.2b advisory fires (or you know the testee is implement-heavy), **prefer two or
+more non-recursive dogfood runs** over one nested fix-mode chain. Worked recipe:
+
+**Bad (recursive fix-mode):** dogfood the whole refine→run→verify chain under `--max-retry N` —
+the driver mutates while the testee pipeline also mutates; attribution fails.
+
+```bash
+# Avoid unless you fully accept dual mutation:
+/sp:dev-dogfood "/sp:dev-refine 0278 --auto --next" --max-retry 3 --full
+```
+
+**Good (step-split):**
+
+```bash
+# 1) Observe refine only (no tree mutation from the driver)
+/sp:dev-dogfood "/sp:dev-refine 0278 --auto" --max-retry 0 --full
+
+# 2) After refine is clean, dogfood implement/run alone
+/sp:dev-dogfood "/sp:dev-run 0278 --auto --mode implement" --max-retry 2 --full
+
+# 3) Dogfood verify as its own run (corpus gates only)
+/sp:dev-dogfood "/sp:dev-verify 0278 --auto --next --force --focus all --fix all" --max-retry 2 --full
+```
+
+Rules: one mutation source per dogfood run; use `--max-retry 0` for unfamiliar pipeline legs; keep
+dual artifacts / finalize for each run. Linked from the implement-heavy advisory
+(`⚠ implement-heavy pipeline dogfood: prefer --max-retry 0 (observe-only) or step-split…`).
 
 ## Cost segmentation for implement-heavy steps
 
