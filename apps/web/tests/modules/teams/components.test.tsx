@@ -3,11 +3,15 @@ import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react
 import type React from 'react';
 import { useEffect, useRef } from 'react';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
-import ActivityTab from '../../../src/modules/teams/ActivityTab';
-import { consumePendingAttach } from '../../../src/modules/teams/attach-bus';
-import MessagesTab from '../../../src/modules/teams/MessagesTab';
+import ActivityTab, {
+    buildRosterIndex,
+    enrichRowFromRoster,
+    MAX_ACTIVITY_ROWS,
+    prependActivityRow,
+    toRow,
+} from '../../../src/modules/teams/ActivityTab';
+import MessagesTab, { parseMessagesFeed } from '../../../src/modules/teams/MessagesTab';
 import ProcessesTab, { buildWatchRows, filterWatchRows } from '../../../src/modules/teams/ProcessesTab';
-import TeamControlStrip from '../../../src/modules/teams/TeamControlStrip';
 import TeamsShell from '../../../src/modules/teams/TeamsShell';
 import TerminalTab from '../../../src/modules/teams/TerminalTab';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
@@ -157,7 +161,6 @@ beforeAll(() => {
 beforeEach(() => {
     FakeEventSource.instances = [];
     // Drain attach intent so a prior Processes→Terminal test cannot hijack restore.
-    consumePendingAttach();
     Object.defineProperty(globalThis, 'EventSource', {
         configurable: true,
         value: FakeEventSource,
@@ -168,7 +171,6 @@ afterEach(async () => {
     cleanup();
     resetFetchForTesting();
     capturedSelects.length = 0;
-    consumePendingAttach();
     Object.defineProperty(globalThis, 'EventSource', {
         configurable: true,
         value: originalEventSource,
@@ -190,11 +192,13 @@ describe('teams module components', () => {
         setFetchForTesting((async () => jsonResponse({ teams: [] })) as unknown as typeof fetch);
         const { getByRole, container } = render(<TeamsShell />);
 
-        for (const label of ['Terminal', 'Processes', 'Messages', 'Activity']) {
+        for (const label of ['Terminal', 'Process', 'Message', 'Activity']) {
             expect(getByRole('tab', { name: label })).toBeDefined();
         }
         // The shell renders no more and no fewer than the 4 declared tabs.
         expect(container.querySelectorAll('[role="tab"]').length).toBe(4);
+        // 0269 R1: shared TeamControlStrip is gone from the shell.
+        expect(container.querySelector('[data-team-control-strip]')).toBeNull();
     });
 
     // ── ProcessesTab (0262 + 0264 registry) ────────────────────────────────
@@ -245,7 +249,7 @@ describe('teams module components', () => {
         expect(processCalls.some((u) => u.includes('/team/processes'))).toBe(true);
         expect(processCalls.some((u) => u.includes('/observability/processes'))).toBe(false);
         // Attach action present on each supervised row.
-        expect(container.querySelectorAll('[data-processes-attach-btn]').length).toBe(2);
+        expect(container.querySelectorAll('[data-processes-attach-btn]').length).toBe(0);
     });
 
     test('ProcessesTab shows registry one-shots alongside supervised rows (0264)', async () => {
@@ -307,9 +311,9 @@ describe('teams module components', () => {
         // Source cell for the one-shot row (filter dropdown also labels "one-shot").
         expect(container.querySelector('[data-process-source="one-shot"]')).not.toBeNull();
         // Supervised row still has Start/Stop; one-shot has no control buttons.
-        expect(container.querySelectorAll('[data-processes-toggle-btn]').length).toBe(1);
-        // Only supervised agent gets Attach.
-        expect(container.querySelectorAll('[data-processes-attach-btn]').length).toBe(1);
+        // Rows are read-only (0269 Plan 4) — no toggle or attach controls.
+        expect(container.querySelectorAll('[data-processes-toggle-btn]').length).toBe(0);
+        expect(container.querySelectorAll('[data-processes-attach-btn]').length).toBe(0);
     });
 
     test('ProcessesTab shows empty state when no supervised processes (0262 edge)', async () => {
@@ -328,46 +332,6 @@ describe('teams module components', () => {
         expect(getByText(/spur team start/)).toBeDefined();
         expect(container.querySelector('[data-processes-tab-empty]')).not.toBeNull();
         expect(container.querySelector('[data-processes-tab-loading]')).toBeNull();
-    });
-
-    test('ProcessesTab Attach dispatches teams:attach-process with agentId (0262 AC)', async () => {
-        setFetchForTesting((async (input: RequestInfo | URL) => {
-            const url = input instanceof Request ? input.url : String(input);
-            if (url.includes('/team/processes')) {
-                return jsonResponse({
-                    processes: [
-                        {
-                            agentId: 'attach-me',
-                            pid: 99,
-                            status: 'running',
-                            startedAt: '2026-07-15T12:00:00.000Z',
-                            exitCode: null,
-                        },
-                    ],
-                    count: 1,
-                });
-            }
-            return jsonResponse({ ok: true });
-        }) as unknown as typeof fetch);
-
-        const seen: string[] = [];
-        const listener = (ev: Event) => {
-            const detail = (ev as CustomEvent<{ agentId: string }>).detail;
-            seen.push(detail.agentId);
-        };
-        globalThis.addEventListener('teams:attach-process', listener);
-
-        const { getByText, container } = render(<ProcessesTab />);
-        await waitFor(() => expect(getByText('attach-me')).toBeDefined());
-
-        const btn = container.querySelector('[data-processes-attach-btn]') as HTMLButtonElement;
-        expect(btn).not.toBeNull();
-        act(() => {
-            fireEvent.click(btn);
-        });
-
-        expect(seen).toEqual(['attach-me']);
-        globalThis.removeEventListener('teams:attach-process', listener);
     });
 
     // ── ProcessesTab filter UI (0267 R2, R4) ───────────────────────────────
@@ -546,10 +510,88 @@ describe('teams module components', () => {
                             id: 'm1',
                             fromId: 'op',
                             toId: 'planner',
+                            to: { agentId: 'planner' },
                             body: 'across-members',
                             status: 'sent',
                             createdAt: '2026-07-14T00:00:00.000Z',
                             inReplyTo: null,
+                            hasReply: false,
+                            replyCount: 0,
+                        },
+                    ],
+                    count: 1,
+                });
+            }
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+        const { getByText, queryByText, container } = render(<MessagesTab />);
+
+        await waitFor(() => expect(getByText('across-members')).toBeDefined());
+        // The dead-end placeholder pointed at a tab that no longer exists.
+        expect(queryByText(/Select a member from the Roster/)).toBeNull();
+        // Feed spans recipients, so each row must name who it was addressed to.
+        const route = container.querySelector('[data-message-route]');
+        expect(route).not.toBeNull();
+        expect(route?.textContent).toContain('op');
+        expect(route?.textContent).toContain('planner');
+        // 0269 R8: every card shows reply state (Awaiting when hasReply is false).
+        const replyBadge = container.querySelector('[data-message-reply-badge]');
+        expect(replyBadge?.textContent).toContain('Awaiting reply');
+        expect(replyBadge?.getAttribute('data-message-reply-state')).toBe('awaiting');
+    });
+
+    test('parseMessagesFeed narrows untrusted rows and defaults missing reply fields (0269 C)', () => {
+        const parsed = parseMessagesFeed({
+            messages: [
+                {
+                    id: 'm1',
+                    fromId: 'a',
+                    toId: 'b',
+                    body: 'hi',
+                    status: 'queued',
+                    createdAt: 't',
+                    // no hasReply / replyCount / to identity
+                },
+                { id: 1, body: 'bad' }, // dropped
+            ],
+        });
+        expect(parsed).not.toBeNull();
+        expect(parsed?.length).toBe(1);
+        expect(parsed?.[0]?.to.agentId).toBe('b');
+        expect(parsed?.[0]?.hasReply).toBe(false);
+        expect(parsed?.[0]?.replyCount).toBe(0);
+        expect(parseMessagesFeed(null)).toBeNull();
+        expect(parseMessagesFeed({ messages: 'nope' })).toBeNull();
+    });
+
+    test('MessagesTab shows identity, delivery chip, and Replied badge (0269 R8)', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/messages')) {
+                return jsonResponse({
+                    messages: [
+                        {
+                            id: 'm1',
+                            fromId: 'alpha-planner',
+                            toId: 'alpha-coder',
+                            from: {
+                                agentId: 'alpha-planner',
+                                teamName: 'Alpha',
+                                memberLabel: 'planner',
+                                agentType: 'claude',
+                            },
+                            to: {
+                                agentId: 'alpha-coder',
+                                teamName: 'Alpha',
+                                memberLabel: 'coder',
+                                agentType: 'codex',
+                            },
+                            body: 'do the thing',
+                            status: 'injected',
+                            createdAt: '2026-07-16T00:00:00.000Z',
+                            inReplyTo: null,
+                            hasReply: true,
+                            replyCount: 2,
                         },
                     ],
                     count: 1,
@@ -558,13 +600,17 @@ describe('teams module components', () => {
             return jsonResponse({ ok: true });
         }) as unknown as typeof fetch);
 
-        const { getByText, queryByText } = render(<MessagesTab />);
-
-        await waitFor(() => expect(getByText('across-members')).toBeDefined());
-        // The dead-end placeholder pointed at a tab that no longer exists.
-        expect(queryByText(/Select a member from the Roster/)).toBeNull();
-        // Feed spans recipients, so each row must name who it was addressed to.
-        expect(getByText('op → planner')).toBeDefined();
+        const { container, getByText } = render(<MessagesTab />);
+        await waitFor(() => expect(getByText('do the thing')).toBeDefined());
+        const route = container.querySelector('[data-message-route]');
+        expect(route?.textContent).toContain('Alpha');
+        expect(route?.textContent).toContain('planner');
+        expect(route?.textContent).toContain('coder');
+        expect(container.querySelector('[data-message-delivery]')?.textContent).toContain('injected');
+        const reply = container.querySelector('[data-message-reply-badge]');
+        expect(reply?.getAttribute('data-message-reply-state')).toBe('replied');
+        expect(reply?.textContent).toContain('Replied');
+        expect(reply?.textContent).toContain('2');
     });
 
     test('MessagesTab reads the unfiltered feed, not a per-agent inbox (0260 R3)', async () => {
@@ -595,10 +641,13 @@ describe('teams module components', () => {
                         id: 'm1',
                         fromId: 'op',
                         toId: 'planner',
+                        to: { agentId: 'planner' },
                         body: 'first',
                         status: 'sent',
                         createdAt: '2026-07-14T00:00:00.000Z',
                         inReplyTo: null,
+                        hasReply: false,
+                        replyCount: 0,
                     },
                     ...(secondVisible
                         ? [
@@ -606,10 +655,13 @@ describe('teams module components', () => {
                                   id: 'm2',
                                   fromId: 'op',
                                   toId: 'builder',
+                                  to: { agentId: 'builder' },
                                   body: 'live-arrived',
                                   status: 'sent',
                                   createdAt: '2026-07-14T00:01:00.000Z',
                                   inReplyTo: null,
+                                  hasReply: false,
+                                  replyCount: 0,
                               },
                           ]
                         : []),
@@ -702,10 +754,10 @@ describe('teams module components', () => {
             expect(sel.options.length).toBeGreaterThan(1);
             return sel;
         });
-        // Member options show id + type + status (R2).
+        // Member options show id + type only — no status text (0269 R3).
         expect(memberSelect.innerHTML).toContain('planner');
         expect(memberSelect.innerHTML).toContain('claude');
-        expect(memberSelect.innerHTML).toContain('running');
+        expect(memberSelect.innerHTML).not.toContain('running');
 
         // Select the running member → status badge + toggle appear, prompt disappears.
         act(() => {
@@ -719,6 +771,64 @@ describe('teams module components', () => {
             return el as HTMLSpanElement;
         });
         expect(badge.textContent).toContain('running');
+
+        // 0269 R2/R4: left focus + right roster; model hidden when unset; chips select.
+        expect(container.querySelector('[data-terminal-focus]')).not.toBeNull();
+        expect(container.querySelector('[data-terminal-roster]')).not.toBeNull();
+        expect(container.querySelector('[data-terminal-model]')).toBeNull();
+        expect(container.querySelectorAll('[data-terminal-roster-chip]').length).toBe(2);
+        expect(container.querySelector('[data-terminal-up-btn]')).not.toBeNull();
+        expect(container.querySelector('[data-terminal-down-btn]')).not.toBeNull();
+
+        act(() => {
+            const chip = container.querySelector(
+                '[data-terminal-roster-chip][title="coder · codex"]',
+            ) as HTMLButtonElement | null;
+            chip?.click();
+        });
+        await waitFor(() => {
+            const member = container.querySelector('[data-terminal-member-select]') as HTMLSelectElement | null;
+            expect(member?.value).toBe('coder');
+        });
+    });
+
+    test('TerminalTab shows model field only when member model is set (0269 edge)', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const req = input instanceof Request ? input : new Request(String(input));
+            if (req.url.includes('/team/teams')) {
+                return jsonResponse({
+                    teams: [
+                        {
+                            teamId: 'alpha',
+                            name: 'Alpha',
+                            members: [
+                                { id: 'planner', type: 'claude', status: 'running', model: 'sonnet' },
+                                { id: 'coder', type: 'codex', status: 'stopped' },
+                            ],
+                        },
+                    ],
+                });
+            }
+            if (req.url.includes('/team/processes')) return jsonResponse({ processes: [] });
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { container } = render(<TerminalTab />);
+        await waitFor(() => expect(container.querySelector('[data-terminal-team-select]')).not.toBeNull());
+        act(() => getSelectOnChange('team')?.({ target: { value: 'alpha' } }));
+        await waitFor(() => {
+            const el = container.querySelector('[data-terminal-member-select]') as HTMLSelectElement | null;
+            expect(el?.options.length ?? 0).toBeGreaterThan(1);
+        });
+        act(() => getSelectOnChange('member')?.({ target: { value: 'planner' } }));
+        await waitFor(() => {
+            const model = container.querySelector('[data-terminal-model]');
+            expect(model?.textContent).toContain('sonnet');
+        });
+        act(() => getSelectOnChange('member')?.({ target: { value: 'coder' } }));
+        await waitFor(() => {
+            expect(container.querySelector('[data-terminal-model]')).toBeNull();
+        });
     });
 
     test('TerminalTab stop toggle shows confirmation modal before POSTing stop (R2)', async () => {
@@ -973,160 +1083,7 @@ describe('teams module components', () => {
         await waitFor(() => expect(globalThis.localStorage?.getItem(key)).toBeNull());
     });
 
-    test('TerminalTab listens for teams:attach-process and selects the member (0265 R1-R3, R5)', async () => {
-        const key = 'spur:board:teams:lastTerminal';
-        globalThis.localStorage?.removeItem(key);
-
-        setFetchForTesting((async (input: RequestInfo | URL) => {
-            const req = input instanceof Request ? input : new Request(String(input));
-            if (req.url.includes('/team/teams')) {
-                return jsonResponse({
-                    teams: [
-                        {
-                            teamId: 'alpha',
-                            name: 'Alpha',
-                            members: [
-                                { id: 'planner', type: 'claude', status: 'running' },
-                                { id: 'coder', type: 'codex', status: 'stopped' },
-                            ],
-                        },
-                    ],
-                });
-            }
-            if (req.url.includes('/team/processes')) return jsonResponse({ processes: [] });
-            return jsonResponse({ ok: true });
-        }) as unknown as typeof fetch);
-
-        const { container, queryByText } = render(<TerminalTab />);
-
-        // Wait for teams to load so the listener has a snapshot to resolve against.
-        await waitFor(() => {
-            expect(container.querySelector('[data-terminal-team-select]')).not.toBeNull();
-        });
-
-        // No selection yet — prompt is visible.
-        expect(queryByText('Choose a team and member above to open a terminal.')).not.toBeNull();
-
-        // ProcessesTab dispatches this event; simulate it here.
-        act(() => {
-            globalThis.dispatchEvent(new CustomEvent('teams:attach-process', { detail: { agentId: 'planner' } }));
-        });
-
-        // MemberTerminal mounts for the attached agentId (R3).
-        await waitFor(() => {
-            expect(container.querySelector('[data-member-terminal="planner"]')).not.toBeNull();
-        });
-
-        // Selection persisted to localStorage (R5 — handled by existing persist effect).
-        await waitFor(() => {
-            const raw = globalThis.localStorage?.getItem(key);
-            expect(raw).not.toBeNull();
-            const parsed = JSON.parse(raw ?? '{}') as { teamId: string; memberId: string };
-            expect(parsed).toEqual({ teamId: 'alpha', memberId: 'planner' });
-        });
-    });
-
-    test('TerminalTab ignores teams:attach-process for unknown agentId (0265 edge, no crash)', async () => {
-        const key = 'spur:board:teams:lastTerminal';
-        globalThis.localStorage?.removeItem(key);
-
-        setFetchForTesting((async (input: RequestInfo | URL) => {
-            const req = input instanceof Request ? input : new Request(String(input));
-            if (req.url.includes('/team/teams')) {
-                return jsonResponse({
-                    teams: [
-                        {
-                            teamId: 'alpha',
-                            name: 'Alpha',
-                            members: [{ id: 'planner', type: 'claude', status: 'running' }],
-                        },
-                    ],
-                });
-            }
-            if (req.url.includes('/team/processes')) return jsonResponse({ processes: [] });
-            return jsonResponse({ ok: true });
-        }) as unknown as typeof fetch);
-
-        const { container, queryByText } = render(<TerminalTab />);
-
-        await waitFor(() => {
-            expect(container.querySelector('[data-terminal-team-select]')).not.toBeNull();
-        });
-
-        // Dispatch for an agentId that is not in any team.
-        expect(() => {
-            act(() => {
-                globalThis.dispatchEvent(
-                    new CustomEvent('teams:attach-process', { detail: { agentId: 'ghost-agent' } }),
-                );
-            });
-        }).not.toThrow();
-
-        // Selection unchanged — prompt still visible, no MemberTerminal mounted.
-        expect(queryByText('Choose a team and member above to open a terminal.')).not.toBeNull();
-        expect(container.querySelector('[data-member-terminal]')).toBeNull();
-        expect(globalThis.localStorage?.getItem(key)).toBeNull();
-    });
-
-    // Regression: the listener lives in TerminalTab, but TeamsShell renders only the
-    // active tab — so Terminal is unmounted exactly when Attach is clicked in Processes.
-    // Mounting TerminalTab directly hides that gap; this drives the operator's real path.
-    test('Attach in Processes opens that member in Terminal via the shell (0265 @core AC)', async () => {
-        globalThis.localStorage?.removeItem('spur:board:teams:lastTerminal');
-        setFetchForTesting((async (input: RequestInfo | URL) => {
-            const url = input instanceof Request ? input.url : String(input);
-            if (url.includes('/team/teams')) {
-                return jsonResponse({
-                    teams: [
-                        {
-                            teamId: 'alpha',
-                            name: 'Alpha',
-                            members: [{ id: 'planner', type: 'claude', status: 'running' }],
-                        },
-                    ],
-                });
-            }
-            if (url.includes('/team/processes')) {
-                return jsonResponse({
-                    processes: [
-                        {
-                            agentId: 'planner',
-                            pid: 4242,
-                            status: 'running',
-                            startedAt: '2026-07-15T12:00:00.000Z',
-                            exitCode: null,
-                        },
-                    ],
-                    count: 1,
-                    executions: [],
-                    executionsCount: 0,
-                });
-            }
-            return jsonResponse({ ok: true });
-        }) as unknown as typeof fetch);
-
-        const { getByRole, container } = render(<TeamsShell />);
-
-        // Attach only exists on the Processes tab, so the operator must be there to click it.
-        fireEvent.click(getByRole('tab', { name: 'Processes' }));
-        await waitFor(() => expect(container.querySelector('[data-processes-attach-btn]')).not.toBeNull());
-
-        fireEvent.click(container.querySelector('[data-processes-attach-btn]') as Element);
-
-        // Attach reveals the Terminal tab (R4) rather than leaving the operator on Processes.
-        await waitFor(() => expect(getByRole('tab', { name: 'Terminal' }).getAttribute('aria-selected')).toBe('true'));
-
-        // "Then Terminal shows that team and member selected / And MemberTerminal mounts".
-        await waitFor(() => expect(container.querySelector('[data-member-terminal="planner"]')).not.toBeNull());
-
-        // R5: the attached selection persists like any other.
-        await waitFor(() => {
-            const raw = globalThis.localStorage?.getItem('spur:board:teams:lastTerminal');
-            expect(JSON.parse(raw ?? '{}')).toEqual({ teamId: 'alpha', memberId: 'planner' });
-        });
-    });
-
-    test('ActivityTab renders team/message events and filters out unrelated telemetry (0254 R7)', async () => {
+    test('ActivityTab renders team/message/process events and filters out unrelated telemetry (0254 R7 + 0269 R9)', async () => {
         setFetchForTesting((async (input: RequestInfo | URL) => {
             const url = input instanceof Request ? input.url : String(input);
             if (url.includes('/events/history')) {
@@ -1153,19 +1110,112 @@ describe('teams module components', () => {
                             actor: 'op',
                             payload: {},
                         },
+                        {
+                            id: 'e4',
+                            eventName: 'process.spawned',
+                            occurredAt: '2026-07-14T00:03:00.000Z',
+                            actor: 'alpha-planner',
+                            payload: { teamId: 'alpha', memberLabel: 'planner', agentType: 'claude' },
+                        },
                     ],
-                    count: 3,
+                    count: 4,
+                });
+            }
+            if (url.includes('/team/teams')) {
+                return jsonResponse({
+                    teams: [
+                        {
+                            teamId: 'alpha',
+                            name: 'Alpha',
+                            members: [{ id: 'alpha-planner', type: 'claude', status: 'running' }],
+                        },
+                    ],
                 });
             }
             return new Response('not found', { status: 404 });
         }) as unknown as typeof fetch);
 
-        const { getByText, queryByText } = render(<ActivityTab />);
+        const { getByText, queryByText, container } = render(<ActivityTab />);
 
         await waitFor(() => expect(getByText('agent.started')).toBeDefined());
         expect(getByText('message.sent')).toBeDefined();
+        expect(getByText('process.spawned')).toBeDefined();
         // System-wide telemetry (task.*) stays on Observability — filtered out here.
         expect(queryByText('task.created')).toBeNull();
+        // Identity columns present (0269 R9).
+        expect(container.textContent).toContain('Team');
+        expect(container.textContent).toContain('Member');
+        expect(container.textContent).toContain('Agent');
+        expect(getByText('alpha')).toBeDefined();
+        expect(getByText('claude')).toBeDefined();
+    });
+
+    test('buildRosterIndex + enrichRowFromRoster fill missing identity from actor (0269 R9)', () => {
+        const roster = buildRosterIndex([
+            {
+                teamId: 'alpha',
+                name: 'Alpha',
+                members: [{ id: 'alpha-planner', type: 'claude', status: 'running' }],
+            },
+        ]);
+        const enriched = enrichRowFromRoster(
+            {
+                id: 'x',
+                eventName: 'process.stopped',
+                occurredAt: 't',
+                actor: 'alpha-planner',
+            },
+            roster,
+        );
+        expect(enriched.teamId).toBe('alpha');
+        expect(enriched.memberLabel).toBe('alpha-planner');
+        expect(enriched.agentType).toBe('claude');
+        // Payload values win.
+        const keep = enrichRowFromRoster(
+            {
+                id: 'y',
+                eventName: 'process.stopped',
+                occurredAt: 't',
+                actor: 'alpha-planner',
+                teamId: 'beta',
+                memberLabel: 'other',
+                agentType: 'codex',
+            },
+            roster,
+        );
+        expect(keep.teamId).toBe('beta');
+        expect(keep.memberLabel).toBe('other');
+        expect(keep.agentType).toBe('codex');
+    });
+
+    test('toRow maps process payload teamId/agentId/agentType (0269 P4 residual)', () => {
+        const row = toRow({
+            id: 'e1',
+            eventName: 'process.spawned',
+            occurredAt: '2026-07-16T00:00:00.000Z',
+            actor: null,
+            payload: { agentId: 'alpha-planner', teamId: 'alpha', agentType: 'claude', pid: 9 },
+        });
+        expect(row).not.toBeNull();
+        expect(row?.actor).toBe('alpha-planner');
+        expect(row?.teamId).toBe('alpha');
+        expect(row?.memberLabel).toBe('alpha-planner');
+        expect(row?.agentType).toBe('claude');
+    });
+
+    test('prependActivityRow caps live buffer at MAX_ACTIVITY_ROWS (0269 P4 residual)', () => {
+        let rows: ReturnType<typeof prependActivityRow> | null = null;
+        for (let i = 0; i < MAX_ACTIVITY_ROWS + 25; i++) {
+            rows = prependActivityRow(rows, {
+                id: `r${i}`,
+                eventName: 'process.spawned',
+                occurredAt: `t${i}`,
+                actor: 'a',
+            });
+        }
+        expect(rows?.length).toBe(MAX_ACTIVITY_ROWS);
+        // Newest first.
+        expect(rows?.[0]?.id).toBe(`r${MAX_ACTIVITY_ROWS + 24}`);
     });
 
     test('ActivityTab prepends live team events and ignores unrelated ones (0254 R7)', async () => {
@@ -1211,359 +1261,124 @@ describe('teams module components', () => {
         expect(queryByText('task.updated')).toBeNull();
     });
 
-    // ── TeamControlStrip (0266) ────────────────────────────────────────────
-    test('TeamControlStrip renders nothing when no teams exist (0266 R1)', async () => {
-        setFetchForTesting((async () => jsonResponse({ teams: [] })) as unknown as typeof fetch);
-        const { container } = render(<TeamControlStrip />);
-        await waitFor(() => expect(container.querySelector('[data-team-control-strip]')).toBeNull());
-    });
+    describe('buildWatchRows + filterWatchRows (0267)', () => {
+        const supervised = [
+            {
+                agentId: 'alpha',
+                pid: 100,
+                status: 'running',
+                startedAt: '2026-07-15T00:00:00Z',
+                exitCode: null,
+                teamId: 'red',
+            },
+            {
+                agentId: 'beta',
+                pid: 101,
+                status: 'exited',
+                startedAt: '2026-07-15T00:00:00Z',
+                exitCode: 0,
+                teamId: null,
+            },
+        ];
+        const executions = [
+            {
+                id: 'e1',
+                label: 'one-shot',
+                command: 'run',
+                args: [],
+                pid: 200,
+                status: 'running',
+                startedAt: '2026-07-15T00:00:00Z',
+                exitedAt: null,
+                exitCode: null,
+                source: 'one-shot',
+                teamId: 'blue',
+                agentId: null,
+            },
+            {
+                id: 'e2',
+                label: 'sidecar',
+                command: 'run',
+                args: [],
+                pid: 201,
+                status: 'running',
+                startedAt: '2026-07-15T00:00:00Z',
+                exitedAt: null,
+                exitCode: null,
+                source: 'serve',
+                teamId: null,
+                agentId: 'gamma',
+            },
+        ];
 
-    test('TeamControlStrip renders team picker + Up/Down buttons after loading teams (0266 R1)', async () => {
-        setFetchForTesting((async (input: RequestInfo | URL) => {
-            const req = input instanceof Request ? input : new Request(String(input));
-            if (req.url.includes('/team/teams')) {
-                return jsonResponse({
-                    teams: [
-                        {
-                            teamId: 'alpha',
-                            name: 'Alpha',
-                            members: [{ id: 'planner', type: 'codex', status: 'running' }],
-                        },
-                    ],
-                });
-            }
-            return jsonResponse({ ok: true });
-        }) as unknown as typeof fetch);
-
-        const { container } = render(<TeamControlStrip />);
-
-        const strip = await waitFor(() => {
-            const el = container.querySelector('[data-team-control-strip]');
-            expect(el).not.toBeNull();
-            return el as HTMLElement;
+        test('buildWatchRows threads teamId from both supervised and registry rows', () => {
+            const rows = buildWatchRows(supervised, executions);
+            const byKey = new Map(rows.map((r) => [r.key, r]));
+            expect(byKey.get('sup:alpha')?.teamId).toBe('red');
+            expect(byKey.get('sup:beta')?.teamId).toBeNull();
+            expect(byKey.get('reg:e1')?.teamId).toBe('blue');
+            expect(byKey.get('reg:e2')?.teamId).toBeNull();
         });
-        expect(strip.textContent).toContain('Team');
-        // Select a team so the Up/Down controls materialize.
-        act(() => getSelectOnChange('team-control')?.({ target: { value: 'alpha' } }));
-        await waitFor(() => expect(container.querySelector('[data-team-control-up]')).not.toBeNull());
-        expect(container.querySelector('[data-team-control-down]')).not.toBeNull();
-        // Down button is enabled — members are present.
-        const downBtn = container.querySelector('[data-team-control-down]') as HTMLButtonElement | null;
-        expect(downBtn?.disabled).toBe(false);
-    });
 
-    test('TeamControlStrip Up button POSTs /up immediately and shows success notice (0266 R2)', async () => {
-        const posts: { url: string; method: string }[] = [];
-        let teamsGets = 0;
-        setFetchForTesting((async (input: RequestInfo | URL) => {
-            const req = input instanceof Request ? input : new Request(String(input));
-            if (req.url.includes('/team/teams')) {
-                teamsGets += 1;
-                return jsonResponse({
-                    teams: [
-                        {
-                            teamId: 'alpha',
-                            name: 'Alpha',
-                            members: [{ id: 'planner', type: 'codex', status: 'stopped' }],
-                        },
-                    ],
-                });
-            }
-            if (req.method === 'POST') posts.push({ url: req.url, method: req.method });
-            return jsonResponse({ ok: true });
-        }) as unknown as typeof fetch);
-
-        const { container } = render(<TeamControlStrip />);
-
-        // Wait for teams to load, then select a team.
-        await waitFor(() => expect(container.querySelector('[data-team-control-select]')).not.toBeNull());
-        act(() => getSelectOnChange('team-control')?.({ target: { value: 'alpha' } }));
-
-        const upBtn = await waitFor(() => {
-            const el = container.querySelector('[data-team-control-up]') as HTMLButtonElement | null;
-            expect(el).not.toBeNull();
-            return el as HTMLButtonElement;
+        test('runningOnly filter hides non-running rows', () => {
+            const rows = buildWatchRows(supervised, executions);
+            const filtered = filterWatchRows(rows, { runningOnly: true, source: 'all', team: 'all' });
+            const keys = filtered.map((r) => r.key);
+            expect(keys).toContain('sup:alpha');
+            expect(keys).toContain('reg:e1');
+            expect(keys).toContain('reg:e2');
+            // beta is exited — filtered out.
+            expect(keys).not.toContain('sup:beta');
         });
-        act(() => fireEvent.click(upBtn));
 
-        await waitFor(() =>
-            expect(posts.some((p) => p.url.includes('/team/alpha/up') && p.method === 'POST')).toBe(true),
-        );
-        // `?check=true` makes the server treat /up as a dry-run that starts nothing
-        // (apps/server/src/modules/team/index.ts:250), so Up must post a bare URL.
-        const upPost = posts.find((p) => p.url.includes('/team/alpha/up'));
-        expect(new URL(upPost?.url ?? '').search).toBe('');
-        await waitFor(() => expect(container.querySelector('[data-team-control-notice]')).not.toBeNull());
-        expect(container.querySelector('[data-team-control-notice]')?.textContent).toContain('materialized');
-        // AC "process/team status refreshes": load() runs on the success path only
-        // (TeamControlStrip.tsx:119) — a refetch beyond the mount GET proves it, and the
-        // 5s poll is far outside this test's window so it cannot account for the second GET.
-        await waitFor(() => expect(teamsGets).toBeGreaterThan(1));
-        // No confirm modal for Up — only Down requires it (R2).
-        expect(container.querySelector('[data-team-down-confirm-modal]')).toBeNull();
-    });
-
-    test('TeamControlStrip Down opens confirm modal; cancel sends no POST (0266 R2)', async () => {
-        const posts: { url: string; method: string }[] = [];
-        setFetchForTesting((async (input: RequestInfo | URL) => {
-            const req = input instanceof Request ? input : new Request(String(input));
-            if (req.url.includes('/team/teams')) {
-                return jsonResponse({
-                    teams: [
-                        {
-                            teamId: 'alpha',
-                            name: 'Alpha',
-                            members: [{ id: 'planner', type: 'codex', status: 'running' }],
-                        },
-                    ],
-                });
-            }
-            if (req.method === 'POST') posts.push({ url: req.url, method: req.method });
-            return jsonResponse({ ok: true });
-        }) as unknown as typeof fetch);
-
-        const { container } = render(<TeamControlStrip />);
-
-        await waitFor(() => expect(container.querySelector('[data-team-control-select]')).not.toBeNull());
-        act(() => getSelectOnChange('team-control')?.({ target: { value: 'alpha' } }));
-
-        const downBtn = await waitFor(() => {
-            const el = container.querySelector('[data-team-control-down]') as HTMLButtonElement | null;
-            expect(el).not.toBeNull();
-            return el as HTMLButtonElement;
+        test('source=supervisor hides non-supervisor rows', () => {
+            const rows = buildWatchRows(supervised, executions);
+            const filtered = filterWatchRows(rows, { runningOnly: false, source: 'supervisor', team: 'all' });
+            const keys = filtered.map((r) => r.key);
+            expect(keys).toEqual(['sup:alpha', 'sup:beta']);
         });
-        act(() => fireEvent.click(downBtn));
 
-        // Modal opens, no POST yet.
-        const modal = await waitFor(() => {
-            const el = container.querySelector('[data-team-down-confirm-modal]');
-            expect(el).not.toBeNull();
-            return el as HTMLElement;
+        test('source=one-shot keeps only one-shot registry rows', () => {
+            const rows = buildWatchRows(supervised, executions);
+            const filtered = filterWatchRows(rows, { runningOnly: false, source: 'one-shot', team: 'all' });
+            const keys = filtered.map((r) => r.key);
+            expect(keys).toEqual(['reg:e1']);
         });
-        expect(modal.textContent).toContain('Stop team?');
-        expect(posts.filter((p) => p.url.includes('/down'))).toHaveLength(0);
 
-        // Cancel closes the modal with no side effects.
-        const cancelBtn = await waitFor(() => {
-            const el = container.querySelector('[data-team-down-confirm-cancel]') as HTMLButtonElement | null;
-            expect(el).not.toBeNull();
-            return el as HTMLButtonElement;
+        test('source=other keeps rows that are neither supervisor nor one-shot', () => {
+            const rows = buildWatchRows(supervised, executions);
+            const filtered = filterWatchRows(rows, { runningOnly: false, source: 'other', team: 'all' });
+            const keys = filtered.map((r) => r.key);
+            expect(keys).toEqual(['reg:e2']);
         });
-        act(() => fireEvent.click(cancelBtn));
-        await waitFor(() => expect(container.querySelector('[data-team-down-confirm-modal]')).toBeNull());
-        expect(posts.filter((p) => p.url.includes('/down'))).toHaveLength(0);
-    });
 
-    test('TeamControlStrip Down confirm POSTs /down and shows success notice (0266 R2+R3)', async () => {
-        const posts: { url: string; method: string }[] = [];
-        setFetchForTesting((async (input: RequestInfo | URL) => {
-            const req = input instanceof Request ? input : new Request(String(input));
-            if (req.url.includes('/team/teams')) {
-                return jsonResponse({
-                    teams: [
-                        {
-                            teamId: 'alpha',
-                            name: 'Alpha',
-                            members: [{ id: 'planner', type: 'codex', status: 'running' }],
-                        },
-                    ],
-                });
-            }
-            if (req.method === 'POST') posts.push({ url: req.url, method: req.method });
-            return jsonResponse({ ok: true });
-        }) as unknown as typeof fetch);
-
-        const { container } = render(<TeamControlStrip />);
-
-        await waitFor(() => expect(container.querySelector('[data-team-control-select]')).not.toBeNull());
-        act(() => getSelectOnChange('team-control')?.({ target: { value: 'alpha' } }));
-
-        const downBtn = await waitFor(() => {
-            const el = container.querySelector('[data-team-control-down]') as HTMLButtonElement | null;
-            expect(el).not.toBeNull();
-            return el as HTMLButtonElement;
+        test('team filter narrows to a specific team', () => {
+            const rows = buildWatchRows(supervised, executions);
+            const filtered = filterWatchRows(rows, { runningOnly: false, source: 'all', team: 'red' });
+            expect(filtered.map((r) => r.key)).toEqual(['sup:alpha']);
         });
-        act(() => fireEvent.click(downBtn));
 
-        const confirmBtn = await waitFor(() => {
-            const el = container.querySelector('[data-team-down-confirm-confirm]') as HTMLButtonElement | null;
-            expect(el).not.toBeNull();
-            return el as HTMLButtonElement;
+        test('team=unassigned selects only rows with null teamId', () => {
+            const rows = buildWatchRows(supervised, executions);
+            const filtered = filterWatchRows(rows, { runningOnly: false, source: 'all', team: 'unassigned' });
+            const keys = filtered.map((r) => r.key);
+            expect(keys).toContain('sup:beta');
+            expect(keys).toContain('reg:e2');
+            expect(keys).not.toContain('sup:alpha');
+            expect(keys).not.toContain('reg:e1');
         });
-        act(() => fireEvent.click(confirmBtn));
 
-        await waitFor(() =>
-            expect(posts.some((p) => p.url.includes('/team/alpha/down') && p.method === 'POST')).toBe(true),
-        );
-        // `?purge=true` would additionally tear down member specs
-        // (apps/server/src/modules/team/index.ts:293); the confirm modal only warns
-        // about stopping processes, so Down must post a bare URL.
-        const downPost = posts.find((p) => p.url.includes('/team/alpha/down'));
-        expect(new URL(downPost?.url ?? '').search).toBe('');
-        await waitFor(() => expect(container.querySelector('[data-team-control-notice]')).not.toBeNull());
-        expect(container.querySelector('[data-team-control-notice]')?.textContent).toContain('stopped');
-    });
-
-    test('TeamControlStrip shows error inline when /up returns non-OK (0266 R3)', async () => {
-        const posts: { url: string; method: string }[] = [];
-        setFetchForTesting((async (input: RequestInfo | URL) => {
-            const req = input instanceof Request ? input : new Request(String(input));
-            if (req.url.includes('/team/teams')) {
-                return jsonResponse({
-                    teams: [
-                        {
-                            teamId: 'alpha',
-                            name: 'Alpha',
-                            members: [{ id: 'planner', type: 'codex', status: 'stopped' }],
-                        },
-                    ],
-                });
-            }
-            if (req.method === 'POST' && req.url.includes('/up')) {
-                posts.push({ url: req.url, method: req.method });
-                return new Response(JSON.stringify({ error: 'agent binary not found' }), {
-                    status: 500,
-                    headers: { 'content-type': 'application/json' },
-                });
-            }
-            return jsonResponse({ ok: true });
-        }) as unknown as typeof fetch);
-
-        const { container } = render(<TeamControlStrip />);
-
-        await waitFor(() => expect(container.querySelector('[data-team-control-select]')).not.toBeNull());
-        act(() => getSelectOnChange('team-control')?.({ target: { value: 'alpha' } }));
-
-        const upBtn = await waitFor(() => {
-            const el = container.querySelector('[data-team-control-up]') as HTMLButtonElement | null;
-            expect(el).not.toBeNull();
-            return el as HTMLButtonElement;
+        test('combined runningOnly + team filter intersects correctly', () => {
+            const rows = buildWatchRows(supervised, executions);
+            const filtered = filterWatchRows(rows, { runningOnly: true, source: 'all', team: 'unassigned' });
+            // Only reg:e2 is both running AND unassigned (beta is exited).
+            expect(filtered.map((r) => r.key)).toEqual(['reg:e2']);
         });
-        act(() => fireEvent.click(upBtn));
 
-        await waitFor(() =>
-            expect(posts.some((p) => p.url.includes('/team/alpha/up') && p.method === 'POST')).toBe(true),
-        );
-        await waitFor(() =>
-            expect(container.querySelector('[data-team-control-error-inline]')?.textContent).toContain(
-                'agent binary not found',
-            ),
-        );
-    });
-});
-
-// ── filterWatchRows / buildWatchRows unit tests (spur#0267 R5) ──
-
-describe('buildWatchRows + filterWatchRows (0267)', () => {
-    const supervised = [
-        {
-            agentId: 'alpha',
-            pid: 100,
-            status: 'running',
-            startedAt: '2026-07-15T00:00:00Z',
-            exitCode: null,
-            teamId: 'red',
-        },
-        { agentId: 'beta', pid: 101, status: 'exited', startedAt: '2026-07-15T00:00:00Z', exitCode: 0, teamId: null },
-    ];
-    const executions = [
-        {
-            id: 'e1',
-            label: 'one-shot',
-            command: 'run',
-            args: [],
-            pid: 200,
-            status: 'running',
-            startedAt: '2026-07-15T00:00:00Z',
-            exitedAt: null,
-            exitCode: null,
-            source: 'one-shot',
-            teamId: 'blue',
-            agentId: null,
-        },
-        {
-            id: 'e2',
-            label: 'sidecar',
-            command: 'run',
-            args: [],
-            pid: 201,
-            status: 'running',
-            startedAt: '2026-07-15T00:00:00Z',
-            exitedAt: null,
-            exitCode: null,
-            source: 'serve',
-            teamId: null,
-            agentId: 'gamma',
-        },
-    ];
-
-    test('buildWatchRows threads teamId from both supervised and registry rows', () => {
-        const rows = buildWatchRows(supervised, executions);
-        const byKey = new Map(rows.map((r) => [r.key, r]));
-        expect(byKey.get('sup:alpha')?.teamId).toBe('red');
-        expect(byKey.get('sup:beta')?.teamId).toBeNull();
-        expect(byKey.get('reg:e1')?.teamId).toBe('blue');
-        expect(byKey.get('reg:e2')?.teamId).toBeNull();
-    });
-
-    test('runningOnly filter hides non-running rows', () => {
-        const rows = buildWatchRows(supervised, executions);
-        const filtered = filterWatchRows(rows, { runningOnly: true, source: 'all', team: 'all' });
-        const keys = filtered.map((r) => r.key);
-        expect(keys).toContain('sup:alpha');
-        expect(keys).toContain('reg:e1');
-        expect(keys).toContain('reg:e2');
-        // beta is exited — filtered out.
-        expect(keys).not.toContain('sup:beta');
-    });
-
-    test('source=supervisor hides non-supervisor rows', () => {
-        const rows = buildWatchRows(supervised, executions);
-        const filtered = filterWatchRows(rows, { runningOnly: false, source: 'supervisor', team: 'all' });
-        const keys = filtered.map((r) => r.key);
-        expect(keys).toEqual(['sup:alpha', 'sup:beta']);
-    });
-
-    test('source=one-shot keeps only one-shot registry rows', () => {
-        const rows = buildWatchRows(supervised, executions);
-        const filtered = filterWatchRows(rows, { runningOnly: false, source: 'one-shot', team: 'all' });
-        const keys = filtered.map((r) => r.key);
-        expect(keys).toEqual(['reg:e1']);
-    });
-
-    test('source=other keeps rows that are neither supervisor nor one-shot', () => {
-        const rows = buildWatchRows(supervised, executions);
-        const filtered = filterWatchRows(rows, { runningOnly: false, source: 'other', team: 'all' });
-        const keys = filtered.map((r) => r.key);
-        expect(keys).toEqual(['reg:e2']);
-    });
-
-    test('team filter narrows to a specific team', () => {
-        const rows = buildWatchRows(supervised, executions);
-        const filtered = filterWatchRows(rows, { runningOnly: false, source: 'all', team: 'red' });
-        expect(filtered.map((r) => r.key)).toEqual(['sup:alpha']);
-    });
-
-    test('team=unassigned selects only rows with null teamId', () => {
-        const rows = buildWatchRows(supervised, executions);
-        const filtered = filterWatchRows(rows, { runningOnly: false, source: 'all', team: 'unassigned' });
-        const keys = filtered.map((r) => r.key);
-        expect(keys).toContain('sup:beta');
-        expect(keys).toContain('reg:e2');
-        expect(keys).not.toContain('sup:alpha');
-        expect(keys).not.toContain('reg:e1');
-    });
-
-    test('combined runningOnly + team filter intersects correctly', () => {
-        const rows = buildWatchRows(supervised, executions);
-        const filtered = filterWatchRows(rows, { runningOnly: true, source: 'all', team: 'unassigned' });
-        // Only reg:e2 is both running AND unassigned (beta is exited).
-        expect(filtered.map((r) => r.key)).toEqual(['reg:e2']);
-    });
-
-    test('all-pass filter returns every row unchanged', () => {
-        const rows = buildWatchRows(supervised, executions);
-        const filtered = filterWatchRows(rows, { runningOnly: false, source: 'all', team: 'all' });
-        expect(filtered).toHaveLength(rows.length);
+        test('all-pass filter returns every row unchanged', () => {
+            const rows = buildWatchRows(supervised, executions);
+            const filtered = filterWatchRows(rows, { runningOnly: false, source: 'all', team: 'all' });
+            expect(filtered).toHaveLength(rows.length);
+        });
     });
 });
