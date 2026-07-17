@@ -126,6 +126,11 @@ When `status` is `aborted` or the report is partial, add under §1:
 - If no meter: print `Meter: n/a` explicitly.
 - Never present an unsubstantiated precise integer as billed/metered cost.
 - Aggregate cache% MUST equal the ledger formula (see §3); otherwise the report is invalid.
+- **Chained-step segmentation (@1.2):** when a derived step is implement-heavy (the step runs a
+  pipeline leg, writes code, or mutates more than its own arguments), its cost MUST be a separate
+  ledger row tagged `chained:<step>` and kept out of the driver's row. If the chained leg ran in a
+  subagent/session whose usage the driver cannot read, label the row `~unknown` and emit a P3 finding.
+  See [SKILL.md §Cost segmentation for implement-heavy steps](../SKILL.md#cost-segmentation-for-implement-heavy-steps).
 
 **Verdict rule** — `PASS` = every step ran and no unresolved issue; `PARTIAL` = ran to the end but
 ≥1 unresolved issue; `FAIL` = the run could not complete (a step blocked all downstream steps). A

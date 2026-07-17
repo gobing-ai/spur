@@ -59,16 +59,21 @@ The command forwards these via `$ARGUMENTS`:
 > ⚠️ **Repo-mutation warning.** The default is **fix mode (`--max-retry 2`)** — it applies
 > `Edit`/`Write` fixes to the working tree as it finds breakages. For a non-mutating run, opt into
 > **observe-only** with `--max-retry 0`: monitor and report, never touch files, full findings report
-> still produced. When the testee is pipeline-driving (`--next`, `run`, `runall`, `wrap`, or
-> `idea`), omission is ambiguous and MUST fail before planning with:
+> still produced. When the testee is pipeline-driving — any of the tokens
+> [`--next`, `dev-runall`, `dev-wrapall`, `dev-run`, `dev-wrap`, `dev-idea`,
+> `runall`, `wrapall`, `run`, `wrap`, `idea`] matched as a **distinct hyphen-word**
+> (machine-checked by
+> [`detectPipelineDriving`](../../scripts/dogfood-testing/detect-pipeline-driving.ts);
+> see [§Pipeline-driving word-boundary contract](#pipeline-driving-word-boundary-contract)) —
+> omission is ambiguous and MUST fail before planning with:
 > `⚠ pipeline-driving testee detected; pass --max-retry 0 (observe-only) or --max-retry N (fix mode, tree mutation acknowledged)`.
-> Explicit `--max-retry 0` and explicit `--max-retry N` both proceed.
-
 ## Phase 1 — Plan
 
 0. **Refuse ambiguous pipeline-driving testees.** Before deriving steps, inspect the raw `testee`
-   string. If it contains any of `--next`, ` run`, ` runall`, ` wrap`, or ` idea` and the dogfood
-   invocation did not explicitly pass `--max-retry`, exit non-zero with exactly:
+   string. Pipeline-driving is matched by word boundary, not leading-space substring — see
+   [`detectPipelineDriving`](../../scripts/dogfood-testing/detect-pipeline-driving.ts) (the matcher
+   contract is unit-checked by `tests/dogfood-testing/pipeline-detect.test.ts`). If it returns true
+   and the dogfood invocation did not explicitly pass `--max-retry`, exit non-zero with exactly:
    `⚠ pipeline-driving testee detected; pass --max-retry 0 (observe-only) or --max-retry N (fix mode, tree mutation acknowledged)`.
    Do not auto-substitute `--max-retry 0`: the driver retry budget does not constrain the testee's
    own pipeline chain, which may still mutate through its own tools.
@@ -103,6 +108,14 @@ For each step, in order:
 **Fix discipline.** Fix the testee or its real dependency. Never weaken the testee, stub the failure
 away, or `--no-verify` past a gate to make a step "pass". A fix that hides the bug you are hunting is
 a **finding**, not a fix.
+
+**Implement-heavy derived steps.** Each derived step that itself chains into further pipeline work
+multiplies the run's blast radius — when a step is implement-heavy (a `--next` chain to `dev-run`, a
+derived `wrap`/`wrapall`, or any testee that mutates more than its own arguments), surface this in
+the ledger row's `Finding` column and prefer **observe-only** or **step-splitting** rather than
+driving the chain under fix mode. See
+[§Cost segmentation for implement-heavy steps](#cost-segmentation-for-implement-heavy-steps) and
+[§`--next` chain stop-at-testing](#next-chain-stop-at-testing).
 
 ## Phase 3 — Monitor
 
@@ -219,6 +232,74 @@ Do **not** use this skill for:
    the testee itself passed.
 8. **`--save` is not required for a file.** Dual artifacts are always-on. Do not skip writing
    `docs/dogfood/` because the operator omitted `--save`.
+9. **Pipeline-driving + implement-heavy derived step ⇒ prefer observe-only or step-split.** When the
+   testee is pipeline-driving (`detectPipelineDriving` returns true) AND a derived step chains into
+   real implementation work (e.g. `/sp:dev-refine … --next` → `/sp:dev-run … --next` → writes code),
+   the dogfood run is **recursive**: it is testing a pipeline that itself mutates the repo, while the
+   dogfood driver is *also* in fix mode mutating the repo. Two mutation sources in one run make
+   attribution impossible. Recommend (do not force) observe-only (`--max-retry 0`) or splitting the
+   chained step into its own dogfood target with explicit provenance. Operator's explicit
+   `--max-retry N --full` overrides the recommendation. See
+   [§Cost segmentation for implement-heavy steps](#cost-segmentation-for-implement-heavy-steps).
+10. **`--next` chain stop-at-testing when provenance is missing.** A `--next` chain (refine→run,
+   run→verify, etc.) runs each leg as its own pipeline stage. If the dogfood driver cannot observe
+   the chain's intermediate artifacts (task file sections, verify verdicts, review tables) — because
+   the chain ran in a subagent, a different session, or the artifacts were never written — the driver
+   MUST stop at the **testing boundary** of the chained step and report "chained-step provenance
+   missing; cannot attribute outcome" rather than fabricating an outcome from the final state. Do not
+   change the chained lifecycle's code (dev-run/dev-verify); this is a reporting discipline, not a
+   lifecycle change. See [§`--next` chain stop-at-testing](#next-chain-stop-at-testing).
+
+## Cost segmentation for implement-heavy steps
+
+A dogfood run where a derived step is implement-heavy (the step itself writes code, runs a pipeline
+leg, or otherwise mutates more than its own arguments) has **two cost sources** that MUST be
+segregated in the Cost block and the ledger:
+
+| Source | What it is | How to label in the ledger |
+|--------|------------|----------------------------|
+| Driver cost | Tokens the dogfood driver spent planning, monitoring, fixing, reporting | normal per-step `Fresh` / `Cached` columns |
+| Chained-step cost | Tokens the testee's own pipeline leg spent (subagent invocations, file reads/writes inside `/sp:dev-run`, etc.) | a separate ledger row tagged `chained:<step>`; Fresh/Cached estimated from observed subagent output, or `~unknown` when not observable |
+
+Rules:
+
+1. Never fold chained-step cost into the driver's row. The whole point of dogfooding a
+   pipeline-driving testee is to see what the *testee* costs to run, separately from what the driver
+   costs to monitor it.
+2. When the chained step ran in a subagent or session whose usage data the driver cannot read, label
+   the chained row `~unknown` and emit a **P3** finding: "chained-step cost not observable — candidate
+   for surfacing subagent usage in the driver context." Do not invent a number.
+3. The chained row still counts toward the aggregate cache% — but mark it pessimistically
+   (`Cached = ~0`) when the basis is missing, per the anti-fiction rule in
+   [monitor-ledger.md](references/monitor-ledger.md).
+
+## `--next` chain stop-at-testing
+
+When a dogfood testee ends in `--next` (refine→run, run→verify, idea→plan→run), the chain runs
+multiple lifecycle legs back-to-back. Each leg has its own testing boundary — the point past which the
+dogfood driver cannot attribute an outcome to a specific leg's contract.
+
+**Stop-at-testing rule.** If the driver cannot observe a chained leg's intermediate artifact (task
+file section update, verify verdict, review table, pipeline transition), the driver STOPS at that
+leg's testing boundary and reports:
+
+```
+chained-leg <name>: provenance missing — intermediate artifact not observable from driver context
+```
+
+Do NOT:
+
+- Fabricate a PASS/FAIL for the chained leg from the repo's final state. The final state reflects
+  every leg's effect combined; attributing it to one leg is fiction.
+- Change the chained lifecycle's code (`dev-run`, `dev-verify`, `dev-refine`) to emit artifacts the
+  dogfood driver can read. The chain's contract is owned by `sp:spur-dev`; this skill reports on it,
+  it does not alter it. Surface the gap as a finding instead.
+- Silently skip the chained leg in the ledger. Record the row with outcome `provenance-missing` and a
+  P3 finding.
+
+**Operator override.** The operator may direct the driver to follow the chain across sessions or into
+subagent output; in that case, the driver reads the named artifacts and attributes normally. The
+default — when provenance is not explicitly provided — is stop-at-testing.
 
 ## Additional Resources
 

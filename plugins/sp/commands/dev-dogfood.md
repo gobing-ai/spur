@@ -32,7 +32,7 @@ report of what happened, what broke, was fixed, and should be improved.
 |----------|-------------|---------|
 | `testee` | What to exercise — a slash command, agent skill, or CLI invocation (positional, required). Quote it if it contains flags. | (required) |
 | `--agent <name\|auto>` | **Testee-scoped:** the agent the **testee** runs under (forwarded into the testee invocation). The driver always runs in the current session. **Omit it** to forward nothing — the testee runs under its own default. | (omitted → forward nothing) |
-| `--max-retry <n>` | Fix attempts per failed step. The **default is `2`** (fix mode): apply `Edit`/`Write` fixes to the working tree, up to 2 attempts per step. For pipeline-driving testees (`--next`, `run`, `runall`, `wrap`, `idea`), omission is refused: pass `--max-retry 0` for observe-only, or explicit `--max-retry N` to acknowledge mutation risk. | `2` unless the testee is pipeline-driving |
+| `--max-retry <n>` | Fix attempts per failed step. The **default is `2`** (fix mode): apply `Edit`/`Write` fixes to the working tree, up to 2 attempts per step. For pipeline-driving testees (word-boundary match via [`detectPipelineDriving`](../scripts/dogfood-testing/detect-pipeline-driving.ts): `--next`, `dev-run`/`run`, `dev-runall`/`runall`, `dev-wrap`/`wrap`, `dev-wrapall`/`wrapall`, `dev-idea`/`idea`), omission is refused: pass `--max-retry 0` for observe-only, or explicit `--max-retry N` to acknowledge mutation risk. | `2` unless the testee is pipeline-driving |
 | `--save` | **Back-compat no-op for delivery.** Reports are **always** written to `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md` and a live file under `.spur/run/dogfood/<run_id>.md`. The flag still documents/prints the report path. | always-on (flag optional) |
 | `--task` | File the findings as a review-template task via `spur task create --template review`. | off |
 | `--full` | Include **all** severity findings (P1–P4) in the report and `--task` output. Default filters to P1+P2 only. | off |
@@ -54,9 +54,12 @@ artifacts, on-disk live ledger, cache/Cost calculation, report template, finaliz
 gate, and the `--task` sink are all owned by the skill. This command parameterizes the testee, the
 retry budget, the testee agent, and optional sinks.
 
-Pipeline-driving ambiguity is rejected by the backing skill before planning. If the testee contains
-`--next`, `run`, `runall`, `wrap`, or `idea` and this command omits `--max-retry`, it exits non-zero
-with: `⚠ pipeline-driving testee detected; pass --max-retry 0 (observe-only) or --max-retry N (fix mode, tree mutation acknowledged)`.
+Pipeline-driving ambiguity is rejected by the backing skill before planning. Detection is
+word-boundary, not leading-space substring — see
+[`detectPipelineDriving`](../scripts/dogfood-testing/detect-pipeline-driving.ts) (contract unit-checked
+by `tests/dogfood-testing/pipeline-detect.test.ts`). If the testee is pipeline-driving (contains any
+pipeline-driving token as a distinct hyphen-word) and this command omits `--max-retry`, it exits
+non-zero with: `⚠ pipeline-driving testee detected; pass --max-retry 0 (observe-only) or --max-retry N (fix mode, tree mutation acknowledged)`.
 Any explicit `--max-retry` value proceeds.
 
 ## Implementation

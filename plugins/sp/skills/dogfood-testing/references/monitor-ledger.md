@@ -94,6 +94,23 @@ Ledger estimates alone are **confidence: LOW**. When assembling the report Cost 
 If no external meter is available, print `Meter: n/a`. Never merge a day-level meter into a
 per-step ledger cell as if it were measured per step.
 
+### Chained-step rows (implement-heavy derived steps)
+
+When a derived step is implement-heavy (it runs a pipeline leg, writes code, or otherwise mutates more
+than its own arguments), its row is tagged `chained:<step>` in the Step column and its Fresh/Cached
+columns reflect the **chained leg's** cost, not the driver's. The driver's monitoring cost for that
+step stays on the driver's own row.
+
+- Observable chained usage (subagent output in driver context, or the operator explicitly provided
+  the artifact) → estimate Fresh/Cached from that output normally.
+- Unobservable chained usage (subagent ran in a different session, usage data never surfaced) →
+  label Fresh `~unknown`, Cached `~0`, Basis `chained-leg usage not observable from driver`. Emit a
+  P3 finding: "chained-step cost not observable — candidate for surfacing subagent usage."
+
+Never fold a chained row into the driver's row; the whole point of dogfooding a pipeline-driving
+testee is to see the testee's own cost separately from the driver's monitoring cost. See
+[SKILL.md §Cost segmentation for implement-heavy steps](../SKILL.md#cost-segmentation-for-implement-heavy-steps).
+
 ## Anti-fiction rule
 
 Never reuse a convenient cache percentage such as `45%` because it "feels right." A cache percentage
