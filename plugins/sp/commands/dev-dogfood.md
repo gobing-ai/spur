@@ -54,13 +54,20 @@ artifacts, on-disk live ledger, cache/Cost calculation, report template, finaliz
 gate, and the `--task` sink are all owned by the skill. This command parameterizes the testee, the
 retry budget, the testee agent, and optional sinks.
 
-Pipeline-driving ambiguity is rejected by the backing skill before planning. Detection is
-word-boundary, not leading-space substring — see
-[`detectPipelineDriving`](../scripts/dogfood-testing/detect-pipeline-driving.ts) (contract unit-checked
-by `tests/dogfood-testing/pipeline-detect.test.ts`). If the testee is pipeline-driving (contains any
-pipeline-driving token as a distinct hyphen-word) and this command omits `--max-retry`, it exits
-non-zero with: `⚠ pipeline-driving testee detected; pass --max-retry 0 (observe-only) or --max-retry N (fix mode, tree mutation acknowledged)`.
-Any explicit `--max-retry` value proceeds.
+Pipeline-driving ambiguity is rejected by the backing skill **before planning** via a **live CLI
+gate** (not agent-only prose):
+
+```bash
+bun plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts \
+  --testee "<testee>" [--max-retry-present] [--steps "s1||s2"] [--json]
+```
+
+Detection is word-boundary, not leading-space substring (contract unit-checked by
+`tests/dogfood-testing/pipeline-detect.test.ts`). Exit **2** without `--max-retry-present` when the
+testee is pipeline-driving → refuse with:
+`⚠ pipeline-driving testee detected; pass --max-retry 0 (observe-only) or --max-retry N (fix mode, tree mutation acknowledged)`.
+Any explicit `--max-retry` proceeds. After step derivation, the same CLI with `--steps` may emit the
+implement-heavy advisory (W8); prefer observe-only or step-split, operator override still proceeds.
 
 ## Implementation
 

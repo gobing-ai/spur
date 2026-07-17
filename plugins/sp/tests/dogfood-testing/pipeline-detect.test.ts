@@ -1,5 +1,16 @@
 import { describe, expect, test } from 'bun:test';
-import { detectPipelineDriving, PIPELINE_TOKENS } from '../../scripts/dogfood-testing/detect-pipeline-driving';
+import { join } from 'node:path';
+import {
+    detectImplementHeavy,
+    detectPipelineDriving,
+    evaluateDogfoodGate,
+    IMPLEMENT_HEAVY_ADVISORY_MESSAGE,
+    isImplementHeavyStep,
+    PIPELINE_DRIVING_REFUSE_MESSAGE,
+    PIPELINE_TOKENS,
+    parseCliArgs,
+    runCli,
+} from '../../scripts/dogfood-testing/detect-pipeline-driving';
 
 /**
  * dogfood-pipeline-detect — @1.2 pipeline-driving detector contract (task 0277 W7).
@@ -118,5 +129,125 @@ describe('dogfood-pipeline-detect — detectPipelineDriving word-boundary contra
         expect(detectPipelineDriving(undefined)).toBe(false);
         // @ts-expect-error — runtime guard against accidental non-string callers
         expect(detectPipelineDriving(null)).toBe(false);
+    });
+});
+
+describe('dogfood implement-heavy + Phase 1.0 gate (task 0277 W8 + live CLI)', () => {
+    test('isImplementHeavyStep — dev-run is heavy; dev-verify is not', () => {
+        expect(isImplementHeavyStep('/sp:dev-run 0125 --auto')).toBe(true);
+        expect(isImplementHeavyStep('/sp:dev-verify 0125 --auto --next')).toBe(false);
+        expect(isImplementHeavyStep('/sp:dev-review 0125')).toBe(false);
+        expect(isImplementHeavyStep('/sp:dev-refine 0125 --auto --next')).toBe(true);
+        expect(isImplementHeavyStep('/sp:dev-refine 0125 --auto')).toBe(false);
+    });
+
+    test('detectImplementHeavy — needs pipeline-driving AND a heavy step', () => {
+        expect(detectImplementHeavy('/sp:dev-verify 0277 --next', ['load', 'verify', 'done'])).toBe(false);
+        expect(detectImplementHeavy('/sp:dev-run 0125 --auto --next', ['implement task', 'verify'])).toBe(true);
+        // no steps → fall back to testee string
+        expect(detectImplementHeavy('/sp:dev-run 0125 --auto --next')).toBe(true);
+        expect(detectImplementHeavy('/sp:dev-verify 0125 --next')).toBe(false);
+    });
+
+    test('evaluateDogfoodGate — refuse when pipeline-driving without max-retry', () => {
+        const r = evaluateDogfoodGate('/sp:dev-run 0125 --next', { maxRetryPresent: false });
+        expect(r.refuse).toBe(true);
+        expect(r.exitCode).toBe(2);
+        expect(r.message).toBe(PIPELINE_DRIVING_REFUSE_MESSAGE);
+    });
+
+    test('evaluateDogfoodGate — advisory when heavy + max-retry present', () => {
+        const r = evaluateDogfoodGate('/sp:dev-run 0125 --next', {
+            maxRetryPresent: true,
+            steps: ['implement via dev-run'],
+        });
+        expect(r.refuse).toBe(false);
+        expect(r.advisory).toBe(true);
+        expect(r.exitCode).toBe(0);
+        expect(r.message).toBe(IMPLEMENT_HEAVY_ADVISORY_MESSAGE);
+    });
+
+    test('evaluateDogfoodGate — verify-only --next with max-retry is clean proceed', () => {
+        const r = evaluateDogfoodGate('/sp:dev-verify 0277 --auto --next --force', {
+            maxRetryPresent: true,
+            steps: ['load task', 'verify requirements', 'strict-core done'],
+        });
+        expect(r.refuse).toBe(false);
+        expect(r.advisory).toBe(false);
+        expect(r.implementHeavy).toBe(false);
+        expect(r.exitCode).toBe(0);
+        expect(r.message).toBeNull();
+    });
+
+    test('parseCliArgs — flags, positional, -- remainder, empty steps', () => {
+        expect(parseCliArgs(['--help']).help).toBe(true);
+        expect(parseCliArgs(['-h']).help).toBe(true);
+        expect(parseCliArgs(['--testee', '/sp:dev-run 1', '--max-retry-present', '--json'])).toEqual({
+            testee: '/sp:dev-run 1',
+            maxRetryPresent: true,
+            steps: [],
+            json: true,
+            help: false,
+        });
+        expect(parseCliArgs(['/sp:dev-verify 1']).testee).toBe('/sp:dev-verify 1');
+        expect(parseCliArgs(['--', 'a', 'b', 'c']).testee).toBe('a b c');
+        expect(parseCliArgs(['--steps', 's1||s2||']).steps).toEqual(['s1', 's2']);
+        expect(parseCliArgs(['--steps', '']).steps).toEqual([]);
+        expect(parseCliArgs(['--testee']).testee).toBeNull();
+    });
+
+    test('runCli — refuse / advisory / help / usage / clean proceed', () => {
+        const refuse = runCli(['--testee', '/sp:dev-run 0125 --auto']);
+        expect(refuse.exitCode).toBe(2);
+        expect(refuse.stdout).toContain('pipeline-driving testee detected');
+
+        const advisory = runCli([
+            '--testee',
+            '/sp:dev-run 0125 --next',
+            '--max-retry-present',
+            '--steps',
+            'implement||verify',
+            '--json',
+        ]);
+        expect(advisory.exitCode).toBe(0);
+        const parsed = JSON.parse(advisory.stdout);
+        expect(parsed.advisory).toBe(true);
+        expect(parsed.refuse).toBe(false);
+
+        const help = runCli(['--help']);
+        expect(help.exitCode).toBe(0);
+        expect(help.stderr).toContain('Usage:');
+
+        const usage = runCli([]);
+        expect(usage.exitCode).toBe(1);
+        expect(usage.stderr).toContain('Usage:');
+
+        const clean = runCli([
+            '--testee',
+            '/sp:dev-verify 0277 --next',
+            '--max-retry-present',
+            '--steps',
+            'load||verify',
+        ]);
+        expect(clean.exitCode).toBe(0);
+        expect(clean.stdout).toBe('');
+    });
+
+    test('CLI binary — refuses pipeline-driving without --max-retry-present (exit 2)', async () => {
+        const proc = Bun.spawn({
+            cmd: [
+                'bun',
+                'plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts',
+                '--testee',
+                '/sp:dev-run 0125 --auto',
+            ],
+            cwd: join(import.meta.dir, '..', '..', '..', '..'),
+            stdout: 'pipe',
+            stderr: 'pipe',
+        });
+        const out = await new Response(proc.stdout).text();
+        const code = await proc.exited;
+        expect(code).toBe(2);
+        expect(out).toContain('pipeline-driving testee detected');
     });
 });

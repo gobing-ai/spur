@@ -69,19 +69,42 @@ The command forwards these via `$ARGUMENTS`:
 > `⚠ pipeline-driving testee detected; pass --max-retry 0 (observe-only) or --max-retry N (fix mode, tree mutation acknowledged)`.
 ## Phase 1 — Plan
 
-0. **Refuse ambiguous pipeline-driving testees.** Before deriving steps, inspect the raw `testee`
-   string. Pipeline-driving is matched by word boundary, not leading-space substring — see
-   [`detectPipelineDriving`](../../scripts/dogfood-testing/detect-pipeline-driving.ts) (the matcher
-   contract is unit-checked by `tests/dogfood-testing/pipeline-detect.test.ts`). If it returns true
-   and the dogfood invocation did not explicitly pass `--max-retry`, exit non-zero with exactly:
-   `⚠ pipeline-driving testee detected; pass --max-retry 0 (observe-only) or --max-retry N (fix mode, tree mutation acknowledged)`.
-   Do not auto-substitute `--max-retry 0`: the driver retry budget does not constrain the testee's
-   own pipeline chain, which may still mutate through its own tools.
+0. **Refuse ambiguous pipeline-driving testees (live CLI gate — not prose-only).** Before deriving
+   steps, run the machine-checked detector as a shell command (do **not** re-implement the matcher
+   in-agent):
+
+   ```bash
+   bun plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts \
+     --testee "<raw testee string>" \
+     [--max-retry-present]   # pass this flag only when the dogfood invocation included --max-retry
+   ```
+
+   - Exit **2** → print the stdout refuse line and **stop** (do not plan). Exact message:
+     `⚠ pipeline-driving testee detected; pass --max-retry 0 (observe-only) or --max-retry N (fix mode, tree mutation acknowledged)`.
+   - Exit **0** → proceed. Do not auto-substitute `--max-retry 0`.
+   - The matcher contract is unit-checked by `tests/dogfood-testing/pipeline-detect.test.ts`.
+     See [§Pipeline-driving word-boundary contract](#pipeline-driving-word-boundary-contract).
 1. **Resolve + classify** the testee: slash command (`/sp:...`), agent skill (`Skill(...)`), or shell
    CLI (`spur ...`, `bun run ...`). Everything before the first dogfood flag is the testee; if it
    carries its own flags, it must be quoted.
 2. **Derive ordered steps** from the testee's own docstring / `argument-hint` / workflow. If no step
    list can be derived, treat the whole invocation as one step.
+2b. **Implement-heavy advisory (W8 — emit at derivation time).** Immediately after step derivation,
+    re-run the gate with the derived step labels:
+
+    ```bash
+    bun plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts \
+      --testee "<raw testee string>" \
+      --max-retry-present \
+      --steps "step1 label||step2 label||..."
+    ```
+
+    When stdout prints
+    `⚠ implement-heavy pipeline dogfood: prefer --max-retry 0 (observe-only) or step-split; operator --max-retry N overrides`,
+    surface that line in the live report §1/§2 **and** continue only because the operator already
+    passed an explicit `--max-retry`. Prefer observe-only or step-split on the next run. Record the
+    advisory in the ledger `Finding` column for implement-heavy steps. See
+    [§Cost segmentation for implement-heavy steps](#cost-segmentation-for-implement-heavy-steps).
 3. **Open dual artifacts (always-on delivery — not gated on `--save`).**
    - Generate `run_id` (uuid or timestamp-slug).
    - `mkdir -p .spur/run/dogfood docs/dogfood`.
@@ -233,13 +256,11 @@ Do **not** use this skill for:
 8. **`--save` is not required for a file.** Dual artifacts are always-on. Do not skip writing
    `docs/dogfood/` because the operator omitted `--save`.
 9. **Pipeline-driving + implement-heavy derived step ⇒ prefer observe-only or step-split.** When the
-   testee is pipeline-driving (`detectPipelineDriving` returns true) AND a derived step chains into
-   real implementation work (e.g. `/sp:dev-refine … --next` → `/sp:dev-run … --next` → writes code),
-   the dogfood run is **recursive**: it is testing a pipeline that itself mutates the repo, while the
-   dogfood driver is *also* in fix mode mutating the repo. Two mutation sources in one run make
-   attribution impossible. Recommend (do not force) observe-only (`--max-retry 0`) or splitting the
-   chained step into its own dogfood target with explicit provenance. Operator's explicit
-   `--max-retry N --full` overrides the recommendation. See
+   Phase 1.2b CLI emits the implement-heavy advisory (pipeline-driving + implement-heavy step), the
+   dogfood run is **recursive**: it tests a pipeline that mutates the repo while the driver may also
+   be in fix mode. Two mutation sources make attribution impossible. The advisory is **emitted at
+   derivation time** (not only as docs-time guidance). Operator's explicit `--max-retry N` proceeds;
+   prefer `--max-retry 0` or step-split next time. See
    [§Cost segmentation for implement-heavy steps](#cost-segmentation-for-implement-heavy-steps).
 10. **`--next` chain stop-at-testing when provenance is missing.** A `--next` chain (refine→run,
    run→verify, etc.) runs each leg as its own pipeline stage. If the dogfood driver cannot observe
@@ -249,6 +270,24 @@ Do **not** use this skill for:
    missing; cannot attribute outcome" rather than fabricating an outcome from the final state. Do not
    change the chained lifecycle's code (dev-run/dev-verify); this is a reporting discipline, not a
    lifecycle change. See [§`--next` chain stop-at-testing](#next-chain-stop-at-testing).
+
+## Pipeline-driving word-boundary contract
+
+Pipeline-driving detection is **word-boundary**, not leading-space substring. The live gate is:
+
+```bash
+bun plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts --testee "<testee>" [--max-retry-present] [--steps "…"] [--json]
+```
+
+| Token shape | Examples | Matches | Rejects |
+|-------------|----------|---------|---------|
+| Flag / complete | `--next`, `dev-run`, `dev-runall`, `dev-wrap`, `dev-wrapall`, `dev-idea` | `/sp:dev-run 0125`, bare `--next` | `--next-gen`, `dev-runner` |
+| Bare noun | `run`, `runall`, `wrap`, `wrapall`, `idea` | `task run 0042` | `runaway`, `wrapper`, `idealist` |
+
+`-` is a **word character** for boundaries: a token must be a distinct hyphen-word. Contract tests:
+`plugins/sp/tests/dogfood-testing/pipeline-detect.test.ts`. Helpers:
+`detectPipelineDriving`, `isImplementHeavyStep`, `detectImplementHeavy`, `evaluateDogfoodGate` in
+[`detect-pipeline-driving.ts`](../../scripts/dogfood-testing/detect-pipeline-driving.ts).
 
 ## Cost segmentation for implement-heavy steps
 
