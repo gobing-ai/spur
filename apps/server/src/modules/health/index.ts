@@ -1,3 +1,4 @@
+import { basename } from 'node:path';
 import type { Hono } from 'hono';
 import type { ServerContext } from '../../context';
 import type { ServerModule } from '../types';
@@ -39,6 +40,14 @@ export const healthModule: ServerModule = {
                 return c.json({ status: 'ok', db: 'connected' });
             }
             return c.json({ status: 'error', db: 'unreachable' }, 503);
+        });
+
+        // ── Project identity ──
+        // The board sidebar labels itself with the served project (basename of
+        // the cwd `spur serve` runs in). `null` when there is no ServerContext
+        // (e.g. the Cloudflare Worker, which has no meaningful cwd).
+        app.get('/api/project', (c) => {
+            return c.json({ name: ctx ? basename(ctx.cwd) : null });
         });
     },
 };

@@ -5,9 +5,24 @@ import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import BoardLayout from '../../src/components/BoardLayout';
 import { resetLayoutState } from '../../src/lib/layout-state';
+import { resetFetchForTesting, setFetchForTesting } from '../../src/lib/rpc-client';
 import { registerHappyDom, teardownHappyDom } from '../happy-dom';
 
-afterAll(teardownHappyDom);
+afterAll(async () => {
+    resetFetchForTesting();
+    await teardownHappyDom();
+});
+
+// BoardLayout mounts LeftSidebar, which fetches /api/project on mount. Intercept with a
+// silent `{}` response (same seam as BoardLayout.test.tsx) so happy-dom never logs a real
+// cross-origin fetch attempt to localhost:3000.
+setFetchForTesting(
+    (async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response('{}', {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+        })) as typeof fetch,
+);
 
 function renderBoard(route = '/board/tasks') {
     return render(

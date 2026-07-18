@@ -1,7 +1,40 @@
+import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router';
 import { Button } from '@/ui';
+import { fetchWithTimeout, resolveApiUrl } from '../lib/rpc-client';
 import { modules } from '../modules/registry';
 import ThemeToggle from './ThemeToggle';
+
+/** Sidebar title shown until the server identifies the project (and on fetch failure). */
+const FALLBACK_TITLE = 'Modules';
+
+/** Wire shape of GET /api/project. `name` is null when the server has no project cwd (CF Worker). */
+interface ProjectInfo {
+    name?: string | null;
+}
+
+/**
+ * Resolve the current project name from the server (basename of the cwd `spur serve`
+ * runs in) so users can tell which project this board belongs to. Falls back to
+ * {@link FALLBACK_TITLE} while loading, when offline, or when the server has no cwd.
+ */
+function useProjectName(): string {
+    const [name, setName] = useState(FALLBACK_TITLE);
+    useEffect(() => {
+        const controller = new AbortController();
+        fetchWithTimeout(new Request(`${resolveApiUrl()}/project`, { signal: controller.signal }))
+            .then(async (res) => {
+                if (!res.ok) return;
+                const body = (await res.json()) as ProjectInfo;
+                if (body.name) setName(body.name);
+            })
+            .catch(() => {
+                // offline / pre-project endpoint server → keep fallback title
+            });
+        return () => controller.abort();
+    }, []);
+    return name;
+}
 
 interface Props {
     collapsed: boolean;
@@ -9,10 +42,15 @@ interface Props {
     onMobileClose?: () => void;
 }
 export default function LeftSidebar({ collapsed, onToggle, onMobileClose }: Props) {
+    const projectName = useProjectName();
     return (
         <aside className="flex flex-col bg-spur-surface border-r border-spur-border overflow-hidden">
             <div className="flex items-center justify-between p-3 border-b border-spur-border shrink-0">
-                {!collapsed && <span className="text-sm font-semibold text-spur-text">Modules</span>}
+                {!collapsed && (
+                    <span className="text-sm font-semibold text-spur-text truncate" title={projectName}>
+                        {projectName}
+                    </span>
+                )}
                 <div className="flex items-center gap-1">
                     {!collapsed && <ThemeToggle />}
                     {onMobileClose && (

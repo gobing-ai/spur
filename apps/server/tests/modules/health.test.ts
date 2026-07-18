@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
+import type { ServerContext } from '../../src/context';
 import { healthModule } from '../../src/modules/health';
 
 describe('healthModule', () => {
@@ -25,5 +26,27 @@ describe('healthModule', () => {
         const readyBody = (await readyRes.json()) as Record<string, unknown>;
         expect(readyBody.status).toBe('error');
         expect(readyBody.db).toBe('unavailable');
+    });
+
+    test('/api/project returns the basename of the served cwd', async () => {
+        const app = new Hono();
+        // Only `cwd` is read by this route — a partial context satisfies the mount.
+        const ctx = { cwd: '/Users/robin/xprojects/spur-new' } as ServerContext;
+        healthModule.mount(app, ctx);
+
+        const res = await app.request('/api/project');
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as Record<string, unknown>;
+        expect(body.name).toBe('spur-new');
+    });
+
+    test('/api/project returns null name without ServerContext', async () => {
+        const app = new Hono();
+        healthModule.mount(app, undefined);
+
+        const res = await app.request('/api/project');
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as Record<string, unknown>;
+        expect(body.name).toBeNull();
     });
 });
