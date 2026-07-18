@@ -93,6 +93,11 @@ When the verdict is **PARTIAL/FAIL**, or the `testing → done` guard fails: sto
 surface the verdict (or the guard's blocking finding), leave the task at its current status, do NOT
 transition to `done`.
 
+> **Already-terminal task (`--force` re-audit):** when the task is already `done`/`cancelled`, a
+> PASS verdict has no transition to make — treat `--next` as a no-op, report the verdict, and stop.
+> Do not expect a `testing → done` transition message; the CLI currently prints an unhelpful
+> `undefined → undefined` for a same-status update (honest no-op messaging is tracked in task 0292).
+
 > **Deferred `feature_id` and strict rigor:** the `--strict-core` done-gate treats a missing
 > `feature_id` as a warning (deferral is valid). If the operator opts into `--strict` rigor and
 > the `feature_id` error surfaces, use the sp:spur-dev feature-link helper to resolve it — single-task

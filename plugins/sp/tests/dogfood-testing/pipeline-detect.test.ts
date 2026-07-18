@@ -167,6 +167,30 @@ describe('dogfood implement-heavy + Phase 1.0 gate (task 0277 W8 + live CLI)', (
         expect(r.message).toBe(IMPLEMENT_HEAVY_ADVISORY_MESSAGE);
     });
 
+    test('isImplementHeavyStep — verify/review with a mutating --fix mode is heavy (0280 dogfood P2)', () => {
+        expect(isImplementHeavyStep('/sp:dev-verify 0280 --auto --next --force --focus all --fix all')).toBe(true);
+        expect(isImplementHeavyStep('/sp:dev-verify 0280 --next --fix blockers-first')).toBe(true);
+        expect(isImplementHeavyStep('/sp:dev-review 0280 --fix all')).toBe(true);
+        // --fix none stays observational; --focus all must never masquerade as --fix all.
+        expect(isImplementHeavyStep('/sp:dev-verify 0280 --next --fix none')).toBe(false);
+        expect(isImplementHeavyStep('/sp:dev-verify 0280 --next --focus all')).toBe(false);
+    });
+
+    test('detectImplementHeavy — a derived step label carrying --fix all triggers the advisory path', () => {
+        expect(detectImplementHeavy('/sp:dev-verify 0280 --next', ['--fix all repair pass + re-verify'])).toBe(true);
+    });
+
+    test('evaluateDogfoodGate — W8 advisory for pipeline-driving verify --fix all (0280 dogfood P2)', () => {
+        const r = evaluateDogfoodGate('/sp:dev-verify 0280 --auto --next --force --focus all --fix all', {
+            maxRetryPresent: true,
+        });
+        expect(r.refuse).toBe(false);
+        expect(r.advisory).toBe(true);
+        expect(r.implementHeavy).toBe(true);
+        expect(r.exitCode).toBe(0);
+        expect(r.message).toBe(IMPLEMENT_HEAVY_ADVISORY_MESSAGE);
+    });
+
     test('evaluateDogfoodGate — verify-only --next with max-retry is clean proceed', () => {
         const r = evaluateDogfoodGate('/sp:dev-verify 0277 --auto --next --force', {
             maxRetryPresent: true,

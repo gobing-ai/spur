@@ -90,6 +90,16 @@ const IMPLEMENT_HEAVY_TOKENS = [
 ] as const;
 
 /**
+ * A verify/review surface stops being non-mutating the moment it carries a
+ * repair mode: `--fix all` / `--fix blockers-first` applies Edit/Write repairs
+ * to the working tree (0280 dogfood, finding P2). `--fix none` stays
+ * observational. Boundary-guarded so `--prefix all` / `--focus all` never match.
+ */
+function hasMutatingFixMode(step: string): boolean {
+    return /(?<![\w-])--fix[=\s]+(all|blockers-first)(?![\w-])/i.test(step);
+}
+
+/**
  * Match a token at a word boundary. A "word boundary" here is the position
  * between a non-`[\w-]` char (or string start) and the token, and between the
  * token and a non-`[\w-]` char (or string end). Treating `-` as a word char
@@ -122,14 +132,16 @@ export function detectPipelineDriving(testee: string): boolean {
  *
  * Non-mutating surfaces (`dev-verify`, `dev-review`, `dev-unit`, plain
  * `dev-refine` without a further run) are never implement-heavy even if
- * pipeline-driving via `--next`.
+ * pipeline-driving via `--next` — UNLESS they carry a mutating repair mode
+ * (`--fix all` / `--fix blockers-first`), which turns the verify/review leg
+ * into a tree-mutating fix pass (0280 dogfood, finding P2).
  */
 export function isImplementHeavyStep(step: string): boolean {
     if (typeof step !== 'string' || step.length === 0) return false;
     // Explicit non-mutating surfaces win unless a mutating token co-occurs.
     const nonMutatingOnly =
         tokenMatches(step, 'dev-verify') || tokenMatches(step, 'dev-review') || tokenMatches(step, 'dev-unit');
-    const hasMutating = IMPLEMENT_HEAVY_TOKENS.some((token) => tokenMatches(step, token));
+    const hasMutating = IMPLEMENT_HEAVY_TOKENS.some((token) => tokenMatches(step, token)) || hasMutatingFixMode(step);
     if (nonMutatingOnly && !hasMutating) return false;
     // refine alone is planning, not implement-heavy; refine+run/--next chain is.
     if (tokenMatches(step, 'dev-refine') && !hasMutating && !tokenMatches(step, '--next')) {

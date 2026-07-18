@@ -134,7 +134,9 @@ a **finding**, not a fix.
 
 **Implement-heavy derived steps.** Each derived step that itself chains into further pipeline work
 multiplies the run's blast radius — when a step is implement-heavy (a `--next` chain to `dev-run`, a
-derived `wrap`/`wrapall`, or any testee that mutates more than its own arguments), surface this in
+derived `wrap`/`wrapall`, a verify/review leg carrying a mutating repair mode `--fix all` /
+`--fix blockers-first` — `--fix none` stays observational — or any testee that mutates more than its
+own arguments), surface this in
 the ledger row's `Finding` column and prefer **observe-only** or **step-splitting** rather than
 driving the chain under fix mode. See
 [§Cost segmentation for implement-heavy steps](#cost-segmentation-for-implement-heavy-steps) and
