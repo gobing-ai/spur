@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.3.12] — 2026-07-17
+
+### Added
+
+- **`spur task run-link` — link a task to its pipeline run.** New CLI verb records a run link (`--source`, `--run-id`, `--json`) against a task WBS, so chained `/sp:dev-next` executions leave an auditable run trail on the task.
+
+- **`/sp:dev-next` command and `sp:next-router` skill.** Next-step routing tables tell the agent exactly what to run after each pipeline verdict: batch-preflight STOP rows (A2/A7/A8/A9) with recovery hints, plus one-shot recovery after a FAIL. Wired into super-coder at batch boundaries — `task-pipeline.yaml` remains the happy path; deep-merge via looping dev-next is forbidden.
+
+- **Dogfood-testing protocol @1.2.** Reports are now footer-mandatory with a 7-check finalize-or-abort gate (structure scrub, ledger cardinality vs `Steps:N`, footer mirrored at report end, refusal rule on any fail). Ships a `validate-report` CLI — pure `validateReport(md)` with stable error codes — plus golden/mutation fixtures.
+
+- **Machine-checked pipeline-driving detection.** A word-boundary detector replaces the leading-space prose matcher for pipeline-driving testees, leading-space invariant without letting `run` leak into `runaway`. Adds a meta-run cost policy for implement-heavy chained steps (driver-vs-chained cost source table) and a stop-at-testing discipline: when chained-leg provenance is missing, the report says so instead of fabricating an outcome.
+
+- **Review L3 done-gate.** The lifecycle adapter now refuses `testing → done` without a populated P1–P4 Review priority table — prose-only reviews can no longer slip through strict-core verification. Dogfood Phase 4 self-validates via the new `validate-report` CLI.
+
+- **Teams board refinements.** Controls centralized in the Terminal tab; the server exposes team and message metadata for the board; the recent message feed is enriched; and the supervisor stamps process event identity onto runs.
+
+### Fixed
+
+- **System event actors derived from process agent ids**, so process-originated rows attribute to the right agent instead of a generic source.
+- **Tighter automated workflow guards** across `/sp:dev-*` commands, closing gaps where automated runs could skip required gates.
+- **Dogfood Phase 1.0 gate is shell-executable, not prose-only.** `evaluateDogfoodGate` ships as a bun CLI required before planning and after step derivation; W8 advisory documented; DD-09 acceptance-criteria gaps cleared.
+
+### Changed
+
+- **ADR-031 plugin layout for executable helpers.** Inside `plugins/sp`, executable TS helpers now live at `scripts/<skill>/` with their suites at `tests/<skill>/`; skill directories hold `SKILL.md` and prompt-side companions only. The daily-summary scripts/tests were relocated accordingly, and a structure test (R53) enforces the rule.
+
 ## [0.3.10] — 2026-07-13
 
 ### Added
