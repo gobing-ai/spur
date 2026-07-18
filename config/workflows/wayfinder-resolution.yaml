@@ -1,0 +1,195 @@
+"$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
+kind: state-machine
+name: wayfinder-resolution
+description: "Reusable resolution pipeline for research/specification tasks without invoking the code implementation pipeline"
+iterationBound: 20
+initialState: precheck
+terminalStates:
+  - done
+  - failed
+  - cancelled
+vars:
+  wbs: "0000"
+  profile: "standard"
+  spurBin: "spur"
+  agent: "omp"
+  stepTimeoutMs: "900000"
+  approval: "required"
+  resolutionMode: "research"
+  evidencePolicy: "spur-cli-first"
+  __hitlAnswer: ""
+
+states:
+  - id: precheck
+    description: "Validate the task and confirm the requested resolution mode before delegation."
+    onEnter:
+      - kind: shell
+        options:
+          command: "${vars.spurBin} task check ${vars.wbs}"
+      - kind: shell
+        options:
+          command: "${vars.spurBin} task show ${vars.wbs} --json"
+      - kind: note
+        options:
+          message: "Wayfinder resolution started for task ${vars.wbs} (mode=${vars.resolutionMode}, evidence=${vars.evidencePolicy}); no code implementation pipeline is permitted."
+
+  - id: collect
+    description: "Create a deterministic local input bundle before delegation."
+    onEnter:
+      - kind: shell
+        options:
+          command: "mkdir -p .spur/run/wayfinder && ${vars.spurBin} task show ${vars.wbs} --json > .spur/run/wayfinder/${vars.wbs}-input.json"
+      - kind: shell
+        options:
+          command: "${vars.spurBin} workflow validate config/workflows/wayfinder-resolution.yaml > .spur/run/wayfinder/${vars.wbs}-workflow-check.txt"
+      - kind: shell
+        options:
+          command: "${vars.spurBin} task check ${vars.wbs} > .spur/run/wayfinder/${vars.wbs}-precheck.txt"
+
+  - id: investigate
+    description: "Resolve the task's research/specification requirements and author evidence-backed sections through Spur CLI."
+    onEnter:
+      - kind: agent.run
+        options:
+          agent: ${vars.agent}
+          capture: true
+          mode: text
+          input: >-
+            Resolve task ${vars.wbs} in resolution mode ${vars.resolutionMode} using the prepared
+            local bundle `.spur/run/wayfinder/${vars.wbs}-input.json` and only local shell/file
+            reads plus the `spur` CLI; do not use network search or MCP tools. Do not
+            invoke task-pipeline.yaml, /sp:dev-run, /sp:dev-runall, or code implementation.
+            Read the task file, map its existing Requirements and Acceptance Criteria to the
+            existing Design/Plan/References, then author concise Solution, Testing, and Review
+            sections through `spur task update --section --from-file`. Preserve the research
+            boundary. Finish with a short summary and stop. Evidence policy: ${vars.evidencePolicy}.
+          timeoutMs: ${vars.stepTimeoutMs}
+
+  - id: verify
+    description: "Perform an independent evidence and traceability check for the resolved research task."
+    onEnter:
+      - kind: agent.run
+        options:
+          agent: ${vars.agent}
+          capture: true
+          mode: text
+          input: >-
+            Verify resolved task ${vars.wbs} using only local reads and `spur` CLI. Check its
+            requirements, acceptance scenarios, Solution, Testing, and Review. Confirm workflow
+            orchestration uses `spur workflow` and execution uses `spur` CLI by default. Run
+            `spur task check ${vars.wbs}` and update Testing/Review via the CLI only if needed.
+            Do not implement plugin code. Finish with PASS, PARTIAL, or FAIL and stop.
+          timeoutMs: ${vars.stepTimeoutMs}
+
+  - id: approve
+    description: "Human review gate unless the caller explicitly selects auto approval."
+    pause: true
+    onEnter:
+      - kind: hitl.confirm
+        options:
+          prompt: "Approve research resolution for task ${vars.wbs}?"
+
+  - id: record
+    description: "Record the resolution through the canonical task CLI and transition only after checks pass."
+    onEnter:
+      - kind: shell
+        options:
+          command: "${vars.spurBin} task check ${vars.wbs}"
+      - kind: shell
+        options:
+          command: "${vars.spurBin} task update ${vars.wbs} done --no-lifecycle"
+
+  - id: done
+    description: "Research task resolved and ready to feed the implementation backlog."
+    onEnter:
+      - kind: note
+        options:
+          message: "Wayfinder research task ${vars.wbs} resolved; implementation remains deferred to the synthesized build backlog."
+
+  - id: failed
+    description: "Research resolution failed a gate; no completion transition is attempted."
+
+  - id: cancelled
+    description: "Operator cancelled the research resolution."
+
+transitions:
+  - from: precheck
+    to: collect
+    description: "Precheck passed — collect deterministic local inputs."
+    guard:
+      kind: shell
+      options:
+        command: "${vars.spurBin} task check ${vars.wbs}"
+  - from: precheck
+    to: failed
+    description: "Precheck failed — stop before delegation."
+    guard:
+      kind: shell
+      options:
+        command: "! ${vars.spurBin} task check ${vars.wbs}"
+  - from: collect
+    to: investigate
+    description: "Input bundle collected — resolve the research task."
+    guard:
+      kind: shell
+      options:
+        command: "test -s .spur/run/wayfinder/${vars.wbs}-input.json && test -s .spur/run/wayfinder/${vars.wbs}-precheck.txt"
+  - from: collect
+    to: failed
+    description: "Input collection failed — stop before delegation."
+    guard:
+      kind: shell
+      options:
+        command: "! test -s .spur/run/wayfinder/${vars.wbs}-input.json || ! test -s .spur/run/wayfinder/${vars.wbs}-precheck.txt"
+  - from: investigate
+    to: verify
+    description: "Research resolution authored — verify evidence and traceability."
+    guard:
+      kind: always
+  - from: verify
+    to: record
+    description: "Auto profile — record after verification without pausing."
+    guard:
+      kind: shell
+      options:
+        command: 'test "${vars.approval}" = auto'
+  - from: verify
+    to: approve
+    description: "Verification completed — require explicit review approval."
+    guard:
+      kind: always
+  - from: approve
+    to: record
+    description: "Operator approved the research resolution."
+    guard:
+      kind: shell
+      options:
+        command: 'test "${vars.__hitlAnswer}" = yes'
+  - from: approve
+    to: cancelled
+    description: "Operator cancelled the research resolution."
+    guard:
+      kind: shell
+      options:
+        command: 'test "${vars.__hitlAnswer}" = cancel'
+  - from: approve
+    to: failed
+    description: "Operator rejected the research resolution."
+    guard:
+      kind: shell
+      options:
+        command: 'test "${vars.__hitlAnswer}" = no'
+  - from: record
+    to: done
+    description: "Task check passed and task was recorded done."
+    guard:
+      kind: shell
+      options:
+        command: "${vars.spurBin} task check ${vars.wbs}"
+  - from: record
+    to: failed
+    description: "Recording/check failed — stop without claiming completion."
+    guard:
+      kind: shell
+      options:
+        command: "! ${vars.spurBin} task check ${vars.wbs}"
