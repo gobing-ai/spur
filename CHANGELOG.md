@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.13] — 2026-07-18
+
+### Documentation
+
+- **"A Day with the `/sp:dev-*` Slash Commands" walkthrough.** The CLI guide (`docs/help/how_to_use_spur_for_daily_software_development.md`) gains a §7 that walks a full workday driven by slash commands — morning orientation, planning (`dev-idea` / `dev-brainstorm` / `dev-plan`), execution (`dev-refine` / `dev-run` / `dev-runall`), wrap-up (`dev-wrap` / `dev-wrapall`), and blocked-work handover — complementing the CLI-only daily loop in §6.
+
+- **Universal-router coverage for `/sp:dev-next`.** The slash-command guide now documents the status-aware router end to end: a command-map row, a mental-model diagram entry, a dedicated "universal router" section (TABLE A/B lookup, `--dry-run` / `--once` / `--full` / `--auto` / `--agent`, smart target detection for WBS / task path / feature id), and the command-vs-flag distinction between `/sp:dev-next` and the `--next` chain flag.
+
 ## [0.3.12] — 2026-07-17
 
 ### Added
