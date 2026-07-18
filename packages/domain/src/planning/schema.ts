@@ -260,6 +260,15 @@ export const taskFrontmatterSchema = z.object({
     priority: z.enum(PRIORITIES as unknown as [Priority, ...Priority[]]).optional(),
     tags: z.array(z.string()).optional(),
     dependencies: z.array(z.string()).optional(),
+    /**
+     * Operator override of the verdict gate (R3, task 0292). `done_forced=true`
+     * records that a non-PASS verdict was advanced to `done` deliberately;
+     * `done_reason` carries the operator rationale. Accepts the YAML boolean
+     * OR the string form emitted by `TaskService.updateField` (which writes
+     * scalars as strings — `done_forced: "true"`), normalizing to a boolean.
+     */
+    done_forced: z.preprocess((v) => (typeof v === 'string' ? v === 'true' : v), z.boolean().optional()),
+    done_reason: z.string().optional(),
     created_at: isoDateString,
     updated_at: isoDateString,
 });

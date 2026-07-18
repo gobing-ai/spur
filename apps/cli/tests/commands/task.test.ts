@@ -1272,4 +1272,174 @@ describe('spur task CLI', () => {
         const result = JSON.parse(jsonMsg);
         expect(result.existed).toBe(true);
     });
+    // ── Done-transition verdict guard (task 0292) ──
+    // The guard is orthogonal to the lifecycle FSM, so all transitions use
+    // --no-lifecycle to isolate the verdict-guard behavior. R8 (verdict gate applies
+    // under --no-lifecycle) is therefore exercised by every test in this block, and
+    // called out explicitly in its own case.
+    async function seedTaskAtTesting(label: string): Promise<string> {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', label], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+        await main(['task', 'update', wbs, 'todo', '--no-lifecycle'], { cwd, output: nullOutput() });
+        await main(['task', 'update', wbs, 'wip', '--no-lifecycle'], { cwd, output: nullOutput() });
+        await main(['task', 'update', wbs, 'testing', '--no-lifecycle'], { cwd, output: nullOutput() });
+        return wbs;
+    }
+
+    async function writeVerdict(wbs: string, verdictJson: object): Promise<void> {
+        const runDir = join(cwd, '.spur', 'run');
+        await mkdir(runDir, { recursive: true });
+        await writeFile(join(runDir, `${wbs}-verdict.json`), JSON.stringify(verdictJson), 'utf-8');
+    }
+
+    async function readStatus(wbs: string): Promise<string> {
+        const show = createCapturedOutput();
+        await main(['task', 'show', wbs, '--json'], { cwd, output: show });
+        const json = JSON.parse(show.messages.filter((m) => m.trim().startsWith('{')).pop() ?? '{}');
+        return String(json.frontmatter?.status ?? '');
+    }
+
+    const PASS_VERDICT = {
+        wbs: 'PLACEHOLDER',
+        verdict: 'PASS',
+        requirements: [
+            { id: 'R1', status: 'MET', evidence: 'x' },
+            { id: 'R2', status: 'MET', evidence: 'y' },
+        ],
+        acceptanceCriteria: [],
+        source: 'spur task verdict',
+    };
+    const PARTIAL_VERDICT = {
+        wbs: 'PLACEHOLDER',
+        verdict: 'PARTIAL',
+        requirements: [
+            { id: 'R1', status: 'MET', evidence: 'x' },
+            { id: 'R2', status: 'PARTIAL', evidence: 'y' },
+        ],
+        acceptanceCriteria: [],
+        source: 'spur task verdict',
+    };
+    const FAIL_VERDICT = {
+        wbs: 'PLACEHOLDER',
+        verdict: 'FAIL',
+        requirements: [
+            { id: 'R1', status: 'MET', evidence: 'x' },
+            { id: 'R2', status: 'UNMET', evidence: 'y' },
+        ],
+        acceptanceCriteria: [],
+        source: 'spur task verdict',
+    };
+
+    test('done guard: PASS verdict advances to done (R4a)', async () => {
+        const wbs = await seedTaskAtTesting('guard pass');
+        await writeVerdict(wbs, { ...PASS_VERDICT, wbs });
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'update', wbs, 'done', '--no-lifecycle'], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(output.messages.join('\n')).toContain('testing → done');
+    });
+
+    test('done guard: PARTIAL verdict blocks done with actionable message (R5/R4b)', async () => {
+        const wbs = await seedTaskAtTesting('guard partial');
+        await writeVerdict(wbs, { ...PARTIAL_VERDICT, wbs });
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'update', wbs, 'done', '--no-lifecycle'], { cwd, output });
+        expect(exitCode).toBe(1);
+        const msg = output.errors.join('\n') + output.messages.join('\n');
+        expect(msg).toContain(wbs);
+        expect(msg).toContain('PARTIAL');
+        expect(msg).toContain('.spur/run/');
+        expect(msg).toContain('--force-done');
+        // Task remains at testing.
+        expect(await readStatus(wbs)).toBe('testing');
+    });
+
+    test('done guard: FAIL verdict blocks done (R4c)', async () => {
+        const wbs = await seedTaskAtTesting('guard fail');
+        await writeVerdict(wbs, { ...FAIL_VERDICT, wbs });
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'update', wbs, 'done', '--no-lifecycle'], { cwd, output });
+        expect(exitCode).toBe(1);
+    });
+
+    test('done guard: no verdict file → back-compat allow (R4d/R1)', async () => {
+        const wbs = await seedTaskAtTesting('guard no-verdict');
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'update', wbs, 'done', '--no-lifecycle'], { cwd, output });
+        expect(exitCode).toBe(0);
+    });
+
+    test('done guard: --force-done with PARTIAL records override frontmatter (R3/R5)', async () => {
+        const wbs = await seedTaskAtTesting('guard forced');
+        await writeVerdict(wbs, { ...PARTIAL_VERDICT, wbs });
+        const output = createCapturedOutput();
+        const exitCode = await main(
+            [
+                'task',
+                'update',
+                wbs,
+                'done',
+                '--no-lifecycle',
+                '--force-done',
+                '--reason',
+                'telemetry absent is acceptable',
+            ],
+            { cwd, output },
+        );
+        expect(exitCode).toBe(0);
+        expect(output.messages.join('\n')).toContain('Override recorded');
+        // Audit-trail persisted on the task frontmatter.
+        const show = createCapturedOutput();
+        await main(['task', 'show', wbs, '--json'], { cwd, output: show });
+        const raw = show.messages.filter((m) => m.trim().startsWith('{')).pop() ?? '{}';
+        const json = JSON.parse(raw);
+        // persisted as YAML-quoted "true"; the schema coerces it to boolean at
+        // validation time. Assert the override was recorded, either form.
+        expect(String(json.frontmatter?.done_forced)).toBe('true');
+        expect(json.frontmatter?.done_reason).toBe('telemetry absent is acceptable');
+    });
+
+    test('done guard: --no-lifecycle PARTIAL is still verdict-gated (R8 explicit)', async () => {
+        const wbs = await seedTaskAtTesting('guard no-lifecycle');
+        await writeVerdict(wbs, { ...PARTIAL_VERDICT, wbs });
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'update', wbs, 'done', '--no-lifecycle'], { cwd, output });
+        expect(exitCode).toBe(1);
+        expect(await readStatus(wbs)).toBe('testing');
+    });
+
+    test('done guard: same-status no-op is honest and exits 0 (R9)', async () => {
+        const wbs = await seedTaskAtTesting('guard noop');
+        await writeVerdict(wbs, { ...PASS_VERDICT, wbs });
+        // First advance to done.
+        await main(['task', 'update', wbs, 'done', '--no-lifecycle'], { cwd, output: nullOutput() });
+        // Second call: no-op, exit 0, message is "already done — no transition".
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'update', wbs, 'done', '--no-lifecycle'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const msg = output.messages.join('\n');
+        expect(msg).toContain('already done');
+        expect(msg).not.toContain('undefined → undefined');
+    });
+
+    test('done guard: inconsistent artifact denied with inconsistency named (R10)', async () => {
+        const wbs = await seedTaskAtTesting('guard inconsistent');
+        // Stored verdict claims PASS but a row is UNMET.
+        await writeVerdict(wbs, {
+            wbs,
+            verdict: 'PASS',
+            requirements: [
+                { id: 'R1', status: 'MET', evidence: 'x' },
+                { id: 'R2', status: 'UNMET', evidence: 'y' },
+            ],
+            acceptanceCriteria: [],
+            source: 'spur task verdict',
+        });
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'update', wbs, 'done', '--no-lifecycle'], { cwd, output });
+        expect(exitCode).toBe(1);
+        const msg = output.errors.join('\n') + output.messages.join('\n');
+        expect(msg).toContain('self-inconsistent');
+    });
 });

@@ -29,6 +29,20 @@ export type {
     MigrationReport,
 } from './services/corpus-migrator';
 export { CorpusMigrator } from './services/corpus-migrator';
+export type {
+    GuardInput,
+    GuardOutcome,
+    VerdictAggregate,
+    VerdictArtifact,
+    VerdictRowStatus,
+} from './services/done-transition-guard';
+export {
+    computeAggregate,
+    evaluateDoneTransition,
+    formatDenialMessage,
+    formatNoopMessage,
+    readVerdictArtifact,
+} from './services/done-transition-guard';
 export { bridgeEventBus } from './services/event-bridge';
 export type {
     SystemEventCatalogEntry,

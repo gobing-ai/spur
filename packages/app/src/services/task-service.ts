@@ -506,9 +506,18 @@ export class TaskService {
      * the value after the write (e.g. an unknown priority is rejected).
      */
     async updateField(wbs: string, key: string, value: string): Promise<WriteResult> {
-        const allowed = new Set(['feature_id', 'parent_wbs', 'priority']);
-        if (!allowed.has(key)) {
-            throw new Error(`Field "${key}" is not settable via update; allowed: ${[...allowed].join(', ')}.`);
+        // `done_forced` / `done_reason` are set by the CLI verdict-guard override
+        // path (R3, task 0292) — they record an operator's explicit decision to
+        // advance a non-PASS task to `done`. Status itself stays on `updateStatus`.
+        const allowed: Record<string, true> = {
+            feature_id: true,
+            parent_wbs: true,
+            priority: true,
+            done_forced: true,
+            done_reason: true,
+        };
+        if (!(key in allowed)) {
+            throw new Error(`Field "${key}" is not settable via update; allowed: ${Object.keys(allowed).join(', ')}.`);
         }
         const filePath = await this.resolveTaskFile(wbs);
         const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: this.ctx.tasksDir };

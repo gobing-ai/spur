@@ -3,14 +3,17 @@ import { join } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import {
     CorpusMigrator,
+    evaluateDoneTransition,
     type MigrationReport,
     PlanningWriteService,
+    readVerdictArtifact,
     resolvePlanningFolders,
     type SectionMatrix,
     TASK_LIFECYCLE_PROFILE,
     TaskCheckService,
     TaskService,
     type TaskSummary,
+    type VerdictAggregate,
 } from '@gobing-ai/spur-app';
 import { bundledConfigRoot, loadStructuredSpurConfig } from '@gobing-ai/spur-config/loader';
 import {
@@ -180,6 +183,15 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             '--no-lifecycle',
             'Suppress lifecycle workflow run creation (use during pipeline runs to avoid orphaned lifecycle runs)',
         )
+        .option(
+            '--force-done',
+            'Allow transitioning to `done` even when the verify verdict is not PASS; records an override (task 0292)',
+        )
+        .option(
+            '--reason <text>',
+            'Rationale for a forced-done override (paired with --force-done; persisted as done_reason)',
+        )
+        .option('--verdict-dir <path>', 'Directory holding <wbs>-verdict.json artifacts (default: .spur/run)')
         .option('--folder <path>', 'Custom tasks folder')
         .option('--json', 'Output machine-readable JSON')
         .action(async (wbs, status, options) => {
@@ -234,11 +246,80 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                             }
                         }
                     }
+                    // ── done-transition verdict gate (task 0292) ──
+                    // Replaces the silent PARTIAL/FAIL → done slide. Runs for every `done`
+                    // transition regardless of --no-lifecycle (covers the SchemaLifecyclePort
+                    // fallback that the P3 backstop at line 234 does not cover). The guard
+                    // reads the verify artifact (`.spur/run/<wbs>-verdict.json` by default),
+                    // recomputes the aggregate for consistency (R10), and either allows,
+                    // denies with an actionable message, or records an override.
+                    // The guard returns `allow | deny | noop`. We separately track whether the
+                    // allow was an operator override (R3) so the post-transition block can record
+                    // the `done_forced` audit-trail frontmatter.
+                    let forcedDone = false;
+                    let forcedDoneReason: string | undefined;
+                    let forcedDoneVerdict: VerdictAggregate | undefined;
+                    if (status === 'done') {
+                        const current = await svc.show(wbs);
+                        const verdictDir = options.verdictDir ?? join(context.cwd, '.spur', 'run');
+                        const loaded = await readVerdictArtifact(context.fs, verdictDir, wbs);
+                        const guardOutcome = evaluateDoneTransition({
+                            wbs,
+                            taskFilePath: current.filePath,
+                            currentStatus: String(current.frontmatter.status),
+                            targetStatus: 'done',
+                            forced: options.forceDone === true,
+                            reason: options.reason,
+                            artifact: loaded.artifact,
+                        });
+                        if (guardOutcome.kind === 'noop') {
+                            // R9: same-status no-op. Exit 0 so scripts/CI can idempotently re-run.
+                            if (options.json) {
+                                context.output.write(toJson({ ok: true, noop: true, wbs, status: 'done' }));
+                            } else {
+                                context.output.write(guardOutcome.message);
+                            }
+                            return;
+                        }
+                        if (guardOutcome.kind === 'deny') {
+                            context.output.error(guardOutcome.message);
+                            context.setExitCode(1);
+                            return;
+                        }
+                        // `allow` — if it was a forced override of a non-PASS verdict, record state
+                        // for the audit-trail write below.
+                        if (guardOutcome.reason === 'forced' && loaded.artifact !== undefined) {
+                            forcedDone = true;
+                            forcedDoneReason = options.reason;
+                            forcedDoneVerdict = loaded.artifact.verdict;
+                        }
+                    }
                     const result = await svc.updateStatus(wbs, status);
+                    // R3 override audit-trail: persist done_forced + done_reason so a later
+                    // `spur task show` surfaces that this `done` was an operator override of a
+                    // non-PASS verdict. Best-effort — a write failure here leaves the task at
+                    // `done` without the audit fields; the transition itself is already committed.
+                    if (forcedDone) {
+                        try {
+                            await svc.updateField(wbs, 'done_forced', 'true');
+                            if (forcedDoneReason !== undefined && forcedDoneReason.length > 0) {
+                                await svc.updateField(wbs, 'done_reason', forcedDoneReason);
+                            }
+                        } catch (auditErr) {
+                            context.output.error(
+                                `warning: failed to record done-forced audit fields: ${String(auditErr)}`,
+                            );
+                        }
+                    }
                     if (options.json) {
                         context.output.write(toJson(result));
                     } else {
                         context.output.write(`${result.ref.id}: ${result.fromStatus} → ${result.toStatus}`);
+                        if (forcedDone && forcedDoneVerdict !== undefined) {
+                            context.output.write(
+                                `ⓘ  Override recorded: task advanced to done despite ${forcedDoneVerdict} verdict (done_forced=true).`,
+                            );
+                        }
                     }
 
                     // ── done-transition feature_id nudge (human output only) ──

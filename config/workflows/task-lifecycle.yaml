@@ -10,6 +10,16 @@ description: >
   today, behavioral wiring activates as the verb ships. Unconditional transitions
   use the `always` guard (externally-driven via `requestTransition`, not
   auto-advance).
+
+  Two-layer done gate (task 0292): this workflow's testing→done guard
+  (`spur task check --strict-core`) is the FIRST gate. The CLI verdict guard
+  (`packages/app/src/services/done-transition-guard.ts`) is the SECOND gate,
+  invoked by `apps/cli/src/commands/task.ts` for every `spur task update <wbs>
+  done` call — it reads `.spur/run/<wbs>-verdict.json` and blocks non-PASS
+  verdicts unless `--force-done --reason "<why>"` is supplied. The CLI gate
+  covers the `--no-lifecycle` and adapter-unavailable paths that bypass this
+  workflow. Overrides are recorded via the `done_forced` / `done_reason`
+  frontmatter fields.
 initialState: backlog
 terminalStates:
   - cancelled
