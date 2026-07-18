@@ -78,7 +78,9 @@ states:
             requirements, acceptance scenarios, Solution, Testing, and Review. Confirm workflow
             orchestration uses `spur workflow` and execution uses `spur` CLI by default. Run
             `spur task check ${vars.wbs}` and update Testing/Review via the CLI only if needed.
-            Do not implement plugin code. Finish with PASS, PARTIAL, or FAIL and stop.
+            Do not implement plugin code. Write the final verdict word (exactly PASS, PARTIAL,
+            or FAIL, nothing else) to `.spur/run/wayfinder/${vars.wbs}-resolution-verdict.txt`,
+            then finish with the same verdict and stop.
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: approve
@@ -97,7 +99,9 @@ states:
           command: "${vars.spurBin} task check ${vars.wbs}"
       - kind: shell
         options:
-          command: "${vars.spurBin} task update ${vars.wbs} done --no-lifecycle"
+          # PASS-only completion (preserve-list P4): lifecycle guards stay on; a forced
+          # done without verdict evidence is the 0280 regression this replaces (see 0292).
+          command: "${vars.spurBin} task update ${vars.wbs} done"
 
   - id: done
     description: "Research task resolved and ready to feed the implementation backlog."
@@ -148,11 +152,11 @@ transitions:
       kind: always
   - from: verify
     to: record
-    description: "Auto profile — record after verification without pausing."
+    description: "Auto profile — record only on a machine-readable PASS verdict (fail-closed to the approve gate otherwise)."
     guard:
       kind: shell
       options:
-        command: 'test "${vars.approval}" = auto'
+        command: 'test "${vars.approval}" = auto && grep -qx PASS .spur/run/wayfinder/${vars.wbs}-resolution-verdict.txt'
   - from: verify
     to: approve
     description: "Verification completed — require explicit review approval."
@@ -181,15 +185,15 @@ transitions:
         command: 'test "${vars.__hitlAnswer}" = no'
   - from: record
     to: done
-    description: "Task check passed and task was recorded done."
+    description: "Task check passed and the task status is actually done (the lifecycle transition succeeded)."
     guard:
       kind: shell
       options:
-        command: "${vars.spurBin} task check ${vars.wbs}"
+        command: '${vars.spurBin} task check ${vars.wbs} && test "$(${vars.spurBin} task show ${vars.wbs} --json | jq -r .status)" = done'
   - from: record
     to: failed
-    description: "Recording/check failed — stop without claiming completion."
+    description: "Recording/check failed or the task never reached done — stop without claiming completion."
     guard:
       kind: shell
       options:
-        command: "! ${vars.spurBin} task check ${vars.wbs}"
+        command: '! ${vars.spurBin} task check ${vars.wbs} || test "$(${vars.spurBin} task show ${vars.wbs} --json | jq -r .status)" != done'

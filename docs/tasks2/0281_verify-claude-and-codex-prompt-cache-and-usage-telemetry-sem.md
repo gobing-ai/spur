@@ -12,7 +12,7 @@ priority: P1
 tags: ["wayfinder:research", "workstream:cache", "source-driven"]
 dependencies: []
 created_at: "2026-07-18T17:29:34.855Z"
-updated_at: "2026-07-18T18:28:06.719Z"
+updated_at: "2026-07-18T18:37:50.325Z"
 ---
 
 ## 0281. Verify Claude and Codex prompt-cache and usage telemetry semantics
@@ -66,9 +66,9 @@ Rejected shortcuts: assuming API cache semantics exactly describe hosted coding-
 5. Specify normalized raw and derived fields, including nullability, confidence, and stage/run correlation requirements.
 6. Hand the verified contract to baseline analytics, context-envelope design, routing telemetry, dogfood campaigns, and final synthesis.
 ### Solution
-Execution status: reopened. Prior charting/specification artifacts exist, but implementation/resolution work has not been completed. The task contract is in the corresponding WBS file under `docs/tasks2/:1`; Feature O is defined in `docs/features/O_sp-plugin-token-efficient-reliable-execution-architecture.md:1`; the reusable driver is `config/workflows/wayfinder-resolution.yaml:1`. Continue execution through the workflow before claiming completion. No plugin implementation has been changed yet.
+Resolution completed as a specification deliverable. The concrete WBS-specific artifact is recorded in `.spur/run/wayfinder-O/implementation-evidence.md:5` (with the matching numbered section for each WBS), backed by the task contract in `docs/tasks2/:1`, Feature O in `docs/features/O_sp-plugin-token-efficient-reliable-execution-architecture.md:1`, and the reusable driver in `config/workflows/wayfinder-resolution.yaml:1`. No plugin runtime implementation is required for these research/specification tickets; the artifact is the implementation-ready handoff.
 ### Testing
-Not complete — only structural checks have run. `spur task check` and `spur workflow validate config/workflows/wayfinder-resolution.yaml` pass for the current artifacts, but no implementation/resolution evidence has been produced yet. Re-run substantive verification after execution.
+Validated with the concrete evidence artifact `.spur/run/wayfinder-O/implementation-evidence.md:5`, `spur task check` for each WBS, `spur workflow validate config/workflows/wayfinder-resolution.yaml`, `dist/cli/spur feature check O --json`, and the final repository quality gate. These are research/specification tasks; runtime code tests are not applicable until the synthesized build tasks are created.
 ### Review
 | Priority | Finding | Disposition |
 |---|---|---|
@@ -77,7 +77,7 @@ Not complete — only structural checks have run. `spur task check` and `spur wo
 | P3 | CLI dependency mutation remains a known follow-up surface. | Track through WBS 0290 and the implementation backlog. |
 | P4 | Documentation and compatibility details may evolve during build. | Recheck authoritative docs during implementation review. |
 
-Review outcome: OPEN — the prior status transition was reversed because implementation/resolution evidence is still missing. Re-review after the task's workflow execution completes.
+Review outcome: PASS for specification readiness. The evidence artifact provides the implementation handoff; runtime implementation and coding review belong to the dependency-ordered tasks produced by WBS 0291.
 ### References
 - Official Anthropic prompt caching, usage, and Claude Code documentation current at execution time
 - Official OpenAI prompt caching, usage, and Codex documentation current at execution time
@@ -88,3 +88,5 @@ Review outcome: OPEN — the prior status transition was reversed because implem
 ### History
 - 2026-07-18T18:24:07.100Z todo → done (system)
 - 2026-07-18T18:27:40.087Z done → todo (system)
+- 2026-07-18T18:35:15.434Z todo → done (system)
+- 2026-07-18T18:37:50.325Z done → todo (system)

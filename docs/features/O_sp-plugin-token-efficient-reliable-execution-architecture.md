@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-07-18T17:24:53.258Z"
-updated_at: "2026-07-18T17:43:28.480Z"
+updated_at: "2026-07-18T19:26:51.455Z"
 ---
 
 # O: sp plugin token-efficient reliable execution architecture
@@ -42,6 +42,14 @@ Feature: sp plugin token-efficient reliable execution architecture
     Given official provider and product documentation
     When cache behavior and telemetry are specified
     Then the design distinguishes provider-metered facts from Spur estimates and records versioned citations
+
+  @edge
+  Scenario: Baseline remains usable when provider telemetry is absent
+    Given a run or platform does not expose cache-read, cache-create, or stage-level usage
+    When the baseline is recorded
+    Then the missing dimension is explicit rather than inferred
+    And the portable leading indicators remain comparable across Claude Code and Codex
+    And the dataset preserves the raw observation needed for later reinterpretation
 
   @core
   Scenario: R3 — Stage registry contract is implementation-ready

@@ -3,7 +3,7 @@ template: brainstorm
 schema_version: 1
 name: "Baseline plugins/sp stages, context, token evidence, and duplication"
 description: ""
-status: todo
+status: done
 type: brainstorm
 profile: standard
 feature_id: O
@@ -12,7 +12,7 @@ priority: P1
 tags: ["wayfinder:research", "workstream:baseline", "sp-plugin"]
 dependencies: []
 created_at: "2026-07-18T17:29:34.845Z"
-updated_at: "2026-07-18T18:28:02.188Z"
+updated_at: "2026-07-18T19:11:20.710Z"
 ---
 
 ## 0280. Baseline plugins/sp stages, context, token evidence, and duplication
@@ -67,9 +67,37 @@ Rejected shortcuts: counting repository tokens as cache savings; treating Claude
 6. Publish preserve-list, hotspot ranking, reproducibility instructions, and handoff data contracts.
 7. Feed findings to tickets “Verify Claude and Codex prompt-cache and usage telemetry semantics”, “Specify the canonical stage-contract registry”, and all later design tickets.
 ### Solution
-Execution status: reopened. Prior charting/specification artifacts exist, but implementation/resolution work has not been completed. The task contract is in the corresponding WBS file under `docs/tasks2/:1`; Feature O is defined in `docs/features/O_sp-plugin-token-efficient-reliable-execution-architecture.md:1`; the reusable driver is `config/workflows/wayfinder-resolution.yaml:1`. Continue execution through the workflow before claiming completion. No plugin implementation has been changed yet.
+Resolution completed as a specification deliverable. The concrete WBS-specific artifact is recorded in `.spur/run/wayfinder-O/implementation-evidence.md:5` (with the matching numbered section for each WBS), backed by the task contract in `docs/tasks2/:1`, Feature O in `docs/features/O_sp-plugin-token-efficient-reliable-execution-architecture.md:1`, and the reusable driver in `config/workflows/wayfinder-resolution.yaml:1`. No plugin runtime implementation is required for these research/specification tickets; the artifact is the implementation-ready handoff.
 ### Testing
-Not complete — only structural checks have run. `spur task check` and `spur workflow validate config/workflows/wayfinder-resolution.yaml` pass for the current artifacts, but no implementation/resolution evidence has been produced yet. Re-run substantive verification after execution.
+Coverage: N/A (research/specification deliverable; the shipped runtime surface is the reproducible collector `.spur/run/wayfinder-O/baseline/collect.ts`, exercised by direct execution — command evidence below).
+
+**Per-Requirement Traceability (re-verify 0280, `/sp:dev-verify 0280 --auto --next --force --focus all --fix all`, 2026-07-18)**
+
+| Req | Status | Evidence Type | Evidence |
+|-----|--------|---------------|----------|
+| R1 machine-readable inventory | MET | command | `bun .spur/run/wayfinder-O/baseline/collect.ts` → `inventory.json` counts `{commands:28, skills:25, skillReferences:40, agents:3, workflows:10 (.spur/workflows is a symlink alias of config/workflows), states:78, agentRunCalls:20, guards:111, edges:90}` |
+| R2 footprint + duplication (reproducible) | MET | command | `footprint.json` totals (commands ~41.4K / skills ~63.7K / references ~89.1K / agents ~8.2K / workflows ~19.6K / scripts ~13.6K est tok) + `duplication.json` (exact+normalized clusters ~551 est wasted tok; semantic clusters flagged for manual pass); `meta.json` separates `estimated` from `provider` classes |
+| R3 context acquisition/invalidation trace | MET | static-ref | `.spur/run/wayfinder-O/baseline/context-trace.md` — 5 acquisition paths, 5 invalidation events, all with anchors |
+| R4 baseline evidence table | MET | static-ref | `evidence-table.md` + `runs.json` — 40 verdict artifacts (38 PASS / 1 PARTIAL / 1 non-JSON `0231`), 6 dogfood runs, token-ledger event counts (365 entries); provider dimensions explicitly `unavailable`, never inferred |
+| R5 top-10 hotspots | MET | command | `hotspots.md` — `grep -c '^| H'` = 10 rows, each with file anchor, cause class, blast radius, confidence |
+| R6 preserve-list | MET | command | `preserve-list.md` P1–P8; grep confirms all four named contracts (dev-next one-dispatch, dogfood @1.2, CLI-only corpus writes, PASS-only completion) |
+| R7 consumable artifacts | MET | static-ref | `README.md` data contract: file → schema → evidence class → consumer tickets (0281–0291) |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: R1 Current plugin baseline is decision-ready | MET | command | collector executed this run (exit 0, 3 runs incl. 2 in-run bug fixes); every surface class present in `inventory.json`; hotspot ranking carries anchors/cause/blast-radius/confidence + downstream consumers; `meta.json` note forbids estimate→provider promotion |
+| Scenario: Baseline remains usable when provider telemetry is absent | MET | command | `evidence-table.md` availability matrix marks provider dims `unavailable` explicitly; portable indicators (verdicts, retries, source footprints) defined identically for Claude Code and Codex; `runs.json` preserves raw pre-aggregation observations |
+
+**SECUA Review (`--focus all`)**
+
+- Security: none — collector is local-read-only; no secrets, no network.
+- Efficiency/Correctness (minor, fixed in-run): Bun.Glob does not follow the `.spur/workflows` directory symlink (collector now scans the real `config/workflows` and records the alias); `Result:` parser missed the bold `**Result:**` form.
+- Correctness (major, repaired): `config/workflows/wayfinder-resolution.yaml` auto path recorded `done` verdict-blind (`verify → record` guarded only on `approval = auto`) and bypassed lifecycle guards with `--no-lifecycle` — the mechanism behind this task's earlier forced `testing → done` on a PARTIAL verdict. Hardened: verify leg writes `.spur/run/wayfinder/<wbs>-resolution-verdict.txt`; auto `verify → record` requires `grep -qx PASS` (fail-closed to the approve HITL gate); `record` runs lifecycle-enforced `task update done`; `record → done` asserts the status actually changed. `spur workflow validate` passes. FSM-level enforcement remains task 0292 (References updated there).
+- Architecture: the normalization layer the previous verify flagged as missing now exists (`README.md` dataset contract). Prior-run aggregation drift noted: core UNMET was reported PARTIAL; `verdict-schema.md` says FAIL — recorded as a process observation.
+
+**Verdict: PASS** — the pre-fix verdict this run was FAIL (R3–R6 UNMET + 1 major SECUA finding); the `--fix all` pass materialized the baseline dataset (`.spur/run/wayfinder-O/baseline/`, 11 files) and repaired the workflow gate; re-verification finds all R1–R7 and both AC scenarios MET with deterministic evidence.
 ### Review
 | Priority | Finding | Disposition |
 |---|---|---|
@@ -78,7 +106,7 @@ Not complete — only structural checks have run. `spur task check` and `spur wo
 | P3 | CLI dependency mutation remains a known follow-up surface. | Track through WBS 0290 and the implementation backlog. |
 | P4 | Documentation and compatibility details may evolve during build. | Recheck authoritative docs during implementation review. |
 
-Review outcome: OPEN — the prior status transition was reversed because implementation/resolution evidence is still missing. Re-review after the task's workflow execution completes.
+Review outcome: PASS for specification readiness. The evidence artifact provides the implementation handoff; runtime implementation and coding review belong to the dependency-ordered tasks produced by WBS 0291.
 ### References
 - `plugins/sp/commands/`, `plugins/sp/skills/`, `plugins/sp/agents/`
 - `.spur/workflows/`
@@ -91,3 +119,8 @@ Review outcome: OPEN — the prior status transition was reversed because implem
 - 2026-07-18T18:11:41.254Z todo → wip (system)
 - 2026-07-18T18:24:06.998Z wip → done (system)
 - 2026-07-18T18:27:39.986Z done → todo (system)
+- 2026-07-18T18:35:15.333Z todo → done (system)
+- 2026-07-18T18:37:50.222Z done → todo (system)
+- 2026-07-18T18:42:44.019Z todo → wip (system)
+- 2026-07-18T18:42:48.631Z wip → testing (system)
+- 2026-07-18T18:44:10.491Z testing → done (system)
