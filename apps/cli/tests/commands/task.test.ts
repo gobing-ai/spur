@@ -1442,4 +1442,15 @@ describe('spur task CLI', () => {
         const msg = output.errors.join('\n') + output.messages.join('\n');
         expect(msg).toContain('self-inconsistent');
     });
+
+    test('done guard: case-variant target (Done) is still verdict-gated (R1/R8)', async () => {
+        const wbs = await seedTaskAtTesting('guard case-variant');
+        await writeVerdict(wbs, { ...PARTIAL_VERDICT, wbs });
+        const output = createCapturedOutput();
+        // The frontmatter schema alias-normalizes `Done` → `done`, so this IS a
+        // `* → done` transition and must pass through the verdict gate.
+        const exitCode = await main(['task', 'update', wbs, 'Done', '--no-lifecycle'], { cwd, output });
+        expect(exitCode).toBe(1);
+        expect(await readStatus(wbs)).toBe('testing');
+    });
 });

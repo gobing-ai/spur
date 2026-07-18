@@ -12,7 +12,7 @@ priority: P1
 tags: []
 dependencies: []
 created_at: "2026-07-18T18:50:43.548Z"
-updated_at: "2026-07-18T20:09:23.001Z"
+updated_at: "2026-07-18T21:49:46.127Z"
 ---
 
 ## 0292. Enforce verify verdict on done transition; record forced-done overrides
@@ -157,23 +157,41 @@ The verdict gate sits at the **CLI layer** (`apps/cli/src/commands/task.ts` upda
 - `apps/cli/tests/commands/task.test.ts:1275-1440` — 7 integration tests covering all four AC scenarios + `--no-lifecycle` + no-op + inconsistent artifact.
 - `config/workflows/task-lifecycle.yaml` (+ `.spur/workflows/task-lifecycle.yaml` hardlink) — document the two-layer done gate (R6).
 ### Testing
+**Re-audit 2026-07-18** (`/sp:dev-verify 0292 --auto --next --force --focus all --fix all`, dogfood run `docs/dogfood/2026-07-18-sp-dev-verify-0292-dogfood.md`). Pre-fix verdict PARTIAL: two major findings repaired in the same run (fix pass, working tree): (1) case/alias-variant target (`spur task update <wbs> Done`) bypassed the verdict gate because the guard matched `status === 'done'` case-sensitively while `taskFrontmatterSchema` alias-normalizes the write — closed by canonicalizing target + stored status at the CLI layer (`apps/cli/src/commands/task.ts` `canonicalStatusOrRaw`); (2) the guard header cited a nonexistent R10 cross-check test — the pin now exists (`done-transition-guard.test.ts` "R10 — agrees with deriveVerdict on every shape", 3 tests). Post-fix verdict: **PASS**.
 
-**Unit (`packages/app/tests/services/done-transition-guard.test.ts`):** 20 tests, all passing. Covers R4a (PASS allow), R4b (PARTIAL deny), R4c (FAIL deny), R4d (no-artifact allow), R4e (force override → `forced`), R4f (`--no-lifecycle` does not bypass — exercised at the CLI layer), R4g (self-inconsistent artifact denied with inconsistency named), R9 (same-status no-op honest message), R10 (harsher-of-stored/computed rule for every verdict pair), plus `computeAggregate`, `formatDenialMessage`, `formatNoopMessage` edge cases. Target met: 100% line/function coverage on the guard module.
+**Per-Requirement Traceability**
 
-**Integration (`apps/cli/tests/commands/task.test.ts`):** 7 tests, all passing. Seeds a task at `testing` via `--no-lifecycle` transitions, writes the verdict JSON to `.spur/run/<wbs>-verdict.json` in the test cwd, then exercises the CLI:
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | Guard consults `.spur/run/<wbs>-verdict.json` on every `* → done` (`apps/cli/src/commands/task.ts` update action); case/alias variants canonicalized pre-guard; integration test `done guard: case-variant target (Done) is still verdict-gated (R1/R8)` — exit 1, status unchanged |
+| R2 | MET | `formatDenialMessage` names wbs, task path, verdict, artifact path, remediation; unit + integration assertions (`task.test.ts` "PARTIAL verdict blocks done with actionable message") |
+| R3 | MET | `--force-done --reason` → `done_forced`/`done_reason` frontmatter + `Override recorded` advisory; integration test 5 |
+| R4 | MET | 23 unit tests in `packages/app/tests/services/done-transition-guard.test.ts` (R4a–g + R9 + R10 + new cross-check block) — 23 pass / 0 fail this run |
+| R5 | MET | 89 integration tests in `apps/cli/tests/commands/task.test.ts` (all 8 AC scenarios + case-variant) — 89 pass / 0 fail this run |
+| R6 | MET | `config/workflows/task-lifecycle.yaml:14-22` documents the two-layer done gate |
+| R7 | MET | Target and stored status alias-normalized before guard logic; unknown values pass through so downstream Zod still emits the clear case-error |
+| R8 | MET | `--no-lifecycle` PARTIAL denied (integration test, exit 1, status unchanged); case-variant closure removes the last known non-canonical path around the choke point |
+| R9 | MET | Live smoke this run: `spur task update 0292 done` → `0292: already done — no transition`, exit 0; case-variant `Done` hits the same honest no-op |
+| R10 | MET | `computeAggregate` + `harshnessMax` deny inconsistent artifacts naming the inconsistency; duplication now pinned by the cross-check tests against `deriveVerdict` (every row-status shape in the guard vocabulary) |
 
-1. `PASS verdict advances to done (R4a)` — exit 0, transition line printed.
-2. `PARTIAL verdict blocks done with actionable message (R5/R4b)` — exit 1; message contains wbs, `PARTIAL`, `.spur/run/`, `--force-done`; task remains at `testing`.
-3. `FAIL verdict blocks done (R4c)` — exit 1.
-4. `no verdict file → back-compat allow (R4d/R1)` — exit 0.
-5. `--force-done with PARTIAL records override frontmatter (R3/R5)` — exit 0; `done_forced`/`done_reason` persisted to frontmatter; `Override recorded` advisory printed.
-6. `--no-lifecycle PARTIAL is still verdict-gated (R8 explicit)` — exit 1; task remains at `testing`.
-7. `same-status no-op is honest and exits 0 (R9)` — exit 0; message contains `already done`; never `undefined → undefined`.
-8. `inconsistent artifact denied with inconsistency named (R10)` — exit 1; message contains `self-inconsistent`.
+**Acceptance Criteria Verification**
 
-**Full suite:** `bun run test` → 3014 pass, 0 fail. `bun run lint` → clean. `bun run typecheck` → clean across all 7 workspaces.
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: PASS verdict advances to done | MET | test | `task.test.ts` "done guard: PASS verdict advances to done (R4a)" |
+| Scenario: PARTIAL verdict blocks done without override | MET | test | `task.test.ts` "PARTIAL verdict blocks done with actionable message (R5/R4b)" |
+| Scenario: Operator override advances PARTIAL to done with audit trail | MET | test | `task.test.ts` "--force-done with PARTIAL records override frontmatter (R3/R5)" |
+| Scenario: No verdict file preserves current behavior | MET | test | `task.test.ts` "no verdict file → back-compat allow (R4d/R1)" |
+| Scenario: --no-lifecycle done is still verdict-gated | MET | test | `task.test.ts` "--no-lifecycle PARTIAL is still verdict-gated (R8 explicit)" |
+| Scenario: Pipeline back-compat — PASS verdict with --no-lifecycle advances | MET | test | `task.test.ts` "PASS verdict advances to done (R4a)" runs the transition under `--no-lifecycle` with a PASS verdict — exit 0 |
+| Scenario: Same-status update reports an honest no-op | MET | test + command | `task.test.ts` "same-status no-op is honest and exits 0 (R9)"; live `spur task update 0292 done` this run |
+| Scenario: Inconsistent verdict artifact is treated as non-PASS | MET | test | `task.test.ts` "inconsistent artifact denied with inconsistency named (R10)" |
 
-**Manual smoke:** `spur task update <wbs> done` with a PARTIAL verdict now prints a multi-line actionable denial and exits 1; with `--force-done --reason "..."` advances and records the override.
+**Suite evidence (this run):** guard unit 23 pass / 0 fail; CLI task integration 89 pass / 0 fail; `bun run lint` (biome + 7-workspace `tsc --noEmit`) clean; `spur task check 0292 --strict-core` pass, 0 findings.
+
+**Fix-pass change map (uncommitted at write time):** `apps/cli/src/commands/task.ts` (canonicalStatusOrRaw helper + pre-guard normalization of target and stored status), `packages/app/tests/services/done-transition-guard.test.ts` (R10 cross-check block), `apps/cli/tests/commands/task.test.ts` (case-variant regression test).
+
+Coverage: guard module exercised by the 23-test unit suite (per-file thresholds enforced repo-wide via `bunfig.toml`); no runtime path left untested by the fix pass.
 ### Review
 
 **Reviewed:** 2026-07-18 (self-review, implementation = review author).

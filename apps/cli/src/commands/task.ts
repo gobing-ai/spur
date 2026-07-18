@@ -19,6 +19,7 @@ import { bundledConfigRoot, loadStructuredSpurConfig } from '@gobing-ai/spur-con
 import {
     createId,
     extractTemplateBodies,
+    normalizeTaskStatus,
     TASK_STATUSES,
     TASK_VARIANTS,
     TaskRunLinkDao,
@@ -58,6 +59,20 @@ const STATUS_TITLE: Record<(typeof TASK_STATUSES)[number], string> = {
  * markdown/glow dependency); `color` is the identity colorizer when the stream is
  * not a TTY, so piped output and tests stay plain text.
  */
+/**
+ * Alias-normalize a status string (task 0292 fix pass): `Done`/`DONE`/legacy
+ * aliases → canonical lowercase, so gate matches on `'done'` cannot be slipped
+ * past with a case variant. Unknown values pass through unchanged — downstream
+ * Zod validation owns the clear error for those.
+ */
+function canonicalStatusOrRaw(raw: string): string {
+    try {
+        return normalizeTaskStatus(raw);
+    } catch {
+        return raw;
+    }
+}
+
 function renderTaskBoard(
     tasks: TaskSummary[],
     boardTitle: string,
@@ -222,6 +237,12 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         context.output.write(`Set ${key}=${value} on task ${result.ref.id}`);
                     }
                 } else if (status !== undefined) {
+                    // Canonicalize the target before any gate matches: the frontmatter
+                    // schema alias-normalizes legacy spellings (`Done`/`DONE` → `done`),
+                    // so a case/alias variant IS a `* → done` transition and must not
+                    // slip past the `=== 'done'` checks below (verdict gate + P3
+                    // backstop).
+                    status = canonicalStatusOrRaw(status);
                     // P3 backstop (task 0130 retrospective): the lifecycle YAML runs
                     // `spur task check` as the wip→testing and testing→done guard. When the
                     // lifecycle adapter is unavailable (--no-lifecycle, or the bundled
@@ -266,7 +287,10 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         const guardOutcome = evaluateDoneTransition({
                             wbs,
                             taskFilePath: current.filePath,
-                            currentStatus: String(current.frontmatter.status),
+                            // Normalize the stored status too, so a legacy-cased
+                            // `Done` still short-circuits as the R9 no-op instead of
+                            // mis-entering the verdict-denial path.
+                            currentStatus: canonicalStatusOrRaw(String(current.frontmatter.status)),
                             targetStatus: 'done',
                             forced: options.forceDone === true,
                             reason: options.reason,

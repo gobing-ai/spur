@@ -6,7 +6,9 @@ import {
     formatNoopMessage,
     type GuardInput,
     type VerdictArtifact,
+    type VerdictRowStatus,
 } from '../../src/services/done-transition-guard';
+import { deriveVerdict } from '../../src/services/task-verdict';
 
 // ─── Fixtures ──────────────────────────────────────────────────────────
 
@@ -289,5 +291,77 @@ describe('formatNoopMessage', () => {
         const msg = formatNoopMessage('0299', 'done');
         expect(msg).toBe('0299: already done — no transition');
         expect(msg).not.toContain('undefined');
+    });
+});
+
+// ─── R10 cross-check: agreement with deriveVerdict ─────────────────────
+// The guard intentionally duplicates the two-fold aggregation rule instead of
+// importing the `task-verdict` answer parser (see the module header). This
+// block is the anti-drift pin that duplication depends on: for every row-status
+// shape expressible in the guard's vocabulary, `computeAggregate` must agree
+// with `deriveVerdict` on the aggregate. Empty-row shapes are excluded by
+// design — `deriveVerdict` treats a row-less answer as unparseable (UNKNOWN),
+// while the guard resolves a row-less artifact against the stored verdict via
+// `harshnessMax`.
+
+describe('R10 — agrees with deriveVerdict on every shape', () => {
+    const STATUSES: readonly VerdictRowStatus[] = ['MET', 'PARTIAL', 'UNMET'];
+
+    function artifactFor(reqs: readonly VerdictRowStatus[], acs: readonly VerdictRowStatus[]): VerdictArtifact {
+        return {
+            wbs: '0299',
+            verdict: 'UNKNOWN',
+            requirements: reqs.map((status, i) => ({ id: `R${i + 1}`, status, evidence: 'tests/x.test.ts:1' })),
+            acceptanceCriteria: acs.map((status, i) => ({
+                id: `Scenario: AC${i + 1}`,
+                status,
+                evidenceType: 'test',
+                evidence: 'tests/x.test.ts:1',
+            })),
+            source: 'spur task verdict',
+        };
+    }
+
+    /** Equivalent verify answer text for the same rows, in the tables `deriveVerdict` parses. */
+    function answerFor(reqs: readonly VerdictRowStatus[], acs: readonly VerdictRowStatus[]): string {
+        const lines = ['| Req | Status | Evidence |', '|-----|--------|----------|'];
+        reqs.forEach((status, i) => {
+            lines.push(`| R${i + 1} | ${status} | \`tests/x.test.ts:1\` |`);
+        });
+        if (acs.length > 0) {
+            lines.push('', '| AC | Status | Evidence Type | Evidence |', '|----|--------|---------------|----------|');
+            acs.forEach((status, i) => {
+                lines.push(`| Scenario: AC${i + 1} | ${status} | test | \`tests/x.test.ts:1\` |`);
+            });
+        }
+        return lines.join('\n');
+    }
+
+    test('every requirement-status pair yields the same aggregate', () => {
+        for (const a of STATUSES) {
+            for (const b of STATUSES) {
+                const computed = computeAggregate(artifactFor([a, b], []));
+                const derived = deriveVerdict(answerFor([a, b], []), true).verdict;
+                expect(`${a}+${b} → ${computed}`).toBe(`${a}+${b} → ${derived}`);
+            }
+        }
+    });
+
+    test('every AC-status pair (executable evidence) yields the same aggregate', () => {
+        for (const a of STATUSES) {
+            for (const b of STATUSES) {
+                const computed = computeAggregate(artifactFor(['MET'], [a, b]));
+                const derived = deriveVerdict(answerFor(['MET'], [a, b]), true).verdict;
+                expect(`AC ${a}+${b} → ${computed}`).toBe(`AC ${a}+${b} → ${derived}`);
+            }
+        }
+    });
+
+    test('single-row shapes agree', () => {
+        for (const s of STATUSES) {
+            const computed = computeAggregate(artifactFor([s], []));
+            const derived = deriveVerdict(answerFor([s], []), true).verdict;
+            expect(`${s} → ${computed}`).toBe(`${s} → ${derived}`);
+        }
     });
 });
