@@ -1,10 +1,15 @@
 # How to Use Spur for Daily Software Development
 
-> **Verified against spur `0.2.5` running on Bun `1.3.14`.** Every command and flag below
+> **Verified against spur `0.3.12` running on Bun `1.3.14`.** Every command and flag below
 > was captured from the live `--help` output and exercised on the real project corpus.
-> For the **slash-command layer** (the `sp` plugin, e.g. `/sp:dev-run`, `/sp:dev-idea`,
-> `/sp:dev-wrap`) layered on top of these CLI verbs, see
+> For the **slash-command layer** (the `sp` plugin) layered on top of these CLI verbs —
+> `/sp:dev-plan`, `/sp:dev-run`, `/sp:dev-verify`, `/sp:dev-wrap`, the batch family
+> `/sp:dev-runall` / `/sp:dev-parallel` / `/sp:dev-verifyall` / `/sp:dev-wrapall`, the
+> status-aware router `/sp:dev-next`, and the `sp:super-coder` / `sp:super-reviewer` /
+> `sp:expert-spur` agents — see
 > [How to Use the `sp:dev-*` Slash Commands](./how_to_use_dev_slash_commands_for_daily_software_development.md).
+> §6 below shows how that layer shortcuts the daily loop; §7 walks a full workday driven
+> entirely by the slash commands.
 
 ---
 
@@ -66,7 +71,7 @@ Per-platform `--compile` binaries are GitHub Release assets for darwin/linux × 
 ### Verify installation
 
 ```bash
-spur --version     # 0.2.5
+spur --version     # 0.3.12
 spur agent doctor  # check every detected agent
 spur agent list    # list detected agents
 ```
@@ -162,12 +167,14 @@ spur task           verdict <wbs> [--from-answer <path>] [--folder <path>] [--js
 spur task           check   [<wbs>] [--strict] [--strict-core] [--folder <path>] [--json]
 spur task           resolve <file-path> [--strict] [--folder <path>] [--json]
 spur task           path    <wbs> [--folder <path>] [--json]
-spur task           migrate                              # reserved (A17) — not yet wired
+spur task           run-link <wbs> [--source <id>] [--run-id <id>] [--json]   # pipeline provenance link (--next auto chains)
+spur task           migrate [--dry-run] [--folder <path>] [--json]            # A17 corpus normalization (now wired)
 
 # Feature management
 spur feature        create  <name> [--parent <id>] [--folder <path>] [--json]
 spur feature        show    <id> [--folder <path>] [--json]
 spur feature        update  <id> [status] [--field <k> --value <v>] [--section <name> --from-file <path>] [--folder <path>] [--json]
+spur feature        advance <id> [--to <status>] [--folder <path>] [--json]   # walk the legal forward lifecycle path
 spur feature        list    [--status <s>] [--priority <p>] [--folder <path>] [--json]
 spur feature        move    <id> [--parent <id>] [--dry-run] [--folder <path>] [--json]
 spur feature        refresh [--folder <path>] [--json]
@@ -222,6 +229,10 @@ spur feature update F7 active                              # lifecycle transitio
 spur feature update F7 --field priority --value P0        # set a scalar field
 spur feature update F7 --section Goal --from-file ./goal.md  # replace Goal body (body-only)
 
+# Advance a feature along its legal forward lifecycle path (defaults to --to done)
+spur feature advance F7                    # walk toward done (legal forward hops)
+spur feature advance F7 --to verifying     # or target a status explicitly
+
 # Validate features
 spur feature check          # validate all features (4-layer check)
 spur feature check F7       # validate one feature
@@ -266,7 +277,7 @@ spur task check 0089       # validate one task
 spur task check --strict   # elevate ALL warnings to failures
 spur task check --strict-core   # gate variant: fail only on hard-core errors (the testing→done guard)
 
-# Regenerate kanban.md from the task corpus
+# Re-scan the task corpus and report counts (kanban.md retired — board lives in the web UI)
 spur task refresh
 
 # Regenerate a parent's sub-task roster block
@@ -278,6 +289,7 @@ spur task batch-create --file ./tasks-batch.json
 # Pipeline integration verbs
 spur task record 0089 --verdict-file .spur/run/0089-verdict.json --solution-from-diff --transition testing
 spur task verdict 0089 --from-answer .spur/run/0089-verify-answer.txt
+spur task run-link 0089 --source next-auto   # provenance link for an auto chain (satisfies the testing→done guard)
 spur task resolve src/auth/login.ts
 spur task path 0089
 ```
@@ -323,7 +335,7 @@ spur agent run "Work on task 0089" --agent reviewer --drain
 **Exit codes** for `spur agent run`: 0 success · 1 agent-not-found / known-but-unusable ·
 2 invalid arguments / unknown executor · 3 agent execution failure.
 
-Canonical coding-agent ids (`ts-ai-runner` 0.4.8+): `claude`, `codex`, `gemini`, `pi`, `omp`,
+Canonical coding-agent ids (`ts-ai-runner` 0.4.10+): `claude`, `codex`, `gemini`, `pi`, `omp`,
 `opencode`, `antigravity-cli`, `openclaw`, `hermes`, `grok`. Grok auth uses `XAI_API_KEY` and/or
 `~/.grok/auth.json` (no CLI auth-status verb).
 
@@ -472,6 +484,7 @@ spur workflow trace --since 2026-06-01 --last 50
 | `task-lifecycle.yaml` | Task status transitions (backlog → todo → wip → testing → done) | Entity FSM |
 | `feature-lifecycle.yaml` | Feature status transitions (backlog → active → verifying → done) | Entity FSM |
 | `task-pipeline.yaml` | Task execution pipeline (precheck → implement → test → review → approve → verify → record → done) | Execution |
+| `docs-pipeline.yaml` | Docs-only execution pipeline (draft → docs-review → record → done) — keeps doc deliverables out of the code gate | Execution (docs) |
 | `feature-dev.yaml` | Feature umbrella (brainstorm → plan → execute-tasks → feature-verify → done) | Umbrella execution |
 | `planning-pipeline.yaml` | Planning pipeline (phasing → feature-id → design-gen → design-approval → handoff) | Planning |
 | `idea-pipeline.yaml` | Idea → feature + AC + task batch (discovery → … → handoff) | Ideation (new 0167) |
@@ -611,16 +624,121 @@ spur workflow trace "$RUN"   # poll until status is terminal (done/failed)
 spur workflow cancel "$RUN"  # SIGTERM the worker + agent grandchild if needed
 ```
 
+### Higher-level shortcuts (the `sp` plugin)
+
+The CLI loop above is the engine; the `sp` plugin composes it into one-call workflows. Reach
+for these before hand-driving the verbs — they call the same `spur` commands documented above,
+never a parallel process.
+
+| Shortcut | Replaces (roughly) | When |
+|---|---|---|
+| `/sp:dev-next <wbs\|feature-id>` | "which verb next?" guessing | You want the **single best next step** for a task or feature frontier. `sp:next-router` inspects status, applies light gates, and dispatches exactly one `/sp:dev-*` command (or stops with a reason). New — also backs the `--next` auto-chains. |
+| `/sp:dev-runall --feature <id>` (or `--tasks feature:<id>`) | Steps 3–6 hand-walked per task | Drive a **batch** of tasks through `task-pipeline.yaml` in dependency-correct order. Delegates to **`sp:super-coder`** — the batch driver now **preflights** each WBS against stop-conditions (`plugins/sp/scripts/batch-preflight.ts`) and does at most **one** recovery hop via `sp:next-router` before continue/halt. |
+| `/sp:dev-parallel --feature <id>` | Sequential batch when tasks are independent | Fan out a proven-independent subset across subagents (`sp:parallel-execution`); serializes on dependency / file-overlap / budget failure. |
+| `/sp:dev-verifyall` / `/sp:dev-wrapall` | Per-task verify/wrap loops | Batch-verify a feature's tasks, then batch-wrap (learnings, metrics, doc-sync, feature transition). |
+
+Single task? `/sp:dev-run <wbs>` (or delegate to `sp:super-coder` directly). Review-only?
+`sp:super-reviewer`. CLI corpus campaigns across many tasks/features/rules? `sp:expert-spur`.
+
+Full composition walkthrough in the slash-command guide linked at the top of this doc.
+
 ---
 
-## 7. JSON Output Convention
+## 7. A Day with the `/sp:dev-*` Slash Commands
+
+The CLI loop in §6 is the engine; the `/sp:dev-*` slash commands are the driver's seat.
+Inside a coding-agent session with the `sp` plugin installed, a typical day is a handful
+of slash commands — each one gates on the same `spur` verbs documented above, so nothing
+below is a parallel process.
+
+### Morning: orient
+
+```bash
+spur status                          # project + git facts (CLI)
+spur task list --status wip          # what's already in flight (CLI)
+/sp:dev-next 0089                    # status-aware router: the single best next step
+/sp:dev-next --feature F71           # same, for a feature frontier
+```
+
+`/sp:dev-next` inspects status, applies light gates, and dispatches exactly one
+`/sp:dev-*` command — or stops with a reason. When in doubt, ask it.
+
+### Planning: idea → validated corpus
+
+```bash
+# No shape yet, just a thought — unified entry (feature + BDD AC + task batch):
+/sp:dev-idea "add a --dry-run flag to spur history import" --auto
+#   → stops at handoff; emits feature id + task WBS list
+
+# Idea is a whole capability and you want the interview:
+/sp:dev-brainstorm "Users can reset their password via email" --feature --next
+#   → grilling interview → feature + AC (gated by `spur feature check`)
+#     → /sp:dev-plan decomposes (gated by `spur task batch-create`)
+
+# Idea is one deliverable — fast lane, no feature ceremony:
+/sp:dev-brainstorm "Fix the flaky retry in the uploader" --skip-discovery --task
+```
+
+### Execution: task → verified done
+
+```bash
+# One command walks refine → implement → verify → done (stops only at real gates):
+/sp:dev-refine 0061 --auto --next
+
+# Or hand the task to the full pipeline (precheck → implement → test → review
+# → approve(HITL) → verify → record → done):
+/sp:dev-run 0061
+
+# A batch, in dependency-correct order, unattended:
+/sp:dev-runall --feature F71 --auto
+
+# As needed around the loop:
+/sp:dev-unit 0061 --coverage 90       # extend tests until the bar clears
+/sp:dev-review 0061 --focus security  # standalone SECU review
+/sp:dev-verify 0061                   # re-check requirements → PASS/PARTIAL/FAIL
+/sp:dev-fixall "bun run check"        # loop lint+type+test until green
+```
+
+Any non-PASS verdict **stops the chain** with findings written to `## Testing` /
+`## Review` — you fix and re-run; there is no silent bad `done`.
+
+### Close: wrap up + ship
+
+```bash
+/sp:dev-wrap 0061 --auto              # learnings, metrics, doc-sync (single task)
+/sp:dev-wrapall --feature F71 --auto  # batch wrap; advances the feature lifecycle
+/sp:dev-wrap 0061 --auto --merge      # + branch cleanup (IRREVERSIBLE — always pauses)
+/sp:dev-gitmsg --commit               # conventional commit from the diff
+/sp:dev-changelog --version 0.3.13    # changelog from commit history
+```
+
+Wrap-up never mutates task status; it consumes completed tasks. Feature lifecycle
+advances only via `/sp:dev-wrapall --feature <id>`.
+
+### Stuck
+
+```bash
+/sp:dev-handover "Blocked: the upstream rate-limiter has no test hook"
+```
+
+An honest handover doc — goal, progress, blocker, rejected approaches, next steps —
+instead of a silent stall.
+
+For the full composition walkthrough (paths from idea to prototype, the `--next` chain,
+`--agent` semantics, guardrails), see
+[How to Use the `sp:dev-*` Slash Commands](./how_to_use_dev_slash_commands_for_daily_software_development.md).
+
+---
+
+## 8. JSON Output Convention
 
 Every command supports `--json`. Representative envelope shapes (verified):
 
 ```bash
 spur task list --json        # → array of task objects [{wbs, name, status, filePath, frontmatter}, ...]
 spur task show 0089 --json   # → single task object {wbs, name, status, ..., frontmatter}
-spur task refresh --json     # → { kanban_path: "docs/tasks/kanban.md" }
+spur task refresh --json     # → { folders, tasks }   # corpus re-scan (kanban.md retired — A17)
+spur feature refresh --json  # → { index_path, tasksUpdated }
 spur feature list --json     # → array of feature objects [{id, status, priority, name}, ...]
 spur rule run --json         # → { preset, ruleCount, findings[], fixes[] }
 spur rule list --json        # → { totalFiles, ...sources }
@@ -639,7 +757,7 @@ Use `--json` for scripting, CI integration, and when piping to other tools.
 
 ---
 
-## 8. Configuration
+## 9. Configuration
 
 ### Project config (`.spur/config.yaml`)
 
@@ -712,14 +830,15 @@ features:
 
 ---
 
-## 9. Known Limitations and Notes
+## 10. Known Limitations and Notes
 
 - **`spur history report`** is a reserved surface that currently prints a TODO marker. The
   full flag grammar is registered; implementation is deferred.
 - **`spur team start|stop`** are deferred daemon stubs that print the daemon-not-available
   message and exit 0. Team mode uses `--drain` (prepend-on-drain) rather than live daemons.
-- **`spur task migrate`** is reserved (A17) — a one-time corpus normalization gate, not
-  yet wired.
+- **`spur task migrate`** now runs the one-time **A17** task-corpus normalization pass
+  (`--dry-run` previews, `--folder` scopes, `--json` for machine output). Run it once when
+  adopting the A17 layout on an older corpus; it is not part of the daily loop.
 - **`spur feature migrate`** is reserved — a one-time feature-corpus normalization, not
   yet wired.
 - **Concurrent SQLite access:** Spur uses SQLite in WAL mode with a 5-second busy timeout.
@@ -731,7 +850,7 @@ features:
 
 ---
 
-## 10. Verification Gate
+## 11. Verification Gate
 
 Before declaring work "done," run the project gate:
 
@@ -746,7 +865,7 @@ A change is complete only when all four pass and `git status` shows only intenti
 
 ---
 
-## 11. References
+## 12. References
 
 - **Slash-command layer (recommended for most users):**
   [How to Use the `sp:dev-*` Slash Commands](./how_to_use_dev_slash_commands_for_daily_software_development.md)

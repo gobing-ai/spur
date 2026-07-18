@@ -22,6 +22,10 @@ agent's bad output is rejected with findings, never silently committed to your c
 
 ```mermaid
 flowchart LR
+  Q{{Unsure what's next?}} -->|/sp:dev-next| NX[/sp:dev-next<br/>status-aware router/]
+  NX -.->|dispatches one step| R
+  NX -.->|dispatches one step| X
+  NX -.->|dispatches one step| W
   IDEA([Vague idea]) -->|/sp:dev-brainstorm| B[/sp:dev-brainstorm<br/>grilling interview +<br/>structured ideation/]
   B -->|/sp:dev-plan| P[/sp:dev-plan<br/>feature + AC + task batch/]
   B -->|/sp:dev-idea| I[/sp:dev-idea<br/>unified idea entry<br/>= brainstorm + plan/]
@@ -49,6 +53,7 @@ artifacts (with optional feature transition and irreversible branch cleanup).
 
 | Command | Phase | What it does | Backed by |
 |---------|-------|--------------|-----------|
+| `/sp:dev-next` | Any | **Status-aware router** — inspect a task WBS or feature frontier, pick the single best next `/sp:dev-*` step, and dispatch it (`--dry-run` to preview, `--once` to stop the child's chain) | `sp:next-router` |
 | `/sp:dev-brainstorm` | Plan | Grilling interview → options with trade-offs → land an artifact (`--task` or `--feature`) | `sp:brainstorm` |
 | `/sp:dev-plan` | Plan | Feature → BDD AC → `feature check` gate → decompose → `batch-create` gate → optional design doc (`--design`/`--auto`) | `sp:spur-dev` (planning) |
 | `/sp:dev-idea` | Plan | Unified entry: vague idea → feature + AC + task batch (the `idea-pipeline.yaml` workflow). Stops at handoff — no task execution. | `spur workflow run idea-pipeline.yaml` |
@@ -68,6 +73,41 @@ artifacts (with optional feature transition and irreversible branch cleanup).
 
 > The single source of truth for every operation (purpose, inputs, behavior) is
 > [`plugins/sp/skills/spur-dev/references/dev-operations.md`](../../plugins/sp/skills/spur-dev/references/dev-operations.md).
+
+---
+
+## The universal router — `/sp:dev-next`
+
+When you don't know (or don't want to remember) which command comes next,
+**`/sp:dev-next <wbs|feature-id>`** is the front door. It reads corpus status
+(`spur task show --json` / `spur feature show --json` plus dependency status), looks up
+the routing tables (TABLE A for tasks, TABLE B for feature frontiers), and dispatches
+**exactly one** `/sp:dev-*` step — or stops with a reason (`dev-next: no route`,
+`dev-next: blocked by open dependencies`, a HITL decision-brief on multiple candidates).
+It never invents a second pipeline FSM; the child's own `--next` chain carries on from
+there.
+
+```bash
+/sp:dev-next 0042                 # inspect + dispatch the single best next step
+/sp:dev-next --feature B3         # feature frontier: pick the frontier task, then route
+/sp:dev-next 0042 --dry-run       # print the resolved plan (signals, table row, exact
+                                  # child invocation) without dispatching
+/sp:dev-next 0042 --once          # run only the current step — strip --next from the child
+/sp:dev-next 0042 --full          # substitute dev-run --mode full (no --next) on run routes
+/sp:dev-next 0042 --auto --agent codex   # forward --auto / --agent into the child
+```
+
+Targets are smart-detected: bare digits are a task WBS, a task `.md` path is resolved via
+`spur task resolve`, and `N` / `M3`-style ids take the feature-frontier path.
+
+> **Command vs flag.** `/sp:dev-next` (this command) is the router entry; `--next` is a
+> flag on `dev-refine` / `dev-run` / `dev-verify` / … that advances *that command's own*
+> chain link. The router frequently dispatches children that include `--next` — the two
+> compose, they are not the same mechanism.
+
+Reach for it when: you return to a task mid-flight, a hygiene fork appears (unit gap,
+lint red, rule findings) and you want a deterministic first hop, or you simply want to
+say "advance this" and let the router pick.
 
 ---
 
@@ -145,6 +185,10 @@ Use this when the idea is a single unit of work: "fix the flaky retry in the upl
 ---
 
 ## The `--next` chain — one command, the whole loop
+
+Not sure which link a task is on? Start from the router instead: `/sp:dev-next <wbs>`
+picks the right first link and dispatches it (with `--next` intact unless you pass
+`--once`).
 
 The execution commands chain through `--next`, so you typically type **one** command and
 the agent walks the rest, stopping only at a real gate (a failed verdict, or a HITL
