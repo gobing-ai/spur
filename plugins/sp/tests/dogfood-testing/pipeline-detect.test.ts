@@ -6,6 +6,7 @@ import {
     evaluateDogfoodGate,
     IMPLEMENT_HEAVY_ADVISORY_MESSAGE,
     isImplementHeavyStep,
+    MUTATING_FIX_REFUSE_MESSAGE,
     PIPELINE_DRIVING_REFUSE_MESSAGE,
     PIPELINE_TOKENS,
     parseCliArgs,
@@ -273,5 +274,88 @@ describe('dogfood implement-heavy + Phase 1.0 gate (task 0277 W8 + live CLI)', (
         const code = await proc.exited;
         expect(code).toBe(2);
         expect(out).toContain('pipeline-driving testee detected');
+    });
+
+    // Task 0293 R4 — refuse-gate coverage for mutating --fix modes (no pipeline token required)
+    describe('task 0293 — mutating --fix refuse gate (R4 a–f)', () => {
+        test('(a) --fix all without pipeline token, no --max-retry → exit 2 + mutating-fix refuse message', () => {
+            const r = evaluateDogfoodGate('/sp:dev-verify 0299 --force --fix all', { maxRetryPresent: false });
+            expect(r.pipelineDriving).toBe(false);
+            expect(r.mutatingFix).toBe(true);
+            expect(r.refuse).toBe(true);
+            expect(r.exitCode).toBe(2);
+            expect(r.message).toBe(MUTATING_FIX_REFUSE_MESSAGE);
+            // R2 honesty: message states driver-only scope of --max-retry 0
+            expect(r.message).toContain('the testee still mutates the tree');
+        });
+
+        test('(b) --fix blockers-first same refuse path', () => {
+            const r = evaluateDogfoodGate('/sp:dev-verify 0299 --fix blockers-first', { maxRetryPresent: false });
+            expect(r.mutatingFix).toBe(true);
+            expect(r.refuse).toBe(true);
+            expect(r.exitCode).toBe(2);
+            expect(r.message).toBe(MUTATING_FIX_REFUSE_MESSAGE);
+        });
+
+        test('(c) --fix none → clean proceed (no refuse, no advisory)', () => {
+            const r = evaluateDogfoodGate('/sp:dev-verify 0299 --fix none', { maxRetryPresent: false });
+            expect(r.mutatingFix).toBe(false);
+            expect(r.refuse).toBe(false);
+            expect(r.advisory).toBe(false);
+            expect(r.exitCode).toBe(0);
+            expect(r.message).toBeNull();
+        });
+
+        test('(d) --focus all / --prefix all never match the fix-mode matcher', () => {
+            expect(evaluateDogfoodGate('/sp:dev-verify 0299 --force --focus all').mutatingFix).toBe(false);
+            expect(evaluateDogfoodGate('/sp:dev-verify 0299 --prefix all').mutatingFix).toBe(false);
+            expect(evaluateDogfoodGate('/sp:dev-verify 0299 --focus all').refuse).toBe(false);
+            expect(evaluateDogfoodGate('/sp:dev-verify 0299 --prefix all').refuse).toBe(false);
+        });
+
+        test('(e) --fix all with --max-retry present → exit 0 + W8 advisory (R3)', () => {
+            const r = evaluateDogfoodGate('/sp:dev-verify 0299 --force --fix all', { maxRetryPresent: true });
+            expect(r.refuse).toBe(false);
+            expect(r.advisory).toBe(true);
+            expect(r.implementHeavy).toBe(true);
+            expect(r.exitCode).toBe(0);
+            expect(r.message).toBe(IMPLEMENT_HEAVY_ADVISORY_MESSAGE);
+        });
+
+        test('(f) pre-existing pipeline-token cases unchanged — pipeline-driving still refuses first when both co-occur', () => {
+            // pipeline-driving + mutating-fix, no max-retry → pipeline-driving refuse wins (superset message)
+            const both = evaluateDogfoodGate('/sp:dev-verify 0299 --next --fix all', { maxRetryPresent: false });
+            expect(both.pipelineDriving).toBe(true);
+            expect(both.mutatingFix).toBe(true);
+            expect(both.refuse).toBe(true);
+            expect(both.exitCode).toBe(2);
+            expect(both.message).toBe(PIPELINE_DRIVING_REFUSE_MESSAGE);
+            // PIPELINE_TOKENS array itself is unchanged (R6)
+            expect(PIPELINE_TOKENS).not.toContain('fix');
+            expect(PIPELINE_TOKENS).not.toContain('--fix');
+        });
+
+        test('R3 — detectImplementHeavy fires for mutating fix mode without pipeline token', () => {
+            expect(detectImplementHeavy('/sp:dev-verify 0299 --force --fix all')).toBe(true);
+            expect(detectImplementHeavy('/sp:dev-verify 0299 --fix none')).toBe(false);
+        });
+
+        test('CLI binary — refuses mutating --fix without --max-retry-present (exit 2)', async () => {
+            const proc = Bun.spawn({
+                cmd: [
+                    'bun',
+                    'plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts',
+                    '--testee',
+                    '/sp:dev-verify 0299 --force --fix all',
+                ],
+                cwd: join(import.meta.dir, '..', '..', '..', '..'),
+                stdout: 'pipe',
+                stderr: 'pipe',
+            });
+            const out = await new Response(proc.stdout).text();
+            const code = await proc.exited;
+            expect(code).toBe(2);
+            expect(out).toContain('mutating --fix mode detected');
+        });
     });
 });

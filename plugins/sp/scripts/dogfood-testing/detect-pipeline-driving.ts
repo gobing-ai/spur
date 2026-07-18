@@ -65,6 +65,16 @@ const PIPELINE_TOKENS = [
 export const PIPELINE_DRIVING_REFUSE_MESSAGE =
     '⚠ pipeline-driving testee detected; pass --max-retry 0 (observe-only) or --max-retry N (fix mode, tree mutation acknowledged)';
 
+/**
+ * Refuse message when the testee carries a mutating `--fix` mode (`--fix all` /
+ * `--fix blockers-first`) and `--max-retry` was not passed. A mutating fix mode
+ * mutates the working tree independent of pipeline-driving (task 0293 R1/R2):
+ * `--max-retry 0` bounds the **driver** only — the testee's own `--fix` pass
+ * still mutates the tree — so the message must not imply otherwise.
+ */
+export const MUTATING_FIX_REFUSE_MESSAGE =
+    '⚠ mutating --fix mode detected (--fix all | --fix blockers-first); pass --max-retry 0 (observe-only for the driver; the testee still mutates the tree) or --max-retry N (fix mode, driver + testee both mutate)';
+
 /** Advisory when pipeline-driving + implement-heavy derived steps (exact string). */
 export const IMPLEMENT_HEAVY_ADVISORY_MESSAGE =
     '⚠ implement-heavy pipeline dogfood: prefer --max-retry 0 (observe-only) or step-split; operator --max-retry N overrides';
@@ -94,8 +104,9 @@ const IMPLEMENT_HEAVY_TOKENS = [
  * repair mode: `--fix all` / `--fix blockers-first` applies Edit/Write repairs
  * to the working tree (0280 dogfood, finding P2). `--fix none` stays
  * observational. Boundary-guarded so `--prefix all` / `--focus all` never match.
+ * Exported so the Phase 1.0 gate and tests share one matcher (task 0293 R1/R4).
  */
-function hasMutatingFixMode(step: string): boolean {
+export function hasMutatingFixMode(step: string): boolean {
     return /(?<![\w-])--fix[=\s]+(all|blockers-first)(?![\w-])/i.test(step);
 }
 
@@ -155,20 +166,24 @@ export function isImplementHeavyStep(step: string): boolean {
 }
 
 /**
- * True when the testee is pipeline-driving AND at least one derived step (or the
- * testee itself when no steps given) is implement-heavy. Used for the W8 Phase 1
- * advisory after step derivation.
+ * True when the testee is implement-heavy: it carries a pipeline-driving token,
+ * a mutating `--fix` mode, OR at least one derived step (or the testee itself
+ * when no steps given) is implement-heavy. Used for the W8 Phase 1 advisory
+ * after step derivation.
+ *
+ * Task 0293 R3: a mutating `--fix` mode alone is implement-heavy even with no
+ * pipeline token — the verify/review leg itself becomes a tree-mutating fix
+ * pass.
  */
 export function detectImplementHeavy(testee: string, derivedSteps: string[] = []): boolean {
-    if (!detectPipelineDriving(testee)) return false;
-    // Always consider the raw testee (slash form may be implement-heavy even when
-    // step labels are soft). OR with any derived-step label that is heavy.
     if (isImplementHeavyStep(testee)) return true;
+    if (!detectPipelineDriving(testee)) return false;
     return derivedSteps.some((step) => isImplementHeavyStep(step));
 }
 
 export interface GateResult {
     pipelineDriving: boolean;
+    mutatingFix: boolean;
     maxRetryPresent: boolean;
     implementHeavy: boolean;
     refuse: boolean;
@@ -179,6 +194,20 @@ export interface GateResult {
 
 /**
  * Phase 1.0 + W8 gate decision. Pure — no I/O. The CLI wrapper prints and exits.
+ *
+ * Refuse condition (task 0293 R1) is the union of two **independent** mutation
+ * sources, each gated on `!maxRetryPresent`:
+ *
+ *   1. pipeline-driving testee (`--next`, `dev-run`, …) — refuses because the
+ *      testee chains lifecycle legs whose cumulative blast radius the driver
+ *      cannot pre-attribute.
+ *   2. mutating `--fix` mode (`--fix all` / `--fix blockers-first`) — refuses
+ *      because the testee itself applies Edit/Write repairs even with no
+ *      pipeline token. `--max-retry 0` bounds the **driver** only; the testee
+ *      still mutates (honesty note in MUTATING_FIX_REFUSE_MESSAGE).
+ *
+ * Pipeline-driving is reported first when both co-occur (its refuse message is
+ * the superset — chain + tree mutation).
  */
 export function evaluateDogfoodGate(
     testee: string,
@@ -187,11 +216,13 @@ export function evaluateDogfoodGate(
     const maxRetryPresent = options.maxRetryPresent === true;
     const steps = options.steps ?? [];
     const pipelineDriving = detectPipelineDriving(testee);
+    const mutatingFix = hasMutatingFixMode(testee);
     const implementHeavy = detectImplementHeavy(testee, steps);
 
     if (pipelineDriving && !maxRetryPresent) {
         return {
             pipelineDriving,
+            mutatingFix,
             maxRetryPresent,
             implementHeavy,
             refuse: true,
@@ -201,9 +232,23 @@ export function evaluateDogfoodGate(
         };
     }
 
-    if (pipelineDriving && implementHeavy) {
+    if (mutatingFix && !maxRetryPresent) {
         return {
             pipelineDriving,
+            mutatingFix,
+            maxRetryPresent,
+            implementHeavy,
+            refuse: true,
+            advisory: false,
+            message: MUTATING_FIX_REFUSE_MESSAGE,
+            exitCode: 2,
+        };
+    }
+
+    if (implementHeavy) {
+        return {
+            pipelineDriving,
+            mutatingFix,
             maxRetryPresent,
             implementHeavy,
             refuse: false,
@@ -215,6 +260,7 @@ export function evaluateDogfoodGate(
 
     return {
         pipelineDriving,
+        mutatingFix,
         maxRetryPresent,
         implementHeavy,
         refuse: false,
@@ -280,7 +326,7 @@ export const CLI_USAGE = `Usage:
 
 Exit codes:
   0  proceed (stdout may carry implement-heavy advisory)
-  2  refuse — pipeline-driving without --max-retry
+  2  refuse — pipeline-driving OR mutating --fix mode without --max-retry
   1  usage error
 
 Phase 1.0: run BEFORE deriving steps (omit --steps).

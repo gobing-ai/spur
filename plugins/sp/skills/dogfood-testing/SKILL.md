@@ -51,7 +51,7 @@ The command forwards these via `$ARGUMENTS`:
 |----------|-------------|---------|
 | `testee` | What to exercise — a slash command, agent skill, or CLI invocation (positional, required). Quote it if it contains flags. | (required) |
 | `--agent <name\|auto>` | **Testee-scoped** agent: the agent the **testee** runs under, forwarded into the testee invocation. The driver (this skill) always runs in the current session. **Omit it** to forward nothing — the testee runs under its own default. See [§Testee-scoped agent](#testee-scoped-agent). | (omitted → forward nothing) |
-| `--max-retry <n>` | Fix attempts per failed step. The **default is `2`** (fix mode): apply `Edit`/`Write` fixes to the working tree, up to 2 attempts per step. For pipeline-driving testees, this flag is mandatory: pass `--max-retry 0` for **observe-only**, or `--max-retry N` to acknowledge fix-mode mutation risk. | `2` unless the testee is pipeline-driving |
+| `--max-retry <n>` | Fix attempts per failed step. The **default is `2`** (fix mode): apply `Edit`/`Write` fixes to the working tree, up to 2 attempts per step. This flag is **mandatory** for two independent mutation sources: (a) pipeline-driving testees and (b) testees carrying a mutating `--fix` mode (`--fix all` / `--fix blockers-first`). Pass `--max-retry 0` for **observe-only**, or `--max-retry N` to acknowledge fix-mode mutation risk. For a mutating-`--fix` testee, `--max-retry 0` bounds the **driver only** — the testee still mutates the tree. | `2` unless the testee is pipeline-driving or carries a mutating `--fix` mode |
 | `--save` | **Back-compat no-op for delivery.** Reports are always written to `docs/dogfood/…` and `.spur/run/dogfood/<run_id>.md`. The flag still documents/prints the report path. | always-on (flag optional) |
 | `--task` | File findings as a review-template task via `spur task create --template review`. | off |
 | `--full` | Include all severity findings (P1–P4). Default: P1+P2 only. | off |
@@ -59,17 +59,26 @@ The command forwards these via `$ARGUMENTS`:
 > ⚠️ **Repo-mutation warning.** The default is **fix mode (`--max-retry 2`)** — it applies
 > `Edit`/`Write` fixes to the working tree as it finds breakages. For a non-mutating run, opt into
 > **observe-only** with `--max-retry 0`: monitor and report, never touch files, full findings report
-> still produced. When the testee is pipeline-driving — any of the tokens
-> [`--next`, `dev-runall`, `dev-wrapall`, `dev-run`, `dev-wrap`, `dev-idea`,
-> `runall`, `wrapall`, `run`, `wrap`, `idea`] matched as a **distinct hyphen-word**
-> (machine-checked by
-> [`detectPipelineDriving`](../../scripts/dogfood-testing/detect-pipeline-driving.ts);
-> see [§Pipeline-driving word-boundary contract](#pipeline-driving-word-boundary-contract)) —
-> omission is ambiguous and MUST fail before planning with:
-> `⚠ pipeline-driving testee detected; pass --max-retry 0 (observe-only) or --max-retry N (fix mode, tree mutation acknowledged)`.
+> still produced. Omission is ambiguous and MUST fail before planning when **either** of two
+> independent mutation sources is present:
+>
+> - **Pipeline-driving testees** — tokens
+>   [`--next`, `dev-runall`, `dev-wrapall`, `dev-run`, `dev-wrap`, `dev-idea`,
+>   `runall`, `wrapall`, `run`, `wrap`, `idea`] matched as a **distinct hyphen-word**
+>   (machine-checked by
+>   [`detectPipelineDriving`](../../scripts/dogfood-testing/detect-pipeline-driving.ts);
+>   see [§Pipeline-driving word-boundary contract](#pipeline-driving-word-boundary-contract))
+>   → `⚠ pipeline-driving testee detected; pass --max-retry 0 (observe-only) or --max-retry N (fix mode, tree mutation acknowledged)`.
+> - **Mutating `--fix` modes** — `--fix all` / `--fix blockers-first`, boundary-guarded via
+>   [`hasMutatingFixMode`](../../scripts/dogfood-testing/detect-pipeline-driving.ts) (never matches
+>   `--fix none` / `--focus all` / `--prefix all`). No pipeline token required: a verify/review leg
+>   with `--fix all` mutates the tree on its own (0280 dogfood P2, task 0293). Honesty note:
+>   `--max-retry 0` here bounds **the driver only** — the testee still mutates the tree — so the
+>   refuse message is
+>   `⚠ mutating --fix mode detected (--fix all | --fix blockers-first); pass --max-retry 0 (observe-only for the driver; the testee still mutates the tree) or --max-retry N (fix mode, driver + testee both mutate)`.
 ## Phase 1 — Plan
 
-0. **Refuse ambiguous pipeline-driving testees (live CLI gate — not prose-only).** Before deriving
+0. **Refuse ambiguous mutation-source testees (live CLI gate — not prose-only).** Before deriving
    steps, run the machine-checked detector as a shell command (do **not** re-implement the matcher
    in-agent):
 
@@ -79,11 +88,14 @@ The command forwards these via `$ARGUMENTS`:
      [--max-retry-present]   # pass this flag only when the dogfood invocation included --max-retry
    ```
 
-   - Exit **2** → print the stdout refuse line and **stop** (do not plan). Exact message:
-     `⚠ pipeline-driving testee detected; pass --max-retry 0 (observe-only) or --max-retry N (fix mode, tree mutation acknowledged)`.
+   - Exit **2** → print the stdout refuse line and **stop** (do not plan). The CLI refuses on either
+     of two independent mutation sources (task 0293); print whichever refuse message it emits:
+     - pipeline-driving: `⚠ pipeline-driving testee detected; pass --max-retry 0 (observe-only) or --max-retry N (fix mode, tree mutation acknowledged)`.
+     - mutating `--fix`: `⚠ mutating --fix mode detected (--fix all | --fix blockers-first); pass --max-retry 0 (observe-only for the driver; the testee still mutates the tree) or --max-retry N (fix mode, driver + testee both mutate)`.
    - Exit **0** → proceed. Do not auto-substitute `--max-retry 0`.
    - The matcher contract is unit-checked by `tests/dogfood-testing/pipeline-detect.test.ts`.
-     See [§Pipeline-driving word-boundary contract](#pipeline-driving-word-boundary-contract).
+     See [§Pipeline-driving word-boundary contract](#pipeline-driving-word-boundary-contract) and
+     [§Mutating `--fix` mode contract](#mutating---fix-mode-contract).
 1. **Resolve + classify** the testee: slash command (`/sp:...`), agent skill (`Skill(...)`), or shell
    CLI (`spur ...`, `bun run ...`). Everything before the first dogfood flag is the testee; if it
    carries its own flags, it must be quoted.
@@ -302,6 +314,31 @@ bun plugins/sp/scripts/dogfood-testing/detect-pipeline-driving.ts --testee "<tes
 `plugins/sp/tests/dogfood-testing/pipeline-detect.test.ts`. Helpers:
 `detectPipelineDriving`, `isImplementHeavyStep`, `detectImplementHeavy`, `evaluateDogfoodGate` in
 [`detect-pipeline-driving.ts`](../../scripts/dogfood-testing/detect-pipeline-driving.ts).
+
+## Mutating `--fix` mode contract
+
+Task 0293 extended the refuse gate to a **second, independent** mutation source: a testee carrying
+a mutating `--fix` mode — `--fix all` or `--fix blockers-first`. Boundary-guarded via
+`hasMutatingFixMode` so it never matches `--fix none`, `--focus all`, `--prefix all`, or substrings
+inside other flags. No pipeline token required: a verify/review leg with `--fix all` mutates the
+tree on its own (0280 dogfood P2 — the `--fix all` pass was the sole mutation source for 11 dataset
+files, a workflow edit, and 2 corpus writes).
+
+| Token shape | Matches | Rejects |
+|-------------|---------|---------|
+| `--fix all` / `--fix=all` / `--fix all` (case-insensitive) | `/sp:dev-verify 0299 --fix all`, `--fix=All`, `--fix BLOCKERS-FIRST` | `--fix none`, `--focus all`, `--prefix all`, `--fix-all-gen` |
+
+Refuse message (R2 honesty — `--max-retry 0` bounds **the driver only**; the testee still mutates):
+
+```
+⚠ mutating --fix mode detected (--fix all | --fix blockers-first); pass --max-retry 0
+(observe-only for the driver; the testee still mutates the tree) or --max-retry N (fix mode,
+driver + testee both mutate)
+```
+
+This is **not** a new token in `PIPELINE_TOKENS` (R5/R6 — back-compat): pipeline-driving and
+mutating-fix are checked by separate matchers, and pipeline-driving's refuse message wins when both
+co-occur (its message is the superset — chain + tree mutation).
 
 ## Step-splitting recipe (implement-heavy pipeline dogfoods)
 
