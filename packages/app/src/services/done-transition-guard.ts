@@ -157,6 +157,14 @@ export function computeAggregate(artifact: VerdictArtifact): VerdictAggregate {
  * Build an actionable denial message. Per R2 it MUST name the task (WBS +
  * file path), the verdict value found, the verdict file path, and the
  * remediation. Never a bare `GuardDeniedError`.
+ *
+ * R3b enrichment: when the effective verdict is `UNKNOWN` and the artifact's
+ * `source` is `spur-task-verdict` (i.e. it was produced by `spur task verdict`
+ * parsing a verify answer file), append a `source:` diagnostic explaining that
+ * zero structured rows were parsed and pointing at the answer-file shape
+ * documented in sp:spur-cli. The parser is intentionally strict (loosening it
+ * would let malformed answers silently reach PASS); the fix is to author the
+ * answer file with the documented table shape, not to widen acceptance.
  */
 export function formatDenialMessage(args: {
     wbs: string;
@@ -164,8 +172,10 @@ export function formatDenialMessage(args: {
     verdictPath: string;
     verdict: VerdictAggregate;
     inconsistency?: { stored: VerdictAggregate; computed: VerdictAggregate };
+    /** Original artifact — used only to drive the R3b UNKNOWN enrichment. */
+    artifact?: VerdictArtifact;
 }): string {
-    const { wbs, taskFilePath, verdictPath, verdict, inconsistency } = args;
+    const { wbs, taskFilePath, verdictPath, verdict, inconsistency, artifact } = args;
     const lines: string[] = [
         `Cannot transition task ${wbs} to done: verify verdict is ${verdict}.`,
         `  task:    ${taskFilePath}`,
@@ -176,8 +186,29 @@ export function formatDenialMessage(args: {
             `  warning: artifact is self-inconsistent — stored aggregate ${inconsistency.stored} contradicts rows (computed ${inconsistency.computed}). Treated as non-PASS.`,
         );
     }
+    // R3b: diagnose the UNKNOWN-from-sparse-artifact case explicitly.
+    const reqCount = artifact?.requirements?.length ?? 0;
+    const acCount = artifact?.acceptanceCriteria?.length ?? 0;
+    const rowCount = reqCount + acCount;
+    if (
+        verdict === 'UNKNOWN' &&
+        artifact !== undefined &&
+        (artifact.source === 'spur-task-verdict' || rowCount === 0)
+    ) {
+        const source = artifact.source ?? 'unknown';
+        lines.push(
+            `  source:  ${source} artifact contains ${rowCount} structured row${rowCount === 1 ? '' : 's'} ` +
+                `(${reqCount} requirement${reqCount === 1 ? '' : 's'}, ${acCount} AC${acCount === 1 ? '' : 's'}). ` +
+                `UNKNOWN means the verify answer file carried no parseable markdown tables ` +
+                `(\`| Req | Status | Evidence |\` and \`| AC | Status | Evidence Type | Evidence |\`).`,
+        );
+        lines.push(
+            `           see sp:spur-cli \`tasks/verbs.md\` §Answer-file shape for the expected format. ` +
+                `Re-run \`/sp:dev-verify ${wbs}\` so the skill authors the tables; do not loosen the parser.`,
+        );
+    }
     lines.push(
-        '  remediation: re-run `/sp-dev-verify ' +
+        '  remediation: re-run `/sp:dev-verify ' +
             wbs +
             '` until PASS, or override with `spur task update ' +
             wbs +
@@ -248,7 +279,14 @@ export function evaluateDoneTransition(input: GuardInput): GuardOutcome {
     return {
         kind: 'deny',
         verdict: effective,
-        message: formatDenialMessage({ wbs, taskFilePath, verdictPath, verdict: effective, inconsistency }),
+        message: formatDenialMessage({
+            wbs,
+            taskFilePath,
+            verdictPath,
+            verdict: effective,
+            inconsistency,
+            artifact,
+        }),
     };
 }
 

@@ -384,6 +384,27 @@ export class TaskCheckService extends PlanningCheckService {
         featuresDir: string,
         tasksDir: string,
     ): Promise<void> {
+        // ── R4 (task 0294): Design placeholder warning ──
+        // Standard tasks retain Design as historical intent after it stops being
+        // status-required at `testing`/`done`. Key this content warning to the
+        // template, not the current matrix entry, so an empty scaffold cannot
+        // become silent merely because the task advanced. L2 remains responsible
+        // for a missing required heading; this warning only covers a present but
+        // empty / HTML-comment-only / `> TBD` body.
+        const template = typeof fm.template === 'string' ? fm.template : DEFAULT_TASK_VARIANT;
+        if (template === DEFAULT_TASK_VARIANT) {
+            const designBody = doc.getSection('Design');
+            if (designBody !== null && isPlaceholderBody(designBody)) {
+                findings.push({
+                    layer: 'L4',
+                    severity: 'warning',
+                    section: 'Design',
+                    message:
+                        'Design section is present but empty (placeholder-only) — populate it so the task retains an explicit implementation approach',
+                });
+            }
+        }
+
         // Resolve feature_id from either snake_case or legacy kebab-case key.
         const featureId = (fm.feature_id as string | undefined) ?? (fm['feature-id'] as string | undefined);
         const parentWbs = (fm.parent_wbs as string | undefined) ?? (fm['parent-wbs'] as string | undefined);

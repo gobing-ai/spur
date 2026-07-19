@@ -266,7 +266,7 @@ describe('formatDenialMessage', () => {
         expect(msg).toContain(TASK_PATH);
         expect(msg).toContain('PARTIAL');
         expect(msg).toContain('.spur/run/0299-verdict.json');
-        expect(msg).toContain('/sp-dev-verify 0299');
+        expect(msg).toContain('/sp:dev-verify 0299');
         expect(msg).toContain('--force-done');
     });
 
@@ -281,6 +281,100 @@ describe('formatDenialMessage', () => {
         expect(msg).toContain('self-inconsistent');
         expect(msg).toContain('PASS');
         expect(msg).toContain('FAIL');
+    });
+
+    // ─── R3b: UNKNOWN enrichment (task 0294) ──────────────────────────────
+    // When the effective verdict is UNKNOWN and the artifact was produced by
+    // `spur task verdict` (source: 'spur-task-verdict'), the denial MUST name
+    // the row count and point at the documented answer-file shape rather than
+    // leaving the operator to guess why a non-PASS verdict appeared.
+    test('R3b: UNKNOWN + spur-task-verdict source appends row-count diagnostic', () => {
+        const msg = formatDenialMessage({
+            wbs: '0299',
+            taskFilePath: TASK_PATH,
+            verdictPath: '.spur/run/0299-verdict.json',
+            verdict: 'UNKNOWN',
+            artifact: {
+                verdict: 'UNKNOWN',
+                requirements: [],
+                acceptanceCriteria: [],
+                source: 'spur-task-verdict',
+            },
+        });
+        expect(msg).toContain('UNKNOWN');
+        expect(msg).toContain('source:');
+        // Zero rows is the common failure mode — free-form prose answer file.
+        expect(msg).toContain('0 structured rows');
+        expect(msg).toContain('0 requirements, 0 AC');
+        expect(msg).toContain('answer file carried no parseable markdown tables');
+        expect(msg).toContain('sp:spur-cli');
+        expect(msg).toContain('do not loosen the parser');
+        // Remediation line still present.
+        expect(msg).toContain('/sp:dev-verify 0299');
+    });
+
+    test('R3b: UNKNOWN with non-zero rows still names the count (pluralized)', () => {
+        const msg = formatDenialMessage({
+            wbs: '0299',
+            taskFilePath: TASK_PATH,
+            verdictPath: '.spur/run/0299-verdict.json',
+            verdict: 'UNKNOWN',
+            artifact: {
+                verdict: 'UNKNOWN',
+                requirements: [{ status: 'MET' }],
+                acceptanceCriteria: [{ status: 'UNMET' }, { status: 'MET' }],
+                source: 'spur-task-verdict',
+            },
+        });
+        // 1 requirement + 2 AC = 3 rows. Pluralization kicks in.
+        expect(msg).toContain('3 structured rows');
+        expect(msg).toContain('1 requirement, 2 AC');
+    });
+
+    test('R3b: UNKNOWN without artifact (e.g. read error) skips the enrichment', () => {
+        // When `artifact` is absent (read error path, malformed JSON), the
+        // guard cannot know the source. The base denial still fires.
+        const msg = formatDenialMessage({
+            wbs: '0299',
+            taskFilePath: TASK_PATH,
+            verdictPath: '.spur/run/0299-verdict.json',
+            verdict: 'UNKNOWN',
+        });
+        expect(msg).toContain('UNKNOWN');
+        expect(msg).not.toContain('source:');
+        expect(msg).not.toContain('structured rows');
+    });
+
+    test('R3b: UNKNOWN zero-row artifact from another source still gets actionable enrichment', () => {
+        const msg = formatDenialMessage({
+            wbs: '0299',
+            taskFilePath: TASK_PATH,
+            verdictPath: '.spur/run/0299-verdict.json',
+            verdict: 'UNKNOWN',
+            artifact: { verdict: 'UNKNOWN', source: 'manual' },
+        });
+        expect(msg).toContain('UNKNOWN');
+        expect(msg).toContain('source:  manual');
+        expect(msg).toContain('0 structured rows');
+        expect(msg).toContain('sp:spur-cli');
+    });
+
+    test('R3b: non-UNKNOWN verdict with spur-task-verdict source skips the enrichment', () => {
+        // PARTIAL/FAIL have actionable row evidence; the enrichment targets
+        // only the UNKNOWN case where the operator has no row signal at all.
+        const msg = formatDenialMessage({
+            wbs: '0299',
+            taskFilePath: TASK_PATH,
+            verdictPath: '.spur/run/0299-verdict.json',
+            verdict: 'PARTIAL',
+            artifact: {
+                verdict: 'PARTIAL',
+                requirements: [{ status: 'PARTIAL' }],
+                source: 'spur-task-verdict',
+            },
+        });
+        expect(msg).toContain('PARTIAL');
+        expect(msg).not.toContain('source:');
     });
 });
 

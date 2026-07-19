@@ -9,7 +9,13 @@ const matrix = {
     variants: {
         standard: {
             backlog: { required: ['Background'], forbidden: ['Solution', 'Review', 'Testing'] },
+            todo: { required: ['Background', 'Acceptance Criteria', 'Design', 'Plan'] },
+            wip: { required: ['Background', 'Acceptance Criteria', 'Design', 'Plan'] },
+            testing: { required: ['Solution', 'Testing'], optional: ['Design', 'Review'] },
             done: { required: ['Solution', 'Testing', 'Review'], gate: true },
+        },
+        issue: {
+            wip: { required: ['Background', 'Design'] },
         },
     },
 };
@@ -1745,5 +1751,113 @@ describe('TaskCheckService', () => {
         cleanup();
         const boxes = result.findings.filter((f) => f.layer === 'L3' && f.message.includes('unchecked checklist box'));
         expect(boxes).toHaveLength(0);
+    });
+    // ── R4 (task 0294): Design placeholder warning ───────────────────────────
+
+    test('R4: placeholder Design at wip warns (empty body)', async () => {
+        // WHY: a wip task must have a real Design record before implementation.
+        // An empty Design heading means the operator started coding without
+        // an agreed approach — exactly the signal this check exists to surface.
+        const content = [taskFm({ status: 'wip', name: 'Empty design at wip' }), '', '### Design', '', ''].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const designWarnings = result.findings.filter(
+            (f) => f.layer === 'L4' && f.severity === 'warning' && f.section === 'Design',
+        );
+        expect(designWarnings).toHaveLength(1);
+        expect(designWarnings[0]?.message).toContain('present but empty');
+    });
+
+    test('R4: placeholder Design at todo warns (HTML comment + TBD only)', async () => {
+        // WHY: the scaffolded Design section typically ships with HTML guidance
+        // comments and a `> TBD` marker. Those must NOT count as filled —
+        // stripping them is what `isPlaceholderBody` does.
+        const content = [
+            taskFm({ status: 'todo', name: 'TBD design' }),
+            '',
+            '### Design',
+            '',
+            '<!-- Describe the approach: interfaces, data flow, tradeoffs -->',
+            '> TBD',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const designWarnings = result.findings.filter(
+            (f) => f.layer === 'L4' && f.severity === 'warning' && f.section === 'Design',
+        );
+        expect(designWarnings).toHaveLength(1);
+    });
+
+    test('R4: populated Design at wip does NOT warn', async () => {
+        // WHY: once the operator writes a real approach (prose, bullets, an
+        // interface sketch), the warning must clear — the check is shape-based,
+        // not a subjective quality gate.
+        const content = [
+            taskFm({ status: 'wip', name: 'Filled design' }),
+            '',
+            '### Design',
+            '',
+            'Use an in-memory cache with a 5-minute TTL. Eviction LRU, cap 1k entries.',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const designWarnings = result.findings.filter(
+            (f) => f.layer === 'L4' && f.severity === 'warning' && f.section === 'Design',
+        );
+        expect(designWarnings).toHaveLength(0);
+    });
+
+    test('R4: placeholder Design at testing still warns after Design becomes optional', async () => {
+        // WHY: advancing status must not make a hollow standard-task Design
+        // record disappear from the audit. The warning is template-scoped, not
+        // coupled to the current status entry's required-section list.
+        const content = [taskFm({ status: 'testing', name: 'Testing empty design' }), '', '### Design', '', ''].join(
+            '\n',
+        );
+        const { fs, path, cleanup } = seedFile(content);
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const designWarnings = result.findings.filter(
+            (f) => f.layer === 'L4' && f.severity === 'warning' && f.section === 'Design',
+        );
+        expect(designWarnings).toHaveLength(1);
+    });
+
+    test('R4: placeholder Design on a non-standard template does NOT warn', async () => {
+        // WHY: R4 intentionally targets the standard task profile. Other
+        // templates have their own section semantics even when their matrix
+        // happens to require a Design heading.
+        const content = [
+            taskFm({ status: 'wip', name: 'Issue empty design', template: 'issue' }),
+            '',
+            '### Design',
+            '',
+        ].join('\n');
+        const { fs, path, cleanup } = seedFile(content);
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const designWarnings = result.findings.filter(
+            (f) => f.layer === 'L4' && f.severity === 'warning' && f.section === 'Design',
+        );
+        expect(designWarnings).toHaveLength(0);
+    });
+
+    test('R4: missing Design section does NOT emit the placeholder warning (L2 handles missing)', async () => {
+        // WHY: L2 already flags a missing required section as an error. The R4
+        // placeholder check must only fire when the heading EXISTS but the body
+        // is empty — emitting both would double-report and confuse the operator.
+        const content = [taskFm({ status: 'wip', name: 'No design heading' }), '', '### Background', '', 'text'].join(
+            '\n',
+        );
+        const { fs, path, cleanup } = seedFile(content);
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        cleanup();
+        const designWarnings = result.findings.filter(
+            (f) => f.layer === 'L4' && f.severity === 'warning' && f.section === 'Design',
+        );
+        expect(designWarnings).toHaveLength(0);
     });
 });
