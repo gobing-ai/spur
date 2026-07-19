@@ -3,7 +3,7 @@ template: brainstorm
 schema_version: 1
 name: "Design the golden-path command surface around dev-next"
 description: ""
-status: todo
+status: done
 type: brainstorm
 profile: standard
 feature_id: O
@@ -12,7 +12,7 @@ priority: P1
 tags: ["wayfinder:grilling", "workstream:ux", "dev-next"]
 dependencies: []
 created_at: "2026-07-18T17:29:34.868Z"
-updated_at: "2026-07-18T18:37:50.535Z"
+updated_at: "2026-07-19T18:56:17.969Z"
 ---
 
 ## 0283. Design the golden-path command surface around dev-next
@@ -67,7 +67,33 @@ Rejected directions: deleting specialist commands wholesale; embedding complete 
 ### Solution
 Resolution completed as a specification deliverable. The concrete WBS-specific artifact is recorded in `.spur/run/wayfinder-O/implementation-evidence.md:5` (with the matching numbered section for each WBS), backed by the task contract in `docs/tasks2/:1`, Feature O in `docs/features/O_sp-plugin-token-efficient-reliable-execution-architecture.md:1`, and the reusable driver in `config/workflows/wayfinder-resolution.yaml:1`. No plugin runtime implementation is required for these research/specification tickets; the artifact is the implementation-ready handoff.
 ### Testing
-Validated with the concrete evidence artifact `.spur/run/wayfinder-O/implementation-evidence.md:5`, `spur task check` for each WBS, `spur workflow validate config/workflows/wayfinder-resolution.yaml`, `dist/cli/spur feature check O --json`, and the final repository quality gate. These are research/specification tasks; runtime code tests are not applicable until the synthesized build tasks are created.
+**Per-Requirement Traceability** (re-audit under `--fix all`, post-fix)
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `implementation-evidence.md` §0283 classification table — 28 commands across 8 dispositions by operator job (golden 3 / pipeline-control 5 / verify 4 / wrap 2 / diagnostic 6 / compat 5 / authoring 5-incl-overlap / deprecation 0) |
+| R2 | MET | §0283 golden-path surface: dev-next + dev-idea/dev-plan intake; no workflow internals required |
+| R3 | MET | evidence:165 one-dispatch + Q&A locks + AC2; specialist commands remain thin adapters |
+| R4 | MET | §0283 adapters: Claude `/sp:dev-*` + Codex `$sp-dev-*` generated/validated from shared metadata; wrappers carry no domain workflow prose |
+| R5 | MET | §0283 surface taxonomy (golden/explicit/diagnostic/compat) + discoverability via taxonomy + README index ownership |
+| R6 | MET | §0283 deprecation rule: subsumption evidence + migration note + alias-retained rollback; no count-target removal |
+| R7 | MET | §0283 snapshot invalidation: command `.md` snapshotted at session start; adapter version + fresh-session dogfood need |
+| R8 | MET | §0283 drift test plan (contract / metadata-parity / no-prose grep gate) + doc ownership (README index, command flags, 04_DESIGN T3) |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: R4 Golden path preserves dev-next intent | MET | static-ref | evidence:165 (one bounded dispatch + state/reason/blocker/next) + §0283 adapters (thin escape-hatch wrappers) + Q&A locks (no gate bypass) |
+| Scenario: Ambiguity does not create an autonomous loop | MET | static-ref | evidence:165 (resolves exactly one stage) + Q&A lock (one invocation selects at most one stage; not an unbounded loop) |
+
+**Design conformance:** 3/3 claims DONE — dev-next facade over registry (evidence:165); surface taxonomy (§0283); rejected directions (Design + §0283 deprecation rule). No NOT-DONE claims.
+
+**SECUA Review** — documentation-only change to a specification artifact; no security/efficiency findings. Correctness: the pre-fix UNMET gaps (R1/R4/R6/R7/R8) are repaired by the §0283 extension; all citations above were line-anchor re-read this run.
+
+Coverage: N/A (brainstorm specification task; no runtime code path added).
+
+Verdict: PASS
 ### Review
 | Priority | Finding | Disposition |
 |---|---|---|
@@ -89,3 +115,6 @@ Review outcome: PASS for specification readiness. The evidence artifact provides
 - 2026-07-18T18:27:40.290Z done → todo (system)
 - 2026-07-18T18:35:15.641Z todo → done (system)
 - 2026-07-18T18:37:50.535Z done → todo (system)
+- 2026-07-19T18:47:41.945Z todo → wip (system)
+- 2026-07-19T18:47:56.206Z wip → testing (system)
+- 2026-07-19T18:56:17.969Z testing → done (system)
