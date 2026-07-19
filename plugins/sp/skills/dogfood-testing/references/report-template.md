@@ -49,6 +49,10 @@ finished_at: <ISO-8601 or null while running>
 live_path: .spur/run/dogfood/<run_id>.md
 report_path: docs/dogfood/YYYY-MM-DD-<slug>-dogfood.md
 protocol: sp:dogfood-testing@1.2
+workspace_fingerprint:    ← optional — recorded in Phase 1 for fix-mode and mutating-`--fix` dogfoods
+  head: <`git rev-parse HEAD`>
+  porcelain_hash: <sha256 of `git status --porcelain`>
+  taken_at: <ISO-8601>
 ---
 ```
 
@@ -233,10 +237,12 @@ downstream task creation does not inherit an unactionable acceptance criterion:
 
 The tag is a prompt to whoever turns findings into tasks: `[stale]` → drop, `[unverifiable]` →
 reframe or defer, `[feasible]` → proceed. A finding without a tag is treated as `[feasible]`.
-
 Severity scale:
 - **P1** — blocks correct use or causes drift/wrong output; fix before shipping the testee.
-- **P2** — real friction or a latent correctness gap; fix soon.
+- **P2** — real friction or a latent correctness gap; fix soon. **Includes mandatory workspace-drift
+  finding:** when a drift row (`drift:external`) is present in the ledger, a P2 finding naming the
+  drifted paths is mandatory in the report (not optional). The finding states the run's evidence is
+  degraded, not voided. See [SKILL.md §Workspace-drift guard](../SKILL.md#workspace-drift-guard-r2--task-0296).
 - **P3** — efficiency / DX / observation (includes the cache-health rule below).
 - **P4** — nice-to-have, cosmetic, or speculative.
 
@@ -260,17 +266,22 @@ Before the skill may stop (success, partial, fail, observe-only end, or abort), 
    `#### Fixed` and `#### Unresolved` (`(none)` when empty); unfinished narrative uses
    `⚠ incomplete — not reached`; no leftover "run in progress" markers survive finalization.
 3. **Ledger cardinality (@1.2):** Monitor Ledger data rows == the `Steps: N executed` declared in
-   §2 (N/A steps documented explicitly as rows). A mismatch refuses `complete`.
+   §2 (N/A steps documented explicitly as rows; drift rows count separately, not toward executed
+   steps — include `drift:external` rows in the table but subtract them from the executed count in
+   §2). A mismatch refuses `complete`.
 4. Write the Cost block (method + confidence + Meter).
-5. Sync final content to **both** live and report paths.
-6. **Footer mandatory (@1.2):** print the mandatory summary footer with **both** paths always,
+5. **R2 drift check at finalize.** If a workspace fingerprint was recorded, re-take snapshot
+   and diff against baseline minus run-touched files. Detected drift → append `drift:external`
+   ledger row + mandatory P2 finding. See [SKILL.md §Workspace-drift guard](../SKILL.md#workspace-drift-guard-r2--task-0296).
+6. Sync final content to **both** live and report paths.
+7. **Footer mandatory (@1.2):** print the mandatory summary footer with **both** paths always,
    and mirror the footer block at the **end of the report file**. A report whose body lacks the
    footer cannot set `status: complete`.
-7. **Self-validate (task 0278 R6):** run
+8. **Self-validate (task 0278 R6):** run
    `bun plugins/sp/scripts/dogfood-testing/validate-report.ts --file <report-path>` before
    claiming `status: complete`. Exit 2 → `status: aborted` + list error codes under
    `#### Unresolved` (never force complete on a non-@1.2 shape).
-8. **Refusal rule (@1.2):** when any check above fails, set `status: aborted` and list every
+9. **Refusal rule (@1.2):** when any check above fails, set `status: aborted` and list every
    failed check under §5 `#### Unresolved` — never force `complete`.
 
 Any early-exit path still runs this checklist. Stopping without it is a **driver contract violation**.

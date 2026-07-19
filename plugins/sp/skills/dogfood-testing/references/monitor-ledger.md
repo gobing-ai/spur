@@ -36,7 +36,13 @@ artifacts):
 5. **Cardinality (@1.2).** The ledger's data-row count MUST equal the `Steps: N executed` declared
    in the report's §2 Execution Summary. N/A steps are not dropped — each gets its own row with
    `Outcome: N/A`. A count mismatch refuses `status: complete` at finalize (see
-   [report-template.md](report-template.md) → Phase 4).
+6. **R2 drift row (task 0296).** A ledger row tagged `drift:external` in the `Step` column documents
+   workspace drift detected during the run — files changed by an external writer that neither the
+   driver nor testee ledger rows name. The row carries `Outcome: drift`, `Fix Applied: <drifted paths>`,
+   `Finding: P2 — workspace drift detected during run; attribution to external writer`,
+   and `Basis: <fingerprint diff>`. A drift row never changes a step's outcome and never results in
+   a `FIXED` / `PASS` outcome — it is purely documentary. Cache columns carry `—` (not estimated).
+   See [SKILL.md §Workspace-drift guard](../SKILL.md#workspace-drift-guard-r2--task-0296).
 
 ### Fast-run exemption (task 0294 R6a)
 

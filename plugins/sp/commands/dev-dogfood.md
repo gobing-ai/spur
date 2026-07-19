@@ -1,6 +1,6 @@
 ---
 description: Dogfood an agent skill/command/CLI — drive it end-to-end with bounded auto-fix, self-monitor, and emit a comprehensive report
-argument-hint: "<testee> [--agent <name|auto>] [--max-retry <n>] [--save] [--task] [--full]"
+argument-hint: "<testee> [--agent <name|auto>] [--max-retry <n>] [--save] [--task] [--chain-follow] [--full]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Grep", "Glob", "Skill"]
 ---
 
@@ -35,6 +35,7 @@ report of what happened, what broke, was fixed, and should be improved.
 | `--max-retry <n>` | Fix attempts per failed step. The **default is `2`** (fix mode): apply `Edit`/`Write` fixes to the working tree, up to 2 attempts per step. Omission is **refused** for two independent mutation sources, each gated on `--max-retry` being explicitly passed: (a) **pipeline-driving testees** (word-boundary match via [`detectPipelineDriving`](../scripts/dogfood-testing/detect-pipeline-driving.ts): `--next`, `dev-run`/`run`, `dev-runall`/`runall`, `dev-wrap`/`wrap`, `dev-wrapall`/`wrapall`, `dev-idea`/`idea`) and (b) **mutating `--fix` modes** (`--fix all`, `--fix blockers-first`; boundary-guarded via `hasMutatingFixMode`, never matching `--fix none` / `--focus all` / `--prefix all`). Pass `--max-retry 0` for observe-only, or explicit `--max-retry N` to acknowledge mutation risk. **Note:** for a mutating-`--fix` testee, `--max-retry 0` bounds **the driver only** — the testee's own `--fix` pass still mutates the tree. | `2` unless the testee is pipeline-driving or carries a mutating `--fix` mode |
 | `--save` | **Back-compat no-op for delivery.** Reports are **always** written to `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md` and a live file under `.spur/run/dogfood/<run_id>.md`. The flag still documents/prints the report path. | always-on (flag optional) |
 | `--task` | File the findings as a review-template task via `spur task create --template review`. | off |
+| `--chain-follow` | **Operator override for `--next` chains.** Permits the driver to follow the chain past the testing boundary and attribute chained-leg outcomes normally. Licenses reading chained-leg artifacts; does NOT license executing the chained leg. See [SKILL.md §`--next` chain stop-at-testing](../skills/dogfood-testing/SKILL.md#next-chain-stop-at-testing). | off |
 | `--full` | Include **all** severity findings (P1–P4) in the report and `--task` output. Default filters to P1+P2 only. | off |
 
 > **Single-dash lenient parsing (R6b).** The argument parser accepts `-flag value` as equivalent to

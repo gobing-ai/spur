@@ -54,7 +54,7 @@ The command forwards these via `$ARGUMENTS`:
 | `--max-retry <n>` | Fix attempts per failed step. The **default is `2`** (fix mode): apply `Edit`/`Write` fixes to the working tree, up to 2 attempts per step. This flag is **mandatory** for two independent mutation sources: (a) pipeline-driving testees and (b) testees carrying a mutating `--fix` mode (`--fix all` / `--fix blockers-first`). Pass `--max-retry 0` for **observe-only**, or `--max-retry N` to acknowledge fix-mode mutation risk. For a mutating-`--fix` testee, `--max-retry 0` bounds the **driver only** — the testee still mutates the tree. | `2` unless the testee is pipeline-driving or carries a mutating `--fix` mode |
 | `--save` | **Back-compat no-op for delivery.** Reports are always written to `docs/dogfood/…` and `.spur/run/dogfood/<run_id>.md`. The flag still documents/prints the report path. | always-on (flag optional) |
 | `--task` | File findings as a review-template task via `spur task create --template review`. | off |
-| `--full` | Include all severity findings (P1–P4). Default: P1+P2 only. | off |
+| `--chain-follow` | **Operator override for `--next` chains.** Permits the driver to follow the chain into named chained-leg artifacts (`.spur/run/<wbs>-verdict.json`, task-file section diffs, review tables) and attribute normally instead of stopping at the testing boundary. The flag licenses reading chained-leg evidence that already exists; it does NOT license the driver to execute the chained leg itself. Omit it to keep stop-at-testing as the default. See [§`--next` chain stop-at-testing](#next-chain-stop-at-testing) and [§Platform boundary (Claude Code)](#claude-code). | off |
 
 > ⚠️ **Repo-mutation warning.** The default is **fix mode (`--max-retry 2`)** — it applies
 > `Edit`/`Write` fixes to the working tree as it finds breakages. For a non-mutating run, opt into
@@ -75,7 +75,8 @@ The command forwards these via `$ARGUMENTS`:
 >   with `--fix all` mutates the tree on its own (0280 dogfood P2, task 0293). Honesty note:
 >   `--max-retry 0` here bounds **the driver only** — the testee still mutates the tree — so the
 >   refuse message is
->   `⚠ mutating --fix mode detected (--fix all | --fix blockers-first); pass --max-retry 0 (observe-only for the driver; the testee still mutates the tree) or --max-retry N (fix mode, driver + testee both mutate)`.
+   `⚠ mutating --fix mode detected (--fix all | --fix blockers-first); pass --max-retry 0 (observe-only for the driver; the testee still mutates the tree) or --max-retry N (fix mode, driver + testee both mutate)`.
+
 ## Phase 1 — Plan
 
 0. **Refuse ambiguous mutation-source testees (live CLI gate — not prose-only).** Before deriving
@@ -127,6 +128,10 @@ The command forwards these via `$ARGUMENTS`:
      - Report: `docs/dogfood/YYYY-MM-DD-<testee-slug>-dogfood.md`
    - Canonical frontmatter and skeleton: [report-template.md](references/report-template.md).
    - Column contract + dual-write: [monitor-ledger.md](references/monitor-ledger.md).
+   - **R2 workspace fingerprint (fix-mode and mutating-`--fix` dogfoods only).** When the run is
+     fix-mode or a mutating-`--fix` testee, record a `workspace_fingerprint` block (git HEAD +
+     `git status --porcelain` hash + timestamp) in the live ledger frontmatter. See
+     [§Workspace-drift guard](#workspace-drift-guard-r2--task-0296).
 
 ## Phase 2 — Execute + bounded fix
 
@@ -137,8 +142,12 @@ For each step, in order:
 3. **Failure** →
    - `--max-retry 0` → log as an **Unresolved issue** with diagnosis, mutate nothing, advance.
    - else → diagnose root cause → apply the smallest `Edit`/`Write` fix → **re-run the same step**,
-     up to `--max-retry` times. Pass within budget → **Fixed issue** (record the fix); still failing
-     → **Unresolved issue** (record everything tried). Either way, advance — partial signal is the point.
+     up to `--max-retry` times, but **first re-take the workspace snapshot and check drift**
+     (R2 — see [§Workspace-drift guard](#workspace-drift-guard-r2--task-0296)). If drift is detected,
+     append a `drift:external` warning row and emit a P2 finding; never attribute drifted files to
+     the run or claim them as the fix. Pass within budget → **Fixed issue** (record the fix); still
+     failing → **Unresolved issue** (record everything tried). Either way, advance — partial signal
+     is the point.
 
 **Fix discipline.** Fix the testee or its real dependency. Never weaken the testee, stub the failure
 away, or `--no-verify` past a gate to make a step "pass". A fix that hides the bug you are hunting is
@@ -192,11 +201,16 @@ contract violation**.
    optional ccusage/agent usage when real). For any `chained:<step>` ledger row whose meter is not
    observable, Fresh/Cached MUST be `~unknown` (or Cached `~0` with Basis `unobservable`) **and**
    emit finding `P3 — chained-step cost not observable` — never invent chained totals.
-5. Sync final content to **both** live and report paths (always — not gated on `--save`).
-6. **Footer mandatory (@1.2).** Print the mandatory summary footer with **both** `[Live: …]` and
+5. **R2 drift check at finalize.** If a workspace fingerprint was recorded in Phase 1, re-take
+   the snapshot and diff against baseline minus the run's own touched files. If drift is detected,
+   append a `drift:external` warning row to the ledger and emit a mandatory P2 report finding
+   (under §6 Findings) stating the run's evidence is degraded, not voided. Never claim drifted
+   files as run work. See [§Workspace-drift guard](#workspace-drift-guard-r2--task-0296).
+6. Sync final content to **both** live and report paths (always — not gated on `--save`).
+7. **Footer mandatory (@1.2).** Print the mandatory summary footer with **both** `[Live: …]` and
    `[Report: …]` always, **and mirror the footer block at the end of the report file**. A report
    without the footer cannot set `status: complete`.
-7. **Self-validate (task 0278 R6 — non-skippable).** Run the machine checker on the report body
+8. **Self-validate (task 0278 R6 — non-skippable).** Run the machine checker on the report body
    **before** claiming `status: complete`:
 
    ```bash
@@ -206,7 +220,7 @@ contract violation**.
    Exit **0** → proceed. Exit **2** → set `status: aborted`, list every error code under §5
    `#### Unresolved`, do **not** claim complete (closes non-@1.2 shapes like `## §1` without
    `### 1.`–`### 6.` / footer). Exit **1** → usage/IO failure; fix path and re-run.
-8. **Refusal rule (@1.2).** If any check above fails, set `status: aborted` (never `complete`) and
+9. **Refusal rule (@1.2).** If any check above fails, set `status: aborted` (never `complete`) and
    list each failed check under §5 `#### Unresolved`.
 
 Full section contract, frontmatter, Cost shape, and footer:
@@ -340,6 +354,72 @@ This is **not** a new token in `PIPELINE_TOKENS` (R5/R6 — back-compat): pipeli
 mutating-fix are checked by separate matchers, and pipeline-driving's refuse message wins when both
 co-occur (its message is the superset — chain + tree mutation).
 
+## Workspace-drift guard (R2 — task 0296)
+
+A fix-mode dogfood (`--max-retry ≥ 1`) or a mutating-`--fix` testee writes to the **shared working
+tree**. A concurrent external writer — formatter, another agent, the operator's editor — is then
+indistinguishable from testee/driver mutation in the ledger and report. The guard detects drift,
+attributes it to the external writer, and never claims drifted files as run work.
+
+**Additive only** — protocol stays `sp:dogfood-testing@1.2`; the new ledger/report fields are
+optional so existing reports remain valid. No gate refuses a run on drift; drift degrades the
+evidence (a warning + finding), never voids it.
+
+### Fingerprint (Phase 1)
+
+Before the first testee step, record a **workspace fingerprint** in the live ledger frontmatter:
+
+```yaml
+workspace_fingerprint:
+  head: <`git rev-parse HEAD`>
+  porcelain_hash: <stable hash of `git status --porcelain` output>
+  taken_at: <ISO-8601>
+```
+
+The hash is over the raw `git status --porcelain` bytes (e.g. `shasum -a 256`). Store the snapshot
+string is NOT required — the hash is enough to detect a change; the live file already records what
+the run itself touched via ledger rows.
+
+### Drift check (before each fix application + once at Phase 4 finalize)
+
+Re-take the snapshot and diff it against the baseline **minus files the run itself has touched**
+(driver fixes + testee-attributed writes from the ledger `Fix Applied` column). Drift check points:
+
+1. Immediately before each Phase 2 fix application (so a fix isn't credited to drift, and drift
+   isn't credited to a fix).
+2. Once at Phase 4 finalize (so the final report acknowledges any drift that happened mid-run).
+
+**Not** after every testee step — observe-only runs (`--max-retry 0`) stay zero-overhead. A run with
+no fix applications and a clean tree at finalize needs no drift row.
+
+### What drift is — and is not
+
+**Drift** = a tracked file changes that neither the driver nor the testee ledger row names.
+**Explained** set = files named in ledger `Fix Applied` cells (driver fixes) plus files the testee
+wrote that the driver recorded in the ledger (testee-attributed writes). Anything else in
+`git status --porcelain` that is new or modified since baseline is drift.
+
+### On detecting drift
+
+- Append a **warning ledger row** tagged `drift:external` in the Step column: paths in `Fix Applied`,
+  `Outcome: drift`, `Basis: <fingerprint diff>`. Do NOT mark the step PASSED/FIXED on account of
+  drift; the row records the drift, it does not change a step's outcome.
+- Emit a **mandatory report finding** under §6 Findings — `P2 — workspace drift detected during
+  run; attribution to external writer` — naming the drifted paths and the snapshot delta. The report
+  explicitly states the run's evidence is degraded, not voided.
+- The driver **never** claims drifted files as its own or the testee's work. A fix ledger row's
+  `Fix Applied` cites only the file:line the driver changed; drift rows cite the drifted paths
+  separately.
+
+### Worktree advisory (mutating dogfoods)
+
+For fix-mode dogfoods of **pipeline-driving** or **mutating-`--fix`** testees (the two refuse-gate
+cases above), the §Mutating `--fix` mode contract recommends running the dogfood in an **isolated
+`git worktree`** so concurrent external writers cannot collide with the run. This is **advisory,
+not a hard gate** — the refuse-gate semantics from task 0293 are unchanged. A worktree removes the
+drift case entirely (no concurrent writer can reach the isolated checkout), which is why it is the
+preferred setup for mutating dogfoods where the operator cares about clean attribution.
+
 ## Step-splitting recipe (implement-heavy pipeline dogfoods)
 
 When the Phase 1.2b advisory fires (or you know the testee is implement-heavy), **prefer two or
@@ -417,9 +497,15 @@ Do NOT:
 - Silently skip the chained leg in the ledger. Record the row with outcome `provenance-missing` and a
   P3 finding.
 
-**Operator override.** The operator may direct the driver to follow the chain across sessions or into
-subagent output; in that case, the driver reads the named artifacts and attributes normally. The
-default — when provenance is not explicitly provided — is stop-at-testing.
+**`--chain-follow` (sanctioned override).** The operator passes `--chain-follow` to grant the
+  driver permission to read the chained leg's named artifacts (`.spur/run/<wbs>-verdict.json`,
+  task-file section diffs, review tables) after the leg completes and attribute normally. The flag
+  licenses **reading** chained-leg evidence that already exists — it does NOT license the driver to
+  execute the chained leg itself. The legacy "operator may direct" prose direction is still honored
+  for back-compat; `--chain-follow` is the explicit, machine-recognizable form. Omitting the flag
+  keeps stop-at-testing as the **default**. The flag is a driver attribute only — it does not change
+  `detect-pipeline-driving` gate semantics (it is not a testee mutation source). See
+  [§Arguments](#arguments).
 
 ## Additional Resources
 
@@ -434,6 +520,18 @@ default — when provenance is not explicitly provided — is stop-at-testing.
 
 Native — `Skill()` delegation, argument substitution, and the `Edit`/`Write`/`Bash` toolset work
 directly. The `/sp:dev-dogfood` command is the entry point.
+
+**Platform boundary (R3 — task 0296).** On Claude Code, `Skill()` runs **inline** in the current
+session — there is no subprocess boundary, so a chained `--next` leg (refine→run, run→verify)
+dispatched from the driver runs in the **same session** and is not independently observable. A
+`--next` dogfood forced to follow the chain would lose per-leg provenance. Therefore a `--next`
+dogfood on Claude Code ends **stop-at-testing** at the chain's testing boundary unless the operator
+overrides — either by passing `--chain-follow` (the sanctioned mechanism; see
+[§Arguments](#arguments) and [§`--next` chain stop-at-testing](#next-chain-stop-at-testing)) or by
+**running the chained leg as its own standalone invocation**, which is exactly how the 0281 pair
+completed: the dev-run dogfood stopped at testing, and `/sp:dev-verify 0281 --auto --next --force
+--focus all --fix all` was driven as its own dogfood (the verify dogfood report). This is a
+reporting discipline, not a bug in the chain — the chain's contract is owned by `sp:spur-dev`.
 
 ### Codex / OpenClaw / OpenCode / Antigravity
 

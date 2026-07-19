@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-07-18T17:24:53.258Z"
-updated_at: "2026-07-18T19:26:51.455Z"
+updated_at: "2026-07-19T04:44:28.406Z"
 ---
 
 # O: sp plugin token-efficient reliable execution architecture
@@ -32,13 +32,13 @@ Define a reviewable and verifiable target architecture, evidence model, and migr
 Feature: sp plugin token-efficient reliable execution architecture
 
   @core
-  Scenario: R1 — Current plugin baseline is decision-ready
+  Scenario: R1 - Current plugin baseline is decision-ready
     Given the current commands, skills, agents, workflows, hooks, evals, and historical dogfood evidence
     When the baseline investigation is resolved
     Then every material token, duplication, routing, and reliability claim is tied to reproducible evidence
 
   @core
-  Scenario: R2 — Provider cache semantics are verified for Claude and Codex
+  Scenario: R2 - Provider cache semantics are verified for Claude and Codex
     Given official provider and product documentation
     When cache behavior and telemetry are specified
     Then the design distinguishes provider-metered facts from Spur estimates and records versioned citations
@@ -51,74 +51,80 @@ Feature: sp plugin token-efficient reliable execution architecture
     And the portable leading indicators remain comparable across Claude Code and Codex
     And the dataset preserves the raw observation needed for later reinterpretation
 
+  @edge
+  Scenario: Cache evidence cannot silently inflate fresh input
+    Given provider records separately expose fresh input, cache read, or cache creation
+    When normalized metrics are calculated
+    Then raw fields are retained, fresh input per verified PASS never folds in cache-read tokens, and provider-specific totals are labeled with their exact definitions
+
   @core
-  Scenario: R3 — Stage registry contract is implementation-ready
+  Scenario: R3 - Stage registry contract is implementation-ready
     Given the lifecycle and competency surfaces
     When the canonical stage model is specified
     Then commands, workflows, dev-next, model policy, context, gates, and outputs can reference the same typed stage identity
 
   @core
-  Scenario: R4 — Golden path preserves dev-next intent
+  Scenario: R4 - Golden path preserves dev-next intent
     Given the current command surface and compatibility requirements
     When the simplified operator surface is specified
     Then dev-next remains the primary one-dispatch router and compatibility wrappers contain no duplicated domain logic
 
   @core
-  Scenario: R5 — Layered context envelopes are cache-stable and safe
+  Scenario: R5 - Layered context envelopes are cache-stable and safe
     Given a canonical stage and task state
     When its context envelope is assembled repeatedly without source changes
     Then stable layers remain identical and dynamic layers are minimal, explicit, and invalidated by content state
 
   @core
-  Scenario: R6 — Adaptive model routing escalates objectively
+  Scenario: R6 - Adaptive model routing escalates objectively
     Given eligible cheap and fallback executor profiles
     When a stage starts, fails a gate, times out, or emits insufficient evidence
     Then routing follows explicit eligibility, risk, retry, override, and escalation rules without relying on model self-confidence
 
   @core
-  Scenario: R7 — Qualification corpus detects quality regression
+  Scenario: R7 - Qualification corpus detects quality regression
     Given historical and adversarial fixtures
     When a model-stage candidate is evaluated
     Then deterministic gates, behavioral disciplines, verified outcome, token totals, retries, and escalations are comparable to baseline
 
   @core
-  Scenario: R8 — Dogfood campaigns aggregate atomic runs honestly
+  Scenario: R8 - Dogfood campaigns aggregate atomic runs honestly
     Given isolated dogfood reports for a declared campaign matrix
     When the campaign is aggregated
     Then incomparable, invalid, or unmetered evidence is labeled or rejected and atomic report contracts remain unchanged
 
   @core
-  Scenario: R9 — Workflow simplification preserves lifecycle gates
+  Scenario: R9 - Workflow simplification preserves lifecycle gates
     Given current project and seeded workflows
     When they are mapped to canonical stages
     Then duplicate orchestration is removed without nesting pipelines, bypassing lifecycle guards, or losing resumability and HITL semantics
 
   @core
-  Scenario: R10 — Shadow migration is reversible
+  Scenario: R10 - Shadow migration is reversible
     Given current and candidate stage bindings
     When a stage is qualified and cut over
     Then before-after evidence, compatibility behavior, rollback conditions, and ownership are explicit
 
   @core
-  Scenario: R11 — Dependency wiring has a CLI-safe contract
+  Scenario: R11 - Dependency wiring has a CLI-safe contract
     Given wayfinder and decomposition tasks need blocking edges
     When dependencies are authored or changed
     Then a validated CLI path writes dependencies without direct task-frontmatter edits
 
   @core
-  Scenario: R12 — Final synthesis produces an executable redesign package
+  Scenario: R12 - Final synthesis produces an executable redesign package
     Given all prerequisite investigation artifacts
     When the synthesis ticket resolves
     Then reviewers receive the target architecture, decision log, metrics, risks, migration waves, and dependency-ordered implementation backlog
 
   @edge
-  Scenario: R13 — Charting performs no enhancement
+  Scenario: R13 - Charting performs no enhancement
     Given this wayfinder session creates the map and tickets
     When the session ends
     Then no plugin implementation file or workflow behavior has been modified
 
   @core
-  Scenario: R14 — Workflows are orchestrated through spur workflow
+  Scenario: R14 - Workflows are orchestrated through spur workflow
     Given the target architecture composes lifecycle stages into workflows
     When workflow execution is designed or implemented
     Then `spur workflow` remains the driver and canonical orchestration boundary
@@ -126,7 +132,7 @@ Feature: sp plugin token-efficient reliable execution architecture
     And plugin commands, skills, campaigns, and adapters do not create a competing workflow runner
 
   @core
-  Scenario: R15 — Spur CLI is the default execution capacity
+  Scenario: R15 - Spur CLI is the default execution capacity
     Given implementation or qualification needs scripts, subprocesses, corpus mutation, or operational automation
     When an execution path is selected
     Then the path uses the supported `spur` CLI surface where one exists
