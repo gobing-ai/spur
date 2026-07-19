@@ -1,5 +1,5 @@
 {
     "name": "sp",
-    "version": "0.3.16",
+    "version": "0.3.17",
     "description": "Spur — a local-first harness engineering toolkit that wraps mainstream coding agents with constraint checking, workflow orchestration, and history analytics."
 }
