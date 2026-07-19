@@ -215,6 +215,68 @@ Verdict shape (always written to `.spur/run/<wbs>-verdict.json` regardless of `-
 - Exit code: `0` on `PASS`, `1` on `PARTIAL` / `FAIL` / `UNKNOWN` (so the pipeline's verify→record
   guard can gate on exit code AND read the JSON).
 
+### Answer-file shape (what `--from-answer` parses)
+
+The answer file is **markdown** — exactly what a chained `/sp:dev-verify` leg naturally writes.
+The parser (`task-verdict.ts` `extractRequirements` / `extractAcceptanceCriteria`) reads rows from
+two table shapes; free-form prose with no tables parses to **zero rows**, which yields
+`verdict: "UNKNOWN"` (the honest answer for unparseable input — the fix is to write tables, not to
+loosen the parser).
+
+**Requirement rows** — markdown table with `Req` (or `Requirement`) and `Status` (or `Verdict`)
+columns; optional `Evidence` third column. Header detection is case-insensitive on the first two
+cells:
+
+```markdown
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1  | MET    | `src/foo.ts:42` |
+| R2  | PARTIAL| needs test |
+| R3  | UNMET  | not started |
+```
+
+`Status` values: `MET` | `PARTIAL` | `UNMET` (matched by word-boundary regex, case-insensitive).
+
+**Acceptance Criteria rows** — markdown table with `AC` (or `Acceptance`) / `Status` / `Evidence
+Type` / `Evidence` columns (four cells minimum). Header detection requires the `evidence type`
+column to distinguish AC rows from requirement rows:
+
+```markdown
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| AC-1 | MET | test    | `tests/foo.test.ts:12` |
+| AC-2 | MET | command | `bun run lint` exit 0 |
+| AC-3 | N/A | n/a     | non-behavioral — doc-only |
+```
+
+`Status`: `MET` | `PARTIAL` | `UNMET` | `N/A`. `Evidence Type`: `test` | `command` | `static-ref`
+(or `static`) | `manual-review` (or `manual`) | `llm-judge` (or `judge`) | `n/a` (or `na`).
+
+**Evidence rule (behavior-bearing AC):** an AC row with `status: MET` on a behavior-bearing id
+(no `[advisory]`/`[non-core]`/`[non-behavior]`/`[docs-only]` marker) MUST carry `test` or
+`command` evidence; any other evidence type downgrades the row to `PARTIAL` and caps the verdict.
+
+**Worked example** — a minimal PASS-producing answer file:
+
+```markdown
+## Verify Verdict — 0042
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1  | MET    | `src/foo.ts:42` implements the guard |
+| R2  | MET    | `tests/foo.test.ts` covers the branch |
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| AC-1 | MET | test | `tests/foo.test.ts:12` exit 0 |
+```
+
+A free-form prose answer (no tables, or tables missing the required headers) yields
+`verdict: "UNKNOWN"`. The resulting `.spur/run/<wbs>-verdict.json` (with `source:
+"spur-task-verdict"`) will then deny the `testing → done` transition — the denial message names
+the artifact source and directs the operator to `/sp:dev-verify <wbs>`. Re-run verify with the
+table format above.
+
 ## `refresh-roster <wbs>`
 
 Regenerate a parent task's sub-task roster block in `## Plan` — the marker-delimited table that the

@@ -38,6 +38,28 @@ artifacts):
    `Outcome: N/A`. A count mismatch refuses `status: complete` at finalize (see
    [report-template.md](report-template.md) → Phase 4).
 
+### Fast-run exemption (task 0294 R6a)
+
+The per-step live-write mandate (rules 1–4) exists to bound information loss when a mid-run crash
+terminates the driver before finalize. That risk is real for long runs (multi-step pipelines,
+mutating testees); it is **marginal for fast runs** where wall-clock is short enough that an
+operator would naturally watch the run to completion.
+
+**Codified exemption.** A run with **total wall-clock < 3 minutes** MAY batch-write all ledger
+rows at finalize, provided **both** of the following hold:
+
+1. The report's §2 Execution Summary carries an explicit note:
+   `Ledger write mode: batch-finalize (fast-run exemption, total wall-clock < 3 min)`.
+2. The driver is still prepared to reconstruct per-step ordering honestly — batched does not mean
+   fictional. If the driver cannot reconstruct attempts/outcomes per step from its own tool-call
+   history, the exemption does NOT apply and the strict per-step rule is back in force (rule 4:
+   "if it is not in the ledger file, it does not go in the report").
+
+This matches how the 0280 fast-run actually behaved (batch-finalize, still validated `complete`)
+and preserves the strict mandate for long runs where mid-run crash loss is the real risk. A run
+≥ 3 min that batch-writes is a **protocol violation the driver must self-report** as a P3 finding
+in the report's §6 Findings (no exemption applies).
+
 ## Column contract
 
 ```

@@ -111,6 +111,15 @@ off"). This makes `/sp:dev-run <wbs> --auto --next` work as the headline chain l
 
 When `--next` is set and implementation succeeds:
 
+0. **Backlog promotion (chain step 0).** If the task's current status is `backlog`, the chain
+   first auto-promotes `backlog → todo` via `spur task update <wbs> todo`. The FSM permits this
+   transition unguarded (no section gate), so the promotion is pure ceremony — but the chain
+   performs it explicitly rather than surfacing a raw `GuardDeniedError: No transition from
+   "backlog" to "wip"`. `--auto --next` already expresses the operator's intent to drive the
+   task, so the mechanical two-hop (`backlog → todo → wip`) is correct behavior, not a bypass:
+   the lifecycle guard stays authoritative for every subsequent transition. If the promotion
+   itself fails, stop as review-pending and include both the FSM error and the concrete remediation
+   `spur task update <wbs> todo`; never surface a raw `GuardDeniedError` unaided.
 1. **Transition through the FSM (guards honored — no `--no-lifecycle`):**
    - `spur task update <wbs> wip` — the `todo → wip` guard is `always`; passes.
    - `spur task update <wbs> testing` — the `wip → testing` guard runs `spur task check <wbs>`.
@@ -131,6 +140,14 @@ review pending — wip → testing guard failed for <wbs>
   spur task check reported: <blocking finding, e.g. "## Solution section is empty">
   task left at wip. Resolve the finding, then re-run: /sp:dev-run <wbs> --auto --next
 ```
+
+**Status precondition (R2).** The chain assumes the task is at `todo` or later when step 0 is
+absent — i.e. the operator has already moved it off `backlog` via `spur task update <wbs> todo`
+during refinement. Step 0's auto-promote covers the case where they did not: a `backlog`-seeded
+task with `--next` is promoted mechanically rather than denied (`--auto` only controls objective
+confirmations). There is no refusal path for `backlog` when `--next` is present. To retain manual
+status control, omit `--next` and promote explicitly with `spur task update <wbs> todo` before a
+later chained run.
 
 Honoring the guard is the point: the FSM is what stops a malformed task from sliding into `testing`
 and then `done`. Bypassing it with `--no-lifecycle` (as the pipeline does for its own internal

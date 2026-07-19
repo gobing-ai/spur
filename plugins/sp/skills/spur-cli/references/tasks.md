@@ -31,7 +31,7 @@ does what*, this skill.
 | `refresh-roster <wbs>` | Regenerate a parent task's sub-task roster block in `## Plan` | `--folder` `--json` |
 | `batch-create` | Create many tasks from a validated JSON array | `--file <path>` `--folder` `--json` |
 | `record <wbs>` | Write Testing/Review from a verify verdict; optional Solution + transition | `--verdict-file <path>` `--solution-from-diff` `--transition <status>` `--folder` `--json` |
-| `verdict <wbs>` | Derive PASS/PARTIAL/FAIL/UNKNOWN from verify answer text → verdict JSON | `--from-answer <path>` `--folder` `--json` |
+| `verdict <wbs>` | Derive PASS/PARTIAL/FAIL/UNKNOWN from verify answer text → verdict JSON; see [answer-file shape](tasks/verbs.md#answer-file-shape-what---from-answer-parses) | `--from-answer <path>` `--folder` `--json` |
 | `check [wbs]` | Four-layer validation; the readiness matrix | `--strict` `--strict-core` `--folder` `--json` |
 | `resolve <file-path>` | Map a file path to its owning task WBS | `--strict` `--folder` `--json` |
 | `path <wbs>` | Map a WBS to its absolute task file path (inverse of `resolve`) | `--folder` `--json` |

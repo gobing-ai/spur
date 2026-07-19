@@ -37,6 +37,17 @@ report of what happened, what broke, was fixed, and should be improved.
 | `--task` | File the findings as a review-template task via `spur task create --template review`. | off |
 | `--full` | Include **all** severity findings (P1–P4) in the report and `--task` output. Default filters to P1+P2 only. | off |
 
+> **Single-dash lenient parsing (R6b).** The argument parser accepts `-flag value` as equivalent to
+> `--flag value` for `--max-retry`, `--agent`, `--save`, `--task`, `--full` (and their `--fix`/
+> `--steps` siblings). This is intentional back-compat for terminal ergonomics, but it collides with
+> the mutating-fix refuse-gate, which keys on `--max-retry` presence: an operator typing
+> `-max-retry 3` on a pipeline-driving testee would bypass the refuse message if the gate ran on
+> the raw string. It does not — the gate runs on the **normalized** token after parse. The driver
+> MUST echo the normalized flag in its Phase-1 plan output (`Plan: testee invoked as …
+> --max-retry 3 …`), not the operator's original spelling, so the operator sees which form was
+> honored. A run that silently parsed `-max-retry 3` without echoing the normalized form is a P4
+> finding (verify-0293) — the parsing is allowed, the silent treatment is not.
+
 `--task` is independent and composable with always-on report files. A **mandatory dual-path write**
 (live + `docs/dogfood/`), **Monitor Ledger**, **Cost block**, and **summary footer** (result +
 issues + findings + `[Live:]` + `[Report:]`) are always emitted — not gated on `--save`.

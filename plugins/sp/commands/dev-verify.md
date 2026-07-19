@@ -77,6 +77,16 @@ other's default:
 
 `--next` makes verify the last step in the `refine → run → verify → done` chain.
 
+> **Precondition — `/sp:dev-review` must have run first** on a standalone
+> `--next` invocation. Verify mode is forbidden from writing `## Review` (code-
+> verification SKILL.md Step 10), yet the done-gate's Review L3 layer (see
+> below) requires a populated P1–P4 `### Review` table. So a standalone
+> `/sp:dev-verify --next` on a task that skipped `/sp:dev-review` cannot reach
+> `done` unaided — the stop message will name the missing Review. The Step 10
+> write prohibition stays intact; the contract tension is real and intentional.
+> Pipeline-driven runs satisfy this automatically (the pipeline's `review`
+> state runs `/sp:dev-review` before `verify`).
+
 When `--fix` is set, `--next` acts on the **post-fix** verdict: the fix pass repairs findings, the
 skill re-verifies (Step 10's bounded loop), and the **re-verified** verdict drives the transition.
 A `--fix all` that turns a FAIL into a PASS therefore reaches `done`; a residual UNMET after the
@@ -84,25 +94,48 @@ bounded retry does not.
 
 When the (post-fix) verdict is **PASS**:
 
-1. Transition: `spur task update <wbs> done` — the `testing → done` guard runs
-   `spur task check <wbs> --strict-core`. **No `--no-lifecycle`:** the guard is the final
-   defense-in-depth check before `done`.
+1. Transition: `spur task update <wbs> done`. The `testing → done` transition runs **three** gate
+   layers in the order below; a failure at any layer stops the transition with that layer's
+   remediation. **No `--no-lifecycle`:** these guards are the final defense-in-depth check before
+   `done`.
 2. Stop — end of the chain (no further command to invoke).
 
-When the verdict is **PARTIAL/FAIL**, or the `testing → done` guard fails: stop as review-pending —
-surface the verdict (or the guard's blocking finding), leave the task at its current status, do NOT
+### The three `testing → done` gate layers
+
+The CLI verdict-artifact check runs first. The lifecycle adapter then checks provenance, Review L3,
+and finally the workflow's strict-core shell guard. The table groups the two complementary
+strict-core/verdict checks as one defense-in-depth layer even though they bracket the adapter checks.
+The first denial wins; each denial names its own remediation. In verify-0293, the artifact check
+passed, so provenance denied first and Review L3 denied on the retry.
+
+| # | Gate layer | Triggers denial when | Remediation |
+|---|------------|----------------------|-------------|
+| 1 | **Strict-core + verdict artifact** (`spur task check <wbs> --strict-core` + `done-transition-guard.ts`) | The strict-core check fails, or `.spur/run/<wbs>-verdict.json` is missing or has a non-PASS aggregate. The aggregate is recomputed from requirement/AC rows; the harsher of stored and computed wins. | Re-run `/sp:dev-verify <wbs>` until PASS, or explicitly override with `spur task update <wbs> done --force-done --reason "<why>"`. |
+| 2 | **Provenance guard** (`lifecycle-adapter.ts`) | No pipeline-kind run link exists for `<wbs>`. | Run `/sp:dev-run <wbs>` through the pipeline, use `/sp:dev-run <wbs> --auto --next`, or record the audited bypass with `SPUR_PROVENANCE_OVERRIDE=1`. |
+| 3 | **Review L3** (`task-check.ts`) | `### Review` is empty, placeholder-only, or lacks a populated P1–P4 findings table. | Run `/sp:dev-review <wbs>`; verify cannot write Review because of the Step 10 prohibition above. |
+
+When the verdict is **PARTIAL/FAIL**, or any gate layer fails: stop as review-pending — surface
+the verdict (or the gate's blocking finding), leave the task at its current status, do NOT
 transition to `done`.
 
 > **Already-terminal task (`--force` re-audit):** when the task is already `done`/`cancelled`, a
-> PASS verdict has no transition to make — treat `--next` as a no-op, report the verdict, and stop.
-> Do not expect a `testing → done` transition message; the CLI currently prints an unhelpful
-> `undefined → undefined` for a same-status update (honest no-op messaging is tracked in task 0292).
+> PASS verdict has no transition to make — `--next` is a no-op. The CLI prints the honest message
+> `<wbs>: already <status> — no transition` (task 0292 R9) and exits 0. Do not expect a
+> `testing → done` transition line.
 
 > **Deferred `feature_id` and strict rigor:** the `--strict-core` done-gate treats a missing
 > `feature_id` as a warning (deferral is valid). If the operator opts into `--strict` rigor and
 > the `feature_id` error surfaces, use the sp:spur-dev feature-link helper to resolve it — single-task
 > mode or batch-sweep. The helper is opt-in only; it NEVER runs automatically from `--next` or any gate.
 > See [references/feature-link-helper.md](../skills/spur-dev/references/feature-link-helper.md).
+
+> **Answer-file shape (R3).** The verify step's structured output (`.spur/run/<wbs>-verify-answer.txt`)
+> is parsed by `spur task verdict` to derive the artifact. Free-form prose with no markdown
+> requirement/AC tables parses to `verdict: "UNKNOWN"` and will deny the done-gate. The expected
+> table format (`| Req | Status | Evidence |` and `| AC | Status | Evidence Type | Evidence |`)
+> is documented in [sp:spur-cli `tasks/verbs.md` §Answer-file shape](../skills/spur-cli/references/tasks/verbs.md#answer-file-shape-what---from-answer-parses).
+> The verify skill writes this shape automatically — operators only need it when hand-authoring
+> an answer file or debugging an UNKNOWN verdict.
 
 ## Implementation
 
