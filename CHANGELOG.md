@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.3.15] — 2026-07-19
+
+### Added
+
+- **Dogfood workspace-drift guard.** The dogfood driver now records a workspace fingerprint
+  (git HEAD + `git status --porcelain` hash) in Phase 1 and checks for external drift before
+  each fix application and at finalize (Phase 4). A `drift:external` ledger row and mandatory
+  P2 finding name the drifted paths and state the run's evidence is degraded, not voided.
+  Mutating dogfoods are advised to run in an isolated `git worktree`. The new `workspace_fingerprint`
+  frontmatter block is additive — existing reports remain valid.
+
+- **`--chain-follow` flag for dogfood chained-leg observability.** The informal "operator may
+  direct" prose override is replaced with an explicit `--chain-follow` argument (default off)
+  that permits the driver to read named chained-leg artifacts and attribute normally instead
+  of stopping at the testing boundary. The Platform Notes for Claude Code now document that
+  `Skill()` runs inline, so `--next` chain legs are same-session-unobservable by default;
+  the standalone-invocation workaround is named for completing the chain.
+
+- **Feature O anti-inflation acceptance criteria.** The `@edge` scenario "Cache evidence cannot
+  silently inflate fresh input" is added to feature O's AC gherkin block, codifying the locked
+  metric rule (fresh input per verified PASS never folds in cache-read tokens).
+
+### Fixed
+
+- **Workflow `agent.run` hardened against non-TTY slash-command stalls.** The agent service
+  now detects non-TTY environments and adapts slash-command invocation so a workflow step
+  does not hang when the agent's output is piped or redirected.
+
+- **Review L3 done-gate no longer accepts dash-filled placeholder P-tables.** A `| P1 | — | — | — |`
+  row previously passed the populated-findings check because `—` was a non-empty cell.
+  `isPlaceholderCell` now treats dash/em-dash runs and bare `n/a` cells as empty, closing the
+  false-pass that let task 0296 reach `done` with an unauthored Review table.
+
 ## [0.3.14] — 2026-07-18
 
 ### Added
