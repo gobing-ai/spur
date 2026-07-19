@@ -350,6 +350,132 @@ describe('TaskCheckService', () => {
         const reviewErrors = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Review');
         expect(reviewErrors.length).toBe(0);
     });
+    test('L3: dash-filled P-table placeholder does not satisfy the rule where Review is required (0297)', async () => {
+        // A `| P1 | — | — | — |` row is a placeholder, not a finding. The pre-0297
+        // rule counted any non-empty cell as content, so an all-dash table passed the
+        // done-gate's Review L3 layer — empirically how task 0296 reached `done` with
+        // an unauthored Review. Dash/`n/a`-only cells must count as empty.
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Dash placeholder"',
+            'status: done',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Dash placeholder',
+            '',
+            '### Solution',
+            '',
+            'Fixed `src/foo.ts:10-15`.',
+            '',
+            '### Testing',
+            '',
+            'Coverage: 95%.',
+            '',
+            '### Review',
+            '',
+            '| Severity | Finding | Location | Action |',
+            '|----------|---------|----------|--------|',
+            '| P1 | — | — | — |',
+            '| P2 | — | — | — |',
+            '| P3 | n/a | - | N/A |',
+            '| P4 | — | — | — |',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+
+        const reviewErrors = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Review');
+        expect(reviewErrors.length).toBeGreaterThan(0);
+        expect(reviewErrors[0]?.severity).toBe('error');
+    });
+    test('L3: dash-filled Review scaffold is tolerated where Review is optional (0297)', async () => {
+        // The dash-filled table is the same "not yet authored" state as the empty-cell
+        // scaffold — at an optional-Review status it must be tolerated, not errored,
+        // exactly like the empty-cell variant in the test above.
+        const reviewMatrix = {
+            variants: {
+                review: {
+                    todo: { required: ['Background'], optional: ['Review'] },
+                    done: { required: ['Background', 'Review'], gate: true },
+                },
+            },
+        };
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Dash scaffold at todo"',
+            'status: todo',
+            'template: review',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Dash scaffold at todo',
+            '',
+            '### Background',
+            '',
+            'Context.',
+            '',
+            '### Review',
+            '',
+            '| Severity | Finding | Location | Action |',
+            '|----------|---------|----------|--------|',
+            '| P1 | — | — | — |',
+            '| P2 | — | — | — |',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new TaskCheckService(fs, reviewMatrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+
+        const reviewErrors = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Review');
+        expect(reviewErrors.length).toBe(0);
+    });
+    test('L3: a P-row with real content beside dash cells still counts as populated (0297)', async () => {
+        // Dash cells are empty, but one substantive cell in any P-row keeps the table
+        // populated — mixed rows like `| P2 | real finding | — | follow-up |` must not
+        // regress to an error.
+        const content = [
+            '---',
+            'schema_version: 1',
+            'name: "Mixed dash row"',
+            'status: done',
+            'created_at: 2026-06-13T00:00:00.000Z',
+            'updated_at: 2026-06-13T00:00:00.000Z',
+            '---',
+            '',
+            '## 0001. Mixed dash row',
+            '',
+            '### Solution',
+            '',
+            'Fixed `src/foo.ts:10-15`.',
+            '',
+            '### Testing',
+            '',
+            'Coverage: 95%.',
+            '',
+            '### Review',
+            '',
+            '| Severity | Finding | Location | Action |',
+            '|----------|---------|----------|--------|',
+            '| P1 | — | — | — |',
+            '| P2 | scaffold detector misses dash cells | `task-check.ts:127` | tighten placeholder rule |',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new TaskCheckService(fs, matrix);
+        const result = await svc.check(path, '0001');
+        cleanup();
+
+        const reviewErrors = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Review');
+        expect(reviewErrors.length).toBe(0);
+    });
     test('L3: prose-only ### Review (no table) at optional status is tolerated (P1 regression)', async () => {
         // WHY: a fresh review-template fix-task may have its ### Review authored as
         // prose context (no table at all) when all findings are stale — this is a

@@ -63,16 +63,28 @@ function isPlaceholderBody(body: string): boolean {
 }
 
 /**
+ * A table cell that carries no real content: empty, a dash/em-dash placeholder run
+ * (`—`, `–`, `-`, `---`), or a bare `n/a`/`N/A`. Dash-filled cells defeat a bare
+ * non-empty check — a `| P1 | — | — | — |` placeholder row is still a placeholder
+ * (task 0297; how 0296 reached `done` with an unauthored Review).
+ */
+function isPlaceholderCell(cell: string): boolean {
+    const c = cell.trim();
+    return c === '' || /^[—–-]+$/.test(c) || /^n\/?a$/i.test(c);
+}
+
+/**
  * A `### Review` body counts as carrying a real findings table only when at least
  * one `P1`–`P4` row has substantive content beyond the severity label itself — i.e.
  * a markdown table row `| P2 | <file> | <finding> | … |` where some non-severity cell
- * is non-empty. The shipped review template scaffolds an *empty-cell* P-table
+ * is non-placeholder. The shipped review template scaffolds an *empty-cell* P-table
  * (`| P1 | | | |`); a bare `/P[1-4]/` match falsely accepts that scaffold as a
- * populated table. Requiring a populated cell closes that false-pass so a review
- * task can't reach `wip` with an empty findings table.
+ * populated table, and a bare non-empty check falsely accepts dash-filled cells
+ * (`| P1 | — | — | — |`). Requiring a non-placeholder cell closes both false-passes
+ * so a review task can't reach `wip` with an unauthored findings table.
  */
 /**
- * True when Review body has at least one `| P1|…|P4 |` row with a non-empty
+ * True when Review body has at least one `| P1|…|P4 |` row with a non-placeholder
  * non-severity cell. Exported for the lifecycle done-gate (task 0278 R1) so
  * `testing→done` can refuse prose-only Reviews in-process — defense-in-depth
  * when PATH `spur task check --strict-core` is stale or unreachable.
@@ -83,7 +95,7 @@ export function hasPopulatedPriorityTable(body: string): boolean {
         if (cells.length < 3) continue; // not a table row
         const severityIdx = cells.findIndex((c) => /^\s*P[1-4]\s*$/.test(c));
         if (severityIdx === -1) continue;
-        const hasContent = cells.some((c, i) => i !== severityIdx && c.trim().length > 0);
+        const hasContent = cells.some((c, i) => i !== severityIdx && !isPlaceholderCell(c));
         if (hasContent) return true;
     }
     return false;
@@ -118,13 +130,15 @@ function isReviewScaffold(body: string): boolean {
     // pure prose with no table at all is a half-authored section, not the shipped
     // scaffold, and must still error. The scaffold is present only when at least one
     // empty-cell P-row exists AND every table row is empty-cell chrome (header,
-    // separator, or `| Pn | | | |`) — any real table content disqualifies it.
+    // separator, or `| Pn | | | |` — dash/`n/a` placeholder cells count as empty) —
+    // any real table content disqualifies it.
     let sawEmptyPRow = false;
     for (const line of body.split('\n')) {
         if (!line.includes('|')) continue; // prose line — allowed alongside the scaffold table
         const cells = line.split('|').map((c) => c.trim());
         const isSeparator = cells.every((c) => c === '' || /^:?-+:?$/.test(c));
-        const isEmptyPRow = cells.every((c) => c === '' || /^P[1-4]$/.test(c)) && cells.some((c) => /^P[1-4]$/.test(c));
+        const isEmptyPRow =
+            cells.every((c) => isPlaceholderCell(c) || /^P[1-4]$/.test(c)) && cells.some((c) => /^P[1-4]$/.test(c));
         const isHeader = cells.some((c) => /severity|file|finding|recommendation/i.test(c));
         if (isEmptyPRow) sawEmptyPRow = true;
         else if (!isSeparator && !isHeader) return false; // real table content → not a scaffold
