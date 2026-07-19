@@ -9,7 +9,7 @@ tags:
   - sp-plugin
   - meta
 created_at: "2026-07-17T00:53:58.309Z"
-updated_at: "2026-07-17T06:35:57.975Z"
+updated_at: "2026-07-19T00:12:48.532Z"
 ---
 
 # N: sp plugin next-layer UX — dev-next router and dogfood hardening
@@ -114,7 +114,6 @@ Feature: sp plugin next-layer UX — wayfinder map N
     When the charting session ends
     Then all investigation tickets remain todo (none claimed wip/done in the charting session)
 
-  # Dogfood @1.2 contract (tasks 0276–0277) — DD-09 subset of task ACs
   @core
   Scenario: Complete requires footer
     Given a dogfood report missing the Dogfood Summary footer
@@ -139,7 +138,6 @@ Feature: sp plugin next-layer UX — wayfinder map N
     When Phase 1 completes step derivation
     Then an advisory recommends observe-only or step-split
 
-  # Residual hardening (task 0278) — from 0277 dogfood reports
   @core
   Scenario: Done refuses prose-only Review
     Given a task at status testing whose Review has no populated P1-P4 table
@@ -170,7 +168,6 @@ Feature: sp plugin next-layer UX — wayfinder map N
     When Cost and ledger are finalized
     Then the chained row uses ~unknown and a P3 finding is present
 
-  # Super-coder × next-router light empowerment (task 0279)
   @core
   Scenario: Super-coder still drives the pipeline for ready tasks
     Given a frozen batch with a ready todo task
@@ -201,6 +198,42 @@ Feature: sp plugin next-layer UX — wayfinder map N
     Given recovery or preflight would yield more than one candidate hop
     When super-coder handles that case
     Then it stops with a HITL style message and does not silent-pick under --auto
+
+  @core
+  Scenario: dev-verify --next documents all three done-gate layers honestly (R1)
+    Given plugins/sp/commands/dev-verify.md at the fix commit
+    When an operator reads the §--next chain section
+    Then all three gate layers and their remediations are documented
+
+  @core
+  Scenario: dev-run --next on a backlog-seeded task has a defined outcome (R2)
+    Given a backlog task
+    When /sp:dev-run runs with --auto --next
+    Then the chain promotes backlog to todo or names the exact remediation
+
+  @core
+  Scenario: UNKNOWN verdict artifacts carry an actionable remediation (R3)
+    Given an UNKNOWN or zero-row verdict artifact
+    When testing to done is attempted
+    Then the denial names the source and /sp:dev-verify remediation
+
+  @edge
+  Scenario: empty Design placeholder surfaces a warning (R4)
+    Given a standard task with an empty or placeholder-only Design section
+    When spur task check runs
+    Then an L4 warning names Design
+
+  @core
+  Scenario: pipeline agent.run stall has a written root cause (R5)
+    Given the recorded pipeline stall runs
+    When the timeboxed investigation completes
+    Then the task records an evidence-backed hypothesis and a bounded follow-up
+
+  @edge
+  Scenario: protocol and corpus hygiene items are closed (R6, R7)
+    Given the dogfood protocol and related task corpus
+    When task 0294 completes
+    Then the protocol decisions, counts, and verdict artifact are consistent
 ```
 ## Tasks
 
@@ -217,6 +250,7 @@ Feature: sp plugin next-layer UX — wayfinder map N
 | 0277 | Dogfood @1.2 meta-run detector and token policy | done |
 | 0278 | Dogfood residual hardening from 0277 dogfood reports (done-gate, cost, self-validate) | done |
 | 0279 | Wire next-router into super-coder (preflight + one-shot recovery) | done |
+| 0294 | Fix consolidated open findings from 2026-07-18 dogfood runs (0280/0292/0293) | done |
 <!-- END AUTO-GENERATED -->
 
 ## History

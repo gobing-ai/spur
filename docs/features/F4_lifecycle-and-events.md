@@ -57,6 +57,7 @@ Feature: Lifecycle and events
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0152 | Normalize task status before lifecycle transition; fix opaque FSMError on case-drift | done |
+| 0292 | Enforce verify verdict on done transition; record forced-done overrides | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

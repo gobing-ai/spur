@@ -35,4 +35,5 @@
     ├── [backlog] **M2**: Teams residual polish for release (post-M1) ([M2_teams-residual-polish-for-release-post-m1.md](./M2_teams-residual-polish-for-release-post-m1.md))
     └── [backlog] **M3**: Teams board continuous UX fine-tune (Terminal-centric controls) ([M3_teams-board-continuous-ux-fine-tune-terminal-centric-controls.md](./M3_teams-board-continuous-ux-fine-tune-terminal-centric-controls.md))
 [backlog] **N**: sp plugin next-layer UX — dev-next router and dogfood hardening ([N_sp-plugin-next-layer-ux-dev-next-router-and-dogfood-hardening.md](./N_sp-plugin-next-layer-ux-dev-next-router-and-dogfood-hardening.md))
+[backlog] **O**: sp plugin token-efficient reliable execution architecture ([O_sp-plugin-token-efficient-reliable-execution-architecture.md](./O_sp-plugin-token-efficient-reliable-execution-architecture.md))
 <!-- END AUTO-GENERATED -->

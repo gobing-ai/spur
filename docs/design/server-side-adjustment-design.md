@@ -2,9 +2,9 @@
 doc: server-side-adjustment-design
 owns: HOW — mechanism, module interface shapes, wiring, layout, manifest format
 authority: design (derived from server-side-adjustment-feature-drafted v0.3)
-version: 0.2.0
+version: 0.2.1
 revision: incorporates operator feedback 2026-06-14 — mermaid diagrams; ts-runtime as the runtime-adaptation seam (enhance-first rule); SSE design complete (implementation deferred); oRPC link interceptor API corrected against installed @orpc/client@1.14.4 + @orpc/shared@1.14.4; all 6 open items resolved.
-updated_at: 2026-06-14
+updated_at: 2026-07-18
 derived_from: [server-side-adjustment-feature-drafted v0.3, 00_ADR, 03_ARCHITECTURE, codebase]
 read_before: implementing the server/web adjustment
 edit_rules: 99 §6.4
@@ -632,9 +632,11 @@ CLI `--json` output:
 | `ConflictError` | 409 | `CONFLICT` | Duplicate ID, race on allocation |
 | Unhandled | 500 | `INTERNAL_ERROR` | Never leaks stack in production |
 
-**Implementation:** a custom `oRPCError` class hierarchy (or reuse `ts-utils` errors if they
-exist) thrown by handlers, caught by the `errorHandler` middleware, mapped to the envelope. The
-oRPC handler's `onError` option can also centralize this.
+**Implementation:** missing task/feature resources throw Hono `HTTPException(404)`. The global
+handler structurally recognizes ts-utils `AppError` values by `code` + `message`, avoiding the
+Node-oriented `@gobing-ai/ts-utils` root barrel in the Worker graph. Lifecycle errors preserve
+exact class identity through the narrow Worker-safe `@gobing-ai/spur-app/errors` subpath. The
+handler maps all three shapes into the envelope above.
 
 **Request ID in errors:** every error response includes the `requestId` from `c.var.requestId` so
 operators can correlate a failed API call to the log line.

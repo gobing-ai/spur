@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.3.2
+version: 1.3.3
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-07-02
+updated_at: 2026-07-18
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -25,7 +25,7 @@ detail-first then index (§4.5 rule 5 / T9).
 | Satellite | Area | Status |
 |-----------|------|--------|
 | [`rd3-migration-design.md`](design/rd3-migration-design.md) | Planning layer (`spur task`/`spur feature`) — schemas, lifecycle, corpus migration (ADR-020–023) | finalized; surface in §1.x / §7 |
-| [`server-side-adjustment-design.md`](design/server-side-adjustment-design.md) | Server/Web slice — ServerContext, EventBus/JobQueue/Scheduler wiring, oRPC surface | design (in progress) |
+| [`server-side-adjustment-design.md`](design/server-side-adjustment-design.md) | Server/Web slice — ServerContext, runtime-safe imports, EventBus/JobQueue/Scheduler wiring, oRPC surface | design (in progress) |
 | [`server-side-adjustment-feature-finalized.md`](design/server-side-adjustment-feature-finalized.md) | Server/Web — finalized feature decisions for the above | finalized |
 | [`spur-team-mode-design.md`](design/spur-team-mode-design.md) | Team mode — agent specs, inbox, `TeamService` | design |
 | [`workflow-observability.md`](design/workflow-observability.md) | `spur workflow run` DX — run-start plan preview + live EventBus step progress; board reuse (0114) | implemented |
@@ -927,7 +927,10 @@ a control plane.
 | UI | Live prefers **SSE** (poll fallback if `EventSource` missing); **Load older** uses `before=nextBefore`; columns Time \| Type \| **Target** (file basename or summary) \| Action \| Tokens \| Session \| Agent? \| Model? |
 
 **Mechanism:** `TokenLedgerService` reverse-tails with optional `before` filter; `TokenLedgerWatcher`
-fans out appends to SSE subscribers. Hooks stay file-append only with privacy default **summary over body**.
+fans out appends to SSE subscribers. The Node-only watcher loads only when a local SSE request has a
+`ServerContext`; Worker bootstrap does not import its `node:fs` graph. The `connected` frame follows
+watcher subscription, so an immediate append cannot race initialization. Hooks stay file-append only
+with privacy default **summary over body**.
 
 ### 7.9 System Event catalog
 
