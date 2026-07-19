@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.16] - 2026-07-19
+
+### Fixed
+
+- **Verify line-anchor fidelity rule (anti-stale-citation).** A `--force` re-audit of task 0282 exposed that the prior verify run certified the task `done` citing `file:line` anchors that resolved to a *different ticket's* content (0281 telemetry text), with requirement rows marked MET on material absent from the deliverable. The `code-verification` skill now requires every `file:line` evidence citation in the Testing table (and in Acceptance Criteria evidence) to be re-read at the cited lines this run and confirmed to name the requirement's subject before a MET row is written. Stale or cross-ticket anchors fail the row to UNMET and surface as a P2+ finding. Closes task 0299 (R1).
+
+- **`--next` no-op surfaced in the verify report line.** When `--next` is invoked on a task already at `done` or `cancelled`, the transition cannot fire - but the no-op previously lived only in the CLI print, not in the verify report. The skill's Step 13 now requires the report line itself to state `--next: no-op - task already terminal (<status>)`, so a terminal-task re-audit cannot be misread as a successful `testing -> done` transition. Closes task 0299 (R2).
+
+- **Gitignored `.spur/run/**` fix-pass writes now disclosed in Testing.** A `--fix all` verify pass can mutate deliverables under `.spur/run/**` that are invisible to `git status` and to drift guards. The skill's Step 12 now requires the Testing write-back to name the exact artifact path and line range the fix pass touched, so the mutation is discoverable from the tracked task file alone without diffing untracked directories. Closes task 0299 (R3).
+
+### Documentation
+
+- **Verify-fidelity lesson added to the project constitution.** `docs/99_PROJECT_CONSTITUTION.md` §8 records the 0282 stale-anchor incident and the line-anchor verification rule it produced, so the gap is not re-closed as a new finding in a future audit.
+
 ## [0.3.15] — 2026-07-19
 
 ### Added
