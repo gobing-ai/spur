@@ -63,6 +63,17 @@ states:
             existing Design/Plan/References, then author concise Solution, Testing, and Review
             sections through `spur task update --section --from-file`. Preserve the research
             boundary. Finish with a short summary and stop. Evidence policy: ${vars.evidencePolicy}.
+
+            Evidence-anchor and content contract (mandatory — 0300 R1/R2): when the task's evidence
+            lives in a shared evidence file (e.g. `.spur/run/wayfinder-O/implementation-evidence.md`),
+            the `## <wbs>` section you author MUST (a) be substantive — more than 5 lines AND more
+            than 60 words, covering the task's own requirements, not a generic 2–3 sentence
+            placeholder; and (b) be anchored truthfully — after writing the section, resolve its
+            real start line with `grep -n "^## <wbs> " <evidence-file>` and use that exact line
+            number in every Solution/Testing `file:line` citation. NEVER copy a line number from
+            another ticket's example (e.g. `:5` from an earlier WBS); each WBS anchors to its own
+            section. Before finishing, re-read each cited line and confirm it names the
+            requirement's subject (0299 R1 line-anchor rule).
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: verify
@@ -147,9 +158,18 @@ transitions:
         command: "! test -s .spur/run/wayfinder/${vars.wbs}-input.json || ! test -s .spur/run/wayfinder/${vars.wbs}-precheck.txt"
   - from: investigate
     to: verify
-    description: "Research resolution authored — verify evidence and traceability."
+    description: "Research resolution authored — verify evidence and traceability. Guard enforces the evidence content floor (0300 R2): the task's Testing section must be non-placeholder (>5 lines, >60 words) before independent verification may begin."
     guard:
-      kind: always
+      kind: shell
+      options:
+        command: 'test "$(${vars.spurBin} task show ${vars.wbs} --json | jq -r ".content" | awk "/^### Testing/{f=1;next} /^### /{f=0} f" | wc -l)" -gt 5 && test "$(${vars.spurBin} task show ${vars.wbs} --json | jq -r ".content" | awk "/^### Testing/{f=1;next} /^### /{f=0} f" | wc -w)" -gt 60'
+  - from: investigate
+    to: failed
+    description: "Evidence content floor not met (0300 R2) — investigate authored a placeholder Testing section; stop before verification rather than certify hollow evidence."
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(${vars.spurBin} task show ${vars.wbs} --json | jq -r ".content" | awk "/^### Testing/{f=1;next} /^### /{f=0} f" | wc -l)" -le 5 || test "$(${vars.spurBin} task show ${vars.wbs} --json | jq -r ".content" | awk "/^### Testing/{f=1;next} /^### /{f=0} f" | wc -w)" -le 60'
   - from: verify
     to: record
     description: "Auto profile — record only on a machine-readable PASS verdict (fail-closed to the approve gate otherwise)."
