@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-19T20:08:37.522Z"
-updated_at: "2026-07-19T22:53:33.584Z"
+updated_at: "2026-07-19T23:15:24.889Z"
 ---
 
 ## 0300. Fix wayfinder driver anchor + add evidence content gate (0282/0283 dogfood findings)
@@ -109,9 +109,14 @@ Coverage: N/A (workflow YAML config change; validated via `spur workflow validat
 
 Verdict: PARTIAL
 ### Review
+| Severity | File | Finding | Recommendation |
+|----------|------|---------|----------------|
+| P1 | `config/workflows/wayfinder-resolution.yaml` (investigate `agent.run`) | R3 BLOCKED: cohort regeneration (0284–0291) cannot run — **all four `agent.run` backends fail in this sandbox**: omp (`SQLITE_READONLY` from two live interactive omp sessions holding `agent.db` WAL + sandbox EPERM on `~/.omp`), claude (600s headless stall), codex (EPERM "in-process app-server client"), pi (auto-update.ts:163 crash, exit 1). Probes: 0284 validation run failed at `investigate` (codex, 0ms, code 3). | Unblock requires action outside this sandbox: (a) close the two interactive omp sessions so omp's WAL releases AND run unsandboxed, or (b) run the driver on an unsandboxed host. Then re-run `wayfinder-resolution.yaml --vars '{"wbs":"<0284..0291>","approval":"auto","agent":"<working>"}'` per ticket. |
+| P2 | `config/workflows/wayfinder-resolution.yaml:67-78, 161-172` | R1+R2 FIXED and verified: anchor contract (agent grep-resolves real `## <wbs>` line) + deterministic content-floor guard (Testing >5 lines AND >60 words) with fail-closed `investigate→failed` edge. Floor discriminates: 0284 placeholder FAILs, 0283 real PASSes. `spur workflow validate` → valid. Committed `826fdd2e`. | None — shipped. |
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Residual risk:** until R3 lands, the content-floor guard stops *new* placeholder evidence from advancing, but 0284–0291 still carry their pre-existing placeholder sections (they remain `todo`; none can reach `done` without passing the new floor on re-run). No under-evidenced task can slip to `done` — the gate is fail-closed in the safe direction.
 
+**Back-issues:** none from R1/R2. The R3 executor block is environmental (sandbox + live omp WAL), not a defect introduced by this task.
 ### References
 
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
