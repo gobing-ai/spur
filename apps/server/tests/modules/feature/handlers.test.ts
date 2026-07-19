@@ -92,7 +92,7 @@ describe('feature handlers', () => {
         expect(result.data.name).toBe('Test');
     });
 
-    test('show handler throws NotFoundError when service returns null', async () => {
+    test('show handler throws a 404 HTTP error when service returns null', async () => {
         const handlers = createFeatureHandlers(makeCtx({ show: async () => null }));
         const fn = handlers.show['~orpc'].handler as unknown as (opts: { input: { id: string } }) => Promise<unknown>;
         await expect(fn({ input: { id: 'Z' } })).rejects.toThrow('Feature Z not found');
@@ -230,7 +230,7 @@ describe('feature handlers', () => {
         expect(updatedBody).toBe('New Body Content');
     });
 
-    test('body handler throws NotFoundError when feature not found', async () => {
+    test('body handler throws a 404 HTTP error when feature not found', async () => {
         const ctx = makeCtx({ show: async () => null });
         const handlers = createFeatureHandlers(ctx);
         const fn = handlers.body['~orpc'].handler as unknown as (opts: {

@@ -1,8 +1,8 @@
 /**
  * Server-side domain errors that map to specific HTTP status codes.
  *
- * Re-exported from `@gobing-ai/spur-app` so the HTTP error-handler and the
- * PlanningWriteService throw sites share one class identity (`instanceof` works
- * across the package boundary).
+ * The narrow `@gobing-ai/spur-app/errors` entry preserves class identity with
+ * PlanningWriteService without pulling the Node-oriented app barrel into the
+ * Cloudflare Worker module graph.
  */
-export { GuardDeniedError, LockTimeoutError } from '@gobing-ai/spur-app';
+export { GuardDeniedError, LockTimeoutError } from '@gobing-ai/spur-app/errors';

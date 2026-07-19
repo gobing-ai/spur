@@ -1,8 +1,8 @@
 import type { WriteResult } from '@gobing-ai/spur-app';
 import { contract } from '@gobing-ai/spur-contracts';
 import { normalizeFeatureStatus, PRIORITIES, type Priority } from '@gobing-ai/spur-domain/schema';
-import { NotFoundError } from '@gobing-ai/ts-utils';
 import { implement } from '@orpc/server';
+import { HTTPException } from 'hono/http-exception';
 import type { ServerContext } from '../../context';
 
 const os = implement(contract);
@@ -41,7 +41,7 @@ export function createFeatureHandlers(ctx: ServerContext) {
 
         show: os.feature.show.handler(async ({ input }) => {
             const result = await ctx.featureService().show(input.id);
-            if (!result) throw new NotFoundError(`Feature ${input.id} not found`);
+            if (!result) throw new HTTPException(404, { message: `Feature ${input.id} not found` });
             return {
                 ok: true as const,
                 data: {
@@ -74,7 +74,7 @@ export function createFeatureHandlers(ctx: ServerContext) {
         check: os.feature.check.handler(async ({ input }) => {
             const folders = ctx.planningFolders();
             const feature = await ctx.featureService().show(input.id);
-            if (!feature) throw new NotFoundError(`Feature ${input.id} not found`);
+            if (!feature) throw new HTTPException(404, { message: `Feature ${input.id} not found` });
             const { FeatureCheckService } = await import('@gobing-ai/spur-app/feature-check');
             const svc = new FeatureCheckService(ctx.fs);
             return {
@@ -88,7 +88,7 @@ export function createFeatureHandlers(ctx: ServerContext) {
 
         body: os.feature.body.handler(async ({ input }) => {
             const feature = await ctx.featureService().show(input.id);
-            if (!feature) throw new NotFoundError(`Feature ${input.id} not found`);
+            if (!feature) throw new HTTPException(404, { message: `Feature ${input.id} not found` });
             await ctx.featureService().updateBody(input.id, input.body);
             return { ok: true as const, data: {} };
         }),

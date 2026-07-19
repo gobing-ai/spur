@@ -186,14 +186,14 @@ describe('observability module', () => {
                 path,
                 `${JSON.stringify({ ts: '2026-07-12T12:00:00.000Z', session: 's', type: 'bash', summary: 'ls' })}\n`,
             );
-            getLedgerWatcher(path).pollNewBytes();
+            (await getLedgerWatcher(path)).pollNewBytes();
             const second = await reader?.read();
             const text2 = new TextDecoder().decode(second?.value ?? new Uint8Array());
             expect(text2.includes('tool-use') || text2.includes('bash')).toBe(true);
             // Re-bind watcher on a different path (covers getLedgerWatcher path switch).
             const path2 = join(dir, 'other.jsonl');
             writeFileSync(path2, '');
-            getLedgerWatcher(path2);
+            await getLedgerWatcher(path2);
             ac.abort();
             await reader?.cancel();
         } finally {

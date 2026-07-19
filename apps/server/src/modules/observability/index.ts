@@ -1,30 +1,52 @@
-import {
-    clampToolUseLimit,
-    TokenLedgerWatcher,
-    type ToolUseEvent,
-    UnsupportedProcessPlatformError,
-} from '@gobing-ai/spur-app';
+import type { ToolUseEvent } from '@gobing-ai/spur-app';
 import type { Context, Hono } from 'hono';
 import type { ServerContext } from '../../context';
 import { enqueueSseFrame, sendSseKeepalive } from '../sse/stream-helpers';
 import type { ServerModule } from '../types';
 
 /** Process-local ledger watcher (lazy, shared across SSE clients). */
-let ledgerWatcher: TokenLedgerWatcher | undefined;
+interface LedgerWatcher {
+    stop(): void;
+    start(): void;
+    subscribe(listener: (event: Omit<ToolUseEvent, 'seq'>) => void): () => void;
+    pollNewBytes(): void;
+}
+
+let ledgerWatcher: LedgerWatcher | undefined;
+let ledgerWatcherLoad: Promise<LedgerWatcher> | undefined;
 let watcherPath: string | undefined;
 
 /**
  * Lazy shared watcher for the ledger path (tests may call
  * {@link TokenLedgerWatcher.pollNewBytes} on the returned instance).
  */
-export function getLedgerWatcher(path: string): TokenLedgerWatcher {
-    if (!ledgerWatcher || watcherPath !== path) {
-        ledgerWatcher?.stop();
-        ledgerWatcher = new TokenLedgerWatcher({ ledgerPath: path });
-        watcherPath = path;
-        ledgerWatcher.start();
+export async function getLedgerWatcher(path: string): Promise<LedgerWatcher> {
+    if (watcherPath === path) {
+        if (ledgerWatcher) return ledgerWatcher;
+        if (ledgerWatcherLoad) return ledgerWatcherLoad;
     }
-    return ledgerWatcher;
+
+    ledgerWatcher?.stop();
+    ledgerWatcher = undefined;
+    watcherPath = path;
+
+    // Node-only implementation: defer loading node:fs until a local server
+    // actually opens the ledger SSE route. Worker bootstrap never loads it.
+    const load = import('@gobing-ai/spur-app').then(({ TokenLedgerWatcher }) => {
+        const watcher = new TokenLedgerWatcher({ ledgerPath: path });
+        watcher.start();
+        return watcher;
+    });
+    ledgerWatcherLoad = load;
+
+    const watcher = await load;
+    if (watcherPath === path && ledgerWatcherLoad === load) {
+        ledgerWatcher = watcher;
+        ledgerWatcherLoad = undefined;
+    } else {
+        watcher.stop();
+    }
+    return watcher;
 }
 
 /** Test helper: drop the process-local watcher so the next stream bind is clean. */
@@ -35,6 +57,7 @@ export function resetLedgerWatcherForTests(): void {
         /* ignore */
     }
     ledgerWatcher = undefined;
+    ledgerWatcherLoad = undefined;
     watcherPath = undefined;
 }
 
@@ -57,7 +80,7 @@ function handleProcesses(ctx: ServerContext) {
             const snapshot = await ctx.processInventory().snapshot();
             return c.json(snapshot);
         } catch (err) {
-            if (err instanceof UnsupportedProcessPlatformError) {
+            if (err instanceof Error && 'code' in err && err.code === 'UNSUPPORTED_PLATFORM') {
                 return c.json({ error: err.message, code: err.code }, 501);
             }
             const message = err instanceof Error ? err.message : String(err);
@@ -76,7 +99,8 @@ function handleToolUseGet(ctx: ServerContext) {
                 if (!Number.isNaN(parsed)) limitRaw = parsed;
             }
             const before = c.req.query('before') ?? undefined;
-            const limit = clampToolUseLimit(limitRaw);
+            const limit =
+                limitRaw === undefined || !Number.isFinite(limitRaw) || limitRaw <= 0 ? 200 : Math.min(limitRaw, 1000);
             const snapshot = ctx.tokenLedger().snapshot({ limit, before });
             return c.json(snapshot);
         } catch (err) {
@@ -110,7 +134,7 @@ function handleToolUseStream(ctx: ServerContext) {
         };
 
         const stream = new ReadableStream({
-            start(controller) {
+            async start(controller) {
                 const encoder = new TextEncoder();
                 closeController = () => {
                     try {
@@ -128,17 +152,16 @@ function handleToolUseStream(ctx: ServerContext) {
 
                 heartbeatInterval = setInterval(sendSseKeepalive, 15_000, closed, controller, encoder);
 
-                enqueueSseFrame(closed, controller, encoder, {
-                    type: 'connected',
-                    occurredAt: new Date().toISOString(),
-                });
-
                 try {
                     const path = ctx.tokenLedger().path;
-                    const watcher = getLedgerWatcher(path);
+                    const watcher = await getLedgerWatcher(path);
                     unsubscribe = watcher.subscribe((event) => {
                         // On backpressure / closed controller, enqueue returns false — tear down.
                         if (!enqueueSseFrame(closed, controller, encoder, toolUseSsePayload(event))) teardown();
+                    });
+                    enqueueSseFrame(closed, controller, encoder, {
+                        type: 'connected',
+                        occurredAt: new Date().toISOString(),
                     });
                 } catch {
                     enqueueSseFrame(closed, controller, encoder, {

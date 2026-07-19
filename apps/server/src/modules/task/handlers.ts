@@ -1,8 +1,8 @@
 import type { WriteResult } from '@gobing-ai/spur-app';
 import { contract } from '@gobing-ai/spur-contracts';
 import { normalizeTaskStatusSafe, TASK_TYPES } from '@gobing-ai/spur-domain/schema';
-import { NotFoundError } from '@gobing-ai/ts-utils';
 import { implement } from '@orpc/server';
+import { HTTPException } from 'hono/http-exception';
 import type { ServerContext } from '../../context';
 
 const os = implement(contract);
@@ -56,7 +56,7 @@ export function createTaskHandlers(ctx: ServerContext) {
 
         show: os.task.show.handler(async ({ input }) => {
             const result = await ctx.taskService().show(input.wbs);
-            if (!result) throw new NotFoundError(`Task ${input.wbs} not found`);
+            if (!result) throw new HTTPException(404, { message: `Task ${input.wbs} not found` });
             return {
                 ok: true as const,
                 data: {

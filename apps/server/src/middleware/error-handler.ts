@@ -1,4 +1,3 @@
-import { isAppError } from '@gobing-ai/ts-utils';
 import type { ErrorHandler } from 'hono';
 import { GuardDeniedError, LockTimeoutError } from '../errors';
 
@@ -29,7 +28,14 @@ function hasHttpStatus(err: unknown): err is HttpExceptionLike {
 
 /** True when `err` is a ts-utils `AppError` (carries a domain `code`). */
 function isAppErrorLike(err: unknown): err is AppErrorLike {
-    return isAppError(err);
+    return (
+        typeof err === 'object' &&
+        err !== null &&
+        'code' in err &&
+        typeof err.code === 'string' &&
+        'message' in err &&
+        typeof err.message === 'string'
+    );
 }
 
 /**

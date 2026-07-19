@@ -114,7 +114,7 @@ describe('task handlers', () => {
         expect(result.data.content).toBe('# Task');
     });
 
-    test('show handler throws NotFoundError when service returns null', async () => {
+    test('show handler throws a 404 HTTP error when service returns null', async () => {
         const handlers = createTaskHandlers(makeCtx({ show: async () => null }));
         const fn = handlers.show['~orpc'].handler as unknown as (opts: { input: { wbs: string } }) => Promise<unknown>;
         await expect(fn({ input: { wbs: '9999' } })).rejects.toThrow('Task 9999 not found');
