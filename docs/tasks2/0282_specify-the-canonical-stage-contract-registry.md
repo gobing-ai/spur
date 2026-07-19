@@ -3,7 +3,7 @@ template: brainstorm
 schema_version: 1
 name: "Specify the canonical stage-contract registry"
 description: ""
-status: todo
+status: done
 type: brainstorm
 profile: standard
 feature_id: O
@@ -12,7 +12,7 @@ priority: P1
 tags: ["wayfinder:grilling", "workstream:architecture", "stage-contract"]
 dependencies: []
 created_at: "2026-07-18T17:29:34.862Z"
-updated_at: "2026-07-18T18:37:50.429Z"
+updated_at: "2026-07-19T07:05:30.550Z"
 ---
 
 ## 0282. Specify the canonical stage-contract registry
@@ -68,7 +68,35 @@ Rejected directions: one giant universal command; workflow YAML as the only auth
 ### Solution
 Resolution completed as a specification deliverable. The concrete WBS-specific artifact is recorded in `.spur/run/wayfinder-O/implementation-evidence.md:5` (with the matching numbered section for each WBS), backed by the task contract in `docs/tasks2/:1`, Feature O in `docs/features/O_sp-plugin-token-efficient-reliable-execution-architecture.md:1`, and the reusable driver in `config/workflows/wayfinder-resolution.yaml:1`. No plugin runtime implementation is required for these research/specification tickets; the artifact is the implementation-ready handoff.
 ### Testing
-Validated with the concrete evidence artifact `.spur/run/wayfinder-O/implementation-evidence.md:5`, `spur task check` for each WBS, `spur workflow validate config/workflows/wayfinder-resolution.yaml`, `dist/cli/spur feature check O --json`, and the final repository quality gate. These are research/specification tasks; runtime code tests are not applicable until the synthesized build tasks are created.
+**Per-Requirement Traceability** (re-audit under `--force`, post-`--fix all`)
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | Full field set incl. versioning, aliases, typed I/O, artifacts, reasoning skill, required references, gates, mutation class, timeout/retry, model policy, context envelope, observability, owner — evidence:144 (record sentence) + evidence:168 (`reasoning skill`/`required references`/`timeout` closure line) + task Design |
+| R2 | MET | Authority boundaries — task Design (three-concern separation) + Background (reasoning in skills, deterministic legality in CLI/gates) |
+| R3 | MET | evidence:144 — validation rejects missing references, cycles, unknown gates, unsupported transitions before execution; Design: whole-graph load-time validation |
+| R4 | MET | evidence:154 — execution-model taxonomy (inline / subprocess / deterministic / hitl / irreversible) with the current-agent honesty rule (subprocess record must not claim current-agent execution) |
+| R5 | MET | evidence:157-166 — six stage examples (plan, implement, test, verify, wrap, dogfood) spanning plan/refine → wrap/dogfood in the same contract shape |
+| R6 | MET | Routing policy key (Design) + locked Q&A (static minima + adaptive start/fallback) + evidence:189 (0285 routing: eligibility, pools, override) |
+| R7 | MET | Design rejected-directions: workflow-YAML-only authority, prose-only conventions, opaque DSL |
+| R8 | PARTIAL | Seam/migration checklist delegated to evidence §0289/§0291; 0282 itself produces no checklist (deferred by design) |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: R3 Stage registry contract is implementation-ready | MET | static-ref | evidence:144 (fields + validation), :148/:164/:168/:189 (0283/0288 path mappings), :152 (extension/versioning rules), :157-166 (stage instances declaring the fields) |
+| Scenario: Registry errors fail before execution | MET | static-ref | evidence:144 sentence 2 — rejection before execution; Design load-time graph validation |
+
+**Design conformance:** 4/4 claims DONE — typed versioned declarative registry (evidence:144); three-concern separation (Design + evidence §§0283/0284/0285); load-time whole-graph validation (evidence:144 sentence 2); rejected directions recorded (Design final paragraph).
+
+Coverage: N/A (brainstorm specification task; no runtime code path added).
+
+
+| Severity | Finding | Disposition |
+|----------|---------|-------------|
+| major | Prior verify run's Testing table cited `evidence:134` anchors that resolve to 0281 telemetry text, and marked R4/R5 MET without evidence in the deliverable | **Fixed** by `--fix all` — evidence §0282 extended with the execution-model taxonomy and six stage examples; this re-audit's table cites checked anchors |
+| minor | R8 checklist remains delegated to 0291/0289 rather than produced in 0282 | Documented deviation — Plan item 7 assigns synthesis to 0291; PARTIAL on R8 does not block |
 ### Review
 | Priority | Finding | Disposition |
 |---|---|---|
@@ -90,3 +118,6 @@ Review outcome: PASS for specification readiness. The evidence artifact provides
 - 2026-07-18T18:27:40.190Z done → todo (system)
 - 2026-07-18T18:35:15.541Z todo → done (system)
 - 2026-07-18T18:37:50.429Z done → todo (system)
+- 2026-07-19T06:51:13.712Z todo → wip (system)
+- 2026-07-19T06:51:23.788Z wip → testing (system)
+- 2026-07-19T06:52:57.752Z testing → done (system)

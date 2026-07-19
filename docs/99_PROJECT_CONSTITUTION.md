@@ -448,6 +448,11 @@ if it recurs, a new rule in §6.
 - [2026-06-11] spur-new: Accepted-but-unbuilt design text reads as current architecture unless
   the section title says otherwise — always flag `(accepted design — not yet built)` (§6.4
   rule 1).
+- [2026-07-19] spur-new: A verify run certified task 0282 `done` citing `evidence:134` anchors
+  that resolve to a *different ticket's* content, with R4/R5 marked MET on material absent from
+  the deliverable — caught only by a `--force` re-audit that re-read every cited line. Verify
+  must confirm each `file:line` anchor names the requirement's subject (not merely exists)
+  before writing a MET row (filed as task 0299, P2).
 
 ### Lessons for `docs/04_DESIGN.md`
 
