@@ -122,6 +122,14 @@ assign a per-requirement status:
 Record the evidence string (`file:line`, command, or test name) per requirement — this is what lands
 in `## Testing`.
 
+**Line-anchor verification (anti-stale-citation rule).** Every `file:line` evidence citation
+written into the Testing table MUST be re-read at the cited lines this run, and the re-read content
+MUST name the requirement's subject (the R-item's noun - not merely exist on disk) before a MET row
+is written. A citation whose anchor resolves to another ticket's content, a stale line range, or a
+heading/comment unrelated to the requirement fails the row to UNMET and surfaces the stale anchor as
+a finding (severity >= P2). This closes the gap where a verify run certified a task `done` citing
+`evidence:134` that was actually a sibling ticket's telemetry text (0299 R1, from the 0282 re-audit).
+
 ### Step 5 — Acceptance Criteria guard
 
 If the task has a non-empty Acceptance Criteria section, evaluate every checklist item and every
@@ -154,6 +162,10 @@ The answer file must include a stable AC table:
 |----|--------|---------------|----------|
 | Scenario: CLI emits JSON | MET | test | `apps/cli/tests/foo.test.ts:42` |
 ```
+
+**Line-anchor verification applies to AC evidence too.** Every `file:line` citation in the AC
+evidence column is subject to the Step 4 line-anchor rule - re-read at the cited lines this run and
+confirm the content names the AC's subject before marking the row MET.
 
 ### Step 6 — Design conformance (Phase 7a; Wave C / 0179 R1–R3)
 
@@ -293,11 +305,24 @@ checker without pretending a coverage percentage was measured.
 Loop is bounded — if a fix doesn't move a requirement to MET after one retry, report the residual
 and stop (don't thrash).
 
+**Gitignored fix-pass writes (disclosure rule).** Artifacts written under `.spur/run/**` during a
+fix pass are gitignored, so a `--fix all` pass can mutate deliverables invisibly to `git status` and
+to drift guards. The Testing write-back MUST name the exact artifact path and line range the fix
+pass touched (e.g. `.spur/run/0299-verdict.json:12-18 (re-evaluated R2 evidence after fix)`) so the
+mutation is discoverable from the tracked task file alone, without diffing untracked directories.
+
 ### Step 13 — Report
 
 Show the verdict, the per-requirement table, and the gate outcome (cleared / blocked). Under the
 pipeline this is consumed by the gate; for a direct `/sp:dev-verify` invocation it's the operator's
 summary.
+
+**`--next` on an already-terminal task (no-op surfacing).** When `--next` is invoked on a task
+already at `done` or `cancelled`, the transition cannot fire. The verify report line MUST state the
+no-op itself (e.g. `--next: no-op - task already terminal (<status>)`) rather than relying solely
+on the CLI print (documented in `dev-verify.md`'s `--next` chain section). The CLI print is the
+machine signal; the report line is the operator-visible summary - both must agree so a terminal-task
+re-audit cannot be misread as a successful `testing -> done` transition.
 
 ---
 
