@@ -1,6 +1,16 @@
 # Changelog
 
-## [0.3.13] — 2026-07-18
+## [0.3.14] — 2026-07-18
+
+### Added
+
+- **Verify verdict now gates every `* → done` task transition.** A two-layer done gate at the CLI layer (`apps/cli/src/commands/task.ts` `update` action) consults `.spur/run/<wbs>-verdict.json` on every done transition — including `--no-lifecycle` updates — and denies non-PASS verdicts with an actionable message naming the wbs, file path, verdict value, and remediation. Operators can still override with `--force-done --reason`, which records an audit trail via new `done_forced` and `done_reason` frontmatter fields. R10 hardening: `computeAggregate` recomputes the verdict from requirement/AC rows and takes the harsher of stored-vs-computed, so self-inconsistent artifacts are denied with the inconsistency named. Closes task 0292 (R1–R10).
+
+- **Dogfood refuse-gate extended to mutating `--fix` modes.** `detect-pipeline-driving.ts` now refuses testees carrying `--fix all` or `--fix blockers-first` without `--max-retry`, closing a second tree-mutation source that the original pipeline-driving token matcher did not cover. The same modes are flagged as implement-heavy on verify/review legs (task 0280 P2), while `--fix none` stays observational and a boundary guard prevents `--focus all` from ever matching. `dev-dogfood.md` and the `dogfood-testing` skill document both refuse sources in the `--max-retry` row, the detection section, and a new "Mutating `--fix` mode contract" section.
+
+### Fixed
+
+- **Status-case canonicalization before the done gate.** `apps/cli/src/commands/task.ts` now normalizes the target and stored status via `normalizeTaskStatus` before any verdict-gate match, so `Done`, `DONE`, and legacy aliases can no longer slip past the `=== 'done'` checks (0292 fix-pass, R1/R8 closure). Backed by a CLI integration regression test and an R10 cross-check pin comparing `computeAggregate` vs `deriveVerdict` across every row-status shape in the guard vocabulary.
 
 ### Documentation
 
