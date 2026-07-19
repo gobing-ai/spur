@@ -3,16 +3,16 @@ template: standard
 schema_version: 1
 name: "Fix consolidated open findings from 2026-07-18 dogfood runs (0280/0292/0293)"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
-feature_id: null
+feature_id: N
 parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-18T22:51:48.132Z"
-updated_at: "2026-07-18T23:06:32.021Z"
+updated_at: "2026-07-19T00:13:21.702Z"
 ---
 
 ## 0294. Fix consolidated open findings from 2026-07-18 dogfood runs (0280/0292/0293)
@@ -58,7 +58,7 @@ Everything remaining is in Requirements below, deduplicated across reports with 
 ### Requirements
 Seven deduplicated open items. Priority = highest severity among the merged source findings.
 
-- [ ] R1. **Core, P2 — `dev-verify.md` §`--next` documentation refresh.**
+- [x] R1. **Core, P2 — `dev-verify.md` §`--next` documentation refresh.**
   Merges: verify-0292 P2 (stale already-terminal note), verify-0293 P2 ×2 (undocumented gate layers; Review contract tension), verify-0280 P3 (already-terminal edge).
   Current state: `plugins/sp/commands/dev-verify.md:34,87-89` document only the `--strict-core` guard on `testing → done`; `dev-verify.md:96-99` still says the CLI prints "an unhelpful `undefined → undefined`" and that "honest no-op messaging is tracked in task 0292" — R9 shipped, the CLI now prints `<wbs>: already done — no transition`.
   Required:
@@ -66,11 +66,11 @@ Seven deduplicated open items. Priority = highest severity among the merged sour
   - (b) Document **all three** gate layers the live `testing → done` transition runs, each with its remediation: (1) strict-core + verdict-artifact gate (0292; verdict must be PASS, artifact recomputed from rows), (2) provenance guard (no recorded pipeline run → denial; recorded bypass `SPUR_PROVENANCE_OVERRIDE=1`), (3) Review L3 gate (populated P1–P4 `### Review` table required; remediation `/sp:dev-review <wbs>`). The verify-0293 run was denied by (2) then (3) in sequence — the doc predicted neither.
   - (c) Document the contract tension explicitly: verify mode is forbidden from writing `## Review` (code-verification SKILL.md Step 10), yet the done-gate requires a populated Review table — so a standalone `/sp:dev-verify --next` on a task that skipped `/sp:dev-review` can never reach `done` unaided. State "run `/sp:dev-review` first" as a `--next` precondition (or make the review-pending stop message point at it). Keep the Step 10 write prohibition intact.
 
-- [ ] R2. **Core, P2, HIGH confidence — `/sp:dev-run --next` on a `backlog`-seeded task.**
+- [x] R2. **Core, P2, HIGH confidence — `/sp:dev-run --next` on a `backlog`-seeded task.**
   Source: 0293 dev-run P1. Current state: `plugins/sp/commands/dev-run.md` contains zero mentions of `backlog`; the FSM correctly refuses `backlog → wip` (`GuardDeniedError: No transition from "backlog" to "wip"`), and the chain has no documented pre-step, so an operator running `/sp:dev-run <wbs> --auto --next` on a backlog task hits a raw guard denial with no in-skill remediation. The 0293 run worked around it by hand (`backlog → todo` then `todo → wip`).
   Required: pick and implement one of — (a) chain auto-promotes `backlog → todo` as a documented step 0 of mode resolution (recommended; see Design), or (b) emit a clear operator-facing error naming `spur task update <wbs> todo` as the fix. Either way, `dev-run.md` §Mode resolution / `--next` chain must state the status precondition.
 
-- [ ] R3. **Core, P2 — `spur task verdict` answer-file contract: undocumented shape + unhelpful UNKNOWN path.**
+- [x] R3. **Core, P2 — `spur task verdict` answer-file contract: undocumented shape + unhelpful UNKNOWN path.**
   Merges: 0293 dev-run P2 (parser shape undocumented) + verify-0293 P3 (stale UNKNOWN artifact yields confusing done-denials).
   Current state: `packages/app/src/services/task-verdict.ts:40-49,80,137` — parser extracts structured Requirements/AcceptanceCriteria rows; zero parsed requirements → `verdict: "UNKNOWN"`. `plugins/sp/skills/spur-cli/references/tasks/verbs.md:194` documents only the `--from-answer <path>` flag, not the expected file shape; `dev-verify.md` does not mention it at all. Free-form prose — exactly what a chained dev-verify leg naturally writes — parses to UNKNOWN; the resulting `.spur/run/<wbs>-verdict.json` (source `spur-task-verdict`) then triggers a done-gate denial that does not tell the operator what to do (observed live in verify-0293: the stale UNKNOWN artifact would have denied the 0292 gate with no remediation hint).
   Required:
@@ -78,19 +78,19 @@ Seven deduplicated open items. Priority = highest severity among the merged sour
   - (b) When the done-gate denies on an UNKNOWN artifact whose `source` is `spur-task-verdict` (or the artifact parses to zero rows), the denial message must name the remediation: `run /sp:dev-verify <wbs>`.
   - (c) Decision point (see Design): do NOT add a lenient marker-line fallback to the parser unless the operator overrides — UNKNOWN is the honest answer for unparseable input; the fix is documentation + actionable denial, not loosening.
 
-- [ ] R4. **Non-core, P3 — empty `### Design` placeholder passes `task check` silently.**
+- [x] R4. **Non-core, P3 — empty `### Design` placeholder passes `task check` silently.**
   Merges: verify-0292 P3 + verify-0293 P4. Current state: `packages/app/src/services/task-check.ts:588,644` check section *presence* only (Background/Requirements/Design/Acceptance Criteria/Plan); both 0292 and 0293 reached `done` with an empty `### Design` while `--strict-core` passed, forcing verify's design-conformance step to fall back to `### Solution` as the design authority.
   Required: add a warning-level content check — `### Design` present but empty (or placeholder-only) on standard-profile tasks → L4 WARN naming the section (severity choice justified in Design; must not fail existing corpus). Include tests in `packages/app/tests/services/task-check.test.ts`.
 
-- [ ] R5. **Core, P1, investigation — task-pipeline `agent.run` implement-step stalls while direct `spur agent run` succeeds.**
+- [x] R5. **Core, P1, investigation — task-pipeline `agent.run` implement-step stalls while direct `spur agent run` succeeds.**
   Source: omp-capacity P1 (the only P1 across all six reports). Current state: direct capacity probes pass (Codex `CAPACITY_OK`; omp `usable`, `omp/17.0.4`), but the task-pipeline `/sp:dev-run --mode implement` step stalled under **both** OMP and Codex; stale run `423a2d9a-…` had to be cancelled. Recorded evidence: `.spur/run/423a2d9a-5714-40ae-819b-6fcd658576b7`, `.spur/run/b4c3b395-bffa-4989-a3fa-d2202fb928ef`, `.spur/run/ceecda6f-547e-438a-8bbf-1efc21a5f338`.
   Required: root-cause the divergence between direct `spur agent run` and the pipeline `agent.run` step — inspect the command construction, prompt/answer contract, and timeout handling in `config/workflows/task-pipeline.yaml` and the dev-run `--mode implement` integration. Deliverable is a written root-cause hypothesis with evidence (in this task's Solution); if the fix is non-trivial, spawn a follow-up implementation task rather than expanding this one. Timeboxed (see Plan).
 
-- [ ] R6. **Non-core, P4 — dogfood protocol micro-gaps.**
+- [x] R6. **Non-core, P4 — dogfood protocol micro-gaps.**
   - (a) Live-ledger write mode (0280 dev-run P1, LOW confidence): `monitor-ledger.md:13,32` mandates per-step live writes ("never reconstructed", "Do not batch rows until Phase 4"), yet the 0280 run batch-wrote all rows at finalize and still validated `complete`. Decide and codify: either add an explicit fast-run exemption (batch-finalize permitted for sub-3-minute runs, noted in the report) or keep the strict mandate and state that finalize-only writes are a protocol violation the driver must self-report as a finding. No enforcement tooling required — this is a protocol-text decision.
   - (b) Single-dash lenient parsing (verify-0293 P4): operator typed `-max-retry 3`; the driver silently parsed it as `--max-retry 3`. Since the mutation-acknowledgment refuse-gate keys on this exact flag, note the lenient parsing in `dev-dogfood.md`'s argument table and require the driver to echo the normalized flag.
 
-- [ ] R7. **Non-core, P4 — corpus/artifact hygiene sweep.**
+- [x] R7. **Non-core, P4 — corpus/artifact hygiene sweep.**
   All via CLI-gated writes (`spur task update … --section … --from-file`); never raw edits.
   - (a) 0292 `### Solution` stale counts (verify-0292 P4): `docs/tasks2/0292_….md:152` says "20 unit tests" (post-fix: 23); `:157` says "7 integration tests" (post-fix: 9 guard tests / 8 scenarios).
   - (b) 0293 `### Solution` mislabel (verify-0293 P3): `docs/tasks2/0293_….md:100` says "All 49 pre-existing tests" — pre-change bun count was 41; 49 is the post-change total (already acknowledged in 0293's own Review table at `:147`).
@@ -176,17 +176,123 @@ Ordered for dependency and blast radius: doc-truthing first (cheap, immediately 
 
 Suggested checkpoint after step 4: R1–R4 are the operator-facing value; steps 5–7 are cleanup that can land in the same branch but must not hold the earlier fixes hostage if R5 drags.
 ### Solution
+Implemented all seven consolidated dogfood-remediation requirements and closed the verification fix-pass findings.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**R1 — honest `dev-verify --next` contract**
 
+- `plugins/sp/commands/dev-verify.md:80-137` documents the standalone review precondition, the exact verdict → provenance → Review → strict-core execution order, all remediation paths, the honest terminal no-op, and the verdict answer-file pointer.
+
+**R2 — backlog-seeded chained runs**
+
+- `plugins/sp/commands/dev-run.md:114-151` adds lifecycle-governed `backlog → todo` chain step 0, distinguishes `--next` from `--auto`, and requires actionable remediation if promotion fails.
+
+**R3 — verdict-answer contract and UNKNOWN remediation**
+
+- `plugins/sp/skills/spur-cli/references/tasks/verbs.md:218-280` specifies the exact requirement and AC tables parsed by `spur task verdict`; `tasks.md:34` links to that contract.
+- `packages/app/src/services/done-transition-guard.ts:189-216` enriches UNKNOWN/zero-row denials with source, row counts, expected headers, and `/sp:dev-verify <wbs>`. The parser remains strict.
+- `packages/app/tests/services/done-transition-guard.test.ts` covers source, zero-row, nonzero-row, exclusion, pluralization, and remediation cases.
+
+**R4 — empty standard-task Design warning**
+
+- `packages/app/src/services/task-check.ts:387-405` emits L4 when a standard task has a present empty/placeholder-only Design body, including at testing/done where Design is optional.
+- `packages/app/tests/services/task-check.test.ts` covers empty, placeholder, populated, testing, non-standard, and missing-heading cases.
+
+**R5 — pipeline-stall investigation**
+
+- The leading hypothesis is an interactive `/sp:dev-run --mode implement` wait inside the non-TTY workflow execution context. Evidence spans `config/workflows/task-pipeline.yaml:43-92`, `packages/app/src/workflow/actions/agent-run.ts:69-115`, and `packages/app/src/services/agent-service.ts:314-348`.
+- The 30-minute timeout is a bound, not the cause. Structural tracing/reproduction/cancellation hardening is scoped in follow-up task 0295.
+
+**R6 — protocol decisions**
+
+- `monitor-ledger.md:41-62` permits batch-finalize only below three minutes with an explicit report note; longer batching is a self-reported protocol violation.
+- `dev-dogfood.md:40-50` documents single-dash normalization and requires the normalized flag in Phase-1 output.
+
+**R7 — hygiene**
+
+- Task 0292 now reports 23 unit and 9 integration tests; task 0293 correctly labels 41 tests as pre-existing. Both used CLI-gated Solution replacement.
+- `.spur/run/0231-verdict.json` is schema-shaped PASS JSON.
+
+**Verification-gate repair and design sync**
+
+- Isolated the Cloudflare SIGSEGV to broad Node-oriented package barrels. Server error handling now uses structural ts-utils AppError detection, Hono 404 exceptions, and the narrow Worker-safe `@gobing-ai/spur-app/errors` export.
+- `apps/server/src/modules/observability/index.ts` defers the Node-only ledger watcher until a local SSE request and emits `connected` only after subscription, eliminating both the Worker import crash and the initialization race.
+- `docs/design/server-side-adjustment-design.md` was updated before its `docs/04_DESIGN.md` index row per T3/T9.
+- Task 0294 is linked to owning feature N; N's AC now covers all six task scenarios, and `spur feature refresh` repaired the generated F4/N/O rosters plus the missing O index entry.
 ### Testing
+**Verdict: PASS** — all requirements, Acceptance Criteria, review dimensions, and mandatory repository gates pass.
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Per-requirement traceability**
 
+| Req | Status | Evidence |
+|---|---|---|
+| R1 | MET | `plugins/sp/commands/dev-verify.md:80-137`; static review confirmed precondition, exact execution order, three contract layers, remediation, and honest no-op. |
+| R2 | MET | `plugins/sp/commands/dev-run.md:114-151`; backlog step 0 and failure remediation are explicit. |
+| R3 | MET | `tasks/verbs.md:218-280`, `tasks.md:34`, `done-transition-guard.ts:189-216`; full suite includes UNKNOWN/zero-row remediation cases. |
+| R4 | MET | `task-check.ts:387-405` and six focused cases in `task-check.test.ts`; full suite passes. |
+| R5 | MET | Solution cites workflow command, answer/capture, continuation, and timeout paths; `spur task show 0295 --json` confirms the bounded follow-up. |
+| R6 | MET | `monitor-ledger.md:41-62` and `dev-dogfood.md:40-50`. |
+| R7 | MET | 0292/0293 counts corrected through CLI; `.spur/run/0231-verdict.json` parses as PASS JSON. |
+
+**Acceptance Criteria verification**
+
+| AC | Status | Evidence Type | Evidence |
+|---|---|---|---|
+| AC-1 dev-verify gate contract | MET | command | Static source review of `dev-verify.md:80-137`; `git diff --check HEAD` exit 0. |
+| AC-2 backlog-seeded dev-run | MET | command | Static source review of `dev-run.md:114-151`; full plugin tests pass. |
+| AC-3 UNKNOWN remediation | MET | test | `bun run spur-check` exit 0; done-transition guard tests cover source and zero-row artifacts. |
+| AC-4 empty Design warning | MET | test | `bun run spur-check` exit 0; six R4 cases pass and `task-check.ts` is 98.80% lines. |
+| AC-5 pipeline stall root cause | MET | command | Solution contains required evidence and `spur task show 0295 --json` confirms R1–R4 follow-up scope. |
+| AC-6 protocol and hygiene | MET | command | Protocol/corpus source review plus schema validation of 0231 artifact; exit 0. |
+
+**Mandatory gate evidence**
+
+| Check | Status | Evidence |
+|---|---|---|
+| autofix | MET | `bun run autofix` exit 0; Biome checked 498 files, no fixes; all workspace typechecks pass. |
+| spur-check | MET | Exit 0; 33 pre-check rules, 3,037 tests, 0 failures, 8,700 assertions, 99.07% lines, 2 post-check rules. |
+| lint | MET | `bun run lint` exit 0; Biome clean and all workspace typechecks pass. |
+| test-cf | MET | `bun run test-cf` exit 0; 1 Cloudflare Worker test passed and executed. |
+| build | MET | `bun run build` exit 0; CLI, server, and Astro web builds completed. Vite chunk-size notice is non-blocking and pre-existing. |
+| task-check | MET | `spur task check 0294 --strict-core --json` exit 0 at `done` with `findings: []`. |
+| diff-check | MET | `git diff --check HEAD` exit 0. |
+| doc-sync | MET | T3/T9 detection found both `docs/design/server-side-adjustment-design.md` and its `docs/04_DESIGN.md` index/frontmatter update in the same diff. |
+| feature-sync | MET | Task 0294 linked to feature N; N AC includes every task scenario; generated F4/N/O rosters and feature index refreshed through the CLI. |
+
+**Coverage:** 99.07% aggregate lines. Changed runtime files: `done-transition-guard.ts` 96.55%, `task-check.ts` 98.80%, `observability/index.ts` 98.43%; all above the 90% gate.
 ### Review
+**Functional traceability**
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Req | Status | Evidence |
+|---|---|---|
+| R1 | MET | `plugins/sp/commands/dev-verify.md:80-137` — precondition, gate order/remediations, no-op, and answer-shape pointer. |
+| R2 | MET | `plugins/sp/commands/dev-run.md:114-151` — backlog promotion and actionable failure path. |
+| R3 | MET | `tasks/verbs.md:218-280`; `done-transition-guard.ts:189-216`; full tests pass. |
+| R4 | MET | `task-check.ts:387-405`; six focused cases in `task-check.test.ts`; full tests pass. |
+| R5 | MET | Solution records command construction, answer/capture, continuation, timeout evidence; task 0295 owns the structural fix. |
+| R6 | MET | `monitor-ledger.md:41-62`; `dev-dogfood.md:40-50`. |
+| R7 | MET | CLI-gated 0292/0293 corrections; schema-valid `.spur/run/0231-verdict.json`. |
 
+**SECUA and architecture findings**
+
+| Priority | Finding | Disposition | Evidence |
+|---|---|---|---|
+| P1 | None | Clear | Full rules, tests, Worker runtime, and build gates pass. |
+| P2 | None | Clear after fix | Removed Node-oriented runtime barrels from the Worker module graph; exact lifecycle error identity uses `@gobing-ai/spur-app/errors`. |
+| P3 | None | Clear after fix | Shared watcher-load promise plus subscribe-before-connected ordering closes the local SSE startup race. |
+| P4 | None | Clear after fix | Corrected gate-order prose, slash-command spelling, task-summary pointer, Markdown quoting, and optional-Design wording. |
+
+**Dimension disposition**
+
+| Dimension | Result | Evidence |
+|---|---|---|
+| Functional | PASS | All R1–R7 rows MET with file/command evidence. |
+| Security | PASS | No new secret, auth, SQL, shell, or external-input surface; 33 pre-check rules pass. |
+| Efficiency | PASS | Checks are bounded scalar work; watcher initialization is lazy and shared. |
+| Correctness | PASS | 3,037 tests pass; Worker test executes; SSE race regression passes. |
+| Usability | PASS | Every denial/precondition names an executable remediation. |
+| Architecture | PASS | Worker-safe narrow entry, existing HTTP boundary, and existing observability seam; T3/T9 docs synchronized. |
+
+**Final disposition:** PASS — no unresolved P1–P4 finding outside follow-up task 0295.
 ### References
 **Source dogfood reports (2026-07-18):**
 - `docs/dogfood/2026-07-18-0280-sp-dev-run-dogfood.md` — findings P1 (ledger lag → R6a), P2 (done gate → fixed by 0292), P-pre (DD-09 → fixed via feature O AC), P3/P4 (`--save`/`--full` → fixed in dev-dogfood.md)
@@ -217,3 +323,6 @@ Suggested checkpoint after step 4: R1–R4 are the operator-facing value; steps 
 **Related tasks:** 0280 (baseline dataset), 0292 (done-transition verdict gate), 0293 (mutating-fix refuse gate) — all `done`; this task is the consolidated fix batch for their dogfood residue.
 ### History
 - 2026-07-18T22:55:44.545Z backlog → todo (system)
+- 2026-07-18T23:13:30.973Z todo → wip (system)
+- 2026-07-18T23:34:52.717Z wip → testing (system)
+- 2026-07-19T00:10:17.422Z testing → done (system)

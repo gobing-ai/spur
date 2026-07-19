@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-18T19:34:31.804Z"
-updated_at: "2026-07-18T22:34:06.849Z"
+updated_at: "2026-07-18T23:31:34.512Z"
 ---
 
 ## 0293. Refuse-gate coverage for mutating --fix modes in dogfood detection
@@ -97,7 +97,7 @@ Implemented R1–R6 in `plugins/sp/scripts/dogfood-testing/detect-pipeline-drivi
 - `SKILL.md:318` — NEW `## Mutating --fix mode contract` section (placed after the pipeline-driving word-boundary contract). Notes `PIPELINE_TOKENS` unchanged (R5/R6).
 
 **Back-compat (R6)**
-- All 49 pre-existing tests in `pipeline-detect.test.ts` pass unmodified.
+- All 41 pre-existing tests in `pipeline-detect.test.ts` pass unmodified.
 - Full `plugins/sp/` suite: 252/252 pass.
 ### Testing
 Verified 2026-07-18 by `/sp:dev-verify 0293 --auto --next --force --focus all --fix all` (standalone inline; all evidence re-run fresh this session).

@@ -12,7 +12,7 @@ priority: P1
 tags: []
 dependencies: []
 created_at: "2026-07-18T18:50:43.548Z"
-updated_at: "2026-07-18T21:49:46.127Z"
+updated_at: "2026-07-18T23:31:19.416Z"
 ---
 
 ## 0292. Enforce verify verdict on done transition; record forced-done overrides
@@ -149,12 +149,12 @@ The verdict gate sits at the **CLI layer** (`apps/cli/src/commands/task.ts` upda
 
 - `packages/app/src/services/done-transition-guard.ts:1-185` (new) — pure guard logic.
 - `packages/app/src/index.ts:184-185` — re-export the guard surface.
-- `packages/app/tests/services/done-transition-guard.test.ts:1-280` (new) — 20 unit tests covering R4a–g, R9, R10.
+- `packages/app/tests/services/done-transition-guard.test.ts:1-280` (new) — 23 unit tests covering R4a–g, R9, R10.
 - `packages/domain/src/planning/schema.ts:263-274` — add `done_forced`/`done_reason` to `taskFrontmatterSchema` with string→boolean coercion.
 - `packages/app/src/services/task-service.ts:508-525` — add `done_forced`/`done_reason` to the `updateField` allow-list.
 - `apps/cli/src/commands/task.ts:188-194` — add `--force-done`, `--reason`, `--verdict-dir` options.
 - `apps/cli/src/commands/task.ts:249-329` — wire guard into the update action (R1/R2/R3/R8/R9).
-- `apps/cli/tests/commands/task.test.ts:1275-1440` — 7 integration tests covering all four AC scenarios + `--no-lifecycle` + no-op + inconsistent artifact.
+- `apps/cli/tests/commands/task.test.ts:1275-1440` — 9 integration tests covering all four AC scenarios + `--no-lifecycle` + no-op + inconsistent artifact.
 - `config/workflows/task-lifecycle.yaml` (+ `.spur/workflows/task-lifecycle.yaml` hardlink) — document the two-layer done gate (R6).
 ### Testing
 **Re-audit 2026-07-18** (`/sp:dev-verify 0292 --auto --next --force --focus all --fix all`, dogfood run `docs/dogfood/2026-07-18-sp-dev-verify-0292-dogfood.md`). Pre-fix verdict PARTIAL: two major findings repaired in the same run (fix pass, working tree): (1) case/alias-variant target (`spur task update <wbs> Done`) bypassed the verdict gate because the guard matched `status === 'done'` case-sensitively while `taskFrontmatterSchema` alias-normalizes the write — closed by canonicalizing target + stored status at the CLI layer (`apps/cli/src/commands/task.ts` `canonicalStatusOrRaw`); (2) the guard header cited a nonexistent R10 cross-check test — the pin now exists (`done-transition-guard.test.ts` "R10 — agrees with deriveVerdict on every shape", 3 tests). Post-fix verdict: **PASS**.
