@@ -1,4 +1,7 @@
 import { describe, expect, mock, test } from 'bun:test';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { delimiter, join } from 'node:path';
 import type { AgentName, AgentRunResult, AuthState } from '@gobing-ai/ts-ai-runner';
 import { TIER1_PRIORITY } from '@gobing-ai/ts-ai-runner';
 import { type AgentConfig, type AgentRunDeps, AgentService, type AgentServiceOutput } from '../../src/index';
@@ -1381,6 +1384,118 @@ describe('AgentService.runCapture', () => {
         expect(result.durationMs).toBeUndefined();
         expect(result.signal).toBeUndefined();
         expect(result.stderr).toBeUndefined();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: AgentService.runTraced — task 0295
+// ---------------------------------------------------------------------------
+
+describe('AgentService.runTraced', () => {
+    test('redacts prompt-bearing argv and translated source before trace persistence (R1)', async () => {
+        const svc = makeService();
+        const deps = makeSimpleDeps('pi');
+        const secret = 'api_key=do-not-persist-this';
+        const result = await svc.runTraced(`/sp:dev-run 0295 --auto --description ${secret}`, { agent: 'pi' }, deps);
+
+        expect(result.exitCode).toBe(0);
+        expect(result.invocation).toBeDefined();
+        const serialized = JSON.stringify(result.invocation);
+        expect(serialized).not.toContain('do-not-persist-this');
+        expect(result.invocation?.argv).toContain('/skill:sp-dev-run 0295 --auto [redacted] [redacted]');
+        expect(result.invocation?.translatedFrom).toBe('/sp:dev-run 0295 --auto [redacted] [redacted]');
+        expect(result.invocation?.outputMode).toBe('buffered');
+        expect(result.invocation?.stdinInteractive).toBe(false);
+    });
+
+    test('fully redacts an ordinary prose prompt from traced argv (R1)', async () => {
+        const svc = makeService();
+        const deps = makeSimpleDeps('pi');
+        const prompt = 'Investigate customer password swordfish in the failing request';
+        const result = await svc.runTraced(prompt, { agent: 'pi' }, deps);
+
+        const serialized = JSON.stringify(result.invocation);
+        expect(serialized).not.toContain('swordfish');
+        expect(result.invocation?.argv).toContain(`[redacted prompt: ${prompt.length} chars]`);
+    });
+
+    test('bounded OMP fixture distinguishes translation, non-TTY stdin, and stale continuation (R2/R3)', async () => {
+        const fixtureDir = mkdtempSync(join(tmpdir(), 'spur-0295-omp-'));
+        const executable = join(fixtureDir, 'omp');
+        const previousPath = process.env.PATH;
+        writeFileSync(
+            executable,
+            `#!/usr/bin/env bun
+const args = Bun.argv.slice(2);
+const promptIndex = args.indexOf('-p');
+const observation = {
+    prompt: promptIndex >= 0 ? args[promptIndex + 1] : '',
+    stdinInteractive: process.stdin.isTTY === true,
+    continue: args.includes('-c'),
+    noSession: args.includes('--no-session'),
+};
+console.log(JSON.stringify(observation));
+if (observation.continue) await Bun.sleep(2500);
+`,
+            'utf8',
+        );
+        chmodSync(executable, 0o755);
+        process.env.PATH = `${fixtureDir}${delimiter}${previousPath ?? ''}`;
+
+        const deps: AgentRunDeps = {
+            detector: {
+                detectOne: mock(() =>
+                    Promise.resolve({
+                        name: 'omp',
+                        installed: true,
+                        version: 'fixture',
+                        channels: [],
+                        error: null,
+                    }),
+                ),
+            } as unknown as AgentRunDeps['detector'],
+            doctorRunner: {
+                runOne: mock(() => Promise.resolve(mockDoctorResult({ agent: 'omp', installed: true, usable: true }))),
+            } as unknown as AgentRunDeps['doctorRunner'],
+        };
+
+        try {
+            const svc = makeService();
+            const prompt = '/sp:dev-run 0295 --mode implement --auto';
+            const fresh = await svc.runTraced(prompt, { agent: 'omp', timeout: '1500' }, deps);
+            expect(fresh.exitCode).toBe(0);
+            const freshObservation = JSON.parse(fresh.stdout) as {
+                prompt: string;
+                stdinInteractive: boolean;
+                continue: boolean;
+                noSession: boolean;
+            };
+            expect(freshObservation).toEqual({
+                prompt: '/skill:sp-dev-run 0295 --mode implement --auto',
+                stdinInteractive: false,
+                continue: false,
+                noSession: true,
+            });
+            expect(fresh.invocation).toMatchObject({
+                continue: false,
+                outputMode: 'buffered',
+                stdinInteractive: false,
+            });
+
+            const startedAt = Date.now();
+            const stale = await svc.runTraced(prompt, { agent: 'omp', continue: true, timeout: '500' }, deps);
+            const elapsedMs = Date.now() - startedAt;
+            expect(stale.exitCode).toBe(3);
+            expect(elapsedMs).toBeLessThan(2000);
+            expect(stale.stdout).toContain('"continue":true');
+            expect(stale.invocation?.continue).toBe(true);
+            expect(stale.invocation?.argv).toContain('-c');
+            expect(stale.invocation?.argv).not.toContain('--no-session');
+        } finally {
+            if (previousPath === undefined) delete process.env.PATH;
+            else process.env.PATH = previousPath;
+            rmSync(fixtureDir, { recursive: true, force: true });
+        }
     });
 });
 

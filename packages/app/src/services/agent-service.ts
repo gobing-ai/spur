@@ -83,6 +83,75 @@ export interface AgentRunCaptureResult {
     stderr?: string;
 }
 
+/**
+ * Resolved agent invocation captured before dispatch (R1 / task 0295).
+ *
+ * Persists in the workflow run trace so a stalled or failed `agent.run` can be
+ * reconstructed after the fact: which agent, which resolved argv (including the
+ * translated slash-command), which cwd/mode/timeout, and whether the subprocess
+ * was permitted to inherit the TTY. Prompt-bearing argv entries are reduced to
+ * a trace-safe command summary before persistence; arbitrary prompts, purpose
+ * preambles, system prompts, and secret-like flag values never enter the trace.
+ */
+export interface AgentRunInvocation {
+    /** Canonical agent name (post-resolution). */
+    agent: AgentName;
+    /** Resolution source — phase/default/priority/explicit. */
+    source: AgentResolveSource;
+    /** Shim executable (e.g. `claude`, `codex`). */
+    command: string;
+    /** Resolved argv (post slash-command translation). */
+    argv: string[];
+    /** Working directory passed to the subprocess; undefined = inherit. */
+    cwd?: string;
+    /** Output mode. */
+    mode: 'text' | 'json';
+    /** Process output policy selected for this dispatch. */
+    outputMode: 'buffered' | 'stream';
+    /** Effective timeout in ms; undefined = no timeout. */
+    timeoutMs?: number;
+    /** Effective continue flag (session latch). */
+    continue: boolean;
+    /** Whether stdin can read from an interactive terminal. Always false for one-shot runs. */
+    stdinInteractive: boolean;
+    /** Optional model override (explicit `--model` or executor-resolved). */
+    model?: string;
+    /**
+     * Original prompt when a Claude-style slash command was translated to the
+     * agent's dialect (e.g. `/sp:dev-run` → `/skill:sp-dev-run` on pi/omp).
+     * Undefined when the prompt was passed through verbatim. Diagnostic only —
+     * `argv` already contains the translated form. Arguments are redacted.
+     */
+    translatedFrom?: string;
+}
+
+/**
+ * Result of {@link AgentService.runTraced} — a pipeline-oriented variant that
+ * forces non-interactive buffered execution and returns the resolved invocation
+ * alongside captured stdout/stderr and the diagnostic fields needed for the
+ * partial-work handoff artifact (R2b / G2) and the workflow run trace (R1).
+ *
+ * On a validation failure (bad `--mode`, missing prompt, unknown agent) that
+ * never reaches the subprocess, `invocation` is `undefined` and `exitCode`
+ * reflects the validation error (typically 2); `stdout` is empty.
+ */
+export interface AgentRunTracedResult {
+    /** Final mapped exit code (0 success, 3 agent failure, 2 validation error). */
+    exitCode: number;
+    /** Resolved invocation; absent only when validation failed before resolution. */
+    invocation?: AgentRunInvocation;
+    /** Captured agent stdout (always buffered under non-interactive mode). */
+    stdout: string;
+    /** Captured agent stderr, when available. */
+    stderr?: string;
+    /** Subprocess wall-clock duration in ms, when available. */
+    durationMs?: number;
+    /** Termination signal when the subprocess was killed (timeout/abort), if any. */
+    signal?: string;
+    /** Validation/dispatch error message (exitCode 2). */
+    message?: string;
+}
+
 /** Output sink injected into AgentService. */
 export interface AgentServiceOutput {
     write(message: string): void;
@@ -214,7 +283,7 @@ export class AgentService {
         flags: Record<string, string | boolean>,
         deps?: AgentRunDeps,
     ): Promise<number> {
-        const outcome = await this.executeRun(prompt, flags, deps, false);
+        const outcome = await this.executeRun(prompt, flags, deps, { silent: false });
         if (!outcome.ok) {
             this.ctx.output.error(outcome.message);
             return outcome.exitCode;
@@ -246,7 +315,7 @@ export class AgentService {
         flags: Record<string, string | boolean>,
         deps?: AgentRunDeps,
     ): Promise<AgentRunCaptureResult> {
-        const outcome = await this.executeRun(prompt, flags, deps, true);
+        const outcome = await this.executeRun(prompt, flags, deps, { silent: true });
         if (!outcome.ok) {
             return { exitCode: outcome.exitCode, answer: '' };
         }
@@ -265,20 +334,79 @@ export class AgentService {
     }
 
     // -------------------------------------------------------------------------
+    // Public: runTraced (pipeline / workflow-oriented; non-interactive by contract)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Execute an agent prompt under a non-interactive contract and return the
+     * resolved {@link AgentRunInvocation} alongside captured stdout/stderr and
+     * diagnostic fields. Designed for the pipeline `agent.run` action so a
+     * translated slash command (e.g. `/sp:dev-run --mode implement … --auto`)
+     * cannot stall waiting on an interactive stdin that never arrives (R3 /
+     * task 0295), and so the workflow run trace can record what was actually
+     * dispatched (R1).
+     *
+     * Contract:
+     *  - Output is ALWAYS buffered (`{ mode: 'buffered' }`) regardless of TTY —
+     *    the agent subprocess never inherits the parent's stdout, so it cannot
+     *    perceive an interactive terminal. Direct `spur agent run` keeps its
+     *    interactive streaming behavior because it uses {@link run}, not this.
+     *  - Diagnostics are suppressed (silent).
+     *  - Exit-code mapping matches {@link runCapture}: 0 success, 3 agent
+     *    failure / signal, 2 validation/dispatch error.
+     *
+     * On validation failure (bad `--mode`, missing prompt, unknown agent),
+     * `invocation` is `undefined` and `message` carries the reason.
+     */
+    async runTraced(
+        prompt: string | undefined,
+        flags: Record<string, string | boolean>,
+        deps?: AgentRunDeps,
+    ): Promise<AgentRunTracedResult> {
+        const outcome = await this.executeRun(prompt, flags, deps, { silent: true, nonInteractive: true });
+        if (!outcome.ok) {
+            return { exitCode: outcome.exitCode, stdout: '', message: outcome.message };
+        }
+        const result = outcome.result;
+        const exitCode = result.exitCode === 0 ? 0 : 3;
+        return {
+            exitCode,
+            invocation: outcome.invocation,
+            stdout: result.stdout,
+            stderr: result.stderr,
+            durationMs: result.durationMs,
+            ...(result.signal !== undefined ? { signal: result.signal } : {}),
+        };
+    }
+
+    // -------------------------------------------------------------------------
     // Private: executeRun (shared by run and runCapture)
     // -------------------------------------------------------------------------
 
     /**
-     * Core execution logic shared by {@link run} and {@link runCapture}.
-     * When `silent` is true, suppresses all output and forces buffered mode
-     * to ensure stdout is captured in the returned AgentRunResult.
+     * Core execution logic shared by {@link run}, {@link runCapture}, and
+     * {@link runTraced}.
+     *
+     * @param options.silent  suppress all output and force buffered mode so the
+     *   caller can read `result.stdout` (used by `runCapture` and `runTraced`).
+     * @param options.nonInteractive force buffered output regardless of TTY so
+     *   the subprocess cannot perceive an interactive terminal (R3 / task 0295).
+     *   Implies `silent` semantics for output-policy selection but does NOT
+     *   suppress diagnostics on its own — pass `silent: true` too for that.
+     *   Used by `runTraced`.
      */
     private async executeRun(
         prompt: string | undefined,
         flags: Record<string, string | boolean>,
         deps: AgentRunDeps | undefined,
-        silent: boolean,
-    ): Promise<{ ok: true; result: AgentRunResult } | { ok: false; exitCode: number; message: string }> {
+        options: { silent: boolean; nonInteractive?: boolean },
+    ): Promise<
+        | { ok: true; result: AgentRunResult; invocation: AgentRunInvocation }
+        | { ok: false; exitCode: number; message: string }
+    > {
+        const silent = options.silent;
+        const nonInteractive = options.nonInteractive === true;
+
         // validate --mode
         const mode = stringFlag(flags, 'mode', 'text');
         if (mode !== 'text' && mode !== 'json') {
@@ -309,9 +437,20 @@ export class AgentService {
             return { ok: false, exitCode: 2, message: 'Prompt is required' };
         }
 
-        // determine output mode — silent forces buffered (captures stdout)
+        // determine output mode.
+        // - silent or --json → buffered (capture stdout)
+        // - nonInteractive (R3 / task 0295) → buffered regardless of TTY, so the
+        //   subprocess cannot perceive an interactive terminal and stall on a
+        //   slash command waiting for confirmation prompts that never arrive.
+        // - otherwise (direct `spur agent run` from a TTY) → stream + inherit.
         const jsonOutput = silent || booleanFlag(flags, 'json');
-        const outputPolicy: OutputPolicy = jsonOutput ? { mode: 'buffered' } : { mode: 'stream', isTTY: isatty(1) };
+        const forceBuffered = silent || nonInteractive;
+        const outputPolicy: OutputPolicy = forceBuffered
+            ? { mode: 'buffered' }
+            : jsonOutput
+              ? { mode: 'buffered' }
+              : { mode: 'stream', isTTY: isatty(1) };
+        const outputMode = outputPolicy.mode;
 
         // deps or defaults. When the service has a server EventBus, thread it
         // onto the runner so `agent.invoke.*` emits also reach the system_events
@@ -344,8 +483,11 @@ export class AgentService {
         }
 
         // slash-command translation
-        const input =
-            prompt !== undefined && isClaudeStyleSlashCommand(prompt) ? translateSlashCommand(agent, prompt) : prompt;
+        const translated =
+            prompt !== undefined && isClaudeStyleSlashCommand(prompt)
+                ? translateSlashCommand(agent, prompt)
+                : undefined;
+        const input = translated ?? prompt;
 
         // team-mode identity flags map straight through to PromptOptions; the
         // shim renders them into the agent's identity preamble. `--task` reads the
@@ -372,10 +514,19 @@ export class AgentService {
             ...(taskId !== undefined ? { taskId } : {}),
         };
 
-        // dispatch diagnostics (suppressed in json/silent mode)
+        // Resolve the concrete shim command ONCE (R1 / task 0295): used both for
+        // the dispatch diagnostics line and for the captured invocation that
+        // goes into the workflow run trace. A failure here means the agent
+        // cannot be invoked under the resolved options (e.g. codex resume+prompt).
+        let shimCommand: { command: string; args: string[] };
         try {
-            const shim = getAgentShim(agent);
-            const shimCommand = shim.getPromptCommand(promptOptions);
+            // Production AiRunner applies identity context in buildPromptCommand;
+            // use the same builder as dispatch so the trace describes the actual
+            // command. The fallback keeps structural test doubles compatible.
+            shimCommand =
+                typeof runner.buildPromptCommand === 'function'
+                    ? runner.buildPromptCommand(agent, promptOptions, { cwd: cwd || undefined })
+                    : getAgentShim(agent).getPromptCommand(promptOptions);
             if (!jsonOutput) {
                 const version = (await detector.detectOne(agent)).version;
                 this.ctx.output.error(
@@ -385,6 +536,28 @@ export class AgentService {
         } catch (error) {
             return { ok: false, exitCode: 2, message: error instanceof Error ? error.message : String(error) };
         }
+
+        // Capture the resolved invocation BEFORE dispatch (R1 / task 0295).
+        // Prompt-bearing argv entries and the pre-translation prompt are reduced
+        // to trace-safe summaries; raw prompts/system context must never be
+        // persisted in action_runs.result_json.
+        const traceInput = input === undefined ? undefined : traceSafePrompt(input);
+        const invocation: AgentRunInvocation = {
+            agent,
+            source: resolved.source,
+            command: shimCommand.command,
+            argv: sanitizeInvocationArgv(shimCommand.args, input, traceInput),
+            ...(cwd !== '' ? { cwd } : {}),
+            mode: mode as 'text' | 'json',
+            outputMode,
+            ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+            continue: continueFlag,
+            // NodeProcessExecutor one-shot execution uses `stdin: 'ignore'`
+            // for both buffered and streamed output policies.
+            stdinInteractive: false,
+            ...(model !== undefined ? { model } : {}),
+            ...(translated !== undefined && prompt !== undefined ? { translatedFrom: traceSafePrompt(prompt) } : {}),
+        };
 
         // dispatch
         let result: AgentRunResult;
@@ -405,7 +578,7 @@ export class AgentService {
             process.off('SIGINT', onTerminate);
         }
 
-        return { ok: true, result };
+        return { ok: true, result, invocation };
     }
 
     // -------------------------------------------------------------------------
@@ -596,6 +769,53 @@ export class AgentService {
 
 function toJson(value: unknown): string {
     return JSON.stringify(value, null, 2);
+}
+
+const TRACE_SAFE_SLASH_COMMAND = /^(?:\/skill:(?:sp|rd3)-|\/(?:sp|rd3)[:-]|\$(?:sp|rd3)-)[A-Za-z0-9._-]+(?:\s|$)/;
+const TRACE_SAFE_SLASH_TOKEN =
+    /^(?:\d{4}|--(?:auto|next|force|bdd)|--(?:mode|fix|focus)|implement|test|review|verify|all|none|blockers-first|quick|requirements|background|constraints|acceptance)$/;
+const SENSITIVE_FLAG = /^--?(?:api[-_]?key|authorization|credential|password|secret|token)$/i;
+const SENSITIVE_INLINE_FLAG = /^(--?(?:api[-_]?key|authorization|credential|password|secret|token)=).+$/i;
+
+/**
+ * Preserve the diagnostic identity of a slash command without persisting its
+ * free-form argument payload. Ordinary prompts are fully redacted because no
+ * generic secret detector can prove arbitrary prose safe.
+ */
+function traceSafePrompt(prompt: string): string {
+    const trimmed = prompt.trim();
+    if (!TRACE_SAFE_SLASH_COMMAND.test(trimmed)) {
+        return `[redacted prompt: ${prompt.length} chars]`;
+    }
+    const [command = '', ...tokens] = trimmed.split(/\s+/);
+    const safeTokens = tokens.map((token) => (TRACE_SAFE_SLASH_TOKEN.test(token) ? token : '[redacted]'));
+    return [command, ...safeTokens].join(' ');
+}
+
+/** Redact prompt-bearing and secret-bearing argv entries before trace persistence. */
+function sanitizeInvocationArgv(
+    argv: string[],
+    rawInput: string | undefined,
+    traceInput: string | undefined,
+): string[] {
+    let redactNext = false;
+    return argv.map((arg) => {
+        if (redactNext) {
+            redactNext = false;
+            return '[redacted]';
+        }
+        if (SENSITIVE_FLAG.test(arg)) {
+            redactNext = true;
+            return arg;
+        }
+        if (rawInput !== undefined && traceInput !== undefined && arg.includes(rawInput)) {
+            return traceInput;
+        }
+        return arg
+            .replace(SENSITIVE_INLINE_FLAG, '$1[redacted]')
+            .replace(/\bBearer\s+\S+/gi, 'Bearer [redacted]')
+            .replace(/\b(?:sk|ghp|github_pat)-?[A-Za-z0-9_]{12,}\b/g, '[redacted]');
+    });
 }
 
 /**

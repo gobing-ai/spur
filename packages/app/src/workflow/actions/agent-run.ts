@@ -4,7 +4,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join } from 'node:path';
 import { promisify } from 'node:util';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
-import type { AgentRunCaptureResult, AgentService } from '../../services/agent-service';
+import type { AgentRunInvocation, AgentRunTracedResult, AgentService } from '../../services/agent-service';
 
 const execFileAsync = promisify(execFile);
 
@@ -14,7 +14,22 @@ const PARTIAL_ARTIFACT_TAIL_CHARS = 4000;
 const KIND = 'agent.run';
 
 /**
- * Workflow action that delegates to AgentService.run.
+ * Workflow action that delegates to AgentService.runTraced — the pipeline's
+ * non-interactive agent dispatch path (task 0295 / R3).
+ *
+ * **Non-interactive contract (R3 / task 0295):** every `agent.run` dispatched
+ * by a workflow uses {@link AgentService.runTraced}, which forces
+ * `{ mode: 'buffered' }` output regardless of TTY. The subprocess therefore
+ * never inherits the parent's stdout, so a translated slash command (e.g.
+ * `/sp:dev-run --mode implement … --auto`) cannot stall waiting on an
+ * interactive confirmation prompt that never arrives. Direct `spur agent run`
+ * from a terminal keeps its interactive streaming behavior because it uses
+ * {@link AgentService.run}, not this action.
+ *
+ * **Invocation capture (R1 / task 0295):** the resolved agent, argv (post
+ * slash-command translation), cwd, output mode, timeout, continue state, and
+ * stdin interactivity are captured before dispatch and returned in
+ * `ActionResult.data.invocation` for the workflow run trace.
  *
  * Options:
  * - `input` (string, conditionally required): prompt or slash command. Only optional
@@ -25,10 +40,12 @@ const KIND = 'agent.run';
  * - `cwd` (string): working directory; defaults to context.workdir.
  * - `continue` (boolean): explicit continue flag. When unset, the session latch
  *   (`vars.__agentSession`) auto-determines continue-on/open-new.
- * - `capture` (boolean): when true, use `AgentService.runCapture` to capture the
- *   agent's stdout. The answer text is returned in `data.answer` for downstream
- *   steps (e.g. `response.validate`). Output is buffered, not streamed.
- * - `answerFile` (string): persist the captured answer to a file (implies capture).
+ * - `capture` (boolean): when true, the agent's stdout is also returned in
+ *   `data.answer` for downstream steps (e.g. `response.validate`). Output is
+ *   always buffered under the non-interactive contract, so `capture` here only
+ *   controls whether `answer` is surfaced in `data` — it does NOT switch the
+ *   dispatch path. Kept for backward compatibility with existing workflow yaml.
+ * - `answerFile` (string): persist the captured stdout to a file (implies capture).
  *   Relative paths resolve against `cwd`; parent dirs are created.
  * - `expectFile` (string): post-exit verification — after a successful (exit-0)
  *   agent run, assert the file exists. If absent, downgrade to `ok:false` with a
@@ -39,11 +56,12 @@ const KIND = 'agent.run';
  *   on elapse. On timeout, the agent step exits non-zero → `ok:false` → pipeline
  *   routes to `failed`. Absent by default (no timeout).
  *
- * On a captured run that fails (non-zero/null exit), a partial-work handoff
- * artifact is written to `.spur/run/<runId>-<stateOrNodeId>-partial.md` (R2b /
- * G2): exit reason (signal vs exit code), elapsed ms, `git diff --stat`, and a
- * bounded tail of the captured stdout/stderr. Best-effort — a write failure
- * here never masks the underlying `ok:false` action result.
+ * On any failed run (non-zero/null exit, signal, or dispatch error), a
+ * partial-work handoff artifact is written to
+ * `.spur/run/<runId>-<stateOrNodeId>-partial.md` (R2b / G2 + R1 / task 0295):
+ * exit reason (signal vs exit code vs dispatch error), elapsed ms, the resolved
+ * invocation, `git diff --stat`, and a bounded tail of captured stdout/stderr.
+ * Best-effort — a write failure here never masks the underlying `ok:false` result.
  *
  * Session latch (Q8): the first executed agent.run opens a session (continue: false);
  * subsequent ones inherit it (continue: true). On success, sets `__agentSession: "open"`.
@@ -98,7 +116,7 @@ export class AgentRunActionRunner implements ActionRunner {
         if (timeoutMs !== undefined) flags.timeout = String(timeoutMs);
         if (continueFlag !== undefined) flags.continue = continueFlag;
 
-        // `answerFile` implies capture: persist the agent's answer to a file a
+        // `answerFile` implies capture: persist the agent's stdout to a file a
         // downstream shell step can read (the engine only propagates setVars, not
         // result.data, so a file is the deterministic transport for the answer —
         // e.g. the verify step writing its PASS/FAIL verdict artifact).
@@ -107,58 +125,80 @@ export class AgentRunActionRunner implements ActionRunner {
         const capture = asOptionalBoolean(options.capture) || answerFile !== undefined;
         const agentLabel = agent ?? '<default>';
 
-        if (capture) {
-            const captured = await this.agentService.runCapture(input, flags);
-            const { exitCode, answer } = captured;
-            const ok = exitCode === 0;
-            if (answerFile !== undefined) {
-                const target = isAbsolute(answerFile) ? answerFile : join(cwd, answerFile);
-                await mkdir(dirname(target), { recursive: true });
-                await writeFile(target, answer, 'utf8');
-            }
-            // R6-S2a: verify expected side-effect artifact exists after exit-0.
-            if (ok && expectFile !== undefined) {
-                const target = isAbsolute(expectFile) ? expectFile : join(cwd, expectFile);
-                if (!existsSync(target)) {
-                    return {
-                        ok: false,
-                        data: { exitCode, agent: agentLabel, answer },
-                        error: `agent.run (${agentLabel}) exited 0 but expected file is absent: ${expectFile}`,
-                    };
-                }
-            }
-            if (!ok) {
-                await writePartialWorkArtifact(context, agentLabel, model, captured, cwd);
-            }
-            return {
-                ok,
-                data: { exitCode, agent: agentLabel, answer },
-                error: ok ? undefined : `agent.run (${agentLabel}) exited with code ${exitCode}`,
-                setVars: ok ? { __agentSession: 'open' } : undefined,
-            };
+        // Always dispatch via runTraced: forces non-interactive buffered output
+        // (R3 / task 0295) and returns the resolved invocation for the run
+        // trace (R1). The legacy capture/non-capture branch collapses into a
+        // single dispatch path — `capture` now only controls whether the
+        // stdout is surfaced as `data.answer`.
+        const traced = await this.agentService.runTraced(input, flags);
+        const { exitCode, stdout: answer } = traced;
+        const ok = exitCode === 0;
+        const invocation = traced.invocation;
+
+        if (capture && answerFile !== undefined) {
+            const target = isAbsolute(answerFile) ? answerFile : join(cwd, answerFile);
+            await mkdir(dirname(target), { recursive: true });
+            await writeFile(target, answer, 'utf8');
         }
 
-        const exitCode = await this.agentService.run(input, flags);
-        const ok = exitCode === 0;
+        // R6-S2a: verify expected side-effect artifact exists after exit-0.
         if (ok && expectFile !== undefined) {
             const target = isAbsolute(expectFile) ? expectFile : join(cwd, expectFile);
             if (!existsSync(target)) {
                 return {
                     ok: false,
-                    data: { exitCode, agent: agentLabel },
+                    data: buildResultData(exitCode, agentLabel, capture, answer, invocation),
                     error: `agent.run (${agentLabel}) exited 0 but expected file is absent: ${expectFile}`,
                 };
             }
         }
+
+        if (!ok) {
+            await writePartialWorkArtifact(context, agentLabel, model, traced, cwd);
+        }
+
+        // Actionable failure message (R4 / task 0295): identify the workflow
+        // step and configured timeout, then distinguish signal termination from
+        // dispatch failure and a plain non-zero exit.
+        const stepLabel = context.stateOrNodeId;
+        const error = ok
+            ? undefined
+            : traced.signal !== undefined
+              ? timeoutMs !== undefined
+                  ? `agent.run '${stepLabel}' (${agentLabel}) terminated by signal ${traced.signal} (configured timeout: ${timeoutMs}ms; timeout or cancellation); see partial-work artifact`
+                  : `agent.run '${stepLabel}' (${agentLabel}) was cancelled by signal ${traced.signal}; see partial-work artifact`
+              : traced.message !== undefined
+                ? `agent.run '${stepLabel}' (${agentLabel}) dispatch failed: ${traced.message}`
+                : `agent.run '${stepLabel}' (${agentLabel}) exited with code ${exitCode}`;
+
         return {
             ok,
-            data: { exitCode, agent: agentLabel },
-            error: ok ? undefined : `agent.run (${agentLabel}) exited with code ${exitCode}`,
+            data: buildResultData(exitCode, agentLabel, capture, answer, invocation),
+            error,
             // Latch: mark the session open after the first successful agent.run so later
             // steps auto-continue (Q8). Requires engine setVars (F1, ≥0.3.9).
             setVars: ok ? { __agentSession: 'open' } : undefined,
         };
     }
+}
+
+/**
+ * Build the `ActionResult.data` payload. Always includes `exitCode`, `agent`,
+ * and (when available) the resolved `invocation` for the run trace (R1 / task
+ * 0295). Includes `answer` only when the caller asked for capture, to keep
+ * non-capture results lean.
+ */
+function buildResultData(
+    exitCode: number,
+    agentLabel: string,
+    capture: boolean,
+    answer: string,
+    invocation: AgentRunInvocation | undefined,
+): Record<string, unknown> {
+    const data: Record<string, unknown> = { exitCode, agent: agentLabel };
+    if (capture) data.answer = answer;
+    if (invocation !== undefined) data.invocation = invocation;
+    return data;
 }
 
 function asOptionalString(value: unknown): string | undefined {
@@ -186,7 +226,8 @@ function asOptionalNumber(value: unknown): number | undefined {
 
 /**
  * Write a machine-readable partial-work handoff artifact after a failed
- * captured `agent.run` (R2b / G2 — implement-step timeouts, bugs 742/744/746/748).
+ * `agent.run` (R2b / G2 — implement-step timeouts, bugs 742/744/746/748;
+ * R1 / task 0295 — include the resolved invocation for post-mortem).
  * Destination: `.spur/run/<runId>-<stateOrNodeId>-partial.md`, relative to `cwd`.
  * Best-effort: any error here is swallowed so it never masks the real `ok:false`
  * action result the caller already returns.
@@ -195,18 +236,23 @@ async function writePartialWorkArtifact(
     context: ActionRunContext,
     agentLabel: string,
     model: string | undefined,
-    captured: AgentRunCaptureResult,
+    traced: AgentRunTracedResult,
     cwd: string,
 ): Promise<void> {
     try {
+        const signal = traced.signal;
         const exitReason =
-            captured.signal !== undefined
-                ? `killed by signal ${captured.signal} (likely timeout)`
-                : `exited with code ${captured.exitCode}`;
+            signal !== undefined
+                ? `killed by signal ${signal} (likely timeout or cancellation)`
+                : traced.message !== undefined
+                  ? `dispatch error: ${traced.message}`
+                  : `exited with code ${traced.exitCode}`;
         const diffStat = await gitDiffStat(cwd);
-        const stdoutTail = tail(captured.answer, PARTIAL_ARTIFACT_TAIL_CHARS);
-        const stderrTail = tail(captured.stderr ?? '', PARTIAL_ARTIFACT_TAIL_CHARS);
+        const stdoutTail = tail(traced.stdout, PARTIAL_ARTIFACT_TAIL_CHARS);
+        const stderrTail = tail(traced.stderr ?? '', PARTIAL_ARTIFACT_TAIL_CHARS);
         const headerLine = model !== undefined ? `${agentLabel} (model: ${model})` : agentLabel;
+        const inv = traced.invocation;
+        const argvLine = inv ? `${inv.command} ${inv.argv.join(' ')}` : '(invocation not captured)';
         const body = [
             `# Partial-work handoff — ${headerLine}`,
             '',
@@ -215,7 +261,18 @@ async function writePartialWorkArtifact(
             `- agent: ${agentLabel}`,
             `- model: ${model ?? '(default)'}`,
             `- exit reason: ${exitReason}`,
-            `- elapsed: ${captured.durationMs ?? 'unknown'}ms`,
+            `- elapsed: ${traced.durationMs ?? 'unknown'}ms`,
+            '',
+            '## resolved invocation',
+            '',
+            `- command: ${argvLine}`,
+            `- cwd: ${inv?.cwd ?? '(inherit)'}`,
+            `- mode: ${inv?.mode ?? 'unknown'}`,
+            `- timeoutMs: ${inv?.timeoutMs ?? '(none)'}`,
+            `- continue: ${inv?.continue ?? false}`,
+            `- output: ${inv?.outputMode ?? 'unknown'}`,
+            `- stdinInteractive: ${inv?.stdinInteractive ?? false}`,
+            `- translatedFrom: ${inv?.translatedFrom ?? '(none)'}`,
             '',
             '## git diff --stat',
             '```',

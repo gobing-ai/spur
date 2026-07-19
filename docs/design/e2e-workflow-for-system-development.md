@@ -372,6 +372,9 @@ Rules:
 - `precheck` runs `spur task check <wbs>` before implementation.
 - `implement`, `test`, `review`, and `verify` dispatch existing `sp` competency skills through
   `agent.run`.
+- Every workflow `agent.run` uses the traced, buffered service path: stdin is non-interactive,
+  the sanitized resolved invocation is persisted in the action result, and `capture` controls only
+  whether buffered stdout is exposed as `data.answer`.
 - `approve` is the human review gate; `profile=auto` can route around it only by objective verdict.
 - `verify` must produce a task verdict at `.spur/run/<wbs>-verdict.json` (PASS / PARTIAL / FAIL).
 - `record` records the verdict and solution through `spur task record`.

@@ -13,7 +13,7 @@ describe('registerSpurBuiltins', () => {
     test('registers all action kinds including http.request when requester provided', () => {
         const host = new WorkflowEngineHost();
         registerSpurBuiltins(host, {
-            agentService: { run: async () => 0 } as unknown as AgentService,
+            agentService: { runTraced: async () => ({ exitCode: 0, stdout: '' }) } as unknown as AgentService,
             ruleService: { evaluate: async () => ({ exitCode: 0, findings: [] }) } as unknown as RuleService,
             hitlResponder: { respond: async () => ({ value: 'yes' }) } as unknown as HitlResponder,
             httpRequester: { rawRequest: async () => ({ status: 200, headers: {}, body: '' }) },
@@ -32,7 +32,7 @@ describe('registerSpurBuiltins', () => {
     test('http.request is not registered when no requester provided', () => {
         const host = new WorkflowEngineHost();
         registerSpurBuiltins(host, {
-            agentService: { run: async () => 0 } as unknown as AgentService,
+            agentService: { runTraced: async () => ({ exitCode: 0, stdout: '' }) } as unknown as AgentService,
             ruleService: { evaluate: async () => ({ exitCode: 0, findings: [] }) } as unknown as RuleService,
             hitlResponder: { respond: async () => ({ value: 'yes' }) } as unknown as HitlResponder,
         });
@@ -44,7 +44,7 @@ describe('registerSpurBuiltins', () => {
     test('registers with origin builtin', () => {
         const host = new WorkflowEngineHost();
         registerSpurBuiltins(host, {
-            agentService: { run: async () => 0 } as unknown as AgentService,
+            agentService: { runTraced: async () => ({ exitCode: 0, stdout: '' }) } as unknown as AgentService,
             ruleService: { evaluate: async () => ({ exitCode: 0, findings: [] }) } as unknown as RuleService,
             hitlResponder: { respond: async () => ({ value: 'yes' }) } as unknown as HitlResponder,
             httpRequester: { rawRequest: async () => ({ status: 200, headers: {}, body: '' }) },
@@ -62,7 +62,7 @@ describe('registerSpurBuiltins', () => {
     test('agent.run resolves through host.runAction', async () => {
         const host = new WorkflowEngineHost();
         registerSpurBuiltins(host, {
-            agentService: { run: async () => 0 } as unknown as AgentService,
+            agentService: { runTraced: async () => ({ exitCode: 0, stdout: '' }) } as unknown as AgentService,
             ruleService: { evaluate: async () => ({ exitCode: 0, findings: [] }) } as unknown as RuleService,
             hitlResponder: { respond: async () => ({ value: 'yes' }) } as unknown as HitlResponder,
         });
@@ -88,9 +88,9 @@ describe('registerSpurBuiltins', () => {
         // pre-0.3.9 engine without ActionResult.setVars).
         const continueSeen: Array<boolean | undefined> = [];
         const agentService = {
-            run: async (_input: string | undefined, flags: Record<string, string | boolean>) => {
+            runTraced: async (_input: string | undefined, flags: Record<string, string | boolean>) => {
                 continueSeen.push(flags.continue as boolean | undefined);
-                return 0;
+                return { exitCode: 0, stdout: '' };
             },
         } as unknown as AgentService;
 
@@ -128,6 +128,57 @@ describe('registerSpurBuiltins', () => {
         expect(continueSeen).toEqual([undefined, true]);
     });
 
+    test('resolved invocation is persisted in the workflow action trace without the raw prompt (0295 R1)', async () => {
+        const persistence = new MemoryWorkflowPersistenceAdapter();
+        const host = new WorkflowEngineHost();
+        registerSpurBuiltins(host, {
+            agentService: {
+                runTraced: async () => ({
+                    exitCode: 0,
+                    stdout: '',
+                    invocation: {
+                        agent: 'omp',
+                        source: 'phase',
+                        command: 'omp',
+                        argv: ['--no-session', '-p', '/skill:sp-dev-run 0295 --auto [redacted]'],
+                        mode: 'text',
+                        outputMode: 'buffered',
+                        continue: false,
+                        stdinInteractive: false,
+                        translatedFrom: '/sp:dev-run 0295 --auto [redacted]',
+                    },
+                }),
+            } as unknown as AgentService,
+            ruleService: { evaluate: async () => ({ exitCode: 0, findings: [] }) } as unknown as RuleService,
+            hitlResponder: { respond: async () => ({ value: 'yes' }) } as unknown as HitlResponder,
+        });
+
+        const rawSecret = 'api_key=never-persist-this';
+        const result = await new StateMachineDriver({ host, persistence }).run(
+            {
+                name: 'invocation-trace-e2e',
+                initialState: 'invoke',
+                terminalStates: ['done'],
+                states: [
+                    {
+                        id: 'invoke',
+                        onEnter: [{ kind: 'agent.run', options: { input: `/sp:dev-run 0295 --auto ${rawSecret}` } }],
+                    },
+                    { id: 'done' },
+                ],
+                transitions: [{ from: 'invoke', to: 'done' }],
+            },
+            { runId: 'invocation-trace-e2e-1' },
+        );
+        await Promise.resolve();
+
+        expect(result.status).toBe('done');
+        const traceJson = persistence.actionRuns[0]?.resultJson ?? '';
+        expect(traceJson).toContain('"invocation"');
+        expect(traceJson).toContain('"stdinInteractive":false');
+        expect(traceJson).not.toContain('never-persist-this');
+    });
+
     test('hitl answer propagates to a later step via setVars end-to-end (R7)', async () => {
         // Prove a hitl.input answer is merged into run vars and is visible to a later
         // node's action — the cross-step path that unit tests (which only assert the
@@ -139,7 +190,7 @@ describe('registerSpurBuiltins', () => {
         const hitlInputTemplate = `$${'{vars.__hitlInput}'}`;
         const host = new WorkflowEngineHost();
         registerSpurBuiltins(host, {
-            agentService: { run: async () => 0 } as unknown as AgentService,
+            agentService: { runTraced: async () => ({ exitCode: 0, stdout: '' }) } as unknown as AgentService,
             ruleService: { evaluate: async () => ({ exitCode: 0, findings: [] }) } as unknown as RuleService,
             // The responder supplies the human's answer; the action stores it in __hitlInput.
             hitlResponder: { respond: async () => ({ value: 'ship it' }) } as unknown as HitlResponder,

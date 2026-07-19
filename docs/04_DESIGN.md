@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.3.3
+version: 1.3.4
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-07-18
@@ -840,7 +840,7 @@ Two primitives back the anti-hallucination migration (superskill task 0041):
 | Primitive | Surface | Description |
 |---|---|---|
 | `AgentService.runCapture` | `packages/app/src/services/agent-service.ts` | Opt-in capture path: returns `{ exitCode, answer }` without streaming or diagnostics. Uses buffered output mode. |
-| `agent.run` `capture: true` | `packages/app/src/workflow/actions/agent-run.ts` | When `capture: true`, switches to `runCapture` and surfaces `data.answer` for downstream steps. Default (no `capture`) path is unchanged. |
+| Workflow `agent.run` | `packages/app/src/workflow/actions/agent-run.ts` | Always dispatches through `AgentService.runTraced`: buffered output, non-interactive stdin, and a sanitized resolved invocation persisted in `ActionResult.data`. `capture: true` only surfaces buffered stdout as `data.answer`. Direct `spur agent run` keeps its TTY-aware `run` / `runCapture` paths. |
 | `response.validate` action | `packages/app/src/workflow/actions/response-validate.ts` | Reads `text` from options, calls injected `ResponseValidateEngine.validate()`, maps `{ ok, reason, issues }` to `ActionResult`. Engine injected via `SpurWorkflowBuiltinsOptions.responseValidateEngine` in `builtins.ts`. |
 
 **Engine seam:** `ResponseValidateEngine` interface (`{ validate(text: string): { ok, reason, issues? } }`) is the contract. The concrete engine is owned by superskill 0041 and provided by the externally-installed `cc:anti-hallucination` skill; the caller wires a thin adapter over its surface. The in-repo copy (`plugins/sp/skills/anti-hallucination/`) was removed once the migration completed (ADR-024 amendment, 2026-06-20); the seam itself is DI-only and unchanged.
