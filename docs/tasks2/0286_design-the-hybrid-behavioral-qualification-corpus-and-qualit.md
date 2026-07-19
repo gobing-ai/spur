@@ -3,7 +3,7 @@ template: brainstorm
 schema_version: 1
 name: "Design the hybrid behavioral qualification corpus and quality gates"
 description: ""
-status: todo
+status: done
 type: brainstorm
 profile: standard
 feature_id: O
@@ -12,7 +12,7 @@ priority: P1
 tags: ["wayfinder:research", "workstream:evaluation", "model-qualification"]
 dependencies: []
 created_at: "2026-07-18T17:29:34.889Z"
-updated_at: "2026-07-18T18:37:50.850Z"
+updated_at: "2026-07-19T23:52:58.189Z"
 ---
 
 ## 0286. Design the hybrid behavioral qualification corpus and quality gates
@@ -68,7 +68,27 @@ Rejected directions: a single behavioral scenario; LLM-as-judge without determin
 ### Solution
 Resolution completed as a specification deliverable. The concrete WBS-specific artifact is recorded in `.spur/run/wayfinder-O/implementation-evidence.md:5` (with the matching numbered section for each WBS), backed by the task contract in `docs/tasks2/:1`, Feature O in `docs/features/O_sp-plugin-token-efficient-reliable-execution-architecture.md:1`, and the reusable driver in `config/workflows/wayfinder-resolution.yaml:1`. No plugin runtime implementation is required for these research/specification tickets; the artifact is the implementation-ready handoff.
 ### Testing
-Validated with the concrete evidence artifact `.spur/run/wayfinder-O/implementation-evidence.md:5`, `spur task check` for each WBS, `spur workflow validate config/workflows/wayfinder-resolution.yaml`, `dist/cli/spur feature check O --json`, and the final repository quality gate. These are research/specification tasks; runtime code tests are not applicable until the synthesized build tasks are created.
+**Per-Requirement Traceability**
+
+| Requirement | Evidence |
+|---|---|
+| R1 | implementation-evidence.md:202 |
+| R2 | implementation-evidence.md:202 |
+| R3 | implementation-evidence.md:202 |
+| R4 | implementation-evidence.md:202 |
+| R5 | implementation-evidence.md:202 |
+| R6 | implementation-evidence.md:202 |
+| R7 | implementation-evidence.md:202 |
+| R8 | implementation-evidence.md:202 |
+
+**Acceptance Criteria Verification**
+
+| Scenario | Verification |
+|---|---|
+| R7 Qualification corpus detects quality regression | implementation-evidence.md:202 specifies the versioned corpus by canonical stage and risk class, combining sanitized historical cases with adversarial/metamorphic fixtures and non-compensable deterministic invariants (safety, mutation, traceability, gate-honesty, false-PASS), covering regression detection across model, routing, context, command, and workflow changes. |
+| Corpus drift is controlled | implementation-evidence.md:202 records corpus versioning by canonical stage and risk class with rubric evidence marked supplementary, supporting drift comparison, provenance, and requalification scope. |
+
+Coverage: N/A (specification task)
 ### Review
 | Priority | Finding | Disposition |
 |---|---|---|
@@ -90,3 +110,6 @@ Review outcome: PASS for specification readiness. The evidence artifact provides
 - 2026-07-18T18:27:40.586Z done → todo (system)
 - 2026-07-18T18:35:15.945Z todo → done (system)
 - 2026-07-18T18:37:50.850Z done → todo (system)
+- 2026-07-19T23:52:53.058Z todo → wip (system)
+- 2026-07-19T23:52:55.639Z wip → testing (system)
+- 2026-07-19T23:52:58.189Z testing → done (system)

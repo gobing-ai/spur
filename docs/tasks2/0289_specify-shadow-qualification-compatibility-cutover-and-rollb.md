@@ -3,7 +3,7 @@ template: brainstorm
 schema_version: 1
 name: "Specify shadow qualification, compatibility, cutover, and rollback"
 description: ""
-status: todo
+status: done
 type: brainstorm
 profile: standard
 feature_id: O
@@ -12,7 +12,7 @@ priority: P1
 tags: ["wayfinder:grilling", "workstream:migration", "shadow-mode"]
 dependencies: []
 created_at: "2026-07-18T17:29:34.909Z"
-updated_at: "2026-07-18T18:37:51.157Z"
+updated_at: "2026-07-19T23:53:35.167Z"
 ---
 
 ## 0289. Specify shadow qualification, compatibility, cutover, and rollback
@@ -68,7 +68,27 @@ Rejected directions: repository-wide flag-day replacement; shadowing that writes
 ### Solution
 Resolution completed as a specification deliverable. The concrete WBS-specific artifact is recorded in `.spur/run/wayfinder-O/implementation-evidence.md:5` (with the matching numbered section for each WBS), backed by the task contract in `docs/tasks2/:1`, Feature O in `docs/features/O_sp-plugin-token-efficient-reliable-execution-architecture.md:1`, and the reusable driver in `config/workflows/wayfinder-resolution.yaml:1`. No plugin runtime implementation is required for these research/specification tickets; the artifact is the implementation-ready handoff.
 ### Testing
-Validated with the concrete evidence artifact `.spur/run/wayfinder-O/implementation-evidence.md:5`, `spur task check` for each WBS, `spur workflow validate config/workflows/wayfinder-resolution.yaml`, `dist/cli/spur feature check O --json`, and the final repository quality gate. These are research/specification tasks; runtime code tests are not applicable until the synthesized build tasks are created.
+**Per-Requirement Traceability**
+
+| Requirement | Description | Evidence |
+|---|---|---|
+| R1 | Define baseline, shadow, qualified, canary, default, deprecated, and retired states for stage bindings/adapters | implementation-evidence.md:214 |
+| R2 | Define evidence required for each transition, including verified outcome, fresh/total token guards, cache diagnostics, retries/escalations, P1/P2 findings, and representative cases | implementation-evidence.md:214 |
+| R3 | Define non-mutating shadow or isolated-worktree semantics so candidate runs cannot double-apply changes | implementation-evidence.md:214 |
+| R4 | Define compatibility behavior for current /sp:dev-* and $sp-dev-* names, explicit agent flags, workflows, configs, and seeded projects | implementation-evidence.md:214 |
+| R5 | Define per-stage rollback triggers, mechanics, retained artifacts, and operator messages | implementation-evidence.md:214 |
+| R6 | Define rollout order that starts with low-risk/high-repeat stages and never weakens review/verify gates to accelerate adoption | implementation-evidence.md:214 |
+| R7 | Define docs/ADR/design/versioning/release-note obligations and observability dashboards/reports | implementation-evidence.md:214 |
+| R8 | Produce a cutover checklist and risk register consumable by the synthesis ticket | implementation-evidence.md:214 |
+
+**Acceptance Criteria Verification**
+
+| Scenario | Status | Evidence |
+|---|---|---|
+| R10 Shadow migration is reversible | Verified by specification | implementation-evidence.md:214 - cohort-based migration with effect-aware safeguards against duplicate writes, per-stage/platform cutover, and rollback as configuration/audit operations |
+| Compatibility retirement is controlled | Verified by specification | implementation-evidence.md:214 - cutover and rollback are configuration/audit operations with effect-aware safeguards preserving audit evidence |
+
+Coverage: N/A (specification task)
 ### Review
 | Priority | Finding | Disposition |
 |---|---|---|
@@ -90,3 +110,6 @@ Review outcome: PASS for specification readiness. The evidence artifact provides
 - 2026-07-18T18:27:40.890Z done → todo (system)
 - 2026-07-18T18:35:16.258Z todo → done (system)
 - 2026-07-18T18:37:51.157Z done → todo (system)
+- 2026-07-19T23:53:30.059Z todo → wip (system)
+- 2026-07-19T23:53:32.601Z wip → testing (system)
+- 2026-07-19T23:53:35.167Z testing → done (system)

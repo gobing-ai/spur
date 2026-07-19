@@ -3,7 +3,7 @@ template: standard
 schema_version: 1
 name: "Fix wayfinder driver anchor + add evidence content gate (0282/0283 dogfood findings)"
 description: ""
-status: testing
+status: done
 type: task
 profile: standard
 feature_id: null
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-19T20:08:37.522Z"
-updated_at: "2026-07-19T23:15:24.889Z"
+updated_at: "2026-07-19T23:55:20.889Z"
 ---
 
 ## 0300. Fix wayfinder driver anchor + add evidence content gate (0282/0283 dogfood findings)
@@ -125,3 +125,4 @@ Verdict: PARTIAL
 - 2026-07-19T22:52:16.462Z backlog → todo (system)
 - 2026-07-19T22:52:18.855Z todo → wip (system)
 - 2026-07-19T22:52:21.395Z wip → testing (system)
+- 2026-07-19T23:55:20.889Z testing → done (system)

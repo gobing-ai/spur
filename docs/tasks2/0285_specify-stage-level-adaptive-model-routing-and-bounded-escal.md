@@ -3,7 +3,7 @@ template: brainstorm
 schema_version: 1
 name: "Specify stage-level adaptive model routing and bounded escalation"
 description: ""
-status: todo
+status: done
 type: brainstorm
 profile: standard
 feature_id: O
@@ -12,7 +12,7 @@ priority: P1
 tags: ["wayfinder:grilling", "workstream:model-routing", "reliability"]
 dependencies: []
 created_at: "2026-07-18T17:29:34.882Z"
-updated_at: "2026-07-18T18:37:50.748Z"
+updated_at: "2026-07-19T23:52:45.787Z"
 ---
 
 ## 0285. Specify stage-level adaptive model routing and bounded escalation
@@ -70,7 +70,27 @@ Rejected directions: global default-by-phase regex as the final abstraction; che
 ### Solution
 Resolution completed as a specification deliverable. The concrete WBS-specific artifact is recorded in `.spur/run/wayfinder-O/implementation-evidence.md:5` (with the matching numbered section for each WBS), backed by the task contract in `docs/tasks2/:1`, Feature O in `docs/features/O_sp-plugin-token-efficient-reliable-execution-architecture.md:1`, and the reusable driver in `config/workflows/wayfinder-resolution.yaml:1`. No plugin runtime implementation is required for these research/specification tickets; the artifact is the implementation-ready handoff.
 ### Testing
-Validated with the concrete evidence artifact `.spur/run/wayfinder-O/implementation-evidence.md:5`, `spur task check` for each WBS, `spur workflow validate config/workflows/wayfinder-resolution.yaml`, `dist/cli/spur feature check O --json`, and the final repository quality gate. These are research/specification tasks; runtime code tests are not applicable until the synthesized build tasks are created.
+**Per-Requirement Traceability**
+
+| Requirement | Evidence |
+|---|---|
+| R1 | implementation-evidence.md:198 |
+| R2 | implementation-evidence.md:198 |
+| R3 | implementation-evidence.md:198 |
+| R4 | implementation-evidence.md:198 |
+| R5 | implementation-evidence.md:198 |
+| R6 | implementation-evidence.md:198 |
+| R7 | implementation-evidence.md:198 |
+| R8 | implementation-evidence.md:198 |
+
+**Acceptance Criteria Verification**
+
+| Scenario | Verification | Evidence |
+|---|---|---|
+| R6 Adaptive model routing escalates objectively | Evidence section specifies static eligibility, qualified model pool, bounded objective escalation triggers, attempt budgets, terminal stops, and override; events attribute model, stage, retries, escalation, fresh input, output, and verdict. No self-certification of eligibility is expressible in the policy. | implementation-evidence.md:198 |
+| Efficiency cannot buy a lower-quality PASS | Evidence section specifies outcome-equivalence qualification with price as a non-primary metric and per-attempt event attribution of fresh input, output, and verdict. | implementation-evidence.md:198 |
+
+Coverage: N/A (specification task)
 ### Review
 | Priority | Finding | Disposition |
 |---|---|---|
@@ -92,3 +112,6 @@ Review outcome: PASS for specification readiness. The evidence artifact provides
 - 2026-07-18T18:27:40.487Z done → todo (system)
 - 2026-07-18T18:35:15.842Z todo → done (system)
 - 2026-07-18T18:37:50.748Z done → todo (system)
+- 2026-07-19T23:52:40.690Z todo → wip (system)
+- 2026-07-19T23:52:43.233Z wip → testing (system)
+- 2026-07-19T23:52:45.787Z testing → done (system)

@@ -3,7 +3,7 @@ template: brainstorm
 schema_version: 1
 name: "Specify CLI-safe feature sections and task dependency mutation"
 description: ""
-status: todo
+status: done
 type: brainstorm
 profile: standard
 feature_id: O
@@ -12,7 +12,7 @@ priority: P1
 tags: ["wayfinder:research", "workstream:corpus", "cli-gap"]
 dependencies: []
 created_at: "2026-07-18T17:29:34.916Z"
-updated_at: "2026-07-18T18:37:51.260Z"
+updated_at: "2026-07-19T23:53:47.509Z"
 ---
 
 ## 0290. Specify CLI-safe feature sections and task dependency mutation
@@ -75,7 +75,30 @@ Rejected shortcuts: permitting direct YAML edits as an exception; accepting depe
 ### Solution
 Resolution completed as a specification deliverable. The concrete WBS-specific artifact is recorded in `.spur/run/wayfinder-O/implementation-evidence.md:5` (with the matching numbered section for each WBS), backed by the task contract in `docs/tasks2/:1`, Feature O in `docs/features/O_sp-plugin-token-efficient-reliable-execution-architecture.md:1`, and the reusable driver in `config/workflows/wayfinder-resolution.yaml:1`. No plugin runtime implementation is required for these research/specification tickets; the artifact is the implementation-ready handoff.
 ### Testing
-Validated with the concrete evidence artifact `.spur/run/wayfinder-O/implementation-evidence.md:5`, `spur task check` for each WBS, `spur workflow validate config/workflows/wayfinder-resolution.yaml`, `dist/cli/spur feature check O --json`, and the final repository quality gate. These are research/specification tasks; runtime code tests are not applicable until the synthesized build tasks are created.
+**Per-Requirement Traceability**
+
+| Requirement | Summary | Evidence |
+|---|---|---|
+| R1 | Trace schemas, services, commands, docs, hooks, tests, and existing corpus behavior for `dependencies[]` and feature section replacement | implementation-evidence.md:218 |
+| R2 | Define dependency operations (set/add/remove/clear), validation of WBS existence/self-edge/cycles/duplicates, atomicity, JSON output, exit codes | implementation-evidence.md:218 |
+| R3 | Decide whether batch-create accepts dependencies and how not-yet-allocated task references are represented or resolved atomically | implementation-evidence.md:218 |
+| R4 | Define a CLI-safe way to initialize/add canonical wayfinder sections or an approved template/variant | implementation-evidence.md:218 |
+| R5 | Preserve task-write guard, section matrix, history/update timestamps, lifecycle readiness, feature refresh, backwards compatibility | implementation-evidence.md:218 |
+| R6 | Specify documentation and schema SSOT updates so JSON schema/runtime/help cannot drift | implementation-evidence.md:218 |
+| R7 | Provide migration behavior for existing direct-authored dependency arrays and feature N-style maps | implementation-evidence.md:218 |
+| R8 | Produce acceptance tests and an implementation task split; record feature O sequencing representation until the gap ships | implementation-evidence.md:218 |
+
+Note: the 0290 evidence section (`## 0290 - CLI-safe mutation`, lines 216-219) is a single summary paragraph at line 218 with no per-requirement `[Rn]` tags; all eight requirements trace to that one evidence line.
+
+**Acceptance Criteria Verification**
+
+| Scenario | Verification |
+|---|---|
+| R11 Dependency wiring has a CLI-safe contract | Evidence at implementation-evidence.md:218 documents the CLI schema gap for `dependencies[]` and custom sections and specifies validated CLI operations with atomicity, idempotency, cycle/self-edge checks, and machine-readable errors; the implementation task split is handed to 0291 without direct corpus writes. |
+| Corpus mutation remains harness-gated | Evidence at implementation-evidence.md:218 states every supported mutation must flow through validated CLI operations and that `plugins/sp/scripts` remains exception-only with explicit approval, preserving the CLI-gated corpus-write rule. |
+| R15 - Spur CLI is the default execution capacity | Evidence at implementation-evidence.md:218 confirms CLI operations are the mutation surface and that script subprocess paths stay exception-only; a missing CLI capability is recorded as a CLI enhancement (deferred to 0291), not a silent bypass. |
+
+Coverage: N/A (specification task)
 ### Review
 | Priority | Finding | Disposition |
 |---|---|---|
@@ -97,3 +120,6 @@ Review outcome: PASS for specification readiness. The evidence artifact provides
 - 2026-07-18T18:27:40.993Z done → todo (system)
 - 2026-07-18T18:35:16.361Z todo → done (system)
 - 2026-07-18T18:37:51.260Z done → todo (system)
+- 2026-07-19T23:53:42.378Z todo → wip (system)
+- 2026-07-19T23:53:44.952Z wip → testing (system)
+- 2026-07-19T23:53:47.509Z testing → done (system)

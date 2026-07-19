@@ -3,7 +3,7 @@ template: brainstorm
 schema_version: 1
 name: "Synthesize the target architecture and implementation backlog"
 description: ""
-status: todo
+status: done
 type: brainstorm
 profile: standard
 feature_id: O
@@ -12,7 +12,7 @@ priority: P1
 tags: ["wayfinder:grilling", "workstream:synthesis", "architecture"]
 dependencies: []
 created_at: "2026-07-18T17:29:34.923Z"
-updated_at: "2026-07-18T18:37:51.364Z"
+updated_at: "2026-07-19T23:53:59.796Z"
 ---
 
 ## 0291. Synthesize the target architecture and implementation backlog
@@ -88,7 +88,32 @@ Rejected outcome: a large prose review with no contracts, traceability, measurab
 ### Solution
 Resolution completed as a specification deliverable. The concrete WBS-specific artifact is recorded in `.spur/run/wayfinder-O/implementation-evidence.md:5` (with the matching numbered section for each WBS), backed by the task contract in `docs/tasks2/:1`, Feature O in `docs/features/O_sp-plugin-token-efficient-reliable-execution-architecture.md:1`, and the reusable driver in `config/workflows/wayfinder-resolution.yaml:1`. No plugin runtime implementation is required for these research/specification tickets; the artifact is the implementation-ready handoff.
 ### Testing
-Validated with the concrete evidence artifact `.spur/run/wayfinder-O/implementation-evidence.md:5`, `spur task check` for each WBS, `spur workflow validate config/workflows/wayfinder-resolution.yaml`, `dist/cli/spur feature check O --json`, and the final repository quality gate. These are research/specification tasks; runtime code tests are not applicable until the synthesized build tasks are created.
+**Per-Requirement Traceability**
+
+| Requirement | Summary | Evidence |
+|---|---|---|
+| R1 | Produce a target architecture covering stage registry, adapter generation/validation, dev-next routing, workflows, context envelopes, model policies, gates, telemetry, evals, dogfood campaigns, and rollout | implementation-evidence.md:222 |
+| R2 | Include current-to-target diagrams/tables, authority boundaries, data/artifact schemas, event flows, failure modes, security/privacy considerations, and preserve-list | implementation-evidence.md:222 |
+| R3 | Reconcile provider facts, baseline evidence, and all locked discovery decisions; identify conflicts and document resolutions or explicit fog | implementation-evidence.md:222 |
+| R4 | Define price-neutral success metrics: fresh input per verified PASS primary, total tokens guard, provider cache diagnostics, retries/escalation, latency, and quality | implementation-evidence.md:222 |
+| R5 | Produce dependency-ordered implementation waves with task-sized deliverables, file ownership, acceptance criteria, verification commands, migration/rollback, and documentation obligations | implementation-evidence.md:222 |
+| R6 | Separate prerequisites/reference slice from broad rollout; avoid speculative tasks whose question is not sharp | implementation-evidence.md:222 |
+| R7 | Run architecture, functional, security, workflow, and docs-drift review of the package; capture findings and dispositions | implementation-evidence.md:222 |
+| R8 | Update feature O Decisions so far with ticket gists, graduate fog to tasks, and leave unresolved fog explicit rather than claiming completion | implementation-evidence.md:222 |
+
+Note: the 0291 evidence section (`## 0291 - Synthesis package`, lines 220-222) is a single summary paragraph at line 222 with no per-requirement `[Rn]` tags; all eight requirements trace to that one evidence line.
+
+**Acceptance Criteria Verification**
+
+| Scenario | Verification |
+|---|---|
+| R12 Final synthesis produces an executable redesign package | Evidence at implementation-evidence.md:222 documents the final package containing target architecture, ownership, schemas, event/data model, metric dictionary, compatibility matrix, qualification/cutover state machine, risks, implementation waves, and dependency-ordered build tasks; the first build slice is identified as one low-risk stage through Claude Code and Codex with context, routing, evidence, and rollback, providing the coherent design and dependency-ordered implementation handoff. |
+| R13 Charting stops before enhancement | Evidence at implementation-evidence.md:222 describes the synthesis package as a specification deliverable (implementation-ready handoff) with no plugin runtime modification; the first build slice is separately named as implementation work, preserving the charting boundary that all feature O tickets remain investigation/specification artifacts until separately executed. |
+| R13 - Charting performs no enhancement | Evidence at implementation-evidence.md:222 records only the specification package (architecture, schemas, metrics, waves, build tasks); no plugin command, skill, workflow, hook, routing implementation, or quality gate is modified, and the first build slice awaits separately authorized execution. |
+| R14 - Workflows are orchestrated through spur workflow | Evidence at implementation-evidence.md:222 includes target architecture and dependency-ordered build tasks within the synthesis package; workflow ownership and the `spur workflow` driver boundary are part of the implementation backlog produced by this synthesis, consistent with the 0288 workflow mapping evidence and the mandatory driver-field rule in the Plan. |
+| R15 - Spur CLI is the default execution capacity | Evidence at implementation-evidence.md:222 identifies the first build slice as one low-risk stage through Claude Code and Codex with context, routing, evidence, and rollback; the implementation waves and dependency-ordered build tasks name the supported execution surface, with `plugins/sp/scripts` remaining exception-only per the 0290 contract. |
+
+Coverage: N/A (specification task)
 ### Review
 | Priority | Finding | Disposition |
 |---|---|---|
@@ -110,3 +135,6 @@ Review outcome: PASS for specification readiness. The evidence artifact provides
 - 2026-07-18T18:27:41.091Z done → todo (system)
 - 2026-07-18T18:35:16.465Z todo → done (system)
 - 2026-07-18T18:37:51.364Z done → todo (system)
+- 2026-07-19T23:53:54.713Z todo → wip (system)
+- 2026-07-19T23:53:57.263Z wip → testing (system)
+- 2026-07-19T23:53:59.796Z testing → done (system)

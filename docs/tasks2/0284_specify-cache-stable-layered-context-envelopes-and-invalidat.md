@@ -3,7 +3,7 @@ template: brainstorm
 schema_version: 1
 name: "Specify cache-stable layered context envelopes and invalidation"
 description: ""
-status: todo
+status: done
 type: brainstorm
 profile: standard
 feature_id: O
@@ -12,7 +12,7 @@ priority: P1
 tags: ["wayfinder:grilling", "workstream:cache", "context-envelope"]
 dependencies: []
 created_at: "2026-07-18T17:29:34.875Z"
-updated_at: "2026-07-18T18:37:50.637Z"
+updated_at: "2026-07-19T23:52:19.488Z"
 ---
 
 ## 0284. Specify cache-stable layered context envelopes and invalidation
@@ -68,18 +68,38 @@ Rejected directions: one monolithic prompt; time-based cache assumptions without
 6. Define conformance tests for byte/canonical stability, invalidation precision, precedence, redaction, and no-loss traceability.
 7. Hand implementation slices and unresolved host limitations to migration and synthesis.
 ### Solution
-Resolution completed as a specification deliverable. The concrete WBS-specific artifact is recorded in `.spur/run/wayfinder-O/implementation-evidence.md:5` (with the matching numbered section for each WBS), backed by the task contract in `docs/tasks2/:1`, Feature O in `docs/features/O_sp-plugin-token-efficient-reliable-execution-architecture.md:1`, and the reusable driver in `config/workflows/wayfinder-resolution.yaml:1`. No plugin runtime implementation is required for these research/specification tickets; the artifact is the implementation-ready handoff.
+Resolution completed as a specification deliverable. The WBS-specific artifact is the `## 0284` section at `.spur/run/wayfinder-O/implementation-evidence.md:188`, which defines the canonical ordered envelope as stable-first then volatile typed layers: harness policy, project authority, stage contract, feature/task state, indexed evidence, run state, volatile tool observations [R1: implementation-evidence.md:190]. Per-layer metadata covers owner, schema version, content hash, source revision, sensitivity/redaction, size budget, invalidation dependencies, and stable-prefix-eligible vs volatile cacheability [R1: implementation-evidence.md:190]. Project/task snapshots are obtained via targeted `--json` verbs, never full-file rereads [R2: implementation-evidence.md:192]. Invalidation is per-layer and fingerprint-driven across corpus, git, config/model, skill/reference, gate-result, and tool-output dimensions [R3: implementation-evidence.md:192]. Progressive disclosure routes optional references through handles with triggers and budgets while keeping safety, authorization, traceability, and mutation-gate layers mandatory inline [R4: implementation-evidence.md:192]. Inline stages may reuse captured stable layers within one dispatch; subprocess (`spur agent run`) stages start a fresh process and may only cross the boundary via fingerprinted on-disk artifacts [R5: implementation-evidence.md:194]. Instrumentation attributes fresh vs reused Spur layers by content-hash comparison and labels provider cache dimensions only from verified raw usage, never fabricating host cache hits [R6: implementation-evidence.md:194]. Representative envelopes for refine, implement, review, verify, and dogfood are assembled from the stage registry record [R7: implementation-evidence.md:194]. Conformance tests cover byte/canonical stability, invalidation precision, no-loss traceability, and size/token guardrails that fail closed [R8: implementation-evidence.md:194]. Inputs consumed: the task contract, Feature O, baseline 0280, provider semantics 0281, stage registry 0282, and `config/workflows/wayfinder-resolution.yaml`. No plugin runtime implementation is required for this research/specification ticket; the artifact is the implementation-ready handoff to the synthesized build backlog (0291).
 ### Testing
-Validated with the concrete evidence artifact `.spur/run/wayfinder-O/implementation-evidence.md:5`, `spur task check` for each WBS, `spur workflow validate config/workflows/wayfinder-resolution.yaml`, `dist/cli/spur feature check O --json`, and the final repository quality gate. These are research/specification tasks; runtime code tests are not applicable until the synthesized build tasks are created.
+**Per-Requirement Traceability**
+
+| Req | Requirement | Evidence |
+|-----|-------------|----------|
+| R1 | Define each envelope layer, canonical serialization/order, size budget, content hash, provenance, and cacheability classification | implementation-evidence.md:190 |
+| R2 | Define minimal project/task snapshot schemas obtained via targeted `--json` rather than full-file rereads | implementation-evidence.md:192 |
+| R3 | Specify invalidation triggers for corpus updates, git changes, config/model changes, skill/reference version changes, gate results, and tool outputs | implementation-evidence.md:192 |
+| R4 | Define reference routing/progressive disclosure so required safety and gate contracts cannot be omitted by a cheap model | implementation-evidence.md:192 |
+| R5 | Define session/subprocess boundaries and what cannot be cached or shared across `agent.run` processes | implementation-evidence.md:194 |
+| R6 | Specify instrumentation that attributes fresh versus reused context without fabricating provider cache behavior | implementation-evidence.md:194 |
+| R7 | Provide representative envelopes for refine, implement, review, verify, and dogfood | implementation-evidence.md:194 |
+| R8 | Define deterministic stability and stale-context tests plus size/token guardrails | implementation-evidence.md:194 |
+
+**Acceptance Criteria Verification**
+
+| Scenario | Verdict | Evidence |
+|----------|---------|----------|
+| R5 Layered context envelopes are cache-stable and safe | PASS | Stable policy and stage-contract layers precede volatile run and tool-output layers (R1: implementation-evidence.md:190); each layer carries owner, schema version, content hash, source revision, sensitivity/redaction, size budget, invalidation dependencies, and cacheability (R1: implementation-evidence.md:190); byte/canonical stability across Claude Code and Codex adapters asserted by the stability conformance test (R8: implementation-evidence.md:194); stale or mismatched layers fail closed - assembly fails closed when the required-layer budget is exceeded and invalidation is fingerprint-driven per-layer (R3: implementation-evidence.md:192, R8: implementation-evidence.md:194) |
+| Progressive disclosure preserves quality gates | PASS | Expansion routes optional references through disclosure handles with triggers and budgets, but safety, authorization, requirements-traceability, and mutation-gate contracts are mandatory inline layers that cannot be deferred or omitted by a cheap model (R4: implementation-evidence.md:192); no-loss traceability conformance test asserts required safety/gate/requirements layers survive any disclosure expansion (R8: implementation-evidence.md:194); fresh-vs-reused attribution is recorded via content-hash comparison instrumentation (R6: implementation-evidence.md:194) |
+
+Coverage: N/A (specification task)
 ### Review
 | Priority | Finding | Disposition |
 |---|---|---|
-| P1 | No unresolved implementation blocker in this specification artifact. | Implementation is deferred to the synthesized build backlog. |
-| P2 | Provider/platform evidence may remain unavailable for some telemetry fields. | Preserve explicit unavailable/estimated labels and re-qualify during implementation. |
-| P3 | CLI dependency mutation remains a known follow-up surface. | Track through WBS 0290 and the implementation backlog. |
-| P4 | Documentation and compatibility details may evolve during build. | Recheck authoritative docs during implementation review. |
+| P1 | No unresolved implementation blocker in this specification artifact. | Implementation is deferred to the synthesized build backlog (0291). |
+| P2 | Provider/platform cache telemetry may remain unavailable for some instrumentation fields. | Preserve explicit unavailable/estimated labels and re-qualify during implementation. |
+| P3 | Inline-vs-subprocess boundary and on-disk-artifact-only crossing rule is a contract implementation must enforce, not infer. | Track through WBS 0290/0291 and the implementation backlog. |
+| P4 | Canonical-serialization parity across Claude Code and Codex adapters depends on host-controlled prompt assembly (ticket 0281 LOW-confidence). | Recheck authoritative docs and adapter behavior during implementation review. |
 
-Review outcome: PASS for specification readiness. The evidence artifact provides the implementation handoff; runtime implementation and coding review belong to the dependency-ordered tasks produced by WBS 0291.
+Review outcome: PASS for specification readiness. The evidence artifact at `.spur/run/wayfinder-O/implementation-evidence.md:188` provides the implementation handoff; runtime implementation and coding review belong to the dependency-ordered tasks produced by WBS 0291.
 ### References
 - `plugins/sp/skills/sp-indexed-context/` and related hook/config files
 - `.spur/context/` anatomy, learnings, pitfalls, buglog, memory, and token ledger contracts
@@ -92,3 +112,6 @@ Review outcome: PASS for specification readiness. The evidence artifact provides
 - 2026-07-18T18:27:40.387Z done → todo (system)
 - 2026-07-18T18:35:15.744Z todo → done (system)
 - 2026-07-18T18:37:50.637Z done → todo (system)
+- 2026-07-19T23:52:14.403Z todo → wip (system)
+- 2026-07-19T23:52:16.942Z wip → testing (system)
+- 2026-07-19T23:52:19.488Z testing → done (system)
