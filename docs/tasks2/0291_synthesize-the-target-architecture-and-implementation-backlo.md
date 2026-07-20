@@ -12,7 +12,7 @@ priority: P1
 tags: ["wayfinder:grilling", "workstream:synthesis", "architecture"]
 dependencies: []
 created_at: "2026-07-18T17:29:34.923Z"
-updated_at: "2026-07-19T23:53:59.796Z"
+updated_at: "2026-07-20T00:23:08.366Z"
 ---
 
 ## 0291. Synthesize the target architecture and implementation backlog
@@ -39,17 +39,11 @@ Scenario: R12 Final synthesis produces an executable redesign package
   And baseline versus target estimates use the price-neutral metric contract and state evidence limitations
   And ADR, PRD, architecture, design-surface, roadmap, feature-status, and plugin documentation impacts are identified at their authoritative layers
 
-Scenario: R13 Charting stops before enhancement
-  Given this feature was created through wayfinding
-  When the synthesis ticket is ready for implementation intake
-  Then all feature O tickets remain investigation/specification artifacts until separately executed
-And no plugin command, skill, workflow, hook, routing implementation, or quality gate has been modified merely to complete the map
-
 Scenario: R13 — Charting performs no enhancement
-  Given the selected wayfinder mode is Option A and the charting boundary is reached
-  When the map is finalized
-  Then only tasks, feature metadata, and supporting research artifacts are written
-  And plugin implementation remains unchanged until a separately authorized build step
+  Given this feature was created through wayfinding (Option A) and the charting boundary is reached
+  When the synthesis ticket is ready for implementation intake
+  Then all feature O tickets remain investigation/specification artifacts — only tasks, feature metadata, and supporting research artifacts are written
+  And no plugin command, skill, workflow, hook, routing implementation, or quality gate has been modified merely to complete the map
 
 Scenario: R14 — Workflows are orchestrated through spur workflow
   Given upstream workflow and stage-contract decisions are ready
