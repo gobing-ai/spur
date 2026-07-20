@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Implement the stage-registry schema and types"
 description: ""
-status: testing
+status: done
 type: task
 profile: standard
 feature_id: O
@@ -12,7 +12,7 @@ priority: P1
 tags: ["wave-1", "stage-registry", "feature-O"]
 dependencies: []
 created_at: "2026-07-20T01:54:25.237Z"
-updated_at: "2026-07-20T04:34:24.681Z"
+updated_at: "2026-07-20T05:36:33.400Z"
 ---
 
 ## 0301. Implement the stage-registry schema and types
@@ -135,3 +135,4 @@ O
 ### History
 - 2026-07-20T04:09:59.578Z todo → wip (system)
 - 2026-07-20T04:11:32.271Z wip → testing (system)
+- 2026-07-20T05:36:33.400Z testing → done (system)
