@@ -16,7 +16,7 @@ import {
     stageRecordSchema,
     validateStageRecord,
     validateStageRegistry,
-} from '../src';
+} from '../../src';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────
 

@@ -6,7 +6,7 @@ import {
     type StageTransition,
     stageRecordSchema,
     validateStageRegistryGraph,
-} from '../src';
+} from '../../src';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────
 
