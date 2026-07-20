@@ -86,11 +86,21 @@ Feature: sp plugin token-efficient reliable execution architecture
     When a stage starts, fails a gate, times out, or emits insufficient evidence
     Then routing follows explicit eligibility, risk, retry, override, and escalation rules without relying on model self-confidence
 
+  Scenario: Efficiency cannot buy a lower-quality PASS
+    Given a cheaper-model routing decision for a stage
+    When the stage's verdict and gates are evaluated
+    Then quality gates, CLI-only write rules, and verification requirements are unchanged by the cheaper profile
+
   @core
   Scenario: R7 - Qualification corpus detects quality regression
     Given historical and adversarial fixtures
     When a model-stage candidate is evaluated
     Then deterministic gates, behavioral disciplines, verified outcome, token totals, retries, and escalations are comparable to baseline
+
+  Scenario: Corpus drift is controlled
+    Given a versioned qualification corpus
+    When fixtures are added, updated, or retired
+    Then each change is reviewed, versioned, and traceable to a baseline so the oracle does not silently shift
 
   @core
   Scenario: R8 - Dogfood campaigns aggregate atomic runs honestly
@@ -98,11 +108,21 @@ Feature: sp plugin token-efficient reliable execution architecture
     When the campaign is aggregated
     Then incomparable, invalid, or unmetered evidence is labeled or rejected and atomic report contracts remain unchanged
 
+  Scenario: Dogfood remains a regression tool, not an optimizer that edits its own oracle
+    Given a dogfood campaign and its qualification fixtures
+    When a run finds a failure
+    Then the campaign repairs the testee, never weakens the fixture or verdict to force a pass
+
   @core
   Scenario: R9 - Workflow simplification preserves lifecycle gates
     Given current project and seeded workflows
     When they are mapped to canonical stages
     Then duplicate orchestration is removed without nesting pipelines, bypassing lifecycle guards, or losing resumability and HITL semantics
+
+  Scenario: Workflow removal is evidence-backed
+    Given a current workflow proposed for removal or merge
+    When the simplification is decided
+    Then the removal cites usage evidence and a rollback path, and is never made to hit a count target
 
   @core
   Scenario: R10 - Shadow migration is reversible
@@ -110,11 +130,21 @@ Feature: sp plugin token-efficient reliable execution architecture
     When a stage is qualified and cut over
     Then before-after evidence, compatibility behavior, rollback conditions, and ownership are explicit
 
+  Scenario: Compatibility retirement is controlled
+    Given a compatibility alias or legacy surface
+    When it is retired
+    Then retirement requires subsumption evidence, a migration note, and a retained rollback window
+
   @core
   Scenario: R11 - Dependency wiring has a CLI-safe contract
     Given wayfinder and decomposition tasks need blocking edges
     When dependencies are authored or changed
     Then a validated CLI path writes dependencies without direct task-frontmatter edits
+
+  Scenario: Corpus mutation remains harness-gated
+    Given any task, feature, rule, or workflow corpus write
+    When it is performed
+    Then it goes through the CLI-validated verb, never a direct file edit that bypasses the gate
 
   @core
   Scenario: R12 - Final synthesis produces an executable redesign package
