@@ -12,7 +12,7 @@ priority: P1
 tags: ["wave-1", "cli", "dependencies", "feature-O"]
 dependencies: []
 created_at: "2026-07-20T01:54:25.281Z"
-updated_at: "2026-07-20T17:25:29.503Z"
+updated_at: "2026-07-20T23:18:51.377Z"
 ---
 
 ## 0303. Implement the CLI-safe task dependency mutation verb
@@ -185,22 +185,80 @@ Implemented `spur task deps <wbs> <op> [values...]` end-to-end with atomic valid
 **Reused, not modified:** `executePipeline` (lock, L1/L2 schema validate, `updated_at`, atomic write, history append, event emit). The `taskFrontmatterSchema` already accepts `dependencies: z.array(z.string()).optional()`, so L1 validation passes without schema changes. `resolveEventName` already returns `task.updated` for any non-create/non-transition mutation kind.
 ### Testing
 **Domain** (`packages/domain/tests/planning/markdown-document.test.ts`):
-- 16 new tests for `setFrontmatterArray` + `escapeYamlArrayElement`: empty, single, multiple, numeric-looking WBS round-trip, special chars, quote escaping, backslash escaping.
-- `bun test` -> 70 pass, 0 fail.
+- 7 new tests for `setFrontmatterArray` + `escapeYamlArrayElement`: append inline form, replace in place, empty `[]`, numeric-looking WBS round-trip, quote/backslash escaping, prepend when no frontmatter, body byte-identical.
+- `bun test packages/domain/tests/planning/markdown-document.test.ts` -> 70 pass, 0 fail.
 
 **App** (`packages/app/tests/services/task-service.test.ts`):
-- 15 new tests for `mutateDependencies`: set, add (dedupe), remove, clear, clear-with-values (usage), set-empty (usage), format, not-found, self-edge, duplicate, direct cycle, transitive cycle, atomicity, numeric WBS string round-trip, `--json` shape.
-- `bun test` -> 75 pass, 0 fail.
+- 14 new tests for `mutateDependencies`: set, add (dedupe), remove, clear, clear-with-values (usage), set-empty (usage), format, not-found, self-edge, duplicate, direct cycle, transitive cycle, atomicity, numeric WBS string round-trip.
+- `bun test packages/app/tests/services/task-service.test.ts` -> 75 pass, 0 fail.
 
 **CLI** (`apps/cli/tests/commands/task.test.ts`):
 - 11 new tests for `task deps`: set, add, remove, clear, `--json`, unknown-op (exit 2), clear-with-values (exit 2), not-found (exit 3), self-edge (exit 3), direct cycle (exit 3), non-existent task (exit 1).
-- `bun test` -> 99 pass, 1 fail. The single failure (`path with non-existent folder exits 1`) is **pre-existing** - verified by `git stash && bun test`: fails without 0303 changes too. Root cause: `allFolderDirs()` (task-service.ts:1187) includes default folders from `foldersConfig` in addition to `--folder`, so the `path` command finds a task created by an earlier test via the default folder. Not caused by 0303; out of scope.
+- `bun test apps/cli/tests/commands/task.test.ts` -> 99 pass, 1 fail (pre-existing, see below).
 
-**Lint/typecheck:**
-- `bun run lint` -> clean (biome + tsc --noEmit across all 7 workspaces).
-- `bun run format` applied (4 files auto-formatted).
+**New-test total: 32** (7 domain + 14 service + 11 CLI).
 
-**Coverage claim:** all 6 validation codes (`usage`, `format`, `not-found`, `self-edge`, `duplicate`, `cycle`) and all 4 ops (`set`, `add`, `remove`, `clear`) exercised at both service and CLI layers. Atomicity verified by a test that runs a failing mutation and asserts the file is byte-identical.
+**Pre-existing failure — independently re-verified (verify 0303)**
+
+`path with non-existent folder exits 1` (`apps/cli/tests/commands/task.test.ts:1403`) is NOT caused by 0303.
+Evidence chain run this session:
+1. `git show a4f84147 -- apps/cli/tests/commands/task.test.ts | grep "non-existent folder"` -> the test was not touched by 0303.
+2. `git show a4f84147 -- packages/app/src/services/task-service.ts | grep -E "allFolderDirs|async path"` -> 0303 touched neither the `path` command nor `allFolderDirs()`.
+3. Isolation run (`bun test -t "path with non-existent folder exits 1"`) -> 1 pass, 0 fail. The failure is test-order pollution, not a defect in the assertion.
+4. Decisive control: the pre-0303 version of the test file (`git show a4f84147~1:apps/cli/tests/commands/task.test.ts`, 89 tests, none of them 0303's) run against current source -> 88 pass, **1 fail — the same test**. The polluter is an older test, not 0303's 11 additions. 100 - 89 = 11, matching the CLI new-test count.
+5. In the full workspace run (`bun run test`) this test passes; the failure only reproduces when the file is run directly. Ordering-dependent either way, and orthogonal to 0303.
+
+**Acceptance Criteria Verification**
+
+All 11 Gherkin scenarios exercised against the real CLI this session (`bun run apps/cli/src/index.ts task deps ... --folder $TMPDIR/ac0303`), not inferred from the diff.
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| set replaces the dependency array | MET | command | `task deps 0303 set 0002 0003` -> exit 0; frontmatter `dependencies: ["0002", "0003"]`; `--json` -> `"dependencies": ["0002","0003"]` |
+| add appends and dedupes | MET | command | from `["0001"]`, `add 0001 0002` -> exit 0; `dependencies: ["0001", "0002"]` (no dupe) |
+| remove drops listed values | MET | command | from `["0001","0002"]`, `remove 0001` -> exit 0; `dependencies: ["0002"]` |
+| clear empties the array | MET | command | `clear` -> exit 0; `dependencies: []` |
+| clear with values is a usage error | MET | command | `clear 0001` -> exit 2; stderr `[usage] clear takes no values; got 1` |
+| non-existent target WBS is a validation error | MET | command | `set 9999` -> exit 3; stderr `[not-found] No task file for WBS 9999` |
+| self-edge is rejected | MET | command | `set 0303` -> exit 3; stderr `[self-edge] Task 0303 cannot depend on itself` |
+| direct cycle is rejected | MET | command | 0002->0303 then `deps 0303 set 0002` -> exit 3; stderr `[cycle] Dependency cycle detected: 0303 -> ... -> 0303` |
+| transitive cycle is rejected | MET | command | 0001->0002, 0002->0003, then `deps 0003 set 0001` -> exit 3; stderr `[cycle] ... 0003 -> ... -> 0003` |
+| atomicity - failed validation leaves the file untouched | MET | command | shasum before/after a failing `set 9999`: `aa5a61db...` == `aa5a61db...` byte-identical |
+| numeric-looking WBS strings round-trip as strings | MET | command | `set 0042` -> `dependencies: ["0042"]`; subsequent `add 0003` re-parse -> `["0042", "0003"]` (still quoted string, not `42`) |
+
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 set/add/remove/clear + WBS-existence, self-edge, cycle, duplicate validation | MET | `task-service.ts:570` `mutateDependencies`; all 4 ops + all 6 codes exercised via CLI this session, incl. `[duplicate] Duplicate WBS in dependencies: 0001, 0001` (exit 3) |
+| R2 atomic, machine-readable JSON, stable exit codes | MET | Atomicity: byte-identical shasum after failed mutation (AC10). JSON: `{ref{kind,id,filePath,folder}, eventName:"task.updated", dependencies[]}`. Exit map `task.ts:412-419` verified live: usage->2, format/not-found/self-edge/duplicate/cycle->3, other->1 |
+| R3 preserve write guard, section matrix, timestamps, lifecycle, feature refresh, back-compat | MET | Reuses `executePipeline` via `planning-write-service.ts:305`. Live check on mutated file: `updated_at` bumped 00:00:00.000Z -> 23:14:34.802Z, `created_at` unchanged, `status` unchanged (lifecycle inert), frontmatter key order preserved, body byte-identical, `eventName: task.updated` emitted |
+| R4 migration behavior for direct-authored dependency arrays | MET | `corpus-migrator.ts:627-629` re-read this session: `const deps = coerceArray(data.dependencies)` coerces legacy comma-separated to arrays on `spur task migrate`. 0303 writes canonical inline YAML only |
+
+**Design conformance**
+
+| Check | Status | Evidence |
+|-------|--------|----------|
+| design-conformance | pass | 8/8 Design claims DONE, 0 CHANGED, 0 silent deviations. Verb surface, `mutateDependencies` signature, 6-step validation order, `updateFrontmatterArray` write path, canonical serialization, `DependencyMutationError` codes, `task.updated` event, and all 7 listed invariants each confirmed against the diff |
+
+**Line-anchor verification**
+
+All 14 `file:line` citations in the Solution section re-read at the cited lines this session and confirmed to name their subject: `markdown-document.ts:542,594`; `planning-write-service.ts:171,187,305,532`; `task-service.ts:87,570,637,654`; `index.ts:183`; `task.ts:377,396-400,412-419`. Zero stale anchors.
+
+**Security probe**
+
+Target-`wbs` path traversal probed directly (`../../../etc/passwd`, `0303/../0001`, `*`): all rejected by `resolveTaskFile` with exit 1, no filesystem escape. Dependency values are regex-gated `^\d{4}$` before any lookup.
+
+**Lint / typecheck / suite**
+
+- `bun run lint` -> clean: biome 503 files, `tsc --noEmit` exit 0 across all 7 workspaces.
+- `bun run test` -> 3161 pass, 3 fail across 204 files. All 3 failures are sandbox denials in server/rpc code untouched by 0303 (`Bun.serve` -> `EADDRINUSE` on port 0, `ps` EPERM), not regressions.
+- `packages/app` -> 929 pass, 0 fail. `packages/domain` -> 558 pass, 0 fail (554 at 0303's commit; +4 from later stage-registry commits).
+- `spur task check 0303 --strict-core` -> PASS (11 advisory DD-09 AC-subset warnings only).
+
+**Coverage:** all 6 validation codes (`usage`, `format`, `not-found`, `self-edge`, `duplicate`, `cycle`) and all 4 ops (`set`, `add`, `remove`, `clear`) exercised at service and CLI layers, and re-exercised end-to-end through the real CLI binary during verification.
+
+**Verify-pass artifact writes:** `.spur/run/0303-verdict.json` (created this run, PASS aggregate). No source files were modified by the fix pass; the only correction was to this Testing section's new-test counts (16 -> 7 domain, 15 -> 14 service), which had overstated the diff's actual test additions.
 ### Review
 **P1–P4 Findings**
 
