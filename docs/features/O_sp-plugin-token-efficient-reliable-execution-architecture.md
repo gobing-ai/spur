@@ -75,6 +75,11 @@ Feature: sp plugin token-efficient reliable execution architecture
     When its context envelope is assembled repeatedly without source changes
     Then stable layers remain identical and dynamic layers are minimal, explicit, and invalidated by content state
 
+  Scenario: Progressive disclosure preserves quality gates
+    Given a stage context envelope with required safety, authorization, traceability, and mutation-gate contracts
+    When optional references are expanded through progressive disclosure
+    Then the mandatory inline gate layers cannot be deferred, omitted, or truncated by a cheap model
+
   @core
   Scenario: R6 - Adaptive model routing escalates objectively
     Given eligible cheap and fallback executor profiles
