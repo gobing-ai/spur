@@ -453,6 +453,95 @@ describe('validateStageRegistryGraph (R4: same identifiers on pass and fail)', (
     });
 });
 
+// ─── Defensive branches: run-id fallback + unexpected throw ──────────────
+
+describe('validateStageRegistryGraph (defensive branches)', () => {
+    test('generateRunId falls back to timestamp+random when crypto.randomUUID is unavailable', () => {
+        const savedCrypto = globalThis.crypto;
+        // Temporarily remove crypto to exercise the fallback path (line 187-188).
+        // `Object.defineProperty` is required because `globalThis.crypto` is a
+        // read-only accessor on some runtimes.
+        Object.defineProperty(globalThis, 'crypto', {
+            configurable: true,
+            value: undefined,
+        });
+        try {
+            const result = validateStageRegistryGraph([copy()], { resolver: passAllResolver });
+            // Fallback format: stage-registry-run-<timestamp>-<random>
+            expect(result.run_id).toMatch(/^stage-registry-run-\d+-[a-z0-9]+$/);
+            expect(result.run_id).not.toBe(savedCrypto.randomUUID());
+        } finally {
+            Object.defineProperty(globalThis, 'crypto', {
+                configurable: true,
+                value: savedCrypto,
+            });
+        }
+    });
+
+    test('generateRunId falls back when crypto is present but randomUUID is not a function', () => {
+        const savedCrypto = globalThis.crypto;
+        Object.defineProperty(globalThis, 'crypto', {
+            configurable: true,
+            value: { randomUUID: 'not-a-function' },
+        });
+        try {
+            const result = validateStageRegistryGraph([copy()], { resolver: passAllResolver });
+            expect(result.run_id).toMatch(/^stage-registry-run-\d+-[a-z0-9]+$/);
+        } finally {
+            Object.defineProperty(globalThis, 'crypto', {
+                configurable: true,
+                value: savedCrypto,
+            });
+        }
+    });
+
+    test('a non-StageRegistryError thrown by validateStageRecord is caught and reported as unknown-dependency', () => {
+        // Corrupt the execution field after type-checking so validateStageRecord
+        // throws a TypeError (not a StageRegistryError), exercising the else
+        // branch (lines 233-241). Cast through unknown because we are
+        // intentionally violating the StageRecord contract to reach the
+        // defensive catch.
+        const record = { ...copy(), execution: null } as unknown as StageRecord;
+        const result = validateStageRegistryGraph([record], { resolver: passAllResolver });
+        expect(result.ok).toBe(false);
+        const diag = result.diagnostics.find((d) => d.code === 'unknown-dependency');
+        expect(diag).toBeDefined();
+        expect(diag?.message).toContain('unexpected validation error');
+        expect(diag?.stageId).toBe('plan');
+    });
+});
+
+// ─── passAllResolver: exercise all resolver methods ──────────────────────
+
+describe('passAllResolver (full method invocation)', () => {
+    test('hasArtifactPath, hasAdapter, and hasWorkflow are invoked through passAllResolver', () => {
+        // Drive the three passAllResolver arrows that are otherwise never
+        // invoked: hasArtifactPath (needs a record with required_references),
+        // hasAdapter (needs options.adapter_refs), hasWorkflow (needs a
+        // transition with t.workflow). All should resolve to true, so the
+        // registry must be clean.
+        const record: StageRecord = {
+            ...copy(),
+            required_references: ['docs/plan.md'],
+        };
+        const transitions: StageTransition[] = [
+            { from: 'plan', to: 'plan', workflow: 'noop-workflow', gate: 'feature-check' },
+        ];
+        const result = validateStageRegistryGraph([record], {
+            resolver: passAllResolver,
+            transitions,
+            adapter_refs: new Map([['plan', 'default-adapter']]),
+        });
+        // passAllResolver resolves everything, but the self-transition is a
+        // cycle -> one cyclic-transition diagnostic. The important assertion
+        // is that NO unknown-dependency / missing-gate diagnostics appear:
+        // that means hasArtifactPath, hasAdapter, hasWorkflow all returned true.
+        const refDiags = result.diagnostics.filter((d) => d.code === 'unknown-dependency' || d.code === 'missing-gate');
+        expect(refDiags).toEqual([]);
+        expect(result.diagnostics.some((d) => d.code === 'cyclic-transition')).toBe(true);
+    });
+});
+
 // ─── Cross-record identity (duplicate ids / alias shadows) ────────────────
 
 describe('validateStageRegistryGraph (cross-record identity)', () => {
