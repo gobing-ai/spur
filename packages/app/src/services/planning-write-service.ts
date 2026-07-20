@@ -164,7 +164,13 @@ export interface WriteResult {
 
 // ─── Internal mutation descriptor ───────────────────────────────────────
 
-type MutationKind = 'create' | 'updateSection' | 'updateFrontmatter' | 'transition' | 'updateBody';
+type MutationKind =
+    | 'create'
+    | 'updateSection'
+    | 'updateFrontmatter'
+    | 'updateFrontmatterArray'
+    | 'transition'
+    | 'updateBody';
 
 interface MutationDescriptor {
     kind: MutationKind;
@@ -175,9 +181,11 @@ interface MutationDescriptor {
     sectionBody?: string;
     /** For updateBody: the new preamble body text. */
     body?: string;
-    /** For updateFrontmatter/transition: the key and value. */
+    /** For updateFrontmatter/transition: the key and scalar value. */
     fmKey?: string;
     fmValue?: string;
+    /** For updateFrontmatterArray: the key and string-array value (e.g. dependencies[]). */
+    fmArrayValue?: string[];
     /** For transition: the actor string for the history line. */
     actor?: string;
 }
@@ -284,6 +292,18 @@ export class PlanningWriteService {
      */
     async updateFrontmatter(ref: EntityRef, key: string, value: string): Promise<WriteResult> {
         return this.executePipeline(ref, { kind: 'updateFrontmatter', fmKey: key, fmValue: value });
+    }
+
+    /**
+     * Set a frontmatter field to an inline YAML string array (e.g.
+     * `dependencies: ["0001", "0002"]`). Acquires the entity lock, applies
+     * the array write, runs the L1/L2 schema validation, and writes
+     * atomically. Emits a `*.updated` event. Use this for corpus fields
+     * whose schema type is `z.array(z.string())` — scalar fields stay on
+     * `updateFrontmatter`.
+     */
+    async updateFrontmatterArray(ref: EntityRef, key: string, values: string[]): Promise<WriteResult> {
+        return this.executePipeline(ref, { kind: 'updateFrontmatterArray', fmKey: key, fmArrayValue: values });
     }
 
     /**
@@ -507,6 +527,11 @@ function applyMutation(doc: MarkdownDocument, mutation: MutationDescriptor): voi
         case 'transition':
             if (mutation.fmKey !== undefined && mutation.fmValue !== undefined) {
                 doc.setFrontmatterField(mutation.fmKey, mutation.fmValue);
+            }
+            break;
+        case 'updateFrontmatterArray':
+            if (mutation.fmKey !== undefined && mutation.fmArrayValue !== undefined) {
+                doc.setFrontmatterArray(mutation.fmKey, mutation.fmArrayValue);
             }
             break;
     }

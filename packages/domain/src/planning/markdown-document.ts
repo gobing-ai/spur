@@ -527,6 +527,49 @@ export class MarkdownDocument {
     }
 
     /**
+     * Set a frontmatter field to an inline YAML array of strings.
+     *
+     * Writes the canonical inline form `key: ["v1", "v2"]` (or `key: []` when
+     * empty), matching the existing corpus convention for `dependencies` and
+     * `tags`. Each element is double-quoted with embedded `\` and `"` escaped
+     * so numeric-looking WBS strings (e.g. `"0042"`) and special characters
+     * round-trip through YAML parse without being coerced to numbers or
+     * booleans. Untouched frontmatter lines and the body are byte-preserved.
+     *
+     * @param key - frontmatter key (matched at line start, before the first `:`)
+     * @param values - string elements to write; duplicates and order are preserved as given
+     */
+    setFrontmatterArray(key: string, values: string[]): void {
+        const inline = values.length === 0 ? '[]' : `[${values.map((v) => escapeYamlArrayElement(v)).join(', ')}]`;
+        const fieldLine = `${key}: ${inline}`;
+
+        if (this._frontmatter === null) {
+            this._frontmatter = { raw: fieldLine, data: { [key]: values } };
+            this._frontmatterBlock = `---\n${fieldLine}\n---\n\n`;
+            return;
+        }
+
+        const oldRaw = this._frontmatter.raw;
+        const lines = oldRaw.split('\n');
+        const keyPrefix = `${key}:`;
+        const idx = lines.findIndex((line) => line === keyPrefix || line.startsWith(`${keyPrefix} `));
+        if (idx === -1) {
+            lines.push(fieldLine);
+        } else {
+            lines[idx] = fieldLine;
+        }
+        const raw = lines.join('\n');
+        this._frontmatter = { raw, data: { ...this._frontmatter.data, [key]: values } };
+        const rawStart = this._frontmatterBlock.indexOf(oldRaw);
+        this._frontmatterBlock =
+            rawStart === -1
+                ? `---\n${raw}\n---\n`
+                : this._frontmatterBlock.slice(0, rawStart) +
+                  raw +
+                  this._frontmatterBlock.slice(rawStart + oldRaw.length);
+    }
+
+    /**
      * Serialize the document back to a string.
      *
      * Untouched sections round-trip byte-identically. Modified sections use
@@ -540,6 +583,17 @@ export class MarkdownDocument {
         }
         return result;
     }
+}
+
+/**
+ * Write a string as a double-quoted YAML array element, escaping embedded
+ * backslashes and double quotes. Always wraps in double quotes so
+ * numeric-looking WBS strings (e.g. `0042`) survive a YAML parse round-trip
+ * as strings, not numbers.
+ */
+export function escapeYamlArrayElement(value: string): string {
+    const escaped = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    return `"${escaped}"`;
 }
 
 /**

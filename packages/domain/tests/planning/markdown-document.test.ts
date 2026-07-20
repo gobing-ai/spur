@@ -578,6 +578,81 @@ describe('MarkdownDocument', () => {
         });
     });
     // -----------------------------------------------------------------------
+    // setFrontmatterArray() (task 0303 — CLI-safe dependencies[] write)
+    // -----------------------------------------------------------------------
+
+    describe('setFrontmatterArray()', () => {
+        test('appends a new array field in inline `["a", "b"]` form', () => {
+            const content = '---\nname: "Demo"\nstatus: wip\n---\n\n## 0042. Body\n';
+            const doc = MarkdownDocument.parse(content, 'task');
+            doc.setFrontmatterArray('dependencies', ['0001', '0002']);
+            const out = doc.serialize();
+            expect(out).toContain('dependencies: ["0001", "0002"]');
+            expect(out).toContain('name: "Demo"');
+            expect(out).toContain('## 0042. Body');
+            const reparsed = MarkdownDocument.parse(out, 'task');
+            expect(reparsed.frontmatterData?.dependencies).toEqual(['0001', '0002']);
+        });
+
+        test('replaces an existing array field in place', () => {
+            const content = '---\nname: "Demo"\ndependencies: ["0001"]\n---\n\nbody\n';
+            const doc = MarkdownDocument.parse(content, 'task');
+            doc.setFrontmatterArray('dependencies', ['0002', '0003']);
+            const out = doc.serialize();
+            expect(out).toContain('dependencies: ["0002", "0003"]');
+            expect(out).not.toContain('0001');
+        });
+
+        test('writes an empty array as `[]`', () => {
+            const content = '---\nname: "Demo"\n---\n\nbody\n';
+            const doc = MarkdownDocument.parse(content, 'task');
+            doc.setFrontmatterArray('dependencies', []);
+            const out = doc.serialize();
+            expect(out).toContain('dependencies: []');
+            const reparsed = MarkdownDocument.parse(out, 'task');
+            expect(reparsed.frontmatterData?.dependencies).toEqual([]);
+        });
+
+        test('double-quotes numeric-looking WBS strings so they survive as strings', () => {
+            const content = '---\nname: "Demo"\n---\n\nbody\n';
+            const doc = MarkdownDocument.parse(content, 'task');
+            doc.setFrontmatterArray('dependencies', ['0042']);
+            const out = doc.serialize();
+            expect(out).toContain('dependencies: ["0042"]');
+            const reparsed = MarkdownDocument.parse(out, 'task');
+            // Without quoting, YAML would coerce "0042" → number 42.
+            expect(reparsed.frontmatterData?.dependencies).toEqual(['0042']);
+        });
+
+        test('escapes embedded double quotes and backslashes in elements', () => {
+            const content = '---\nname: "Demo"\n---\n\nbody\n';
+            const doc = MarkdownDocument.parse(content, 'task');
+            doc.setFrontmatterArray('tags', ['say "hi"', 'a\\b']);
+            const out = doc.serialize();
+            expect(out).toContain('tags: ["say \\"hi\\"", "a\\\\b"]');
+            const reparsed = MarkdownDocument.parse(out, 'task');
+            expect(reparsed.frontmatterData?.tags).toEqual(['say "hi"', 'a\\b']);
+        });
+
+        test('prepends a frontmatter block when the file has none', () => {
+            const content = '## 0042. No frontmatter\n\nbody\n';
+            const doc = MarkdownDocument.parse(content, 'task');
+            doc.setFrontmatterArray('dependencies', ['0001']);
+            const out = doc.serialize();
+            expect(out.startsWith('---\ndependencies: ["0001"]\n---\n\n')).toBe(true);
+            expect(out).toContain('## 0042. No frontmatter');
+        });
+
+        test('leaves the body byte-identical when only frontmatter changes', () => {
+            const doc = MarkdownDocument.parse(TASK_FILE, 'task');
+            const bodyBefore = TASK_FILE.slice(TASK_FILE.indexOf('## 0050.'));
+            doc.setFrontmatterArray('dependencies', ['0001']);
+            const out = doc.serialize();
+            expect(out.slice(out.indexOf('## 0050.'))).toBe(bodyBefore);
+        });
+    });
+
+    // -----------------------------------------------------------------------
     // replaceSection() / insertSection() — same-level heading stripping (R2)
     // -----------------------------------------------------------------------
 

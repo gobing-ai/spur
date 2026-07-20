@@ -74,6 +74,26 @@ function escapeRegex(s: string): string {
 }
 
 /**
+ * Error thrown by `mutateDependencies` for any validation failure (R2).
+ * The `code` field is a stable identifier the CLI maps to an exit code:
+ *
+ * - `usage`     — wrong arg shape (op vs. values count) → exit 2
+ * - `format`    — value is not a 4-digit WBS → exit 3
+ * - `not-found` — no task file for a referenced WBS → exit 3
+ * - `self-edge` — task references itself → exit 3
+ * - `duplicate` — duplicate WBS in the resulting array → exit 3
+ * - `cycle`     — the resulting graph has a cycle → exit 3
+ */
+export class DependencyMutationError extends Error {
+    readonly code: 'usage' | 'format' | 'not-found' | 'self-edge' | 'duplicate' | 'cycle';
+    constructor(code: DependencyMutationError['code'], message: string) {
+        super(message);
+        this.name = 'DependencyMutationError';
+        this.code = code;
+    }
+}
+
+/**
  * Render a new task file from the skeleton template + post-render
  * frontmatter patching. Used by both {@link TaskService.create} and
  * {@link TaskService.createBatchItem} to avoid duplicating the
@@ -522,6 +542,140 @@ export class TaskService {
         const filePath = await this.resolveTaskFile(wbs);
         const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: this.ctx.tasksDir };
         return this.writeService.updateFrontmatter(ref, key, value);
+    }
+
+    // ── mutateDependencies (task 0303 — CLI-safe dependencies[] write) ──
+
+    /**
+     * Mutate the `dependencies[]` frontmatter array on an existing task.
+     *
+     * Operations (R1):
+     * - `set`    — replace the entire array with `values` (may be empty)
+     * - `add`    — append `values`, dedupe against existing entries
+     * - `remove` — drop `values` (silently no-ops on absent entries)
+     * - `clear`  — empty the array (`values` must be empty)
+     *
+     * Validation pipeline (R2, atomic — all checks run before any write):
+     *   1. WBS format — every value matches `^\d{4}$`
+     *   2. WBS existence — every value resolves to a sibling task file
+     *   3. Self-edge — `values` must not contain the target `wbs`
+     *   4. Duplicates — `values` itself must not contain duplicates
+     *   5. Cycle detection — DFS over the resulting dependency graph
+     *
+     * On success, writes via `writeService.updateFrontmatterArray` (atomic,
+     * schema-validated, emits `task.updated`). Throws `DependencyMutationError`
+     * with a stable `code` for any validation failure — the CLI maps these to
+     * exit codes.
+     */
+    async mutateDependencies(
+        wbs: string,
+        op: 'set' | 'add' | 'remove' | 'clear',
+        values: string[] = [],
+    ): Promise<WriteResult & { dependencies: string[] }> {
+        if (op === 'clear') {
+            if (values.length > 0) {
+                throw new DependencyMutationError('usage', `clear takes no values; got ${values.length}`);
+            }
+        } else if (values.length === 0) {
+            throw new DependencyMutationError('usage', `${op} requires at least one WBS value`);
+        }
+
+        // Load the current array (empty if the field is absent).
+        const filePath = await this.resolveTaskFile(wbs);
+        const current = await this.readDependencyArray(filePath);
+
+        // Compute the next array per `op`.
+        let next: string[];
+        if (op === 'clear') {
+            next = [];
+        } else if (op === 'set') {
+            next = [...values];
+        } else if (op === 'add') {
+            next = [...current];
+            for (const v of values) {
+                if (!next.includes(v)) next.push(v);
+            }
+        } else {
+            // remove
+            next = current.filter((v) => !values.includes(v));
+        }
+
+        // 1. WBS format.
+        for (const v of next) {
+            if (!/^\d{4}$/.test(v)) {
+                throw new DependencyMutationError('format', `Not a 4-digit WBS: "${v}"`);
+            }
+        }
+
+        // 2. WBS existence (each value must resolve to a sibling task file).
+        for (const v of next) {
+            const target = await this.findTaskFileName(v);
+            if (target === null) {
+                throw new DependencyMutationError('not-found', `No task file for WBS ${v}`);
+            }
+        }
+
+        // 3. Self-edge.
+        if (next.includes(wbs)) {
+            throw new DependencyMutationError('self-edge', `Task ${wbs} cannot depend on itself`);
+        }
+
+        // 4. Duplicates (defensive — `add` dedupes, but `set` could carry them).
+        if (new Set(next).size !== next.length) {
+            throw new DependencyMutationError('duplicate', `Duplicate WBS in dependencies: ${next.join(', ')}`);
+        }
+
+        // 5. Cycle detection — DFS over the graph that *would* result.
+        await this.assertNoCycle(wbs, next);
+
+        const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: this.ctx.tasksDir };
+        const result = await this.writeService.updateFrontmatterArray(ref, 'dependencies', next);
+        return { ...result, dependencies: next };
+    }
+
+    /** Read the current `dependencies[]` array from a task file (empty if absent). */
+    private async readDependencyArray(filePath: string): Promise<string[]> {
+        const raw = await this.ctx.fs.readFile(filePath);
+        const fm = MarkdownDocument.parse(raw, 'task').frontmatterData ?? {};
+        const deps = fm.dependencies;
+        if (!Array.isArray(deps)) return [];
+        const out: string[] = [];
+        for (const item of deps) {
+            if (typeof item === 'string') out.push(item);
+        }
+        return out;
+    }
+
+    /**
+     * DFS cycle check: starting from `rootWbs`, walk the dependency graph that
+     * *would* exist after writing `nextDeps` to `rootWbs`, and fail if the
+     * traversal revisits `rootWbs` (a self-feeding cycle through any chain).
+     */
+    private async assertNoCycle(rootWbs: string, nextDeps: string[]): Promise<void> {
+        const visiting = new Set<string>();
+        const seen = new Set<string>();
+        const stack: string[] = [...nextDeps];
+        while (stack.length > 0) {
+            const current = stack.pop();
+            if (current === undefined) break;
+            if (current === rootWbs) {
+                throw new DependencyMutationError(
+                    'cycle',
+                    `Dependency cycle detected: ${rootWbs} -> ... -> ${rootWbs}`,
+                );
+            }
+            if (seen.has(current)) continue;
+            if (visiting.has(current)) continue;
+            visiting.add(current);
+            const found = await this.findTaskFileName(current);
+            if (found !== null) {
+                const deps = await this.readDependencyArray(found.filePath);
+                for (const d of deps) {
+                    if (!seen.has(d) && !visiting.has(d)) stack.push(d);
+                }
+            }
+            seen.add(current);
+        }
     }
 
     // ── updateBody (body region write) ──

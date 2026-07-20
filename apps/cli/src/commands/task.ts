@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import {
     CorpusMigrator,
+    DependencyMutationError,
     evaluateDoneTransition,
     type MigrationReport,
     PlanningWriteService,
@@ -369,6 +370,53 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             } catch (err) {
                 context.output.error(String(err));
                 context.setExitCode(1);
+            }
+        });
+
+    // ── deps (task 0303 — CLI-safe dependencies[] mutation) ──
+    task.command('deps')
+        .summary('Mutate the dependencies[] frontmatter array on a task.')
+        .description(
+            'Mutate the `dependencies[]` array on an existing task. Operations:\n' +
+                '  set <wbs...>     — replace the array with the given WBS values\n' +
+                '  add <wbs...>     — append the given values (deduped)\n' +
+                '  remove <wbs...>  — drop the given values\n' +
+                '  clear            — empty the array\n\n' +
+                'Validation: WBS format, existence, self-edge, duplicates, and cycle detection\n' +
+                'all run BEFORE any write (atomic — R2). Exit codes: 0 success, 1 generic error,\n' +
+                '2 usage error, 3 validation error.',
+        )
+        .argument('<wbs>', 'Task WBS number to mutate')
+        .argument('<op>', 'Operation: set | add | remove | clear')
+        .argument('[values...]', 'WBS values (required for set/add/remove; forbidden for clear)')
+        .option('--folder <path>', 'Custom tasks folder')
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (wbs, op, values, options) => {
+            const allowedOps = ['set', 'add', 'remove', 'clear'] as const;
+            if (!allowedOps.includes(op as (typeof allowedOps)[number])) {
+                context.output.error(`Unknown op "${op}". Allowed: ${allowedOps.join(', ')}.`);
+                context.setExitCode(2);
+                return;
+            }
+            const typedOp = op as (typeof allowedOps)[number];
+            const svc = await makeService(context, options.folder);
+            try {
+                const result = await svc.mutateDependencies(wbs, typedOp, values);
+                if (options.json) {
+                    context.output.write(toJson(result));
+                } else {
+                    const list = result.dependencies.length > 0 ? result.dependencies.join(', ') : '(none)';
+                    context.output.write(`Set dependencies on task ${result.ref.id}: [${list}]`);
+                }
+            } catch (err) {
+                if (err instanceof DependencyMutationError) {
+                    context.output.error(`[${err.code}] ${err.message}`);
+                    // usage → 2, all other validation codes → 3
+                    context.setExitCode(err.code === 'usage' ? 2 : 3);
+                } else {
+                    context.output.error(String(err));
+                    context.setExitCode(1);
+                }
             }
         });
 

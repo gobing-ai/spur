@@ -180,7 +180,7 @@ export type {
     TaskShowResult,
     TaskSummary,
 } from './services/task-service';
-export { TASK_ACTION_COMMANDS, TaskService } from './services/task-service';
+export { DependencyMutationError, TASK_ACTION_COMMANDS, TaskService } from './services/task-service';
 export type { VerdictResult } from './services/task-verdict';
 export { deriveVerdict } from './services/task-verdict';
 export type {

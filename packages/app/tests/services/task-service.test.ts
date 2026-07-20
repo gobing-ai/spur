@@ -899,6 +899,147 @@ describe('TaskService', () => {
         });
     });
 
+    describe('mutateDependencies — CLI-safe dependencies[] write (task 0303)', () => {
+        test('set replaces the dependency array', async () => {
+            const a = await svc.create({ title: 'dep parent' });
+            const b = await svc.create({ title: 'dep child b' });
+            const c = await svc.create({ title: 'dep child c' });
+            const result = await svc.mutateDependencies(a.ref.id, 'set', [b.ref.id, c.ref.id]);
+            expect(result.dependencies).toEqual([b.ref.id, c.ref.id]);
+
+            const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
+            const doc = MarkdownDocument.parse(await fs.readFile(a.ref.filePath), 'task');
+            expect(doc.frontmatterData?.dependencies).toEqual([b.ref.id, c.ref.id]);
+        });
+
+        test('add appends new values and dedupes against existing', async () => {
+            const a = await svc.create({ title: 'add parent' });
+            const b = await svc.create({ title: 'add child b' });
+            const c = await svc.create({ title: 'add child c' });
+            await svc.mutateDependencies(a.ref.id, 'set', [b.ref.id]);
+            const result = await svc.mutateDependencies(a.ref.id, 'add', [b.ref.id, c.ref.id]);
+            expect(result.dependencies).toEqual([b.ref.id, c.ref.id]);
+        });
+
+        test('remove drops listed values and leaves the rest', async () => {
+            const a = await svc.create({ title: 'remove parent' });
+            const b = await svc.create({ title: 'remove child b' });
+            const c = await svc.create({ title: 'remove child c' });
+            await svc.mutateDependencies(a.ref.id, 'set', [b.ref.id, c.ref.id]);
+            const result = await svc.mutateDependencies(a.ref.id, 'remove', [b.ref.id]);
+            expect(result.dependencies).toEqual([c.ref.id]);
+        });
+
+        test('clear empties the array', async () => {
+            const a = await svc.create({ title: 'clear parent' });
+            const b = await svc.create({ title: 'clear child b' });
+            await svc.mutateDependencies(a.ref.id, 'set', [b.ref.id]);
+            const result = await svc.mutateDependencies(a.ref.id, 'clear', []);
+            expect(result.dependencies).toEqual([]);
+
+            const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
+            const doc = MarkdownDocument.parse(await fs.readFile(a.ref.filePath), 'task');
+            expect(doc.frontmatterData?.dependencies).toEqual([]);
+        });
+
+        test('clear with values throws a usage error', async () => {
+            const a = await svc.create({ title: 'clear misuse' });
+            await expect(svc.mutateDependencies(a.ref.id, 'clear', ['0001'])).rejects.toMatchObject({
+                code: 'usage',
+            });
+        });
+
+        test('set with no values throws a usage error', async () => {
+            const a = await svc.create({ title: 'set empty misuse' });
+            await expect(svc.mutateDependencies(a.ref.id, 'set', [])).rejects.toMatchObject({
+                code: 'usage',
+            });
+        });
+
+        test('rejects a non-4-digit WBS value (format)', async () => {
+            const a = await svc.create({ title: 'format parent' });
+            const b = await svc.create({ title: 'format child b' });
+            await expect(svc.mutateDependencies(a.ref.id, 'set', [b.ref.id, '12'])).rejects.toMatchObject({
+                code: 'format',
+            });
+        });
+
+        test('rejects a WBS with no task file (not-found)', async () => {
+            const a = await svc.create({ title: 'not-found parent' });
+            await expect(svc.mutateDependencies(a.ref.id, 'set', ['9999'])).rejects.toMatchObject({
+                code: 'not-found',
+            });
+        });
+
+        test('rejects a self-edge (self-edge)', async () => {
+            const a = await svc.create({ title: 'self-edge parent' });
+            await expect(svc.mutateDependencies(a.ref.id, 'set', [a.ref.id])).rejects.toMatchObject({
+                code: 'self-edge',
+            });
+        });
+
+        test('rejects duplicates in a set operation (duplicate)', async () => {
+            const a = await svc.create({ title: 'dup parent' });
+            const b = await svc.create({ title: 'dup child b' });
+            await expect(svc.mutateDependencies(a.ref.id, 'set', [b.ref.id, b.ref.id])).rejects.toMatchObject({
+                code: 'duplicate',
+            });
+        });
+
+        test('rejects a direct cycle: A→B→A (cycle)', async () => {
+            const a = await svc.create({ title: 'cycle a' });
+            const b = await svc.create({ title: 'cycle b' });
+            // B depends on A first
+            await svc.mutateDependencies(b.ref.id, 'set', [a.ref.id]);
+            // Now making A depend on B would create A→B→A
+            await expect(svc.mutateDependencies(a.ref.id, 'set', [b.ref.id])).rejects.toMatchObject({
+                code: 'cycle',
+            });
+        });
+
+        test('rejects a transitive cycle: A→B→C→A (cycle)', async () => {
+            const a = await svc.create({ title: 'cycle t a' });
+            const b = await svc.create({ title: 'cycle t b' });
+            const c = await svc.create({ title: 'cycle t c' });
+            await svc.mutateDependencies(b.ref.id, 'set', [a.ref.id]);
+            await svc.mutateDependencies(c.ref.id, 'set', [b.ref.id]);
+            // Closing the loop: A → C → B → A
+            await expect(svc.mutateDependencies(a.ref.id, 'set', [c.ref.id])).rejects.toMatchObject({
+                code: 'cycle',
+            });
+        });
+
+        test('atomicity: a failed validation must not modify the file', async () => {
+            const a = await svc.create({ title: 'atomic parent' });
+            const b = await svc.create({ title: 'atomic child b' });
+            await svc.mutateDependencies(a.ref.id, 'set', [b.ref.id]);
+
+            const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
+            const beforeRaw = await fs.readFile(a.ref.filePath);
+
+            // Attempt a set that will fail validation (non-existent WBS).
+            await expect(svc.mutateDependencies(a.ref.id, 'set', ['8888'])).rejects.toMatchObject({
+                code: 'not-found',
+            });
+
+            const afterRaw = await fs.readFile(a.ref.filePath);
+            expect(afterRaw).toBe(beforeRaw);
+        });
+
+        test('numeric-looking WBS strings round-trip as strings, not numbers', async () => {
+            const a = await svc.create({ title: 'round-trip parent' });
+            const b = await svc.create({ title: 'round-trip child' });
+            await svc.mutateDependencies(a.ref.id, 'set', [b.ref.id]);
+
+            const fs = createNodeFileSystem(tasksDir.replace('/tasks', ''));
+            const raw = await fs.readFile(a.ref.filePath);
+            // Must be double-quoted in the YAML so a re-parse keeps them as strings.
+            expect(raw).toContain(`dependencies: ["${b.ref.id}"]`);
+            const doc = MarkdownDocument.parse(raw, 'task');
+            expect(doc.frontmatterData?.dependencies).toEqual([b.ref.id]);
+        });
+    });
+
     describe('fulfillAction', () => {
         test('passes channel and skipDeps to enqueue job', async () => {
             const created = await svc.create({ title: 'Action task' });

@@ -682,6 +682,163 @@ describe('spur task CLI', () => {
         expect(parsed.ref.id).toBe(wbs);
     });
 
+    // ── task deps (task 0303 — CLI-safe dependencies[] mutation) ──
+
+    test('deps set replaces the dependency array and exits 0', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'Deps parent'], { cwd, output: cOut });
+        const parentWbs = createdWbs(cOut);
+        const cOut2 = createCapturedOutput();
+        await main(['task', 'create', 'Deps child'], { cwd, output: cOut2 });
+        const childWbs = createdWbs(cOut2);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'deps', parentWbs, 'set', childWbs], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(output.messages[0] ?? '').toContain(`[${childWbs}]`);
+
+        const content = await Bun.file(join(cwd, 'docs', 'tasks', `${parentWbs}_deps-parent.md`)).text();
+        expect(content).toContain(`dependencies: ["${childWbs}"]`);
+    });
+
+    test('deps add appends and dedupes', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'Add parent'], { cwd, output: cOut });
+        const parentWbs = createdWbs(cOut);
+        const cOutB = createCapturedOutput();
+        await main(['task', 'create', 'Add child b'], { cwd, output: cOutB });
+        const bWbs = createdWbs(cOutB);
+        const cOutC = createCapturedOutput();
+        await main(['task', 'create', 'Add child c'], { cwd, output: cOutC });
+        const cWbs = createdWbs(cOutC);
+
+        await main(['task', 'deps', parentWbs, 'set', bWbs], { cwd, output: createCapturedOutput() });
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'deps', parentWbs, 'add', bWbs, cWbs], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(output.messages[0] ?? '').toContain(`${bWbs}`);
+        expect(output.messages[0] ?? '').toContain(`${cWbs}`);
+    });
+
+    test('deps remove drops a listed value', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'Rem parent'], { cwd, output: cOut });
+        const parentWbs = createdWbs(cOut);
+        const cOutB = createCapturedOutput();
+        await main(['task', 'create', 'Rem child b'], { cwd, output: cOutB });
+        const bWbs = createdWbs(cOutB);
+        const cOutC = createCapturedOutput();
+        await main(['task', 'create', 'Rem child c'], { cwd, output: cOutC });
+        const cWbs = createdWbs(cOutC);
+
+        await main(['task', 'deps', parentWbs, 'set', bWbs, cWbs], { cwd, output: createCapturedOutput() });
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'deps', parentWbs, 'remove', bWbs], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(output.messages[0] ?? '').toContain(`${cWbs}`);
+        expect(output.messages[0] ?? '').not.toContain(`${bWbs}`);
+    });
+
+    test('deps clear empties the array and exits 0', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'Clr parent'], { cwd, output: cOut });
+        const parentWbs = createdWbs(cOut);
+        const cOutB = createCapturedOutput();
+        await main(['task', 'create', 'Clr child b'], { cwd, output: cOutB });
+        const bWbs = createdWbs(cOutB);
+
+        await main(['task', 'deps', parentWbs, 'set', bWbs], { cwd, output: createCapturedOutput() });
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'deps', parentWbs, 'clear'], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(output.messages[0] ?? '').toContain('(none)');
+
+        const content = await Bun.file(join(cwd, 'docs', 'tasks', `${parentWbs}_clr-parent.md`)).text();
+        expect(content).toContain('dependencies: []');
+    });
+
+    test('deps --json returns structured output with dependencies field', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'JSON parent'], { cwd, output: cOut });
+        const parentWbs = createdWbs(cOut);
+        const cOutB = createCapturedOutput();
+        await main(['task', 'create', 'JSON child b'], { cwd, output: cOutB });
+        const bWbs = createdWbs(cOutB);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'deps', parentWbs, 'set', bWbs, '--json'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lastMessage(output));
+        expect(parsed.ref.id).toBe(parentWbs);
+        expect(parsed.dependencies).toEqual([bWbs]);
+    });
+
+    test('deps with unknown op exits 2 (usage)', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'Bad op parent'], { cwd, output: cOut });
+        const parentWbs = createdWbs(cOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'deps', parentWbs, 'frobnicate', '0001'], { cwd, output });
+        expect(exitCode).toBe(2);
+        expect(output.errors.some((e) => e.includes('Unknown op'))).toBe(true);
+    });
+
+    test('deps clear with values exits 2 (usage)', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'Clr misuse'], { cwd, output: cOut });
+        const parentWbs = createdWbs(cOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'deps', parentWbs, 'clear', '0001'], { cwd, output });
+        expect(exitCode).toBe(2);
+        expect(output.errors.some((e) => e.includes('usage'))).toBe(true);
+    });
+
+    test('deps with non-existent target WBS exits 3 (not-found)', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'Nf parent'], { cwd, output: cOut });
+        const parentWbs = createdWbs(cOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'deps', parentWbs, 'set', '8888'], { cwd, output });
+        expect(exitCode).toBe(3);
+        expect(output.errors.some((e) => e.includes('not-found'))).toBe(true);
+    });
+
+    test('deps with self-edge exits 3 (self-edge)', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', 'Self-edge'], { cwd, output: cOut });
+        const parentWbs = createdWbs(cOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'deps', parentWbs, 'set', parentWbs], { cwd, output });
+        expect(exitCode).toBe(3);
+        expect(output.errors.some((e) => e.includes('self-edge'))).toBe(true);
+    });
+
+    test('deps with a direct cycle exits 3 (cycle)', async () => {
+        const cOutA = createCapturedOutput();
+        await main(['task', 'create', 'Cycle a'], { cwd, output: cOutA });
+        const aWbs = createdWbs(cOutA);
+        const cOutB = createCapturedOutput();
+        await main(['task', 'create', 'Cycle b'], { cwd, output: cOutB });
+        const bWbs = createdWbs(cOutB);
+
+        await main(['task', 'deps', bWbs, 'set', aWbs], { cwd, output: createCapturedOutput() });
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'deps', aWbs, 'set', bWbs], { cwd, output });
+        expect(exitCode).toBe(3);
+        expect(output.errors.some((e) => e.includes('cycle'))).toBe(true);
+    });
+
+    test('deps on a non-existent task exits 1 (generic error)', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'deps', '7777', 'set', '0001'], { cwd, output });
+        expect(exitCode).toBe(1);
+        expect(output.errors.length).toBeGreaterThan(0);
+    });
+
     test('update with non-existent wbs exits 1 and prints error (update catch)', async () => {
         const output = createCapturedOutput();
         const exitCode = await main(['task', 'update', '9999', 'todo'], { cwd, output });
