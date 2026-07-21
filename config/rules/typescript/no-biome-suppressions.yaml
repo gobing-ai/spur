@@ -13,6 +13,9 @@ include:
   - "apps/**/src/**/*.ts"
   - "packages/**/src/**/*.ts"
   - "scripts/**/*.ts"
+  - "apps/**/src/**/*.tsx"
+  - "packages/**/src/**/*.tsx"
+  - "scripts/**/*.tsx"
 exclude:
   - "**/node_modules/**"
   - "**/dist/**"
