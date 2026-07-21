@@ -536,11 +536,13 @@ describe('TaskDetail — cancel confirmation modal', () => {
 
         fireEvent.click(getByLabelText('Cancel'));
 
-        // Click the backdrop (role=presentation div)
-        const backdrop = document.querySelector('[role="presentation"]');
+        // Click the backdrop (the dialog container itself — target === currentTarget)
+        const backdrop = document.querySelector('[role="dialog"][aria-label="Confirm cancel task"]');
         expect(backdrop).not.toBeNull();
         fireEvent.click(backdrop as HTMLElement);
 
+        // Modal dismissed without firing the transition
+        expect(document.querySelector('[role="dialog"][aria-label="Confirm cancel task"]')).toBeNull();
         expect(transitions.length).toBe(0);
     });
 });

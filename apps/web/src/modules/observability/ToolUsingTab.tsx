@@ -233,9 +233,12 @@ export default function ToolUsingTab() {
                     {events.length} event(s)
                     {meta?.nextBefore ? ' · more available' : ''}
                 </span>
-                {/* biome-ignore lint/a11y/noLabelWithoutControl: Checkbox renders the input inside the label */}
-                <label className="flex items-center gap-1.5 text-xs text-spur-text ml-2 cursor-pointer">
+                <label
+                    htmlFor="live-toggle"
+                    className="flex items-center gap-1.5 text-xs text-spur-text ml-2 cursor-pointer"
+                >
                     <Checkbox
+                        id="live-toggle"
                         size="xs"
                         checked={live}
                         onChange={(e) => setLive(e.target.checked)}

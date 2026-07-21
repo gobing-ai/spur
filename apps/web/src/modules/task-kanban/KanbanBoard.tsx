@@ -254,9 +254,13 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
                     <span className="text-xs text-spur-text-muted">|</span>
                     <div className="flex-1" />
                     {KANBAN_COLUMNS.map((status) => (
-                        // biome-ignore lint/a11y/noLabelWithoutControl: Checkbox renders an input inside the label
-                        <label key={status} className="flex items-center gap-1 cursor-pointer">
+                        <label
+                            key={status}
+                            htmlFor={`kanban-col-toggle-${status}`}
+                            className="flex items-center gap-1 cursor-pointer"
+                        >
                             <Checkbox
+                                id={`kanban-col-toggle-${status}`}
                                 size="xs"
                                 checked={!hiddenColumns.has(status)}
                                 onChange={() => toggleColumn(status)}
@@ -295,10 +299,10 @@ export default function KanbanBoard({ onSelectTask, filters, onFilterChange }: P
                 />
                 {popupTaskWbs && (
                     <>
-                        {/* biome-ignore lint/a11y/noStaticElementInteractions: role=presentation with onClick is the standard backdrop pattern */}
-                        <div
-                            role="presentation"
-                            className="fixed inset-0 z-50 bg-black/40"
+                        <button
+                            type="button"
+                            aria-label="Close task detail"
+                            className="fixed inset-0 z-50 bg-black/40 border-0 p-0 cursor-default"
                             onClick={() => setPopupTaskWbs(null)}
                         />
                         <div

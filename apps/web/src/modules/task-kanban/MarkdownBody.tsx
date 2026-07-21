@@ -1,5 +1,5 @@
 import DOMPurify from 'dompurify';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { MDEditor } from '@/ui';
 
 /**
@@ -14,6 +14,7 @@ import { MDEditor } from '@/ui';
  */
 export function MermaidBlock({ code }: { code: string }) {
     const id = useId().replace(/:/g, '');
+    const containerRef = useRef<HTMLDivElement>(null);
     const [svg, setSvg] = useState<string | null>(null);
     const [error, setError] = useState(false);
 
@@ -35,6 +36,16 @@ export function MermaidBlock({ code }: { code: string }) {
         };
     }, [code, id]);
 
+    // Inject the DOMPurify-sanitized SVG via the DOM API (mermaid returns a
+    // complete SVG string; there is no node-based render alternative). The
+    // markup was sanitized with DOMPurify's SVG profile in the effect above,
+    // on top of mermaid's own securityLevel:'strict'.
+    useEffect(() => {
+        if (containerRef.current) {
+            containerRef.current.innerHTML = svg ?? '';
+        }
+    }, [svg]);
+
     if (error) {
         return (
             <pre>
@@ -42,14 +53,7 @@ export function MermaidBlock({ code }: { code: string }) {
             </pre>
         );
     }
-    return (
-        <div
-            className="mermaid-diagram flex justify-center"
-            data-testid="mermaid-diagram"
-            // biome-ignore lint/security/noDangerouslySetInnerHtml: mermaid returns an SVG string with no DOM-method alternative; the markup is DOMPurify-sanitized (SVG profile) on top of mermaid's securityLevel:'strict'.
-            dangerouslySetInnerHTML={{ __html: svg ?? '' }}
-        />
-    );
+    return <div ref={containerRef} className="mermaid-diagram flex justify-center" data-testid="mermaid-diagram" />;
 }
 
 type CodeProps = {

@@ -532,25 +532,20 @@ export default function TaskDetail({ task, onTransition, onClose }: Props) {
 
             {/* Cancel confirmation modal (R4) */}
             {showCancelModal && (
-                // biome-ignore lint/a11y/noStaticElementInteractions: role=presentation with onClick is the standard modal backdrop pattern
                 <div
-                    role="presentation"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Confirm cancel task"
+                    tabIndex={-1}
                     className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-                    onClick={() => setShowCancelModal(false)}
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) setShowCancelModal(false);
+                    }}
                     onKeyDown={(e) => {
                         if (e.key === 'Escape') setShowCancelModal(false);
                     }}
                 >
-                    <div
-                        role="dialog"
-                        aria-modal="true"
-                        aria-label="Confirm cancel task"
-                        className="bg-spur-surface border border-spur-border rounded-lg shadow-xl p-4 mx-4 max-w-xs w-full"
-                        onClick={(e) => e.stopPropagation()}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Escape') setShowCancelModal(false);
-                        }}
-                    >
+                    <div className="bg-spur-surface border border-spur-border rounded-lg shadow-xl p-4 mx-4 max-w-xs w-full">
                         <p className="text-sm text-spur-text mb-4">
                             Cancel task <strong>{task.wbs}</strong>? This marks it as cancelled and cannot be undone
                             from the board.
@@ -576,23 +571,20 @@ export default function TaskDetail({ task, onTransition, onClose }: Props) {
 
             {/* Channel selection modal (R9) */}
             {actionModal && task && (
-                // biome-ignore lint/a11y/noStaticElementInteractions: role=presentation with onClick is the standard modal backdrop pattern
                 <div
-                    role="presentation"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={`Configure ${actionModal} action`}
+                    tabIndex={-1}
                     className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-                    onClick={() => setActionModal(null)}
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) setActionModal(null);
+                    }}
                     onKeyDown={(e) => {
                         if (e.key === 'Escape') setActionModal(null);
                     }}
                 >
-                    {/* biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation on the dialog body is not an action */}
-                    <div
-                        role="dialog"
-                        aria-modal="true"
-                        aria-label={`Configure ${actionModal} action`}
-                        className="bg-spur-surface border border-spur-border rounded-lg shadow-xl p-4 mx-4 max-w-sm w-full"
-                        onClick={(e) => e.stopPropagation()}
-                    >
+                    <div className="bg-spur-surface border border-spur-border rounded-lg shadow-xl p-4 mx-4 max-w-sm w-full">
                         <h4 className="text-sm font-semibold text-spur-text mb-3">
                             {ACTION_LABELS[actionModal] ?? actionModal} — Select Channel
                         </h4>
@@ -612,9 +604,9 @@ export default function TaskDetail({ task, onTransition, onClose }: Props) {
                                     ),
                                 )}
                             </Select>
-                            {/* biome-ignore lint/a11y/noLabelWithoutControl: Checkbox renders an input inside the label */}
-                            <label className="flex items-center gap-2 cursor-pointer">
+                            <label htmlFor="skip-deps" className="flex items-center gap-2 cursor-pointer">
                                 <Checkbox
+                                    id="skip-deps"
                                     size="xs"
                                     checked={skipDeps}
                                     onChange={(e) => setSkipDeps(e.target.checked)}

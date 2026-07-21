@@ -342,33 +342,44 @@ describe('Modal', () => {
         expect(closed).toBe(true);
     });
 
-    test('clicking inside modal-box does not propagate to backdrop', () => {
-        const result = Modal({ open: true, onClose: () => {}, children: 'X' }) as React.ReactElement;
-        const box = (result.props as Record<string, unknown>).children as React.ReactElement;
-        const boxProps = box.props as Record<string, unknown>;
-        let stopped = false;
-        const fakeEvent = {
-            stopPropagation: () => {
-                stopped = true;
+    test('backdrop click closes the modal when the backdrop itself is the click target', () => {
+        let closed = false;
+        const result = Modal({
+            open: true,
+            onClose: () => {
+                closed = true;
             },
-        };
-        const onClick = boxProps.onClick as (e: { stopPropagation: () => void }) => void;
-        onClick(fakeEvent);
-        expect(stopped).toBe(true);
+            children: 'X',
+        }) as React.ReactElement;
+        const props = result.props as Record<string, unknown>;
+        const onClick = props.onClick as (e: { target: unknown; currentTarget: unknown }) => void;
+        const backdrop = {};
+        onClick({ target: backdrop, currentTarget: backdrop });
+        expect(closed).toBe(true);
     });
 
-    test('keydown inside modal-box does not propagate to backdrop', () => {
+    test('click bubbled from modal-box content does not close the modal', () => {
+        let closed = false;
+        const result = Modal({
+            open: true,
+            onClose: () => {
+                closed = true;
+            },
+            children: 'X',
+        }) as React.ReactElement;
+        const props = result.props as Record<string, unknown>;
+        const onClick = props.onClick as (e: { target: unknown; currentTarget: unknown }) => void;
+        // Different target vs currentTarget = click bubbled up from inside the box.
+        onClick({ target: {}, currentTarget: {} });
+        expect(closed).toBe(false);
+    });
+
+    test('modal-box carries no event handlers (backdrop uses target-check, not stopPropagation)', () => {
         const result = Modal({ open: true, onClose: () => {}, children: 'X' }) as React.ReactElement;
         const box = (result.props as Record<string, unknown>).children as React.ReactElement;
         const boxProps = box.props as Record<string, unknown>;
-        let stopped = false;
-        const onKeyDown = boxProps.onKeyDown as (e: { stopPropagation: () => void }) => void;
-        onKeyDown({
-            stopPropagation: () => {
-                stopped = true;
-            },
-        });
-        expect(stopped).toBe(true);
+        expect(boxProps.onClick).toBeUndefined();
+        expect(boxProps.onKeyDown).toBeUndefined();
     });
 });
 

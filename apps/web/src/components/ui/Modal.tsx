@@ -45,16 +45,17 @@ export function Modal({ variant, open: isOpen, onClose, className, children, ...
             role="dialog"
             aria-modal="true"
             tabIndex={-1}
-            onClick={onClose}
+            onClick={(e) => {
+                // Backdrop click closes; clicks inside the box bubble with a
+                // different target and are ignored (no stopPropagation needed).
+                if (e.target === e.currentTarget) onClose?.();
+            }}
             onKeyDown={(e) => {
                 if (e.key === 'Escape') onClose?.();
             }}
             {...rest}
         >
-            {/* biome-ignore lint/a11y/noStaticElementInteractions: stopPropagation on the modal-box is not an action */}
-            <div className={boxClasses} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-                {children}
-            </div>
+            <div className={boxClasses}>{children}</div>
         </div>
     );
 }

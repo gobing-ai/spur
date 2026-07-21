@@ -302,8 +302,8 @@ test('detail panel is right-docked overlay with backdrop', async () => {
     fireEvent.click(getByText('Alpha'));
     await waitFor(() => expect(getByLabelText('Close detail')).toBeDefined());
 
-    // Verify backdrop
-    const backdrop = container.querySelector('[role="presentation"].fixed.inset-0');
+    // Verify backdrop (semantic button overlay)
+    const backdrop = container.querySelector('button[aria-label="Close task detail"]');
     expect(backdrop).toBeTruthy();
 
     // Verify docked panel (dialog, fixed right-0)
@@ -324,7 +324,7 @@ test('detail panel closes on backdrop click', async () => {
     await waitFor(() => expect(getByLabelText('Close detail')).toBeDefined());
 
     // Close via backdrop click
-    const backdrop = container.querySelector('[role="presentation"].fixed.inset-0') as HTMLElement;
+    const backdrop = container.querySelector('button[aria-label="Close task detail"]') as HTMLElement;
     fireEvent.click(backdrop);
     await waitFor(() => expect(queryByLabelText('Close detail')).toBeNull());
 });

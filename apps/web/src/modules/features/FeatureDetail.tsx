@@ -568,25 +568,20 @@ export default function FeatureDetail({ featureId, onClose }: FeatureDetailProps
 
             {/* Cancel confirmation modal */}
             {showCancelModal && (
-                // biome-ignore lint/a11y/noStaticElementInteractions: role=presentation with onClick is the standard modal backdrop pattern
                 <div
-                    role="presentation"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Confirm cancel feature"
+                    tabIndex={-1}
                     className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-                    onClick={() => setShowCancelModal(false)}
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) setShowCancelModal(false);
+                    }}
                     onKeyDown={(e) => {
                         if (e.key === 'Escape') setShowCancelModal(false);
                     }}
                 >
-                    <div
-                        role="dialog"
-                        aria-modal="true"
-                        aria-label="Confirm cancel feature"
-                        className="bg-spur-surface border border-spur-border rounded-lg shadow-xl p-4 mx-4 max-w-xs w-full"
-                        onClick={(e) => e.stopPropagation()}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Escape') setShowCancelModal(false);
-                        }}
-                    >
+                    <div className="bg-spur-surface border border-spur-border rounded-lg shadow-xl p-4 mx-4 max-w-xs w-full">
                         <p className="text-sm text-spur-text mb-4">
                             Cancel feature <strong>{featureId}</strong>? This marks it as cancelled and cannot be undone
                             from the board.
@@ -605,25 +600,20 @@ export default function FeatureDetail({ featureId, onClose }: FeatureDetailProps
 
             {/* Channel / sync direction selector modal */}
             {actionModal && (
-                // biome-ignore lint/a11y/noStaticElementInteractions: role=presentation with onClick is standard modal backdrop
                 <div
-                    role="presentation"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={`Configure ${actionModal} action`}
+                    tabIndex={-1}
                     className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-                    onClick={() => setActionModal(null)}
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) setActionModal(null);
+                    }}
                     onKeyDown={(e) => {
                         if (e.key === 'Escape') setActionModal(null);
                     }}
                 >
-                    <div
-                        role="dialog"
-                        aria-modal="true"
-                        aria-label={`Configure ${actionModal} action`}
-                        className="bg-spur-surface border border-spur-border rounded-lg shadow-xl p-4 mx-4 max-w-sm w-full"
-                        onClick={(e) => e.stopPropagation()}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Escape') setActionModal(null);
-                        }}
-                    >
+                    <div className="bg-spur-surface border border-spur-border rounded-lg shadow-xl p-4 mx-4 max-w-sm w-full">
                         {actionModal === 'sync-status' ? (
                             <>
                                 <h4 className="text-sm font-semibold text-spur-text mb-3">Sync Status — Direction</h4>
@@ -661,9 +651,8 @@ export default function FeatureDetail({ featureId, onClose }: FeatureDetailProps
                                             ),
                                         )}
                                     </Select>
-                                    {/* biome-ignore lint/a11y/noLabelWithoutControl: Checkbox renders an input inside the label */}
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <Checkbox size="xs" checked={false} onChange={() => {}} />
+                                    <label htmlFor="skip-deps" className="flex items-center gap-2 cursor-pointer">
+                                        <Checkbox id="skip-deps" size="xs" checked={false} onChange={() => {}} />
                                         <span className="text-xs text-spur-text">Skip dependencies</span>
                                     </label>
                                 </div>
@@ -683,25 +672,20 @@ export default function FeatureDetail({ featureId, onClose }: FeatureDetailProps
 
             {/* Inline input modal (add-child, add-task, link-task) */}
             {inlineModal && (
-                // biome-ignore lint/a11y/noStaticElementInteractions: role=presentation with onClick is standard modal backdrop
                 <div
-                    role="presentation"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={`${FEATURE_ACTION_LABELS[inlineModal]} input`}
+                    tabIndex={-1}
                     className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-                    onClick={() => setInlineModal(null)}
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) setInlineModal(null);
+                    }}
                     onKeyDown={(e) => {
                         if (e.key === 'Escape') setInlineModal(null);
                     }}
                 >
-                    <div
-                        role="dialog"
-                        aria-modal="true"
-                        aria-label={`${FEATURE_ACTION_LABELS[inlineModal]} input`}
-                        className="bg-spur-surface border border-spur-border rounded-lg shadow-xl p-4 mx-4 max-w-sm w-full"
-                        onClick={(e) => e.stopPropagation()}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Escape') setInlineModal(null);
-                        }}
-                    >
+                    <div className="bg-spur-surface border border-spur-border rounded-lg shadow-xl p-4 mx-4 max-w-sm w-full">
                         <h4 className="text-sm font-semibold text-spur-text mb-3">
                             {FEATURE_ACTION_LABELS[inlineModal]}
                         </h4>
