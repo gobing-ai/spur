@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-07-21T20:46:29.481Z"
-updated_at: "2026-07-21T22:16:52.536Z"
+updated_at: "2026-07-21T22:49:30.392Z"
 ---
 
 # P: workflow run observability — enriched step lines, FSM transitions, async follow
@@ -97,6 +97,8 @@ Feature: workflow run observability — design destination
     And a truncation and redaction policy is written down
     And `shell` steps are covered, not only `agent.run`
     And verbose-mode FSM transition rendering is specified
+    And the format reserves a slot for per-agent.run token cost
+    And an `unavailable` rendering is specified for absent cost telemetry
 
   Scenario: Long and detached runs are observable
     Given ticket 0310 is done
@@ -111,6 +113,7 @@ Feature: workflow run observability — design destination
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0310 | Decide the verbosity model for spur workflow run output | todo |
+| 0311 | Attach real token cost and cache-hit ratio to workflow agent.run steps via history join | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -157,6 +160,13 @@ Feature: workflow run observability — design destination
 - Post-charting — **consolidated six investigation tickets into one (0310).** Six tickets was
   disproportionate for the size of the change; the questions are tightly coupled and better answered in one
   pass. 0311–0315 deleted.
+- Post-charting — **token cost split in two: display slot (0310) + acquisition (0311).** Path (2) of the
+  acquisition plan is **DONE**: the analytics layer now preserves the cache read/create split
+  (`extractClaudeTokens` → `ExtractedTokens`, `CostRecord.cacheReadTokens`/`cacheCreationTokens`/
+  `usageReported`) and exposes `cacheHitRatio(totals) → number | null` (null = unavailable, never a fabricated
+  0), surfaced on `spur history analyze` output. Path (1) — the run↔usage join that puts real cost on
+  `spur workflow trace` — is captured as **0311** (feature-impl, deferred; depends on 0310) with full
+  Background/Requirements/Design/Plan/References for a cold pickup.
 
 ### Not yet specified — the fog
 
@@ -172,6 +182,13 @@ Fog — in scope, but not yet sharp enough to ticket:
   the `runId: ''` gap in `action.finished` becomes load-bearing. Not a problem today (engine is sequential).
 - **Whether any of this warrants an ADR.** Widening a published engine interface may cross the ADR-020 line.
   Folded into 0310 as a sub-question; if the answer is yes it graduates into its own ticket.
+- **Token/cost acquisition — a named follow-up, not fog.** 0310 settles only the *display slot* and the
+  `unavailable` rendering. Getting real numbers is a separate ticket, opened after 0310 lands, in this
+  order: (1) stop flattening the cache read/create split in `extractClaudeTokens`
+  (`packages/domain/src/analytics/query.ts:74`) and carry it onto `CostRecord` — independently useful to
+  every analytics surface; (2) add a run ↔ agent-session join so `workflow trace` can attach the costs
+  history import already computes with real pricing. Live stdout parsing (`mode: 'json'` + a per-agent
+  usage-envelope adapter matrix) is explicitly *not* the recommended first step.
 - **Whether `spur workflow trace`'s existing output should be unified with the live run's line vocabulary.**
   If 0310 lands on DB-polling for async, trace and run would render the same event stream through two code
   paths — possibly one shared pure renderer. Can't specify until 0310 picks a transport.
