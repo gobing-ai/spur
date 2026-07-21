@@ -19,6 +19,9 @@
  */
 
 export * from './assemblies';
+export * from './attribution';
+export * from './boundary';
 export * from './fingerprint';
+export * from './invalidation';
 export * from './schema';
 export * from './serialization';
