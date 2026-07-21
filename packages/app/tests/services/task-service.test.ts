@@ -1040,6 +1040,92 @@ describe('TaskService', () => {
         });
     });
 
+    describe('mutateSections — partial-write reporting (task 0304)', () => {
+        /** Minimal task file with only `Background`, so `init` has real work to do. */
+        function minimalTask(wbs: string): string {
+            return `---
+template: standard
+schema_version: 1
+name: "Partial write probe"
+description: ""
+status: todo
+type: task
+profile: standard
+feature_id: null
+parent_wbs: null
+priority: P2
+tags: []
+dependencies: []
+created_at: "2026-07-20T00:00:00.000Z"
+updated_at: "2026-07-20T00:00:00.000Z"
+---
+
+## ${wbs}. Partial write probe
+
+### Background
+
+Seeded.
+`;
+        }
+
+        const matrix = {
+            variants: { standard: { todo: { required: ['Background', 'Design', 'Plan'] } } },
+        } as never;
+
+        test('reports which sections landed when a write fails mid-loop', async () => {
+            const root = mkdtempSync(join(tmpdir(), 'spur-task-partial-'));
+            const dir = join(root, 'tasks');
+            const fs = createNodeFileSystem(root);
+            await fs.ensureDir(dir);
+            await fs.writeFile(join(dir, '9101_partial-write-probe.md'), minimalTask('9101'));
+
+            // Fail on the SECOND section so the first is already committed to disk —
+            // the exact partial state the raw throw used to hide from the caller.
+            const real = new PlanningWriteService({ fs });
+            let calls = 0;
+            const flaky = {
+                ...real,
+                updateSection: async (ref: never, name: string, body: string) => {
+                    calls += 1;
+                    if (calls === 2) throw new Error('disk full');
+                    return real.updateSection(ref, name, body);
+                },
+            } as never;
+            const flakySvc = new TaskService({ fs, tasksDir: dir, writeService: flaky, sectionMatrix: matrix });
+
+            await expect(flakySvc.mutateSections('9101', 'init')).rejects.toThrow(
+                /already written: Design.*Re-run init/s,
+            );
+            // The first section really is on disk — the message is not speculative.
+            const raw = await fs.readFile(join(dir, '9101_partial-write-probe.md'));
+            expect(raw).toContain('### Design');
+            expect(raw).not.toContain('### Plan');
+            rmSync(root, { recursive: true, force: true });
+        });
+
+        test('re-running init after a partial failure completes the remainder', async () => {
+            const root = mkdtempSync(join(tmpdir(), 'spur-task-partial-heal-'));
+            const dir = join(root, 'tasks');
+            const fs = createNodeFileSystem(root);
+            await fs.ensureDir(dir);
+            await fs.writeFile(join(dir, '9102_partial-write-probe.md'), minimalTask('9102'));
+
+            const healthy = new TaskService({
+                fs,
+                tasksDir: dir,
+                writeService: new PlanningWriteService({ fs }),
+                sectionMatrix: matrix,
+            });
+            // Simulate the post-failure state: Design landed, Plan did not.
+            await healthy.mutateSections('9102', 'add', 'Design');
+            const result = await healthy.mutateSections('9102', 'init');
+
+            // Idempotent re-run writes only what is still missing — this is what
+            // makes the non-atomic loop recoverable rather than corrupting.
+            expect(result.added).toEqual(['Plan']);
+        });
+    });
+
     describe('fulfillAction', () => {
         test('passes channel and skipDeps to enqueue job', async () => {
             const created = await svc.create({ title: 'Action task' });

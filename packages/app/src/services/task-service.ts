@@ -14,13 +14,16 @@ import {
     escapeYamlValue,
     MarkdownDocument,
     renderTaskTemplate,
+    SECTION_GUIDANCE,
+    TASK_CANONICAL_SECTIONS,
     type TaskBatchItem,
     type TaskSection,
     taskBatchSchema,
+    UNIVERSAL_SECTIONS,
 } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import type { SectionMatrix } from './planning-check-base';
-import type { EntityRef, PlanningWriteService, WriteResult } from './planning-write-service';
+import type { EntityRef, PlanningEventName, PlanningWriteService, WriteResult } from './planning-write-service';
 import {
     escapeTablePipe,
     gitDiffU0,
@@ -91,6 +94,48 @@ export class DependencyMutationError extends Error {
         this.name = 'DependencyMutationError';
         this.code = code;
     }
+}
+
+/**
+ * Error thrown by `mutateSections` for any validation failure (R2).
+ * The `code` field is a stable identifier the CLI maps to an exit code:
+ *
+ * - `usage`          — wrong arg shape (op vs. section name) → exit 2
+ * - `no-matrix`      — no section-matrix entry for variant/status → exit 3
+ * - `unknown-section`— section name not in `TASK_CANONICAL_SECTIONS` → exit 3
+ * - `forbidden`      — section is forbidden for the task's current status → exit 3
+ */
+export class SectionMutationError extends Error {
+    readonly code: 'usage' | 'no-matrix' | 'unknown-section' | 'forbidden';
+    constructor(code: SectionMutationError['code'], message: string) {
+        super(message);
+        this.name = 'SectionMutationError';
+        this.code = code;
+    }
+}
+
+/**
+ * Result of a section mutation (R3). `list` is read-only and returns no
+ * write-event fields; `init`/`add` write through `writeService.updateSection`
+ * (atomic, schema-validated, emits `task.updated`) and carry the write result.
+ */
+export interface SectionMutationResult {
+    readonly op: 'init' | 'add' | 'list';
+    readonly ref: EntityRef;
+    readonly variant: string;
+    readonly status: string;
+    /** Sections written (init/add); empty when no-op or for `list`. */
+    readonly added: string[];
+    /** Write-event name; undefined for `list` and for `init`/`add` no-ops (no write, no event). */
+    readonly eventName?: PlanningEventName;
+    /** Non-fatal advisories (stripped headings, no-op notices). */
+    readonly warnings?: string[];
+    /** Matrix snapshot for the variant/status (always present for `list`). */
+    readonly matrix?: { required: string[]; optional: string[]; forbidden: string[] };
+    /** Sections currently in the file (`list` only). */
+    readonly present?: string[];
+    /** Required sections not yet in the file (`list` only). */
+    readonly missing?: string[];
 }
 
 /**
@@ -366,6 +411,20 @@ export function sectionIsBare(doc: MarkdownDocument, name: string): boolean {
     return false;
 }
 
+/**
+ * Render the placeholder body for a canonical task section — the one-line
+ * guidance comment from `SECTION_GUIDANCE` wrapped in `<!-- ... -->`, matching
+ * `buildTaskSkeleton`'s rendering (so `sections add` and `sections init`
+ * produce the same artifact as `task create`). `History` (machine-owned) and
+ * unknown sections render an empty body.
+ */
+function renderSectionGuidanceBody(name: TaskSection): string {
+    const guidance = SECTION_GUIDANCE[name];
+    if (guidance === undefined) return '';
+    if (name === 'History') return '';
+    return `<!-- ${guidance} -->`;
+}
+
 // ─── TaskService ────────────────────────────────────────────────────────
 
 /** Core task verbs over PlanningWriteService and direct corpus reads. */
@@ -631,6 +690,159 @@ export class TaskService {
         const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: this.ctx.tasksDir };
         const result = await this.writeService.updateFrontmatterArray(ref, 'dependencies', next);
         return { ...result, dependencies: next };
+    }
+
+    /**
+     * CLI-safe mutation of canonical task sections (task 0304, R4-R6).
+     *
+     * Operations:
+     * - `init`        — add every required section for the task's current status
+     *                  that is not already present (idempotent; uses the shipped
+     *                  guidance comment as the placeholder body, matching
+     *                  `buildTaskSkeleton`).
+     * - `add <name>`  — add a single canonical section (rejected if unknown, or
+     *                  forbidden for the current status). Idempotent: a no-op when
+     *                  the section is already present.
+     * - `list`        — read-only: resolve the matrix entry for variant + status
+     *                  and return `required`/`optional`/`forbidden`, `present`, and
+     *                  `missing` (the required sections not yet in the file).
+     *
+     * Matrix enforcement (R5): section names are validated against
+     * `TASK_CANONICAL_SECTIONS` (closed-world) and against the variant/status
+     * matrix entry (`forbidden`). Universal sections (`History`, `References`,
+     * `Notes`) are always allowed. All writes go through the existing
+     * `planning-write-service.updateSection` pipeline — phantom-section guards,
+     * atomic writes, history, and timestamps are inherited.
+     *
+     * Throws {@link SectionMutationError} with a stable `code` for any validation
+     * failure; the CLI maps these to exit codes (2 for `usage`, 3 for the rest).
+     */
+    async mutateSections(
+        wbs: string,
+        op: 'init' | 'add' | 'list',
+        sectionName?: string,
+    ): Promise<SectionMutationResult> {
+        if (op === 'add' && sectionName === undefined) {
+            throw new SectionMutationError('usage', 'add requires a section name');
+        }
+        if (op !== 'add' && sectionName !== undefined) {
+            throw new SectionMutationError('usage', `${op} takes no section name; got "${sectionName}"`);
+        }
+
+        const filePath = await this.resolveTaskFile(wbs);
+        const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: this.ctx.tasksDir };
+
+        const raw = await this.ctx.fs.readFile(filePath);
+        const doc = MarkdownDocument.parse(raw, 'task');
+        const fm = doc.frontmatterData ?? {};
+        const variant = typeof fm.template === 'string' ? fm.template : DEFAULT_TASK_VARIANT;
+        const status = typeof fm.status === 'string' ? fm.status : 'backlog';
+
+        const matrix = this.ctx.sectionMatrix;
+        const entry = matrix?.variants[variant]?.[status] ?? matrix?.variants.standard?.[status];
+        if (entry === undefined) {
+            throw new SectionMutationError(
+                'no-matrix',
+                `No section matrix for variant "${variant}" status "${status}"`,
+            );
+        }
+        const required = entry.required ?? [];
+        const optional = entry.optional ?? [];
+        const forbidden = entry.forbidden ?? [];
+        const present = doc.sectionNames;
+
+        if (op === 'list') {
+            return {
+                op: 'list',
+                ref,
+                variant,
+                status,
+                added: [],
+                matrix: { required: [...required], optional: [...optional], forbidden: [...forbidden] },
+                present,
+                missing: required.filter((s) => !present.includes(s)),
+                warnings: [],
+            };
+        }
+
+        if (op === 'add') {
+            const name = sectionName as string;
+            if (
+                !TASK_CANONICAL_SECTIONS.includes(name as TaskSection) &&
+                !(UNIVERSAL_SECTIONS as readonly string[]).includes(name)
+            ) {
+                throw new SectionMutationError('unknown-section', `Unknown section: "${name}"`);
+            }
+            if (forbidden.includes(name)) {
+                throw new SectionMutationError('forbidden', `Section "${name}" is forbidden for status "${status}"`);
+            }
+            if (present.includes(name)) {
+                // No write happened, so no PlanningEvent was emitted — leave
+                // `eventName` undefined rather than claiming one fired.
+                return {
+                    op: 'add',
+                    ref,
+                    variant,
+                    status,
+                    added: [],
+                    warnings: [`Section "${name}" already present; no change`],
+                };
+            }
+            const body = renderSectionGuidanceBody(name as TaskSection);
+            const result = await this.writeService.updateSection(ref, name, body);
+            return {
+                op: 'add',
+                ref,
+                variant,
+                status,
+                added: [name],
+                eventName: result.eventName,
+                warnings: result.warnings ?? [],
+            };
+        }
+
+        // op === 'init'
+        const missing = required.filter((s) => !present.includes(s));
+        if (missing.length === 0) {
+            // No write happened — see the `add` no-op above.
+            return {
+                op: 'init',
+                ref,
+                variant,
+                status,
+                added: [],
+                warnings: ['All required sections already present; no change'],
+            };
+        }
+        // Each `updateSection` is individually atomic, but the set is not: a failure
+        // part-way through leaves the earlier sections on disk. Batching them would
+        // need a new write-pipeline kind, which D3 rules out — so instead report
+        // exactly what landed, since `init` is idempotent and a re-run completes
+        // the remainder. Without this the throw would discard that progress.
+        const written: string[] = [];
+        let last: WriteResult | undefined;
+        for (const s of missing) {
+            const body = renderSectionGuidanceBody(s as TaskSection);
+            try {
+                last = await this.writeService.updateSection(ref, s, body);
+            } catch (err) {
+                const landed = written.length > 0 ? written.join(', ') : '(none)';
+                throw new Error(
+                    `init failed while writing section "${s}"; sections already written: ${landed}. ` +
+                        `Re-run init to complete the rest (it is idempotent). Cause: ${String(err)}`,
+                );
+            }
+            written.push(s);
+        }
+        return {
+            op: 'init',
+            ref,
+            variant,
+            status,
+            added: written,
+            eventName: last?.eventName ?? 'task.updated',
+            warnings: last?.warnings ?? [],
+        };
     }
 
     /** Read the current `dependencies[]` array from a task file (empty if absent). */

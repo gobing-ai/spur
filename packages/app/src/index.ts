@@ -172,6 +172,7 @@ export {
 export type {
     FolderConfig,
     ParentWireResult,
+    SectionMutationResult,
     TaskActionJob,
     TaskActionName,
     TaskActionResult,
@@ -180,7 +181,12 @@ export type {
     TaskShowResult,
     TaskSummary,
 } from './services/task-service';
-export { DependencyMutationError, TASK_ACTION_COMMANDS, TaskService } from './services/task-service';
+export {
+    DependencyMutationError,
+    SectionMutationError,
+    TASK_ACTION_COMMANDS,
+    TaskService,
+} from './services/task-service';
 export type { VerdictResult } from './services/task-verdict';
 export { deriveVerdict } from './services/task-verdict';
 export type {
