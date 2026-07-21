@@ -333,6 +333,57 @@ describe('FeatureCheckService', () => {
         expect(scopeWarning.length).toBeGreaterThan(0);
     });
 
+    // The scaffold in feature-service.ts emits `- In:` / `- Out:` bullets. The check must
+    // accept its own scaffold: a prior `/\b[Ii]n:\b/` could never match them (a `\b` after
+    // a colon needs a following word char), so every freshly created feature warned.
+    test.each([
+        ['scaffold bullets', ['- In:', '- Out:']],
+        ['bold labels', ['**In scope:**', '**Out of scope:**']],
+        ['bare labels', ['In:', 'Out:']],
+        ['prose headings', ['In scope', 'Out of scope']],
+    ])('L3: accepts in/out delineation written as %s', async (_label, scopeLines) => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'id: "G"',
+            'name: "Delineated Scope"',
+            'status: active',
+            'priority: P3',
+            'created_at: 2026-06-14T00:00:00.000Z',
+            'updated_at: 2026-06-14T00:00:00.000Z',
+            '---',
+            '',
+            '# G: Delineated Scope',
+            '',
+            '## Goal',
+            '',
+            'Test scope.',
+            '',
+            '## Scope',
+            '',
+            ...scopeLines,
+            '',
+            '## Acceptance Criteria',
+            '',
+            'Feature: Test',
+            '',
+            '  Scenario: Placeholder',
+            '    Given nothing',
+            '    When nothing',
+            '    Then nothing',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new FeatureCheckService(fs);
+        const result = await svc.check(path, 'G');
+        cleanup();
+
+        const scopeWarning = result.findings.filter(
+            (f) => f.layer === 'L3' && f.severity === 'warning' && f.section === 'Scope',
+        );
+        expect(scopeWarning).toEqual([]);
+    });
+
     // ── L3: One-active-goal ──────────────────────────────────────────────
 
     test('L3: one-active-goal detects conflicting P0 active/verifying features', async () => {

@@ -202,11 +202,16 @@ export class FeatureCheckService extends PlanningCheckService {
         // Scope: should contain in/out delineation (warning)
         const scopeBody = doc.getSection('Scope');
         if (scopeBody !== null && scopeBody.trim().length > 0) {
+            // The `In:` / `Out:` label forms are anchored per-line rather than written as
+            // `/\b[Ii]n:\b/`: a `\b` after a colon only matches when a word character
+            // follows, so that form could never match the `- In:` / `- Out:` bullets the
+            // scaffold itself emits (feature-service.ts) — every scaffolded feature warned.
+            // Optional leading bullet and `**bold**` wrapping are both accepted.
             const hasInOut =
                 /\b[Ii]n\s*scope\b/.test(scopeBody) ||
                 /\b[Oo]ut\s*of\s*scope\b/.test(scopeBody) ||
-                /\b[Ii]n:\b/.test(scopeBody) ||
-                /\b[Oo]ut:\b/.test(scopeBody);
+                /^\s*(?:[-*+]\s*)?\*{0,2}[Ii]n\*{0,2}\s*:/m.test(scopeBody) ||
+                /^\s*(?:[-*+]\s*)?\*{0,2}[Oo]ut\*{0,2}\s*:/m.test(scopeBody);
             if (!hasInOut) {
                 findings.push({
                     layer: 'L3',
