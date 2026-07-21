@@ -19,4 +19,3 @@ spur init $ARGUMENTS
 ```
 - Customize (Phase 2): `Skill(skill="sp:doc-evolve", args="customize --project <name>")`
 
-<!-- adapter:generated v1 snapshot:91feea73d699 — regenerate: `bun plugins/sp/scripts/generate-adapters.ts`; a fresh session is required to trust an in-session dogfood of a just-edited wrapper -->

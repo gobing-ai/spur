@@ -17,4 +17,3 @@ Wraps the **sp:brainstorm** and **sp:wayfinder** skills.
 - Default: `Skill(skill="sp:brainstorm", args="dev-brainstorm --context <decision-tree> --options <n>")`
 - `--wayfind`: `Skill(skill="sp:wayfinder", args="chart --destination <destination> --context <decision-tree>")`
 
-<!-- adapter:generated v1 snapshot:381b4354a16b — regenerate: `bun plugins/sp/scripts/generate-adapters.ts`; a fresh session is required to trust an in-session dogfood of a just-edited wrapper -->

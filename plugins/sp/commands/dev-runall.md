@@ -16,4 +16,3 @@ Wraps the **sp:spur-dev** skill.
 
 - `Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")`
 
-<!-- adapter:generated v1 snapshot:af224c71f4e9 — regenerate: `bun plugins/sp/scripts/generate-adapters.ts`; a fresh session is required to trust an in-session dogfood of a just-edited wrapper -->

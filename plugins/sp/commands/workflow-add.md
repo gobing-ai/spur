@@ -16,4 +16,3 @@ Wraps the **sp:spur-cli** skill.
 
 - `Skill(skill="sp:spur-cli", args="workflow add $ARGUMENTS")`
 
-<!-- adapter:generated v1 snapshot:c228dbfe8147 — regenerate: `bun plugins/sp/scripts/generate-adapters.ts`; a fresh session is required to trust an in-session dogfood of a just-edited wrapper -->

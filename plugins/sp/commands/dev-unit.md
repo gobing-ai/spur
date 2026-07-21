@@ -16,4 +16,3 @@ Wraps the **sp:code-testing** skill.
 
 - `Skill(skill="sp:code-testing", args="$ARGUMENTS")`
 
-<!-- adapter:generated v1 snapshot:d1b7b042b0f7 — regenerate: `bun plugins/sp/scripts/generate-adapters.ts`; a fresh session is required to trust an in-session dogfood of a just-edited wrapper -->

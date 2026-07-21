@@ -17,4 +17,3 @@ Wraps the **sp:spur-dev** and **sp:code-verification** skills.
 - Batch orchestration: `Skill(skill="sp:spur-dev", args="verifyall $ARGUMENTS")`
 - Per-task verification (inner): `Skill(skill="sp:code-verification", args="verify <wbs> $SHARED_FLAGS")`
 
-<!-- adapter:generated v1 snapshot:03a333426bc2 — regenerate: `bun plugins/sp/scripts/generate-adapters.ts`; a fresh session is required to trust an in-session dogfood of a just-edited wrapper -->

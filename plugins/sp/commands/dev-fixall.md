@@ -16,4 +16,3 @@ Implements an inline procedure — see [dev-operations.md](../skills/spur-dev/re
 
 Follow the inline procedure in [dev-operations.md](../skills/spur-dev/references/dev-operations.md#10-fixall) (fixall).
 
-<!-- adapter:generated v1 snapshot:7a89ceab5da9 — regenerate: `bun plugins/sp/scripts/generate-adapters.ts`; a fresh session is required to trust an in-session dogfood of a just-edited wrapper -->

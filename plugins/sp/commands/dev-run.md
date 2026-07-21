@@ -17,4 +17,3 @@ Wraps the **sp:spur-dev** and **sp:code-implementation** skills.
 - Full pipeline (default): `Skill(skill="sp:spur-dev", args="run $ARGUMENTS")`
 - Implement step (`--next` or `--mode implement`): `Skill(skill="sp:code-implementation", args="$ARGUMENTS")`
 
-<!-- adapter:generated v1 snapshot:335b55dcc3a4 — regenerate: `bun plugins/sp/scripts/generate-adapters.ts`; a fresh session is required to trust an in-session dogfood of a just-edited wrapper -->

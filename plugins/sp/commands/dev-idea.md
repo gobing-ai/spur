@@ -18,4 +18,3 @@ Wraps the **idea-pipeline.yaml** workflow.
 spur workflow run .spur/workflows/idea-pipeline.yaml --vars '{"idea":"<text>","profile":"interactive|auto","design":"auto|force|skip","design_approved":"false|true"}'
 ```
 
-<!-- adapter:generated v1 snapshot:664289f598a2 — regenerate: `bun plugins/sp/scripts/generate-adapters.ts`; a fresh session is required to trust an in-session dogfood of a just-edited wrapper -->

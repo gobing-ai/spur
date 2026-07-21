@@ -16,4 +16,3 @@ Wraps the **sp:code-verification** skill.
 
 - `Skill(skill="sp:code-verification", args="verify $ARGUMENTS")`
 
-<!-- adapter:generated v1 snapshot:802e4d08ca85 — regenerate: `bun plugins/sp/scripts/generate-adapters.ts`; a fresh session is required to trust an in-session dogfood of a just-edited wrapper -->

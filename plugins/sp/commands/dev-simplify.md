@@ -16,4 +16,3 @@ Wraps the **sp:code-simplification** skill.
 
 - `Skill(skill="sp:code-simplification", args="$ARGUMENTS")`
 
-<!-- adapter:generated v1 snapshot:b88e22b38893 — regenerate: `bun plugins/sp/scripts/generate-adapters.ts`; a fresh session is required to trust an in-session dogfood of a just-edited wrapper -->

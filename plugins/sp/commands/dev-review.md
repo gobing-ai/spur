@@ -18,4 +18,3 @@ Wraps the **sp:functional-review** and **sp:code-verification** and **sp:code-im
 - SECUA quality review: `Skill(skill="sp:code-verification", args="review $ARGUMENTS")`
 - Architectural depth: `Skill(skill="sp:code-improvement", args="<wbs|path> $ARGUMENTS")`
 
-<!-- adapter:generated v1 snapshot:c9c14bbed6a1 — regenerate: `bun plugins/sp/scripts/generate-adapters.ts`; a fresh session is required to trust an in-session dogfood of a just-edited wrapper -->

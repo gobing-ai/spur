@@ -226,15 +226,13 @@ plugins/sp/
 │   ├── sys-debugging/               # Structured debugging protocol
 │   │   └── references/debugging-protocol.md
 │   └── wayfinder/                   # Multi-session investigation maps (SKILL.md only)
-├── commands/                        # 28 slash-command wrappers (GENERATED — see below)
-├── adapters/codex/                  # 28 Codex `$sp-dev-*` skill wrappers (GENERATED — same source)
+├── commands/                        # 28 slash-command wrappers — the SSOT (hand-editable thin wrappers; see Commands below)
 ├── agents/                          # 3 specialist subagents (expert-spur, super-coder, super-reviewer)
 ├── hooks/                           # hooks.json + task-write-guard.{ts,test.ts} + context-{session-start,post-tool,session-stop}.ts
 │                                    # + careful-guard.{ts,test.ts} + context-hooks.test.ts + token-estimate.test.ts
-├── scripts/                         # Executable helpers, split from prompts (ADR-031) — command-registry.ts + generate-adapters.ts (adapter SSOT + generator), batch-preflight.ts + scripts/<skill>/
+├── scripts/                         # Executable helpers, split from prompts (ADR-031) — validate-commands.ts (thin-wrapper validator), batch-preflight.ts + scripts/<skill>/
 │                                    # (daily-summary: {daily-summary, logger}.ts; dogfood-testing: {detect-pipeline-driving, validate-report}.ts)
-├── tests/                           # Plugin tests — skill-structure.test.ts + batch-preflight.test.ts + per-skill suites
-│                                    # (daily-summary, dogfood-testing + fixtures)
+├── tests/                           # Plugin tests — command-contract.test.ts + skill-structure.test.ts + batch-preflight.test.ts + per-skill suites
 ├── evals/                           # Skill behavioral eval harness (scenarios + judge + run-eval runner)
 ├── plugin.json                      # Marketplace entry
 └── README.md                        # This file
@@ -330,22 +328,27 @@ Each command file contains:
 - YAML frontmatter (`description`, `argument-hint`, `allowed-tools`).
 - A delegation block: `Skill(skill="sp:<skill-name>", args="<operation> $ARGUMENTS")`.
 
-**Generated adapters (feature O, task 0308).** Both surfaces — the 28 Claude Code slash wrappers in
-`commands/` and the 28 Codex `$sp-dev-*` skill wrappers in `adapters/codex/` — are generated from
-one shared metadata source, `scripts/command-registry.ts`, by `scripts/generate-adapters.ts`:
+**Commands as SSOT (ADR-032).** The 28 `.md` files in `commands/` are the authoritative,
+hand-editable source for the operator command surface. Per-platform adapters are **install-time
+output** owned by `superskill` (`superskill install sp`) and never committed here. Plugin `sp` ships
+no per-platform artifacts — only the platform-independent thin wrappers.
+
+**Thin-wrapper contract** is enforced by `scripts/validate-commands.ts`:
 
 ```bash
-bun plugins/sp/scripts/generate-adapters.ts            # regenerate all 56 wrappers
-bun plugins/sp/scripts/generate-adapters.ts --check    # drift check (CI gate)
+bun plugins/sp/scripts/validate-commands.ts            # validate all 28 commands
+bun plugins/sp/scripts/validate-commands.ts --json     # machine-readable output
 ```
 
-Wrappers carry invocation syntax + the delegation line only — no domain workflow prose; lifecycle
-semantics live in the dispatched skill / workflow / inline procedure. Never hand-edit a generated
-wrapper: edit the registry and regenerate. Each wrapper embeds an `adapter:generated v<n>
-snapshot:<hash>` marker versioning it against the registry; a stale (hand-edited in-session)
-wrapper fails `tests/adapter-drift.test.ts` (contract / metadata-parity / no-prose / snapshot
-gates), and **a fresh session is required to trust an in-session dogfood of a just-edited
-wrapper** (platforms snapshot command bodies at session start).
+The validator checks four gates: (a) heading whitelist — only `## Usage` + `## Implementation`
+beyond the H1 title; (b) frontmatter schema — `description`, `argument-hint`, `allowed-tools`
+present; (c) target resolution — every `sp:<skill>` reference, workflow file, and procedure anchor
+in `## Implementation` exists on disk; (d) `allowed-tools` coherence — `Skill` is present iff the
+body contains a `Skill()` call. The same gates are tested in `tests/command-contract.test.ts`.
+
+Commands are hand-editable by design: edit the `.md` directly; the validator catches drift.
+**A fresh session is required to trust an in-session dogfood of a just-edited wrapper** (platforms
+snapshot command bodies at session start).
 
 **Design principle:** Commands are **pass-through routers**. They contain zero domain logic — they
 parse `$ARGUMENTS` and forward to the skill, which owns the workflow knowledge.

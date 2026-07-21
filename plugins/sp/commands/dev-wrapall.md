@@ -18,4 +18,3 @@ Wraps the **wrapup-pipeline.yaml** workflow.
 spur workflow run .spur/workflows/wrapup-pipeline.yaml --vars '{"tasks":"<json-encoded-wbs-list>","feature":"<id|>","profile":"interactive|auto","merge":"true|false"}' [--dry-run]
 ```
 
-<!-- adapter:generated v1 snapshot:9b56c69cfc36 — regenerate: `bun plugins/sp/scripts/generate-adapters.ts`; a fresh session is required to trust an in-session dogfood of a just-edited wrapper -->

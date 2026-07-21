@@ -16,4 +16,3 @@ Wraps the **sp:dogfood-testing** skill.
 
 - `Skill(skill="sp:dogfood-testing", args="$ARGUMENTS")`
 
-<!-- adapter:generated v1 snapshot:f9426da66296 — regenerate: `bun plugins/sp/scripts/generate-adapters.ts`; a fresh session is required to trust an in-session dogfood of a just-edited wrapper -->
