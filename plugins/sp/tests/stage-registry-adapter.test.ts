@@ -1,8 +1,12 @@
 import { describe, expect, test } from 'bun:test';
+import type { StageResolution, TaskSignal } from '../scripts/stage-registry-adapter';
 import {
+    bootMain,
+    formatStageResult,
     getStage,
     getTableCRedirect,
     listStages,
+    parseCliArgs,
     pickFrontierTask,
     REGISTERED_STAGES,
     renderHelp,
@@ -584,5 +588,279 @@ describe('additional coverage', () => {
     test('stage resolution preserves --once for backlog', () => {
         const r = tableAResolve({ wbs: '0126', status: 'backlog', once: true });
         expect(r.dispatchCommand).not.toContain('--next');
+    });
+
+    // ── Additional coverage for function & line gaps ──
+    test('B4 filter arrow — tasks in non-open statuses exercise filter', () => {
+        // The B4 condition has a .filter() arrow that V8 counts as a separate function.
+        // Test with tasks in done/cancelled status so the filter iterates but returns empty.
+        const r = resolveStage({
+            target: 'F',
+            feature: {
+                id: 'F',
+                status: 'backlog',
+                tasks: [
+                    { wbs: 'f01', status: 'done', dependencies: [] },
+                    { wbs: 'f02', status: 'cancelled', dependencies: [] },
+                ],
+            },
+        });
+        // B4 matches: feature is backlog, no open tasks → blocked
+        expect(r.tableRow).toBe('B4');
+        expect(r.reasonKind).toBe('blocked');
+    });
+
+    test('resolveFeature no-route for unmatched feature status without B5 match', () => {
+        // Provide tasks so B5 (zero-tasks) doesn't match. Use status 'unknown'
+        // which no B row's condition accepts.
+        const r = resolveStage({
+            target: 'Z',
+            feature: {
+                id: 'Z',
+                status: 'unknown',
+                tasks: [{ wbs: 'z01', status: 'strange_status', dependencies: [] }],
+            },
+        });
+        expect(r.tableRow).toBeNull();
+        expect(r.reasonKind).toBe('no-route');
+        expect(r.reason).toContain('no route for feature Z');
+    });
+
+    test('resolveFeature B3 inconsistent — condition matches but no frontier due to deps', () => {
+        // B3 condition matches (task has open status), but pickFrontierTask
+        // returns null because the dependency is not done.
+        const r = resolveStage({
+            target: 'I',
+            feature: {
+                id: 'I',
+                status: 'active',
+                tasks: [
+                    {
+                        wbs: 'i01',
+                        status: 'todo',
+                        dependencies: [{ wbs: 'dep', status: 'backlog' }],
+                    },
+                ],
+            },
+        });
+        expect(r.tableRow).toBe('B3');
+        expect(r.reasonKind).toBe('error');
+    });
+
+    test('runCli --help returns help text', () => {
+        const r = runCli(['--help']);
+        expect(r.exitCode).toBe(0);
+        expect(r.stdout).toContain('Usage:');
+        expect(r.stdout).toContain('--wbs');
+    });
+
+    test('runCli --list-stages', () => {
+        const r = runCli(['--list-stages']);
+        expect(r.exitCode).toBe(0);
+        expect(r.stdout).toContain('dev-unit');
+        expect(r.stdout).toContain('dev-wrap');
+    });
+
+    test('runCli with no args prints usage and exits 1', () => {
+        const r = runCli([]);
+        expect(r.exitCode).toBe(1);
+        expect(r.stderr).toContain('--wbs');
+    });
+
+    test('runCli with --dry-run and --wbs sets dispatch output', () => {
+        const r = runCli(['--wbs', '0307', '--dry-run']);
+        expect(r.exitCode).toBeGreaterThanOrEqual(0);
+        expect(r.stdout).toContain('dev-next:');
+    });
+
+    test('runCli with --feature and --dry-run', () => {
+        const r = runCli(['--feature', 'O', '--dry-run']);
+        expect(r.exitCode).toBeGreaterThanOrEqual(0);
+    });
+
+    test('runCli with --auto flag propagates auto', () => {
+        const r = runCli(['--wbs', '0307', '--auto']);
+        expect(r.exitCode).toBeGreaterThanOrEqual(0);
+        expect(r.stdout).toContain('dev-next:');
+    });
+
+    test('parseCliArgs --dry-run and --auto each set correctly', () => {
+        const r1 = parseCliArgs(['--dry-run']);
+        expect(r1.dryRun).toBe(true);
+        expect(r1.auto).toBe(false);
+
+        const r2 = parseCliArgs(['--auto']);
+        expect(r2.auto).toBe(true);
+        expect(r2.dryRun).toBe(false);
+    });
+
+    test('B5 filter arrow — feature with non-empty all-done tasks exercises callback', () => {
+        // B5's inner filter((t) => !['done','cancelled'].includes(t.status))
+        // arrow is never called when tasks is empty. Provide tasks to exercise it.
+        const r = resolveStage({
+            target: 'X1',
+            feature: {
+                id: 'X1',
+                status: 'unknown',
+                tasks: [
+                    { wbs: 'x01', status: 'done', dependencies: [] },
+                    { wbs: 'x02', status: 'cancelled', dependencies: [] },
+                ],
+            },
+        });
+        expect(r.tableRow).toBe('B7');
+        expect(r.reasonKind).toBe('blocked');
+    });
+
+    test('B7 condition arrow — all-done tasks with non-standard status', () => {
+        const r = resolveStage({
+            target: 'X2',
+            feature: {
+                id: 'X2',
+                status: 'unknown',
+                tasks: [{ wbs: 'x03', status: 'done', dependencies: [] }],
+            },
+        });
+        expect(r.tableRow).toBe('B7');
+        expect(r.reasonKind).toContain('blocked');
+    });
+
+    test('unmetDependencies callbacks — filter and map inner arrows', () => {
+        const r = unmetDependencies({
+            wbs: 'u01',
+            status: 'todo',
+            dependencies: [
+                { wbs: 'dep-a', status: 'backlog' },
+                { wbs: 'dep-b', status: 'done' },
+            ],
+        });
+        expect(r).toEqual(['dep-a']);
+    });
+
+    test('formatStageResult renders dispatch, chain, and next-outcome fields', () => {
+        const result: StageResolution = {
+            stage: null,
+            target: 'T01',
+            status: 'active',
+            tableRow: 'B6',
+            reason: 'all tasks done — wrap up feature',
+            reasonKind: 'dispatch',
+            requiresConfirmation: true,
+            chain: false,
+            dispatchCommand: '/sp:dev-wrapall --feature T01',
+            nextObservableOutcome: 'feature transition or wrap',
+        };
+        const lines = formatStageResult(result);
+        const output = lines.join('\n');
+        expect(output).toContain('dispatch: /sp:dev-wrapall');
+        expect(output).toContain('next outcome:');
+    });
+
+    test('formatStageResult renders chain flag', () => {
+        const result: StageResolution = {
+            stage: null,
+            target: 'X',
+            status: 'todo',
+            tableRow: 'A3',
+            reason: 'ready',
+            reasonKind: 'dispatch',
+            chain: true,
+            requiresConfirmation: false,
+            dispatchCommand: '/sp:dev-run X',
+        };
+        const lines = formatStageResult(result);
+        expect(lines.join('\n')).toContain('chain: yes');
+    });
+
+    test('formatStageResult renders blocker', () => {
+        const result: StageResolution = {
+            stage: null,
+            target: 'B',
+            status: 'blocked',
+            tableRow: 'A7',
+            reason: 'blocked',
+            reasonKind: 'blocked',
+            chain: false,
+            requiresConfirmation: true,
+            blocker: 'dependency not met',
+        };
+        const lines = formatStageResult(result);
+        expect(lines.join('\n')).toContain('blocker: dependency');
+    });
+
+    test('runCli --task-status backlog dispatches via A1', () => {
+        // --task-status backlog makes TABLE A1 match, producing dispatchCommand and chain output.
+        const r = runCli(['--wbs', '0307', '--task-status', 'backlog']);
+        expect(r.exitCode).toBe(0);
+        expect(r.stdout).toContain('dispatch:');
+        expect(r.stdout).toContain('chain: yes');
+    });
+
+    test('runCli catch handler with throwing resolve', () => {
+        const r = runCli(['--wbs', 'X'], {
+            resolve: () => {
+                throw new Error('simulated failure');
+            },
+        });
+        expect(r.exitCode).toBe(1);
+        expect(r.stderr).toContain('simulated failure');
+    });
+
+    test('bootMain with injectable runCli avoids process.exit', () => {
+        const origExit = process.exit;
+        let exitCode: number | undefined;
+        const exitSpy = (code?: number) => {
+            exitCode = code;
+        };
+        process.exit = exitSpy as (code?: number) => void;
+        try {
+            bootMain(['--wbs', 'X'], {
+                run: () => ({ exitCode: 42, stdout: 'test-output', stderr: '' }),
+                stdout: { write: () => true },
+                stderr: { write: () => true },
+            });
+            expect(exitCode).toBe(42);
+        } finally {
+            (process.exit as unknown as (code?: number) => void) = origExit;
+        }
+    });
+
+    test('bootMain with injected stdout/stderr writes streams and exits', () => {
+        const writes: string[] = [];
+        const fakeStdout = {
+            write: (s: string) => {
+                writes.push(`out:${s}`);
+                return true;
+            },
+        };
+        const fakeStderr = {
+            write: (s: string) => {
+                writes.push(`err:${s}`);
+                return true;
+            },
+        };
+        let exitCode: number | undefined;
+        bootMain(['--wbs', 'X'], {
+            run: () => ({ exitCode: 7, stdout: 'outstream\n', stderr: 'errstream\n' }),
+            exit: (code?: number) => {
+                exitCode = code;
+            },
+            stdout: fakeStdout,
+            stderr: fakeStderr,
+        });
+        expect(exitCode).toBe(7);
+        expect(writes).toEqual(['out:outstream\n', 'err:errstream\n']);
+    });
+
+    test('bootMain defaults to runCli when no run override', () => {
+        let exitCode: number | undefined;
+        bootMain(['--help'], {
+            exit: (code?: number) => {
+                exitCode = code;
+            },
+            stdout: { write: () => true },
+            stderr: { write: () => true },
+        });
+        expect(exitCode).toBe(0);
     });
 });

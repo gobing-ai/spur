@@ -671,7 +671,7 @@ const TABLE_B: TableBRow[] = [
             );
             return open.length === 0;
         },
-        dispatch: () => null,
+        dispatch: null, // stop row — resolveFeature returns before invoking dispatch
         rowId: 'B4',
         chain: false,
         stop: true,
@@ -691,7 +691,7 @@ const TABLE_B: TableBRow[] = [
             const open = tasks.filter((t) => !['done', 'cancelled'].includes(t.status));
             return open.length === 0 && tasks.length === 0;
         },
-        dispatch: () => null,
+        dispatch: null, // stop row — resolveFeature returns before invoking dispatch
         rowId: 'B5',
         chain: false,
         stop: true,
@@ -741,8 +741,10 @@ const TABLE_B: TableBRow[] = [
 
 // ─── TABLE C light-gate short-circuit (routing-table.md §3) ─────────────
 
+// Note: no `condition` field — TABLE C rows encode external runtime checks
+// (lint failures, test failures, rule findings) that this pure adapter cannot
+// evaluate. Rows are only consumed via C_REDIRECT_TABLE lookup, never matched.
 interface TableCRow {
-    condition: (input: ResolutionInput) => boolean;
     redirectDispatch: string;
     rowId: string;
     probeRows: string[];
@@ -750,31 +752,31 @@ interface TableCRow {
 
 const TABLE_C: TableCRow[] = [
     {
-        condition: () => false, // C1 — spur task check L3 findings: external check, not evaluable here
+        // C1 — spur task check L3 findings: external check, not evaluable here
         redirectDispatch: '/sp:dev-refine {wbs} --auto',
         rowId: 'C1',
         probeRows: ['A1', 'A3', 'A5'],
     },
     {
-        condition: () => false, // C2 — lint failures: requires runtime check
+        // C2 — lint failures: requires runtime check
         redirectDispatch: '/sp:dev-fixall',
         rowId: 'C2',
         probeRows: ['A3', 'A5'],
     },
     {
-        condition: () => false, // C3 — test failures: requires runtime check
+        // C3 — test failures: requires runtime check
         redirectDispatch: '/sp:dev-unit {wbs} --auto',
         rowId: 'C3',
         probeRows: ['A5', 'A6'],
     },
     {
-        condition: () => false, // C4 — rule findings: requires spur rule run
+        // C4 — rule findings: requires spur rule run
         redirectDispatch: null as unknown as string, // HITL stop
         rowId: 'C4',
         probeRows: ['A3', 'A5', 'A6'],
     },
     {
-        condition: () => false, // C5 — verdict FAIL pointing at coverage
+        // C5 — verdict FAIL pointing at coverage
         redirectDispatch: '/sp:dev-unit {wbs}',
         rowId: 'C5',
         probeRows: ['A6'],
@@ -1097,26 +1099,36 @@ export function renderHelp(): string {
 
 // ─── CLI entry point ────────────────────────────────────────────────────
 
-export function parseCliArgs(argv: string[]): {
+export interface CliArgs {
     wbs?: string;
     feature?: string;
+    taskStatus?: string;
     dryRun: boolean;
     auto: boolean;
     once: boolean;
     full: boolean;
     listStages: boolean;
     help: boolean;
-} {
+}
+
+/** Result of a CLI invocation. */
+export interface CliResult {
+    exitCode: number;
+    stdout: string;
+    stderr: string;
+}
+
+export function parseCliArgs(argv: string[]): CliArgs {
     const args = argv;
     let wbs: string | undefined;
     let feature: string | undefined;
+    let taskStatus: string | undefined;
     let dryRun = false;
     let auto = false;
     let once = false;
     let full = false;
     let listStages = false;
     let help = false;
-
     for (let i = 0; i < args.length; i++) {
         const arg = args[i];
         if (arg == null) continue;
@@ -1124,6 +1136,8 @@ export function parseCliArgs(argv: string[]): {
             wbs = args[++i];
         } else if (arg === '--feature') {
             feature = args[++i];
+        } else if (arg === '--task-status') {
+            taskStatus = args[++i];
         } else if (arg === '--dry-run') {
             dryRun = true;
         } else if (arg === '--auto') {
@@ -1139,20 +1153,49 @@ export function parseCliArgs(argv: string[]): {
         }
     }
 
-    return { wbs, feature, dryRun, auto, once, full, listStages, help };
+    return { wbs, feature, taskStatus, dryRun, auto, once, full, listStages, help };
 }
 
-export function runCli(argv: string[]): { exitCode: number; stdout: string; stderr: string } {
+/**
+ * Format a resolved stage result as human-readable output lines.
+ * Exported for testing — separates presentation from I/O.
+ */
+export function formatStageResult(result: StageResolution): string[] {
+    const lines = [
+        `dev-next: ${result.reasonKind === 'dispatch' ? 'dispatch' : result.reasonKind}`,
+        `  target: ${result.target}  status=${result.status}  table=${result.tableRow ?? '\u2014'}`,
+        `  reason: ${result.reason}`,
+    ];
+    if (result.blocker) {
+        lines.push(`  blocker: ${result.blocker}`);
+    }
+    if (result.dispatchCommand) {
+        lines.push(`  dispatch: ${result.dispatchCommand}`);
+    }
+    if (result.chain) {
+        lines.push('  chain: yes');
+    }
+    if (result.requiresConfirmation) {
+        lines.push('  confirmation: required');
+    }
+    if (result.nextObservableOutcome) {
+        lines.push(`  next outcome: ${result.nextObservableOutcome}`);
+    }
+    return lines;
+}
+
+export function runCli(argv: string[], opts?: { resolve?: (input: ResolutionInput) => StageResolution }): CliResult {
     const parsed = parseCliArgs(argv);
+    const resolve = opts?.resolve ?? resolveStage;
 
     if (parsed.help) {
         return { exitCode: 0, stdout: renderHelp(), stderr: '' };
     }
 
     if (parsed.listStages) {
-        const stages = listStages();
-        const lines = stages.map((s) => `${s.stage_id}\t${s.command}\t${s.skill}`);
-        return { exitCode: 0, stdout: `${lines.join('\n')}\n`, stderr: '' };
+        const stagesList = listStages();
+        const stageLines = stagesList.map((s) => `${s.stage_id}\t${s.command}\t${s.skill}`);
+        return { exitCode: 0, stdout: `${stageLines.join('\n')}\n`, stderr: '' };
     }
 
     if (!parsed.wbs && !parsed.feature) {
@@ -1171,41 +1214,47 @@ export function runCli(argv: string[]): { exitCode: number; stdout: string; stde
         once: parsed.once,
         auto: parsed.auto,
         fullMode: parsed.full,
-        task: parsed.wbs ? { wbs: parsed.wbs, status: 'unknown', dependencies: [] } : undefined,
+        task: parsed.wbs ? { wbs: parsed.wbs, status: parsed.taskStatus ?? 'unknown', dependencies: [] } : undefined,
         feature: parsed.feature ? { id: parsed.feature, status: 'active', tasks: [] } : undefined,
     };
 
     try {
-        const result = resolveStage(input);
-        const lines = [
-            `dev-next: ${result.reasonKind === 'dispatch' ? 'dispatch' : result.reasonKind}`,
-            `  target: ${result.target}  status=${result.status}  table=${result.tableRow ?? '—'}`,
-            `  reason: ${result.reason}`,
-        ];
-        if (result.blocker) {
-            lines.push(`  blocker: ${result.blocker}`);
-        }
-        if (result.dispatchCommand) {
-            lines.push(`  dispatch: ${result.dispatchCommand}`);
-        }
-        if (result.chain) {
-            lines.push('  chain: yes');
-        }
-        if (result.requiresConfirmation) {
-            lines.push('  confirmation: required');
-        }
-        if (result.nextObservableOutcome) {
-            lines.push(`  next outcome: ${result.nextObservableOutcome}`);
-        }
+        const result = resolve(input);
+        const lines = formatStageResult(result);
         return { exitCode: result.reasonKind === 'dispatch' ? 0 : 2, stdout: `${lines.join('\n')}\n`, stderr: '' };
     } catch (e) {
         return { exitCode: 1, stdout: '', stderr: `error: ${(e as Error).message}` };
     }
 }
 
+/**
+ * Entry-point boot — runs the CLI using process.argv. Extracted so tests can
+ * call it directly without spawning a subprocess (which would not contribute
+ * to the test isolate's V8 coverage counters).
+ *
+ * No `import.meta.main` guard here; the test calls this directly with
+ * `process.exit` swapped for a spy. Production entry point is
+ * `plugins/sp/scripts/main.ts` which calls this when `import.meta.main`.
+ */
+export function bootMain(
+    argv: string[] = process.argv,
+    opts?: {
+        run?: (a: string[]) => CliResult;
+        exit?: (code: number) => void;
+        stdout?: { write: (data: string) => void };
+        stderr?: { write: (data: string) => void };
+    },
+): void {
+    const cliRunner = opts?.run ?? runCli;
+    const doExit = opts?.exit ?? process.exit;
+    const stdout = opts?.stdout ?? process.stdout;
+    const stderr = opts?.stderr ?? process.stderr;
+    const result = cliRunner(argv);
+    if (result.stdout) stdout.write(result.stdout);
+    if (result.stderr) stderr.write(result.stderr);
+    doExit(result.exitCode);
+}
+
 if (import.meta.main) {
-    const result = runCli(process.argv);
-    if (result.stdout) process.stdout.write(result.stdout);
-    if (result.stderr) process.stderr.write(result.stderr);
-    process.exit(result.exitCode);
+    bootMain();
 }
