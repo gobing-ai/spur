@@ -90,6 +90,14 @@ describe('appendDisclosurePlaceholders (R4)', () => {
         expect(evidence?.size_bytes).toBe(0);
     });
 
+    test('a placeholder carries an explicit size budget bounding its resolved body (R4)', () => {
+        const built = buildStageLayers('implement', { 'harness-policy': 'p' }, 'sp:spur-dev', '1.0', ISO);
+        const withHandles = appendDisclosurePlaceholders('implement', built, PROVENANCE);
+
+        const evidence = withHandles.find((l) => l.layer === 'indexed-evidence');
+        expect(evidence?.size_budget?.max_bytes).toBeGreaterThan(0);
+    });
+
     test('an optional layer that already has content is left alone', () => {
         const built = buildStageLayers(
             'implement',

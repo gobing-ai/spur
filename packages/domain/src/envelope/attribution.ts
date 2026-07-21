@@ -136,8 +136,11 @@ export function attributeFreshVsReused(
         const capturedHash = captured?.content_hash ?? '';
 
         // A layer is fresh if no captured version exists or hashes differ.
-        // Volatile layers are always fresh by contract.
-        const isFresh = !captured || captured.content_hash !== layer.content_hash;
+        // Volatile layers are always fresh by contract. An empty content hash
+        // can never be treated as reused — a real layer hash is a 64-char
+        // digest, so an empty string means "no usable capture" and must not
+        // false-positive as a match.
+        const isFresh = !captured || layer.content_hash === '' || captured.content_hash !== layer.content_hash;
         const isReused = !isFresh;
 
         if (isFresh) freshCount++;
@@ -172,6 +175,8 @@ export function attributeFreshVsReused(
     }
 
     return {
+        // dispatchId is not derivable here; callers that track a dispatch id
+        // stamp it on the returned report (see attributeWithoutTelemetry).
         dispatchId: '',
         attributedAt: new Date().toISOString(),
         layers: layerResults,

@@ -259,6 +259,17 @@ export function buildStageLayers(
 }
 
 /**
+ * Default size budget for disclosure-resolved optional layers (0284 R4).
+ *
+ * Progressive disclosure routes optional references through handles with
+ * explicit triggers and budgets. The handle is the explicit trigger; this is
+ * the explicit budget that bounds how much a resolved optional layer may
+ * contribute when the consumer loads it on demand. 8 KiB keeps an optional
+ * reference from crowding out mandatory-inline contract layers.
+ */
+export const DEFAULT_DISCLOSURE_BUDGET_BYTES = 8192;
+
+/**
  * Emit metadata-only placeholders for a stage's optional-disclosure layers that
  * have no inline content (0284 R4, R7).
  *
@@ -266,7 +277,8 @@ export function buildStageLayers(
  * stage's *optional* layers that drop is lossy: the consumer cannot tell "this
  * stage never wants indexed-evidence" from "the body was left out to save
  * budget". A placeholder keeps the distinction — zero-length content plus a
- * `disclosure_handle` the consumer can resolve on demand.
+ * `disclosure_handle` the consumer can resolve on demand and a `size_budget`
+ * bounding the resolved body.
  *
  * Composed with, not folded into, `buildStageLayers`, so the plain assembly
  * path keeps its existing skip-missing behavior.
@@ -295,6 +307,7 @@ export function appendDisclosurePlaceholders(
             provenance,
             cacheability: cacheabilityForLayer(name),
             sensitivity: 'internal',
+            size_budget: { max_bytes: DEFAULT_DISCLOSURE_BUDGET_BYTES },
             disclosure_handle: `${stageId}:${name}`,
         });
     }

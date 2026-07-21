@@ -84,6 +84,13 @@ describe('attributeFreshVsReused (R6)', () => {
         const report = attributeFreshVsReused([stableLayer('harness-policy', 'content')], []);
         expect(report.layers[0]?.evidenceKind).toBe('inferred');
     });
+
+    test('an empty content hash is never classified as reused', () => {
+        const emptyLayer = { ...stableLayer('harness-policy', 'content'), content_hash: '' };
+        const report = attributeFreshVsReused([emptyLayer], [emptyLayer]);
+        expect(report.layers[0]?.reused).toBe(false);
+        expect(report.layers[0]?.fresh).toBe(true);
+    });
 });
 
 // ─── R6: Provider telemetry handling ────────────────────────────────────────
