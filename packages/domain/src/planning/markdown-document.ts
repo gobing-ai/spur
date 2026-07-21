@@ -322,7 +322,9 @@ export class MarkdownDocument {
     }
 
     private get canonicalSections(): readonly string[] {
-        return this._domain === 'task' ? TASK_CANONICAL_SECTIONS : FEATURE_CANONICAL_SECTIONS;
+        const base = this._domain === 'task' ? TASK_CANONICAL_SECTIONS : FEATURE_CANONICAL_SECTIONS;
+        const extra = UNIVERSAL_SECTIONS.filter((s) => !(base as readonly string[]).includes(s));
+        return [...base, ...extra];
     }
 
     private validateSectionName(name: string): void {
