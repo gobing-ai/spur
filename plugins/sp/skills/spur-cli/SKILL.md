@@ -79,6 +79,10 @@ the whole point of this facade is that the CLI surface has a single, scalable ho
 
 ## See also
 
+- **[references/init.md](references/init.md)** — post-scaffold init validation: the Phase 1.5
+  functional-validation probes and the Phase 1.6 rule-glob adaptation (`LLM-as-judge` layout
+  classification, local-layer shadow writes) that run after `spur init` and before doc
+  customization (`/sp:spur-init`).
 - **`sp:spur-dev`** — the spine that dispatches these verbs into the planning +
   execution lifecycle. Use it to *drive* work; use this facade to *look up or operate a verb*.
 - **`sp:expert-spur`** — the subagent that loads this facade for multi-step, multi-noun corpus work

@@ -114,14 +114,15 @@ passed (or defaulted). `--next` means "advance the task to its next step, then h
 the single implement step, transitions the task through the FSM (`todo → wip → testing`, guards
 honored), and chains to `/sp:dev-verify <wbs> --auto --next`. On a guard failure it stops as
 review-pending (leave status, surface the blocking finding, do not advance). The full pipeline
-(no `--next`) still runs every stage internally and ends at `done` on its own. See
-`plugins/sp/commands/dev-run.md` `--next` for the exact behavior and the review-pending message.
+(no `--next`) still runs every stage internally and ends at `done` on its own. The exact chain
+behavior and the review-pending message live in § "`--next` chain — advance to the next step"
+below.
 
 **MANDATORY `--next`-ignored warning (deterministic emission — not optional prose).** When
 `$ARGUMENTS` carries BOTH an explicit `--mode full` AND `--next`, the resolved mode is `implement`
 (the explicit `--mode full` has no effect). In that one case the operator MUST be warned before
-dispatch — emit the literal string defined in `plugins/sp/commands/dev-run.md` → "Mode resolution
-(deterministic — run before dispatch)". The plain `--next` case (no explicit `--mode full`) is the
+dispatch — emit the literal string in § "Mode resolution (deterministic — run before dispatch)"
+below. The plain `--next` case (no explicit `--mode full`) is the
 intended chain link and emits no warning. This emission is a required procedure step, not a
 "may mention" note — the trigger is mechanical (`$ARGUMENTS` contains both flags).
 
@@ -141,6 +142,88 @@ the run:
 - **On completion** (`done`): the pipeline's `record` step has already written results into
   the task's `## Testing` and `## Review` sections via `spur task record <wbs>` (verdict →
   matrix-compliant tables; never transitions to `done` — the gate stays in the workflow).
+
+## `--next` chain — advance to the next step
+
+`--next` makes `/sp:dev-run` **one link in the linear execution chain**
+(`refine → run → verify → done`), not the whole-pipeline driver. It always operates on the
+**implement** step: when `--next` is present, the mode resolves to `implement` even if `--mode full`
+was passed (full mode runs every step itself, so there is nothing to *advance to* — but rather than
+reject the operator's typed flag, `--next` reinterprets it as "run the implement step, then hand
+off"). This makes `/sp:dev-run <wbs> --auto --next` work as the headline chain link.
+
+When `--next` is set and implementation succeeds:
+
+0. **Backlog promotion (chain step 0).** If the task's current status is `backlog`, the chain
+   first auto-promotes `backlog → todo` via `spur task update <wbs> todo`. The FSM permits this
+   transition unguarded (no section gate), so the promotion is pure ceremony — but the chain
+   performs it explicitly rather than surfacing a raw `GuardDeniedError: No transition from
+   "backlog" to "wip"`. `--auto --next` already expresses the operator's intent to drive the
+   task, so the mechanical two-hop (`backlog → todo → wip`) is correct behavior, not a bypass:
+   the lifecycle guard stays authoritative for every subsequent transition. If the promotion
+   itself fails, stop as review-pending and include both the FSM error and the concrete remediation
+   `spur task update <wbs> todo`; never surface a raw `GuardDeniedError` unaided.
+1. **Transition through the FSM (guards honored — no `--no-lifecycle`):**
+   - `spur task update <wbs> wip` — the `todo → wip` guard is `always`; passes.
+   - `spur task update <wbs> testing` — the `wip → testing` guard runs `spur task check <wbs>`.
+2. **Record provenance** — `spur task run-link <wbs> --source next-auto --json`. Writes a
+   `kind: pipeline` entry into `task_run_links` so the `testing → done` provenance guard
+   (lifecycle-adapter.ts L106-131) accepts the in-session implementation path. Idempotent:
+   safe to call even when a pipeline link already exists.
+3. **On a clean transition:** invoke `/sp:dev-verify <wbs> --auto --next` (`--auto` propagates
+   down the whole chain). The verify step's `--next` transition to `done` now passes the
+   provenance guard because step 2 recorded the link.
+4. **On a guard failure — stop as review-pending:** leave the task at its current status, surface
+   the blocking reason (e.g. a missing `## Solution` section that fails `spur task check`), and do
+   NOT invoke dev-verify. The chain halts here for the operator to resolve, exactly like the
+   pipeline's precheck/HITL gates.
+
+```
+review pending — wip → testing guard failed for <wbs>
+  spur task check reported: <blocking finding, e.g. "## Solution section is empty">
+  task left at wip. Resolve the finding, then re-run: /sp:dev-run <wbs> --auto --next
+```
+
+**Status precondition (R2).** The chain assumes the task is at `todo` or later when step 0 is
+absent — i.e. the operator has already moved it off `backlog` via `spur task update <wbs> todo`
+during refinement. Step 0's auto-promote covers the case where they did not: a `backlog`-seeded
+task with `--next` is promoted mechanically rather than denied (`--auto` only controls objective
+confirmations). There is no refusal path for `backlog` when `--next` is present. To retain manual
+status control, omit `--next` and promote explicitly with `spur task update <wbs> todo` before a
+later chained run.
+
+Honoring the guard is the point: the FSM is what stops a malformed task from sliding into `testing`
+and then `done`. Bypassing it with `--no-lifecycle` (as the pipeline does for its own internal
+transitions) would defeat the review-pending stop the chain exists to provide.
+
+## Mode resolution (deterministic — run before dispatch)
+
+`--next` always resolves the mode to `implement` (the chain link), regardless of `--mode`. The
+mode is decided mechanically from `$ARGUMENTS`, then the dispatch runs. This is a
+deterministic resolution, not agent discretion.
+
+| `$ARGUMENTS` carries | Resolved mode | Dispatch |
+|---|---|---|
+| `--next` (with or without `--mode implement`) | `implement` | `implement $ARGUMENTS` |
+| `--next` **and** explicit `--mode full` | `implement` + **MANDATORY warning** (below) | `implement $ARGUMENTS` |
+| `--mode full` (no `--next`) | `full` | `run $ARGUMENTS` |
+| `--mode implement` (no `--next`) | `implement` | `implement $ARGUMENTS` |
+| neither (default) | `full` | `run $ARGUMENTS` |
+
+**MANDATORY warning — emit when `$ARGUMENTS` carries BOTH an explicit `--mode full` AND `--next`.**
+This is the only case `--next` is "ignored" (the operator asked for the full pipeline *and* the
+advance-chain; `--next` won the resolution, so the explicit `--mode full` has no effect). Emit
+this literal string to the operator **before** dispatching — it is a required step, not optional
+prose:
+
+```
+⚠️  --next is ignored in full mode: --next resolves the mode to `implement` (the chain link),
+    so an explicit --mode full has no effect. Running the implement step only. Drop --next to
+    run the full pipeline, or drop --mode full to silence this warning.
+```
+
+The plain `--next` case (no explicit `--mode full`) emits **no** warning — that is the intended
+chain-link behavior, not a silent ignore.
 
 ## Infrastructure failure recognition (mandatory)
 

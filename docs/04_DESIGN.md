@@ -279,6 +279,26 @@ stabilize before the report implementation is designed.
 | `spur migrate [--json]` | Temporary helper: apply CLI-owned schema migrations; reports `{ ok, applied }`. |
 | `spur --help` / `spur --version` | Commander-rendered usage / binary version (ADR-014). |
 
+### 1.3 Agent command surface — generated adapters (feature O, task 0308)
+
+The `plugins/sp` agent-facing command surface (28 Claude Code `/sp:dev-*` slash wrappers +
+28 Codex `$sp-dev-*` skill wrappers) is **generated**, not hand-authored:
+
+| Artifact | Role |
+|----------|------|
+| `plugins/sp/scripts/command-registry.ts` | Shared metadata SSOT — per command: name, title, description, argument-hint, allowed-tools, delegation target (skill / workflow / inline procedure / composite) |
+| `plugins/sp/scripts/generate-adapters.ts` | Generator + `--check` drift validator; renders both wrapper kinds from one registry entry |
+| `plugins/sp/commands/<name>.md` | Claude Code slash wrapper (frontmatter + usage + delegation line only) |
+| `plugins/sp/adapters/codex/sp-<name>.md` | Codex dollar-skill wrapper (`disable-model-invocation: true`; same metadata, platform-native delegation) |
+| `plugins/sp/tests/adapter-drift.test.ts` | Drift-test contract: (a) target resolution, (b) slash↔codex metadata parity, (c) no-prose byte-exact + grep gate, (d) snapshot-hash freshness |
+
+Invariants: wrappers carry invocation syntax + the delegation line only — lifecycle semantics live
+in the dispatched skill/workflow/procedure (0283 R4). Hand edits are drift: each wrapper embeds an
+`adapter:generated v<n> snapshot:<sha256-12>` marker versioning it against the registry; a stale
+wrapper fails the drift gate, and a fresh session is required to trust an in-session dogfood of a
+just-edited wrapper (0283 R7 — platforms snapshot command bodies at session start). The command
+index itself remains owned by `plugins/sp/README.md`.
+
 ## 2. Configuration
 
 ### 2.1 Project config — `.spur/config.yaml` (ADR-017)

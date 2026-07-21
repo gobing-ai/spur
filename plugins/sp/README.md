@@ -226,11 +226,12 @@ plugins/sp/
 │   ├── sys-debugging/               # Structured debugging protocol
 │   │   └── references/debugging-protocol.md
 │   └── wayfinder/                   # Multi-session investigation maps (SKILL.md only)
-├── commands/                        # 28 slash-command definitions
+├── commands/                        # 28 slash-command wrappers (GENERATED — see below)
+├── adapters/codex/                  # 28 Codex `$sp-dev-*` skill wrappers (GENERATED — same source)
 ├── agents/                          # 3 specialist subagents (expert-spur, super-coder, super-reviewer)
 ├── hooks/                           # hooks.json + task-write-guard.{ts,test.ts} + context-{session-start,post-tool,session-stop}.ts
 │                                    # + careful-guard.{ts,test.ts} + context-hooks.test.ts + token-estimate.test.ts
-├── scripts/                         # Executable helpers, split from prompts (ADR-031) — batch-preflight.ts + scripts/<skill>/
+├── scripts/                         # Executable helpers, split from prompts (ADR-031) — command-registry.ts + generate-adapters.ts (adapter SSOT + generator), batch-preflight.ts + scripts/<skill>/
 │                                    # (daily-summary: {daily-summary, logger}.ts; dogfood-testing: {detect-pipeline-driving, validate-report}.ts)
 ├── tests/                           # Plugin tests — skill-structure.test.ts + batch-preflight.test.ts + per-skill suites
 │                                    # (daily-summary, dogfood-testing + fixtures)
@@ -328,7 +329,23 @@ Each command file contains:
 
 - YAML frontmatter (`description`, `argument-hint`, `allowed-tools`).
 - A delegation block: `Skill(skill="sp:<skill-name>", args="<operation> $ARGUMENTS")`.
-- A CLI fallback (`spur <verb> $ARGUMENTS`) for non-Claude platforms.
+
+**Generated adapters (feature O, task 0308).** Both surfaces — the 28 Claude Code slash wrappers in
+`commands/` and the 28 Codex `$sp-dev-*` skill wrappers in `adapters/codex/` — are generated from
+one shared metadata source, `scripts/command-registry.ts`, by `scripts/generate-adapters.ts`:
+
+```bash
+bun plugins/sp/scripts/generate-adapters.ts            # regenerate all 56 wrappers
+bun plugins/sp/scripts/generate-adapters.ts --check    # drift check (CI gate)
+```
+
+Wrappers carry invocation syntax + the delegation line only — no domain workflow prose; lifecycle
+semantics live in the dispatched skill / workflow / inline procedure. Never hand-edit a generated
+wrapper: edit the registry and regenerate. Each wrapper embeds an `adapter:generated v<n>
+snapshot:<hash>` marker versioning it against the registry; a stale (hand-edited in-session)
+wrapper fails `tests/adapter-drift.test.ts` (contract / metadata-parity / no-prose / snapshot
+gates), and **a fresh session is required to trust an in-session dogfood of a just-edited
+wrapper** (platforms snapshot command bodies at session start).
 
 **Design principle:** Commands are **pass-through routers**. They contain zero domain logic — they
 parse `$ARGUMENTS` and forward to the skill, which owns the workflow knowledge.

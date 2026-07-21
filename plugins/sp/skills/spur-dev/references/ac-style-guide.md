@@ -102,3 +102,19 @@ During decomposition, each core scenario maps to ≥1 task:
 The mapping is recorded in the task's `## Background` or in the feature's `## Notes`.
 `spur feature check` warns on unmapped core scenarios after `spur feature refresh`
 regenerates the `## Tasks` block.
+
+## Decision-trace → AC-scenario mapping
+
+Each resolved decision from a grilling interview (Phase 1) becomes one or more Gherkin scenarios:
+
+| Decision-tree element | Becomes |
+|-----------------------|---------|
+| A **locked decision** (a capability the feature commits to) | A `@core` scenario — the must-ship behavior it enables |
+| The decision's **observable outcome** (why it was chosen) | The scenario's `Then` — assert the observable, not the mechanism |
+| A decision's **preconditions / constraints** | The scenario's `Given` |
+| The **user action** that exercises the decision | The scenario's single `When` (one action per scenario — split if more) |
+| An **error path / boundary** surfaced during grilling | An `@edge` scenario (advisory; may defer per DD-06) |
+| A **deferred branch** ("out of scope for now") | A `## Scope` **Out** bullet — *not* a scenario |
+
+Number scenarios `R1, R2, …` sequentially, stable forever (the title is the traceability identity
+key). Use the Gherkin template at `.spur/templates/bdd/gherkin.md`.

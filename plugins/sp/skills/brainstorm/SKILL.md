@@ -250,6 +250,9 @@ this skill's `dev-brainstorm` operation for structured ideation.
 Invoked as `Skill(skill="sp:brainstorm", args="dev-brainstorm --context <decision-tree> --options <n>")`.
 Accepts a pre-built decision-tree context from the discovery phase and skips the clarification step
 (Phase 1 → Phase 2 transition in the skill's own workflow), going directly to structured ideation.
+The discovery interview that produces this context (5-step grilling protocol, question format,
+codebase-first rule, stop conditions, depth question budgets, smart positional detection) lives in
+[references/grilling-interview.md](references/grilling-interview.md).
 
 **Decision-tree context format** (free-form markdown passed as `--context`):
 

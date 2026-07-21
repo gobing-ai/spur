@@ -39,7 +39,10 @@ It backs two commands:
 
 The verify mode is the **completion gate's evidence source**: it emits a machine verdict the
 `task-pipeline.yaml` workflow reads before allowing `record → done`. A `PASS` clears the gate; a
-`PARTIAL`/`FAIL` blocks it. This is what makes "done" mean *verified*, not *self-reported*.
+`PARTIAL`/`FAIL` blocks it. This is what makes "done" mean *verified*, not *self-reported*. The
+three `testing → done` gate layers (strict-core + verdict artifact, provenance guard, Review L3)
+and their per-layer remediation are owned by
+[gate-checklists.md](../spur-dev/references/gate-checklists.md) § done-gate.
 
 ## Why this skill exists (the gap it closes)
 

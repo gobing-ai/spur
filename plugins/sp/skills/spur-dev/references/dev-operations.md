@@ -64,7 +64,7 @@ each would be scope creep for one-liner procedures.
 | 13a | parallel | `dev-parallel` | `Skill()` | `sp:parallel-execution` | `--tasks <selector> [--feature <id>] [--mode <fan-out\|review-panel\|investigation>] [--agent <name\|auto>] [--json]` |
 | 14 | wrap | `dev-wrap` | `Skill()` | `spur workflow run` (wrapup-pipeline) | `<wbs> [--auto] [--merge]` |
 | 15 | wrapall | `dev-wrapall` | `Skill()` | `spur workflow run` (wrapup-pipeline) | `[--since <iso>] [--feature <id>] [--status <s>] [--auto] [--merge]` |
-| 16 | idea | `dev-idea` | `Skill()` | `spur workflow run` (idea-pipeline) | `"<idea>" [--auto] [--design] [--skip-design]` |
+| 16 | idea | `dev-idea` | `Skill()` | `spur workflow run` (idea-pipeline) | `"<idea>" [--auto] [--design] [--skip-design] [--design-approved]` |
 
 ---
 
@@ -120,7 +120,7 @@ must not be changed without updating the backing skill.
 
 - **Purpose:** Refine a task's requirements via structured Q&A — clarify scope, elicit missing details, tighten acceptance criteria before execution.
 - **Inputs:** `<wbs>` (required). `--focus <mode>` narrows the gap analysis. `--agent <name|auto>` is an **inline** override: omit (default) to run the synthesis **in the current session**; `<name>`/`auto` spawns it via `spur agent run`. `--auto` skips interactive Q&A (synthesis only) and propagates down the `--next` chain. `--next`: advance to the next step — transition `backlog → todo` through the FSM **idempotently** (only when `status == backlog`; a task already at `todo` or past it skips the transition and chains anyway — `status >= todo` ⇒ already advanced) and invoke `/sp:dev-run <wbs> --auto --next` (which resolves to the implement step). On a guard/refine failure, stop as review-pending.
-- **Backing:** `sp:spur-dev` skill, `refine` operation.
+- **Backing:** `sp:spur-dev` skill, `refine` operation. Q&A clarifications are presented as decision briefs per [decision-brief.md](decision-brief.md).
 - **Behavior:** Read the task → elicit missing AC/Design/Plan through targeted Q&A → write each via `spur task update <wbs> --section <name> --from-file`. Done just-in-time, per task, immediately before execution. With `--next`: on success, transition status (idempotently — see Inputs) + chain to dev-run; on failure, stop and surface error.
 - **Pre-synthesis skip gate (under `--auto`):** Before invoking synthesis, run `spur task check <wbs> --json`. Filter the findings to the target sections only ({Background, Requirements, Plan}). If there are no L3 findings for any of those sections (regardless of whether the *overall* exit code is 0 — other sections may have findings), emit a structured SKIP result instead of synthesizing:
   ```
@@ -163,9 +163,15 @@ must not be changed without updating the backing skill.
 - **Behavior:** Two-phase protocol. Phase 1 (inline): walk the decision tree one question at a time, each with a recommended answer, exploring the codebase before asking the user. Phase 2 (delegated): pass the resolved decision tree to `sp:brainstorm` for structured ideation — each approach includes description, trade-offs, implementation notes, confidence level, and decision trace.
 - **Artifact exits (mutually exclusive):**
   - `--task [<feature-id>]` — create one `todo` task from the ⭐ approach via `spur task create` (Background/Requirements/Plan seeded from the brainstorm). The fast path for a single unit of work.
-  - `--feature [<parent-id>]` — the **front-half entry**: `spur feature create`, then author Goal/Scope/BDD-AC by editing the feature file (no `--section` verb on `feature update`), then loop `spur feature check` to exit 0. Lands a validated feature; hands off to `/sp:dev-plan --feature <ID>` for decomposition. AC scenarios derive from the decision trace per [ac-style-guide.md](ac-style-guide.md).
+  - `--feature [<parent-id>]` — the **front-half entry**: `spur feature create`, then author Goal/Scope/BDD-AC by editing the feature file (no `--section` verb on `feature update`), then loop `spur feature check` to exit 0. Lands a validated feature; hands off to `/sp:dev-plan --feature <ID>` for decomposition. AC scenarios derive from the decision trace per [ac-style-guide.md](ac-style-guide.md#decision-trace--ac-scenario-mapping).
   - `--next` (with `--feature`) — on a clean `feature check`, auto-invoke `/sp:dev-plan --feature <ID>` so the planning half chains end-to-end like the execution half. Ignored without `--feature`.
   - Passing both `--task` and `--feature` is an error.
+- **`--task` exit seeding:** create via `spur task create "<approach-name>" --feature <id> --template feature-impl` (omit `--feature` when no feature-id is given). The task is seeded with:
+  - **Background** ← the brainstorm Overview + the chosen approach's Description + decision-trace context
+  - **Requirements** ← the approach's Implementation Notes, converted to R-item checkboxes
+  - **Plan** ← the brainstorm's Next Steps, converted to an ordered checklist
+
+  Report the new task WBS and file path; the task lands at `todo`, ready for `/sp:dev-refine`.
 - **Delegation:** `Skill(skill="sp:brainstorm", args="dev-brainstorm --context <decision-tree> --options <n>")`
 
 ### 13. runall
@@ -181,7 +187,14 @@ must not be changed without updating the backing skill.
 - **Purpose:** Wrap up a single completed task — capture learnings, record metrics, sync docs, and optionally advance the feature / clean up the branch.
 - **Inputs:** `<wbs>` (required, positional). `--auto` skips objective confirmations (the branch-cleanup HITL gate still pauses — irreversible). `--merge` triggers branch cleanup (irreversible HITL gate).
 - **Backing:** `spur workflow run .spur/workflows/wrapup-pipeline.yaml` — direct workflow invocation (no backing skill; the pipeline IS the procedure).
-- **Behavior:** Builds `--vars '{"tasks":["<wbs>"],"profile":"interactive|auto","merge":"true|false"}'` and invokes the wrapup pipeline. The pipeline runs: task-resolve → doc-sync → learning-capture → metrics-record → (feature-transition) → (branch-cleanup) → done. Task statuses are NOT mutated. Branch cleanup is an irreversible HITL gate that always pauses, even under `--auto`.
+- **Behavior:** Builds `--vars '{"tasks":"[\"<wbs>\"]","profile":"interactive|auto","merge":"true|false"}'` and invokes the wrapup pipeline. The pipeline runs: task-resolve → doc-sync → learning-capture → metrics-record → (feature-transition) → (branch-cleanup) → done. Task statuses are NOT mutated. Branch cleanup is an irreversible HITL gate that always pauses, even under `--auto`.
+- **Vars string typing:** `tasks` is a JSON-encoded **string**, not a JSON array — `spur workflow run --vars` accepts only string values (`--vars values must be strings`); the pipeline's guards parse the string with `jq length`. `jq -nc` guarantees the shape:
+
+  ```bash
+  VARS=$(jq -nc --arg tasks "[\"$WBS\"]" --arg profile "$PROFILE" --arg merge "$MERGE" \
+    '{tasks:$tasks, profile:$profile, merge:$merge}')
+  spur workflow run .spur/workflows/wrapup-pipeline.yaml --vars "$VARS"
+  ```
 - **Delegation:** Direct `spur workflow run .spur/workflows/wrapup-pipeline.yaml` (no `Skill()` call — the command builds the vars JSON and invokes the workflow directly via `Bash`).
 
 ### 15. wrapall
@@ -189,16 +202,34 @@ must not be changed without updating the backing skill.
 - **Purpose:** Wrap up a batch of completed tasks — capture learnings, record metrics, sync docs, advance a feature through legal lifecycle edges, and optionally clean up branches.
 - **Inputs:** `--since <iso-date>` filters done tasks by frontmatter `updated_at >= date` (v1 approximation). `--feature <id>` selects all tasks under a feature AND advances the feature through legal lifecycle edges (`backlog → active → verifying → done`, guards honored). `--status <s>` (default: `done`) filters by task status. `--auto` skips objective confirmations. `--merge` triggers branch cleanup (irreversible HITL gate).
 - **Backing:** `spur workflow run .spur/workflows/wrapup-pipeline.yaml` — direct workflow invocation.
-- **Behavior:** Resolves the task list via `spur task list --json` (filtered by `--feature`, `--since`, `--status`), builds `--vars '{"tasks":[...],"feature":"<id>","profile":"interactive|auto","merge":"true|false"}'`, and invokes the wrapup pipeline. The pipeline runs the same states as `wrap` but with the full task list and optional feature transition. Task statuses are NOT mutated. Feature transitions go through `spur feature update` so lifecycle guards apply. Branch cleanup is an irreversible HITL gate.
+- **Behavior:** Resolves the task list via `spur task list --json` (filtered by `--feature`, `--since`, `--status`), builds `--vars '{"tasks":"[...]","feature":"<id>","profile":"interactive|auto","merge":"true|false"}'`, and invokes the wrapup pipeline. The pipeline runs the same states as `wrap` but with the full task list and optional feature transition. Task statuses are NOT mutated. Feature transitions go through `spur feature update` so lifecycle guards apply. Branch cleanup is an irreversible HITL gate.
+- **Vars string typing:** `tasks` is a JSON-encoded **string**, not a JSON array — `--vars` values must be strings (the CLI rejects raw arrays); `jq -nc` passes the array text through as a string value:
+
+  ```bash
+  VARS=$(jq -nc --arg tasks "$TASKS" --arg feature "$FEATURE" --arg profile "$PROFILE" --arg merge "$MERGE" \
+    '{tasks:$tasks, feature:$feature, profile:$profile, merge:$merge}')
+  spur workflow run .spur/workflows/wrapup-pipeline.yaml --vars "$VARS"
+  ```
 - **Delegation:** Direct `spur workflow run .spur/workflows/wrapup-pipeline.yaml` (no `Skill()` call — the command resolves tasks and invokes the workflow directly via `Bash`).
 
 ### 16. idea
 
 - **Purpose:** Turn a vague idea into a feature with AC and a decomposed task batch — the unified entry point for the planning half.
-- **Inputs:** `"<idea>"` (required, positional, quoted). `--auto` skips objective HITL gates (feature-check, batch-create); design-approval still pauses (taste gate). `--design` forces the system-design step to run. `--skip-design` skips system-design (brainstorm design summary still recorded).
+- **Inputs:** `"<idea>"` (required, positional, quoted). `--auto` skips objective HITL gates (feature-check, batch-create); design-approval still pauses (taste gate). `--design` forces the system-design step to run. `--skip-design` skips system-design (brainstorm design summary still recorded). `--design-approved` marks the design explicitly approved in the current operator session (see below).
 - **Backing:** `spur workflow run .spur/workflows/idea-pipeline.yaml` — direct workflow invocation.
 - **Behavior:** Builds `--vars '{"idea":"<text>","profile":"interactive|auto","design":"auto|force|skip"}'` and invokes the idea pipeline. The pipeline runs: discovery (sp:brainstorm, records design summary + emits `needs_design` signal) -> feature-create -> ac-generate -> feature-check (objective gate) -> system-design (conditional, via `needs_design` signal or `--design`/`--skip-design` flags) -> design-approval (taste HITL gate) -> decompose (sp:spec-decomposition) -> batch-create (objective gate) -> handoff. The pipeline STOPS at handoff — tasks are created but NOT executed. No pipeline nesting — idea-pipeline does not call task-pipeline or feature-dev.
 - **Delegation:** Direct `spur workflow run .spur/workflows/idea-pipeline.yaml` (no `Skill()` call — the command builds the vars JSON and invokes the workflow directly via `Bash`).
+- **Design routing (`--design` / `--skip-design`):** whether the `system-design` state runs:
+
+  | Flags | Signal | Route |
+  |---|---|---|
+  | `--design` | (ignored) | run `system-design` |
+  | `--skip-design` | (ignored) | skip `system-design`; keep brainstorm summary |
+  | neither | `needs_design=true` | run `system-design` |
+  | neither | `needs_design=false` | skip `system-design` |
+
+  Ties lean design — when the signal is ambiguous, `system-design` runs.
+- **`--design-approved`:** sets `design_approved=true` for an explicitly approved design in the current operator session; under `--auto`, routes around the design-approval taste gate. The `design_approved` var semantics are owned by [cross-cutting.md](cross-cutting.md) § "Design Approval Gate" — not duplicated here.
 
 ---
 
@@ -218,10 +249,10 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
   3. Parse each commit's conventional-commit prefix (`feat`, `fix`, `refactor`, `docs`, `chore`, `perf`, `test`, `style`, `ci`, `build`). Commits without a recognized prefix go under `Other`.
   4. Group commits by type. Within each group, list one bullet per commit: `- <summary> (<short-hash>)`.
   5. Format as markdown:
-     - `keepachangelog` (default): `## [<version>] - <date>` header, then `### Added` / `### Fixed` / `### Changed` / `### Removed` / `### Other` sections mapped from conventional-commit types.
+     - `keepachangelog` (default): `## [<version>] - <date>` header, then category headings per the keepachangelog convention — `### Added` / `### Fixed` / `### Changed` / `### Removed` / `### Other` — mapped from conventional-commit types.
      - `simple`: flat bulleted list grouped by type heading (`### feat`, `### fix`, …).
   6. Print the changelog to stdout. If the operator wants it in `CHANGELOG.md`, they redirect or paste.
-- **Invariants:** Never mutates `CHANGELOG.md` directly — the command outputs to stdout. The operator decides where it lands.
+- **Invariants:** Never mutates `CHANGELOG.md` directly — the command surface is stdout-only; writing it to a file (e.g. appending to `CHANGELOG.md`) is the operator's redirect choice, never the command's.
 
 ### 9. gitmsg
 
@@ -263,6 +294,66 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
   8. Final verification: run `bun run format && bun run lint && bun run test` once more to confirm formatting is settled and both gates are green simultaneously.
   9. Report: list what was fixed (file + one-line summary per fix). If any error could not be resolved, report it explicitly — do not suppress.
 - **Invariants:** Never bypass with `--no-verify`, `--force`, or new `biome-ignore`/`eslint-disable` suppressions. Never skip or `.skip` a test to make the suite green. Fix the root cause, not the symptom. Never claim green on `bun run lint` alone — a formatter-only diff passes `lint` but fails the formatter; run `bun run format` (or assert it produces no diff) before declaring the gate clean.
+- **MANDATORY Exit Condition.** The ONLY way to complete successfully:
+  1. Run validation command: `eval "$VALIDATION_CMD"`
+  2. Capture exit code: `EXIT_CODE=$?`
+  3. Output: `echo "EXIT_CODE=$EXIT_CODE"`
+  4. **EXIT_CODE must equal 0**
+
+  If EXIT_CODE != 0: NOT completed. MUST continue fixing.
+
+  **Hallucination Red Flags — STOP if you think:**
+  - "The errors look fixed" — check exit code, not appearance
+  - "Most tests pass" — partial success = FAILURE
+  - "Good enough for now" — 0 is the ONLY acceptable exit code
+- **7-Phase Workflow:**
+
+  ```text
+  ┌─────────────────────────────────────────────────┐
+  │ RETRY LOOP (max --max-retry iterations)         │
+  │                                                 │
+  │  → Phase 1: Detect validation command           │
+  │  → Phase 2: Capture validation output           │
+  │  → Phase 3: Auto-fix (biome check --write)      │
+  │  → Phase 4: Parse and categorize errors         │
+  │  → Phase 5: Root cause diagnosis                │
+  │  → Phase 6: Fix by error type group             │
+  │  → Phase 7: Validate (check EXIT_CODE)          │
+  │                                                 │
+  │  If EXIT_CODE = 0: SUCCESS, exit loop           │
+  │  If EXIT_CODE != 0: continue                    │
+  │                                                 │
+  │  If counter >= MAX_RETRY:                       │
+  │    Ask user: [Continue / Stop]                  │
+  └─────────────────────────────────────────────────┘
+  ```
+
+  The 7 phases map onto the format→lint→test behavior loop above: Phases 1–2 capture the gate, Phase 3 settles auto-fixable formatting, Phases 4–6 are the per-group root-cause fix loops, Phase 7 is the final verification re-run.
+- **Fix Priority:**
+
+  | Priority | Type | Rationale |
+  |----------|------|-----------|
+  | 1 | Build/compile | Blocks everything downstream |
+  | 2 | Import/module | May cause cascading type failures |
+  | 3 | Type errors | Often reveals logic bugs |
+  | 4 | Test failures | Confirms behavior correctness |
+  | 5 | Lint warnings | Code quality (lowest priority) |
+
+  **Critical Rule**: If THREE fixes fail consecutively, STOP. This signals architectural problems.
+- **Error Patterns — TypeScript:**
+
+  | Issue | Root Cause Approach |
+  |-------|---------------------|
+  | `any` type | Trace where untyped data enters; add types at source |
+  | Unused variable | Check if removal breaks anything |
+  | Missing return type | Read function to understand actual return |
+  | Type mismatch | Compare expected vs. actual; find divergence |
+- **Bun/V8 Coverage Quirk.** Bun uses V8's function coverage which does NOT count implicit class constructors:
+
+  ```typescript
+  // biome-ignore lint/complexity/noUselessConstructor: V8 function coverage requires explicit constructor
+  constructor() {}
+  ```
 
 ### 11. handover
 

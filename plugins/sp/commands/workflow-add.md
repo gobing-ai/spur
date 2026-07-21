@@ -6,47 +6,14 @@ allowed-tools: ["Bash", "Read", "Write", "Skill"]
 
 # Workflow Add
 
-Wraps the **sp:spur-cli** facade (workflow noun) (`add` operation).
+Wraps the **sp:spur-cli** skill.
 
-Author a new workflow. **First choose the execution mode** — `state-machine` (loops/retries, one
-active state) vs `transition-flow` (pipeline, action-per-node) — surfacing the recommendation with its
-reason and the rejected alternative, and confirm before authoring. Then **check whether an existing
-workflow already covers the process** (extend it rather than duplicate, on confirmation); author from
-scratch only when the process is genuinely new. Write the real schema shape for the chosen mode,
-validate the file, and dry-run it to the expected terminal state before trusting it.
+## Usage
 
-## When to use
-
-- A new multi-step process should become a declarative workflow.
-- The process is describable in plain language but the right mode/schema shape is unknown.
-- Coverage is uncertain — this command checks existing workflows first and recommends extend over
-  authoring a near-duplicate.
-
-## Arguments
-
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `description` | The process the workflow should run (required, positional) | (required) |
-| `--kind <mode>` | Force the execution mode (`state-machine` / `transition-flow`); skips the recommend-and-confirm gate | (agent-recommended, confirmed) |
-| `--file <path>` | Output workflow file path | `.spur/workflows/<name>.yaml` |
-
-## Behavior
-
-Thin wrapper: ensure a description is present, pass `--kind`/`--file` through. The skill owns the
-mode-selection gate, the find-existing-workflow reconciliation, real schema-shape generation per mode,
-file placement, and the validate-and-dry-run core. The workflow is not "done" until it validates and
-the dry-run reaches the expected terminal state.
+/sp:workflow-add "<description>" [--kind <state-machine|transition-flow>] [--file <path>]
 
 ## Implementation
 
-Delegates to **sp:spur-cli** facade (workflow noun):
+- `Skill(skill="sp:spur-cli", args="workflow add $ARGUMENTS")`
 
-```
-Skill(skill="sp:spur-cli", args="workflow add $ARGUMENTS")
-```
-
-## Platform Notes
-
-- **Claude Code:** native — `Skill()` delegation and `$ARGUMENTS` work directly.
-- **Other platforms:** `Skill()` and `$ARGUMENTS` are Claude-specific. Invoke the `sp:spur-cli` (workflow)
-  skill's `add` operation directly and pass the description/flags as arguments in chat.
+<!-- adapter:generated v1 snapshot:c228dbfe8147 — regenerate: `bun plugins/sp/scripts/generate-adapters.ts`; a fresh session is required to trust an in-session dogfood of a just-edited wrapper -->

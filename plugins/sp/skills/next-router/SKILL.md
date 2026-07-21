@@ -84,8 +84,7 @@ command's own `--next` chain does). Never self-loop `/sp:dev-next`.
 
 ## Operator messages
 
-The exact literals (all prefixed `dev-next:`) are owned by the command surface —
-`plugins/sp/commands/dev-next.md` § **Operator messages**. The router fires them by id:
+**[references/messages.md](references/messages.md)** (exact templates, prefixed `dev-next:`). The router fires them by id:
 
 | Id | Fires when | Kind |
 |----|-----------|------|

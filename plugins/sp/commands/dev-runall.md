@@ -6,128 +6,14 @@ allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 
 # Dev Runall
 
-Wraps the **sp:spur-dev** skill (execution half — batch operation).
+Wraps the **sp:spur-dev** skill.
 
-Run a **set** of task files through their pipelines in one operation, in dependency-correct order.
-Where `/sp:dev-run <wbs>` runs one task through `.spur/workflows/task-pipeline.yaml`, `/sp:dev-runall`
-runs N tasks through the same verbatim pipeline with set resolution, freeze, topological ordering,
-failure policy, and a batch report layered on top by the skill. The default is sequential; parallel
-mode is opt-in and only applies to an independent subset that passes the fan-out checks.
+## Usage
 
-## When to use
-
-- A feature's task batch is ready to execute end-to-end (`/sp:dev-runall --feature A1` or `--tasks feature:A1`).
-- A dependency-ordered sweep is needed ("run every `ready` task").
-- The operator says "run the batch", "execute these tasks", or "runall todo".
-
-Do **not** use for a single task — `/sp:dev-run <wbs>` is lighter and owns the single-task pipeline
-contract.
-
-## Arguments
-
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `--tasks <selector>` | The task set to run. See selector grammar below. Mutually exclusive with `--feature` in the simple case (see below). | (required unless `--feature`) |
-| `--feature <id>` | Convenience shorthand for `--tasks feature:<id>`. If `--tasks` is also supplied, the explicit `--tasks` wins. | (none) |
-| `--mode <sequential\|parallel>` | Batch execution mode. `sequential` runs the topo-ordered plan one task at a time. `parallel` first applies the `sp:parallel-execution` dependency/file-overlap/token-budget checks, then fans out only the safe independent subset. | `sequential` |
-| `--keep-going` | On a failed task, skip its in-batch dependents and continue independents. Default halts on first failure. | off (stop-the-batch) |
-| `--auto` | Skip the HITL approve gate on each per-task run (sets `profile=auto` in each pipeline's `--vars`). Propagates to every task in the batch. | off |
-| `--agent <name\|auto>` | Pin the per-task step executor. Merged into each pipeline's `--vars.agent`. Omit (the default) → spawned `agent.run` steps use the configured default executor (`omp`). **`sp:super-coder` remains the batch orchestrator regardless of `--agent`** — the flag pins the step executor, not the orchestrator. | (configured default — `omp`) |
-| `--json` | Emit the batch report as JSON (machine consumption). Off emits the markdown report to the transcript. | off |
-| `--wrap` | Trigger `wrapup-pipeline.yaml` after the batch completes. Equivalent to running `/sp:dev-wrapall` after execution. Does not change the execution pipeline. | off |
-| `--continue` | Resume an interrupted batch: read the latest checkpoint from `.spur/memory/sessions/` and surface its `next_action` before resuming. See "Resume from checkpoint" below. | off |
-
-### Selector grammar
-
-You can specify the set in two equivalent ways:
-
-- `--tasks <value>` (full power)
-- `--feature <id>` (convenience for the common case)
-
-When `--feature M1` is used without `--tasks`, it is treated exactly as `--tasks feature:M1`.
-
-| Form | Example | Resolves to |
-|---|---|---|
-| Explicit WBS list | `--tasks 0040,0042,0051` | Exactly those tasks (comma-separated, order irrelevant — the driver re-orders by dependency). |
-| Status pseudo-list | `--tasks todo` | Every task with that status via `spur task list --status todo --json`. Valid: `todo`, `backlog`, `wip`, `blocked`, `testing`. |
-| Feature-scoped (via `--tasks`) | `--tasks feature:A1` | Every task whose `feature_id` edge is A1 via `spur task list --feature A1 --json`. |
-| Feature shorthand | `--feature A1` | Same as `--tasks feature:A1`. |
-| `ready` | `--tasks ready` | Tasks in `todo`/`backlog` whose every `dependencies[]` entry resolves to `done`. Reports each excluded task with its unmet dependency. |
-| *(unknown)* | `--tasks bogus` | Error: lists the valid forms and halts before running anything. |
-
-**Precedence:** If both `--feature` and `--tasks` are supplied, the explicit `--tasks` value is used (the `--feature` is ignored with a note in the report for clarity). This keeps the general selector mechanism authoritative.
-
-Resolution happens **once, at kickoff** — the set is frozen and never re-queried mid-batch.
-
-## Behavior
-
-Thin wrapper: argument parsing and deterministic delegation route to the `sp:spur-dev` `runall`
-operation. Set resolution, freeze, topological ordering, the per-task run loop, optional parallel
-fan-out, failure policy, and report shape are owned by the skill's batch driver (documented in
-[references/execution-batch.md](../skills/spur-dev/references/execution-batch.md)).
-
-### `--agent` — the two-surface contract
-
-`--agent` is a **pipeline** command on the batch surface (the batch drives N pipelines). The
-dual-workflow FSM runs each stage as a subprocess; the calling agent cannot block on itself, so
-"current agent" is **not expressible** here. The honest behaviors:
-
-| Value | Behavior |
-|---|---|
-| *(omitted)* | Forward nothing — each per-task pipeline's spawned `agent.run` steps resolve to the configured default executor (`omp`). |
-| `<name>` | Spawn that explicit agent — threaded to each per-task `vars.agent`. |
-| `auto` | Resolve the current runtime to its canonical agent name and spawn that, in each per-task `vars.agent`. |
-
-In all cases `sp:super-coder` is the batch orchestrator — it runs the loop in its own context and is
-not replaced by `--agent`. See [cross-cutting.md](../skills/spur-dev/references/cross-cutting.md)
-§ "Honor `--agent`" for the full two-surface contract.
+/sp:dev-runall --tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <name|auto>] [--json] [--wrap] [--continue]
 
 ## Implementation
 
-Delegates to **sp:spur-dev** skill. `$ARGUMENTS` passes all flags through verbatim:
+- `Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")`
 
-```
-Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")
-```
-
-The skill reads [references/execution-batch.md](../skills/spur-dev/references/execution-batch.md)
-and drives the batch driver loop, delegating to `sp:super-coder` as the orchestrator.
-
-## `--wrap` — post-batch wrap-up
-
-When `--wrap` is set and the batch completes (all attempted tasks reach `done` or the batch is halted),
-automatically invoke the wrap-up pipeline:
-
-```bash
-spur workflow run .spur/workflows/wrapup-pipeline.yaml --vars '{"tasks":"[\"<wbs1>\",\"<wbs2>\"]","profile":"interactive|auto"}'
-```
-
-(`tasks` is a JSON-encoded string — `--vars` values must be strings.)
-
-This is equivalent to running `/sp:dev-wrapall` after execution. The wrap-up captures learnings,
-records metrics, syncs docs, and optionally advances the feature / cleans up the branch (when `--merge`
-is also passed). `--wrap` does NOT change the execution pipeline — it only adds a post-batch wrap-up
-step.
-
-
-## Resume from checkpoint (`--continue`)
-
-When resuming an interrupted batch, read the latest checkpoint from
-`.spur/memory/sessions/` to recover context:
-
-```bash
-ls -t .spur/memory/sessions/*.md 2>/dev/null | head -1
-cat .spur/memory/sessions/<session-id>.md
-```
-
-Surface the checkpoint's `next_action` to the operator before resuming. Checkpoints are
-working memory — the task files and the batch plan are the authoritative state.
-
-See [cross-cutting.md](../skills/spur-dev/references/cross-cutting.md) § "Session Checkpoint
-Convention" for the full format.
-
-## Platform Notes
-
-- **Claude Code:** native — `Skill()` delegation and `$ARGUMENTS` work directly.
-- **Other platforms:** `Skill()` and `$ARGUMENTS` are Claude-specific. Invoke the `sp:spur-dev`
-  skill's `runall` operation directly, routing to `sp:super-coder` as the orchestrator.
+<!-- adapter:generated v1 snapshot:af224c71f4e9 — regenerate: `bun plugins/sp/scripts/generate-adapters.ts`; a fresh session is required to trust an in-session dogfood of a just-edited wrapper -->

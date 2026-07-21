@@ -73,6 +73,22 @@ Long implementation steps should leave resumable evidence:
 If the task ships a partial deliverable, mark it visibly in Solution and Review with the deferred
 requirement and follow-up WBS. Do not let a partial implementation look complete.
 
+## Task-Type Awareness
+
+The implement step assumes a standard implementation task (`template: default`). When the task
+carries a different template, the implement agent MUST check the task's frontmatter `template`
+field and adjust its scope:
+
+| Template | Scope | Primary input |
+|----------|-------|---------------|
+| `default` | Implement `## Requirements` → code changes | `## Requirements` R-items, `## Design`, `## Plan` |
+| `review` | Fix the findings in `#### Review Findings` → code changes | `#### Review Findings` table (under `### Background`), `## Plan` |
+| `brainstorm` | Research/ideation → `## Solution` write-up | `## Background` prompt, `## Design` constraints |
+
+The implement agent reads the template field first, then picks the correct input section. For a
+`review` task, the `#### Review Findings` table IS the requirements — fix each finding in
+severity order (P1 → P2 → P3 → P4), then re-review.
+
 ## Handoff To Testing And Review
 
 Implementation is complete only when:

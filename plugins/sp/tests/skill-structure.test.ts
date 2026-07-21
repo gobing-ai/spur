@@ -195,8 +195,11 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             'utf8',
         );
 
-        expect(command).toContain('AC checking itself is automatic when AC exists');
-        expect(command).toContain('Strict BDD lens');
+        // Thin-wrapper world (0308): the command carries only the delegation line; the AC-gate
+        // contract lives in the dispatched skill.
+        expect(command).toContain('Skill(skill="sp:code-verification", args="verify $ARGUMENTS")');
+        expect(skill).toContain('AC evaluation is mandatory when this section is non-empty');
+        expect(skill).toContain('### Step 8 — Strict BDD scenario lens');
         expect(skill).toContain('### Step 5 — Acceptance Criteria guard');
         expect(skill).toContain('| AC | Status | Evidence Type | Evidence |');
         expect(skill).toContain('Objective AC cannot be cleared by `llm-judge` alone');
@@ -216,11 +219,13 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             'utf8',
         );
 
-        // Protocol @1.1 — always-on dual artifacts + ledger (not gated on --save).
-        expect(command).toContain('mandatory dual-path write');
-        expect(command).toContain('**Monitor Ledger**');
-        expect(command).toContain('[Live:]');
-        expect(command).toContain('[Report:]');
+        // Protocol @1.1 — always-on dual artifacts + ledger (not gated on --save). Thin-wrapper
+        // world (0308): the command delegates; the delivery contract lives in the skill.
+        expect(command).toContain('Skill(skill="sp:dogfood-testing", args="$ARGUMENTS")');
+        expect(skill).toContain('Always-on dual artifacts');
+        expect(skill).toContain('Monitor Ledger');
+        expect(skill).toContain('[Live:]');
+        expect(reportTemplate).toContain('[Report:]');
         expect(skill).toContain('Monitor Ledger');
         expect(skill).toContain('finalize-or-abort');
         expect(skill).toContain('.spur/run/dogfood/');
@@ -296,7 +301,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(superCoder).toContain('sp:parallel-execution');
         expect(superCoder).not.toContain('Never run tasks in parallel (v1)');
         expect(executionBatch).toContain('optional parallel fan-out');
-        expect(devRunall).toContain('--mode <sequential\\|parallel>');
+        expect(devRunall).toContain('--mode <sequential|parallel>');
         expect(devRunall).toContain('--feature <id>');
         expect(devParallel).toContain('--feature <id>');
         expect(devParallel).toContain('args="$ARGUMENTS"');
@@ -570,31 +575,31 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(spineSkill).toContain('glossary.md');
     });
 
-    test('R45 — spur-init.md declares the Phase 1.6 rule glob adaptation probe (task 0188 ownership contract)', () => {
+    test('R45 — spur-init Phase 1.6 rule glob adaptation probe is owned by sp:spur-cli init reference (task 0188 ownership contract)', () => {
         // The ownership contract (04_DESIGN.md §1.1) requires /sp:spur-init to adapt
         // recommended-pre-check globs to the project's layout instead of shipping a broken probe.
-        // A "dogfood artifact" excuse is NOT acceptable — the command must inspect the tree and
-        // rewrite layout-dependent globs as local-layer overlays under .spur/rules/<category>/.
-        const spurInit = readFileSync(join(PLUGIN_ROOT, 'commands', 'spur-init.md'), 'utf8');
+        // Thin-wrapper world (0308): the command carries only the delegation line; the Phase 1.6
+        // contract lives in the skill reference.
+        const initRef = readFileSync(join(SKILLS_DIR, 'spur-cli', 'references', 'init.md'), 'utf8');
 
         // Phase 1.6 section exists and names the probe.
-        expect(spurInit, 'spur-init.md must declare a Phase 1.6 rule glob adaptation section').toContain(
+        expect(initRef, 'init.md must declare a Phase 1.6 rule glob adaptation section').toContain(
             '### Phase 1.6 — Rule glob adaptation',
         );
-        expect(spurInit).toContain('recommended-pre-check');
+        expect(initRef).toContain('recommended-pre-check');
 
         // The LLM-as-judge framing: the executing agent inspects the tree and rewrites globs.
-        expect(spurInit, 'Phase 1.6 must frame the agent as the LLM-as-judge').toContain('LLM-as-judge');
+        expect(initRef, 'Phase 1.6 must frame the agent as the LLM-as-judge').toContain('LLM-as-judge');
 
         // Adapted rules land as local-layer overlays, NOT scaffold files.
-        expect(spurInit).toContain('.spur/rules/<category>/');
-        expect(spurInit, 'Phase 1.6 must state the local-layer shadowing invariant (first-layer-wins)').toContain(
+        expect(initRef).toContain('.spur/rules/<category>/');
+        expect(initRef, 'Phase 1.6 must state the local-layer shadowing invariant (first-layer-wins)').toContain(
             'first-layer-wins',
         );
 
         // The old "dogfood artifact" excuse must be gone — it papered over a real probe gap.
-        expect(spurInit, 'spur-init.md must NOT dismiss the probe as a dogfood artifact').not.toContain('dogfood');
-        expect(spurInit).not.toContain('intentionally NOT a probe');
+        expect(initRef, 'init.md must NOT dismiss the probe as a dogfood artifact').not.toContain('dogfood');
+        expect(initRef).not.toContain('intentionally NOT a probe');
     });
 
     test('R46 — gate-bearing skills carry the anti-rationalization anatomy (task 0214 R1)', () => {
@@ -715,7 +720,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(briefText.toLowerCase()).toContain('recommendation'); // recommendation is mandatory
         for (const [label, p] of [
             ['brainstorm', join(SKILLS_DIR, 'brainstorm', 'SKILL.md')],
-            ['dev-refine', join(PLUGIN_ROOT, 'commands', 'dev-refine.md')],
+            ['dev-refine (refine op)', join(SKILLS_DIR, 'spur-dev', 'references', 'dev-operations.md')],
             ['decomposition', join(SKILLS_DIR, 'spec-decomposition', 'references', 'decomposition.md')],
         ] as const) {
             expect(readFileSync(p, 'utf8'), `${label} must reference decision-brief.md`).toContain('decision-brief.md');
@@ -823,10 +828,12 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         // logic in commands, so the wiring string + file existence is the structural contract.
         const command = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-next.md'), 'utf8');
         expect(command).toContain('Skill(skill="sp:next-router", args="$ARGUMENTS")');
-        // Exact stop/plan message ids (0272 R3) — all prefixed `dev-next:`.
+        // Exact stop/plan message ids (0272 R3) — all prefixed `dev-next:`. Thin-wrapper world
+        // (0308): the literal templates live in the router skill's messages reference.
+        const messages = readFileSync(join(SKILLS_DIR, 'next-router', 'references', 'messages.md'), 'utf8');
         for (const id of ['U1', 'U2', 'U3', 'U4', 'U-HITL', 'U-GUARD', 'P1', 'P2', 'P3', 'W-FULL']) {
-            expect(command, `dev-next.md must document message ${id}`).toContain(`### ${id} `);
-            expect(command).toContain('dev-next:');
+            expect(messages, `messages.md must document message ${id}`).toContain(`### ${id} `);
+            expect(messages).toContain('dev-next:');
         }
 
         const skill = readFileSync(join(SKILLS_DIR, 'next-router', 'SKILL.md'), 'utf8');
