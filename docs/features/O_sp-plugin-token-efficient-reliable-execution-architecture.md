@@ -191,6 +191,15 @@ Feature: sp plugin token-efficient reliable execution architecture
 | 0289 | Specify shadow qualification, compatibility, cutover, and rollback | done |
 | 0290 | Specify CLI-safe feature sections and task dependency mutation | done |
 | 0291 | Synthesize the target architecture and implementation backlog | done |
+| 0301 | Implement the stage-registry schema and types | done |
+| 0302 | Implement the stage-registry validator | done |
+| 0303 | Implement the CLI-safe task dependency mutation verb | done |
+| 0304 | Implement the CLI-safe canonical task-section verb | done |
+| 0305 | Implement context-envelope layers and canonical serialization | done |
+| 0306 | Implement envelope invalidation, progressive disclosure, and attribution instrumentation | done |
+| 0307 | Implement the dev-next golden-path adapter over the stage registry | done |
+| 0308 | Implement adapter generation from shared metadata plus the drift-test contract | done |
+| 0309 | Restore commands as SSOT: replace adapter generation with validation, delete codex adapters | done |
 <!-- END AUTO-GENERATED -->
 ## Notes
 **Domain context**

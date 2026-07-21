@@ -222,11 +222,19 @@ export class FeatureService {
      * - `## Tasks` is rewritten ONLY between the auto-gen markers via
      *   `replaceMarkerRegion`; everything else in the feature file — and every
      *   task file — is left untouched (R2).
+     * - A feature is written only when its rendered table actually differs from
+     *   what is on disk, so `tasksUpdated` counts real changes rather than writes
+     *   and an unrelated feature never lands in the working tree as a no-op touch.
      *
+     * @param options.featureId  Restrict the per-feature `## Tasks` rewrite to a single
+     *                           feature. INDEX.md is still regenerated (it is global and
+     *                           deterministic — it changes only if the tree changed).
+     *                           Use this to keep a refresh from sweeping unrelated
+     *                           features into the working tree alongside scoped work.
      * @returns the rendered INDEX content and the count of features whose Tasks
-     *          region was rewritten.
+     *          region actually changed.
      */
-    async refresh(): Promise<{ index: string; tasksUpdated: number }> {
+    async refresh(options?: { featureId?: string }): Promise<{ index: string; tasksUpdated: number }> {
         const features = await this.list();
         features.sort((a, b) => a.id.localeCompare(b.id));
 
@@ -242,8 +250,9 @@ export class FeatureService {
 
         // ── R2: per-feature ## Tasks marker region ──
         const tasksByFeature = await this.collectTasksByFeature();
+        const targets = options?.featureId ? features.filter((f) => f.id === options.featureId) : features;
         let tasksUpdated = 0;
-        for (const feature of features) {
+        for (const feature of targets) {
             const rows = tasksByFeature.get(feature.id) ?? [];
             const table = renderTasksTable(rows);
             const raw = await this.ctx.fs.readFile(feature.filePath);
@@ -254,13 +263,9 @@ export class FeatureService {
             } catch {
                 continue; // no marker region → leave the feature untouched
             }
-            await atomicWriteAsync(
-                feature.filePath,
-                doc.serialize(),
-                feature.id,
-                this.ctx.fs,
-                this.ctx.projectName ?? 'spur',
-            );
+            const next = doc.serialize();
+            if (next === raw) continue; // roster already current → no write, no working-tree churn
+            await atomicWriteAsync(feature.filePath, next, feature.id, this.ctx.fs, this.ctx.projectName ?? 'spur');
             tasksUpdated += 1;
         }
 

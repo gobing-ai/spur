@@ -276,12 +276,13 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
     feature
         .command('refresh')
         .summary('Regenerate INDEX.md (ID-encoded tree) and repopulate each feature ## Tasks region.')
+        .option('--feature <id>', 'Restrict the ## Tasks rewrite to one feature (INDEX.md still regenerated)')
         .option('--folder <path>', 'Custom features folder')
         .option('--json', 'Output machine-readable JSON')
         .action(async (options) => {
             const svc = await makeService(context, options.folder);
             try {
-                const result = await svc.refresh();
+                const result = await svc.refresh({ featureId: options.feature });
                 if (options.json) {
                     const featuresDir = options.folder ?? (await resolvePlanningFolders(context.fs)).featuresDir;
                     context.output.write(

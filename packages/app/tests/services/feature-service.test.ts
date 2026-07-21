@@ -354,6 +354,39 @@ describe('FeatureService', () => {
             expect(after).toBe(before); // byte-identical — task untouched
         });
 
+        // A refresh whose rosters are already current must not rewrite anything: an
+        // unconditional write made `tasksUpdated` count writes rather than changes, which
+        // hid real roster drift among a pile of no-op touches.
+        test('R2: a second refresh changes nothing and reports zero updates', async () => {
+            const { svc: s, featuresDir, cleanup } = await seedRefreshCorpus();
+            const fs = createNodeFileSystem();
+            const first = await s.refresh();
+            const afterFirst = await fs.readFile(`${featuresDir}/A_foundation.md`);
+            const second = await s.refresh();
+            const afterSecond = await fs.readFile(`${featuresDir}/A_foundation.md`);
+            cleanup();
+
+            expect(first.tasksUpdated).toBeGreaterThan(0); // first pass populates rosters
+            expect(second.tasksUpdated).toBe(0); // nothing drifted → nothing written
+            expect(afterSecond).toBe(afterFirst); // byte-identical
+        });
+
+        // Scoping keeps a refresh from sweeping unrelated features into the working tree
+        // alongside scoped work.
+        test('R2: --feature restricts the Tasks rewrite to the named feature', async () => {
+            const { svc: s, featuresDir, cleanup } = await seedRefreshCorpus();
+            const fs = createNodeFileSystem();
+            const bBefore = await fs.readFile(`${featuresDir}/B_agents.md`);
+            const result = await s.refresh({ featureId: 'A' });
+            const aAfter = await fs.readFile(`${featuresDir}/A_foundation.md`);
+            const bAfter = await fs.readFile(`${featuresDir}/B_agents.md`);
+            cleanup();
+
+            expect(result.tasksUpdated).toBe(1); // only A
+            expect(aAfter).toContain('| 0001 | Impl foundation | backlog |'); // A populated
+            expect(bAfter).toBe(bBefore); // unrelated feature untouched
+        });
+
         test('R2: a feature with no linked tasks gets a "no tasks" placeholder', async () => {
             const { svc: s, featuresDir, cleanup } = await seedRefreshCorpus();
             await s.refresh();
@@ -390,8 +423,19 @@ describe('FeatureService', () => {
                 const id = name.match(/^([A-Z][1-9]*)_/)?.[1];
                 if (id) expect(index).toContain(`**${id}**`);
             }
-            // Every feature has a Tasks marker region → every one is repopulated.
-            expect(tasksUpdated).toBe(realNames.length);
+            // Every feature has a Tasks marker region → none is skipped for a missing region.
+            // `tasksUpdated` counts features whose roster actually CHANGED, so it is bounded by
+            // the corpus size rather than equal to it: this fixture copies no tasks, so any
+            // feature already showing the empty-roster placeholder needs no write.
+            expect(tasksUpdated).toBeLessThanOrEqual(realNames.length);
+            // …and the repopulation itself is proven directly: with an empty tasks dir every
+            // feature must end up carrying the placeholder, written this pass or already correct.
+            for (const name of realNames) {
+                const content = await createNodeFileSystem().readFile(join(fdir, name));
+                expect(content).toContain('_No linked tasks._');
+            }
+            // A second pass is a no-op — nothing drifted, so nothing is rewritten.
+            expect((await s.refresh()).tasksUpdated).toBe(0);
             // Each rewritten feature still parses (no corruption) and keeps its Goal.
             for (const name of realNames) {
                 const content = await createNodeFileSystem().readFile(join(fdir, name));
