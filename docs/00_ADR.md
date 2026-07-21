@@ -744,3 +744,31 @@ test `R53` in `plugins/sp/tests/skill-structure.test.ts` (no `scripts/`/`tests/`
 
 **Relates:** complements ADR-028 (skill *content* decomposition; this ADR owns artifact *placement*);
 ADR-016 extends the same "code where determinism, prompts where judgment" line to file layout.
+
+## ADR-032: Commands Are the SSOT; Adapters Are Install-Time Output Owned by superskill
+
+**Status:** Accepted · **Date:** 2026-07-21
+
+**Decision.** plugins/sp/commands/*.md is the authoritative, hand-editable source for the operator
+command surface. Per-platform adapters (Codex, Pi, OpenCode, Antigravity, Hermes, Grok, etc.) are
+**install-time output** owned by superskill (superskill install sp) and never committed in
+plugin sp. Thin-wrapper correctness is enforced by **validation** (validate-commands.ts), not
+generation. The registry (command-registry.ts), generator (generate-adapters.ts), and
+committed per-platform adapters (adapters/codex/) introduced in 0308 are deleted.
+
+**Why.** The 0308 shape introduced three problems: (1) command-registry.ts duplicated every field
+already present in the command .md frontmatter — a parallel encoding whose sole consumer was its
+own generator, requiring a byte-exact drift test as tax for the duplication; (2) superskill
+already reads commands/*.md as input to emit per-platform output, so the registry inserted a
+second upstream that nothing outside its generator consumed; (3) adapters/codex/ was a single
+platform artifact when superskill supports 9 targets — committing one would either be permanent
+inconsistency or an obligation to add seven more folders. Generation also blocked direct improvement:
+any hand or LLM edit to a command body was a test failure.
+
+**Provenance.** 0283 R4 sanctioned the "generated **or validated**" branch for adapter thinness.
+0308 took the "generated" branch and invented new metadata, without recording a design-choice
+rationale. This ADR explicitly selects the "validated" branch and supersedes the 0308 approach.
+
+**Detail:** plugins/sp/scripts/validate-commands.ts (four-gate validator),
+plugins/sp/tests/command-contract.test.ts (contract test + negative-path coverage),
+plugins/sp/README.md section 2 (commands-as-SSOT documentation).
