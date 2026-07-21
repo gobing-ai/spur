@@ -15,6 +15,7 @@ export {
     type QueueConsumerConfig,
     type ServerQueueConsumer,
 } from './db';
+export * from './envelope';
 export {
     applyCliMigrations,
     CLI_MIGRATION_FILE_MARKER,
