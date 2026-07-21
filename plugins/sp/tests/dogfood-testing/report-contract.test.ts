@@ -171,8 +171,20 @@ describe('dogfood @1.2 report contract (task 0276)', () => {
         expect(missing.exitCode).toBe(1);
         expect(missing.stderr).toContain('Failed to read');
 
-        // mainCli uses real fs — pass fixture path must exit 0
-        const realExit = mainCli(['--file', join(FIXTURES, 'report-complete.md')]);
-        expect(realExit).toBe(0);
+        // mainCli uses real fs and real stdout — capture the write so the
+        // success banner ('ok') doesn't leak into the test reporter output.
+        const origWrite = process.stdout.write;
+        let captured = '';
+        process.stdout.write = ((chunk: unknown) => {
+            captured += String(chunk);
+            return true;
+        }) as typeof process.stdout.write;
+        try {
+            const realExit = mainCli(['--file', join(FIXTURES, 'report-complete.md')]);
+            expect(realExit).toBe(0);
+            expect(captured.trim()).toBe('ok');
+        } finally {
+            process.stdout.write = origWrite;
+        }
     });
 });
