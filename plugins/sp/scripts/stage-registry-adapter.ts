@@ -1,0 +1,1211 @@
+/**
+ * stage-registry-adapter — dev-next golden-path adapter over the canonical
+ * stage registry (feature O, spec ticket 0282/0283, task 0307).
+ *
+ * Provides a programmatic bridge between the dev-next status-aware facade and
+ * the stage-registry schema. Defines the actual registered stage records,
+ * implements the TABLE A/B/C resolution algorithm, and exports a pure-function
+ * resolution API that any agent or CLI can call.
+ *
+ * Self-contained: no @gobing-ai/spur-domain dependency (plugins/sp is outside
+ * the workspace). Types are defined inline, mirroring the domain schema.
+ *
+ * CLI usage:
+ *   bun plugins/sp/scripts/stage-registry-adapter.ts --wbs 0307 [--dry-run]
+ *   bun plugins/sp/scripts/stage-registry-adapter.ts --wbs 0307 --auto
+ *   bun plugins/sp/scripts/stage-registry-adapter.ts --feature O
+ *   bun plugins/sp/scripts/stage-registry-adapter.ts --list-stages
+ *   bun plugins/sp/scripts/stage-registry-adapter.ts --help
+ */
+
+// ─── Inline type definitions (mirrors packages/domain/src/stage-registry/) ─
+
+export type SchemaVersion = { major: number; minor: number };
+export const CURRENT_SCHEMA_VERSION: SchemaVersion = { major: 1, minor: 0 };
+export const AUTHORITY_LANES = ['registry', 'workflow', 'skill', 'cli', 'adapter'] as const;
+export type AuthorityLane = (typeof AUTHORITY_LANES)[number];
+export const MUTATION_CLASSES = ['none', 'corpus', 'worktree', 'irreversible'] as const;
+export type MutationClass = (typeof MUTATION_CLASSES)[number];
+export const EXECUTION_KINDS = ['inline', 'subprocess', 'deterministic', 'hitl', 'irreversible'] as const;
+export type ExecutionKind = (typeof EXECUTION_KINDS)[number];
+export const ARTIFACT_DIRECTIONS = ['input', 'output'] as const;
+export type ArtifactDirection = (typeof ARTIFACT_DIRECTIONS)[number];
+export const CONTEXT_LAYER_NAMES = [
+    'harness-policy',
+    'project-authority',
+    'stage-contract',
+    'task-state',
+    'indexed-evidence',
+    'run-state',
+    'tool-observations',
+] as const;
+export type ContextLayerName = (typeof CONTEXT_LAYER_NAMES)[number];
+
+export interface StageArtifact {
+    kind: string;
+    direction: ArtifactDirection;
+    description?: string;
+    required?: boolean;
+}
+
+export interface StageGate {
+    name: string;
+    timing: 'pre' | 'post' | 'transition';
+    min_verdict?: 'pass' | 'partial' | 'fail';
+    description?: string;
+}
+
+export interface StageRetryPolicy {
+    max_attempts: number;
+    terminal_stop: 'block' | 'escalate' | 'fail';
+    timeout_seconds?: number;
+}
+
+export interface StageModelPolicy {
+    min_tier: 'cheap' | 'standard' | 'capable';
+    fallback: Array<{
+        tier: 'cheap' | 'standard' | 'capable';
+        trigger: 'gate-fail' | 'timeout' | 'insufficient-evidence' | 'retry-exhausted';
+    }>;
+    override_key?: string;
+}
+
+export interface StageContextLayer {
+    layer: ContextLayerName;
+    required: true;
+}
+
+export interface StageEvent {
+    name: string;
+    description?: string;
+}
+
+export interface ExecutionVariantInline {
+    kind: 'inline';
+    current_agent_allowed: true;
+    may_reuse_captured_layers?: boolean;
+}
+
+export interface ExecutionVariantSubprocess {
+    kind: 'subprocess';
+    current_agent_allowed: false;
+    via: 'spur-agent-run';
+}
+
+export interface ExecutionVariantDeterministic {
+    kind: 'deterministic';
+    current_agent_allowed: false;
+    executor: 'cli' | 'script';
+}
+
+export interface ExecutionVariantHitl {
+    kind: 'hitl';
+    current_agent_allowed: true;
+    gate_timing: 'pre' | 'post' | 'both';
+}
+
+export interface ExecutionVariantIrreversible {
+    kind: 'irreversible';
+    requires_operator_intent: true;
+    current_agent_allowed: boolean;
+    rollback_disclaimer: string;
+}
+
+export type ExecutionVariant =
+    | ExecutionVariantInline
+    | ExecutionVariantSubprocess
+    | ExecutionVariantDeterministic
+    | ExecutionVariantHitl
+    | ExecutionVariantIrreversible;
+
+export interface StageRecord {
+    schema_version: SchemaVersion;
+    id: string;
+    aliases?: string[];
+    description: string;
+    artifacts: StageArtifact[];
+    reasoning_skill: string;
+    required_references?: string[];
+    gates?: StageGate[];
+    mutation_class: MutationClass;
+    retry: StageRetryPolicy;
+    model_policy: StageModelPolicy;
+    context_layers?: StageContextLayer[];
+    observability?: StageEvent[];
+    execution: ExecutionVariant;
+}
+
+export type TaskStatus = 'backlog' | 'todo' | 'wip' | 'testing' | 'blocked' | 'done' | 'cancelled' | string;
+export type FeatureStatus = 'backlog' | 'active' | 'verifying' | 'blocked' | 'done' | 'cancelled' | string;
+export const TASK_STATUSES = ['backlog', 'todo', 'wip', 'testing', 'blocked', 'done', 'cancelled'] as const;
+export const FEATURE_STATUSES = ['backlog', 'active', 'verifying', 'blocked', 'done', 'cancelled'] as const;
+
+// ─── Resolution result types ────────────────────────────────────────────
+
+export interface StageResolution {
+    stage: StageRecord | null;
+    target: string;
+    status: string;
+    tableRow: string | null;
+    reason: string;
+    reasonKind: 'dispatch' | 'blocked' | 'multi-candidate' | 'no-route' | 'error' | 'usage';
+    requiresConfirmation: boolean;
+    chain: boolean;
+    dispatchCommand: string | null;
+    blocker?: string;
+    nextObservableOutcome?: string;
+    candidates?: Array<{ command: string; reason: string }>;
+}
+export interface TaskSignal {
+    wbs: string;
+    status: TaskStatus;
+    dependencies?: Array<{ wbs: string; status: TaskStatus }>;
+    feature_id?: string | null;
+    hasCheckpoint?: boolean;
+}
+export interface FeatureSignal {
+    id: string;
+    status: FeatureStatus;
+    tasks?: TaskSignal[];
+}
+
+export interface ResolutionInput {
+    target: string;
+    wbs?: string;
+    feature?: FeatureSignal;
+    task?: TaskSignal;
+    dryRun?: boolean;
+    once?: boolean;
+    auto?: boolean;
+    fullMode?: boolean;
+}
+
+export interface StageLookupEntry {
+    stage_id: string;
+    command: string;
+    skill: string;
+}
+
+// ─── Registry of all canonical stage records ────────────────────────────
+
+const inlineInline = (reuse?: boolean): ExecutionVariantInline => ({
+    kind: 'inline',
+    current_agent_allowed: true,
+    may_reuse_captured_layers: reuse,
+});
+
+const inlineDeterministic = (executor: 'cli' | 'script' = 'cli'): ExecutionVariantDeterministic => ({
+    kind: 'deterministic',
+    current_agent_allowed: false,
+    executor,
+});
+
+const inlineHitl = (timing: 'pre' | 'post' | 'both'): ExecutionVariantHitl => ({
+    kind: 'hitl',
+    current_agent_allowed: true,
+    gate_timing: timing,
+});
+const defaultRetry: StageRetryPolicy = { max_attempts: 3, terminal_stop: 'block', timeout_seconds: 300 };
+const standardModel: StageModelPolicy = {
+    min_tier: 'standard',
+    fallback: [{ tier: 'capable', trigger: 'gate-fail' }],
+};
+const capableModel: StageModelPolicy = {
+    min_tier: 'capable',
+    fallback: [],
+};
+
+const layer = (name: ContextLayerName): StageContextLayer => ({ layer: name, required: true });
+const event = (name: string, description?: string): StageEvent => ({ name, description });
+
+/**
+ * Complete set of registered canonical stage records.
+ * Maps one-to-one with /sp:dev-* operations from dev-operations.md.
+ */
+export const REGISTERED_STAGES: StageRecord[] = [
+    {
+        schema_version: CURRENT_SCHEMA_VERSION,
+        id: 'refine',
+        aliases: [],
+        description: 'dev-refine: Q&A refinement, section filling, AC tightening',
+        artifacts: [
+            { kind: 'task-section', direction: 'input', description: 'Background/Requirements sections' },
+            { kind: 'task-section', direction: 'output', description: 'Q&A/Design/Plan/AC sections' },
+        ],
+        reasoning_skill: 'sp:spur-dev',
+        required_references: ['references/dev-operations.md', 'spur-dev/references/decision-brief.md'],
+        gates: [
+            { name: 'refine-skip-gate', timing: 'pre', description: 'Skip sections that already meet L3' },
+            { name: 'l4-advisory', timing: 'post', min_verdict: 'pass', description: 'L4 advisory surface' },
+        ],
+        mutation_class: 'corpus',
+        retry: defaultRetry,
+        model_policy: standardModel,
+        context_layers: [layer('project-authority'), layer('task-state'), layer('stage-contract')],
+        observability: [event('stage-started'), event('feature-created'), event('batch-created')],
+        execution: inlineInline(true),
+    },
+    {
+        schema_version: CURRENT_SCHEMA_VERSION,
+        id: 'plan',
+        aliases: ['dev-plan'],
+        description: 'dev-plan: feature intake -> AC generation -> decomposition -> batch-create',
+        artifacts: [
+            { kind: 'feature-frontmatter', direction: 'input', required: true },
+            { kind: 'task-batch', direction: 'output', required: true },
+        ],
+        reasoning_skill: 'sp:spur-dev',
+        gates: [
+            { name: 'feature-check', timing: 'post', min_verdict: 'pass' },
+            { name: 'batch-create', timing: 'post', min_verdict: 'pass' },
+        ],
+        mutation_class: 'corpus',
+        retry: defaultRetry,
+        model_policy: capableModel,
+        context_layers: [layer('project-authority'), layer('task-state'), layer('stage-contract')],
+        observability: [event('stage-started'), event('feature-created'), event('batch-created')],
+        execution: inlineInline(true),
+    },
+    {
+        schema_version: CURRENT_SCHEMA_VERSION,
+        id: 'implement',
+        description: 'dev-run --mode implement: code edits in worktree',
+        artifacts: [
+            { kind: 'worktree-diff', direction: 'output', required: true },
+            { kind: 'task-section', direction: 'input', description: 'Solution section constraints' },
+        ],
+        reasoning_skill: 'sp:code-implementation',
+        gates: [],
+        mutation_class: 'worktree',
+        retry: defaultRetry,
+        model_policy: standardModel,
+        context_layers: [layer('task-state'), layer('run-state')],
+        observability: [event('stage-started'), event('code-modified')],
+        execution: inlineInline(),
+    },
+    {
+        schema_version: CURRENT_SCHEMA_VERSION,
+        id: 'test',
+        description: 'dev-unit: generate/extend tests to coverage target',
+        artifacts: [
+            { kind: 'test-file', direction: 'output', required: true },
+            { kind: 'coverage-report', direction: 'output', required: false },
+        ],
+        reasoning_skill: 'sp:code-testing',
+        gates: [{ name: 'coverage-floor', timing: 'post', min_verdict: 'pass', description: '≥90% function coverage' }],
+        mutation_class: 'worktree',
+        retry: defaultRetry,
+        model_policy: standardModel,
+        context_layers: [layer('task-state'), layer('run-state')],
+        observability: [event('stage-started'), event('gate-passed'), event('coverage-measured')],
+        execution: inlineInline(),
+    },
+    {
+        schema_version: CURRENT_SCHEMA_VERSION,
+        id: 'verify',
+        description: 'dev-verify: SECUA review + requirements traceability',
+        artifacts: [
+            { kind: 'verdict-artifact', direction: 'output', required: true },
+            { kind: 'task-section', direction: 'output', description: 'Testing/Review sections' },
+        ],
+        reasoning_skill: 'sp:code-verification',
+        gates: [
+            { name: 'verdict-artifact', timing: 'post', min_verdict: 'pass' },
+            { name: 'strict-core', timing: 'post', description: 'L3 core findings must pass' },
+        ],
+        mutation_class: 'corpus',
+        retry: { max_attempts: 2, terminal_stop: 'escalate', timeout_seconds: 600 },
+        model_policy: capableModel,
+        context_layers: [layer('task-state'), layer('run-state'), layer('indexed-evidence')],
+        observability: [event('stage-started'), event('verdict-emitted'), event('gate-passed')],
+        execution: inlineInline(),
+    },
+    {
+        schema_version: CURRENT_SCHEMA_VERSION,
+        id: 'wrap',
+        aliases: ['dev-wrap'],
+        description: 'dev-wrap: learnings/doc-sync/feature transition',
+        artifacts: [
+            { kind: 'learning-entry', direction: 'output' },
+            { kind: 'task-section', direction: 'output', description: 'Testing/Review updated' },
+        ],
+        reasoning_skill: 'sp:spur-dev',
+        gates: [
+            {
+                name: 'task-check',
+                timing: 'pre',
+                min_verdict: 'pass',
+                description: 'Task check must PASS before close',
+            },
+        ],
+        mutation_class: 'corpus',
+        retry: { max_attempts: 2, terminal_stop: 'block', timeout_seconds: 180 },
+        model_policy: standardModel,
+        context_layers: [layer('task-state'), layer('indexed-evidence')],
+        observability: [event('stage-started'), event('learnings-written'), event('doc-synced')],
+        execution: inlineHitl('both'),
+    },
+    {
+        schema_version: CURRENT_SCHEMA_VERSION,
+        id: 'review',
+        description: 'dev-review: multi-dimensional code review (functional/SECUA/architecture)',
+        artifacts: [{ kind: 'review-findings', direction: 'output', required: true }],
+        reasoning_skill: 'sp:code-verification',
+        gates: [{ name: 'review-guard', timing: 'post', min_verdict: 'pass', description: 'No P1 findings blocking' }],
+        mutation_class: 'corpus',
+        retry: { max_attempts: 2, terminal_stop: 'block', timeout_seconds: 300 },
+        model_policy: standardModel,
+        context_layers: [layer('task-state'), layer('run-state')],
+        observability: [event('stage-started'), event('findings-produced')],
+        execution: inlineInline(),
+    },
+    {
+        schema_version: CURRENT_SCHEMA_VERSION,
+        id: 'dogfood',
+        description: 'dev-dogfood: end-to-end driver test of a skill/command/CLI',
+        artifacts: [
+            { kind: 'dogfood-report', direction: 'output', required: true },
+            { kind: 'monitor-ledger', direction: 'output' },
+        ],
+        reasoning_skill: 'sp:dogfood-testing',
+        required_references: ['references/monitor-ledger.md', 'references/report-template.md'],
+        gates: [
+            { name: 'detect-pipeline-driving', timing: 'pre', description: 'Refuse dogfood when driving a pipeline' },
+            {
+                name: 'report-validate',
+                timing: 'post',
+                min_verdict: 'pass',
+                description: 'Report must pass schema validation',
+            },
+        ],
+        mutation_class: 'none',
+        retry: { max_attempts: 3, terminal_stop: 'block', timeout_seconds: 600 },
+        model_policy: capableModel,
+        context_layers: [layer('task-state'), layer('run-state')],
+        observability: [event('stage-started'), event('gate-passed'), event('report-emitted')],
+        execution: inlineInline(),
+    },
+    {
+        schema_version: CURRENT_SCHEMA_VERSION,
+        id: 'handover',
+        description: 'dev-handover: structured handover document when blocked',
+        artifacts: [{ kind: 'handover-doc', direction: 'output', required: true }],
+        reasoning_skill: 'inline',
+        gates: [],
+        mutation_class: 'corpus',
+        retry: { max_attempts: 1, terminal_stop: 'block', timeout_seconds: 120 },
+        model_policy: standardModel,
+        context_layers: [layer('task-state')],
+        observability: [event('stage-started')],
+        execution: inlineDeterministic('cli'),
+    },
+    {
+        schema_version: CURRENT_SCHEMA_VERSION,
+        id: 'fixall',
+        description: 'dev-fixall: lint + type + test fix loop',
+        artifacts: [
+            { kind: 'lint-report', direction: 'output' },
+            { kind: 'test-report', direction: 'output' },
+        ],
+        reasoning_skill: 'inline',
+        gates: [],
+        mutation_class: 'worktree',
+        retry: { max_attempts: 1, terminal_stop: 'block', timeout_seconds: 120 },
+        model_policy: standardModel,
+        context_layers: [layer('task-state')],
+        observability: [event('stage-started')],
+        execution: inlineDeterministic('script'),
+    },
+    {
+        schema_version: CURRENT_SCHEMA_VERSION,
+        id: 'brainstorm',
+        description: 'dev-brainstorm: structured ideation with trade-off analysis',
+        artifacts: [{ kind: 'brainstorm-outline', direction: 'output', required: true }],
+        reasoning_skill: 'sp:brainstorm',
+        gates: [],
+        mutation_class: 'corpus',
+        retry: { max_attempts: 2, terminal_stop: 'block', timeout_seconds: 300 },
+        model_policy: standardModel,
+        context_layers: [layer('project-authority'), layer('task-state')],
+        observability: [event('stage-started')],
+        execution: inlineInline(),
+    },
+    {
+        schema_version: CURRENT_SCHEMA_VERSION,
+        id: 'changelog',
+        description: 'dev-changelog: generate changelog from git commits',
+        artifacts: [{ kind: 'changelog-entry', direction: 'output' }],
+        reasoning_skill: 'inline',
+        gates: [],
+        mutation_class: 'none',
+        retry: { max_attempts: 1, terminal_stop: 'block', timeout_seconds: 60 },
+        model_policy: { min_tier: 'cheap', fallback: [] },
+        context_layers: [],
+        observability: [event('stage-started')],
+        execution: inlineDeterministic('cli'),
+    },
+];
+
+// ─── Stage lookup ────────────────────────────────────────────────────────
+
+export const STAGE_BY_ID = new Map<string, StageRecord>(REGISTERED_STAGES.map((s) => [s.id, s]));
+for (const s of REGISTERED_STAGES) {
+    for (const a of s.aliases ?? []) {
+        STAGE_BY_ID.set(a, s);
+    }
+}
+
+export function getStage(id: string): StageRecord | undefined {
+    return STAGE_BY_ID.get(id);
+}
+
+export function listStages(): StageLookupEntry[] {
+    const COMMAND_BY_ID: Record<string, string> = {
+        refine: '/sp:dev-refine',
+        plan: '/sp:dev-plan',
+        implement: '/sp:dev-run --mode implement',
+        test: '/sp:dev-unit',
+        verify: '/sp:dev-verify',
+        wrap: '/sp:dev-wrap',
+        review: '/sp:dev-review',
+        dogfood: '/sp:dev-dogfood',
+        handover: 'inline (dev-handover)',
+        fixall: 'inline (dev-fixall)',
+        brainstorm: '/sp:dev-brainstorm',
+        changelog: 'inline (dev-changelog)',
+    };
+    return REGISTERED_STAGES.map((s) => ({
+        stage_id: s.id,
+        command: COMMAND_BY_ID[s.id] ?? `/sp:dev-${s.id}`,
+        skill: s.reasoning_skill,
+    }));
+}
+
+// ─── TABLE A: task status → dispatch (routing-table.md §1) ──────────────
+
+interface TableARow {
+    condition: (input: ResolutionInput) => boolean;
+    dispatch: string | null;
+    rowId: string;
+    chain: boolean;
+    stop: boolean;
+    stopReason?: string;
+    probe: boolean;
+    requiresConfirmation: boolean;
+}
+
+function statusEquals(s: string): (input: ResolutionInput) => boolean {
+    return (input) => input.task?.status === s;
+}
+
+function statusAndDepsSatisfied(s: string): (input: ResolutionInput) => boolean {
+    return (input) => {
+        if (input.task?.status !== s) return false;
+        const deps = input.task?.dependencies ?? [];
+        if (deps.length === 0) return true;
+        return deps.every((d) => d.status === 'done');
+    };
+}
+
+const TABLE_A: TableARow[] = [
+    // A1 — backlog → refine
+    {
+        condition: statusEquals('backlog'),
+        dispatch: '/sp:dev-refine {wbs} --auto --next',
+        rowId: 'A1',
+        chain: true,
+        stop: false,
+        probe: true,
+        requiresConfirmation: false,
+    },
+    // A2 — todo with unmet deps → STOP
+    {
+        condition: (input) => {
+            if (input.task?.status !== 'todo') return false;
+            const deps = input.task?.dependencies ?? [];
+            return deps.length > 0 && deps.some((d) => d.status !== 'done');
+        },
+        dispatch: null,
+        rowId: 'A2',
+        chain: false,
+        stop: true,
+        stopReason: 'blocked by open dependencies',
+        probe: false,
+        requiresConfirmation: false,
+    },
+    // A3 — todo with satisfied deps → run --next
+    {
+        condition: statusAndDepsSatisfied('todo'),
+        dispatch: '/sp:dev-run {wbs} --auto --next',
+        rowId: 'A3',
+        chain: true,
+        stop: false,
+        probe: true,
+        requiresConfirmation: false,
+    },
+    // A4 — wip with checkpoint → continue
+    {
+        condition: (input) => input.task?.status === 'wip' && input.task?.hasCheckpoint === true,
+        dispatch: '/sp:dev-run {wbs} --continue',
+        rowId: 'A4',
+        chain: false,
+        stop: false,
+        probe: false,
+        requiresConfirmation: false,
+    },
+    // A5 — wip no checkpoint → implement --next
+    {
+        condition: statusEquals('wip'),
+        dispatch: '/sp:dev-run {wbs} --mode implement --auto --next',
+        rowId: 'A5',
+        chain: true,
+        stop: false,
+        probe: true,
+        requiresConfirmation: false,
+    },
+    // A6 — testing → verify
+    {
+        condition: statusEquals('testing'),
+        dispatch: '/sp:dev-verify {wbs} --auto --next',
+        rowId: 'A6',
+        chain: true,
+        stop: false,
+        probe: true,
+        requiresConfirmation: false,
+    },
+    // A7 — blocked → handover
+    {
+        condition: statusEquals('blocked'),
+        dispatch: '/sp:dev-handover <blocker>',
+        rowId: 'A7',
+        chain: false,
+        stop: true,
+        stopReason: 'blocked — handover document needed',
+        probe: false,
+        requiresConfirmation: true,
+    },
+    // A8 — done → wrap
+    {
+        condition: statusEquals('done'),
+        dispatch: '/sp:dev-wrap {wbs}',
+        rowId: 'A8',
+        chain: false,
+        stop: false,
+        probe: false,
+        requiresConfirmation: true,
+    },
+    // A9 — cancelled → STOP
+    {
+        condition: statusEquals('cancelled'),
+        dispatch: null,
+        rowId: 'A9',
+        chain: false,
+        stop: true,
+        stopReason: 'cancelled — nothing to advance',
+        probe: false,
+        requiresConfirmation: false,
+    },
+];
+
+// ─── TABLE B: feature-level routing (routing-table.md §2) ────────────────
+
+interface TableBRow {
+    condition: (input: ResolutionInput) => boolean;
+    dispatch: ((input: ResolutionInput) => string | null) | null;
+    rowId: string;
+    chain: boolean;
+    stop: boolean;
+    stopReason?: string;
+    requiresConfirmation: boolean;
+}
+
+const TABLE_B: TableBRow[] = [
+    // B0 — unknown feature
+    {
+        condition: (input) => input.feature == null,
+        dispatch: null,
+        rowId: 'B0',
+        chain: false,
+        stop: true,
+        stopReason: 'unknown feature id',
+        requiresConfirmation: false,
+    },
+    // B1 — cancelled
+    {
+        condition: (input) => input.feature?.status === 'cancelled',
+        dispatch: null,
+        rowId: 'B1',
+        chain: false,
+        stop: true,
+        stopReason: 'feature cancelled',
+        requiresConfirmation: false,
+    },
+    // B2 — done
+    {
+        condition: (input) => input.feature?.status === 'done',
+        dispatch: null,
+        rowId: 'B2',
+        chain: false,
+        stop: true,
+        stopReason: 'feature already done',
+        requiresConfirmation: false,
+    },
+    // B3 — frontier task exists → recurse TABLE A
+    {
+        condition: (input) => {
+            const tasks = input.feature?.tasks ?? [];
+            return tasks.some((t) => ['backlog', 'todo', 'wip', 'testing', 'blocked'].includes(t.status));
+        },
+        dispatch: null, // Handled specially by resolveStage — picks frontier task
+        rowId: 'B3',
+        chain: false,
+        stop: false,
+        requiresConfirmation: false,
+    },
+    // B4 — no frontier, feature backlog, AC invalid
+    {
+        condition: (input) => {
+            if (input.feature?.status !== 'backlog') return false;
+            const open = (input.feature?.tasks ?? []).filter((t) =>
+                ['backlog', 'todo', 'wip', 'testing', 'blocked'].includes(t.status),
+            );
+            return open.length === 0;
+        },
+        dispatch: () => null,
+        rowId: 'B4',
+        chain: false,
+        stop: true,
+        stopReason: 'feature needs description and AC decomposition',
+        requiresConfirmation: true,
+    },
+    // B5 — no frontier, valid AC but zero tasks
+    {
+        condition: (input) => {
+            if (
+                input.feature?.status === 'blocked' ||
+                input.feature?.status === 'cancelled' ||
+                input.feature?.status === 'done'
+            )
+                return false;
+            const tasks = input.feature?.tasks ?? [];
+            const open = tasks.filter((t) => !['done', 'cancelled'].includes(t.status));
+            return open.length === 0 && tasks.length === 0;
+        },
+        dispatch: () => null,
+        rowId: 'B5',
+        chain: false,
+        stop: true,
+        stopReason: 'no tasks created yet — run dev-plan to decompose',
+        requiresConfirmation: true,
+    },
+    // B6 — all tasks done, feature active/verifying → wrapall
+    {
+        condition: (input) => {
+            if (!input.feature) return false;
+            if (!['active', 'verifying'].includes(input.feature.status)) return false;
+            const tasks = input.feature?.tasks ?? [];
+            return tasks.length > 0 && tasks.every((t) => ['done', 'cancelled'].includes(t.status));
+        },
+        dispatch: (input) => `/sp:dev-wrapall --feature ${input.feature?.id ?? ''}`,
+        rowId: 'B6',
+        chain: false,
+        stop: false,
+        requiresConfirmation: true,
+    },
+    // B7 — mixed cancelled/done only
+    {
+        condition: (input) => {
+            if (!input.feature) return false;
+            const tasks = input.feature?.tasks ?? [];
+            if (tasks.length === 0) return false;
+            return tasks.every((t) => ['done', 'cancelled'].includes(t.status));
+        },
+        dispatch: null,
+        rowId: 'B7',
+        chain: false,
+        stop: true,
+        stopReason: 'all tasks are done or cancelled — no action needed',
+        requiresConfirmation: false,
+    },
+    // B8 — blocked
+    {
+        condition: (input) => input.feature?.status === 'blocked',
+        dispatch: null,
+        rowId: 'B8',
+        chain: false,
+        stop: true,
+        stopReason: 'feature is blocked — resolve blocker first',
+        requiresConfirmation: false,
+    },
+];
+
+// ─── TABLE C light-gate short-circuit (routing-table.md §3) ─────────────
+
+interface TableCRow {
+    condition: (input: ResolutionInput) => boolean;
+    redirectDispatch: string;
+    rowId: string;
+    probeRows: string[];
+}
+
+const TABLE_C: TableCRow[] = [
+    {
+        condition: () => false, // C1 — spur task check L3 findings: external check, not evaluable here
+        redirectDispatch: '/sp:dev-refine {wbs} --auto',
+        rowId: 'C1',
+        probeRows: ['A1', 'A3', 'A5'],
+    },
+    {
+        condition: () => false, // C2 — lint failures: requires runtime check
+        redirectDispatch: '/sp:dev-fixall',
+        rowId: 'C2',
+        probeRows: ['A3', 'A5'],
+    },
+    {
+        condition: () => false, // C3 — test failures: requires runtime check
+        redirectDispatch: '/sp:dev-unit {wbs} --auto',
+        rowId: 'C3',
+        probeRows: ['A5', 'A6'],
+    },
+    {
+        condition: () => false, // C4 — rule findings: requires spur rule run
+        redirectDispatch: null as unknown as string, // HITL stop
+        rowId: 'C4',
+        probeRows: ['A3', 'A5', 'A6'],
+    },
+    {
+        condition: () => false, // C5 — verdict FAIL pointing at coverage
+        redirectDispatch: '/sp:dev-unit {wbs}',
+        rowId: 'C5',
+        probeRows: ['A6'],
+    },
+];
+
+// ─── Table C helpers ────────────────────────────────────────────────────
+
+const C_REDIRECT_TABLE: Record<string, TableCRow> = {};
+for (const row of TABLE_C) {
+    for (const pr of row.probeRows) {
+        C_REDIRECT_TABLE[pr] = row;
+    }
+}
+
+export function getTableCRedirect(rowId: string): TableCRow | undefined {
+    return C_REDIRECT_TABLE[rowId];
+}
+
+// ─── Core resolution ────────────────────────────────────────────────────
+
+/**
+ * Pick the best frontier task from a feature's task list (TABLE B3 algorithm).
+ */
+export function pickFrontierTask(tasks: TaskSignal[]): TaskSignal | null {
+    const OPEN_STATUSES: Record<string, number> = {
+        todo: 0,
+        backlog: 1,
+        wip: 2,
+        testing: 3,
+        blocked: 4,
+    };
+    const candidates = tasks.filter((t) => {
+        const rank = OPEN_STATUSES[t.status];
+        if (rank === undefined) return false;
+        // Exclude tasks with blocked-by-dep (not all dependencies done)
+        const deps = t.dependencies ?? [];
+        if (deps.length > 0 && deps.some((d) => d.status !== 'done')) return false;
+        return true;
+    });
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => {
+        const rankA = OPEN_STATUSES[a.status] ?? 99;
+        const rankB = OPEN_STATUSES[b.status] ?? 99;
+        if (rankA !== rankB) return rankA - rankB;
+        return a.wbs.localeCompare(b.wbs);
+    });
+    return candidates[0] ?? null;
+}
+
+/**
+ * Build the unmet dependencies list for the A2 block message.
+ */
+export function unmetDependencies(task: TaskSignal): string[] {
+    return (task.dependencies ?? []).filter((d) => d.status !== 'done').map((d) => d.wbs);
+}
+
+/**
+ * Resolve a task WBS or feature id to the next canonical stage.
+ *
+ * Implements the TABLE A/B/C algorithm from routing-table.md.
+ * Returns a StageResolution describing the selected stage (or stop reason).
+ */
+export function resolveStage(input: ResolutionInput): StageResolution {
+    // Feature mode
+    if (input.feature != null) {
+        return resolveFeature(input);
+    }
+
+    // Task mode — TABLE A
+    if (input.task != null) {
+        return resolveTask(input);
+    }
+
+    return {
+        stage: null,
+        target: input.target,
+        status: 'unknown',
+        tableRow: null,
+        reason: 'no target resolved — pass a task WBS or feature id',
+        reasonKind: 'usage',
+        requiresConfirmation: false,
+        chain: false,
+        dispatchCommand: null,
+    };
+}
+
+function resolveTask(input: ResolutionInput): StageResolution {
+    if (input.task == null) throw new Error('resolveTask called without task');
+    const task = input.task;
+    const wbs = task.wbs;
+
+    // Apply TABLE A rows in order (A4 fires before A5 for wip+checkpoint;
+    // A5 catches wip without checkpoint since A4's condition is narrower)
+    for (const row of TABLE_A) {
+        if (!row.condition(input)) continue;
+
+        // Build the dispatch command
+        let dispatchCmd: string | null = row.dispatch;
+        if (dispatchCmd) {
+            dispatchCmd = dispatchCmd.replace(/\{wbs\}/g, wbs);
+        }
+
+        // Apply flag forwarding
+        if (input.once && dispatchCmd) {
+            dispatchCmd = dispatchCmd.replace(/ --next/g, '');
+        }
+        if (input.auto && dispatchCmd && !dispatchCmd.includes('--auto')) {
+            dispatchCmd += ' --auto';
+        }
+        if (input.fullMode && dispatchCmd) {
+            if (dispatchCmd.includes('--mode implement') || dispatchCmd.includes('--next')) {
+                dispatchCmd = `/sp:dev-run ${wbs} --mode full`;
+            }
+        }
+
+        // Map dispatch command pattern → canonical stage id
+        const STAGE_BY_DISPATCH_PREFIX: Record<string, string> = {
+            refine: 'refine',
+            verify: 'verify',
+            wrap: 'wrap',
+            handover: 'handover',
+            'run --mode': 'implement',
+            'run --continue': 'implement',
+            unit: 'test',
+            fixall: 'fixall',
+        };
+        let stageId: string | undefined;
+        if (dispatchCmd) {
+            for (const [prefix, sid] of Object.entries(STAGE_BY_DISPATCH_PREFIX)) {
+                if (dispatchCmd.includes(prefix)) {
+                    stageId = sid;
+                    break;
+                }
+            }
+        }
+        const stage = stageId ? (getStage(stageId) ?? null) : null;
+
+        if (row.stop) {
+            const stopReason = row.stopReason ?? 'no route';
+            return {
+                stage: null,
+                target: wbs,
+                status: task.status,
+                tableRow: row.rowId,
+                reason: stopReason,
+                reasonKind: row.rowId === 'A2' ? 'blocked' : 'no-route',
+                requiresConfirmation: row.requiresConfirmation,
+                chain: row.chain,
+                dispatchCommand: null,
+                blocker: row.rowId === 'A2' ? `unmet deps: ${unmetDependencies(task).join(', ')}` : undefined,
+                nextObservableOutcome:
+                    row.rowId === 'A2'
+                        ? 'resolve open dependencies'
+                        : row.rowId === 'A7'
+                          ? 'handover document created'
+                          : row.rowId === 'A9'
+                            ? 'no action needed'
+                            : undefined,
+            };
+        }
+
+        const OUTCOME_BY_ROW: Record<string, string> = {
+            A1: 'refined task with filled sections',
+            A3: 'code changes implemented',
+            A4: 'implementation resumed from checkpoint',
+            A5: 'implementation continued',
+            A6: 'verification verdict (PASS/PARTIAL/FAIL)',
+            A8: 'learnings recorded, doc synced',
+        };
+
+        const REASON_BY_ROW: Record<string, string> = {
+            A1: 'backlog — needs refinement',
+            A3: 'todo — ready to implement',
+            A4: 'wip — resume from checkpoint',
+            A5: 'wip — continue implementing',
+            A6: 'testing — verify results',
+            A8: 'done — wrap up',
+        };
+
+        return {
+            stage,
+            target: wbs,
+            status: task.status,
+            tableRow: row.rowId,
+            reason: REASON_BY_ROW[row.rowId] ?? 'dispatch',
+            reasonKind: 'dispatch',
+            requiresConfirmation: row.requiresConfirmation,
+            chain: row.chain,
+            dispatchCommand: dispatchCmd,
+            nextObservableOutcome: OUTCOME_BY_ROW[row.rowId],
+        };
+    }
+
+    // No row matched
+    return {
+        stage: null,
+        target: wbs,
+        status: task.status,
+        tableRow: null,
+        reason: `no route for ${wbs} (status=${task.status})`,
+        reasonKind: 'no-route',
+        requiresConfirmation: false,
+        chain: false,
+        dispatchCommand: null,
+    };
+}
+function resolveFeature(input: ResolutionInput): StageResolution {
+    if (input.feature == null) throw new Error('resolveFeature called without feature');
+    const feature = input.feature;
+
+    for (const row of TABLE_B) {
+        if (!row.condition(input)) continue;
+
+        // B3: frontier task → recurse TABLE A on the picked task
+        if (row.rowId === 'B3') {
+            const frontier = pickFrontierTask(feature.tasks ?? []);
+            if (!frontier) {
+                return {
+                    stage: null,
+                    target: feature.id,
+                    status: feature.status,
+                    tableRow: 'B3',
+                    reason: 'no frontier task found after condition matched — inconsistency',
+                    reasonKind: 'error',
+                    requiresConfirmation: false,
+                    chain: false,
+                    dispatchCommand: null,
+                };
+            }
+            const taskInput: ResolutionInput = {
+                target: frontier.wbs,
+                task: frontier,
+                feature: input.feature,
+                dryRun: input.dryRun,
+                once: input.once,
+                auto: input.auto,
+                fullMode: input.fullMode,
+            };
+            return resolveTask(taskInput);
+        }
+
+        if (row.stop) {
+            return {
+                stage: null,
+                target: feature.id,
+                status: feature.status,
+                tableRow: row.rowId,
+                reason: row.stopReason ?? 'stop',
+                reasonKind: 'blocked',
+                requiresConfirmation: row.requiresConfirmation,
+                chain: false,
+                dispatchCommand: null,
+                blocker: row.stopReason,
+            };
+        }
+
+        const dispatchCmd = row.dispatch?.(input);
+        const stage = dispatchCmd?.includes('wrapall') ? getStage('wrap') : null;
+
+        return {
+            stage: stage ?? null,
+            target: feature.id,
+            status: feature.status,
+            tableRow: row.rowId,
+            reason: row.rowId === 'B6' ? 'all tasks done — wrap up feature' : 'feature route',
+            reasonKind: 'dispatch',
+            requiresConfirmation: row.requiresConfirmation,
+            chain: false,
+            dispatchCommand: dispatchCmd,
+            nextObservableOutcome: row.rowId === 'B6' ? 'feature transition or wrap' : undefined,
+        };
+    }
+
+    return {
+        stage: null,
+        target: feature.id,
+        status: feature.status,
+        tableRow: null,
+        reason: `no route for feature ${feature.id}`,
+        reasonKind: 'no-route',
+        requiresConfirmation: false,
+        chain: false,
+        dispatchCommand: null,
+    };
+}
+
+// ─── Utility: display stage help ────────────────────────────────────────
+
+export function renderHelp(): string {
+    const lines: string[] = [
+        'stage-registry-adapter — dev-next golden-path adapter',
+        '',
+        'Usage:',
+        '  bun plugins/sp/scripts/stage-registry-adapter.ts \\',
+        '    --wbs <wbs> [--dry-run] [--auto] [--once] [--full]',
+        '  bun plugins/sp/scripts/stage-registry-adapter.ts \\',
+        '    --feature <id> [--dry-run] [--auto]',
+        '  bun plugins/sp/scripts/stage-registry-adapter.ts --list-stages',
+        '  bun plugins/sp/scripts/stage-registry-adapter.ts --help',
+        '',
+        'Options:',
+        '  --wbs <wbs>            Task WBS to resolve (digits)',
+        '  --feature <id>         Feature id to resolve (e.g. O)',
+        '  --dry-run              Print plan without dispatching',
+        '  --auto                 Forward --auto to dispatched commands',
+        '  --once                 Suppress --next chain',
+        '  --full                 Use --mode full for implement',
+        '  --list-stages          List all registered stages',
+        '  --help                 Show this message',
+        '',
+        'Registered stages:',
+    ];
+    for (const s of REGISTERED_STAGES) {
+        const aliases = s.aliases?.length ? ` (${s.aliases.join(', ')})` : '';
+        lines.push(`  ${s.id}${aliases} — ${s.description}`);
+    }
+    return lines.join('\n');
+}
+
+// ─── CLI entry point ────────────────────────────────────────────────────
+
+export function parseCliArgs(argv: string[]): {
+    wbs?: string;
+    feature?: string;
+    dryRun: boolean;
+    auto: boolean;
+    once: boolean;
+    full: boolean;
+    listStages: boolean;
+    help: boolean;
+} {
+    const args = argv;
+    let wbs: string | undefined;
+    let feature: string | undefined;
+    let dryRun = false;
+    let auto = false;
+    let once = false;
+    let full = false;
+    let listStages = false;
+    let help = false;
+
+    for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+        if (arg == null) continue;
+        if (arg === '--wbs') {
+            wbs = args[++i];
+        } else if (arg === '--feature') {
+            feature = args[++i];
+        } else if (arg === '--dry-run') {
+            dryRun = true;
+        } else if (arg === '--auto') {
+            auto = true;
+        } else if (arg === '--once') {
+            once = true;
+        } else if (arg === '--full') {
+            full = true;
+        } else if (arg === '--list-stages') {
+            listStages = true;
+        } else if (arg === '--help') {
+            help = true;
+        }
+    }
+
+    return { wbs, feature, dryRun, auto, once, full, listStages, help };
+}
+
+export function runCli(argv: string[]): { exitCode: number; stdout: string; stderr: string } {
+    const parsed = parseCliArgs(argv);
+
+    if (parsed.help) {
+        return { exitCode: 0, stdout: renderHelp(), stderr: '' };
+    }
+
+    if (parsed.listStages) {
+        const stages = listStages();
+        const lines = stages.map((s) => `${s.stage_id}\t${s.command}\t${s.skill}`);
+        return { exitCode: 0, stdout: `${lines.join('\n')}\n`, stderr: '' };
+    }
+
+    if (!parsed.wbs && !parsed.feature) {
+        return {
+            exitCode: 1,
+            stdout: '',
+            stderr: `error: specify --wbs <wbs> or --feature <id>\n\n${renderHelp()}`,
+        };
+    }
+
+    // Build resolution input from CLI args (note: no live corpus access in CLI mode)
+    const input: ResolutionInput = {
+        target: parsed.wbs ?? parsed.feature ?? '',
+        wbs: parsed.wbs,
+        dryRun: parsed.dryRun,
+        once: parsed.once,
+        auto: parsed.auto,
+        fullMode: parsed.full,
+        task: parsed.wbs ? { wbs: parsed.wbs, status: 'unknown', dependencies: [] } : undefined,
+        feature: parsed.feature ? { id: parsed.feature, status: 'active', tasks: [] } : undefined,
+    };
+
+    try {
+        const result = resolveStage(input);
+        const lines = [
+            `dev-next: ${result.reasonKind === 'dispatch' ? 'dispatch' : result.reasonKind}`,
+            `  target: ${result.target}  status=${result.status}  table=${result.tableRow ?? '—'}`,
+            `  reason: ${result.reason}`,
+        ];
+        if (result.blocker) {
+            lines.push(`  blocker: ${result.blocker}`);
+        }
+        if (result.dispatchCommand) {
+            lines.push(`  dispatch: ${result.dispatchCommand}`);
+        }
+        if (result.chain) {
+            lines.push('  chain: yes');
+        }
+        if (result.requiresConfirmation) {
+            lines.push('  confirmation: required');
+        }
+        if (result.nextObservableOutcome) {
+            lines.push(`  next outcome: ${result.nextObservableOutcome}`);
+        }
+        return { exitCode: result.reasonKind === 'dispatch' ? 0 : 2, stdout: `${lines.join('\n')}\n`, stderr: '' };
+    } catch (e) {
+        return { exitCode: 1, stdout: '', stderr: `error: ${(e as Error).message}` };
+    }
+}
+
+if (import.meta.main) {
+    const result = runCli(process.argv);
+    if (result.stdout) process.stdout.write(result.stdout);
+    if (result.stderr) process.stderr.write(result.stderr);
+    process.exit(result.exitCode);
+}
