@@ -1,6 +1,30 @@
 import { describe, expect, test } from 'bun:test';
-import { aggregateCosts, byCostDesc, byDateAsc, computeRecordCost, formatSummary } from '../../src/analytics/costs';
+import {
+    aggregateCosts,
+    byCostDesc,
+    byDateAsc,
+    cacheHitRatio,
+    computeRecordCost,
+    formatSummary,
+} from '../../src/analytics/costs';
 import type { CostRecord } from '../../src/analytics/types';
+
+/** Build a CostRecord from a partial, defaulting the cache/usage fields so a test only
+ *  states the dimensions it exercises. Keeps fixtures immune to future field additions. */
+function mkRecord(partial: Partial<CostRecord> = {}): CostRecord {
+    return {
+        source: 'claude',
+        date: '2026-05-30',
+        model: 'claude-sonnet-4-20250514',
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+        usageReported: true,
+        costUsd: 0,
+        ...partial,
+    };
+}
 
 describe('analytics costs', () => {
     describe('byDateAsc', () => {
@@ -33,14 +57,7 @@ describe('analytics costs', () => {
 
     describe('computeRecordCost', () => {
         test('computes cost for known model claude-sonnet-4', () => {
-            const record: CostRecord = {
-                source: 'claude',
-                date: '2026-05-30',
-                model: 'claude-sonnet-4-20250514',
-                inputTokens: 1_000_000,
-                outputTokens: 1_000_000,
-                costUsd: 0,
-            };
+            const record = mkRecord({ inputTokens: 1_000_000, outputTokens: 1_000_000 });
             const result = computeRecordCost(record);
             // inputPricePer1M=3, outputPricePer1M=15 → 3 + 15 = 18
             expect(result.costUsd).toBeCloseTo(18, 10);
@@ -49,41 +66,31 @@ describe('analytics costs', () => {
         });
 
         test('computes cost for unknown model using fallback pricing', () => {
-            const record: CostRecord = {
+            const record = mkRecord({
                 source: 'test',
-                date: '2026-05-30',
                 model: 'unknown-model-xyz',
                 inputTokens: 2_000_000,
                 outputTokens: 500_000,
-                costUsd: 0,
-            };
+            });
             const result = computeRecordCost(record);
             // UNKNOWN: inputPricePer1M=3, outputPricePer1M=15 → 6 + 7.5 = 13.5
             expect(result.costUsd).toBeCloseTo(13.5, 10);
         });
 
         test('computes zero cost for zero tokens', () => {
-            const record: CostRecord = {
-                source: 'test',
-                date: '2026-05-30',
-                model: 'claude-sonnet-4-20250514',
-                inputTokens: 0,
-                outputTokens: 0,
-                costUsd: 0,
-            };
+            const record = mkRecord({ source: 'test', inputTokens: 0, outputTokens: 0 });
             const result = computeRecordCost(record);
             expect(result.costUsd).toBe(0);
         });
 
         test('preserves other record fields', () => {
-            const record: CostRecord = {
+            const record = mkRecord({
                 source: 'pi',
                 date: '2026-01-15',
                 model: 'gemini-2.5-flash',
                 inputTokens: 100,
                 outputTokens: 50,
-                costUsd: 0,
-            };
+            });
             const result = computeRecordCost(record);
             expect(result.source).toBe('pi');
             expect(result.date).toBe('2026-01-15');
@@ -96,23 +103,22 @@ describe('analytics costs', () => {
     describe('aggregateCosts', () => {
         test('returns zeroed summary for empty array', () => {
             const summary = aggregateCosts([]);
-            expect(summary.totals).toEqual({ inputTokens: 0, outputTokens: 0, costUsd: 0, records: 0 });
+            expect(summary.totals).toEqual({
+                inputTokens: 0,
+                outputTokens: 0,
+                cacheReadTokens: 0,
+                cacheCreationTokens: 0,
+                costUsd: 0,
+                records: 0,
+                recordsWithUsage: 0,
+            });
             expect(summary.bySource).toEqual({});
             expect(summary.byModel).toEqual({});
             expect(summary.daily).toEqual([]);
         });
 
         test('aggregates single record correctly', () => {
-            const records: CostRecord[] = [
-                {
-                    source: 'claude',
-                    date: '2026-05-30',
-                    model: 'claude-sonnet-4-20250514',
-                    inputTokens: 1000,
-                    outputTokens: 500,
-                    costUsd: 0.05,
-                },
-            ];
+            const records = [mkRecord({ inputTokens: 1000, outputTokens: 500, costUsd: 0.05 })];
             const summary = aggregateCosts(records);
             expect(summary.totals.records).toBe(1);
             expect(summary.totals.inputTokens).toBe(1000);
@@ -125,31 +131,16 @@ describe('analytics costs', () => {
         });
 
         test('aggregates multiple records from different sources', () => {
-            const records: CostRecord[] = [
-                {
-                    source: 'claude',
-                    date: '2026-05-30',
-                    model: 'claude-sonnet-4-20250514',
-                    inputTokens: 1000,
-                    outputTokens: 500,
-                    costUsd: 0.05,
-                },
-                {
+            const records = [
+                mkRecord({ inputTokens: 1000, outputTokens: 500, costUsd: 0.05 }),
+                mkRecord({
                     source: 'pi',
-                    date: '2026-05-30',
                     model: 'gemini-2.5-flash',
                     inputTokens: 2000,
                     outputTokens: 1000,
                     costUsd: 0.02,
-                },
-                {
-                    source: 'claude',
-                    date: '2026-05-29',
-                    model: 'claude-sonnet-4-20250514',
-                    inputTokens: 500,
-                    outputTokens: 200,
-                    costUsd: 0.03,
-                },
+                }),
+                mkRecord({ date: '2026-05-29', inputTokens: 500, outputTokens: 200, costUsd: 0.03 }),
             ];
             const summary = aggregateCosts(records);
 
@@ -174,10 +165,10 @@ describe('analytics costs', () => {
         });
 
         test('sorts daily entries by date ascending', () => {
-            const records: CostRecord[] = [
-                { source: 'pi', date: '2026-05-31', model: 'm', inputTokens: 1, outputTokens: 0, costUsd: 0 },
-                { source: 'pi', date: '2026-05-29', model: 'm', inputTokens: 1, outputTokens: 0, costUsd: 0 },
-                { source: 'pi', date: '2026-05-30', model: 'm', inputTokens: 1, outputTokens: 0, costUsd: 0 },
+            const records = [
+                mkRecord({ source: 'pi', date: '2026-05-31', model: 'm', inputTokens: 1 }),
+                mkRecord({ source: 'pi', date: '2026-05-29', model: 'm', inputTokens: 1 }),
+                mkRecord({ source: 'pi', date: '2026-05-30', model: 'm', inputTokens: 1 }),
             ];
             const summary = aggregateCosts(records);
             const dates = summary.daily.map((d) => d.date);
@@ -188,22 +179,14 @@ describe('analytics costs', () => {
     describe('formatSummary', () => {
         test('formats populated summary', () => {
             const summary = aggregateCosts([
-                {
-                    source: 'claude',
-                    date: '2026-05-30',
-                    model: 'claude-sonnet-4-20250514',
-                    inputTokens: 1_000_000,
-                    outputTokens: 500_000,
-                    costUsd: 10.5,
-                },
-                {
+                mkRecord({ inputTokens: 1_000_000, outputTokens: 500_000, costUsd: 10.5 }),
+                mkRecord({
                     source: 'pi',
-                    date: '2026-05-30',
                     model: 'gemini-2.5-flash',
                     inputTokens: 500_000,
                     outputTokens: 200_000,
                     costUsd: 2.1,
-                },
+                }),
             ]);
             const text = formatSummary(summary);
             expect(text).toContain('$12.60');
@@ -219,6 +202,47 @@ describe('analytics costs', () => {
             const text = formatSummary(summary);
             expect(text).toContain('$0.00');
             expect(text).toContain('0 records');
+        });
+
+        test('renders the cache-hit line as n/a when no record carried usage', () => {
+            // Length-estimated records (usageReported=false) must not read as 0% cache — unknown, not zero.
+            const summary = aggregateCosts([mkRecord({ inputTokens: 100, usageReported: false })]);
+            expect(formatSummary(summary)).toContain('Cache hit: n/a');
+        });
+
+        test('renders the cache-hit percentage when usage is present', () => {
+            const summary = aggregateCosts([mkRecord({ inputTokens: 1000, cacheReadTokens: 250 })]);
+            expect(formatSummary(summary)).toContain('Cache hit: 25.0%');
+        });
+    });
+
+    describe('aggregateCosts — cache split', () => {
+        test('sums cache read/create dimensions and counts records with usage', () => {
+            const summary = aggregateCosts([
+                mkRecord({ inputTokens: 1000, cacheReadTokens: 400, cacheCreationTokens: 100 }),
+                mkRecord({ inputTokens: 500, cacheReadTokens: 100, usageReported: false }),
+            ]);
+            expect(summary.totals.cacheReadTokens).toBe(500);
+            expect(summary.totals.cacheCreationTokens).toBe(100);
+            expect(summary.totals.records).toBe(2);
+            expect(summary.totals.recordsWithUsage).toBe(1);
+        });
+    });
+
+    describe('cacheHitRatio', () => {
+        test('is cache-read over total input when usage is present', () => {
+            expect(cacheHitRatio({ inputTokens: 1000, cacheReadTokens: 300, recordsWithUsage: 1 })).toBeCloseTo(
+                0.3,
+                10,
+            );
+        });
+
+        test('is null (unavailable) when no record carried usage — never a fabricated 0', () => {
+            expect(cacheHitRatio({ inputTokens: 1000, cacheReadTokens: 0, recordsWithUsage: 0 })).toBeNull();
+        });
+
+        test('is null when there are no input tokens to divide by', () => {
+            expect(cacheHitRatio({ inputTokens: 0, cacheReadTokens: 0, recordsWithUsage: 3 })).toBeNull();
         });
     });
 });

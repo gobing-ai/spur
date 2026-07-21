@@ -1,5 +1,5 @@
 import { resolvePricing } from './models';
-import type { AnalyticsSummary, CostRecord } from './types';
+import type { AnalyticsSummary, CostRecord, TokenTotals } from './types';
 
 /** Compute USD cost for a single cost record based on model pricing. */
 export function computeRecordCost(record: CostRecord): CostRecord {
@@ -10,66 +10,80 @@ export function computeRecordCost(record: CostRecord): CostRecord {
     return { ...record, costUsd };
 }
 
+/** A zeroed {@link TokenTotals} accumulator. */
+function emptyTotals(): TokenTotals {
+    return {
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+        costUsd: 0,
+        records: 0,
+        recordsWithUsage: 0,
+    };
+}
+
+/** Fold one record into a {@link TokenTotals} bucket in place. Single point of truth so a
+ *  new token dimension is added once, not once per breakdown — the omission that dropped the
+ *  cache split in the first place. */
+function accumulate(bucket: TokenTotals, record: CostRecord): void {
+    bucket.inputTokens += record.inputTokens;
+    bucket.outputTokens += record.outputTokens;
+    bucket.cacheReadTokens += record.cacheReadTokens;
+    bucket.cacheCreationTokens += record.cacheCreationTokens;
+    bucket.costUsd += record.costUsd;
+    bucket.records += 1;
+    if (record.usageReported) bucket.recordsWithUsage += 1;
+}
+
 /** Aggregate cost records into a summary with per-source and per-model breakdowns. */
 export function aggregateCosts(records: readonly CostRecord[]): AnalyticsSummary {
     const summary: AnalyticsSummary = {
-        totals: { inputTokens: 0, outputTokens: 0, costUsd: 0, records: 0 },
+        totals: emptyTotals(),
         bySource: {},
         byModel: {},
         daily: [],
     };
 
-    const dailyMap = new Map<
-        string,
-        { date: string; inputTokens: number; outputTokens: number; costUsd: number; records: number }
-    >();
+    const dailyMap = new Map<string, { date: string } & TokenTotals>();
 
     for (const record of records) {
-        // Totals
-        summary.totals.inputTokens += record.inputTokens;
-        summary.totals.outputTokens += record.outputTokens;
-        summary.totals.costUsd += record.costUsd;
-        summary.totals.records += 1;
+        accumulate(summary.totals, record);
 
-        // By source
-        const sourceEntry = summary.bySource[record.source] ?? {
-            inputTokens: 0,
-            outputTokens: 0,
-            costUsd: 0,
-            records: 0,
-        };
-        sourceEntry.inputTokens += record.inputTokens;
-        sourceEntry.outputTokens += record.outputTokens;
-        sourceEntry.costUsd += record.costUsd;
-        sourceEntry.records += 1;
-        summary.bySource[record.source] = sourceEntry;
+        summary.bySource[record.source] ??= emptyTotals();
+        accumulate(summary.bySource[record.source] as TokenTotals, record);
 
-        // By model
-        const modelEntry = summary.byModel[record.model] ?? { inputTokens: 0, outputTokens: 0, costUsd: 0, records: 0 };
-        modelEntry.inputTokens += record.inputTokens;
-        modelEntry.outputTokens += record.outputTokens;
-        modelEntry.costUsd += record.costUsd;
-        modelEntry.records += 1;
-        summary.byModel[record.model] = modelEntry;
+        summary.byModel[record.model] ??= emptyTotals();
+        accumulate(summary.byModel[record.model] as TokenTotals, record);
 
-        // Daily
-        const dailyEntry = dailyMap.get(record.date) ?? {
-            date: record.date,
-            inputTokens: 0,
-            outputTokens: 0,
-            costUsd: 0,
-            records: 0,
-        };
-        dailyEntry.inputTokens += record.inputTokens;
-        dailyEntry.outputTokens += record.outputTokens;
-        dailyEntry.costUsd += record.costUsd;
-        dailyEntry.records += 1;
-        dailyMap.set(record.date, dailyEntry);
+        let dailyEntry = dailyMap.get(record.date);
+        if (dailyEntry === undefined) {
+            dailyEntry = { date: record.date, ...emptyTotals() };
+            dailyMap.set(record.date, dailyEntry);
+        }
+        accumulate(dailyEntry, record);
     }
 
     summary.daily = [...dailyMap.values()].sort(byDateAsc);
 
     return summary;
+}
+
+/**
+ * Prompt-cache hit ratio for a totals bucket: cache-read input tokens over total billed
+ * input tokens, in `[0, 1]`.
+ *
+ * Returns `null` — never 0 — when the ratio is not knowable: no records carried provider
+ * usage, or there were no input tokens to divide by. A `null` here is the "unavailable"
+ * that callers must render as such rather than as 0%, honoring the 0281/0284 never-fabricate
+ * invariant: absent telemetry is unknown, not a real zero.
+ */
+export function cacheHitRatio(
+    totals: Pick<TokenTotals, 'inputTokens' | 'cacheReadTokens' | 'recordsWithUsage'>,
+): number | null {
+    if (totals.recordsWithUsage === 0) return null;
+    if (totals.inputTokens === 0) return null;
+    return totals.cacheReadTokens / totals.inputTokens;
 }
 
 /** Format a human-readable analytics summary string. */
@@ -83,6 +97,7 @@ export function formatSummary(summary: AnalyticsSummary): string {
     lines.push(
         `Total: ${totalInput}M input / ${totalOutput}M output tokens · $${totalCost} · ${summary.totals.records} records`,
     );
+    lines.push(`Cache hit: ${formatRatio(cacheHitRatio(summary.totals))} of input tokens served from cache`);
     lines.push('');
 
     // By source
@@ -107,6 +122,12 @@ export function formatSummary(summary: AnalyticsSummary): string {
     }
 
     return lines.join('\n');
+}
+
+/** Render a cache-hit ratio for humans: `42.0%`, or `n/a` when the ratio is unavailable
+ *  (`null`) — never a fabricated `0.0%`. */
+function formatRatio(ratio: number | null): string {
+    return ratio === null ? 'n/a' : `${(ratio * 100).toFixed(1)}%`;
 }
 
 /** Comparator that orders daily entries by ISO date string, ascending. */

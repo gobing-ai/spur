@@ -3,6 +3,37 @@ import type { DbAdapter } from '@gobing-ai/ts-db';
 import { aggregateCosts, computeRecordCost, formatSummary, resolvePricing } from '../../src/analytics';
 import { byCostDesc, byDateAsc } from '../../src/analytics/costs';
 import { etlToCostRecord, extractClaudeTokens, queryAllEtlRecords, queryEtlRecords } from '../../src/analytics/query';
+import type { CostRecord, TokenTotals } from '../../src/analytics/types';
+
+/** CostRecord with cache/usage fields defaulted — a test states only what it exercises. */
+function rec(partial: Partial<CostRecord> = {}): CostRecord {
+    return {
+        source: 'claude',
+        date: '2026-05-30',
+        model: 'claude-sonnet-4-20250514',
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+        usageReported: true,
+        costUsd: 0,
+        ...partial,
+    };
+}
+
+/** TokenTotals bucket with cache/usage fields defaulted. */
+function totals(partial: Partial<TokenTotals> = {}): TokenTotals {
+    return {
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+        costUsd: 0,
+        records: 0,
+        recordsWithUsage: 0,
+        ...partial,
+    };
+}
 
 describe('analytics', () => {
     test('resolves model pricing', () => {
@@ -16,44 +47,22 @@ describe('analytics', () => {
     });
 
     test('computes record costs from token counts', () => {
-        const raw = {
-            source: 'claude',
-            date: '2026-05-30',
-            model: 'claude-sonnet-4-20250514',
-            inputTokens: 1_000_000,
-            outputTokens: 500_000,
-            costUsd: 0,
-        };
+        const raw = rec({ inputTokens: 1_000_000, outputTokens: 500_000 });
         const priced = computeRecordCost(raw);
         expect(priced.costUsd).toBeCloseTo(10.5, 1); // 1M * $3/1M + 0.5M * $15/1M = 3 + 7.5 = 10.5
     });
 
     test('aggregates records into summary', () => {
         const records = [
-            {
-                source: 'claude',
-                date: '2026-05-30',
-                model: 'claude-sonnet-4-20250514',
-                inputTokens: 1_000_000,
-                outputTokens: 500_000,
-                costUsd: 10.5,
-            },
-            {
+            rec({ inputTokens: 1_000_000, outputTokens: 500_000, costUsd: 10.5 }),
+            rec({
                 source: 'gemini',
-                date: '2026-05-30',
                 model: 'gemini-2.5-flash',
                 inputTokens: 2_000_000,
                 outputTokens: 1_000_000,
                 costUsd: 0.9,
-            },
-            {
-                source: 'claude',
-                date: '2026-05-31',
-                model: 'claude-sonnet-4-20250514',
-                inputTokens: 500_000,
-                outputTokens: 200_000,
-                costUsd: 4.5,
-            },
+            }),
+            rec({ date: '2026-05-31', inputTokens: 500_000, outputTokens: 200_000, costUsd: 4.5 }),
         ];
 
         const summary = aggregateCosts(records);
@@ -88,22 +97,12 @@ describe('analytics', () => {
     });
 
     test('formats summary as readable text', () => {
+        const bucket = totals({ inputTokens: 3_000_000, outputTokens: 1_500_000, costUsd: 12.34, records: 2 });
         const summary = {
-            totals: { inputTokens: 3_000_000, outputTokens: 1_500_000, costUsd: 12.34, records: 2 },
-            bySource: {
-                claude: { inputTokens: 3_000_000, outputTokens: 1_500_000, costUsd: 12.34, records: 2 },
-            },
-            byModel: {
-                'claude-sonnet-4-20250514': {
-                    inputTokens: 3_000_000,
-                    outputTokens: 1_500_000,
-                    costUsd: 12.34,
-                    records: 2,
-                },
-            },
-            daily: [
-                { date: '2026-05-30', inputTokens: 3_000_000, outputTokens: 1_500_000, costUsd: 12.34, records: 2 },
-            ],
+            totals: bucket,
+            bySource: { claude: bucket },
+            byModel: { 'claude-sonnet-4-20250514': bucket },
+            daily: [{ date: '2026-05-30', ...bucket }],
         };
 
         const text = formatSummary(summary);
@@ -122,7 +121,13 @@ describe('analytics', () => {
             content: 'hello',
             usage: { input_tokens: 1500, output_tokens: 800 },
         });
-        expect(tokens).toEqual({ inputTokens: 1500, outputTokens: 800 });
+        expect(tokens).toEqual({
+            inputTokens: 1500,
+            outputTokens: 800,
+            cacheReadTokens: 0,
+            cacheCreationTokens: 0,
+            usageReported: true,
+        });
 
         const withCache = extractClaudeTokens({
             source_record_id: 'msg-2',
@@ -135,14 +140,26 @@ describe('analytics', () => {
                 cache_creation_input_tokens: 50,
             },
         });
-        expect(withCache).toEqual({ inputTokens: 650, outputTokens: 200 });
+        expect(withCache).toEqual({
+            inputTokens: 650, // total: 100 + 500 + 50
+            outputTokens: 200,
+            cacheReadTokens: 500,
+            cacheCreationTokens: 50,
+            usageReported: true,
+        });
 
         const noUsage = extractClaudeTokens({
             source_record_id: 'msg-3',
             created_at: '2026-05-30T00:00:00Z',
             content: 'no usage',
         });
-        expect(noUsage).toEqual({ inputTokens: 0, outputTokens: 0 });
+        expect(noUsage).toEqual({
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheReadTokens: 0,
+            cacheCreationTokens: 0,
+            usageReported: false,
+        });
     });
 
     test('converts ETL payload to cost record with fallback estimation', () => {

@@ -23,47 +23,61 @@ async function setupEtlDb(): Promise<DbAdapter> {
 
 describe('analytics query', () => {
     describe('extractClaudeTokens', () => {
-        test('returns tokens from usage', () => {
+        test('returns tokens from usage and flags usage as reported', () => {
             const result = extractClaudeTokens({
                 source_record_id: 'test-1',
                 created_at: '2026-01-01T00:00:00Z',
                 content: 'hello',
                 usage: { input_tokens: 100, output_tokens: 50 },
             });
-            expect(result).toEqual({ inputTokens: 100, outputTokens: 50 });
+            expect(result).toEqual({
+                inputTokens: 100,
+                outputTokens: 50,
+                cacheReadTokens: 0,
+                cacheCreationTokens: 0,
+                usageReported: true,
+            });
         });
 
-        test('returns zeros for null usage', () => {
+        test('returns zeros and usageReported=false for null usage', () => {
             const result = extractClaudeTokens({
                 source_record_id: 'test-2',
                 created_at: '2026-01-01T00:00:00Z',
                 content: 'hello',
                 usage: null,
             });
-            expect(result).toEqual({ inputTokens: 0, outputTokens: 0 });
+            expect(result).toEqual({
+                inputTokens: 0,
+                outputTokens: 0,
+                cacheReadTokens: 0,
+                cacheCreationTokens: 0,
+                usageReported: false,
+            });
         });
 
-        test('returns zeros for undefined usage', () => {
+        test('returns zeros and usageReported=false for undefined usage', () => {
             const result = extractClaudeTokens({
                 source_record_id: 'test-3',
                 created_at: '2026-01-01T00:00:00Z',
                 content: 'hello',
             });
-            expect(result).toEqual({ inputTokens: 0, outputTokens: 0 });
+            expect(result.usageReported).toBe(false);
+            expect(result.inputTokens).toBe(0);
         });
 
-        test('includes cache read tokens in input', () => {
+        test('reports cache read tokens in the split AND folded into input total', () => {
             const result = extractClaudeTokens({
                 source_record_id: 'test-4',
                 created_at: '2026-01-01T00:00:00Z',
                 content: '',
                 usage: { input_tokens: 100, output_tokens: 50, cache_read_input_tokens: 200 },
             });
-            expect(result.inputTokens).toBe(300);
+            expect(result.inputTokens).toBe(300); // total stays fresh+read+create
+            expect(result.cacheReadTokens).toBe(200); // and the split is now preserved
             expect(result.outputTokens).toBe(50);
         });
 
-        test('includes cache creation tokens in input', () => {
+        test('reports cache creation tokens in the split AND folded into input total', () => {
             const result = extractClaudeTokens({
                 source_record_id: 'test-5',
                 created_at: '2026-01-01T00:00:00Z',
@@ -71,16 +85,19 @@ describe('analytics query', () => {
                 usage: { input_tokens: 100, output_tokens: 50, cache_creation_input_tokens: 75 },
             });
             expect(result.inputTokens).toBe(175);
+            expect(result.cacheCreationTokens).toBe(75);
         });
 
-        test('treats non-number token values as 0', () => {
+        test('treats non-number token values as 0 but still flags usage present', () => {
             const result = extractClaudeTokens({
                 source_record_id: 'test-6',
                 created_at: '2026-01-01T00:00:00Z',
                 content: '',
                 usage: { input_tokens: 'not-a-number', output_tokens: null },
             });
-            expect(result).toEqual({ inputTokens: 0, outputTokens: 0 });
+            expect(result.inputTokens).toBe(0);
+            expect(result.outputTokens).toBe(0);
+            expect(result.usageReported).toBe(true); // a usage object WAS present, just malformed
         });
     });
 
@@ -100,7 +117,40 @@ describe('analytics query', () => {
             expect(record.model).toBe('claude-sonnet-4-20250514');
             expect(record.inputTokens).toBe(1000);
             expect(record.outputTokens).toBe(200);
+            expect(record.usageReported).toBe(true);
             expect(record.costUsd).toBe(0);
+        });
+
+        test('carries the cache split onto the record', () => {
+            const record = etlToCostRecord(
+                {
+                    source_record_id: 'test-cache',
+                    created_at: '2026-01-01T00:00:00Z',
+                    content: '',
+                    model: 'claude-sonnet-4-20250514',
+                    usage: {
+                        input_tokens: 300,
+                        output_tokens: 100,
+                        cache_read_input_tokens: 600,
+                        cache_creation_input_tokens: 100,
+                    },
+                },
+                'claude',
+            );
+            expect(record.inputTokens).toBe(1000); // 300 + 600 + 100
+            expect(record.cacheReadTokens).toBe(600);
+            expect(record.cacheCreationTokens).toBe(100);
+            expect(record.usageReported).toBe(true);
+        });
+
+        test('length-estimated record leaves usageReported false so cache reads as unknown', () => {
+            const record = etlToCostRecord(
+                { source_record_id: 'test-est', created_at: '2026-01-01T00:00:00Z', content: 'a'.repeat(40) },
+                'pi',
+            );
+            expect(record.usageReported).toBe(false);
+            expect(record.cacheReadTokens).toBe(0);
+            expect(record.outputTokens).toBe(10); // ceil(40/4)
         });
 
         test('estimates outputTokens from content length when no usage', () => {
