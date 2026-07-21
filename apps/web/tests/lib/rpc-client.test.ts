@@ -85,8 +85,10 @@ describe('rpc client', () => {
     test('logTransportError dispatches api-error custom event', () => {
         const dispatched: CustomEvent[] = [];
         const origDispatch = globalThis.dispatchEvent;
-        // biome-ignore lint/suspicious/noExplicitAny: test mock
-        globalThis.dispatchEvent = ((ev: Event) => dispatched.push(ev as CustomEvent)) as any;
+        globalThis.dispatchEvent = (ev: Event): boolean => {
+            dispatched.push(ev as CustomEvent);
+            return true;
+        };
         try {
             logTransportError(new Error('boom'));
             expect(dispatched).toHaveLength(1);
@@ -100,8 +102,10 @@ describe('rpc client', () => {
     test('onError adapter interceptor catches a transport failure', async () => {
         const dispatched: CustomEvent[] = [];
         const origDispatch = globalThis.dispatchEvent;
-        // biome-ignore lint/suspicious/noExplicitAny: test mock
-        globalThis.dispatchEvent = ((ev: Event) => dispatched.push(ev as CustomEvent)) as any;
+        globalThis.dispatchEvent = (ev: Event): boolean => {
+            dispatched.push(ev as CustomEvent);
+            return true;
+        };
         const client = createORPCClient(
             new OpenAPILink(contract, {
                 url: 'http://127.0.0.1:1/api',

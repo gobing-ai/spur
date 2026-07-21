@@ -17,10 +17,15 @@ function app() {
     return a;
 }
 
+/** Error envelope shape asserted by these tests (matches globalErrorHandler output). */
+interface ErrorEnvelope {
+    ok: boolean;
+    error: { code: string; message?: string; details: Record<string, unknown> };
+}
+
 /** Parse JSON response body — cast for test assertions (Hono returns unknown). */
-// biome-ignore lint/suspicious/noExplicitAny: test helper for JSON body assertions
-async function json(res: Response): Promise<any> {
-    return res.json();
+async function json(res: Response): Promise<ErrorEnvelope> {
+    return (await res.json()) as ErrorEnvelope;
 }
 
 describe('globalErrorHandler', () => {

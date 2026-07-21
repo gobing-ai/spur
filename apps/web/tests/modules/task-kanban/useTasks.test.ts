@@ -132,6 +132,18 @@ describe('useTasks', () => {
     });
 });
 
+/** Test-only view of TaskStore's private SSE callbacks. */
+type TaskStorePrivates = {
+    handleSSEOpen: () => void;
+    handleSSEMessage: () => void;
+    handleSSEError: () => void;
+};
+
+/** Access TaskStore's private SSE handlers for direct invocation in tests. */
+function privates(store: TaskStore): TaskStorePrivates {
+    return store as unknown as TaskStorePrivates;
+}
+
 describe('TaskStore SSE callbacks', () => {
     test('handleSSEOpen sets connected=true and emits', () => {
         const listFn = async () => ({ data: [] });
@@ -140,8 +152,7 @@ describe('TaskStore SSE callbacks', () => {
         store.subscribe(() => {
             result.notified = true;
         });
-        // biome-ignore lint/complexity/useLiteralKeys: access private method for testing
-        store['handleSSEOpen']();
+        privates(store).handleSSEOpen();
         expect(store.getState().connected).toBe(true);
         expect(result.notified).toBe(true);
     });
@@ -153,8 +164,7 @@ describe('TaskStore SSE callbacks', () => {
             return { data: [] };
         };
         const store = new TaskStore(listFn);
-        // biome-ignore lint/complexity/useLiteralKeys: access private method for testing
-        store['handleSSEMessage']();
+        privates(store).handleSSEMessage();
 
         // refresh is async; wait one microtick
         await new Promise((r) => setTimeout(r, 10));
@@ -168,8 +178,7 @@ describe('TaskStore SSE callbacks', () => {
         store.subscribe(() => {
             result.notified = true;
         });
-        // biome-ignore lint/complexity/useLiteralKeys: access private method for testing
-        store['handleSSEError']();
+        privates(store).handleSSEError();
         expect(store.getState().connected).toBe(false);
         expect(result.notified).toBe(true);
     });

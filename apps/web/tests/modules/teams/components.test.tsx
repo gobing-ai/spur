@@ -104,7 +104,7 @@ mock.module('@/ui', () => {
     function Modal(props: Record<string, unknown>) {
         if (!props.open) return null;
         const rest: Record<string, unknown> = {};
-        const onClose = props.onClose as React.MouseEventHandler | undefined;
+        const onClose = props.onClose as (() => void) | undefined;
         for (const key of Object.keys(props)) {
             if (
                 key.startsWith('data-') ||
@@ -117,8 +117,15 @@ mock.module('@/ui', () => {
             }
         }
         return (
-            // biome-ignore lint/a11y/noStaticElementInteractions: test mock Modal
-            <div {...rest} onClick={onClose} role="presentation">
+            <div
+                {...rest}
+                role="dialog"
+                aria-modal="true"
+                onClick={() => onClose?.()}
+                onKeyDown={(e) => {
+                    if (e.key === 'Escape') onClose?.();
+                }}
+            >
                 {props.children as React.ReactNode}
             </div>
         );
