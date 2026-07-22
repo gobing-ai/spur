@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.3.4
+version: 1.3.5
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-07-18
+updated_at: 2026-07-22
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -32,6 +32,7 @@ detail-first then index (§4.5 rule 5 / T9).
 | [`dev-plan-design-doc-generation.md`](design/dev-plan-design-doc-generation.md) | `/sp:dev-plan` design-doc step — `--design`/`--auto` flags, seam heuristic, satellite + index authoring (0124) | implemented |
 | [`dev-agent-flag-and-dogfood-skill.md`](design/dev-agent-flag-and-dogfood-skill.md) | `--agent` on dev-refine/plan/brainstorm (threaded, not theater) + `sp:dogfood-testing` backbone extraction with enhanced report/ledger (0125) | implemented |
 | [`e2e-workflow-for-system-development.md`](design/e2e-workflow-for-system-development.md) | End-to-end workflow system for system development — pipeline architecture, design step auto-detection, HITL gate model, doc-sync boundary (0167) | design |
+| [`portable-agents-harness-contract.md`](design/portable-agents-harness-contract.md) | `spur init` root `AGENTS.md` seed — complementary Spur/Superskill ownership, portable routing, conditional root `DESIGN.md` | implemented |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See
@@ -95,7 +96,11 @@ clobbering a configured project. `--json` emits
   one-line edit, no control-flow change. **AGENTS.md** (`preserve: true`): when scaffolding a
   *new* file from `config/templates/AGENTS.md`, init substitutes `{project-name}` (from `--name`
   or cwd basename) and `{project-description}` (stub: `local Spur project`) so fresh projects
-  never ship residual brace tokens (task 0242). Existing customized AGENTS.md is never overwritten.
+  never ship residual brace tokens (task 0242). The seed names Spur and Superskill as complementary
+  first-class harness tools, routes each operation to its owning plane, and conditionally makes a
+  repository-root `DESIGN.md` authoritative for UI/UX work without colliding with this doc's surface
+  ownership (task 0312; [portable contract](design/portable-agents-harness-contract.md)). Existing
+  customized AGENTS.md is never overwritten.
 
 - **`/sp:spur-init` owns content adaptation only.** Calls `spur init` as its first step, then
   performs three classes of adaptation. Two probes sit between scaffold and customization:

@@ -3,7 +3,7 @@
 Entry point for AI coding agents. `CLAUDE.md` and `GEMINI.md` symlink here.
 
 **Read first every session.** Lean: harness routing + this monorepo’s facts + where depth lives.
-Does **not** restate skill runbooks or the full `spur` verb catalog.
+Does **not** restate skill runbooks or the full `spur` / `superskill` verb catalogs.
 
 Portable harness sections (any Spur-managed project) are the pattern in
 `config/templates/AGENTS.md` (seeded by `spur init`). **This file is the Spur monorepo instance** —
@@ -18,8 +18,9 @@ pi, omp, OpenCode, Antigravity, OpenClaw, Hermes, Grok). Not a coding agent and 
 platform: it wraps agents you already run, adding discipline, constraints, workflows, history
 analytics, and ops visibility.
 
-**This monorepo is Spur.** Develop it **with** Spur: `spur` CLI + `/sp:dev-*` commands + `sp:*`
-subagents/skills are first-class for planning, execution, constraints, and docs hygiene.
+**This monorepo is Spur.** Develop it with the complementary first-class harness pair: `spur` CLI +
+`/sp:dev-*` commands + `sp:*` subagents/skills for project lifecycle, constraints, and docs hygiene;
+`superskill` for cross-agent plugin installation and capability authoring/quality lifecycle.
 
 ---
 
@@ -47,6 +48,8 @@ Agents need not know “plugin packing.” Use these **entry surfaces**:
 | Docs drift / sync / lessons                            | Skill **`sp:doc-evolve`** + `docs/99_PROJECT_CONSTITUTION.md`       | Patching derived docs over authority     |
 | Wrap completed work                                    | `/sp:dev-wrap`, `/sp:dev-wrapall`                                   | Skipping learnings / doc sync            |
 | Session index / memory                                 | Skill **`sp:indexed-context`** + `.spur/context/`                   | Full-tree re-reads every turn            |
+| Install / sync a plugin across coding agents           | **`superskill install <plugin>`**                                   | Hand-copying per-platform adapters       |
+| Capability authoring / quality lifecycle               | **`superskill <noun> --help`** (`agent`, `skill`, `command`, `hook`, `magent`) | Bypassing the noun's validation / evaluation gates |
 
 **Non-negotiable (unless operator overrides):**
 
@@ -57,10 +60,13 @@ Agents need not know “plugin packing.” Use these **entry surfaces**:
 3. **`--json` for machines** — parse CLI with `--json`.
 4. **Route, don’t invent** — verbs → `sp:spur-cli`; lifecycle → `/sp:dev-*` / `sp:super-coder`;
    multi-noun corpus → `sp:expert-spur`; review → `sp:super-reviewer`; docs process → `sp:doc-evolve`.
+5. **Keep tool ownership explicit** — project lifecycle/corpus/gates → Spur; plugin installation and
+   capability lifecycle → Superskill. Do not hand-maintain per-platform adapters Superskill generates.
 
 **Platform fallback:** Platforms without slash commands and/or subagents still use the harness.
-Equivalent path: skills `sp:spur-dev`, `sp:spur-cli`, `sp:code-verification` (and related) plus the
-`spur` CLI. Do not invent a parallel process because `/sp:dev-*` is unavailable.
+Install the plugin through Superskill for the target platform, then use skills `sp:spur-dev`,
+`sp:spur-cli`, `sp:code-verification` (and related) plus the `spur` CLI. Do not invent a parallel
+process because `/sp:dev-*` is unavailable.
 
 Invoke CLI: `spur …` on PATH, or in this monorepo `bun run apps/cli/src/index.ts …`.
 
@@ -89,6 +95,19 @@ authority first, then derived docs, then this file.
 
 **Routing:** decision → `00`; scope → `01`; mechanism → `03`; surface → `04`; phase → `02`;
 feature status → `05`. Working layers §4.2; audits §7; satellites §4.5.
+
+---
+
+## Design system
+
+**Conditional contract:** If repository-root `DESIGN.md` exists, read it before planning or
+implementing any change to UI, styling, interaction, accessibility, or responsive behavior. Treat
+it as the project source of truth for visual and interaction design — tokens, components, patterns,
+and UX constraints — and keep affected work consistent with it. If it is absent, continue with the
+project's established UI conventions.
+
+Root `DESIGN.md` owns UI/UX guidance; `docs/04_DESIGN.md` still owns command, config, schema, and DTO
+surface shapes under the doc map above.
 
 ---
 
@@ -217,6 +236,22 @@ spur <noun> --help
 
 Full shapes: `docs/04_DESIGN.md` (T3 same-commit). Planning depth: ADR-020–023 / ADR-028,
 `docs/03_ARCHITECTURE.md §12`, `docs/05_FEATURES.md §9`. Board: web Task Kanban (not `kanban.md`).
+
+---
+
+## Superskill CLI surface
+
+**Ownership boundary:** Superskill is the install-time portability and capability-quality plane;
+Spur remains the project lifecycle and deterministic corpus/ops plane.
+
+```bash
+superskill install <plugin> --dry-run
+superskill install <plugin> --targets <list>
+superskill <agent|skill|command|hook|magent> --help
+```
+
+Use `superskill <noun> --help` for the current lifecycle verbs and flags. Do not duplicate its full
+catalog here or maintain generated per-platform capability copies in the project.
 
 ---
 
