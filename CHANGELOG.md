@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.3.18] — 2026-07-21
+
+### New Features
+
+- **Workflow trace per-step cost and cache-hit (task 0311).** `spur workflow trace <run-id>` now renders token cost and cache-hit ratio per `agent.run` step, joined from imported history ETL records. Cost appears as `$X.XXX · cache Y%` for exact session-id joins (R1a), `~...` for time-window heuristic estimates (R1b fallback), and `cost n/a` when no usage data is available (never `$0.00` — 0281/0284 never-fabricate invariant). Unjoined steps append a `spur history import` hint. The `--json` output gains an additive, nullable per-action `cost` object. ETL tables are loaded once per trace and matched in memory — no re-scan per action.
+
+- **Workflow run observability design locked (task 0310).** The design record for feature P settles six decisions: engine seam (widened `saveActionStart` with optional 4th param), verbosity model (`--detail <quiet|normal|verbose|debug>` with TTY auto-degrade), two-line step formats with terminal-width-aware truncation and `ActionRedactor` support, FSM transition rendering under verbose mode, CLI-side elapsed liveness timer (TTY) / periodic heartbeat (non-TTY), and `spur workflow trace --follow` for async runs. Token cost display slot reserved with `[cost unavailable]` rendering; acquisition deferred to task 0311.
+
+- **Analytics cache split.** `extractClaudeTokens` now preserves `cache_read_input_tokens` and `cache_creation_input_tokens` separately instead of folding them into `inputTokens`. `CostRecord` gains `cacheReadTokens`, `cacheCreationTokens`, and `usageReported` fields. `cacheHitRatio(totals)` returns `number | null` — `null` means unavailable (never fabricated 0%). `formatSummary` shows cache hit ratio; `formatRatio` renders `n/a` for null and `42.0%` otherwise.
+
+- **Stage-registry adapter from shared metadata (task 0308).** The stage-registry feature pipeline ships a code-generated adapter (`plugins/sp/scripts/stage-registry-adapter.ts`) that maps the stage-registry schema to CLI/Task corpus operations, with command structure validation and batch-preflight logic supporting execution-mode (`--dry-run` / `--auto`) and worktree isolation.
+
+- **CLI `sections` verb (task 0306).** `spur task sections init/add/list` for managing canonical task sections — part of the progressive-disclosure envelope implementation.
+
+- **Task dependency mutation (task 0303).** `spur task depend add <wbs> <dep-wbs>` and `spur task depend rm <wbs> <dep-wbs>` for safe dependency management via the CLI, with validation against circular references.
+
+- **Context-envelope layers (task 0306).** Progressive disclosure, attribution, and invalidation for task envelope storage with canonical serialization — production-grade review findings propagation and disclosure-budget enforcement.
+
+### Improvements
+
+- **run-cost module optimized for single-pass ETL loading.** `matchEtlForAction` split into `loadAllEtlPayloads` (one DB scan per trace) and `matchEtlPayloads` (pure in-memory join per action). `EtlMatch` return type bundles both matched records and the estimated flag, so callers no longer need to extract session ids separately.
+
+- **Commands as SSOT (ADR-032).** The `plugins/sp` skill structure now treats commands as the single source of truth for CLI verb definitions, replacing the prior adapter-generation approach. Adapter validation replaces generation — `validate-commands.ts` checks command structure against the intended contract instead of producing derived code.
+
+### Bug Fixes
+
+- **Feature check accepts scaffold forms in scope delineation.** `spur feature check` no longer rejects features whose acceptance criteria include partial or scaffold-level steps.
+
+- **Web accessibility suppressions removed.** Replaced `biome-ignore` suppressions in `apps/web` with accessible markup patterns — no silently hidden violations in the frontend.
+
+- **Envelope review fixes.** Disclosure budgets now cap correctly; empty-hash guard prevents zero-length content from passing verification; AC and Solution sections are properly filled during envelope serialization.
+
+- **`UNIVERSAL_SECTIONS` included in canonical getter.** The universal section set (History, References) is now included in `canonicalSections` lookups, so they appear in task metadata without special-casing.
+
+- **Feature O tasks wrapped in auto-generated markers.** Auto-generated tasks in feature O now carry correct `<!-- AUTO-GENERATED ... -->` markers for lifecycle tracking.
+
 ## [0.3.16] - 2026-07-19
 
 ### Fixed
@@ -115,7 +151,7 @@
 
 ### Added
 
-- **Teams board — a full module for managing agent teams from the web.** `spur team up` / `spur team down` / `spur team status` CLI verbs drive a persistent agent loop that the supervisor self-drains. A new web module (board) hosts four tabs: **Terminal** (team → member cascading dropdowns with live status badges, localStorage-persisted selection, start/stop with confirmation modal, stdin POST, local echo, and message enqueue for loop agents), **Processes** (live watch list with team / source / running-only filters and a per-row Attach button that jumps to the member's terminal), **Messages** (per-member inbox with `EventSource` live-tail that refetches on `message.sent` / `message.replied`), and **Activity** (timeline of team / message / agent / supervisor events). A bulk Up/Down control strip sits above the tabs and replaces the prior Roster surface (M1).
+- **Teams board — a full module for managing agent teams from the web.** `spur team up` / `spur team down` / `spur team status` CLI verbs drive a persistent agent loop that the supervisor self-drains. A new web module (board) hosts four tabs: **Terminal** (team → member cascading dropdowns with live status badges, localStorage-persisted selection, start/stop with confirmation modal, stdin POST, local echo, and message enqueue for loop agents), **Processes** (live watch list with team / source / running-only filters and a per-row Attach button that jumps to the member's terminal), **Messages** (per-member inbox with `EventSource` live-tail that refetches on `message.sent` / `message.replied`), and **Activity** (timeline of team / message / agent / supervisor …
 
 - **Cross-process registry exposes every harness-launched run.** A new `ProcessRegistry` records supervisor-tracked processes **and** one-shot agent executions. `apps/server` now injects the registry into the team module so `GET /api/team/processes` returns the full inventory — supervisor-tracked rows, ad-hoc `spur agent` runs, and descendants — with a `teamId` tag derived from `spec.tags.team:<id>` for grouping.
 
