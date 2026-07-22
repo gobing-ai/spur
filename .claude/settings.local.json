@@ -54,5 +54,25 @@
       "Edit(//tmp/**)",
       "Edit(//private/tmp/**)"
     ]
+  },
+  "skillOverrides": {
+    "agents-sdk": "off",
+    "cloudflare": "off",
+    "cloudflare-email-service": "off",
+    "cloudflare-one": "off",
+    "cloudflare-one-migrations": "off",
+    "durable-objects": "off",
+    "openclaw-task-management": "off",
+    "paseo": "off",
+    "paseo-advisor": "off",
+    "paseo-committee": "off",
+    "paseo-epic": "off",
+    "paseo-handoff": "off",
+    "paseo-loop": "off",
+    "paseo-orchestrate": "off",
+    "sandbox-sdk": "off",
+    "turnstile-spin": "off",
+    "web-perf": "off",
+    "workers-best-practices": "off"
   }
 }
