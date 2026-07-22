@@ -114,7 +114,7 @@ describe('AGENTS portable harness sections stay aligned with init template', () 
         expect(new Set(rootKeys)).toEqual(new Set(templateKeys));
     });
 
-    test('both files carry Platform fallback, Long-tail, and Outside spur-cli anchors', () => {
+    test('both files carry the stable portable prose anchors', () => {
         for (const [label, content] of [
             [rootLabel, root],
             [seedLabel, template],

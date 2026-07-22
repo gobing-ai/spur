@@ -9,6 +9,11 @@ Surface index row: [`04_DESIGN.md §0`](../04_DESIGN.md).
 portable first-session contract for any Spur-managed project; project-specific stack, command, and
 boundary slots remain explicit customization stubs.
 
+The seed names the numbered documents but does not hard-code constitution section numbers. The
+bundled bootstrap constitution is intentionally abbreviated before customization, while a mature
+project carries the full canonical constitution; stable concepts survive both shapes, section
+numbers do not.
+
 ## Harness ownership
 
 The seed presents two complementary first-class tools:

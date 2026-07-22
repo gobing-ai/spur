@@ -194,7 +194,13 @@ describe('spur init template copy', () => {
         expect(content).toContain('## Indexed context');
         expect(content).toContain('## Harness-first contract');
         expect(content).toContain('### Harness tool routing');
+        expect(content).toContain('### Doc map');
+        expect(content).toContain('Working-layer, audit, and satellite rules live in the project constitution.');
         expect(content).toContain('**Platform fallback:**');
+        expect(content).toContain('## Design system');
+        expect(content).toContain('repository-root `DESIGN.md`');
+        expect(content).toContain('## Superskill CLI surface');
+        expect(content).toContain('superskill install <plugin>');
     });
 
     test('AGENTS.md is preserved under --force (task 0232)', async () => {

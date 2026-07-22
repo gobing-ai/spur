@@ -4,7 +4,7 @@ Entry point for AI coding agents in this repository. Symlink `CLAUDE.md` / `GEMI
 equivalents) here when the platform expects those names.
 
 **Read this first every session.** Lean: harness routing + project facts + where depth lives.
-Does **not** restate skill runbooks or the full `spur` verb catalog.
+Does **not** restate skill runbooks or the full `spur` / `superskill` verb catalogs.
 
 ---
 
@@ -13,9 +13,16 @@ Does **not** restate skill runbooks or the full `spur` verb catalog.
 <!-- PROJECT-SPECIFIC: filled by `spur init` (`{project-name}` / `{project-description}`). -->
 **{project-name}** — {project-description}.
 
-This project uses **Spur** as its harness: the `spur` CLI for deterministic corpus/ops, and Spur’s
-agent surface (`/sp:dev-*` commands + `sp:*` subagents/skills) for planning, execution, review, and
-docs hygiene. Prefer the harness over ad-hoc process unless the operator overrides for a one-off.
+This project uses two complementary first-class harness tools:
+
+- **Spur** — `spur` provides deterministic project corpus/ops; the `sp` agent surface
+  (`/sp:dev-*` commands + `sp:*` subagents/skills) drives planning, execution, review, and docs
+  hygiene.
+- **Superskill** — `superskill` installs plugin capabilities across supported coding agents and
+  manages the authoring and quality lifecycle for skills, commands, agents, hooks, and main-agent
+  configs.
+
+Prefer these entry surfaces over ad-hoc process unless the operator overrides for a one-off.
 
 ---
 
@@ -41,6 +48,8 @@ All product development work goes through the harness by default.
 | Docs drift / sync / lessons | Skill **`sp:doc-evolve`** + `docs/99_PROJECT_CONSTITUTION.md` | Patching derived docs over authority |
 | Wrap completed work | `/sp:dev-wrap`, `/sp:dev-wrapall` | Skipping learnings / doc sync |
 | Session index / memory | Skill **`sp:indexed-context`** + `.spur/context/` | Full-tree re-reads every turn |
+| Install / sync a plugin across coding agents | **`superskill install <plugin>`** | Hand-copying per-platform adapters |
+| Capability authoring / quality lifecycle | **`superskill <noun> --help`** (`agent`, `skill`, `command`, `hook`, `magent`) | Bypassing the noun's validation / evaluation gates |
 
 **Non-negotiable (unless operator overrides):**
 
@@ -51,10 +60,13 @@ All product development work goes through the harness by default.
 3. **`--json` for machines** — parse CLI with `--json`.
 4. **Route, don’t invent** — verbs → `sp:spur-cli`; lifecycle → `/sp:dev-*` / `sp:super-coder`;
    multi-noun corpus → `sp:expert-spur`; review → `sp:super-reviewer`; docs process → `sp:doc-evolve`.
+5. **Keep tool ownership explicit** — project lifecycle/corpus/gates → Spur; plugin installation and
+   capability lifecycle → Superskill. Do not hand-maintain per-platform adapters Superskill generates.
 
 **Platform fallback:** Platforms without slash commands and/or subagents still use the harness.
-Equivalent path: skills `sp:spur-dev`, `sp:spur-cli`, `sp:code-verification` (and related) plus the
-`spur` CLI. Do not invent a parallel process because `/sp:dev-*` is unavailable.
+Install the plugin through Superskill for the target platform, then use skills `sp:spur-dev`,
+`sp:spur-cli`, `sp:code-verification` (and related) plus the `spur` CLI. Do not invent a parallel
+process because `/sp:dev-*` is unavailable.
 
 Invoke CLI: `spur <noun> <verb> … --json` (or the project’s documented dev entry).
 
@@ -68,7 +80,7 @@ Invoke CLI: `spur <noun> <verb> … --json` (or the project’s documented dev e
 **Conflict rule:** lower number wins on content (`00` decisions, `01` scope, `99` process). Fix
 authority first, then derived docs, then this file.
 
-### Doc map (constitution §4.1)
+### Doc map
 
 | Doc | Owns | Authority | When |
 |------|------|-----------|------|
@@ -82,7 +94,20 @@ authority first, then derived docs, then this file.
 | `AGENTS.md` (this file) | **ENTRY** | Derived | First every session |
 
 **Routing:** decision → `00`; scope → `01`; mechanism → `03`; surface → `04`; phase → `02`;
-feature status → `05`. Working layers §4.2; audits §7; satellites §4.5.
+feature status → `05`. Working-layer, audit, and satellite rules live in the project constitution.
+
+---
+
+## Design system
+
+**Conditional contract:** If repository-root `DESIGN.md` exists, read it before planning or
+implementing any change to UI, styling, interaction, accessibility, or responsive behavior. Treat
+it as the project source of truth for visual and interaction design — tokens, components, patterns,
+and UX constraints — and keep affected work consistent with it. If it is absent, continue with the
+project's established UI conventions.
+
+Root `DESIGN.md` owns UI/UX guidance; `docs/04_DESIGN.md` still owns command, config, schema, and DTO
+surface shapes under the doc map above.
 
 ---
 
@@ -122,6 +147,22 @@ spur <noun> --help
 **Outside spur-cli:** Nouns not fully documented in `sp:spur-cli` (`agent`, `history`, `message`,
 `team`, `status`, `migrate`, `serve`, `init`, …) — use only `spur <noun> --help` and
 `docs/04_DESIGN.md`. Never guess flags.
+
+---
+
+## Superskill CLI surface
+
+**Ownership boundary:** Superskill is the install-time portability and capability-quality plane;
+Spur remains the project lifecycle and deterministic corpus/ops plane.
+
+```bash
+superskill install <plugin> --dry-run
+superskill install <plugin> --targets <list>
+superskill <agent|skill|command|hook|magent> --help
+```
+
+Use `superskill <noun> --help` for the current lifecycle verbs and flags. Do not duplicate its full
+catalog here or maintain generated per-platform capability copies in the project.
 
 ---
 

@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-22T19:26:09.959Z"
-updated_at: "2026-07-22T19:40:49.329Z"
+updated_at: "2026-07-22T19:44:20.494Z"
 ---
 
 ## 0312. Review and enhance portable AGENTS.md harness template
@@ -40,16 +40,49 @@ R5. Preserve project-specific customization slots and the constitution's authori
 
 R6. Focused tests and repository quality gates pass; unrelated user changes remain untouched.
 ### Acceptance Criteria
-- [x] AC1 — A fresh scaffold names both `spur` and `superskill` as first-class, complementary
-  harness tools and assigns each only responsibilities supported by current `--help`/plugin docs.
-- [x] AC2 — The harness routing table includes plugin installation and capability lifecycle routes
-  for skills, commands, agents, hooks, and main-agent configs.
-- [x] AC3 — The seed says to read root `DESIGN.md` before UI-facing design or implementation only
-  when the file exists, and treats it as authoritative for the project's design system and UX rules.
-- [x] AC4 — Portable alignment tests lock the new routing/design anchors in both root and seed.
-- [x] AC5 — `docs/04_DESIGN.md` documents the changed `spur init` scaffold surface in the same
-  change, with frontmatter metadata refreshed.
-- [x] AC6 — Focused tests plus lint/test/test-cf/build gates pass and git status is intentional.
+```gherkin
+Feature: Portable AGENTS harness contract
+
+  @core
+  Scenario: R6 — Fresh AGENTS seed exposes Spur and Superskill ownership
+    Given a fresh project scaffolded by spur init
+    When an agent reads the root AGENTS.md
+    Then Spur owns project lifecycle, corpus, and gates
+    And Superskill owns cross-agent plugin installation and capability quality lifecycle
+
+  @core
+  Scenario: R7 — Superskill routes cover installation and capability lifecycle
+    Given the root AGENTS.md harness routing table
+    When plugin or capability work is required
+    Then installation routes to superskill install
+    And capability work routes to the matching superskill noun help
+
+  @core
+  Scenario: R8 — Root DESIGN contract gates UI and UX work conditionally
+    Given a task that changes UI, styling, interaction, accessibility, or responsive behavior
+    When repository-root DESIGN.md exists
+    Then the agent reads it before planning or implementation
+    And treats it as authoritative for visual and interaction design
+    But docs/04_DESIGN.md retains ownership of command, config, schema, and DTO surfaces
+
+  @core
+  Scenario: R9 — Portable root and seed contracts stay aligned
+    Given root AGENTS.md and config/templates/AGENTS.md
+    When the portable harness contract changes
+    Then required headings, routing keys, and stable prose anchors match mechanically
+
+  @core
+  Scenario: R10 — Init surface documentation tracks the AGENTS seed
+    Given a change to the bundled AGENTS.md seed
+    When the change is ready to ship
+    Then docs/04_DESIGN.md and its design satellite describe the scaffold contract in the same change
+
+  @core
+  Scenario: R11 — Portable AGENTS changes pass repository gates
+    Given a portable AGENTS.md contract change
+    When focused scaffold tests and repository verification gates run
+    Then every required gate passes without suppressions
+```
 ### Q&A
 
 <!-- Clarifications and decisions made during refinement. Keep empty if none. -->
@@ -74,22 +107,28 @@ the ownership boundary is being made explicit, not changed.
 - `config/templates/AGENTS.md:101` — adds the conditional root `DESIGN.md` UI/UX contract and
   disambiguates it from `docs/04_DESIGN.md`.
 - `config/templates/AGENTS.md:153` — adds a lean Superskill CLI surface without copying its catalog.
+- `config/templates/AGENTS.md:83` — keeps the doc map portable across abbreviated bootstrap and full
+  project constitutions by avoiding brittle section-number references.
 - `AGENTS.md:20` — keeps the Spur dogfood instance aligned with the portable seed.
 - `apps/cli/tests/fixtures/agents-md-portable-contract.ts:10` — locks the new H2, routing, and prose
   anchors; `apps/cli/tests/init-templates.test.ts:182` proves fresh-scaffold output.
 - `docs/design/portable-agents-harness-contract.md:1` — records the detailed portable surface;
   `docs/04_DESIGN.md:35` indexes it and `docs/04_DESIGN.md:99` syncs the `spur init` contract.
+- `docs/features/A1_init-scaffold-ownership-contract.md:62` — extends the owning feature with R6–R11
+  and links task `0312`; `docs/tasks2/0312_review-and-enhance-portable-agents-md-harness-template.md:9`
+  records the feature edge with matching Gherkin scenarios.
 ### Testing
 | Check | Result | Evidence |
 |---|---|---|
 | Focused portable alignment | PASS | `bun test apps/cli/tests/agents-md-portable-alignment.test.ts` — 4/4 |
-| Focused scaffold behavior | PASS | `bun test apps/cli/tests/init-templates.test.ts` — 19/19 |
+| Focused scaffold behavior | PASS | `bun test apps/cli/tests/init-templates.test.ts` — 19/19, including portable doc-map pointers |
 | Autofix + typecheck | PASS | `bun run autofix` — 525 files clean; all workspace typechecks exit 0 |
 | Comprehensive Spur gate | PASS | `bun run spur-check` — 33 pre-rules + 3,485 tests + 2 post-rules; 99.15% lines |
 | Standalone lint | PASS | `bun run lint` — Biome clean; all workspace typechecks exit 0 |
 | Standalone tests | PASS | `bun run test` — 3,485/3,485; 99.15% lines |
 | Cloudflare tests | PASS | `bun run test-cf` — 1/1 |
 | Production build | PASS | `bun run build` — CLI, server, and web built successfully |
+| Strict traceability | PASS | `spur task check 0312 --strict --json` and `spur feature check A1 --strict --json` — zero findings |
 | Diff hygiene | PASS | `git diff --check` clean; unrelated pre-existing `package.json` edit preserved |
 
 The first sandboxed full-test/Cloudflare attempts failed only on denied `ps`, localhost bind, and

@@ -11,8 +11,10 @@ export const PORTABLE_AGENTS_H2 = [
     '## Project',
     '## Harness-first contract',
     '## Documentation',
+    '## Design system',
     '## Stack & layout',
     '## Spur CLI surface',
+    '## Superskill CLI surface',
     '## Conventions & boundaries',
     '## Indexed context',
 ] as const;
@@ -36,7 +38,15 @@ export const PORTABLE_ROUTING_NEED_KEYS = [
     'Docs drift / sync / lessons',
     'Wrap completed work',
     'Session index / memory',
+    'Install / sync a plugin across coding agents',
+    'Capability authoring / quality lifecycle',
 ] as const;
 
 /** Stable prose anchors required in both files (task 0242 R3/R4). */
-export const PORTABLE_AGENTS_ANCHORS = ['**Platform fallback:**', '**Long-tail:**', '**Outside spur-cli:**'] as const;
+export const PORTABLE_AGENTS_ANCHORS = [
+    '**Platform fallback:**',
+    '**Long-tail:**',
+    '**Outside spur-cli:**',
+    '**Conditional contract:**',
+    '**Ownership boundary:**',
+] as const;
