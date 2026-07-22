@@ -10,7 +10,7 @@ lifecycle step a deterministic entry point.
 > orchestration, history analytics, and operational visibility. The `sp` plugin is the Claude Code
 > plugin surface for that toolkit.
 
-- **Marketplace entry:** `name: "sp"`, `version: "0.3.11"`, `source: "./plugins/sp"` (`plugin.json`,
+- **Marketplace entry:** `name: "sp"`, `version: "0.3.18"`, `source: "./plugins/sp"` (`plugin.json`,
   kept in sync with `.claude-plugin/marketplace.json`).
 - **Owner:** Robin Min.
 

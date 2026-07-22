@@ -20,7 +20,7 @@
                     {
                         "type": "command",
                         "command": "superskill hook run sp context-post-tool",
-                        "timeout": 5
+                        "timeout": 10
                     }
                 ]
             }
@@ -31,18 +31,18 @@
                     {
                         "type": "command",
                         "command": "superskill hook run sp context-session-start",
-                        "timeout": 5
+                        "timeout": 15
                     }
                 ]
             }
         ],
-        "Stop": [
+        "SessionEnd": [
             {
                 "hooks": [
                     {
                         "type": "command",
                         "command": "superskill hook run sp context-session-stop",
-                        "timeout": 5
+                        "timeout": 15
                     }
                 ]
             }

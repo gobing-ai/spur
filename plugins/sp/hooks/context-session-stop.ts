@@ -1,9 +1,12 @@
 #!/usr/bin/env bun
 /**
- * context-session-stop — Stop hook for indexed-context.
+ * context-session-stop — SessionEnd hook for indexed-context (session teardown).
  *
  * Scans `token-ledger.jsonl` for the current session's events, computes rollup totals, appends
- * a `session_end` event, and cleans up `.session.json`.
+ * a `session_end` event, and cleans up `.session.json`. Registered on SessionEnd (not Stop) so it
+ * runs once at true session teardown: on Claude Code the rollup counts the whole session (Stop fired
+ * per-turn and tore down after turn 1), and on Pi/omp it maps to `session_shutdown` — off the
+ * `agent_end`/Stop event where blocking gates (e.g. cc/anti-hallucination) live and would collide.
  *
  * **Fail-open contract:** every error path — missing `.spur/context/`, missing/unparseable
  * `.session.json`, write failure — exits 0 with no output.
