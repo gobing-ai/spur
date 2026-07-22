@@ -5,7 +5,7 @@ import type { CostRecord, EtlPayload } from './types';
 // (SQLite cannot parameterize identifiers). They MUST remain a hardcoded
 // compile-time allowlist — never derive a source table name from user input.
 // `SourceTable` narrows callers to this set so the compiler enforces it.
-const SOURCE_TABLES = [
+export const SOURCE_TABLES = [
     'history_etl_pi',
     'history_etl_claude',
     'history_etl_codex',

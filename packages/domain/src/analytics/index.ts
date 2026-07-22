@@ -6,5 +6,14 @@ export {
     extractClaudeTokens,
     queryAllEtlRecords,
     queryEtlRecords,
+    SOURCE_TABLES,
 } from './query';
+export {
+    type ActionCost,
+    type ActionRunCostRow,
+    actionCost,
+    actionCostEstimated,
+    extractSessionId,
+    matchEtlForAction,
+} from './run-cost';
 export type { AnalyticsSummary, CostRecord, EtlPayload, ModelPricing, TokenTotals } from './types';

@@ -4,7 +4,19 @@ import { access, lstat, readdir, readFile, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
-import { ActionRunDao, createId, PhaseRunDao, RunDao, TaskRunLinkDao, TransitionRunDao } from '@gobing-ai/spur-domain';
+import {
+    type ActionCost,
+    ActionRunDao,
+    actionCost,
+    actionCostEstimated,
+    createId,
+    extractSessionId,
+    matchEtlForAction,
+    PhaseRunDao,
+    RunDao,
+    TaskRunLinkDao,
+    TransitionRunDao,
+} from '@gobing-ai/spur-domain';
 
 import {
     createDefaultWorkflowEngineHost,
@@ -247,6 +259,8 @@ export type TimelineEvent =
           duration: string;
           ok: boolean;
           label: string;
+          /** Per-step cost + cache-hit computed from matched ETL records (R4). Undefined when cost hasn't been computed yet or isn't available. */
+          cost?: ActionCost;
       };
 
 /** Result of a per-run trace with timeline. */
@@ -623,6 +637,23 @@ export class WorkflowAppService {
         const transitionRows = await new TransitionRunDao(db).transitionRowsByRunId(runId);
         const actionRows = await new ActionRunDao(db).actionRowsByRunId(runId);
 
+        // Pre-compute per-step cost for agent.run actions via the history-ETL join (R4).
+        // Costs are computed eagerly before the merge loop so the timeline merge is a
+        // pure lookup — no async I/O inside the ordered-merge.
+        const costByActionId = new Map<string, ActionCost>();
+        for (const a of actionRows) {
+            if (a.kind === 'agent.run') {
+                try {
+                    const matched = await matchEtlForAction(db, a);
+                    const sessionId = extractSessionId(a);
+                    const cost = sessionId ? actionCost(matched, '') : actionCostEstimated(matched, '');
+                    costByActionId.set(a.id, cost);
+                } catch {
+                    // Cost lookup is best-effort — don't break the trace.
+                }
+            }
+        }
+
         const events: TimelineEvent[] = [];
         let pi = 0;
         let ti = 0;
@@ -660,6 +691,7 @@ export class WorkflowAppService {
                     duration: duration,
                     ok: a.ok === 1,
                     label: label,
+                    cost: costByActionId.get(a.id),
                 } as TimelineEvent);
             }
         }

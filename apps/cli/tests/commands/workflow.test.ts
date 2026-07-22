@@ -6,7 +6,10 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { TimelineEvent, WorkflowTraceTimeline } from '@gobing-ai/spur-app';
+import type { ActionCost } from '@gobing-ai/spur-domain';
 import { createMigratedDb } from '@gobing-ai/spur-domain';
+import { formatActionCost, formatTraceTimeline } from '../../src/commands/workflow';
 import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
 import { createCapturedOutput, createTempProject, runCli } from '../helpers';
@@ -790,4 +793,125 @@ terminalStates:
         }
         await rm(cwd, { recursive: true, force: true });
     }, 20_000);
+
+    // ── cancel without --json ──
+
+    test('cancel without --json reports not_found for nonexistent run', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['workflow', 'cancel', 'nonexistent-run-id'], {
+            output,
+            dbUrl: ':memory:',
+        });
+        expect(exitCode).toBe(1);
+        expect(output.errors).toContain('Run nonexistent-run-id not found.');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Trace cost rendering (task 0311) — formatActionCost / formatTraceTimeline.
+// These are pure presentation helpers; unit-tested directly since producing a
+// real agent.run row requires spawning an agent.
+// ---------------------------------------------------------------------------
+
+function makeCost(overrides: Partial<ActionCost> = {}): ActionCost {
+    return {
+        totals: {
+            inputTokens: 1000,
+            outputTokens: 500,
+            cacheReadTokens: 200,
+            cacheCreationTokens: 0,
+            costUsd: 0.0123,
+            records: 1,
+            recordsWithUsage: 1,
+        },
+        cacheHit: 0.25,
+        estimated: false,
+        ...overrides,
+    };
+}
+
+const UNJOINED_COST: ActionCost = {
+    totals: {
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+        costUsd: 0,
+        records: 0,
+        recordsWithUsage: 0,
+    },
+    cacheHit: null,
+    estimated: false,
+};
+
+function makeActionEvent(cost?: ActionCost): TimelineEvent {
+    return {
+        kind: 'action',
+        actionId: 'act-1',
+        node: 'n1',
+        actionKind: 'agent.run',
+        status: 'done',
+        duration: '120ms',
+        ok: true,
+        label: ' ✓',
+        cost,
+    };
+}
+
+describe('formatActionCost', () => {
+    test('returns empty string for non-action events', () => {
+        const event: TimelineEvent = { kind: 'transition', from: 'a', to: 'b', trigger: null };
+        expect(formatActionCost(event)).toBe('');
+    });
+
+    test('returns empty string when cost is undefined (non-agent.run action)', () => {
+        expect(formatActionCost(makeActionEvent(undefined))).toBe('');
+    });
+
+    test('renders `cost n/a` for an unjoinable step — never $0.00 (R3, 0281/0284)', () => {
+        const rendered = formatActionCost(makeActionEvent(UNJOINED_COST));
+        expect(rendered).toBe(' · cost n/a');
+        expect(rendered).not.toContain('$0.00');
+        expect(rendered).not.toContain('0%');
+    });
+
+    test('renders exact cost and cache-hit for a session-id join (R1a)', () => {
+        expect(formatActionCost(makeActionEvent(makeCost()))).toBe(' · $0.012 · cache 25%');
+    });
+
+    test('marks estimated joins with the ~ prefix (R1b)', () => {
+        expect(formatActionCost(makeActionEvent(makeCost({ estimated: true })))).toBe(' · ~$0.012 · cache ~25%');
+    });
+
+    test('renders `cache n/a` when records matched but carry no cache dimensions', () => {
+        const cost = makeCost({ cacheHit: null, totals: { ...makeCost().totals, costUsd: 0.005 } });
+        expect(formatActionCost(makeActionEvent(cost))).toBe(' · $0.005 · cache n/a');
+    });
+});
+
+describe('formatTraceTimeline cost footer', () => {
+    function makeTimeline(events: TimelineEvent[]): WorkflowTraceTimeline {
+        return {
+            run: {
+                runId: 'r1',
+                workflowName: 'wf',
+                mode: 'sync',
+                status: 'done',
+                startedAt: '2026-01-15T10:00:00.000Z',
+                completedAt: '2026-01-15T10:05:00.000Z',
+                isDryRun: false,
+            },
+            events,
+        };
+    }
+
+    test('appends a `history import` hint when a step has no joinable usage (R6, AC2)', () => {
+        const out = formatTraceTimeline(makeTimeline([makeActionEvent(UNJOINED_COST)]));
+        expect(out).toContain('spur history import');
+    });
+
+    test('omits the hint when every agent.run step is joined', () => {
+        const out = formatTraceTimeline(makeTimeline([makeActionEvent(makeCost())]));
+        expect(out).not.toContain('spur history import');
+    });
 });

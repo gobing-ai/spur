@@ -123,6 +123,13 @@ export interface AgentRunInvocation {
      * `argv` already contains the translated form. Arguments are redacted.
      */
     translatedFrom?: string;
+    /**
+     * Agent session/conversation id, when the agent exposes one. Used as the
+     * primary join key connecting a workflow `agent.run` step to imported
+     * history ETL records (R1a). Undefined when the agent does not expose a
+     * session id — the heuristic time-window fallback (R1b) applies.
+     */
+    sessionId?: string;
 }
 
 /**

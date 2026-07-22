@@ -254,6 +254,14 @@ Backed by `ts-rule-engine`. Help dispatch per §1.0.
   newest first) with filters `--workflow`, `--status`, `--since`, `--last`. With `<run-id>`:
   per-run timeline of state entries, transitions, and action executions interleaved by `created_at`.
   Action lines include the action kind, duration when finalized, and an in-flight/success/failure marker.
+  **Per-step cost (0311):** `agent.run` lines also carry token cost + cache-hit joined from imported
+  history ETL rows — ` · $X.XXX · cache Y%` for an exact session-id join (R1a), ` · ~$…` when the
+  time-window heuristic was used (R1b estimate), and ` · cost n/a` when no imported usage matches
+  (never `$0.00` — 0281/0284 never-fabricate). An unjoined step appends a footer hinting
+  `spur history import`. `--json` gains a nullable per-action `cost` object (`costUsd`, input/output +
+  cache token dims, `cacheHitRatio`, `estimated`), additive so existing consumers are unaffected. Cost
+  is read from already-imported ETL; `trace` never triggers an import. Join + math:
+  `packages/domain/src/analytics/run-cost.ts`.
 Backed by `ts-dual-workflow-engine` (`WorkflowService` + `DbWorkflowPersistenceAdapter`).
 
 #### `spur history import --source <source> [--file <path>|--root <path>] [--mode <mode>] [--dry-run] [--json]`

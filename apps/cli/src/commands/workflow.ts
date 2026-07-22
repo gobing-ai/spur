@@ -5,6 +5,7 @@ import {
     renderRunPlan,
     renderStepLine,
     type StepEvent,
+    type TimelineEvent,
     WorkflowAppService,
     type WorkflowListEntry,
     type WorkflowListResult,
@@ -433,8 +434,11 @@ function formatTraceList(result: WorkflowTraceListResult): string {
     }
     return lines.join('\n');
 }
-
-function formatTraceTimeline(result: WorkflowTraceTimeline): string {
+/**
+ * Render a per-run timeline for human output: phase entries, transitions, action
+ * events, and per-step cost when available.
+ */
+export function formatTraceTimeline(result: WorkflowTraceTimeline): string {
     const { run, events } = result;
     const dryLabel = run.isDryRun ? ' [DRY RUN]' : '';
     const lines = [
@@ -450,8 +454,40 @@ function formatTraceTimeline(result: WorkflowTraceTimeline): string {
             const guard = event.trigger ? `  [${event.trigger}]` : '';
             lines.push(`    → ${event.to}${guard}`);
         } else {
-            lines.push(`    ⚡ ${event.actionKind.padEnd(15)} ${event.duration.padEnd(6)}${event.label}`);
+            const costSuffix = formatActionCost(event);
+            lines.push(`    ⚡ ${event.actionKind.padEnd(15)} ${event.duration.padEnd(6)}${event.label}${costSuffix}`);
         }
     }
+    // Import is a precondition, not a trigger (R6): when any agent.run step has no
+    // joinable usage, point the operator at `history import` rather than auto-running it (AC2).
+    const hasUnjoinedCost = events.some(
+        (e) => e.kind === 'action' && e.cost !== undefined && e.cost.totals.records === 0,
+    );
+    if (hasUnjoinedCost) {
+        lines.push('', 'Some agent.run steps show cost n/a — run `spur history import` to populate cost.');
+    }
     return lines.join('\n').trimEnd();
+}
+
+/**
+ * Render per-step cost and cache-hit for the human-readable trace timeline.
+ *
+ * Returns an empty string for non-agent.run actions; ` · cost n/a` when the
+ * step cannot be joined to usage data (never `$0.00` — 0281/0284 invariant);
+ * ` · ~$X.XX · cache ~Y%` when the time-window heuristic was used (R1b);
+ * ` · $X.XX · cache Y%` for exact session-id joins (R1a).
+ */
+export function formatActionCost(event: TimelineEvent): string {
+    if (event.kind !== 'action') return '';
+    const cost = event.cost;
+    if (!cost) return '';
+    // Unjoinable agent.run step (no matched usage) → render `n/a`, never `$0.00`
+    // (0281/0284 never-fabricate invariant; R3).
+    if (cost.totals.records === 0) return ' · cost n/a';
+    const est = cost.estimated ? '~' : '';
+    if (cost.cacheHit === null) {
+        // Records matched but carried no cache dimensions — cost known, ratio not.
+        return cost.totals.costUsd > 0 ? ` · ${est}$${cost.totals.costUsd.toFixed(3)} · cache n/a` : ' · cost n/a';
+    }
+    return ` · ${est}$${cost.totals.costUsd.toFixed(3)} · cache ${est}${(cost.cacheHit * 100).toFixed(0)}%`;
 }
