@@ -10,8 +10,15 @@ updated_at: 1970-01-01T00:00:00.000Z
 
 # Design
 
-> Derived. Concrete shapes — every command, flag, config key, env var, schema, and DTO. Edit when
-> a surface changes.
+> Derived. Non-UI concrete shapes — every command, flag, config key, env var, schema, and DTO. Edit
+> when a non-UI surface changes.
+
+## UI/UX boundary
+
+Repository-root `DESIGN.md` owns all UI/UX design, including visual language, design tokens,
+components, layout, interaction, accessibility, and responsive behavior. Read and update it for UI
+work; keep this document focused on non-UI surface design. If `DESIGN.md` is absent, follow the
+project's established UI conventions rather than adding UI guidance here.
 
 ## 1. CLI commands
 

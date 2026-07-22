@@ -134,6 +134,10 @@ describe('spur init template copy', () => {
         expect(existsSync(join(docsDir, '03_ARCHITECTURE.md'))).toBe(true);
         expect(existsSync(join(docsDir, '04_DESIGN.md'))).toBe(true);
         expect(existsSync(join(docsDir, '05_FEATURES.md'))).toBe(true);
+
+        const designContent = readFileSync(join(docsDir, '04_DESIGN.md'), 'utf-8');
+        expect(designContent).toContain('Repository-root `DESIGN.md` owns all UI/UX design');
+        expect(designContent).toContain('focused on non-UI surface design');
     });
 
     test('docs scaffolds are preserved even under --force (R1 — never clobber customized docs)', async () => {
