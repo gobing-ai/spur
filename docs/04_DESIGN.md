@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.3.5
+version: 1.3.6
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-07-22
@@ -103,7 +103,10 @@ clobbering a configured project. `--json` emits
   customized AGENTS.md is never overwritten.
 
 - **`/sp:spur-init` owns content adaptation only.** Calls `spur init` as its first step, then
-  performs three classes of adaptation. Two probes sit between scaffold and customization:
+  performs three classes of adaptation. Its scaffold step invokes `spur init --json` exactly once,
+  retains the result envelope, reports one concise created/skipped summary, and reuses
+  `result.project` for customization without replaying the human transcript. Two probes sit between
+  scaffold and customization:
   - *Functional probe (Phase 1.5):* `spur status`, `spur task create`, `spur workflow validate`.
   - *Rule glob adaptation (Phase 1.6):* the `recommended-pre-check` preset ships globs calibrated
     to Spur's monorepo (`apps/**/*.ts` etc.). On any other layout these match zero files and `rg`
@@ -287,7 +290,7 @@ stabilize before the report implementation is designed.
 
 | Command | Behavior |
 |---------|----------|
-| `spur status [path] [--json]` | Project health: config present, package.json present, git context, team agent spec ids found under `.spur/agents/`; optional path metadata (size, isFile, isDirectory). |
+| `spur status [path] [--json]` | Project health: `ok`/exit 0 requires a valid `.spur/config.yaml`; `packageJson` is an independent optional fact. Also reports Git context, team agent spec ids under `.spur/agents/`, and optional path metadata (size, isFile, isDirectory). |
 | `spur serve [--port <n>] [--host <addr>] [--no-open] [--cwd <path>] [--json]` | Start the web server (local fallback) and serve the Spur Board SPA when static assets resolve. Options: `--port` (env PORT, default 3000), `--host` (env HOST, default localhost), `--no-open` skip browser, `--json` print {port,url,pid}. Board assets ship in the npm package as `web/` next to `spur.js` (`resolveWebDistPath`); without them `/board` returns JSON 404 and the server logs a warning. |
 | `spur migrate [--json]` | Temporary helper: apply CLI-owned schema migrations; reports `{ ok, applied }`. |
 | `spur --help` / `spur --version` | Commander-rendered usage / binary version (ADR-014). |

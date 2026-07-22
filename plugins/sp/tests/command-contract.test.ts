@@ -389,6 +389,21 @@ describe('(e) validator reports no violations on the live corpus', () => {
     });
 });
 
+describe('spur-init structured-output contract (task 0313)', () => {
+    test('invokes init once with JSON, preserves supported flags, and reuses the parsed result', () => {
+        const raw = readFileSync(join(COMMANDS_DIR, 'spur-init.md'), 'utf8');
+        const implementation = implSection(raw);
+        const invocations = implementation.match(/spur init\b/g) ?? [];
+
+        expect(invocations).toHaveLength(1);
+        expect(implementation).toContain('spur init --json $ARGUMENTS');
+        expect(implementation).toContain('scaffoldResult');
+        expect(implementation).toContain('<scaffoldResult.project>');
+        expect(implementation).toContain('one block');
+        expect(raw).not.toContain('--skip-docs');
+    });
+});
+
 // ─── (f) negative-path tests per gate ───────────────────────────────────────
 
 describe('(f) validator catches violations in corrupted files', () => {

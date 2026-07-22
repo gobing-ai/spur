@@ -38,7 +38,7 @@ async function runStatusCore(
     const target = path === undefined ? undefined : await readTargetStatus(context, path);
 
     const status = {
-        ok: packageJsonExists,
+        ok: spurConfigExists,
         packageJson: packageJsonExists,
         spurConfig: spurConfigExists,
         git,
@@ -51,8 +51,8 @@ async function runStatusCore(
     } else {
         context.output.write(
             [
-                `Project: ${status.ok ? 'ok' : 'missing package.json'}`,
-                `.spur: ${spurConfigExists ? 'ok' : 'missing'}`,
+                `Project: ${spurConfigExists ? 'ok' : 'missing .spur/config.yaml'}`,
+                `Package: ${packageJsonExists ? 'ok' : 'none'}`,
                 `Agents: ${agentSpecs.length === 0 ? 'none' : agentSpecs.join(', ')}`,
                 `Git: ${git.root === null ? 'none' : `${git.branch ?? 'detached'}${git.dirty ? ' dirty' : ' clean'}`}`,
                 ...(target === undefined ? [] : [`Path: ${target.path}\t${target.size} bytes`]),

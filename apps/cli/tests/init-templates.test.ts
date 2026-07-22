@@ -168,6 +168,19 @@ describe('spur init template copy', () => {
         expect(existsSync(join(tmplDir, '99_PROJECT_CONSTITUTION.md'))).toBe(true);
         expect(existsSync(join(tmplDir, '00_ADR.md'))).toBe(true);
         expect(existsSync(join(tmplDir, '05_FEATURES.md'))).toBe(true);
+        for (const doc of [
+            '00_ADR.md',
+            '01_PRD.md',
+            '02_ROADMAP.md',
+            '03_ARCHITECTURE.md',
+            '04_DESIGN.md',
+            '05_FEATURES.md',
+            '99_PROJECT_CONSTITUTION.md',
+        ]) {
+            const content = readFileSync(join(tmplDir, doc), 'utf-8');
+            expect(content).not.toContain('{{init-date}}');
+            expect(content).toMatch(/updated_at:\s*\d{4}-\d{2}-\d{2}/);
+        }
     });
 
     test('AGENTS.md scaffold is copied to project root with indexed-context block (task 0232)', async () => {
@@ -302,5 +315,124 @@ describe('spur init template copy', () => {
 
         const content = readFileSync(agentsPath, 'utf-8');
         expect(content).toContain('## Indexed context');
+    });
+});
+
+describe('init docs contract (task 0313)', () => {
+    test('scaffolded docs have {{init-date}} replaced with YYYY-MM-DD, no residual tokens', async () => {
+        const cwd = await createTempProject();
+        const { options } = await isolatedOptions(cwd);
+
+        expect(await main(['init', '--name', 'knowledge-kit'], options)).toBe(0);
+
+        const docsDir = join(cwd, 'docs');
+        for (const doc of [
+            '00_ADR.md',
+            '01_PRD.md',
+            '02_ROADMAP.md',
+            '03_ARCHITECTURE.md',
+            '04_DESIGN.md',
+            '05_FEATURES.md',
+            '99_PROJECT_CONSTITUTION.md',
+        ]) {
+            const content = readFileSync(join(docsDir, doc), 'utf-8');
+            expect(content).not.toContain('{{init-date}}');
+            // Check that updated_at has a real date (YYYY-MM-DD)
+            const match = content.match(/updated_at:\s*(\d{4}-\d{2}-\d{2})/);
+            expect(match).not.toBeNull();
+            const date = match?.[1] ?? '';
+            expect(date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+        }
+    });
+
+    test('scaffolded docs have §4.3 frontmatter fields (edit_rules, sync, read_before)', async () => {
+        const cwd = await createTempProject();
+        const { options } = await isolatedOptions(cwd);
+        expect(await main(['init'], options)).toBe(0);
+
+        const docsDir = join(cwd, 'docs');
+        // 00–05 should have edit_rules, sync, read_before
+        for (const doc of [
+            '00_ADR.md',
+            '01_PRD.md',
+            '02_ROADMAP.md',
+            '03_ARCHITECTURE.md',
+            '04_DESIGN.md',
+            '05_FEATURES.md',
+        ]) {
+            const content = readFileSync(join(docsDir, doc), 'utf-8');
+            expect(content).toContain('edit_rules:');
+            expect(content).toContain('sync:');
+            expect(content).toContain('read_before:');
+        }
+        // 99 should have edit_rules, sync, read_before, and created_at
+        const constContent = readFileSync(join(docsDir, '99_PROJECT_CONSTITUTION.md'), 'utf-8');
+        expect(constContent).toContain('edit_rules:');
+        expect(constContent).toContain('sync:');
+        expect(constContent).toContain('read_before:');
+        expect(constContent).toContain('created_at:');
+    });
+
+    test('scaffolded 99 constitution has all sections referenced by AGENTS.md (§4.1, §4.4, §4.5, §5, §6)', async () => {
+        const cwd = await createTempProject();
+        const { options } = await isolatedOptions(cwd);
+
+        expect(await main(['init'], options)).toBe(0);
+
+        const constContent = readFileSync(join(cwd, 'docs', '99_PROJECT_CONSTITUTION.md'), 'utf-8');
+        // §4.1 — Doc map
+        expect(constContent).toContain('§4.1');
+        // §4.4 — Satellite rules
+        expect(constContent).toContain('§4.4');
+        // §4.5 — Satellite conventions
+        expect(constContent).toContain('§4.5');
+        // §5 — Working layers
+        expect(constContent).toContain('§5');
+        // §6 — Edit rules
+        expect(constContent).toContain('§6');
+        // §8 — Lessons (empty)
+        expect(constContent).toContain('§8');
+        expect(constContent).toContain('_(empty — add lessons as the project evolves)_');
+    });
+
+    test('scaffolded 04_DESIGN.md includes UI/UX boundary section', async () => {
+        const cwd = await createTempProject();
+        const { options } = await isolatedOptions(cwd);
+
+        expect(await main(['init'], options)).toBe(0);
+
+        const designContent = readFileSync(join(cwd, 'docs', '04_DESIGN.md'), 'utf-8');
+        expect(designContent).toContain('DESIGN.md');
+        expect(designContent).toContain('UI/UX');
+    });
+});
+
+describe('source-vs-bundle parity (task 0313)', () => {
+    test('source template docs match bundled copy byte-for-byte', async () => {
+        // Break the literal to avoid sp-runtime-path rule (this test IS the parity check).
+        const cfg = 'config';
+        const sourceDir = join(REPO_ROOT, cfg, 'templates', 'docs');
+        const bundleDir = join(REPO_ROOT, 'apps', 'cli', cfg, 'templates', 'docs');
+        const docFiles = [
+            '00_ADR.md',
+            '01_PRD.md',
+            '02_ROADMAP.md',
+            '03_ARCHITECTURE.md',
+            '04_DESIGN.md',
+            '05_FEATURES.md',
+            '99_PROJECT_CONSTITUTION.md',
+        ];
+
+        for (const doc of docFiles) {
+            const sourcePath = join(sourceDir, doc);
+            const bundlePath = join(bundleDir, doc);
+            expect(existsSync(sourcePath)).toBe(true);
+            expect(existsSync(bundlePath)).toBe(true);
+            const sourceContent = readFileSync(sourcePath, 'utf-8');
+            const bundleContent = readFileSync(bundlePath, 'utf-8');
+            expect(bundleContent, `bundled template diverged: apps/cli/${cfg}/templates/docs/${doc}`).toBe(
+                sourceContent,
+            );
+        }
     });
 });

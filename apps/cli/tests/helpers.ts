@@ -16,6 +16,13 @@ export async function createTempProject(): Promise<string> {
     return dir;
 }
 
+/** Create a temporary project directory with only a .spur config (no package manifest). */
+export async function createTempProjectStackNeutral(): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), 'spur-'));
+    // Intentionally NO package.json — Spur is stack-neutral.
+    return dir;
+}
+
 /** Create an output sink that stores writes for assertions. */
 export function createCapturedOutput(): CapturedOutput {
     return {

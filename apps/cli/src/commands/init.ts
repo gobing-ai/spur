@@ -35,6 +35,16 @@ export function substituteAgentsMdTemplate(content: string, projectName: string)
 }
 
 /**
+ * Substitute doc template tokens when scaffolding (task 0313).
+ * `{{init-date}}` is replaced with the current date in `YYYY-MM-DD` format,
+ * so scaffolded docs get a real `updated_at`/`created_at` timestamp instead of a sentinel.
+ */
+export function substituteDocTemplateTokens(content: string, date: Date = new Date()): string {
+    const dateStr = date.toISOString().slice(0, 10); // YYYY-MM-DD
+    return content.replaceAll('{{init-date}}', dateStr);
+}
+
+/**
  * Activation block appended to an existing AGENTS.md when the marker is absent.
  * Mirrors the block embedded in the bundled AGENTS.md template (see SCAFFOLD_MANIFEST).
  */
@@ -249,6 +259,10 @@ export function registerInitCommand(program: Command, context: CliContext): void
                     // projects get real copies instead of links (ADR-015: no symlinks in
                     // install/init). Never overwrites without --force.
                     for (const relPath of listBundledProjectSeedFiles()) {
+                        // The manifest owns doc-template copies because they require init-time
+                        // token rendering. Seeding them here first would make the manifest pass
+                        // treat them as existing and leave `{{init-date}}` unresolved.
+                        if (relPath.startsWith('templates/docs/')) continue;
                         const sourcePath = join(configRoot, relPath);
                         if (!(await context.fs.exists(sourcePath))) continue;
                         const targetPath = join(context.cwd, CLI_CONFIG.configDir, relPath);
@@ -271,6 +285,10 @@ export function registerInitCommand(program: Command, context: CliContext): void
                         // AGENTS.md: fill init-time tokens so new projects never ship `{project-name}`.
                         if (entry.target === 'AGENTS.md') {
                             body = substituteAgentsMdTemplate(body, projectName);
+                        }
+                        // Doc templates: replace `{{init-date}}` with the current date (task 0313).
+                        if (entry.source.startsWith('templates/docs/')) {
+                            body = substituteDocTemplateTokens(body);
                         }
                         await writeIfNew(context, targetPath, body, entryForce, result);
                     }

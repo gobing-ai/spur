@@ -28,6 +28,8 @@ describe('cli test helpers', () => {
         test('returns exit code 0 and parses --json stdout for status', async () => {
             const dir = await createTempProject();
             try {
+                // init so .spur/config.yaml exists — status.ok is Spur-config health, not package.json
+                await runCli(['init', '--name', 'fixture'], dir);
                 const result = await runCli(['status', '--json'], dir);
                 expect(result.code).toBe(0);
                 expect(result.json).toBeDefined();

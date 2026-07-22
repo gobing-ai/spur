@@ -4,13 +4,15 @@ doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
 version: 1.0.0
-created_at: 1970-01-01T00:00:00.000Z
-updated_at: 1970-01-01T00:00:00.000Z
+derived_from: [00_ADR, 01_PRD]
+owner: _(project owner)_
+updated_at: {{init-date}}
+read_before: cross-module, seam, or schema work
+edit_rules: 99 §6.4
+sync: [T1]
 ---
 
 # Architecture
-
-> Derived (ADR wins). Read before cross-module/seam/schema work; edit when boundaries or mechanisms change.
 
 ## 1. Module map
 
@@ -24,4 +26,9 @@ _(Describe the primary data path: input → processing → output. Name the seam
 
 ## 3. Invariants
 
-- _(state or property that always holds — the thing tests should protect)_
+- _(state or property that always holds — phrased so a constraint rule or reviewer can check it mechanically)_
+
+<!--
+Describes the CURRENT architecture only. Future/accepted designs go in sections explicitly
+titled "(accepted design — ADR-NNN; not yet built)". On conflict with 00, the ADR wins; fix here.
+-->

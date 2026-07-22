@@ -18,9 +18,11 @@ describe('status command', () => {
     test('reports agent specs found in .spur/agents/', async () => {
         const cwd = await mkdtemp(join(tmpdir(), 'spur-status-'));
         try {
-            // status.ok requires package.json to exist for a 0 exit code.
-            await writeFile(join(cwd, 'package.json'), '{}');
-            const agentsDir = join(cwd, '.spur', 'agents');
+            // status.ok requires .spur/config.yaml to exist for a 0 exit code.
+            const spurrDir = join(cwd, '.spur');
+            await mkdir(spurrDir, { recursive: true });
+            await writeFile(join(spurrDir, 'config.yaml'), 'project: test\n');
+            const agentsDir = join(spurrDir, 'agents');
             await mkdir(agentsDir, { recursive: true });
             await writeFile(join(agentsDir, 'planner.yaml'), 'id: planner\n');
             await writeFile(join(agentsDir, '.gitkeep'), '');

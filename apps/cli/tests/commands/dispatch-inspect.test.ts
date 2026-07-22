@@ -92,6 +92,9 @@ describe('CLI dispatch and status', () => {
     test('status reports optional path metadata and missing path errors', async () => {
         const cwd = await createTempProject();
         const output = createCapturedOutput();
+        // init so .spur/config.yaml exists — status.ok is Spur-config health
+        await main(['init', '--name', 'fixture'], { cwd, output, dbUrl: ':memory:' });
+        output.messages.length = 0;
         await Bun.write(join(cwd, 'sample.txt'), 'sample');
 
         expect(await main(['status', 'sample.txt', '--json'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
