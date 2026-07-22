@@ -248,6 +248,12 @@ Three bundled workflows cover the altitudes (the two new 0167 workflows are in i
 completion unattended: `spur workflow run config/workflows/feature-dev.yaml --vars
 '{"featureId":"B3"}'`.
 
+> **Enriched pipeline output (tasks 0310/0311).** After a pipeline run, `spur workflow trace <run-id>`
+> shows per-step token cost and cache-hit ratio for each `agent.run` action — joined from imported
+> history ETL records. Cost renders as `$X.XXX · cache Y%` (exact join), `~...` (heuristic estimate),
+> or `cost n/a` (no usage data — never `$0.00`). Run `spur history import` before tracing to
+> populate cost.
+
 **Run a batch of tasks in dependency order.** When you have a set of tasks ready to
 execute (not a whole feature's lifecycle — just "run these tasks through their
 pipelines"), `/sp:dev-runall` is the batch driver. It resolves the set, topo-sorts by

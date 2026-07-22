@@ -1,6 +1,6 @@
 # How to Use Spur for Daily Software Development
 
-> **Verified against spur `0.3.12` running on Bun `1.3.14`.** Every command and flag below
+> **Verified against spur `0.3.18` running on Bun `1.3.14`.** Every command and flag below
 > was captured from the live `--help` output and exercised on the real project corpus.
 > For the **slash-command layer** (the `sp` plugin) layered on top of these CLI verbs —
 > `/sp:dev-plan`, `/sp:dev-run`, `/sp:dev-verify`, `/sp:dev-wrap`, the batch family
@@ -71,7 +71,7 @@ Per-platform `--compile` binaries are GitHub Release assets for darwin/linux × 
 ### Verify installation
 
 ```bash
-spur --version     # 0.3.12
+spur --version     # 0.3.18
 spur agent doctor  # check every detected agent
 spur agent list    # list detected agents
 ```
@@ -147,7 +147,7 @@ spur rule           trace [run-id] [--preset <name>] [--status <s>] [--since <is
 
 # Workflow orchestration
 spur workflow       validate <workflow.yaml> [--no-schema] [--json]
-spur workflow       run     <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--json]
+spur workflow       run     <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--detail <quiet|normal|verbose|debug>] [--json]
 spur workflow       continue [run-id] [--yes] [--json]
 spur workflow       list    [--json]
 spur workflow       trace   [run-id] [--workflow <name>] [--status <s>] [--since <iso-date>] [--last <n>] [--json]
@@ -455,6 +455,10 @@ spur workflow run config/workflows/basic.yaml --dry-run
 spur workflow run config/workflows/task-pipeline.yaml --async --json
 # → { "runId": "...", "status": "started", "workflowName": "..." }
 # Monitor: spur workflow trace <run-id>
+# Per-step cost from imported history: spur workflow trace <run-id> renders token
+# cost and cache-hit ratio per agent.run action (task 0311). Cost appears as
+# $X.XXX · cache Y% for exact joins, ~... for heuristic estimates, and cost n/a
+# when no usage data is available (never $0.00). Run spur history import first.
 
 # Resume a paused (HITL) workflow run
 spur workflow continue              # resume the most recent paused run
@@ -709,7 +713,7 @@ Any non-PASS verdict **stops the chain** with findings written to `## Testing` /
 /sp:dev-wrapall --feature F71 --auto  # batch wrap; advances the feature lifecycle
 /sp:dev-wrap 0061 --auto --merge      # + branch cleanup (IRREVERSIBLE — always pauses)
 /sp:dev-gitmsg --commit               # conventional commit from the diff
-/sp:dev-changelog --version 0.3.13    # changelog from commit history
+    /sp:dev-changelog --version 0.3.18    # changelog from commit history
 ```
 
 Wrap-up never mutates task status; it consumes completed tasks. Feature lifecycle
