@@ -84,25 +84,24 @@ function extractAgentModel(action: ActionRunCostRow): { agent: string | undefine
 // ETL matching
 // ---------------------------------------------------------------------------
 
-/**
- * Match imported ETL records to a workflow `action_runs` row.
- *
- * Prefers an exact join on the agent's session id (R1a); falls back to a
- * time-window heuristic limited to matching agent/model pairs (R1b).
- */
-export async function matchEtlForAction(db: DbAdapter, action: ActionRunCostRow): Promise<readonly EtlPayload[]> {
-    const sessionId = extractSessionId(action);
-
-    if (sessionId) {
-        return matchBySessionId(db, sessionId);
-    }
-
-    return matchByTimeWindow(db, action);
+/** A matched-record set plus whether the R1b heuristic (not an exact session-id join) produced it. */
+export interface EtlMatch {
+    /** ETL payloads attributed to the action. */
+    records: readonly EtlPayload[];
+    /** True when the R1b time-window heuristic was used (no session id) — costs are estimates. */
+    estimated: boolean;
 }
 
-/** R1a: exact join on agent session id across all source tables. */
-async function matchBySessionId(db: DbAdapter, sessionId: string): Promise<readonly EtlPayload[]> {
-    const results: EtlPayload[] = [];
+/**
+ * Load every imported ETL payload across all source tables once.
+ *
+ * Split out from matching so a caller iterating many actions (e.g. a trace with
+ * several `agent.run` steps) pays the table scan a single time and matches each
+ * action in memory, instead of re-scanning every table per action. Absent tables
+ * and unparseable rows are skipped (best-effort, like the rest of the trace path).
+ */
+export async function loadAllEtlPayloads(db: DbAdapter): Promise<readonly EtlPayload[]> {
+    const payloads: EtlPayload[] = [];
     for (const table of SOURCE_TABLES) {
         let rows: Array<{ payload_json: string }>;
         try {
@@ -112,49 +111,58 @@ async function matchBySessionId(db: DbAdapter, sessionId: string): Promise<reado
         }
         for (const row of rows) {
             try {
-                const parsed = JSON.parse(row.payload_json);
-                if ((parsed as Record<string, unknown>)?.sessionId === sessionId) {
-                    results.push(parsed as EtlPayload);
-                }
+                payloads.push(JSON.parse(row.payload_json) as EtlPayload);
             } catch {
                 // Skip unparseable rows
             }
         }
     }
-    return results;
+    return payloads;
 }
 
-/** R1b: time-window heuristic — ETL created_at within [action.started_at, action.completed_at]. */
-async function matchByTimeWindow(db: DbAdapter, action: ActionRunCostRow): Promise<readonly EtlPayload[]> {
+/**
+ * Match pre-loaded ETL payloads to a workflow `action_runs` row (pure, no I/O).
+ *
+ * Prefers an exact join on the agent's session id (R1a, `estimated: false`); falls
+ * back to a time-window heuristic limited to matching agent/model pairs (R1b,
+ * `estimated: true`). The `estimated` flag *is* the R1a/R1b path, so callers no
+ * longer re-parse the action to re-derive it.
+ */
+export function matchEtlPayloads(payloads: readonly EtlPayload[], action: ActionRunCostRow): EtlMatch {
+    const sessionId = extractSessionId(action);
+    if (sessionId) {
+        const records = payloads.filter((p) => (p as Record<string, unknown>).sessionId === sessionId);
+        return { records, estimated: false };
+    }
+
     const { agent, model } = extractAgentModel(action);
     const startedAt = action.started_at ? new Date(action.started_at).getTime() : 0;
     const completedAt = action.completed_at ? new Date(action.completed_at).getTime() : Date.now();
 
-    const results: EtlPayload[] = [];
-    for (const table of SOURCE_TABLES) {
-        let rows: Array<{ payload_json: string }>;
-        try {
-            rows = await db.queryAll<{ payload_json: string }>(`SELECT payload_json FROM ${table}`);
-        } catch {
-            continue; // Table doesn't exist yet — skip
-        }
-        for (const row of rows) {
-            try {
-                const parsed = JSON.parse(row.payload_json);
-                const record = parsed as Record<string, unknown>;
-                const createdAt = new Date(String(record.created_at ?? '')).getTime();
-                if (Number.isNaN(createdAt)) continue;
-                if (createdAt < startedAt || createdAt > completedAt) continue;
-                // Narrow by agent/model when available in invocation data
-                if (agent && record.agent !== agent) continue;
-                if (model && record.model !== model) continue;
-                results.push(parsed as EtlPayload);
-            } catch {
-                // Skip unparseable rows
-            }
-        }
-    }
-    return results;
+    const records = payloads.filter((p) => {
+        const record = p as Record<string, unknown>;
+        const createdAt = new Date(String(record.created_at ?? '')).getTime();
+        if (Number.isNaN(createdAt)) return false;
+        if (createdAt < startedAt || createdAt > completedAt) return false;
+        // Narrow by agent/model when available in invocation data
+        if (agent && record.agent !== agent) return false;
+        if (model && record.model !== model) return false;
+        return true;
+    });
+    return { records, estimated: true };
+}
+
+/**
+ * Match imported ETL records to a single workflow `action_runs` row: loads the
+ * source tables, then matches. For many actions, prefer {@link loadAllEtlPayloads}
+ * once + {@link matchEtlPayloads} per action to avoid re-scanning per action.
+ *
+ * Prefers an exact join on the agent's session id (R1a); falls back to a
+ * time-window heuristic limited to matching agent/model pairs (R1b).
+ */
+export async function matchEtlForAction(db: DbAdapter, action: ActionRunCostRow): Promise<EtlMatch> {
+    const payloads = await loadAllEtlPayloads(db);
+    return matchEtlPayloads(payloads, action);
 }
 
 // ---------------------------------------------------------------------------

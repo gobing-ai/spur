@@ -10,8 +10,8 @@ import {
     actionCost,
     actionCostEstimated,
     createId,
-    extractSessionId,
-    matchEtlForAction,
+    loadAllEtlPayloads,
+    matchEtlPayloads,
     PhaseRunDao,
     RunDao,
     TaskRunLinkDao,
@@ -639,14 +639,16 @@ export class WorkflowAppService {
 
         // Pre-compute per-step cost for agent.run actions via the history-ETL join (R4).
         // Costs are computed eagerly before the merge loop so the timeline merge is a
-        // pure lookup — no async I/O inside the ordered-merge.
+        // pure lookup — no async I/O inside the ordered-merge. The ETL source tables are
+        // loaded once and matched in memory per action, not re-scanned per action.
         const costByActionId = new Map<string, ActionCost>();
-        for (const a of actionRows) {
-            if (a.kind === 'agent.run') {
+        if (actionRows.some((a) => a.kind === 'agent.run')) {
+            const etlPayloads = await loadAllEtlPayloads(db);
+            for (const a of actionRows) {
+                if (a.kind !== 'agent.run') continue;
                 try {
-                    const matched = await matchEtlForAction(db, a);
-                    const sessionId = extractSessionId(a);
-                    const cost = sessionId ? actionCost(matched, '') : actionCostEstimated(matched, '');
+                    const { records, estimated } = matchEtlPayloads(etlPayloads, a);
+                    const cost = estimated ? actionCostEstimated(records, '') : actionCost(records, '');
                     costByActionId.set(a.id, cost);
                 } catch {
                     // Cost lookup is best-effort — don't break the trace.

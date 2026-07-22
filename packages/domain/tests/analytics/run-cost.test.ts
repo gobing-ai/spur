@@ -5,7 +5,9 @@ import {
     actionCost,
     actionCostEstimated,
     extractSessionId,
+    loadAllEtlPayloads,
     matchEtlForAction,
+    matchEtlPayloads,
 } from '../../src/analytics/run-cost';
 import type { EtlPayload } from '../../src/analytics/types';
 
@@ -190,8 +192,9 @@ describe('matchEtlForAction', () => {
         });
 
         const matched = await matchEtlForAction(db, action);
-        expect(matched.length).toBe(1);
-        expect(matched[0]?.source_record_id).toBe('rec-1');
+        expect(matched.records.length).toBe(1);
+        expect(matched.records[0]?.source_record_id).toBe('rec-1');
+        expect(matched.estimated).toBe(true);
     });
 
     test('excludes records outside time window', async () => {
@@ -205,14 +208,14 @@ describe('matchEtlForAction', () => {
         });
 
         const matched = await matchEtlForAction(db, action);
-        expect(matched.length).toBe(0);
+        expect(matched.records.length).toBe(0);
     });
 
     test('returns empty when no ETL tables exist', async () => {
         const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
         const action = makeAction();
         const matched = await matchEtlForAction(db, action);
-        expect(matched.length).toBe(0);
+        expect(matched.records.length).toBe(0);
     });
 
     test('prefers session-id join (R1a) when sessionId is available', async () => {
@@ -228,6 +231,57 @@ describe('matchEtlForAction', () => {
 
         // R1a should find it via session id even though time window doesn't match
         const matched = await matchEtlForAction(db, action);
-        expect(matched.length).toBe(1);
+        expect(matched.records.length).toBe(1);
+        expect(matched.estimated).toBe(false);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// matchEtlPayloads — pure in-memory matcher
+// ---------------------------------------------------------------------------
+
+describe('matchEtlPayloads', () => {
+    test('R1a session-id match is not estimated', () => {
+        const payloads = [
+            makePayload({ source_record_id: 'r1', sessionId: 'sess-1' } as Partial<EtlPayload> & { sessionId: string }),
+            makePayload({ source_record_id: 'r2', sessionId: 'other' } as Partial<EtlPayload> & { sessionId: string }),
+        ];
+        const action = makeAction({ result_json: JSON.stringify({ invocation: { sessionId: 'sess-1' } }) });
+        const { records, estimated } = matchEtlPayloads(payloads as EtlPayload[], action);
+        expect(records.length).toBe(1);
+        expect(records[0]?.source_record_id).toBe('r1');
+        expect(estimated).toBe(false);
+    });
+
+    test('R1b time-window match is estimated and narrows by agent', () => {
+        const payloads = [
+            makePayload({ source_record_id: 'in', created_at: '2026-01-15T10:02:00.000Z', agent: 'claude' }),
+            makePayload({ source_record_id: 'wrong-agent', created_at: '2026-01-15T10:02:00.000Z', agent: 'codex' }),
+            makePayload({ source_record_id: 'out', created_at: '2026-01-15T11:00:00.000Z', agent: 'claude' }),
+        ];
+        const action = makeAction({ result_json: JSON.stringify({ invocation: { agent: 'claude' } }) });
+        const { records, estimated } = matchEtlPayloads(payloads, action);
+        expect(records.map((r) => r.source_record_id)).toEqual(['in']);
+        expect(estimated).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// loadAllEtlPayloads
+// ---------------------------------------------------------------------------
+
+describe('loadAllEtlPayloads', () => {
+    test('loads payloads across all source tables once', async () => {
+        const db = await setupEtlDb();
+        await insertPayload(db, 'history_etl_claude', makePayload({ source_record_id: 'c1' }));
+        await insertPayload(db, 'history_etl_codex', makePayload({ source_record_id: 'x1' }));
+        const payloads = await loadAllEtlPayloads(db);
+        expect(payloads.map((p) => p.source_record_id).sort()).toEqual(['c1', 'x1']);
+    });
+
+    test('returns empty when tables are absent', async () => {
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        const payloads = await loadAllEtlPayloads(db);
+        expect(payloads.length).toBe(0);
     });
 });

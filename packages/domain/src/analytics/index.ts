@@ -13,7 +13,10 @@ export {
     type ActionRunCostRow,
     actionCost,
     actionCostEstimated,
+    type EtlMatch,
     extractSessionId,
+    loadAllEtlPayloads,
     matchEtlForAction,
+    matchEtlPayloads,
 } from './run-cost';
 export type { AnalyticsSummary, CostRecord, EtlPayload, ModelPricing, TokenTotals } from './types';
