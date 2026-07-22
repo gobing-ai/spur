@@ -121,6 +121,20 @@ describe('ProcessInventoryService', () => {
         expect(snap.processes[0]?.command.endsWith('…')).toBe(true);
     });
 
+    test('does not throw on a non-finite or out-of-range elapsed (bad `ps` etime) — startedAt null', async () => {
+        // Regression: a NaN/huge elapsedSeconds slips past the `!= null` guard and previously reached
+        // `new Date(...).toISOString()`, throwing `RangeError: Invalid Date` and crashing the whole
+        // snapshot on CI Linux (where `ps` runs; the sandbox masks it locally via `ps` EPERM).
+        for (const elapsedSeconds of [Number.NaN, Number.POSITIVE_INFINITY, 1e18]) {
+            const svc = new ProcessInventoryService({
+                inspector: fixtureInspector([{ pid: 7, ppid: 0, rssBytes: 1, elapsedSeconds, command: 'x' }]),
+                rootPid: 7,
+            });
+            const snap = await svc.snapshot();
+            expect(snap.processes[0]?.startedAt).toBeNull();
+        }
+    });
+
     test('propagates unsupported platform errors', async () => {
         const svc = new ProcessInventoryService({
             inspector: {

@@ -183,7 +183,13 @@ function shortLabel(command: string, source: ProcessInventorySource, pid: number
     return leaf || `pid:${pid}`;
 }
 
-function startedAtFromElapsed(elapsedSeconds: number, capturedAtIso: string): string {
+function startedAtFromElapsed(elapsedSeconds: number, capturedAtIso: string): string | null {
+    // A non-finite elapsed (unparseable `ps` etime) or an out-of-range derived date must yield
+    // `null`, never throw: `ps` output varies across platforms (Linux CI vs macOS), and a single
+    // bad row must not crash the whole snapshot with `RangeError: Invalid Date`.
+    if (!Number.isFinite(elapsedSeconds)) return null;
     const captured = new Date(capturedAtIso).getTime();
-    return new Date(captured - elapsedSeconds * 1000).toISOString();
+    if (!Number.isFinite(captured)) return null;
+    const started = new Date(captured - elapsedSeconds * 1000);
+    return Number.isNaN(started.getTime()) ? null : started.toISOString();
 }
