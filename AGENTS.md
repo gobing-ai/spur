@@ -58,8 +58,7 @@ Agents need not know “plugin packing.” Use these **entry surfaces**:
 2. **Gates before done** — `spur task check` / `spur feature check` / `spur rule run`; pipeline done
    needs a real verify **PASS**.
 3. **`--json` for machines** — parse CLI with `--json`.
-4. **Route, don’t invent** — verbs → `sp:spur-cli`; lifecycle → `/sp:dev-*` / `sp:super-coder`;
-   multi-noun corpus → `sp:expert-spur`; review → `sp:super-reviewer`; docs process → `sp:doc-evolve`.
+4. **Route, don’t invent** — execute high-frequency verbs directly from **`sp:spur-cli`** reference files (`references/{tasks,features,rules,workflows}.md`); use `spur <noun> --help` only as a last resort for unlisted long-tail nouns or version skew. Lifecycle → `/sp:dev-*` / `sp:super-coder`; multi-noun corpus → `sp:expert-spur`; review → `sp:super-reviewer`; docs process → `sp:doc-evolve`.
 5. **Keep tool ownership explicit** — project lifecycle/corpus/gates → Spur; plugin installation and
    capability lifecycle → Superskill. Do not hand-maintain per-platform adapters Superskill generates.
 

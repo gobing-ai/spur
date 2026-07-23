@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-23T06:11:52.580Z"
-updated_at: "2026-07-23T06:54:02.056Z"
+updated_at: "2026-07-23T17:34:58.691Z"
 ---
 
 ## 0315. Harden sp command contracts — dev-review modes, safe handover, least-privilege tools
@@ -147,12 +147,13 @@ The simplification target is **contract ambiguity, not command count**. Any surf
 
 Verdict: PASS
 ### Review
+| Severity | File | Finding | Recommendation |
+| --- | --- | --- | --- |
+| P4 | plugins/sp/commands/*.md | R2's 28-command allowed-tools audit was completed during verification but not shipped as a standalone parity-table artifact; it surfaced systemic Write/Edit over-privilege on 5 other wrappers (dev-idea/wrap/wrapall/verify/verifyall) — the same class R10 removed from dev-review. | Tracked as follow-up task 0318 (least-privilege sweep). No 0315 requirement fails. |
 
-- P1–P4 Findings: None.
-- Residual Risk: None. All command contracts pass thin-wrapper gates (a)-(d), allowed-tools least-privilege verified, and existing content preservation unit-tested.
+**Residual risk:** Low. dev-review / dev-handover contracts fixed and unit-tested; deprecations carry one-release compatibility. `dev-review` dropped `Write`; `dev-handover` retains `Write` (writes the handover file — justified).
 
-
-
+**Disposition:** Approved. All 9 requirements MET (independent verify PASS, 2026-07-23). The single P4 is a follow-up, not a blocker.
 ### References
 - Parent **0314** (full audit + cross-cutting requirements) and siblings **0316** (new commands, README count/version) and **0317** (spur-cli section-set fix)
 - `plugins/sp/commands/dev-review.md`, `plugins/sp/commands/dev-handover.md`

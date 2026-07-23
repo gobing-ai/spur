@@ -13,6 +13,7 @@
 
 ### Changed
 
+- **Make `sp:spur-cli` an executable surface SSOT (task 0317).** Added missing `deps`, `sections`, and `run-link` verbs to `sp:spur-cli` task reference (`references/tasks.md` and `references/tasks/verbs.md`). Corrected section-editing matrix documentation to list the complete canonical and universal sections (`Background`, `Requirements`, `Acceptance Criteria`, `Q&A`, `Design`, `Plan`, `Solution`, `Testing`, `Review`, `References`, `History`, `Notes`). Updated `AGENTS.md` and `SKILL.md` to establish the Execute-First Contract (Tier A reference execution without calling `spur --help` every turn). Added unit test suite `plugins/sp/tests/spur-cli-parity.test.ts` to assert reference↔CLI parity across all Tier A nouns.
 - **Harden `sp:dev-review` and `sp:dev-handover` command contracts (task 0315).** `dev-review` simplified into deterministic modes (WBS mode: functional traceability + SECUA framework + architectural depth with `Review` section write; Path mode: advisory SECUA + architecture with zero task mutation); deprecated `--fix` and `--next` flags with warning guidance, and trimmed `allowed-tools` to least privilege (`["Bash", "Read", "Skill"]`). `dev-handover` updated so standalone `docs/handover/<date>-<slug>.md` acts as durable SSOT and task association appends a pointer link into `References` / `Notes` without clobbering existing content.
 - clarify UI/UX boundary in scaffolded 04_DESIGN.md template (6f370a70)
 

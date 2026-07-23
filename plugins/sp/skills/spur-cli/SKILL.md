@@ -29,17 +29,21 @@ CLI knows *what is valid*; the **spine** (`sp:spur-dev`) knows *how to drive the
 
 ## Noun routing
 
-Pick the noun, read its reference. Each reference owns that noun's full verb catalog and conventions.
+Pick the noun, read its reference. Each Tier A reference owns that noun's full verb catalog and conventions.
 
-| Noun | Operate | Reference |
-|------|---------|-----------|
-| **task** | The task corpus: create (template variants), edit sections, status lifecycle, record/verdict pipeline artifacts, the four-layer readiness matrix (`check --json`), corpus scan | [references/tasks.md](references/tasks.md) |
-| **feature** | The feature tree: author with hierarchical IDs (DD-14), write acceptance criteria, drive the lifecycle, move subtrees, keep traceability honest | [references/features.md](references/features.md) |
-| **rule** | The constraint quality gate: run presets, author rules, fine-tune, validate rule files/presets, extend the engine | [references/rules.md](references/rules.md) |
-| **workflow** | The dual-mode workflow runtime: choose mode, author state-machine / transition-flow workflows, validate, run, read traces, refine | [references/workflows.md](references/workflows.md) |
+| Tier | Noun | Operate | Reference |
+|------|------|---------|-----------|
+| **Tier A** | **task** | Task corpus: create (variants), `deps` mutation, canonical `sections` (`init`/`add`/`list`), status lifecycle, `record`/`verdict` artifacts, `run-link`, `check --json` matrix | [references/tasks.md](references/tasks.md) |
+| **Tier A** | **feature** | Feature tree: author with hierarchical IDs (DD-14), acceptance criteria (Gherkin), status lifecycle, move subtrees, `check --json` | [references/features.md](references/features.md) |
+| **Tier A** | **rule** | Constraint quality gate: run presets, author rules, fine-tune, validate rule files/presets, extend engine | [references/rules.md](references/rules.md) |
+| **Tier A** | **workflow** | Dual-mode workflow runtime: author state-machine / transition-flow workflows, validate, run, read traces | [references/workflows.md](references/workflows.md) |
+| **Tier B** | **init** / **status** | Project initialization validation probes & layout classification; status overview | [references/init.md](references/init.md) (`spur status`) |
+| **Tier B** | **agent** / **history** / **message** / **team** / **migrate** / **serve** | Long-tail nouns — read `spur <noun> --help` for specific flags | Last-resort `--help` |
+
+**Execute-First Contract:** Load `sp:spur-cli` references first to execute Tier A commands directly without calling `spur --help`. Use `spur <noun> --help` only as a last resort for version skew, unlisted long-tail flags, or parity assertion failures.
 
 Each noun's per-topic detail lives one level deeper under `references/<noun>/` (e.g.
-`references/tasks/verbs.md`, `references/features/acceptance-criteria.md`,
+`references/tasks/verbs.md`, `references/tasks/section-editing.md`, `references/features/acceptance-criteria.md`,
 `references/rules/operations.md`, `references/workflows/authoring-workflows.md`).
 
 ## When to use

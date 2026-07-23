@@ -55,13 +55,46 @@ frontmatter scalar.
 - **`--no-lifecycle`**: suppress lifecycle workflow run creation (use inside pipeline runs to avoid
   orphaned nested lifecycle runs).
 - **Section** (`--section` **requires** `--from-file`): replaces the entire named section body from
-  the file. No inline-body flag. Section names: `Background`, `Acceptance Criteria`, `Plan`,
-  `Solution`, `Testing`, `Review`, `References`, `History`.
+  the file. No inline-body flag. Section names: `Background`, `Requirements`, `Acceptance Criteria`, `Q&A`, `Design`, `Plan`, `Solution`, `Testing`, `Review`, `References`, `History`, `Notes`.
 - **Frontmatter** (`--feature <id>`, `--priority <p>`): sets the scalar frontmatter field on an
   existing task — the only post-create path, allow-listed to `feature_id` / `parent_wbs` / `priority`.
 
 Exit code `2` when neither mode's required args are supplied (e.g. `--section` without `--from-file`,
 or no status and no `--section`/frontmatter flag).
+
+## `deps <wbs> <op> [values...]`
+
+Mutate the `dependencies[]` frontmatter array on an existing task. Operations run validation (WBS format, existence, self-edge, duplicates, cycle detection) before any write.
+
+| Op | Usage | Description |
+| --- | --- | --- |
+| `set` | `spur task deps <wbs> set <dep-wbs...>` | Replace `dependencies[]` with given WBS values |
+| `add` | `spur task deps <wbs> add <dep-wbs...>` | Append given WBS values (deduped) |
+| `remove` | `spur task deps <wbs> remove <dep-wbs...>` | Drop given WBS values |
+| `clear` | `spur task deps <wbs> clear` | Empty `dependencies[]` array |
+
+Flags: `--folder <path>`, `--json`. Exit codes: `0` success, `1` error, `2` usage error, `3` validation error.
+`--json` shape: `{ "ref": { "id": "0316", "filePath": "..." }, "dependencies": ["0315"] }`.
+
+## `sections <wbs> <op> [name]`
+
+CLI-safe, matrix-enforced task section mutation. Section names are validated against canonical sections (`Background`, `Requirements`, `Acceptance Criteria`, `Q&A`, `Design`, `Plan`, `Solution`, `Root Cause`, `Testing`, `Review`, `References`, `History`, `Notes`). Universal sections (`History`, `References`, `Notes`) are always allowed; `Root Cause` is carried by the `issue` template variant.
+
+| Op | Usage | Description |
+| --- | --- | --- |
+| `init` | `spur task sections <wbs> init` | Add every required section for task's status not already present (idempotent) |
+| `add` | `spur task sections <wbs> add <name>` | Add a single canonical section |
+| `list` | `spur task sections <wbs> list` | Read-only: return matrix required/optional/forbidden, present, and missing sections |
+
+Flags: `--folder <path>`, `--json`. Exit codes: `0` success, `1` error, `2` usage error, `3` validation error.
+
+## `run-link <wbs>`
+
+Record a pipeline run provenance link for a task WBS (used by `--next` auto chains).
+
+Flags: `--source <source>` (default `chain`), `--run-id <id>`, `--json`.
+`--json` shape: `{ "id": "trl_...", "wbs": "0316", "runId": "...", "kind": "pipeline", "existed"?: true }`.
+Idempotent: skips if a pipeline link already exists for the task. Exit codes: `0` success, `1` error.
 
 ## `batch-create --file <path>`
 
@@ -310,6 +343,8 @@ unallocated.
 spur task create   <title> [--feature <id>] [--parent <wbs>] [--template <v>] [--folder] [--json]
 spur task show     <wbs> [--folder] [--json]
 spur task update   <wbs> [status] [--section <n> --from-file <p>] [--feature <id>] [--priority <p>] [--no-lifecycle] [--folder] [--json]
+spur task deps     <wbs> <set|add|remove|clear> [values...] [--folder] [--json]
+spur task sections <wbs> <init|add|list> [name] [--folder] [--json]
 spur task list     [--status <s>] [--phase <p>] [--parent <wbs>] [--feature <id>] [--folder] [--json]
 spur task refresh  [--folder] [--json]
 spur task migrate  [--dry-run] [--folder] [--json]
@@ -320,4 +355,5 @@ spur task verdict  <wbs> [--from-answer <p>] [--folder] [--json]
 spur task check    [wbs] [--strict] [--strict-core] [--folder] [--json]
 spur task resolve  <file-path> [--strict] [--folder] [--json]
 spur task path     <wbs> [--folder] [--json]
+spur task run-link <wbs> [--source <src>] [--run-id <id>] [--json]
 ```

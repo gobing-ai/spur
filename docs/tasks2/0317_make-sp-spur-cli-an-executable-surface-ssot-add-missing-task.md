@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Make sp:spur-cli an executable surface SSOT — add missing task verbs, fix section set"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: O
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-23T06:11:57.566Z"
-updated_at: "2026-07-23T06:18:39.959Z"
+updated_at: "2026-07-23T17:35:03.639Z"
 ---
 
 ## 0317. Make sp:spur-cli an executable surface SSOT — add missing task verbs, fix section set
@@ -86,16 +86,65 @@ Independent of 0315/0316 — but 0315's R4 handover-reference wording should cit
 6. Update AGENTS / skill execute-first wording; add a changelog entry; cold-session dogfood the Tier A recipes; run the full gate.
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+1. `plugins/sp/skills/spur-cli/references/tasks/verbs.md:66-98,346-355` — Added full documentation sections and quick surface snippets for missing task verbs `deps`, `sections`, and `run-link`.
+2. `plugins/sp/skills/spur-cli/references/tasks.md:28-37` — Added `deps`, `sections`, and `run-link` to the main task verb map table.
+3. `plugins/sp/skills/spur-cli/references/tasks/section-editing.md:45-47` — Corrected the canonical section list to include `Background`, `Requirements`, `Acceptance Criteria`, `Q&A`, `Design`, `Plan`, `Solution`, `Testing`, `Review`, `References`, `History`, `Notes` and universal sections (`History`, `References`, `Notes`).
+4. `plugins/sp/skills/spur-cli/SKILL.md:32-47` — Updated noun routing table to distinguish Tier A (`task`, `feature`, `rule`, `workflow`), Tier B (`init`/`status` + long-tail router), and established the **Execute-First Contract**.
+5. `AGENTS.md:61` — Updated non-negotiable rule 4 to direct agents to execute high-frequency Tier A verbs directly from `sp:spur-cli` references before resorting to `--help`.
+6. `plugins/sp/tests/spur-cli-parity.test.ts:1-118` — Created new reference↔live-CLI parity test suite asserting verb coverage and critical-flag presence across all Tier A nouns (`task`, `feature`, `rule`, `workflow`).
+7. `CHANGELOG.md:15-16` — Added release changelog entry under `[0.3.21]`.
 
 ### Testing
+**Verification verdict (independent re-audit + fix, 2026-07-23, `--force --fix all`): PASS after fix.**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Findings — two PARTIALs, both repaired this turn.**
 
+1. **R7 accuracy gap (P2).** The domain SSOT `TASK_CANONICAL_SECTIONS` (`packages/domain/src/planning/markdown-document.ts`) includes `Root Cause` (carried by the `issue` template that `dev-debug` creates), but the corrected `section-editing.md` and the new `sections` verb doc both **omitted** it. The implementer fixed the Requirements/Q&A/Design/Notes omission but missed `Root Cause`, so the "section contract matches the live matrix" AC was not fully met.
+2. **R9 circular test (P2).** `spur-cli-parity.test.ts`'s section check hardcoded its own section list (also missing `Root Cause`) and asserted the doc contained those — it could only re-assert the same omission. False confidence: it passed while the contract was incomplete.
+
+The verb docs were accurate — `deps` / `sections` / `run-link` ops, flags, and exit codes were cross-checked against live `--help` and match exactly (no invented flags). The verb-coverage tests (which spawn the live CLI) are genuinely non-circular.
+
+**Fixes applied this turn (Step 12).**
+- `references/tasks/section-editing.md` and `references/tasks/verbs.md` — added `Root Cause` to the canonical section enumeration (after `Solution`, matching domain order) with a note that it is the `issue`-variant section.
+- `tests/spur-cli-parity.test.ts` — de-circularized the section check: it now derives the expected vocabulary from the domain SSOT (`markdown-document.ts` `TASK_CANONICAL_SECTIONS` ∪ `UNIVERSAL_SECTIONS`) instead of a hardcoded copy. Proven non-hollow: with `Root Cause` stripped the test fails (6 pass / 1 fail); restored it passes (7 / 0).
+
+**Re-verified after fix (all run this turn).**
+- `bun test plugins/sp/spur-cli-parity`: 7 pass / 0 fail; `bun test plugins/sp/`: 379 pass / 0 fail; `bun run lint`: biome + tsc exit 0.
+- Cold-agent dogfood of one Tier A recipe per noun, from references only (no `--help`): task `sections 0317 list --json` → returns the matrix; feature `show O --json` → id O; rule `list --json` → exit 0; workflow `list --json` → exit 0. (Completes R12 — the implementer had dogfooded only rule + workflow.)
+
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R7 | MET (fixed) | `deps`/`sections`/`run-link` docs match live `--help`; section set corrected to add `Root Cause`; SKILL.md Tier A/B/C + Execute-First Contract; feature/rule/workflow verb coverage confirmed by parity + dogfood |
+| R9 | MET (fixed) | parity test de-circularized (derives from domain SSOT); non-hollow proof (fails on `Root Cause` removal); verb tests cross-check live CLI |
+| R11 | MET | `AGENTS.md` rule 4 execute-first (last-resort `--help`); SKILL.md Execute-First Contract; `CHANGELOG.md` [0.3.21] |
+| R12 | MET (completed) | all four Tier A nouns cold-dogfooded from references this turn |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| R7 — Tier A executable without `--help` | MET | command+file | verb docs vs live help; section matrix complete incl. `Root Cause` |
+| R9 — parity fails loud on drift | MET | test | proven: 6 pass/1 fail when `Root Cause` stripped, 7/0 restored |
+| R11/R12 — execute-first documented + dogfooded | MET | command | AGENTS rule 4; all 4 nouns dogfooded; gates exit 0 |
+
+**SECUA review.** No blocker/major beyond the two fixed doc/test defects. Advisory (P4): `spur task sections list --json` output shows a trailing comma before `}` (looks like invalid JSON) — out of 0317's scope (CLI formatter, not spur-cli refs); flag for a CLI-output follow-up, verify it is not a display artifact first.
+
+**Fix-pass disclosure.** Mutated `references/tasks/section-editing.md`, `references/tasks/verbs.md`, `tests/spur-cli-parity.test.ts` (all tracked).
+
+**Coverage:** N/A for runtime app code (reference-doc + test change); the corrected test lands in the plugin suite (379 pass).
+
+Verdict: PASS
 ### Review
+| Severity | File | Finding | Recommendation |
+| --- | --- | --- | --- |
+| P2 | plugins/sp/skills/spur-cli/references/tasks/section-editing.md, tasks/verbs.md | The corrected canonical section set omitted `Root Cause` (a real `TASK_CANONICAL_SECTIONS` entry carried by the `issue` variant) — the reference did not fully match the live matrix. | FIXED during review: added `Root Cause` to both references. |
+| P2 | plugins/sp/tests/spur-cli-parity.test.ts | The section-parity test hardcoded its expected list (also missing `Root Cause`) — circular; it could only re-assert the same omission (false confidence). | FIXED during review: test now derives the vocabulary from the domain SSOT; proven non-hollow (fails when `Root Cause` removed). |
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Residual risk:** Low post-fix. `deps`/`sections`/`run-link` docs match live CLI `--help`; all four Tier A nouns cold-dogfooded from references.
 
+**Disposition:** Approved after fix. All 4 requirements MET (independent verify PASS, 2026-07-23).
 ### References
 - Parent **0314** and sibling **0315** (R4 handover-reference wording cites this task's corrected section set)
 - `plugins/sp/skills/spur-cli/SKILL.md`, `references/tasks.md`, `references/tasks/{verbs,section-editing}.md`
@@ -104,3 +153,7 @@ Independent of 0315/0316 — but 0315's R4 handover-reference wording should cit
 - `packages/domain/src/planning/markdown-document.ts` (`UNIVERSAL_SECTIONS`) and `packages/app/src/services/planning-write-service.ts`
 - `CLAUDE.md` / AGENTS spur-cli routing (execute-first wording)
 ### History
+### Notes
+
+**P4 advisory resolved (2026-07-23).** The verify Testing section flagged `spur task sections list --json` as possibly emitting a trailing comma (invalid JSON). Investigated: raw stdout is **valid JSON** — `JSON.parse` accepts it and there is no banner pollution (first byte is `{`). The apparent trailing comma was a display artifact of a banner-stripping `grep` used during the audit, and the earlier `python json.load` failure was a piping quirk, not malformed output. No CLI defect; no follow-up task warranted. `feature show --json` also parses clean.
+

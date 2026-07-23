@@ -25,6 +25,8 @@ does what*, this skill.
 | `create <title>` | Allocate a new task (race-safe WBS) | `--feature <id>` `--parent <wbs>` `--template <variant>` `--folder` `--json` |
 | `show <wbs>` | Print one task's frontmatter + body | `--folder` `--json` |
 | `update <wbs> [status]` | Lifecycle transition, section replace, **or** frontmatter set | `--section <name> --from-file <path>` `--feature <id>` `--priority <p>` `--no-lifecycle` `--folder` `--json` |
+| `deps <wbs> <op> [values...]` | Mutate `dependencies[]` frontmatter array (ops: `set`, `add`, `remove`, `clear`) | `--folder` `--json` |
+| `sections <wbs> <op> [name]` | Initialize, add, or list canonical task sections (ops: `init`, `add`, `list`) | `--folder` `--json` |
 | `list` | List tasks, filtered | `--status <s>` `--phase <p>` `--parent <wbs>` `--feature <id>` `--folder` `--json` |
 | `refresh` | Re-scan the corpus and report counts (**`kanban.md` retired** — web Task Kanban is SSOT) | `--folder` `--json` |
 | `migrate` | One-time A17 corpus normalization pass | `--dry-run` `--folder` `--json` |
@@ -35,6 +37,7 @@ does what*, this skill.
 | `check [wbs]` | Four-layer validation; the readiness matrix | `--strict` `--strict-core` `--folder` `--json` |
 | `resolve <file-path>` | Map a file path to its owning task WBS | `--strict` `--folder` `--json` |
 | `path <wbs>` | Map a WBS to its absolute task file path (inverse of `resolve`) | `--folder` `--json` |
+| `run-link <wbs>` | Record pipeline run provenance link for task | `--source <src>` `--run-id <id>` `--json` |
 
 All verbs accept `--json` for machine consumption and `--folder <path>` to target a non-default
 tasks folder. **Exit codes:** `0` success, `1` error, `2` invalid usage.

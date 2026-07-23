@@ -43,8 +43,7 @@ narrative section.
    replace again — there is no append mode.
 
 `--section` **requires** `--from-file` (exit `2` otherwise). Section names match the DD-08 headings
-exactly: `Background`, `Acceptance Criteria`, `Plan`, `Solution`, `Testing`, `Review`, `References`,
-`History`.
+exactly: `Background`, `Requirements`, `Acceptance Criteria`, `Q&A`, `Design`, `Plan`, `Solution`, `Root Cause`, `Testing`, `Review`, `References`, `History`, `Notes` (universal sections are `History`, `References`, `Notes`; `Root Cause` is carried by the `issue` template variant).
 
 ## `record` vs. hand-editing
 

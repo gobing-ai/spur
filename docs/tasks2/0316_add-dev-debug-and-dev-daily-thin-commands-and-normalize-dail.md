@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: ["0315"]
 created_at: "2026-07-23T06:11:55.082Z"
-updated_at: "2026-07-23T16:12:08.348Z"
+updated_at: "2026-07-23T17:35:01.166Z"
 ---
 
 ## 0316. Add dev-debug and dev-daily thin commands and normalize daily-summary env/links
@@ -149,12 +149,14 @@ Version bump is centralized here because this is the count-changing subtask: `pl
 
 Verdict: PASS
 ### Review
+| Severity | File | Finding | Recommendation |
+| --- | --- | --- | --- |
+| P1 | plugins/sp/commands/dev-daily.md | dev-daily dispatched via `Skill(sp:daily-summary)`, but that skill is `disable-model-invocation` and cannot be fired via the Skill tool (0187 SSOT) — the command was non-functional as shipped. | FIXED during review: rewrote to the inline script-run pattern (mirrors dev-handover); corrected the dispatch test; dogfooded the script (dry-run exit 0, RD3 fallback warning). |
+| P4 | plugins/sp/commands/dev-debug.md | dev-debug retains `Write` but lacks `Edit` while `sp:sys-debugging` edits code during its minimal-fix step. | Reconcile in follow-up task 0318 (allowed-tools sweep). |
 
-- P1–P4 Findings: None.
-- Residual Risk: None. Dual-read environment variable compatibility preserves backwards compatibility for `RD3_DAILY_SUMMARY_NO_PROMPT` for at least one release window.
+**Residual risk:** Low post-fix. dev-daily now runs the tested script directly; RD3→SP env fallback verified. dev-debug functions (sys-debugging is model-invocable).
 
-
-
+**Disposition:** Approved after fix. All 7 requirements MET (independent verify PASS, 2026-07-23).
 ### References
 - Parent **0314** and sibling **0315** (this task depends on 0315 for the README inventory + command-contract test coupling)
 - `plugins/sp/skills/sys-debugging/SKILL.md`, `plugins/sp/skills/daily-summary/SKILL.md`
