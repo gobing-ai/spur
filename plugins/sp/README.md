@@ -102,7 +102,7 @@ list this README is checked against.
 | --- | --- |
 | `dev-next` | Status-aware router — inspect a task (or next frontier under a feature), dispatch the best existing `/sp:dev-*` command, chain on clean success |
 | `dev-run` | Run a task — full pipeline (precheck→implement→test→review→approve→verify→record→done) or single-step (implement) |
-| `dev-review` | Review code for a task — SECUA framework review across Security, Efficiency, Correctness, Usability, and Architecture |
+| `dev-review` | Multi-dimensional review for a task or path — functional requirements traceability, SECUA framework, and architectural depth |
 | `dev-verify` | Verify a task against its requirements and Acceptance Criteria — traceability check producing a PASS/PARTIAL/FAIL verdict with evidence |
 | `dev-unit` | Generate or extend tests until the unit target is met |
 | `dev-wrap` | Wrap up a single completed task — learnings, metrics, doc-sync, optional feature transition and branch cleanup |

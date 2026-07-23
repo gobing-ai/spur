@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.21] — 2026-07-22
+
+### Fixed
+
+- resolve sp-spur-init knowledge-kit dogfood findings — align doc templates with canonical constitution (§4.3 frontmatter, `{{init-date}}` tokens, updated bodies), fix status health to key on `spurConfigExists` (stack-neutral projects now report `ok: true`), add `substituteDocTemplateTokens()` for `{{init-date}}` → `YYYY-MM-DD` at scaffold, update init command to use `--json` and summarize once, fix 3 existing tests that relied on `package.json` for `ok: true`, add docs-contract / stack-neutral status tests (bcf309d7)
+- CI: source-vs-bundle template parity no longer reads gitignored `apps/cli/config/` (missing on clean CI). The gate materializes a temp tree via `bundleConfig()` — the same publish path — and compares `config/templates/docs/*` byte-for-byte
+
+### Changed
+
+- **Harden `sp:dev-review` and `sp:dev-handover` command contracts (task 0315).** `dev-review` simplified into deterministic modes (WBS mode: functional traceability + SECUA framework + architectural depth with `Review` section write; Path mode: advisory SECUA + architecture with zero task mutation); deprecated `--fix` and `--next` flags with warning guidance, and trimmed `allowed-tools` to least privilege (`["Bash", "Read", "Skill"]`). `dev-handover` updated so standalone `docs/handover/<date>-<slug>.md` acts as durable SSOT and task association appends a pointer link into `References` / `Notes` without clobbering existing content.
+- clarify UI/UX boundary in scaffolded 04_DESIGN.md template (6f370a70)
+
 ## [0.3.18] — 2026-07-21
 
 ### New Features

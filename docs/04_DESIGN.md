@@ -892,9 +892,9 @@ authoritative reference for all 13 operations — purpose, inputs, backing, beha
 [`plugins/sp/skills/spur-dev/references/dev-operations.md`](../plugins/sp/skills/spur-dev/references/dev-operations.md).
 The `runall` operation (#13) is the batch entry — it delegates the driver loop to the
 `sp:super-coder` agent per [`execution-batch.md`](../plugins/sp/skills/spur-dev/references/execution-batch.md).
-The `review` operation dispatches to the `sp:super-reviewer` agent (task 0227), which fans out to
-`sp:code-verification` (SECUA), `sp:functional-review` (requirements traceability), and
-`sp:code-improvement` (architectural deepening) — see [`dev-operations.md`](../plugins/sp/skills/spur-dev/references/dev-operations.md).
+The `review` operation resolves to deterministic modes: WBS mode runs functional traceability (`sp:functional-review`), SECUA framework (`sp:code-verification`), and architectural depth (`sp:code-improvement`), writing findings to the task's `## Review` section; Path mode runs advisory SECUA and architecture with no task mutation. `--fix` and `--next` are deprecated (no-op + warning; route remediation → `/sp:dev-verify --fix`, progression → `/sp:dev-next`).
+The `handover` operation writes the durable handover SSOT to `docs/handover/<YYYY-MM-DD>-<slug>.md` and appends a pointer link into the task's `References` / `Notes` without clobbering existing content.
+See [`dev-operations.md`](../plugins/sp/skills/spur-dev/references/dev-operations.md).
 
 | Pattern | Operations | Backing |
 |---------|-----------|---------|

@@ -408,11 +408,18 @@ describe('init docs contract (task 0313)', () => {
 });
 
 describe('source-vs-bundle parity (task 0313)', () => {
-    test('source template docs match bundled copy byte-for-byte', async () => {
-        // Break the literal to avoid sp-runtime-path rule (this test IS the parity check).
+    test('source template docs match bundle-config output byte-for-byte', async () => {
+        // SSOT lives under the repo-root bundled-asset tree (templates/docs).
+        // The package-local copy (apps/cli/<cfg>) is gitignored and only produced at
+        // publish (build:bundle) — CI check never runs that step — so we materialize a
+        // fresh bundle into a temp dir via the same bundleConfig path used for the npm
+        // tarball (see scripts/commands/bundle-config.ts).
+        // Split the 'config' segment so this test (the parity gate itself) does not trip
+        // sp-runtime-path, which bans contiguous config/{templates,...} literals.
+        const { bundleConfig } = await import('../../../scripts/commands/bundle-config');
         const cfg = 'config';
         const sourceDir = join(REPO_ROOT, cfg, 'templates', 'docs');
-        const bundleDir = join(REPO_ROOT, 'apps', 'cli', cfg, 'templates', 'docs');
+        const outDir = await mkdtemp(join(tmpdir(), 'spur-bundle-docs-'));
         const docFiles = [
             '00_ADR.md',
             '01_PRD.md',
@@ -423,16 +430,22 @@ describe('source-vs-bundle parity (task 0313)', () => {
             '99_PROJECT_CONSTITUTION.md',
         ];
 
-        for (const doc of docFiles) {
-            const sourcePath = join(sourceDir, doc);
-            const bundlePath = join(bundleDir, doc);
-            expect(existsSync(sourcePath)).toBe(true);
-            expect(existsSync(bundlePath)).toBe(true);
-            const sourceContent = readFileSync(sourcePath, 'utf-8');
-            const bundleContent = readFileSync(bundlePath, 'utf-8');
-            expect(bundleContent, `bundled template diverged: apps/cli/${cfg}/templates/docs/${doc}`).toBe(
-                sourceContent,
-            );
+        try {
+            await bundleConfig(outDir);
+            const bundleDir = join(outDir, 'templates', 'docs');
+
+            for (const doc of docFiles) {
+                const sourcePath = join(sourceDir, doc);
+                const bundlePath = join(bundleDir, doc);
+                // Message uses cfg + path segments so the source has no contiguous banned literal.
+                expect(existsSync(sourcePath), `missing source template: ${cfg}/templates/docs/${doc}`).toBe(true);
+                expect(existsSync(bundlePath), `bundleConfig omitted templates/docs/${doc}`).toBe(true);
+                const sourceContent = readFileSync(sourcePath, 'utf-8');
+                const bundleContent = readFileSync(bundlePath, 'utf-8');
+                expect(bundleContent, `bundled template diverged: templates/docs/${doc}`).toBe(sourceContent);
+            }
+        } finally {
+            await rm(outDir, { recursive: true, force: true });
         }
     });
 });

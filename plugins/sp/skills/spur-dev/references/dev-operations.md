@@ -84,11 +84,14 @@ must not be changed without updating the backing skill.
 
 ### 2. review
 
-- **Purpose:** Three-dimensional code review of a task's diff — (1) functional requirements traceability, (2) SECUA framework (Security, Efficiency, Correctness, Usability, Architecture), (3) architecture depth. Findings written to the task's `## Review` section.
-- **Inputs:** `<wbs>` (required). `--agent <name|auto>` is a **pipeline** override: omit (default) → the review runs under the configured default executor (`omp`); current-agent is **not expressible** (subprocess FSM). `<name>`/`auto` spawns that agent. `--focus <lens>` narrows to one SECUA dimension. `--fix <none|blockers-first|all>` controls auto-fix. `--auto` skips confirmations for review/fix passes.
-- **Backing:** `sp:code-verification` skill, `review` mode (SECUA + architecture); `sp:functional-review` (requirements traceability); `sp:code-improvement` (architecture deepening opportunities).
-- **Behavior:** Detect the diff scope → run three-dimensional analysis (functional traceability + SECUA + architecture depth) → rank findings P1–P4 → write findings to the task's `## Review` section. With `--fix`, applies fixes for the selected severity tier.
-- **Delegation:** `Skill(skill="sp:code-verification", args="review $ARGUMENTS")`
+- **Purpose:** Multi-dimensional code review of a task or path — (1) functional requirements traceability (WBS mode only), (2) SECUA framework (Security, Efficiency, Correctness, Usability, Architecture), (3) architecture depth.
+- **Modes:**
+  - **WBS mode (`<wbs>`)**: Runs functional requirements traceability (`sp:functional-review`), SECUA framework (`sp:code-verification`), and architectural depth (`sp:code-improvement`). May write findings to the task's `## Review` section.
+  - **Path mode (`<path>`)**: Runs advisory SECUA framework (`sp:code-verification`) and architectural depth (`sp:code-improvement`). Performs no task mutation.
+- **Inputs:** `<wbs|path>` (required). `--agent <name|auto>` is a **pipeline** override: omit (default) → the review runs under the configured default executor (`omp`). `<name>`/`auto` spawns that agent. `--focus <lens>` narrows to one SECUA dimension. Note: `--fix` and `--next` are **deprecated** (no-op with warning; route remediation to `/sp:dev-verify --fix` and progression to `/sp:dev-next`).
+- **Backing:** `sp:functional-review`, `sp:code-verification` (review mode), `sp:code-improvement`.
+- **Behavior:** WBS mode runs functional traceability + SECUA + architecture depth, ranking findings P1–P4 and writing findings to the task's `## Review` section. Path mode runs advisory SECUA + architecture depth with no task mutation.
+- **Delegation:** WBS mode: `sp:functional-review` + `sp:code-verification` (review) + `sp:code-improvement`; Path mode: `sp:code-verification` (review) + `sp:code-improvement`.
 
 ### 3. verify
 
@@ -390,9 +393,9 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
      ## Next Steps
      1. <concrete action>
      ```
-  4. Write the document:
-     - If a task context exists, write to the task's `## Notes` section via `spur task update <wbs> --section Notes --from-file <path>`.
-     - Otherwise, write to `docs/handover/<YYYY-MM-DD>-<slug>.md` (create `docs/handover/` if absent).
+  4. Write the document & associate task:
+     - Always write the standalone handover document to `docs/handover/<YYYY-MM-DD>-<slug>.md` (create `docs/handover/` if absent). This document is the durable SSOT.
+     - If a task context exists, append a pointer link (`- Handover: [docs/handover/<YYYY-MM-DD>-<slug>.md](docs/handover/<YYYY-MM-DD>-<slug>.md) — <blocker summary>`) into the task's `## References` section (or non-destructively append to `## Notes` if `References` is unavailable), preserving any pre-existing content without replacing or clobbering it.
   5. Print the path to the handover document.
 - **Suggested Skills section:** Name the `sp:*` skill(s) the next agent should invoke to continue —
   inferred from the task's remaining Requirements/AC and the blocker itself (e.g. a design

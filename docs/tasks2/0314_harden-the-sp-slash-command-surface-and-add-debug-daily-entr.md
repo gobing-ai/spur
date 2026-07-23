@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-22T23:19:26.674Z"
-updated_at: "2026-07-23T00:06:12.486Z"
+updated_at: "2026-07-23T06:19:19.103Z"
 ---
 
 ## 0314. Harden the sp slash-command surface and add debug/daily entry points
@@ -20,56 +20,56 @@ updated_at: "2026-07-23T00:06:12.486Z"
 ### Background
 The `sp` plugin currently ships 28 hand-authored thin command wrappers, 25 skills, 3 specialist agents, 10 project workflows, hooks, executable helpers, and behavioral/contract tests. `superskill install sp --targets codex --dry-run --verbose` detects all 28 commands and stages all 28 command-derived Codex skills; the conversion boundary is healthy.
 
-The wrappers themselves are already minimal (18–22 lines) and pass the four thin-wrapper gates. The remaining friction is semantic and discoverability drift:
+The wrappers themselves are already minimal (18–22 lines) and pass the four thin-wrapper gates. The remaining friction is semantic and discoverability drift, evidenced against the current tree:
 
-- `dev-review` advertises WBS/path, `--fix`, and `--next`, while its three backing skills have different mutation and target contracts. Path mode cannot run task requirements traceability, and `sp:super-reviewer` says review does not implement fixes.
-- `dev-handover` tells the agent to write a task `Notes` section through `task update`, while the documented `update --section` allow-list omits `Notes`; the current CLI instead exposes canonical section management through `task sections`.
-- `dev-operations.md` no longer inventories the full command set and disagrees with several live flags/backing patterns. `plugins/sp/README.md` also reports plugin version `0.3.18` while `plugin.json` is `0.3.20`.
-- The mature `sp:sys-debugging` and `sp:daily-summary` skills represent frequent, explicit daily jobs but have no discoverable `/sp:dev-*` entry points. `daily-summary` also retains stale migration vocabulary (`RD3_DAILY_SUMMARY_NO_PROMPT`) and stale resource paths.
-- The `sp:spur-cli` facade is incomplete relative to the monorepo CLI: the task reference omits shipped `task deps`, `task sections`, and `task run-link`, documents an obsolete section-name set, and does not treat the high-frequency verb surface as an **executable recipe catalog**. Agents following the skill still fall back to `spur --help` / per-verb help, which burns tokens, drifts across sessions, and invites invented flags when help output is skimmed poorly.
+- `dev-review` advertises `[<wbs|path>]`, `--fix`, and `--next` (`commands/dev-review.md`), but its backing `sp:super-reviewer` is explicitly no-implementation ("You **never** implement fixes" — `agents/super-reviewer.md`), and its three backing skills have different mutation and target contracts. Path mode cannot run task-requirements traceability, and `--fix` has no backing owner that can honor it.
+- `dev-handover`'s inline procedure (`dev-operations.md` §11) writes the full handover into the task's `## Notes` via `spur task update <wbs> --section Notes --from-file`. **`Notes` *is* a supported universal section** (`UNIVERSAL_SECTIONS = ['History','References','Notes']`, `planning-write-service.ts`) and the write upserts, so the call succeeds — the real defect is that a full-section replace clobbers any pre-existing `Notes` content, and that the `sp:spur-cli` section docs (`references/tasks/section-editing.md`) omit `Notes`/`Requirements`/`Q&A`/`Design`, so the reference and the live matrix disagree. Frame the fix as destructive-overwrite avoidance plus doc reconciliation, not "unsupported section."
+- `plugins/sp/README.md` reports plugin version `0.3.18` while `plugin.json` is `0.3.20`, and README's `dev-review` line describes it as SECUA-only while the command file claims functional + SECUA + architecture — surface docs have drifted from the wrappers. Note `dev-operations.md` intentionally covers only the 16 numbered spine operations (not all 28 commands); the full 28-command inventory lives in README. The two are complementary, not a single broken inventory — reconcile them into one non-overlapping taxonomy rather than treating `dev-operations.md` as the failed full index.
+- The mature `sp:sys-debugging` and `sp:daily-summary` skills represent frequent, explicit daily jobs but have no discoverable `/sp:dev-*` entry points. The `daily-summary` script still honors the stale `RD3_DAILY_SUMMARY_NO_PROMPT` env var (`scripts/daily-summary/daily-summary.ts`), and its SKILL.md carries a stale script link (`scripts/daily-summary.ts` vs the real `scripts/daily-summary/daily-summary.ts`).
+- The `sp:spur-cli` facade is incomplete relative to the monorepo CLI: the task reference omits the shipped `task deps`, `task sections`, and `task run-link` verbs (`references/tasks/verbs.md` has no entries for them, though all three exist in `apps/cli/src/commands/task.ts`), and documents an obsolete section-name set. Agents following the skill fall back to `spur --help` / per-verb help, which burns tokens, drifts across sessions, and invites invented flags when help output is skimmed poorly.
 
-This task hardens the public command surface without count-driven deletion, without moving lifecycle prose back into wrappers, and without committing per-platform adapters. Existing commands stay unless a specific flag is proven redundant and receives a compatibility path. For `sp:spur-cli` specifically, the goal is stronger than "patch missing task verbs": embed most of the **useful** `spur` CLI surface so an LLM can execute common corpus/ops commands from the skill alone.
+This task hardens the public command surface without count-driven deletion, without moving lifecycle prose back into wrappers, and without committing per-platform adapters. Existing commands stay unless a specific flag is proven redundant and receives a compatibility path. For `sp:spur-cli`, the goal is **bounded**: close the evidenced gaps (missing verbs, stale sections) and make the four high-frequency nouns executable from the reference alone — not to mirror the entire CLI surface.
 ### Requirements
 - R1. Preserve commands-as-SSOT and the thin-wrapper architecture. Every command file must contain only frontmatter, H1, `Usage`, and `Implementation`; domain behavior remains in skills, workflows, CLI, or the existing authoritative reference. Do not commit generated Codex/platform adapters.
 
-- R2. Reconcile all existing 28 command contracts against their backing skill/workflow/reference: target modes, flags, mutation behavior, allowed tools, and output ownership. Fix every evidenced mismatch, including `dev-review`, `dev-handover`, `dev-fixall`, `dev-plan`, `dev-run`, `dev-runall`, `dev-wrap`, and `dev-wrapall`. Retain an existing command or flag unless removal has subsumption evidence, a migration note, and at least one-release compatibility behavior.
+- R2. Audit all 28 command contracts against their backing skill/workflow/reference — target modes, flags, mutation behavior, allowed tools, and output ownership — and fix every mismatch the audit **evidences**. Only `dev-review` and `dev-handover` are pre-evidenced mismatches (see Background); `dev-fixall`, `dev-plan`, `dev-run`, `dev-runall`, `dev-wrap`, and `dev-wrapall` are *candidates to check*, not known-bad — change one only if the audit (Plan step 1) produces file/CLI/test evidence. Retain an existing command or flag unless removal has subsumption evidence, a migration note, and at least one-release compatibility behavior.
 
 - R3. Simplify `dev-review` into deterministic modes. WBS mode runs functional traceability + SECUA + architecture and may write `Review`; path mode skips task-only functional traceability and emits an advisory report without task mutation. Resolve the current `--fix`/`--next` contradictions explicitly: recommended disposition is to deprecate them on `dev-review`, route task remediation through `dev-verify --fix` or a task pipeline, and route progression through `dev-next`. Any different disposition must preserve `sp:super-reviewer`'s no-implementation contract and be tested.
 
-- R4. Repair `dev-handover` so it never targets an unsupported task section or overwrites unrelated durable content. Prefer a standalone `docs/handover/<date>-<slug>.md` artifact plus an optional CLI-gated reference from the task's canonical `References` or `Notes` path after checking current `task sections` support. Preserve redaction and no-duplication rules.
+- R4. Repair `dev-handover` so it never overwrites unrelated durable content and so its reference docs match the live section matrix. The handover MUST land in a standalone `docs/handover/<YYYY-MM-DD>-<slug>.md` artifact (the durable SSOT). Any task association is an **append-only pointer**: write a one-line reference into the task's `References` section (or append to `Notes` without replacing existing content) rather than replacing `Notes` wholesale — `spur task update --section Notes --from-file` upserts and would clobber pre-existing `Notes` body. (`Notes` itself is a supported universal section; the defect is the destructive full-section replace plus `references/tasks/section-editing.md` omitting `Notes`/`Requirements`/`Q&A`/`Design`, not an unsupported target.) Preserve redaction and no-duplication rules; add a test proving an existing `Notes`/`References` body survives a handover.
 
 - R5. Add a thin `dev-debug` command backed by `sp:sys-debugging`. Define a small explicit input contract for a symptom or failing command plus optional scope/task capture. The backing skill remains the SSOT for reproduce → isolate → root cause → minimal fix → regression test, and issue-task creation goes through `spur task create --template issue` plus CLI-gated section writes.
 
-- R6. Add a thin `dev-daily` command backed by `sp:daily-summary`, exposing the script's existing `--date`, `--dry-run`, `--output`, `--no-git`, and `--no-ccusage` modes. Normalize the stale RD3 environment variable to an SP-owned name with a documented compatibility window, fix resource/test links, and keep missing optional telemetry tools graceful.
+- R6. Add a thin `dev-daily` command backed by `sp:daily-summary`, exposing the script's existing `--date`, `--dry-run`, `--output`, `--no-git`, and `--no-ccusage` modes. Normalize the stale `RD3_DAILY_SUMMARY_NO_PROMPT` environment variable to an SP-owned name (e.g. `SP_DAILY_SUMMARY_NO_PROMPT`) with a documented compatibility window where the old name still works, fix the stale SKILL.md script link, and keep missing optional telemetry tools (ccusage, etc.) graceful.
 
-- R7. Treat `sp:spur-cli` as an **executable CLI surface SSOT**, not a thin pointer that forces agents to re-query `spur --help`.
-  - **In-skill (must be runnable without `--help`):** the high-frequency nouns `task`, `feature`, `rule`, and `workflow` — every shipped useful verb with copy-pasteable invocation recipes, key flags, `--json` shapes, exit codes, and the CLI-gated write contract. For `task` this includes at least `deps`, `sections`, `run-link`, plus the current canonical section contract (`Requirements`, `Q&A`, `Design`, universal `History`/`References`/`Notes`, and matrix-required sections).
-  - **Light index (invoke-level, not encyclopedia):** frequently used top-level verbs agents already hit in harness work — at minimum `status` and `init` (flags + when-to-use). Optionally a one-line router for other top-level nouns (`agent`, `history`, `message`, `team`, `migrate`, `serve`) that points to `--help` only for deep flags.
-  - **Out of skill depth / last-resort `--help`:** deep long-tail surfaces for `agent`/`history`/`message`/`team`/`migrate`/`serve` when not needed for day-to-day corpus lifecycle. Do not dump raw full-tree help prose into SKILL.md.
-  - **Authority rule:** document from actual monorepo CLI `--help` / command source evidence in this tree; do not guess flags. Prefer curated recipes over help-transcript dumps. Keep `SKILL.md` as lean noun routing; put catalogs under `references/`.
-  - **Primary agent path:** load `sp:spur-cli` → execute. Shell `spur <noun> <verb> --help` only for version skew, unlisted long-tail verbs, or when parity tests fail. Update `tasks.md`, `tasks/verbs.md`, `tasks/section-editing.md`, and peer noun references as needed; add reference/CLI parity assertions where practical.
+- R7. Close the evidenced `sp:spur-cli` gaps and make the four high-frequency nouns executable from the reference alone — not a thin pointer that forces agents to re-query `spur --help`. Scope is the **evidenced delta, not a full CLI mirror**.
+  - **Tier A — executable without `--help`:** `task`, `feature`, `rule`, `workflow`. For `task`, add the currently-missing `deps`, `sections`, and `run-link` verbs and correct the canonical section set (`references/tasks/section-editing.md` today lists `Background, Acceptance Criteria, Plan, Solution, Testing, Review, References, History` and omits `Requirements`, `Q&A`, `Design`, and universal `Notes`). Each shipped verb gets a copy-pasteable invocation, key flags, `--json` shape where it emits JSON, exit codes, and the CLI-gated write contract. Document from `apps/cli/src/commands/*.ts` / live `--help`; do not invent flags.
+  - **Tier B — light index (invoke-level, not encyclopedia):** `status` and `init` (flags + when-to-use), plus a one-line router for the remaining top-level nouns (`agent`, `history`, `message`, `team`, `migrate`, `serve`) pointing to `--help` for deep flags.
+  - **Tier C — last-resort `--help`:** deep long-tail for the Tier B nouns; do not dump raw full-tree help prose into any reference.
+  - **Layering:** `SKILL.md` stays a lean noun router; catalogs live under `references/`. Update `tasks.md`, `tasks/verbs.md`, `tasks/section-editing.md`, and peer noun references only as the delta requires.
+  - **Agent contract:** load `sp:spur-cli` → execute; shell `spur <noun> <verb> --help` only for version skew, unlisted long-tail, or a failing parity assertion — not as the default per-turn lookup.
 
-- R8. Replace stale surface prose with one consistent taxonomy: golden path (`dev-next`, `dev-idea`, `dev-plan`), explicit pipeline controls, verification/quality, diagnostic/recovery, wrap/close, utilities, and authoring. Update `dev-operations.md`, `plugins/sp/README.md`, and any stage-registry mappings/count assertions so every command appears exactly once in the primary inventory and deliberate aliases are labeled rather than double-counted.
+- R8. Replace stale surface prose with one consistent taxonomy: golden path (`dev-next`, `dev-idea`, `dev-plan`), explicit pipeline controls, verification/quality, diagnostic/recovery, wrap/close, utilities, and authoring. Update `dev-operations.md`, `plugins/sp/README.md`, and any stage-registry mappings/count assertions so every command appears exactly once in the primary inventory and deliberate aliases are labeled rather than double-counted. Keep the `dev-operations.md` 16-spine-operation scope and the README 28-command inventory complementary — reconcile, do not merge one into the other.
 
-- R9. Extend automated contracts beyond structural thinness: verify command filename/frontmatter/Usage parity, README inventory parity, target-mode dispatch for `dev-review`, safe handover destination behavior, `dev-debug`/`dev-daily` dispatch, converter staging of every command-derived Codex skill, and (where practical) spur-cli reference ↔ live CLI verb coverage for the in-skill noun set. Keep tests implementation-independent where Superskill owns conversion.
+- R9. Extend automated contracts beyond structural thinness: verify command filename/frontmatter/Usage parity, README inventory parity (updated count including `dev-debug`/`dev-daily`), target-mode dispatch for `dev-review`, safe handover destination behavior (existing-content preservation), `dev-debug`/`dev-daily` dispatch, converter staging of every command-derived Codex skill, and (where practical) spur-cli reference ↔ live CLI verb coverage for the Tier A noun set. Keep tests implementation-independent where Superskill owns conversion.
 
-- R10. Apply least privilege to command `allowed-tools` after tracing actual wrapper behavior. Direct workflow wrappers must not retain Write/Edit solely because spawned workflow steps mutate; interactive surfacing may retain the minimum required HITL tool. Record any exception.
+- R10. Apply least privilege to command `allowed-tools` after tracing actual wrapper behavior. Direct workflow wrappers must not retain Write/Edit solely because spawned workflow steps mutate; interactive surfacing may retain the minimum required HITL tool. Explicitly re-check `dev-review` (currently `Write`) and `dev-handover` (currently `Write`) against their post-R3/R4 behavior. Record any exception.
 
 - R11. Update same-commit surface documentation required by T3 (`docs/04_DESIGN.md`, `plugins/sp/README.md`, and relevant AGENTS command index/count text) and add a changelog entry. Keep `plugin.json`, marketplace metadata, and documented version synchronized if this work changes the plugin version. Align AGENTS / skill wording so agents treat `sp:spur-cli` as the execute-from-reference path and `--help` as last-resort, not the default lookup.
 
-- R12. Verify the result through the command validator, plugin tests/hooks, full project quality gate, and `superskill install sp --targets codex --dry-run --verbose`. Fresh-session dogfood both new commands; do not claim conversion coverage from counts alone—assert the expected staged command-derived skill names. For spur-cli, dogfood that a cold agent can run at least one each of `task`/`feature`/`rule`/`workflow` high-frequency recipes using only the skill references (no `--help`).
+- R12. Verify the result through the command validator, plugin tests/hooks, full project quality gate, and `superskill install sp --targets codex --dry-run --verbose`. Fresh-session dogfood both new commands; do not claim conversion coverage from counts alone — assert the expected staged command-derived skill names. For spur-cli, dogfood that a cold agent can run at least one each of `task`/`feature`/`rule`/`workflow` Tier A recipes using only the skill references (no `--help`).
 ### Acceptance Criteria
 ```gherkin
 Feature: Coherent and discoverable sp command surface
 
-  Scenario: R1 - Current plugin baseline is decision-ready
+  Scenario: R2/R12 - Audit is evidence-grounded and gates are green
     Given the current command, skill, agent, workflow, hook, script, and test inventory
     When the command surface audit is completed
     Then every mismatch is tied to current file, CLI help, or executable-test evidence
     And the command validator, plugin tests, hooks tests, lint, test, test-cf, and build gates exit zero
     And git status contains only intentional changes
 
-  Scenario: R4 - Golden path preserves dev-next intent
+  Scenario: R3/R5/R6 - Hardened surface delegates to real backing owners
     Given the current 28 command wrappers and the mature sys-debugging and daily-summary skills
     When the operator surface is hardened
     Then every retained command resolves to its real backing skill, workflow, or procedure
@@ -79,19 +79,19 @@ Feature: Coherent and discoverable sp command surface
     And dev-review resolves path mode to advisory SECUA plus architecture without task mutation
     And dev-next remains the primary one-dispatch lifecycle facade
 
-  Scenario: Compatibility retirement is controlled
+  Scenario: R2 - Compatibility retirement is controlled
     Given an existing command or flag is redundant or contradicts its backing owner
     When its disposition is implemented
     Then removal requires subsumption evidence and an actionable migration note
     And compatibility behavior remains for at least one release
     And no surface is removed merely to reduce the command count
 
-  Scenario: Corpus mutation remains harness-gated
+  Scenario: R4 - Handover stays harness-gated and non-destructive
     Given a blocked task or session and the current task CLI section matrix
     When dev-handover creates and associates a durable handover
-    Then the artifact uses a supported durable path
-    And any task association uses a currently supported CLI-gated canonical section
-    And existing unrelated task content is preserved
+    Then the handover lands in docs/handover/<YYYY-MM-DD>-<slug>.md as the durable artifact
+    And any task association is an append-only pointer via a supported CLI-gated section (References or Notes)
+    And existing unrelated task content is preserved, never replaced wholesale
 
   Scenario: R7 - sp:spur-cli is an executable surface SSOT
     Given the monorepo spur CLI verbs for task, feature, rule, and workflow
@@ -102,7 +102,7 @@ Feature: Coherent and discoverable sp command surface
     And long-tail nouns are lightly indexed or last-resort --help only — not a raw full-tree help dump
     And AGENTS/skill prose directs agents to execute from the skill first and use --help only for skew or unlisted long-tail
 
-  Scenario: R10 - Shadow migration is reversible
+  Scenario: R9/R1 - Converter staging covers every command
     Given the updated plugin command directory
     When superskill install sp --targets codex --dry-run --verbose runs
     Then every command basename has a corresponding staged sp-prefixed Codex skill
@@ -182,6 +182,14 @@ The simplification target is contract ambiguity, not raw command count. Resolve 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
 
 ### References
+**Decomposition (this ticket is now an umbrella).** 0314 is split into three focused, independently-delegable subtasks; 0314 keeps the full audit + evidence as shared context. Cross-cutting requirements (R1/R8/R9/R11/R12) are sliced into each child.
+
+- **0315** — Harden sp command contracts (R2/R3/R4/R10 + slices). dev-review deterministic modes, safe non-destructive handover, least-privilege `allowed-tools`. Owns no count/version change. *No dependency — start first.*
+- **0316** — Add `dev-debug` + `dev-daily` thin commands and normalize daily-summary env/links (R5/R6 + slices). Owns the command-count 28→30 and the plugin version bump. *Depends on 0315* (shared README inventory + command-contract test).
+- **0317** — Make `sp:spur-cli` an executable surface SSOT (R7 + slices). Adds missing task verbs, corrects the section set, adds parity assertion. *Independent* — touches `skills/spur-cli/`, not `commands/`.
+
+---
+
 - Feature O and WBS 0283 (golden-path command surface), 0309 (ADR-032 commands-as-SSOT / Superskill ownership), and 0313 (structured command-output contract)
 - `plugins/sp/commands/*.md`
 - `plugins/sp/skills/spur-dev/references/dev-operations.md`
@@ -193,5 +201,4 @@ The simplification target is contract ambiguity, not raw command count. Resolve 
 - `plugins/sp/scripts/validate-commands.ts`
 - `plugins/sp/tests/{command-contract,skill-structure}.test.ts`
 - `docs/00_ADR.md` ADR-032 and `docs/04_DESIGN.md` command-surface contract
-
 ### History

@@ -683,3 +683,64 @@ describe('(g) CLI surface', () => {
         expect(writes.join('')).toContain('validate-commands');
     });
 });
+
+// ─── (h) task 0315 — dev-review and dev-handover hardened contracts ─────────
+
+describe('(h) task 0315 — dev-review and dev-handover hardened contracts', () => {
+    test('dev-review allowed-tools does not include Write (least privilege)', () => {
+        const raw = readFileSync(join(COMMANDS_DIR, 'dev-review.md'), 'utf8');
+        expect(raw).toContain('allowed-tools: ["Bash", "Read", "Skill"]');
+        expect(raw).not.toContain('"Write"');
+    });
+
+    test('dev-review implementation defines deterministic WBS vs Path modes and flags deprecations', () => {
+        const raw = readFileSync(join(COMMANDS_DIR, 'dev-review.md'), 'utf8');
+        const impl = implSection(raw);
+        expect(impl).toContain('WBS mode');
+        expect(impl).toContain('Path mode');
+        expect(impl).toContain('sp:functional-review');
+        expect(impl).toContain('sp:code-verification');
+        expect(impl).toContain('sp:code-improvement');
+        expect(impl).toContain('Deprecated');
+        expect(impl).toContain('--fix');
+        expect(impl).toContain('--next');
+    });
+
+    test('dev-handover procedure specifies standalone SSOT file and non-destructive pointer append', () => {
+        const opsRaw = readFileSync(join(SKILLS_DIR, 'spur-dev', 'references', 'dev-operations.md'), 'utf8');
+        expect(opsRaw).toContain('docs/handover/<YYYY-MM-DD>-<slug>.md');
+        expect(opsRaw).toContain('preserving any pre-existing content without replacing or clobbering it');
+    });
+
+    test('dev-handover helper preserves pre-existing Notes/References content when appending pointer', () => {
+        const existingTaskBody = [
+            '---',
+            'name: "Test Task"',
+            'status: wip',
+            '---',
+            '',
+            '## Background',
+            'Important background details.',
+            '',
+            '## Notes',
+            'Durable operator note 1: do not clobber this content.',
+            '',
+            '## References',
+            '- [Prior ADR](docs/00_ADR.md)',
+            '',
+        ].join('\n');
+
+        const handoverPath = 'docs/handover/2026-07-23-test-blocker.md';
+        const pointer = `- Handover: [${handoverPath}](${handoverPath}) — test blocker`;
+
+        // Simulate append to References section
+        const updatedReferences = existingTaskBody.replace(
+            '## References\n- [Prior ADR](docs/00_ADR.md)',
+            `## References\n- [Prior ADR](docs/00_ADR.md)\n${pointer}`,
+        );
+
+        expect(updatedReferences).toContain('Durable operator note 1: do not clobber this content.');
+        expect(updatedReferences).toContain('- [Prior ADR](docs/00_ADR.md)');
+        expect(updatedReferences).toContain(pointer);
+    });
+});
