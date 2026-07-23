@@ -25,11 +25,12 @@ import { enableLogger } from '../../scripts/daily-summary/logger';
 
 beforeAll(() => {
     enableLogger(false, false);
-    process.env.RD3_DAILY_SUMMARY_NO_PROMPT = '1';
+    process.env.SP_DAILY_SUMMARY_NO_PROMPT = '1';
 });
 
 afterAll(() => {
     enableLogger(true, true);
+    delete process.env.SP_DAILY_SUMMARY_NO_PROMPT;
     delete process.env.RD3_DAILY_SUMMARY_NO_PROMPT;
 });
 
@@ -327,9 +328,32 @@ describe('generateMarkdown', () => {
 // ───────── promptUser ─────────
 
 describe('promptUser', () => {
-    test('returns empty annotations when RD3_DAILY_SUMMARY_NO_PROMPT=1', async () => {
-        const result = await promptUser();
-        expect(result).toEqual({ learnings: '', issuesFixed: '', pending: '' });
+    test('returns empty annotations when SP_DAILY_SUMMARY_NO_PROMPT=1', async () => {
+        const originalSp = process.env.SP_DAILY_SUMMARY_NO_PROMPT;
+        process.env.SP_DAILY_SUMMARY_NO_PROMPT = '1';
+        try {
+            const result = await promptUser();
+            expect(result).toEqual({ learnings: '', issuesFixed: '', pending: '' });
+        } finally {
+            if (originalSp !== undefined) process.env.SP_DAILY_SUMMARY_NO_PROMPT = originalSp;
+            else delete process.env.SP_DAILY_SUMMARY_NO_PROMPT;
+        }
+    });
+
+    test('returns empty annotations when RD3_DAILY_SUMMARY_NO_PROMPT=1 (fallback with deprecation warning)', async () => {
+        const originalSp = process.env.SP_DAILY_SUMMARY_NO_PROMPT;
+        const originalRd3 = process.env.RD3_DAILY_SUMMARY_NO_PROMPT;
+        delete process.env.SP_DAILY_SUMMARY_NO_PROMPT;
+        process.env.RD3_DAILY_SUMMARY_NO_PROMPT = '1';
+        try {
+            const result = await promptUser();
+            expect(result).toEqual({ learnings: '', issuesFixed: '', pending: '' });
+        } finally {
+            if (originalSp !== undefined) process.env.SP_DAILY_SUMMARY_NO_PROMPT = originalSp;
+            else delete process.env.SP_DAILY_SUMMARY_NO_PROMPT;
+            if (originalRd3 !== undefined) process.env.RD3_DAILY_SUMMARY_NO_PROMPT = originalRd3;
+            else delete process.env.RD3_DAILY_SUMMARY_NO_PROMPT;
+        }
     });
 
     test('reads buffered stdin lines when not a TTY', async () => {
@@ -338,7 +362,9 @@ describe('promptUser', () => {
         Object.defineProperty(fakeStdin, 'isTTY', { value: false });
 
         const originalStdin = process.stdin;
-        const originalNoPrompt = process.env.RD3_DAILY_SUMMARY_NO_PROMPT;
+        const originalNoPrompt = process.env.SP_DAILY_SUMMARY_NO_PROMPT;
+        const originalRd3 = process.env.RD3_DAILY_SUMMARY_NO_PROMPT;
+        delete process.env.SP_DAILY_SUMMARY_NO_PROMPT;
         delete process.env.RD3_DAILY_SUMMARY_NO_PROMPT;
         Object.defineProperty(process, 'stdin', { value: fakeStdin, configurable: true });
         try {
@@ -347,7 +373,14 @@ describe('promptUser', () => {
         } finally {
             Object.defineProperty(process, 'stdin', { value: originalStdin, configurable: true });
             if (originalNoPrompt !== undefined) {
-                process.env.RD3_DAILY_SUMMARY_NO_PROMPT = originalNoPrompt;
+                process.env.SP_DAILY_SUMMARY_NO_PROMPT = originalNoPrompt;
+            } else {
+                delete process.env.SP_DAILY_SUMMARY_NO_PROMPT;
+            }
+            if (originalRd3 !== undefined) {
+                process.env.RD3_DAILY_SUMMARY_NO_PROMPT = originalRd3;
+            } else {
+                delete process.env.RD3_DAILY_SUMMARY_NO_PROMPT;
             }
         }
     });

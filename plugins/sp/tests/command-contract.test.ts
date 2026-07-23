@@ -299,11 +299,11 @@ describe('(b) frontmatter schema — description, argument-hint, allowed-tools',
         }
     });
 
-    test('28 command files exist with unique basenames', () => {
+    test('30 command files exist with unique basenames', () => {
         const files = listCommandFiles();
-        expect(files.length).toBe(28);
+        expect(files.length).toBe(30);
         const names = new Set(files.map((f) => f.replace(/\.md$/, '')));
-        expect(names.size).toBe(28);
+        expect(names.size).toBe(30);
     });
 });
 
@@ -384,7 +384,7 @@ describe('(d) allowed-tools coherence — Skill <-> Skill() call', () => {
 describe('(e) validator reports no violations on the live corpus', () => {
     test('validate() returns zero violations', () => {
         const result = validate(ROOT);
-        expect(result.fileCount).toBe(28);
+        expect(result.fileCount).toBe(30);
         expect(result.violations).toEqual([]);
     });
 });
@@ -620,10 +620,10 @@ describe('(g) CLI surface', () => {
 
     test('runCli reports clean state', () => {
         const r = runCli([], {
-            validateFn: () => ({ violations: [], fileCount: 28 }),
+            validateFn: () => ({ violations: [], fileCount: 30 }),
         });
         expect(r.exitCode).toBe(0);
-        expect(r.stdout).toContain('28 commands pass');
+        expect(r.stdout).toContain('30 commands pass');
     });
 
     test('runCli reports violations', () => {
@@ -742,5 +742,35 @@ describe('(h) task 0315 — dev-review and dev-handover hardened contracts', () 
         expect(updatedReferences).toContain('Durable operator note 1: do not clobber this content.');
         expect(updatedReferences).toContain('- [Prior ADR](docs/00_ADR.md)');
         expect(updatedReferences).toContain(pointer);
+    });
+});
+
+// ─── (i) task 0316 — dev-debug and dev-daily entry points ───────────────────
+
+describe('(i) task 0316 — dev-debug and dev-daily entry points', () => {
+    test('dev-debug wrapper passes contract gates and delegates to sp:sys-debugging', () => {
+        const raw = readFileSync(join(COMMANDS_DIR, 'dev-debug.md'), 'utf8');
+        expect(raw).toContain('description:');
+        expect(raw).toContain('argument-hint:');
+        expect(raw).toContain('allowed-tools: ["Bash", "Read", "Write", "Skill"]');
+        expect(raw).toContain('# Dev Debug');
+        expect(raw).toContain('## Usage');
+        expect(raw).toContain('## Implementation');
+        expect(implSection(raw)).toContain('Skill(skill="sp:sys-debugging", args="$ARGUMENTS")');
+    });
+
+    test('dev-daily runs the daily-summary script inline (NOT Skill() — the skill is disable-model-invocation)', () => {
+        const raw = readFileSync(join(COMMANDS_DIR, 'dev-daily.md'), 'utf8');
+        expect(raw).toContain('description:');
+        expect(raw).toContain('argument-hint:');
+        expect(raw).toContain('allowed-tools: ["Bash", "Read"]');
+        expect(raw).toContain('# Dev Daily');
+        expect(raw).toContain('## Usage');
+        expect(raw).toContain('## Implementation');
+        // sp:daily-summary carries disable-model-invocation, so a Skill() dispatch would never fire
+        // (docs/tasks2/0187 Q&A). dev-daily must run the script directly, not via Skill().
+        expect(implSection(raw)).toContain('scripts/daily-summary/daily-summary.ts');
+        expect(implSection(raw)).toContain('$ARGUMENTS');
+        expect(raw).not.toContain('Skill(skill="sp:daily-summary"');
     });
 });

@@ -898,7 +898,7 @@ See [`dev-operations.md`](../plugins/sp/skills/spur-dev/references/dev-operation
 
 | Pattern | Operations | Backing |
 |---------|-----------|---------|
-| `Skill()` delegation | implement, unit, review, verify, run, refine, plan, docs, brainstorm, dogfood, runall | `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:functional-review`, `sp:code-improvement`, `sp:spur-dev`, `sp:doc-evolve`, `sp:brainstorm`, `sp:dogfood-testing` |
+| `Skill()` delegation | implement, unit, review, verify, run, refine, plan, docs, brainstorm, dogfood, runall, debug, daily | `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:functional-review`, `sp:code-improvement`, `sp:spur-dev`, `sp:doc-evolve`, `sp:brainstorm`, `sp:dogfood-testing`, `sp:sys-debugging`, `sp:daily-summary` |
 | Inline procedure | changelog, gitmsg, fixall, handover | git CLI + `spur` CLI + agent reasoning |
 
 **Brainstorm artifact exits.** `dev-brainstorm` runs the grilling interview → ideation, then lands an

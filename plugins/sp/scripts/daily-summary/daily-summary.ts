@@ -292,7 +292,11 @@ export async function getGitCommits(date: string): Promise<GitCommit[]> {
 // ─── User Input ─────────────────────────────────────────────────────────────
 
 export async function promptUser(): Promise<UserAnnotations> {
+    if (process.env.SP_DAILY_SUMMARY_NO_PROMPT === '1') {
+        return { learnings: '', issuesFixed: '', pending: '' };
+    }
     if (process.env.RD3_DAILY_SUMMARY_NO_PROMPT === '1') {
+        logger.warn('[deprecate] RD3_DAILY_SUMMARY_NO_PROMPT is deprecated; use SP_DAILY_SUMMARY_NO_PROMPT');
         return { learnings: '', issuesFixed: '', pending: '' };
     }
 

@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Add dev-debug and dev-daily thin commands and normalize daily-summary env/links"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: O
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: ["0315"]
 created_at: "2026-07-23T06:11:55.082Z"
-updated_at: "2026-07-23T06:17:38.795Z"
+updated_at: "2026-07-23T16:12:08.348Z"
 ---
 
 ## 0316. Add dev-debug and dev-daily thin commands and normalize daily-summary env/links
@@ -93,15 +93,67 @@ Version bump is centralized here because this is the count-changing subtask: `pl
 5. Run the validator and the Codex dry-run; assert both new staged skill names; fresh-session dogfood both commands; run the full gate and inspect git status.
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+1. `plugins/sp/commands/dev-debug.md:1-17` — Created thin entry point command for `sp:sys-debugging` protocol (`Skill(skill="sp:sys-debugging", args="$ARGUMENTS")`).
+2. `plugins/sp/commands/dev-daily.md:1-17` — Created thin entry point command for `sp:daily-summary` generator (`Skill(skill="sp:daily-summary", args="$ARGUMENTS")`).
+3. `plugins/sp/scripts/daily-summary/daily-summary.ts:294-299` — Implemented dual-read environment variable compatibility: `SP_DAILY_SUMMARY_NO_PROMPT` (primary) falling back to `RD3_DAILY_SUMMARY_NO_PROMPT` with deprecation warning.
+4. `plugins/sp/skills/daily-summary/SKILL.md:166` — Fixed stale script link reference to `../../scripts/daily-summary/daily-summary.ts`.
+5. `plugins/sp/plugin.json:3`, `.claude-plugin/marketplace.json:9`, `plugins/sp/README.md:13` — Synchronized plugin version to `0.3.21`.
+6. `plugins/sp/README.md:123-124` — Added `dev-debug` and `dev-daily` inventory rows under `Lifecycle — operations and hygiene`.
+7. `plugins/sp/tests/command-contract.test.ts:304-306,387,623,748-771` — Updated command count assertion 28 → 30 and added dispatch tests for `dev-debug` and `dev-daily`.
+8. `plugins/sp/tests/daily-summary/daily-summary.test.ts:28,328-355` — Updated test suite for `SP_DAILY_SUMMARY_NO_PROMPT` primary and `RD3_DAILY_SUMMARY_NO_PROMPT` fallback.
+9. `docs/04_DESIGN.md:901` & `CHANGELOG.md:10-12` — Updated §7.8 operations table and added release changelog entry under `[0.3.21]`.
 
 ### Testing
+**Verification verdict (independent re-audit + fix, 2026-07-23, `--force --fix all`): PASS after fix.**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Initial finding — FAIL (P1 blocker, now repaired).** `dev-daily.md` dispatched via `Skill(skill="sp:daily-summary")`, but `sp:daily-summary` carries `disable-model-invocation: true` (pre-existing). Per the project SSOT (`docs/tasks2/0187` Q&A, lines 239-242): *"A skill with `disable-model-invocation: true` cannot be fired via the Skill tool by another skill, command body, or subagent."* So `dev-daily` could never fire — non-functional as shipped. Confirmed empirically: `daily-summary` is absent from the model-invocable skill set; `dev-debug`→`sp:sys-debugging` is unaffected (that skill is model-invocable).
 
+**Fix applied this turn (Step 12).**
+- `plugins/sp/commands/dev-daily.md` — rewritten to the inline-pointer pattern (mirrors `dev-handover`): runs `bun plugins/sp/scripts/daily-summary/daily-summary.ts $ARGUMENTS` per `daily-summary/SKILL.md`; dropped now-unused `Write`/`Skill` from `allowed-tools` → `["Bash","Read"]`.
+- `plugins/sp/tests/command-contract.test.ts` — corrected the `dev-daily` dispatch test to assert the working script pattern and guard against the broken `Skill()` dispatch returning.
+- Supersedes Solution item 2 (which described the broken `Skill()` dispatch).
+
+**Re-verified after fix (all run this turn).**
+- Command validator: 30/30 thin-wrapper gates pass.
+- `bun test plugins/sp/`: 372 pass / 0 fail.
+- `bun run lint`: biome + tsc all workspaces exit 0.
+- Dogfood: `SP_DAILY_SUMMARY_NO_PROMPT=1 bun …/daily-summary.ts --dry-run --no-ccusage` → exit 0, summary produced; `RD3_DAILY_SUMMARY_NO_PROMPT` fallback emits the deprecation warning and still functions.
+- Codex converter dry-run (`superskill install sp --targets codex --dry-run --verbose`): 30 commands staged; `sp-dev-debug` and `sp-dev-daily` confirmed present in `.rulesync/skills/` and the codex target staging (asserted by name, not count).
+
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | validator 30/30; dev-daily now inline (like dev-handover); no committed adapters |
+| R5 | MET | dev-debug → `sp:sys-debugging` (model-invocable); thin wrapper; input contract `"<symptom>" [--scope] [--task]` |
+| R6 | MET (fixed) | dev-daily repaired to inline script run; env `SP_` primary + `RD3_` fallback+warn; stale SKILL.md link fixed; dogfooded dry-run exit 0 |
+| R8 | MET | README +2 inventory rows; count 28→30 |
+| R9 | MET | count test 30; dispatch tests (dev-daily corrected); plugin suite 372; converter stages both new commands by name |
+| R11 | MET | version 0.3.21 across plugin.json / marketplace.json / README; 04_DESIGN §7.8; CHANGELOG [0.3.21] |
+| R12 | MET | validator + plugin suite + lint re-run this turn; dev-daily dogfooded; Codex dry-run staged names asserted |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| R5 — dev-debug delegates the protocol | MET | file+test | dev-debug.md `Skill()` → sys-debugging; gate (i) test |
+| R6 — dev-daily delegates the script modes | MET | command | dogfood dry-run exit 0 + RD3 fallback (post-fix) |
+| R8/R9 — inventory, count, version consistent | MET | test+file | README rows; count test 30; version 0.3.21 ×3 |
+| R9/R12 — converter stages every command; gates green | MET | command | Codex dry-run: `sp-dev-debug` + `sp-dev-daily` staged; validator/tests/lint exit 0 |
+
+**SECUA review.** No blocker/major beyond the fixed dispatch defect. Advisory (P4 → task 0318): `dev-debug` retains `["Bash","Read","Write","Skill"]` — `Write` is justified (sys-debugging applies fixes) but it lacks `Edit` while the skill edits code; the least-privilege sweep should reconcile it and re-check the now-trimmed dev-daily.
+
+**Fix-pass disclosure.** Mutated `plugins/sp/commands/dev-daily.md` and `plugins/sp/tests/command-contract.test.ts` (both tracked). The Codex dry-run refreshed `.rulesync/` staging (converter-owned, not committed corpus).
+
+**Coverage:** N/A for runtime app code; the corrected TS test lands in the plugin suite (372 pass).
+
+Verdict: PASS
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+- P1–P4 Findings: None.
+- Residual Risk: None. Dual-read environment variable compatibility preserves backwards compatibility for `RD3_DAILY_SUMMARY_NO_PROMPT` for at least one release window.
+
+
 
 ### References
 - Parent **0314** and sibling **0315** (this task depends on 0315 for the README inventory + command-contract test coupling)

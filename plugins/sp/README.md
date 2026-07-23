@@ -10,7 +10,7 @@ lifecycle step a deterministic entry point.
 > orchestration, history analytics, and operational visibility. The `sp` plugin is the Claude Code
 > plugin surface for that toolkit.
 
-- **Marketplace entry:** `name: "sp"`, `version: "0.3.18"`, `source: "./plugins/sp"` (`plugin.json`,
+- **Marketplace entry:** `name: "sp"`, `version: "0.3.21"`, `source: "./plugins/sp"` (`plugin.json`,
   kept in sync with `.claude-plugin/marketplace.json`).
 - **Owner:** Robin Min.
 
@@ -121,6 +121,8 @@ list this README is checked against.
 | Command | What it does |
 | --- | --- |
 | `dev-handover` | Generate a structured handover document when blocked — captures goal, progress, blocker, rejected approaches, and next steps |
+| `dev-debug` | Systematic debugging protocol — reproduce, isolate, diagnose root cause, apply minimal fix, and verify with regression tests |
+| `dev-daily` | Generate a daily summary report from agent usage data, git history, and notes |
 | `dev-dogfood` | Dogfood an agent skill/command/CLI — drive it end-to-end with bounded auto-fix, self-monitor, and emit a comprehensive report |
 | `dev-fixall` | Fix all lint, type, and test errors systematically across the working tree |
 | `dev-simplify` | Simplify recently-changed code for clarity without changing behavior — incremental, test-after-each, revert on regression |
