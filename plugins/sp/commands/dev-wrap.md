@@ -1,7 +1,7 @@
 ---
 description: Wrap up a single completed task — learnings, metrics, doc-sync, optional feature transition and branch cleanup
 argument-hint: "<wbs> [--auto] [--merge] [--dry-run]"
-allowed-tools: ["Bash", "Read", "Write", "Edit", "AskUserQuestion"]
+allowed-tools: ["Bash", "Read", "AskUserQuestion"]
 ---
 
 # Dev Wrap

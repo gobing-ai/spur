@@ -1,7 +1,7 @@
 ---
 description: Refine task requirements via structured Q&A — clarify scope, elicit missing details, tighten acceptance criteria
 argument-hint: "<wbs> [--focus <mode>] [--description <text>] [--agent <name|auto>] [--auto] [--next]"
-allowed-tools: ["Bash", "Read", "Write", "Skill", "AskUserQuestion"]
+allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---
 
 # Dev Refine

@@ -774,3 +774,73 @@ describe('(i) task 0316 — dev-debug and dev-daily entry points', () => {
         expect(raw).not.toContain('Skill(skill="sp:daily-summary"');
     });
 });
+
+// ─── (j) task 0318 — least-privilege allowed-tools sweep ───────────────────
+
+describe('(j) task 0318 — least-privilege allowed-tools sweep', () => {
+    const trimmedCommands = [
+        { file: 'dev-idea.md', forbidden: ['Write', 'Edit'], expected: ['Bash', 'Read', 'AskUserQuestion'] },
+        { file: 'dev-wrap.md', forbidden: ['Write', 'Edit'], expected: ['Bash', 'Read', 'AskUserQuestion'] },
+        { file: 'dev-wrapall.md', forbidden: ['Write', 'Edit'], expected: ['Bash', 'Read', 'AskUserQuestion'] },
+        { file: 'dev-verify.md', forbidden: ['Write', 'Edit'], expected: ['Bash', 'Read', 'Skill'] },
+        { file: 'dev-verifyall.md', forbidden: ['Write', 'Edit'], expected: ['Bash', 'Read', 'Skill'] },
+        { file: 'dev-plan.md', forbidden: ['Write', 'Edit'], expected: ['Bash', 'Read', 'Skill', 'AskUserQuestion'] },
+        { file: 'dev-refine.md', forbidden: ['Write', 'Edit'], expected: ['Bash', 'Read', 'Skill', 'AskUserQuestion'] },
+        { file: 'dev-parallel.md', forbidden: ['Write', 'Edit'], expected: ['Bash', 'Read', 'Skill'] },
+        { file: 'dev-runall.md', forbidden: ['Write', 'Edit'], expected: ['Bash', 'Read', 'Skill'] },
+    ];
+
+    for (const { file, forbidden, expected } of trimmedCommands) {
+        test(`${file} allowed-tools does not contain forbidden tools (${forbidden.join(', ')})`, () => {
+            const raw = readFileSync(join(COMMANDS_DIR, file), 'utf8');
+            for (const tool of forbidden) {
+                expect(raw).not.toContain(`"${tool}"`);
+            }
+            for (const tool of expected) {
+                expect(raw).toContain(`"${tool}"`);
+            }
+        });
+    }
+
+    test('code/test/doc authoring commands retain Write/Edit grants', () => {
+        const authoringCommands = [
+            { file: 'dev-run.md', required: ['Write', 'Edit'] },
+            { file: 'dev-unit.md', required: ['Write', 'Edit'] },
+            { file: 'dev-simplify.md', required: ['Edit'] },
+            { file: 'dev-reverse.md', required: ['Write', 'Edit'] },
+            { file: 'dev-debug.md', required: ['Write'] },
+            { file: 'dev-dogfood.md', required: ['Write', 'Edit'] },
+            { file: 'dev-fixall.md', required: ['Write', 'Edit'] },
+            { file: 'dev-handover.md', required: ['Write'] },
+            { file: 'rule-add.md', required: ['Write'] },
+            { file: 'rule-refine.md', required: ['Edit'] },
+            { file: 'spur-init.md', required: ['Write'] },
+            { file: 'workflow-add.md', required: ['Write'] },
+            { file: 'workflow-refine.md', required: ['Edit'] },
+        ];
+
+        for (const { file, required } of authoringCommands) {
+            const raw = readFileSync(join(COMMANDS_DIR, file), 'utf8');
+            for (const tool of required) {
+                expect(raw).toContain(`"${tool}"`);
+            }
+        }
+    });
+
+    test('interactive wrappers retain AskUserQuestion tool', () => {
+        const interactiveFiles = [
+            'dev-brainstorm.md',
+            'dev-idea.md',
+            'dev-next.md',
+            'dev-plan.md',
+            'dev-refine.md',
+            'dev-wrap.md',
+            'dev-wrapall.md',
+        ];
+
+        for (const file of interactiveFiles) {
+            const raw = readFileSync(join(COMMANDS_DIR, file), 'utf8');
+            expect(raw).toContain('"AskUserQuestion"');
+        }
+    });
+});

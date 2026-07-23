@@ -1,7 +1,7 @@
 ---
 description: Plan a feature from a description — intake → feature create → AC generation → feature check gate → decomposition → batch-create
 argument-hint: "\"<description>\" [--feature <id>] [--parent <feature-id>] [--agent <name|auto>] [--design] [--auto] [--design-approved]"
-allowed-tools: ["Bash", "Read", "Write", "Skill", "AskUserQuestion"]
+allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---
 
 # Dev Plan

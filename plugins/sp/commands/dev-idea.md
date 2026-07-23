@@ -1,7 +1,7 @@
 ---
 description: Turn a vague idea into a feature with AC and a decomposed task batch — discovery, feature-create, AC, feature-check, system-design, decompose, batch-create, handoff
 argument-hint: "\"<idea>\" [--auto] [--design] [--skip-design] [--design-approved]"
-allowed-tools: ["Bash", "Read", "Write", "Edit", "AskUserQuestion"]
+allowed-tools: ["Bash", "Read", "AskUserQuestion"]
 ---
 
 # Dev Idea

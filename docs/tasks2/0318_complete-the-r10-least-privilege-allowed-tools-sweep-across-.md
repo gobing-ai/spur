@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Complete the R10 least-privilege allowed-tools sweep across all sp command wrappers"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: O
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-23T06:59:26.486Z"
-updated_at: "2026-07-23T07:00:39.763Z"
+updated_at: "2026-07-23T18:22:52.822Z"
 ---
 
 ## 0318. Complete the R10 least-privilege allowed-tools sweep across all sp command wrappers
@@ -103,17 +103,55 @@ Do not add wrappers, change Usage/Implementation, or move lifecycle prose. Any s
 5. Extend `command-contract.test.ts` with an `allowed-tools` regression assertion per trimmed wrapper.
 6. Run the command validator, the full `plugins/sp` suite, and `bun run lint`; dogfood `dev-wrap --dry-run` and a verify wrapper; add a changelog entry; inspect git status.
 ### Solution
-
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+1. `plugins/sp/commands/dev-idea.md:4` — Trimmed `allowed-tools`: dropped `Write` and `Edit` (`["Bash", "Read", "AskUserQuestion"]`).
+2. `plugins/sp/commands/dev-wrap.md:4` — Trimmed `allowed-tools`: dropped `Write` and `Edit` (`["Bash", "Read", "AskUserQuestion"]`).
+3. `plugins/sp/commands/dev-wrapall.md:4` — Trimmed `allowed-tools`: dropped `Write` and `Edit` (`["Bash", "Read", "AskUserQuestion"]`).
+4. `plugins/sp/commands/dev-verify.md:4` — Trimmed `allowed-tools`: dropped `Write` (`["Bash", "Read", "Skill"]`).
+5. `plugins/sp/commands/dev-verifyall.md:4` — Trimmed `allowed-tools`: dropped `Write` (`["Bash", "Read", "Skill"]`).
+6. `plugins/sp/commands/dev-plan.md:4` — Verify-then-decide **TRIM** Write (`["Bash", "Read", "Skill", "AskUserQuestion"]`) — CLI-gated via `sp:spur-dev plan`.
+7. `plugins/sp/commands/dev-refine.md:4` — Verify-then-decide **TRIM** Write (`["Bash", "Read", "Skill", "AskUserQuestion"]`) — CLI-gated via `sp:spur-dev refine`.
+8. `plugins/sp/commands/dev-parallel.md:4` — Verify-then-decide **TRIM** Write+Edit (`["Bash", "Read", "Skill"]`) — subagent fan-out.
+9. `plugins/sp/commands/dev-runall.md:4` — Verify-then-decide **TRIM** Write+Edit (`["Bash", "Read", "Skill"]`) — batch orchestration / child agents.
+10. Verify-then-decide **KEEP** (one-release-compat / agent-writes): `dev-dogfood.md` (Write+Edit), `rule-add.md` (Write), `workflow-add.md` (Write) — left unchanged.
+11. Left untouched (R4 authoring): `dev-run`, `dev-unit`, `dev-simplify`, `dev-reverse` retain Write/Edit.
+12. `plugins/sp/tests/command-contract.test.ts:778-846` — Test block `(j)`: forbidden Write/Edit on 9 trimmed wrappers; authoring retain; interactive AskUserQuestion.
+13. `CHANGELOG.md:16` — Release note under `[0.3.21]`.
+14. **Notes** — Full 30-command write-path classification table (R2 deliverable) with path class + evidence + KEEP/TRIM decision.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from `.spur/run/0318-verdict.json`, re-verify 2026-07-23 --force --fix all)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `git diff` frontmatter-only on 9 command wrappers; Usage/Implementation unchanged (`dev-idea.md:4`, `dev-verify.md:4`, …) |
+| R2 | MET | Notes: 30-command write-path classification table (path class + Implementation evidence + KEEP/TRIM) |
+| R3 | MET | 9 trims applied (pre-evidenced five + plan/refine/parallel/runall); `command-contract.test.ts` block (j) |
+| R4 | MET | `dev-run`/`dev-unit`/`dev-simplify`/`dev-reverse` retain Write/Edit; interactive wrappers retain AskUserQuestion — test (j) |
+| R5 | MET | `plugins/sp/tests/command-contract.test.ts:778-846`; 49/49 contract tests pass this run |
+| R6 | MET | validate-commands: 30 pass; `bun test plugins/sp` 390 pass; `bun run lint` clean; wrap dry-run status=done; CHANGELOG.md:16 |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: R2 - write-path classified | MET | static-ref | Notes classification table (30 rows) |
+| Scenario: R3 - over-privileged trimmed | MET | test | (j) forbidden Write/Edit on 9 trimmed wrappers |
+| Scenario: R4 - authoring grants retained | MET | test | (j) authoring retain + AskUserQuestion |
+| Scenario: R5 - regression guard | MET | command | `bun test plugins/sp` → 390 pass |
+| Scenario: R6 - gates green | MET | command | validator + lint + wrap dry-run done |
+
+- Coverage: N/A (frontmatter/config + test-only change; no runtime product path)
+- Fix-pass disclosure: Notes classification table; Testing rewrite; Review P1–P4 table via `spur task update --section Review` (record skipped non-bare Review)
 ### Review
+**SECU findings** (standalone re-verify --force --fix all — verdict: PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|---------|
+| P4 | correctness | plugins/sp/commands/*.md:4 | No P1–P3 findings. Nine wrappers correctly least-privileged; authoring commands retain Write/Edit; regression suite green. |
+| P4 | architecture | plugins/sp/tests/command-contract.test.ts:778-846 | Least-privilege gate (j) locks trims; scope limited to frontmatter + contract tests + changelog. |
 
+Residual risk: none for this slice. Conservative KEEP on dogfood/rule-add/workflow-add is intentional one-release-compat (Notes).
 ### References
 - Parent **0314** (umbrella) and sibling **0315** — its R2 28-command audit (in 0315 `Notes`) is the source of this task; independent of **0316**/**0317**
 - `plugins/sp/commands/*.md` (frontmatter `allowed-tools`)
@@ -121,3 +159,47 @@ Do not add wrappers, change Usage/Implementation, or move lifecycle prose. Any s
 - `plugins/sp/scripts/validate-commands.ts` — thin-wrapper gates
 - 0315 R10 principle ("workflow wrappers must not retain Write/Edit solely because spawned workflow steps mutate") and `docs/00_ADR.md` ADR-032 (commands-as-SSOT)
 ### History
+- 2026-07-23 — Implemented R10 least-privilege sweep: 9 wrapper trims, contract tests `(j)`, changelog.
+- 2026-07-23 — `/sp-dev-verify 0318 --force --fix all`: PASS. Filled Notes classification (30 cmds), Testing tables, Review P1–P4. `spur task check` pass:true (L4 DD-09 warnings only — task AC titles are more specific than feature O scenarios; feature O's "R10" is shadow-migration, not this least-privilege slice).
+- 2026-07-23 — Wrap residual close-out: Solution KEEP decisions recorded; History filled; learning captured.
+### Notes
+
+**R2 write-path classification** (2026-07-23 re-verify; 30 wrappers). Taxonomy: agent-writes | CLI-gated | workflow-engine | subagent-delegated | read-only-ops.
+
+| Command | Path class | Evidence (Implementation) | Decision |
+|---------|------------|---------------------------|----------|
+| dev-idea | workflow-engine | `spur workflow run idea-pipeline.yaml` | **TRIM** Write+Edit |
+| dev-wrap | workflow-engine | `spur workflow run wrapup-pipeline.yaml` | **TRIM** Write+Edit |
+| dev-wrapall | workflow-engine | `spur workflow run wrapup-pipeline.yaml` | **TRIM** Write+Edit |
+| dev-verify | CLI-gated | `Skill(sp:code-verification)` → `spur task update` via Bash temp | **TRIM** Write |
+| dev-verifyall | CLI-gated / orchestrator | `Skill(sp:spur-dev verifyall)` + inner code-verification | **TRIM** Write |
+| dev-plan | CLI-gated | `Skill(sp:spur-dev plan)` — corpus via CLI, not Write tool | **TRIM** Write |
+| dev-refine | CLI-gated | `Skill(sp:spur-dev refine)` | **TRIM** Write |
+| dev-runall | subagent-delegated | `Skill(sp:spur-dev runall)` — batch pipeline / child agents | **TRIM** Write+Edit |
+| dev-parallel | subagent-delegated | `Skill(sp:parallel-execution)` — fan-out subagents | **TRIM** Write+Edit |
+| dev-review | CLI-gated | skills write Review via CLI (trimmed in 0315) | keep (already least-priv) |
+| dev-dogfood | agent-writes | `Skill(sp:dogfood-testing)` authors report artifacts | **KEEP** Write+Edit |
+| rule-add | agent-writes (conservative) | `Skill(sp:spur-cli rule add)` may author rule files | **KEEP** Write |
+| workflow-add | agent-writes (conservative) | `Skill(sp:spur-cli workflow add)` may author workflow YAML | **KEEP** Write |
+| dev-run | agent-writes | `sp:code-implementation` / full pipeline | **KEEP** Write+Edit |
+| dev-unit | agent-writes | `sp:code-testing` | **KEEP** Write+Edit |
+| dev-simplify | agent-writes | `sp:code-simplification` (Edit) | **KEEP** Edit |
+| dev-reverse | agent-writes | `sp:reverse-engineering` | **KEEP** Write+Edit |
+| dev-debug | agent-writes | `sp:sys-debugging` | **KEEP** Write |
+| dev-fixall | agent-writes | inline fixall procedure mutates tree | **KEEP** Write+Edit |
+| dev-handover | agent-writes | writes handover markdown SSOT | **KEEP** Write |
+| rule-refine | agent-writes | `sp:spur-cli rule refine` (Edit) | **KEEP** Edit |
+| workflow-refine | agent-writes | `sp:spur-cli workflow refine` (Edit) | **KEEP** Edit |
+| spur-init | agent-writes + CLI | `spur init` + customize skill | **KEEP** Write |
+| dev-arch | read-only-ops | survey skill; report only | no Write |
+| dev-brainstorm | interactive | brainstorm/wayfinder skills | no Write; AskUserQuestion |
+| dev-changelog | CLI-gated / read | git history → changelog procedure | no Write in tools (Bash) |
+| dev-daily | CLI-gated | runs daily-summary.ts script | no Write |
+| dev-gitmsg | CLI-gated / read | gitmsg procedure | no Write |
+| dev-next | orchestrator | `sp:next-router` dispatch | no Write; AskUserQuestion |
+| rule-scan | read-only-ops | scan skill (Grep/Glob/Skill) | no Write |
+
+**Verify-then-decide (7):** plan/refine/runall/parallel → TRIM (CLI or subagent). dogfood/rule-add/workflow-add → KEEP (agent may author files; one-release-compat).
+
+**Interactive HITL retained:** dev-brainstorm, dev-idea, dev-next, dev-plan, dev-refine, dev-wrap, dev-wrapall keep `AskUserQuestion`.
+

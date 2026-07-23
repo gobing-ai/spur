@@ -1,7 +1,7 @@
 ---
 description: Wrap up a batch of completed tasks — learnings, metrics, doc-sync, feature transition, optional branch cleanup
 argument-hint: "[--since <iso-date>] [--feature <id>] [--status <s>] [--auto] [--merge] [--dry-run]"
-allowed-tools: ["Bash", "Read", "Write", "Edit", "AskUserQuestion"]
+allowed-tools: ["Bash", "Read", "AskUserQuestion"]
 ---
 
 # Dev Wrapall
