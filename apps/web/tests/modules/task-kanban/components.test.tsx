@@ -127,16 +127,16 @@ describe('KanbanColumn', () => {
     });
 
     test('shows sort toggle with neutral icon when no sort is active', () => {
-        const { getByLabelText } = render(
+        const { getByRole } = render(
             <KanbanColumn status="todo" label="todo" tasks={[task()]} onCardClick={() => {}} onSortToggle={() => {}} />,
         );
-        const btn = getByLabelText('Sort todo by WBS');
+        const btn = getByRole('button', { name: 'Sort todo by WBS' });
         expect(btn).toBeDefined();
         expect(btn.textContent).toBe('⇅');
     });
 
     test('shows descending arrow when sort is asc', () => {
-        const { getByLabelText } = render(
+        const { getByRole } = render(
             <KanbanColumn
                 status="todo"
                 label="todo"
@@ -146,11 +146,11 @@ describe('KanbanColumn', () => {
                 onSortToggle={() => {}}
             />,
         );
-        expect(getByLabelText('Sort todo by WBS').textContent).toBe('↓');
+        expect(getByRole('button', { name: 'Sort todo by WBS' }).textContent).toBe('↓');
     });
 
     test('shows ascending arrow when sort is desc', () => {
-        const { getByLabelText } = render(
+        const { getByRole } = render(
             <KanbanColumn
                 status="todo"
                 label="todo"
@@ -160,12 +160,12 @@ describe('KanbanColumn', () => {
                 onSortToggle={() => {}}
             />,
         );
-        expect(getByLabelText('Sort todo by WBS').textContent).toBe('↑');
+        expect(getByRole('button', { name: 'Sort todo by WBS' }).textContent).toBe('↑');
     });
 
     test('calls onSortToggle when sort button is clicked', () => {
         let toggled = false;
-        const { getByLabelText } = render(
+        const { getByRole } = render(
             <KanbanColumn
                 status="todo"
                 label="todo"
@@ -176,7 +176,7 @@ describe('KanbanColumn', () => {
                 }}
             />,
         );
-        fireEvent.click(getByLabelText('Sort todo by WBS'));
+        fireEvent.click(getByRole('button', { name: 'Sort todo by WBS' }));
         expect(toggled).toBe(true);
     });
 });
