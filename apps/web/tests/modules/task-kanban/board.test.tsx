@@ -205,17 +205,17 @@ describe('KanbanBoard', () => {
         );
         const KanbanBoardReload = (await import('../../../src/modules/task-kanban/KanbanBoard')).default;
 
-        const { getByLabelText, container } = render(
+        const { getByRole, container } = render(
             <MemoryRouter>
                 <KanbanBoardReload onSelectTask={() => {}} />
             </MemoryRouter>,
         );
-        await waitFor(() => expect(getByLabelText('Sort todo by WBS')).toBeDefined());
+        await waitFor(() => expect(getByRole('button', { name: 'Sort todo by WBS' })).toBeDefined());
 
         // Default order is descending WBS: Gamma(0003), Beta(0002), Alpha(0001)
 
         // Click sort → asc (WBS order: 0001, 0002, 0003)
-        fireEvent.click(getByLabelText('Sort todo by WBS'));
+        fireEvent.click(getByRole('button', { name: 'Sort todo by WBS' }));
         const afterAsc = (container.querySelector('[aria-label="todo column"]') as HTMLElement).textContent ?? '';
         expect(afterAsc.indexOf('Alpha')).toBeLessThan(afterAsc.indexOf('Beta'));
         expect(afterAsc.indexOf('Beta')).toBeLessThan(afterAsc.indexOf('Gamma'));
@@ -255,8 +255,8 @@ describe('KanbanBoard', () => {
     });
 
     test('column visibility checkboxes are rendered for each status', async () => {
-        const { getByLabelText, container } = renderBoard();
-        await waitFor(() => expect(getByLabelText('Sort todo by WBS')).toBeDefined());
+        const { getByRole, container } = renderBoard();
+        await waitFor(() => expect(getByRole('button', { name: 'Sort todo by WBS' })).toBeDefined());
 
         // Checkboxes exist for each column status
         const checkboxes = container.querySelectorAll('input[type="checkbox"]');

@@ -1,0 +1,30 @@
+# Forbid getByLabelText queries on button accessible names in web component tests.
+#
+# WHY: HTML `<button>` elements are non-labellable per WHATWG HTML spec. In DOM Testing
+# Library, `getByLabelText` queries elements associated with `<label>` tags. When used to
+# query a `<button>` with an `aria-label` attribute, it works when happy-dom DOM state is
+# fresh, but throws `TestingLibraryElementError: element associated with this label is non-labellable`
+# when running in full multi-file test suites on CI (e.g. Linux runners).
+# Real incident: CI-only failure in apps/web/tests/modules/task-kanban/components.test.tsx on 2026-07-24.
+#
+# FIX: Use `getByRole('button', { name: '...' })` or `getByRole('button', { name: /.../ })`,
+# which queries the W3C accessible name provided by `aria-label`.
+include:
+  - "apps/web/tests/**/*.test.ts"
+  - "apps/web/tests/**/*.test.tsx"
+exclude:
+  - "**/node_modules/**"
+  - "**/dist/**"
+
+rules:
+  - id: prefer-accessible-role-for-button-queries
+    description: >
+      Do not query button accessible names with `getByLabelText` in web React tests.
+      `<button>` elements are non-labellable per WHATWG spec, causing timing-dependent
+      CI failures when tests run sequentially in a single process.
+      Use `getByRole('button', { name: ... })` instead.
+    severity: warning
+    evaluator:
+      type: rg
+      config:
+        pattern: "getByLabelText\\(['\"]Sort "
