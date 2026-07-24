@@ -1,6 +1,6 @@
 # How to Use Spur for Daily Software Development
 
-> **Verified against spur `0.3.18` running on Bun `1.3.14`.** Every command and flag below
+> **Verified against spur `0.3.21` running on Bun `1.3.14`.** Every command and flag below
 > was captured from the live `--help` output and exercised on the real project corpus.
 > For the **slash-command layer** (the `sp` plugin) layered on top of these CLI verbs —
 > `/sp:dev-plan`, `/sp:dev-run`, `/sp:dev-verify`, `/sp:dev-wrap`, the batch family
@@ -71,7 +71,7 @@ Per-platform `--compile` binaries are GitHub Release assets for darwin/linux × 
 ### Verify installation
 
 ```bash
-spur --version     # 0.3.18
+spur --version     # 0.3.21
 spur agent doctor  # check every detected agent
 spur agent list    # list detected agents
 ```
@@ -167,6 +167,8 @@ spur task           verdict <wbs> [--from-answer <path>] [--folder <path>] [--js
 spur task           check   [<wbs>] [--strict] [--strict-core] [--folder <path>] [--json]
 spur task           resolve <file-path> [--strict] [--folder <path>] [--json]
 spur task           path    <wbs> [--folder <path>] [--json]
+spur task           deps    <wbs> [--depth <n>] [--folder <path>] [--json]
+spur task           sections <wbs> [--folder <path>] [--json]
 spur task           run-link <wbs> [--source <id>] [--run-id <id>] [--json]   # pipeline provenance link (--next auto chains)
 spur task           migrate [--dry-run] [--folder <path>] [--json]            # A17 corpus normalization (now wired)
 
@@ -286,12 +288,14 @@ spur task refresh-roster 0089
 # Batch-create tasks from JSON (all-or-nothing, validated against task-batch.schema.json)
 spur task batch-create --file ./tasks-batch.json
 
-# Pipeline integration verbs
+# Pipeline integration and inspection verbs
 spur task record 0089 --verdict-file .spur/run/0089-verdict.json --solution-from-diff --transition testing
 spur task verdict 0089 --from-answer .spur/run/0089-verify-answer.txt
 spur task run-link 0089 --source next-auto   # provenance link for an auto chain (satisfies the testing→done guard)
 spur task resolve src/auth/login.ts
 spur task path 0089
+spur task deps 0089                          # inspect dependency tree / blockers for WBS 0089
+spur task sections 0089                      # list canonical and optional markdown section headings
 ```
 
 **Task statuses:** `backlog → todo → wip → testing → blocked → done` (also `cancelled`).
@@ -712,8 +716,10 @@ Any non-PASS verdict **stops the chain** with findings written to `## Testing` /
 /sp:dev-wrap 0061 --auto              # learnings, metrics, doc-sync (single task)
 /sp:dev-wrapall --feature F71 --auto  # batch wrap; advances the feature lifecycle
 /sp:dev-wrap 0061 --auto --merge      # + branch cleanup (IRREVERSIBLE — always pauses)
+/sp:dev-debug 0061                    # systematic debugging protocol (reproduce → isolate → root cause → fix)
+/sp:dev-daily                         # daily summary report generator (ccusage + git history)
 /sp:dev-gitmsg --commit               # conventional commit from the diff
-    /sp:dev-changelog --version 0.3.18    # changelog from commit history
+/sp:dev-changelog --version 0.3.21    # changelog from commit history
 ```
 
 Wrap-up never mutates task status; it consumes completed tasks. Feature lifecycle

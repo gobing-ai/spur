@@ -51,25 +51,40 @@ artifacts (with optional feature transition and irreversible branch cleanup).
 
 ## The command map
 
-| Command | Phase | What it does | Backed by |
-|---------|-------|--------------|-----------|
-| `/sp:dev-next` | Any | **Status-aware router** — inspect a task WBS or feature frontier, pick the single best next `/sp:dev-*` step, and dispatch it (`--dry-run` to preview, `--once` to stop the child's chain) | `sp:next-router` |
-| `/sp:dev-brainstorm` | Plan | Grilling interview → options with trade-offs → land an artifact (`--task` or `--feature`) | `sp:brainstorm` |
-| `/sp:dev-plan` | Plan | Feature → BDD AC → `feature check` gate → decompose → `batch-create` gate → optional design doc (`--design`/`--auto`) | `sp:spur-dev` (planning) |
-| `/sp:dev-idea` | Plan | Unified entry: vague idea → feature + AC + task batch (the `idea-pipeline.yaml` workflow). Stops at handoff — no task execution. | `spur workflow run idea-pipeline.yaml` |
-| `/sp:dev-refine` | Plan→Exec | Fill a task's AC / Design / Plan just-in-time via Q&A | `sp:spur-dev` |
-| `/sp:dev-run` | Exec | Run a task: full pipeline, or `--mode implement` for just the code | `sp:spur-dev` (execution) |
-| `/sp:dev-runall` | Exec | Run a **batch** of tasks through their pipelines in dependency-correct order (set resolve → topo-sort → per-task run → batch report) | `sp:spur-dev` (`runall` op → `sp:super-coder`) |
-| `/sp:dev-unit` | Exec | Generate/extend tests; measure coverage | `sp:code-testing` |
-| `/sp:dev-review` | Exec | SECU code review (security/efficiency/correctness/usability/architecture) | `sp:code-verification` |
-| `/sp:dev-verify` | Exec | Map requirements → evidence; emit a PASS/PARTIAL/FAIL verdict | `sp:code-verification` |
-| `/sp:dev-fixall` | Exec | Loop a validation command until it passes (lint/type/test) | inline |
-| `/sp:dev-gitmsg` | Exec | Draft a Conventional-Commits message from the diff | inline |
-| `/sp:dev-changelog` | Exec | Generate a changelog from commit history | inline |
-| `/sp:dev-handover` | Any | Write an honest handover doc when blocked | inline |
-| `/sp:dev-dogfood` | Any | Drive a command/skill/CLI end-to-end, fix-within-budget, emit a structured report | `sp:dogfood-testing` |
+The `sp` plugin provides **30 commands** across planning, execution, operations/hygiene, wrap-up, and authoring:
+
+| Command | Phase / Category | What it does | Backed by |
+|---------|------------------|--------------|-----------|
+| `/sp:dev-next` | Router | **Status-aware router** — inspect a task WBS or feature frontier, pick the single best next `/sp:dev-*` step, and dispatch it (`--dry-run` to preview, `--once` to stop child's chain) | `sp:next-router` |
+| `/sp:dev-brainstorm` | Planning | Grilling interview → options with trade-offs → land an artifact (`--task` or `--feature`) | `sp:brainstorm` |
+| `/sp:dev-plan` | Planning | Feature → BDD AC → `feature check` gate → decompose → `batch-create` gate → optional design doc (`--design`/`--auto`) | `sp:spur-dev` (planning) |
+| `/sp:dev-idea` | Planning | Unified entry: vague idea → feature + AC + task batch (the `idea-pipeline.yaml` workflow). Stops at handoff — no task execution. | `spur workflow run idea-pipeline.yaml` |
+| `/sp:dev-refine` | Planning→Exec | Fill a task's AC / Design / Plan just-in-time via Q&A | `sp:spur-dev` |
+| `/sp:dev-run` | Execution | Run a task: full pipeline, or `--mode implement` for just the code | `sp:spur-dev` (execution) |
+| `/sp:dev-runall` | Exec (Batch) | Run a **batch** of tasks through their pipelines in dependency-correct order (set resolve → topo-sort → per-task run → batch report) | `sp:spur-dev` (`runall` op → `sp:super-coder`) |
+| `/sp:dev-parallel` | Exec (Batch) | Fan out independent tasks or investigations in parallel via subagents | `sp:parallel-execution` |
+| `/sp:dev-unit` | Execution | Generate or extend tests until unit target is met; measure coverage | `sp:code-testing` |
+| `/sp:dev-review` | Execution | Multi-dimensional review (functional traceability + SECUA framework + architectural depth; WBS mode writes `Review`, Path mode is advisory) | `sp:code-verification` |
+| `/sp:dev-verify` | Execution | Map requirements → evidence; emit a PASS/PARTIAL/FAIL verdict | `sp:code-verification` |
+| `/sp:dev-verifyall` | Exec (Batch) | Batch-verify tasks against requirements and AC, producing consolidated report | `sp:code-verification` |
+| `/sp:dev-fixall` | Hygiene | Systematically loop lint, typecheck, and test checks until clean across working tree | inline |
+| `/sp:dev-simplify` | Hygiene | Simplify recently-changed code for clarity without changing behavior | `sp:code-simplification` |
+| `/sp:dev-debug` | Operations | Systematic debugging protocol — reproduce, isolate, diagnose root cause, apply minimal fix, and verify with regression tests | `sp:sys-debugging` |
+| `/sp:dev-daily` | Operations | Generate a daily summary report from agent usage data, git history, and notes (honors `SP_DAILY_SUMMARY_NO_PROMPT`) | `sp:daily-summary` |
+| `/sp:dev-handover` | Operations | Write an honest handover doc when blocked (`docs/handover/<date>-<slug>.md` SSOT + non-destructive task pointer append) | `sp:spur-dev` (`dev-operations.md`) |
+| `/sp:dev-dogfood` | Operations | Drive a command/skill/CLI end-to-end, fix-within-budget, emit a structured report | `sp:dogfood-testing` |
+| `/sp:dev-arch` | Operations | Survey codebase for shallow modules and deepening opportunities | `sp:code-improvement` |
+| `/sp:dev-reverse` | Operations | Depth-driven codebase reverse engineering / HLD generation / audit | `sp:reverse-engineering` |
+| `/sp:dev-gitmsg` | Operations | Draft Conventional-Commits message from staged changes | inline |
+| `/sp:dev-changelog` | Operations | Generate a changelog from commit history | inline |
 | `/sp:dev-wrap` | Wrap-up | Wrap up a single completed task — learnings, metrics, doc-sync, optional feature transition + branch cleanup | `spur workflow run wrapup-pipeline.yaml` |
-| `/sp:dev-wrapall` | Wrap-up | Wrap up a batch of completed tasks (filter by `--feature` / `--since` / `--status`) | `spur workflow run wrapup-pipeline.yaml` |
+| `/sp:dev-wrapall` | Wrap-up | Wrap up a batch of completed tasks (learnings, doc-sync, feature transition, optional branch cleanup) | `spur workflow run wrapup-pipeline.yaml` |
+| `/sp:rule-scan` | Authoring | Discover recurring anti-patterns worth codifying as constraint rules | `sp:spur-cli` |
+| `/sp:rule-add` | Authoring | Author a validated, smoke-tested constraint rule | `sp:spur-cli` |
+| `/sp:rule-refine` | Authoring | Refine a constraint rule or preset, then re-verify it | `sp:spur-cli` |
+| `/sp:workflow-add` | Authoring | Author a validated, dry-run-verified workflow in the right execution mode | `sp:spur-cli` |
+| `/sp:workflow-refine` | Authoring | Refine an existing workflow, then re-validate and re-dry-run it | `sp:spur-cli` |
+| `/sp:spur-init` | Bootstrap | Initialize a new Spur project — scaffold config + docs, then customize for stack/scope | `sp:doc-evolve` |
 
 > The single source of truth for every operation (purpose, inputs, behavior) is
 > [`plugins/sp/skills/spur-dev/references/dev-operations.md`](../../plugins/sp/skills/spur-dev/references/dev-operations.md).
@@ -414,6 +429,11 @@ pauses**, even under `--auto`.
    when `--feature` is set (advancing through the legal lifecycle edges via
    `spur feature update`). The one exception: `--merge` is **irreversible** and always
    pauses for confirmation.
+6. **Least privilege by design (R10).** Workflow, planning, and verification wrappers
+   (`dev-idea`, `dev-wrap`, `dev-wrapall`, `dev-verify`, `dev-verifyall`, `dev-plan`,
+   `dev-refine`, `dev-parallel`, `dev-runall`) omit direct `Write`/`Edit` tools in frontmatter
+   `allowed-tools`. They mutate strictly via `spur` CLI verbs (`spur task update --section --from-file`)
+   or workflow execution, ensuring wrapper agents cannot bypass corpus ownership gates.
 
 ---
 
