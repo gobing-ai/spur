@@ -334,6 +334,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                         strict,
                         featuresDir,
                         tasksDir,
+                        severityOverrides: resolved.severityOverrides,
                     });
                     results.push(result);
                     if (!json) {

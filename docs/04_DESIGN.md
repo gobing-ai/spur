@@ -339,8 +339,8 @@ Two top-level concerns:
 - **Spur app section** — everything except `bootstrap:`, validated by the single merged
   `spurConfigSchema` in `@gobing-ai/spur-config` (ADR-027; the former CLI-local `SpurAppConfigSchema`
   was folded in). Keys are agent/rules/workflows/redaction/version/name, plus the planning-layer
-  `tasks:`/`features:` blocks: `tasks.folders` (path → `{baseCounter, label?}`), `tasks.active`,
-  `features.dir`. The folder fields tolerate a blank/`null` value (an empty YAML key) and coerce to
+  `tasks:`/`features:` blocks: `tasks.folders` (path → `{baseCounter, label?}`), `tasks.active`, `tasks.severity` (finding code → `error` | `warning` | `off`),
+  `features.dir`. Every finding emitted by task/feature check carries a stable machine code (e.g. `L3.plan-format`, `L4.feature-not-found`) registered in `packages/config/src/finding-codes.ts`. `tasks.severity` overrides finding severities or drops findings (`off`) before pass gate evaluation; unknown codes fail config validation. The folder fields tolerate a blank/`null` value (an empty YAML key) and coerce to
   the canonical default. `@gobing-ai/spur-config` is the SSOT; `apps/cli/schemas/spur-config.schema.json`
   mirrors it for editor/CI validation.
 
@@ -377,6 +377,8 @@ tasks:
   folders:
     docs/tasks: { baseCounter: 0, label: Core }   # legacy folders/base_counter absorbed
   active: docs/tasks                               # default folder for `spur task create`
+  severity:
+    L3.plan-format: off                            # rule severity overrides by code (error | warning | off)
 features:
   dir: docs/features
 ```

@@ -17,6 +17,10 @@ import { type MarkdownDocument, UNIVERSAL_SECTIONS } from '@gobing-ai/spur-domai
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import type { z } from 'zod';
 
+import { ALL_FINDING_CODES, FINDING_CODES, type FindingCode, isFindingCode } from './finding-codes';
+
+export { ALL_FINDING_CODES, FINDING_CODES, type FindingCode, isFindingCode };
+
 // ─── Shared types ─────────────────────────────────────────────────────────
 
 // `UNIVERSAL_SECTIONS` (the closed-world relaxation: History/References/Notes)
@@ -30,6 +34,8 @@ export type Severity = 'error' | 'warning';
 export interface CheckFindings {
     /** Layer the finding belongs to (L1–L4 per design §3). */
     layer: 'L1' | 'L2' | 'L3' | 'L4';
+    /** Machine-readable finding code identifying the rule (R1, task 0321). */
+    code: FindingCode;
     severity: Severity;
     /** Section name or empty string for document-level findings. */
     section: string;
@@ -106,6 +112,7 @@ export abstract class PlanningCheckService {
         } catch (err) {
             findings.push({
                 layer: 'L1',
+                code: FINDING_CODES.L1_MARKDOWN_PARSE,
                 severity: 'error',
                 section: '',
                 message: `Markdown parse failed for ${this.docKind} ${ref}: ${String(err)}`,
@@ -119,6 +126,7 @@ export abstract class PlanningCheckService {
             for (const issue of result.error.issues) {
                 findings.push({
                     layer: 'L1',
+                    code: FINDING_CODES.L1_SCHEMA_VALIDATION,
                     severity: 'error',
                     section: '',
                     message: `Schema: ${issue.path.join('.')}: ${issue.message}`,
@@ -140,6 +148,7 @@ export abstract class PlanningCheckService {
                 const severity = entry.gate === true ? 'error' : 'warning';
                 findings.push({
                     layer: 'L2',
+                    code: FINDING_CODES.L2_MISSING_REQUIRED_SECTION,
                     severity,
                     section: sect,
                     message: `Missing required section "${sect}"${entry.gate ? ' (gate: true)' : ''}`,
@@ -151,6 +160,7 @@ export abstract class PlanningCheckService {
             if (present.has(sect)) {
                 findings.push({
                     layer: 'L2',
+                    code: FINDING_CODES.L2_FORBIDDEN_SECTION,
                     severity: 'warning',
                     section: sect,
                     message: `Section "${sect}" is forbidden for the current status`,
@@ -172,6 +182,7 @@ export abstract class PlanningCheckService {
             if (!allowed.has(sect)) {
                 findings.push({
                     layer: 'L2',
+                    code: FINDING_CODES.L2_DISALLOWED_SECTION,
                     severity: 'warning',
                     section: sect,
                     message: `Section "${sect}" is not allowed in this variant/status`,
@@ -181,18 +192,33 @@ export abstract class PlanningCheckService {
     }
 
     /**
-     * Apply `--strict` elevation, compute the pass gate, and derive the
-     * required/missing section lists from L2 findings. Returns the outcome
-     * fields common to every check result; the subclass spreads its id field on.
+     * Apply config severity overrides (R3/R4) and `--strict` elevation, compute
+     * the pass gate, and derive the required/missing section lists from L2 findings.
+     * Returns the outcome fields common to every check result.
      */
-    protected summarizeWithStatus(status: string, findings: CheckFindings[], strict?: boolean): CheckResultBase {
-        if (strict) {
-            for (const f of findings) {
-                if (f.severity === 'warning') f.severity = 'error';
-            }
-        }
-        let hasError = false;
+    protected summarizeWithStatus(
+        status: string,
+        findings: CheckFindings[],
+        strict?: boolean,
+        overrides?: Record<string, 'error' | 'warning' | 'off'>,
+    ): CheckResultBase {
+        const effectiveFindings: CheckFindings[] = [];
         for (const f of findings) {
+            const override = overrides?.[f.code];
+            if (override === 'off') {
+                continue; // dropped before pass gate or strict elevation sees it (R4)
+            }
+            if (override === 'error' || override === 'warning') {
+                f.severity = override;
+            }
+            if (strict && f.severity === 'warning') {
+                f.severity = 'error';
+            }
+            effectiveFindings.push(f);
+        }
+
+        let hasError = false;
+        for (const f of effectiveFindings) {
             if (f.severity === 'error') {
                 hasError = true;
                 break;
@@ -200,12 +226,12 @@ export abstract class PlanningCheckService {
         }
         const requiredSections: string[] = [];
         const missingSections: string[] = [];
-        for (const f of findings) {
+        for (const f of effectiveFindings) {
             if (f.layer === 'L2' && f.section && f.message.startsWith('Missing required')) {
                 requiredSections.push(f.section);
                 missingSections.push(f.section);
             }
         }
-        return { status, findings, requiredSections, missingSections, pass: !hasError };
+        return { status, findings: effectiveFindings, requiredSections, missingSections, pass: !hasError };
     }
 }

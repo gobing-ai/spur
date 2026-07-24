@@ -19,6 +19,7 @@ import {
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import {
     type CheckFindings,
+    FINDING_CODES,
     type MatrixEntry,
     PlanningCheckService,
     type SectionMatrix,
@@ -211,7 +212,11 @@ export class TaskCheckService extends PlanningCheckService {
     }
 
     /** Run the four-layer validation against a task file. */
-    async check(filePath: string, wbs: string, options?: { strict?: boolean }): Promise<CheckResult> {
+    async check(
+        filePath: string,
+        wbs: string,
+        options?: { strict?: boolean; severityOverrides?: Record<string, 'error' | 'warning' | 'off'> },
+    ): Promise<CheckResult> {
         const strict = options?.strict === true;
         const raw = await this.fs.readFile(filePath);
         const findings: CheckFindings[] = [];
@@ -219,7 +224,7 @@ export class TaskCheckService extends PlanningCheckService {
         // ── L1: Schema validation (hard) ──
         const doc = this.runL1(raw, wbs, findings);
         if (doc === null) {
-            return { wbs, ...this.summarizeWithStatus('', findings, strict) };
+            return { wbs, ...this.summarizeWithStatus('', findings, strict, options?.severityOverrides) };
         }
 
         const fm = doc.frontmatterData ?? {};
@@ -250,7 +255,7 @@ export class TaskCheckService extends PlanningCheckService {
             await this.runL4Readiness(doc, fm, wbs, status, findings, tasksDir);
         }
 
-        return { wbs, ...this.summarizeWithStatus(status, findings, strict) };
+        return { wbs, ...this.summarizeWithStatus(status, findings, strict, options?.severityOverrides) };
     }
 
     // ── L3: Format rules ──
@@ -285,6 +290,7 @@ export class TaskCheckService extends PlanningCheckService {
             if (numbered === 0 || numbered < blocks.length * 0.5) {
                 findings.push({
                     layer: 'L3',
+                    code: FINDING_CODES.L3_REQUIREMENTS_FORMAT,
                     severity: 'warning',
                     section: 'Requirements',
                     message: 'Requirements should use R-numbered items (R1., R2., …) — got ~50% or fewer',
@@ -305,6 +311,7 @@ export class TaskCheckService extends PlanningCheckService {
             if (!hasTableFileLine) {
                 findings.push({
                     layer: 'L3',
+                    code: FINDING_CODES.L3_SOLUTION_FILE_LINE,
                     severity: 'error',
                     section: 'Solution',
                     message: 'Solution must contain at least one `file:line` citation',
@@ -332,6 +339,7 @@ export class TaskCheckService extends PlanningCheckService {
             if (!hasPopulatedPriorityTable(revBody)) {
                 findings.push({
                     layer: 'L3',
+                    code: FINDING_CODES.L3_REVIEW_PRIORITY_TABLE,
                     severity: 'error',
                     section: 'Review',
                     message: 'Review must contain P1–P4 priority findings table',
@@ -346,6 +354,7 @@ export class TaskCheckService extends PlanningCheckService {
             if (!hasCoverage) {
                 findings.push({
                     layer: 'L3',
+                    code: FINDING_CODES.L3_TESTING_COVERAGE,
                     severity: 'warning',
                     section: 'Testing',
                     message: 'Testing should include numeric coverage claim or N/A',
@@ -361,6 +370,7 @@ export class TaskCheckService extends PlanningCheckService {
             if (!isList && !isTable) {
                 findings.push({
                     layer: 'L3',
+                    code: FINDING_CODES.L3_PLAN_FORMAT,
                     severity: 'warning',
                     section: 'Plan',
                     message: 'Plan should be ordered checklist or table, not free-form prose',
@@ -382,6 +392,7 @@ export class TaskCheckService extends PlanningCheckService {
             if (openBoxes > 0) {
                 findings.push({
                     layer: 'L3',
+                    code: FINDING_CODES.L3_UNCHECKED_CHECKLIST,
                     severity: 'warning',
                     section: '',
                     message: `Task is ${status} but carries ${openBoxes} unchecked checklist box(es) — flip to [x] or remove before closing`,
@@ -411,6 +422,7 @@ export class TaskCheckService extends PlanningCheckService {
             if (designBody !== null && isPlaceholderBody(designBody)) {
                 findings.push({
                     layer: 'L4',
+                    code: FINDING_CODES.L4_DESIGN_PLACEHOLDER,
                     severity: 'warning',
                     section: 'Design',
                     message:
@@ -430,6 +442,7 @@ export class TaskCheckService extends PlanningCheckService {
             if (featurePath === null) {
                 findings.push({
                     layer: 'L4',
+                    code: FINDING_CODES.L4_FEATURE_NOT_FOUND,
                     severity: 'warning',
                     section: '',
                     message: `Feature "${featureId}" not found in ${featuresDir}`,
@@ -439,6 +452,7 @@ export class TaskCheckService extends PlanningCheckService {
                 if (featureStatus === 'done' || featureStatus === 'cancelled') {
                     findings.push({
                         layer: 'L4',
+                        code: FINDING_CODES.L4_FEATURE_TERMINAL,
                         severity: 'error',
                         section: '',
                         message: `Feature "${featureId}" is ${featureStatus} — remove or re-parent this task`,
@@ -450,6 +464,7 @@ export class TaskCheckService extends PlanningCheckService {
         } else {
             findings.push({
                 layer: 'L4',
+                code: FINDING_CODES.L4_MISSING_FEATURE_ID,
                 severity: 'warning',
                 section: '',
                 message:
@@ -463,6 +478,7 @@ export class TaskCheckService extends PlanningCheckService {
             if (parentPath === null) {
                 findings.push({
                     layer: 'L4',
+                    code: FINDING_CODES.L4_PARENT_NOT_FOUND,
                     severity: 'warning',
                     section: '',
                     message: `Parent task ${parentWbs} not found in ${tasksDir}`,
@@ -482,6 +498,7 @@ export class TaskCheckService extends PlanningCheckService {
                     if (depPath === null) {
                         findings.push({
                             layer: 'L4',
+                            code: FINDING_CODES.L4_DEPENDENCY_NOT_FOUND,
                             severity: 'warning',
                             section: '',
                             message: `Dependency "${dep}" not found in ${tasksDir}`,
@@ -530,6 +547,7 @@ export class TaskCheckService extends PlanningCheckService {
             const list = openKids.map((c) => c.wbs).join(', ');
             findings.push({
                 layer: 'L4',
+                code: FINDING_CODES.L4_ROLLUP_SUBTASKS_OPEN,
                 severity: 'warning',
                 section: '',
                 message: `Parent is ${status} but sub-task(s) still open: ${list} — close or re-parent them`,
@@ -540,6 +558,7 @@ export class TaskCheckService extends PlanningCheckService {
         if (!parentClosed && openKids.length === 0) {
             findings.push({
                 layer: 'L4',
+                code: FINDING_CODES.L4_ROLLUP_PARENT_OPEN,
                 severity: 'warning',
                 section: '',
                 message: `All ${kids.length} sub-task(s) are done/cancelled but parent is still ${status} — close the parent`,
@@ -551,6 +570,7 @@ export class TaskCheckService extends PlanningCheckService {
         if (!this.hasSubtaskRoster(planBody, kids)) {
             findings.push({
                 layer: 'L4',
+                code: FINDING_CODES.L4_ROLLUP_MISSING_ROSTER,
                 severity: 'warning',
                 section: 'Plan',
                 message: 'Parent task has sub-tasks but its Plan has no sub-task roster (decomposition.md)',
@@ -580,6 +600,7 @@ export class TaskCheckService extends PlanningCheckService {
         if (status === 'blocked') {
             findings.push({
                 layer: 'L4',
+                code: FINDING_CODES.L4_READINESS_BLOCKED,
                 severity: 'warning',
                 section: '',
                 message: `Task ${wbs} is blocked — readiness is false until the blocker is resolved or explicitly forced`,
@@ -592,6 +613,7 @@ export class TaskCheckService extends PlanningCheckService {
             if (!declaredDeps.includes(dep.wbs)) {
                 findings.push({
                     layer: 'L4',
+                    code: FINDING_CODES.L4_PROSE_PREREQUISITE_UNLISTED,
                     severity: 'warning',
                     section: dep.section,
                     message: `Prose prerequisite ${dep.wbs} is not mirrored in frontmatter dependencies[]`,
@@ -649,6 +671,7 @@ export class TaskCheckService extends PlanningCheckService {
         if (seen.has(depWbs)) {
             findings.push({
                 layer: 'L4',
+                code: FINDING_CODES.L4_PREREQUISITE_CYCLE,
                 severity: 'warning',
                 section: '',
                 message: `Prerequisite cycle detected while checking ${rootWbs}: ${[...seen, depWbs].join(' -> ')}`,
@@ -662,6 +685,7 @@ export class TaskCheckService extends PlanningCheckService {
         if (dep.status !== 'done') {
             findings.push({
                 layer: 'L4',
+                code: FINDING_CODES.L4_PREREQUISITE_NOT_DONE,
                 severity: 'warning',
                 section: '',
                 message: `${transitive ? 'Transitive prerequisite' : 'Prerequisite'} ${depWbs} is ${dep.status}; task ${rootWbs} is not ready until it is done`,
@@ -686,6 +710,7 @@ export class TaskCheckService extends PlanningCheckService {
             ) {
                 findings.push({
                     layer: 'L4',
+                    code: FINDING_CODES.L4_GATE_LANGUAGE,
                     severity: 'warning',
                     section,
                     message: `${section} contains gate language; model the gate as a frontmatter dependency or verify it before treating the task as ready`,
@@ -785,6 +810,7 @@ export class TaskCheckService extends PlanningCheckService {
         for (const scenario of result.uncovered) {
             findings.push({
                 layer: 'L4',
+                code: FINDING_CODES.L4_UNCOVERED_TASK_SCENARIO,
                 severity: 'warning',
                 section: 'Acceptance Criteria',
                 message: `Task scenario "${scenario}" is not in feature "${featureId}"'s AC (DD-09 subset rule)`,

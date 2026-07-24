@@ -19,6 +19,7 @@ import {
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import {
     type CheckFindings,
+    FINDING_CODES,
     type MatrixEntry,
     PlanningCheckService,
     type SectionMatrix,
@@ -104,7 +105,13 @@ export class FeatureCheckService extends PlanningCheckService {
     async check(
         filePath: string,
         featureId: string,
-        options?: { strict?: boolean; featuresDir?: string; tasksDir?: string; dogfoodDir?: string },
+        options?: {
+            strict?: boolean;
+            featuresDir?: string;
+            tasksDir?: string;
+            dogfoodDir?: string;
+            severityOverrides?: Record<string, 'error' | 'warning' | 'off'>;
+        },
     ): Promise<CheckFeatureResult> {
         const strict = options?.strict === true;
         const raw = await this.fs.readFile(filePath);
@@ -113,7 +120,7 @@ export class FeatureCheckService extends PlanningCheckService {
         // ── L1: Schema validation (hard) ──
         const doc = this.runL1(raw, featureId, findings);
         if (doc === null) {
-            return { id: featureId, ...this.summarizeWithStatus('', findings, strict) };
+            return { id: featureId, ...this.summarizeWithStatus('', findings, strict, options?.severityOverrides) };
         }
 
         const fm = doc.frontmatterData ?? {};
@@ -137,7 +144,7 @@ export class FeatureCheckService extends PlanningCheckService {
             options?.dogfoodDir ?? (options?.featuresDir ? join(dirname(options.featuresDir), 'dogfood') : undefined);
         await this.runL4(doc, featureId, status, options?.tasksDir, dogfoodDir, findings);
 
-        return { id: featureId, ...this.summarizeWithStatus(status, findings, strict) };
+        return { id: featureId, ...this.summarizeWithStatus(status, findings, strict, options?.severityOverrides) };
     }
 
     // ── L3: Format rules ──
@@ -159,6 +166,7 @@ export class FeatureCheckService extends PlanningCheckService {
                 for (const item of emptyItems) {
                     findings.push({
                         layer: 'L3',
+                        code: FINDING_CODES.L3_AC_CHECKLIST_TEXT,
                         severity: 'warning',
                         section: 'Acceptance Criteria',
                         line: item.line,
@@ -173,6 +181,7 @@ export class FeatureCheckService extends PlanningCheckService {
             for (const err of bddResult.errors) {
                 findings.push({
                     layer: 'L3',
+                    code: FINDING_CODES.L3_AC_BDD_ERROR,
                     severity: 'error',
                     section: 'Acceptance Criteria',
                     line: err.line,
@@ -182,6 +191,7 @@ export class FeatureCheckService extends PlanningCheckService {
             for (const warn of bddResult.warnings) {
                 findings.push({
                     layer: 'L3',
+                    code: FINDING_CODES.L3_AC_BDD_WARNING,
                     severity: 'warning',
                     section: 'Acceptance Criteria',
                     line: warn.line,
@@ -192,6 +202,7 @@ export class FeatureCheckService extends PlanningCheckService {
             if (!bddResult.valid) {
                 findings.push({
                     layer: 'L3',
+                    code: FINDING_CODES.L3_AC_BDD_INVALID,
                     severity: 'error',
                     section: 'Acceptance Criteria',
                     message: 'Acceptance Criteria validation failed; fix BDD syntax errors',
@@ -215,6 +226,7 @@ export class FeatureCheckService extends PlanningCheckService {
             if (!hasInOut) {
                 findings.push({
                     layer: 'L3',
+                    code: FINDING_CODES.L3_SCOPE_DELINEATION,
                     severity: 'warning',
                     section: 'Scope',
                     message: 'Scope should delineate in-scope / out-of-scope items',
@@ -264,6 +276,7 @@ export class FeatureCheckService extends PlanningCheckService {
                     if (otherPriority === 'P0' && (otherStatus === 'active' || otherStatus === 'verifying')) {
                         findings.push({
                             layer: 'L3',
+                            code: FINDING_CODES.L3_ONE_ACTIVE_GOAL,
                             severity: 'error',
                             section: '',
                             message: `One-active-goal violated: P0 feature "${otherId}" is already ${otherStatus}`,
@@ -308,6 +321,7 @@ export class FeatureCheckService extends PlanningCheckService {
         if (children > 9) {
             findings.push({
                 layer: 'L3',
+                code: FINDING_CODES.L3_CHILDREN_LIMIT,
                 severity: 'warning',
                 section: '',
                 message: `Feature "${featureId}" has ${children} children; DD-14 limit is <=9 per node — split the parent`,
@@ -355,6 +369,7 @@ export class FeatureCheckService extends PlanningCheckService {
                     // dangling edge — surface it as a traceability warning.
                     findings.push({
                         layer: 'L4',
+                        code: FINDING_CODES.L4_LINKED_TASK_PARSE_FAILED,
                         severity: 'warning',
                         section: '',
                         message: `Linked task file "${entry}" failed to parse — dangling feature_id edge`,
@@ -373,6 +388,7 @@ export class FeatureCheckService extends PlanningCheckService {
         if (hasScenarios && linkedTasks === 0) {
             findings.push({
                 layer: 'L4',
+                code: FINDING_CODES.L4_ORPHAN_SCENARIOS,
                 severity: 'warning',
                 section: 'Acceptance Criteria',
                 message: `Feature "${featureId}" has acceptance scenarios but no linked task (orphan scenarios)`,
@@ -397,6 +413,7 @@ export class FeatureCheckService extends PlanningCheckService {
             for (const orphan of stillOrphan) {
                 findings.push({
                     layer: 'L4',
+                    code: FINDING_CODES.L4_UNCOVERED_FEATURE_SCENARIO,
                     severity: 'warning',
                     section: 'Acceptance Criteria',
                     message: `Feature scenario "${orphan}" is not covered by any linked task (DD-09)`,
@@ -411,6 +428,7 @@ export class FeatureCheckService extends PlanningCheckService {
         if (status === 'verifying' && incompleteTasks.length > 0) {
             findings.push({
                 layer: 'L4',
+                code: FINDING_CODES.L4_VERIFYING_INCOMPLETE_TASKS,
                 severity: 'warning',
                 section: '',
                 message: `Feature "${featureId}" is verifying but ${incompleteTasks.length} linked task(s) are not done/cancelled: ${incompleteTasks.join(', ')}`,
@@ -443,6 +461,7 @@ export class FeatureCheckService extends PlanningCheckService {
                 if (!hasDogfood) {
                     findings.push({
                         layer: 'L4',
+                        code: FINDING_CODES.L4_DOGFOOD_MISSING,
                         severity: 'warning',
                         section: 'Dogfood',
                         message:

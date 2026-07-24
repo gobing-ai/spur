@@ -76,6 +76,12 @@ export type {
     FeatureSummary,
 } from './services/feature-service';
 export { FeatureService } from './services/feature-service';
+export {
+    ALL_FINDING_CODES,
+    FINDING_CODES,
+    type FindingCode,
+    isFindingCode,
+} from './services/finding-codes';
 export type {
     HistoryAnalyzeResult,
     HistoryImportResult,

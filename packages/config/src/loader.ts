@@ -64,6 +64,8 @@ export interface PlanningFolders {
     featuresDir: string;
     /** All registered task folders + the active one, in the shape services consume. */
     foldersConfig: TaskFoldersConfig;
+    /** Optional rule severity overrides map from tasks.severity (R3/R4, task 0321). */
+    severityOverrides?: Record<string, 'error' | 'warning' | 'off'>;
 }
 
 /** Options for {@link loadSpurConfig}. */
@@ -426,7 +428,7 @@ async function resolvePlanningFoldersUncached(fs: FileSystem): Promise<PlanningF
             active_folder: tasks.active,
             folders: Object.keys(folders).length > 0 ? folders : defaultFoldersConfig().folders,
         };
-        return { tasksDir: tasks.active, featuresDir, foldersConfig };
+        return { tasksDir: tasks.active, featuresDir, foldersConfig, severityOverrides: tasks.severity };
     } catch {
         return defaultPlanningFolders();
     }

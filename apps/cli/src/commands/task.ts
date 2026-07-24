@@ -736,7 +736,8 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             // exists so the testing→done lifecycle guard has a real, stable verb.
             const strict = options.strict === true;
             try {
-                const activeFolder = (await resolvePlanningFolders(context.fs)).foldersConfig.active_folder;
+                const planningFolders = await resolvePlanningFolders(context.fs);
+                const activeFolder = planningFolders.foldersConfig.active_folder;
                 const tasksDir = options.folder ?? context.fs.resolve(activeFolder);
                 const entries = await context.fs.readDir(tasksDir);
                 const wbsPattern: string[] = wbs
@@ -754,7 +755,10 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         context.setExitCode(1);
                         continue;
                     }
-                    const result = await svc.check(`${tasksDir}/${fileName}`, w, { strict });
+                    const result = await svc.check(`${tasksDir}/${fileName}`, w, {
+                        strict,
+                        severityOverrides: planningFolders.severityOverrides,
+                    });
                     results.push(result);
 
                     if (!json) {

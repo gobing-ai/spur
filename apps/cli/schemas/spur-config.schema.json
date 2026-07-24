@@ -262,6 +262,14 @@
                 "active": {
                     "type": "string",
                     "description": "Default folder for `spur task create`. Default: docs/tasks."
+                },
+                "severity": {
+                    "type": "object",
+                    "description": "Rule severity overrides map by code (error | warning | off).",
+                    "additionalProperties": {
+                        "type": "string",
+                        "enum": ["error", "warning", "off"]
+                    }
                 }
             }
         },

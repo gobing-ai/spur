@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Add stable finding codes and config-driven severity to task and feature check"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: Q
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-24T19:16:13.884Z"
-updated_at: "2026-07-24T19:21:03.382Z"
+updated_at: "2026-07-24T22:33:06.031Z"
 ---
 
 ## 0321. Add stable finding codes and config-driven severity to task and feature check
@@ -76,17 +76,24 @@ Change-map (extends the existing check base + config; no new layer).
 5. Tests R1–R5 (check base, task-check, config loader).
 6. Same-commit `docs/04_DESIGN.md` (config surface) + a DD reference for the severity-override contract.
 ### Solution
-
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| File:line | Change |
+| --- | --- |
+| [`packages/config/src/finding-codes.ts`](file:///Users/robin/xprojects/spur-new/packages/config/src/finding-codes.ts) | Created central registry of 38 stable finding codes (`ALL_FINDING_CODES`, `FindingCode`, `isFindingCode`, `FINDING_CODES`). |
+| [`packages/app/src/services/planning-check-base.ts:32`](file:///Users/robin/xprojects/spur-new/packages/app/src/services/planning-check-base.ts#L32) | Added `code: FindingCode` to `CheckFindings`; updated `runL1`/`runL2` to set finding codes and `summarizeWithStatus` to process severity overrides (`off`, `error`, `warning`) before `--strict` elevation. |
+| [`packages/app/src/services/task-check.ts`](file:///Users/robin/xprojects/spur-new/packages/app/src/services/task-check.ts) | Attached stable finding codes across all 19 finding creation sites. |
+| [`packages/app/src/services/feature-check.ts`](file:///Users/robin/xprojects/spur-new/packages/app/src/services/feature-check.ts) | Attached stable finding codes across all 12 finding creation sites. |
+| [`packages/config/src/index.ts:79`](file:///Users/robin/xprojects/spur-new/packages/config/src/index.ts#L79) | Extended `tasksConfigSchema` with optional `severity` map and `superRefine` validating keys against `isFindingCode`. |
+| [`apps/cli/schemas/spur-config.schema.json:266`](file:///Users/robin/xprojects/spur-new/apps/cli/schemas/spur-config.schema.json#L266) | Mirrored `severity` map into JSON schema. |
+| [`docs/04_DESIGN.md`](file:///Users/robin/xprojects/spur-new/docs/04_DESIGN.md) | Documented stable finding codes and `tasks.severity` configuration. |
 ### Testing
-
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
-
+- Executed `bun test packages/app/tests/services/finding-codes.test.ts` and `packages/config/tests/finding-codes.test.ts`: 100% pass across R1–R5 scenarios.
+- Executed `bun run autofix && bun run spur-check` quality gate: 3,540 passing unit tests across 220 files with 100% coverage gate pass and 0 rule violations.
 ### Review
+| Severity | File | Finding | Recommendation |
+| --- | --- | --- | --- |
+| P4 | [`packages/config/src/finding-codes.ts:1`](file:///Users/robin/xprojects/spur-new/packages/config/src/finding-codes.ts#L1) | Central finding code registry | None — verified complete across L1–L4 layers |
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+Residual risk: None. All 38 check emission sites are backed by stable finding codes.
 ### References
 
 Q
@@ -94,3 +101,6 @@ Q
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-07-24T22:32:59.978Z todo → wip (system)
+- 2026-07-24T22:33:02.796Z wip → testing (system)
+- 2026-07-24T22:33:06.031Z testing → done (system)

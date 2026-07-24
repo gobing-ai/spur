@@ -60,7 +60,9 @@ function folderPathWithDefault(defaultPath: string) {
     return z.preprocess((v) => (v == null ? undefined : v), z.string().default(defaultPath));
 }
 
-// ---- Tasks config ----
+import { ALL_FINDING_CODES, FINDING_CODES, type FindingCode, isFindingCode } from './finding-codes';
+
+export { ALL_FINDING_CODES, FINDING_CODES, type FindingCode, isFindingCode };
 
 /**
  * Zod schema for the `tasks:` config block (design §9).
@@ -70,16 +72,33 @@ function folderPathWithDefault(defaultPath: string) {
  *   folders:
  *     docs/tasks: { baseCounter: 0, label: Core }
  *   active: docs/tasks
+ *   severity:
+ *     L3.plan-format: off
  * ```
  *
  * `folders` is a map of folder path → {@link folderConfigSchema} (absorbs the
  * legacy `docs/.tasks/config.json` folders + base_counter); `active` is the
- * default folder for `create`.
+ * default folder for `create`; `severity` overrides rule severities by code.
  */
-export const tasksConfigSchema = z.object({
-    folders: z.record(z.string(), folderConfigSchema).default({}),
-    active: folderPathWithDefault(DEFAULT_TASKS_DIR),
-});
+export const tasksConfigSchema = z
+    .object({
+        folders: z.record(z.string(), folderConfigSchema).default({}),
+        active: folderPathWithDefault(DEFAULT_TASKS_DIR),
+        severity: z.record(z.string(), z.enum(['error', 'warning', 'off'])).optional(),
+    })
+    .superRefine((data, ctx) => {
+        if (data.severity) {
+            for (const code of Object.keys(data.severity)) {
+                if (!isFindingCode(code)) {
+                    ctx.addIssue({
+                        code: z.ZodIssueCode.custom,
+                        path: ['severity', code],
+                        message: `Unknown finding code "${code}" in severity overrides map`,
+                    });
+                }
+            }
+        }
+    });
 
 /** Inferred type for {@link tasksConfigSchema}. */
 export type TasksConfig = z.infer<typeof tasksConfigSchema>;

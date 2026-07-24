@@ -6,6 +6,7 @@ import {
     type CheckFindings,
     type CheckResultBase,
     type DocKind,
+    FINDING_CODES,
     type MatrixEntry,
     PlanningCheckService,
     type SectionMatrix,
@@ -356,7 +357,13 @@ describe('PlanningCheckService.summarizeWithStatus', () => {
     test('returns pass=true when only warnings are present', () => {
         const svc = new TestCheckService(simpleMatrix);
         const findings: CheckFindings[] = [
-            { layer: 'L2', severity: 'warning', section: 'X', message: 'Missing required section "X"' },
+            {
+                layer: 'L2',
+                code: FINDING_CODES.L2_MISSING_REQUIRED_SECTION,
+                severity: 'warning',
+                section: 'X',
+                message: 'Missing required section "X"',
+            },
         ];
         const result = svc.summarizeWithStatus('backlog', findings);
         expect(result.pass).toBe(true);
@@ -364,7 +371,15 @@ describe('PlanningCheckService.summarizeWithStatus', () => {
 
     test('returns pass=false when an error is present', () => {
         const svc = new TestCheckService(simpleMatrix);
-        const findings: CheckFindings[] = [{ layer: 'L1', severity: 'error', section: '', message: 'Schema: bad' }];
+        const findings: CheckFindings[] = [
+            {
+                layer: 'L1',
+                code: FINDING_CODES.L1_SCHEMA_VALIDATION,
+                severity: 'error',
+                section: '',
+                message: 'Schema: bad',
+            },
+        ];
         const result = svc.summarizeWithStatus('backlog', findings);
         expect(result.pass).toBe(false);
     });
@@ -372,7 +387,13 @@ describe('PlanningCheckService.summarizeWithStatus', () => {
     test('elevates warnings to errors when strict is true', () => {
         const svc = new TestCheckService(simpleMatrix);
         const findings: CheckFindings[] = [
-            { layer: 'L2', severity: 'warning', section: 'X', message: 'Missing required section "X"' },
+            {
+                layer: 'L2',
+                code: FINDING_CODES.L2_MISSING_REQUIRED_SECTION,
+                severity: 'warning',
+                section: 'X',
+                message: 'Missing required section "X"',
+            },
         ];
         const result = svc.summarizeWithStatus('backlog', findings, true);
         expect(findings[0]?.severity).toBe('error');
@@ -382,7 +403,13 @@ describe('PlanningCheckService.summarizeWithStatus', () => {
     test('does not elevate warnings when strict is false', () => {
         const svc = new TestCheckService(simpleMatrix);
         const findings: CheckFindings[] = [
-            { layer: 'L2', severity: 'warning', section: 'X', message: 'Missing required section "X"' },
+            {
+                layer: 'L2',
+                code: FINDING_CODES.L2_MISSING_REQUIRED_SECTION,
+                severity: 'warning',
+                section: 'X',
+                message: 'Missing required section "X"',
+            },
         ];
         const result = svc.summarizeWithStatus('backlog', findings, false);
         expect(findings[0]?.severity).toBe('warning');
@@ -392,8 +419,20 @@ describe('PlanningCheckService.summarizeWithStatus', () => {
     test('elevates only warnings, leaving errors as errors', () => {
         const svc = new TestCheckService(simpleMatrix);
         const findings: CheckFindings[] = [
-            { layer: 'L2', severity: 'warning', section: 'X', message: 'Missing required section "X"' },
-            { layer: 'L1', severity: 'error', section: '', message: 'Schema: bad' },
+            {
+                layer: 'L2',
+                code: FINDING_CODES.L2_MISSING_REQUIRED_SECTION,
+                severity: 'warning',
+                section: 'X',
+                message: 'Missing required section "X"',
+            },
+            {
+                layer: 'L1',
+                code: FINDING_CODES.L1_SCHEMA_VALIDATION,
+                severity: 'error',
+                section: '',
+                message: 'Schema: bad',
+            },
         ];
         svc.summarizeWithStatus('backlog', findings, true);
         expect(findings[0]?.severity).toBe('error');
@@ -405,15 +444,34 @@ describe('PlanningCheckService.summarizeWithStatus', () => {
         const findings: CheckFindings[] = [
             {
                 layer: 'L2',
+                code: FINDING_CODES.L2_MISSING_REQUIRED_SECTION,
                 severity: 'warning',
                 section: 'Background',
                 message: 'Missing required section "Background"',
             },
-            { layer: 'L2', severity: 'warning', section: 'Solution', message: 'Missing required section "Solution"' },
+            {
+                layer: 'L2',
+                code: FINDING_CODES.L2_MISSING_REQUIRED_SECTION,
+                severity: 'warning',
+                section: 'Solution',
+                message: 'Missing required section "Solution"',
+            },
             // Non-missing L2 finding should NOT appear in requiredSections
-            { layer: 'L2', severity: 'warning', section: 'Design', message: 'Section "Design" is not allowed' },
+            {
+                layer: 'L2',
+                code: FINDING_CODES.L2_DISALLOWED_SECTION,
+                severity: 'warning',
+                section: 'Design',
+                message: 'Section "Design" is not allowed',
+            },
             // L1 finding should not appear either
-            { layer: 'L1', severity: 'error', section: '', message: 'Schema: bad' },
+            {
+                layer: 'L1',
+                code: FINDING_CODES.L1_SCHEMA_VALIDATION,
+                severity: 'error',
+                section: '',
+                message: 'Schema: bad',
+            },
         ];
         const result = svc.summarizeWithStatus('done', findings);
         expect(result.requiredSections).toEqual(['Background', 'Solution']);
@@ -425,6 +483,7 @@ describe('PlanningCheckService.summarizeWithStatus', () => {
         const findings: CheckFindings[] = [
             {
                 layer: 'L2',
+                code: FINDING_CODES.L2_FORBIDDEN_SECTION,
                 severity: 'warning',
                 section: 'X',
                 message: 'Section "X" is forbidden for the current status',
@@ -440,10 +499,34 @@ describe('PlanningCheckService.summarizeWithStatus', () => {
         // The loop breaks on first error — verify it still reports pass=false
         // with a mix of warnings before the error.
         const findings: CheckFindings[] = [
-            { layer: 'L2', severity: 'warning', section: 'A', message: 'Missing required section "A"' },
-            { layer: 'L2', severity: 'warning', section: 'B', message: 'Missing required section "B"' },
-            { layer: 'L1', severity: 'error', section: '', message: 'Schema: bad' },
-            { layer: 'L3', severity: 'error', section: 'C', message: 'Format error' },
+            {
+                layer: 'L2',
+                code: FINDING_CODES.L2_MISSING_REQUIRED_SECTION,
+                severity: 'warning',
+                section: 'A',
+                message: 'Missing required section "A"',
+            },
+            {
+                layer: 'L2',
+                code: FINDING_CODES.L2_MISSING_REQUIRED_SECTION,
+                severity: 'warning',
+                section: 'B',
+                message: 'Missing required section "B"',
+            },
+            {
+                layer: 'L1',
+                code: FINDING_CODES.L1_SCHEMA_VALIDATION,
+                severity: 'error',
+                section: '',
+                message: 'Schema: bad',
+            },
+            {
+                layer: 'L3',
+                code: FINDING_CODES.L3_SOLUTION_FILE_LINE,
+                severity: 'error',
+                section: 'C',
+                message: 'Format error',
+            },
         ];
         const result = svc.summarizeWithStatus('done', findings);
         expect(result.pass).toBe(false);
@@ -464,7 +547,13 @@ describe('PlanningCheckService.summarizeWithStatus', () => {
     test('mutates the findings array in place (strict elevation)', () => {
         const svc = new TestCheckService(simpleMatrix);
         const findings: CheckFindings[] = [
-            { layer: 'L2', severity: 'warning', section: 'X', message: 'Missing required section "X"' },
+            {
+                layer: 'L2',
+                code: FINDING_CODES.L2_MISSING_REQUIRED_SECTION,
+                severity: 'warning',
+                section: 'X',
+                message: 'Missing required section "X"',
+            },
         ];
         svc.summarizeWithStatus('backlog', findings, true);
         // The original findings array is mutated — severity changed to 'error'
