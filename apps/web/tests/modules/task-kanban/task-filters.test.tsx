@@ -3,6 +3,7 @@ registerHappyDom();
 import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
 import { cleanup, render } from '@testing-library/react';
 import type { InputHTMLAttributes } from 'react';
+import * as RealUI from '@/ui';
 import TaskFilters from '../../../src/modules/task-kanban/TaskFilters';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
@@ -19,6 +20,7 @@ type CapturedInput = {
 const capturedInputs: CapturedInput[] = [];
 
 mock.module('@/ui', () => ({
+    ...RealUI,
     Input: (props: InputHTMLAttributes<HTMLInputElement>) => {
         const ref = (e: HTMLInputElement | null) => {
             if (!e || !props.onChange) return;

@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, tes
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import type React from 'react';
 import { useEffect, useRef } from 'react';
+import * as RealUI from '@/ui';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
 import ActivityTab, {
     buildRosterIndex,
@@ -21,8 +22,6 @@ import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 // select's onChange (capricorn86/happy-dom#856). Instead of reading
 // __reactProps$ (fragile across React versions), we replace the Select
 // component with a native <select> that captures its onChange via a ref.
-// Button / Badge / Modal get thin passthrough wrappers so fireEvent.click
-// and data-attribute queries work against real DOM elements.
 
 interface CapturedSelect {
     label: string;
@@ -71,67 +70,10 @@ mock.module('@/ui', () => {
         return <select {...rest}>{props.children as React.ReactNode}</select>;
     }
 
-    function Button(props: Record<string, unknown>) {
-        const rest: Record<string, unknown> = {};
-        for (const key of Object.keys(props)) {
-            if (
-                key === 'disabled' ||
-                key === 'className' ||
-                key.startsWith('data-') ||
-                key === 'type' ||
-                key.startsWith('on')
-            ) {
-                rest[key] = props[key];
-            }
-        }
-        return <button {...rest}>{props.children as React.ReactNode}</button>;
-    }
-
-    function Badge(props: Record<string, unknown>) {
-        const rest: Record<string, unknown> = {};
-        for (const key of Object.keys(props)) {
-            if (key.startsWith('data-') || key === 'className' || key.startsWith('on')) {
-                rest[key] = props[key];
-            }
-        }
-        return <span {...rest}>{props.children as React.ReactNode}</span>;
-    }
-
-    function Loading(_props: Record<string, unknown>) {
-        return <span data-loading>Loading…</span>;
-    }
-
-    function Modal(props: Record<string, unknown>) {
-        if (!props.open) return null;
-        const rest: Record<string, unknown> = {};
-        const onClose = props.onClose as (() => void) | undefined;
-        for (const key of Object.keys(props)) {
-            if (
-                key.startsWith('data-') ||
-                key === 'className' ||
-                key === 'role' ||
-                key === 'aria-modal' ||
-                key.startsWith('on')
-            ) {
-                rest[key] = props[key];
-            }
-        }
-        return (
-            <div
-                {...rest}
-                role="dialog"
-                aria-modal="true"
-                onClick={() => onClose?.()}
-                onKeyDown={(e) => {
-                    if (e.key === 'Escape') onClose?.();
-                }}
-            >
-                {props.children as React.ReactNode}
-            </div>
-        );
-    }
-
-    return { Select, Button, Badge, Loading, Modal };
+    return {
+        ...RealUI,
+        Select,
+    };
 });
 
 class FakeEventSource {

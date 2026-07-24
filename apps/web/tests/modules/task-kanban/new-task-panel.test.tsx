@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import type { ComponentType } from 'react';
 import React from 'react';
 // Grab real Button and Select before mocking @/ui
-import { Button, Select } from '@/ui';
+import * as RealUI from '@/ui';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 // ── Mock MDEditor ────────────────────────────────────────────────────────────
@@ -66,8 +66,7 @@ function MockInput({ id, onChange, variant, size, error, className, value, ...re
 }
 
 mock.module('@/ui', () => ({
-    Button,
-    Select,
+    ...RealUI,
     Input: MockInput,
 }));
 
