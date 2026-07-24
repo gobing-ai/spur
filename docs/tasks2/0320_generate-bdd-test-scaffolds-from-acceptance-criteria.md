@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-24T19:16:11.465Z"
-updated_at: "2026-07-24T21:33:59.254Z"
+updated_at: "2026-07-24T22:09:11.479Z"
 ---
 
 ## 0320. Generate BDD test scaffolds from Acceptance Criteria
@@ -87,15 +87,40 @@ Change-map:
 | `apps/cli/src/commands/task.ts:889` | Add `scaffold-tests <wbs>` subcommand with `--file`, `--folder`, `--json`. |
 | `docs/04_DESIGN.md:297` | Document `spur task scaffold-tests` CLI surface. |
 ### Testing
-Commands run:
-- `bun test packages/domain/tests/bdd/scaffold.test.ts` (4 pass, 0 fail)
-- `bun test packages/app/tests/services/task-scaffold.test.ts` (3 pass, 0 fail)
-- `bun run apps/cli/src/index.ts task scaffold-tests 0320 --json` (created: 3, skipped: 0, drifted: 0)
-- `bun run apps/cli/src/index.ts task scaffold-tests 0320 --json` (created: 0, skipped: 3, drifted: 0 - idempotent check)
-- `bun run lint` (clean, zero errors)
-- `bun run spur-check` (3534 pass across 218 files, 0 fail)
+**Commands run (this verify, 2026-07-24):**
+- `bun test packages/domain/tests/bdd/scaffold.test.ts packages/app/tests/services/task-scaffold.test.ts` → 8 pass, 0 fail; `scaffold.ts` and `task-scaffold.ts` at 100% line & func coverage
+- `bun run apps/cli/src/index.ts task scaffold-tests 0320 --json` → `{"created":3,"skipped":0,"drifted":0,...}` exit 0
+- re-run same command → `{"created":0,"skipped":3,"drifted":0,...}` exit 0 (idempotent)
+- `bun run lint` → clean (biome + typecheck exit 0)
+- `spur task check 0320 --strict-core` → PASS
 
-Coverage claim: 100% line & func coverage on `scaffold.ts` and `task-scaffold.ts`.
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | CLI verb `scaffold-tests` at `apps/cli/src/commands/task.ts:889-924`; 1:1 `test.todo` from `renderScenarioStub` `packages/domain/src/bdd/scaffold.ts:45-92`; service write `packages/app/src/services/task-scaffold.ts:53-118`; unit `packages/domain/tests/bdd/scaffold.test.ts:5-23`, `packages/app/tests/services/task-scaffold.test.ts:99-144`; CLI golden path created 3 pending tests named for each scenario |
+| R2 | MET | AAA step comments + `// @ac:` tag via `normalizeTitle` (`packages/domain/src/bdd/coverage.ts:30`, used at `scaffold.ts:46,65,83-84`); domain test asserts tag + Given/When/Then order `scaffold.test.ts:18-22` |
+| R3 | MET | `mergeStubs` / `parseExistingAcTags` `scaffold.ts:117-182`; preserves filled bodies, appends new, flags drift without deleting `scaffold.test.ts:66-102`, `task-scaffold.test.ts:146-204`; CLI re-run skipped:3 |
+| R4 | MET | Outline expansion `scaffold.ts:48-79` (Example N comment + row substitution); domain `scaffold.test.ts:25-49` (2 rows → 2 stubs); app `task-scaffold.test.ts:206-245` |
+| R5 | MET | `TaskScaffoldResult` counts `task-scaffold.ts:22-37`; CLI `--json` via `toJson(result)` `task.ts:910-911`; exit non-zero only in catch `task.ts:920-923`; this-run JSON shows created/skipped/drifted |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: One pending test per scenario | MET | test+command | `scaffold.test.ts:5-23`; `task-scaffold.test.ts:99-144`; CLI `--json` created:3 for task 0320's three scenarios |
+| Scenario: Filled stubs are never clobbered | MET | test+command | `scaffold.test.ts:66-102` (filled `test('First scenario')` preserved); `task-scaffold.test.ts:146-204`; CLI second run skipped:3, no overwrite |
+| Scenario: Scenario Outline expands per example row | MET | test | `scaffold.test.ts:25-49` (count=1/2 → 2 stubs with Example comments); `task-scaffold.test.ts:206-245` |
+
+**Design conformance:** 5/5 design claims DONE (pure `scaffold.ts`, `TaskScaffoldService`, CLI verb + `--json`, domain+app tests, `docs/04_DESIGN.md:297`). No silent deviation; Solution section documents the change-map.
+
+**Coverage:** 100% line & func on `packages/domain/src/bdd/scaffold.ts` and `packages/app/src/services/task-scaffold.ts` (measured this run via bun test coverage table).
+
+**SECUA (advisory, non-blocking):**
+- minor/correctness: outline examples share one `acTag` (`scaffold.ts:74`), so adding a new Examples row to an already-scaffolded outline will not append a new stub until the tag strategy is per-row. Outside stated Pass criteria; not repaired under `--fix all` (no UNMET/PARTIAL/major).
+- minor/architecture: empty `catch {}` in `findTaskFile` (`task-scaffold.ts:131`) swallows readDir errors — acceptable for multi-folder probe.
+
+**Verdict: PASS**
 ### Review
 | Severity | Finding | Resolution |
 | --- | --- | --- |
