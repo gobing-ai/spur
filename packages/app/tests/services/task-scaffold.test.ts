@@ -243,4 +243,49 @@ Feature: Outline expansion
         expect(testContent).toContain("test.todo('Process <item> (Example 1: item=A, result=pass)', () => {");
         expect(testContent).toContain("test.todo('Process <item> (Example 2: item=B, result=fail)', () => {");
     });
+
+    test('default targetFile resolution & missing task & empty AC handling', async () => {
+        const fs = new MockFileSystem();
+        const svc = new TaskScaffoldService({
+            fs,
+            tasksDir: '/workspace/docs/tasks',
+            foldersConfig: { folders: { '/custom/tasks': {} } },
+        });
+
+        // 1. Missing task throws error
+        await expect(svc.scaffoldTests('9999')).rejects.toThrow('Task 9999 not found');
+
+        // 2. Default targetFile resolution when options is omitted
+        const taskPath = '/workspace/docs/tasks/0320_scaffold.md';
+        await fs.writeFile(
+            taskPath,
+            `---
+name: "Task without targetFile"
+---
+### Acceptance Criteria
+Scenario: Default path scenario
+  Given a default scenario
+`,
+        );
+
+        const res = await svc.scaffoldTests('0320');
+        expect(res.targetFile).toBe('tests/tasks/0320.test.ts');
+        expect(res.created).toBe(1);
+
+        // 3. Task with no AC scenarios returns warning
+        const emptyTaskPath = '/workspace/docs/tasks/0321_empty.md';
+        await fs.writeFile(
+            emptyTaskPath,
+            `---
+name: "Empty task"
+---
+### Acceptance Criteria
+No gherkin scenarios here.
+`,
+        );
+
+        const emptyRes = await svc.scaffoldTests('0321');
+        expect(emptyRes.created).toBe(0);
+        expect(emptyRes.warnings).toHaveLength(1);
+    });
 });

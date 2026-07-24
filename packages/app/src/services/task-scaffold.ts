@@ -8,30 +8,45 @@
  * - Reports counts (created, skipped, drifted) for CLI --json.
  */
 
-import { atomicWriteAsync, MarkdownDocument, mergeStubs, scaffoldFeatureScenarios } from '@gobing-ai/spur-domain';
+import { dirname } from 'node:path';
+import { MarkdownDocument, mergeStubs, scaffoldFeatureScenarios } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 
+/** Options for task test scaffolding. */
 export interface TaskScaffoldOptions {
     /** Custom target test file path override */
     targetFile?: string;
 }
 
+/** Result of a task test scaffolding operation. */
 export interface TaskScaffoldResult {
+    /** Task WBS identifier */
     wbs: string;
+    /** Path to target test file */
     targetFile: string;
+    /** Number of new stubs created */
     created: number;
+    /** Number of existing stubs skipped */
     skipped: number;
+    /** Number of scenarios missing from AC (drifted) */
     drifted: number;
+    /** Titles of drifted scenarios */
     driftedScenarios: string[];
+    /** Operational warnings */
     warnings: string[];
 }
 
+/** Context dependencies required by TaskScaffoldService. */
 export interface TaskScaffoldContext {
+    /** FileSystem instance */
     fs: FileSystem;
+    /** Base tasks directory */
     tasksDir: string;
+    /** Optional folders configuration */
     foldersConfig?: { folders: Record<string, unknown> };
 }
 
+/** Application service for generating BDD test stubs from task Acceptance Criteria. */
 export class TaskScaffoldService {
     constructor(private ctx: TaskScaffoldContext) {}
 
@@ -78,8 +93,11 @@ export class TaskScaffoldService {
 
         const mergeResult = mergeStubs(existingContent, stubs);
 
+        const dir = dirname(targetFile);
+        await this.ctx.fs.ensureDir(dir);
+
         if (mergeResult.created > 0 || !fileExists) {
-            await atomicWriteAsync(targetFile, mergeResult.content, wbs, this.ctx.fs);
+            await this.ctx.fs.writeFile(targetFile, mergeResult.content);
         }
 
         const warnings: string[] = [];
