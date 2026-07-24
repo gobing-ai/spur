@@ -55,19 +55,19 @@ mock.module('@/ui', () => {
             // props.onChange is stable across renders — captured once per label.
         }, [props.onChange]);
 
-        const rest: Record<string, unknown> = {};
-        for (const key of Object.keys(props)) {
-            if (key.startsWith('data-') || key === 'disabled' || key === 'className' || key === 'aria-label') {
-                rest[key] = props[key];
-            }
-        }
-        rest.ref = ref;
-        rest.value = props.value;
-        // Pass a no-op onChange to suppress React's "value without onChange"
-        // warning. The real onChange is captured via ref above.
-        rest.onChange = () => {};
+        const { variant: _v, size: _s, ...rest } = props;
 
-        return <select {...rest}>{props.children as React.ReactNode}</select>;
+        return (
+            <select
+                {...rest}
+                ref={ref}
+                onChange={(e) => {
+                    (props.onChange as ((e: unknown) => void) | undefined)?.(e);
+                }}
+            >
+                {props.children as React.ReactNode}
+            </select>
+        );
     }
 
     return {
