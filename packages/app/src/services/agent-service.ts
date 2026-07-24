@@ -1,6 +1,15 @@
 import { stat } from 'node:fs/promises';
 import { isatty } from 'node:tty';
 import {
+    type CapabilityTier,
+    getCanonicalStage,
+    getNextFallback,
+    isTierEligible,
+    type ObjectiveEscalationSignal,
+    type StageRecord,
+    TIER_RANK,
+} from '@gobing-ai/spur-domain';
+import {
     AgentDetector,
     type AgentName,
     type AgentRunResult,
@@ -19,6 +28,7 @@ import {
 import type { EventBus } from '@gobing-ai/ts-infra';
 import { NodeProcessExecutor, type OutputPolicy, type ProcessRegistry } from '@gobing-ai/ts-runtime';
 import { bridgeEventBus } from './event-bridge';
+
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
@@ -39,6 +49,7 @@ export interface AgentExecutorConfig {
     name: string;
     agent: string;
     model?: string;
+    tier?: CapabilityTier;
 }
 
 /**
@@ -53,7 +64,7 @@ export interface AgentConfig {
 }
 
 /** How an `auto` resolution chose its agent — carried for diagnostics/tests. */
-export type AgentResolveSource = 'phase' | 'default' | 'priority' | 'explicit';
+export type AgentResolveSource = 'stage' | 'phase' | 'default' | 'priority' | 'explicit';
 
 /**
  * Result of resolving an execution profile from `--agent` + prompt + config.
@@ -592,27 +603,37 @@ export class AgentService {
     // Private: agent resolution
     // -------------------------------------------------------------------------
 
+    private hasWarnedDeprecation = false;
+
+    private warnDeprecationOnce(message: string): void {
+        if (!this.hasWarnedDeprecation) {
+            this.ctx.output.error(`Warning: ${message}`);
+            this.hasWarnedDeprecation = true;
+        }
+    }
+
     private async resolveAgent(
         prompt: string | undefined,
         flags: Record<string, string | boolean>,
         doctorRunner: DoctorRunner,
     ): Promise<AgentResolveResult> {
         const raw = stringFlag(flags, 'agent', 'auto');
-        if (raw === 'auto') return this.resolveAgentAuto(prompt, doctorRunner);
+        if (raw === 'auto') return this.resolveAgentAuto(prompt, flags, doctorRunner);
         return this.resolveAgentExplicit(raw, doctorRunner, 'explicit');
     }
 
     /**
-     * Resolve `--agent auto` as a two-stage selector (R4/R5/R7):
-     *  1. Phase from the raw prompt (`/sp:dev-run` → `dev-run`); none if absent.
-     *  2. A configured phase mapping resolves its named executor and FAILS FAST
-     *     if broken (unknown name → exit 2; unusable agent → exit 1) — it does NOT
-     *     fall back. Only an absent phase mapping falls through to the default.
-     *  3. `agent.default` is resolved as an executor selector; on miss, the static
-     *     Tier-1 priority resolver preserves legacy behavior.
+     * Resolve `--agent auto` using stage-registry model routing (R1/R2/R3):
+     *  1. Check legacy `default-by-phase` config mapping (R4 shim): if configured,
+     *     emit a deprecation warning and resolve via 0126 phase mapping.
+     *  2. Resolve canonical `stage_id` from explicit `--stage` flag or prompt phase/alias.
+     *  3. If stage found, consume `model_policy` and start on the cheapest eligible executor.
+     *     Objective escalation signals (`--signal`) trigger fallback entries.
+     *  4. No stage match falls through to `agent.default` selector, then Tier-1 priority.
      */
     private async resolveAgentAuto(
         prompt: string | undefined,
+        flags: Record<string, string | boolean>,
         doctorRunner: DoctorRunner,
     ): Promise<AgentResolveResult> {
         const config = this.ctx.agentConfig;
@@ -620,18 +641,101 @@ export class AgentService {
         const phaseMap = config?.['default-by-phase'];
         const phaseSelector = phase !== undefined ? phaseMap?.[phase] : undefined;
 
-        // A configured phase mapping is authoritative — broken means fail, not fall back.
+        // A configured legacy phase mapping is authoritative (R4/R5) — broken means fail, not fall back.
         if (phaseSelector !== undefined && phase !== undefined) {
+            this.warnDeprecationOnce(
+                `default-by-phase is deprecated; use stage model_policy instead. Phase '${phase}' mapped to '${phaseSelector}'.`,
+            );
             return this.resolveExecutorSelector(phaseSelector, doctorRunner, 'phase', phase);
         }
 
-        // No phase mapping: try the default executor selector, then priority.
+        // Stage-registry adaptive model routing (R1/R2/R3)
+        const stageFlag = stringFlag(flags, 'stage', '');
+        const targetStageId = stageFlag !== '' ? stageFlag : phase !== undefined ? phase : undefined;
+
+        if (targetStageId !== undefined) {
+            const stageRecord = getCanonicalStage(targetStageId);
+            if (stageRecord !== undefined) {
+                const stageRes = await this.resolveStageModelPolicy(stageRecord, flags, doctorRunner);
+                if (stageRes !== undefined) {
+                    return stageRes;
+                }
+            }
+        }
+
+        // No phase/stage mapping: try the default executor selector, then priority.
         if (config?.default !== undefined) {
             const viaDefault = await this.resolveExecutorSelector(config.default, doctorRunner, 'default');
             if (viaDefault.ok) return viaDefault;
         }
 
         return this.resolveAgentPriority(doctorRunner);
+    }
+
+    /**
+     * Consume `model_policy` for a canonical stage and pick starting/fallback executor.
+     */
+    private async resolveStageModelPolicy(
+        stageRecord: StageRecord,
+        flags: Record<string, string | boolean>,
+        doctorRunner: DoctorRunner,
+    ): Promise<AgentResolveResult | undefined> {
+        const executors = this.ctx.agentConfig?.executors;
+        if (!executors || executors.length === 0) {
+            return undefined;
+        }
+
+        const policy = stageRecord.model_policy;
+        const signalRaw = stringFlag(flags, 'signal', '');
+        const signal = signalRaw.length > 0 ? (signalRaw as ObjectiveEscalationSignal) : undefined;
+        const fromExecutor = stringFlag(flags, 'from-executor', '') || undefined;
+
+        let targetTier: CapabilityTier = policy.min_tier;
+
+        if (signal !== undefined) {
+            const currentExec = executors.find((e) => e.name === fromExecutor);
+            const currentTier = currentExec ? getExecutorTier(currentExec) : undefined;
+            const fallback = getNextFallback(policy, signal, currentTier);
+            if (fallback) {
+                targetTier = fallback.tier;
+                if (fromExecutor) {
+                    this.ctx.output.error(
+                        `Stage escalation: stage=${stageRecord.id} signal=${signal} from=${fromExecutor} to tier=${targetTier}`,
+                    );
+                }
+            }
+        }
+
+        // Filter candidate executors whose capability meets targetTier
+        const eligible = executors.filter((e) => isTierEligible(getExecutorTier(e), targetTier));
+        if (eligible.length === 0) {
+            return undefined;
+        }
+
+        // Sort by tier ascending (cheapest eligible first)
+        eligible.sort((a, b) => TIER_RANK[getExecutorTier(a)] - TIER_RANK[getExecutorTier(b)]);
+
+        for (const executor of eligible) {
+            const canonical = resolveAgentName(executor.agent);
+            if (canonical === undefined) {
+                return {
+                    ok: false,
+                    exitCode: 2,
+                    message: `Executor '${executor.name}' for stage '${stageRecord.id}' maps to unknown agent '${executor.agent}'`,
+                };
+            }
+            const usable = await this.checkUsable(canonical, doctorRunner);
+            if (usable.ok) {
+                return {
+                    ok: true,
+                    agent: canonical,
+                    model: executor.model,
+                    source: 'stage',
+                };
+            }
+        }
+
+        return undefined;
     }
 
     /** Legacy static Tier-1 priority resolution (preserved fallback). */
@@ -974,4 +1078,12 @@ function parseTagsFlag(flags: Record<string, string | boolean>): string[] | unde
         .map((tag) => tag.trim())
         .filter(Boolean);
     return tags.length > 0 ? tags : undefined;
+}
+
+function getExecutorTier(executor: AgentExecutorConfig): CapabilityTier {
+    if (executor.tier) return executor.tier;
+    const combined = `${executor.name} ${executor.model ?? ''} ${executor.agent}`.toLowerCase();
+    if (/\b(cheap|haiku|flash|lite|mini|fast)\b/.test(combined)) return 'cheap';
+    if (/\b(capable|opus|pro|sonnet|r1|o1|o3|expert)\b/.test(combined)) return 'capable';
+    return 'standard';
 }

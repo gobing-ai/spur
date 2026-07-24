@@ -107,6 +107,7 @@ Feature: Init scaffold ownership contract
 | 0188 | Fix spur init + /sp:spur-init: full package scaffold and ownership contract | done |
 | 0242 | AGENTS.md harness contract: drift guard, init placeholders, platform fallback, long-tail routing | done |
 | 0312 | Review and enhance portable AGENTS.md harness template | done |
+| 0313 | Resolve sp-spur-init knowledge-kit dogfood findings | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

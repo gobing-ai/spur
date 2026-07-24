@@ -10,6 +10,7 @@ Spur is **not** a coding agent and **not** a BYOK LLM platform. It assumes you a
 agents installed and authenticated (Claude Code, Codex, Gemini CLI, pi, omp, OpenCode, Antigravity,
 OpenClaw, Hermes, Grok), then wraps them with execution discipline: agent detection and health
 checks, constraint checking, workflow orchestration, conversation-history import and analytics, and
+
 - **Marketplace entry:** `name: "sp"`, `version: "0.3.18"`, `source: "./plugins/sp"` (`plugin.json`,
 
 ---
@@ -49,7 +50,7 @@ Get the `spur` harness tool. Two paths, depending on whether you run Bun. Both e
 **With Bun (`>= 1.3.0`) — recommended:**
 
 ```bash
-bun install -g @gobing-ai/spur   # global `spur` command
+bun add -g @gobing-ai/spur   # global `spur` command
 # or run ad-hoc, no install:
 bunx @gobing-ai/spur --help
 ```

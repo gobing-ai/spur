@@ -37,4 +37,5 @@
 [backlog] **N**: sp plugin next-layer UX — dev-next router and dogfood hardening ([N_sp-plugin-next-layer-ux-dev-next-router-and-dogfood-hardening.md](./N_sp-plugin-next-layer-ux-dev-next-router-and-dogfood-hardening.md))
 [active] **O**: sp plugin token-efficient reliable execution architecture ([O_sp-plugin-token-efficient-reliable-execution-architecture.md](./O_sp-plugin-token-efficient-reliable-execution-architecture.md))
 [backlog] **P**: workflow run observability — enriched step lines, FSM transitions, async follow ([P_workflow-run-observability-enriched-step-lines-fsm-transitions-async-follow.md](./P_workflow-run-observability-enriched-step-lines-fsm-transitions-async-follow.md))
+[backlog] **Q**: AC-verifiable execution: BDD test scaffolds and tunable validation gates ([Q_ac-verifiable-execution-bdd-test-scaffolds-and-tunable-validation-gates.md](./Q_ac-verifiable-execution-bdd-test-scaffolds-and-tunable-validation-gates.md))
 <!-- END AUTO-GENERATED -->

@@ -1780,3 +1780,89 @@ describe('AgentService timeout-kill routing', () => {
         expect(exitCode).toBe(3);
     });
 });
+
+// ---------------------------------------------------------------------------
+// Tests: AgentService — Stage-registry adaptive model routing (0319)
+// ---------------------------------------------------------------------------
+
+describe('AgentService stage-registry adaptive model routing (0319)', () => {
+    const stageConfig: AgentConfig = {
+        executors: [
+            { name: 'cheap-exec', agent: 'pi', tier: 'cheap' },
+            { name: 'std-exec', agent: 'pi', tier: 'standard' },
+            { name: 'capable-exec', agent: 'claude', tier: 'capable' },
+        ],
+    };
+
+    test('R1: resolution keys on canonical stage_id via explicit --stage flag', async () => {
+        const svc = makeConfiguredService(stageConfig);
+        const { deps, runner } = mockResolutionDeps();
+        // Subagent run with no /sp: prefix, passing explicit --stage implement
+        const code = await svc.run(
+            'Implement the user requirement',
+            { agent: 'auto', stage: 'implement', json: true },
+            deps,
+        );
+        expect(code).toBe(0);
+        expect(resolvedAgent(runner)).toBe('pi');
+    });
+
+    test('R2: consumes stage model_policy and starts on cheapest eligible executor', async () => {
+        const svc = makeConfiguredService({
+            executors: [
+                { name: 'cheap-exec', agent: 'pi', tier: 'cheap' },
+                { name: 'capable-exec', agent: 'claude', tier: 'capable' },
+            ],
+        });
+        const { deps, runner } = mockResolutionDeps();
+        // Stage changelog has min_tier: cheap -> selects cheap-exec
+        const code = await svc.run('/sp:dev-changelog', { agent: 'auto', json: true }, deps);
+        expect(code).toBe(0);
+        expect(resolvedAgent(runner)).toBe('pi');
+    });
+
+    test('R3: objective escalation signal selects fallback entry and records escalation', async () => {
+        const { errors, output } = captureOutput();
+        const svc = makeService({}, output, stageConfig);
+        const { deps, runner } = mockResolutionDeps();
+
+        // Stage implement has min_tier: standard, fallback on gate-fail: capable
+        const code = await svc.run(
+            'Implement task',
+            {
+                agent: 'auto',
+                stage: 'implement',
+                signal: 'gate-fail',
+                'from-executor': 'std-exec',
+                json: true,
+            },
+            deps,
+        );
+        expect(code).toBe(0);
+        // Escalated to capable-exec (claude)
+        expect(resolvedAgent(runner)).toBe('claude');
+        expect(errors.some((e) => e.includes('Stage escalation: stage=implement signal=gate-fail'))).toBe(true);
+    });
+
+    test('R4: legacy default-by-phase config emits deprecation warning', async () => {
+        const { errors, output } = captureOutput();
+        const svc = makeService({}, output, {
+            executors: [{ name: 'omp-zai', agent: 'omp', model: 'zai//glm-5.2' }],
+            'default-by-phase': { 'dev-run': 'omp-zai' },
+        });
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('/sp:dev-run 0319 --auto', { agent: 'auto' }, deps);
+        expect(code).toBe(0);
+        expect(resolvedAgent(runner)).toBe('omp');
+        expect(errors.some((e) => e.includes('default-by-phase is deprecated'))).toBe(true);
+    });
+
+    test('R5: stage mapping fails fast when executor maps to unknown agent', async () => {
+        const svc = makeConfiguredService({
+            executors: [{ name: 'unknown-agent-exec', agent: 'nonexistent-agent', tier: 'standard' }],
+        });
+        const { deps } = mockResolutionDeps();
+        const code = await svc.run('/sp:dev-run 0319', { agent: 'auto', stage: 'implement', json: true }, deps);
+        expect(code).toBe(2);
+    });
+});

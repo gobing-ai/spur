@@ -340,6 +340,52 @@ export const stageModelPolicySchema = z
 /** Inferred TypeScript shape of a stage model policy. */
 export type StageModelPolicy = z.infer<typeof stageModelPolicySchema>;
 
+// ─── Capability tiers & Model Policy Helpers (0319) ────────────────────────
+
+/** Model capability tier vocabulary. */
+export type CapabilityTier = 'cheap' | 'standard' | 'capable';
+
+/** Numerical rank mapping for capability tiers (cheap: 1, standard: 2, capable: 3). */
+export const TIER_RANK: Record<CapabilityTier, number> = {
+    cheap: 1,
+    standard: 2,
+    capable: 3,
+};
+
+/** Returns true if candidateTier meets or exceeds minTier capability. */
+export function isTierEligible(candidateTier: CapabilityTier, minTier: CapabilityTier): boolean {
+    return TIER_RANK[candidateTier] >= TIER_RANK[minTier];
+}
+
+/** Given a StageModelPolicy, returns the minimum starting capability tier. */
+export function pickStartingTier(policy: StageModelPolicy): CapabilityTier {
+    return policy.min_tier;
+}
+
+/** Objective failure or risk signal triggering model policy fallback escalation. */
+export type ObjectiveEscalationSignal = 'gate-fail' | 'timeout' | 'insufficient-evidence' | 'retry-exhausted';
+
+/**
+ * Given a StageModelPolicy, an objective signal, and optional current tier,
+ * returns the next fallback entry if an objective escalation rule matches.
+ */
+export function getNextFallback(
+    policy: StageModelPolicy,
+    signal: ObjectiveEscalationSignal,
+    currentTier?: CapabilityTier,
+): { tier: CapabilityTier; trigger: ObjectiveEscalationSignal } | undefined {
+    const currentRank = currentTier ? TIER_RANK[currentTier] : 0;
+    const match = policy.fallback.find((f) => f.trigger === signal && TIER_RANK[f.tier] > currentRank);
+    if (match) {
+        return { tier: match.tier, trigger: match.trigger as ObjectiveEscalationSignal };
+    }
+    const anyMatch = policy.fallback.find((f) => f.trigger === signal);
+    if (anyMatch) {
+        return { tier: anyMatch.tier, trigger: anyMatch.trigger as ObjectiveEscalationSignal };
+    }
+    return undefined;
+}
+
 // ─── Context layers (R1) ──────────────────────────────────────────────────
 
 /**
@@ -602,4 +648,218 @@ export function parseStageRecord(
         );
     }
     return validateStageRecord(record);
+}
+
+// ─── Registered Canonical Stages (0319) ───────────────────────────────────
+
+export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
+    {
+        schema_version: STAGE_REGISTRY_SCHEMA_VERSION,
+        id: 'refine',
+        aliases: ['dev-refine'],
+        description: 'dev-refine: Q&A refinement, section filling, AC tightening',
+        artifacts: [{ kind: 'task-section', direction: 'output', required: true }],
+        reasoning_skill: 'sp:spur-dev',
+        required_references: [],
+        gates: [],
+        mutation_class: 'corpus',
+        retry: { max_attempts: 3, terminal_stop: 'block' },
+        model_policy: {
+            min_tier: 'standard',
+            fallback: [{ tier: 'capable', trigger: 'gate-fail' }],
+        },
+        context_layers: [],
+        observability: [],
+        execution: { kind: 'inline', current_agent_allowed: true },
+    },
+    {
+        schema_version: STAGE_REGISTRY_SCHEMA_VERSION,
+        id: 'plan',
+        aliases: ['dev-plan'],
+        description: 'dev-plan: feature intake -> AC generation -> decomposition',
+        artifacts: [{ kind: 'task-batch', direction: 'output', required: true }],
+        reasoning_skill: 'sp:spur-dev',
+        required_references: [],
+        gates: [],
+        mutation_class: 'corpus',
+        retry: { max_attempts: 3, terminal_stop: 'block' },
+        model_policy: {
+            min_tier: 'capable',
+            fallback: [],
+        },
+        context_layers: [],
+        observability: [],
+        execution: { kind: 'inline', current_agent_allowed: true },
+    },
+    {
+        schema_version: STAGE_REGISTRY_SCHEMA_VERSION,
+        id: 'implement',
+        aliases: ['dev-run'],
+        description: 'dev-run --mode implement: code edits in worktree',
+        artifacts: [{ kind: 'worktree-diff', direction: 'output', required: true }],
+        reasoning_skill: 'sp:code-implementation',
+        required_references: [],
+        gates: [],
+        mutation_class: 'code',
+        retry: { max_attempts: 3, terminal_stop: 'block' },
+        model_policy: {
+            min_tier: 'standard',
+            fallback: [
+                { tier: 'capable', trigger: 'gate-fail' },
+                { tier: 'capable', trigger: 'timeout' },
+            ],
+        },
+        context_layers: [],
+        observability: [],
+        execution: { kind: 'inline', current_agent_allowed: true },
+    },
+    {
+        schema_version: STAGE_REGISTRY_SCHEMA_VERSION,
+        id: 'test',
+        aliases: ['dev-unit'],
+        description: 'dev-unit: generate/extend tests to coverage target',
+        artifacts: [{ kind: 'test-file', direction: 'output', required: true }],
+        reasoning_skill: 'sp:code-testing',
+        required_references: [],
+        gates: [],
+        mutation_class: 'tests',
+        retry: { max_attempts: 3, terminal_stop: 'block' },
+        model_policy: {
+            min_tier: 'standard',
+            fallback: [{ tier: 'capable', trigger: 'gate-fail' }],
+        },
+        context_layers: [],
+        observability: [],
+        execution: { kind: 'inline', current_agent_allowed: true },
+    },
+    {
+        schema_version: STAGE_REGISTRY_SCHEMA_VERSION,
+        id: 'verify',
+        aliases: ['dev-verify'],
+        description: 'dev-verify: SECUA review + requirements traceability',
+        artifacts: [{ kind: 'verdict-artifact', direction: 'output', required: true }],
+        reasoning_skill: 'sp:code-verification',
+        required_references: [],
+        gates: [],
+        mutation_class: 'verdict',
+        retry: { max_attempts: 2, terminal_stop: 'escalate' },
+        model_policy: {
+            min_tier: 'capable',
+            fallback: [],
+        },
+        context_layers: [],
+        observability: [],
+        execution: { kind: 'inline', current_agent_allowed: true },
+    },
+    {
+        schema_version: STAGE_REGISTRY_SCHEMA_VERSION,
+        id: 'wrap',
+        aliases: ['dev-wrap'],
+        description: 'dev-wrap: learnings/doc-sync/feature transition',
+        artifacts: [{ kind: 'learning-entry', direction: 'output', required: true }],
+        reasoning_skill: 'sp:spur-dev',
+        required_references: [],
+        gates: [],
+        mutation_class: 'learnings',
+        retry: { max_attempts: 2, terminal_stop: 'block' },
+        model_policy: {
+            min_tier: 'standard',
+            fallback: [{ tier: 'capable', trigger: 'gate-fail' }],
+        },
+        context_layers: [],
+        observability: [],
+        execution: { kind: 'inline', current_agent_allowed: true },
+    },
+    {
+        schema_version: STAGE_REGISTRY_SCHEMA_VERSION,
+        id: 'review',
+        aliases: ['dev-review'],
+        description: 'dev-review: multi-dimensional code review',
+        artifacts: [{ kind: 'review-findings', direction: 'output', required: true }],
+        reasoning_skill: 'sp:code-verification',
+        required_references: [],
+        gates: [],
+        mutation_class: 'verdict',
+        retry: { max_attempts: 2, terminal_stop: 'block' },
+        model_policy: {
+            min_tier: 'standard',
+            fallback: [{ tier: 'capable', trigger: 'gate-fail' }],
+        },
+        context_layers: [],
+        observability: [],
+        execution: { kind: 'inline', current_agent_allowed: true },
+    },
+    {
+        schema_version: STAGE_REGISTRY_SCHEMA_VERSION,
+        id: 'dogfood',
+        aliases: ['dev-dogfood'],
+        description: 'dev-dogfood: end-to-end driver test',
+        artifacts: [{ kind: 'dogfood-report', direction: 'output', required: true }],
+        reasoning_skill: 'sp:dogfood-testing',
+        required_references: [],
+        gates: [],
+        mutation_class: 'driver',
+        retry: { max_attempts: 3, terminal_stop: 'block' },
+        model_policy: {
+            min_tier: 'capable',
+            fallback: [],
+        },
+        context_layers: [],
+        observability: [],
+        execution: { kind: 'inline', current_agent_allowed: true },
+    },
+    {
+        schema_version: STAGE_REGISTRY_SCHEMA_VERSION,
+        id: 'brainstorm',
+        aliases: ['dev-brainstorm'],
+        description: 'dev-brainstorm: structured ideation',
+        artifacts: [{ kind: 'brainstorm-outline', direction: 'output', required: true }],
+        reasoning_skill: 'sp:brainstorm',
+        required_references: [],
+        gates: [],
+        mutation_class: 'corpus',
+        retry: { max_attempts: 2, terminal_stop: 'block' },
+        model_policy: {
+            min_tier: 'standard',
+            fallback: [],
+        },
+        context_layers: [],
+        observability: [],
+        execution: { kind: 'inline', current_agent_allowed: true },
+    },
+    {
+        schema_version: STAGE_REGISTRY_SCHEMA_VERSION,
+        id: 'changelog',
+        aliases: ['dev-changelog'],
+        description: 'dev-changelog: generate changelog from git commits',
+        artifacts: [{ kind: 'changelog-entry', direction: 'output', required: true }],
+        reasoning_skill: 'inline',
+        required_references: [],
+        gates: [],
+        mutation_class: 'none',
+        retry: { max_attempts: 1, terminal_stop: 'block' },
+        model_policy: {
+            min_tier: 'cheap',
+            fallback: [],
+        },
+        context_layers: [],
+        observability: [],
+        execution: { kind: 'deterministic', current_agent_allowed: false, executor: 'cli' },
+    },
+];
+
+const CANONICAL_STAGE_BY_KEY = new Map<string, StageRecord>();
+for (const s of REGISTERED_CANONICAL_STAGES) {
+    CANONICAL_STAGE_BY_KEY.set(s.id, s);
+    for (const a of s.aliases ?? []) {
+        CANONICAL_STAGE_BY_KEY.set(a, s);
+    }
+}
+
+/**
+ * Look up a registered canonical stage record by its stage id or alias.
+ * Returns undefined if no matching stage is registered.
+ */
+export function getCanonicalStage(idOrAlias: string): StageRecord | undefined {
+    return CANONICAL_STAGE_BY_KEY.get(idOrAlias);
 }

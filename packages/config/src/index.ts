@@ -108,6 +108,7 @@ export const AgentExecutorConfigSchema = z.object({
     name: z.string().min(1),
     agent: z.string().min(1),
     model: z.string().min(1).optional(),
+    tier: z.enum(['cheap', 'standard', 'capable']).optional(),
 });
 
 /** A single executor profile entry. */

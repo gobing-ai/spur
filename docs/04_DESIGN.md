@@ -126,7 +126,7 @@ clobbering a configured project. `--json` emits
 (`standard·feature-impl·issue·review·brainstorm·meta`); enforced by
 `apps/cli/tests/commands/init.test.ts` to prevent template/manifest drift.
 
-#### `spur agent run <prompt> [--agent <name>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--drain] [--json]`
+#### `spur agent run <prompt> [--agent <name>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--stage <id>] [--signal <sig>] [--drain] [--json]`
 **The single LLM execution surface.** Every model invocation in Spur routes through this verb — sp
 skills that generate prose (AC, decompositions, reviews), workflow `agent.run` actions, and team-mode
 runs all call `spur agent run`; Spur owns no other path that reaches a model (it is not a BYOK LLM
@@ -144,6 +144,14 @@ back. With no phase match, `agent.default` is resolved as an executor selector (
 name); on miss, the static Tier-1 priority resolver picks the first usable Tier-1 agent — the legacy
 behavior preserved when no `agent` config is present. `current` reads `SPUR_AGENT` env var; an
 explicit name resolves directly and never consults phase config.
+**Stage-registry routing (ADR-033).** `auto` now resolves primarily on the canonical `stage_id`
+(from an explicit `--stage <id>`, else the derived phase): the stage's `model_policy` starts on the
+cheapest eligible executor at its `min_tier` (`cheap`/`standard`/`capable`, matched against each
+executor's `tier` field) and escalates along the ordered `fallback` chain when an objective
+`--signal` (`gate-fail`/`timeout`/`insufficient-evidence`/`retry-exhausted`) is supplied (with
+`--from-executor` naming the current tier). `default-by-phase` is retained only as a
+backward-compatibility shim that emits a one-time deprecation warning and preserves the 0126
+fail-fast semantics.
 `--continue` resumes the previous session. `--mode text|json` (default `text`) passes output format
 to the agent CLI (Grok maps `text` → `--output-format plain`). `--cwd` sets the working directory.
 `--json` emits a machine-readable envelope

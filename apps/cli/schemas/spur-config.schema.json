@@ -126,6 +126,11 @@
                                 "type": "string",
                                 "minLength": 1,
                                 "description": "Opaque model override passed straight to the agent (e.g. zai//glm-5.2). Applied only when the user passes no explicit --model."
+                            },
+                            "tier": {
+                                "type": "string",
+                                "enum": ["cheap", "standard", "capable"],
+                                "description": "Capability tier for stage-registry adaptive model routing (ADR-033). A stage starts on the cheapest eligible executor meeting its model_policy min_tier and escalates along the fallback chain on objective signals."
                             }
                         }
                     }

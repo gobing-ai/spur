@@ -7,13 +7,18 @@ import {
     CONTEXT_LAYER_NAMES,
     EXECUTION_KINDS,
     executionKindSchema,
+    getCanonicalStage,
+    getNextFallback,
     isCompatibleStageVersion,
+    isTierEligible,
     parseStageRecord,
+    pickStartingTier,
     STAGE_ID_PATTERN,
     STAGE_REGISTRY_SCHEMA_VERSION,
     type StageRecord,
     StageRegistryError,
     stageRecordSchema,
+    TIER_RANK,
     validateStageRecord,
     validateStageRegistry,
 } from '../../src';
@@ -501,5 +506,43 @@ describe('representative stage records (0282 R5)', () => {
     test('all six representative stages form a clean registry', () => {
         const records = cases.map((c) => stageRecordSchema.parse(c.record));
         expect(() => validateStageRegistry(records)).not.toThrow();
+    });
+});
+
+describe('model_policy helpers & canonical stage registry (0319)', () => {
+    test('TIER_RANK & isTierEligible evaluate capability rank correctly', () => {
+        expect(TIER_RANK.cheap).toBeLessThan(TIER_RANK.standard);
+        expect(TIER_RANK.standard).toBeLessThan(TIER_RANK.capable);
+        expect(isTierEligible('capable', 'standard')).toBe(true);
+        expect(isTierEligible('standard', 'standard')).toBe(true);
+        expect(isTierEligible('cheap', 'standard')).toBe(false);
+    });
+
+    test('pickStartingTier returns min_tier', () => {
+        expect(pickStartingTier({ min_tier: 'standard', fallback: [] })).toBe('standard');
+    });
+
+    test('getNextFallback matches signal and higher tier', () => {
+        const policy = {
+            min_tier: 'standard' as const,
+            fallback: [
+                { tier: 'capable' as const, trigger: 'gate-fail' as const },
+                { tier: 'capable' as const, trigger: 'timeout' as const },
+            ],
+        };
+        const res = getNextFallback(policy, 'gate-fail', 'standard');
+        expect(res).toEqual({ tier: 'capable', trigger: 'gate-fail' });
+        const missing = getNextFallback(policy, 'retry-exhausted', 'standard');
+        expect(missing).toBeUndefined();
+    });
+
+    test('getCanonicalStage resolves by stage id or alias', () => {
+        const impl = getCanonicalStage('implement');
+        expect(impl).toBeDefined();
+        expect(impl?.id).toBe('implement');
+        const aliasMatch = getCanonicalStage('dev-run');
+        expect(aliasMatch).toBeDefined();
+        expect(aliasMatch?.id).toBe('implement');
+        expect(getCanonicalStage('nonexistent')).toBeUndefined();
     });
 });
