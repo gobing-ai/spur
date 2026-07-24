@@ -885,6 +885,43 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 context.setExitCode(1);
             }
         });
+
+    // ── scaffold-tests ──
+    task.command('scaffold-tests')
+        .summary('Generate BDD test stubs from task Acceptance Criteria.')
+        .argument('<wbs>', 'Task WBS number')
+        .option('--file <path>', 'Custom target test file path')
+        .option('--folder <path>', 'Custom tasks folder')
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (wbs, options) => {
+            const { TaskScaffoldService, resolvePlanningFolders } = await import('@gobing-ai/spur-app');
+            const foldersConfig = (await resolvePlanningFolders(context.fs)).foldersConfig;
+            const tasksDir = options.folder ?? context.fs.resolve(foldersConfig.active_folder);
+            const scaffoldSvc = new TaskScaffoldService({
+                fs: context.fs,
+                tasksDir,
+                foldersConfig,
+            });
+
+            try {
+                const result = await scaffoldSvc.scaffoldTests(wbs, {
+                    targetFile: options.file,
+                });
+                if (options.json) {
+                    context.output.write(toJson(result));
+                } else {
+                    context.output.write(
+                        `Scaffolded tests for ${wbs} -> ${result.targetFile} (created: ${result.created}, skipped: ${result.skipped}, drifted: ${result.drifted})`,
+                    );
+                    for (const w of result.warnings) {
+                        context.output.write(`  [WARN] ${w}`);
+                    }
+                }
+            } catch (err) {
+                context.output.error(String(err));
+                context.setExitCode(1);
+            }
+        });
 }
 
 async function makeService(context: CliContext, folderOverride?: string, noLifecycle = false): Promise<TaskService> {

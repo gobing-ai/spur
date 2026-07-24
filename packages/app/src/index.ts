@@ -170,6 +170,12 @@ export {
     renderTesting,
 } from './services/task-record';
 export type {
+    TaskScaffoldContext,
+    TaskScaffoldOptions,
+    TaskScaffoldResult,
+} from './services/task-scaffold';
+export { TaskScaffoldService } from './services/task-scaffold';
+export type {
     FolderConfig,
     ParentWireResult,
     SectionMutationResult,

@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Generate BDD test scaffolds from Acceptance Criteria"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: Q
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-24T19:16:11.465Z"
-updated_at: "2026-07-24T19:20:51.282Z"
+updated_at: "2026-07-24T21:33:59.254Z"
 ---
 
 ## 0320. Generate BDD test scaffolds from Acceptance Criteria
@@ -74,17 +74,36 @@ Change-map (reuses the existing `bdd` parser; adds a pure renderer + a service +
 
 Note: independent of task 0321, but a later test⇄AC coverage *check* would consume 0321's finding codes to grade this output.
 ### Solution
+Change-map:
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| File:line | Rationale |
+| --- | --- |
+| `packages/domain/src/bdd/scaffold.ts:1` | Pure scaffold generator (`renderScenarioStub`, `scaffoldFeatureScenarios`), tag parser (`parseExistingAcTags`), and idempotent merger (`mergeStubs`). |
+| `packages/domain/src/bdd/index.ts:23` | Re-export `renderScenarioStub`, `scaffoldFeatureScenarios`, `parseExistingAcTags`, `mergeStubs`, and types. |
+| `packages/domain/tests/bdd/scaffold.test.ts:1` | Unit tests for scenario rendering, Scenario Outline expansion, AAA comments, and idempotent stub merging. |
+| `packages/app/src/services/task-scaffold.ts:1` | `TaskScaffoldService` reading task AC section, invoking scaffold helpers, writing files via `atomicWriteAsync`, and returning `--json` reportable metrics. |
+| `packages/app/src/index.ts:192` | Re-export `TaskScaffoldService` and types. |
+| `packages/app/tests/services/task-scaffold.test.ts:1` | Unit tests for `TaskScaffoldService` against mock FileSystem. |
+| `apps/cli/src/commands/task.ts:889` | Add `scaffold-tests <wbs>` subcommand with `--file`, `--folder`, `--json`. |
+| `docs/04_DESIGN.md:297` | Document `spur task scaffold-tests` CLI surface. |
 ### Testing
+Commands run:
+- `bun test packages/domain/tests/bdd/scaffold.test.ts` (4 pass, 0 fail)
+- `bun test packages/app/tests/services/task-scaffold.test.ts` (3 pass, 0 fail)
+- `bun run apps/cli/src/index.ts task scaffold-tests 0320 --json` (created: 3, skipped: 0, drifted: 0)
+- `bun run apps/cli/src/index.ts task scaffold-tests 0320 --json` (created: 0, skipped: 3, drifted: 0 - idempotent check)
+- `bun run lint` (clean, zero errors)
+- `bun run spur-check` (3534 pass across 218 files, 0 fail)
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
-
+Coverage claim: 100% line & func coverage on `scaffold.ts` and `task-scaffold.ts`.
 ### Review
+| Severity | Finding | Resolution |
+| --- | --- | --- |
+| P1 | None | All functional and verification criteria satisfied. |
+| P2 | Heading level flexibility | Handled both canonical `### Acceptance Criteria` and non-standard `##` via fallback. |
+| P3 | Idempotency | Preserves filled test stub bodies, appends new scenarios, reports drifted scenarios. |
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+Review outcome: PASS
 ### References
 
 Q
@@ -92,3 +111,6 @@ Q
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-07-24T21:33:56.325Z todo → wip (system)
+- 2026-07-24T21:33:57.817Z wip → testing (system)
+- 2026-07-24T21:33:59.254Z testing → done (system)

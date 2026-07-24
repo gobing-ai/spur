@@ -17,6 +17,14 @@ export { stripAcFence } from './fence';
 export type { ParsedFeature, ParsedScenario, ParsedStep } from './parser';
 // Parser — Gherkin-subset AST
 export { parseFeature } from './parser';
+export type { MergeResult, ScaffoldedStub } from './scaffold';
+// Scaffold — BDD test stub generation and scaffold merging
+export {
+    mergeStubs,
+    parseExistingAcTags,
+    renderScenarioStub,
+    scaffoldFeatureScenarios,
+} from './scaffold';
 export type { ValidationIssue, ValidationResult } from './validate';
 // Validation — structural validation keeping the legacy result contract
 export { validateAcceptanceCriteria } from './validate';

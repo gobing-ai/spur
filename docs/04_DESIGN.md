@@ -294,6 +294,9 @@ Reads `history_etl_*` tables; estimates cost from per-model pricing.
 Reserved CLI surface for richer history reports. Currently prints a TODO marker so migration can
 stabilize before the report implementation is designed.
 
+#### `spur task scaffold-tests <wbs> [--file <path>] [--folder <path>] [--json]`
+Scaffold BDD `test.todo` stubs from task Acceptance Criteria into `<workspace>/tests/tasks/<wbs>.test.ts` (or `--file <path>`). Each scenario produces one stub with Given/When/Then steps as AAA comments and a `// @ac:<normalizedTitle>` tag. Expands Scenario Outlines into 1 stub per Examples row. Merges idempotently with existing test files (preserves filled bodies, appends new scenarios, reports drifted scenarios). `--json` returns `{ wbs, targetFile, created, skipped, drifted, driftedScenarios, warnings }`.
+
 ### 1.2 Supporting utilities
 
 | Command | Behavior |
