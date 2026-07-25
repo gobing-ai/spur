@@ -210,6 +210,75 @@ describe('FeatureDetail', () => {
         expect(getByLabelText('Link Task')).toBeDefined();
         expect(getByLabelText('Sync')).toBeDefined();
     });
+
+    test('re-fetches the same feature when refreshKey changes', async () => {
+        // The selected feature's id does not change when it is edited elsewhere, so
+        // without an explicit generation the panel would keep its first response.
+        const calls = installFeatureFetchMock();
+        const { rerender, getByText } = render(<FeatureDetail featureId="F" refreshKey={0} />);
+        await waitFor(() => expect(getByText('active')).toBeDefined());
+
+        const showCalls = () => calls.filter((url) => /\/features\/F(\?|$)/.test(url)).length;
+        const before = showCalls();
+
+        rerender(<FeatureDetail featureId="F" refreshKey={1} />);
+        await waitFor(() => expect(showCalls()).toBeGreaterThan(before));
+    });
+
+    test('does not re-fetch when refreshKey is unchanged', async () => {
+        const calls = installFeatureFetchMock();
+        const { rerender, getByText } = render(<FeatureDetail featureId="F" refreshKey={3} />);
+        await waitFor(() => expect(getByText('active')).toBeDefined());
+
+        const showCalls = () => calls.filter((url) => /\/features\/F(\?|$)/.test(url)).length;
+        const before = showCalls();
+
+        rerender(<FeatureDetail featureId="F" refreshKey={3} />);
+        await new Promise((r) => setTimeout(r, 10));
+        expect(showCalls()).toBe(before);
+    });
+
+    test('a superseded in-flight load does not overwrite the newer feature', async () => {
+        // Switching features mid-request: the first response resolves last and its
+        // handler closed over the OLD id, so without the sequence guard it would paint
+        // feature F's data into a panel that now shows F1.
+        const release: Array<() => void> = [];
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/tasks')) return jsonResponse({ ok: true, data: [] });
+            const isOld = /\/features\/F(\?|$)/.test(url);
+            const payload = {
+                ok: true,
+                data: {
+                    id: isOld ? 'F' : 'F1',
+                    name: isOld ? 'Stale Root' : 'Fresh Child',
+                    status: isOld ? 'active' : 'done',
+                    frontmatter: {},
+                    filePath: 'docs/features/x.md',
+                    content: '---\n---\n\n## Goal\nx',
+                },
+            };
+            // Hold the first (soon-to-be-stale) response open until the second lands.
+            if (isOld) {
+                await new Promise<void>((resolve) => release.push(resolve));
+            }
+            return jsonResponse(payload);
+        }) as unknown as typeof fetch);
+
+        // The header renders `{id} — {name}` across separate text nodes, so assert on
+        // the status badge instead: 'done' for the fresh feature, 'active' for the stale.
+        const { rerender, getByText, queryByText } = render(<FeatureDetail featureId="F" />);
+        // Switch before the first response resolves.
+        rerender(<FeatureDetail featureId="F1" />);
+        await waitFor(() => expect(getByText('done')).toBeDefined());
+
+        // Now let the stale response through; it must be discarded.
+        for (const resolve of release) resolve();
+        await new Promise((r) => setTimeout(r, 20));
+
+        expect(getByText('done')).toBeDefined();
+        expect(queryByText('active')).toBeNull();
+    });
 });
 
 describe('FeaturesShell', () => {
@@ -221,6 +290,73 @@ describe('FeaturesShell', () => {
         fireEvent.click(getByText('Root'));
         // After clicking a feature, the detail panel should render (body section)
         await waitFor(() => expect(calls.some((url) => url.includes('/features/F'))).toBe(true));
+    });
+
+    /**
+     * Serve the detail endpoint with a status that changes after the first read, so a
+     * test can tell an applied refresh from a request whose response was thrown away.
+     * Asserting on call count alone would not: the pre-fix code also issued the fetch.
+     */
+    function installMutatingDetailMock(): { setStatus: (s: string) => void } {
+        let detailStatus = 'active';
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/tasks')) return jsonResponse({ ok: true, data: [] });
+            if (/\/features\/F(\?|$)/.test(url)) {
+                return jsonResponse({
+                    ok: true,
+                    data: {
+                        id: 'F',
+                        name: 'Root',
+                        status: detailStatus,
+                        frontmatter: {},
+                        filePath: 'docs/features/F.md',
+                        content: '---\n---\n\n## Goal\nx',
+                    },
+                });
+            }
+            // Tree status deliberately differs from the detail's, so a status query
+            // matches exactly one node (the detail panel) and not the tree badge too.
+            return jsonResponse({ ok: true, data: [{ id: 'F', name: 'Root', status: 'backlog' }] });
+        }) as unknown as typeof fetch);
+        Object.defineProperty(globalThis, 'EventSource', { configurable: true, value: FakeEventSource });
+        return { setStatus: (s: string) => (detailStatus = s) };
+    }
+
+    test('a feature.updated SSE frame refreshes the open detail panel', async () => {
+        // End-to-end for the shell→panel refresh path: the selected feature's id does
+        // not change, so the shell must nudge the panel. The pre-fix code fetched and
+        // discarded, leaving the panel on its original copy — hence the status assertion.
+        const { setStatus } = installMutatingDetailMock();
+        const { getByText, queryByText } = render(<FeaturesShell />);
+
+        await waitFor(() => expect(getByText('Root')).toBeDefined());
+        fireEvent.click(getByText('Root'));
+        await waitFor(() => expect(getByText('active')).toBeDefined());
+
+        setStatus('verifying');
+        const es = FakeEventSource.instances.at(-1);
+        expect(es).toBeDefined();
+        es?.onmessage?.(new MessageEvent('message', { data: JSON.stringify({ eventName: 'feature.updated' }) }));
+
+        await waitFor(() => expect(getByText('verifying')).toBeDefined());
+        expect(queryByText('active')).toBeNull();
+    });
+
+    test('an unrelated SSE frame does not refresh the detail panel', async () => {
+        const { setStatus } = installMutatingDetailMock();
+        const { getByText } = render(<FeaturesShell />);
+
+        await waitFor(() => expect(getByText('Root')).toBeDefined());
+        fireEvent.click(getByText('Root'));
+        await waitFor(() => expect(getByText('active')).toBeDefined());
+
+        setStatus('verifying');
+        const es = FakeEventSource.instances.at(-1);
+        es?.onmessage?.(new MessageEvent('message', { data: JSON.stringify({ eventName: 'task.updated' }) }));
+        await new Promise((r) => setTimeout(r, 20));
+
+        expect(getByText('active')).toBeDefined();
     });
 
     test('renders empty and error states', async () => {

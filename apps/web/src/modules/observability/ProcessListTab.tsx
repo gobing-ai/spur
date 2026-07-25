@@ -67,10 +67,12 @@ export default function ProcessListTab() {
     }, []);
 
     useEffect(() => {
+        // One controller for the effect: polled loads share it, so an in-flight poll
+        // is actually aborted on unmount instead of resolving into a dead component.
         const controller = new AbortController();
         void load(controller.signal);
         const timer = setInterval(() => {
-            void load(new AbortController().signal);
+            void load(controller.signal);
         }, POLL_MS);
         return () => {
             controller.abort();

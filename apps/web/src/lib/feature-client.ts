@@ -16,10 +16,21 @@ import type {
 } from './feature-types';
 import { fetchWithTimeout, resolveApiUrl } from './rpc-client';
 
+/**
+ * `signal` is optional on every call.
+ *
+ * It used to be required on the read functions, which read as a cancellation
+ * contract the callers could not honour — event handlers have no controller to
+ * hand over, so they satisfied the type with `new AbortController().signal`, a
+ * controller discarded on the same line and therefore never abortable. Effects
+ * that own a controller should still pass it; callers that cannot cancel should
+ * omit it and guard their own state writes instead (see FeatureDetail's load
+ * sequence guard) rather than construct a controller that means nothing.
+ */
 const apiBase = () => `${resolveApiUrl()}/features`;
 
 /** Fetch the feature list. */
-export async function loadFeatures(signal: AbortSignal): Promise<FeatureSummary[]> {
+export async function loadFeatures(signal?: AbortSignal): Promise<FeatureSummary[]> {
     const res = await fetchWithTimeout(new Request(apiBase(), { signal }));
     if (!res.ok) throw new Error(`feature list fetch failed: ${res.status}`);
     const json: unknown = await res.json();
@@ -29,7 +40,7 @@ export async function loadFeatures(signal: AbortSignal): Promise<FeatureSummary[
 }
 
 /** Fetch a single feature's detail (id, name, status, frontmatter, content, filePath). */
-export async function loadFeatureShow(id: string, signal: AbortSignal): Promise<FeatureShowData> {
+export async function loadFeatureShow(id: string, signal?: AbortSignal): Promise<FeatureShowData> {
     const res = await fetchWithTimeout(new Request(`${apiBase()}/${encodeURIComponent(id)}`, { signal }));
     if (!res.ok) throw new Error(`feature show fetch failed: ${res.status}`);
     const json: unknown = await res.json();
@@ -39,7 +50,7 @@ export async function loadFeatureShow(id: string, signal: AbortSignal): Promise<
 }
 
 /** Trigger a feature status transition. Returns the new status on success. */
-export async function transitionFeature(id: string, toStatus: string, signal: AbortSignal): Promise<string> {
+export async function transitionFeature(id: string, toStatus: string, signal?: AbortSignal): Promise<string> {
     const res = await fetchWithTimeout(
         new Request(`${apiBase()}/${encodeURIComponent(id)}/status`, {
             method: 'PATCH',
@@ -58,7 +69,7 @@ export async function transitionFeature(id: string, toStatus: string, signal: Ab
 }
 
 /** Run a feature check and return the findings. */
-export async function checkFeature(id: string, signal: AbortSignal): Promise<CheckResult> {
+export async function checkFeature(id: string, signal?: AbortSignal): Promise<CheckResult> {
     const res = await fetchWithTimeout(
         new Request(`${apiBase()}/${encodeURIComponent(id)}/check`, {
             method: 'POST',

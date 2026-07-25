@@ -1,5 +1,5 @@
 import { taskStatusIcon } from '@gobing-ai/spur-domain/schema';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Badge, Button, Checkbox, Loading, MDEditor, Select } from '@/ui';
 import {
     createChildFeature,
@@ -23,6 +23,13 @@ interface FeatureDetailProps {
     featureId: string;
     /** Dismiss the docked panel. */
     onClose?: () => void;
+    /**
+     * Bump to force a reload of the currently shown feature. The shell increments this
+     * on `feature.updated` / `feature.transitioned` SSE frames: `featureId` does not
+     * change when the *selected* feature is edited, so without this the panel would
+     * keep rendering the copy it fetched on selection.
+     */
+    refreshKey?: number;
 }
 
 type BodyMode = 'preview' | 'edit';
@@ -34,7 +41,7 @@ type BodyMode = 'preview' | 'edit';
  * metadata pane with linked tasks, and dynamic button group driven by the centralized
  * FEATURE_STATUS_ACTIONS mapping.
  */
-export default function FeatureDetail({ featureId, onClose }: FeatureDetailProps) {
+export default function FeatureDetail({ featureId, onClose, refreshKey = 0 }: FeatureDetailProps) {
     const [data, setData] = useState<FeatureShowData | null>(null);
     const [serverBody, setServerBody] = useState('');
     const [draftBody, setDraftBody] = useState('');
@@ -60,9 +67,61 @@ export default function FeatureDetail({ featureId, onClose }: FeatureDetailProps
     const { tasks } = useTasks();
     const linkedTasks = (tasks ?? []).filter((t: TaskSummary) => t.featureId === featureId);
 
-    // Load feature data when featureId changes
+    /**
+     * Monotonic load token. Every handler here reloads the feature after an await,
+     * and each closure captured the `featureId` it started with — so without a guard,
+     * switching features mid-request writes the previous feature's data into the panel
+     * now showing another one. Only the most recently issued load may write state.
+     */
+    const loadSeq = useRef(0);
+    /** Claim the newest load slot; the returned token is only current until the next claim. */
+    const beginLoad = useCallback(() => ++loadSeq.current, []);
+    const isCurrentLoad = useCallback((seq: number) => seq === loadSeq.current, []);
+
+    /** Fetch the feature; resolves null when a newer load has superseded this one. */
+    const fetchGuarded = useCallback(async (): Promise<FeatureShowData | null> => {
+        const seq = beginLoad();
+        const fresh = await loadFeatureShow(featureId);
+        return isCurrentLoad(seq) ? fresh : null;
+    }, [featureId, beginLoad, isCurrentLoad]);
+
+    /**
+     * Apply a loaded feature to panel state. `body: false` leaves the editor buffers
+     * alone, for refreshes that must not clobber an in-progress draft.
+     */
+    const applyFeature = useCallback((fresh: FeatureShowData, opts?: { body?: boolean }) => {
+        setData(fresh);
+        setFrontmatter(fresh.frontmatter);
+        if (opts?.body !== false) {
+            // Strip frontmatter for editor display
+            const bodyOnly = stripFrontmatterContent(fresh.content);
+            setServerBody(bodyOnly);
+            setDraftBody(bodyOnly);
+        }
+    }, []);
+
+    /** Reload and apply; a no-op when superseded. Returns the applied feature, or null. */
+    const reloadFeature = useCallback(
+        async (opts?: { body?: boolean }): Promise<FeatureShowData | null> => {
+            const fresh = await fetchGuarded();
+            if (fresh) applyFeature(fresh, opts);
+            return fresh;
+        },
+        [fetchGuarded, applyFeature],
+    );
+
+    /**
+     * What the loader should fetch: the feature, plus the generation the shell asked
+     * for. Bundled into one value so `refreshKey` is a real input to the effect rather
+     * than a dependency listed purely to re-trigger it — the latter reads as a mistake
+     * and the exhaustive-deps lint rejects it.
+     */
+    const loadTarget = useMemo(() => ({ featureId, generation: refreshKey }), [featureId, refreshKey]);
+
+    // Load feature data when featureId changes, or when the shell signals a refresh.
     useEffect(() => {
-        if (!featureId) {
+        const { featureId: targetId } = loadTarget;
+        if (!targetId) {
             setData(null);
             setServerBody('');
             setDraftBody('');
@@ -71,38 +130,30 @@ export default function FeatureDetail({ featureId, onClose }: FeatureDetailProps
             return;
         }
 
-        let cancelled = false;
         setLoadingBody(true);
         setError(null);
-        loadFeatureShow(featureId, new AbortController().signal)
-            .then((res) => {
-                if (cancelled) return;
-                setData(res);
-                // Strip frontmatter for editor display
-                const bodyOnly = stripFrontmatterContent(res.content);
-                setServerBody(bodyOnly);
-                setDraftBody(bodyOnly);
-                setFrontmatter(res.frontmatter);
-            })
-            .catch((err: unknown) => {
-                if (cancelled) return;
-                const msg = err instanceof Error ? err.message : 'Failed to load feature';
-                setError(msg);
-            })
-            .finally(() => {
-                if (!cancelled) setLoadingBody(false);
-            });
-
-        return () => {
-            cancelled = true;
-        };
-    }, [featureId]);
+        // Uses the token directly rather than fetchGuarded so that a superseded load
+        // also declines to clear the spinner or report an error — the newer load owns
+        // all three, not just the data.
+        const seq = beginLoad();
+        void (async () => {
+            try {
+                const fresh = await loadFeatureShow(targetId);
+                if (!isCurrentLoad(seq)) return;
+                applyFeature(fresh);
+            } catch (err: unknown) {
+                if (!isCurrentLoad(seq)) return;
+                setError(err instanceof Error ? err.message : 'Failed to load feature');
+            } finally {
+                if (isCurrentLoad(seq)) setLoadingBody(false);
+            }
+        })();
+    }, [loadTarget, beginLoad, isCurrentLoad, applyFeature]);
 
     const handleTaskCreated = async () => {
         setShowNewTaskPanel(false);
         try {
-            const fresh = await loadFeatureShow(featureId, new AbortController().signal);
-            setData(fresh);
+            await reloadFeature({ body: false });
         } catch {
             // Non-critical — list will refresh on next poll
         }
@@ -111,12 +162,7 @@ export default function FeatureDetail({ featureId, onClose }: FeatureDetailProps
     const handleFeatureCreated = async () => {
         setShowNewFeaturePanel(false);
         try {
-            const fresh = await loadFeatureShow(featureId, new AbortController().signal);
-            const bodyOnly = stripFrontmatterContent(fresh.content);
-            setData(fresh);
-            setServerBody(bodyOnly);
-            setDraftBody(bodyOnly);
-            setFrontmatter(fresh.frontmatter);
+            await reloadFeature();
         } catch {
             // Non-critical
         }
@@ -157,11 +203,7 @@ export default function FeatureDetail({ featureId, onClose }: FeatureDetailProps
             setServerBody(draftBody);
             setMode('preview');
             // Re-fetch to confirm persisted state
-            const res = await loadFeatureShow(featureId, new AbortController().signal);
-            const bodyOnly = stripFrontmatterContent(res.content);
-            setServerBody(bodyOnly);
-            setDraftBody(bodyOnly);
-            setFrontmatter(res.frontmatter);
+            await reloadFeature();
         } catch (err: unknown) {
             setDraftBody(serverBody);
             setMode('preview');
@@ -220,14 +262,9 @@ export default function FeatureDetail({ featureId, onClose }: FeatureDetailProps
 
         setActionLoading(action);
         try {
-            await transitionFeature(featureId, targetStatus, new AbortController().signal);
+            await transitionFeature(featureId, targetStatus);
             // Reload
-            const res = await loadFeatureShow(featureId, new AbortController().signal);
-            const bodyOnly = stripFrontmatterContent(res.content);
-            setData(res);
-            setServerBody(bodyOnly);
-            setDraftBody(bodyOnly);
-            setFrontmatter(res.frontmatter);
+            await reloadFeature();
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Transition failed';
             if (typeof window !== 'undefined') {
@@ -257,9 +294,9 @@ export default function FeatureDetail({ featureId, onClose }: FeatureDetailProps
             } else if (action === 'link-task') {
                 await linkTaskToFeature({ id: featureId, wbs: inlineValue.trim() });
             }
-            // Reload feature
-            const res = await loadFeatureShow(featureId, new AbortController().signal);
-            setData(res);
+            // Reload feature. Body left alone: these actions add children/tasks rather
+            // than rewrite the body, and clobbering an open draft would lose edits.
+            await reloadFeature({ body: false });
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Action failed';
             if (typeof window !== 'undefined') {
@@ -286,9 +323,10 @@ export default function FeatureDetail({ featureId, onClose }: FeatureDetailProps
                     channel: selectedChannel,
                 });
             }
-            // Reload feature data after action
-            const fresh = await loadFeatureShow(featureId, new AbortController().signal);
-            setData(fresh);
+            // Reload feature data after action. Body left alone: a dispatched agent
+            // action runs asynchronously, so the body is not yet updated anyway, and
+            // overwriting the editor buffer here would discard an open draft.
+            await reloadFeature({ body: false });
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Action failed';
             if (typeof window !== 'undefined') {

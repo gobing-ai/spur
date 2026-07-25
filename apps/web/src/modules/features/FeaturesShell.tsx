@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/ui';
-import { loadFeatureShow, loadFeatures } from '../../lib/feature-client';
+import { loadFeatures } from '../../lib/feature-client';
 import type { FeatureSummary } from '../../lib/feature-types';
 import { resolveApiUrl } from '../../lib/rpc-client';
 import FeatureDetail from './FeatureDetail';
@@ -42,15 +42,17 @@ export default function FeaturesShell() {
     const [statusFilter, setStatusFilter] = useState<string>('all');
     const [showFilterMenu, setShowFilterMenu] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    /** Bumped to make the detail panel re-fetch the already-selected feature. */
+    const [detailRefreshKey, setDetailRefreshKey] = useState(0);
     const filterMenuRef = useRef<HTMLDivElement | null>(null);
 
-    const load = useCallback(async (signal: AbortSignal) => {
+    const load = useCallback(async (signal?: AbortSignal) => {
         try {
             const data = await loadFeatures(signal);
             setFeatures(data);
             setError(null);
         } catch (err) {
-            if (signal.aborted) return;
+            if (signal?.aborted) return;
             setError(err instanceof Error ? err.message : String(err));
         }
     }, []);
@@ -90,10 +92,12 @@ export default function FeaturesShell() {
                 const raw: unknown = JSON.parse(frame.data);
                 const name = (raw as { eventName?: string }).eventName;
                 if (!name?.startsWith('feature.')) return;
-                void load(new AbortController().signal);
-                // Also refresh the detail if a feature is selected and its data may have changed.
+                void load();
+                // Also refresh the detail if a feature is selected and its data may have
+                // changed. `featureId` is unchanged in that case, so the panel needs an
+                // explicit nudge — fetching here instead would just discard the result.
                 if (selectedId && (name === 'feature.updated' || name === 'feature.transitioned')) {
-                    loadFeatureShow(selectedId, new AbortController().signal).catch(() => {});
+                    setDetailRefreshKey((n) => n + 1);
                 }
             } catch {
                 // Malformed frame — drop silently.
@@ -121,7 +125,7 @@ export default function FeaturesShell() {
     const handleRootFeatureCreated = () => {
         setShowNewRootPanel(false);
         // Reload the feature list
-        void load(new AbortController().signal);
+        void load();
     };
 
     const getFilteredFeatures = (allFeatures: FeatureSummary[]) => {
@@ -256,7 +260,11 @@ export default function FeaturesShell() {
                 {/* Right: detail panel */}
                 <div className="flex-1 overflow-y-auto">
                     {selectedId ? (
-                        <FeatureDetail featureId={selectedId} onClose={() => setSelectedId(null)} />
+                        <FeatureDetail
+                            featureId={selectedId}
+                            refreshKey={detailRefreshKey}
+                            onClose={() => setSelectedId(null)}
+                        />
                     ) : (
                         <div className="flex items-center justify-center h-full text-sm text-spur-text-muted italic">
                             Select a feature to view details

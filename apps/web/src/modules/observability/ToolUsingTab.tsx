@@ -130,10 +130,16 @@ export default function ToolUsingTab() {
 
         if (typeof EventSource === 'undefined') {
             setSseStatus('polling');
+            // One controller for the polling loop, aborted with the effect, so a poll
+            // in flight when `live` flips off cannot land after teardown.
+            const controller = new AbortController();
             const timer = setInterval(() => {
-                void loadInitial(new AbortController().signal);
+                void loadInitial(controller.signal);
             }, POLL_MS);
-            return () => clearInterval(timer);
+            return () => {
+                controller.abort();
+                clearInterval(timer);
+            };
         }
 
         setSseStatus('connecting');

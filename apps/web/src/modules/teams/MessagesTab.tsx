@@ -90,21 +90,28 @@ export default function MessagesTab() {
     const [messages, setMessages] = useState<MsgRow[] | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    const load = useCallback(async () => {
+    const load = useCallback(async (signal?: AbortSignal) => {
         try {
-            const res = await fetchWithTimeout(new Request(feedUrl()));
+            const res = await fetchWithTimeout(new Request(feedUrl(), { signal }));
             if (!res.ok) throw new Error(`messages fetch failed: ${res.status}`);
             const parsed = parseMessagesFeed(await res.json());
             if (parsed) setMessages(parsed);
         } catch (err) {
+            // An aborted load is a teardown, not a failure — reporting it would flash
+            // an error banner on unmount. Matches the sibling observability tabs.
+            if (signal?.aborted) return;
             setError(err instanceof Error ? err.message : String(err));
         }
     }, []);
 
     useEffect(() => {
-        void load();
-        const interval = setInterval(() => void load(), 10_000);
-        return () => clearInterval(interval);
+        const controller = new AbortController();
+        void load(controller.signal);
+        const interval = setInterval(() => void load(controller.signal), 10_000);
+        return () => {
+            controller.abort();
+            clearInterval(interval);
+        };
     }, [load]);
 
     // Live tail (0254 R6/AC5 pattern, retained): refetch the feed on a `message.*`
@@ -113,6 +120,7 @@ export default function MessagesTab() {
     // safety net when SSE is unavailable.
     useEffect(() => {
         if (typeof EventSource === 'undefined') return;
+        const controller = new AbortController();
         const es = new EventSource(sseUrl());
         es.onmessage = (frame) => {
             try {
@@ -120,13 +128,16 @@ export default function MessagesTab() {
                 if (raw === null || typeof raw !== 'object') return;
                 const name = (raw as { eventName?: unknown }).eventName;
                 if (typeof name === 'string' && MESSAGE_EVENT_NAMES.has(name)) {
-                    void load();
+                    void load(controller.signal);
                 }
             } catch {
                 // Malformed frame — drop silently.
             }
         };
-        return () => es.close();
+        return () => {
+            controller.abort();
+            es.close();
+        };
     }, [load]);
 
     if (error)
