@@ -1,6 +1,6 @@
 # How to Use Spur for Daily Software Development
 
-> **Verified against spur `0.3.21` running on Bun `1.3.14`.** Every command and flag below
+> **Verified against spur `0.3.22` running on Bun `1.3.14`.** Every command and flag below
 > was captured from the live `--help` output and exercised on the real project corpus.
 > For the **slash-command layer** (the `sp` plugin) layered on top of these CLI verbs —
 > `/sp:dev-plan`, `/sp:dev-run`, `/sp:dev-verify`, `/sp:dev-wrap`, the batch family
@@ -71,7 +71,7 @@ Per-platform `--compile` binaries are GitHub Release assets for darwin/linux × 
 ### Verify installation
 
 ```bash
-spur --version     # 0.3.21
+spur --version     # 0.3.22
 spur agent doctor  # check every detected agent
 spur agent list    # list detected agents
 ```
@@ -179,6 +179,7 @@ spur feature        update  <id> [status] [--field <k> --value <v>] [--section <
 spur feature        advance <id> [--to <status>] [--folder <path>] [--json]   # walk the legal forward lifecycle path
 spur feature        list    [--status <s>] [--priority <p>] [--folder <path>] [--json]
 spur feature        move    <id> [--parent <id>] [--dry-run] [--folder <path>] [--json]
+spur feature        sync    [<id>|--task <wbs>|--all] [--dry-run] [--apply] [--json]   # derive/sync feature status from task states
 spur feature        refresh [--folder <path>] [--json]
 spur feature        check   [<id>] [--strict] [--folder <path>] [--json]
 
@@ -719,7 +720,7 @@ Any non-PASS verdict **stops the chain** with findings written to `## Testing` /
 /sp:dev-debug 0061                    # systematic debugging protocol (reproduce → isolate → root cause → fix)
 /sp:dev-daily                         # daily summary report generator (ccusage + git history)
 /sp:dev-gitmsg --commit               # conventional commit from the diff
-/sp:dev-changelog --version 0.3.21    # changelog from commit history
+/sp:dev-changelog --version 0.3.22    # changelog from commit history
 ```
 
 Wrap-up never mutates task status; it consumes completed tasks. Feature lifecycle

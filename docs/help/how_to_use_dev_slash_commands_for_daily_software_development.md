@@ -51,7 +51,7 @@ artifacts (with optional feature transition and irreversible branch cleanup).
 
 ## The command map
 
-The `sp` plugin provides **30 commands** across planning, execution, operations/hygiene, wrap-up, and authoring:
+The `sp` plugin provides **31 commands** across planning, execution, operations/hygiene, wrap-up, and authoring:
 
 | Command | Phase / Category | What it does | Backed by |
 |---------|------------------|--------------|-----------|
@@ -67,6 +67,7 @@ The `sp` plugin provides **30 commands** across planning, execution, operations/
 | `/sp:dev-review` | Execution | Multi-dimensional review (functional traceability + SECUA framework + architectural depth; WBS mode writes `Review`, Path mode is advisory) | `sp:code-verification` |
 | `/sp:dev-verify` | Execution | Map requirements → evidence; emit a PASS/PARTIAL/FAIL verdict | `sp:code-verification` |
 | `/sp:dev-verifyall` | Exec (Batch) | Batch-verify tasks against requirements and AC, producing consolidated report | `sp:code-verification` |
+| `/sp:dev-refresh` | Execution | Refresh feature status by feature ID, task WBS, or batch sweep via `spur feature sync` | `spur feature sync` |
 | `/sp:dev-fixall` | Hygiene | Systematically loop lint, typecheck, and test checks until clean across working tree | inline |
 | `/sp:dev-simplify` | Hygiene | Simplify recently-changed code for clarity without changing behavior | `sp:code-simplification` |
 | `/sp:dev-debug` | Operations | Systematic debugging protocol — reproduce, isolate, diagnose root cause, apply minimal fix, and verify with regression tests | `sp:sys-debugging` |
