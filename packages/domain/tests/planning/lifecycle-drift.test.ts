@@ -159,11 +159,11 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
         expect(String(yaml.transitions[idxFail]?.guard?.options?.command)).toMatch(/^!\s/);
     });
 
-    test('R2: record writes via `spur task record` (single verb, not inline shell)', () => {
+    test('R2: record writes via `spur task record` + post-record feature sync (task 0328)', () => {
         const record = yaml.states.find((s) => s.id === 'record');
         const cmds = (record?.onEnter ?? []).map((a) => String(a.options?.command ?? ''));
-        // The record state now has ONE shell step calling `spur task record ...`
-        expect(record?.onEnter ?? []).toHaveLength(1);
+        // The record state has record step + post-record feature sync step (task 0328 / ADR-0322)
+        expect(record?.onEnter ?? []).toHaveLength(2);
         expect(
             cmds.some(
                 (c) =>
@@ -172,6 +172,7 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
                     c.includes('--transition testing'),
             ),
         ).toBe(true);
+        expect(cmds.some((c) => c.includes('feature sync'))).toBe(true);
     });
 
     test('R3: status transitions go through the normal verb (`spur task update <wbs> <status>`)', () => {
