@@ -13,7 +13,7 @@
  * for strict validation, and `atomicWrite` (0044) for safe output.
  */
 
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { DEFAULT_TASKS_DIR } from '@gobing-ai/spur-config';
 import {
     atomicWriteAsync,
@@ -425,24 +425,65 @@ function yamlScalar(value: unknown): string {
 
 // ── Git timestamp lookup ─────────────────────────────────────────────────────
 
+/** A bare `%aI` author date, e.g. `2026-07-08T13:25:15-07:00`. */
+const ISO_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})$/;
+
 /**
- * Get the last git author date for a file (ISO 8601).
- * Returns `null` if git is unavailable or the file is not tracked.
+ * Build a `path → last git author date (ISO 8601)` map for every tracked file
+ * under `dir`, in one `git log` walk.
+ *
+ * One spawn for the whole corpus rather than one per file: at a few hundred
+ * tasks the per-file form spent seconds in process startup alone. Commits arrive
+ * newest-first, so the first date seen for a path is its last-modified date.
+ *
+ * Returns an empty map when git is unavailable or nothing is tracked — callers
+ * treat a miss the same as the old `null` return.
  */
-async function getGitLastModified(cwd: string, filePath: string): Promise<string | null> {
+async function loadGitLastModified(cwd: string, dir: string): Promise<Map<string, string>> {
     try {
-        const proc = Bun.spawn(['git', 'log', '--format=%aI', '-1', '--', filePath], {
+        const proc = Bun.spawn(['git', 'log', '--format=%aI', '--name-only', '-z', '--', dir], {
             cwd,
             stdout: 'pipe',
             stderr: 'pipe',
         });
         const output = await new Response(proc.stdout).text();
-        const code = await proc.exited;
-        if (code !== 0 || !output.trim()) return null;
-        return output.trim();
+        if ((await proc.exited) !== 0) return new Map();
+        return parseGitNameOnlyZ(output);
     } catch {
-        return null;
+        // git unavailable — every lookup misses, same as the old per-file failure.
+        return new Map();
     }
+}
+
+/**
+ * Parse `git log --format=%aI --name-only -z` output into `path → newest date`.
+ *
+ * Under `-z` the stream is, per commit: the `%aI` date as its own NUL-terminated
+ * chunk, then the changed paths as NUL-terminated chunks — where the *first* path
+ * carries the newline that separated it from the header. So: strip a leading
+ * newline, and treat a bare ISO timestamp (which no corpus path can look like) as
+ * the current commit's date. Commits arrive newest-first, so the first date seen
+ * for a path is its last-modified date.
+ *
+ * Exported for tests: the layout is easy to get subtly wrong, and a wrong parse
+ * fails silently — every lookup misses and M7 quietly degrades to mtime.
+ */
+export function parseGitNameOnlyZ(output: string): Map<string, string> {
+    const dates = new Map<string, string>();
+    let currentDate: string | null = null;
+    for (const raw of output.split('\0')) {
+        if (raw === '') continue;
+        const leadingNewline = raw.startsWith('\n');
+        const chunk = leadingNewline ? raw.slice(1) : raw;
+        if (chunk === '') continue;
+        if (!leadingNewline && ISO_TIMESTAMP_RE.test(chunk)) {
+            currentDate = chunk;
+            continue;
+        }
+        if (currentDate === null) continue;
+        if (!dates.has(chunk)) dates.set(chunk, currentDate);
+    }
+    return dates;
 }
 
 // ── History seed (M8) ────────────────────────────────────────────────────────
@@ -508,8 +549,11 @@ export class CorpusMigrator {
         // --- discover ---
         const files = await this.discoverFiles();
 
+        // One git walk for the whole corpus, not one per file (M7 timestamp repair).
+        const gitDates = await loadGitLastModified(this.fs.getProjectRoot(), this.corpusDir);
+
         for (const filePath of files) {
-            const report = await this.migrateFile(filePath, dryRun);
+            const report = await this.migrateFile(filePath, dryRun, gitDates);
             fileReports.push(report);
             allFlags.push(...report.flags);
         }
@@ -536,8 +580,12 @@ export class CorpusMigrator {
             .sort();
     }
 
-    /** Migrate a single file. */
-    private async migrateFile(filePath: string, dryRun: boolean): Promise<FileReport> {
+    /** Migrate a single file. `gitDates` maps repo-relative paths to last-commit dates. */
+    private async migrateFile(
+        filePath: string,
+        dryRun: boolean,
+        gitDates: Map<string, string> = new Map(),
+    ): Promise<FileReport> {
         const flags: MigrationFlag[] = [];
         const filename = filePath.split('/').pop() ?? filePath;
         const wbs = filename.replace(/_.*\.md$/, '').replace(/^0+/, '') || '????';
@@ -614,7 +662,7 @@ export class CorpusMigrator {
         applyM6(data);
 
         // M7: timestamp repair
-        const gitDate = await getGitLastModified(this.fs.getProjectRoot(), filePath);
+        const gitDate = gitDates.get(relative(this.fs.getProjectRoot(), filePath)) ?? null;
         const stat = await this.fs.stat(filePath);
         const mtime = stat ? new Date(stat.mtimeMs).toISOString() : null;
         applyM7(data, gitDate, mtime, flags);

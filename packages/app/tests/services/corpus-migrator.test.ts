@@ -16,6 +16,7 @@ import {
     CorpusMigrator,
     extractFilenameParent,
     type MigrationFlag,
+    parseGitNameOnlyZ,
     serializeFrontmatter,
 } from '../../src/services/corpus-migrator';
 
@@ -885,5 +886,49 @@ Body.
         const afterSecond = readFileSync(join(dir, '0050_Sample.md'), 'utf-8');
         const historyCountSecond = (afterSecond.match(/### History/g) ?? []).length;
         expect(historyCountSecond).toBe(1);
+    });
+});
+
+describe('parseGitNameOnlyZ — M7 batched git date lookup', () => {
+    // Real `git log --format=%aI --name-only -z` layout: the date is its own
+    // NUL-terminated chunk and the commit's FIRST path carries the separating
+    // newline. Captured from an actual repo — a hand-written approximation is
+    // what made the first version of this parser silently return nothing.
+    const stream = [
+        '2026-07-25T14:38:42-07:00\0',
+        '\ndocs/tasks/0001_first.md\0',
+        'docs/tasks/0002_second.md\0',
+        '2026-07-08T13:25:15-07:00\0',
+        '\ndocs/tasks/0002_second.md\0',
+        'docs/tasks/0003_third.md\0',
+    ].join('');
+
+    test('maps every changed path to its commit date', () => {
+        const dates = parseGitNameOnlyZ(stream);
+
+        expect(dates.get('docs/tasks/0001_first.md')).toBe('2026-07-25T14:38:42-07:00');
+        expect(dates.get('docs/tasks/0003_third.md')).toBe('2026-07-08T13:25:15-07:00');
+    });
+
+    test('keeps the newest date when a path appears in several commits', () => {
+        // git emits newest-first, so the first date seen wins.
+        expect(parseGitNameOnlyZ(stream).get('docs/tasks/0002_second.md')).toBe('2026-07-25T14:38:42-07:00');
+    });
+
+    test('does not record the date chunk itself as a path', () => {
+        const dates = parseGitNameOnlyZ(stream);
+
+        expect(dates.has('2026-07-25T14:38:42-07:00')).toBe(false);
+        expect([...dates.keys()].every((k) => k.startsWith('docs/'))).toBe(true);
+        expect(dates.size).toBe(3);
+    });
+
+    test('returns an empty map for empty output', () => {
+        expect(parseGitNameOnlyZ('').size).toBe(0);
+    });
+
+    test('ignores a trailing empty chunk', () => {
+        // git terminates the final path with NUL, so split yields a trailing ''.
+        expect(parseGitNameOnlyZ(`2026-07-25T14:38:42-07:00\0\ndocs/tasks/0001_a.md\0`).size).toBe(1);
     });
 });

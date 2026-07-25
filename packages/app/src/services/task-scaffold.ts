@@ -11,6 +11,7 @@
 import { dirname } from 'node:path';
 import { MarkdownDocument, mergeStubs, scaffoldFeatureScenarios } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+import { TaskLocator } from './task-locator';
 
 /** Options for task test scaffolding. */
 export interface TaskScaffoldOptions {
@@ -119,24 +120,7 @@ export class TaskScaffoldService {
     }
 
     private async findTaskFile(wbs: string): Promise<string | null> {
-        const dirs = this.allFolderDirs();
-        for (const dir of dirs) {
-            try {
-                const entries = await this.ctx.fs.readDir(dir);
-                for (const name of entries) {
-                    if (name.startsWith(`${wbs}_`) && name.endsWith('.md')) {
-                        return `${dir}/${name}`;
-                    }
-                }
-            } catch {}
-        }
-        return null;
-    }
-
-    private allFolderDirs(): string[] {
-        const folderKeys = this.ctx.foldersConfig ? Object.keys(this.ctx.foldersConfig.folders) : [];
-        const dirs = [this.ctx.tasksDir, ...folderKeys.map((key) => this.ctx.fs.resolve(key))];
-        return [...new Set(dirs)];
+        return await new TaskLocator(this.ctx).findPathByWbs(wbs);
     }
 
     private resolveDefaultTestPath(wbs: string): string {

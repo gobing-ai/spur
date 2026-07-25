@@ -25,6 +25,7 @@ import {
     type SectionMatrix,
     type Severity,
 } from './planning-check-base';
+import { TaskLocator } from './task-locator';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -201,7 +202,14 @@ function hasAdjacentFileLineColumns(body: string): boolean {
 
 /** Four-layer task validator (design §3). L1 schema → L2 matrix → L3 format → L4 traceability. */
 export class TaskCheckService extends PlanningCheckService {
-    constructor(fs: FileSystem, matrix: SectionMatrix) {
+    /**
+     * Locator for the L4 relational checks. When absent, those checks fall back to
+     * the checked file's own directory — correct for a single-folder corpus, but it
+     * cannot see sibling folders, so callers with a folder config should inject one.
+     */
+    private readonly locator?: TaskLocator;
+
+    constructor(fs: FileSystem, matrix: SectionMatrix, locator?: TaskLocator) {
         super({
             fs,
             matrix,
@@ -209,6 +217,23 @@ export class TaskCheckService extends PlanningCheckService {
             frontmatterSchema: taskFrontmatterSchema,
             parse: (raw, kind) => MarkdownDocument.parse(raw, kind),
         });
+        this.locator = locator;
+    }
+
+    /**
+     * The folder set the L4 edge checks search. Without an injected locator the
+     * corpus is assumed to be the checked task's own directory.
+     */
+    private locatorFor(tasksDir: string): TaskLocator {
+        return this.locator ?? TaskLocator.forSingleDir(this.fs, tasksDir);
+    }
+
+    /**
+     * Human-readable rendering of the folders an edge check actually searched, so a
+     * "not found" finding names the real search scope rather than one directory.
+     */
+    private searchedFolders(tasksDir: string): string {
+        return this.locatorFor(tasksDir).folderDirs().join(', ');
     }
 
     /** Run the four-layer validation against a task file. */
@@ -481,7 +506,7 @@ export class TaskCheckService extends PlanningCheckService {
                     code: FINDING_CODES.L4_PARENT_NOT_FOUND,
                     severity: 'warning',
                     section: '',
-                    message: `Parent task ${parentWbs} not found in ${tasksDir}`,
+                    message: `Parent task ${parentWbs} not found in ${this.searchedFolders(tasksDir)}`,
                 });
             }
         }
@@ -501,7 +526,7 @@ export class TaskCheckService extends PlanningCheckService {
                             code: FINDING_CODES.L4_DEPENDENCY_NOT_FOUND,
                             severity: 'warning',
                             section: '',
-                            message: `Dependency "${dep}" not found in ${tasksDir}`,
+                            message: `Dependency "${dep}" not found in ${this.searchedFolders(tasksDir)}`,
                         });
                     }
                 }
@@ -742,25 +767,27 @@ export class TaskCheckService extends PlanningCheckService {
      */
     private async findChildren(tasksDir: string, wbs: string): Promise<{ wbs: string; status: string }[]> {
         const kids: { wbs: string; status: string }[] = [];
-        let entries: string[];
-        try {
-            entries = await this.fs.readDir(tasksDir);
-        } catch {
-            return kids;
-        }
-        for (const name of entries) {
-            const m = /^(\d{4})_.+\.md$/.exec(name);
-            if (m === null) continue;
-            const kidWbs = m[1];
-            if (kidWbs === undefined || kidWbs === wbs) continue; // skip self
+        for (const dir of this.locatorFor(tasksDir).folderDirs()) {
+            let entries: string[];
             try {
-                const raw = await this.fs.readFile(`${tasksDir}/${name}`);
-                const fm = MarkdownDocument.parse(raw, 'task').frontmatterData ?? {};
-                const parent = (fm.parent_wbs as string | undefined) ?? (fm['parent-wbs'] as string | undefined);
-                if (parent !== wbs) continue;
-                kids.push({ wbs: kidWbs, status: (fm.status as string) ?? 'backlog' });
+                entries = await this.fs.readDir(dir);
             } catch {
-                // Unreadable/malformed sibling — skip; it surfaces under its own check.
+                continue; // folder may not exist yet
+            }
+            for (const name of entries) {
+                const m = /^(\d{4})_.+\.md$/.exec(name);
+                if (m === null) continue;
+                const kidWbs = m[1];
+                if (kidWbs === undefined || kidWbs === wbs) continue; // skip self
+                try {
+                    const raw = await this.fs.readFile(`${dir}/${name}`);
+                    const fm = MarkdownDocument.parse(raw, 'task').frontmatterData ?? {};
+                    const parent = (fm.parent_wbs as string | undefined) ?? (fm['parent-wbs'] as string | undefined);
+                    if (parent !== wbs) continue;
+                    kids.push({ wbs: kidWbs, status: (fm.status as string) ?? 'backlog' });
+                } catch {
+                    // Unreadable/malformed sibling — skip; it surfaces under its own check.
+                }
             }
         }
         return kids;
@@ -830,18 +857,8 @@ export class TaskCheckService extends PlanningCheckService {
         }
     }
 
-    /** Find a task file by WBS number (filename prefix match: `{wbs}_`). */
+    /** Find a task file by WBS number across every registered task folder. */
     private async findTaskFile(tasksDir: string, wbs: string): Promise<string | null> {
-        try {
-            const entries = await this.fs.readDir(tasksDir);
-            for (const name of entries) {
-                if (name.startsWith(`${wbs}_`) && name.endsWith('.md')) {
-                    return `${tasksDir}/${name}`;
-                }
-            }
-        } catch {
-            // Directory doesn't exist or can't be read
-        }
-        return null;
+        return await this.locatorFor(tasksDir).findPathByWbs(wbs);
     }
 }

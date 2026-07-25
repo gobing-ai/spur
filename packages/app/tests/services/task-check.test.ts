@@ -3,7 +3,9 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { FINDING_CODES } from '../../src/services/finding-codes';
 import { TaskCheckService } from '../../src/services/task-check';
+import { TaskLocator } from '../../src/services/task-locator';
 
 const matrix = {
     variants: {
@@ -1985,5 +1987,96 @@ describe('TaskCheckService', () => {
             (f) => f.layer === 'L4' && f.severity === 'warning' && f.section === 'Design',
         );
         expect(designWarnings).toHaveLength(0);
+    });
+
+    // --- Multi-folder corpus (L4 edges across configured task folders) ---
+
+    describe('L4 edges across multiple task folders', () => {
+        /**
+         * Seed a corpus split over two task folders: the checked task in `tasks/`,
+         * its parent and dependency in `tasks2/`. This is the shape a `spur.yaml`
+         * with several `tasks.folders` entries produces.
+         */
+        function seedTwoFolderEnv(): {
+            fs: ReturnType<typeof createNodeFileSystem>;
+            path: string;
+            tasksDir: string;
+            otherDir: string;
+            cleanup(): void;
+        } {
+            const { mkdirSync } = require('node:fs');
+            const root = mkdtempSync(join(tmpdir(), 'spur-check-folders-'));
+            const tasksDir = join(root, 'tasks');
+            const otherDir = join(root, 'tasks2');
+            mkdirSync(tasksDir, { recursive: true });
+            mkdirSync(otherDir, { recursive: true });
+            mkdirSync(join(root, 'features'), { recursive: true });
+
+            const taskPath = join(tasksDir, '0100_task.md');
+            writeFileSync(
+                taskPath,
+                taskFm({ status: 'backlog', parent_wbs: '0050', dependencies: ['0050'], name: 'Child' }),
+            );
+            // Parent + dependency live in the OTHER folder.
+            writeFileSync(join(otherDir, '0050_parent.md'), taskFm({ status: 'done', name: 'Parent' }));
+
+            return {
+                fs: createNodeFileSystem(),
+                path: taskPath,
+                tasksDir,
+                otherDir,
+                cleanup: () => rmSync(root, { recursive: true, force: true }),
+            };
+        }
+
+        const edgeFindings = (result: { findings: { code: string }[] }) =>
+            result.findings.filter(
+                (f) => f.code === FINDING_CODES.L4_PARENT_NOT_FOUND || f.code === FINDING_CODES.L4_DEPENDENCY_NOT_FOUND,
+            );
+
+        test('resolves a parent and dependency living in a sibling folder', async () => {
+            // WHY: the L4 edge checks used to search only dirname(taskFile), so a
+            // cross-folder dependency was reported missing even though `spur task
+            // show` resolved it. The locator makes the check see the whole corpus.
+            const { fs, path, tasksDir, otherDir, cleanup } = seedTwoFolderEnv();
+            const locator = new TaskLocator({
+                fs,
+                tasksDir,
+                foldersConfig: { folders: { [tasksDir]: {}, [otherDir]: {} } },
+            });
+
+            const result = await new TaskCheckService(fs, matrix, locator).check(path, '0100');
+            cleanup();
+
+            expect(edgeFindings(result)).toHaveLength(0);
+        });
+
+        test('still reports a genuinely absent parent and dependency', async () => {
+            const { fs, path, tasksDir, otherDir, cleanup } = seedTwoFolderEnv();
+            rmSync(join(otherDir, '0050_parent.md'));
+            const locator = new TaskLocator({
+                fs,
+                tasksDir,
+                foldersConfig: { folders: { [tasksDir]: {}, [otherDir]: {} } },
+            });
+
+            const result = await new TaskCheckService(fs, matrix, locator).check(path, '0100');
+            cleanup();
+
+            const codes = edgeFindings(result).map((f) => f.code);
+            expect(codes).toContain(FINDING_CODES.L4_PARENT_NOT_FOUND);
+            expect(codes).toContain(FINDING_CODES.L4_DEPENDENCY_NOT_FOUND);
+        });
+
+        test('without a locator, falls back to the checked file own folder', async () => {
+            // The no-locator constructor stays backward compatible: a single-folder
+            // corpus behaves exactly as before.
+            const { fs, path, cleanup } = seedTwoFolderEnv();
+
+            const result = await new TaskCheckService(fs, matrix).check(path, '0100');
+            cleanup();
+
+            expect(edgeFindings(result).length).toBeGreaterThan(0);
+        });
     });
 });

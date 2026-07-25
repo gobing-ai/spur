@@ -5,7 +5,7 @@
  * PlanningWriteService. WBS allocation is race-safe under the create-lock.
  */
 
-import { isAbsolute, relative, resolve } from 'node:path';
+import { isAbsolute, relative } from 'node:path';
 import type { TaskFolderEntry, TaskFoldersConfig } from '@gobing-ai/spur-config/loader';
 import {
     atomicWriteAsync,
@@ -24,6 +24,7 @@ import {
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import type { SectionMatrix } from './planning-check-base';
 import type { EntityRef, PlanningEventName, PlanningWriteService, WriteResult } from './planning-write-service';
+import { TaskLocator } from './task-locator';
 import {
     escapeTablePipe,
     gitDiffU0,
@@ -431,10 +432,12 @@ function renderSectionGuidanceBody(name: TaskSection): string {
 export class TaskService {
     private readonly ctx: TaskServiceContext;
     private readonly writeService: PlanningWriteService;
+    private readonly locator: TaskLocator;
 
     constructor(ctx: TaskServiceContext) {
         this.ctx = ctx;
         this.writeService = ctx.writeService;
+        this.locator = new TaskLocator(ctx);
     }
 
     /**
@@ -1350,11 +1353,8 @@ export class TaskService {
         // Strategy 1: exact match against EVERY registered folder (not just the active
         // one) — the corpus may span folders (e.g. docs/tasks + docs/tasks2). Compare
         // normalized absolute paths so a relative or absolute input both match.
-        const target = resolve(filePath);
-        for (const dir of this.allFolderDirs()) {
-            const hit = await this.exactMatchInDir(dir, target);
-            if (hit !== null) return hit;
-        }
+        const hit = await this.locator.exactMatch(filePath);
+        if (hit !== null) return { wbs: hit.wbs, filePath: hit.filePath };
 
         if (opts.strict === true) return null;
 
@@ -1362,57 +1362,16 @@ export class TaskService {
         const basename = filePath.split('/').pop() ?? '';
         const capturedWbs = /^(\d{4})_.+\.md$/.exec(basename)?.[1];
         if (capturedWbs) {
-            const taskPath = await this.findWbsAcrossFolders(capturedWbs);
+            const taskPath = await this.locator.findPathByWbs(capturedWbs);
             if (taskPath !== null) return { wbs: capturedWbs, filePath: taskPath };
         }
 
         return null;
     }
 
-    /** Locate WBS `wbs`'s file path across all registered folders (lenient Strategy 2). */
-    private async findWbsAcrossFolders(wbs: string): Promise<string | null> {
-        for (const dir of this.allFolderDirs()) {
-            let entries: string[];
-            try {
-                entries = await this.ctx.fs.readDir(dir);
-            } catch {
-                continue;
-            }
-            for (const name of entries) {
-                if (name.startsWith(`${wbs}_`) && name.endsWith('.md')) return `${dir}/${name}`;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * All registered task-folder directories as absolute paths: the active `tasksDir`
-     * plus every `foldersConfig.folders` key (resolved against the fs root). Deduped.
-     * Mirrors `allocateWbs`'s folder enumeration so resolution and allocation agree.
-     */
-    private allFolderDirs(): string[] {
-        const folderKeys = this.ctx.foldersConfig ? Object.keys(this.ctx.foldersConfig.folders) : [];
-        const dirs = [this.ctx.tasksDir, ...folderKeys.map((key) => this.ctx.fs.resolve(key))];
-        return [...new Set(dirs)];
-    }
-
-    /** Find the task whose real path equals `target` (already absolute) within one folder. */
-    private async exactMatchInDir(dir: string, target: string): Promise<{ wbs: string; filePath: string } | null> {
-        let entries: string[];
-        try {
-            entries = await this.ctx.fs.readDir(dir);
-        } catch {
-            return null; // folder may not exist yet
-        }
-        for (const name of entries) {
-            const captured = /^(\d{4})_(.+)\.md$/.exec(name);
-            if (captured === null) continue;
-            const taskPath = `${dir}/${name}`;
-            if (resolve(taskPath) === target) {
-                return { wbs: captured[1] as string, filePath: taskPath };
-            }
-        }
-        return null;
+    /** All registered task-folder directories as absolute paths. See {@link TaskLocator}. */
+    private allFolderDirs(): readonly string[] {
+        return this.locator.folderDirs();
     }
 
     private async allocateWbs(): Promise<string> {
@@ -1457,21 +1416,7 @@ export class TaskService {
 
     /** Search all registered task folders for the task file matching `wbs`. */
     private async findTaskFileName(wbs: string): Promise<{ name: string; filePath: string } | null> {
-        const prefix = `${wbs}_`;
-        for (const dir of this.allFolderDirs()) {
-            let entries: string[];
-            try {
-                entries = await this.ctx.fs.readDir(dir);
-            } catch {
-                continue;
-            }
-            for (const name of entries) {
-                if (name.startsWith(prefix) && name.endsWith('.md')) {
-                    return { name, filePath: `${dir}/${name}` };
-                }
-            }
-        }
-        return null;
+        return await this.locator.findByWbs(wbs);
     }
 
     private async deriveBackground(featureId: string): Promise<string> {

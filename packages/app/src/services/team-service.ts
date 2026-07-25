@@ -21,6 +21,7 @@ import {
 import type { EventBus } from '@gobing-ai/ts-infra';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { resolvePlanningFolders } from '../config/planning-folders';
+import { TaskLocator } from './task-locator';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -700,21 +701,14 @@ export class TeamService {
         const fs = this.ctx.fs;
         // Scan every registered task folder (phase folders), not a hardcoded one —
         // the corpus may span docs/tasks + docs/tasks2 + … (rd3:tasks heritage).
+        // Folders resolve against the invocation `cwd` here (as the rest of this
+        // service does), not the fs project root — hence `forDirs` rather than
+        // handing the raw config to TaskLocator.
         const { foldersConfig } = await resolvePlanningFolders(fs);
-        const dirs = [...new Set([foldersConfig.active_folder, ...Object.keys(foldersConfig.folders)])];
-        const prefix = `${taskId}_`;
-        for (const dir of dirs) {
-            const absDir = join(this.ctx.cwd, dir);
-            let entries: string[];
-            try {
-                entries = await fs.readDir(absDir);
-            } catch {
-                continue;
-            }
-            const match = entries.find((entry) => entry.startsWith(prefix) && entry.endsWith('.md'));
-            if (match !== undefined) return join(absDir, match);
-        }
-        return null;
+        const dirs = [...new Set([foldersConfig.active_folder, ...Object.keys(foldersConfig.folders)])].map((dir) =>
+            join(this.ctx.cwd, dir),
+        );
+        return await TaskLocator.forDirs(fs, dirs).findPathByWbs(taskId);
     }
 }
 

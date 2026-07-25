@@ -165,6 +165,8 @@ export {
     hasPopulatedPriorityTable,
     TaskCheckService,
 } from './services/task-check';
+export type { TaskFileHit, TaskFolderSource } from './services/task-locator';
+export { TaskLocator } from './services/task-locator';
 export type {
     RecordOptions,
     RecordResult,
