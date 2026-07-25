@@ -1,5 +1,48 @@
 # Changelog
 
+## [0.3.22] — 2026-07-25
+
+### Added
+
+- introduce TaskLocator service to centralize task file discovery (157f3454)
+- mirror CORS allowlist in CSRF middleware (b84b223a)
+- normalize legacy task statuses to canonical lowercase done, blocked, cancelled (708ca1c1)
+- backfill drifted corpus feature status via spur feature sync (8e54f27d)
+- author /sp:dev-refresh slash command wrapper (50f9a1ee)
+- wire feature sync into task-pipeline record, wrapup feature-transition, and dev-verify PASS (fd602a50)
+- implement feature status derivation engine and spur feature sync (1b46ebd2)
+- add status filter menu to Features panel header (f5594b4c)
+- add status icon to each Features tree node (43842d22)
+- add stable finding codes and config-driven severity overrides (24405393)
+- generate BDD test scaffolds from Acceptance Criteria (af039271)
+- wire stage-registry model routing and fallback into agent resolution (38de9793)
+
+### Fixed
+
+- support digits in skill name resolution during command validation (ed4b0682)
+- strengthen careful-guard force push detection and secret redacting (99025b36)
+- support refreshKey re-fetching in FeatureDetail and abort stale SSE requests (c24571a5)
+- harden http.request action URL validation and template handling (76eebddd)
+- add menu dismissal on Escape and outside click (117ef824)
+- use design tokens and compose colorClass in status-icons (48bc2583)
+- add TSDoc comments and test coverage for TaskScaffoldService (4c15ad38)
+
+### Changed
+
+- wire TaskLocator into task check and done-gate commands (182682fc)
+- integrate TaskLocator across services and optimize corpus migrator (2ede45d0)
+- restore thin wrapper contract for dev-verify command (1b1d0a45)
+
+### Other
+
+- sync task 0331 verification audit (8abb3474)
+- sync task 0330 verification audit (8daa2e8f)
+- sync task 0329 verification audit and feature R1 tasks status (3d89e2c5)
+- sync task 0328 verification audit and feature R tasks status (5a454969)
+- align lifecycle drift test for task-pipeline record step changes (6eb7428b)
+- add unit test coverage for feature command error paths and sync options (389ea727)
+- update task status after implementation (145fe5e8)
+
 ## [0.3.21] — 2026-07-22
 
 ### Fixed
