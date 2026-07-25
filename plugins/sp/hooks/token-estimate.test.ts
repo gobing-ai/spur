@@ -14,6 +14,7 @@ import {
     recordToolUseEvent,
     redactText,
     resolveTokenEstimate,
+    scrubSecrets,
     truncateSummary,
 } from './context-post-tool';
 import { recordSessionStart, resolveAgentHint, resolveModelHint } from './context-session-start';
@@ -40,6 +41,38 @@ describe('redactText (task 0248)', () => {
         expect(out).toMatch(/Authorization:\s*\*\*\*/i);
         // Standalone Bearer line
         expect(redactText('token line: Bearer sk-live-xyz')).toMatch(/Bearer \*\*\*/i);
+    });
+
+    test.each([
+        // `sk-` keys are hyphen-segmented; matching one alphanumeric block stopped at
+        // the first hyphen and let every Anthropic key through verbatim.
+        ['sk-ant-api03-Zm9vYmFyYmF6cXV4-AA', 'sk-ant-api03'],
+        ['sk-abcdefghijklmnop', 'abcdefghijklmnop'],
+        // `_` is a word char, so a leading \b never matched a namespaced env var.
+        ['ANTHROPIC_API_KEY=sk-ant-secretvalue', 'secretvalue'],
+        ['export GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz01', 'ghp_abcdefghijklmnop'],
+        ['MY_SERVICE_SECRET=hunter2', 'hunter2'],
+        ['ghp_abcdefghijklmnopqrstuvwxyz01', 'abcdefghijklmnop'],
+        ['github_pat_11ABCDEFG0abcdefghijklmnop', 'ABCDEFG0abcdefghij'],
+        ['-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKC\n-----END RSA PRIVATE KEY-----', 'MIIEowIBAAKC'],
+    ])('scrubs %j so the secret material is gone', (input, secret) => {
+        expect(scrubSecrets(input)).not.toContain(secret);
+    });
+
+    test('names the scrubbed variable so the ledger stays diagnosable', () => {
+        expect(scrubSecrets('ANTHROPIC_API_KEY=sk-ant-xyz')).toBe('ANTHROPIC_API_KEY=***');
+    });
+
+    test.each([
+        'claude --max-tokens=4096',
+        'inputTokens=1200 outputTokens=340',
+        'the build is broken: see log',
+        'my_secret_sauce_recipe.md',
+        'git commit -m "add token bucket rate limiter"',
+    ])('leaves non-secret text untouched: %j', (input) => {
+        // A redactor that eats ordinary output is its own defect — the ledger exists
+        // to be read.
+        expect(scrubSecrets(input)).toBe(input);
     });
 });
 

@@ -2,10 +2,11 @@
 /**
  * careful-guard — PreToolUse guard for destructive shell commands (task 0215, R3).
  *
- * Warn (permission `ask`) before a `Bash` tool call runs a destructive command — `rm -rf`,
- * `DROP TABLE`/`DROP DATABASE`/`TRUNCATE`, `git push --force`/`-f`, `git reset --hard`,
- * `git checkout .`/`git restore .`, `kubectl delete`, `docker system prune`. The operator can
- * confirm to proceed. Pure pattern-match + decision, no domain logic (mirrors `task-write-guard`).
+ * Warn (permission `ask`) before a `Bash` tool call runs a destructive command — `rm -rf`
+ * (any flag spelling, including the POSIX uppercase `-R`), `DROP TABLE`/`DROP DATABASE`/
+ * `TRUNCATE`, `git push --force`/`-f`/`+refspec`, `git reset --hard`, `git checkout .`/
+ * `git restore .`, `kubectl delete`, `docker system prune`. The operator can confirm to
+ * proceed. Pure pattern-match + decision, no domain logic (mirrors `task-write-guard`).
  *
  * **Safe exceptions:** `rm -rf` of well-known build/dependency caches (`node_modules`, `dist`,
  * `.next`, `coverage`, `build`, `.turbo`, `.cache`) passes without a warning — deleting a rebuildable
@@ -40,11 +41,35 @@ function preToolUseDecision(decision: Decision, reason?: string): never {
 const SAFE_RM_TARGET =
     /^(?:\.?\/)?(?:[\w.@-]+\/)*(?:node_modules|dist|\.next|coverage|build|\.turbo|\.cache|\.parcel-cache|out)\/?\*?$/;
 
+/**
+ * Expand an argument string into the set of flags it sets, splitting short-flag
+ * clusters into their individual letters: `-Rf --force` → `{R, f, --force}`.
+ *
+ * Matching flags with ad-hoc regexes per call site is what let `rm -R` through —
+ * `-\w*r` only ever matched the lowercase spelling, even though `man rm` defines
+ * `-r` as "Equivalent to -R". Parsing once, case-preserved, makes that class of
+ * miss unrepresentable: a caller names every spelling it cares about explicitly.
+ */
+function parseFlags(args: string): Set<string> {
+    const flags = new Set<string>();
+    for (const token of args.trim().split(/\s+/)) {
+        if (token.length < 2 || !token.startsWith('-') || token === '--') continue;
+        if (token.startsWith('--')) {
+            flags.add(token.split('=')[0] as string); // `--force=x` → `--force`
+            continue;
+        }
+        for (const ch of token.slice(1)) flags.add(ch);
+    }
+    return flags;
+}
+
 /** True when a `rm` invocation is both recursive and forced (any flag spelling). */
 function isRecursiveForceRm(args: string): boolean {
-    const hasRecursive = /(?:^|\s)-\w*r|\s--recursive\b/.test(args);
-    const hasForce = /(?:^|\s)-\w*f|\s--force\b/.test(args);
-    return hasRecursive && hasForce;
+    const flags = parseFlags(args);
+    // POSIX rm accepts -r and -R interchangeably; --recursive is the GNU long form.
+    const recursive = flags.has('r') || flags.has('R') || flags.has('--recursive');
+    const force = flags.has('f') || flags.has('--force');
+    return recursive && force;
 }
 
 /** True when every non-flag target of a `rm` invocation is a known-safe cache path. */
@@ -64,6 +89,11 @@ const DESTRUCTIVE: Array<{ label: string; re: RegExp }> = [
         re: /\b(?:DROP\s+(?:TABLE|DATABASE)|TRUNCATE(?:\s+TABLE)?)\b/i,
     },
     { label: 'a force push (git push --force / -f)', re: /\bgit\s+push\b[^\n]*(?:--force(?!-with-lease)|\s-f\b)/i },
+    {
+        // `git push origin +main` forces that ref without any --force flag.
+        label: 'a force push via a + refspec (git push … +ref)',
+        re: /\bgit\s+push\b[^\n]*\s\+[\w./-]+/i,
+    },
     { label: 'a hard reset (git reset --hard)', re: /\bgit\s+reset\b[^\n]*--hard\b/i },
     {
         label: 'a working-tree discard (git checkout . / git restore .)',

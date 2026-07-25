@@ -71,15 +71,32 @@ export function scrubSecrets(text: string): string {
     let s = text;
     // Bearer / API key prefixes first (before generic key=value)
     s = s.replace(/\bBearer\s+[A-Za-z0-9._\-+=/]+/gi, 'Bearer ***');
-    s = s.replace(/\bsk-[A-Za-z0-9]{8,}/g, 'sk-***');
+    // `sk-` keys. Segments may be hyphen-separated (`sk-ant-api03-…`), so match the
+    // whole run rather than a single alphanumeric block — anchoring on `[A-Za-z0-9]{8,}`
+    // alone stopped at the first hyphen and let every Anthropic key through, which is
+    // the most likely secret to appear in a Claude-agent harness.
+    s = s.replace(/\bsk-[A-Za-z0-9_-]{8,}/g, 'sk-***');
     s = s.replace(/\bAKIA[0-9A-Z]{16}\b/g, 'AKIA***');
-    // Key=value style secrets (value = rest of non-space token)
+    // Provider token prefixes with a fixed, unambiguous shape.
+    s = s.replace(/\bgithub_pat_[A-Za-z0-9_]{20,}/g, 'github_pat_***');
+    s = s.replace(/\bgh[pousr]_[A-Za-z0-9]{20,}/g, (m) => `${m.slice(0, 4)}***`);
+    // Key=value style secrets (value = rest of non-space token). The key may carry a
+    // prefix (`ANTHROPIC_API_KEY`, `GITHUB_TOKEN`): `_` is a word character, so a
+    // leading `\b` would not match there and every namespaced env var leaked. Allow an
+    // optional `WORD_`-style prefix instead of requiring a boundary.
+    // The whole key (prefix included) is captured so the ledger still says *which*
+    // variable was scrubbed — `ANTHROPIC_API_KEY=***`, not a bare `API_KEY=***`.
     s = s.replace(
-        /\b(api[_-]?key|password|passwd|secret|token|access[_-]?key|private[_-]?key)\s*[:=]\s*\S+/gi,
+        /\b((?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|password|passwd|secret|token|access[_-]?key|private[_-]?key))\s*[:=]\s*\S+/gi,
         '$1=***',
     );
     // Authorization: <scheme> <credentials...>
     s = s.replace(/\bAuthorization\s*:\s*\S+(?:\s+\S+)*/gi, 'Authorization: ***');
+    // PEM private key blocks — redact the payload, keep the header as a marker.
+    s = s.replace(
+        /-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----[\s\S]*?(?:-----END (?:[A-Z ]+ )?PRIVATE KEY-----|$)/g,
+        '[private-key-redacted]',
+    );
     // Collapse long base64 only when + / or = present (avoid pure a-z body blobs)
     s = s.replace(/\b[A-Za-z0-9+/]{80,}={0,2}\b/g, (m) => (/[+/=]/.test(m) ? '[base64-redacted]' : m));
     return s;

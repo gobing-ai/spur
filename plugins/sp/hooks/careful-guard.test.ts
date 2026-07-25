@@ -58,6 +58,15 @@ describe('careful-guard — destructive-command pattern matrix', () => {
         'kubectl delete pod web-0',
         'docker system prune -a',
         'rm -rf node_modules /etc/nginx',
+        // `man rm`: "-r  Equivalent to -R". The uppercase spelling is standard POSIX,
+        // not obfuscation, and previously slipped past the guard entirely.
+        'rm -Rf /important',
+        'rm -R -f /important',
+        'rm -fR ~/data',
+        'rm -R --force /var/data',
+        // A `+` refspec force-pushes without any --force flag.
+        'git push origin +main',
+        'git push origin +refs/heads/main',
     ])('asks before destructive command: %j', async (cmd) => {
         const d = await runGuard(bash(cmd));
         expect(d.permissionDecision).toBe('ask');
@@ -74,11 +83,21 @@ describe('careful-guard — destructive-command pattern matrix', () => {
         'git checkout my-branch',
         'git commit -m "wip"',
         'ls -la && echo done',
+        // -R without -f is not a forced remove; neither is -f without recursion.
+        'rm -R ./tmpdir',
+        // A bare `+` in a message must not read as a refspec.
+        'git commit -m "a + b"',
+        'git push origin main',
     ])('allows safe/benign command: %j', async (cmd) => {
         const d = await runGuard(bash(cmd));
         expect(d.permissionDecision).toBe('allow');
     });
 });
+
+// Flag-spelling coverage stays in the spawn matrix above (`rm -Rf`, `-R -f`, `-fR`,
+// `-R --force`). The guard is deliberately never imported in-process — see the header:
+// doing so would pull this portable script into the per-file coverage gate it is
+// excluded from.
 
 describe('careful-guard — fail-open + escape-hatch contract', () => {
     test('fails open (allow) for a non-Bash tool', async () => {
