@@ -117,16 +117,13 @@ states:
 
   - id: feature-transition
     description: >
-      If vars.feature is set, advance the feature through the legal forward path of
-      the feature-lifecycle FSM via `spur feature advance` (task 0180 F9c / ADR-029).
-      The verb walks backlog → active → verifying → done idempotently, verifying the
-      observed status after every hop, and returns a per-hop trail. Replaces the prior
-      ~20-line inline shell ladder; the verb now owns the multi-hop walk + legal-edge
-      enforcement. Task statuses are NOT mutated.
+      If vars.feature is set, derive and sync feature status with linked task states via
+      `spur feature sync` (task 0328 / ADR-0322).
+      Replaces prior unconditional `spur feature advance` with conservative status sync.
     onEnter:
       - kind: shell
         options:
-          command: '${vars.spurBin} feature advance ${vars.feature} --json'
+          command: '${vars.spurBin} feature sync ${vars.feature} --json'
 
   - id: branch-cleanup
     description: >

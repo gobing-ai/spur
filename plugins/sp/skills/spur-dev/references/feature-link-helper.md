@@ -34,6 +34,21 @@ explicit operator choice.
 - Any `--next` chain or automated pipeline step
 - Any context where the operator has not explicitly requested strict rigor or linking
 
+## Post-PASS Verification Feature Sync & Deferral
+
+When `/sp:dev-verify <wbs>` produces a `PASS` verdict:
+
+1. **Task has `feature_id`**:
+   - Run `spur feature sync <id> --dry-run --json` to generate the proposed status transition.
+   - Present the derivation proposal to the operator (showing current status, target status, and derivation reason).
+   - Confirm with the operator before executing `spur feature sync <id>` (in `--auto` mode, apply forward-only proposals).
+
+2. **Task missing `feature_id`**:
+   - Check if `feature_link_declined: true` is set on the task frontmatter (`spur task show <wbs> --json`).
+   - If `feature_link_declined: true`: skip linking prompt — explicit operator deferral is preserved.
+   - If unlinked and not declined: propose candidate existing features via single-task mode.
+   - If operator explicitly declines: record `feature_link_declined: true` via `spur task update <wbs> --field feature_link_declined --value true`.
+
 ## Single-task mode
 
 Use when the operator has a specific task in mind.

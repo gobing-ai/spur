@@ -164,12 +164,16 @@ states:
     description: >
       Record pipeline results into the task file via `spur task record` —
       Testing/Review from the verdict, Solution backfilled from git diff as a
-      safety net, optional transition to testing. A single verb replaces the
-      previous ~50 lines of embedded shell (0108; ADR-022).
+      safety net, optional transition to testing. Post-record step conditionally syncs
+      feature status if `feature_id` is present, or appends an orphan link proposal
+      to the run report if absent (task 0328 / ADR-0322).
     onEnter:
       - kind: shell
         options:
           command: "${vars.spurBin} task record ${vars.wbs} --solution-from-diff --transition testing"
+      - kind: shell
+        options:
+          command: 'FID=$(${vars.spurBin} task show ${vars.wbs} --json 2>/dev/null | jq -r ".feature_id // .frontmatter.feature_id // empty"); if [ -n "$FID" ]; then ${vars.spurBin} feature sync "$FID" --json; else echo "Orphan task ${vars.wbs} — no feature_id linked; proposal: consider linking to a parent feature." >> .spur/run/${vars.wbs}-report.txt; fi'
 
   - id: done
     description: >

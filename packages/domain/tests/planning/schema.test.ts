@@ -115,6 +115,20 @@ describe('planning schema — frontmatter schemas', () => {
         expect(result.success).toBe(false);
     });
 
+    test('taskFrontmatterSchema accepts feature_link_declined boolean or string', () => {
+        const parsedBool = taskFrontmatterSchema.parse({
+            ...validTaskFrontmatter,
+            feature_link_declined: true,
+        });
+        expect(parsedBool.feature_link_declined).toBe(true);
+
+        const parsedStr = taskFrontmatterSchema.parse({
+            ...validTaskFrontmatter,
+            feature_link_declined: 'true',
+        });
+        expect(parsedStr.feature_link_declined).toBe(true);
+    });
+
     const validFeatureFrontmatter = {
         schema_version: 1,
         id: 'F1',

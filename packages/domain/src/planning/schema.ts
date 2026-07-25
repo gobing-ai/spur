@@ -269,6 +269,11 @@ export const taskFrontmatterSchema = z.object({
      */
     done_forced: z.preprocess((v) => (typeof v === 'string' ? v === 'true' : v), z.boolean().optional()),
     done_reason: z.string().optional(),
+    /**
+     * Operator declined feature linkage (task 0328). `feature_link_declined=true`
+     * records that the operator explicitly chose to leave a task unlinked to any feature.
+     */
+    feature_link_declined: z.preprocess((v) => (typeof v === 'string' ? v === 'true' : v), z.boolean().optional()),
     created_at: isoDateString,
     updated_at: isoDateString,
 });
