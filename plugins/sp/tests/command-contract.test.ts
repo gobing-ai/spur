@@ -475,6 +475,30 @@ describe('(f) validator catches violations in corrupted files', () => {
         }
     });
 
+    test('gate (c) — a skill name containing a digit is still checked', () => {
+        // The reference matcher must not be narrower than the set of names a skill
+        // directory can take: a ref it fails to match is silently not collected, so
+        // the gate would report success on a genuinely unresolved reference.
+        const tmp = mkdtempSync(join(tmpdir(), 'cmd-contract-'));
+        try {
+            makeTempCommand(
+                tmp,
+                'Test Cmd',
+                'test',
+                '""',
+                '["Bash", "Skill"]',
+                '/sp:test-cmd',
+                '- Skill(skill="sp:missing2", args="$ARGUMENTS")',
+            );
+            const result = validate(tmp);
+            const cViolations = result.violations.filter((v) => v.gate === 'c');
+            expect(cViolations.length).toBeGreaterThan(0);
+            expect(cViolations[0].message).toContain('missing2');
+        } finally {
+            rmSync(tmp, { recursive: true, force: true });
+        }
+    });
+
     test('gate (d) — Skill in tools but no Skill() call is reported', () => {
         const tmp = mkdtempSync(join(tmpdir(), 'cmd-contract-'));
         try {

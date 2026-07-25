@@ -184,7 +184,10 @@ function checkTargetResolution(cmd: ParsedCommand, skillsDir: string, root: stri
     const implSection = implPart.split(/\n## (?!Usage)/m)[0].trim();
 
     // Skill() calls: Skill(skill="sp:NAME",
-    const skillCalls = [...implSection.matchAll(/Skill\(skill="sp:([a-z][a-z-]+)"/g)];
+    // The name charset must stay at least as wide as any name a skill directory can
+    // take: a ref this pattern does not match is silently not collected, so the gate
+    // would pass a genuinely unresolved reference rather than report it.
+    const skillCalls = [...implSection.matchAll(/Skill\(skill="sp:([a-z][a-z0-9-]*)"/g)];
     for (const ref of skillCalls) {
         const skillName = ref[1];
         const skillPath = join(skillsDir, skillName, 'SKILL.md');
