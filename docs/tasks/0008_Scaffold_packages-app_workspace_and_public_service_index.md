@@ -1,7 +1,7 @@
 ---
 name: Scaffold packages-app workspace and public service index
 description: Scaffold packages-app workspace and public service index
-status: Done
+status: done
 created_at: 2026-06-03T06:12:03.247Z
 updated_at: 2026-06-03T06:24:33.296Z
 folder: docs/tasks

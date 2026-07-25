@@ -2,7 +2,7 @@
 schema_version: 1
 name: rd3 migration 0054-0070 review — remediate 8 post-implementation findings
 description: rd3 migration 0054-0070 review — remediate 8 post-implementation findings
-status: Done
+status: done
 created_at: 2026-06-15T05:30:27.556Z
 updated_at: 2026-06-15T06:55:24.713Z
 folder: docs/tasks

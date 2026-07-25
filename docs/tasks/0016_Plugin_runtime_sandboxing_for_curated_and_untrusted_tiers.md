@@ -1,7 +1,7 @@
 ---
 name: Plugin runtime sandboxing for curated and untrusted tiers
 description: Plugin runtime sandboxing for curated and untrusted tiers
-status: Blocked
+status: blocked
 created_at: 2026-06-03T17:06:55.474Z
 updated_at: 2026-06-03T22:43:14.811Z
 folder: docs/tasks

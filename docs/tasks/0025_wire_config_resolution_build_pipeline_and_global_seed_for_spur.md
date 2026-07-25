@@ -1,7 +1,7 @@
 ---
 name: wire config resolution build pipeline and global seed for spur
 description: wire config resolution build pipeline and global seed for spur
-status: Done
+status: done
 created_at: 2026-06-07T05:20:44.115Z
 updated_at: 2026-06-07T05:58:52.269Z
 folder: docs/tasks

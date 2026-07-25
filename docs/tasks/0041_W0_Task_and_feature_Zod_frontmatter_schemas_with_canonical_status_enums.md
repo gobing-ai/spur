@@ -1,7 +1,7 @@
 ---
 name: "W0: Task and feature Zod frontmatter schemas with canonical status enums"
 description: "W0: Task and feature Zod frontmatter schemas with canonical status enums"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.979Z
 updated_at: 2026-06-13T17:01:39.395Z
 folder: docs/tasks

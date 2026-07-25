@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: Message bus events, server send/reply API, SSE inclusion (0193 wave A)
 description: ""
-status: Done
+status: done
 type: task
 profile: standard
 feature_id: G1

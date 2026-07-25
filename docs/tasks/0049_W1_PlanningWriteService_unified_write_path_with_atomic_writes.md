@@ -1,7 +1,7 @@
 ---
 name: "W1: PlanningWriteService — unified write path with atomic writes"
 description: "W1: PlanningWriteService — unified write path with atomic writes"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.982Z
 updated_at: 2026-06-14T04:54:15.434Z
 folder: docs/tasks

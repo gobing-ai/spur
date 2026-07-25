@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Team server module: process list API, SSE attach stream, stdin endpoint (0195 wave B)"
 description: ""
-status: Done
+status: done
 type: task
 profile: standard
 feature_id: G2

@@ -1,7 +1,7 @@
 ---
 name: bump_ts-libs_catalog_to_0.3.2_and_absorb_MessageService_removal
 description: bump_ts-libs_catalog_to_0.3.2_and_absorb_MessageService_removal
-status: Done
+status: done
 created_at: 2026-06-05T19:12:38.331Z
 updated_at: 2026-06-05T19:13:02.365Z
 folder: docs/tasks

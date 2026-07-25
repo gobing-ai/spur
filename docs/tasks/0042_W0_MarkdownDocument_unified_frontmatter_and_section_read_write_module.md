@@ -1,7 +1,7 @@
 ---
 name: "W0: MarkdownDocument — unified frontmatter and section read/write module"
 description: "W0: MarkdownDocument — unified frontmatter and section read/write module"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.980Z
 updated_at: 2026-06-13T11:30:00.000Z
 folder: docs/tasks

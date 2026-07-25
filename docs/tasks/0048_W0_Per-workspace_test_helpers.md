@@ -1,7 +1,7 @@
 ---
 name: "W0: Per-workspace test helpers"
 description: "W0: Per-workspace test helpers"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.981Z
 updated_at: 2026-06-14T03:56:04.879Z
 folder: docs/tasks

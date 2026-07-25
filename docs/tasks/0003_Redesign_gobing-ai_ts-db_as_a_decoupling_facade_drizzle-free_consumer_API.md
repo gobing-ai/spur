@@ -1,7 +1,7 @@
 ---
 name: "Redesign @gobing-ai/ts-db as a decoupling facade (drizzle-free consumer API)"
 description: "Redesign @gobing-ai/ts-db as a decoupling facade (drizzle-free consumer API)"
-status: Done
+status: done
 created_at: 2026-05-31T18:31:19.708Z
 updated_at: 2026-06-01T17:00:45Z
 folder: docs/tasks

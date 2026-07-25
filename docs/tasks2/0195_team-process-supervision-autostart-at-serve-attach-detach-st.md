@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Team process supervision: autostart at serve, attach/detach stdio streams, process registry"
 description: ""
-status: Done
+status: done
 type: task
 profile: standard
 feature_id: G2

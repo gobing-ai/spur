@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "CLI team verbs: start, stop, attach replacing Phase-4 stubs (0195 wave C)"
 description: ""
-status: Done
+status: done
 type: task
 profile: standard
 feature_id: G2

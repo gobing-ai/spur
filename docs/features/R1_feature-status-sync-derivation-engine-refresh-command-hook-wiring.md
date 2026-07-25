@@ -2,11 +2,11 @@
 schema_version: 1
 id: "R1"
 name: "Feature status sync: derivation engine, refresh command, hook wiring"
-status: backlog
+status: active
 priority: P2
 tags: []
 created_at: "2026-07-25T00:27:36.676Z"
-updated_at: "2026-07-25T00:27:43.908Z"
+updated_at: "2026-07-25T21:37:45.001Z"
 ---
 
 # R1: Feature status sync: derivation engine, refresh command, hook wiring
@@ -38,10 +38,11 @@ R5 @edge — after the backfill run, no linked done task sits under a feature st
 | 0327 | Implement feature-status derivation engine, spur feature sync verb, and Board sync endpoint | done |
 | 0328 | Wire feature sync into task-pipeline record, wrapup feature-transition, and dev-verify PASS | done |
 | 0329 | Author /sp:dev-refresh command (feature-id \| wbs \| --all \| --auto) | done |
-| 0330 | Backfill drifted corpus via /sp:dev-refresh --all (operator-confirmed) | todo |
-| 0331 | Normalize legacy 'Done' task statuses to canonical done | todo |
+| 0330 | Backfill drifted corpus via /sp:dev-refresh --all (operator-confirmed) | done |
+| 0331 | Normalize legacy 'Done' task statuses to canonical done | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
 
 ## History
+- 2026-07-25T21:37:45.001Z backlog → active (system)

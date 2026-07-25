@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Live board inbox tab: message events live tail (0193 wave C)"
 description: ""
-status: Done
+status: done
 type: task
 profile: standard
 feature_id: G1

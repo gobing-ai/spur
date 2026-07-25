@@ -1,7 +1,7 @@
 ---
 name: "W0: Task and feature lifecycle workflow YAML definitions"
 description: "W0: Task and feature lifecycle workflow YAML definitions"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.981Z
 updated_at: 2026-06-13T13:45:00.000Z
 folder: docs/tasks

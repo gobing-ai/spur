@@ -1,7 +1,7 @@
 ---
 name: "W1: TaskService and spur task core verbs (create/show/update/list)"
 description: "W1: TaskService and spur task core verbs (create/show/update/list)"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.982Z
 updated_at: 2026-06-14T05:17:56.677Z
 folder: docs/tasks

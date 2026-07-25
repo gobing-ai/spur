@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "System Events completeness, real-time stream, filters, and extensible details"
 description: "System Events completeness, real-time stream, filters, and extensible details"
-status: Done
+status: done
 type: task
 profile: standard
 feature_id: J

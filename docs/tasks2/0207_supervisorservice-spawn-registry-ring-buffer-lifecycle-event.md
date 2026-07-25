@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "SupervisorService: spawn, registry, ring buffer, lifecycle events, autostart (0195 wave A)"
 description: ""
-status: Done
+status: done
 type: task
 profile: standard
 feature_id: G2

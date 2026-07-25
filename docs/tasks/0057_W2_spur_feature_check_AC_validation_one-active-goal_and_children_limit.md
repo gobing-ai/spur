@@ -1,7 +1,7 @@
 ---
 name: "W2: spur feature check — AC validation, one-active-goal and children limit"
 description: "W2: spur feature check — AC validation, one-active-goal and children limit"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.983Z
 updated_at: 2026-06-14T18:08:52.656Z
 folder: docs/tasks

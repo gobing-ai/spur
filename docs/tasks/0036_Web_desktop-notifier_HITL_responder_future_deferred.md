@@ -1,7 +1,7 @@
 ---
 name: "Web/desktop-notifier HITL responder (desktop done, web deferred)"
 description: "Web/desktop-notifier HITL responder (desktop done, web deferred)"
-status: Blocked
+status: blocked
 created_at: 2026-06-10T06:48:43.405Z
 updated_at: 2026-06-10T20:00:00.000Z
 folder: docs/tasks

@@ -1,7 +1,7 @@
 ---
 name: "W3: sp:spur-dev umbrella skill — planning and execution halves"
 description: "W3: sp:spur-dev umbrella skill — planning and execution halves"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.985Z
 updated_at: 2026-06-14T23:44:31.794Z
 folder: docs/tasks

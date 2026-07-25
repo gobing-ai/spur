@@ -1,7 +1,7 @@
 ---
 name: unify_CLI_surface_with_CommandSpec_SSOT_and_grammar_contract
 description: unify_CLI_surface_with_CommandSpec_SSOT_and_grammar_contract
-status: Done
+status: done
 created_at: 2026-06-06T05:45:43.896Z
 updated_at: 2026-06-06T16:56:08.657Z
 folder: docs/tasks

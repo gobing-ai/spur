@@ -494,8 +494,8 @@ export class FeatureService {
                 results.push({
                     proposal: {
                         featureId: f.id,
-                        from: f.status as FeatureStatus,
-                        to: f.status as FeatureStatus,
+                        from: f.status,
+                        to: f.status,
                         reason: `Transition blocked by guard: ${message}`,
                     },
                     applied: false,

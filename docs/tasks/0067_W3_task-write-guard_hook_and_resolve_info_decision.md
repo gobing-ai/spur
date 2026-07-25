@@ -1,7 +1,7 @@
 ---
 name: "W3: task-write-guard hook and resolve/info decision"
 description: "W3: task-write-guard hook and resolve/info decision"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.985Z
 updated_at: 2026-06-15T04:04:51.192Z
 folder: docs/tasks

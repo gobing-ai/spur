@@ -1,7 +1,7 @@
 ---
 name: "W2: Feature lifecycle engine integration including verifying"
 description: "W2: Feature lifecycle engine integration including verifying"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.984Z
 updated_at: 2026-06-14T18:40:42.864Z
 folder: docs/tasks

@@ -1,7 +1,7 @@
 ---
 name: "Plugin discovery, loader, and CLI plugin commands"
 description: "Plugin discovery, loader, and CLI plugin commands"
-status: Done
+status: done
 created_at: 2026-06-03T17:06:42.792Z
 updated_at: 2026-06-03T17:06:42.792Z
 folder: docs/tasks

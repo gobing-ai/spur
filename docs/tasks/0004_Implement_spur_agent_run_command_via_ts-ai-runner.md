@@ -1,7 +1,7 @@
 ---
 name: Implement spur agent run command via ts-ai-runner
 description: Implement spur agent run command via ts-ai-runner
-status: Done
+status: done
 created_at: 2026-06-01T12:00:00.000Z
 updated_at: 2026-06-01T12:45:00.000Z
 folder: docs/tasks

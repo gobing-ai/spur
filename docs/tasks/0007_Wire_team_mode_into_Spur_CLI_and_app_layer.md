@@ -1,7 +1,7 @@
 ---
 name: "Wire team mode into Spur CLI and app layer"
 description: "Consume ts-ai-runner team mode primitives, wire up CLI commands (spur message, spur team, spur agent create), add DB migration for inbox_messages, and build the TeamService application layer"
-status: Done
+status: done
 created_at: 2026-06-02T18:15:00Z
 updated_at: 2026-06-03T16:34:24.293Z
 folder: docs/tasks

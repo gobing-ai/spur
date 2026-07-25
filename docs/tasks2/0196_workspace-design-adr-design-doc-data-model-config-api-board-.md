@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Workspace design: ADR + design doc (data model, config, API, board tabs)"
 description: ""
-status: Done
+status: done
 type: task
 profile: standard
 feature_id: G3

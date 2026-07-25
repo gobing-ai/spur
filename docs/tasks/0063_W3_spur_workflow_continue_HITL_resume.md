@@ -1,7 +1,7 @@
 ---
 name: "W3: spur workflow continue — HITL resume"
 description: "W3: spur workflow continue — HITL resume"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.984Z
 updated_at: 2026-06-14T23:05:11.924Z
 folder: docs/tasks

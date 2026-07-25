@@ -1,7 +1,7 @@
 ---
 name: "W1: Task lifecycle engine integration with file-wins rehydration"
 description: "W1: Task lifecycle engine integration with file-wins rehydration"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.983Z
 updated_at: 2026-06-14T17:38:05.414Z
 folder: docs/tasks

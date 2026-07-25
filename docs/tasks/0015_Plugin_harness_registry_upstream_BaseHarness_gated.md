@@ -1,7 +1,7 @@
 ---
 name: Plugin harness registry (AgentShim overlay)
 description: Plugin harness registry via a Spur-side AgentShim overlay map — no upstream gate (ADR-012)
-status: Blocked
+status: blocked
 created_at: 2026-06-03T17:06:55.431Z
 updated_at: 2026-06-03T22:40:01.303Z
 folder: docs/tasks

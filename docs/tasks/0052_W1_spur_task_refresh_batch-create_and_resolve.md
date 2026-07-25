@@ -1,7 +1,7 @@
 ---
 name: "W1: spur task refresh, batch-create and resolve"
 description: "W1: spur task refresh, batch-create and resolve"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.982Z
 updated_at: 2026-06-13T01:08:18.982Z
 folder: docs/tasks

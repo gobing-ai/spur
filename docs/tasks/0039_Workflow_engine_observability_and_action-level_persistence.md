@@ -1,7 +1,7 @@
 ---
 name: Workflow engine observability and action-level persistence
 description: Add action_runs two-phase persistence, enrich the workflow event map (runId, dryRun, HITL, guards), lock the custom-event design, and define the event-map compatibility policy
-status: Done
+status: done
 created_at: 2026-06-11T21:00:00.000Z
 updated_at: 2026-06-11T20:25:22.345Z
 folder: docs/tasks

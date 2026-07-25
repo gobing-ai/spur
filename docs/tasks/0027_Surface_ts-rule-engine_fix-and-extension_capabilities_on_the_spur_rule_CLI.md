@@ -1,7 +1,7 @@
 ---
 name: Surface ts-rule-engine fix-and-extension capabilities on the spur rule CLI
 description: Surface ts-rule-engine fix-and-extension capabilities on the spur rule CLI
-status: Done
+status: done
 created_at: 2026-06-07T21:26:05.727Z
 updated_at: 2026-06-07T21:27:44.221Z
 folder: docs/tasks

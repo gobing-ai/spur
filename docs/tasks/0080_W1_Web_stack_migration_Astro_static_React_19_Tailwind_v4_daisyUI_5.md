@@ -1,7 +1,7 @@
 ---
 name: "W1: Web stack migration — Astro static + React 19 + Tailwind v4 + daisyUI 5"
 description: "W1: Web stack migration — Astro static + React 19 + Tailwind v4 + daisyUI 5"
-status: Done
+status: done
 created_at: 2026-06-15T16:56:35.804Z
 updated_at: 2026-06-16T21:05:36.795Z
 folder: docs/tasks

@@ -1,7 +1,7 @@
 ---
 name: "W0: Lock utilities — create-lock and entity lock with staleness detection"
 description: "W0: Lock utilities — create-lock and entity lock with staleness detection"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.980Z
 updated_at: 2026-06-13T13:00:00.000Z
 folder: docs/tasks

@@ -1,7 +1,7 @@
 ---
 name: "W2: Web module system — WebModule interface, registry, React Router 7 wiring, sidebar nav"
 description: "W2: Web module system — WebModule interface, registry, React Router 7 wiring, sidebar nav"
-status: Done
+status: done
 created_at: 2026-06-15T16:57:15.320Z
 updated_at: 2026-06-16T23:50:46.647Z
 folder: docs/tasks

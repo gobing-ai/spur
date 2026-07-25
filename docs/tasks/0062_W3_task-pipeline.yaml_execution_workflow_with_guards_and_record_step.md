@@ -1,7 +1,7 @@
 ---
 name: "W3: task-pipeline.yaml — execution workflow with guards and record step"
 description: "W3: task-pipeline.yaml — execution workflow with guards and record step"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.984Z
 updated_at: 2026-06-14T22:38:41.793Z
 folder: docs/tasks

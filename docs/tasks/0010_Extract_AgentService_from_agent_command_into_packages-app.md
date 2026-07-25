@@ -1,7 +1,7 @@
 ---
 name: Extract AgentService from agent command into packages-app
 description: Extract AgentService from agent command into packages-app
-status: Done
+status: done
 created_at: 2026-06-03T06:12:27.584Z
 updated_at: 2026-06-03T07:17:44.849Z
 folder: docs/tasks

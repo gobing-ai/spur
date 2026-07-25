@@ -1,7 +1,7 @@
 ---
 name: "W0: ts-utils and ts-runtime consolidation audit"
 description: "W0: ts-utils and ts-runtime consolidation audit"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.981Z
 updated_at: 2026-06-14T02:14:49.242Z
 folder: docs/tasks

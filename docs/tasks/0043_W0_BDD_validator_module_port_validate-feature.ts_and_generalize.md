@@ -1,7 +1,7 @@
 ---
 name: "W0: BDD validator module — port validate-feature.ts and generalize"
 description: "W0: BDD validator module — port validate-feature.ts and generalize"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.980Z
 updated_at: 2026-06-13T12:00:00.000Z
 folder: docs/tasks

@@ -1,7 +1,7 @@
 ---
 name: "Design plugin system architecture"
 description: "Design and implement a plugin system for extending Spur CLI commands, API routes, agent harnesses, rule evaluators, and UI components — modeled on relaydeck's plugin-first architecture"
-status: Done
+status: done
 created_at: 2026-06-02T18:00:00Z
 updated_at: 2026-06-03T17:08:28.534Z
 folder: docs/tasks

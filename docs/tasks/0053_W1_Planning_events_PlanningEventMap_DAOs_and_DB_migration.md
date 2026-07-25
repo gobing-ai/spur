@@ -1,7 +1,7 @@
 ---
 name: "W1: Planning events — PlanningEventMap, DAOs and DB migration"
 description: "W1: Planning events — PlanningEventMap, DAOs and DB migration"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.982Z
 updated_at: 2026-06-14T16:29:55.754Z
 folder: docs/tasks

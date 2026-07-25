@@ -1,7 +1,7 @@
 ---
 name: enhance the bootstrap procedure with PluginHost and plugin mechanism
 description: enhance the bootstrap procedure with PluginHost and plugin mechanism
-status: Done
+status: done
 created_at: 2026-06-08T18:13:17.156Z
 updated_at: 2026-06-09T06:29:32.107Z
 folder: docs/tasks

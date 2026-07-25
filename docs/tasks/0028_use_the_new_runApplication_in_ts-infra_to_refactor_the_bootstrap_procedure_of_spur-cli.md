@@ -1,7 +1,7 @@
 ---
 name: use the new runApplication in ts-infra to refactor the bootstrap procedure of spur-cli
 description: use the new runApplication in ts-infra to refactor the bootstrap procedure of spur-cli
-status: Done
+status: done
 created_at: 2026-06-08T05:28:32.973Z
 updated_at: 2026-06-08T15:06:21.000Z
 folder: docs/tasks

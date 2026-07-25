@@ -1,7 +1,7 @@
 ---
 name: "W3: sp:doc-evolve — constitution-driven rewrite of code-docs"
 description: "W3: sp:doc-evolve — constitution-driven rewrite of code-docs"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.986Z
 updated_at: 2026-06-15T04:46:40.675Z
 folder: docs/tasks

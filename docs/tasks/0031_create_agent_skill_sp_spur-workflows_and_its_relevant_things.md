@@ -1,7 +1,7 @@
 ---
 name: "create agent skill sp:spur-workflows and its relevant things"
 description: "create agent skill sp:spur-workflows and its relevant things"
-status: Done
+status: done
 created_at: 2026-06-09T20:05:07.448Z
 updated_at: 2026-06-09T20:32:31.612Z
 folder: docs/tasks

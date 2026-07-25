@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: spur message watch verb (0193 wave B)
 description: ""
-status: Done
+status: done
 type: task
 profile: standard
 feature_id: G1

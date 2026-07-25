@@ -1,7 +1,7 @@
 ---
 name: "W2: FeatureService and spur feature core verbs with hierarchical IDs"
 description: "W2: FeatureService and spur feature core verbs with hierarchical IDs"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.983Z
 updated_at: 2026-06-14T17:55:21.147Z
 folder: docs/tasks

@@ -1,7 +1,7 @@
 ---
 name: "W2: Web layout shell — 3-column resizable/foldable board + rpc-client extension"
 description: "W2: Web layout shell — 3-column resizable/foldable board + rpc-client extension"
-status: Done
+status: done
 created_at: 2026-06-15T16:57:15.299Z
 updated_at: 2026-06-16T22:46:20.992Z
 folder: docs/tasks

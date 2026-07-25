@@ -1,7 +1,7 @@
 ---
 name: "W5: Web build integration — unified Vite dev server + dual production build modes"
 description: "W5: Web build integration — unified Vite dev server + dual production build modes"
-status: Done
+status: done
 created_at: 2026-06-15T16:56:35.825Z
 updated_at: 2026-06-16T21:29:46.058Z
 folder: docs/tasks

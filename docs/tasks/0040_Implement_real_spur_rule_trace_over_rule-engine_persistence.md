@@ -1,7 +1,7 @@
 ---
 name: Implement real spur rule trace over rule-engine persistence
 description: Implement real spur rule trace over rule-engine persistence
-status: Done
+status: done
 created_at: 2026-06-11T20:40:33.400Z
 updated_at: 2026-06-11T22:59:14.361Z
 folder: docs/tasks

@@ -1,7 +1,7 @@
 ---
 name: "S3: Server domain modules — task + feature (handlers + ServerContext wiring + error mapping)"
 description: "S3: Server domain modules — task + feature (handlers + ServerContext wiring + error mapping)"
-status: Done
+status: done
 created_at: 2026-06-15T16:56:10.113Z
 updated_at: 2026-06-16T18:05:15.841Z
 folder: docs/tasks

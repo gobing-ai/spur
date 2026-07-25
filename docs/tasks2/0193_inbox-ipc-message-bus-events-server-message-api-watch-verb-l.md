@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Inbox IPC: message bus events, server message API, watch verb, live board inbox"
 description: ""
-status: Done
+status: done
 type: task
 profile: standard
 feature_id: G1

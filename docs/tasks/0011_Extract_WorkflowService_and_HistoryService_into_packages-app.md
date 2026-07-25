@@ -1,7 +1,7 @@
 ---
 name: Extract WorkflowService and HistoryService into packages-app
 description: Extract WorkflowService and HistoryService into packages-app
-status: Done
+status: done
 created_at: 2026-06-03T06:12:40.140Z
 updated_at: 2026-06-03T07:17:44.935Z
 folder: docs/tasks

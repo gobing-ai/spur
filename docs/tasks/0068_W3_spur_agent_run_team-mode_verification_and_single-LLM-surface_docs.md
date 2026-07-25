@@ -1,7 +1,7 @@
 ---
 name: "W3: spur agent run team-mode verification and single-LLM-surface docs"
 description: "W3: spur agent run team-mode verification and single-LLM-surface docs"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.985Z
 updated_at: 2026-06-15T04:18:13.790Z
 folder: docs/tasks

@@ -1,7 +1,7 @@
 ---
 name: fix the default config files container for spur
 description: fix the default config files container for spur
-status: Done
+status: done
 created_at: 2026-06-07T04:09:20.796Z
 updated_at: 2026-06-07T21:34:46.314Z
 folder: docs/tasks

@@ -1,7 +1,7 @@
 ---
 name: "S5: Server static asset serving — Hono serveStatic (local) + Cloudflare  (default) with SPA fallback"
 description: "S5: Server static asset serving — Hono serveStatic (local) + Cloudflare  (default) with SPA fallback"
-status: Done
+status: done
 created_at: 2026-06-15T16:56:10.135Z
 updated_at: 2026-06-16T18:41:05.245Z
 folder: docs/tasks

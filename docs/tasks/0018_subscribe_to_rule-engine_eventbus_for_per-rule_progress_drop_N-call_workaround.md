@@ -1,7 +1,7 @@
 ---
 name: subscribe_to_rule-engine_eventbus_for_per-rule_progress_drop_N-call_workaround
 description: subscribe_to_rule-engine_eventbus_for_per-rule_progress_drop_N-call_workaround
-status: Done
+status: done
 created_at: 2026-06-04T23:36:46.003Z
 updated_at: 2026-06-04T23:36:49.605Z
 folder: docs/tasks

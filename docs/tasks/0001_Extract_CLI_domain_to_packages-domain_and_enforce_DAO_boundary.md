@@ -1,7 +1,7 @@
 ---
 name: Extract CLI domain to packages-domain and enforce DAO boundary
 description: Extract CLI domain to packages-domain and enforce DAO boundary
-status: Done
+status: done
 created_at: 2026-05-31T06:22:59.990Z
 updated_at: 2026-05-31T15:46:11.179Z
 folder: docs/tasks

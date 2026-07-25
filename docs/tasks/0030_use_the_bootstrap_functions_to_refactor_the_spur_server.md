@@ -1,7 +1,7 @@
 ---
 name: use the bootstrap functions to refactor the spur server
 description: use the bootstrap functions to refactor the spur server
-status: Done
+status: done
 updated_at: 2026-06-09T22:22:00.000Z
 folder: docs/tasks
 type: task

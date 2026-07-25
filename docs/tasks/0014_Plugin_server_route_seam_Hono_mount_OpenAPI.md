@@ -1,7 +1,7 @@
 ---
 name: Plugin server route seam (Hono mount + OpenAPI)
 description: Plugin server route seam (Hono mount + OpenAPI)
-status: Done
+status: done
 created_at: 2026-06-03T17:06:42.835Z
 updated_at: 2026-06-03T22:07:44.266Z
 folder: docs/tasks

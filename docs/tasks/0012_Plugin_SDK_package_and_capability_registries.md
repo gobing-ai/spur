@@ -1,7 +1,7 @@
 ---
 name: Plugin SDK package and capability registries
 description: Plugin SDK package and capability registries
-status: Done
+status: done
 created_at: 2026-06-03T17:06:42.747Z
 updated_at: 2026-06-03T17:06:42.747Z
 folder: docs/tasks

@@ -1,7 +1,7 @@
 ---
 name: "Review findings: packages (dev-review --focus all)"
 description: "Review findings: packages (dev-review --focus all)"
-status: Done
+status: done
 created_at: 2026-06-17T23:41:43.584Z
 updated_at: 2026-06-18T03:57:40.826Z
 folder: docs/tasks

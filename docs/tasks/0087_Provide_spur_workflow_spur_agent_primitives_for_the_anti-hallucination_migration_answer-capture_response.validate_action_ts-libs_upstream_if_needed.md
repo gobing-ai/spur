@@ -2,7 +2,7 @@
 schema_version: 1
 name: "Provide spur workflow + spur agent primitives for the anti-hallucination migration (answer-capture, response.validate action, ts-libs upstream if needed)"
 description: "Provide spur workflow + spur agent primitives for the anti-hallucination migration (answer-capture, response.validate action, ts-libs upstream if needed)"
-status: Done
+status: done
 type: task
 priority: P1
 dependencies: ["superskill#0041"]

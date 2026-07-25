@@ -1,7 +1,7 @@
 ---
 name: "W2: Task-to-feature traceability validation (L4)"
 description: "W2: Task-to-feature traceability validation (L4)"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.984Z
 updated_at: 2026-06-14T22:03:00.475Z
 folder: docs/tasks

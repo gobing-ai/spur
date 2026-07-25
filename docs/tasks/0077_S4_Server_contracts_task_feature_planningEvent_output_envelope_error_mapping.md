@@ -1,7 +1,7 @@
 ---
 name: "S4: Server contracts (task + feature + planningEvent) + output envelope + error mapping"
 description: "S4: Server contracts (task + feature + planningEvent) + output envelope + error mapping"
-status: Done
+status: done
 created_at: 2026-06-15T16:56:10.090Z
 updated_at: 2026-06-16T16:49:05.893Z
 folder: docs/tasks

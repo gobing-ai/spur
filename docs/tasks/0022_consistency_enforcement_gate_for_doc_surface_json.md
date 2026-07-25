@@ -1,7 +1,7 @@
 ---
 name: consistency_enforcement_gate_for_doc_surface_json
 description: Build a test / spur rule asserting doc↔spec↔--json consistency across the CLI surface
-status: Done
+status: done
 created_at: 2026-06-06T06:30:00.000Z
 updated_at: 2026-06-06T17:20:00.000Z
 folder: docs/tasks

@@ -1,7 +1,7 @@
 ---
 name: "W1: Task templates, config keys and init assets"
 description: "W1: Task templates, config keys and init assets"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.983Z
 updated_at: 2026-06-14T16:45:30.142Z
 folder: docs/tasks

@@ -1,7 +1,7 @@
 ---
 name: "W2: spur feature move — cascade rename for hierarchy changes"
 description: "W2: spur feature move — cascade rename for hierarchy changes"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.984Z
 updated_at: 2026-06-14T22:20:54.841Z
 folder: docs/tasks

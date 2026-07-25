@@ -1,7 +1,7 @@
 ---
 name: "W1: spur task check — four-layer validation and section-matrix config"
 description: "W1: spur task check — four-layer validation and section-matrix config"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.982Z
 updated_at: 2026-06-14T05:35:21.630Z
 folder: docs/tasks

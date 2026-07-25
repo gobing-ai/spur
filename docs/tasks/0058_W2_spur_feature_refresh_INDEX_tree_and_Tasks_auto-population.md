@@ -1,7 +1,7 @@
 ---
 name: "W2: spur feature refresh — INDEX tree and Tasks auto-population"
 description: "W2: spur feature refresh — INDEX tree and Tasks auto-population"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.983Z
 updated_at: 2026-06-14T18:27:17.750Z
 folder: docs/tasks

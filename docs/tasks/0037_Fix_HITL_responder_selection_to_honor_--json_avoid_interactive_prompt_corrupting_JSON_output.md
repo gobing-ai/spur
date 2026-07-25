@@ -1,7 +1,7 @@
 ---
 name: Fix HITL responder selection to honor --json (avoid interactive prompt corrupting JSON output)
 description: Fix HITL responder selection to honor --json (avoid interactive prompt corrupting JSON output)
-status: Done
+status: done
 created_at: 2026-06-10T16:41:42.445Z
 updated_at: 2026-06-10T17:02:32.670Z
 folder: docs/tasks

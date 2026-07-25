@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: Process List tab in observability module (0195 wave D)
 description: ""
-status: Done
+status: done
 type: task
 profile: standard
 feature_id: G2

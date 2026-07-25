@@ -1,7 +1,7 @@
 ---
 name: "Extract packages/app application services layer"
 description: "Extract an application services layer (packages/app) from fat CLI command files to restore pre-migration architecture separation and create natural plugin seams"
-status: Done
+status: done
 created_at: 2026-06-02T18:00:00Z
 updated_at: 2026-06-03T07:21:38.806Z
 folder: docs/tasks

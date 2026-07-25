@@ -1,7 +1,7 @@
 ---
 name: "W3: sp:dev-* slash command subset and subagents"
 description: "W3: sp:dev-* slash command subset and subagents"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.985Z
 updated_at: 2026-06-15T00:04:26.598Z
 folder: docs/tasks

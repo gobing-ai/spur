@@ -1,7 +1,7 @@
 ---
 name: "W3: sp:spur-tasks and sp:spur-features companion skills"
 description: "W3: sp:spur-tasks and sp:spur-features companion skills"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.985Z
 updated_at: 2026-06-15T00:30:14.276Z
 folder: docs/tasks

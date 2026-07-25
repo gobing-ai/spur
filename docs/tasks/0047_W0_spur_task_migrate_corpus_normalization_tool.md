@@ -1,7 +1,7 @@
 ---
 name: "W0: spur task migrate — corpus normalization tool"
 description: "W0: spur task migrate — corpus normalization tool"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.981Z
 updated_at: 2026-06-13T14:30:00.000Z
 folder: docs/tasks

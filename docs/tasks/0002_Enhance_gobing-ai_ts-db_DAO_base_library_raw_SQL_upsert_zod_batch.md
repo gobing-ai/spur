@@ -1,7 +1,7 @@
 ---
 name: "Enhance @gobing-ai/ts-db DAO base library (raw SQL, upsert, zod, batch)"
 description: "Enhance @gobing-ai/ts-db DAO base library (raw SQL, upsert, zod, batch)"
-status: Canceled
+status: cancelled
 created_at: 2026-05-31T17:30:43.643Z
 updated_at: 2026-05-31T18:34:45.914Z
 folder: docs/tasks

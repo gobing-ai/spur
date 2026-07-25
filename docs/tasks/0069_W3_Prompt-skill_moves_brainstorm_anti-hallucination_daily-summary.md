@@ -1,7 +1,7 @@
 ---
 name: "W3: Prompt-skill moves — brainstorm, anti-hallucination, daily-summary"
 description: "W3: Prompt-skill moves — brainstorm, anti-hallucination, daily-summary"
-status: Done
+status: done
 created_at: 2026-06-13T01:08:18.985Z
 updated_at: 2026-06-15T04:35:07.330Z
 folder: docs/tasks

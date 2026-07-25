@@ -1,7 +1,7 @@
 ---
 name: consolidate_spur_rules_from_ts-libs_into_spur-new_as_single_source_of_truth
 description: consolidate_spur_rules_from_ts-libs_into_spur-new_as_single_source_of_truth
-status: Done
+status: done
 created_at: 2026-06-05T19:42:35.555Z
 updated_at: 2026-06-05T22:35:02.906Z
 folder: docs/tasks

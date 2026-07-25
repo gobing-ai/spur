@@ -1,7 +1,7 @@
 ---
 name: expose_rule-engine_stopOnFirst_as_spur_rule_run_stop-on-first_flag
 description: expose_rule-engine_stopOnFirst_as_spur_rule_run_stop-on-first_flag
-status: Done
+status: done
 created_at: 2026-06-04T22:24:49.553Z
 updated_at: 2026-06-04T22:24:53.008Z
 folder: docs/tasks

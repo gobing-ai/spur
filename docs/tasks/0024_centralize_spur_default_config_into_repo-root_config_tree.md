@@ -1,7 +1,7 @@
 ---
 name: centralize spur default config into repo-root config tree
 description: centralize spur default config into repo-root config tree
-status: Done
+status: done
 created_at: 2026-06-07T05:20:33.299Z
 updated_at: 2026-06-07T05:43:03.673Z
 folder: docs/tasks

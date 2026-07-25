@@ -1,7 +1,7 @@
 ---
 name: Implement HITL workflow actions (hitl.confirm/select/input) + CLI and non-interactive responders
 description: Implement HITL workflow actions (hitl.confirm/select/input) + CLI and non-interactive responders
-status: Done
+status: done
 created_at: 2026-06-10T06:48:43.386Z
 updated_at: 2026-06-10T06:48:43.386Z
 folder: docs/tasks

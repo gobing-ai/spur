@@ -1,7 +1,7 @@
 ---
 schema_version: 1
 name: "S0: spur serve launcher + configSchema.server extension + startServer"
-status: Done
+status: done
 type: task
 feature_id: S0
 priority: P1

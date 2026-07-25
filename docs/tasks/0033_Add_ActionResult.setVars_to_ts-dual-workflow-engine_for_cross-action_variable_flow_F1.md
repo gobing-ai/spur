@@ -1,7 +1,7 @@
 ---
 name: Add ActionResult.setVars to ts-dual-workflow-engine for cross-action variable flow (F1)
 description: Add ActionResult.setVars to ts-dual-workflow-engine for cross-action variable flow (F1)
-status: Done
+status: done
 created_at: 2026-06-10T00:46:55.023Z
 updated_at: 2026-06-10T01:02:04.492Z
 folder: docs/tasks

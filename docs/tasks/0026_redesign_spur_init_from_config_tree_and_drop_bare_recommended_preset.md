@@ -1,7 +1,7 @@
 ---
 name: redesign spur init from config tree and drop bare recommended preset
 description: redesign spur init from config tree and drop bare recommended preset
-status: Done
+status: done
 created_at: 2026-06-07T05:20:55.349Z
 updated_at: 2026-06-07T06:18:18.386Z
 folder: docs/tasks

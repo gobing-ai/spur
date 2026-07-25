@@ -1,7 +1,7 @@
 ---
 name: "W3: Task Kanban module — board, cards, detail panel, filters, polling, drag-and-drop"
 description: "W3: Task Kanban module — board, cards, detail panel, filters, polling, drag-and-drop"
-status: Done
+status: done
 created_at: 2026-06-15T16:57:15.341Z
 updated_at: 2026-06-17T16:35:07.708Z
 folder: docs/tasks

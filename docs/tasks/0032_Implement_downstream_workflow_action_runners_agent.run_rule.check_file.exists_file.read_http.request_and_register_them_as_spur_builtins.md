@@ -1,7 +1,7 @@
 ---
 name: "Implement downstream workflow action runners (agent.run, rule.check, file.exists, file.read, http.request) and register them as spur builtins"
 description: "Implement downstream workflow action runners (agent.run, rule.check, file.exists, file.read, http.request) and register them as spur builtins"
-status: Done
+status: done
 created_at: 2026-06-09T23:35:59.997Z
 updated_at: 2026-06-10T01:33:53.981Z
 folder: docs/tasks

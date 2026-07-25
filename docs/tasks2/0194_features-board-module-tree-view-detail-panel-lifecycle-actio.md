@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Features board module: tree view, detail panel, lifecycle actions, check runner"
 description: ""
-status: Done
+status: done
 type: task
 profile: standard
 feature_id: F8
