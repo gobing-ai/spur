@@ -13,6 +13,7 @@ import {
     SectionMutationError,
     TASK_LIFECYCLE_PROFILE,
     TaskCheckService,
+    TaskLocator,
     TaskService,
     type TaskSummary,
     type VerdictAggregate,
@@ -1025,8 +1026,22 @@ function loadTemplateBodies(projectRoot: string, variant: string): Partial<Recor
     return bodies;
 }
 
+/**
+ * Locator over every registered task folder. The L4 edge checks (parent, deps,
+ * child rollup) resolve related tasks through it, so a corpus spanning several
+ * folders no longer reports cross-folder dependencies as missing.
+ */
+async function makeTaskLocator(context: CliContext): Promise<TaskLocator> {
+    const { foldersConfig } = await resolvePlanningFolders(context.fs);
+    return new TaskLocator({
+        fs: context.fs,
+        tasksDir: context.fs.resolve(foldersConfig.active_folder),
+        foldersConfig,
+    });
+}
+
 async function makeCheckService(context: CliContext): Promise<TaskCheckService> {
-    return new TaskCheckService(context.fs, await loadSectionMatrix(context.cwd));
+    return new TaskCheckService(context.fs, await loadSectionMatrix(context.cwd), await makeTaskLocator(context));
 }
 
 /**
@@ -1051,17 +1066,16 @@ async function runDoneGateCheck(
 ): Promise<boolean> {
     const foldersConfig = (await resolvePlanningFolders(context.fs)).foldersConfig;
     const tasksDir = folderOverride ?? context.fs.resolve(foldersConfig.active_folder);
-    const entries = await context.fs.readDir(tasksDir);
-    const fileName = entries.find((n) => n.startsWith(`${wbs}_`) && n.endsWith('.md'));
-    if (!fileName) {
+    const hit = await new TaskLocator({ fs: context.fs, tasksDir, foldersConfig }).findByWbs(wbs);
+    if (!hit) {
         return false; // missing task — let updateStatus throw the real error
     }
-    const svc = new TaskCheckService(context.fs, await loadSectionMatrix(context.cwd));
+    const svc = new TaskCheckService(context.fs, await loadSectionMatrix(context.cwd), await makeTaskLocator(context));
     // Both the wip→testing and testing→done guards use default severity (not --strict, not
     // --strict-core — both are equivalent here: hard-core L3/L2-gate errors are already
     // errors in the base computation). Never pass strict:true here — that would block a
     // `pass:True`-with-warnings task that the real FSM guard would allow through.
-    const result = await svc.check(`${tasksDir}/${fileName}`, wbs, { strict: false });
+    const result = await svc.check(hit.filePath, wbs, { strict: false });
     return result.pass;
 }
 /**
