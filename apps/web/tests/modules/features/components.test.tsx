@@ -168,6 +168,29 @@ describe('FeatureTree', () => {
         const accentButtons = Array.from(buttons).filter((b) => b.getAttribute('class')?.includes('bg-spur-accent'));
         expect(accentButtons.length).toBe(1);
     });
+
+    test('renders mapped status icons and accessible labels for all 6 canonical statuses', () => {
+        const features: FeatureSummary[] = [
+            { id: 'A', name: 'Backlog Item', status: 'backlog' },
+            { id: 'B', name: 'Active Item', status: 'active' },
+            { id: 'C', name: 'Verifying Item', status: 'verifying' },
+            { id: 'D', name: 'Blocked Item', status: 'blocked' },
+            { id: 'E', name: 'Done Item', status: 'done' },
+            { id: 'F', name: 'Cancelled Item', status: 'cancelled' },
+        ];
+        const { container } = render(<FeatureTree features={features} selectedId={null} onSelect={() => {}} />);
+        const svgs = container.querySelectorAll('svg');
+        expect(svgs.length).toBe(6);
+
+        const badges = container.querySelectorAll('[aria-label^="Status:"]');
+        expect(badges.length).toBe(6);
+        expect(container.innerHTML).toContain('Status: backlog');
+        expect(container.innerHTML).toContain('Status: active');
+        expect(container.innerHTML).toContain('Status: verifying');
+        expect(container.innerHTML).toContain('Status: blocked');
+        expect(container.innerHTML).toContain('Status: done');
+        expect(container.innerHTML).toContain('Status: cancelled');
+    });
 });
 
 describe('FeatureDetail', () => {

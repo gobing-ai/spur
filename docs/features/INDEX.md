@@ -38,4 +38,6 @@
 [active] **O**: sp plugin token-efficient reliable execution architecture ([O_sp-plugin-token-efficient-reliable-execution-architecture.md](./O_sp-plugin-token-efficient-reliable-execution-architecture.md))
 [backlog] **P**: workflow run observability — enriched step lines, FSM transitions, async follow ([P_workflow-run-observability-enriched-step-lines-fsm-transitions-async-follow.md](./P_workflow-run-observability-enriched-step-lines-fsm-transitions-async-follow.md))
 [backlog] **Q**: AC-verifiable execution: BDD test scaffolds and tunable validation gates ([Q_ac-verifiable-execution-bdd-test-scaffolds-and-tunable-validation-gates.md](./Q_ac-verifiable-execution-bdd-test-scaffolds-and-tunable-validation-gates.md))
+[backlog] **R**: Feature status feedback loop: derivation sync, refresh command, Board status UX ([R_feature-status-feedback-loop-derivation-sync-refresh-command-board-status-ux.md](./R_feature-status-feedback-loop-derivation-sync-refresh-command-board-status-ux.md))
+    └── [backlog] **R1**: Feature status sync: derivation engine, refresh command, hook wiring ([R1_feature-status-sync-derivation-engine-refresh-command-hook-wiring.md](./R1_feature-status-sync-derivation-engine-refresh-command-hook-wiring.md))
 <!-- END AUTO-GENERATED -->

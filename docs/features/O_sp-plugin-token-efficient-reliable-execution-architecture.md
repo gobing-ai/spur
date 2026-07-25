@@ -205,7 +205,7 @@ Feature: sp plugin token-efficient reliable execution architecture
 | 0316 | Add dev-debug and dev-daily thin commands and normalize daily-summary env/links | done |
 | 0317 | Make sp:spur-cli an executable surface SSOT — add missing task verbs, fix section set | done |
 | 0318 | Complete the R10 least-privilege allowed-tools sweep across all sp command wrappers | done |
-| 0319 | Wire stage-registry model routing and fallback into agent resolution | todo |
+| 0319 | Wire stage-registry model routing and fallback into agent resolution | done |
 <!-- END AUTO-GENERATED -->
 ## Notes
 **Domain context**

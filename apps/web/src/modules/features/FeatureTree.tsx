@@ -1,5 +1,6 @@
 import { Badge } from '@/ui';
 import type { FeatureSummary } from '../../lib/feature-types';
+import { FeatureStatusIcon } from './status-icons';
 
 interface FeatureTreeProps {
     features: FeatureSummary[];
@@ -99,11 +100,18 @@ function TreeNode({ feature, childrenMap, selectedId, onSelect, depth }: TreeNod
     );
 }
 
-/** Status badge for the tree — same style as task-kanban TaskCard badges. */
+/** Status badge for the tree node — renders status icon + text label. */
 function StatusBadge({ status }: { status: string }) {
     return (
-        <Badge variant="outline" size="xs">
-            {status}
+        <Badge
+            variant="outline"
+            size="xs"
+            className="flex items-center gap-1 shrink-0"
+            aria-label={`Status: ${status}`}
+            title={`Status: ${status}`}
+        >
+            <FeatureStatusIcon status={status} />
+            <span>{status}</span>
         </Badge>
     );
 }
