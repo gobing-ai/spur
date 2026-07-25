@@ -106,6 +106,7 @@ list this README is checked against.
 | `dev-verify` | Verify a task against its requirements and Acceptance Criteria — traceability check producing a PASS/PARTIAL/FAIL verdict with evidence |
 | `dev-unit` | Generate or extend tests until the unit target is met |
 | `dev-wrap` | Wrap up a single completed task — learnings, metrics, doc-sync, optional feature transition and branch cleanup |
+| `dev-refresh` | Refresh feature status by feature ID, task WBS, or batch sweep via spur feature sync |
 
 #### Lifecycle — batch and parallel
 

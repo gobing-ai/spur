@@ -299,11 +299,11 @@ describe('(b) frontmatter schema — description, argument-hint, allowed-tools',
         }
     });
 
-    test('30 command files exist with unique basenames', () => {
+    test('31 command files exist with unique basenames', () => {
         const files = listCommandFiles();
-        expect(files.length).toBe(30);
+        expect(files.length).toBe(31);
         const names = new Set(files.map((f) => f.replace(/\.md$/, '')));
-        expect(names.size).toBe(30);
+        expect(names.size).toBe(31);
     });
 });
 
@@ -384,7 +384,7 @@ describe('(d) allowed-tools coherence — Skill <-> Skill() call', () => {
 describe('(e) validator reports no violations on the live corpus', () => {
     test('validate() returns zero violations', () => {
         const result = validate(ROOT);
-        expect(result.fileCount).toBe(30);
+        expect(result.fileCount).toBe(31);
         expect(result.violations).toEqual([]);
     });
 });

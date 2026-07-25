@@ -317,7 +317,7 @@ Scaffold BDD `test.todo` stubs from task Acceptance Criteria into `<workspace>/t
 
 ### 1.3 Agent command surface — commands as SSOT (feature O, ADR-032)
 
-The `plugins/sp` agent-facing command surface (28 Claude Code `/sp:dev-*` slash wrappers) is
+The `plugins/sp` agent-facing command surface (31 Claude Code `/sp:dev-*` slash wrappers) is
 **hand-authored** — each `commands/<name>.md` is the authoritative, directly-editable source.
 Per-platform adapters are **install-time output** owned by `superskill` (`superskill install sp`)
 and never committed in plugin `sp` (ADR-032).
