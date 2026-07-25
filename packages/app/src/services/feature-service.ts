@@ -499,7 +499,7 @@ export class FeatureService {
     }
 
     /** Scan registered task folders for `feature_id` edges, grouped by feature ID. */
-    private async collectTasksByFeature(): Promise<Map<string, TaskRow[]>> {
+    async collectTasksByFeature(): Promise<Map<string, TaskRow[]>> {
         const byFeature = new Map<string, TaskRow[]>();
         let names: string[];
         try {

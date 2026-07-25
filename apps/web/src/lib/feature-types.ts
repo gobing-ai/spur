@@ -116,7 +116,10 @@ export interface FeatureSyncResponse {
     ok: true;
     data: {
         direction: SyncDirection;
+        /** Number of tasks linked to the feature (the derivation inputs). */
         affectedTasks: number;
+        /** Whether a status transition was applied. */
+        applied: boolean;
         newStatus?: string;
     };
 }

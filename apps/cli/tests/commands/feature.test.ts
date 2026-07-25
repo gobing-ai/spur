@@ -481,4 +481,85 @@ describe('spur feature CLI', () => {
         expect(typeof parsed.totalFeatures).toBe('number');
         expect(Array.isArray(parsed.results)).toBe(true);
     });
+
+    test('sync <id> human text branch', async () => {
+        const listOut = createCapturedOutput();
+        await main(['feature', 'list', '--json'], { cwd, output: listOut });
+        const features = JSON.parse(lastMessage(listOut));
+        const fid = features[0]?.id ?? 'A';
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'sync', fid, '--dry-run'], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(output.messages.join('')).toContain(`Feature ${fid}:`);
+    });
+
+    test('sync --all human text branch with linked tasks and --folder', async () => {
+        const featDir = join(cwd, 'docs', 'features');
+        const tasksDir = join(cwd, 'docs', 'tasks');
+        await mkdir(featDir, { recursive: true });
+        await mkdir(tasksDir, { recursive: true });
+
+        const fid = 'A';
+        const taskContent = `---
+schema_version: 1
+wbs: "9910"
+name: "Task 9910"
+title: "Task 9910"
+status: "wip"
+feature_id: "${fid}"
+created_at: "${new Date().toISOString()}"
+updated_at: "${new Date().toISOString()}"
+---
+
+## Description
+Task description
+
+## Requirements
+- R1: Requirement 1
+
+## Solution
+Solution description
+
+## Testing
+Testing description
+
+## Review
+Review description
+`;
+        writeFileSync(join(tasksDir, '9910_sync-all-task.md'), taskContent);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'sync', '--all', '--dry-run', '--folder', featDir], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(output.messages.join('')).toContain('Evaluated');
+    });
+
+    test('show non-existent feature returns error exit code', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'show', 'Z99'], { cwd, output });
+        expect(exitCode).toBe(1);
+        expect(output.errors.join('')).toContain('Feature Z99 not found');
+    });
+
+    test('advance non-existent feature throws error', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'advance', 'Z99'], { cwd, output });
+        expect(exitCode).toBe(1);
+        expect(output.errors.join('')).toContain('Feature Z99 not found');
+    });
+
+    test('update parameter guard errors', async () => {
+        const fid = 'A';
+
+        const errOut1 = createCapturedOutput();
+        const code1 = await main(['feature', 'update', fid, '--from-file', 'foo.md'], { cwd, output: errOut1 });
+        expect(code1).toBe(2);
+        expect(errOut1.errors.join('')).toContain('--section is required with --from-file');
+
+        const errOut2 = createCapturedOutput();
+        const code2 = await main(['feature', 'update', fid, '--value', 'val'], { cwd, output: errOut2 });
+        expect(code2).toBe(2);
+        expect(errOut2.errors.join('')).toContain('--field is required with --value');
+    });
 });

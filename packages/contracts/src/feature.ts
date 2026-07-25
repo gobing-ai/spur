@@ -153,11 +153,14 @@ export const featureSyncInputSchema = z.object({
     direction: featureSyncDirectionSchema,
 });
 
-/** Sync response: `{ ok: true, data: { direction, affectedTasks, newStatus? } }`. */
+/** Sync response: `{ ok: true, data: { direction, affectedTasks, applied, newStatus? } }`. */
 export const featureSyncResponseSchema = apiSuccessSchema(
     z.object({
         direction: featureSyncDirectionSchema,
+        /** Number of tasks linked to the feature (the derivation inputs). */
         affectedTasks: z.number().int().nonnegative(),
+        /** Whether a status transition was applied. */
+        applied: z.boolean(),
         newStatus: z.string().optional(),
     }),
 );

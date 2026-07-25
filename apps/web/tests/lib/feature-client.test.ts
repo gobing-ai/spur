@@ -232,7 +232,7 @@ describe('syncFeatureStatus', () => {
     test('sends post request and returns sync response', async () => {
         const responseData = {
             ok: true as const,
-            data: { direction: 'pull' as const, affectedTasks: 1, newStatus: 'executing' },
+            data: { direction: 'pull' as const, affectedTasks: 1, applied: true, newStatus: 'executing' },
         };
         setFetch(() => jsonResponse(200, responseData));
         const result = await syncFeatureStatus({ id: 'A', direction: 'pull' });

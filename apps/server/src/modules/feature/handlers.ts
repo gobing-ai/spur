@@ -122,12 +122,15 @@ export function createFeatureHandlers(ctx: ServerContext) {
             if (input.direction === 'push') {
                 throw new Error('Push sync (feature->tasks cascade) is not implemented');
             }
-            const res = await ctx.featureService().syncFeature(input.id);
+            const svc = ctx.featureService();
+            const res = await svc.syncFeature(input.id);
+            const linkedTasks = await svc.collectTasksByFeature();
             return {
                 ok: true as const,
                 data: {
                     direction: input.direction,
-                    affectedTasks: res.applied ? 1 : 0,
+                    affectedTasks: (linkedTasks.get(input.id) ?? []).length,
+                    applied: res.applied,
                     newStatus: res.proposal.to,
                 },
             };

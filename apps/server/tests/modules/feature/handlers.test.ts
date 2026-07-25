@@ -39,6 +39,7 @@ describe('feature handlers', () => {
                     applied: true,
                     appliedHops: ['active'],
                 }),
+                collectTasksByFeature: async () => new Map([['F3', [{}, {}]]]),
                 updateBody: async () => {},
                 ...overrides,
             }),
@@ -295,15 +296,19 @@ describe('feature handlers', () => {
         expect(result.ok).toBe(true);
     });
 
-    test('sync handler pull direction delegates to syncFeature and returns newStatus', async () => {
+    test('sync handler pull direction delegates to syncFeature and returns linked-task count + newStatus', async () => {
         const handlers = createFeatureHandlers(makeCtx());
         const fn = handlers.sync['~orpc'].handler as unknown as (opts: {
             input: { id: string; direction: 'pull' | 'push' };
-        }) => Promise<{ ok: boolean; data: { direction: string; affectedTasks: number; newStatus?: string } }>;
+        }) => Promise<{
+            ok: boolean;
+            data: { direction: string; affectedTasks: number; applied: boolean; newStatus?: string };
+        }>;
         const result = await fn({ input: { id: 'F3', direction: 'pull' } });
         expect(result.ok).toBe(true);
         expect(result.data.direction).toBe('pull');
-        expect(result.data.affectedTasks).toBe(1);
+        expect(result.data.affectedTasks).toBe(2);
+        expect(result.data.applied).toBe(true);
         expect(result.data.newStatus).toBe('active');
     });
 
