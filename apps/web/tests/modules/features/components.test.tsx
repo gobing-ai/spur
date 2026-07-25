@@ -281,4 +281,23 @@ describe('FeaturesShell', () => {
 
         expect(getByText('No features match status filter "blocked".')).toBeDefined();
     });
+
+    test('closes status filter menu on Escape and on outside mousedown', async () => {
+        installFeatureFetchMock();
+        const { getByLabelText, getByText, container } = render(<FeaturesShell />);
+
+        await waitFor(() => expect(getByText('Root')).toBeDefined());
+
+        // Open the menu, then close via Escape.
+        fireEvent.click(getByLabelText('Filter features by status'));
+        expect(container.querySelector('[data-filter-menu]')).not.toBeNull();
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(container.querySelector('[data-filter-menu]')).toBeNull();
+
+        // Re-open, then close via mousedown outside the menu anchor.
+        fireEvent.click(getByLabelText('Filter features by status'));
+        expect(container.querySelector('[data-filter-menu]')).not.toBeNull();
+        fireEvent.mouseDown(document.body);
+        expect(container.querySelector('[data-filter-menu]')).toBeNull();
+    });
 });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/ui';
 import { loadFeatureShow, loadFeatures } from '../../lib/feature-client';
 import type { FeatureSummary } from '../../lib/feature-types';
@@ -42,6 +42,7 @@ export default function FeaturesShell() {
     const [statusFilter, setStatusFilter] = useState<string>('all');
     const [showFilterMenu, setShowFilterMenu] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const filterMenuRef = useRef<HTMLDivElement | null>(null);
 
     const load = useCallback(async (signal: AbortSignal) => {
         try {
@@ -60,6 +61,25 @@ export default function FeaturesShell() {
         void load(controller.signal);
         return () => controller.abort();
     }, [load]);
+
+    // Dismiss the status-filter menu on outside click or Escape.
+    useEffect(() => {
+        if (!showFilterMenu) return;
+        const onMouseDown = (event: MouseEvent) => {
+            if (filterMenuRef.current && !filterMenuRef.current.contains(event.target as Node)) {
+                setShowFilterMenu(false);
+            }
+        };
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') setShowFilterMenu(false);
+        };
+        document.addEventListener('mousedown', onMouseDown);
+        document.addEventListener('keydown', onKeyDown);
+        return () => {
+            document.removeEventListener('mousedown', onMouseDown);
+            document.removeEventListener('keydown', onKeyDown);
+        };
+    }, [showFilterMenu]);
 
     // Live tail: SSE-driven refetch on feature.* events.
     useEffect(() => {
@@ -133,7 +153,7 @@ export default function FeaturesShell() {
                     <div className="px-3 py-2 border-b border-spur-border flex items-center justify-between">
                         <span className="text-xs font-semibold text-spur-text uppercase tracking-wide">Features</span>
                         <div className="flex items-center gap-1">
-                            <div className="relative">
+                            <div className="relative" ref={filterMenuRef}>
                                 <Button
                                     variant="ghost"
                                     size="xs"
