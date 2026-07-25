@@ -149,12 +149,140 @@ describe('health endpoints', () => {
     });
 });
 
+describe('csrf middleware', () => {
+    /**
+     * Mount the real pipeline over a state-changing route, so these exercise the
+     * middleware order rather than csrf() in isolation.
+     */
+    function appWithMutatingRoute(): Hono {
+        const app = new Hono();
+        mountMiddleware(app);
+        app.post('/api/team/agents/a1/start', (c) => c.json({ ok: true }));
+        app.get('/api/team/agents', (c) => c.json({ ok: true }));
+        return app;
+    }
+
+    const withCorsEnv = async (value: string | undefined, fn: () => Promise<void>) => {
+        const prev = process.env.SPUR_CORS_ORIGINS;
+        if (value === undefined) delete process.env.SPUR_CORS_ORIGINS;
+        else process.env.SPUR_CORS_ORIGINS = value;
+        try {
+            await fn();
+        } finally {
+            if (prev === undefined) delete process.env.SPUR_CORS_ORIGINS;
+            else process.env.SPUR_CORS_ORIGINS = prev;
+        }
+    };
+
+    test('blocks a cross-origin POST with no Content-Type (a CORS-simple request)', async () => {
+        // The core CSRF shape: no body, no custom headers → no preflight → the
+        // request reaches the handler and its side effect fires, even though the
+        // attacker cannot read the response. CORS does not prevent this.
+        await withCorsEnv(undefined, async () => {
+            const res = await appWithMutatingRoute().request('http://localhost/api/team/agents/a1/start', {
+                method: 'POST',
+                headers: { origin: 'https://evil.example.com' },
+            });
+            expect(res.status).toBe(403);
+        });
+    });
+
+    test('blocks a cross-origin POST that smuggles JSON as text/plain', async () => {
+        // c.req.json() is text().then(JSON.parse) — it never checks Content-Type — so
+        // text/plain keeps the request "simple" while still parsing as JSON server-side.
+        await withCorsEnv(undefined, async () => {
+            const res = await appWithMutatingRoute().request('http://localhost/api/team/agents/a1/start', {
+                method: 'POST',
+                headers: { origin: 'https://evil.example.com', 'content-type': 'text/plain' },
+                body: JSON.stringify({ line: 'rm -rf /\n' }),
+            });
+            expect(res.status).toBe(403);
+        });
+    });
+
+    test('allows a same-origin POST', async () => {
+        await withCorsEnv(undefined, async () => {
+            const res = await appWithMutatingRoute().request('http://localhost/api/team/agents/a1/start', {
+                method: 'POST',
+                headers: { origin: 'http://localhost' },
+            });
+            expect(res.status).toBe(200);
+        });
+    });
+
+    test('allows a same-origin POST identified by Sec-Fetch-Site', async () => {
+        await withCorsEnv(undefined, async () => {
+            const res = await appWithMutatingRoute().request('http://localhost/api/team/agents/a1/start', {
+                method: 'POST',
+                headers: { 'sec-fetch-site': 'same-origin' },
+            });
+            expect(res.status).toBe(200);
+        });
+    });
+
+    test('allows an explicitly allowlisted cross-origin POST (SPUR_CORS_ORIGINS)', async () => {
+        // The csrf origin check mirrors the CORS allowlist, so opting an origin in
+        // does not leave it able to read responses but unable to send requests.
+        await withCorsEnv('https://board.example.com', async () => {
+            const res = await appWithMutatingRoute().request('http://localhost/api/team/agents/a1/start', {
+                method: 'POST',
+                headers: { origin: 'https://board.example.com' },
+            });
+            expect(res.status).toBe(200);
+        });
+    });
+
+    test('does not block JSON-typed cross-origin requests at the csrf layer', async () => {
+        // application/json already forces a preflight, which CORS answers; csrf only
+        // guards the form-element content types. Guarding JSON too would be redundant
+        // and would break non-browser clients that send no Origin.
+        await withCorsEnv(undefined, async () => {
+            const res = await appWithMutatingRoute().request('http://localhost/api/team/agents/a1/start', {
+                method: 'POST',
+                headers: { origin: 'https://evil.example.com', 'content-type': 'application/json' },
+                body: '{}',
+            });
+            expect(res.status).toBe(200);
+        });
+    });
+
+    test('leaves safe methods alone', async () => {
+        await withCorsEnv(undefined, async () => {
+            const res = await appWithMutatingRoute().request('http://localhost/api/team/agents', {
+                headers: { origin: 'https://evil.example.com' },
+            });
+            expect(res.status).toBe(200);
+        });
+    });
+
+    test('still answers CORS preflight for an allowlisted origin', async () => {
+        // csrf sits after cors precisely so preflight OPTIONS short-circuits in cors
+        // (which returns 204 without calling next()) and never hits the csrf guard.
+        await withCorsEnv('https://board.example.com', async () => {
+            const res = await appWithMutatingRoute().request('http://localhost/api/team/agents/a1/start', {
+                method: 'OPTIONS',
+                headers: {
+                    origin: 'https://board.example.com',
+                    'access-control-request-method': 'POST',
+                },
+            });
+            expect(res.status).toBe(204);
+            expect(res.headers.get('access-control-allow-origin')).toBe('https://board.example.com');
+        });
+    });
+});
+
 describe('bodyLimit middleware', () => {
+    // These POST text/plain, which is a csrf-guarded shape — so they must present a
+    // same-origin Origin to reach bodyLimit at all. csrf deliberately runs first: an
+    // unauthorized request should be refused before the server buffers its body.
+    const sameOrigin = { origin: 'http://localhost', 'content-type': 'text/plain' };
+
     test('rejects oversized body before oRPC parse', async () => {
         const body = 'x'.repeat(2_000_000);
-        const res = await createApp().request('/api/health', {
+        const res = await createApp().request('http://localhost/api/health', {
             method: 'POST',
-            headers: { 'content-type': 'text/plain' },
+            headers: sameOrigin,
             body,
         });
         expect(res.status).toBe(413);
@@ -162,12 +290,15 @@ describe('bodyLimit middleware', () => {
 
     test('accepts body within limit', async () => {
         const body = 'x'.repeat(512_000);
-        const res = await createApp().request('/api/health', {
+        const res = await createApp().request('http://localhost/api/health', {
             method: 'POST',
-            headers: { 'content-type': 'text/plain' },
+            headers: sameOrigin,
             body,
         });
-        expect(res.status).not.toBe(413);
+        // /api/health routes GET only, so an in-limit POST falls through to the
+        // 404 handler — which is the proof we want: it passed csrf and bodyLimit and
+        // reached routing. Asserting only `not 413` would also hold for a 403.
+        expect(res.status).toBe(404);
     });
 });
 
