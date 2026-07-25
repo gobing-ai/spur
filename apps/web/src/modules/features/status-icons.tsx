@@ -18,7 +18,7 @@ export const FEATURE_STATUS_MAP: Record<string, StatusMeta> = {
         colorClass: 'text-spur-text-muted',
         Icon: ({ className = 'w-3.5 h-3.5' }: { className?: string }) => (
             <svg
-                className={`inline-block shrink-0 text-spur-text-muted ${className}`}
+                className={`inline-block shrink-0 ${className}`}
                 viewBox="0 0 16 16"
                 fill="none"
                 stroke="currentColor"
@@ -35,7 +35,7 @@ export const FEATURE_STATUS_MAP: Record<string, StatusMeta> = {
         colorClass: 'text-spur-accent',
         Icon: ({ className = 'w-3.5 h-3.5' }: { className?: string }) => (
             <svg
-                className={`inline-block shrink-0 text-spur-accent ${className}`}
+                className={`inline-block shrink-0 ${className}`}
                 viewBox="0 0 16 16"
                 fill="currentColor"
                 aria-hidden="true"
@@ -47,10 +47,10 @@ export const FEATURE_STATUS_MAP: Record<string, StatusMeta> = {
     verifying: {
         status: 'verifying',
         label: 'Verifying',
-        colorClass: 'text-amber-500',
+        colorClass: 'text-spur-warning',
         Icon: ({ className = 'w-3.5 h-3.5' }: { className?: string }) => (
             <svg
-                className={`inline-block shrink-0 text-amber-500 ${className}`}
+                className={`inline-block shrink-0 ${className}`}
                 viewBox="0 0 16 16"
                 fill="none"
                 stroke="currentColor"
@@ -68,7 +68,7 @@ export const FEATURE_STATUS_MAP: Record<string, StatusMeta> = {
         colorClass: 'text-error',
         Icon: ({ className = 'w-3.5 h-3.5' }: { className?: string }) => (
             <svg
-                className={`inline-block shrink-0 text-error ${className}`}
+                className={`inline-block shrink-0 ${className}`}
                 viewBox="0 0 16 16"
                 fill="none"
                 stroke="currentColor"
@@ -89,7 +89,7 @@ export const FEATURE_STATUS_MAP: Record<string, StatusMeta> = {
         colorClass: 'text-success',
         Icon: ({ className = 'w-3.5 h-3.5' }: { className?: string }) => (
             <svg
-                className={`inline-block shrink-0 text-success ${className}`}
+                className={`inline-block shrink-0 ${className}`}
                 viewBox="0 0 16 16"
                 fill="none"
                 stroke="currentColor"
@@ -109,7 +109,7 @@ export const FEATURE_STATUS_MAP: Record<string, StatusMeta> = {
         colorClass: 'text-spur-text-muted opacity-60',
         Icon: ({ className = 'w-3.5 h-3.5' }: { className?: string }) => (
             <svg
-                className={`inline-block shrink-0 text-spur-text-muted opacity-60 ${className}`}
+                className={`inline-block shrink-0 ${className}`}
                 viewBox="0 0 16 16"
                 fill="none"
                 stroke="currentColor"
@@ -131,7 +131,7 @@ export function FeatureStatusIcon({ status, className }: { status: string; class
     const meta = FEATURE_STATUS_MAP[key];
     if (meta) {
         const IconComp = meta.Icon;
-        return <IconComp className={className} />;
+        return <IconComp className={`${meta.colorClass} ${className ?? 'w-3.5 h-3.5'}`} />;
     }
     return (
         <svg
