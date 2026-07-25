@@ -354,6 +354,71 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                 context.setExitCode(1);
             }
         });
+
+    // ── sync ──
+    feature
+        .command('sync')
+        .summary('Sync feature status with linked task states.')
+        .argument('[id]', 'Feature ID to sync (optional if --all is passed)')
+        .option('--all', 'Sync all features with linked tasks')
+        .option('--dry-run', 'Report proposed status sync transitions without applying')
+        .option('--force', 'Force applying reopen proposals without confirmation')
+        .option('--folder <path>', 'Custom features folder')
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (id, options) => {
+            const svc = await makeService(context, options.folder);
+            try {
+                if (!options.all && !id) {
+                    context.output.error('Feature ID is required unless --all is passed');
+                    context.setExitCode(2);
+                    return;
+                }
+
+                if (options.all) {
+                    const result = await svc.syncAllFeatures({
+                        dryRun: options.dryRun,
+                        forceConfirm: options.force,
+                    });
+                    if (options.json) {
+                        context.output.write(toJson(result));
+                    } else {
+                        context.output.write(
+                            `Evaluated ${result.evaluated}/${result.totalFeatures} features; updated ${result.updatedCount} feature(s).`,
+                        );
+                        for (const res of result.results) {
+                            const tag = res.applied
+                                ? 'UPDATED'
+                                : res.proposal.from === res.proposal.to
+                                  ? 'NOOP'
+                                  : 'SKIPPED';
+                            context.output.write(
+                                `  [${tag}] ${res.proposal.featureId}: ${res.proposal.from} -> ${res.proposal.to} (${res.proposal.reason})`,
+                            );
+                        }
+                    }
+                } else if (id) {
+                    const result = await svc.syncFeature(id, {
+                        dryRun: options.dryRun,
+                        forceConfirm: options.force,
+                    });
+                    if (options.json) {
+                        context.output.write(toJson(result));
+                    } else {
+                        const tag = result.applied
+                            ? 'UPDATED'
+                            : result.proposal.from === result.proposal.to
+                              ? 'NOOP'
+                              : 'SKIPPED';
+                        context.output.write(
+                            `Feature ${id}: [${tag}] ${result.proposal.from} -> ${result.proposal.to} (${result.proposal.reason})`,
+                        );
+                    }
+                }
+            } catch (err) {
+                context.output.error(String(err));
+                context.setExitCode(1);
+            }
+        });
 }
 
 async function makeService(context: CliContext, folderOverride?: string): Promise<FeatureService> {

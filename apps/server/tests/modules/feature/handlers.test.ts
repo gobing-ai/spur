@@ -34,6 +34,11 @@ describe('feature handlers', () => {
                     ref: { id: 'A', filePath: '/test/A.md', kind: 'feature' as const, folder: '.' },
                 }),
                 refresh: async () => ({ index: '', tasksUpdated: 3 }),
+                syncFeature: async (id: string) => ({
+                    proposal: { featureId: id, from: 'backlog', to: 'active', reason: 'Active task' },
+                    applied: true,
+                    appliedHops: ['active'],
+                }),
                 updateBody: async () => {},
                 ...overrides,
             }),
@@ -290,14 +295,25 @@ describe('feature handlers', () => {
         expect(result.ok).toBe(true);
     });
 
-    test('sync handler returns ok true', async () => {
+    test('sync handler pull direction delegates to syncFeature and returns newStatus', async () => {
         const handlers = createFeatureHandlers(makeCtx());
         const fn = handlers.sync['~orpc'].handler as unknown as (opts: {
-            input: { id: string; direction: 'up' | 'down' };
-        }) => Promise<{ ok: boolean; data: { direction: string; affectedTasks: number } }>;
-        const result = await fn({ input: { id: 'F3', direction: 'up' } });
+            input: { id: string; direction: 'pull' | 'push' };
+        }) => Promise<{ ok: boolean; data: { direction: string; affectedTasks: number; newStatus?: string } }>;
+        const result = await fn({ input: { id: 'F3', direction: 'pull' } });
         expect(result.ok).toBe(true);
-        expect(result.data.direction).toBe('up');
-        expect(result.data.affectedTasks).toBe(0);
+        expect(result.data.direction).toBe('pull');
+        expect(result.data.affectedTasks).toBe(1);
+        expect(result.data.newStatus).toBe('active');
+    });
+
+    test('sync handler push direction throws explicit error', async () => {
+        const handlers = createFeatureHandlers(makeCtx());
+        const fn = handlers.sync['~orpc'].handler as unknown as (opts: {
+            input: { id: string; direction: 'pull' | 'push' };
+        }) => Promise<unknown>;
+        await expect(fn({ input: { id: 'F3', direction: 'push' } })).rejects.toThrow(
+            'Push sync (feature->tasks cascade) is not implemented',
+        );
     });
 });

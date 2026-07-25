@@ -119,12 +119,17 @@ export function createFeatureHandlers(ctx: ServerContext) {
         }),
 
         sync: os.feature.sync.handler(async ({ input }) => {
-            // Sync feature status with linked tasks — full implementation
-            // deferred (needs task-by-feature query + aggregate logic).
-            // Returns ok: true with affectedTasks: 0 so the UI doesn't block.
+            if (input.direction === 'push') {
+                throw new Error('Push sync (feature->tasks cascade) is not implemented');
+            }
+            const res = await ctx.featureService().syncFeature(input.id);
             return {
                 ok: true as const,
-                data: { direction: input.direction, affectedTasks: 0 },
+                data: {
+                    direction: input.direction,
+                    affectedTasks: res.applied ? 1 : 0,
+                    newStatus: res.proposal.to,
+                },
             };
         }),
     };

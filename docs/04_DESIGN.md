@@ -294,6 +294,14 @@ Reads `history_etl_*` tables; estimates cost from per-model pricing.
 Reserved CLI surface for richer history reports. Currently prints a TODO marker so migration can
 stabilize before the report implementation is designed.
 
+#### `spur feature sync [id] [--all] [--dry-run] [--force] [--json]`
+Sync feature status with linked task states via conservative forward-only derivation rules (ADR-0322).
+- `[id]` — sync a single feature by ID.
+- `--all` — evaluate and sync all features with linked tasks.
+- `--dry-run` — report proposed status sync transitions without applying writes.
+- `--force` — force applying reopen proposals (`done/cancelled -> active` when non-terminal tasks are linked) without confirmation.
+- `POST /features/{id}/sync` HTTP endpoint: `pull` direction delegates to `syncFeature` (`{ direction: 'pull', affectedTasks, newStatus }`); `push` direction returns an explicit error ("Push sync not implemented").
+
 #### `spur task scaffold-tests <wbs> [--file <path>] [--folder <path>] [--json]`
 Scaffold BDD `test.todo` stubs from task Acceptance Criteria into `<workspace>/tests/tasks/<wbs>.test.ts` (or `--file <path>`). Each scenario produces one stub with Given/When/Then steps as AAA comments and a `// @ac:<normalizedTitle>` tag. Expands Scenario Outlines into 1 stub per Examples row. Merges idempotently with existing test files (preserves filled bodies, appends new scenarios, reports drifted scenarios). `--json` returns `{ wbs, targetFile, created, skipped, drifted, driftedScenarios, warnings }`.
 

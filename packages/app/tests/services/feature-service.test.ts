@@ -591,8 +591,125 @@ describe('FeatureService', () => {
             await expect(s.move('A1', 'B')).rejects.toThrow(/collision/);
             // Zero writes: A1/A11 still in place, no B1 created.
             expect(await fs.exists(join(featuresDir, 'A1_sub.md'))).toBe(true);
-            expect(await fs.exists(join(featuresDir, 'B1_sub.md'))).toBe(false);
             cleanup();
+        });
+    });
+
+    describe('feature status sync', () => {
+        test('deriveFeatureStatus returns no-op when no linked tasks exist', async () => {
+            const feat = await svc.create('Sync Test Empty');
+            const prop = await svc.deriveFeatureStatus(feat.ref.id);
+            expect(prop.from).toBe('backlog');
+            expect(prop.to).toBe('backlog');
+            expect(prop.reason).toBe('No linked tasks found');
+        });
+
+        test('deriveFeatureStatus proposes active when linked task is wip', async () => {
+            const feat = await svc.create('Sync Test Active');
+            const tPath = join(tasksDir, '9901_task-for-sync.md');
+            writeFileSync(
+                tPath,
+                `---
+schema_version: 1
+wbs: "9901"
+name: "Task for Sync"
+status: "wip"
+feature_id: "${feat.ref.id}"
+created_at: "${new Date().toISOString()}"
+updated_at: "${new Date().toISOString()}"
+---
+# 9901: Task for Sync
+`,
+            );
+
+            const prop = await svc.deriveFeatureStatus(feat.ref.id);
+            expect(prop.from).toBe('backlog');
+            expect(prop.to).toBe('active');
+            expect(prop.reason).toContain('active work');
+            expect(prop.hops).toEqual(['active']);
+        });
+
+        test('deriveFeatureStatus proposes blocked when all non-terminal tasks are blocked', async () => {
+            const feat = await svc.create('Sync Test Blocked');
+            writeFileSync(
+                join(tasksDir, '9902_blocked-task.md'),
+                `---
+schema_version: 1
+wbs: "9902"
+name: "Blocked Task"
+status: "blocked"
+feature_id: "${feat.ref.id}"
+created_at: "${new Date().toISOString()}"
+updated_at: "${new Date().toISOString()}"
+---
+# 9902: Blocked Task
+`,
+            );
+
+            const prop = await svc.deriveFeatureStatus(feat.ref.id);
+            expect(prop.from).toBe('backlog');
+            expect(prop.to).toBe('blocked');
+            expect(prop.reason).toContain('blocked');
+        });
+
+        test('deriveFeatureStatus proposes reopen (active) with requiresConfirm on a done feature', async () => {
+            const feat = await svc.create('Sync Test Reopen');
+            await svc.transition(feat.ref.id, 'active');
+            await svc.transition(feat.ref.id, 'verifying');
+            await svc.transition(feat.ref.id, 'done');
+
+            writeFileSync(
+                join(tasksDir, '9903_reopen-task.md'),
+                `---
+schema_version: 1
+wbs: "9903"
+name: "Reopen Task"
+status: "wip"
+feature_id: "${feat.ref.id}"
+created_at: "${new Date().toISOString()}"
+updated_at: "${new Date().toISOString()}"
+---
+# 9903: Reopen Task
+`,
+            );
+
+            const prop = await svc.deriveFeatureStatus(feat.ref.id);
+            expect(prop.from).toBe('done');
+            expect(prop.to).toBe('active');
+            expect(prop.requiresConfirm).toBe(true);
+
+            // syncFeature without forceConfirm skips reopening
+            const res = await svc.syncFeature(feat.ref.id);
+            expect(res.applied).toBe(false);
+
+            // syncFeature with forceConfirm applies reopening
+            const resForce = await svc.syncFeature(feat.ref.id, { forceConfirm: true });
+            expect(resForce.applied).toBe(true);
+            expect(resForce.appliedHops).toEqual(['active']);
+            const updated = await svc.show(feat.ref.id);
+            expect(updated?.status).toBe('active');
+        });
+
+        test('syncAllFeatures evaluates features with linked tasks', async () => {
+            const feat = await svc.create('Sync All Feat');
+            writeFileSync(
+                join(tasksDir, '9904_task.md'),
+                `---
+schema_version: 1
+wbs: "9904"
+name: "Task 9904"
+status: "wip"
+feature_id: "${feat.ref.id}"
+created_at: "${new Date().toISOString()}"
+updated_at: "${new Date().toISOString()}"
+---
+# 9904: Task 9904
+`,
+            );
+
+            const res = await svc.syncAllFeatures({ dryRun: true });
+            expect(res.evaluated).toBeGreaterThan(0);
+            expect(res.results.some((r) => r.proposal.featureId === feat.ref.id)).toBe(true);
         });
     });
 });

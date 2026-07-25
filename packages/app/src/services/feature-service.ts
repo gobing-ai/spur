@@ -8,6 +8,7 @@
 
 import { acquireCreateLock, atomicWriteAsync, MarkdownDocument } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+import { type CheckFeatureFindings, FeatureCheckService } from './feature-check';
 import type { EntityRef, PlanningWriteService, WriteResult } from './planning-write-service';
 
 /** A task row rendered into a feature's `## Tasks` table. */
@@ -15,6 +16,39 @@ interface TaskRow {
     wbs: string;
     name: string;
     status: string;
+}
+
+/** Proposal returned by `deriveFeatureStatus`. */
+export interface FeatureSyncProposal {
+    featureId: string;
+    from: string;
+    to: string;
+    reason: string;
+    requiresConfirm?: boolean;
+    gateBlocked?: boolean;
+    gateFindings?: CheckFeatureFindings[];
+    hops?: string[];
+}
+
+/** Options for feature status sync operations. */
+export interface FeatureSyncOptions {
+    dryRun?: boolean;
+    forceConfirm?: boolean;
+}
+
+/** Result of a single feature status sync. */
+export interface FeatureSyncResult {
+    proposal: FeatureSyncProposal;
+    applied: boolean;
+    appliedHops: string[];
+}
+
+/** Result of a bulk feature status sync over all features with linked tasks. */
+export interface FeatureSyncAllResult {
+    totalFeatures: number;
+    evaluated: number;
+    updatedCount: number;
+    results: FeatureSyncResult[];
 }
 
 /** Dependencies injected into FeatureService. */
@@ -270,6 +304,198 @@ export class FeatureService {
         }
 
         return { index, tasksUpdated };
+    }
+
+    /**
+     * Derive proposed feature status from its linked tasks state per ADR/0322.
+     * Conservative forward-only derivation mapping.
+     */
+    async deriveFeatureStatus(featureId: string): Promise<FeatureSyncProposal> {
+        const feature = await this.show(featureId);
+        if (!feature) {
+            throw new Error(`Feature ${featureId} not found`);
+        }
+
+        const tasksByFeature = await this.collectTasksByFeature();
+        const linkedTasks = tasksByFeature.get(featureId) ?? [];
+        const from = feature.status;
+
+        if (linkedTasks.length === 0) {
+            return {
+                featureId,
+                from,
+                to: from,
+                reason: 'No linked tasks found',
+            };
+        }
+
+        const isTerminal = (st: string) => st === 'done' || st === 'cancelled';
+        const terminalTasks = linkedTasks.filter((t) => isTerminal(t.status));
+        const doneTasks = linkedTasks.filter((t) => t.status === 'done');
+        const activeTasks = linkedTasks.filter((t) => t.status === 'wip' || t.status === 'testing');
+        const nonTerminalTasks = linkedTasks.filter((t) => !isTerminal(t.status));
+
+        // Reopen rule: closed feature with non-terminal tasks
+        if (from === 'done' || from === 'cancelled') {
+            if (nonTerminalTasks.length > 0) {
+                return {
+                    featureId,
+                    from,
+                    to: 'active',
+                    reason: 'Linked tasks contain non-terminal work while feature is closed',
+                    requiresConfirm: true,
+                    hops: ['active'],
+                };
+            }
+            return {
+                featureId,
+                from,
+                to: from,
+                reason: 'All linked tasks are terminal and feature is closed',
+            };
+        }
+
+        // Helper to evaluate L4 AC gate before transitioning into verifying or done
+        const checkL4Gate = async (): Promise<{ pass: boolean; findings: CheckFeatureFindings[] }> => {
+            const checkSvc = new FeatureCheckService(this.ctx.fs);
+            const res = await checkSvc.check(feature.filePath, featureId, {
+                featuresDir: this.ctx.featuresDir,
+                tasksDir: this.ctx.tasksDir,
+            });
+            const l4Errors = res.findings.filter((f) => f.layer === 'L4' && f.severity === 'error');
+            return { pass: l4Errors.length === 0, findings: res.findings };
+        };
+
+        // All tasks terminal (with at least 1 done) -> propose advance to done via legal hops
+        if (terminalTasks.length === linkedTasks.length && doneTasks.length > 0) {
+            if (from === 'done') {
+                return { featureId, from, to: 'done', reason: 'All linked tasks are terminal and feature is done' };
+            }
+
+            const gate = await checkL4Gate();
+            if (!gate.pass) {
+                const targetBeforeVerifying = from === 'backlog' || from === 'blocked' ? 'active' : from;
+                return {
+                    featureId,
+                    from,
+                    to: targetBeforeVerifying,
+                    reason: 'L4 AC-traceability gate failed; stopped before verifying',
+                    gateBlocked: true,
+                    gateFindings: gate.findings,
+                    ...(from !== targetBeforeVerifying ? { hops: [targetBeforeVerifying] } : {}),
+                };
+            }
+
+            // L4 gate passed -> calculate hops to done
+            let hops: string[] = [];
+            if (from === 'backlog' || from === 'blocked') {
+                hops = ['active', 'verifying', 'done'];
+            } else if (from === 'active') {
+                hops = ['verifying', 'done'];
+            } else if (from === 'verifying') {
+                hops = ['done'];
+            }
+
+            return {
+                featureId,
+                from,
+                to: 'done',
+                reason: 'All linked tasks are terminal and L4 AC gate passed',
+                ...(hops.length > 0 ? { hops } : {}),
+            };
+        }
+
+        // Active work present
+        if (activeTasks.length > 0) {
+            if (from === 'active') {
+                return { featureId, from, to: 'active', reason: 'Linked tasks contain active work' };
+            }
+            return {
+                featureId,
+                from,
+                to: 'active',
+                reason: 'Linked tasks contain active work (wip or testing)',
+                hops: ['active'],
+            };
+        }
+
+        // All non-terminal tasks are blocked
+        if (nonTerminalTasks.length > 0 && nonTerminalTasks.every((t) => t.status === 'blocked')) {
+            if (from === 'blocked') {
+                return { featureId, from, to: 'blocked', reason: 'All non-terminal linked tasks are blocked' };
+            }
+            return {
+                featureId,
+                from,
+                to: 'blocked',
+                reason: 'All non-terminal linked tasks are blocked',
+                hops: ['blocked'],
+            };
+        }
+
+        return {
+            featureId,
+            from,
+            to: from,
+            reason: 'Linked tasks state does not trigger status transition',
+        };
+    }
+
+    /**
+     * Sync a feature's status with its linked tasks.
+     */
+    async syncFeature(featureId: string, options?: FeatureSyncOptions): Promise<FeatureSyncResult> {
+        const proposal = await this.deriveFeatureStatus(featureId);
+
+        if (proposal.from === proposal.to) {
+            return { proposal, applied: false, appliedHops: [] };
+        }
+
+        if (options?.dryRun) {
+            return { proposal, applied: false, appliedHops: [] };
+        }
+
+        if (proposal.requiresConfirm && !options?.forceConfirm) {
+            return { proposal, applied: false, appliedHops: [] };
+        }
+
+        const hops = proposal.hops ?? (proposal.from !== proposal.to ? [proposal.to] : []);
+        if (hops.length === 0) {
+            return { proposal, applied: false, appliedHops: [] };
+        }
+
+        const appliedHops: string[] = [];
+        for (const hop of hops) {
+            await this.transition(featureId, hop);
+            appliedHops.push(hop);
+        }
+
+        return { proposal, applied: true, appliedHops };
+    }
+
+    /**
+     * Sync all features that have linked tasks.
+     */
+    async syncAllFeatures(options?: FeatureSyncOptions): Promise<FeatureSyncAllResult> {
+        const allFeatures = await this.list();
+        const tasksByFeature = await this.collectTasksByFeature();
+        const evaluated = allFeatures.filter((f) => (tasksByFeature.get(f.id) ?? []).length > 0);
+
+        const results: FeatureSyncResult[] = [];
+        let updatedCount = 0;
+
+        for (const f of evaluated) {
+            const res = await this.syncFeature(f.id, options);
+            if (res.applied) updatedCount++;
+            results.push(res);
+        }
+
+        return {
+            totalFeatures: allFeatures.length,
+            evaluated: evaluated.length,
+            updatedCount,
+            results,
+        };
     }
 
     /** Scan registered task folders for `feature_id` edges, grouped by feature ID. */

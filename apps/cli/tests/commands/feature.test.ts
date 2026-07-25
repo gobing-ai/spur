@@ -450,4 +450,35 @@ describe('spur feature CLI', () => {
         expect(parsed.length).toBeGreaterThan(1);
         expect(exitCode === 0 || exitCode === 1).toBe(true);
     });
+
+    test('sync requires id or --all (exits 2)', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'sync'], { cwd, output });
+        expect(exitCode).toBe(2);
+        expect(output.errors.join('')).toContain('Feature ID is required unless --all is passed');
+    });
+
+    test('sync <id> --dry-run --json outputs sync proposal', async () => {
+        const listOut = createCapturedOutput();
+        await main(['feature', 'list', '--json'], { cwd, output: listOut });
+        const features = JSON.parse(lastMessage(listOut));
+        const fid = features[0]?.id ?? 'A';
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'sync', fid, '--dry-run', '--json'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lastMessage(output));
+        expect(parsed.proposal.featureId).toBe(fid);
+        expect(typeof parsed.proposal.from).toBe('string');
+        expect(typeof parsed.proposal.to).toBe('string');
+    });
+
+    test('sync --all --json evaluates features in corpus', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['feature', 'sync', '--all', '--json'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lastMessage(output));
+        expect(typeof parsed.totalFeatures).toBe('number');
+        expect(Array.isArray(parsed.results)).toBe(true);
+    });
 });

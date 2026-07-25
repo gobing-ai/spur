@@ -74,6 +74,10 @@ export type {
     FeatureServiceContext,
     FeatureShowResult,
     FeatureSummary,
+    FeatureSyncAllResult,
+    FeatureSyncOptions,
+    FeatureSyncProposal,
+    FeatureSyncResult,
 } from './services/feature-service';
 export { FeatureService } from './services/feature-service';
 export {
