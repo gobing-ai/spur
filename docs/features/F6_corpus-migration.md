@@ -2,11 +2,11 @@
 schema_version: 1
 id: F6
 name: Corpus migration
-status: backlog
+status: verifying
 priority: P1
 tags: [rd3-migration, wave-0]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: 2026-06-12T23:45:00.000Z
+updated_at: "2026-07-25T19:33:21.942Z"
 ---
 
 # F6: Corpus migration
@@ -60,3 +60,5 @@ code). Cutover sequence + legacy freeze: cc-agents task 0404.
 ## History
 
 - 2026-06-12 — created (rd3-migration feature finalizing)
+- 2026-07-25T19:33:21.709Z backlog → active (system)
+- 2026-07-25T19:33:21.942Z active → verifying (system)

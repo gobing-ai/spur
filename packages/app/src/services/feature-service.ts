@@ -485,9 +485,23 @@ export class FeatureService {
         let updatedCount = 0;
 
         for (const f of evaluated) {
-            const res = await this.syncFeature(f.id, options);
-            if (res.applied) updatedCount++;
-            results.push(res);
+            try {
+                const res = await this.syncFeature(f.id, options);
+                if (res.applied) updatedCount++;
+                results.push(res);
+            } catch (err) {
+                const message = err instanceof Error ? err.message : String(err);
+                results.push({
+                    proposal: {
+                        featureId: f.id,
+                        from: f.status as FeatureStatus,
+                        to: f.status as FeatureStatus,
+                        reason: `Transition blocked by guard: ${message}`,
+                    },
+                    applied: false,
+                    appliedHops: [],
+                });
+            }
         }
 
         return {

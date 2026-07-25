@@ -2,11 +2,11 @@
 schema_version: 1
 id: "K"
 name: "Observability System Events Table Redesign"
-status: backlog
+status: done
 priority: P2
 tags: []
 created_at: "2026-07-07T23:15:49.635Z"
-updated_at: "2026-07-07T23:23:09.244Z"
+updated_at: "2026-07-25T19:33:17.564Z"
 ---
 
 # K: Observability System Events Table Redesign
@@ -154,3 +154,6 @@ Feature: Observability System Events Table Redesign
 ## Notes
 
 ## History
+- 2026-07-25T19:33:17.100Z backlog → active (system)
+- 2026-07-25T19:33:17.331Z active → verifying (system)
+- 2026-07-25T19:33:17.564Z verifying → done (system)

@@ -2,11 +2,11 @@
 schema_version: 1
 id: "Q"
 name: "AC-verifiable execution: BDD test scaffolds and tunable validation gates"
-status: backlog
+status: done
 priority: P2
 tags: []
 created_at: "2026-07-24T19:15:55.798Z"
-updated_at: "2026-07-24T19:22:03.691Z"
+updated_at: "2026-07-25T19:33:21.131Z"
 ---
 
 # Q: AC-verifiable execution: BDD test scaffolds and tunable validation gates
@@ -81,3 +81,6 @@ Feature: AC-verifiable execution
 ## Notes
 
 ## History
+- 2026-07-25T19:33:20.656Z backlog → active (system)
+- 2026-07-25T19:33:20.890Z active → verifying (system)
+- 2026-07-25T19:33:21.131Z verifying → done (system)

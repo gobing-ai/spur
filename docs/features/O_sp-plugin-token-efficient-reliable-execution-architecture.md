@@ -2,11 +2,11 @@
 schema_version: 1
 id: "O"
 name: "sp plugin token-efficient reliable execution architecture"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-07-18T17:24:53.258Z"
-updated_at: "2026-07-20T00:46:32.141Z"
+updated_at: "2026-07-25T19:33:20.378Z"
 ---
 
 # O: sp plugin token-efficient reliable execution architecture
@@ -256,3 +256,4 @@ Feature: sp plugin token-efficient reliable execution architecture
 15. Implementation kickoff is gated on each affected task documenting its `spur workflow` driver path and `spur` CLI invocation surface, or explicitly recording the approved exception and reason.
 ## History
 - 2026-07-20T00:46:32.141Z backlog → active (system)
+- 2026-07-25T19:33:20.378Z active → verifying (system)

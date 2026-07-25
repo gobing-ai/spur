@@ -2,11 +2,11 @@
 schema_version: 1
 id: F4
 name: Lifecycle and events
-status: backlog
+status: active
 priority: P0
 tags: [rd3-migration, wave-0, wave-1, wave-2]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: 2026-06-12T23:45:00.000Z
+updated_at: "2026-07-25T19:33:01.272Z"
 ---
 
 # F4: Lifecycle and events
@@ -69,3 +69,4 @@ design (risk R1, accepted).
 ## History
 
 - 2026-06-12 — created (rd3-migration feature finalizing)
+- 2026-07-25T19:33:01.272Z backlog → active (system)

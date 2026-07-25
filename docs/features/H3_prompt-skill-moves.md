@@ -2,11 +2,11 @@
 schema_version: 1
 id: H3
 name: Prompt-skill moves
-status: backlog
+status: verifying
 priority: P2
 tags: [rd3-migration, wave-3]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: 2026-06-12T23:45:00.000Z
+updated_at: "2026-07-25T19:33:14.283Z"
 ---
 
 # H3: Prompt-skill moves
@@ -49,3 +49,5 @@ cc-agents removal side: task 0406 there (gated on these landings). Checklist-tie
 ## History
 
 - 2026-06-12 — created (rd3-migration feature finalizing)
+- 2026-07-25T19:33:14.057Z backlog → active (system)
+- 2026-07-25T19:33:14.283Z active → verifying (system)

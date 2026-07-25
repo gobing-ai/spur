@@ -2,11 +2,11 @@
 schema_version: 1
 id: "M2"
 name: "Teams residual polish for release (post-M1)"
-status: backlog
+status: done
 priority: P2
 tags: []
 created_at: "2026-07-15T23:02:57.700Z"
-updated_at: "2026-07-15T23:03:19.612Z"
+updated_at: "2026-07-25T19:33:16.539Z"
 ---
 
 # M2: Teams residual polish for release (post-M1)
@@ -72,3 +72,6 @@ Feature: Teams residual polish for release (post-M1)
 ## Notes
 
 ## History
+- 2026-07-25T19:33:16.081Z backlog → active (system)
+- 2026-07-25T19:33:16.313Z active → verifying (system)
+- 2026-07-25T19:33:16.539Z verifying → done (system)

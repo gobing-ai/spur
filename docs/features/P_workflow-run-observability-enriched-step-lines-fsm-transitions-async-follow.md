@@ -2,11 +2,11 @@
 schema_version: 1
 id: "P"
 name: "workflow run observability — enriched step lines, FSM transitions, async follow"
-status: backlog
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-07-21T20:46:29.481Z"
-updated_at: "2026-07-21T22:49:30.392Z"
+updated_at: "2026-07-25T19:33:21.408Z"
 ---
 
 # P: workflow run observability — enriched step lines, FSM transitions, async follow
@@ -206,3 +206,5 @@ independent of every display decision.
 The CLI has no task-rename verb (`spur task` exposes no `delete` or `rename`), so the title was left rather
 than direct-writing the corpus. Read the scope from `### Background`.
 ## History
+- 2026-07-25T19:33:21.180Z backlog → active (system)
+- 2026-07-25T19:33:21.408Z active → verifying (system)

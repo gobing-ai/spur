@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A1"
 name: "Init scaffold ownership contract"
-status: backlog
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-07-03T23:28:23.522Z"
-updated_at: "2026-07-22T19:42:26.008Z"
+updated_at: "2026-07-25T19:33:16.825Z"
 ---
 
 # A1: Init scaffold ownership contract
@@ -113,3 +113,5 @@ Feature: Init scaffold ownership contract
 ## Notes
 
 ## History
+- 2026-07-25T19:33:16.588Z backlog → active (system)
+- 2026-07-25T19:33:16.825Z active → verifying (system)

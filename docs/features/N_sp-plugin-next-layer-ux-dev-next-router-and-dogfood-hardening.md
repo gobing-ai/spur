@@ -2,14 +2,14 @@
 schema_version: 1
 id: "N"
 name: "sp plugin next-layer UX — dev-next router and dogfood hardening"
-status: backlog
+status: verifying
 priority: P1
 tags:
   - wayfinder
   - sp-plugin
   - meta
 created_at: "2026-07-17T00:53:58.309Z"
-updated_at: "2026-07-19T00:12:48.532Z"
+updated_at: "2026-07-25T19:33:14.782Z"
 ---
 
 # N: sp plugin next-layer UX — dev-next router and dogfood hardening
@@ -256,3 +256,5 @@ Feature: sp plugin next-layer UX — wayfinder map N
 ## History
 
 - 2026-07-16 — Wayfinder map charted from `/sp:dev-brainstorm --wayfind` discovery interview (decisions locked in ## Notes).
+- 2026-07-25T19:33:14.555Z backlog → active (system)
+- 2026-07-25T19:33:14.782Z active → verifying (system)

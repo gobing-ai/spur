@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A2"
 name: "Embedded job queue and scheduler"
-status: backlog
+status: done
 priority: P2
 tags: []
 created_at: "2026-07-03T23:28:26.008Z"
-updated_at: "2026-07-03T23:31:11.363Z"
+updated_at: "2026-07-25T19:33:15.547Z"
 ---
 
 # A2: Embedded job queue and scheduler
@@ -78,3 +78,6 @@ Feature: Embedded job queue and scheduler
 ## Notes
 
 ## History
+- 2026-07-25T19:33:15.075Z backlog → active (system)
+- 2026-07-25T19:33:15.312Z active → verifying (system)
+- 2026-07-25T19:33:15.547Z verifying → done (system)

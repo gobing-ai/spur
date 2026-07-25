@@ -2,11 +2,11 @@
 schema_version: 1
 id: "M"
 name: "Teams: declarative agent teams + Board module over existing message/drain/supervisor backbones"
-status: backlog
+status: active
 priority: P2
 tags: []
 created_at: "2026-07-14T04:28:15.630Z"
-updated_at: "2026-07-14T06:54:45.853Z"
+updated_at: "2026-07-25T19:33:19.292Z"
 ---
 
 # M: Teams: declarative agent teams + Board module over existing message/drain/supervisor backbones
@@ -137,3 +137,4 @@ testable AC · Design · Plan), staying `todo`. Two decisions locked during refi
 The earlier backend-impl gap is **now closed** by 0257 (schema) + 0258 (runtime). 0256 is now **thin routes** —
 its service methods live in 0258 per ADR-021 (logic in `packages/app`, apps thin).
 ## History
+- 2026-07-25T19:33:19.292Z backlog → active (system)

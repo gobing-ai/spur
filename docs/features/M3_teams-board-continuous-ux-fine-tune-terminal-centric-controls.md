@@ -2,11 +2,11 @@
 schema_version: 1
 id: "M3"
 name: "Teams board continuous UX fine-tune (Terminal-centric controls)"
-status: backlog
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-07-16T18:17:26.784Z"
-updated_at: "2026-07-16T23:58:27.161Z"
+updated_at: "2026-07-25T19:33:19.814Z"
 ---
 
 # M3: Teams board continuous UX fine-tune (Terminal-centric controls)
@@ -156,3 +156,5 @@ _(none — fog cleared by 0269 implementation + residual cleanup)_
 - `sp:spur-cli` for corpus updates; `/sp:dev-run 0269` was the execution path.
 - Prefer existing UI primitives (`Badge`, `Button`, `Modal`, `Select` from `@/ui`).
 ## History
+- 2026-07-25T19:33:19.577Z backlog → active (system)
+- 2026-07-25T19:33:19.814Z active → verifying (system)
