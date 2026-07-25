@@ -42,8 +42,8 @@ Close the task→feature status feedback loop so a feature's status always refle
 | 0322 | Decide feature-status derivation rules and where the sync logic lives | done |
 | 0323 | Decide post-verify feature-refresh hook placement, missing-feature-id UX, and unattended policy | done |
 | 0324 | Decide refresh command surface: single dev-refresh with modes vs dev-refresh + dev-refreshall | done |
-| 0325 | Board: add status icon to each Features tree node | todo |
-| 0326 | Board: add status filter menu to Features panel header | todo |
+| 0325 | Board: add status icon to each Features tree node | done |
+| 0326 | Board: add status filter menu to Features panel header | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
