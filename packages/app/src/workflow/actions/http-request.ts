@@ -54,17 +54,26 @@ const HEADER_VALUE_RE = /^[ \t]*[!-~\x80-\xff][\t -~\x80-\xff]*$/;
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Resolve `${vars.key}` and `${key}` template syntax from context.vars. */
-function resolveTemplate(value: string, vars: Vars): string {
-    return value.replace(/\$\{(vars\.)?(\w+)\}/g, (_match, _prefix, key: string) => {
-        return vars[key] ?? '';
-    });
-}
-
 /** Strip header values from error messages (auth tokens must not leak to logs). */
 function redactHeaders(message: string): string {
     // Match both `"headers":{...}` (JSON) and `headers {...}` (stringified/Error output) forms.
     return message.replace(/"?headers"?\s*[: ]\s*\{[^}]+\}/gi, 'headers <redacted>');
+}
+
+/**
+ * Reduce a URL to `scheme://host/path` for error messages. A URL assembled from
+ * workflow vars can carry a token in its query string or userinfo, and an error
+ * string reaches logs and the run record — so never echo the raw URL back.
+ */
+function redactUrl(raw: string): string {
+    try {
+        const parsed = new URL(raw);
+        const query = parsed.search ? '?<redacted>' : '';
+        return `${parsed.protocol}//${parsed.host}${parsed.pathname}${query}`;
+    } catch {
+        // Unparseable: keep only the scheme prefix, which cannot hold credentials.
+        return `${raw.split(/[?#]/)[0]?.slice(0, 60) ?? ''}…`;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -84,12 +93,17 @@ function redactHeaders(message: string): string {
  * - Rejects `redirect: 'follow'` — auto-following escapes the host allowlist
  *   gate (which only validates the initial URL), creating an SSRF risk.
  *   Callers must re-issue per hop so every host is re-validated.
+ * - Does not itself expand `${…}` templates. The engine resolves them once,
+ *   before dispatch; a second pass here would re-expand resolved *values*, so
+ *   untrusted content captured into a var (a response body, a file, agent
+ *   output) could reference other vars and splice a secret into the request.
  *
- * Options:
- * - `url` (string, required): the target URL, may contain `${vars.*}` templates.
+ * Options (all `${vars.*}` / `${env.*}` templates are resolved by the engine
+ * before this runner sees them; an undefined reference fails the run there):
+ * - `url` (string, required): the target URL.
  * - `method` (string, default `GET`): HTTP method, normalized to uppercase.
- * - `headers` (Record<string,string>): request headers, template-resolved.
- * - `body` (string): raw request body, template-resolved.
+ * - `headers` (Record<string,string>): request headers.
+ * - `body` (string): raw request body.
  * - `failOnStatus` (number[]): status codes that should be treated as failure.
  * - `timeoutMs` (number, default 30000, max 120000): request timeout.
  * - `maxResponseBytes` (number, default 1048576): max response body size.
@@ -110,12 +124,20 @@ export class HttpRequestActionRunner implements ActionRunner {
         this.allowlist = allowlist;
     }
 
-    async execute(options: Record<string, unknown>, context: ActionRunContext): Promise<ActionResult> {
-        // --- Extract and template-resolve options ---
-        const rawUrl = asRequiredString(options.url, 'url');
+    async execute(options: Record<string, unknown>, _context: ActionRunContext): Promise<ActionResult> {
+        // --- Extract options ---
+        // Templates are already resolved: the engine expands `${vars.*}` / `${env.*}`
+        // over every option before an action sees it (and fails loud on an unknown
+        // reference). Re-expanding here would run a second pass over resolved *values* —
+        // so a response body or file captured into a var could smuggle its own
+        // `${vars.token}` into a URL or header. Consume the options as delivered.
+        const url = asOptionalString(options.url);
+        if (url === undefined || url.length === 0) {
+            return { ok: false, error: 'http.request: url is required' };
+        }
         const method = (asOptionalString(options.method) ?? 'GET').toUpperCase();
         const rawHeaders = asRecord(options.headers) ?? {};
-        const rawBody = asOptionalString(options.body);
+        const body = asOptionalString(options.body);
         const failOnStatus = asNumberArray(options.failOnStatus);
         const timeoutMs = asNumber(options.timeoutMs) ?? DEFAULT_TIMEOUT_MS;
         const maxResponseBytes = asNumber(options.maxResponseBytes) ?? DEFAULT_MAX_RESPONSE_BYTES;
@@ -140,30 +162,19 @@ export class HttpRequestActionRunner implements ActionRunner {
             return { ok: false, error: `http.request: maxResponseBytes must be positive, got ${maxResponseBytes}` };
         }
 
-        // --- Template-resolve strings ---
-        let url: string;
-        let body: string | undefined;
-        let headers: Record<string, string>;
-        try {
-            url = resolveTemplate(rawUrl, context.vars);
-            body = rawBody !== undefined ? resolveTemplate(rawBody, context.vars) : undefined;
-            headers = {};
-            for (const [key, value] of Object.entries(rawHeaders)) {
-                if (!HEADER_NAME_RE.test(key)) {
-                    throw new Error(`invalid header name: ${JSON.stringify(key)}`);
-                }
-                // Validate AFTER template resolution — the injected var, not the
-                // template, is what reaches the wire (a var containing CR/LF would
-                // otherwise smuggle a header past this gate). The error names only
-                // the key: the resolved value may carry a secret.
-                const resolved = resolveTemplate(value, context.vars);
-                if (!HEADER_VALUE_RE.test(resolved)) {
-                    throw new Error(`invalid header value for ${JSON.stringify(key)}`);
-                }
-                headers[key] = resolved;
+        // --- Header validation ---
+        // Runs on the already-resolved values, which is what reaches the wire: a var
+        // whose value carries CR/LF must not smuggle a header past this gate. Errors
+        // name only the key — the value may be a secret.
+        const headers: Record<string, string> = {};
+        for (const [key, value] of Object.entries(rawHeaders)) {
+            if (!HEADER_NAME_RE.test(key)) {
+                return { ok: false, error: `http.request: invalid header name: ${JSON.stringify(key)}` };
             }
-        } catch (err) {
-            return { ok: false, error: `http.request: ${(err as Error).message}` };
+            if (!HEADER_VALUE_RE.test(value)) {
+                return { ok: false, error: `http.request: invalid header value for ${JSON.stringify(key)}` };
+            }
+            headers[key] = value;
         }
 
         // --- URL security gates ---
@@ -171,7 +182,7 @@ export class HttpRequestActionRunner implements ActionRunner {
         try {
             parsed = new URL(url);
         } catch {
-            return { ok: false, error: redactHeaders(`http.request: invalid URL: ${url}`) };
+            return { ok: false, error: `http.request: invalid URL: ${redactUrl(url)}` };
         }
 
         if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
@@ -250,13 +261,6 @@ export class HttpRequestActionRunner implements ActionRunner {
 // ---------------------------------------------------------------------------
 // Option coercion helpers
 // ---------------------------------------------------------------------------
-
-function asRequiredString(value: unknown, name: string): string {
-    if (typeof value !== 'string' || value.length === 0) {
-        throw new Error(`${name} is required`);
-    }
-    return value;
-}
 
 function asOptionalString(value: unknown): string | undefined {
     if (value === undefined || value === null) return undefined;

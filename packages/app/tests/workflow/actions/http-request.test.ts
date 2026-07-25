@@ -286,20 +286,19 @@ describe('HttpRequestActionRunner', () => {
         expect(result.error).toContain('invalid header value');
     });
 
-    test('rejects a header whose RESOLVED value smuggles CR/LF via a template var', async () => {
+    test('rejects a header whose value carries CR/LF', async () => {
         const { runner, fake } = newRunner();
 
-        // The raw template passes the value regex; the injected var is what
-        // must be validated — otherwise a var carries header injection to the wire.
-        const headerTemplate = `$${'{vars.token}'}`;
+        // The engine resolves templates before dispatch, so what arrives here is the
+        // value that reaches the wire — CR/LF in it is header injection.
         const result = await runner.execute(
-            { url: 'https://api.example.com/data', headers: { 'X-Token': headerTemplate } },
-            makeContext({ token: 'abc\r\nX-Injected: 1' }),
+            { url: 'https://api.example.com/data', headers: { 'X-Token': 'abc\r\nX-Injected: 1' } },
+            makeContext(),
         );
 
         expect(result.ok).toBe(false);
         expect(result.error).toContain('invalid header value');
-        // The secret-bearing resolved value must not leak into the error.
+        // The secret-bearing value must not leak into the error.
         expect(result.error).not.toContain('abc');
         expect(fake.calls.length).toBe(0);
     });
@@ -393,44 +392,88 @@ describe('HttpRequestActionRunner', () => {
         expect(result.error).toContain('<redacted>');
     });
 
-    // --- Template resolution ---
+    // --- Template ownership ---
+    //
+    // The engine expands `${…}` once, over every option, before dispatch. The runner
+    // must NOT expand again: a second pass would run over already-resolved *values*,
+    // so untrusted content captured into a var could reference other vars.
 
-    test('template-resolves url from context.vars', async () => {
+    test('does not expand templates itself — options arrive already resolved', async () => {
         const { runner, fake } = newRunner();
         fake.nextResponse = makeResponse(200, 'ok');
 
-        const urlTemplate = `https://api.example.com/$${'{vars.path}'}`;
-        const result = await runner.execute({ url: urlTemplate }, makeContext({ path: 'users/42' }));
+        // Engine-resolved options: no `${…}` left. Vars are populated but irrelevant.
+        const result = await runner.execute(
+            { url: 'https://api.example.com/users/42', method: 'POST', body: 'user=42' },
+            makeContext({ path: 'SHOULD-NOT-BE-USED' }),
+        );
 
         expect(result.ok).toBe(true);
         expect(fake.calls[0]?.url).toBe('https://api.example.com/users/42');
-    });
-
-    test('template-resolves headers from context.vars', async () => {
-        const { runner, fake } = newRunner();
-        fake.nextResponse = makeResponse(200, 'ok');
-
-        const headersTemplate = { 'X-Token': `$${'{token}'}` };
-        await runner.execute(
-            { url: 'https://api.example.com/data', headers: headersTemplate },
-            makeContext({ token: 'abc123' }),
-        );
-
-        expect(fake.calls[0]?.opts).toHaveProperty('headers');
-        expect((fake.calls[0]?.opts as Record<string, unknown>).headers).toEqual({ 'X-Token': 'abc123' });
-    });
-
-    test('template-resolves body from context.vars', async () => {
-        const { runner, fake } = newRunner();
-        fake.nextResponse = makeResponse(200, 'ok');
-
-        const bodyTemplate = `user=$${'{vars.userId}'}`;
-        await runner.execute(
-            { url: 'https://api.example.com/data', method: 'POST', body: bodyTemplate },
-            makeContext({ userId: '42' }),
-        );
-
         expect(fake.calls[0]?.body).toBe('user=42');
+    });
+
+    test('does not re-expand a vars reference carried inside a resolved value', async () => {
+        const { runner, fake } = newRunner();
+        fake.nextResponse = makeResponse(200, 'ok');
+
+        // Models untrusted content that reached a var (a captured response body, a
+        // file, agent output) and happens to contain template syntax. It must travel
+        // verbatim — expanding it would splice `apiToken` into the request.
+        const untrusted = `https://api.example.com/echo?leak=$${'{vars.apiToken}'}`;
+        const result = await runner.execute({ url: untrusted }, makeContext({ apiToken: 'super-secret' }));
+
+        expect(result.ok).toBe(true);
+        expect(fake.calls[0]?.url).toBe(untrusted);
+        expect(fake.calls[0]?.url).not.toContain('super-secret');
+    });
+
+    test('does not re-expand template syntax carried in a resolved header value', async () => {
+        const { runner, fake } = newRunner();
+        fake.nextResponse = makeResponse(200, 'ok');
+
+        const untrusted = `token-$${'{vars.apiToken}'}`;
+        await runner.execute(
+            { url: 'https://api.example.com/data', headers: { 'X-Token': untrusted } },
+            makeContext({ apiToken: 'super-secret' }),
+        );
+
+        const sent = (fake.calls[0]?.opts as Record<string, unknown>).headers as Record<string, string>;
+        expect(sent['X-Token']).toBe(untrusted);
+        expect(sent['X-Token']).not.toContain('super-secret');
+    });
+
+    // --- Required options ---
+
+    test('a missing url fails the step instead of throwing', async () => {
+        const { runner, fake } = newRunner();
+
+        // Must not reject: the engine's runActionStep has no catch around
+        // execute(), so a throw escapes the run's onError policy entirely.
+        const result = await runner.execute({}, makeContext());
+
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('url is required');
+        expect(fake.calls.length).toBe(0);
+    });
+
+    test('an empty url fails the step instead of throwing', async () => {
+        const { runner } = newRunner();
+
+        const result = await runner.execute({ url: '' }, makeContext());
+
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('url is required');
+    });
+
+    test('an unparseable url is reported without echoing its query string', async () => {
+        const { runner } = newRunner();
+
+        const result = await runner.execute({ url: 'ht!tp://bad url?token=super-secret' }, makeContext());
+
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('invalid URL');
+        expect(result.error).not.toContain('super-secret');
     });
 
     // --- Redirect policy ---

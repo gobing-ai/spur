@@ -179,6 +179,97 @@ describe('registerSpurBuiltins', () => {
         expect(traceJson).not.toContain('never-persist-this');
     });
 
+    test('http.request templates are resolved once, by the engine, end-to-end', async () => {
+        // The runner deliberately does no template expansion of its own. Driving it
+        // through the real host proves the engine still resolves `${vars.*}` — the
+        // property the runner's own unit tests cannot observe, because they construct
+        // the runner directly and never go through resolveTemplates.
+        const seen: string[] = [];
+        const host = new WorkflowEngineHost();
+        registerSpurBuiltins(host, {
+            agentService: { runTraced: async () => ({ exitCode: 0, stdout: '' }) } as unknown as AgentService,
+            ruleService: { evaluate: async () => ({ exitCode: 0, findings: [] }) } as unknown as RuleService,
+            hitlResponder: { respond: async () => ({ value: 'yes' }) } as unknown as HitlResponder,
+            httpRequester: {
+                rawRequest: async (_method: string, url: string) => {
+                    seen.push(url);
+                    return { status: 200, headers: {}, body: '' };
+                },
+            },
+            hostAllowlist: new Set(['https://api.example.com']),
+        });
+
+        // Workflow template syntax, not a JS template literal (see the note in the
+        // hitl test below for why it is built by concatenation).
+        const urlTemplate = `https://api.example.com/$${'{vars.path}'}`;
+        const result = await new StateMachineDriver({
+            host,
+            persistence: new MemoryWorkflowPersistenceAdapter(),
+        }).run(
+            {
+                name: 'http-template-e2e',
+                initialState: 'call',
+                terminalStates: ['done'],
+                states: [
+                    { id: 'call', onEnter: [{ kind: 'http.request', options: { url: urlTemplate } }] },
+                    { id: 'done' },
+                ],
+                transitions: [{ from: 'call', to: 'done' }],
+            },
+            { runId: 'http-template-e2e-1', vars: { path: 'users/42' } },
+        );
+
+        expect(result.status).toBe('done');
+        expect(seen).toEqual(['https://api.example.com/users/42']);
+    });
+
+    test('a missing http.request url fails the step under onError policy, not by throwing', async () => {
+        // Guards the contract that every action runner returns `{ok:false}` rather
+        // than throwing: the engine's runActionStep wraps execute() in try/finally
+        // with no catch, so a throw would escape the run's onError policy.
+        let requested = false;
+        const persistence = new MemoryWorkflowPersistenceAdapter();
+        const host = new WorkflowEngineHost();
+        registerSpurBuiltins(host, {
+            agentService: { runTraced: async () => ({ exitCode: 0, stdout: '' }) } as unknown as AgentService,
+            ruleService: { evaluate: async () => ({ exitCode: 0, findings: [] }) } as unknown as RuleService,
+            hitlResponder: { respond: async () => ({ value: 'yes' }) } as unknown as HitlResponder,
+            httpRequester: {
+                rawRequest: async () => {
+                    requested = true;
+                    return { status: 200, headers: {}, body: '' };
+                },
+            },
+            hostAllowlist: new Set(['https://api.example.com']),
+        });
+
+        const result = await new StateMachineDriver({ host, persistence }).run(
+            {
+                name: 'http-missing-url-e2e',
+                initialState: 'call',
+                terminalStates: ['done'],
+                states: [
+                    {
+                        id: 'call',
+                        // `continue` proves the failure went through the policy rather
+                        // than aborting the run.
+                        onEnter: [{ kind: 'http.request', options: {}, onError: 'continue' }],
+                    },
+                    { id: 'done' },
+                ],
+                transitions: [{ from: 'call', to: 'done' }],
+            },
+            { runId: 'http-missing-url-e2e-1' },
+        );
+        await Promise.resolve();
+
+        // Reaching a terminal state at all proves execute() did not throw past the
+        // engine; the recorded failure proves it reported the error through the result.
+        expect(result.status).toBe('done');
+        expect(requested).toBe(false);
+        expect(persistence.actionRuns[0]?.resultJson ?? '').toContain('url is required');
+    });
+
     test('hitl answer propagates to a later step via setVars end-to-end (R7)', async () => {
         // Prove a hitl.input answer is merged into run vars and is visible to a later
         // node's action — the cross-step path that unit tests (which only assert the
