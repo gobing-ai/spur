@@ -15,4 +15,3 @@ Wraps the **sp:code-verification** skill.
 ## Implementation
 
 - `Skill(skill="sp:code-verification", args="verify $ARGUMENTS")`
-
