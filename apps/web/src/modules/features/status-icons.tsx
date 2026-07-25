@@ -7,6 +7,9 @@ export interface StatusMeta {
     Icon: (props: { className?: string }) => React.JSX.Element;
 }
 
+/** Canonical feature statuses in presentation order. */
+export const FEATURE_STATUSES = ['backlog', 'active', 'verifying', 'blocked', 'done', 'cancelled'] as const;
+
 /**
  * Mapping table from canonical feature status to inline SVG icon & color class.
  * Canonical statuses: backlog, active, verifying, blocked, done, cancelled.

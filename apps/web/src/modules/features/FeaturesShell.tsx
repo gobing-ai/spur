@@ -6,20 +6,41 @@ import { resolveApiUrl } from '../../lib/rpc-client';
 import FeatureDetail from './FeatureDetail';
 import FeatureTree from './FeatureTree';
 import NewFeaturePanel from './NewFeaturePanel';
+import { FEATURE_STATUSES, FeatureStatusIcon } from './status-icons';
 
 const sseUrl = () => `${resolveApiUrl()}/events/planning`;
 
+function FilterIcon({ className = 'w-3.5 h-3.5' }: { className?: string }) {
+    return (
+        <svg
+            className={`inline-block shrink-0 ${className}`}
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.75"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+        >
+            <polygon points="1.5 2.5 14.5 2.5 9.5 8.5 9.5 13.5 6.5 13.5 6.5 8.5 1.5 2.5" />
+        </svg>
+    );
+}
+
 /**
- * Shell for the features board module (task 0194).
+ * Shell for the features board module (task 0194 / 0326).
  *
- * Left column: ID-derived tree with status badges (FeatureTree). Right column:
- * detail panel when a feature is selected (FeatureDetail). SSE subscription to
- * `feature.*` events keeps the tree + selected detail live without refresh.
+ * Left column: ID-derived tree with status badges and filter menu (FeatureTree).
+ * Right column: detail panel when a feature is selected (FeatureDetail). SSE
+ * subscription to `feature.*` events keeps the tree + selected detail live
+ * without refresh.
  */
 export default function FeaturesShell() {
     const [features, setFeatures] = useState<FeatureSummary[] | null>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [showNewRootPanel, setShowNewRootPanel] = useState(false);
+    const [statusFilter, setStatusFilter] = useState<string>('all');
+    const [showFilterMenu, setShowFilterMenu] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const load = useCallback(async (signal: AbortSignal) => {
@@ -82,6 +103,28 @@ export default function FeaturesShell() {
         // Reload the feature list
         void load(new AbortController().signal);
     };
+
+    const getFilteredFeatures = (allFeatures: FeatureSummary[]) => {
+        if (statusFilter === 'all') return allFeatures;
+        const normFilter = statusFilter.toLowerCase();
+        const matchingIds = new Set<string>();
+
+        for (const f of allFeatures) {
+            if (f.status.toLowerCase() === normFilter) {
+                matchingIds.add(f.id);
+                let currentId = f.id;
+                while (currentId.length > 1) {
+                    currentId = currentId.slice(0, -1);
+                    matchingIds.add(currentId);
+                }
+            }
+        }
+
+        return allFeatures.filter((f) => matchingIds.has(f.id));
+    };
+
+    const filteredFeatures = getFilteredFeatures(features);
+
     return (
         <>
             <div className="flex h-full overflow-hidden" data-features-shell>
@@ -89,21 +132,104 @@ export default function FeaturesShell() {
                 <div className="w-72 shrink-0 border-r border-spur-border overflow-y-auto bg-base-200">
                     <div className="px-3 py-2 border-b border-spur-border flex items-center justify-between">
                         <span className="text-xs font-semibold text-spur-text uppercase tracking-wide">Features</span>
-                        <Button
-                            variant="ghost"
-                            size="xs"
-                            className="text-spur-text-muted hover:text-spur-accent"
-                            onClick={() => setShowNewRootPanel(true)}
-                            aria-label="Add root feature"
-                            title="Add root feature"
-                        >
-                            +
-                        </Button>
+                        <div className="flex items-center gap-1">
+                            <div className="relative">
+                                <Button
+                                    variant="ghost"
+                                    size="xs"
+                                    className={`relative text-spur-text-muted hover:text-spur-accent flex items-center gap-1 ${
+                                        statusFilter !== 'all' ? 'text-spur-accent font-semibold' : ''
+                                    }`}
+                                    onClick={() => setShowFilterMenu((prev) => !prev)}
+                                    aria-label="Filter features by status"
+                                    aria-expanded={showFilterMenu}
+                                    title="Filter features by status"
+                                >
+                                    <FilterIcon className="w-3.5 h-3.5" />
+                                    {statusFilter !== 'all' && (
+                                        <span
+                                            className="w-1.5 h-1.5 rounded-full bg-spur-accent shrink-0"
+                                            aria-hidden="true"
+                                        />
+                                    )}
+                                </Button>
+                                {showFilterMenu && (
+                                    <div
+                                        className="absolute right-0 top-full mt-1 z-20 w-44 rounded-md shadow-lg bg-base-100 border border-spur-border py-1 text-xs"
+                                        data-filter-menu
+                                    >
+                                        <div className="px-2.5 py-1 font-semibold text-spur-text-muted border-b border-spur-border flex items-center justify-between">
+                                            <span>Filter by Status</span>
+                                            {statusFilter !== 'all' && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setStatusFilter('all');
+                                                        setShowFilterMenu(false);
+                                                    }}
+                                                    className="text-[10px] text-spur-accent hover:underline"
+                                                >
+                                                    Reset
+                                                </button>
+                                            )}
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setStatusFilter('all');
+                                                setShowFilterMenu(false);
+                                            }}
+                                            className={`w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-base-200 ${
+                                                statusFilter === 'all'
+                                                    ? 'font-semibold text-spur-accent bg-spur-accent/10'
+                                                    : 'text-spur-text'
+                                            }`}
+                                        >
+                                            <span className="flex-1">All</span>
+                                            {statusFilter === 'all' && <span>✓</span>}
+                                        </button>
+                                        {FEATURE_STATUSES.map((st) => (
+                                            <button
+                                                key={st}
+                                                type="button"
+                                                onClick={() => {
+                                                    setStatusFilter(st);
+                                                    setShowFilterMenu(false);
+                                                }}
+                                                className={`w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-base-200 capitalize ${
+                                                    statusFilter === st
+                                                        ? 'font-semibold text-spur-accent bg-spur-accent/10'
+                                                        : 'text-spur-text'
+                                                }`}
+                                            >
+                                                <FeatureStatusIcon status={st} />
+                                                <span className="flex-1 capitalize">{st}</span>
+                                                {statusFilter === st && <span>✓</span>}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                            <Button
+                                variant="ghost"
+                                size="xs"
+                                className="text-spur-text-muted hover:text-spur-accent"
+                                onClick={() => setShowNewRootPanel(true)}
+                                aria-label="Add root feature"
+                                title="Add root feature"
+                            >
+                                +
+                            </Button>
+                        </div>
                     </div>
                     {features.length === 0 ? (
                         <div className="p-3 text-xs text-spur-text-muted italic">No features found.</div>
+                    ) : filteredFeatures.length === 0 ? (
+                        <div className="p-3 text-xs text-spur-text-muted italic">
+                            No features match status filter "{statusFilter}".
+                        </div>
                     ) : (
-                        <FeatureTree features={features} selectedId={selectedId} onSelect={setSelectedId} />
+                        <FeatureTree features={filteredFeatures} selectedId={selectedId} onSelect={setSelectedId} />
                     )}
                 </div>
 

@@ -233,4 +233,52 @@ describe('FeaturesShell', () => {
         const failed = render(<FeaturesShell />);
         await waitFor(() => expect(failed.getByRole('alert').textContent).toContain('Failed to load features'));
     });
+
+    test('opens status filter menu on filter button click and filters tree by selected status', async () => {
+        installFeatureFetchMock();
+        const { getByLabelText, getByText, queryByText, container } = render(<FeaturesShell />);
+
+        await waitFor(() => expect(getByText('Root')).toBeDefined());
+
+        // Both 'Root' (active) and 'Child' (done) are visible initially
+        expect(getByText('Root')).toBeDefined();
+        expect(getByText('Child')).toBeDefined();
+
+        // Click filter button
+        const filterBtn = getByLabelText('Filter features by status');
+        fireEvent.click(filterBtn);
+
+        // Menu pops up containing canonical statuses
+        expect(container.querySelector('[data-filter-menu]')).not.toBeNull();
+
+        // Filter by 'active'
+        const activeOption = Array.from(container.querySelectorAll('[data-filter-menu] button')).find((b) =>
+            b.textContent?.includes('active'),
+        );
+        expect(activeOption).toBeDefined();
+        if (activeOption) fireEvent.click(activeOption);
+
+        // Under 'active' filter, 'Root' is visible, 'Child' (done) is hidden
+        expect(getByText('Root')).toBeDefined();
+        expect(queryByText('Child')).toBeNull();
+    });
+
+    test('shows empty state message when status filter matches zero features', async () => {
+        installFeatureFetchMock();
+        const { getByLabelText, getByText, container } = render(<FeaturesShell />);
+
+        await waitFor(() => expect(getByText('Root')).toBeDefined());
+
+        // Click filter button
+        fireEvent.click(getByLabelText('Filter features by status'));
+
+        // Filter by 'blocked' (no feature in mock is blocked)
+        const blockedOption = Array.from(container.querySelectorAll('[data-filter-menu] button')).find((b) =>
+            b.textContent?.includes('blocked'),
+        );
+        expect(blockedOption).toBeDefined();
+        if (blockedOption) fireEvent.click(blockedOption);
+
+        expect(getByText('No features match status filter "blocked".')).toBeDefined();
+    });
 });
