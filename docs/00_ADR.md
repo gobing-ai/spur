@@ -827,6 +827,14 @@ regression — the tree's six glyphs currently put four statuses on a shared cir
 detail pane and Task Kanban keep labelled affordances by design — a tree is a scanning surface, a
 detail pane is a reading surface.
 
+**Outcome (2026-07-26).** Convention (2)'s gate did its job: 0335 added the light-theme semantic
+values, measured all six glyphs, and correctly **froze** the swap when `cancelled` came in at 2.30:1
+on the light canvas. 0338 cleared it by introducing a dedicated `--color-spur-text-faint` token with
+per-theme values rather than darkening `text-muted` globally, then completed the swap — all six
+statuses now resolve through `text-spur-*` at 12/12 ≥ 3:1. Convention (3) also produced a reusable
+`Tooltip` primitive (`apps/web/src/components/ui/Tooltip.tsx`): a typed wrapper over daisyUI's
+CSS-only tooltip that carries no accessible name by design, keeping the name on the wrapped element.
+
 **Detail:** `docs/design/feature-tree-status-affordance.md`,
 `docs/plans/2026-07-25-feature-tree-status-icon-brainstorm.md`,
 `apps/web/src/modules/features/status-icons.tsx`, `apps/web/src/styles/global.css`.

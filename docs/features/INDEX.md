@@ -40,5 +40,5 @@
 [done] **Q**: AC-verifiable execution: BDD test scaffolds and tunable validation gates ([Q_ac-verifiable-execution-bdd-test-scaffolds-and-tunable-validation-gates.md](./Q_ac-verifiable-execution-bdd-test-scaffolds-and-tunable-validation-gates.md))
 [active] **R**: Feature status feedback loop: derivation sync, refresh command, Board status UX ([R_feature-status-feedback-loop-derivation-sync-refresh-command-board-status-ux.md](./R_feature-status-feedback-loop-derivation-sync-refresh-command-board-status-ux.md))
     ├── [active] **R1**: Feature status sync: derivation engine, refresh command, hook wiring ([R1_feature-status-sync-derivation-engine-refresh-command-hook-wiring.md](./R1_feature-status-sync-derivation-engine-refresh-command-hook-wiring.md))
-    └── [backlog] **R2**: Features tree status affordance: icon-only leading indicator with accessible name ([R2_features-tree-status-affordance-icon-only-leading-indicator-with-accessible-name.md](./R2_features-tree-status-affordance-icon-only-leading-indicator-with-accessible-name.md))
+    └── [done] **R2**: Features tree status affordance: icon-only leading indicator with accessible name ([R2_features-tree-status-affordance-icon-only-leading-indicator-with-accessible-name.md](./R2_features-tree-status-affordance-icon-only-leading-indicator-with-accessible-name.md))
 <!-- END AUTO-GENERATED -->

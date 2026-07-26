@@ -2,11 +2,11 @@
 schema_version: 1
 id: "R2"
 name: "Features tree status affordance: icon-only leading indicator with accessible name"
-status: backlog
+status: done
 priority: P2
 tags: []
 created_at: "2026-07-26T00:12:26.757Z"
-updated_at: "2026-07-26T00:14:08.824Z"
+updated_at: "2026-07-26T23:12:36.577Z"
 ---
 
 # R2: Features tree status affordance: icon-only leading indicator with accessible name
@@ -192,10 +192,13 @@ Feature: Features tree status affordance: icon-only leading indicator with acces
 | 0334 | Features tree: harden the six status glyphs for shape-first distinguishability | done |
 | 0335 | Features tree: converge status colors on the Spur token family with light-theme values | done |
 | 0336 | Features tree: add a hover tooltip revealing the status label | done |
-| 0337 | Features tree: resolve cancelled-glyph light-canvas contrast, then complete the Spur token swap (AC R10) | todo |
-| 0338 | Features tree: resolve cancelled-glyph light-canvas contrast, then complete the Spur token swap (AC R10) | todo |
+| 0337 | Features tree: resolve cancelled-glyph light-canvas contrast, then complete the Spur token swap (AC R10) | cancelled |
+| 0338 | Features tree: resolve cancelled-glyph light-canvas contrast, then complete the Spur token swap (AC R10) | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
 
 ## History
+- 2026-07-26T23:12:36.251Z backlog → active (system)
+- 2026-07-26T23:12:36.423Z active → verifying (system)
+- 2026-07-26T23:12:36.577Z verifying → done (system)

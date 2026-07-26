@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Features tree: resolve cancelled-glyph light-canvas contrast, then complete the Spur token swap (AC R10)"
 description: ""
-status: wip
+status: done
 type: task
 profile: standard
 feature_id: R2
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: ["0335"]
 created_at: "2026-07-26T20:07:54.169Z"
-updated_at: "2026-07-26T23:03:26.871Z"
+updated_at: "2026-07-26T23:11:56.972Z"
 ---
 
 ## 0338. Features tree: resolve cancelled-glyph light-canvas contrast, then complete the Spur token swap (AC R10)
@@ -33,14 +33,14 @@ Levers named by the 0335 review (pick during refine): (1) theme-conditional opac
 per-theme values; (3) — rejected — darkening `text-muted` globally (would ripple across all muted
 text).
 ### Requirements
-- [ ] R1. Raise the `cancelled` glyph's contrast on the light canvas to ≥ 3:1 (WCAG 1.4.11) without
+- [x] R1. Raise the `cancelled` glyph's contrast on the light canvas to ≥ 3:1 (WCAG 1.4.11) without
     regressing its dark-canvas ratio (currently 3.40:1) and without changing `text-muted` globally.
-- [ ] R2. Re-measure all six glyphs on both canvases after the fix (same method as 0335: WCAG
+- [x] R2. Re-measure all six glyphs on both canvases after the fix (same method as 0335: WCAG
     relative luminance, cancelled measured with its effective blended color); record the 12 ratios.
-- [ ] R3. With all 12 ratios ≥ 3:1, complete the deferred swap: `blocked` → `text-spur-error`,
+- [x] R3. With all 12 ratios ≥ 3:1, complete the deferred swap: `blocked` → `text-spur-error`,
     `done` → `text-spur-success` in `apps/web/src/modules/features/status-icons.tsx`, so all six
     statuses resolve through the Spur token family.
-- [ ] R4. Satisfy feature AC scenario R10 (single token family + ≥ 3:1 on both canvases).
+- [x] R4. Satisfy feature AC scenario R10 (single token family + ≥ 3:1 on both canvases).
 ### Acceptance Criteria
 Derived from parent feature R2 scenario **R10** (`docs/features/R2_*.md:156-161`) and
 task requirements R1–R4. R-numbered for traceability; titles are identity keys — keep stable.
@@ -350,3 +350,5 @@ R2
 
 ### History
 - 2026-07-26T22:55:19.075Z todo → wip (system)
+- 2026-07-26T23:11:47.540Z wip → testing (system)
+- 2026-07-26T23:11:56.972Z testing → done (system)

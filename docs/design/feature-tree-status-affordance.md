@@ -43,11 +43,14 @@ Per ADR-034 (3), the name lives in the markup, not in a tooltip.
   instead, so screen readers announce "verifying"; after this change they announce "Verifying".
 - The SVG gains `role="img"` and `aria-label={meta.label}`, and drops `aria-hidden="true"` (it is no
   longer decorative — it *is* the status).
-- The visual tooltip is a separate, additive concern. Mechanism is deliberately unresolved:
-  daisyUI 5.0.29 is declared at `apps/web/package.json:24` but is not installed in the local tree
-  and its `tooltip`/`data-tip` contract could not be verified, so implementation verifies
-  availability first and falls back to a small local wrapper. Either way, deleting the tooltip must
-  leave the accessible name intact — that is the acceptance condition, not the mechanism.
+- The visual tooltip is a separate, additive concern. **Resolved (task 0336):** daisyUI's CSS-only
+  `tooltip` / `data-tip` proved available and is used, wrapped in a typed `Tooltip` primitive at
+  `apps/web/src/components/ui/Tooltip.tsx` exported from `@/ui`, so no component writes
+  `className="tooltip …"` by hand. Because daisyUI renders the tip via `content: attr(data-tip)`,
+  it contributes **no** accessible name — the inner `role="img"` SVG names itself, per (2) above.
+  Callers compose layout utilities on the wrapper (`flex! w-4 shrink-0`) to override daisyUI's
+  default `display:inline-block`. Deleting the tooltip leaves the accessible name intact — asserted
+  by `components.test.tsx:313`.
 
 ## 3. Vocabulary import
 
@@ -89,19 +92,35 @@ Current split (`status-icons.tsx`):
 | done | `text-success` | daisyUI |
 | cancelled | `text-spur-text-muted opacity-60` | Spur |
 
-Target: blocked → `text-spur-error`, done → `text-spur-success`, giving one family and a consumer
-for the two orphaned tokens (`global.css:16-17`).
+**Resolved (tasks 0335 + 0338).** All six now resolve through `text-spur-*`:
 
-**Prerequisite (ADR-034 (2)).** `[data-theme="light"]` at `global.css:29-36` overrides only
-bg/surface/accent/accent-hover/text/text-muted/border — the semantic tokens are theme-invariant,
-tuned for the dark canvas (`#0f1117`). daisyUI's `text-success`/`text-error` re-resolve per theme, so
-a straight swap trades a token inconsistency for a light-mode contrast regression. Order of work:
+| Status | Class (final) | Dark | Light |
+|---|---|---|---|
+| backlog | `text-spur-text-muted` | `#94a3b8` 7.36:1 | `#64748b` 4.76:1 |
+| active | `text-spur-accent` | `#6366f1` 4.22:1 | `#4f46e5` 6.29:1 |
+| verifying | `text-spur-warning` | `#f59e0b` 8.79:1 | `#b45309` 5.02:1 |
+| blocked | `text-spur-error` | `#ef4444` 5.01:1 | `#dc2626` 4.83:1 |
+| done | `text-spur-success` | `#22c55e` 8.28:1 | `#15803d` 5.02:1 |
+| cancelled | `text-spur-text-faint` | `#5f6978` 3.40:1 | `#7c8699` 3.67:1 |
 
-1. add light-theme values for `--color-spur-success` / `--color-spur-warning` / `--color-spur-error`;
-2. contrast-check all six glyphs against both canvases (≥3:1, WCAG 1.4.11);
-3. then swap the two classes.
+12/12 ≥ 3:1 (WCAG 1.4.11), independently re-verified 2026-07-26.
 
-If step 1–2 is descoped, **leave the split as-is** and record the debt. Do not swap blind.
+`cancelled` was the blocker: as `text-spur-text-muted opacity-60` it measured **2.30:1** on the
+light canvas, which froze the swap under 0335's R4 gate. 0338 resolved it with a dedicated
+`--color-spur-text-faint` token carrying per-theme values (lever 2 of the three the 0335 review
+named), rather than an opacity blend or a global `text-muted` darkening — so no ripple to other
+muted text. The two previously orphaned tokens (`--color-spur-error` / `--color-spur-success`) now
+have consumers.
+
+**Prerequisite that gated this (ADR-034 (2)) — now satisfied.** `[data-theme="light"]` originally
+overrode only bg/surface/accent/accent-hover/text/text-muted/border, leaving the semantic tokens
+theme-invariant and tuned for the dark canvas (`#0f1117`), while the daisyUI classes they replaced
+re-resolve per theme. A straight swap would have traded a token inconsistency for a light-mode
+contrast regression, so the work was ordered: (1) add light-theme values for the semantic tokens,
+(2) contrast-check all six glyphs on both canvases, (3) only then swap. 0335 did (1) and (2) and
+correctly stopped at the R4 gate when `cancelled` failed; 0338 cleared the blocker and completed (3).
+`[data-theme="light"]` now carries `--color-spur-success/warning/error` (`global.css:49-51`) and
+`--color-spur-text-faint` (`:44`).
 
 ## 6. Test impact
 
