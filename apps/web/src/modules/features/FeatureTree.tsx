@@ -1,6 +1,6 @@
-import { Badge } from '@/ui';
+import { Tooltip } from '@/ui';
 import type { FeatureSummary } from '../../lib/feature-types';
-import { FeatureStatusIcon } from './status-icons';
+import { FeatureStatusIcon, featureStatusLabel } from './status-icons';
 
 interface FeatureTreeProps {
     features: FeatureSummary[];
@@ -13,7 +13,7 @@ interface FeatureTreeProps {
  *
  * Builds an ID-derived hierarchy client-side from the flat feature list. Children
  * of `X` = features whose id.length === X.length + 1 AND id starts with X.
- * Each node renders its id, name, and status badge; clicking selects it.
+ * Each node renders a leading status indicator, its id, and its name; clicking selects it.
  */
 export default function FeatureTree({ features, selectedId, onSelect }: FeatureTreeProps) {
     // Feature IDs are single-uppercase-letter + digits (DD-14): F, F1, F2, F1A, F1A1, etc.
@@ -75,9 +75,21 @@ function TreeNode({ feature, childrenMap, selectedId, onSelect, depth }: TreeNod
                 }`}
                 style={{ paddingLeft: `calc(0.5rem + ${padLeft})` }}
             >
+                {/* The Tooltip wrapper carries daisyUI's CSS-only hover affordance (task 0336).
+                    `flex!` pins the slot layout: daisyUI's `.tooltip` sets `display:inline-block`
+                    later in the utilities layer, which would un-center the indicator without it.
+                    Per ADR-034 the accessible name comes from the inner role="img" SVG, not the
+                    tooltip — `data-tip` is presentational only. */}
+                <Tooltip
+                    position="right"
+                    tip={featureStatusLabel(feature.status)}
+                    className="flex! w-4 shrink-0 items-center justify-center"
+                    data-testid="feature-tree-status"
+                >
+                    <FeatureStatusIcon status={feature.status} />
+                </Tooltip>
                 <span className="text-xs font-mono text-spur-text-muted shrink-0">{feature.id}</span>
                 <span className="flex-1 truncate">{feature.name}</span>
-                <StatusBadge status={feature.status} />
             </button>
             {children && children.length > 0 && (
                 <ul>
@@ -97,21 +109,5 @@ function TreeNode({ feature, childrenMap, selectedId, onSelect, depth }: TreeNod
                 </ul>
             )}
         </li>
-    );
-}
-
-/** Status badge for the tree node — renders status icon + text label. */
-function StatusBadge({ status }: { status: string }) {
-    return (
-        <Badge
-            variant="outline"
-            size="xs"
-            className="flex items-center gap-1 shrink-0"
-            aria-label={`Status: ${status}`}
-            title={`Status: ${status}`}
-        >
-            <FeatureStatusIcon status={status} />
-            <span>{status}</span>
-        </Badge>
     );
 }

@@ -9,6 +9,12 @@
     --color-spur-accent-hover: #818cf8;
     --color-spur-text: #e2e8f0;
     --color-spur-text-muted: #94a3b8;
+    /* Faint status color — the cancelled glyph's own token (0338 R1).
+       Reproduces the exact effective blended color (#5f6978) the
+       `text-spur-text-muted opacity-60` hack produced on the dark canvas,
+       so the rendered pixel is unchanged -> dark ratio stays 3.40:1.
+       Light-theme override below tunes a separate value for #ffffff. */
+    --color-spur-text-faint: #5f6978;
     --color-spur-border: #334155;
 
     /* Semantic colors — align with daisyUI badge/alert tokens */
@@ -32,7 +38,17 @@
     --color-spur-accent-hover: #6366f1;
     --color-spur-text: #0f172a;
     --color-spur-text-muted: #64748b;
+    /* Faint status color on the light canvas (0338 R1) — #7c8699 measures
+       3.67:1 on #ffffff, inside the 3.3-3.8:1 target window and above the
+       WCAG 1.4.11 3:1 floor. Slate hue family of --color-spur-text-muted. */
+    --color-spur-text-faint: #7c8699;
     --color-spur-border: #e2e8f0;
+
+    /* Semantic colors — tuned for the light canvas (0335 R1); the @theme values
+       above are tuned for dark and must not be inherited here. */
+    --color-spur-success: #15803d;
+    --color-spur-warning: #b45309;
+    --color-spur-error: #dc2626;
 }
 
 /* ── Detail panel markdown (0100/0101) ──

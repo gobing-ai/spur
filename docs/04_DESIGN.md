@@ -33,6 +33,7 @@ detail-first then index (§4.5 rule 5 / T9).
 | [`dev-agent-flag-and-dogfood-skill.md`](design/dev-agent-flag-and-dogfood-skill.md) | `--agent` on dev-refine/plan/brainstorm (threaded, not theater) + `sp:dogfood-testing` backbone extraction with enhanced report/ledger (0125) | implemented |
 | [`e2e-workflow-for-system-development.md`](design/e2e-workflow-for-system-development.md) | End-to-end workflow system for system development — pipeline architecture, design step auto-detection, HITL gate model, doc-sync boundary (0167) | design |
 | [`portable-agents-harness-contract.md`](design/portable-agents-harness-contract.md) | `spur init` root `AGENTS.md` seed — complementary Spur/Superskill ownership, portable routing, conditional root `DESIGN.md` | implemented |
+| [`feature-tree-status-affordance.md`](design/feature-tree-status-affordance.md) | Board Features tree — icon-only leading status indicator, accessible-name contract, glyph silhouettes, semantic-token convergence (ADR-034, feature R2) | implemented |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See

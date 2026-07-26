@@ -16,3 +16,4 @@ export { Modal, type ModalProps } from './components/ui/Modal';
 export { Select, type SelectProps } from './components/ui/Select';
 export { Textarea, type TextareaProps } from './components/ui/Textarea';
 export { Toggle, type ToggleProps } from './components/ui/Toggle';
+export { Tooltip, type TooltipProps } from './components/ui/Tooltip';

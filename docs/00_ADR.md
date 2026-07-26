@@ -785,3 +785,49 @@ plugins/sp/README.md section 2 (commands-as-SSOT documentation).
 
 **Detail:** `04 §2.1`, `packages/app/src/services/agent-service.ts`, `packages/domain/src/stage-registry/schema.ts`.
 
+---
+
+## ADR-034: Status Vocabulary Is Domain-Owned; Board Owns Its Visual Encoding; Icon-Only Affordances Carry an Accessible Name
+
+**Status:** Accepted · **Date:** 2026-07-25
+
+**Decision.** Three conventions for Board status affordances, established while making the Features
+tree status icon-only (feature R2):
+
+1. **Vocabulary vs. encoding.** `packages/domain/src/planning/schema.ts` is the sole owner of the
+   canonical status *vocabularies* (`TASK_STATUSES`, `FEATURE_STATUSES`). A Board module must import
+   the vocabulary rather than re-declare it, and owns only its *visual encoding* (glyph, label,
+   color). Multiple renderings of one vocabulary are legitimate and expected — the domain's emoji
+   maps (`FEATURE_STATUS_ICONS`, `TASK_STATUS_ICONS`) serve CLI/terminal output; the Board's SVG map
+   serves the web surface. Two renderings are fine; two vocabularies are not.
+2. **Semantic color is Spur-token-owned on Spur-token surfaces.** Where a surface's background comes
+   from the `--color-spur-*` family, its status foreground must too. Converging onto that family is
+   gated on the semantic tokens first gaining light-theme values: `--color-spur-success/warning/error/
+   info` are declared once in `@theme` and are theme-invariant, while the daisyUI classes they would
+   replace re-resolve per theme. Swap only after contrast is verified against both canvases (≥3:1,
+   WCAG 1.4.11); otherwise leave the split and record it.
+3. **Icon-only means accessible-name-bearing.** Any affordance that drops its text label must carry
+   the human-readable label as an accessible name in the markup (`role="img"` + `<title>`/
+   `aria-label`). A tooltip — native `title` or CSS-only — is a visual enhancement and never the sole
+   channel, and glyphs must remain distinguishable by shape in greyscale (WCAG 1.4.1).
+
+**Why.** (1) `apps/web/src/modules/features/status-icons.tsx` re-declared `FEATURE_STATUSES` verbatim
+from the domain constant — a silent drift hazard with no compiler link, while `KanbanBoard.tsx:2`
+already imports `TASK_STATUSES` from the domain, so the correct pattern was present but unapplied.
+`apps/web` declares `@gobing-ai/spur-domain` at `package.json:17` and imports its schema in six
+places; §5 constraint 3 ("never server internals") does not bar the planning vocabulary, so no new
+dependency or layering change is involved. (2) The same file split its six colors 4/2 between Spur
+tokens and daisyUI classes, orphaning `--color-spur-success` and `--color-spur-error`; the split is
+invisible while a text label carries the meaning, and becomes a contrast risk the moment the label is
+removed. (3) Removing a text label promotes shape and color from decoration to sole information
+channel, so the accessibility contract has to be explicit or the next icon-only change repeats the
+regression — the tree's six glyphs currently put four statuses on a shared circular silhouette.
+
+**Scope note.** This ADR sets the convention; R2 applies it to the Features tree only. The Feature
+detail pane and Task Kanban keep labelled affordances by design — a tree is a scanning surface, a
+detail pane is a reading surface.
+
+**Detail:** `docs/design/feature-tree-status-affordance.md`,
+`docs/plans/2026-07-25-feature-tree-status-icon-brainstorm.md`,
+`apps/web/src/modules/features/status-icons.tsx`, `apps/web/src/styles/global.css`.
+
