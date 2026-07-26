@@ -59,11 +59,11 @@ agent:
       agent: grok
   default-by-phase:
     dev-brainstorm: grok
-    dev-fixall: omp-xf
+    dev-fixall: omp
     dev-plan: grok
-    dev-run: omp-xf
-    dev-runall: omp-xf
-    dev-changelog: omp-xf
+    dev-run: omp
+    dev-runall: omp
+    dev-changelog: omp
     dev-gitmsg: minimax
     dev-review: grok
     dev-verify: grok
