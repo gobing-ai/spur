@@ -116,4 +116,106 @@ describe('TokenLedgerWatcher', () => {
             rmSync(dir, { recursive: true, force: true });
         }
     });
+    test('incomplete trailing line is carried, not emitted until newline arrives', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-watch-carry-'));
+        try {
+            const path = join(dir, 'ledger.jsonl');
+            writeFileSync(path, '');
+            const watcher = new TokenLedgerWatcher({ ledgerPath: path, debounceMs: 5 });
+            const received: string[] = [];
+            watcher.subscribe((e) => {
+                received.push(e.type);
+            });
+            // Partial line (no trailing newline) — must NOT be emitted yet.
+            appendFileSync(
+                path,
+                JSON.stringify({ ts: '2026-07-12T12:00:00.000Z', session: 's', type: 'read', file: '/a.ts' }),
+            );
+            watcher.pollNewBytes();
+            expect(received).toEqual([]);
+            // Completing the line with a newline makes it emit on the next poll.
+            appendFileSync(path, '\n');
+            watcher.pollNewBytes();
+            expect(received).toEqual(['read']);
+            watcher.stop();
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('unparseable line is skipped, valid lines around it still emit', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-watch-skip-'));
+        try {
+            const path = join(dir, 'ledger.jsonl');
+            writeFileSync(path, '');
+            const watcher = new TokenLedgerWatcher({ ledgerPath: path, debounceMs: 5 });
+            const received: string[] = [];
+            watcher.subscribe((e) => {
+                received.push(e.type);
+            });
+            appendFileSync(
+                path,
+                `${[
+                    JSON.stringify({ ts: '2026-07-12T12:00:00.000Z', session: 's', type: 'read', file: '/a.ts' }),
+                    'this is not json {',
+                    JSON.stringify({ ts: '2026-07-12T12:01:00.000Z', session: 's', type: 'write', file: '/b.ts' }),
+                ].join('\n')}\n`,
+            );
+            watcher.pollNewBytes();
+            expect(received).toEqual(['read', 'write']);
+            watcher.stop();
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('pollNewBytes is a no-op when the file has not grown since last poll', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-watch-noop-'));
+        try {
+            const path = join(dir, 'ledger.jsonl');
+            writeFileSync(path, '');
+            const watcher = new TokenLedgerWatcher({ ledgerPath: path, debounceMs: 5 });
+            let calls = 0;
+            watcher.subscribe(() => {
+                calls += 1;
+            });
+            appendFileSync(
+                path,
+                `${JSON.stringify({ ts: '2026-07-12T12:00:00.000Z', session: 's', type: 'read', file: '/a.ts' })}\n`,
+            );
+            // First poll consumes the appended bytes.
+            watcher.pollNewBytes();
+            expect(calls).toBe(1);
+            // Second poll with no further growth must not re-emit.
+            watcher.pollNewBytes();
+            expect(calls).toBe(1);
+            watcher.stop();
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('start is idempotent and does not reset the offset to existing content', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-watch-idem-'));
+        try {
+            const path = join(dir, 'ledger.jsonl');
+            writeFileSync(
+                path,
+                `${JSON.stringify({ ts: '2026-07-12T12:00:00.000Z', session: 's', type: 'read', file: '/a.ts' })}\n`,
+            );
+            const watcher = new TokenLedgerWatcher({ ledgerPath: path, debounceMs: 5 });
+            const received: string[] = [];
+            watcher.subscribe((e) => {
+                received.push(e.type);
+            });
+            // Seed line already captured on first start; re-invoking start() must not replay it.
+            watcher.start();
+            watcher.start();
+            watcher.pollNewBytes();
+            expect(received).toEqual([]);
+            watcher.stop();
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
 });
