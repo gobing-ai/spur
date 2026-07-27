@@ -19,6 +19,7 @@
     ├── [verifying] **F6**: Corpus migration ([F6_corpus-migration.md](./F6_corpus-migration.md))
     ├── [verifying] **F7**: Task Kanban web parity ([F7_task-kanban-web-parity.md](./F7_task-kanban-web-parity.md))
     └── [backlog] **F8**: Features board module ([F8_features-board-module.md](./F8_features-board-module.md))
+        └── [backlog] **F81**: Board Features detail action group: lifecycle ops, async runner, observability ([F81_board-features-detail-action-group-lifecycle-ops-async-runner-observability.md](./F81_board-features-detail-action-group-lifecycle-ops-async-runner-observability.md))
 [active] **G**: Collaboration ([G_collaboration.md](./G_collaboration.md))
     ├── [backlog] **G1**: Inbox IPC ([G1_inbox-ipc.md](./G1_inbox-ipc.md))
     ├── [backlog] **G2**: Team process supervision ([G2_team-process-supervision.md](./G2_team-process-supervision.md))
