@@ -12,7 +12,7 @@ priority: P1
 tags: ["cli", "gates", "task-check", "dogfood-followup"]
 dependencies: []
 created_at: "2026-07-26T23:50:31.157Z"
-updated_at: "2026-07-27T04:37:21.298Z"
+updated_at: "2026-07-27T07:09:02.945Z"
 ---
 
 ## 0339. spur task check: terminal-feature error fires on healthy tasks; content-free tasks pass
@@ -132,31 +132,41 @@ Both must be kept in sync — `FindingCode` is `(typeof ALL_FINDING_CODES)[numbe
 
 **Harness note:** the `spur` on PATH (`/Users/robin/.bun/bin/spur` → published npm package) is stale and does not contain this fix. Verified R6 via `bun run apps/cli/src/index.ts`. AGENTS.md documents the `bun link` + `build:bundle` workflow for putting the monorepo CLI on PATH during Spur dev; bundle was rebuilt (`apps/cli/spur.js`, 3.21 MB) but PATH still resolves to the npm install. Not a code defect — operator can re-link if needed.
 ### Testing
-Commands run and outcomes:
+**Re-verify (2026-07-27)** — standalone `/sp:dev-verify 0339 --auto --force --focus all --fix all`. Prior done mark lacked full AC evidence rows; this run re-anchors code, re-runs tests, and fills AC table. Fix-pass touched: `packages/app/tests/services/task-check.test.ts` (added "missing Requirements section does NOT emit L3_REQUIREMENTS_EMPTY"); `.spur/run/0339-verdict.json` (re-emitted).
 
-- `bun test packages/app/tests/services/task-check.test.ts` — **86 pass / 0 fail**, 120 expect() calls. Includes the 7 new tests under `describe('TaskCheckService task 0339 (terminal-feature + content-free)')`:
-  - R1: done task under done feature → no `L4_FEATURE_TERMINAL` (PASS).
-  - R1: cancelled task under cancelled feature → no `L4_FEATURE_TERMINAL` (PASS).
-  - R2: live (todo) task under done feature → `L4_FEATURE_TERMINAL` error retained, message contains "done".
-  - R2: live (wip) task under cancelled feature → `L4_FEATURE_TERMINAL` error retained, message contains "cancelled".
-  - R3: placeholder-only Requirements → `L3_REQUIREMENTS_EMPTY` error, `pass: false`.
-  - R3: placeholder-only AC → `L3_AC_EMPTY` error, `pass: false`.
-  - R3: populated Requirements + AC → no empty findings, `pass: true`.
-  - R3: AC with only ```` ``` ```` fence around placeholder → `L3_AC_EMPTY` (confirms `stripAcFence` runs before `isPlaceholderBody`).
-- `bun test packages/app/tests/services/` — **807 pass / 0 fail** across 31 files. No regressions in adjacent services.
-- `bun test packages/config/` — **92 pass / 0 fail**. Finding-code registry changes don't break existing config tests.
-- `bun x tsc --noEmit` in `packages/app` and `packages/config` — clean.
-- `bun x biome check` on `task-check.ts`, `finding-codes.ts` (both packages), `task-check.test.ts` — clean, no fixes applied.
-- R6 (`spur task check` across R2 set via `bun run apps/cli/src/index.ts`):
-  - 0332 (done): PASS, 0 findings.
-  - 0333 (done): PASS, 0 findings.
-  - 0334 (done): PASS, 0 findings.
-  - 0335 (done): PASS, 0 findings.
-  - 0336 (done): PASS, 0 findings.
-  - 0337 (cancelled): **FAIL** — `L3.requirements-empty` + `L3.ac-empty`. This is the original content-free offender from the bug report; failing is the intended behavior change.
-  - 0338 (done): PASS — 5 `L4.uncovered-task-scenario` warnings (pre-existing AC-coverage warnings, unrelated to 0339; severity `warning` so pass=True).
+**Commands this run**
+- `bun test packages/app/tests/services/task-check.test.ts --test-name-pattern "0339"` → **9 pass / 0 fail**
+- `bun test packages/app/tests/services/task-check.test.ts` → **87 pass / 0 fail** (86 + 1 new)
+- `bun run apps/cli/src/index.ts task check 0320 --json` → pass=true, no `L4.feature-terminal`
+- `bun run apps/cli/src/index.ts task check` R2 set: 0332–0336,0338 pass=true; 0337 pass=false with `L3.requirements-empty` + `L3.ac-empty` (intended)
+- `bun run apps/cli/src/index.ts task check 0339 --json` → pass=true, 0 findings
 
-Coverage: `packages/app/src/services/task-check.ts` at 98.15% functions / 99.64% lines (unchanged from baseline; the two uncovered lines 110-111 are pre-existing and unrelated to this change). `packages/config/src/finding-codes.ts` at 98.81% lines.
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `packages/app/src/services/task-check.ts:506-508` `featureTerminal && !taskTerminal`; tests "R1: done task under done feature" + "R1: cancelled…"; CLI `task check 0320` no terminal finding |
+| R2 | MET | Same predicate; tests "R2: live (todo)…" + "R2: live (wip)…" assert `L4_FEATURE_TERMINAL` retained with message containing done/cancelled |
+| R3 | MET | `task-check.ts:299-317` `L3_REQUIREMENTS_EMPTY` / `L3_AC_EMPTY`; CLI 0337 FAIL; unit tests R3 placeholder cases |
+| R4 | MET | Live-task signal + format warning retained; only predicate narrowed + findings added |
+| R5 | MET | 9 tests under `describe('TaskCheckService task 0339…')` including new missing-section case |
+| R6 | MET | R2 non-cancelled 0332–0336,0338 PASS; 0337 cancelled correctly FAILs empty findings |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: terminal task under terminal feature | MET | command + test | CLI `task check 0320` pass; unit R1 done/done |
+| Scenario: live task under terminal feature | MET | test | unit R2 todo under done → L4_FEATURE_TERMINAL + "done" |
+| Scenario: cancelled task under cancelled feature | MET | test | unit R1 cancelled/cancelled → no L4_FEATURE_TERMINAL |
+| Scenario: placeholder-only Requirements fails | MET | command + test | CLI 0337 → L3.requirements-empty; unit R3 placeholder Requirements |
+| Scenario: placeholder-only Acceptance Criteria fails | MET | command + test | CLI 0337 → L3.ac-empty; unit R3 placeholder AC |
+| Scenario: populated task passes | MET | test | unit "populated Requirements and AC do NOT emit empty findings" |
+| Scenario: missing Requirements section is not double-reported | MET | test | unit "missing Requirements section does NOT emit L3_REQUIREMENTS_EMPTY" (fix-pass this run) |
+
+**Design conformance:** DONE for R1/R2 predicate + codes; CHANGED for empty-section predicate (Design said null OR placeholder; Solution refined to heading-exists AND placeholder — documented in Solution, PASS-acceptable).
+
+Coverage: N/A for this re-verify delta beyond existing task-check suite (unit suite green).
 ### Review
 | P | Finding | File:Line | Fix / Disposition |
 | --- | --- | --- | --- |

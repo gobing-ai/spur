@@ -12,7 +12,7 @@ priority: P2
 tags: ["cli", "gates", "feature-check", "traceability", "dogfood-followup"]
 dependencies: []
 created_at: "2026-07-26T23:50:31.191Z"
-updated_at: "2026-07-27T05:29:30.088Z"
+updated_at: "2026-07-27T15:45:41.793Z"
 ---
 
 ## 0340. spur feature check --strict reports PASS when a linked AC scenario is known-unsatisfied
@@ -169,13 +169,58 @@ Feature: spur feature check --strict surfaces AC satisfaction
 6. **Verify** — `bun run lint && bun run typecheck && bun run test` (full monorepo gate). Smoke: `bun run apps/cli/src/index.ts feature check F3 --strict --json` on the current corpus.
 7. **Transition to done** — `spur task update 0340 --status testing → done` with provenance override (no pipeline run in `--auto` refine flow).
 ### Solution
+**Change map (0340)**
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | What |
+| --- | --- |
+| `packages/config/src/finding-codes.ts:57` / `:117` | `L4.scenario-unverified` in `ALL_FINDING_CODES` + `FINDING_CODES.L4_SCENARIO_UNVERIFIED` |
+| `packages/app/src/services/feature-check.ts:442` | `checkScenarioSatisfaction` invoked after DD-09 orphan pass in `runL4` |
+| `packages/app/src/services/feature-check.ts:503-554` | `checkScenarioSatisfaction` — three-state classification; emits `L4.scenario-unverified` |
+| `packages/app/src/services/feature-check.ts:562-580` | `isScenarioVerified` — done + PASS + MET (normalized title or `AC-N`) |
+| `packages/app/src/services/feature-check.ts:587-609` | private `readVerdictArtifact` for `.spur/run/<wbs>-verdict.json` |
+| `packages/app/tests/services/feature-check.test.ts:1465+` | 10× `0340 …` cases (three states, strict elevation, R5 dogfood, orphan regression) |
+| `docs/design/feature-check-strict-ac-satisfaction.md:1` | R1 decision record (evidence source, three states, severity contract, non-goals) |
 
+**Rationale.** Linkage alone (DD-09) could PASS while a covering task recorded UNMET. Satisfaction consults the same `.spur/run/<wbs>-verdict.json` artifacts the done-transition guard uses. Non-strict keeps warnings (R6); `--strict` elevates via existing severity policy (R4). Orphans stay on the uncovered-feature path only (R3).
+
+**Match rule.** Scenario MET when any covering task is `done` + verdict `PASS` + `requirements[]` row MET by normalized title or `AC-N` alias (`feature-check.ts:572-577`).
 ### Testing
+**Re-verify (2026-07-27)** — `/sp:dev-verify 0340 --auto --force --focus all --fix all`. Fix-pass: added design satellite (R1), strengthened R5 strict test, filled Solution/Testing. Artifacts: `docs/design/feature-check-strict-ac-satisfaction.md`; `feature-check.test.ts` R5; `.spur/run/0340-verdict.json`.
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Commands this run**
+- `bun test packages/app/tests/services/feature-check.test.ts --test-name-pattern "0340"` → **10 pass / 0 fail**
+- `bun test packages/app/tests/services/feature-check.test.ts` → **47 pass / 0 fail**
+- `bun run apps/cli/src/index.ts feature check R2 --json` → `pass=true`, 13× `L4.scenario-unverified` **warning**
+- `bun run apps/cli/src/index.ts feature check R2 --strict --json` → `pass=false`, same findings **error**
+- `bun run apps/cli/src/index.ts task check 0340 --json` → `pass=true` (AC-coverage warnings only, pre-existing DD-09 subset)
 
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | Decision recorded in `docs/design/feature-check-strict-ac-satisfaction.md` + task Design; evidence = verdict artifacts; warning default / error under `--strict` |
+| R2 | MET | `feature-check.ts:503-554` three-state path; unit tests linked-and-verified / linked-but-unverified (todo, no-verdict, UNMET, FAIL) |
+| R3 | MET | Orphan test emits `L4.uncovered-feature-scenario` only, zero `L4.scenario-unverified` for orphan title |
+| R4 | MET | Unit "R4: --strict elevates… pass false"; CLI R2 `--strict` pass=false |
+| R5 | MET | Unit R5 dogfood with `strict:true` → error + pass=false on UNMET MET-row gap |
+| R6 | MET | Unit todo path `pass=true` warning; CLI R2 non-strict pass=true |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: Linked-and-verified scenario produces no finding | MET | test | `0340 R2: linked-and-verified…` |
+| Scenario: Linked-but-unverified scenario emits an unverified finding | MET | test | `0340 R2: linked-but-unverified via todo…` severity warning, pass true |
+| Scenario: Done task with no verdict artifact is treated as unverified | MET | test | `0340 R2: done task with no verdict…` |
+| Scenario: PASS verdict with an UNMET matching requirement is unverified | MET | test | `0340 R2: …UNMET matching requirement…` + R5 strict |
+| Scenario: Orphaned scenario still emits existing coverage warning | MET | test | `0340 R3 regression: orphan…` |
+| Scenario: A feature whose every covering task is todo cannot PASS --strict | MET | test | `0340 R4: --strict elevates…` 2 scenarios, pass false |
+| Scenario: Non-strict check does not block on unverified scenarios | MET | test + command | unit pass true warning; CLI R2 non-strict pass=true |
+| Scenario: R2 regression — full linkage but recorded UNMET must not PASS --strict | MET | test | `0340 R5 dogfood` strict:true pass=false |
+
+**Design conformance:** DONE (three-state + severity contract match Design + design satellite).
+
+Coverage: feature-check suite green (47 tests).
 ### Review
 | P | Severity | Finding | Evidence | Action |
 |---|----------|---------|----------|--------|

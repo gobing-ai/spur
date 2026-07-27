@@ -12,7 +12,7 @@ priority: P3
 tags: ["web", "tests", "hygiene", "dogfood-followup"]
 dependencies: []
 created_at: "2026-07-26T23:50:31.207Z"
-updated_at: "2026-07-27T06:10:40.239Z"
+updated_at: "2026-07-27T07:12:33.025Z"
 ---
 
 ## 0342. apps/web: eliminate the standing React act() warning in the features test suite
@@ -170,20 +170,34 @@ The sibling `unrelated SSE` test uses `await new Promise((r) => setTimeout(r, 20
 - No assertions removed. The 4 expects in this test are all preserved; the suite total dropped from 204 → 203 because `waitFor` no longer needs a retry poll to observe 'verifying' — `act` already flushed the state, so the first `waitFor` check passes.
 - No console filtering, reporter mute, or blanket `act()` wrap (R1, R4 satisfied).
 ### Testing
-**Commands run and outcomes:**
+**Re-verify (2026-07-27)** — `/sp:dev-verify 0342 --auto --force --focus all --fix all`. No code fix needed this run; re-ran evidence. Artifact: `.spur/run/0342-verdict.json`.
 
-|Command|Result|
-|---|---|
-|`cd apps/web && bun test tests/modules/features/components.test.tsx -t "feature.updated SSE frame refreshes"` (pre-fix)|1 pass, **warned** — "An update to FeaturesShell inside a test was not wrapped in act(...)"|
-|Same command (post-fix)|1 pass, **0 warnings**, 4 expect() calls|
-|`cd apps/web && bun test tests/modules/features/` (post-fix)|37 pass, 0 fail, **0 warnings**, 203 expect() calls|
-|`cd apps/web && bun test` (full web suite)|524 pass, 0 fail, 1664 expect() calls — no regressions|
-|`bun run lint` (Biome + typecheck)|Clean — all 7 workspaces typecheck green|
-|`git diff apps/web/tests/modules/features/components.test.tsx`|2-line diff: import + `act` wrap|
+**Commands this run**
+- `cd apps/web && bun test tests/modules/features/` → **37 pass / 0 fail / 203 expect**; **NO** `not wrapped in act` warning (stdout/stderr scanned)
+- `cd apps/web && bun test` → **524 pass / 0 fail / 1664 expect** — no regressions
+- Grep features tests for console mute / act suppression → none
 
-**Coverage claim:** N/A — test-only hygiene fix, no production code changed.
+**Per-Requirement Traceability**
 
-**R5 note:** The 2 pre-existing `rpc-client.test.ts` EADDRINUSE failures mentioned in the task did not manifest in this environment (524/524 pass). They are environmental (sandboxed shell port-binding) and out of scope.
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | Diagnosis: `feature.updated SSE` test; fix is single `await act` around `onmessage` at `components.test.tsx:613-615` (not blanket wrap) |
+| R2 | MET | Warning eliminated; suite 37/37; root cause is settled `void load()` `setFeatures` inside act |
+| R3 | MET | 37 pass, 0 skipped; assertions preserved |
+| R4 | MET | No console filter / reporter mute in features tests |
+| R5 | MET | Full apps/web suite 524 pass / 0 fail |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: Features test suite runs without act() warnings | MET | command | `bun test tests/modules/features/` 37 pass, no act warning line |
+| Scenario: The fix settles the stray async update rather than suppressing output | MET | static-ref + command | `components.test.tsx:613-615` act wrap; no console mute |
+| Scenario: The rest of the apps/web test suite is not regressed | MET | command | `cd apps/web && bun test` 524 pass / 0 fail |
+
+**Design conformance:** CHANGED vs original Design `setTimeout(0)` / no-act-import — Solution documents that setTimeout(0) failed (multi-await fetch hops) and `act` is the correct flush; PASS-acceptable documented deviation. Production `FeaturesShell.tsx` unchanged.
+
+Coverage: N/A (test-only hygiene; no production path added).
 ### Review
 | Severity | Finding | Disposition |
 |---|---|---|

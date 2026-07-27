@@ -12,7 +12,7 @@ priority: P2
 tags: ["sp-plugin", "verify", "dogfood-followup"]
 dependencies: []
 created_at: "2026-07-26T23:50:31.199Z"
-updated_at: "2026-07-27T05:16:35.638Z"
+updated_at: "2026-07-27T15:45:43.205Z"
 ---
 
 ## 0341. dev-verify/verifyall: no 'not started' verdict cell, and duplicate follow-up task creation
@@ -133,17 +133,17 @@ spur task verifyall-aggregate --from-file .spur/run/<feature>-batch-input.json -
 - **Block verifyall from reaching unstarted tasks at all.** Rejected by R3 — `--force` must still be able to reach them; the fix is classification, not access.
 - **Make `spur task create` refuse identical names unconditionally.** Rejected — legitimate same-name tasks across features or across time exist. Guard is opt-in via `--dedupe-within`.
 ### Plan
-- [ ] Read full `task-verdict.ts` to confirm the parser shape and export surface for the new batch types
-- [ ] Add `BatchTaskOutcome`, `BatchTaskResult`, `BatchAggregation` types to `task-verdict.ts`
-- [ ] Implement `classifyTaskOutcome(taskStatus, verdict)` — deterministic per-task outcome classification
-- [ ] Implement `aggregateBatchVerdicts(results)` — the rollup rule as tested code
-- [ ] Add regression tests in `task-verdict.test.ts` covering: all-pass batch, fail-rolls-up, not-started-excluded, all-not-started-→-UNKNOWN, mixed
-- [ ] Add `verifyall-aggregate` CLI verb (thin: reads JSON, calls `aggregateBatchVerdicts`, prints/emits JSON)
-- [ ] Add `--dedupe-within <seconds>` flag to `spur task create` with name-collision check under same feature
-- [ ] Update `plugins/sp/skills/spur-dev/references/dev-operations.md §3a` — deterministic verb reference, NOT-STARTED docs
-- [ ] Update `plugins/sp/skills/code-verification/SKILL.md` Step 12 — record-then-create discipline for follow-ups
-- [ ] Run `bun run lint` + `bun test packages/app` + `bun run apps/cli/src/index.ts task verifyall-aggregate --help` smoke
-- [ ] R6 reproduction: synthesize the R2 scenario (5 PASS + 2 NOT-STARTED → batch PASS, not FAIL) as a test case
+- [x] Read full `task-verdict.ts` to confirm the parser shape and export surface for the new batch types
+- [x] Add `BatchTaskOutcome`, `BatchTaskResult`, `BatchAggregation` types to `task-verdict.ts`
+- [x] Implement `classifyTaskOutcome(taskStatus, verdict)` — deterministic per-task outcome classification
+- [x] Implement `aggregateBatchVerdicts(results)` — the rollup rule as tested code
+- [x] Add regression tests in `task-verdict.test.ts` covering: all-pass batch, fail-rolls-up, not-started-excluded, all-not-started-→-UNKNOWN, mixed
+- [x] Add `verifyall-aggregate` CLI verb (thin: reads JSON, calls `aggregateBatchVerdicts`, prints/emits JSON)
+- [x] Add `--dedupe-within <seconds>` flag to `spur task create` with name-collision check under same feature
+- [x] Update `plugins/sp/skills/spur-dev/references/dev-operations.md §3a` — deterministic verb reference, NOT-STARTED docs
+- [x] Update `plugins/sp/skills/code-verification/SKILL.md` Step 12 — record-then-create discipline for follow-ups
+- [x] Run `bun run lint` + `bun test packages/app` + `bun run apps/cli/src/index.ts task verifyall-aggregate --help` smoke
+- [x] R6 reproduction: synthesize the R2 scenario (5 PASS + 2 NOT-STARTED → batch PASS, not FAIL) as a test case
 ### Solution
 
 **R1–R3 — Batch verdict NOT-STARTED outcome (`packages/app/src/services/task-verdict.ts`):**
@@ -185,15 +185,42 @@ spur task verifyall-aggregate --from-file .spur/run/<feature>-batch-input.json -
 - 0339 introduced `L3.requirements-empty` / `L3.ac-empty` (fire on placeholder-only Requirements/AC) but never ran apps/cli integration tests.
 - 3 tests in `apps/cli/tests/commands/task.test.ts` created fresh tasks with placeholder content expecting PASS — broke. Fixed by populating Requirements + AC sections in each (aligns with 0339's intent: placeholder content SHOULD fail).
 ### Testing
+**Re-verify (2026-07-27)** — `/sp:dev-verify 0341 --auto --force --focus all --fix all`. Fix-pass: documented record-then-create in `plugins/sp/skills/code-verification/SKILL.md` Step 12 (was missing from skill text). Artifacts: that skill path; `.spur/run/0341-verdict.json`.
 
-- **Unit:** `packages/app` — 1015 pass / 0 fail (was 1003). 12 new tests in `task-verdict.test.ts`; 1 new in `task-service.test.ts`.
-- **CLI integration:** `apps/cli/tests/commands/task.test.ts` — 10 new `verifyall-aggregate` tests (PASS/FAIL/UNKNOWN/PARTIAL/all-NOT-STARTED/missing-file/non-array/invalid-outcome/non-JSON-summary). apps/cli total: 531 pass / 0 fail.
-- **Coverage:** `packages/app/src/services/task-verdict.ts` 100% lines/functions. `apps/cli/src/commands/task.ts` 91.01% functions (above 90% per-file gate).
-- **Monorepo:** `bun run test` → **3682 pass / 0 fail / 11141 expect() / exit 0**.
-- **Lint/typecheck:** `bun run lint` clean (Biome 2.4.16, no warnings); `bun run typecheck` clean across all 7 packages.
-- **Smoke (R2 dogfood scenario):** 5 PASS + 2 NOT-STARTED → batch verdict `PASS` (not FAIL), exit 0. Bug confirmed fixed.
-- **Smoke (FAIL exit code):** batch with 1 FAIL → exit 1, "Batch verdict: FAIL".
-- **Smoke (dedup guard):** duplicate `task create` with `--dedupe-within 60` → blocked with `duplicate-follow-up:` message, exit 3; `--allow-duplicate-name` overrides, creates successfully.
+**Commands this run**
+- `bun test packages/app/tests/services/task-verdict.test.ts` → **24 pass / 0 fail** (classifyTaskOutcome + aggregateBatchVerdicts, incl. R2 dogfood 5 PASS + 2 NOT-STARTED → PASS)
+- `bun test packages/app/tests/services/task-service.test.ts --test-name-pattern "DuplicateFollowUp|dedupe"` → **3 pass**
+- `bun test apps/cli/tests/commands/task.test.ts --test-name-pattern "verifyall-aggregate"` → **10 pass**
+- Smoke: `task verifyall-aggregate --from-file` R2-shaped batch → verdict PASS, summary `5 PASS, … 2 NOT-STARTED (excluded)`
+- Smoke: 3 PASS + 1 FAIL + 2 NOT-STARTED → verdict FAIL, summary lists 2 NOT-STARTED excluded
+- Smoke: 4 NOT-STARTED → verdict UNKNOWN
+- `task check 0341` → pass=true (1 L3.unchecked-checklist warning on Plan checkboxes — non-blocking)
+
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `task-verdict.ts` `BatchTaskOutcome` + `classifyTaskOutcome` + `aggregateBatchVerdicts`; NOT-STARTED excluded from rollup |
+| R2 | MET | Aggregation `summary` + CLI human path lists NOT-STARTED WBS; unit + smoke show "N NOT-STARTED (excluded)" |
+| R3 | MET | Classification only; `--force` still reaches unstarted (dev-operations §3a + design invariant) |
+| R4 | MET | CLI `--dedupe-within` + `DuplicateFollowUpError`; skill Step 12 record-then-create + ledger (fix-pass this run) |
+| R5 | MET | Unit R2 dogfood all-unstarted UNKNOWN; dedupe service tests; verifyall-aggregate CLI tests |
+| R6 | MET | `plugins/sp/skills/spur-dev/references/dev-operations.md` §3a documents NOT-STARTED + verifyall-aggregate |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: verifyall batch grammar classifies unstarted as NOT-STARTED | MET | test + command | unit R2 dogfood; smoke 5 PASS + 2 NOT-STARTED → PASS |
+| Scenario: NOT-STARTED excluded from any-FAIL rollup but visible | MET | command | smoke mixed FAIL+NOT-STARTED → FAIL with 2 excluded |
+| Scenario: all-unstarted batch does not report FAIL | MET | command | smoke 4 NOT-STARTED → UNKNOWN |
+| Scenario: --force still reaches unstarted tasks | MET | static-ref + test | classifyTaskOutcome(todo)=NOT-STARTED; design/dev-ops status bypass unchanged |
+| Scenario: single-follow-up creation is idempotent | MET | test + static-ref | DuplicateFollowUpError tests; skill Step 12 ledger + `--dedupe-within 300` |
+| Scenario: same-name guard under one feature | MET | test | task-service dedupe tests + CLI `--allow-duplicate-name` override |
+
+**Design conformance:** DONE for batch module + CLI verbs + dedupe flag; skill Step 12 text completed this re-verify (was gap vs Design).
+
+Coverage: task-verdict.ts ~95–100% lines/functions on focused suite.
 ### Review
 
 | Priority | File / Symbol | Finding | Action |
