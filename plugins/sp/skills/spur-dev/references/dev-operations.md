@@ -1,6 +1,6 @@
 ---
 name: dev-operations
-description: Unified reference for all 16 dev-* operations — purpose, inputs, backing (skill/CLI/inline), and behavior contract. The single source of truth for what each `/sp:dev-*` command does. (`implement` is covered as a sub-mode of run, #4; `runall` is the batch operation, #13.)
+description: Unified reference for all 17+ dev-* operations — purpose, inputs, backing (skill/CLI/inline), and behavior contract. The single source of truth for what each `/sp:dev-*` command does. (`implement` is covered as a sub-mode of run, #4; `runall` is the batch execution operation, #13; `refineall` is the batch refine operation, #5a.)
 see_also:
   - spur-dev
 ---
@@ -15,7 +15,7 @@ table is the index; the per-operation sections below are the detail.
 
 | Pattern | Meaning | Commands |
 |---------|---------|----------|
-| `Skill()` | Delegates to a backing skill via `Skill(skill="<skill>", args="<op> $ARGUMENTS")`. The skill owns the procedure; the command is a thin entry point. | implement, unit, review, verify, verifyall, run, refine, plan, brainstorm, runall, parallel, wrap, wrapall, idea |
+| `Skill()` | Delegates to a backing skill via `Skill(skill="<skill>", args="<op> $ARGUMENTS")`. The skill owns the procedure; the command is a thin entry point. | implement, unit, review, verify, verifyall, run, refine, refineall, plan, brainstorm, runall, parallel, wrap, wrapall, idea |
 | `inline` | The procedure is defined directly in the command file. No `Skill()` delegation — the command carries its own steps. | changelog, gitmsg, fixall, handover |
 
 The `Skill()` commands back onto six skills: `sp:spur-dev` (planning + execution workflow + batch),
@@ -53,7 +53,8 @@ each would be scope creep for one-liner procedures.
 | 3a | verifyall | `dev-verifyall` | `Skill()` → agent | `sp:spur-dev` (`verifyall`) | `--tasks <selector> [--feature <id>] [--agent <name\|auto>] [--fix ...] [--focus <lens>] [--bdd] [--auto] [--force] [--json]` |
 | 4 | run | `dev-run` | `Skill()` | `sp:spur-dev` (`run` / `implement`) | `<wbs> [--mode <full\|implement>] [--agent <name\|auto>] [--auto]` |
 | 5 | refine | `dev-refine` | `Skill()` | `sp:spur-dev` (`refine`) | `<wbs> [--focus <mode>] [--description <text>] [--agent <name\|auto>] [--auto] [--next]` |
-| 6 | plan | `dev-plan` | `Skill()` | `sp:spur-dev` (`plan`) | `"<description>" [--feature <id>] [--parent <feature-id>] [--agent <name\|auto>] [--design] [--auto]` |
+| 5a | refineall | `dev-refineall` | `Skill()` | `sp:spur-dev` (`refineall`) | `--feature <id> \| --tasks <selector> [--focus <mode>] [--description <text>] [--agent <name\|auto>] [--auto] [--keep-going] [--status <s>] [--json] [--next]` |
+| 6 | plan | `dev-plan` | `Skill()` | `sp:spur-dev` (`plan`) | `"<description>" [--feature <id>] [--parent <feature-id>] [--agent <name\|auto>] [--design] [--skip-design] [--auto] [--design-approved]` |
 | 7 | docs | *(no thin wrapper)* | `Skill()` | `sp:doc-evolve` | `"<change description>"` |
 | 8 | changelog | `dev-changelog` | `inline` | git log + conventional-commit grouping | `[--since <ref>] [--until <ref>] [--version <ver>]` |
 | 9 | gitmsg | `dev-gitmsg` | `inline` | per-file diff summary → group → conventional commit | `[--commit] [--squash] [--scope <path>]` |
@@ -125,9 +126,14 @@ must not be changed without updating the backing skill.
 - **Inputs:** `<wbs>` (required). `--focus <mode>` narrows the gap analysis. `--agent <name|auto>` is an **inline** override: omit (default) to run the synthesis **in the current session**; `<name>`/`auto` spawns it via `spur agent run`. `--auto` skips interactive Q&A (synthesis only) and propagates down the `--next` chain. `--next`: advance to the next step — transition `backlog → todo` through the FSM **idempotently** (only when `status == backlog`; a task already at `todo` or past it skips the transition and chains anyway — `status >= todo` ⇒ already advanced) and invoke `/sp:dev-run <wbs> --auto --next` (which resolves to the implement step). On a guard/refine failure, stop as review-pending.
 - **Backing:** `sp:spur-dev` skill, `refine` operation. Q&A clarifications are presented as decision briefs per [decision-brief.md](decision-brief.md).
 - **Behavior:** Read the task → elicit missing AC/Design/Plan through targeted Q&A → write each via `spur task update <wbs> --section <name> --from-file`. Done just-in-time, per task, immediately before execution. With `--next`: on success, transition status (idempotently — see Inputs) + chain to dev-run; on failure, stop and surface error.
-- **Pre-synthesis skip gate (under `--auto`):** Before invoking synthesis, run `spur task check <wbs> --json`. Filter the findings to the target sections only ({Background, Requirements, Plan}). If there are no L3 findings for any of those sections (regardless of whether the *overall* exit code is 0 — other sections may have findings), emit a structured SKIP result instead of synthesizing:
+- **Pre-synthesis skip gate (under `--auto`):** Before invoking synthesis, run `spur task check <wbs> --json`. Filter the findings to the **refine target sections** only:
+  `{Background, Requirements, Acceptance Criteria, Design, Plan}`.
+  These are the anti-drift surfaces: constraints + planning that cheaper implementers must follow.
+  **Solution is not a refine target** (as-built change-map owned by implement). If there are no L3
+  findings for any of those sections (regardless of whether the *overall* exit code is 0 — other
+  sections may have findings), emit a structured SKIP result instead of synthesizing:
   ```
-  SKIP — sections already meet L3: sections-considered=[Background, Requirements, Plan], reason="no L3 findings for target sections" (N L4 advisory: <labels>)
+  SKIP — sections already meet L3: sections-considered=[Background, Requirements, Acceptance Criteria, Design, Plan], reason="no L3 findings for target sections" (N L4 advisory: <labels>)
   ```
   The `(N L4 advisory: <labels>)` suffix is emitted whenever `spur task check` returned ≥1 L4
   finding — list each L4 finding's one-line label, comma-separated. Omit the suffix when there
@@ -135,19 +141,45 @@ must not be changed without updating the backing skill.
   Under `--json`/machine consumption, emit the same decision as a structured object so a downstream
   (observe-only) driver need not re-run `spur task check` to reconstruct it:
   ```json
-  {"result": "SKIP", "sections-considered": ["Background", "Requirements", "Plan"], "reason": "no L3 findings for target sections", "l4Advisories": [{"message": "Missing feature_id — ..."}]}
+  {"result": "SKIP", "sections-considered": ["Background", "Requirements", "Acceptance Criteria", "Design", "Plan"], "reason": "no L3 findings for target sections", "l4Advisories": [{"message": "Missing feature_id — ..."}]}
   ```
   Synthesis is only invoked when a real L3 gap exists in a target section. The SKIP result is the normal outcome for a well-specified task under `--auto`; it is not a failure.
-  **Scope:** only L3 findings whose `section` ∈ {Background, Requirements, Plan} count toward the SKIP gate. L3 findings on other sections (e.g. `### Review`) do not block the SKIP — refine does not own those sections.
+  **Scope:** only L3 findings whose `section` ∈ {Background, Requirements, Acceptance Criteria, Design, Plan} count toward the SKIP gate. L3 findings on other sections (e.g. `### Review`, `### Solution`) do not block the SKIP — refine does not own those sections.
+  **Variant note:** for templates that omit Design or AC (e.g. `review`, `meta`, `issue`), only apply the target sections that the section-matrix allows at the current status (`spur task check` `requiredSections` / optional list).
 - **SKIP short-circuits synthesis, not `--next`.** A SKIP means no synthesis was needed — it does **not** cancel the `--next` chain. Under `--auto --next`, a SKIP still flows into the (idempotent) status transition and the chained `/sp:dev-run`. "`refine --auto --next` on a well-specified task" is therefore effectively "run the pipeline"; an operator who wanted refinement only should drop `--next`.
 - **Delegation:** `Skill(skill="sp:spur-dev", args="refine $ARGUMENTS")`
 
+### 5a. refineall
+
+- **Purpose:** Batch-refine a set of tasks (or all refine-eligible tasks under a feature) — resolve a set, topo-sort by dependencies, run per-task `refine`, emit a summary report. Planning-half counterpart of `verifyall` / `runall` for the just-in-time spec-completion gate.
+- **Inputs:**
+  - `--feature <id>` **or** `--tasks <selector>` (required — at least one). `--feature` is sugar for `--tasks feature:<id>` (shared selector grammar: explicit WBS list, `feature:<id>`, `ready`, status pseudo-list — [execution-batch.md](execution-batch.md) Step 1). If both are present, `--tasks` wins (one-line note in the report).
+  - Shared refine flags (passed through to each per-task refine): `--focus <mode>`, `--description <text>`, `--agent <name|auto>`, `--auto`, `--next`.
+  - Batch-only flags: `--keep-going` (continue independents after a failure; default halt), `--status <s>` (filter resolved membership; default **`backlog,todo`** — planning-side fill candidates), `--json` (machine-readable batch report).
+- **Backing:** `sp:spur-dev` skill, `refineall` operation (orchestrates; per-task body is the single-task `refine` operation — never a second refine implementation).
+- **Behavior:**
+  1. Resolve + **freeze** the set at kickoff (never re-query membership mid-batch).
+  2. Apply `--status` filter (default `backlog,todo`). Tasks already `done`/`cancelled`/`testing` are excluded unless the operator widens `--status`. Report each exclusion with reason.
+  3. Topo-sort by `dependencies[]` (Kahn, WBS-ascending tie-break). Cycle → abort entire batch before any refine. Out-of-set deps: `done` → allow; else → block subtree (same as runall).
+  4. For each WBS in order: invoke single-task refine with shared flags. Under `--auto`, the per-task **pre-synthesis SKIP gate** still applies (no L3 gap in Background/Requirements/Acceptance Criteria/Design/Plan → SKIP, not failure).
+  5. Failure policy: **stop-the-batch** (default) or `--keep-going` (skip in-batch dependents of a failed refine; continue independents).
+  6. Emit a batch report (markdown or `--json`).
+- **Per-task outcome vocabulary:** `refined` (synthesis wrote sections) | `SKIP` (already L3-clean under `--auto`) | `failed` | `skipped` (dep failed under `--keep-going`) | `not-attempted` (halted) | `blocked` (unmet out-of-set dep).
+- **Batch verdict:** `clean` (all attempted tasks `refined` or `SKIP`) | `halted` (a failure stopped the batch) | `aborted` (cycle / unknown selector / empty set after filter).
+- **`--next` warning:** Passing `--next` chains **each** successful refine into `/sp:dev-run <wbs> --auto --next`, which can balloon into full pipeline execution for every task. Prefer refineall without `--next`, then `/sp:dev-runall --feature <id>` for execution. Document the risk in the batch report header when `--next` is set.
+- **`--auto` recommendation:** Batch refine without `--auto` requires per-task interactive Q&A and does not scale. Default operator path: `/sp:dev-refineall --feature <id> --auto`.
+- **Delegation:** `Skill(skill="sp:spur-dev", args="refineall $ARGUMENTS")` → per task `Skill(skill="sp:spur-dev", args="refine <wbs> $SHARED_FLAGS")`.
+
 ### 6. plan
 
-- **Purpose:** Plan a feature from a description — intake → feature create → AC generation → feature check gate → decomposition → batch-create.
-- **Inputs:** `"<description>"` (required). `--feature <id>` links to an existing feature. `--parent <feature-id>` nests under a parent. `--agent <name|auto>` is an **inline** override: omit (default) to run the model steps (AC generation, decomposition) **in the current session**; `<name>`/`auto` spawns them via `spur agent run`. `--design`/`--auto` drive the conditional design-doc step (Step 5.5).
-- **Backing:** `sp:spur-dev` skill, `plan` operation.
-- **Behavior:** Clarify scope → `spur feature create` → author BDD AC → `spur feature check` gate → decompose into task-batch JSON → `spur task batch-create` gate.
+- **Purpose:** Plan a feature from a description — intake → feature create → AC generation → feature check gate → decomposition → batch-create (with **Design by default**).
+- **Inputs:** `"<description>"` (required). `--feature <id>` links to an existing feature. `--parent <feature-id>` nests under a parent. `--agent <name|auto>` is an **inline** override: omit (default) to run the model steps (AC generation, decomposition) **in the current session**; `<name>`/`auto` spawns them via `spur agent run`. **Design package flags (unified):**
+  - **Default:** author task `design` on every batch item + feature satellite when the seam heuristic fires.
+  - `--design` — force feature satellite even if heuristic would skip; task Design still defaults on.
+  - `--skip-design` — skip feature satellite **and** omit task `design` fields (scaffold only; refine fills later).
+  - `--design-approved` — prior in-session approval for the design-approval taste gate (see cross-cutting).
+- **Backing:** `sp:spur-dev` skill, `plan` operation. Stage `plan` floors at `capable-2` (fallback `capable-3`).
+- **Behavior:** Clarify scope → `spur feature create` → author BDD AC → `spur feature check` gate → decompose into task-batch JSON **including `design` (unless `--skip-design`)** → `spur task batch-create` gate.
 - **Delegation:** `Skill(skill="sp:spur-dev", args="plan $ARGUMENTS")`
 
 ### 7. docs
@@ -222,16 +254,16 @@ must not be changed without updating the backing skill.
 - **Backing:** `spur workflow run .spur/workflows/idea-pipeline.yaml` — direct workflow invocation.
 - **Behavior:** Builds `--vars '{"idea":"<text>","profile":"interactive|auto","design":"auto|force|skip"}'` and invokes the idea pipeline. The pipeline runs: discovery (sp:brainstorm, records design summary + emits `needs_design` signal) -> feature-create -> ac-generate -> feature-check (objective gate) -> system-design (conditional, via `needs_design` signal or `--design`/`--skip-design` flags) -> design-approval (taste HITL gate) -> decompose (sp:spec-decomposition) -> batch-create (objective gate) -> handoff. The pipeline STOPS at handoff — tasks are created but NOT executed. No pipeline nesting — idea-pipeline does not call task-pipeline or feature-dev.
 - **Delegation:** Direct `spur workflow run .spur/workflows/idea-pipeline.yaml` (no `Skill()` call — the command builds the vars JSON and invokes the workflow directly via `Bash`).
-- **Design routing (`--design` / `--skip-design`):** whether the `system-design` state runs:
+- **Design package (`--design` / `--skip-design`, unified with plan):**
 
-  | Flags | Signal | Route |
+  | Flags | Feature satellite (`system-design`) | Task `### Design` in batch |
   |---|---|---|
-  | `--design` | (ignored) | run `system-design` |
-  | `--skip-design` | (ignored) | skip `system-design`; keep brainstorm summary |
-  | neither | `needs_design=true` | run `system-design` |
-  | neither | `needs_design=false` | skip `system-design` |
+  | (default) | seam / `needs_design` signal | **author `design` on each batch item** |
+  | `--design` | always run | **author `design` on each batch item** |
+  | `--skip-design` | skip (keep brainstorm summary) | **omit `design`** — refine fallback later |
 
-  Ties lean design — when the signal is ambiguous, `system-design` runs.
+  Ties lean design — when the signal is ambiguous, `system-design` runs. Task Design defaults on
+  unless `--skip-design`.
 - **`--design-approved`:** sets `design_approved=true` for an explicitly approved design in the current operator session; under `--auto`, routes around the design-approval taste gate. The `design_approved` var semantics are owned by [cross-cutting.md](cross-cutting.md) § "Design Approval Gate" — not duplicated here.
 
 ---

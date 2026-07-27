@@ -114,6 +114,7 @@ list this README is checked against.
 | --- | --- |
 | `dev-runall` | Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via task-pipeline.yaml, emit a batch report |
 | `dev-parallel` | Fan out independent tasks or investigations in parallel via subagents — choose the right pattern and synthesize results |
+| `dev-refineall` | Batch-refine tasks (feature or selector) — planning-half bulk fill of Background/Requirements/AC/Design/Plan before runall |
 | `dev-verifyall` | Batch-verify tasks against requirements and AC — resolves a set, runs per-task verification, produces consolidated PASS/PARTIAL/FAIL summary report |
 | `dev-wrapall` | Wrap up a batch of completed tasks — learnings, metrics, doc-sync, feature transition, optional branch cleanup |
 
@@ -317,7 +318,7 @@ Skills contain zero validation logic — the CLI is the gate.
 
 Thin slash-command wrappers that parse user arguments and delegate to the corresponding skill. Each
 command is a user-facing entry point that bridges natural language to skill invocation. There are
-**31 commands** (see the Command index above for the full list), organized by the surface they wrap:
+**32 commands** (see the Command index above for the full list), organized by the surface they wrap:
 
 | Prefix | Count | Delegates to | Purpose |
 | -------- | ------- | ------------- | --------- |
@@ -339,7 +340,7 @@ no per-platform artifacts — only the platform-independent thin wrappers.
 **Thin-wrapper contract** is enforced by `scripts/validate-commands.ts`:
 
 ```bash
-bun plugins/sp/scripts/validate-commands.ts            # validate all 31 commands
+bun plugins/sp/scripts/validate-commands.ts            # validate all 32 commands
 bun plugins/sp/scripts/validate-commands.ts --json     # machine-readable output
 ```
 
@@ -443,7 +444,7 @@ the hard gate that the soft skill cannot enforce on its own.
 ```mermaid
 graph TB
     subgraph "User entry points"
-        CMD["Commands<br/>30 slash commands<br/>/sp:dev-plan, /sp:dev-runall, /sp:rule-add, ..."]
+        CMD["Commands<br/>32 slash commands<br/>/sp:dev-plan, /sp:dev-runall, /sp:dev-refineall, /sp:rule-add, ..."]
         AGENT["Agents<br/>3 subagents<br/>expert-spur, super-coder, super-reviewer"]
         HOOK["PreToolUse hook<br/>Write|Edit matcher"]
     end

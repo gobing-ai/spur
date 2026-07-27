@@ -37,6 +37,7 @@ All product development work goes through the harness by default.
 | Plan a feature (intake → AC → tasks) | `/sp:dev-plan`, `/sp:dev-idea` | Freeform feature files without gates |
 | Drive one task end-to-end | `/sp:dev-run <wbs>` or **`sp:super-coder`** | Implement with no task / no pipeline |
 | Batch or parallel task runs | `/sp:dev-runall`, `/sp:dev-parallel` → **`sp:super-coder`** | Unordered multi-task thrash |
+| Batch-refine tasks under a feature | `/sp:dev-refineall --feature <id> --auto` | Hand-looping `/sp:dev-refine` per WBS |
 | Multi-step corpus CLI (tasks/features/rules/workflows) | **`sp:expert-spur`** | Raw Write/Edit on corpus files |
 | Look up `spur` verbs / flags / `--json` | Skill **`sp:spur-cli`** | Inventing flags from memory |
 | Create/edit/list tasks or features | **`spur task` / `spur feature`** (`--section --from-file`) | Direct-writing task/feature corpus files |

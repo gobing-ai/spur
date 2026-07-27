@@ -23,7 +23,7 @@ one and physically impossible on the other, so the contract splits:
 
 | Surface | Commands | Default (no `--agent`, or `inherit`) | Explicit `--agent <name>` / `auto` |
 |---|---|---|---|
-| **Inline** | `dev-plan`, `dev-refine`, `dev-brainstorm`, `dev-unit` | Run the model step **in the current session** — do NOT shell to `spur agent run`; write the result via `spur task update --section --from-file` directly | Spawn via `spur agent run "<prompt>" --agent <value>` |
+| **Inline** | `dev-plan`, `dev-refine`, `dev-refineall` (per-task legs), `dev-brainstorm`, `dev-unit` | Run the model step **in the current session** — do NOT shell to `spur agent run`; write the result via `spur task update --section --from-file` directly | Spawn via `spur agent run "<prompt>" --agent <value>` |
 | **Pipeline** | `dev-run`, `dev-review`, `dev-verify` | Forward nothing — the spawned `agent.run` step uses the configured default executor (`omp`). Current-agent execution is **not expressible** (the FSM runs a subprocess; the calling agent cannot block on itself) | Forward `--agent <value>` into the workflow `vars`, spawning that agent |
 
 ### Inline surface — the default is in-session

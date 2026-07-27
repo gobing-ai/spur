@@ -106,6 +106,7 @@ reference for the half you're operating; do not duplicate its content here.
 | Batch-create gate | planning | `spur task batch-create` | [planning-workflow.md](references/planning-workflow.md) |
 | Design doc | planning | — (prompt work; §4.5/T9) | [planning-workflow.md](references/planning-workflow.md) |
 | Refine | planning | `spur task update --section` | [planning-workflow.md](references/planning-workflow.md) |
+| Batch refine | planning | `sp:dev-refineall` → per-task `refine` | [dev-operations.md](references/dev-operations.md) § refineall · [planning-workflow.md](references/planning-workflow.md) |
 | Task selection | execution | `spur task list` | [execution-workflow.md](references/execution-workflow.md) |
 | Pipeline run | execution | `spur workflow run` | [execution-workflow.md](references/execution-workflow.md) |
 | Implement (dispatch) | execution | `sp:code-implementation` | competency skill — the spine dispatches, does not inline |
@@ -205,8 +206,9 @@ for "what's actually in file Y" or for resources that sit outside the step seque
 `spur` CLI via the Bash tool. The `sp:dev-*` slash commands are the primary entry points;
 invoke the skill directly via `Skill(skill="sp:spur-dev", args="plan <description>")` for
 planning, `args="run <wbs>"` for execution, `args="unit <target>"` for test generation,
-or `args="refine <wbs>"` for task refinement. Use `spur agent run` for isolated LLM
-invocations within pipeline steps.
+or `args="refine <wbs>"` for task refinement, or `args="refineall --feature <id> --auto"` for
+batch refine under a feature. Use `spur agent run` for isolated LLM invocations within pipeline
+steps.
 
 ### Codex / OpenClaw / OpenCode / Antigravity
 
