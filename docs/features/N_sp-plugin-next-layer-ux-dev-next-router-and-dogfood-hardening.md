@@ -251,6 +251,7 @@ Feature: sp plugin next-layer UX — wayfinder map N
 | 0278 | Dogfood residual hardening from 0277 dogfood reports (done-gate, cost, self-validate) | done |
 | 0279 | Wire next-router into super-coder (preflight + one-shot recovery) | done |
 | 0294 | Fix consolidated open findings from 2026-07-18 dogfood runs (0280/0292/0293) | done |
+| 0341 | dev-verify/verifyall: no 'not started' verdict cell, and duplicate follow-up task creation | todo |
 <!-- END AUTO-GENERATED -->
 
 ## History

@@ -60,6 +60,7 @@ Feature: Features board module
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0194 | Features board module: tree view, detail panel, lifecycle actions, check runner | done |
+| 0342 | apps/web: eliminate the standing React act() warning in the features test suite | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
