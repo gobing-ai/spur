@@ -12,7 +12,9 @@ import {
     checkAcCoverage,
     featureFrontmatterSchema,
     MarkdownDocument,
+    normalizeTitle,
     parseChecklist,
+    parseFeature,
     stripAcFence,
     validateAcceptanceCriteria,
 } from '@gobing-ai/spur-domain';
@@ -110,6 +112,8 @@ export class FeatureCheckService extends PlanningCheckService {
             featuresDir?: string;
             tasksDir?: string;
             dogfoodDir?: string;
+            /** Directory containing `<wbs>-verdict.json` artifacts (default: <tasksDir parent>/.spur/run). */
+            runDir?: string;
             severityOverrides?: Record<string, 'error' | 'warning' | 'off'>;
         },
     ): Promise<CheckFeatureResult> {
@@ -142,7 +146,9 @@ export class FeatureCheckService extends PlanningCheckService {
         // ── L4: Traceability — incoming feature_id edges + orphan scenarios ──
         const dogfoodDir =
             options?.dogfoodDir ?? (options?.featuresDir ? join(dirname(options.featuresDir), 'dogfood') : undefined);
-        await this.runL4(doc, featureId, status, options?.tasksDir, dogfoodDir, findings);
+        const runDir =
+            options?.runDir ?? (options?.tasksDir ? join(dirname(options.tasksDir), '.spur', 'run') : undefined);
+        await this.runL4(doc, featureId, status, options?.tasksDir, dogfoodDir, runDir, findings);
 
         return { id: featureId, ...this.summarizeWithStatus(status, findings, strict, options?.severityOverrides) };
     }
@@ -335,17 +341,22 @@ export class FeatureCheckService extends PlanningCheckService {
         status: string,
         tasksDir: string | undefined,
         dogfoodDir: string | undefined,
+        runDir: string | undefined,
         findings: CheckFeatureFindings[],
     ): Promise<void> {
         if (tasksDir === undefined) return;
 
         // Tasks reference features via `feature_id` (one direction, DD-07). A
         // feature's "edges" are the tasks pointing at it. Verify those tasks
-        // resolve (file exists + parses) and count them for orphan-scenario detection.
         let linkedTasks = 0;
         const incompleteTasks: string[] = [];
         const linkedTaskAc: string[] = [];
         const linkedTaskSolutions: string[] = [];
+        // Per-task linkage record for scenario-satisfaction classification (0340).
+        // A scenario is "covered" by a task when DD-09 normalized-title matching
+        // links them; "verified" only when that task is done AND carries a PASS
+        // verdict artifact whose matching requirement row is MET.
+        const linkedTaskRecords: Array<{ wbs: string; status: string; ac: string }> = [];
         try {
             const entries = await this.fs.readDir(tasksDir);
             for (const entry of entries) {
@@ -358,12 +369,14 @@ export class FeatureCheckService extends PlanningCheckService {
                     if (tfid !== featureId) continue;
                     linkedTasks += 1;
                     const tStatus = (tfm.status as string | undefined) ?? 'backlog';
+                    const wbs = entry.match(/^(\d{4})_/)?.[1] ?? entry;
                     if (tStatus !== 'done' && tStatus !== 'cancelled') {
-                        incompleteTasks.push(entry.match(/^(\d{4})_/)?.[1] ?? entry);
+                        incompleteTasks.push(wbs);
                     }
                     const tac = stripAcFence(taskDoc.getSection('Acceptance Criteria') ?? '');
                     if (tac.trim().length > 0) linkedTaskAc.push(tac);
                     linkedTaskSolutions.push(taskDoc.getSection('Solution') ?? '');
+                    linkedTaskRecords.push({ wbs, status: tStatus, ac: tac });
                 } catch {
                     // A task that references this feature but fails to parse is a
                     // dangling edge — surface it as a traceability warning.
@@ -421,6 +434,12 @@ export class FeatureCheckService extends PlanningCheckService {
             }
         }
 
+        // 0340: Scenario-satisfaction classification. For each linked (non-orphan)
+        // scenario, check whether any covering task is `done` AND carries a PASS
+        // verdict artifact whose matching requirement row is MET. Unverified
+        // scenarios emit L4.scenario-unverified (warning by default; --strict
+        // elevates to error). Orphans were already handled above and are excluded.
+        await this.checkScenarioSatisfaction(acBody, linkedTaskRecords, runDir, findings);
         // DD-13 verifying-readiness: a feature in (or entering) `verifying` should
         // have all its linked tasks done/cancelled. This is a WARNING (non-blocking)
         // — it surfaces through the `active→verifying` guard (`spur feature check`,
@@ -471,6 +490,121 @@ export class FeatureCheckService extends PlanningCheckService {
                     });
                 }
             }
+        }
+    }
+
+    /**
+     * 0340: Classify each linked (non-orphan) AC scenario as verified or
+     * unverified against per-task verdict artifacts. A scenario is verified when
+     * ANY covering task is `done` AND its `<wbs>-verdict.json` shows verdict PASS
+     * with a matching requirement row of status MET. Otherwise the scenario is
+     * linked-but-unverified → L4.scenario-unverified (warning; elevated by strict).
+     */
+    private async checkScenarioSatisfaction(
+        featureAc: string,
+        linkedTasks: Array<{ wbs: string; status: string; ac: string }>,
+        runDir: string | undefined,
+        findings: CheckFeatureFindings[],
+    ): Promise<void> {
+        if (linkedTasks.length === 0 || runDir === undefined) return;
+        const parsed = parseFeature(featureAc);
+        if (parsed === null) return;
+        if (parsed.scenarios.length === 0) return;
+
+        // Index AC-N aliases (1-based ordinal) so verdict rows keyed by either
+        // normalized title or AC-N ordinal both match.
+        const scenarioAliases = parsed.scenarios.map((s, i) => ({
+            title: s.name,
+            normalized: normalizeTitle(s.name),
+            alias: `AC-${i + 1}`,
+        }));
+
+        // Build covering-task sets per scenario using DD-09 normalized matching.
+        // A scenario is "covered" by a task when that task's AC contains a
+        // scenario whose normalized title matches (checkAcCoverage semantics).
+        const covers: Record<string, Array<{ wbs: string; status: string }>> = {};
+        for (const sc of scenarioAliases) {
+            const linked: Array<{ wbs: string; status: string }> = [];
+            for (const task of linkedTasks) {
+                // checkAcCoverage returns `orphans` = feature scenarios NOT covered
+                // by this task. If the scenario is NOT in orphans, this task covers it.
+                const taskCov = checkAcCoverage(`Feature: x\n  Scenario: ${sc.title}\n    Given x`, task.ac);
+                if (!taskCov.orphans.includes(sc.title)) {
+                    linked.push({ wbs: task.wbs, status: task.status });
+                }
+            }
+            covers[sc.title] = linked;
+        }
+
+        for (const sc of scenarioAliases) {
+            const linked = covers[sc.title] ?? [];
+            if (linked.length === 0) continue; // orphan — already handled above
+            const verified = await this.isScenarioVerified(sc, linked, runDir);
+            if (!verified) {
+                findings.push({
+                    layer: 'L4',
+                    code: FINDING_CODES.L4_SCENARIO_UNVERIFIED,
+                    severity: 'warning',
+                    section: 'Acceptance Criteria',
+                    message:
+                        `Feature scenario "${sc.title}" is linked but unverified: covering task(s) ` +
+                        `${linked.map((l) => l.wbs).join(', ')} have no PASS verdict with MET requirement`,
+                });
+            }
+        }
+    }
+
+    /**
+     * A scenario is verified when ANY covering task is `done` AND its verdict
+     * artifact shows verdict PASS with a matching requirement row of status MET.
+     * Matching requirement id = normalized scenario title OR AC-N alias.
+     */
+    private async isScenarioVerified(
+        sc: { title: string; normalized: string; alias: string },
+        linked: Array<{ wbs: string; status: string }>,
+        runDir: string,
+    ): Promise<boolean> {
+        for (const task of linked) {
+            if (task.status !== 'done') continue;
+            const artifact = await this.readVerdictArtifact(runDir, task.wbs);
+            if (artifact === null) continue;
+            if (artifact.verdict !== 'PASS') continue;
+            const matched = artifact.requirements.find(
+                (r) =>
+                    normalizeTitle(r.id) === sc.normalized ||
+                    normalizeTitle(r.alias ?? r.id) === sc.normalized ||
+                    r.id === sc.alias,
+            );
+            if (matched !== undefined && matched.status === 'MET') return true;
+        }
+        return false;
+    }
+
+    /**
+     * Read and parse `<runDir>/<wbs>-verdict.json`. Returns null on missing or
+     * malformed (graceful degradation — treated as unverified).
+     */
+    private async readVerdictArtifact(
+        runDir: string,
+        wbs: string,
+    ): Promise<{ verdict: string; requirements: Array<{ id: string; alias?: string; status: string }> } | null> {
+        try {
+            const raw = await this.fs.readFile(join(runDir, `${wbs}-verdict.json`));
+            const parsed = JSON.parse(raw) as {
+                verdict?: unknown;
+                requirements?: Array<{ id?: unknown; status?: unknown }>;
+            };
+            if (typeof parsed.verdict !== 'string') return null;
+            if (!Array.isArray(parsed.requirements)) return null;
+            const requirements = parsed.requirements
+                .filter(
+                    (r): r is { id: string; status: string } =>
+                        typeof r?.id === 'string' && typeof r?.status === 'string',
+                )
+                .map((r) => ({ id: r.id, status: r.status }));
+            return { verdict: parsed.verdict, requirements };
+        } catch {
+            return null;
         }
     }
 }

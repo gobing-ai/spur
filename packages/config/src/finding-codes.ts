@@ -18,6 +18,8 @@ export const ALL_FINDING_CODES = [
 
     // L3: Format rules
     'L3.requirements-format',
+    'L3.requirements-empty',
+    'L3.ac-empty',
     'L3.solution-file-line',
     'L3.review-priority-table',
     'L3.testing-coverage',
@@ -52,6 +54,7 @@ export const ALL_FINDING_CODES = [
     'L4.uncovered-feature-scenario',
     'L4.verifying-incomplete-tasks',
     'L4.dogfood-missing',
+    'L4.scenario-unverified',
 ] as const;
 
 /** Union type of all valid finding codes. */
@@ -75,6 +78,8 @@ export const FINDING_CODES = {
 
     // L3
     L3_REQUIREMENTS_FORMAT: 'L3.requirements-format',
+    L3_REQUIREMENTS_EMPTY: 'L3.requirements-empty',
+    L3_AC_EMPTY: 'L3.ac-empty',
     L3_SOLUTION_FILE_LINE: 'L3.solution-file-line',
     L3_REVIEW_PRIORITY_TABLE: 'L3.review-priority-table',
     L3_TESTING_COVERAGE: 'L3.testing-coverage',
@@ -109,4 +114,5 @@ export const FINDING_CODES = {
     L4_UNCOVERED_FEATURE_SCENARIO: 'L4.uncovered-feature-scenario',
     L4_VERIFYING_INCOMPLETE_TASKS: 'L4.verifying-incomplete-tasks',
     L4_DOGFOOD_MISSING: 'L4.dogfood-missing',
+    L4_SCENARIO_UNVERIFIED: 'L4.scenario-unverified',
 } as const satisfies Record<string, FindingCode>;
