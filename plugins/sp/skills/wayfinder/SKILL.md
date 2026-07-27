@@ -150,10 +150,13 @@ The map is **deliberately incomplete**: don't chart what you can't yet see. Beyo
 
 The map's **## Not yet specified** section is where that dim view is written down: the suspected question, the area to revisit later. It's the undiscovered frontier toward the destination — everything here is in scope, just not sharp enough to ticket.
 
-**Fog or ticket?** The test is whether you can state the question precisely now — not whether you can answer it now.
+**Ask, ticket, or fog?** Sharpness alone does not earn a ticket — a ticket costs a whole session, so it must also need one. Apply both tests, in this order:
 
-- **Ticket when** the question is already sharp — even if it's blocked and you can't act on it yet.
-- **Not yet specified when** you can't yet phrase it that sharply. Don't pre-slice the fog into ticket-sized pieces: it's coarser than a ticket, and one patch may graduate into several tickets, or none, once the frontier reaches it.
+1. **Ask now when** the question is sharp **and the operator already holds the answer** — a preference, a scope call, a ruling only they can make. These are decision briefs, not investigations. Put them to the operator in the charting session (`AskUserQuestion` where available), record the answer directly in **## Decisions so far**, and never create a ticket. A ticket here buys nothing and costs a session.
+2. **Ticket when** the question is sharp **and answering it needs real work** — research, a prototype, a codebase inventory, or structured back-and-forth that will not fit in one exchange. Blocked-but-sharp still tickets.
+3. **Not yet specified when** you can't yet phrase the question sharply. Don't pre-slice the fog into ticket-sized pieces: it's coarser than a ticket, and one patch may graduate into several tickets, or none, once the frontier reaches it.
+
+The failure mode this prevents: charting a map, then watching the operator answer half the tickets in their next message. If that happens, those were briefs mis-filed as tickets — consolidate them and record the answers.
 
 **Not yet specified** excludes what's already decided (Decisions so far), what's already a live ticket, and what's out of scope.
 
@@ -189,6 +192,7 @@ The operator invokes this skill directly: `Skill(skill="sp:wayfinder", args="<lo
 | "I'll auto-escalate to wayfinding when the topic looks big." | Scope judgment needs human confirmation. A 30-minute quick-answer need might touch a big domain without requiring a multi-session map. Always ask. |
 | "The map feature description is just boilerplate — the tasks are what matter." | The map is the orienting artifact every session loads first. Without a clear destination and running Decisions-so-far log, each session re-derives context from scratch. |
 | "I'll pre-slice the fog into ticket stubs so the map looks more complete." | Pre-sliced fog is noise — it creates tickets for questions you can't yet phrase, which wastes time and may point the wrong direction once earlier tickets resolve. |
+| "More tickets make the map look thorough." | A ticket costs a session. If the operator answers it in their next message, it was a decision brief mis-filed as a ticket — ask those during charting and record them in Decisions so far. |
 
 ## Red Flags
 
@@ -198,6 +202,7 @@ The operator invokes this skill directly: `Skill(skill="sp:wayfinder", args="<lo
 - An empty or missing **## Not yet specified** section when the destination was described as foggy — fog that isn't written down is fog the next session can't see.
 - Skipping the claim step (`spur task update <wbs> wip`) before work — concurrent sessions may collide.
 - Pre-slicing fog into ticket stubs before the questions are sharp.
+- Ticketing a question the operator could answer on the spot — a preference or scope ruling is a decision brief, not an investigation ticket.
 - Referring to tickets by bare WBS number instead of WBS + title.
 - Treating wayfinding as a replacement for brainstorming — wayfinding is for when the destination ITSELF is foggy, not for generating options toward a clear destination.
 
