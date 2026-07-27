@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { FEATURE_STATUSES as DOMAIN_FEATURE_STATUSES } from '@gobing-ai/spur-domain/schema';
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import type { FeatureSummary } from '../../../src/lib/feature-types';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
 import { isWebModule } from '../../../src/modules/discover';
@@ -607,8 +607,12 @@ describe('FeaturesShell', () => {
         setStatus('verifying');
         const es = FakeEventSource.instances.at(-1);
         expect(es).toBeDefined();
-        es?.onmessage?.(new MessageEvent('message', { data: JSON.stringify({ eventName: 'feature.updated' }) }));
-
+        // Wrap the external SSE dispatch in `act` so the async tree refetch
+        // (`void load()` → `setFeatures`) and the detail nudge both flush
+        // inside the test boundary rather than after the test returns.
+        await act(async () => {
+            es?.onmessage?.(new MessageEvent('message', { data: JSON.stringify({ eventName: 'feature.updated' }) }));
+        });
         await waitFor(() => expect(getByTestId('status-pill').textContent).toBe('verifying'));
     });
 
