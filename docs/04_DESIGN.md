@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.3.8
+version: 1.4.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-07-27
@@ -158,8 +158,12 @@ matched against each executor's `tier` field; 0343 split bare `capable` into qua
 escalates along the ordered `fallback` chain when an objective `--signal`
 (`gate-fail`/`timeout`/`insufficient-evidence`/`retry-exhausted`) is supplied (with
 `--from-executor` naming the current tier). Legacy bare `capable` normalizes to `capable-1` during
-the deprecation window. `default-by-phase` is retained only as a backward-compatibility shim that
-emits a one-time deprecation warning and preserves the 0126 fail-fast semantics.
+the deprecation window. **Stage floors (cost-aware):** `plan` starts at `capable-2` (escalate to
+`capable-3`) so Design is authored at create by default; `refine` floors at `standard` (fallback
+`capable-2`) as the blank-Design fallback; `implement` stays `standard`; `verify`/`dogfood` floor at
+`capable-1`. Unified `--skip-design` skips feature satellite **and** per-task Design at create.
+`default-by-phase` is retained only as a backward-compatibility shim that emits a one-time
+deprecation warning and preserves the 0126 fail-fast semantics.
 `--continue` resumes the previous session. `--mode text|json` (default `text`) passes output format
 to the agent CLI (Grok maps `text` → `--output-format plain`). `--cwd` sets the working directory.
 `--json` emits a machine-readable envelope

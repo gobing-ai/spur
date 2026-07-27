@@ -559,4 +559,21 @@ describe('model_policy helpers & canonical stage registry (0319)', () => {
         expect(aliasMatch?.id).toBe('implement');
         expect(getCanonicalStage('nonexistent')).toBeUndefined();
     });
+
+    test('plan is capable-first; refine is cheap fallback for blank Design', () => {
+        const plan = getCanonicalStage('plan');
+        const refine = getCanonicalStage('refine');
+        expect(plan?.model_policy.min_tier).toBe('capable-2');
+        expect(plan?.model_policy.fallback).toEqual([{ tier: 'capable-3', trigger: 'gate-fail' }]);
+        expect(refine?.model_policy.min_tier).toBe('standard');
+        expect(refine?.model_policy.fallback).toEqual([{ tier: 'capable-2', trigger: 'gate-fail' }]);
+        const planTier = plan?.model_policy.min_tier;
+        const refineTier = refine?.model_policy.min_tier;
+        expect(planTier).toBeDefined();
+        expect(refineTier).toBeDefined();
+        if (planTier === undefined || refineTier === undefined) {
+            throw new Error('expected plan and refine stages to define min_tier');
+        }
+        expect(TIER_RANK[planTier]).toBeGreaterThan(TIER_RANK[refineTier]);
+    });
 });

@@ -694,9 +694,11 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
         mutation_class: 'corpus',
         retry: { max_attempts: 3, terminal_stop: 'block' },
         model_policy: {
+            // Default: Design is authored at plan/create (capable models). Refine is the
+            // cheap fallback for blank/missing Design — standard floor; escalate to capable-2
+            // only when the pre-synthesis SKIP gate fails on target sections.
             min_tier: 'standard',
-            // Escalation into the capable band starts at the floor (capable-1).
-            fallback: [{ tier: 'capable-1', trigger: 'gate-fail' }],
+            fallback: [{ tier: 'capable-2', trigger: 'gate-fail' }],
         },
         context_layers: [],
         observability: [],
@@ -714,9 +716,9 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
         mutation_class: 'corpus',
         retry: { max_attempts: 3, terminal_stop: 'block' },
         model_policy: {
-            // 0343: bare capable restated as capable-1 (floor of the capable band).
-            min_tier: 'capable-1',
-            fallback: [],
+            // Planning/create is the capable-first path (author Design in batch by default).
+            min_tier: 'capable-2',
+            fallback: [{ tier: 'capable-3', trigger: 'gate-fail' }],
         },
         context_layers: [],
         observability: [],

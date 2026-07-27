@@ -217,6 +217,16 @@ const capableModel: StageModelPolicy = {
     min_tier: 'capable-1',
     fallback: [],
 };
+/** Plan/create: capable-first (Design authored into tasks by default). */
+const planModel: StageModelPolicy = {
+    min_tier: 'capable-2',
+    fallback: [{ tier: 'capable-3', trigger: 'gate-fail' }],
+};
+/** Refine: cheap fallback when Design/AC/Plan still blank after create. */
+const refineModel: StageModelPolicy = {
+    min_tier: 'standard',
+    fallback: [{ tier: 'capable-2', trigger: 'gate-fail' }],
+};
 
 const layer = (name: ContextLayerName): StageContextLayer => ({ layer: name, required: true });
 const event = (name: string, description?: string): StageEvent => ({ name, description });
@@ -243,7 +253,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
         ],
         mutation_class: 'corpus',
         retry: defaultRetry,
-        model_policy: standardModel,
+        model_policy: refineModel,
         context_layers: [layer('project-authority'), layer('task-state'), layer('stage-contract')],
         observability: [event('stage-started'), event('feature-created'), event('batch-created')],
         execution: inlineInline(true),
@@ -264,7 +274,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
         ],
         mutation_class: 'corpus',
         retry: defaultRetry,
-        model_policy: capableModel,
+        model_policy: planModel,
         context_layers: [layer('project-authority'), layer('task-state'), layer('stage-contract')],
         observability: [event('stage-started'), event('feature-created'), event('batch-created')],
         execution: inlineInline(true),
