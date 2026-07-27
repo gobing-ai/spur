@@ -143,8 +143,14 @@ model **unless** the user passed an explicit `--model` (explicit wins). A config
 authoritative: an unknown executor exits 2, a known-but-unusable executor exits 1, and neither falls
 back. With no phase match, `agent.default` is resolved as an executor selector (then a legacy agent
 name); on miss, the static Tier-1 priority resolver picks the first usable Tier-1 agent — the legacy
-behavior preserved when no `agent` config is present. `current` reads `SPUR_AGENT` env var; an
-explicit name resolves directly and never consults phase config.
+behavior preserved when no `agent` config is present. `current` reads `SPUR_AGENT` env var.
+**Explicit `--agent` is executor-aware (0346).** An explicit `--agent <name>` reuses the same
+executor-first-then-binary lookup as `agent.default` (`resolveExecutorSelector`, source `explicit`):
+if `agent.executors` has an entry whose `name` matches, that profile's `{ agent, model? }` is used
+(the profile's `model` becomes the run model unless the user also passed `--model`); otherwise the
+name is resolved as a legacy coding-agent binary. Collision precedence: when an executor and an
+agent binary share a name, **the executor wins** (to reach the bare binary, remove or rename the
+executor entry). An explicit selector never consults phase / `default-by-phase` config (R8).
 **Stage-registry routing (ADR-033).** `auto` now resolves primarily on the canonical `stage_id`
 (from an explicit `--stage <id>`, else the derived phase): the stage's `model_policy` starts on the
 cheapest eligible executor at its `min_tier` (`cheap`/`standard`/`capable`, matched against each
