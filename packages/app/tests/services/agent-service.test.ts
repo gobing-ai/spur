@@ -1852,7 +1852,7 @@ describe('AgentService stage-registry adaptive model routing (0319)', () => {
         executors: [
             { name: 'cheap-exec', agent: 'pi', tier: 'cheap' },
             { name: 'std-exec', agent: 'pi', tier: 'standard' },
-            { name: 'capable-exec', agent: 'claude', tier: 'capable' },
+            { name: 'capable-exec', agent: 'claude', tier: 'capable-1' },
         ],
     };
 
@@ -1873,7 +1873,7 @@ describe('AgentService stage-registry adaptive model routing (0319)', () => {
         const svc = makeConfiguredService({
             executors: [
                 { name: 'cheap-exec', agent: 'pi', tier: 'cheap' },
-                { name: 'capable-exec', agent: 'claude', tier: 'capable' },
+                { name: 'capable-exec', agent: 'claude', tier: 'capable-1' },
             ],
         });
         const { deps, runner } = mockResolutionDeps();
@@ -1888,7 +1888,7 @@ describe('AgentService stage-registry adaptive model routing (0319)', () => {
         const svc = makeService({}, output, stageConfig);
         const { deps, runner } = mockResolutionDeps();
 
-        // Stage implement has min_tier: standard, fallback on gate-fail: capable
+        // Stage implement has min_tier: standard, fallback on gate-fail: capable-1
         const code = await svc.run(
             'Implement task',
             {

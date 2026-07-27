@@ -30,7 +30,7 @@ const basePlanRecord: StageRecord = {
     retry: { max_attempts: 3, terminal_stop: 'block' },
     model_policy: {
         min_tier: 'standard',
-        fallback: [{ tier: 'capable', trigger: 'gate-fail' }],
+        fallback: [{ tier: 'capable-1', trigger: 'gate-fail' }],
     },
     context_layers: [{ layer: 'project-authority', required: true }],
     observability: [{ name: 'stage-started' }],

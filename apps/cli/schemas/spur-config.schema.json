@@ -12,7 +12,7 @@
         },
         "version": {
             "type": "string",
-            "description": "Config schema version. Currently '1'."
+            "description": "Config schema version (string, not integer). Current recommended: '1.1' (ADR-033 executor tiers + planning blocks). '1' remains accepted for backward compatibility."
         },
         "name": {
             "type": "string",
@@ -129,15 +129,15 @@
                             },
                             "tier": {
                                 "type": "string",
-                                "enum": ["cheap", "standard", "capable"],
-                                "description": "Capability tier for stage-registry adaptive model routing (ADR-033). A stage starts on the cheapest eligible executor meeting its model_policy min_tier and escalates along the fallback chain on objective signals."
+                                "enum": ["cheap", "standard", "capable-1", "capable-2", "capable-3"],
+                                "description": "Capability tier for stage-registry adaptive model routing (ADR-033, 0343). Live values: cheap | standard | capable-1 | capable-2 | capable-3 (1=low output quality, 3=high within the capable band). A stage starts on the cheapest eligible executor meeting its model_policy min_tier. Bare legacy `capable` is accepted at runtime (zod preprocess → capable-1) during the deprecation window but is not part of this editor enum."
                             }
                         }
                     }
                 },
                 "default-by-phase": {
                     "type": "object",
-                    "description": "Map of dev phase (e.g. dev-run, dev-review) to executor selector. A configured phase mapping is authoritative — a broken mapping fails fast and does NOT fall back to `default`.",
+                    "description": "DEPRECATED (ADR-033). Backward-compat map of dev phase (e.g. dev-run, dev-review) to executor selector. Prefer executor `tier` + stage-registry model_policy. When present, a matching phase mapping is still authoritative (fail-fast; no fall back to `default`) and shadows stage routing for that phase.",
                     "additionalProperties": {
                         "type": "string"
                     }

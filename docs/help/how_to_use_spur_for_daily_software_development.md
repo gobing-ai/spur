@@ -777,15 +777,15 @@ retired). The Zod-validated schema lives in `@gobing-ai/spur-config`. A canonica
 
 ```yaml
 $schema: "@gobing-ai/spur/schemas/spur-config.schema.json"
-version: "1"
+version: "1.1"            # string; current recommended. "1" still accepted.
 name: my-project
 
 bootstrap:
   logging:
     enabled: true
     level: info           # debug | info | warn | error
-    console: true
-    json: true
+    console: false
+    json: false
     file: true
     filePath: .spur/logs/spur.log
   database:
@@ -798,12 +798,17 @@ bootstrap:
     enabled: false
 
 agent:
-  default: pi             # default executor when no phase matches
-  default-by-phase:
-    # phase → named `agent.executors` profile
-    dev-run: { name: orchestrator, agent: claude, model: opus-4 }
+  default: omp            # executor selector first, then legacy agent name
+  # ADR-033 / 0343: cheap | standard | capable-1 | capable-2 | capable-3
+  # Stage registry picks cheapest eligible; same-tier order = preference
   executors:
-    orchestrator: { name: orchestrator, agent: claude }
+    - name: omp
+      agent: omp
+      tier: standard
+    - name: claude
+      agent: claude
+      tier: capable-3
+  # default-by-phase is a deprecated shim — prefer executor tier + stage routing
 
 rules:
   paths:

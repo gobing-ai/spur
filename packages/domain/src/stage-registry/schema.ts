@@ -313,6 +313,35 @@ export type StageRetryPolicy = z.infer<typeof stageRetryPolicySchema>;
 
 // ─── Model eligibility / fallback (R1) ────────────────────────────────────
 
+// ─── Capability tiers & Model Policy Helpers (0319, 0343) ─────────────────
+
+/**
+ * Model capability tier vocabulary (0343).
+ * `capable` split into capable-1/2/3 (1 = low output quality, 3 = high).
+ * `cheap` and `standard` stay single, unsubdivided.
+ */
+export const CAPABILITY_TIERS = ['cheap', 'standard', 'capable-1', 'capable-2', 'capable-3'] as const;
+
+/** Model capability tier vocabulary. */
+export type CapabilityTier = (typeof CAPABILITY_TIERS)[number];
+
+/**
+ * Legacy bare `capable` (pre-0343). Accepted during the deprecation window as a
+ * synonym for `capable-1` (floor of the capable band). Not a live enum member.
+ */
+export const LEGACY_CAPABLE_ALIAS = 'capable' as const;
+
+/**
+ * Normalize a raw tier value: bare `capable` → `capable-1`. Other values pass through
+ * for zod to validate against {@link CAPABILITY_TIERS}.
+ */
+export function normalizeCapabilityTier(value: unknown): unknown {
+    return value === LEGACY_CAPABLE_ALIAS ? 'capable-1' : value;
+}
+
+/** Zod schema for a capability tier, with legacy `capable` → `capable-1` preprocess. */
+export const capabilityTierSchema = z.preprocess(normalizeCapabilityTier, z.enum(CAPABILITY_TIERS));
+
 /**
  * Adaptive model policy: static minima plus an objective-signal fallback
  * chain. Price is not a primary metric; qualification uses outcome
@@ -321,12 +350,12 @@ export type StageRetryPolicy = z.infer<typeof stageRetryPolicySchema>;
 export const stageModelPolicySchema = z
     .object({
         /** Minimum model capability tier required to start the stage. */
-        min_tier: z.enum(['cheap', 'standard', 'capable']),
+        min_tier: capabilityTierSchema,
         /** Ordered fallback chain triggered by objective escalation. */
         fallback: z.array(
             z
                 .object({
-                    tier: z.enum(['cheap', 'standard', 'capable']),
+                    tier: capabilityTierSchema,
                     /** Objective signal that triggers this fallback step. */
                     trigger: z.enum(['gate-fail', 'timeout', 'insufficient-evidence', 'retry-exhausted']),
                 })
@@ -340,16 +369,16 @@ export const stageModelPolicySchema = z
 /** Inferred TypeScript shape of a stage model policy. */
 export type StageModelPolicy = z.infer<typeof stageModelPolicySchema>;
 
-// ─── Capability tiers & Model Policy Helpers (0319) ────────────────────────
-
-/** Model capability tier vocabulary. */
-export type CapabilityTier = 'cheap' | 'standard' | 'capable';
-
-/** Numerical rank mapping for capability tiers (cheap: 1, standard: 2, capable: 3). */
+/**
+ * Numerical rank mapping for capability tiers (0343).
+ * cheap=1 < standard=2 < capable-1=3 < capable-2=4 < capable-3=5.
+ */
 export const TIER_RANK: Record<CapabilityTier, number> = {
     cheap: 1,
     standard: 2,
-    capable: 3,
+    'capable-1': 3,
+    'capable-2': 4,
+    'capable-3': 5,
 };
 
 /** Returns true if candidateTier meets or exceeds minTier capability. */
@@ -666,7 +695,8 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
         retry: { max_attempts: 3, terminal_stop: 'block' },
         model_policy: {
             min_tier: 'standard',
-            fallback: [{ tier: 'capable', trigger: 'gate-fail' }],
+            // Escalation into the capable band starts at the floor (capable-1).
+            fallback: [{ tier: 'capable-1', trigger: 'gate-fail' }],
         },
         context_layers: [],
         observability: [],
@@ -684,7 +714,8 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
         mutation_class: 'corpus',
         retry: { max_attempts: 3, terminal_stop: 'block' },
         model_policy: {
-            min_tier: 'capable',
+            // 0343: bare capable restated as capable-1 (floor of the capable band).
+            min_tier: 'capable-1',
             fallback: [],
         },
         context_layers: [],
@@ -705,8 +736,8 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
         model_policy: {
             min_tier: 'standard',
             fallback: [
-                { tier: 'capable', trigger: 'gate-fail' },
-                { tier: 'capable', trigger: 'timeout' },
+                { tier: 'capable-1', trigger: 'gate-fail' },
+                { tier: 'capable-1', trigger: 'timeout' },
             ],
         },
         context_layers: [],
@@ -726,7 +757,7 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
         retry: { max_attempts: 3, terminal_stop: 'block' },
         model_policy: {
             min_tier: 'standard',
-            fallback: [{ tier: 'capable', trigger: 'gate-fail' }],
+            fallback: [{ tier: 'capable-1', trigger: 'gate-fail' }],
         },
         context_layers: [],
         observability: [],
@@ -744,7 +775,7 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
         mutation_class: 'verdict',
         retry: { max_attempts: 2, terminal_stop: 'escalate' },
         model_policy: {
-            min_tier: 'capable',
+            min_tier: 'capable-1',
             fallback: [],
         },
         context_layers: [],
@@ -764,7 +795,7 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
         retry: { max_attempts: 2, terminal_stop: 'block' },
         model_policy: {
             min_tier: 'standard',
-            fallback: [{ tier: 'capable', trigger: 'gate-fail' }],
+            fallback: [{ tier: 'capable-1', trigger: 'gate-fail' }],
         },
         context_layers: [],
         observability: [],
@@ -783,7 +814,7 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
         retry: { max_attempts: 2, terminal_stop: 'block' },
         model_policy: {
             min_tier: 'standard',
-            fallback: [{ tier: 'capable', trigger: 'gate-fail' }],
+            fallback: [{ tier: 'capable-1', trigger: 'gate-fail' }],
         },
         context_layers: [],
         observability: [],
@@ -801,7 +832,7 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
         mutation_class: 'driver',
         retry: { max_attempts: 3, terminal_stop: 'block' },
         model_policy: {
-            min_tier: 'capable',
+            min_tier: 'capable-1',
             fallback: [],
         },
         context_layers: [],

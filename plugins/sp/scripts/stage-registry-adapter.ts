@@ -61,10 +61,13 @@ export interface StageRetryPolicy {
     timeout_seconds?: number;
 }
 
+/** Capability tiers (0343): cheap | standard | capable-1 | capable-2 | capable-3. */
+export type AdapterCapabilityTier = 'cheap' | 'standard' | 'capable-1' | 'capable-2' | 'capable-3';
+
 export interface StageModelPolicy {
-    min_tier: 'cheap' | 'standard' | 'capable';
+    min_tier: AdapterCapabilityTier;
     fallback: Array<{
-        tier: 'cheap' | 'standard' | 'capable';
+        tier: AdapterCapabilityTier;
         trigger: 'gate-fail' | 'timeout' | 'insufficient-evidence' | 'retry-exhausted';
     }>;
     override_key?: string;
@@ -208,10 +211,10 @@ const inlineHitl = (timing: 'pre' | 'post' | 'both'): ExecutionVariantHitl => ({
 const defaultRetry: StageRetryPolicy = { max_attempts: 3, terminal_stop: 'block', timeout_seconds: 300 };
 const standardModel: StageModelPolicy = {
     min_tier: 'standard',
-    fallback: [{ tier: 'capable', trigger: 'gate-fail' }],
+    fallback: [{ tier: 'capable-1', trigger: 'gate-fail' }],
 };
 const capableModel: StageModelPolicy = {
-    min_tier: 'capable',
+    min_tier: 'capable-1',
     fallback: [],
 };
 

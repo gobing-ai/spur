@@ -116,18 +116,47 @@ export type FeaturesConfig = z.infer<typeof featuresConfigSchema>;
 // ---- Agent config (app section) ----
 
 /**
+ * Executor capability tiers (0343). Live vocabulary is five values:
+ * `cheap | standard | capable-1 | capable-2 | capable-3`.
+ * Bare `capable` is accepted during the deprecation window as a synonym for
+ * `capable-1` (must stay in lockstep with domain `capabilityTierSchema`).
+ * CF-safe core cannot import domain — the enum + preprocess are mirrored here.
+ */
+export const EXECUTOR_CAPABILITY_TIERS = ['cheap', 'standard', 'capable-1', 'capable-2', 'capable-3'] as const;
+
+/** Executor capability tier (canonical post-0343 values only). */
+export type ExecutorCapabilityTier = (typeof EXECUTOR_CAPABILITY_TIERS)[number];
+
+/** Normalize legacy bare `capable` → `capable-1` before enum validation. */
+function normalizeExecutorTier(value: unknown): unknown {
+    return value === 'capable' ? 'capable-1' : value;
+}
+
+/**
+ * Zod schema for an executor `tier` field.
+ * Missing/null → undefined (optional). Legacy bare `capable` → `capable-1`.
+ */
+export const executorCapabilityTierSchema = z.preprocess((value) => {
+    if (value === undefined || value === null) return undefined;
+    return normalizeExecutorTier(value);
+}, z.enum(EXECUTOR_CAPABILITY_TIERS).optional());
+
+/**
  * Schema for a single named executor profile under `agent.executors`.
  *
  * An executor pairs a canonical coding-agent (`agent`) with an optional opaque
  * `model` override. `name` is the selector key referenced from `agent.default`
  * and `agent.default-by-phase`. `agent`/`model` are validated as non-empty
  * strings here; canonicalization and usability checks happen at resolution time.
+ *
+ * `tier` (0343): declare `cheap | standard | capable-1 | capable-2 | capable-3`.
+ * Never invent capable-2/3 via inference — only declare those explicitly.
  */
 export const AgentExecutorConfigSchema = z.object({
     name: z.string().min(1),
     agent: z.string().min(1),
     model: z.string().min(1).optional(),
-    tier: z.enum(['cheap', 'standard', 'capable']).optional(),
+    tier: executorCapabilityTierSchema.optional(),
 });
 
 /** A single executor profile entry. */
@@ -353,6 +382,9 @@ export const RedactionConfigSchema = z.object({
  * All fields are optional — a missing key means "use the default" rather than "error",
  * preserving partial-config tolerance and forward-compatible additions. YAML keys are
  * preserved verbatim (R3 — no drift from the existing `.spur/config.yaml`).
+ *
+ * `version` is a **string** label (recommended `"1.1"`; `"1"` still accepted). There is
+ * no hard migrator keyed on this field yet — unquoted YAML numbers fail validation.
  */
 export const spurConfigSchema = z.object({
     version: z.string().optional(),

@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.3.6
+version: 1.3.8
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-07-22
+updated_at: 2026-07-27
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -153,12 +153,13 @@ agent binary share a name, **the executor wins** (to reach the bare binary, remo
 executor entry). An explicit selector never consults phase / `default-by-phase` config (R8).
 **Stage-registry routing (ADR-033).** `auto` now resolves primarily on the canonical `stage_id`
 (from an explicit `--stage <id>`, else the derived phase): the stage's `model_policy` starts on the
-cheapest eligible executor at its `min_tier` (`cheap`/`standard`/`capable`, matched against each
-executor's `tier` field) and escalates along the ordered `fallback` chain when an objective
-`--signal` (`gate-fail`/`timeout`/`insufficient-evidence`/`retry-exhausted`) is supplied (with
-`--from-executor` naming the current tier). `default-by-phase` is retained only as a
-backward-compatibility shim that emits a one-time deprecation warning and preserves the 0126
-fail-fast semantics.
+cheapest eligible executor at its `min_tier` (`cheap`/`standard`/`capable-1`/`capable-2`/`capable-3`,
+matched against each executor's `tier` field; 0343 split bare `capable` into quality sub-tiers) and
+escalates along the ordered `fallback` chain when an objective `--signal`
+(`gate-fail`/`timeout`/`insufficient-evidence`/`retry-exhausted`) is supplied (with
+`--from-executor` naming the current tier). Legacy bare `capable` normalizes to `capable-1` during
+the deprecation window. `default-by-phase` is retained only as a backward-compatibility shim that
+emits a one-time deprecation warning and preserves the 0126 fail-fast semantics.
 `--continue` resumes the previous session. `--mode text|json` (default `text`) passes output format
 to the agent CLI (Grok maps `text` → `--output-format plain`). `--cwd` sets the working directory.
 `--json` emits a machine-readable envelope
@@ -360,18 +361,24 @@ Two top-level concerns:
   the canonical default. `@gobing-ai/spur-config` is the SSOT; `apps/cli/schemas/spur-config.schema.json`
   mirrors it for editor/CI validation.
 
+`version` is a **string** (YAML must quote it: `"1.1"`). Current recommended value is
+`"1.1"` (ADR-033 executor tiers + planning blocks). `"1"` remains accepted; there is no hard
+migrator yet. Do not use a bare integer (`version: 2` fails Zod `z.string()`).
+
 ```yaml
-version: "1"
+version: "1.1"
 name: <project-name>
 bootstrap:
   logging:
     enabled: true
     level: info           # debug | info | warn | error
-    console: true
-    json: true
+    console: false
+    json: false
+    file: true
+    filePath: .spur/logs/spur.log
   telemetry:
     enabled: false        # CLI: off by default (per-invocation latency)
-    serviceName: spur-cli
+    serviceName: spur
     environment: development
   database:
     enabled: true
@@ -380,7 +387,16 @@ bootstrap:
   scheduler:
     enabled: false        # CLI is run-once; no scheduler
 agent:
-  default: pi
+  default: omp            # executor selector first, then legacy agent name
+  executors:              # ADR-033 / 0343 — declare tier (capable-1/2/3 quality ladder)
+    - name: omp
+      agent: omp
+      tier: standard
+    - name: claude
+      agent: claude
+      tier: capable-3
+  # default-by-phase:     # deprecated shim (ADR-033); prefer executor tier + stage registry
+  #   dev-run: omp
 rules:
   paths:
     - .spur/rules/**/*.yaml

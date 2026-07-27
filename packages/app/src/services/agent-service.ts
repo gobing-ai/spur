@@ -1075,10 +1075,21 @@ function parseTagsFlag(flags: Record<string, string | boolean>): string[] | unde
     return tags.length > 0 ? tags : undefined;
 }
 
+/**
+ * Resolve an executor's capability tier (0343).
+ * Declared `tier` wins. Inference may only yield `cheap`, `standard`, or
+ * `capable-1` — never invent `capable-2`/`capable-3` from a regex.
+ * Legacy bare `capable` (if still present on a raw config object) maps to
+ * `capable-1`.
+ */
 function getExecutorTier(executor: AgentExecutorConfig): CapabilityTier {
-    if (executor.tier) return executor.tier;
+    if (executor.tier) {
+        // Structural compat: configs that skip zod may still carry legacy `capable`.
+        const declared = executor.tier as CapabilityTier | 'capable';
+        return declared === 'capable' ? 'capable-1' : declared;
+    }
     const combined = `${executor.name} ${executor.model ?? ''} ${executor.agent}`.toLowerCase();
     if (/\b(cheap|haiku|flash|lite|mini|fast)\b/.test(combined)) return 'cheap';
-    if (/\b(capable|opus|pro|sonnet|r1|o1|o3|expert)\b/.test(combined)) return 'capable';
+    if (/\b(capable|opus|pro|sonnet|r1|o1|o3|expert)\b/.test(combined)) return 'capable-1';
     return 'standard';
 }

@@ -134,6 +134,24 @@ describe('app-section schemas', () => {
         expect(result.success).toBe(true);
     });
 
+    test('executor tier accepts capable-1/2/3 and normalizes legacy bare capable (0343)', () => {
+        const result = AgentConfigSchema.parse({
+            executors: [
+                { name: 'a', agent: 'claude', tier: 'capable-3' },
+                { name: 'b', agent: 'omp', tier: 'capable' },
+                { name: 'c', agent: 'pi', tier: 'capable-1' },
+            ],
+        });
+        expect(result.executors?.map((e) => e.tier)).toEqual(['capable-3', 'capable-1', 'capable-1']);
+    });
+
+    test('executor tier rejects unknown values', () => {
+        const result = AgentConfigSchema.safeParse({
+            executors: [{ name: 'a', agent: 'claude', tier: 'capable-9' }],
+        });
+        expect(result.success).toBe(false);
+    });
+
     test('RulesConfigSchema accepts a paths array', () => {
         expect(RulesConfigSchema.safeParse({ paths: ['a'] }).success).toBe(true);
     });

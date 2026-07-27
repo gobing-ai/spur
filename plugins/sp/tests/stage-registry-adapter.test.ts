@@ -453,7 +453,7 @@ describe('stage record invariants', () => {
 
     test('every record has a valid model policy', () => {
         for (const s of REGISTERED_STAGES) {
-            expect(['cheap', 'standard', 'capable']).toContain(s.model_policy.min_tier);
+            expect(['cheap', 'standard', 'capable-1', 'capable-2', 'capable-3']).toContain(s.model_policy.min_tier);
             expect(Array.isArray(s.model_policy.fallback)).toBe(true);
         }
     });

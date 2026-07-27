@@ -779,7 +779,7 @@ plugins/sp/README.md section 2 (commands-as-SSOT documentation).
 
 **Status:** Accepted · **Date:** 2026-07-24
 
-**Decision.** Key agent auto-resolution directly on the canonical `stage_id` and consume `model_policy` from the stage registry (`packages/domain/src/stage-registry/`). A stage starts on the cheapest eligible executor matching its `min_tier` (`cheap`, `standard`, `capable`) and escalates along the ordered `fallback` chain on objective risk/failure signals (`gate-fail`, `timeout`, `insufficient-evidence`, `retry-exhausted`). Retain `default-by-phase` as a backward-compatibility shim with a one-time deprecation warning.
+**Decision.** Key agent auto-resolution directly on the canonical `stage_id` and consume `model_policy` from the stage registry (`packages/domain/src/stage-registry/`). A stage starts on the cheapest eligible executor matching its `min_tier` (`cheap`, `standard`, `capable-1`, `capable-2`, `capable-3` — 0343 split bare `capable` into quality sub-tiers; legacy `capable` normalizes to `capable-1`) and escalates along the ordered `fallback` chain on objective risk/failure signals (`gate-fail`, `timeout`, `insufficient-evidence`, `retry-exhausted`). Retain `default-by-phase` as a backward-compatibility shim with a one-time deprecation warning.
 
 **Why.** Coarse prompt-regex phase mapping (`default-by-phase`) hardcoded single executor strings without capability tiers or objective escalation fallback, and failed in non-slash-command mode (e.g. subagents). The stage registry's declarative `model_policy` provides static capability minima and objective fallback triggers without hardcoding model vendor names or price.
 

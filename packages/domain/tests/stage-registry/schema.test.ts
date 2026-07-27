@@ -17,6 +17,7 @@ import {
     STAGE_REGISTRY_SCHEMA_VERSION,
     type StageRecord,
     StageRegistryError,
+    stageModelPolicySchema,
     stageRecordSchema,
     TIER_RANK,
     validateStageRecord,
@@ -45,7 +46,7 @@ const basePlanRecord: StageRecord = {
     retry: { max_attempts: 3, terminal_stop: 'block' },
     model_policy: {
         min_tier: 'standard',
-        fallback: [{ tier: 'capable', trigger: 'gate-fail' }],
+        fallback: [{ tier: 'capable-1', trigger: 'gate-fail' }],
     },
     context_layers: [{ layer: 'project-authority', required: true }],
     observability: [{ name: 'stage-started' }],
@@ -510,10 +511,14 @@ describe('representative stage records (0282 R5)', () => {
 });
 
 describe('model_policy helpers & canonical stage registry (0319)', () => {
-    test('TIER_RANK & isTierEligible evaluate capability rank correctly', () => {
+    test('TIER_RANK & isTierEligible evaluate capability rank correctly (0343 sub-tiers)', () => {
         expect(TIER_RANK.cheap).toBeLessThan(TIER_RANK.standard);
-        expect(TIER_RANK.standard).toBeLessThan(TIER_RANK.capable);
-        expect(isTierEligible('capable', 'standard')).toBe(true);
+        expect(TIER_RANK.standard).toBeLessThan(TIER_RANK['capable-1']);
+        expect(TIER_RANK['capable-1']).toBeLessThan(TIER_RANK['capable-2']);
+        expect(TIER_RANK['capable-2']).toBeLessThan(TIER_RANK['capable-3']);
+        expect(isTierEligible('capable-1', 'standard')).toBe(true);
+        expect(isTierEligible('capable-3', 'capable-1')).toBe(true);
+        expect(isTierEligible('capable-1', 'capable-2')).toBe(false);
         expect(isTierEligible('standard', 'standard')).toBe(true);
         expect(isTierEligible('cheap', 'standard')).toBe(false);
     });
@@ -526,14 +531,23 @@ describe('model_policy helpers & canonical stage registry (0319)', () => {
         const policy = {
             min_tier: 'standard' as const,
             fallback: [
-                { tier: 'capable' as const, trigger: 'gate-fail' as const },
-                { tier: 'capable' as const, trigger: 'timeout' as const },
+                { tier: 'capable-1' as const, trigger: 'gate-fail' as const },
+                { tier: 'capable-1' as const, trigger: 'timeout' as const },
             ],
         };
         const res = getNextFallback(policy, 'gate-fail', 'standard');
-        expect(res).toEqual({ tier: 'capable', trigger: 'gate-fail' });
+        expect(res).toEqual({ tier: 'capable-1', trigger: 'gate-fail' });
         const missing = getNextFallback(policy, 'retry-exhausted', 'standard');
         expect(missing).toBeUndefined();
+    });
+
+    test('legacy bare capable normalizes to capable-1 in model_policy schema', () => {
+        const parsed = stageModelPolicySchema.parse({
+            min_tier: 'capable',
+            fallback: [{ tier: 'capable', trigger: 'gate-fail' }],
+        });
+        expect(parsed.min_tier).toBe('capable-1');
+        expect(parsed.fallback[0]?.tier).toBe('capable-1');
     });
 
     test('getCanonicalStage resolves by stage id or alias', () => {
