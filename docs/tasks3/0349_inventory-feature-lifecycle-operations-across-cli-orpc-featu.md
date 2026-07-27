@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: []
 created_at: "2026-07-27T17:49:41.046Z"
-updated_at: "2026-07-27T21:53:20.671Z"
+updated_at: "2026-07-27T22:29:18.815Z"
 ---
 
 ## 0349. Inventory feature lifecycle operations across CLI, oRPC, FeatureService, and Board action map
@@ -180,32 +180,36 @@ No button redesign here. Membership decisions → **0351**. Async runner → **0
 
 Candidates to evaluate for primary/overflow: **check**, **sync pull** (fix default), **advance**, **refresh** (scoped?), **move** (destructive), reopen-from-done, priority edit. Treat brainstorm/plan as **broken until action handler is real**. Treat push-sync as **hide or implement**.
 ### Testing
-**Mode:** research / inventory (no runtime code change). Re-verified 2026-07-27 under `/sp-dev-verifyall --feature F81 --auto --next --force --focus all --fix all` (dogfood run `2026-07-27-verifyall-f81-215120`).
+**Mode:** research / inventory (no runtime code change). Re-verified 2026-07-27 under `/sp-dev-verify 0349 --auto --next --force --focus all --fix all`.
 
-**Method:** Read-only re-survey of monorepo CLI `apps/cli/src/commands/feature.ts`, `packages/contracts/src/feature.ts:170-312`, `apps/server/src/modules/feature/handlers.ts`, `feature-actions.ts:1-65`, `FeatureDetail.tsx` action state/handlers, `feature-client.ts:72`.
+**Method:** Line-anchor re-read of Solution inventory against monorepo surfaces this run — CLI verbs, `featureContract`, server handlers, `FEATURE_STATUS_ACTIONS`, `FeatureDetail` dispatch, `checkFeature` client.
 
-**Coverage claim:** N/A — documentation-only research ticket; no production paths under test.
+**Coverage:** N/A (documentation-only research ticket; no production path under test).
 
 **Per-requirement traceability**
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | MET | Solution inventory table; contracts `feature.ts:170-312`; CLI verbs create/show/update/advance/list/move/refresh/check/sync in `feature.ts` |
-| R2 | MET | `feature-actions.ts:1-9` FEATURE_STATUS_ACTIONS; `FeatureDetail.tsx:55-64` action state; `:221-274` handleAction/FSM; checkFeature client-only |
-| R3 | MET | action stub `handlers.ts:95-101`; push throw `:122-124`; sync default push `FeatureDetail.tsx:62`; checkFeature no UI call sites |
-| R4 | MET | Explicit no-redesign; handoff 0351+ |
-| R5 | MET | Inventory in Solution on this task file |
+| R1 | MET | Solution multi-surface inventory table; CLI verbs `create/show/update/advance/list/move/refresh/check/sync` in `apps/cli/src/commands/feature.ts`; oRPC `packages/contracts/src/feature.ts:171-303` (list/show/create/transition/refresh/check/body/action/children/tasks/link/sync) |
+| R2 | MET | `feature-actions.ts:2-9` FEATURE_STATUS_ACTIONS; `FeatureDetail.tsx:56-62` actionLoading + syncDirection default `push`; `:221-252` handleAction; `:254-276` handleFSMTransition; `:380` statusActions from map; checkFeature client-only |
+| R3 | MET | action stub `handlers.ts:95-100` returns ok without agent; push throw `:122-124`; sync default push `FeatureDetail.tsx:62`; checkFeature `feature-client.ts:72` with zero UI call sites outside client |
+| R4 | MET | Solution ends with explicit no-redesign; membership deferred to 0351+ |
+| R5 | MET | Inventory recorded in Solution on this task file with path:line anchors |
 
 **Acceptance Criteria Verification**
 
 | AC | Status | Evidence Type | Evidence |
 |----|--------|---------------|----------|
-| Scenario: Inventory covers all surfaces | MET | static-ref | Solution multi-surface table [docs-only] |
-| Scenario: Gaps are explicit | MET | static-ref | R3 gap list with path:line [docs-only] |
+| Scenario: Inventory covers all surfaces | MET | static-ref | Solution multi-surface table + CLI/oRPC/service/Board columns [docs-only research] |
+| Scenario: Gaps are explicit | MET | static-ref | R3 gap list; handlers.ts:95-100, :122-124; FeatureDetail.tsx:62; feature-client.ts:72 [docs-only] |
 
-**SECUA (focus all):** no runtime code modified — N/A security/correctness surface; inventory honesty check: default syncDirection=push vs server reject remains the highest residual product risk (documented, deferred to membership/impl).
+**SECUA (`--focus all`):** N/A security/correctness surface — research ticket; no production code modified by 0349. Residual product risk (documented, not in scope): Sync modal default `push` vs server reject (`FeatureDetail.tsx:62` / `handlers.ts:122-124`) — membership/impl tickets own remediation.
+
+**`--fix all`:** no UNMET/PARTIAL requirements; no code repair applied.
 
 **`--next`:** no-op — task already terminal (`done`).
+
+**Verdict artifact:** `.spur/run/0349-verdict.json` (this run).
 
 **Verdict: PASS**
 ### Review

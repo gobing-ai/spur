@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: ["0352"]
 created_at: "2026-07-27T17:49:50.605Z"
-updated_at: "2026-07-27T19:57:20.387Z"
+updated_at: "2026-07-27T22:43:03.128Z"
 ---
 
 ## 0354. Decide the observability contract for Features detail action lifecycle
@@ -142,7 +142,7 @@ click
   → FeaturesShell bumps detailRefreshKey (existing path, FeaturesShell.tsx:99-100)
 ```
 
-**runId is the correlation id.** It is the `queue_jobs` job id, echoed in `FeatureActionResponse.runId` (mirroring `TaskActionResult.runId`, `packages/app/src/services/task-service.ts:300-305`) and in every `queue.job.*` event's `payload.jobId` (confirmed shape via `apps/web/tests/modules/observability/components.test.tsx:72-76` — `{ jobId: 'job-1', … }`).
+**runId is the correlation id.** It is the `queue_jobs` job id, echoed in `FeatureActionResponse.runId` (mirroring `TaskActionResult.runId`, `packages/app/src/services/task-service.ts:319-322`) and in every `queue.job.*` event's `payload.jobId` (confirmed shape via `apps/web/tests/modules/observability/components.test.tsx:72-76` — `{ jobId: 'job-1', … }`).
 
 **Critical reuse rule (carried forward from 0352 R2):** the client does **not** need to track `runId` for correctness. The job is server-durable; on re-entry the feature loads its post-action state regardless of whether the client still holds the runId. runId is retained for two narrow purposes only: (1) **scoping the status chip** while the user remains on the detail page (so an event for feature A doesn't flip the chip on feature B when two details are mounted — currently only one detail is mounted at a time, but the contract is forward-compatible); (2) **log/event correlation** in the System Events and Jobs tabs (the drill-down surfaces from R2).
 
@@ -189,22 +189,39 @@ Decision only. No code is changed by this ticket. Implementation is sequenced in
 
 This Solution records the state space (R1), the minimum-viable surface set (R2), the correlation chain and the "client doesn't need runId for correctness" rule (R3), the failure taxonomy and no-partial-results contract (R4), and the scope gate (R5) so the implementing tickets have a single observability decision to build against. It references 0352 (async model) as the upstream contract for the `FeatureActionResponse` shape and the sync-exception list, and reuses 0352's finding that `runId` is exposed-but-not-required for the basic path.
 ### Testing
-**dev-unit run (2026-07-27, this turn — Workflow B, task-scoped).** No code changed by this ticket (R5); coverage target N/A per `unit-testing.md` "When to accept lower coverage — generated/decision-only surfaces." Status moved `wip → testing` this turn via `spur task update 0354 testing` after `spur task check 0354` PASS (5 L4 warnings = known F81 placeholder AC stub artifact, identical to 0352).
+**Mode:** decision / wayfinder (no runtime code change). Re-verified 2026-07-27 under `/sp-dev-verify 0354 --auto --next --force --focus all --fix all`.
 
-Re-ran the three test surfaces that back the decision's anchor claims (all fresh this turn, `bun test … --coverage`):
+**Method:** Line-anchor re-read of observability contract against event-names catalog, FeaturesShell filter, planning SSE mount, TaskActionResult shape (corrected `:319-322`), serve runTaskActionJob paths.
 
-- **`apps/web` features module suite — 39 pass / 0 fail** (`bun test apps/web/tests/modules/features/ --coverage`): the action-group surface the R2 "status chip on action group" decision rests on stays green. `feature-actions.ts` at **100% / 100%** line/function.
-- **`packages/app/tests/services/event-names.test.ts` — 8 pass / 0 fail**: confirms `queue.job.enqueued` / `.completed` / `.failed` are in `SYSTEM_EVENT_NAMES` (lines 27-31) — the load-bearing R1 finding that `queue.*` is already in the streamed catalog, so the server needs no widening.
-- **`apps/web/tests/modules/observability/components.test.tsx` — 32 pass / 0 fail**: confirms `queue.job.completed` events with `{ jobId, type, status, durationMs }` payloads already render in the System Events tab and Jobs tab — the R2 drill-down surfaces and the R3 correlation-shape claim.
+**Coverage:** N/A (decision-only).
 
-No new tests added: decision-only ticket (R5). The implementation tickets under F81 (client filter widening in `FeaturesShell.tsx:94`, status chip in `FeatureDetail.tsx`, global error toast closing the `api-error` dead-letter, `FeatureActionResponse` adoption, `sync` atomicity guarantee) own the test-extension work for the surfaces this decision specifies.
+**Per-requirement traceability**
 
-**Completion criteria (per `unit-testing.md`):**
-1. Relevant tests pass with 0 failures — ✅ (39 + 8 + 32 = 79 pass / 0 fail across the three backing suites).
-2. Coverage target met — N/A (no runtime code path added by this ticket; R5 decision-only).
-3. No unresolved blocker — ✅.
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | Solution §R1 six states confirmed→queued→running→succeeded|failed|cancelled with storage mapping; `event-names.ts:85-91` queue.* catalog; `events/index.ts:66` SSE; `serve.ts` success/fail paths |
+| R2 | MET | Solution §R2 min-viable: status chip + global error toast + existing observability tab drill-down; in-panel strip optional |
+| R3 | MET | Solution §R3 runId = job id = queue.job.*.payload.jobId; client filter widen `FeaturesShell.tsx:94`; mirrors `task-service.ts:319-322` |
+| R4 | MET | Solution §R4 recoverable (retrying chip-only) vs terminal (chip+toast); partial results never for check/sync/agent per contract |
+| R5 | MET | Decision only; depends on 0352 |
 
-Coverage target N/A for the decision itself (no runtime code path added by this ticket).
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: Observable lifecycle states defined | MET | static-ref | Solution §R1 [docs-only] |
+| Scenario: User-facing feedback surfaces chosen | MET | static-ref | Solution §R2 [docs-only] |
+| Scenario: Correlation id propagation defined | MET | static-ref | Solution §R3 [docs-only] |
+| Scenario: Failure surfacing defined | MET | static-ref | Solution §R4 [docs-only] |
+| Scenario: Decision only — depends on 0352 | MET | static-ref | Solution §R5 [docs-only] |
+
+**SECUA (`--focus all`):** N/A decision-only. Load-bearing finding: server already streams queue.*; only client filter blocks Board observation.
+
+**`--fix all`:** corrected stale `task-service.ts:300-305` → `:319-322` in Solution/Testing prose.
+
+**`--next`:** no-op — already terminal (`done`).
+
+**Verdict: PASS**
 ### Review
 Functional Verdict: PASS (2026-07-27, this turn)
 
@@ -214,7 +231,7 @@ Per-requirement traceability — every cited anchor re-read at the cited lines t
 |-----|--------|----------------------------------|
 | R1 | MET | Solution §R1 defines all six lifecycle states with a source-of-truth/storage/surface mapping. Anchors re-read: `apps/server/src/serve.ts:156-187` (`runTaskActionJob` — exit-code-0 success path, throw-on-failure at `:184-186`); `packages/app/src/services/event-names.ts:85-91` (catalog: `queue.job.enqueued`/`completed`/`failed`/`retrying`/`queue.stats`, all tier `default`); `event-names.test.ts:27-31` (asserts the catalog contents — load-bearing for the "already streamed" claim); `apps/server/src/modules/events/index.ts:66` (SSE handler subscribes to `SYSTEM_EVENT_STREAMED_NAMES`); `packages/app/src/services/planning-write-service.ts:443-452,549-557` (feature mutation → `feature.updated`/`feature.transitioned` emission). `cancelled` explicitly named as reserved (no ship-path surface). |
 | R2 | MET | Solution §R2 inventories existing surfaces (spinner ✅; `api-error` dead-letter ⚠️; System Events/Jobs/Inbox tabs ✅; toast/banner/chip ❌) with file:line for each, then names the minimum-viable ship set: (1) status chip on feature detail action group, (2) global error toast closing the `api-error` dead-letter gap, (3) drill-down via existing tabs. Deferrals explicitly named (feature-scoped activity stream, list-row chip, success toasts). **Load-bearing finding verified:** `grep` of `apps/web/src` for a production `api-error` listener returns no matches — only test files (`rpc-client.test.ts:85`, `new-task-panel.test.tsx:196`, `task-detail.test.tsx:177,470`, `index.test.tsx:29`) attach one. |
-| R3 | MET | Solution §R3 traces click → POST → job row → `FeatureActionResponse.runId` → `queue.job.*.payload.jobId` → SSE → client match → `detailRefreshKey` bump, with each hop anchored. `runId` shape mirrors `TaskActionResult` (`packages/app/src/services/task-service.ts:300-305`); event payload shape `{ jobId }` confirmed via `apps/web/tests/modules/observability/components.test.tsx:72-76`. Reuses 0352 R2's "client doesn't need runId for correctness" rule. Server-side change: none (events already streamed, R1 finding). Client-side change: one filter line (`FeaturesShell.tsx:94`) + per-action `runId` ref. Distributed tracing explicitly named as a non-goal. |
+| R3 | MET | Solution §R3 traces click → POST → job row → `FeatureActionResponse.runId` → `queue.job.*.payload.jobId` → SSE → client match → `detailRefreshKey` bump, with each hop anchored. `runId` shape mirrors `TaskActionResult` (`packages/app/src/services/task-service.ts:319-322`); event payload shape `{ jobId }` confirmed via `apps/web/tests/modules/observability/components.test.tsx:72-76`. Reuses 0352 R2's "client doesn't need runId for correctness" rule. Server-side change: none (events already streamed, R1 finding). Client-side change: one filter line (`FeaturesShell.tsx:94`) + per-action `runId` ref. Distributed tracing explicitly named as a non-goal. |
 | R4 | MET | Solution §R4 maps recoverable (`queue.job.retrying`) vs terminal (`queue.job.failed`) to surfaces (chip-only vs chip+toast) with event anchors (`db-job-queue.ts:218,206`; catalog `event-names.ts:90,89`). Partial-results policy is "never surfaced" for all three op classes (`check` sync exception, `sync` async, agent dispatches), with a contract-level atomicity requirement placed on the `sync` implementing ticket. Cancellation distinguished from failure. Recoverable→terminal transition de-dup rule recorded. |
 | R5 | MET | Decision only. `git diff --name-only` for this task's working tree touches only `docs/tasks3/0354_*.md` (no `*.ts`/`*.tsx`/`*.js`/`*.jsx`). Dependency 0352 status `done` confirmed. Implementation sequenced to five named follow-up tickets under F81. |
 

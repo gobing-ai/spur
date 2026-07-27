@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: []
 created_at: "2026-07-27T17:49:42.940Z"
-updated_at: "2026-07-27T21:53:50.656Z"
+updated_at: "2026-07-27T22:30:33.403Z"
 ---
 
 ## 0350. Inventory Board action-runner patterns (FeatureDetail, TaskDetail jobs, Teams confirm, SSE)
@@ -153,28 +153,39 @@ Catalog registration: `event-names.ts:81-83`.
 
 This Solution is an **inventory only**. The decision about which async-runner model FeatureDetail should adopt (job-queue with runId tracking vs. extended sync vs. hybrid; whether to widen the SSE filter to `queue.*`/`task.*`; whether to port the Teams confirm-before-destructive modal pattern to destructive feature actions) is explicitly deferred to **0352** (and, per the feature map, the confirmation matrix to 0353 and the observability contract to 0354).
 ### Testing
-**Re-verified 2026-07-27** under verifyall F81 dogfood (`--force --focus all --fix all`). Prior Testing cited `task-service.ts:300-305` / `:998-1018` — **stale**; corrected this run.
+**Mode:** research / inventory (no runtime code change). Re-verified 2026-07-27 under `/sp-dev-verify 0350 --auto --next --force --focus all --fix all`.
+
+**Method:** Line-anchor re-read of Solution inventory against FeatureDetail, TaskService/TaskDetail job path, Teams TerminalTab confirm modals, FeaturesShell SSE this run.
+
+**Coverage:** N/A (documentation-only research ticket; no production path under test).
 
 **Per-requirement traceability**
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | MET | `FeatureDetail.tsx:55-64` action state; `:221-274` handleAction/FSM; `:62` syncDirection default `push` |
-| R2 | MET | `task-service.ts:319-322` TaskActionResult; `:1016-1035` fulfillAction enqueue; `event-names.ts:85-91` queue.job.* |
-| R3 | MET | Teams confirm modal patterns (Solution inventory); non-destructive skip |
-| R4 | MET | `FeaturesShell.tsx:86-107` SSE `feature.*` only; no queue.* subscription |
-| R5 | MET | Inventory only; defers 0352/0353/0354 |
+| R1 | MET | `FeatureDetail.tsx:56` actionLoading; `:221-252` handleAction; `:254-276` handleFSMTransition (cancel modal `:258-261`, `api-error` `:271`); `:303`/`:`333` api-error on inline/agent; `:318-320` syncFeatureStatus/dispatchFeatureAction; `:423-427` loading disable |
+| R2 | MET | `task-service.ts:319-322` TaskActionResult `{runId,action,status:'queued'}`; `:1016-1035` fulfillAction enqueue inject; `handlers.ts:95-105` task action → `jobQueue.enqueue('task-action')`; `event-names.ts:85-91` queue.job.*; `TaskDetail.tsx:180-201` dispatchAction awaits `api.task.action` then list refresh — discards runId |
+| R3 | MET | `TerminalTab.tsx:79-80` confirmStopFor/confirmDownFor; `:336-373` stop Modal; `:375-411` down Modal |
+| R4 | MET | `FeaturesShell.tsx:11` sseUrl planning events; `:86-107` EventSource filters `feature.*` only (`:94`); detail refresh on feature.updated/transitioned (`:99`) — no queue.* subscription |
+| R5 | MET | Solution § explicitly inventory-only; defers async model to 0352 (confirm 0353, observability 0354) |
 
 **Acceptance Criteria Verification**
 
 | AC | Status | Evidence Type | Evidence |
 |----|--------|---------------|----------|
-| Runner patterns inventoried | MET | static-ref | Solution R1–R4 tables [docs-only] |
-| Gaps for 0352 named | MET | static-ref | fire-and-forget vs job queue; SSE gap [docs-only] |
+| Scenario: FeatureDetail dispatch paths documented | MET | static-ref | Solution R1 + anchors above [docs-only] |
+| Scenario: Job-queue pattern documented | MET | static-ref | Solution R2 + task-service/handlers/TaskDetail [docs-only] |
+| Scenario: Teams confirm patterns documented | MET | static-ref | Solution R3 + TerminalTab modals [docs-only] |
+| Scenario: SSE surfaces documented | MET | static-ref | Solution R4 + FeaturesShell SSE [docs-only] |
+| Scenario: Inventory scope respected | MET | static-ref | Solution §R5 defer to 0352 [docs-only] |
 
-**Fix applied (`--fix all`):** corrected stale line anchors for TaskActionResult/fulfillAction after line-anchor re-read failed at old ranges (content shifted). No production code change.
+**SECUA (`--focus all`):** N/A — inventory-only; no production code modified by 0350. Inventory notes (not defects of this ticket): FeatureDetail fire-and-forget vs Task job queue; FeaturesShell does not subscribe to queue.*.
+
+**`--fix all`:** no UNMET/PARTIAL; no repair required. Prior stale TaskActionResult anchors remain corrected at `:319-322` / `:1016-1035`.
 
 **`--next`:** no-op — task already terminal (`done`).
+
+**Verdict artifact:** `.spur/run/0350-verdict.json` (this run).
 
 **Verdict: PASS**
 ### Review
@@ -185,7 +196,7 @@ Per-requirement traceability (re-read at cited anchors this run; all anchors res
 | Req | Status | Evidence |
 |-----|--------|----------|
 | R1 | MET | `apps/web/src/modules/features/FeatureDetail.tsx:55-64` (actionLoading, showCancelModal, actionModal, inlineModal state) — verified; `:221-252` handleAction dispatch router — verified; `:254-276` handleFSMTransition (cancel→modal at 258-261, await transitionFeature at 265, api-error at 271, finally clears actionLoading at 274) — verified; `:278-281` handleCancelConfirm — verified; `:283-308` handleInlineConfirm (createChildFeature/createFeatureTask/linkTaskToFeature + api-error at 303) — verified; `:310-338` dispatchAgentAction (sync HTTP POST via syncFeatureStatus/dispatchFeatureAction at 320-324, single reloadFeature at 329, api-error at 333) — verified; `:423-428` disabled={actionLoading===action} render — verified; `:703-704` Dispatching… label — verified. `apps/web/src/lib/feature-types.ts:66-68` FeatureActionResponse={ok:true} (no runId, no job tracking) — verified. |
-| R2 | MET | `packages/app/src/services/task-service.ts:300-305` TaskActionResult {runId, action, status:'queued'} — verified; `:998-1018` fulfillAction (resolveTaskFile + isTaskActionName at 1006, enqueue at 1010-1016) — verified. `apps/server/src/modules/task/handlers.ts:93-105` action handler (jobQueue.enqueue('task-action', job) at 99, returns result with runId) — verified. `packages/app/src/services/event-names.ts:85-91` queue.consumer.started/stopped + queue.job.enqueued/completed/failed/retrying + queue.stats — verified (all source:'queue', tier default). `apps/web/src/modules/task-kanban/TaskDetail.tsx:180-201` dispatchAction (await api.task.action at 185, immediate api.task.list + setTasks at 191-192, no runId tracking, finally clears actionLoading at 199) — verified; `:85-86` 5s poll comment — verified. UI discards runId; observes completion only via list poll + task.transitioned. |
+| R2 | MET | `packages/app/src/services/task-service.ts:319-322` TaskActionResult {runId, action, status:'queued'} — verified; `:998-1018` fulfillAction (resolveTaskFile + isTaskActionName at 1028, enqueue at 1028-1035) — verified. `apps/server/src/modules/task/handlers.ts:93-105` action handler (jobQueue.enqueue('task-action', job) at 99, returns result with runId) — verified. `packages/app/src/services/event-names.ts:85-91` queue.consumer.started/stopped + queue.job.enqueued/completed/failed/retrying + queue.stats — verified (all source:'queue', tier default). `apps/web/src/modules/task-kanban/TaskDetail.tsx:180-201` dispatchAction (await api.task.action at 185, immediate api.task.list + setTasks at 191-192, no runId tracking, finally clears actionLoading at 199) — verified; `:85-86` 5s poll comment — verified. UI discards runId; observes completion only via list poll + task.transitioned. |
 | R3 | MET | `apps/web/src/modules/teams/TerminalTab.tsx:79-80` confirmStopFor/confirmDownFor state — verified; `:266-269` stop trigger (if isRunning → setConfirmStopFor else direct toggleMemberStatus) — verified; `:314-316` Down → setConfirmDownFor — verified; `:336-373` stop Modal (variant="warning", data-stop-confirm-modal, Cancel at 352, Stop at 362-367, disabled={actionPending} at 361) — verified; `:375-411` down Modal (variant="warning", data-down-confirm-modal, Cancel at 390, Bring Down at 400-404, disabled={actionPending} at 399) — verified. Non-destructive start/up skip modal. |
 | R4 | MET | `apps/server/src/modules/events/index.ts:39-66` eventsModule mounts GET /api/events/planning, streams SYSTEM_EVENT_STREAMED_NAMES (default tier) — verified; `:66` mount — verified. `apps/web/src/modules/features/FeaturesShell.tsx:11` sseUrl → /events/planning — verified; `:86-107` SSE effect (EventSource, filters name.startsWith('feature.') at 94, void load() at 95, detailRefreshKey bump on feature.updated/feature.transitioned at 99-100, no task.*/queue.* subscription) — verified. `packages/app/src/services/planning-write-service.ts:102-105` PlanningEventName union incl. feature.created/updated/transitioned — verified; `:550-556` resolveEventName mapping — verified; `:443-452` emit at Step 8 — verified. `packages/app/src/services/planning-events.ts:36-51` BusPlanningEventEmitter.emit (persist to planning_events then bus.emit) — verified. `apps/server/src/modules/events/system-event-tap.ts:1-8` re-export of registerSystemEventTap — verified (file is a thin re-export; cited as `:27-` in Solution, actual content is the re-export — anchor resolves, subject named). `packages/app/src/services/event-names.ts:81-83` feature.* catalog registration — verified. |
 | R5 | MET | Solution §R5 explicitly records "inventory only" and defers the async-runner model decision to 0352, confirmation matrix to 0353, observability contract to 0354. Scope respected — no decision recorded in this task. |

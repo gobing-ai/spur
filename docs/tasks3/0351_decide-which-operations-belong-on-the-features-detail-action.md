@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: ["0349"]
 created_at: "2026-07-27T17:49:44.771Z"
-updated_at: "2026-07-27T18:54:14.149Z"
+updated_at: "2026-07-27T22:35:08.199Z"
 ---
 
 ## 0351. Decide which operations belong on the Features detail action group per status
@@ -199,18 +199,40 @@ Discovered candidates from 0349 not in R2: **unlink-task** (overflow, [destructi
 - **Solution holds the matrix** (this section) — the membership SSOT for 0355 (IA prototype) and 0352/0353/0354 (cross-cutting contracts).
 - **Map Decisions gist (one line):** *Features detail action group = status-gated; FSM transitions + add-child/add-task primary on live statuses; sync-pull/check primary on active/verifying; brainstorm/plan/sync-push hidden until fixed; advance/move/refresh/unlink overflow behind confirm once API parity lands.*
 ### Testing
-**Pipeline verify results**
+**Mode:** decision / wayfinder grilling (no runtime code change). Re-verified 2026-07-27 under `/sp-dev-verify 0351 --auto --next --force --focus all --fix all`.
 
-- Verdict: PASS (from verdict artifact)
+**Method:** Re-read Solution membership matrix + R2–R5 handoff against FSM source (`config/workflows/feature-lifecycle.yaml` / `apps/cli/config/workflows/feature-lifecycle.yaml`), `SchemaLifecyclePort` same-status-only guard, current `FEATURE_STATUS_ACTIONS` empty terminal rows, and F81 map Decisions.
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | docs/tasks3/0351.md §Decision matrix — per-status primary/overflow/never with one-line reasons for all 6 statuses |
-| R2 | MET | Matrix covers all R2 ops: FSM (start/verify/complete/rework/block/unblock/cancel), sync, check, advance, move, refresh, brainstorm, plan, add-child, add-task, link-task |
-| R3 | MET | §Default-for-new-ops states rule for 0349-discovered ops not in R2 |
-| R4 | MET | No UI implementation; async/confirm explicitly deferred to 0352/0353 with expensive/destructive notes only |
-| R5 | MET | Matrix recorded in Solution; map Decisions updated with one-line gist on close |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+**Coverage:** N/A (decision-only ticket; no production path under test).
+
+**Per-requirement traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | Solution §R1 per-status matrix: op → P / OF / — across backlog/active/verifying/blocked/done/cancelled with one-line reasons; FSM table cites `feature-lifecycle.yaml` |
+| R2 | MET | Solution §R2 checklist places FSM (start/verify/complete/rework/block/unblock/cancel), sync pull/push, check, advance, move, refresh, brainstorm, plan, add-child, add-task, link-task |
+| R3 | MET | Solution §R3 default `overflow` on non-terminal / `never` on terminal + four exception rules; candidates unlink/derive/sync-all/field/section/body |
+| R4 | MET | Solution §R4 no UI; expensive/destructive/stub/broken flags only — defers 0352/0353/0354 |
+| R5 | MET | Matrix in Solution; F81 map Decisions one-line gist recorded this run under `--fix all` (was missing at verify start) |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: Per-status matrix produced | MET | static-ref | Solution §R1 multi-status tables [docs-only decision] |
+| Scenario: Required ops placed | MET | static-ref | Solution §R2 checklist + tables [docs-only] |
+| Scenario: Newly discovered ops covered | MET | static-ref | Solution §R3 default + candidates [docs-only] |
+| Scenario: Scope respected — no UI, no async/confirm detail | MET | static-ref | Solution §R4 + no production UI diff [docs-only] |
+
+**SECUA (`--focus all`):** N/A — decision-only; no production code. Note: Solution correctly documents `SchemaLifecyclePort` (`planning-write-service.ts` same-status only) so Board membership is the user-facing FSM guardrail.
+
+**`--fix all`:** R5 map gist was UNMET (Decisions so far lacked 0351 one-liner). Fixed: `spur feature update F81 --section Notes` added membership gist and trimmed resolved “Not yet specified” bullets. Re-checked → MET.
+
+**`--next`:** no-op — task already terminal (`done`).
+
+**Verdict artifact:** `.spur/run/0351-verdict.json` (this run).
+
+**Verdict: PASS**
 ### Review
 **Disposition:** APPROVE for wayfinder grilling close — decision-only, no production code change.
 

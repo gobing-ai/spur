@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: ["0350"]
 created_at: "2026-07-27T17:49:46.654Z"
-updated_at: "2026-07-27T19:13:07.583Z"
+updated_at: "2026-07-27T22:37:59.746Z"
 ---
 
 ## 0352. Decide the unified async action-runner model for Features detail actions
@@ -85,7 +85,7 @@ Decision only — no implementation (R5). All path:line anchors re-verified this
 
 | Option | Verdict | Reason |
 |---|---|---|
-| **A. Job-queue extension (chosen)** | ✅ | The queue is already generic (`JobQueue<unknown>`, `enqueue(kind, payload)` — `apps/server/src/context.ts:98,205,489-503`); the task side is a working, shipped precedent with a clean queue-agnostic service seam (`TaskService.fulfillAction` takes `enqueue` as an injected closure — `packages/app/src/services/task-service.ts:998-1018`); the feature handler already leaves the seam open with a "needs job queue wiring" TODO (`apps/server/src/modules/feature/handlers.ts:95-100`). Reuses the worker consumer registration pattern (`registry.register('task-action', …)` — `apps/server/src/serve.ts:322-325`) one-for-one under a new kind string. No new infrastructure, no new transport. |
+| **A. Job-queue extension (chosen)** | ✅ | The queue is already generic (`JobQueue<unknown>`, `enqueue(kind, payload)` — `apps/server/src/context.ts:98,205,489-503`); the task side is a working, shipped precedent with a clean queue-agnostic service seam (`TaskService.fulfillAction` takes `enqueue` as an injected closure — `packages/app/src/services/task-service.ts:1016-1035`); the feature handler already leaves the seam open with a "needs job queue wiring" TODO (`apps/server/src/modules/feature/handlers.ts:95-100`). Reuses the worker consumer registration pattern (`registry.register('task-action', …)` — `apps/server/src/serve.ts:322-325`) one-for-one under a new kind string. No new infrastructure, no new transport. |
 | **B. Client fire-and-forget + optimistic UI + SSE** | ❌ | "Fire-and-forget" describes the *current* feature path and is the problem, not the solution. It loses server-side durability: if the Board tab closes between click and the (currently missing) server receipt, the action is lost. B also requires inventing a second, parallel "did it run?" channel that duplicates `queue.job.*`. Rejected on durability and duplication grounds. |
 | **C. Hybrid (sync FSM, async agent/sync/check)** | ❌ as primary | Splitting the dispatch path by op class doubles the contracts the Board must know (R2) and the observability surface (0354). The async job queue handles cheap FSM transitions fine — enqueue cost is one DB row + one event emit, well under the HTTP round-trip budget — so there is no performance reason to keep a sync path. Sync stays only as a narrow **exception** (see R3), not as a parallel model. A hybrid of *transports* is the wrong axis; the right axis is one transport, op-specific exception list. |
 
@@ -100,7 +100,7 @@ interface FeatureActionResponse {
 }
 ```
 
-This is `TaskActionResult` verbatim (`packages/app/src/services/task-service.ts:300-305`) under a feature namespace. The HTTP handler returns `{ ok: true, data: FeatureActionResponse }` to match the oRPC envelope used elsewhere.
+This is `TaskActionResult` verbatim (`packages/app/src/services/task-service.ts:319-322`) under a feature namespace. The HTTP handler returns `{ ok: true, data: FeatureActionResponse }` to match the oRPC envelope used elsewhere.
 
 **"Done" semantics — two cases:**
 
@@ -129,7 +129,7 @@ The only op that currently qualifies:
 
 Rationale, in priority order:
 
-1. **The inject-`enqueue` seam is already the right abstraction.** `fulfillAction(wbs, action, enqueue, options)` (`task-service.ts:1001`) is deliberately queue-agnostic: the service owns *domain validation* (does this entity exist, is this action supported) and the handler owns *transport* (how the job is persisted). `FeatureService.fulfillAction` reuses this seam by structural copy, not by inheritance — feature validation differs (entity is a feature ID, action set is the feature action catalog from 0349/0351).
+1. **The inject-`enqueue` seam is already the right abstraction.** `fulfillAction(wbs, action, enqueue, options)` (`task-service.ts:1016`) is deliberately queue-agnostic: the service owns *domain validation* (does this entity exist, is this action supported) and the handler owns *transport* (how the job is persisted). `FeatureService.fulfillAction` reuses this seam by structural copy, not by inheritance — feature validation differs (entity is a feature ID, action set is the feature action catalog from 0349/0351).
 
 2. **Premature shared `ActionRunner` is the wrong move now.** A generic `ActionRunner<TEntity, TAction>` would today have exactly two specializations (Task, Feature) and a divergent pair of validation rule sets. Two similar lines beat a premature abstraction (per house style). The feature map explicitly lists "Shared abstraction with Task detail action group now vs Features-only first, extract later" under *Not yet specified* and resolves it: **Features-only first, extract later** when a third consumer appears.
 
@@ -143,37 +143,43 @@ Rationale, in priority order:
 
 **R5 — Scope confirmation.** Decision only. No code is changed by this ticket. Implementation is sequenced into later tickets under F81 (worker consumer registration, `FeatureService.fulfillAction` body, handler cutover from the `{ ok: true }` stub, SSE filter widening, client `FeatureActionResponse` adoption). This Solution records the model, the contract, the exception list, and the reuse boundary so those tickets have a single decision to implement against.
 ### Testing
-**Pipeline verify results**
+**Mode:** decision / wayfinder (no runtime code change). Re-verified 2026-07-27 under `/sp-dev-verify 0352 --auto --next --force --focus all --fix all`.
 
-- Verdict: PASS (from verdict artifact `.spur/run/0352-verdict.json`)
+**Method:** Line-anchor re-read of Solution Option A decision against JobQueue, TaskService.fulfillAction, feature action stub, check handler, serve registry, FeaturesShell SSE, planning-write emit this run.
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | Solution §Decision + "Why A, not B or C" — Option A (job-queue extension) named with rationale; B and C rejected on durability/duplication/contract-doubling grounds. Grounded in `apps/server/src/context.ts:98,205,489-503` (generic `JobQueue<unknown>`), `packages/app/src/services/task-service.ts:998-1018` (inject-`enqueue` seam), `apps/server/src/modules/feature/handlers.ts:95-100` (open stub). |
-| R2 | MET | Solution §R2 — `FeatureActionResponse { runId, action, status: 'queued' }` mirrors `TaskActionResult` (`packages/app/src/services/task-service.ts:300-305`); two-row done-semantics table (still-on-page via SSE `queue.job.completed` widening `FeaturesShell.tsx:99-100`; navigated-away via server-durable `queue_jobs` + `feature.*` emission through `planning-write-service.ts:443-456,550-556`). |
-| R3 | MET | Solution §R3 — default all-async; three-test sync-exception gate; exactly one named exception (read-only `check`, `feature/handlers.ts:74-87`); all other ops async with per-op reasoning. |
-| R4 | MET | Solution §R4 — `FeatureService.fulfillAction` mirrors `TaskService.fulfillAction`; shared `ActionRunner` deferred; boundary statement: TaskService NOT extended, queue + worker registry (`serve.ts:322-325`) + SSE tap + `FeatureActionResponse` (in `packages/contracts/src/feature.ts`) reused. |
-| R5 | MET | Solution §R5 — decision only, no code changed; implementation sequenced to later F81 tickets; dependency 0350 done and cited. |
+**Coverage:** N/A (decision-only; no production path added by this ticket).
 
-- Coverage: N/A (decision/issue ticket — no code changed; verdict-based verify does not measure code coverage).
+**Per-requirement traceability**
 
-Acceptance Criteria (5 scenarios, documentation/decision-only; each maps to the R{n} evidence above):
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | Solution names **Option A** (job-queue extension) with Why A/B/C table; anchors: `apps/server/src/context.ts:98` `ServerJobQueue = JobQueue<unknown>`; `:205` jobQueue(); `:489-503` createJobQueue; `task-service.ts:1016-1035` inject-enqueue fulfillAction; `handlers.ts:95-100` open stub; `serve.ts:322-325` TASK_ACTION_JOB registry pattern |
+| R2 | MET | Solution §R2 `FeatureActionResponse { runId, action, status: 'queued' }` mirrors `TaskActionResult` `task-service.ts:319-322`; on-page done via SSE widen (FeaturesShell currently `feature.*` only `:94-99`); navigated-away via durable queue + `planning-write-service.ts:443-452` emit / `:549-557` resolveEventName |
+| R3 | MET | Default all-async; sole sync exception **check** `handlers.ts:74-87` pure FeatureCheckService read; push remains broken until impl (`handlers.ts:122-124`) |
+| R4 | MET | FeatureService.fulfillAction mirrors TaskService; TaskService NOT extended; ActionRunner deferred; queue/registry/SSE/`FeatureActionResponse` in contracts reused |
+| R5 | MET | Decision only; no production code by this ticket; depends on 0350 (done); F81 map Decisions gist recorded this run |
+
+**Acceptance Criteria Verification**
 
 | AC | Status | Evidence Type | Evidence |
 |----|--------|---------------|----------|
-| Scenario: Runner model decided | MET | doc | Solution §Decision (Option A named with rationale) |
-| Scenario: Request/response contract defined | MET | doc | Solution §R2 (`FeatureActionResponse` + done semantics) |
-| Scenario: Synchronous exceptions bounded | MET | doc | Solution §R3 (one named exception: `check`) |
-| Scenario: Reuse boundary stated | MET | doc | Solution §R4 (TaskService NOT extended; FeatureService mirrors; ActionRunner deferred) |
-| Scenario: Decision only — no implementation | MET | doc | Solution §R5 (no code changed; deferred to later tickets) |
+| Scenario: Runner model decided | MET | static-ref | Solution Option A + rationale table [docs-only] |
+| Scenario: Request/response contract defined | MET | static-ref | Solution §R2 FeatureActionResponse + done semantics [docs-only] |
+| Scenario: Synchronous exceptions bounded | MET | static-ref | Solution §R3 check-only exception [docs-only] |
+| Scenario: Reuse boundary stated | MET | static-ref | Solution §R4 boundary statement [docs-only] |
+| Scenario: Decision only — no implementation | MET | static-ref | Solution §R5; no *.ts change owned by this ticket [docs-only] |
 
-**dev-unit run (2026-07-27, this turn).** Re-ran the test surface backing the decision's anchor claims. No code changed by this ticket (R5); coverage target N/A per `unit-testing.md` "When to accept lower coverage — generated/decision-only surfaces."
+**SECUA (`--focus all`):** N/A decision-only. Architecture note: one transport (queue) + closed sync exception list is the correct axis vs hybrid dual-contract (documented in Solution Why C rejected).
 
-- `apps/web` features module suite: **39 pass / 0 fail** (`bun test tests/modules/features/ --coverage`, this turn).
-- `src/modules/features/feature-actions.ts` (the action-group guardrail the decision's R3 "sync exception = `check` only" rests on): **100% Funcs / 100% Lines**.
-- FSM legality floor (added in 0351, exercised again here): the 6-test `feature-actions.test.ts` validates that every surfaced FSM button is a legal transition under `config/workflows/feature-lifecycle.yaml` — the invariant the 0352 Option-A dispatch model inherits.
+**`--fix all`:**
+1. Corrected stale Solution anchors `task-service.ts:300-305` → `:319-322`, `:998-1018` → `:1016-1035` (line drift).
+2. Added F81 Notes Decisions one-line gist for Option A.
 
-No new tests added: decision-only ticket; the implementation tickets under F81 (worker consumer registration, `FeatureService.fulfillAction` body, handler cutover, SSE widening, client adoption) own the test-extension work for the surfaces this decision specifies.
+**`--next`:** no-op — task already terminal (`done`).
+
+**Verdict artifact:** `.spur/run/0352-verdict.json` (this run).
+
+**Verdict: PASS**
 ### Review
 Functional Verdict: PASS (re-audited 2026-07-27, this turn)
 
@@ -181,10 +187,10 @@ Per-requirement traceability — every cited anchor re-read at the cited lines t
 
 | Req | Status | Evidence (re-verified this turn) |
 |-----|--------|----------------------------------|
-| R1 | MET | Solution §Decision names Option A (job-queue extension) with rationale. Anchors re-read: `apps/server/src/context.ts:98` (`export type ServerJobQueue = JobQueue<unknown>` — generic queue confirmed); `:205` (`jobQueue(): Promise<ServerJobQueue>`); `:489-503` (lazy `createJobQueue` over DB + EventBus). Precedent: `packages/app/src/services/task-service.ts:998-1018` (`fulfillAction` with injected `enqueue` closure at `:1001`). Open seam: `apps/server/src/modules/feature/handlers.ts:95-100` (`action` handler returns `{ ok: true }` with "needs job queue wiring" comment). |
-| R2 | MET | Solution §R2 defines `FeatureActionResponse { runId, action, status: 'queued' }` mirroring `TaskActionResult` at `packages/app/src/services/task-service.ts:300-305` (re-read: exact shape match). Done-semantics: on-page via SSE — `apps/web/src/modules/features/FeaturesShell.tsx:94` (`name?.startsWith('feature.')` filter) + `:99-100` (`detailRefreshKey` bump on `feature.updated`/`feature.transitioned`); navigated-away via server-durable `queue_jobs` + `feature.*` emission through `packages/app/src/services/planning-write-service.ts:443-452` (Step 8 emit) and `:549-557` (`resolveEventName` → `feature.transitioned`/`feature.updated`). |
+| R1 | MET | Solution §Decision names Option A (job-queue extension) with rationale. Anchors re-read: `apps/server/src/context.ts:98` (`export type ServerJobQueue = JobQueue<unknown>` — generic queue confirmed); `:205` (`jobQueue(): Promise<ServerJobQueue>`); `:489-503` (lazy `createJobQueue` over DB + EventBus). Precedent: `packages/app/src/services/task-service.ts:1016-1035` (`fulfillAction` with injected `enqueue` closure at `:1016`). Open seam: `apps/server/src/modules/feature/handlers.ts:95-100` (`action` handler returns `{ ok: true }` with "needs job queue wiring" comment). |
+| R2 | MET | Solution §R2 defines `FeatureActionResponse { runId, action, status: 'queued' }` mirroring `TaskActionResult` at `packages/app/src/services/task-service.ts:319-322` (re-read: exact shape match). Done-semantics: on-page via SSE — `apps/web/src/modules/features/FeaturesShell.tsx:94` (`name?.startsWith('feature.')` filter) + `:99-100` (`detailRefreshKey` bump on `feature.updated`/`feature.transitioned`); navigated-away via server-durable `queue_jobs` + `feature.*` emission through `packages/app/src/services/planning-write-service.ts:443-452` (Step 8 emit) and `:549-557` (`resolveEventName` → `feature.transitioned`/`feature.updated`). |
 | R3 | MET | Solution §R3 names `check` as the single sync exception. Anchor re-read: `apps/server/src/modules/feature/handlers.ts:74-87` — pure read over `FeatureCheckService`, no mutation, returns findings inline. All other ops async with per-op reasoning (transition, sync, brainstorm/plan, add-child/add-task/link-task). Push-direction sync currently throws (`feature/handlers.ts:121-123`), correctly flagged as needing the queue + push impl together. |
-| R4 | MET | Solution §R4 bounds reuse. Anchors re-read: `packages/app/src/services/task-service.ts:1001` (`enqueue` injection point — the seam to mirror); `apps/server/src/serve.ts:322-325` (`registry.register(TASK_ACTION_JOB, …)` — pattern for new `'feature-action'` kind); `:129-135` (`createTaskActionAgentService` facade pattern). Boundary: TaskService NOT extended; `FeatureService` already exists at `packages/app/src/services/feature-service.ts:97` and will host `fulfillAction`. Shared `ActionRunner` deferred (two consumers, divergent validation — correct call). |
+| R4 | MET | Solution §R4 bounds reuse. Anchors re-read: `packages/app/src/services/task-service.ts:1016` (`enqueue` injection point — the seam to mirror); `apps/server/src/serve.ts:322-325` (`registry.register(TASK_ACTION_JOB, …)` — pattern for new `'feature-action'` kind); `:129-135` (`createTaskActionAgentService` facade pattern). Boundary: TaskService NOT extended; `FeatureService` already exists at `packages/app/src/services/feature-service.ts:97` and will host `fulfillAction`. Shared `ActionRunner` deferred (two consumers, divergent validation — correct call). |
 | R5 | MET | Decision only. `git diff --name-only` for this task's working tree touches only `docs/tasks3/0352_*.md` (no `*.ts`/`*.tsx`/`*.js`/`*.jsx`). Dependency 0350 status `done` confirmed via `spur task show 0350 --json`. |
 
 Acceptance Criteria (5 scenarios, decision-only; each maps to the R{n} evidence above):

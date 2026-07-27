@@ -6,7 +6,7 @@ status: done
 priority: P1
 tags: []
 created_at: "2026-07-27T17:48:29.352Z"
-updated_at: "2026-07-27T22:05:43.891Z"
+updated_at: "2026-07-27T22:43:39.688Z"
 ---
 
 # F81: Board Features detail action group: lifecycle ops, async runner, observability
@@ -221,15 +221,26 @@ Pinned 2026-07-27: destination kind = **Board shippable design** (CLI/API only a
 
 - [0349 Inventory feature lifecycle operations across CLI, oRPC, FeatureService, and Board action map](../tasks3/0349_inventory-feature-lifecycle-operations-across-cli-orpc-featu.md) — Full ops matrix + Board gaps: action endpoint stub, push-sync throws (UI defaults push), check API/client with no button, advance/move CLI-only, refresh API-only.
 
+- [0350 Inventory Board action-runner patterns (FeatureDetail, TaskDetail jobs, Teams confirm, SSE)](../tasks3/0350_inventory-board-action-runner-patterns-featuredetail-taskdet.md) — Pattern inventory: FeatureDetail sync-await + api-error; Task job-queue with discarded runId; Teams soft/hard confirm; FeaturesShell SSE feature.* only (no queue.*).
+
+- [0351 Decide which operations belong on the Features detail action group per status](../tasks3/0351_decide-which-operations-belong-on-the-features-detail-action.md) — Features detail action group = status-gated; FSM transitions + add-child/add-task primary on live statuses; sync-pull/check primary on active/verifying; brainstorm/plan/sync-push hidden until fixed; advance/move/refresh/unlink overflow behind confirm once API parity lands.
+
+- [0352 Decide the unified async action-runner model for Features detail actions](../tasks3/0352_decide-the-unified-async-action-runner-model-for-features-de.md) — Option A: extend task-style job queue to feature actions (`feature-action` job kind, `FeatureService.fulfillAction` mirrors TaskService); post-click `{runId, status:queued}`; sole sync exception = read-only `check`; shared ActionRunner deferred.
+
+- [0355 Prototype Features detail action-group IA and visual hierarchy](../tasks3/0355_prototype-features-detail-action-group-ia-and-visual-hierarc.md) — Prototype only: primary/overflow/status-chip/in-flight zones; FSM-first priority; done/cancelled empty FSM; feeds later /sp:dev-plan impl.
+
+- [0354 Decide the observability contract for Features detail action lifecycle](../tasks3/0354_decide-the-observability-contract-for-features-detail-action.md) — Reuse queue_jobs + queue.* SSE as SSOT; min-viable chip + global error toast; runId=jobId correlation; client must widen FeaturesShell filter beyond feature.* only.
+
+- [0353 Decide the confirmation matrix for Features detail actions](../tasks3/0353_decide-the-confirmation-matrix-for-features-detail-actions.md) — Confirm scales with blast radius: hard (cancel/rework/move/unlink/push), soft (verify/complete/sync-pull/advance/agent channel), none (start/block/check/create/link); confirm always before enqueue (never after).
+
 **Not yet specified**
 
-- Whether `advance`, `move`, `refresh` (index), `check`, and body-edit stay off the action group, overflow-only, or primary.
-- Default sync direction (`pull` vs `push`) and whether both remain user-visible every time.
-- Shared abstraction with Task detail action group now vs Features-only first, extract later.
-- Exact visual language (icon+label vs label-only; overflow menu vs wrap; destructive styling).
-- Correlation of agent-backed actions (brainstorm/plan) to Board feedback when jobs complete after the user navigated away.
-- Accessibility requirements for the action group (keyboard, focus trap on confirm, live regions).
-- Whether confirmation is modal-only or also supports "don't ask again this session".
+- Shared abstraction with Task detail action group now vs Features-only first, extract later (0352 runner may inform).
+- Exact visual language (icon+label vs label-only; overflow menu vs wrap; destructive styling) — 0355 prototype.
+- Correlation of agent-backed actions (brainstorm/plan) to Board feedback when jobs complete after the user navigated away — 0354.
+- Accessibility requirements for the action group (keyboard, focus trap on confirm, live regions) — 0355/impl.
+- Whether confirmation is modal-only or also supports "don't ask again this session" — 0353.
+- Default sync direction UX after push is implemented (membership: push hidden until fixed; pull primary on active/verifying per 0351).
 
 **Out of scope**
 

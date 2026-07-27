@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: ["0351", "0353", "0352", "0354"]
 created_at: "2026-07-27T17:49:52.422Z"
-updated_at: "2026-07-27T20:06:30.943Z"
+updated_at: "2026-07-27T22:43:04.439Z"
 ---
 
 ## 0355. Prototype Features detail action-group IA and visual hierarchy
@@ -366,17 +366,37 @@ The prototype is **forward-compatible** with 0352/0354's named enhancements (a f
 - **Implementing tickets** (to be planned via `/sp:dev-plan` under F81) consume: 0351 (membership), 0352 (runner + contract), 0353 (confirm copy), 0354 (observability), and this artifact (visual contract). They should not re-derive grouping, priority, or truncation rules — those live here.
 - **Map Decisions gist (one line):** *Features detail action group = three-zone header (primary FSM-first row / overflow kebab / status chip) + in-flight strip placeholder; per-status composition from 0351×0353; cancelled shows a reopen hint instead of an empty row; narrow panel demotes non-FSM buttons into overflow and shortens FSM labels to glyphs.*
 ### Testing
-**Pipeline verify results**
+**Mode:** prototype / wayfinder (no production UI). Re-verified 2026-07-27 under `/sp-dev-verify 0355 --auto --next --force --focus all --fix all`.
 
-- Verdict: PASS (from verdict artifact)
+**Method:** Re-read Solution markdown wire + TSX sketch claims against R1–R4; confirmed no production UI paths claimed as shipped.
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | Prototype artifact covers primary/overflow/confirm/async-in-flight/empty/done/cancelled |
-| R2 | MET | Usability: grouping, Sync/Check priority, truncation, keyboard reachability addressed |
-| R3 | MET | No production UI shipped; artifact is for reaction |
-| R4 | MET | Depends on 0351 (done) + 0353 (done); assumes 0352/0354 placeholders |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+**Coverage:** N/A (prototype artifact only).
+
+**Per-requirement traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | Solution §R1 zones (PRIMARY/OVERFLOW/STATUS CHIP/IN-FLIGHT) + per-status wires for backlog/active/verifying/blocked/done/cancelled + confirm affordance notes + TSX sketch |
+| R2 | MET | Solution §R2: FSM-first then composition then sync priority; Sync/Check placement; narrow truncation; keyboard reachability |
+| R3 | MET | Explicit prototype-only; no production UI shipped by this ticket |
+| R4 | MET | Depends on 0351+0353 (done); assumes 0352/0354 placeholders for in-flight/feedback chrome |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: Prototype artifact produced | MET | static-ref | Solution markdown wire + sketch [docs-only] |
+| Scenario: Usability concerns addressed | MET | static-ref | Solution §R2 [docs-only] |
+| Scenario: Prototype only — not production | MET | static-ref | Solution §R3 [docs-only] |
+| Scenario: Dependency assumptions stated | MET | static-ref | Solution §R4 [docs-only] |
+
+**SECUA (`--focus all`):** N/A prototype/docs.
+
+**`--fix all`:** no UNMET/PARTIAL.
+
+**`--next`:** no-op — already terminal (`done`).
+
+**Verdict: PASS**
 ### Review
 **Review (2026-07-27) — three-dimensional: functional traceability + SECUA + architecture.**
 

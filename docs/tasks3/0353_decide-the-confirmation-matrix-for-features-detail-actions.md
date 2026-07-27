@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: ["0351", "0352"]
 created_at: "2026-07-27T17:49:48.949Z"
-updated_at: "2026-07-27T19:29:52.930Z"
+updated_at: "2026-07-27T22:43:01.780Z"
 ---
 
 ## 0353. Decide the confirmation matrix for Features detail actions
@@ -183,17 +183,37 @@ This ordering is why the confirm matrix is a **pre-dispatch** concern owned here
 - **Runner model is closed (0352).** The confirm-before-enqueue ordering (R3) consumes 0352's all-async-except-`check` decision verbatim; the runner model is not re-litigated.
 - **Reuse of existing modal primitives** is noted (cancel modal, channel/sync-direction selector, inline naming modal) so 0355 and the build-out extend in place rather than invent parallel affordances — but no code is changed by this ticket.
 ### Testing
-**Pipeline verify results**
+**Mode:** decision / wayfinder (no runtime code change). Re-verified 2026-07-27 under `/sp-dev-verify 0353 --auto --next --force --focus all --fix all`.
 
-- Verdict: PASS (from verdict artifact)
+**Method:** Re-read Solution confirm matrix against 0351 membership scope, 0352 confirm-before-enqueue, FeatureDetail cancel modal, feature-lifecycle rework History requirement.
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 — confirm level per retained op | MET | §R1 tables assign none/soft/hard to all 17 ops 0351 retains as primary/overflow; cross-checked against 0351 §R1 matrix (all covered, never/elsewhere excluded w/ rationale). |
-| R2 — destructive-op copy | MET | §R2 table: risk statement + typed-input gate + button label for cancel, rework, move, sync push, unlink-task; copy-rules block pins default-focus + exact-match gates + rework-reason exception. |
-| R3 — confirm-before-enqueue | MET | §R3 flow `click → confirm → POST → enqueue → {runId, queued}`; 4 rules pin precondition, prohibit post-enqueue confirm, ride typed payload in job body (`{featureId, action, command}`, 0352 R4), exclude `check` as the one sync exception (0352 R3). |
-| R4 — decision only, refs deps | MET | §R4 "No UI implemented"; 0351 membership + 0352 runner model referenced, not re-decided; existing modal primitives noted for 0355. |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+**Coverage:** N/A (decision-only).
+
+**Per-requirement traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | Solution §R1 tables assign none/soft/hard to every 0351 primary+overflow op (FSM, sync, check/advance/refresh/move, agent, compose) with one-line reasons |
+| R2 | MET | Solution §R2 destructive copy for cancel, rework, move, unlink, sync push (when un-hidden): risk statement + typed-input gate + button labels |
+| R3 | MET | Solution §R3: click → confirm → POST → enqueue → {runId,queued}; never after enqueue; check excluded as 0352 sync exception |
+| R4 | MET | Decision only; references 0351 membership + 0352 runner; no UI implemented |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: Confirm level per op decided | MET | static-ref | Solution §R1 tables [docs-only] |
+| Scenario: Destructive-op copy specified | MET | static-ref | Solution §R2 [docs-only] |
+| Scenario: Async interaction pinned | MET | static-ref | Solution §R3 confirm-before-enqueue [docs-only] |
+| Scenario: Decision only — depends on 0351 and 0352 | MET | static-ref | Solution §R4 [docs-only] |
+
+**SECUA (`--focus all`):** N/A decision-only.
+
+**`--fix all`:** no UNMET/PARTIAL on requirements; map gist added this batch.
+
+**`--next`:** no-op — already terminal (`done`).
+
+**Verdict: PASS**
 ### Review
 **Review (0353) — /sp-dev-review, three-dimensional.** Decision-only `wayfinder:grilling` (R4: no code). All Solution anchors re-verified this turn against the working tree (see anchor table below). Aggregated verdict: **PASS** (functional PASS; SECUA PASS w/ 1 minor; architecture PASS w/ 1 advisory — both non-blocking).
 
