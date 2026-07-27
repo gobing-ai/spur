@@ -116,6 +116,28 @@ export class SectionMutationError extends Error {
 }
 
 /**
+ * Error thrown by `create()` when the dedup guard (task 0341 R4) detects an
+ * existing task under the same feature with an identical name created within
+ * the dedupe window. The CLI maps this to a stable exit code and surfaces the
+ * existing WBS so the operator can reuse the prior task instead of duplicating.
+ */
+export class DuplicateFollowUpError extends Error {
+    readonly existingWbs: string;
+    readonly existingName: string;
+    readonly attemptedName: string;
+    constructor(existingWbs: string, existingName: string, attemptedName: string) {
+        super(
+            `duplicate-follow-up: task ${existingWbs} ("${existingName}") already exists under this feature ` +
+                `with an identical name. Reuse ${existingWbs} or pass --allow-duplicate-name to override.`,
+        );
+        this.name = 'DuplicateFollowUpError';
+        this.existingWbs = existingWbs;
+        this.existingName = existingName;
+        this.attemptedName = attemptedName;
+    }
+}
+
+/**
  * Result of a section mutation (R3). `list` is read-only and returns no
  * write-event fields; `init`/`add` write through `writeService.updateSection`
  * (atomic, schema-validated, emits `task.updated`) and carry the write result.
@@ -470,6 +492,36 @@ export class TaskService {
         return { ...templateBodies, ...taskBodies };
     }
 
+    /**
+     * Find an existing task under `featureId` with a name matching `title`
+     * (case-insensitive) created within the last `withinSec` seconds.
+     * Returns the matching task's WBS+name, or null if no collision.
+     *
+     * Used by the dedup guard (task 0341 R4) to prevent the verify fix pass
+     * from double-creating the same follow-up task.
+     */
+    private async findDuplicateFollowUp(
+        featureId: string,
+        title: string,
+        withinSec: number,
+    ): Promise<{ wbs: string; name: string } | null> {
+        const siblings = await this.list({ featureId });
+        const now = Date.now();
+        const lowerTitle = title.toLowerCase();
+        for (const t of siblings) {
+            if ((t.name ?? '').toLowerCase() !== lowerTitle) continue;
+            const createdAt = t.frontmatter?.created_at;
+            if (typeof createdAt !== 'string') continue;
+            const createdMs = Date.parse(createdAt);
+            if (Number.isNaN(createdMs)) continue;
+            const ageSec = (now - createdMs) / 1000;
+            if (ageSec >= 0 && ageSec <= withinSec) {
+                return { wbs: t.wbs, name: t.name };
+            }
+        }
+        return null;
+    }
+
     // ── create ──
 
     async create(params: {
@@ -479,6 +531,13 @@ export class TaskService {
         status?: string;
         template?: string;
         actor?: string;
+        /**
+         * Dedup window in seconds. When set with a featureId, refuse creation if an
+         * existing task under the same feature has an identical (case-insensitive)
+         * name and was created within the last N seconds. Guards against the verify
+         * fix pass double-creating the same follow-up (task 0341 R4).
+         */
+        dedupeWithinSec?: number;
     }): Promise<WriteResult> {
         const folder = this.ctx.tasksDir;
 
@@ -501,6 +560,20 @@ export class TaskService {
         const status = params.status ?? (params.featureId !== undefined ? 'todo' : 'backlog');
 
         return this.writeService.createAllocated(folder, async () => {
+            // Dedup guard (task 0341 R4): when a feature-scoped dedupe window is
+            // requested, refuse creation if an existing task under the same feature
+            // has an identical (case-insensitive) name and was created within the
+            // window. Guards against the verify fix pass double-creating follow-ups.
+            if (params.dedupeWithinSec !== undefined && params.featureId !== undefined) {
+                const collision = await this.findDuplicateFollowUp(
+                    params.featureId,
+                    params.title,
+                    params.dedupeWithinSec,
+                );
+                if (collision !== null) {
+                    throw new DuplicateFollowUpError(collision.wbs, collision.name, params.title);
+                }
+            }
             const wbs = await this.allocateWbs();
             const slug = this.slugify(params.title);
             const filePath = this.resolveTaskPath(wbs, slug);

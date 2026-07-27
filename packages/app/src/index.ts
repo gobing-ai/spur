@@ -201,12 +201,13 @@ export type {
 } from './services/task-service';
 export {
     DependencyMutationError,
+    DuplicateFollowUpError,
     SectionMutationError,
     TASK_ACTION_COMMANDS,
     TaskService,
 } from './services/task-service';
-export type { VerdictResult } from './services/task-verdict';
-export { deriveVerdict } from './services/task-verdict';
+export type { BatchAggregation, BatchTaskOutcome, BatchTaskResult } from './services/task-verdict';
+export { aggregateBatchVerdicts, classifyTaskOutcome, deriveVerdict } from './services/task-verdict';
 export type {
     AgentSpecInput,
     InboxEntry,

@@ -367,12 +367,24 @@ describe('spur task CLI', () => {
 
     // ── check ──
     test('check validates a freshly-created backlog task as PASS', async () => {
-        // WHY: a bare new task is created at backlog with only Background (no empty
-        // Solution heading), so it passes the gate cleanly. This is the dogfood fix
-        // — previously every new task FAILed on a spurious L3 file:line error.
+        // WHY: a bare new task with populated Requirements + AC passes cleanly. Post-0339,
+        // placeholder Requirements/AC trip L3 empty-section errors — so this test seeds
+        // real content to validate the gate on a *valid* backlog task.
         const cOut = createCapturedOutput();
         await main(['task', 'create', 'Check me'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
+        const reqBody = join(cwd, `req-${wbs}.md`);
+        await Bun.write(reqBody, 'R1. The check command must pass on a valid backlog task.\n');
+        await main(['task', 'update', wbs, '--section', 'Requirements', '--from-file', reqBody], {
+            cwd,
+            output: createCapturedOutput(),
+        });
+        const acBody = join(cwd, `ac-${wbs}.md`);
+        await Bun.write(acBody, '- [ ] Given a valid task / When check runs / Then exit code is 0.\n');
+        await main(['task', 'update', wbs, '--section', 'Acceptance Criteria', '--from-file', acBody], {
+            cwd,
+            output: createCapturedOutput(),
+        });
 
         const output = createCapturedOutput();
         const exitCode = await main(['task', 'check', wbs], { cwd, output });
@@ -1180,8 +1192,20 @@ Only this section exists.
             const wbs = createdWbs(cOut);
 
             // Seed done-required sections with valid content so the ONLY finding is
-            // the L4 "missing feature_id" warning. Solution has a file:line citation
-            // (required hard-core), Review has a P1–P4 table (required hard-core).
+            // the L4 "missing feature_id" warning. Post-0339: placeholder
+            // Requirements/AC trip L3 empty-section errors, so populate them too.
+            const reqBody = join(cwd, 'req-strict-core.md');
+            await Bun.write(reqBody, 'R1. Done gate must not block on L4 warnings under --strict-core.\n');
+            await main(['task', 'update', wbs, '--section', 'Requirements', '--from-file', reqBody], {
+                cwd,
+                output: createCapturedOutput(),
+            });
+            const acBody = join(cwd, 'ac-strict-core.md');
+            await Bun.write(acBody, '- [ ] Given a strict-core task / When done is attempted / Then exit 0.\n');
+            await main(['task', 'update', wbs, '--section', 'Acceptance Criteria', '--from-file', acBody], {
+                cwd,
+                output: createCapturedOutput(),
+            });
             const solutionBody = join(cwd, 'sol-strict-core.md');
             await Bun.write(solutionBody, 'Fix applied in `apps/cli/src/commands/task.ts:645`.\n');
             await main(['task', 'update', wbs, '--section', 'Solution', '--from-file', solutionBody], {
@@ -1289,7 +1313,20 @@ Only this section exists.
         await main(['task', 'create', '0147-regression target'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
 
-        // task check --strict-core on a freshly-created task (feature_id: null by default).
+        // Seed Requirements + AC so the only finding is the L4 "Missing feature_id"
+        // warning. Post-0339: placeholder Requirements/AC trip L3 empty-section errors.
+        const reqBody = join(cwd, `req-0147-${wbs}.md`);
+        await Bun.write(reqBody, 'R1. feature_id=null must stay a warning under --strict-core.\n');
+        await main(['task', 'update', wbs, '--section', 'Requirements', '--from-file', reqBody], {
+            cwd,
+            output: createCapturedOutput(),
+        });
+        const acBody = join(cwd, `ac-0147-${wbs}.md`);
+        await Bun.write(acBody, '- [ ] Given feature_id=null / When check --strict-core / Then pass:true.\n');
+        await main(['task', 'update', wbs, '--section', 'Acceptance Criteria', '--from-file', acBody], {
+            cwd,
+            output: createCapturedOutput(),
+        });
         const output = createCapturedOutput();
         const exitCode = await main(['task', 'check', wbs, '--strict-core', '--json'], { cwd, output });
 
@@ -1871,5 +1908,156 @@ Only this section exists.
         const exitCode = await main(['task', 'update', wbs, 'Done', '--no-lifecycle'], { cwd, output });
         expect(exitCode).toBe(1);
         expect(await readStatus(wbs)).toBe('testing');
+    });
+
+    // ── verifyall-aggregate (task 0341) ──────────────────────────────
+    // Deterministic batch verdict rollup. Replaces agent-discretion prose
+    // (dev-operations.md §3a). NOT-STARTED rows are excluded from the rollup
+    // but reported in the summary so the operator sees them.
+    async function writeBatchFile(rows: object[]): Promise<string> {
+        const batchPath = join(cwd, '.spur', 'run', `batch-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+        await mkdir(join(cwd, '.spur', 'run'), { recursive: true });
+        await writeFile(batchPath, JSON.stringify(rows), 'utf-8');
+        return batchPath;
+    }
+
+    test('verifyall-aggregate: all-PASS rolls up to PASS, exit 0', async () => {
+        const batchPath = await writeBatchFile([
+            { wbs: '0001', outcome: 'PASS' },
+            { wbs: '0002', outcome: 'PASS' },
+        ]);
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'verifyall-aggregate', '--from-file', batchPath, '--json'], {
+            cwd,
+            output,
+        });
+        expect(exitCode).toBe(0);
+        const json = JSON.parse(output.messages.filter((m) => m.trim().startsWith('{')).pop() ?? '{}');
+        expect(json.verdict).toBe('PASS');
+        expect(json.summary).toContain('2 PASS');
+        expect(json.notStarted).toEqual([]);
+    });
+
+    test('verifyall-aggregate: NOT-STARTED excluded from rollup, batch still PASS (R2 dogfood)', async () => {
+        // The bug 0341 fixed: 5 PASS + 2 NOT-STARTED must NOT roll up to FAIL.
+        const batchPath = await writeBatchFile([
+            { wbs: '0332', outcome: 'PASS' },
+            { wbs: '0333', outcome: 'PASS' },
+            { wbs: '0334', outcome: 'PASS' },
+            { wbs: '0335', outcome: 'PASS' },
+            { wbs: '0336', outcome: 'PASS' },
+            { wbs: '0337', outcome: 'NOT-STARTED' },
+            { wbs: '0338', outcome: 'NOT-STARTED' },
+        ]);
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'verifyall-aggregate', '--from-file', batchPath, '--json'], {
+            cwd,
+            output,
+        });
+        expect(exitCode).toBe(0);
+        const json = JSON.parse(output.messages.filter((m) => m.trim().startsWith('{')).pop() ?? '{}');
+        expect(json.verdict).toBe('PASS');
+        expect(json.notStarted.map((r: { wbs: string }) => r.wbs)).toEqual(['0337', '0338']);
+        expect(json.summary).toContain('2 NOT-STARTED (excluded)');
+    });
+
+    test('verifyall-aggregate: any FAIL rolls up to FAIL, exit 1', async () => {
+        const batchPath = await writeBatchFile([
+            { wbs: '0001', outcome: 'PASS' },
+            { wbs: '0002', outcome: 'FAIL' },
+        ]);
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'verifyall-aggregate', '--from-file', batchPath], { cwd, output });
+        expect(exitCode).toBe(1);
+        const msg = output.messages.join('\n');
+        expect(msg).toContain('Batch verdict: FAIL');
+    });
+
+    test('verifyall-aggregate: all-NOT-STARTED rolls up to UNKNOWN, exit 0', async () => {
+        const batchPath = await writeBatchFile([
+            { wbs: '0001', outcome: 'NOT-STARTED' },
+            { wbs: '0002', outcome: 'NOT-STARTED' },
+        ]);
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'verifyall-aggregate', '--from-file', batchPath, '--json'], {
+            cwd,
+            output,
+        });
+        expect(exitCode).toBe(0);
+        const json = JSON.parse(output.messages.filter((m) => m.trim().startsWith('{')).pop() ?? '{}');
+        expect(json.verdict).toBe('UNKNOWN');
+        expect(json.rolledUp).toEqual([]);
+    });
+
+    test('verifyall-aggregate: PARTIAL present (no FAIL) rolls up to PARTIAL', async () => {
+        const batchPath = await writeBatchFile([
+            { wbs: '0001', outcome: 'PASS' },
+            { wbs: '0002', outcome: 'PARTIAL' },
+        ]);
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'verifyall-aggregate', '--from-file', batchPath, '--json'], {
+            cwd,
+            output,
+        });
+        expect(exitCode).toBe(0);
+        const json = JSON.parse(output.messages.filter((m) => m.trim().startsWith('{')).pop() ?? '{}');
+        expect(json.verdict).toBe('PARTIAL');
+    });
+
+    test('verifyall-aggregate: UNKNOWN present rolls batch down to PARTIAL (cannot certify)', async () => {
+        const batchPath = await writeBatchFile([
+            { wbs: '0001', outcome: 'PASS' },
+            { wbs: '0002', outcome: 'UNKNOWN' },
+        ]);
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'verifyall-aggregate', '--from-file', batchPath, '--json'], {
+            cwd,
+            output,
+        });
+        expect(exitCode).toBe(0);
+        const json = JSON.parse(output.messages.filter((m) => m.trim().startsWith('{')).pop() ?? '{}');
+        expect(json.verdict).toBe('PARTIAL');
+    });
+
+    test('verifyall-aggregate: missing input file exits 1', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(
+            ['task', 'verifyall-aggregate', '--from-file', join(cwd, 'nonexistent-batch.json')],
+            { cwd, output },
+        );
+        expect(exitCode).toBe(1);
+        expect(output.errors.join('\n')).toContain('Batch input file not found');
+    });
+
+    test('verifyall-aggregate: non-array JSON exits 1', async () => {
+        const batchPath = join(cwd, '.spur', 'run', `obj-${Date.now()}.json`);
+        await mkdir(join(cwd, '.spur', 'run'), { recursive: true });
+        await writeFile(batchPath, JSON.stringify({ not: 'an array' }), 'utf-8');
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'verifyall-aggregate', '--from-file', batchPath], { cwd, output });
+        expect(exitCode).toBe(1);
+        expect(output.errors.join('\n')).toContain('expected a JSON array');
+    });
+    test('verifyall-aggregate: non-JSON output surfaces NOT-STARTED WBS list explicitly', async () => {
+        // The human-readable path must name the excluded NOT-STARTED tasks so the
+        // operator sees them — not just the counts.
+        const batchPath = await writeBatchFile([
+            { wbs: '0001', outcome: 'PASS' },
+            { wbs: '0002', outcome: 'NOT-STARTED' },
+        ]);
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'verifyall-aggregate', '--from-file', batchPath], { cwd, output });
+        expect(exitCode).toBe(0);
+        const msg = output.messages.join('\n');
+        expect(msg).toContain('Batch verdict: PASS');
+        expect(msg).toContain('NOT-STARTED (excluded from rollup): 0002');
+    });
+
+    test('verifyall-aggregate: invalid outcome value exits 1', async () => {
+        const batchPath = await writeBatchFile([{ wbs: '0001', outcome: 'BOGUS' }]);
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'verifyall-aggregate', '--from-file', batchPath], { cwd, output });
+        expect(exitCode).toBe(1);
+        expect(output.errors.join('\n')).toContain('Invalid outcome for 0001: BOGUS');
     });
 });

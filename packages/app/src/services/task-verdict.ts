@@ -5,7 +5,8 @@
  * grep/shell block (task 0111; same pattern as task 0108's spur task record).
  */
 
-import type { VerdictCheck, VerdictRequirement } from './task-record';
+import type { TaskStatus } from '@gobing-ai/spur-domain/schema';
+import type { VerdictCheck, VerdictRequirement, VerifyVerdict } from './task-record';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -278,4 +279,109 @@ function extractChecks(
     }
 
     return checks;
+}
+
+// ─── Batch aggregation (verifyall) ──────────────────────────────────────
+//
+// Batch verdict rollup for `/sp:dev-verifyall`. Extracted from agent-discretion
+// prose (dev-operations.md §3a) into deterministic, tested code (task 0341).
+// The single-task verdict union (PASS/PARTIAL/FAIL/UNKNOWN) is unchanged;
+// NOT-STARTED is a verifyall-layer classification over task status.
+
+/** Per-task outcome in a verifyall batch. NOT-STARTED is distinct from FAIL. */
+export type BatchTaskOutcome = 'PASS' | 'PARTIAL' | 'FAIL' | 'NOT-STARTED' | 'UNKNOWN';
+
+/** A single task's outcome within a verifyall batch. */
+export interface BatchTaskResult {
+    wbs: string;
+    outcome: BatchTaskOutcome;
+    /** Short reason string for the summary table (e.g. "task at status todo, no implementation to trace"). */
+    reason?: string;
+}
+
+/** Aggregated batch verdict for verifyall. */
+export interface BatchAggregation {
+    /** Headline verdict over rolledUp only. UNKNOWN when nothing has been implemented yet. */
+    verdict: 'PASS' | 'PARTIAL' | 'FAIL' | 'UNKNOWN';
+    /** Tasks that contributed to the verdict (excludes NOT-STARTED). */
+    rolledUp: BatchTaskResult[];
+    /** Tasks classified NOT-STARTED — excluded from rollup, reported separately so the operator sees them. */
+    notStarted: BatchTaskResult[];
+    /** One-line summary, e.g. "3 PASS, 0 PARTIAL, 1 FAIL, 2 NOT-STARTED (excluded)". */
+    summary: string;
+}
+
+/** Statuses that mean "not started yet" — implementation work has not begun (task 0341). */
+const NOT_STARTED_STATUSES: Record<TaskStatus, boolean> = {
+    backlog: true,
+    todo: true,
+    wip: false,
+    testing: false,
+    blocked: true, // blocked has no verifiable work yet — distinct from FAIL
+    done: false,
+    cancelled: false,
+};
+
+/**
+ * Classify a single task's batch outcome from its lifecycle status and verify verdict.
+ *
+ * A task at `backlog` or `todo` reached via `--force` is NOT-STARTED — the verify
+ * step had nothing implemented to trace, so FAIL would be misleading. Tasks at any
+ * post-start status (`wip`/`testing`/`done`) use their own verify verdict.
+ *
+ * `blocked` is treated as NOT-STARTED: a blocked task has not produced verifiable
+ * work, and reporting it as FAIL would conflate two distinct conditions.
+ */
+export function classifyTaskOutcome(
+    taskStatus: TaskStatus | string,
+    verdict: VerifyVerdict['verdict'] | string | undefined,
+): BatchTaskOutcome {
+    const status = String(taskStatus).toLowerCase() as TaskStatus;
+    if (NOT_STARTED_STATUSES[status]) {
+        return 'NOT-STARTED';
+    }
+    const v = String(verdict ?? 'UNKNOWN').toUpperCase();
+    if (v === 'PASS' || v === 'PARTIAL' || v === 'FAIL') return v;
+    return 'UNKNOWN';
+}
+
+/**
+ * Aggregate per-task outcomes into a deterministic batch verdict.
+ *
+ * Rollup rule (mirrors single-task semantics, applied over rolledUp only):
+ *   rolledUp empty (all NOT-STARTED)  → UNKNOWN  ("nothing implemented yet")
+ *   any FAIL in rolledUp             → FAIL
+ *   any PARTIAL in rolledUp (no FAIL) → PARTIAL
+ *   all PASS                         → PASS
+ *   otherwise (UNKNOWN present)       → PARTIAL  (cannot certify)
+ *
+ * NOT-STARTED tasks are excluded from the rollup but surfaced in `notStarted`
+ * so the operator sees them in the summary. They never cause a FAIL.
+ */
+export function aggregateBatchVerdicts(results: BatchTaskResult[]): BatchAggregation {
+    const notStarted = results.filter((r) => r.outcome === 'NOT-STARTED');
+    const rolledUp = results.filter((r) => r.outcome !== 'NOT-STARTED');
+
+    const counts = {
+        PASS: rolledUp.filter((r) => r.outcome === 'PASS').length,
+        PARTIAL: rolledUp.filter((r) => r.outcome === 'PARTIAL').length,
+        FAIL: rolledUp.filter((r) => r.outcome === 'FAIL').length,
+        UNKNOWN: rolledUp.filter((r) => r.outcome === 'UNKNOWN').length,
+    };
+
+    let verdict: BatchAggregation['verdict'];
+    if (rolledUp.length === 0) {
+        verdict = 'UNKNOWN';
+    } else if (counts.FAIL > 0) {
+        verdict = 'FAIL';
+    } else if (counts.PARTIAL > 0 || counts.UNKNOWN > 0) {
+        // UNKNOWN per-task rows cannot be certified — treat as PARTIAL at the batch level.
+        verdict = 'PARTIAL';
+    } else {
+        verdict = 'PASS';
+    }
+
+    const summary = `${counts.PASS} PASS, ${counts.PARTIAL} PARTIAL, ${counts.FAIL} FAIL, ${notStarted.length} NOT-STARTED (excluded)`;
+
+    return { verdict, rolledUp, notStarted, summary };
 }

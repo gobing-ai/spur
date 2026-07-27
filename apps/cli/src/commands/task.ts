@@ -2,8 +2,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import {
+    aggregateBatchVerdicts,
     CorpusMigrator,
     DependencyMutationError,
+    DuplicateFollowUpError,
     evaluateDoneTransition,
     type MigrationReport,
     PlanningWriteService,
@@ -137,6 +139,12 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option('--parent <wbs>', 'Parent WBS for sub-task grouping')
         .option('--template <variant>', `Template variant (${TASK_VARIANTS.join('|')})`)
         .option('--folder <path>', 'Custom tasks folder')
+        .option(
+            '--dedupe-within <seconds>',
+            'Refuse creation if an existing task under the same feature has an identical name created within the last N seconds (task 0341 R4)',
+            (v: string) => Number.parseInt(v, 10),
+        )
+        .option('--allow-duplicate-name', 'Override the --dedupe-within guard (creates anyway)')
         .option('--json', 'Output machine-readable JSON')
         .action(async (title, options) => {
             if (options.template !== undefined && !(TASK_VARIANTS as readonly string[]).includes(options.template)) {
@@ -153,6 +161,9 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     featureId: options.feature,
                     parentWbs: options.parent,
                     template: options.template,
+                    // Dedup guard is skipped entirely when --allow-duplicate-name is set,
+                    // even if --dedupe-within was also supplied.
+                    dedupeWithinSec: options.allowDuplicateName ? undefined : options.dedupeWithin,
                 });
                 if (options.json) {
                     context.output.write(toJson(result));
@@ -160,8 +171,13 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     context.output.write(`Created task ${result.ref.id}: ${result.ref.filePath}`);
                 }
             } catch (err) {
-                context.output.error(String(err));
-                context.setExitCode(1);
+                if (err instanceof DuplicateFollowUpError) {
+                    context.output.error(err.message);
+                    context.setExitCode(3);
+                } else {
+                    context.output.error(String(err));
+                    context.setExitCode(1);
+                }
             }
         });
 
@@ -715,6 +731,71 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             }
 
             if (result.verdict !== 'PASS') {
+                context.setExitCode(1);
+            }
+        });
+
+    // ── verifyall-aggregate ──
+    task.command('verifyall-aggregate')
+        .summary('Aggregate per-task verify outcomes into a deterministic batch verdict (verifyall).')
+        .description(
+            'Reads a JSON array of per-task outcomes ({wbs,outcome}) and emits the batch ' +
+                'verdict with NOT-STARTED tasks excluded from the rollup. Replaces agent-discretion ' +
+                'rollup prose (dev-operations.md §3a) with deterministic code (task 0341).',
+        )
+        .option('--from-file <path>', 'Path to JSON array of {wbs,outcome[,reason]} rows')
+        .option('--json', 'Output machine-readable JSON')
+        .action(async (options) => {
+            const inputPath = options.fromFile ?? '.spur/run/verifyall-batch-input.json';
+            let raw: string;
+            try {
+                raw = readFileSync(inputPath, 'utf-8');
+            } catch {
+                context.output.error(`Batch input file not found: ${inputPath}`);
+                context.setExitCode(1);
+                return;
+            }
+
+            let rows: Array<{ wbs: string; outcome: string; reason?: string }>;
+            try {
+                const parsed: unknown = JSON.parse(raw);
+                if (!Array.isArray(parsed)) {
+                    throw new Error('expected a JSON array');
+                }
+                rows = parsed;
+            } catch (err) {
+                context.output.error(`Invalid batch input JSON: ${String(err)}`);
+                context.setExitCode(1);
+                return;
+            }
+
+            const results = rows.map((r) => {
+                const outcome = r.outcome.toUpperCase();
+                if (!['PASS', 'PARTIAL', 'FAIL', 'NOT-STARTED', 'UNKNOWN'].includes(outcome)) {
+                    throw new Error(`Invalid outcome for ${r.wbs}: ${r.outcome}`);
+                }
+                return {
+                    wbs: r.wbs,
+                    outcome: outcome as 'PASS' | 'PARTIAL' | 'FAIL' | 'NOT-STARTED' | 'UNKNOWN',
+                    reason: r.reason,
+                };
+            });
+
+            const aggregation = aggregateBatchVerdicts(results);
+
+            if (options.json) {
+                context.output.write(JSON.stringify(aggregation, null, 2));
+            } else {
+                context.output.write(`Batch verdict: ${aggregation.verdict}`);
+                context.output.write(aggregation.summary);
+                if (aggregation.notStarted.length > 0) {
+                    context.output.write(
+                        `NOT-STARTED (excluded from rollup): ${aggregation.notStarted.map((r) => r.wbs).join(', ')}`,
+                    );
+                }
+            }
+
+            if (aggregation.verdict === 'FAIL') {
                 context.setExitCode(1);
             }
         });

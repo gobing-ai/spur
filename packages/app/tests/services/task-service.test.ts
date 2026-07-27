@@ -5,7 +5,13 @@ import { join } from 'node:path';
 import { MarkdownDocument } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { PlanningWriteService } from '../../src/services/planning-write-service';
-import { sectionIsBare, TASK_ACTION_COMMANDS, type TaskActionJob, TaskService } from '../../src/services/task-service';
+import {
+    DuplicateFollowUpError,
+    sectionIsBare,
+    TASK_ACTION_COMMANDS,
+    type TaskActionJob,
+    TaskService,
+} from '../../src/services/task-service';
 
 let tasksDir: string;
 let svc: TaskService;
@@ -1188,6 +1194,67 @@ Seeded.
                 'Unsupported task action: unknown',
             );
         });
+    });
+});
+
+describe('TaskService — dedup guard (task 0341 R4)', () => {
+    let dir: string;
+    let localTasksDir: string;
+    let localSvc: TaskService;
+    beforeAll(async () => {
+        dir = mkdtempSync(join(tmpdir(), 'spur-task-dedup-'));
+        localTasksDir = join(dir, 'tasks');
+        const fs = createNodeFileSystem(dir);
+        await fs.ensureDir(localTasksDir);
+        const writeService = new PlanningWriteService({ fs });
+        localSvc = new TaskService({ fs, tasksDir: localTasksDir, writeService });
+    });
+
+    afterAll(() => {
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('refuses a same-name task under the same feature within the window', async () => {
+        await localSvc.create({ title: 'Resolve X', featureId: 'A', dedupeWithinSec: 60 });
+        await expect(localSvc.create({ title: 'Resolve X', featureId: 'A', dedupeWithinSec: 60 })).rejects.toThrow(
+            /duplicate-follow-up/,
+        );
+    });
+
+    test('name match is case-insensitive', async () => {
+        await localSvc.create({ title: 'Fix Y', featureId: 'B', dedupeWithinSec: 60 });
+        await expect(localSvc.create({ title: 'fix y', featureId: 'B', dedupeWithinSec: 60 })).rejects.toThrow(
+            /duplicate-follow-up/,
+        );
+    });
+
+    test('allows same name across different features', async () => {
+        await localSvc.create({ title: 'Unique Z', featureId: 'C', dedupeWithinSec: 60 });
+        // Different feature → no collision, even with identical name and within window.
+        const result = await localSvc.create({ title: 'Unique Z', featureId: 'D', dedupeWithinSec: 60 });
+        expect(result.ref.kind).toBe('task');
+    });
+
+    test('DuplicateFollowUpError carries existing WBS and name', async () => {
+        const first = await localSvc.create({ title: 'Named Task', featureId: 'E', dedupeWithinSec: 60 });
+        const firstWbs = first.ref.id;
+        try {
+            await localSvc.create({ title: 'Named Task', featureId: 'E', dedupeWithinSec: 60 });
+            throw new Error('expected create to throw duplicate-follow-up');
+        } catch (err) {
+            expect(err).toBeInstanceOf(DuplicateFollowUpError);
+            const dup = err as DuplicateFollowUpError;
+            expect(dup.existingWbs).toBe(firstWbs);
+            expect(dup.existingName).toBe('Named Task');
+            expect(dup.attemptedName).toBe('Named Task');
+            expect(dup.message).toMatch(/duplicate-follow-up/);
+        }
+    });
+
+    test('no dedupe-within flag → no guard (legacy behavior preserved)', async () => {
+        await localSvc.create({ title: 'Unguarded V', featureId: 'F' });
+        const result = await localSvc.create({ title: 'Unguarded V', featureId: 'F' });
+        expect(result.ref.kind).toBe('task');
     });
 });
 
