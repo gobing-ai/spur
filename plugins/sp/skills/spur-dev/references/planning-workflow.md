@@ -153,21 +153,29 @@ re-run `spur task refresh-roster <parent-wbs>` to re-emit it after a child statu
 `batch-create`. See `sp:spec-decomposition` ("Parent (umbrella) tasks") for the roster format and
 the parent-completion rule.
 
-## Step 5.5: Design doc (conditional)
+## Step 5.5: Design package (unified `--skip-design`)
 
-A feature's **design satellite** (`docs/design/<slug>.md`) is the cross-cutting design record for the
-area — the decision record a reviewer reads, indexed from `docs/04_DESIGN.md §0`. The planning half
-authors it here, after the batch lands, when the feature warrants one. This is **per feature**, not
-per task: a task's in-file `### Design` section (code-level, written at refine — Step 6) is a separate,
-narrower artifact and does not replace the satellite.
+Two design surfaces, **one operator flag**:
 
-**Decision — does this run at all?** Driven by the `/sp:dev-plan` flags:
+| Surface | What | Default |
+|---------|------|---------|
+| **Feature satellite** | `docs/design/<slug>.md` + `04_DESIGN.md` index | On when seam heuristic / `--design` forces; off with `--skip-design` |
+| **Task `### Design`** | Per-task WHAT/WHY in each batch item's `design` field | **On by default** at decompose/batch-create; off with `--skip-design` |
 
-| Flags | Action |
-|-------|--------|
-| `--design` (± `--auto`) | **Always** author/update the satellite. `--design` wins; `--auto` ignored. |
-| `--auto` (no `--design`) | **Decide from intake.** Author **iff** a cross-cutting seam is detected; else skip. |
-| neither | **Skip.** No satellite, no `04` change — Step 6 follows directly. |
+**`--skip-design` (unified):** skip the feature satellite **and** leave task `design` empty (scaffold
+only). Refine is the **fallback** that fills blank Design before implement.
+
+**`--design`:** force the feature satellite even when the seam heuristic would skip. Does **not**
+skip task Design — task Design still defaults on unless `--skip-design`.
+
+| Flags | Feature satellite | Task `### Design` in batch |
+|-------|-------------------|----------------------------|
+| (default / `--auto`) | seam heuristic | **author `design` on each item** |
+| `--design` | always | **author `design` on each item** |
+| `--skip-design` | skip | **omit `design`** (refine later) |
+
+A task's in-file `### Design` is code-level and narrow. The feature satellite is cross-cutting. Both
+are part of the same planning "design package" controlled by `--skip-design`.
 
 **The seam heuristic (the `--auto` decision).** A design doc is warranted when the feature introduces
 an **ADR-worthy** change — anything that shifts a boundary another engineer must reason about:
@@ -207,17 +215,21 @@ skip and why. Do not pause to ask; the operator reviews the satellite afterward.
 
 ## Step 6: Refine before execute (the spec-completion gate)
 
-`batch-create` lands a task at **`todo`** with its required sections (`Acceptance Criteria`,
-`Design`, `Plan`) **scaffolded as guidance comments only** — the batch item carries `background`
-and `requirements`, but it has no field for AC/Design/Plan, and `spur task check` gates on section
-*presence*, not human content. So a freshly batch-created `todo` task is **structurally ready but
-content-incomplete**: it passes `check` while its Design/Plan are still empty placeholders.
+`batch-create` accepts optional `design` / `plan` / `acceptance_criteria` fields (plus
+`background` / `requirements`). **Default planning path:** the decomposition agent fills `design`
+(and preferably Plan/AC) so tasks land **content-ready**. **`--skip-design`:** leave `design`
+empty — headings only.
 
-Before a task enters the execution half, fill those sections via the **refine** operation
-(`/sp:dev-refine <wbs>`): read the task, elicit the missing AC/Design/Plan through targeted Q&A,
-and write each via `spur task update <wbs> --section <name> --from-file`. This is the only path
-that turns the `todo` HITL-review gate from a formality into a real one — a reviewer approves the
-*Design*, not an empty heading.
+**Refine is the fallback**, not the primary Design author:
+
+```text
+/sp:dev-refine <wbs>          # single task — fills blank Design/AC/Plan if L3 gaps
+/sp:dev-refineall --feature X --auto
+```
+
+Under `--auto`, refine **SKIP**s when target sections (Background, Requirements, AC, Design, Plan)
+already have no L3 findings. If Design is still placeholder, synthesis runs (standard tier by
+default; escalates only on gate-fail).
 
 **Check the variant before you write.** Which sections a task carries is decided by its `template:`
 frontmatter against `.spur/tasks/section-matrix.yaml` — NOT a fixed list. Before authoring any
@@ -242,20 +254,32 @@ correct section (e.g. *"See `### Plan` for the fix checklist."*) rather than lea
 time. Design written against a stale snapshot of the codebase rots; design written right before
 `implement` reflects current reality. Refine `0042`, run `0042`; refine `0043`, run `0043`.
 
-**Refine arguments** (defined on the `/sp:dev-refine` entry point, passed through verbatim):
+**Batch refine (optional pre-pass).** When an operator wants every planning-side task under a
+feature filled before a runall, use `/sp:dev-refineall --feature <id> --auto` (batch counterpart
+of `/sp:dev-refine`). It reuses the same per-task refine operation, freezes the set, topo-sorts by
+`dependencies[]`, and emits a batch report — see [dev-operations.md](dev-operations.md) § refineall.
+This does **not** replace just-in-time refine before each implement; it is a bulk pre-pass when the
+feature's tasks are still `backlog`/`todo` placeholders. Prefer `--auto` for batch scale; avoid
+`--next` on large features (that chains each task into run).
+
+**Refine arguments** (defined on the `/sp:dev-refine` entry point, passed through verbatim; also
+shared flags on `/sp:dev-refineall`):
 
 | Argument | Effect |
 |----------|--------|
 | `--focus <mode>` | Narrows the gap analysis to a subset of domain hints. See the `sp:dev-refine` skill for the full value table (`all`, `requirements`, `background`, `constraints`, `acceptance`, `quick`). Default `all`. |
-| `--auto` | Skip interactive Q&A — synthesize improvements from the task content alone. Use for well-scoped tasks where the agent can fill gaps without operator input. |
+| `--auto` | Skip interactive Q&A — synthesize improvements from the task content alone. Use for well-scoped tasks where the agent can fill gaps without operator input. **Required for practical batch use** via `dev-refineall`. |
 
-**Pre-synthesis skip gate (under `--auto`).** Before synthesizing, run `spur task check <wbs> --json`. When the check exits 0 (PASS) and the target sections show no L3 warnings, emit a structured SKIP instead of calling the synthesis agent:
+**Pre-synthesis skip gate (under `--auto`).** Before synthesizing, run `spur task check <wbs> --json`. When the **refine target sections** show no L3 findings, emit a structured SKIP instead of calling the synthesis agent.
+
+**Refine target sections (anti-drift lock):** `{Background, Requirements, Acceptance Criteria, Design, Plan}`.  
+These must be solid enough that a cheaper implementer cannot invent another path. **Solution is not a refine target** — it is written by implement as the as-built change-map.
 
 ```
-SKIP — sections already meet L3: sections-considered=[Background, Requirements, Plan], reason="spur task check PASS, all target sections at L3"
+SKIP — sections already meet L3: sections-considered=[Background, Requirements, Acceptance Criteria, Design, Plan], reason="no L3 findings for target sections"
 ```
 
-This is the expected outcome for a task that is already well-specified. Under `--auto`, a SKIP is not an error — it means no gap was found. The operator can verify by reading the check output or the task file directly. Synthesis is only invoked when a real gap exists.
+This is the expected outcome for a task that is already well-specified. Under `--auto`, a SKIP is not an error — it means no gap was found. The operator can verify by reading the check output or the task file directly. Synthesis is only invoked when a real gap exists in a target section (including empty/placeholder Design or AC).
 
 > **Requirements formatting:** author R-items as a GitHub task-list checkbox — `- [ ] R1. <text>`
 > — so progress is trackable in the file. The L3 check accepts the `- [ ] Rn.` / `- Rn.` / `Rn.`

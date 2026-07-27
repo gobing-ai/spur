@@ -36,11 +36,24 @@ rejected, and a single rejected item fails the whole batch (all-or-nothing).
 | `tags` | no | String tags. |
 | `background` | no | Pre-filled `## Background` body (the scenario→task mapping note goes here). |
 | `requirements` | no | Pre-filled `## Requirements` body. |
+| `design` | **default yes** | Pre-filled `### Design` (WHAT/WHY). **Author by default** on plan/decompose. Omit only under operator `--skip-design` (refine fills later). |
+| `plan` | recommended | Pre-filled `### Plan` checklist when known at create. |
+| `acceptance_criteria` | recommended | Pre-filled `### Acceptance Criteria` when scenarios are known. |
 
 > There is **no** generic `sections` field and **no** `dependencies` field in the batch item — the
-> Zod schema is strict and rejects both. Use `background`/`requirements` for content, and record
-> ordering in `background` prose (the WBS-level `dependencies` frontmatter is set later, not at batch
-> create).
+> Zod schema is strict and rejects both. Use `background`/`requirements`/`design`/`plan`/
+> `acceptance_criteria` for content, and record ordering in `background` prose (the WBS-level
+> `dependencies` frontmatter is set later, not at batch create).
+
+### Design at create (default) vs `--skip-design`
+
+**Default (no `--skip-design` on `/sp:dev-plan` / `/sp:dev-idea`):** every batch item for
+`standard` / `feature-impl` (and any variant that carries Design at `todo`) **must** include a
+non-empty `design` field — chosen approach + one-line reason, rejected alternatives, invariants,
+key signatures (not code dumps). This is the capable-first cost path: lock the box once at create.
+
+**`--skip-design`:** leave `design` empty (scaffold only). Refine is the **fallback** that fills
+blank Design before implement (`/sp:dev-refine` / `dev-refineall`).
 
 ## Template-variant selection
 
@@ -370,14 +383,19 @@ The payload is a top-level JSON **array** (no `tasks` wrapper):
     "template": "feature-impl",
     "feature_id": "A1",
     "priority": "P0",
-    "background": "Implements: R1 — User can create a task with required fields"
+    "background": "Implements: R1 — User can create a task with required fields",
+    "design": "Approach: POST /tasks via existing TaskService.create.\nRejected: ad-hoc SQL in handler.\nInvariants: CLI-gated corpus writes only.",
+    "plan": "1. Contract\n2. Handler\n3. Tests",
+    "acceptance_criteria": "Scenario: create succeeds\n  Given a valid title\n  When POST /tasks\n  Then a task file is allocated"
   },
   {
     "name": "Implement task listing endpoint",
     "template": "feature-impl",
     "feature_id": "A1",
     "priority": "P1",
-    "background": "Implements: R2 — User can list tasks filtered by status (runs after the create endpoint)"
+    "background": "Implements: R2 — User can list tasks filtered by status (runs after the create endpoint)",
+    "design": "Approach: GET /tasks with status filter on TaskService.list.\nRejected: client-side full scan only.\nInvariants: reuses list DTO from contracts.",
+    "plan": "1. Filter param\n2. Handler\n3. Tests"
   }
 ]
 ```

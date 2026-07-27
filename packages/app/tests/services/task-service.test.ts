@@ -464,6 +464,44 @@ describe('TaskService', () => {
             }
         });
 
+        test('writes design, plan, and acceptance_criteria from batch items (default plan path)', async () => {
+            const root = mkdtempSync(join(tmpdir(), 'spur-task-svc-design-'));
+            const dir = join(root, 'tasks');
+            const isolateFs = createNodeFileSystem(root);
+            await isolateFs.ensureDir(dir);
+            const writeService = new PlanningWriteService({ fs: isolateFs });
+            const isolateSvc = new TaskService({ fs: isolateFs, tasksDir: dir, writeService });
+
+            try {
+                const batchFile = join(dir, 'batch-design.json');
+                await isolateFs.writeFile(
+                    batchFile,
+                    JSON.stringify([
+                        {
+                            name: 'Designed task',
+                            background: 'Context.',
+                            requirements: 'R1. Do the thing.',
+                            design: 'Approach: extend TaskService batch-create.\nRejected: post-hoc refine only.\nInvariants: no Solution at create.',
+                            plan: '1. Schema\n2. Wire create\n3. Docs',
+                            acceptance_criteria:
+                                '```gherkin\nScenario: Design lands at create\n  Given a batch item with design\n  When batch-create runs\n  Then Design section is populated\n```',
+                        },
+                    ]),
+                );
+                const { children } = await isolateSvc.batchCreate(batchFile);
+                const first = children[0];
+                if (!first) throw new Error('Expected a result');
+                const doc = MarkdownDocument.parse(await isolateFs.readFile(first.ref.filePath), 'task');
+                expect(doc.getSection('Design')).toContain('extend TaskService batch-create');
+                expect(doc.getSection('Design')).toContain('no Solution at create');
+                expect(doc.getSection('Plan')).toContain('Schema');
+                expect(doc.getSection('Acceptance Criteria')).toContain('Design lands at create');
+                expect(first.ref.id).toMatch(/^\d{4}$/);
+            } finally {
+                rmSync(root, { recursive: true, force: true });
+            }
+        });
+
         test('bulletizes a run-on R-numbered requirements paragraph into a list', async () => {
             // WHY: dogfood issue #2 — a single-line "R1. … R2. … R3. …" must render
             // as one bullet per requirement so it is legible in a markdown viewer.

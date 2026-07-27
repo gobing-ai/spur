@@ -184,11 +184,13 @@ directly from `feature-check` to `decompose`.
 **Ties lean design.** When the criteria are mixed or ambiguous, set `needs_design: true`. The cost
 of an unnecessary design step is low; the cost of skipping a needed one is high.
 
-**Flag overrides** (consumed by `idea-pipeline.yaml`, not brainstorm itself):
+**Flag overrides** (consumed by `idea-pipeline.yaml` / plan, not brainstorm itself):
 
-- `--design` forces `system-design` regardless of signal.
-- `--skip-design` skips `system-design` regardless of signal (the brainstorm design summary is still
-  recorded — only the heavier architecture step is skipped).
+- `--design` forces `system-design` (feature satellite) regardless of signal; task `### Design` still
+  defaults **on** in the later batch.
+- `--skip-design` (unified): skips `system-design` **and** omits per-task `design` fields at
+  batch-create (scaffold only). Brainstorm design summary is still recorded. Refine is the fallback
+  for blank task Design.
 
 ### Auto-mode behavior
 

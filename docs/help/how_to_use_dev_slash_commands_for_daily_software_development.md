@@ -395,8 +395,13 @@ expressible there. `auto` resolves the current runtime to its canonical name; `<
 > orchestrator — it runs the loop in its own context and is never replaced by `--agent`.
 > Same dual-surface contract as `dev-run`, scaled across the batch.
 
-**`--design` / `--auto` on `/sp:dev-plan`** — author a feature design satellite
-(`docs/design/<slug>.md`) + its `04_DESIGN.md` index row. `--design` always authors;
+**Design package on `/sp:dev-plan` / `/sp:dev-idea` (unified `--skip-design`)** —
+**default:** author per-task `### Design` in the batch **and** the feature satellite when the
+seam heuristic (or `--design`) says so. **`--skip-design`:** skip the satellite **and** leave
+task Design blank (scaffold only); `/sp:dev-refine` / `dev-refineall` is the fallback.
+**`--design`** forces the feature satellite (`docs/design/<slug>.md` + `04` index row) on; task
+Design still defaults on unless skip. With `--auto` the seam heuristic decides satellite authorship
+unless force/skip:
 `--auto` lets the agent decide via a cross-cutting-seam heuristic (new
 command/module/schema/transport); neither = no design doc (the default). Idempotent —
 re-runs update in place.

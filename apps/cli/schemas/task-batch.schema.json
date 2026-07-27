@@ -22,6 +22,18 @@
                 "type": "string",
                 "description": "R-numbered requirement items (R1. R2. …) — a referenceable list."
             },
+            "design": {
+                "type": "string",
+                "description": "Pre-filled ### Design body (WHAT/WHY decision record). Default for plan/decompose unless --skip-design."
+            },
+            "plan": {
+                "type": "string",
+                "description": "Pre-filled ### Plan body (ordered checklist)."
+            },
+            "acceptance_criteria": {
+                "type": "string",
+                "description": "Pre-filled ### Acceptance Criteria body (Gherkin or checklist)."
+            },
             "feature_id": {
                 "type": "string",
                 "pattern": "^[A-Z][1-9]*$",

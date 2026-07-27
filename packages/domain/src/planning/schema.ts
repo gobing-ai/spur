@@ -329,6 +329,16 @@ export const taskBatchItemSchema = z
         name: z.string().min(1, 'name is required'),
         background: z.string().optional(),
         requirements: z.string().optional(),
+        /**
+         * Pre-filled `### Design` body (WHAT/WHY decision record).
+         * Default planning path should author this unless the operator passed
+         * `--skip-design` (then leave empty; refine fills as fallback).
+         */
+        design: z.string().optional(),
+        /** Pre-filled `### Plan` body (ordered checklist). */
+        plan: z.string().optional(),
+        /** Pre-filled `### Acceptance Criteria` body (Gherkin or checklist). */
+        acceptance_criteria: z.string().optional(),
         feature_id: featureId,
         parent_wbs: wbsString,
         priority: z.enum(PRIORITIES).optional(),

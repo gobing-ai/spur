@@ -17,6 +17,8 @@
 #   idea     — the idea text (required), e.g. --vars '{"idea":"add a --dry-run flag to dev-wrap"}'
 #   profile  — set --vars '{"profile":"auto"}' to skip objective HITL gates (feature-check, batch-create)
 #   design   — "auto" (default, signal-driven), "force" (--design), "skip" (--skip-design)
+#              Unified: skip also means omit per-task Design in batch-create (scaffold only;
+#              refine fills later). Default/force: decompose must author batch item `design`.
 #   design_approved — "true" only when the operator explicitly approved the design in-session;
 #              lets profile=auto route around the design-approval taste gate (default "false")
 #   spurBin  — PATH-independent spur invocation (overridden by CLI at run start)

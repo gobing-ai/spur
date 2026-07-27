@@ -183,6 +183,9 @@ function renderCreatedTaskContent(params: {
     priority?: string;
     tags?: string[];
     requirements?: string;
+    design?: string;
+    plan?: string;
+    acceptanceCriteria?: string;
 }): string {
     let content = renderTaskTemplate(params.rawTemplate, {
         NAME: params.name,
@@ -209,9 +212,24 @@ function renderCreatedTaskContent(params: {
             `[${params.tags.map((tag) => JSON.stringify(tag)).join(', ')}]`,
         );
     }
+    const sectionPatches: Partial<Record<TaskSection, string>> = {};
     if ((params.requirements ?? '').trim() !== '') {
+        sectionPatches.Requirements = bulletizeRequirements(params.requirements ?? '');
+    }
+    if ((params.design ?? '').trim() !== '') {
+        sectionPatches.Design = (params.design ?? '').trim();
+    }
+    if ((params.plan ?? '').trim() !== '') {
+        sectionPatches.Plan = (params.plan ?? '').trim();
+    }
+    if ((params.acceptanceCriteria ?? '').trim() !== '') {
+        sectionPatches['Acceptance Criteria'] = (params.acceptanceCriteria ?? '').trim();
+    }
+    if (Object.keys(sectionPatches).length > 0) {
         const doc = MarkdownDocument.parse(content, 'task');
-        doc.replaceSection('Requirements', bulletizeRequirements(params.requirements ?? ''));
+        for (const [section, body] of Object.entries(sectionPatches)) {
+            doc.replaceSection(section as TaskSection, body);
+        }
         content = doc.serialize();
     }
     return content;
@@ -1108,8 +1126,9 @@ export class TaskService {
      *    `todo → wip` if applicable — see {@link wireUpParents}.
      *
      * @param jsonPath Path to a batch file matching `taskBatchSchema` (a bare
-     *   array of `{name, background?, requirements?, feature_id?, parent_wbs?,
-     *   priority?, tags?, template?}` items).
+     *   array of `{name, background?, requirements?, design?, plan?,
+     *   acceptance_criteria?, feature_id?, parent_wbs?, priority?, tags?,
+     *   template?}` items).
      * @returns `children` — one {@link WriteResult} per created task, in the same
      *   order as the input array. `parentsWired` — one {@link ParentWireResult}
      *   per distinct parent touched by the wire-up pass.
@@ -1222,9 +1241,14 @@ export class TaskService {
             background = await this.deriveBackground(item.feature_id);
         }
 
-        // A batch item with a real spec (background or requirements) is ready to
-        // execute → 'todo'; otherwise 'backlog' (§2.3 semantics).
-        const hasSpec = background !== '' || (item.requirements ?? '').trim() !== '';
+        // A batch item with a real spec (background/requirements/design/plan/AC) is
+        // ready to execute → 'todo'; otherwise 'backlog' (§2.3 semantics).
+        const hasSpec =
+            background !== '' ||
+            (item.requirements ?? '').trim() !== '' ||
+            (item.design ?? '').trim() !== '' ||
+            (item.plan ?? '').trim() !== '' ||
+            (item.acceptance_criteria ?? '').trim() !== '';
         const status = hasSpec ? 'todo' : 'backlog';
 
         // Explicit item template wins; a feature link defaults to `feature-impl`, else `standard`.
@@ -1256,6 +1280,9 @@ export class TaskService {
                     priority: item.priority,
                     tags: item.tags,
                     requirements: item.requirements,
+                    design: item.design,
+                    plan: item.plan,
+                    acceptanceCriteria: item.acceptance_criteria,
                 });
                 const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder };
                 return { ref, content };
@@ -1283,6 +1310,15 @@ export class TaskService {
             if (background !== '') taskBodies.Background = background;
             if ((item.requirements ?? '').trim() !== '') {
                 taskBodies.Requirements = bulletizeRequirements(item.requirements ?? '');
+            }
+            if ((item.design ?? '').trim() !== '') {
+                taskBodies.Design = (item.design ?? '').trim();
+            }
+            if ((item.plan ?? '').trim() !== '') {
+                taskBodies.Plan = (item.plan ?? '').trim();
+            }
+            if ((item.acceptance_criteria ?? '').trim() !== '') {
+                taskBodies['Acceptance Criteria'] = (item.acceptance_criteria ?? '').trim();
             }
 
             const content = buildTaskSkeleton({
