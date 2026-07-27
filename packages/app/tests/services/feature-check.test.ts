@@ -1688,18 +1688,80 @@ describe('FeatureCheckService', () => {
     });
 
     test('0340 R5 dogfood: PASS verdict with UNMET matching requirement must not PASS --strict', async () => {
-        const { result, cleanup } = await setupScenarioSatisfaction({
-            taskStatus: 'done',
-            scenarioTitle: 'alpha',
-            verdict: { verdict: 'PASS', requirements: [{ id: 'alpha', status: 'UNMET' }] },
+        // WHY: the original R2 dogfood case — full linkage + recorded UNMET must
+        // fail under --strict (not merely emit a non-strict warning).
+        const dir = mkdtempSync(join(tmpdir(), 'spur-fc-0340-r5-'));
+        const featuresDir = join(dir, 'features');
+        const tasksDir = join(dir, 'tasks');
+        const runDir = join(dir, '.spur', 'run');
+        mkdirSync(featuresDir, { recursive: true });
+        mkdirSync(tasksDir, { recursive: true });
+        mkdirSync(runDir, { recursive: true });
+        const fenced = (lines: string[]) => ['```gherkin', ...lines, '```'];
+        writeFileSync(
+            join(featuresDir, 'A_r5.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'id: "A"',
+                'name: "R5"',
+                'status: active',
+                'priority: P1',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# A: R5',
+                '',
+                '## Goal',
+                '',
+                'g',
+                '',
+                '## Scope',
+                '',
+                'In scope: x',
+                '',
+                '## Acceptance Criteria',
+                '',
+                ...fenced(['Feature: A', '', '  Scenario: alpha', '    Given x']),
+            ].join('\n'),
+        );
+        writeFileSync(
+            join(tasksDir, '0001_a.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'name: "covers alpha"',
+                'status: done',
+                'feature_id: A',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '## 0001. covers alpha',
+                '',
+                '### Acceptance Criteria',
+                '',
+                ...fenced(['Feature: T', '', '  Scenario: alpha', '    Given x']),
+            ].join('\n'),
+        );
+        writeFileSync(
+            join(runDir, '0001-verdict.json'),
+            JSON.stringify({ verdict: 'PASS', requirements: [{ id: 'alpha', status: 'UNMET' }] }),
+        );
+        const svc = new FeatureCheckService(createNodeFileSystem());
+        const result = await svc.check(join(featuresDir, 'A_r5.md'), 'A', {
+            strict: true,
+            featuresDir,
+            tasksDir,
+            runDir,
         });
-        // Re-run with strict by re-checking the same fixture path via the wrapper.
-        // setupScenarioSatisfaction uses non-strict; verify the underlying signal
-        // (the unverified finding fires) which is what --strict elevates.
         const unverified = result.findings.filter((f) => f.code === 'L4.scenario-unverified');
         expect(unverified).toHaveLength(1);
+        expect(unverified[0]?.severity).toBe('error');
         expect(unverified[0]?.message).toContain('alpha');
-        cleanup();
+        expect(result.pass).toBe(false);
+        rmSync(dir, { recursive: true, force: true });
     });
 
     test('0340 R3 regression: orphan scenario emits uncovered-feature-scenario, NOT scenario-unverified', async () => {

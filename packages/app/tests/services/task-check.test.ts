@@ -2259,5 +2259,26 @@ describe('TaskCheckService', () => {
             const emptyAc = result.findings.filter((f) => f.code === FINDING_CODES.L3_AC_EMPTY);
             expect(emptyAc.length).toBe(1);
         });
+
+        test('R3: missing Requirements section does NOT emit L3_REQUIREMENTS_EMPTY (L2 handles absence)', async () => {
+            // WHY: AC "missing Requirements section is not double-reported". When the
+            // section heading is absent, L2 owns matrix-driven presence; L3 empty-body
+            // findings must not fire on a null body (that would double-report).
+            const content = [
+                taskFm({ status: 'backlog' }),
+                '',
+                '### Background',
+                '',
+                'No Requirements or AC headings — legitimate at backlog.',
+            ].join('\n');
+            const { fs, path, cleanup } = seedFile(content);
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+            cleanup();
+
+            const emptyReq = result.findings.filter((f) => f.code === FINDING_CODES.L3_REQUIREMENTS_EMPTY);
+            const emptyAc = result.findings.filter((f) => f.code === FINDING_CODES.L3_AC_EMPTY);
+            expect(emptyReq).toEqual([]);
+            expect(emptyAc).toEqual([]);
+        });
     });
 });
