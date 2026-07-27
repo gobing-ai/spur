@@ -308,6 +308,24 @@ checker without pretending a coverage percentage was measured.
 Loop is bounded — if a fix doesn't move a requirement to MET after one retry, report the residual
 and stop (don't thrash).
 
+**Follow-up task create — record-then-create discipline (0341 R4).** When the fix pass defers work
+into a new task under the same feature, do **not** call bare `spur task create` twice for the same
+name. Before creating:
+
+1. Read `.spur/run/<wbs>-fix-created.json` (create empty `[]` if missing) — the per-run ledger of
+   follow-ups already minted by this fix pass.
+2. If an entry under the same `feature_id` has an identical (case-insensitive) `name`, **reuse** that
+   WBS and report it; do not create a duplicate.
+3. Otherwise create with CLI guard:
+   `spur task create … --feature <id> --name "<name>" --dedupe-within 300`
+   (5-minute window covers one run). On `duplicate-follow-up` exit 3, parse the existing WBS from
+   the error and reuse it.
+4. Immediately append `{ wbs, name, feature_id, created_at }` to the ledger after a successful create.
+
+Override only with explicit operator intent (`--allow-duplicate-name` on the create, or operator
+instruction). This closes the dogfood double-create where one deferred requirement produced two
+task files seconds apart.
+
 **Gitignored fix-pass writes (disclosure rule).** Artifacts written under `.spur/run/**` during a
 fix pass are gitignored, so a `--fix all` pass can mutate deliverables invisibly to `git status` and
 to drift guards. The Testing write-back MUST name the exact artifact path and line range the fix
