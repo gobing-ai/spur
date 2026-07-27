@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: []
 created_at: "2026-07-27T17:49:41.046Z"
-updated_at: "2026-07-27T18:13:22.326Z"
+updated_at: "2026-07-27T21:53:20.671Z"
 ---
 
 ## 0349. Inventory feature lifecycle operations across CLI, oRPC, FeatureService, and Board action map
@@ -180,21 +180,34 @@ No button redesign here. Membership decisions → **0351**. Async runner → **0
 
 Candidates to evaluate for primary/overflow: **check**, **sync pull** (fix default), **advance**, **refresh** (scoped?), **move** (destructive), reopen-from-done, priority edit. Treat brainstorm/plan as **broken until action handler is real**. Treat push-sync as **hide or implement**.
 ### Testing
-**Mode:** research / inventory (no runtime code change).
+**Mode:** research / inventory (no runtime code change). Re-verified 2026-07-27 under `/sp-dev-verifyall --feature F81 --auto --next --force --focus all --fix all` (dogfood run `2026-07-27-verifyall-f81-215120`).
 
-**Method:** Read-only survey of monorepo CLI help, `featureContract`, `FeatureService`, server `handlers.ts`, `feature-actions.ts`, `FeatureDetail.tsx`, `feature-client.ts`.
+**Method:** Read-only re-survey of monorepo CLI `apps/cli/src/commands/feature.ts`, `packages/contracts/src/feature.ts:170-312`, `apps/server/src/modules/feature/handlers.ts`, `feature-actions.ts:1-65`, `FeatureDetail.tsx` action state/handlers, `feature-client.ts:72`.
 
 **Coverage claim:** N/A — documentation-only research ticket; no production paths under test.
 
-**Verification**
+**Per-requirement traceability**
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 | MET | Solution tables — CLI/oRPC/service/Board columns with path anchors |
-| R2 | MET | Per-status button table + handler wiring |
-| R3 | MET | Eight half-wired / gap bullets |
-| R4 | MET | Explicit no-redesign; handoff to 0351+ |
-| R5 | MET | Inventory recorded in Solution on this task |
+| R1 | MET | Solution inventory table; contracts `feature.ts:170-312`; CLI verbs create/show/update/advance/list/move/refresh/check/sync in `feature.ts` |
+| R2 | MET | `feature-actions.ts:1-9` FEATURE_STATUS_ACTIONS; `FeatureDetail.tsx:55-64` action state; `:221-274` handleAction/FSM; checkFeature client-only |
+| R3 | MET | action stub `handlers.ts:95-101`; push throw `:122-124`; sync default push `FeatureDetail.tsx:62`; checkFeature no UI call sites |
+| R4 | MET | Explicit no-redesign; handoff 0351+ |
+| R5 | MET | Inventory in Solution on this task file |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: Inventory covers all surfaces | MET | static-ref | Solution multi-surface table [docs-only] |
+| Scenario: Gaps are explicit | MET | static-ref | R3 gap list with path:line [docs-only] |
+
+**SECUA (focus all):** no runtime code modified — N/A security/correctness surface; inventory honesty check: default syncDirection=push vs server reject remains the highest residual product risk (documented, deferred to membership/impl).
+
+**`--next`:** no-op — task already terminal (`done`).
+
+**Verdict: PASS**
 ### Review
 **Disposition:** APPROVE for wayfinder research close — inventory-only, no production code change.
 

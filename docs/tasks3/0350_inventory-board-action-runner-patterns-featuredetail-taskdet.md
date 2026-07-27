@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: []
 created_at: "2026-07-27T17:49:42.940Z"
-updated_at: "2026-07-27T18:39:17.569Z"
+updated_at: "2026-07-27T21:53:50.656Z"
 ---
 
 ## 0350. Inventory Board action-runner patterns (FeatureDetail, TaskDetail jobs, Teams confirm, SSE)
@@ -153,18 +153,30 @@ Catalog registration: `event-names.ts:81-83`.
 
 This Solution is an **inventory only**. The decision about which async-runner model FeatureDetail should adopt (job-queue with runId tracking vs. extended sync vs. hybrid; whether to widen the SSE filter to `queue.*`/`task.*`; whether to port the Teams confirm-before-destructive modal pattern to destructive feature actions) is explicitly deferred to **0352** (and, per the feature map, the confirmation matrix to 0353 and the observability contract to 0354).
 ### Testing
-**Pipeline verify results**
+**Re-verified 2026-07-27** under verifyall F81 dogfood (`--force --focus all --fix all`). Prior Testing cited `task-service.ts:300-305` / `:998-1018` — **stale**; corrected this run.
 
-- Verdict: PASS (from verdict artifact)
+**Per-requirement traceability**
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | `apps/web/src/modules/features/FeatureDetail.tsx:55-64` (actionLoading, showCancelModal, actionModal, inlineModal state) — verified; `:221-252` handleAction dispatch router — verified; `:254-276` handleFSMTransition (cancel→modal at 258-261, await transitionFeature at 265, api-error at 271, finally clears actionLoading at 274) — verified; `:278-281` handleCancelConfirm — verified; `:283-308` handleInlineConfirm (createChildFeature/createFeatureTask/linkTaskToFeature + api-error at 303) — verified; `:310-338` dispatchAgentAction (sync HTTP POST via syncFeatureStatus/dispatchFeatureAction at 320-324, single reloadFeature at 329, api-error at 333) — verified; `:423-428` disabled={actionLoading===action} render — verified; `:703-704` Dispatching… label — verified. `apps/web/src/lib/feature-types.ts:66-68` FeatureActionResponse={ok:true} (no runId, no job tracking) — verified. |
-| R2 | MET | `packages/app/src/services/task-service.ts:300-305` TaskActionResult {runId, action, status:'queued'} — verified; `:998-1018` fulfillAction (resolveTaskFile + isTaskActionName at 1006, enqueue at 1010-1016) — verified. `apps/server/src/modules/task/handlers.ts:93-105` action handler (jobQueue.enqueue('task-action', job) at 99, returns result with runId) — verified. `packages/app/src/services/event-names.ts:85-91` queue.consumer.started/stopped + queue.job.enqueued/completed/failed/retrying + queue.stats — verified (all source:'queue', tier default). `apps/web/src/modules/task-kanban/TaskDetail.tsx:180-201` dispatchAction (await api.task.action at 185, immediate api.task.list + setTasks at 191-192, no runId tracking, finally clears actionLoading at 199) — verified; `:85-86` 5s poll comment — verified. UI discards runId; observes completion only via list poll + task.transitioned. |
-| R3 | MET | `apps/web/src/modules/teams/TerminalTab.tsx:79-80` confirmStopFor/confirmDownFor state — verified; `:266-269` stop trigger (if isRunning → setConfirmStopFor else direct toggleMemberStatus) — verified; `:314-316` Down → setConfirmDownFor — verified; `:336-373` stop Modal (variant="warning", data-stop-confirm-modal, Cancel at 352, Stop at 362-367, disabled={actionPending} at 361) — verified; `:375-411` down Modal (variant="warning", data-down-confirm-modal, Cancel at 390, Bring Down at 400-404, disabled={actionPending} at 399) — verified. Non-destructive start/up skip modal. |
-| R4 | MET | `apps/server/src/modules/events/index.ts:39-66` eventsModule mounts GET /api/events/planning, streams SYSTEM_EVENT_STREAMED_NAMES (default tier) — verified; `:66` mount — verified. `apps/web/src/modules/features/FeaturesShell.tsx:11` sseUrl → /events/planning — verified; `:86-107` SSE effect (EventSource, filters name.startsWith('feature.') at 94, void load() at 95, detailRefreshKey bump on feature.updated/feature.transitioned at 99-100, no task.*/queue.* subscription) — verified. `packages/app/src/services/planning-write-service.ts:102-105` PlanningEventName union incl. feature.created/updated/transitioned — verified; `:550-556` resolveEventName mapping — verified; `:443-452` emit at Step 8 — verified. `packages/app/src/services/planning-events.ts:36-51` BusPlanningEventEmitter.emit (persist to planning_events then bus.emit) — verified. `apps/server/src/modules/events/system-event-tap.ts:1-8` re-export of registerSystemEventTap — verified (file is a thin re-export; cited as `:27-` in Solution, actual content is the re-export — anchor resolves, subject named). `packages/app/src/services/event-names.ts:81-83` feature.* catalog registration — verified. |
-| R5 | MET | Solution §R5 explicitly records "inventory only" and defers the async-runner model decision to 0352, confirmation matrix to 0353, observability contract to 0354. Scope respected — no decision recorded in this task. |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `FeatureDetail.tsx:55-64` action state; `:221-274` handleAction/FSM; `:62` syncDirection default `push` |
+| R2 | MET | `task-service.ts:319-322` TaskActionResult; `:1016-1035` fulfillAction enqueue; `event-names.ts:85-91` queue.job.* |
+| R3 | MET | Teams confirm modal patterns (Solution inventory); non-destructive skip |
+| R4 | MET | `FeaturesShell.tsx:86-107` SSE `feature.*` only; no queue.* subscription |
+| R5 | MET | Inventory only; defers 0352/0353/0354 |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Runner patterns inventoried | MET | static-ref | Solution R1–R4 tables [docs-only] |
+| Gaps for 0352 named | MET | static-ref | fire-and-forget vs job queue; SSE gap [docs-only] |
+
+**Fix applied (`--fix all`):** corrected stale line anchors for TaskActionResult/fulfillAction after line-anchor re-read failed at old ranges (content shifted). No production code change.
+
+**`--next`:** no-op — task already terminal (`done`).
+
+**Verdict: PASS**
 ### Review
 Functional Verdict: PASS
 
