@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.3.24] — 2026-07-27
+
+### Added
+
+- feature-check strict AC satisfaction (0340) (9874379d)
+- batch verdict aggregation, NOT-STARTED outcome, dedup guard (0341) (4745ab0f)
+- unify --agent selector with agent.executors (0346) (bf1833e1)
+- converge feature-tree status affordance on icon-only glyphs with accessible names (d134b863)
+
+### Fixed
+
+- correct two task-check false-negatives (0339) (5a06da57)
+
+### Changed
+
+- declare executor tiers explicitly and retire default-by-phase (9dce28b6)
+- pin dev-fixall/run/runall/changelog agents to omp (539eff4d)
+
+### Other
+
+- polish 0339/0340/0341/0342 records after verify re-audit (c92238c6)
+- document 0341 R4 follow-up task dedup discipline in code-verification (3a650853)
+- add 0340 R5 dogfood and 0339 R3 double-report guard cases (9c0a61b1)
+- add 0340 feature-check strict AC satisfaction satellite (9211ff07)
+- polish 0348 decision record after verify re-audit (6879d413)
+- polish 0347 inventory after verify re-audit (dcaded69)
+- sync design, B2 feature, and 7 task records to shipped state (abe14c4a)
+- document verifyall batch verdict rollup and NOT-STARTED grammar (9f13e2fc)
+- wrap SSE dispatch in act to clear React act warning (0342) (801b3b80)
+- add 0347 backward-compatibility inventory artifact (08c9fd5b)
+- update task status after implementation (2ab830a2)
+- add 'ask now' tier to wayfinder question-sharpness test (6aca3877)
+- reword dogfood ledger cardinality rule to match §2 Steps format (148e38db)
+- file verifyall-dogfood follow-ups 0339-0342 (12fe4232)
+- chart wayfinder map B2 for invocation-agnostic executor selection (ac3fc72b)
+
 ## [0.3.22] — 2026-07-25
 
 ### Added
