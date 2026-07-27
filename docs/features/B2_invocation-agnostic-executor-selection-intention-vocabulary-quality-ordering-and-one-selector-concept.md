@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-07-27T01:24:47.771Z"
-updated_at: "2026-07-27T06:45:16.911Z"
+updated_at: "2026-07-27T06:53:19.295Z"
 ---
 
 # B2: Invocation-agnostic executor selection: intention vocabulary, quality ordering, and one selector concept
@@ -139,6 +139,9 @@ amends or supersedes **ADR-033**), `sp:spur-cli` for corpus verbs, `sp:source-dr
 before asserting any framework or CLI behavior.
 
 ### Decisions so far
+- [0348 Decide the fate of REGISTERED_CANONICAL_STAGES](../tasks2/0348_decide-the-fate-of-registered-canonical-stages-and-prompt-re.md) —
+  **Demote to overridable default; AMEND ADR-033.** Registry stays as `model_policy` seed; config gains per-stage deep-replace override (Follow-up A). Escalation stays in domain (`getNextFallback`). Validator DAG retired (Follow-up B). `extractPhase` owned by 0344. Adapter reconcile is Follow-up C.
+
 - [0347 Inventory the backward-compatibility surface](../tasks2/0347_inventory-the-backward-compatibility-surface-before-any-agen.md) —
   **Complete.** Citeable inventory at `docs/tasks2/0347-inventory.md` (~16 operator-visible contracts, dual stage registries, four-source schema stack, deprecated-but-authoritative `default-by-phase`). No redesign proposed (R5); 0348 amends ADR-033 against this surface.
 
