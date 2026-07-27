@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-07-27T01:24:47.771Z"
-updated_at: "2026-07-27T06:21:20.732Z"
+updated_at: "2026-07-27T06:45:16.911Z"
 ---
 
 # B2: Invocation-agnostic executor selection: intention vocabulary, quality ordering, and one selector concept
@@ -139,6 +139,9 @@ amends or supersedes **ADR-033**), `sp:spur-cli` for corpus verbs, `sp:source-dr
 before asserting any framework or CLI behavior.
 
 ### Decisions so far
+- [0347 Inventory the backward-compatibility surface](../tasks2/0347_inventory-the-backward-compatibility-surface-before-any-agen.md) —
+  **Complete.** Citeable inventory at `docs/tasks2/0347-inventory.md` (~16 operator-visible contracts, dual stage registries, four-source schema stack, deprecated-but-authoritative `default-by-phase`). No redesign proposed (R5); 0348 amends ADR-033 against this surface.
+
 - [0346 Unify the --agent selector namespace with agent.executors](../tasks2/0346_unify-the-agent-selector-namespace-with-agent-executors.md) —
   **Shipped.** Explicit `--agent <name>` reuses executor-first-then-binary lookup; bare binaries still
   work; ship-ahead of the rest of the map. `--executor` rename deferred.

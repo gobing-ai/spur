@@ -3,7 +3,7 @@
 Investigation of the Spur monorepo at `/Users/robin/xprojects/spur-new`. Every consumer of the `agent:` config surface, canonical stages, phase extraction, and tier routing — classified for the B2/0347 redesign.
 
 ## Summary
-- **~14 operator-visible contracts** (zod schemas, JSON schema, CLI flags, `spur init` example, workflow `vars.agent`)
+- **~16 operator-visible contracts** (zod schemas, JSON schema, CLI flags, `spur init` example, workflow `vars.agent`)
 - **~24 internal implementation items** (services, types, helpers, two parallel stage registries)
 - **2 deprecated/retired items** (`default-by-phase` shim, legacy Tier-1 priority resolver)
 
@@ -36,17 +36,22 @@ Investigation of the Spur monorepo at `/Users/robin/xprojects/spur-new`. Every c
 
 | Flag | Surface | File:Line | Notes |
 |---|---|---|---|
-| `--agent <name\|auto>` | ALL `/sp:dev-*` commands | `plugins/sp/commands/dev-{brainstorm,dogfood,next,parallel,plan,refine,review,run,runall,unit,verify,verifyall}.md` (each L3 + L13 argument-hint) | Universal flag. `<name>` = explicit executor/agent; `auto` = resolve via stage-registry `model_policy`; omit = configured default `omp`. **Pin shape — every command documents it.** |
-| `--auto` | paired with `--agent` | same command files | Sets `profile=auto`, bypasses HITL confirmations. |
-| Dogfood `--agent` (testee-scoped) | `plugins/sp/commands/dev-dogfood.md:3`; `plugins/sp/skills/dogfood-testing/SKILL.md:52-269` | **Different semantics** — sets the *testee's* agent, not the driver's. Driver always runs in current session. |
-| `--agent` forwarding | next-router | `plugins/sp/skills/next-router/SKILL.md:50,72` | Router runs inline; forwards `--agent` into dispatched child only if child documents it. |
-| `--stage` / `--signal` / `--intention` / `--from-executor` | (none) | — | **Searched `apps/cli/src/commands/**` and `plugins/sp/**`: NO occurrences.** The stage registry is not exposed as operator CLI input today; "signals" come only from runtime gate results inside `resolveStageModelPolicy`. |
+| `--agent <name\|auto>` | **Primary CLI** `spur agent run` | `apps/cli/src/commands/agent.ts:37` (also `inbox`/`loop`/`drain` paths at L54+) | **Primary operator surface.** Default when omitted is `auto` (not a hard-coded `omp`). Executor-aware since 0346. |
+| `--agent <name\|auto>` | 12 `/sp:dev-*` plugin commands | `plugins/sp/commands/dev-{brainstorm,dogfood,next,parallel,plan,refine,review,run,runall,unit,verify,verifyall}.md` | Documents `--agent` in argument-hint. **19 other** `plugins/sp/commands/*.md` files do **not** declare `--agent` (e.g. dev-wrap, dev-gitmsg, rule-*, workflow-*). |
+| `--auto` | paired with `--agent` on some dev commands | same 12 command files | Sets `profile=auto`, bypasses HITL confirmations. |
+| Dogfood `--agent` (testee-scoped) | `plugins/sp/commands/dev-dogfood.md:3`; `plugins/sp/skills/dogfood-testing/SKILL.md` | **Different semantics** — sets the *testee's* agent, not the driver's. |
+| `--agent` forwarding | next-router | `plugins/sp/skills/next-router/SKILL.md` | Router runs inline; forwards `--agent` into dispatched child only if child documents it. |
+| `--stage` / `--signal` / `--from-executor` | **Not registered on commander** | Service still reads them if present: `agent-service.ts:656` (`stage`), `:692` (`signal`), `:694` (`from-executor`) | **Internal flag keys only** — `docs/04_DESIGN.md` documents them, but `apps/cli/src/commands/agent.ts` does not expose `.option('--stage'…)` etc. Introducing operator CLI flags is new surface. |
+| `--intention` | (none) | — | Not present anywhere; 0344 plans this flag as future work. |
+| `--agent <id>` (message/inbox/loop) | `apps/cli/src/commands/message.ts:30,51`; `agent.ts` loop/drain | **Different namespace** — agent-spec / message recipient id, not `agent.executors` selectors. Out of `agent:` config redesign scope, but flag name collides with coding-agent `--agent` (0346 unified only the executor/binary axis). |
 
 ### 1.4 `spur init` Templates / Example Config
 
 | Item | File:Line | Notes |
 |---|---|---|
-| `agent:` example section | `config/config.example.yaml:38-64` | Documented `default: omp`, commented `executors:` block (L47-59), commented `default-by-phase:` block (L61-64). **This is the seeded example operators copy from.** (No `config/templates/spur-config.yaml` — `config/templates/` holds docs/task/feature/bdd templates only.) |
+| `agent:` example section | `config/config.example.yaml:38-64` | Documented `default: omp`, commented `executors:` block (L47-59), commented `default-by-phase:` block (L61-64). **De-facto operator contract** (`spur init` does not write `agent:`). (No `config/templates/spur-config.yaml` — `config/templates/` holds docs/task/feature/bdd templates only.) |
+| `agent:` example (CLI package copy) | `apps/cli/config/config.example.yaml` | Sibling copy packaged with the CLI; keep in lockstep with root `config/config.example.yaml` (verify diff when amending). |
+| Surface docs | `docs/04_DESIGN.md` (`spur agent run` §) | Operator-facing design surface: phase forms, `agent.executors`, `default-by-phase` shim, stage-registry routing, **explicit `--agent` executor-aware (0346)**. Amending config shape requires T3 same-commit update here. |
 | `vars.agent: "omp"` default | 7 workflow YAMLs (see §2.3) | The universal pipeline default. Changing the default ripples across all workflows. |
 
 ---
@@ -60,8 +65,8 @@ Investigation of the Spur monorepo at `/Users/robin/xprojects/spur-new`. Every c
 | `AgentService` (class) | `packages/app/src/services/agent-service.ts` | The resolver. Owns all phase→executor→agent routing. |
 | `resolveAgentAuto` | `packages/app/src/services/agent-service.ts:629-` | Main `--agent auto` path. R4 shim: checks `default-by-phase` first (with deprecation warn), else resolves canonical `stage_id` and consumes `model_policy`. |
 | `resolveStageModelPolicy` | `packages/app/src/services/agent-service.ts:~690-735` | Stage-registry adaptive routing. Uses `getExecutorTier`, `isTierEligible`, `getNextFallback`, `TIER_RANK`. Sorts eligible executors cheapest-first (L719). |
-| `resolveExecutorSelector` | `packages/app/src/services/agent-service.ts:755-825` | Three sources: `phase` (default-by-phase), `default` (agent.default), `explicit` (--agent). Implements R3 collision precedence (executor wins over binary). |
-| `checkUsable` | `packages/app/src/services/agent-service.ts:811-830` | Liveness gate (installed + version detected). Not auth — fails fast before timeout burn. |
+| `resolveExecutorSelector` | `packages/app/src/services/agent-service.ts:766-815` | Three sources: `phase` (default-by-phase), `default` (agent.default), `explicit` (--agent). Implements R3 collision precedence (executor wins over binary). |
+| `checkUsable` | `packages/app/src/services/agent-service.ts:822-` | Liveness gate (installed + version detected). Not auth — fails fast before timeout burn. |
 | `getExecutorTier` | `packages/app/src/services/agent-service.ts:1078-1085` | **Module-private.** Infers `CapabilityTier` via regex on `name + model + agent` when `executor.tier` undeclared. Behavior-bearing; cited by 0343 L116,160. |
 | `extractPhase` | `packages/app/src/services/agent-service.ts:937-` | **Module-private.** Regex `/^(?:\/skill:|\/|\$)(?:sp[:-]|rd3[:-])([a-z0-9-]+)/` → bare phase (e.g. `dev-run`). Returns `undefined` for non-slash prompts. Safe to refactor internally. |
 | `warnDeprecationOnce` | `packages/app/src/services/agent-service.ts:608-` | One-shot deprecation emitter; used only for `default-by-phase` today. |
@@ -116,7 +121,7 @@ All pipeline YAMLs use `vars.agent: "omp"` as the default executor, threaded int
 | `resolveStage` (TABLE A/B/C) | `plugins/sp/scripts/stage-registry-adapter.ts:843-` | dev-next golden-path resolution. The function actually consumed by `/sp:dev-next`. |
 | `parseCliArgs` / `runCli` / `bootMain` | `plugins/sp/scripts/stage-registry-adapter.ts:1102-1261` | Adapter is a runnable script: `bun plugins/sp/scripts/stage-registry-adapter.ts --wbs 0307`. |
 | `stage-registry-adapter.test.ts` | `plugins/sp/tests/stage-registry-adapter.test.ts:455-459` | Tests adapter invariants (`min_tier` ∈ 3-value enum, `fallback` is array). |
-| `/sp:dev-*` command files | `plugins/sp/commands/dev-*.md` (13 files) | Each carries `--agent <name|auto>` in argument-hint (L3) and usage (L13). |
+| `/sp:dev-*` command files | `plugins/sp/commands/dev-*.md` (12 files with `--agent`) | Each carries `--agent <name|auto>` in argument-hint (L3) and usage (L13). |
 | Skills referencing `--agent` | `plugins/sp/skills/{brainstorm,code-verification,dogfood-testing,next-router}/SKILL.md` | Document `--agent` semantics, forwarding rules, and the "current agent is not expressible on the pipeline surface" constraint. |
 
 ---
@@ -126,7 +131,7 @@ All pipeline YAMLs use `vars.agent: "omp"` as the default executor, threaded int
 | Item | File:Line | How marked deprecated | Notes |
 |---|---|---|---|
 | `agent.default-by-phase` (config key) | schema: `packages/config/src/index.ts:266`; JSON: `apps/cli/schemas/spur-config.schema.json:138`; example: `config/config.example.yaml:61`; type: `packages/app/src/services/agent-service.ts:63` | **Three markings:** (1) runtime `warnDeprecationOnce` at `agent-service.ts:649-651` with message *"default-by-phase is deprecated; use stage model_policy instead"*; (2) ADR-033 at `docs/00_ADR.md:782` — *"Retain `default-by-phase` as a backward-compatibility shim with a one-time deprecation"*; (3) commented-out in `config.example.yaml`. | **Still authoritative when configured** (R4/R5): `resolveAgentAuto` checks it FIRST and a configured mapping fails fast rather than falling back. The shim is load-bearing for any operator who has set it. |
-| `resolveAgentPriority` (legacy Tier-1) | `packages/app/src/services/agent-service.ts:~736` | Inline JSDoc comment: *"Legacy static Tier-1 priority resolution (preserved fallback)."* Uses `TIER1_PRIORITY` constant. | The pre-stage-registry resolver. Preserved as a fallback path; not operator-configurable. |
+| `resolveAgentPriority` (legacy Tier-1) | `packages/app/src/services/agent-service.ts:745-` | Inline JSDoc comment: *"Legacy static Tier-1 priority resolution (preserved fallback)."* Uses `TIER1_PRIORITY` constant. | The pre-stage-registry resolver. Preserved as a fallback path; not operator-configurable. |
 
 **No `_legacy`-prefixed symbols, no `@deprecated` JSDoc tags, no separate `legacy/` directories found** on this surface. The only retirement markings are the two above.
 
@@ -154,6 +159,8 @@ All pipeline YAMLs use `vars.agent: "omp"` as the default executor, threaded int
 
 ## 5. Decision-Amendment Surface
 
+**Cite this file** as the backward-compatibility inventory when drafting the ADR that amends ADR-033 (task 0348).
+
 The redesign amends or supersedes:
 
 - **ADR-033** (`docs/00_ADR.md:778`) — stage-registry routing decision
@@ -164,6 +171,19 @@ The redesign amends or supersedes:
 - **`packages/domain/src/stage-registry/`** — publicly-exported stage registry (published `@gobing-ai/spur-domain` API)
 - **`plugins/sp/scripts/stage-registry-adapter.ts`** — parallel adapter registry (the dev-next consumer)
 - **`config/workflows/*.yaml`** `vars.agent` defaults (7 files)
-- **`plugins/sp/commands/dev-*.md`** — `--agent` flag documentation (13 command files)
+- **`apps/cli/src/commands/agent.ts`** — primary `spur agent run/list/doctor/loop` CLI options
+- **`docs/04_DESIGN.md`** — `spur agent run` surface docs (T3)
+- **`plugins/sp/commands/dev-*.md`** — `--agent` flag documentation (12 of 31 command files)
 
 Out of scope: `packages/contracts/src/`, `packages/domain/src/planning/`, ADR-012 (plugin substrate).
+
+## 6. Verify re-audit (2026-07-26)
+
+Re-checked under `/sp:dev-verify 0347 --force --fix all`:
+
+- Corrected plugin `--agent` count **13 → 12** (brace list was always 12).
+- Added missing operator-visible surfaces: `apps/cli/src/commands/agent.ts:37`, `docs/04_DESIGN.md` agent-run §, `apps/cli/config/config.example.yaml`.
+- Clarified `--stage`/`--signal`/`--from-executor` are **service flag keys** (`agent-service.ts:656,692,694`) not commander options.
+- Line anchors refreshed for `resolveExecutorSelector` / `checkUsable` / `resolveAgentPriority` after 0346.
+- Spot-checked zod/JSON/example/ADR/stage-registry anchors; all resolve.
+- Noted `message`/`loop`/`drain` `--agent <id>` as agent-spec namespace (out of `agent:` config shape; flag-name collision only).

@@ -12,7 +12,7 @@ priority: P2
 tags: ["wayfinder:research", "backward-compat"]
 dependencies: []
 created_at: "2026-07-27T01:27:19.150Z"
-updated_at: "2026-07-27T05:38:50.779Z"
+updated_at: "2026-07-27T06:45:23.431Z"
 ---
 
 ## 0347. Inventory the backward-compatibility surface before any agent-config redesign
@@ -88,7 +88,7 @@ Feature: 0347 — Backward-Compatibility Inventory
 
 1. **AgentConfigSchema** — zod schemas in `packages/config`, published JSON schema, structural interface mirrors in `packages/app`, contracts negative result.
 2. **CanonicalStages** — `REGISTERED_CANONICAL_STAGES`, `getCanonicalStage`, `extractPhase`, stage-registry types/helpers, the parallel adapter registry in `plugins/sp`.
-3. **CliAndTemplates** — `--agent` flag across 13 commands, `vars.agent` in 7 workflow YAMLs, `spur init` templates, `agent.team[].members[].executor`, plugin sp subagents/skills.
+3. **CliAndTemplates** — `--agent` flag across 12 plugin commands + primary CLI (`apps/cli/src/commands/agent.ts`), `vars.agent` in 7 workflow YAMLs, `spur init` templates, `agent.team[].members[].executor`, plugin sp subagents/skills.
 4. **DocsAndServices** — `docs/00-05 + 99`, service-layer consumers (`agent-service`, `team-service`), ADRs that decided the current shape.
 
 **Synthesis:** Each scout wrote to a shared `local://` artifact; the last-writer shape was extended with cross-scout findings (TeamService, ADR-033 location, contracts negative result, `extractPhase` retirement via 0344, four-source schema stack, `spur init` non-seeding).
@@ -103,71 +103,114 @@ Feature: 0347 — Backward-Compatibility Inventory
 
 **Rejected — proposing the redesign here:** R5 explicitly forbids it. This task produces the inventory; the redesign proposal belongs in the ADR that cites this artifact (task 0348 scope).
 ### Plan
-1. **Dispatch 4 read-only scouts in parallel** (scout agent) across disjoint surfaces: AgentConfigSchema (config + schemas + contracts), CanonicalStages (domain registry + adapter), CliAndTemplates (CLI flags + workflow YAML + init templates), DocsAndServices (docs + service layer). Each writes findings to `local://0347-inventory.md`.
-
-2. **Reconcile duplicate writes.** Last scout's report is the base; read each scout's `agent://` output and append unique findings (TeamService consumer, ADR-033 location, contracts negative result, `extractPhase` retirement via 0344, four-source schema stack).
-
-3. **Verify cross-scout claims** against the repo (`grep -n` for ADR-033, `TeamService.resolveExecutor`, contracts negative result, `AgentConfig` re-declaration in `agent-service.ts:48-64`, `extractPhase` in 0344).
-
-4. **Write task sections** via `spur task update --section`: Acceptance Criteria (R1-R5 gherkin), Design (method + classification contract), Plan (this list), Q&A (auto-resolved clarifications), Solution (the inventory artifact — citeable by the ADR).
-
-5. **Task check + transition to done.** This is a research task with no code change; verify gate is "every R1-R5 requirement has evidence in the Solution inventory". `SPUR_PROVENANCE_OVERRIDE=1` for the done transition (no pipeline run).
-
-6. **Hand off to 0348** (Decide the fate of `REGISTERED_CANONICAL_STAGES` and prompt-regex phase). 0348 will cite this inventory when proposing the ADR amendment.
+1. [x] Dispatch 4 read-only scouts (AgentConfigSchema, CanonicalStages, CliAndTemplates, DocsAndServices).
+2. [x] Reconcile scout writes into `docs/tasks2/0347-inventory.md` (cross-scout merge).
+3. [x] Verify claims against repo (zod, JSON schema, example yaml, ADR-033, dual registries, TeamService, contracts negative).
+4. [x] Write task sections (AC Gherkin, Design, Plan, Q&A, Solution summary).
+5. [x] Transition to `done` (research task; no pipeline code change).
+6. [x] Verify re-audit (`/sp:dev-verify --force --fix all`): primary CLI surface, 12 vs 13 count, DESIGN/example rows, hollow sections filled.
+7. [x] Hand-off surface ready for 0348 (ADR amend cites inventory artifact).
 ### Root Cause
-
-<!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
-
+No defect to fix — research ticket. The risk being mitigated is **unscoped redesign**: the `agent:` config shape is consumed by zod, a published JSON schema, CLI flags, workflow defaults, a dual stage-registry, and plugin docs, with no prior inventory. Without this artifact, an ADR amending ADR-033 would guess the blast radius. Evidence of the hole: Background starting list; post-inventory §5 amendment surface in `docs/tasks2/0347-inventory.md`.
 ### Solution
-**Artifact:** `docs/tasks2/0347-inventory.md` (169 lines) — the citeable backward-compatibility inventory for the `agent:` config redesign (feature B2). The later ADR (task 0348) amends ADR-033 against this surface.
+**Artifact:** `docs/tasks2/0347-inventory.md` (citeable backward-compatibility inventory for the `agent:` config redesign, feature B2). Later ADR (task 0348) amends ADR-033 against this surface. R5: inventory only — no redesign proposal.
 
+**Summary (post verify fix-pass):**
+- **~16 operator-visible contracts** — zod (`packages/config/src/index.ts:126-372`), published JSON schema (`apps/cli/schemas/spur-config.schema.json:101-217`), primary CLI (`apps/cli/src/commands/agent.ts:37`), 12 plugin commands with `--agent`, surface docs (`docs/04_DESIGN.md`), example configs (`config/config.example.yaml:38-64` + `apps/cli/config/config.example.yaml`), `vars.agent` in 7 workflow YAMLs.
+- **~24 internal implementation items** — `AgentService` (`packages/app/src/services/agent-service.ts`), stage-registry (`packages/domain/src/stage-registry/`), parallel adapter (`plugins/sp/scripts/stage-registry-adapter.ts:225`).
+- **2 deprecated/retired items** — `default-by-phase` shim (runtime warning `agent-service.ts:649-651`, ADR-033 `docs/00_ADR.md:782`), legacy Tier-1 priority (`resolveAgentPriority` `:745`).
 
-- **~14 operator-visible contracts** — zod schemas (`packages/config/src/index.ts:126-372`), published JSON schema (`apps/cli/schemas/spur-config.schema.json:101-217`), CLI flags (`--agent` across 13 `/sp:dev-*` command files), `spur init` example (`config/config.example.yaml:38-64`), `vars.agent` defaults in 7 workflow YAMLs.
-- **~24 internal implementation items** — `AgentService` resolver (`packages/app/src/services/agent-service.ts`), stage-registry types/helpers (`packages/domain/src/stage-registry/`), the parallel adapter registry (`plugins/sp/scripts/stage-registry-adapter.ts`).
-- **2 deprecated/retired items** — `default-by-phase` shim (runtime warning at `agent-service.ts:649-651`, ADR-033 note at `docs/00_ADR.md:782`, commented in example config), legacy Tier-1 priority resolver (`agent-service.ts:~736`).
+**Headline findings (see inventory §4):**
+1. Two parallel stage registries (domain `REGISTERED_CANONICAL_STAGES` `:655` vs adapter `REGISTERED_STAGES` `:225`).
+2. Four-source schema stack (zod / JSON schema / structural interface `:48-64` / resolution engine).
+3. No commander-exposed `--stage`/`--signal`/`--from-executor` (service still reads flag keys if present).
+4. `default-by-phase` is deprecated-but-authoritative (checked first).
+5. `tier` enum dual-published; 0343 sub-tiers need synonym window.
+6. `--agent` namespace unified by 0346 (executor-first).
+7. `extractPhase` retirement owned by 0344; registry fate by 0348.
+8. `TeamService` second executor consumer (`team-service.ts:585`).
+9. `packages/contracts/` zero agent/executor DTOs — out of scope.
+10. `spur init` seeds only `bootstrap:`; example yaml is de-facto contract.
+11. **Primary CLI is `apps/cli/src/commands/agent.ts`, not only plugin command docs** (verify fix-pass).
 
+**Decision-amendment surface:** ADR-033; example yaml; zod + JSON schema; agent-service structural types; domain stage-registry; adapter; 7 workflow YAMLs; agent CLI; DESIGN.md; 12 plugin commands with `--agent`.
 
-1. **Two parallel stage registries** — `REGISTERED_CANONICAL_STAGES` (`packages/domain/src/stage-registry/schema.ts:655`, publicly exported from `@gobing-ai/spur-domain`) and `REGISTERED_STAGES` (`plugins/sp/scripts/stage-registry-adapter.ts:225`, the dev-next consumer). Adapter exists because `plugins/sp` is outside the workspace. Must reconcile explicitly.
-2. **Four-source schema stack** — zod SSOT (`packages/config`), JSON schema mirror (`apps/cli/schemas`), structural interface re-declaration (`packages/app/src/services/agent-service.ts:48-64`), resolution engine (`agent-service.ts`). Field changes propagate to all four or drift silently.
-3. **No operator-facing `--stage`/`--signal`/`--intention`/`--from-executor` CLI surface** — stage registry consumed only inside `resolveAgentAuto`. Introducing such flags is new surface, not migration.
-4. **`default-by-phase` is deprecated-but-authoritative** — checked FIRST by `resolveAgentAuto`; configured mapping fails fast. Replacement (`stage model_policy`) is wired but only activates when the shim is absent.
-5. **`tier` enum is dual-published** (zod + JSON schema) with three independent definition sites (config `executor.tier`, domain `min_tier`, domain `CapabilityTier` type). Per 0343 L117 must move in lockstep; `capable → capable-1` migration needs a synonym window in both.
-6. **`--agent` namespace unified by task 0346** — `<id>` resolves executor-first; the redesign inherits this and should not re-split spec-id vs coding-agent-type namespaces.
-7. **`extractPhase` retirement tracked by 0344** (not 0348); `REGISTERED_CANONICAL_STAGES` fate is 0348. Redesign coordinates with both.
-8. **`TeamService` (`team-service.ts:585`) is the second executor consumer** via `resolveExecutor(member.executor, agentConfig)` — orthogonal to stage routing. Blast radius includes team materialization.
-9. **`packages/contracts/src/` has zero agent/executor/stage DTOs** — out of scope; blast radius stops at config + schemas + app/services + domain/stage-registry.
-10. **`spur init` does NOT seed an `agent:` block** — only `bootstrap:`. `config/config.example.yaml:38-64` is the de-facto operator contract.
+**Method:** Four parallel scouts + synthesis; verify re-audit closed gaps (CLI surface, 12 vs 13 count, DESIGN/example copy).
 
+**Coverage claim:** N/A — research/docs inventory; no runtime code path added.
 
-The redesign amends: ADR-033 (`docs/00_ADR.md:778`), `config/config.example.yaml:38-64`, `packages/config/src/index.ts:126-372`, `apps/cli/schemas/spur-config.schema.json:101-217`, `packages/app/src/services/agent-service.ts:48-64`, `packages/domain/src/stage-registry/`, `plugins/sp/scripts/stage-registry-adapter.ts`, `config/workflows/*.yaml` (7 files), `plugins/sp/commands/dev-*.md` (13 files).
-
-Out of scope: `packages/contracts/src/`, `packages/domain/src/planning/`, ADR-012 (plugin substrate).
-
-
-Four parallel read-only scouts (AgentConfigSchema, CanonicalStages, CliAndTemplates, DocsAndServices) across disjoint surfaces; synthesized into one artifact with cross-scout findings merged. Every claim has `path:line` evidence in `docs/tasks2/0347-inventory.md`.
-
-
-N/A — research task. Verify gate: every R1-R5 requirement has evidence in the Solution artifact.
+**Flag-namespace note (verify polish):** `spur message` / `agent loop` / `--drain` use `--agent <id>` for **agent-spec** ids — different namespace from `agent.executors` selectors. Out of redesign blast radius; listed in inventory §1.3 to prevent conflation.
 ### Testing
+**Verdict: PASS** (re-audit: `/sp:dev-verify 0347 --force --fix all --focus all --next`)
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+Research/inventory task (R5: no redesign code). Coverage: N/A (documentation-only inventory; no runtime code path).
 
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | Inventory §1–§2 enumerates consumers with path:line. Verify fix-pass added missing primary CLI `apps/cli/src/commands/agent.ts:37`, `docs/04_DESIGN.md`, `apps/cli/config/config.example.yaml`. Spot-check this run: zod `:126`/`:262`, JSON schema `:101-138`, example yaml `:38-64`, ADR-033 `:778`, `REGISTERED_CANONICAL_STAGES` `:655`, adapter `REGISTERED_STAGES` `:225`, `extractPhase` `:937`, TeamService `resolveExecutor` `:585`. |
+| R2 | MET | Inventory §1 operator-visible vs §2 internal classification tables. |
+| R3 | MET | Inventory §1.4 + finding: `spur init` writes only `bootstrap:` (`apps/cli/src/commands/init.ts:203`); `agent:` learned from example yaml. |
+| R4 | MET | Inventory §3: `default-by-phase` + legacy Tier-1 priority with deprecation markers. |
+| R5 | MET | Citeable artifact `docs/tasks2/0347-inventory.md` (tracked); Solution forbids redesign proposal. |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| Scenario: Every consumer enumerated | MET | static-ref + command | Inventory tables + this-run `rg` spot-checks; fix-pass closed CLI/docs gaps |
+| Scenario: Operator-visible vs internal | MET | static-ref | Inventory §1 vs §2 classification |
+| Scenario: Deprecated/retired flagged | MET | static-ref | Inventory §3 + agent-service.ts:649-651 warn |
+| Scenario: Inventory citeable by ADR | MET | static-ref | `docs/tasks2/0347-inventory.md` + Solution decision-amendment surface |
+
+**Design conformance**
+
+| Check | Status | Evidence |
+| --- | --- | --- |
+| design-conformance | pass | Research method (4 scouts + synthesis) DONE; R5 no-redesign held |
+| scope-creep | pass | No production code; only inventory + task corpus |
+| evidence-rule-pass | pass | AC scenarios backed by static inventory evidence (research, not runtime tests) |
+
+**Commands this verify**
+
+```
+rg -n AgentConfigSchema packages/config/src/index.ts          # :262
+rg -n "option('--agent" apps/cli/src/commands/agent.ts        # :37
+rg -l "--agent" plugins/sp/commands/*.md | wc -l              # 12
+spur task check 0347 --strict-core --json                     # pass, 0 findings (pre-fix hollow Testing)
+```
+
+**Fix-pass disclosure (`--fix all`)**
+- `docs/tasks2/0347-inventory.md` — CLI surface, 12 vs 13, DESIGN/example copy, line anchors, §6 verify footer.
+- Task: Root Cause, Testing, References, History; Solution refreshed.
+- Artifact: `.spur/run/0347-verdict.json` (gitignored).
+
+**`--next`:** no-op — task already terminal (`done`).
 ### Review
 | P | Severity | Finding | Evidence | Action |
 |---|----------|---------|----------|--------|
-| P1 | HIGH | Four parallel scouts each wrote to the same `local://0347-inventory.md` artifact, so last-writer-wins overwrote earlier reports. Unique findings from the first three scouts would be lost without manual reconciliation. | `local://0347-inventory.md` ended as the CanonicalStages report (last to finish, 3m19s) | Read each scout's `agent://` output; verified and appended 7 unique cross-scout findings (TeamService consumer, ADR-033 location, contracts negative result, extractPhase retirement via 0344, four-source schema stack, spur init non-seeding, --agent namespace overload) to §4 of the artifact. |
-| P2 | MED | `default-by-phase` is documented as "deprecated" but `resolveAgentAuto` checks it FIRST and a configured mapping fails fast — it is load-bearing for any operator who set the key. Calling it merely "deprecated" understates the migration cost. | `packages/app/src/services/agent-service.ts:649-651`; `docs/00_ADR.md:782` | Reframed in §3 and §4-finding-4 as "deprecated-but-authoritative". Removing the shim requires migrating every operator who has set the key — flagged for the ADR. |
-| P3 | MED | The `tier` enum has THREE independent definition sites (config `executor.tier`, domain `min_tier`, domain `CapabilityTier` type) plus dual publication (zod + JSON schema). 0343 proposes `capable-1/-2/-3` sub-tiers; a synonym window must span all sites or drift silently. | `packages/config/src/index.ts:130`; `packages/domain/src/stage-registry/schema.ts:324,346`; `apps/cli/schemas/spur-config.schema.json:130-134` | Flagged in §4-finding-5 with explicit citation to 0343 L117. The ADR must specify the synonym window scope. |
-| P4 | LOW | Inventory classifies ~40 items but does not weight them by migration friction (e.g. `vars.agent` in 7 YAMLs is mechanical; amending ADR-033 is substantive). | §1-§3 of artifact | Acceptable for an inventory deliverable; the ADR (0348) will prioritize. R5 explicitly forbids proposing the redesign here. |
+| P1 | HIGH | Four parallel scouts each wrote to the same shared inventory artifact (last-writer-wins). | Scout merge history | Reconciled: unique cross-scout findings merged into inventory §4. |
+| P2 | MED | `default-by-phase` is deprecated-but-authoritative (checked first, fails fast). | `agent-service.ts:649-651`; ADR-033 | Flagged in inventory §3/§4 for ADR migration cost. |
+| P3 | MED | `tier` enum dual-published + three definition sites; 0343 sub-tiers need synonym window. | config + domain + JSON schema | Flagged inventory §4-finding. |
+| P3 | MED | Inventory omitted primary CLI `apps/cli/src/commands/agent.ts` and counted 13 plugin commands (actual 12). | verify re-audit `rg` | **Fixed** in inventory §1.3/§4/§6 this verify fix-pass. |
+| P4 | LOW | Inventory does not weight items by migration friction. | §1–§3 | Acceptable for inventory; ADR prioritizes. R5 forbids redesign here. |
 
-**Verdict:** Inventory satisfies R1-R5. Every consumer of the `agent:` config shape is enumerated with `path:line` evidence; operator-visible contracts (§1) are distinguished from internal implementation (§2) and deprecated items (§3). Headline findings (two parallel registries, four-source schema stack, no `--stage` CLI surface, deprecated-but-authoritative `default-by-phase`, dual-published `tier` enum, unified `--agent` namespace) give the redesign its decision surface. Artifact persisted at `docs/tasks2/0347-inventory.md` (169 lines) for the later ADR to cite.
+**SECUA (research artifact):** S/E/C N/A for runtime; U — inventory is citeable; A — four-source schema stack and dual registries correctly elevated as headline findings.
 
-**Verification gate:** Research task — no code change. R1 (enumerate), R2 (classify), R3 (spur init shape), R4 (deprecated/retired), R5 (citeable artifact, no redesign proposal) all evidenced in the Solution section. `bun run lint`/`test` unaffected (no source touched; only `docs/tasks2/0347-inventory.md` added, which is not lint-scoped).
+**Verdict:** Inventory satisfies R1–R5 after fix-pass. Artifact: `docs/tasks2/0347-inventory.md`. Status remains `done`.
+
+**Final disposition:** PASS. `--next` no-op (terminal).
 ### References
-
-<!-- Links to failing logs, related issues, tasks, docs, or external references. -->
-
+- **Inventory artifact (cite this):** `docs/tasks2/0347-inventory.md`
+- Feature map: **B2**
+- Related tasks: **0343** (tier ordering), **0344** (intention / extractPhase), **0346** (`--agent` executor-aware), **0348** (registry fate / ADR amend)
+- ADR-033: `docs/00_ADR.md:778`
+- Primary code surfaces: `packages/config/src/index.ts`, `packages/app/src/services/agent-service.ts`, `packages/app/src/services/team-service.ts:585`, `packages/domain/src/stage-registry/`, `plugins/sp/scripts/stage-registry-adapter.ts`, `apps/cli/src/commands/agent.ts`, `apps/cli/schemas/spur-config.schema.json`, `config/config.example.yaml`
+- Surface docs: `docs/04_DESIGN.md` (`spur agent run`)
 ### History
 - 2026-07-27T05:30:15.297Z todo → wip (system)
 - 2026-07-27T05:38:50.222Z wip → testing (system)
 - 2026-07-27T05:38:50.779Z testing → done (system)
+- 2026-07-26: `/sp:dev-verify 0347 --force --fix all --focus all --next`. Inventory re-audited; fixed missing primary CLI surface, 13→12 command count, DESIGN/example-config rows, line anchors. Root Cause/Testing/References filled. Verdict PASS. `--next` no-op (already `done`).
+- 2026-07-26: Pre-commit residual clear — Plan checklist closed; inventory notes message/`loop` `--agent` agent-spec namespace; B2 Decisions so far links 0347 inventory.
