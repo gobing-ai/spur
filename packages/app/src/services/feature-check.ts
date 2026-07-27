@@ -146,8 +146,11 @@ export class FeatureCheckService extends PlanningCheckService {
         // ── L4: Traceability — incoming feature_id edges + orphan scenarios ──
         const dogfoodDir =
             options?.dogfoodDir ?? (options?.featuresDir ? join(dirname(options.featuresDir), 'dogfood') : undefined);
-        const runDir =
-            options?.runDir ?? (options?.tasksDir ? join(dirname(options.tasksDir), '.spur', 'run') : undefined);
+        // Verdict artifacts live at <repo>/.spur/run (CLI cwd), not under docs/.
+        // When tasksDir is `docs/tasks*` (this monorepo layout), dirname(tasksDir)
+        // is `docs` — walking one extra level reaches the repo root. Callers that
+        // know the root should pass `runDir` explicitly.
+        const runDir = options?.runDir ?? (options?.tasksDir ? defaultVerdictRunDir(options.tasksDir) : undefined);
         await this.runL4(doc, featureId, status, options?.tasksDir, dogfoodDir, runDir, findings);
 
         return { id: featureId, ...this.summarizeWithStatus(status, findings, strict, options?.severityOverrides) };
@@ -556,8 +559,9 @@ export class FeatureCheckService extends PlanningCheckService {
 
     /**
      * A scenario is verified when ANY covering task is `done` AND its verdict
-     * artifact shows verdict PASS with a matching requirement row of status MET.
-     * Matching requirement id = normalized scenario title OR AC-N alias.
+     * artifact shows verdict PASS with a matching requirement **or acceptanceCriteria**
+     * row of status MET. Matching id = normalized scenario title, optional
+     * `Scenario: ` prefix, or AC-N alias.
      */
     private async isScenarioVerified(
         sc: { title: string; normalized: string; alias: string },
@@ -569,12 +573,8 @@ export class FeatureCheckService extends PlanningCheckService {
             const artifact = await this.readVerdictArtifact(runDir, task.wbs);
             if (artifact === null) continue;
             if (artifact.verdict !== 'PASS') continue;
-            const matched = artifact.requirements.find(
-                (r) =>
-                    normalizeTitle(r.id) === sc.normalized ||
-                    normalizeTitle(r.alias ?? r.id) === sc.normalized ||
-                    r.id === sc.alias,
-            );
+            const rows = [...artifact.requirements, ...artifact.acceptanceCriteria];
+            const matched = rows.find((r) => rowMatchesScenario(r.id, sc));
             if (matched !== undefined && matched.status === 'MET') return true;
         }
         return false;
@@ -587,24 +587,58 @@ export class FeatureCheckService extends PlanningCheckService {
     private async readVerdictArtifact(
         runDir: string,
         wbs: string,
-    ): Promise<{ verdict: string; requirements: Array<{ id: string; alias?: string; status: string }> } | null> {
+    ): Promise<{
+        verdict: string;
+        requirements: Array<{ id: string; status: string }>;
+        acceptanceCriteria: Array<{ id: string; status: string }>;
+    } | null> {
         try {
             const raw = await this.fs.readFile(join(runDir, `${wbs}-verdict.json`));
             const parsed = JSON.parse(raw) as {
                 verdict?: unknown;
                 requirements?: Array<{ id?: unknown; status?: unknown }>;
+                acceptanceCriteria?: Array<{ id?: unknown; status?: unknown }>;
             };
             if (typeof parsed.verdict !== 'string') return null;
-            if (!Array.isArray(parsed.requirements)) return null;
-            const requirements = parsed.requirements
-                .filter(
-                    (r): r is { id: string; status: string } =>
-                        typeof r?.id === 'string' && typeof r?.status === 'string',
-                )
-                .map((r) => ({ id: r.id, status: r.status }));
-            return { verdict: parsed.verdict, requirements };
+            const pickRows = (arr: Array<{ id?: unknown; status?: unknown }> | undefined) =>
+                (arr ?? [])
+                    .filter(
+                        (r): r is { id: string; status: string } =>
+                            typeof r?.id === 'string' && typeof r?.status === 'string',
+                    )
+                    .map((r) => ({ id: r.id, status: r.status }));
+            const requirements = pickRows(parsed.requirements);
+            const acceptanceCriteria = pickRows(parsed.acceptanceCriteria);
+            // Need at least one row surface (req or AC) to count as a real verdict.
+            if (requirements.length === 0 && acceptanceCriteria.length === 0) return null;
+            return { verdict: parsed.verdict, requirements, acceptanceCriteria };
         } catch {
             return null;
         }
     }
+}
+
+/**
+ * Resolve `<repo>/.spur/run` from a tasksDir that may be nested under `docs/tasks*`.
+ * Prefer an explicit `runDir` from the CLI (cwd-based) when available.
+ */
+export function defaultVerdictRunDir(tasksDir: string): string {
+    const norm = tasksDir.replace(/\\/g, '/');
+    // Monorepo / spur-init layout: docs/tasks, docs/tasks2, docs/tasks3, …
+    if (/\/docs\/tasks\d*$/.test(norm) || /\/docs\/tasks$/.test(norm)) {
+        return join(dirname(dirname(tasksDir)), '.spur', 'run');
+    }
+    // Flat layout: <root>/tasks → <root>/.spur/run
+    return join(dirname(tasksDir), '.spur', 'run');
+}
+
+/** True when a verdict row id names the same scenario (title, Scenario: prefix, or AC-N). */
+function rowMatchesScenario(id: string, sc: { title: string; normalized: string; alias: string }): boolean {
+    const stripped = id.replace(/^Scenario:\s*/i, '').trim();
+    return (
+        normalizeTitle(id) === sc.normalized ||
+        normalizeTitle(stripped) === sc.normalized ||
+        id === sc.alias ||
+        stripped === sc.alias
+    );
 }

@@ -334,6 +334,8 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                         strict,
                         featuresDir,
                         tasksDir,
+                        // Verdict SSOT is always <cwd>/.spur/run (not docs/.spur/run).
+                        runDir: context.fs.resolve('.spur/run'),
                         severityOverrides: resolved.severityOverrides,
                     });
                     results.push(result);

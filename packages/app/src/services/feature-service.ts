@@ -8,7 +8,7 @@
 
 import { acquireCreateLock, atomicWriteAsync, MarkdownDocument } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
-import { type CheckFeatureFindings, FeatureCheckService } from './feature-check';
+import { type CheckFeatureFindings, defaultVerdictRunDir, FeatureCheckService } from './feature-check';
 import type { EntityRef, PlanningWriteService, WriteResult } from './planning-write-service';
 
 /** A task row rendered into a feature's `## Tasks` table. */
@@ -361,6 +361,7 @@ export class FeatureService {
             const res = await checkSvc.check(feature.filePath, featureId, {
                 featuresDir: this.ctx.featuresDir,
                 tasksDir: this.ctx.tasksDir,
+                runDir: defaultVerdictRunDir(this.ctx.tasksDir),
             });
             const l4Errors = res.findings.filter((f) => f.layer === 'L4' && f.severity === 'error');
             return { pass: l4Errors.length === 0, findings: res.findings };
