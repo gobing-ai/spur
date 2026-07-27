@@ -619,7 +619,10 @@ export class AgentService {
     ): Promise<AgentResolveResult> {
         const raw = stringFlag(flags, 'agent', 'auto');
         if (raw === 'auto') return this.resolveAgentAuto(prompt, flags, doctorRunner);
-        return this.resolveAgentExplicit(raw, doctorRunner, 'explicit');
+        // Executor-aware (0346): explicit `--agent <name>` reuses the same
+        // executor-first lookup as `agent.default`. phase stays undefined so no
+        // default-by-phase mapping is consulted (R8: --agent wins, no phase).
+        return this.resolveExecutorSelector(raw, doctorRunner, 'explicit');
     }
 
     /**
@@ -749,15 +752,21 @@ export class AgentService {
     }
 
     /**
-     * Resolve an executor selector (from a phase map or `agent.default`) to an
-     * execution profile. The selector names a configured executor first, then a
-     * legacy direct agent name. `phase` (when given) marks a hard mapping: an
-     * unknown executor exits 2, an unusable agent exits 1 — no fallback.
+     * Resolve an executor selector to an execution profile. Sources:
+     *  - `phase` — from `default-by-phase`; an unknown executor exits 2 and an
+     *    unusable agent exits 1, no fallback.
+     *  - `default` — from `agent.default`; falls through to legacy agent name.
+     *  - `explicit` — from `--agent <name>` (0346); executor-first then binary,
+     *    `phase` undefined so no `default-by-phase` mapping is consulted (R8).
+     *
+     * Collision precedence (R3): when an executor and an agent binary share a
+     * name, the executor wins. To reach a bare binary whose name is shadowed
+     * by an executor entry, the user must remove or rename the executor.
      */
     private async resolveExecutorSelector(
         selector: string,
         doctorRunner: DoctorRunner,
-        source: 'phase' | 'default',
+        source: 'phase' | 'default' | 'explicit',
         phase?: string,
     ): Promise<AgentResolveResult> {
         const executor = this.ctx.agentConfig?.executors?.find((e) => e.name === selector);
@@ -800,20 +809,6 @@ export class AgentService {
         // Default path: treat the selector as a legacy direct agent name.
         const canonical = resolveAgentName(selector);
         if (canonical === undefined) return { ok: false, exitCode: 2, message: `Unknown agent: ${selector}` };
-        const usable = await this.checkUsable(canonical, doctorRunner);
-        if (!usable.ok) return usable.result;
-        return { ok: true, agent: canonical, source };
-    }
-
-    private async resolveAgentExplicit(
-        name: string,
-        doctorRunner: DoctorRunner,
-        source: 'explicit',
-    ): Promise<AgentResolveResult> {
-        const canonical = resolveAgentName(name);
-        if (canonical === undefined) {
-            return { ok: false, exitCode: 2, message: `Unknown agent: ${name}` };
-        }
         const usable = await this.checkUsable(canonical, doctorRunner);
         if (!usable.ok) return usable.result;
         return { ok: true, agent: canonical, source };

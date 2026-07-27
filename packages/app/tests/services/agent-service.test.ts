@@ -1739,6 +1739,68 @@ describe('AgentService phase-aware auto resolution', () => {
     });
 });
 
+describe('AgentService executor-aware explicit --agent (0346)', () => {
+    // Same fixture as phase-aware auto: omp + omp-zai + claude executors,
+    // with omp-zai and claude both shadowing bare-binary names.
+    const cfg: AgentConfig = {
+        default: 'omp',
+        executors: [
+            { name: 'omp', agent: 'omp' },
+            { name: 'omp-zai', agent: 'omp', model: 'zai//glm-5.2' },
+            { name: 'claude', agent: 'claude' },
+        ],
+        'default-by-phase': { 'dev-run': 'omp-zai', 'dev-review': 'claude' },
+    };
+
+    test('R5: --agent <executor-name> resolves to that executor with model override', async () => {
+        const svc = makeConfiguredService(cfg);
+        const { deps, runner } = mockResolutionDeps();
+        // Plain prompt, explicit selector — no phase routing involved.
+        const code = await svc.run('plain prompt', { agent: 'omp-zai', json: true }, deps);
+        expect(code).toBe(0);
+        expect(resolvedAgent(runner)).toBe('omp');
+        expect(resolvedModel(runner)).toBe('zai//glm-5.2');
+    });
+
+    test('R3 collision: --agent <shared-name> resolves to the executor, not the bare binary', async () => {
+        const svc = makeConfiguredService(cfg);
+        const { deps, runner } = mockResolutionDeps();
+        // 'claude' is both a bare binary and an executor entry; executor wins.
+        const code = await svc.run('plain prompt', { agent: 'claude', json: true }, deps);
+        expect(code).toBe(0);
+        expect(resolvedAgent(runner)).toBe('claude');
+        // The executor entry has no model override; none propagates.
+        expect(resolvedModel(runner)).toBeUndefined();
+    });
+
+    test('R2 no-regression: --agent <bare-binary> with no matching executor still resolves', async () => {
+        const svc = makeConfiguredService(cfg);
+        const { deps, runner } = mockResolutionDeps();
+        // 'pi' is a canonical agent with no executor entry — legacy direct path.
+        const code = await svc.run('plain prompt', { agent: 'pi', json: true }, deps);
+        expect(code).toBe(0);
+        expect(resolvedAgent(runner)).toBe('pi');
+        expect(resolvedModel(runner)).toBeUndefined();
+    });
+
+    test('explicit --agent still ignores phase mapping (R8 preserved)', async () => {
+        const svc = makeConfiguredService(cfg);
+        const { deps, runner } = mockResolutionDeps();
+        // dev-run maps to omp-zai, but an explicit agent must win with no model override.
+        const code = await svc.run('/sp:dev-run 0126', { agent: 'claude', json: true }, deps);
+        expect(code).toBe(0);
+        expect(resolvedAgent(runner)).toBe('claude');
+        expect(resolvedModel(runner)).toBeUndefined();
+    });
+
+    test('explicit --agent <unknown> still exits 2', async () => {
+        const svc = makeConfiguredService(cfg);
+        const { deps } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'not-a-name', json: true }, deps);
+        expect(code).toBe(2);
+    });
+});
+
 // ---------------------------------------------------------------------------
 // Tests: AgentService — timeout-kill routing (P0-b)
 // ---------------------------------------------------------------------------
