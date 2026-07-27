@@ -170,7 +170,7 @@ Ledger rules:
   previously-read file reused from context, generated report text, or similar.
 - The aggregate cache line in `#### Cost` under §2 must equal the ledger formula above. If it
   does not, the report is invalid.
-- **Cardinality (@1.2):** the number of ledger data rows MUST equal the `Steps: N executed`
+- **Cardinality (@1.2):** the number of ledger data rows MUST equal the `**Steps:** N derived, N executed`
   declared in §2. Steps marked N/A are documented explicitly as their own rows (`Outcome: N/A`);
   an unaccounted step or an extra row refuses `status: complete` at finalize.
 - If the driver cannot make a defensible estimate for a row, write `~0` cached and explain the
@@ -265,7 +265,7 @@ Before the skill may stop (success, partial, fail, observe-only end, or abort), 
    (`### 1.` … `### 6.` — a duplicated heading refuses `complete`); §5 Issues carries both
    `#### Fixed` and `#### Unresolved` (`(none)` when empty); unfinished narrative uses
    `⚠ incomplete — not reached`; no leftover "run in progress" markers survive finalization.
-3. **Ledger cardinality (@1.2):** Monitor Ledger data rows == the `Steps: N executed` declared in
+3. **Ledger cardinality (@1.2):** Monitor Ledger data rows == the `**Steps:** N derived, N executed` declared in
    §2 (N/A steps documented explicitly as rows; drift rows count separately, not toward executed
    steps — include `drift:external` rows in the table but subtract them from the executed count in
    §2). A mismatch refuses `complete`.

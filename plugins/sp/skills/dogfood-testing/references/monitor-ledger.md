@@ -33,7 +33,7 @@ artifacts):
    as SSOT, emit a P2 finding, and retry promote on finalize.
 4. **The report reads the on-disk ledger, not your memory.** Every number in the report traces to a
    ledger row on disk. If it is not in the ledger file, it does not go in the report.
-5. **Cardinality (@1.2).** The ledger's data-row count MUST equal the `Steps: N executed` declared
+5. **Cardinality (@1.2).** The ledger's data-row count MUST equal the `**Steps:** N derived, N executed` declared
    in the report's §2 Execution Summary. N/A steps are not dropped — each gets its own row with
    `Outcome: N/A`. A count mismatch refuses `status: complete` at finalize (see
 6. **R2 drift row (task 0296).** A ledger row tagged `drift:external` in the `Step` column documents

@@ -186,7 +186,7 @@ On **every** step resolve:
 3. Do **not** batch rows until Phase 4.
 
 The final report MUST include a `### 3. Monitor Ledger` section containing those rows, and the
-ledger's data-row count MUST equal the `Steps: N executed` declared in §2 of the report (N/A steps
+ledger's data-row count MUST equal the `**Steps:** N derived, N executed` declared in §2 of the report (N/A steps
 documented explicitly as rows) — the cardinality rule in
 [monitor-ledger.md](references/monitor-ledger.md). Full
 methodology, column contract, token/cache estimation, multi-source Cost honesty, the cache-health
@@ -206,7 +206,7 @@ contract violation**.
    `#### Unresolved` (with `(none)` when empty). Unfinished narrative sections:
    `⚠ incomplete — not reached` — never invent What-We-Did / Issues / Findings fiction, and no
    leftover "run in progress" markers may survive finalization.
-3. **Ledger cardinality (@1.2).** Monitor Ledger data rows MUST equal the `Steps: N executed`
+3. **Ledger cardinality (@1.2).** Monitor Ledger data rows MUST equal the `**Steps:** N derived, N executed`
    declared in §2 (N/A steps documented explicitly as rows). A mismatch refuses `complete`.
 4. Write the **Cost** block under §2 (ledger `~estimate` + Method + confidence; `Meter: n/a` or
    optional ccusage/agent usage when real). For any `chained:<step>` ledger row whose meter is not
