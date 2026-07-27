@@ -2079,4 +2079,185 @@ describe('TaskCheckService', () => {
             expect(edgeFindings(result).length).toBeGreaterThan(0);
         });
     });
+    // ── Task 0339: terminal-feature + content-free section enforcement ──────
+    describe('TaskCheckService task 0339 (terminal-feature + content-free)', () => {
+        test('R1: done task under done feature does NOT emit L4_FEATURE_TERMINAL', async () => {
+            // WHY: a terminal task under a terminal feature is the correct end state.
+            // The pre-0339 predicate fired on featureStatus alone and failed every
+            // completed feature's tasks, proposing a re-parent that would destroy
+            // exactly the traceability the corpus exists to hold.
+            const content = taskFm({ status: 'done', feature_id: 'F1' });
+            const { fs, path, cleanup } = seedEnv({
+                taskContent: content,
+                features: { F1: featureFm('F1', 'done') },
+            });
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+            cleanup();
+
+            const terminalErrors = result.findings.filter(
+                (f) => f.code === FINDING_CODES.L4_FEATURE_TERMINAL && f.severity === 'error',
+            );
+            expect(terminalErrors).toEqual([]);
+        });
+
+        test('R1: cancelled task under cancelled feature does NOT emit L4_FEATURE_TERMINAL', async () => {
+            // WHY: symmetric to done-done. Both `done` and `cancelled` are terminal
+            // statuses for both tasks and features; the narrowed predicate must hold
+            // for the cancelled-cancelled end state too.
+            const content = taskFm({ status: 'cancelled', feature_id: 'F1' });
+            const { fs, path, cleanup } = seedEnv({
+                taskContent: content,
+                features: { F1: featureFm('F1', 'cancelled') },
+            });
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+            cleanup();
+
+            const terminalErrors = result.findings.filter((f) => f.code === FINDING_CODES.L4_FEATURE_TERMINAL);
+            expect(terminalErrors).toEqual([]);
+        });
+
+        test('R2: live (todo) task under done feature still emits L4_FEATURE_TERMINAL', async () => {
+            // WHY: the rule was written for this case — a live task parented to a
+            // terminal feature genuinely needs re-parenting. R1 narrows the
+            // predicate; it must not silence the original signal.
+            const content = taskFm({ status: 'todo', feature_id: 'F1' });
+            const { fs, path, cleanup } = seedEnv({
+                taskContent: content,
+                features: { F1: featureFm('F1', 'done') },
+            });
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+            cleanup();
+
+            const terminalErrors = result.findings.filter(
+                (f) => f.code === FINDING_CODES.L4_FEATURE_TERMINAL && f.severity === 'error',
+            );
+            expect(terminalErrors.length).toBe(1);
+            expect(terminalErrors[0]?.message).toContain('done');
+        });
+
+        test('R2: live (wip) task under cancelled feature still emits L4_FEATURE_TERMINAL', async () => {
+            // WHY: covers the cancelled-feature half of R2 and a non-todo live
+            // status, so the predicate isn't accidentally keyed to `todo` only.
+            const content = taskFm({ status: 'wip', feature_id: 'F1' });
+            const { fs, path, cleanup } = seedEnv({
+                taskContent: content,
+                features: { F1: featureFm('F1', 'cancelled') },
+            });
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+            cleanup();
+
+            const terminalErrors = result.findings.filter(
+                (f) => f.code === FINDING_CODES.L4_FEATURE_TERMINAL && f.severity === 'error',
+            );
+            expect(terminalErrors.length).toBe(1);
+            expect(terminalErrors[0]?.message).toContain('cancelled');
+        });
+
+        test('R3: placeholder-only Requirements emits L3_REQUIREMENTS_EMPTY (fails gate)', async () => {
+            // WHY: task 0337 had only template placeholder comments in Requirements
+            // and still passed. A task with no requirements is unverifiable by
+            // construction — the gate must fail it.
+            const content = [
+                taskFm({ status: 'todo' }),
+                '',
+                '### Requirements',
+                '',
+                '<!-- List the R-numbered requirements here. -->',
+                '',
+                '### Acceptance Criteria',
+                '',
+                '- Scenario: real AC',
+                '  - WHEN check runs',
+                '  - THEN pass',
+            ].join('\n');
+            const { fs, path, cleanup } = seedFile(content);
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+            cleanup();
+
+            const emptyReq = result.findings.filter((f) => f.code === FINDING_CODES.L3_REQUIREMENTS_EMPTY);
+            expect(emptyReq.length).toBe(1);
+            expect(emptyReq[0]?.severity).toBe('error');
+            expect(result.pass).toBe(false);
+        });
+
+        test('R3: placeholder-only Acceptance Criteria emits L3_AC_EMPTY (fails gate)', async () => {
+            // WHY: the bug report (0337) had both placeholder Requirements AND a
+            // placeholder AC whose body literally read "Do not leave placeholder AC
+            // here". A task with a real Requirements but empty AC is equally
+            // unverifiable — AC is the contract verify checks against.
+            const content = [
+                taskFm({ status: 'todo' }),
+                '',
+                '### Requirements',
+                '',
+                'R1. The gate must fail placeholder-only AC.',
+                '',
+                '### Acceptance Criteria',
+                '',
+                '<!-- Copy or derive real scenarios from the linked feature. Do not leave placeholder AC here. -->',
+            ].join('\n');
+            const { fs, path, cleanup } = seedFile(content);
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+            cleanup();
+
+            const emptyAc = result.findings.filter((f) => f.code === FINDING_CODES.L3_AC_EMPTY);
+            expect(emptyAc.length).toBe(1);
+            expect(emptyAc[0]?.severity).toBe('error');
+            expect(result.pass).toBe(false);
+        });
+
+        test('R3: populated Requirements and AC do NOT emit empty findings (passes)', async () => {
+            // WHY: defense against over-firing. A well-authored task with real
+            // R-numbered Requirements and real scenario AC must not trip the new
+            // rules. Also confirms `pass: true` end-to-end.
+            const content = [
+                taskFm({ status: 'todo' }),
+                '',
+                '### Requirements',
+                '',
+                'R1. Real requirement one.',
+                'R2. Real requirement two.',
+                '',
+                '### Acceptance Criteria',
+                '',
+                '- Scenario: happy path',
+                '  - GIVEN a populated task',
+                '  - WHEN check runs',
+                '  - THEN no empty-section finding',
+            ].join('\n');
+            const { fs, path, cleanup } = seedFile(content);
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+            cleanup();
+
+            const emptyFindings = result.findings.filter(
+                (f) => f.code === FINDING_CODES.L3_REQUIREMENTS_EMPTY || f.code === FINDING_CODES.L3_AC_EMPTY,
+            );
+            expect(emptyFindings).toEqual([]);
+        });
+
+        test('R3: AC body with only a ```fence wrapper around placeholder is still empty', async () => {
+            // WHY: stripAcFence must run before isPlaceholderBody so an AC that is
+            // ```` ```\n<!-- placeholder -->\n``` ```` is detected as empty. A bare
+            // isPlaceholderBody check would see the fence lines as "content".
+            const content = [
+                taskFm({ status: 'todo' }),
+                '',
+                '### Requirements',
+                '',
+                'R1. Fence-aware AC placeholder detection.',
+                '',
+                '### Acceptance Criteria',
+                '',
+                '```',
+                '<!-- Do not leave placeholder AC here. -->',
+                '```',
+            ].join('\n');
+            const { fs, path, cleanup } = seedFile(content);
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+            cleanup();
+
+            const emptyAc = result.findings.filter((f) => f.code === FINDING_CODES.L3_AC_EMPTY);
+            expect(emptyAc.length).toBe(1);
+        });
+    });
 });

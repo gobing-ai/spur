@@ -268,7 +268,7 @@ export class TaskCheckService extends PlanningCheckService {
         // ── L4: Traceability — feature_id edges, parent_wbs, dependencies, AC coverage
         const tasksDir = dirname(filePath);
         const featuresDir = join(dirname(tasksDir), 'features');
-        await this.runL4(doc, fm, findings, featuresDir, tasksDir);
+        await this.runL4(doc, fm, status, findings, featuresDir, tasksDir);
 
         // ── L4 roll-up (0121, R1–R3): parent↔child status drift + roster presence.
         // Inert unless one or more sibling tasks declare parent_wbs == this wbs.
@@ -290,6 +290,31 @@ export class TaskCheckService extends PlanningCheckService {
         status: string,
         findings: CheckFindings[],
     ): void {
+        // ── Task 0339 (R3): a placeholder-only body (HTML comments, `> TBD`,
+        // whitespace) means the task has no real requirements or contract — fail
+        // before format rules run. Fires only when the section heading exists;
+        // a missing section is L2's job (matrix-driven presence). L2 drives
+        // presence, this drives substance.
+        const reqBodyRaw = doc.getSection('Requirements');
+        if (reqBodyRaw !== null && isPlaceholderBody(reqBodyRaw)) {
+            findings.push({
+                layer: 'L3',
+                code: FINDING_CODES.L3_REQUIREMENTS_EMPTY,
+                severity: 'error',
+                section: 'Requirements',
+                message: 'Requirements is placeholder-only — a task with no requirements is unverifiable',
+            });
+        }
+        const acBodyRaw = doc.getSection('Acceptance Criteria');
+        if (acBodyRaw !== null && isPlaceholderBody(stripAcFence(acBodyRaw))) {
+            findings.push({
+                layer: 'L3',
+                code: FINDING_CODES.L3_AC_EMPTY,
+                severity: 'error',
+                section: 'Acceptance Criteria',
+                message: 'Acceptance Criteria is placeholder-only — populate with real scenarios',
+            });
+        }
         // Requirements: R-numbering (warning, only when section has real content)
         const reqBody = doc.getSection('Requirements');
         if (reqBody !== null && !isPlaceholderBody(reqBody)) {
@@ -430,6 +455,7 @@ export class TaskCheckService extends PlanningCheckService {
     private async runL4(
         doc: MarkdownDocument,
         fm: Record<string, unknown>,
+        status: string,
         findings: CheckFindings[],
         featuresDir: string,
         tasksDir: string,
@@ -474,7 +500,12 @@ export class TaskCheckService extends PlanningCheckService {
                 });
             } else {
                 const featureStatus = await this.readFeatureStatus(featurePath);
-                if (featureStatus === 'done' || featureStatus === 'cancelled') {
+                // Task 0339 (R1/R2): a terminal task under a terminal feature is the
+                // correct end state — flag only when the task itself is still live
+                // (backlog/todo/wip/testing/blocked), since that genuinely needs re-parenting.
+                const featureTerminal = featureStatus === 'done' || featureStatus === 'cancelled';
+                const taskTerminal = status === 'done' || status === 'cancelled';
+                if (featureTerminal && !taskTerminal) {
                     findings.push({
                         layer: 'L4',
                         code: FINDING_CODES.L4_FEATURE_TERMINAL,
