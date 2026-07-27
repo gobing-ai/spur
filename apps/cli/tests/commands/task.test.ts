@@ -1227,11 +1227,28 @@ Only this section exists.
                 cwd,
                 output: createCapturedOutput(),
             });
-
             // Walk to testing via --no-lifecycle so only the done transition hits the fallback.
             await main(['task', 'update', wbs, 'todo', '--no-lifecycle'], { cwd, output: createCapturedOutput() });
             await main(['task', 'update', wbs, 'wip', '--no-lifecycle'], { cwd, output: createCapturedOutput() });
             await main(['task', 'update', wbs, 'testing', '--no-lifecycle'], { cwd, output: createCapturedOutput() });
+
+            // Post-0292 tighten: the CLI-layer verdict-artifact gate denies `done` when
+            // `.spur/run/<wbs>-verdict.json` is absent (no silent no-artifact allow).
+            // This test's subject is the SECONDARY fallback `spur task check` gate, so
+            // plant a PASS verdict stub to clear the primary gate and let the fallback
+            // run — matching how docs-pipeline.yaml reaches `done` for docs-only tasks.
+            await mkdir(join(cwd, '.spur', 'run'), { recursive: true });
+            await writeFile(
+                join(cwd, '.spur', 'run', `${wbs}-verdict.json`),
+                `${JSON.stringify({
+                    wbs,
+                    verdict: 'PASS',
+                    source: 'test-stub',
+                    requirements: [{ id: 'r1', status: 'MET', evidence: 'stub' }],
+                    acceptanceCriteria: [],
+                    checks: [{ name: 'stub', status: 'pass', evidence: 'stub' }],
+                })}\n`,
+            );
 
             // Attempt done: adapter unavailable (spy + SPUR_GLOBAL_RULES_DIR redirect, see
             // the P3 backstop test above for why both are needed post-0071/R5), fallback
@@ -1819,11 +1836,25 @@ Only this section exists.
         expect(exitCode).toBe(1);
     });
 
-    test('done guard: no verdict file → back-compat allow (R4d/R1)', async () => {
+    test('done guard: no verdict file → deny (R4d; require verify or --force-done)', async () => {
         const wbs = await seedTaskAtTesting('guard no-verdict');
         const output = createCapturedOutput();
         const exitCode = await main(['task', 'update', wbs, 'done', '--no-lifecycle'], { cwd, output });
+        expect(exitCode).toBe(1);
+        const msg = output.errors.join('\n') + output.messages.join('\n');
+        expect(msg).toContain('missing verify verdict artifact');
+        expect(await readStatus(wbs)).toBe('testing');
+    });
+
+    test('done guard: no verdict file + --force-done → allow with audit trail', async () => {
+        const wbs = await seedTaskAtTesting('guard no-verdict force');
+        const output = createCapturedOutput();
+        const exitCode = await main(
+            ['task', 'update', wbs, 'done', '--no-lifecycle', '--force-done', '--reason', 'docs-only pipeline close'],
+            { cwd, output },
+        );
         expect(exitCode).toBe(0);
+        expect(output.messages.join('\n')).toContain('Override recorded');
     });
 
     test('done guard: --force-done with PARTIAL records override frontmatter (R3/R5)', async () => {

@@ -330,12 +330,12 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                             context.setExitCode(1);
                             return;
                         }
-                        // `allow` — if it was a forced override of a non-PASS verdict, record state
-                        // for the audit-trail write below.
-                        if (guardOutcome.reason === 'forced' && loaded.artifact !== undefined) {
+                        // `allow` — if it was a forced override (non-PASS or missing artifact),
+                        // record state for the audit-trail write below.
+                        if (guardOutcome.reason === 'forced') {
                             forcedDone = true;
                             forcedDoneReason = options.reason;
-                            forcedDoneVerdict = loaded.artifact.verdict;
+                            forcedDoneVerdict = loaded.artifact?.verdict ?? 'UNKNOWN';
                         }
                     }
                     const result = await svc.updateStatus(wbs, status);

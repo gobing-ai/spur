@@ -101,11 +101,22 @@ describe('evaluateDoneTransition', () => {
         }
     });
 
-    test('R4d: no verdict file → allow (back-compat)', () => {
+    test('R4d: no verdict file → deny (require verify or --force-done)', () => {
         const out = evaluateDoneTransition(baseInput({ artifact: undefined }));
+        expect(out.kind).toBe('deny');
+        if (out.kind === 'deny') {
+            expect(out.verdict).toBe('UNKNOWN');
+            expect(out.message).toContain('missing verify verdict artifact');
+            expect(out.message).toContain('--force-done');
+            expect(out.message).toContain('0299');
+        }
+    });
+
+    test('R4d variant: --force-done with no artifact → allow (forced)', () => {
+        const out = evaluateDoneTransition(baseInput({ artifact: undefined, forced: true, reason: 'docs-only close' }));
         expect(out.kind).toBe('allow');
         if (out.kind === 'allow') {
-            expect(out.reason).toBe('no-artifact');
+            expect(out.reason).toBe('forced');
         }
     });
 

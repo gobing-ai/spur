@@ -8,10 +8,13 @@
  * module backs the CLI-layer gate that consults the verdict artifact before
  * any `done` transition is allowed through.
  *
- * Design (0292):
+ * Design (0292, tightened post–F81 dogfood):
  *   - The guard runs at the CLI layer (`apps/cli/src/commands/task.ts`), the
  *     single choke point above both `--no-lifecycle` and the lifecycle adapter.
  *     R8: `--no-lifecycle` skips the FSM, not this gate.
+ *   - Missing artifact is a **deny** (not a silent allow). Docs-only / emergency
+ *     closes use `--force-done --reason` or write a PASS stub first
+ *     (`docs-pipeline.yaml` does the latter).
  *   - R10 consistency: the aggregate `verdict` in the artifact is validated
  *     against the per-requirement / per-AC rows using the same aggregation rule
  *     as `deriveVerdict` (any UNMET → FAIL; any PARTIAL → PARTIAL). An
@@ -54,7 +57,7 @@ export interface VerdictArtifact {
 
 /** What the guard decided. */
 export type GuardOutcome =
-    | { kind: 'allow'; reason: 'no-artifact' | 'pass' | 'forced' }
+    | { kind: 'allow'; reason: 'pass' | 'forced' }
     | { kind: 'deny'; verdict: VerdictAggregate; message: string }
     | { kind: 'noop'; fromStatus: string; message: string };
 
@@ -80,9 +83,10 @@ export interface GuardInput {
 
 /**
  * Read and parse the verdict artifact at `.spur/run/<wbs>-verdict.json`.
- * Returns `undefined` when the file does not exist (R1 back-compat: treat as
- * "no verify leg ran" and allow the transition). A parse failure is surfaced
- * as a deny with the parse error named — never silently allowed through.
+ * Returns `undefined` when the file does not exist — the guard **denies** the
+ * transition (no-artifact is no longer a silent allow; dogfood F81 / 0349 class).
+ * Operators override with `--force-done --reason`. A parse failure is also
+ * surfaced as a deny with the parse error named — never silently allowed through.
  */
 export async function readVerdictArtifact(
     fs: FileSystem,
@@ -235,12 +239,11 @@ export function formatNoopMessage(wbs: string, status: string): string {
  *
  * Ordering (matches R7 — verdict logic runs only after status normalization):
  *   1. Same-status no-op short-circuits before any verdict read (R9).
- *   2. No artifact on disk → allow (R1 back-compat for tasks that never ran
- *      the verify leg).
- *   3. Malformed/unreadable artifact → deny naming the read error.
- *   4. Forced override → allow (R3); `done_forced=true` is recorded by the
- *      caller. A missing reason is still allowed (advisory only — the override
- *      is the explicit signal, not the prose).
+ *   2. Forced override → allow (R3) even when no artifact exists; caller
+ *      records `done_forced=true`. A missing reason is still allowed (advisory).
+ *   3. No artifact on disk → **deny** (require verify or --force-done). Closes
+ *      the 0349 class of "done without verdict.json".
+ *   4. Malformed/unreadable artifact → deny naming the read error (caller).
  *   5. R10 consistency: recompute aggregate; if it contradicts the stored
  *      `verdict`, treat as the harsher of the two and name the inconsistency.
  *   6. PASS → allow; anything else → deny with the actionable message.
@@ -253,14 +256,26 @@ export function evaluateDoneTransition(input: GuardInput): GuardOutcome {
         return { kind: 'noop', fromStatus: currentStatus, message: formatNoopMessage(wbs, currentStatus) };
     }
 
-    // R1: no verdict artifact → back-compat allow (no verify leg ran).
-    if (artifact === undefined) {
-        return { kind: 'allow', reason: 'no-artifact' };
-    }
-
     // R3: explicit operator override — allow and record via the caller.
+    // Applies before the no-artifact deny so docs-only / emergency closes work.
     if (forced) {
         return { kind: 'allow', reason: 'forced' };
+    }
+
+    // No verdict artifact → deny (no silent done without verify).
+    if (artifact === undefined) {
+        const verdictPath = `.spur/run/${wbs}-verdict.json`;
+        return {
+            kind: 'deny',
+            verdict: 'UNKNOWN',
+            message: [
+                `Cannot transition task ${wbs} to done: missing verify verdict artifact.`,
+                `  task:    ${taskFilePath}`,
+                `  verdict: ${verdictPath} (not found)`,
+                `  remediation: re-run \`/sp:dev-verify ${wbs}\` until PASS (writes the artifact), ` +
+                    `or override with \`spur task update ${wbs} done --force-done --reason "<why>"\`.`,
+            ].join('\n'),
+        };
     }
 
     // R10: recompute aggregate from rows; if it disagrees with the stored
