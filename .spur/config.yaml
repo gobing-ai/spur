@@ -30,43 +30,84 @@ bootstrap:
 # ── Spur app section (validated by a local zod schema — UNCHANGED keys) ──
 agent:
   default: omp
+
+  # ── Executors (ADR-033 adaptive model routing) ──
+  # `tier` is DECLARED, never inferred. Without it, agent-service falls back to a
+  # regex over `name + model + agent` which misclassifies silently — e.g.
+  # `deepseek-v4-pro` matched `\bpro\b` and became the only `capable` executor,
+  # while `claude`/`codex`/`grok` fell to `standard` and were excluded from every
+  # capable-tier stage.
+  #
+  # Selection: a stage takes the CHEAPEST executor whose tier >= its `min_tier`
+  # (cheap=1 < standard=2 < capable=3). Ties inside a tier break by ARRAY ORDER,
+  # so within each block the first entry is the preferred default — keep the
+  # preferred agent first when reordering.
   executors:
-    - name: omp
-      agent: omp
-    - name: omp-zai
-      agent: omp
-      model: zai/glm-5.2
-    - name: omp-xf
-      agent: omp
-      model: astron-code-latest
-    - name: pi-xf
-      agent: pi
-      model: astron-code-latest
-    - name: omp-zai-volc
-      agent: omp
-      model: volc/glm-5.2
-    - name: omp-deepseek
-      agent: omp
-      model: deepseek/deepseek-v4-pro
+    # cheap — mechanical, high-volume work
     - name: minimax
       agent: omp
       model: minimax/MiniMax-M3
-    - name: codex
-      agent: codex
-    - name: claude
-      agent: claude
+      tier: cheap
+
+    # standard — implementation, tests, wrap-up (omp first: the working default)
+    - name: omp
+      agent: omp
+      tier: standard
+    - name: omp-zai
+      agent: omp
+      model: zai/glm-5.2
+      tier: standard
+    - name: omp-zai-nvidia
+      agent: omp
+      model: nvidia/z-ai/glm-5.2
+      tier: standard
+    # - name: omp-zai-opencode
+    #   agent: omp
+    #   model: opencode/glm-5.2
+    #   tier: standard
+    # - name: omp-zai-volc
+    #   agent: omp
+    #   model: volc/glm-5.2
+    #   tier: standard
+    - name: omp-zai-ollama
+      agent: omp
+      model: ollama/glm-5.2:cloud
+      tier: standard
+    # - name: agy-gemini
+    #   agent: agy
+    #   model: gemini-3.6-flash-high
+    #   # model: gemini-3.1-pro
+    #   tier: standard
+    # - name: agy-opus
+    #   agent: agy
+    #   model: claude-4-6-opus
+    #   tier: standard
+
+    # capable — planning, verification, dogfooding (grok first: prior default
+    # for dev-plan / dev-verify / dev-review / dev-brainstorm)
+    - name: pi-k3
+      agent: pi
+      model: "k3[1m]"
+      tier: capable
     - name: grok
       agent: grok
-  default-by-phase:
-    dev-brainstorm: grok
-    dev-fixall: omp
-    dev-plan: grok
-    dev-run: omp
-    dev-runall: omp
-    dev-changelog: omp
-    dev-gitmsg: minimax
-    dev-review: grok
-    dev-verify: grok
+      tier: capable
+    - name: claude
+      agent: claude
+      tier: capable
+    - name: codex
+      agent: codex
+      tier: capable
+    - name: omp-deepseek
+      agent: omp
+      model: deepseek/deepseek-v4-pro
+      tier: capable
+
+  # `default-by-phase` retired 2026-07-26 (ADR-033). It was deprecated, emitted a
+  # warning on every resolve, and — being authoritative when present — shadowed
+  # stage routing entirely for the phases it listed. Routing now comes from the
+  # stage registry's `model_policy` (packages/domain/src/stage-registry/), with
+  # preference expressed by executor order above.
 
   # ── Teams (feature M) — declarative rosters materialized by `spur team up` ──
   # A sample team so the Teams board tabs (Roster / Messages / Activity /
@@ -76,7 +117,7 @@ agent:
   # to populate Terminal / Messages / Activity with live data.
   team:
     demo:
-      name: "Sample team"
+      name: "Team Spur"
       work_dir: ~/xprojects/spur-new
       members:
         - executor: claude
