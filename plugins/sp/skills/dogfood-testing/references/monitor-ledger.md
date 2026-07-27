@@ -174,6 +174,8 @@ When aggregate cache% risks falling under 50%, apply this checklist **before** r
 | 3 | Prefer `--json` CLI over re-parsing freeform prose | Smaller, stable payloads |
 | 4 | Dual-write ledger rows without re-reading the whole report each step | Append/patch; don't full-file re-load |
 | 5 | Skip redundant `bun test` full suite between steps when a focused file suite already green | Run the broad suite once at the end |
+| 6 | For batch testees (`verifyall` / `runall` / `refineall`): freeze `task list --json` once at resolve | Re-listing the set per task is the #1 sub-50% cache pattern on feature dogfoods |
+| 7 | On re-verify of done tasks: re-read only cited `file:line` anchors, not full Solution blobs | Anchor-first re-verify keeps cache% above the 50% floor |
 
 1. **Reuse CLI output already in context.** If a prior step (or a prior tool call this step)
    captured `spur task show`/`check`/`list` output, do **not** re-invoke the same command for that
