@@ -175,6 +175,46 @@ function isProseOnlyReview(body: string): boolean {
  * The file column must contain a recognisable extension (`.ts`, `.js`, `.md`, etc.);
  * the line column must be a bare integer or integer range.
  */
+/**
+ * Project root for resolving relative `path:line` citations.
+ * `docs/tasks*` → two levels up; otherwise one level up from the tasks folder.
+ */
+export function resolveProjectRootFromTasksDir(tasksDir: string): string {
+    const norm = tasksDir.replace(/\\/g, '/');
+    if (/\/docs\/tasks\d*$/.test(norm) || /\/docs\/tasks$/.test(norm)) {
+        return dirname(dirname(tasksDir));
+    }
+    return dirname(tasksDir);
+}
+
+/** Backtick `path:line` / `path:start-end` citations (skips URLs and bare numbers). */
+export function extractBacktickLineAnchors(
+    body: string,
+): Array<{ raw: string; path: string; startLine: number; endLine?: number }> {
+    const out: Array<{ raw: string; path: string; startLine: number; endLine?: number }> = [];
+    const re = /`([^`\n]+?:(\d+)(?:-(\d+))?)`/g;
+    let m: RegExpExecArray | null = re.exec(body);
+    while (m !== null) {
+        const raw = m[1] ?? '';
+        const startStr = m[2];
+        const endStr = m[3];
+        if (startStr) {
+            // Split path from trailing :line / :start-end
+            const pathPart = raw.replace(/:(\d+)(?:-(\d+))?$/, '');
+            const hasExt = /\.\w{1,8}$/.test(pathPart.split('/').pop() ?? '');
+            if (pathPart && !pathPart.includes('://') && hasExt) {
+                const startLine = Number(startStr);
+                const endLine = endStr !== undefined ? Number(endStr) : undefined;
+                if (Number.isFinite(startLine) && startLine >= 1) {
+                    out.push({ raw, path: pathPart, startLine, endLine });
+                }
+            }
+        }
+        m = re.exec(body);
+    }
+    return out;
+}
+
 function hasAdjacentFileLineColumns(body: string): boolean {
     const lines = body.split('\n');
     for (const line of lines) {
@@ -412,6 +452,9 @@ export class TaskCheckService extends PlanningCheckService {
             }
         }
 
+        // Note: L4.stale-line-anchor for Testing/Solution file:line citations runs in runL4
+        // (needs tasksDir → project root resolution).
+
         // Plan: ordered checklist or table, not free-form prose (warning)
         const planBody = doc.getSection('Plan');
         if (planBody !== null && !isPlaceholderBody(planBody)) {
@@ -481,6 +524,12 @@ export class TaskCheckService extends PlanningCheckService {
                 });
             }
         }
+
+        // ── Stale file:line anchors in Testing / Solution (dogfood F81 P2) ──
+        // Re-check backtick citations ``path:line`` / ``path:start-end`` against
+        // the working tree: file must exist and the line number must fall within
+        // the file. Warning-only (L4) — does not block done unless elevated.
+        await this.checkLineAnchors(doc, tasksDir, findings);
 
         // Resolve feature_id from either snake_case or legacy kebab-case key.
         const featureId = (fm.feature_id as string | undefined) ?? (fm['feature-id'] as string | undefined);
@@ -788,6 +837,64 @@ export class TaskCheckService extends PlanningCheckService {
             };
         } catch {
             return null;
+        }
+    }
+
+    /**
+     * Validate backtick `path:line` / `path:start-end` citations in Testing and
+     * Solution against the working tree. Emits L4.stale-line-anchor warnings when
+     * the file is missing or the line is out of range (dogfood F81 P2).
+     *
+     * Caps findings per section to 5 so a heavily-cited section does not flood
+     * the report. Subject-name matching (line content names the R-item) stays an
+     * agent re-verify responsibility — this gate is existence + bounds only.
+     */
+    private async checkLineAnchors(doc: MarkdownDocument, tasksDir: string, findings: CheckFindings[]): Promise<void> {
+        const projectRoot = resolveProjectRootFromTasksDir(tasksDir);
+        for (const section of ['Testing', 'Solution'] as const) {
+            const body = doc.getSection(section);
+            if (body === null || isPlaceholderBody(body)) continue;
+            const citations = extractBacktickLineAnchors(body);
+            let reported = 0;
+            for (const cite of citations) {
+                if (reported >= 5) break;
+                const abs = join(projectRoot, cite.path);
+                let exists = false;
+                try {
+                    exists = await this.fs.exists(abs);
+                } catch {
+                    exists = false;
+                }
+                if (!exists) {
+                    findings.push({
+                        layer: 'L4',
+                        code: FINDING_CODES.L4_STALE_LINE_ANCHOR,
+                        severity: 'warning',
+                        section,
+                        message: `Stale line anchor \`${cite.raw}\` — file not found at ${cite.path} (from project root)`,
+                    });
+                    reported++;
+                    continue;
+                }
+                // Line-count bounds: only when we can cheaply read the file.
+                try {
+                    const raw = await this.fs.readFile(abs);
+                    const lineCount = raw.split('\n').length;
+                    const end = cite.endLine ?? cite.startLine;
+                    if (cite.startLine < 1 || end > lineCount) {
+                        findings.push({
+                            layer: 'L4',
+                            code: FINDING_CODES.L4_STALE_LINE_ANCHOR,
+                            severity: 'warning',
+                            section,
+                            message: `Stale line anchor \`${cite.raw}\` — line ${cite.startLine}${cite.endLine ? `-${cite.endLine}` : ''} outside file (${lineCount} lines)`,
+                        });
+                        reported++;
+                    }
+                } catch {
+                    // Unreadable — skip bounds; existence already passed.
+                }
+            }
         }
     }
 

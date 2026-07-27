@@ -55,6 +55,7 @@ export const ALL_FINDING_CODES = [
     'L4.verifying-incomplete-tasks',
     'L4.dogfood-missing',
     'L4.scenario-unverified',
+    'L4.stale-line-anchor',
 ] as const;
 
 /** Union type of all valid finding codes. */
@@ -115,4 +116,5 @@ export const FINDING_CODES = {
     L4_VERIFYING_INCOMPLETE_TASKS: 'L4.verifying-incomplete-tasks',
     L4_DOGFOOD_MISSING: 'L4.dogfood-missing',
     L4_SCENARIO_UNVERIFIED: 'L4.scenario-unverified',
+    L4_STALE_LINE_ANCHOR: 'L4.stale-line-anchor',
 } as const satisfies Record<string, FindingCode>;
