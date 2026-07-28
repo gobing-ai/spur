@@ -218,7 +218,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .command('continue')
         .description('Resume a paused (HITL) workflow run. Omit run-id to resume the most recent paused run.')
         .argument('[run-id]', 'Run ID to resume (default: the most recent paused run)')
-        .option('--yes', 'Resume without prompting for confirmation')
+        .option('--yes', 'Skip the CLI resume confirmation (does not set the persisted HITL answer)')
         .option('--json', 'Output machine-readable JSON where supported')
         .action(async (runId, options) => {
             const json = options.json === true;
@@ -441,8 +441,9 @@ function formatTraceList(result: WorkflowTraceListResult): string {
 export function formatTraceTimeline(result: WorkflowTraceTimeline): string {
     const { run, events } = result;
     const dryLabel = run.isDryRun ? ' [DRY RUN]' : '';
+    const reasonLabel = run.failureReason ? ` — ${run.failureReason}` : '';
     const lines = [
-        `Run: ${run.runId} — ${run.workflowName} (${run.mode}) — ${run.status}${dryLabel}`,
+        `Run: ${run.runId} — ${run.workflowName} (${run.mode}) — ${run.status}${dryLabel}${reasonLabel}`,
         `Started: ${run.startedAt}   Completed: ${run.completedAt ?? '-'}   Events: ${events.length}`,
         '',
     ];

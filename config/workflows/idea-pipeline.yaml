@@ -52,6 +52,8 @@ vars:
   featureId: ""
   __hitlAnswer: ""
   spurBin: "spur"
+  # R8 (0366): injected by WorkflowAppService.run(); stamps discovery artifact provenance.
+  __runId: ""
   agent: "omp"
   stepTimeoutMs: "600000"
 
@@ -69,7 +71,7 @@ states:
           command: "${vars.spurBin} agent doctor ${vars.agent}"
       - kind: shell
         options:
-          command: 'mkdir -p .spur/run && rm -f .spur/run/idea-ac-retry-count .spur/run/idea-decompose-retry-count .spur/run/idea-feature-id.txt .spur/run/idea-ac-content.md .spur/run/idea-ac-done.txt .spur/run/idea-task-batch.json .spur/run/idea-batch-create.done .spur/run/idea-batch-create.failed .spur/run/idea-eval-report.md .spur/run/idea-needs-design.json'
+          command: 'mkdir -p .spur/run && { [ -f .spur/run/idea-eval-report.md ] || [ -f .spur/run/idea-needs-design.json ]; } && { a=".spur/run/idea-archive/$(date +%Y%m%d-%H%M%S)"; mkdir -p "$a"; mv -f .spur/run/idea-eval-report.md "$a/" 2>/dev/null; mv -f .spur/run/idea-needs-design.json "$a/" 2>/dev/null; } ; rm -f .spur/run/idea-ac-retry-count .spur/run/idea-decompose-retry-count .spur/run/idea-feature-id.txt .spur/run/idea-ac-content.md .spur/run/idea-ac-done.txt .spur/run/idea-task-batch.json .spur/run/idea-batch-create.done .spur/run/idea-batch-create.failed'
 
   - id: discovery
     description: >
@@ -84,7 +86,7 @@ states:
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: "Run sp:brainstorm for the idea: ${vars.idea}. The skill owns the approach-generation, design summary, and `needs_design` signal criteria; emit .spur/run/idea-needs-design.json ({\"needs_design\": true|false}) and the design summary per the skill's `Design Approval Gate` and `The needs_design signal` sections. Also emit the idea-evaluation report to .spur/run/idea-eval-report.md per plugins/sp/skills/spur-dev/references/idea-evaluation.md (urgency/necessity 0–5, premises, pros/cons, alternatives, enhanced idea, recommendation)."
+          input: "Run sp:brainstorm for the idea: ${vars.idea}. The skill owns the approach-generation, design summary, and `needs_design` signal criteria; emit .spur/run/idea-needs-design.json ({\"needs_design\": true|false}) and the design summary per the skill's `Design Approval Gate` and `The needs_design signal` sections. Also emit the idea-evaluation report to .spur/run/idea-eval-report.md per plugins/sp/skills/spur-dev/references/idea-evaluation.md (urgency/necessity 0–5, premises, pros/cons, alternatives, enhanced idea, recommendation). At the END of the report, append a provenance footer block of the exact form: `---\\nrun_id: ${vars.__runId}\\ngenerated_at: <RFC3339 timestamp>\\n---` (omit the footer only if run_id is empty)."
           timeoutMs: ${vars.stepTimeoutMs}
 
   - id: idea-eval
@@ -254,7 +256,17 @@ transitions:
     guard:
       kind: always
 
-  # ── discovery -> idea-eval ──
+  # ── discovery: auto-skip (profile=auto + idea_approved) OR enter idea-eval taste gate ──
+  # Declaration order: auto-skip FIRST (same pattern as system-design → design-approval).
+  # Without this edge, discovery always enters idea-eval (pause: true), rendering the prompt
+  # and persisting an avoidable pause before the in-state auto-skip guard can fire (0366 R4/R5).
+  - from: discovery
+    to: feature-create
+    description: profile=auto AND idea_approved=true — skip idea-eval taste gate entirely.
+    guard:
+      kind: shell
+      options:
+        command: 'test "${vars.profile}" = auto && test "${vars.idea_approved}" = true'
   - from: discovery
     to: idea-eval
     description: Discovery complete — gate on idea evaluation taste decision.

@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: []
 created_at: "2026-07-28T06:28:47.106Z"
-updated_at: "2026-07-28T06:33:18.082Z"
+updated_at: "2026-07-28T16:27:50.371Z"
 ---
 
 ## 0366. Fix idea-pipeline HITL approval and pause/resume state loss
@@ -157,13 +157,73 @@ These combine into the observed failure: resume falls back to YAML defaults
 (`idea_approved=false`, `profile=standard`, empty idea, no `__hitlAnswer`), every outgoing idea-eval guard
 fails, and the run terminates with zero transitions.
 ### Solution
+Cross-repo fix: upstream `@gobing-ai/ts-dual-workflow-engine` 0.4.11 → 0.4.12 (vars persistence), then Spur-side routing, observability, provenance, and integration coverage.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+## Engine (upstream `ts-libs/packages/dual-workflow-engine`, released 0.4.12)
 
+- **R1–R3, R11 — vars persistence across pause/resume.**
+  - `src/persistence.ts`: added `loadLatestStateSnapshot(runId)` to the `WorkflowStateStore` interface.
+  - `src/adapters/db-state-store.ts` + `src/adapters/in-memory-state-store.ts`: implement `loadLatestStateSnapshot` (reads `data_json` of the newest `workflow_states` row).
+  - `src/run-lifecycle.ts`: `enter()`, `commitHop()`, `pause()` now accept a `vars` param; `pause()` writes a fresh snapshot whose `data_json` carries `effectiveVars` BEFORE `savePhase`, capturing `setVars` mutations from the paused state's own `onEnter` (e.g. `__hitlAnswer` from `hitl.confirm`).
+  - `src/drivers/state-machine.ts` + `src/drivers/transition-flow.ts`: pass current `vars` at every lifecycle touchpoint.
+  - `src/service.ts` `resumeRun()`: restores `effectiveVars` via new `extractEffectiveVars()`; merge strategy `mergeVars(persistedEffectiveVars, options.vars ?? {})` — caller wins as override. Old snapshots without `effectiveVars` fall back to `{}` (R11 backward compat).
+  - Test: `tests/pause-resume-vars.test.ts` (4 tests).
+
+## Spur monorepo
+
+- **R4/R5 — pre-approval bypass (idea-pipeline.yaml).** Added `discovery → feature-create` edge guarded by `test "${vars.profile}" = auto && test "${vars.idea_approved}" = true`, declared BEFORE `discovery → idea-eval` so pre-approved runs skip the paused taste gate entirely. Same pattern already used by `system-design → design-approval`.
+- **R6 — `continue --yes` help.** `apps/cli/src/commands/workflow.ts:221`: clarified option text — bypasses CLI resume confirmation; persisted workflow HITL answer remains the transition input.
+- **R7 — trace failure reasons.** `packages/app/src/services/workflow-service.ts`: `stampFailureReason()` stamps `result.reason` into `runs.metadata_json` via `json_set`; called from both `run()` and `continuePaused()`. Surfaced in `workflow trace` human + JSON.
+- **R8 — discovery artifact provenance.**
+  - `workflow-service.ts` `run()`: injects `__runId` into workflow vars (`{ ...(opts.vars ?? {}), __runId: runId }`); survives pause/resume via R1–R3 effectiveVars.
+  - `idea-pipeline.yaml`: declared `__runId: ""` in `vars:`; replaced blind `rm -f` of discovery artifacts with timestamped archive (`.spur/run/idea-archive/<timestamp>/`); discovery `agent.run` input instructs appending a `run_id`/`generated_at` provenance footer.
+- **R9 — integration coverage.** `packages/app/tests/services/workflow-service.test.ts`: 5 new tests — `__runId` injection (shell-observable, no-vars default, caller-vars coexist) and pause/resume var persistence (`hitl.confirm` → `__hitlAnswer` survives resume through guarded transition; backward-compat degradation when `effectiveVars` stripped).
+
+## Release / consumption (R10)
+
+- Engine version 0.4.11 → 0.4.12 (8 lockstep `@gobing-ai/*` packages).
+- Spur `package.json` catalog: all 8 entries bumped to 0.4.12.
+- `.bun` dist hot-swapped; CLI bundle rebuilt (`apps/cli/spur.js`).
+
+## Dogfood (R12)
+
+- `idea-pipeline.yaml` validates clean.
+- Dry-run `profile=auto,idea_approved=true`: `discovery → feature-create` taken directly (skips `idea-eval` pause); trace shows `failureReason: iteration-bound-exceeded` (R7 working).
+- Dry-run `profile=standard,idea_approved=false`: correctly pauses at `idea-eval`.
 ### Testing
+## Regression commands and outcomes
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+```bash
+cd ~/xprojects/ts-libs/packages/dual-workflow-engine && bun test
+```
+**Result:** 334 pass, 0 fail. New file `tests/pause-resume-vars.test.ts` (4 tests) covers R1–R3 vars persistence across pause/resume.
 
+```bash
+cd packages/app && bun test
+```
+**Result:** 1043 pass, 0 fail (5 new tests in `workflow-service.test.ts`).
+
+- `run — __runId injection (R8 of 0366)` (3 tests): shell action observes injected `__runId`; works with no caller vars; caller-provided vars coexist.
+- `run — pause/resume var persistence (R9 of 0366)` (2 tests): `hitl.confirm` sets `__hitlAnswer` during paused state's `onEnter`; survives resume; downstream shell captures `__hitlAnswer|__runId|seedVar`; guarded transition (`test "${vars.__hitlAnswer}" = yes`) passes after resume. Backward-compat test strips `effectiveVars` from snapshot → guard fails gracefully with `reason: 'no-passing-transition'` (no crash).
+
+- `workflow-service.test.ts` ~line 466: `surfaces terminal failure reason in trace entry (R7 of 0366)` — passes.
+- Dogfood dry-run confirmed `failureReason: "iteration-bound-exceeded"` stamped in `workflow trace --json`.
+
+```bash
+cd packages/app && bunx tsc --noEmit
+```
+**Result:** clean (no errors).
+
+```bash
+bun run --filter @gobing-ai/spur build:bundle
+```
+**Result:** `spur.js` rebuilt (3.23 MB); `__runId` and `stampFailureReason` present in bundle.
+
+- `spur workflow validate config/workflows/idea-pipeline.yaml` → valid.
+- Dry-run `profile=auto,idea_approved=true` → `discovery → feature-create` (bypass works, R4/R5).
+- Dry-run `profile=standard,idea_approved=false` → pauses at `idea-eval` (interactive path intact).
+
+R1–R12 all addressed at the engine or Spur-service layer with real-action integration tests (not just `always`-guard pausers). Engine vars-persistence unit tests + Spur service-layer integration tests with `hitl.confirm`, shell guards, and run-level `--vars`.
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->

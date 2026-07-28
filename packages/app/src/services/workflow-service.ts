@@ -238,6 +238,8 @@ export interface WorkflowTraceEntry {
     startedAt: string;
     completedAt: string | null;
     isDryRun: boolean;
+    /** Terminal failure reason (e.g. `no-passing-transition`) when the engine recorded one. */
+    failureReason?: string;
 }
 
 /** Result of a trace listing (no run-id). */
@@ -383,10 +385,14 @@ export class WorkflowAppService {
         });
         const runId = opts.runId ?? crypto.randomUUID();
         const isDry = opts.dryRun === true;
+        // R8 (0366): inject __runId so discovery artifacts can stamp run provenance.
+        // Survives pause/resume via the effective-vars snapshot (R1–R3). Inert for
+        // workflows that don't reference ${vars.__runId}.
+        const runVars = { ...(opts.vars ?? {}), __runId: runId };
         const result = await svc.runFile(file, {
             workdir: this.ctx.cwd,
             runId,
-            ...(opts.vars ? { vars: opts.vars } : {}),
+            vars: runVars,
             ...(isDry ? { dryRun: true } : {}),
             ...(eventsBus !== undefined ? { events: bridgeEventBus(eventsBus) } : {}),
         });
@@ -395,6 +401,9 @@ export class WorkflowAppService {
             const db = await this.ctx.getDb();
             await new RunDao(db).stampMetadata(runId, { dryRun: true });
         }
+        // R7 (0366): persist terminal failure reason so `workflow trace` can surface
+        // `no-passing-transition` (and siblings) rather than only the command result.
+        await this.stampFailureReason(runId, result);
         // R1 (task 0071): record a kind='pipeline' task_run_links row when a
         // task-pipeline run carries vars.wbs — links execution results back to
         // the task. Idempotent: a re-run with the same runId does not duplicate.
@@ -535,7 +544,26 @@ export class WorkflowAppService {
             );
         }
         const result = await svc.resumeRun(workflow, runId, { workdir: this.ctx.cwd });
+        await this.stampFailureReason(runId, result);
         return result as WorkflowRunResult;
+    }
+
+    /**
+     * Persist a terminal failure reason into the run row's metadata_json so
+     * `workflow trace` surfaces it (R7 of 0366). The engine returns the reason
+     * in WorkflowRunResult but only persists status; this closes the gap. Uses
+     * json_set so dryRun and staleReason coexist peacefully.
+     */
+    private async stampFailureReason(runId: string, result: EngineWorkflowRunResult): Promise<void> {
+        if (result.status !== 'failed' || typeof result.reason !== 'string' || result.reason === '') {
+            return;
+        }
+        const db = await this.ctx.getDb();
+        await db.run(
+            "UPDATE runs SET metadata_json = json_set(COALESCE(NULLIF(metadata_json, ''), '{}'), '$.failureReason', ?) WHERE id = ?",
+            result.reason,
+            runId,
+        );
     }
 
     /** Resolve a workflow definition by its `name` field, scanning the search paths. */
@@ -818,9 +846,13 @@ function rowToTraceEntry(row: {
     metadata_json: string;
 }): WorkflowTraceEntry {
     let isDryRun = false;
+    let failureReason: string | undefined;
     try {
         const meta = JSON.parse(row.metadata_json);
         isDryRun = meta.dryRun === true;
+        if (typeof meta.failureReason === 'string' && meta.failureReason !== '') {
+            failureReason = meta.failureReason;
+        }
     } catch {
         // metadata_json unparseable — treat as not dry-run
     }
@@ -832,5 +864,6 @@ function rowToTraceEntry(row: {
         startedAt: row.started_at,
         completedAt: row.completed_at,
         isDryRun,
+        ...(failureReason !== undefined ? { failureReason } : {}),
     };
 }

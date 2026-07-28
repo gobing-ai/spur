@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { spawn } from 'node:child_process';
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createMigratedDb, RunDao, TaskRunLinkDao } from '@gobing-ai/spur-domain';
@@ -463,6 +463,40 @@ describe('WorkflowAppService', () => {
             }
             await rm(dir, { recursive: true, force: true });
         });
+        test('surfaces terminal failure reason in trace entry (R7 of 0366)', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-reason-'));
+            const path = join(dir, 'fail.yaml');
+            // Outbound transition exists but its shell guard always exits non-zero,
+            // so no transition passes → engine fails with `no-passing-transition`.
+            await writeFile(
+                path,
+                [
+                    'name: fail-flow',
+                    'kind: state-machine',
+                    'initialState: start',
+                    'states:',
+                    '  - id: start',
+                    '  - id: done',
+                    'transitions:',
+                    '  - from: start',
+                    '    to: done',
+                    '    guard:',
+                    '      kind: shell',
+                    '      options:',
+                    "        command: 'test no = yes'",
+                    'terminalStates: [done]',
+                ].join('\n'),
+            );
+            const svc = new WorkflowAppService(makeCtx(dir));
+            await svc.run(path, { runId: 'trace-reason-1' });
+
+            const result = await svc.trace('trace-reason-1');
+            expect('events' in result).toBe(true);
+            if ('events' in result) {
+                expect(result.run.failureReason).toBe('no-passing-transition');
+            }
+            await rm(dir, { recursive: true, force: true });
+        });
     });
 
     describe('continue — HITL resume (0063, E3)', () => {
@@ -543,6 +577,191 @@ terminalStates:
             await expect(svc.continuePaused('no-such-run')).rejects.toThrow(
                 /not paused|does not exist|nothing to continue/i,
             );
+            await rm(dir, { recursive: true, force: true });
+        });
+    });
+    // R8 (0366): WorkflowAppService.run() injects __runId into workflow vars so
+    // discovery artifacts can stamp run provenance. The var must be observable
+    // by shell actions and survive the full run.
+    describe('run — __runId injection (R8 of 0366)', () => {
+        const RUNID_YAML = `name: runid-inject
+kind: state-machine
+initialState: start
+vars:
+  __runId: ""
+states:
+  - id: start
+    onEnter:
+      - kind: shell
+        options:
+          command: 'mkdir -p .spur/run && printf "%s" "\${vars.__runId}" > .spur/run/captured-runid.txt'
+  - id: done
+transitions:
+  - from: start
+    to: done
+terminalStates:
+  - done
+`;
+
+        test('injects the runId as vars.__runId, observable by shell actions', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-runid-'));
+            const path = join(dir, 'test.yaml');
+            await writeFile(path, RUNID_YAML);
+
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const result = await svc.run(path, { runId: 'inject-test-1' });
+            expect(result.status).toBe('done');
+
+            const captured = await readFile(join(dir, '.spur', 'run', 'captured-runid.txt'), 'utf8');
+            expect(captured).toBe('inject-test-1');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('__runId is injected even when caller passes no vars', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-runid-novars-'));
+            const path = join(dir, 'test.yaml');
+            await writeFile(path, RUNID_YAML);
+
+            const svc = new WorkflowAppService(makeCtx(dir));
+            await svc.run(path, { runId: 'auto-runid-1' });
+
+            const captured = await readFile(join(dir, '.spur', 'run', 'captured-runid.txt'), 'utf8');
+            expect(captured).toBe('auto-runid-1');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('caller-provided vars are preserved alongside __runId', async () => {
+            // Separate workflow that also captures a caller-provided var alongside __runId.
+            const MIX_YAML = RUNID_YAML.replace('vars:\n  __runId: ""', 'vars:\n  __runId: ""\n  taskId: ""').replace(
+                // biome-ignore lint/suspicious/noTemplateCurlyInString: intentional — matches ${vars.*} literal in the YAML template
+                'printf "%s" "${vars.__runId}"',
+                // biome-ignore lint/suspicious/noTemplateCurlyInString: intentional — matches ${vars.*} literal in the YAML template
+                'printf "%s|%s" "${vars.__runId}" "${vars.taskId}"',
+            );
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-runid-vars-'));
+            const path = join(dir, 'test.yaml');
+            await writeFile(path, MIX_YAML);
+
+            const svc = new WorkflowAppService(makeCtx(dir));
+            await svc.run(path, { runId: 'mix-1', vars: { taskId: '0099' } });
+
+            const captured = await readFile(join(dir, '.spur', 'run', 'captured-runid.txt'), 'utf8');
+            expect(captured).toBe('mix-1|0099');
+            await rm(dir, { recursive: true, force: true });
+        });
+    });
+
+    // R9 (0366): End-to-end integration proving the pause/resume var-persistence
+    // fix (R1–R3) works at the Spur service layer. A paused state's onEnter
+    // action mutates vars via setVars (hitl.confirm → __hitlAnswer); those vars
+    // must survive the pause→resume boundary and be observable in subsequent
+    // states AND in transition guards.
+    describe('run — pause/resume var persistence (R9 of 0366)', () => {
+        // Workflow exercises the full path: caller vars → pause with setVars →
+        // resume → guard reads paused vars → shell captures all vars.
+        const PERSIST_YAML = `name: pause-resume-vars
+kind: state-machine
+initialState: start
+vars:
+  __hitlAnswer: ""
+  __runId: ""
+  seedVar: ""
+states:
+  - id: start
+  - id: gate
+    pause: true
+    onEnter:
+      - kind: hitl.confirm
+        options:
+          prompt: approve?
+  - id: after
+    onEnter:
+      - kind: shell
+        options:
+          command: 'mkdir -p .spur/run && printf "%s|%s|%s" "\${vars.__hitlAnswer}" "\${vars.__runId}" "\${vars.seedVar}" > .spur/run/captured-vars.txt'
+  - id: done
+transitions:
+  - from: start
+    to: gate
+    guard: { kind: always }
+  - from: gate
+    to: after
+    guard:
+      kind: shell
+      options:
+        command: 'test "\${vars.__hitlAnswer}" = yes'
+  - from: after
+    to: done
+    guard: { kind: always }
+terminalStates:
+  - done
+`;
+
+        /** Seed a project with the persist workflow under `.spur/workflows/` (so name→file resolves on resume). */
+        async function seedPersist(): Promise<{ dir: string; wfPath: string }> {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-persist-'));
+            const wfDir = join(dir, '.spur', 'workflows');
+            await mkdir(wfDir, { recursive: true });
+            const wfPath = join(wfDir, 'persist.yaml');
+            await writeFile(wfPath, PERSIST_YAML);
+            return { dir, wfPath };
+        }
+
+        test('setVars from a paused state survive resume and reach downstream states + guards', async () => {
+            const { dir, wfPath } = await seedPersist();
+            const svc = new WorkflowAppService(makeCtx(dir));
+            // Run-level vars (__runId injected, seedVar caller-provided).
+            const paused = await svc.run(wfPath, { runId: 'persist-1', vars: { seedVar: 'seeded' } });
+            expect(paused.status).toBe('paused');
+            expect(paused.finalState).toBe('gate');
+
+            // Resume — the gate→after guard reads __hitlAnswer (set during pause).
+            const resumed = await svc.continuePaused('persist-1');
+            expect(resumed.status).toBe('done');
+            expect(resumed.finalState).toBe('done');
+
+            // All three var classes captured in the downstream state:
+            // - __hitlAnswer: set by hitl.confirm during gate.onEnter (setVars mutation)
+            // - __runId: injected by WorkflowAppService.run()
+            // - seedVar: caller-provided run-level var
+            const captured = await readFile(join(dir, '.spur', 'run', 'captured-vars.txt'), 'utf8');
+            expect(captured).toBe('yes|persist-1|seeded');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('resume without the persisted var snapshot degrades gracefully (backward compat)', async () => {
+            // Simulates resuming a run whose snapshot predates the R1–R3 fix
+            // (no effectiveVars in data_json). extractEffectiveVars returns {},
+            // so \${vars.__hitlAnswer} interpolates to '' — the guard fails,
+            // and the run terminates with no-passing-transition rather than
+            // crashing. This is acceptable degradation for old snapshots.
+            const { dir, wfPath } = await seedPersist();
+            const db = await createMigratedDb({ url: ':memory:' });
+            const ctx = {
+                cwd: dir,
+                getDb: async () => db,
+                agentService: () => ({ run: async () => 0 }) as unknown as AgentService,
+                ruleService: () =>
+                    ({ evaluate: async () => ({ exitCode: 0, findings: [] }) }) as unknown as RuleService,
+                hitlResponder: () => ({ respond: async () => ({ value: 'yes' }) }),
+            };
+            const svc = new WorkflowAppService(ctx);
+
+            // Run to pause.
+            const paused = await svc.run(wfPath, { runId: 'old-snap-1', vars: { seedVar: 'seeded' } });
+            expect(paused.status).toBe('paused');
+
+            // Strip effectiveVars from the latest workflow_states row, simulating
+            // a snapshot written by the pre-R3 engine (no effectiveVars field).
+            await db.run(
+                `UPDATE workflow_states SET data_json = json_remove(data_json, '$.effectiveVars') WHERE run_id = ?`,
+                'old-snap-1',
+            );
+
+            const resumed = await svc.continuePaused('old-snap-1');
+            // Guard `test "\${vars.__hitlAnswer}" = yes` fails (empty string),
+            // no transition passes → run fails with no-passing-transition.
+            expect(resumed.reason).toBe('no-passing-transition');
             await rm(dir, { recursive: true, force: true });
         });
     });

@@ -201,6 +201,9 @@ export class ObservableWorkflowAdapter implements WorkflowPersistenceAdapter {
     loadCurrentState(runId: string): Promise<string | undefined> {
         return this.inner.loadCurrentState(runId);
     }
+    loadLatestStateSnapshot(runId: string): Promise<{ state: string; data: Record<string, unknown> } | undefined> {
+        return this.inner.loadLatestStateSnapshot(runId);
+    }
     listPausedRuns(options?: { workflowName?: string; limit?: number }): Promise<readonly WorkflowRunRecord[]> {
         return this.inner.listPausedRuns(options);
     }
