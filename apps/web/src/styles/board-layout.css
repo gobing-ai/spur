@@ -28,12 +28,15 @@
     --rightpanel-handle-w: 0px;
 }
 
-/* Responsive: md — sidebar to icon bar */
-@media (max-width: 1023px) {
-    .board-layout {
-        --sidebar-w: 48px;
-        --sidebar-handle-w: 0px;
-    }
+/*
+ * Collapse is driven only by data-sidebar-collapsed (and persisted layout state).
+ * A previous md breakpoint forced --sidebar-w:48px unconditionally, which made the
+ * expand toggle a no-op below 1024px: labels rendered in the DOM but stayed clipped.
+ * md+ users can fold/unfold freely; <md still uses the mobile drawer overlay below.
+ */
+.board-layout[data-sidebar-collapsed="true"] > .resize-handle:first-of-type {
+    pointer-events: none;
+    visibility: hidden;
 }
 
 /* Responsive: <md — single column with drawer + bottom sheet overlays */

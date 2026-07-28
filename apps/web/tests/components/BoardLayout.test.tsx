@@ -160,6 +160,30 @@ describe('BoardLayout', () => {
         expect(persisted.sidebarCollapsed).toBe(true);
     });
 
+    test('expand toggle restores data-sidebar-collapsed=false and persists', () => {
+        // Fold then unfold — both directions must work; expand was the broken path.
+        localStorage.setItem(
+            'spur-board-layout',
+            JSON.stringify({
+                sidebarWidth: 240,
+                rightPanelWidth: 320,
+                sidebarCollapsed: true,
+                rightPanelCollapsed: true,
+            }),
+        );
+        const { container, getByTestId } = renderBoard();
+        const root = container.querySelector('.board-layout');
+        expect(root?.getAttribute('data-sidebar-collapsed')).toBe('true');
+
+        fireEvent.click(getByTestId('sidebar-expand'));
+
+        expect(root?.getAttribute('data-sidebar-collapsed')).toBe('false');
+        const persisted = JSON.parse(localStorage.getItem('spur-board-layout') ?? '{}');
+        expect(persisted.sidebarCollapsed).toBe(false);
+        // Unfolded header must expose a collapse control (not only expand-when-folded).
+        expect(getByTestId('sidebar-collapse')).toBeTruthy();
+    });
+
     test('right panel toggle expands the panel and persists', () => {
         const { container, getByLabelText } = renderBoard();
         const root = container.querySelector('.board-layout');

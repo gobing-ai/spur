@@ -15,10 +15,19 @@ interface FeatureTreeProps {
  * of `X` = features whose id.length === X.length + 1 AND id starts with X.
  * Each node renders a leading status indicator, its id, and its name; clicking selects it.
  */
+/** Ascending ID order so the tree is stable A→Z regardless of API / filter order. */
+function byFeatureId(a: FeatureSummary, b: FeatureSummary): number {
+    return a.id.localeCompare(b.id);
+}
+
 export default function FeatureTree({ features, selectedId, onSelect }: FeatureTreeProps) {
     // Feature IDs are single-uppercase-letter + digits (DD-14): F, F1, F2, F1A, F1A1, etc.
     // Top-level features are those whose id is a root letter (one char).
-    const rootFeatures = features.filter((f) => f.id.length === 1);
+    // Sort roots and every sibling group A→Z so the tree never mirrors arbitrary list order.
+    const rootFeatures = features
+        .filter((f) => f.id.length === 1)
+        .slice()
+        .sort(byFeatureId);
     const childrenMap = groupByParent(features);
 
     return (
@@ -48,6 +57,9 @@ function groupByParent(features: FeatureSummary[]): Map<string, FeatureSummary[]
         } else {
             map.set(parentId, [f]);
         }
+    }
+    for (const siblings of map.values()) {
+        siblings.sort(byFeatureId);
     }
     return map;
 }
@@ -93,19 +105,16 @@ function TreeNode({ feature, childrenMap, selectedId, onSelect, depth }: TreeNod
             </button>
             {children && children.length > 0 && (
                 <ul>
-                    {children
-                        .slice()
-                        .sort((a, b) => a.id.localeCompare(b.id))
-                        .map((child) => (
-                            <TreeNode
-                                key={child.id}
-                                feature={child}
-                                childrenMap={childrenMap}
-                                selectedId={selectedId}
-                                onSelect={onSelect}
-                                depth={depth + 1}
-                            />
-                        ))}
+                    {children.map((child) => (
+                        <TreeNode
+                            key={child.id}
+                            feature={child}
+                            childrenMap={childrenMap}
+                            selectedId={selectedId}
+                            onSelect={onSelect}
+                            depth={depth + 1}
+                        />
+                    ))}
                 </ul>
             )}
         </li>

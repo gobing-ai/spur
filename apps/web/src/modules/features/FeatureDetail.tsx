@@ -54,6 +54,8 @@ export default function FeatureDetail({ featureId, onClose, refreshKey = 0 }: Fe
 
     // Action dispatch state
     const [actionLoading, setActionLoading] = useState<string | null>(null);
+    /** In-panel outcome for the last action — `api-error` alone has no board listener. */
+    const [actionFeedback, setActionFeedback] = useState<{ kind: 'ok' | 'error'; message: string } | null>(null);
     const [showCancelModal, setShowCancelModal] = useState(false);
     const [actionModal, setActionModal] = useState<string | null>(null);
     const [inlineModal, setInlineModal] = useState<string | null>(null);
@@ -62,6 +64,13 @@ export default function FeatureDetail({ featureId, onClose, refreshKey = 0 }: Fe
     const [syncDirection, setSyncDirection] = useState<SyncDirection>('push');
     const [showNewTaskPanel, setShowNewTaskPanel] = useState(false);
     const [showNewFeaturePanel, setShowNewFeaturePanel] = useState(false);
+
+    /**
+     * Id of the feature currently painted in the panel. Used so background reloads
+     * (SSE refreshKey, post-action reload) do not flip `loadingBody` and race with
+     * another in-flight `beginLoad` that never clears the spinner.
+     */
+    const paintedIdRef = useRef<string | null>(null);
 
     // Linked tasks: subscribe to the shared TaskStore
     const { tasks } = useTasks();
@@ -91,6 +100,7 @@ export default function FeatureDetail({ featureId, onClose, refreshKey = 0 }: Fe
      */
     const applyFeature = useCallback((fresh: FeatureShowData, opts?: { body?: boolean }) => {
         setData(fresh);
+        paintedIdRef.current = fresh.id;
         setFrontmatter(fresh.frontmatter);
         if (opts?.body !== false) {
             // Strip frontmatter for editor display
@@ -104,11 +114,23 @@ export default function FeatureDetail({ featureId, onClose, refreshKey = 0 }: Fe
     const reloadFeature = useCallback(
         async (opts?: { body?: boolean }): Promise<FeatureShowData | null> => {
             const fresh = await fetchGuarded();
-            if (fresh) applyFeature(fresh, opts);
+            if (fresh) {
+                applyFeature(fresh, opts);
+                // Own the spinner if we superseded an effect-driven load that left it on.
+                setLoadingBody(false);
+            }
             return fresh;
         },
         [fetchGuarded, applyFeature],
     );
+
+    const reportActionError = useCallback((err: unknown, fallback: string) => {
+        const msg = err instanceof Error ? err.message : fallback;
+        setActionFeedback({ kind: 'error', message: msg });
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('api-error', { detail: { message: msg } }));
+        }
+    }, []);
 
     /**
      * What the loader should fetch: the feature, plus the generation the shell asked
@@ -123,14 +145,20 @@ export default function FeatureDetail({ featureId, onClose, refreshKey = 0 }: Fe
         const { featureId: targetId } = loadTarget;
         if (!targetId) {
             setData(null);
+            paintedIdRef.current = null;
             setServerBody('');
             setDraftBody('');
             setMode('preview');
             setError(null);
+            setActionFeedback(null);
             return;
         }
 
-        setLoadingBody(true);
+        // Full-body spinner only when this id is not yet painted. SSE refreshKey bumps
+        // and post-action reloads must keep showing the current body — otherwise a race
+        // with reloadFeature's beginLoad leaves "Loading body…" stuck forever.
+        const needsSpinner = paintedIdRef.current !== targetId;
+        if (needsSpinner) setLoadingBody(true);
         setError(null);
         // Uses the token directly rather than fetchGuarded so that a superseded load
         // also declines to clear the spinner or report an error — the newer load owns
@@ -219,8 +247,10 @@ export default function FeatureDetail({ featureId, onClose, refreshKey = 0 }: Fe
     // ── Action dispatch ──
 
     const handleAction = (action: string) => {
+        if (actionLoading) return;
+        setActionFeedback(null);
         if (FSM_ACTIONS[action]) {
-            handleFSMTransition(action);
+            void handleFSMTransition(action);
             return;
         }
         // Workflow/agent actions need channel selector
@@ -251,33 +281,45 @@ export default function FeatureDetail({ featureId, onClose, refreshKey = 0 }: Fe
         }
     };
 
-    const handleFSMTransition = async (action: string) => {
+    /**
+     * Apply an FSM status transition. Shared by action buttons and the cancel modal
+     * confirm path (the modal must not re-enter the "open cancel dialog" branch).
+     */
+    const applyFsmTransition = async (action: string) => {
         const targetStatus = FSM_TRANSITION_TARGET[action];
         if (!targetStatus) return;
 
-        if (action === 'cancel') {
-            setShowCancelModal(true);
-            return;
-        }
-
         setActionLoading(action);
+        setActionFeedback(null);
         try {
-            await transitionFeature(featureId, targetStatus);
-            // Reload
-            await reloadFeature();
+            const newStatus = await transitionFeature(featureId, targetStatus);
+            // Optimistic paint so the pill/actions update before the round-trip reload.
+            setData((prev) => (prev ? { ...prev, status: newStatus } : prev));
+            await reloadFeature({ body: false });
+            setActionFeedback({
+                kind: 'ok',
+                message: `${FEATURE_ACTION_LABELS[action] ?? action}: status is now ${newStatus}.`,
+            });
         } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : 'Transition failed';
-            if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('api-error', { detail: { message: msg } }));
-            }
+            reportActionError(err, 'Transition failed');
         } finally {
             setActionLoading(null);
         }
     };
 
+    const handleFSMTransition = async (action: string) => {
+        if (action === 'cancel') {
+            setShowCancelModal(true);
+            return;
+        }
+        await applyFsmTransition(action);
+    };
+
     const handleCancelConfirm = async () => {
         setShowCancelModal(false);
-        await handleFSMTransition('cancel');
+        // Must call applyFsmTransition directly — handleFSMTransition('cancel') only
+        // re-opens the confirm dialog and never issues the network call.
+        await applyFsmTransition('cancel');
     };
 
     const handleInlineConfirm = async () => {
@@ -285,6 +327,7 @@ export default function FeatureDetail({ featureId, onClose, refreshKey = 0 }: Fe
         if (!action || !inlineValue.trim()) return;
         setInlineModal(null);
         setActionLoading(action);
+        setActionFeedback(null);
 
         try {
             if (action === 'add-child') {
@@ -297,11 +340,12 @@ export default function FeatureDetail({ featureId, onClose, refreshKey = 0 }: Fe
             // Reload feature. Body left alone: these actions add children/tasks rather
             // than rewrite the body, and clobbering an open draft would lose edits.
             await reloadFeature({ body: false });
+            setActionFeedback({
+                kind: 'ok',
+                message: `${FEATURE_ACTION_LABELS[action] ?? action} completed.`,
+            });
         } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : 'Action failed';
-            if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('api-error', { detail: { message: msg } }));
-            }
+            reportActionError(err, 'Action failed');
         } finally {
             setActionLoading(null);
         }
@@ -312,26 +356,35 @@ export default function FeatureDetail({ featureId, onClose, refreshKey = 0 }: Fe
         const action = actionModal;
         setActionModal(null);
         setActionLoading(action);
+        setActionFeedback(null);
 
         try {
             if (action === 'sync-status') {
-                await syncFeatureStatus({ id: featureId, direction: syncDirection });
+                const result = await syncFeatureStatus({ id: featureId, direction: syncDirection });
+                await reloadFeature({ body: false });
+                const applied = result.data?.applied;
+                const newStatus = result.data?.newStatus;
+                setActionFeedback({
+                    kind: 'ok',
+                    message: applied
+                        ? `Sync applied${newStatus ? `: status is now ${newStatus}` : ''}.`
+                        : 'Sync finished — no status change was needed.',
+                });
             } else {
                 await dispatchFeatureAction({
                     id: featureId,
                     action: action as 'brainstorm' | 'plan',
                     channel: selectedChannel,
                 });
+                // Agent runs async; body not updated yet. Don't clobber an open draft.
+                await reloadFeature({ body: false });
+                setActionFeedback({
+                    kind: 'ok',
+                    message: `${FEATURE_ACTION_LABELS[action] ?? action} dispatched on ${selectedChannel}.`,
+                });
             }
-            // Reload feature data after action. Body left alone: a dispatched agent
-            // action runs asynchronously, so the body is not yet updated anyway, and
-            // overwriting the editor buffer here would discard an open draft.
-            await reloadFeature({ body: false });
         } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : 'Action failed';
-            if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('api-error', { detail: { message: msg } }));
-            }
+            reportActionError(err, 'Action failed');
         } finally {
             setActionLoading(null);
         }
@@ -421,7 +474,8 @@ export default function FeatureDetail({ featureId, onClose, refreshKey = 0 }: Fe
                                 variant={variant}
                                 size="xs"
                                 onClick={() => handleAction(action)}
-                                disabled={actionLoading === action}
+                                disabled={actionLoading !== null}
+                                aria-busy={actionLoading === action}
                                 aria-label={FEATURE_ACTION_LABELS[action]}
                             >
                                 {actionLoading === action ? '…' : FEATURE_ACTION_LABELS[action]}
@@ -441,6 +495,22 @@ export default function FeatureDetail({ featureId, onClose, refreshKey = 0 }: Fe
                     )}
                 </div>
             </div>
+
+            {/* Inline action outcome — never rely on the un-listened `api-error` bus alone. */}
+            {actionFeedback && (
+                <div
+                    role="status"
+                    data-testid="action-feedback"
+                    data-kind={actionFeedback.kind}
+                    className={`px-3 py-1.5 text-xs border-b border-spur-border shrink-0 ${
+                        actionFeedback.kind === 'error'
+                            ? 'bg-spur-error/10 text-spur-error'
+                            : 'bg-spur-success/10 text-spur-success'
+                    }`}
+                >
+                    {actionFeedback.message}
+                </div>
+            )}
 
             {/* Metadata pane — collapsible */}
             <div className="border-b border-spur-border shrink-0">

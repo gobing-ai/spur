@@ -287,6 +287,22 @@ describe('FeatureTree', () => {
         expect(ids).toEqual(['F', 'F1', 'F2']);
     });
 
+    test('renders root features sorted A→Z regardless of input order', () => {
+        // Multiple top-level IDs (DD-14 single-letter roots) must sort ascending too —
+        // only children were sorted before, so Z appeared above A when the API listed Z first.
+        const features: FeatureSummary[] = [
+            { id: 'Z', name: 'Zeta', status: 'active' },
+            { id: 'A', name: 'Alpha', status: 'draft' },
+            { id: 'M', name: 'Mu', status: 'done' },
+            { id: 'A1', name: 'Alpha child', status: 'active' },
+        ];
+        const { container } = render(<FeatureTree features={features} selectedId={null} onSelect={() => {}} />);
+        const ids = Array.from(container.querySelectorAll('[data-feature-tree] button span.font-mono')).map(
+            (span) => span.textContent,
+        );
+        expect(ids).toEqual(['A', 'A1', 'M', 'Z']);
+    });
+
     // ── Task 0336: hover tooltip revealing the status label (AC R5) ──
 
     test('indicator slot carries a daisyUI tooltip whose data-tip is the human status label', () => {
@@ -547,6 +563,104 @@ describe('FeatureDetail', () => {
 
         expect(getByText('done')).toBeDefined();
         expect(queryByText('active')).toBeNull();
+    });
+
+    test('refreshKey reload does not stick on Loading body when feature is already painted', async () => {
+        // Regression: SSE refreshKey + post-action reloadFeature raced on beginLoad;
+        // the effect set loadingBody=true and a superseded finally never cleared it.
+        installFeatureFetchMock();
+        const { rerender, getByText, queryByText, getByTestId } = render(
+            <FeatureDetail featureId="F" refreshKey={0} />,
+        );
+        await waitFor(() => expect(getByText('active')).toBeDefined());
+        expect(queryByText('Loading body…')).toBeNull();
+        expect(getByTestId('feature-body-section').textContent).not.toContain('Loading body…');
+
+        rerender(<FeatureDetail featureId="F" refreshKey={1} />);
+        // Must not blank the body into a permanent spinner on background refresh.
+        await waitFor(() => expect(getByText('active')).toBeDefined());
+        expect(queryByText('Loading body…')).toBeNull();
+    });
+
+    test('Complete FSM action updates status and shows in-panel success feedback', async () => {
+        let status = 'verifying';
+        setFetchForTesting((async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url = input instanceof Request ? input.url : String(input);
+            const method = input instanceof Request ? input.method : (init?.method ?? 'GET');
+            if (url.includes('/tasks')) return jsonResponse({ ok: true, data: [] });
+            if (url.includes('/features/F/status') && method === 'PATCH') {
+                status = 'done';
+                return jsonResponse({ ok: true, data: { status: 'done' } });
+            }
+            if (url.includes('/features/F')) {
+                return jsonResponse({
+                    ok: true,
+                    data: {
+                        id: 'F',
+                        name: 'Root',
+                        status,
+                        frontmatter: {},
+                        filePath: 'docs/features/F.md',
+                        content: '---\n---\n\n## Goal\nx',
+                    },
+                });
+            }
+            return jsonResponse({ ok: true, data: {} });
+        }) as unknown as typeof fetch);
+
+        const { getByLabelText, getByText, getByTestId, queryByLabelText, queryByText } = render(
+            <FeatureDetail featureId="F" />,
+        );
+        await waitFor(() => expect(getByText('verifying')).toBeDefined());
+        expect(getByLabelText('Complete')).toBeDefined();
+
+        fireEvent.click(getByLabelText('Complete'));
+
+        await waitFor(() => expect(getByTestId('status-pill').textContent).toBe('done'));
+        await waitFor(() => expect(getByTestId('action-feedback').getAttribute('data-kind')).toBe('ok'));
+        // Terminal status has no Complete button.
+        expect(queryByLabelText('Complete')).toBeNull();
+        // Body must not be stuck loading after the transition reload.
+        expect(queryByText('Loading body…')).toBeNull();
+    });
+
+    test('failed FSM transition shows in-panel error feedback (not silent)', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url = input instanceof Request ? input.url : String(input);
+            const method = input instanceof Request ? input.method : (init?.method ?? 'GET');
+            if (url.includes('/tasks')) return jsonResponse({ ok: true, data: [] });
+            if (url.includes('/features/F/status') && method === 'PATCH') {
+                return jsonResponse({ error: { message: 'guard denied: incomplete linked work' } }, 400);
+            }
+            if (url.includes('/features/F')) {
+                return jsonResponse({
+                    ok: true,
+                    data: {
+                        id: 'F',
+                        name: 'Root',
+                        status: 'verifying',
+                        frontmatter: {},
+                        filePath: 'docs/features/F.md',
+                        content: '---\n---\n\n## Goal\nx',
+                    },
+                });
+            }
+            return jsonResponse({ ok: true, data: {} });
+        }) as unknown as typeof fetch);
+
+        const { getByLabelText, getByText, getByTestId } = render(<FeatureDetail featureId="F" />);
+        await waitFor(() => expect(getByText('verifying')).toBeDefined());
+
+        fireEvent.click(getByLabelText('Complete'));
+
+        await waitFor(() => {
+            const feedback = getByTestId('action-feedback');
+            expect(feedback.getAttribute('data-kind')).toBe('error');
+            expect(feedback.textContent).toContain('guard denied');
+        });
+        // Status unchanged; Complete still available.
+        expect(getByTestId('status-pill').textContent).toBe('verifying');
+        expect(getByLabelText('Complete')).toBeDefined();
     });
 });
 
