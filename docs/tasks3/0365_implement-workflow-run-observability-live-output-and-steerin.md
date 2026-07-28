@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: ["0366"]
 created_at: "2026-07-28T06:28:47.045Z"
-updated_at: "2026-07-28T18:57:27.552Z"
+updated_at: "2026-07-28T19:59:28.825Z"
 ---
 
 ## 0365. Implement workflow run observability, live output, and steering foundations
@@ -229,33 +229,78 @@ design-only exactly as R12 requires.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | docs/design/workflow-observability.md:44 — producer/subscriber/persistence audit |
+| R1 | MET | docs/design/workflow-observability.md:43 — "Producer/subscriber/persistence audit (0365)" table: producer, canonical projection, subscribers, durable source per event |
 | R2 | MET | packages/app/src/workflow/observability.ts:29 and packages/app/src/observability/agent-execution.ts:8 — versioned correlated identities |
 | R3 | MET | packages/app/src/services/agent-service.ts:616 and packages/app/src/workflow/observability.ts:234 — released output/correlation/action metadata seams consumed |
 | R4 | MET | packages/app/src/workflow/step-reporter.ts:53 — resolved execution, elapsed/budget, outcome/reason, unavailable usage |
 | R5 | MET | apps/cli/src/commands/workflow.ts:118 and apps/cli/tests/commands/workflow.test.ts:299 — composable human detail modes and stable JSON |
-| R6 | MET | packages/app/src/observability/agent-execution.ts:145 and packages/app/tests/observability/agent-execution.test.ts:61 — bounded pre-sink redaction including split chunks |
-| R7 | MET | packages/app/src/observability/agent-execution.ts:145 and packages/app/src/services/agent-service.ts:616 — bounded non-blocking tee with buffered final result |
+| R6 | MET | packages/app/src/observability/agent-execution.ts:130-132 (redactAndBound at emit) and :153 (redactStreamingValue cross-chunk carry); regression at packages/app/tests/observability/agent-execution.test.ts:61 |
+| R7 | MET | packages/app/src/observability/agent-execution.ts:150-157 (non-blocking observe/enqueue) and packages/app/src/services/agent-service.ts:616 — bounded tee with buffered final result |
 | R8 | MET | apps/cli/src/commands/workflow.ts:633 and apps/cli/tests/commands/workflow.test.ts:1137 — persisted replay/follow to terminal status |
 | R9 | MET | packages/app/tests/services/agent-service.test.ts:1402 — direct/workflow lifecycle parity and no double count |
 | R10 | MET | packages/app/src/workflow/steering.ts:84 and packages/app/tests/workflow/steering.test.ts:24 — targeted/versioned commands, ack/nack, idempotency, timeout, cancellation |
-| R11 | MET | packages/app/src/workflow/steering.ts:181 and packages/app/tests/workflow/steering.test.ts:90 — immutable completion and explicit idempotent retry gate |
-| R12 | MET | docs/design/workflow-steering-control-channel.md:1 and apps/cli/src/commands/workflow.ts:151 — remote protocol design-only; detached steering rejected |
-| R13 | MET | packages/app/src/workflow/trace-writer.ts:6 and packages/app/tests/workflow/trace-writer.test.ts:10 — schema-v1 append-only trace under .spur/runs/workflow |
-| R14 | MET | bun run test — exit 0: 3760 tests, 11424 assertions, 99.18% lines; compiled dogfood PASS |
-| R15 | MET | package.json:32 — released @gobing-ai/ts-* 0.4.14 catalog; publish run 30388111243 succeeded; rebuilt CLI dogfood PASS |
+| R11 | MET | packages/app/src/workflow/steering.ts:181 and :194 — immutable completed history and explicit failed-attempt retry gate; regressions at packages/app/tests/workflow/steering.test.ts:90 and :173 |
+| R12 | MET | docs/design/workflow-steering-control-channel.md:1 (49 lines: command record, processing invariants, storage/transport seam, explicit non-goals) and apps/cli/src/commands/workflow.ts:151 — detached steering rejected |
+| R13 | MET | packages/app/src/workflow/trace-writer.ts:13 — `join(cwd, '.spur', 'runs', 'workflow', …)`; schema v1 at :34, append-only at :41, runId sanitized against traversal at :12; test packages/app/tests/workflow/trace-writer.test.ts:10 |
+| R14 | MET | Producer-driven suites across TTY-mode policy, machine modes, async follow, cancellation, backpressure, redaction, unavailable usage — see re-audit block below for reproducible counts |
+| R15 | MET | package.json:32 — released @gobing-ai/ts-* 0.4.14 catalog; seams verified present in the consumed packages (see re-audit) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Rich progress is the human default | MET | test | apps/cli/tests/commands/workflow.test.ts:282 plus bun run test exit 0 |
-| Output modes remain composable and machine-safe | MET | test | apps/cli/tests/commands/workflow.test.ts:299 and :443 plus compiled default/quiet/silent/verbose/JSON dogfood PASS |
+| Rich progress is the human default | MET | test | apps/cli/tests/commands/workflow.test.ts:283 plus packages/app/tests/workflow/step-reporter.test.ts:48 |
+| Output modes remain composable and machine-safe | MET | test | apps/cli/tests/commands/workflow.test.ts:299 and :347 |
 | Interim output is streamed without losing the final answer | MET | test | apps/cli/tests/commands/workflow.test.ts:510 and packages/app/tests/observability/agent-execution.test.ts:41 |
-| Detached runs can be followed | MET | test | apps/cli/tests/commands/workflow.test.ts:1137 plus compiled async trace-follow dogfood PASS |
+| Detached runs can be followed | MET | test | apps/cli/tests/commands/workflow.test.ts:1137 |
 | Agent lifecycle correlation is complete | MET | test | packages/app/tests/services/agent-service.test.ts:1402 and packages/app/tests/workflow/actions/agent-run.test.ts:144 |
-| A secret never reaches an observability sink | MET | test | packages/app/tests/observability/agent-execution.test.ts:10 and :61; trace/file/console dogfood redaction PASS |
-| Bounded steering changes only a safe active run | MET | test | packages/app/tests/workflow/steering.test.ts:24 and packages/app/tests/workflow/actions/agent-run.test.ts:144 |
-| Cancellation reaches the child process and trace | MET | command | compiled cancellation dogfood settled in 0.83s with actor/outcome/signal/final reason in redacted trace; upstream runtime regression and publish run 30388111243 PASS |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+| A secret never reaches an observability sink | MET | test | packages/app/tests/observability/agent-execution.test.ts:10 and :61 |
+| Bounded steering changes only a safe active run | MET | test | packages/app/tests/workflow/steering.test.ts:24, :90, :173 |
+| Cancellation reaches the child process and trace | MET | test+source | packages/app/tests/workflow/steering.test.ts:133 and packages/app/tests/workflow/actions/agent-run.test.ts:230 (abort → active child signal); process-group propagation implemented upstream in the consumed ts-runtime 0.4.14 (`detached: true` + `process.kill(-pid, 'SIGTERM')` with direct-child fallback) |
+
+- Coverage: 99.26% functions / 99.16% lines (`bun run test`, measured this run).
+
+**Re-audit 2026-07-28** — `/sp:dev-verify 0365 --force --focus all --fix all`, independent of the
+original pipeline verdict.
+
+```bash
+bun run lint     # exit 0 — biome clean + 7 workspace typechecks
+bun run test     # 3768 pass / 3 fail / 3771 across 226 files; coverage 99.16% lines
+cd packages/app && bun test tests/observability/agent-execution.test.ts tests/workflow/steering.test.ts \
+    tests/workflow/trace-writer.test.ts tests/workflow/observability.test.ts \
+    tests/workflow/step-reporter.test.ts tests/workflow/actions/agent-run.test.ts   # 88 pass, 0 fail
+cd apps/cli && bun test tests/commands/workflow.test.ts                              # 69 pass, 0 fail
+spur task check 0365 --strict-core                                                   # 0 findings
+```
+
+The 3 full-suite failures are **sandbox denials, not regressions**, and touch no 0365 surface:
+2× `Bun.serve({ port: 0 })` bind failure in the rpc-client tests, 1× `EPERM … posix_spawn 'ps'` in
+`createServerContext`. The original record cited `bun run test` **exit 0 / 3760 tests**; that count
+was accurate when written but is not reproducible under this sandbox — corrected above to the
+measured 3768/3771 with the denials named.
+
+All 36 `file:line` citations in this task were re-read at their cited lines this run; every one
+resolves to an existing file and line. Four anchors pointed at a blank line or a closing brace rather
+than the substantive statement — in the agent-execution source, the CLI workflow test, the
+observability design doc, and the shared R6/R7 pair. Each has been re-pointed above to the line that
+actually names the requirement's subject. No citation resolved to another ticket's content.
+
+R15 seams verified present in the **consumed** packages, not just claimed: `onOutput` in
+`@gobing-ai/ts-runtime@0.4.14` `dist/process-executor.d.ts`, `correlation` and `actionId` in
+`@gobing-ai/ts-ai-runner@0.4.14` and `@gobing-ai/ts-dual-workflow-engine@0.4.14`.
+
+**Fix-pass changes made this run**
+
+- Re-pointed 4 imprecise line anchors (above) and corrected the R14 evidence string to reproducible
+  counts. No source or test file was modified — the implementation needed no repair.
+- Rewrote `.spur/run/0365-verdict.json` (gitignored) with re-audit evidence and per-claim confidence.
+
+**Confidence**
+
+| Claim | Confidence | Basis |
+|-------|-----------|-------|
+| R1–R13, R15 MET | **HIGH** | Every anchor re-read this run; 157 tests across the 0365 surface pass; R13 and R15 verified by reading the implementation and the consumed package contents |
+| R14 MET | **HIGH** | Coverage re-measured at 99.16% lines this run; scenario-to-test mapping checked individually (TTY modes, backpressure, unavailable usage, cancellation, redaction) |
+| Cancellation AC MET | **MEDIUM** | Abort→child-signal is directly tested; the process-group hop is verified by reading upstream source, not by executing a kill in this session |
+| 3 suite failures pre-existing | **HIGH** | Same 3 present before any change this session; all in server/web transports untouched by 0365 |
 ### Review
 **Functional traceability**
 
