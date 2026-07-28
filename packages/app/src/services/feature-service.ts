@@ -10,6 +10,7 @@ import { acquireCreateLock, atomicWriteAsync, MarkdownDocument } from '@gobing-a
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { type CheckFeatureFindings, defaultVerdictRunDir, FeatureCheckService } from './feature-check';
 import type { EntityRef, PlanningWriteService, WriteResult } from './planning-write-service';
+import { TaskLocator } from './task-locator';
 
 /** A task row rendered into a feature's `## Tasks` table. */
 interface TaskRow {
@@ -56,7 +57,15 @@ export interface FeatureServiceContext {
     fs: FileSystem;
     writeService: PlanningWriteService;
     featuresDir: string;
+    /** Active task folder (default I/O). Always scanned. */
     tasksDir: string;
+    /**
+     * Optional multi-folder task corpus (phase folders from `.spur/config.yaml`).
+     * When set, `collectTasksByFeature` / `move` scan **every** registered folder —
+     * not only `tasksDir` — so cascade `feature_id` rewrites cover docs/tasks2, tasks3, …
+     * Same shape as TaskService / TaskLocator (`folders` keys are resolved via `fs.resolve`).
+     */
+    foldersConfig?: { folders: Record<string, unknown> };
     projectName?: string;
     actor?: string;
 }
@@ -513,35 +522,46 @@ export class FeatureService {
         };
     }
 
+    /** TaskLocator spanning active + configured phase folders (SSOT multi-folder walk). */
+    private taskLocator(): TaskLocator {
+        return new TaskLocator({
+            fs: this.ctx.fs,
+            tasksDir: this.ctx.tasksDir,
+            foldersConfig: this.ctx.foldersConfig,
+        });
+    }
+
     /** Scan registered task folders for `feature_id` edges, grouped by feature ID. */
     async collectTasksByFeature(): Promise<Map<string, TaskRow[]>> {
         const byFeature = new Map<string, TaskRow[]>();
-        let names: string[];
-        try {
-            names = await this.ctx.fs.readDir(this.ctx.tasksDir);
-        } catch {
-            return byFeature; // no tasks dir yet
-        }
-        for (const name of names) {
-            if (!/^\d{4}_.+\.md$/.test(name)) continue;
-            const wbs = name.match(/^(\d{4})_/)?.[1];
-            if (!wbs) continue;
+        for (const dir of this.taskLocator().folderDirs()) {
+            let names: string[];
             try {
-                const raw = await this.ctx.fs.readFile(`${this.ctx.tasksDir}/${name}`);
-                const doc = MarkdownDocument.parse(raw, 'task');
-                const fm = doc.frontmatterData ?? {};
-                const fid = (fm.feature_id as string | undefined) ?? (fm['feature-id'] as string | undefined);
-                if (fid === undefined) continue;
-                const row: TaskRow = {
-                    wbs,
-                    name: (fm.name as string | undefined) ?? wbs,
-                    status: (fm.status as string | undefined) ?? 'backlog',
-                };
-                const list = byFeature.get(fid) ?? [];
-                list.push(row);
-                byFeature.set(fid, list);
+                names = await this.ctx.fs.readDir(dir);
             } catch {
-                // skip unparseable task files
+                continue; // folder may not exist yet
+            }
+            for (const name of names) {
+                if (!/^\d{4}_.+\.md$/.test(name)) continue;
+                const wbs = name.match(/^(\d{4})_/)?.[1];
+                if (!wbs) continue;
+                try {
+                    const raw = await this.ctx.fs.readFile(`${dir}/${name}`);
+                    const doc = MarkdownDocument.parse(raw, 'task');
+                    const fm = doc.frontmatterData ?? {};
+                    const fid = (fm.feature_id as string | undefined) ?? (fm['feature-id'] as string | undefined);
+                    if (fid === undefined) continue;
+                    const row: TaskRow = {
+                        wbs,
+                        name: (fm.name as string | undefined) ?? wbs,
+                        status: (fm.status as string | undefined) ?? 'backlog',
+                    };
+                    const list = byFeature.get(fid) ?? [];
+                    list.push(row);
+                    byFeature.set(fid, list);
+                } catch {
+                    // skip unparseable task files
+                }
             }
         }
         // Deterministic order: WBS ascending within each feature.
@@ -694,30 +714,33 @@ export class FeatureService {
         return { movedCount, mapping, tasksUpdated: affectedTasks.map((t) => t.wbs), dryRun: false };
     }
 
-    /** Find tasks whose `feature_id` is in the given set. */
+    /** Find tasks whose `feature_id` is in the given set (all registered task folders). */
     private async tasksWithFeatureIds(
         ids: Set<string>,
     ): Promise<Array<{ wbs: string; path: string; featureId: string }>> {
         const out: Array<{ wbs: string; path: string; featureId: string }> = [];
-        let names: string[];
-        try {
-            names = await this.ctx.fs.readDir(this.ctx.tasksDir);
-        } catch {
-            return out;
-        }
-        for (const name of names) {
-            if (!/^\d{4}_.+\.md$/.test(name)) continue;
-            const wbs = name.match(/^(\d{4})_/)?.[1];
-            if (!wbs) continue;
+        for (const dir of this.taskLocator().folderDirs()) {
+            let names: string[];
             try {
-                const raw = await this.ctx.fs.readFile(`${this.ctx.tasksDir}/${name}`);
-                const fm = MarkdownDocument.parse(raw, 'task').frontmatterData ?? {};
-                const fid = (fm.feature_id as string | undefined) ?? (fm['feature-id'] as string | undefined);
-                if (fid !== undefined && ids.has(fid)) {
-                    out.push({ wbs, path: `${this.ctx.tasksDir}/${name}`, featureId: fid });
-                }
+                names = await this.ctx.fs.readDir(dir);
             } catch {
-                // skip unparseable
+                continue;
+            }
+            for (const name of names) {
+                if (!/^\d{4}_.+\.md$/.test(name)) continue;
+                const wbs = name.match(/^(\d{4})_/)?.[1];
+                if (!wbs) continue;
+                try {
+                    const path = `${dir}/${name}`;
+                    const raw = await this.ctx.fs.readFile(path);
+                    const fm = MarkdownDocument.parse(raw, 'task').frontmatterData ?? {};
+                    const fid = (fm.feature_id as string | undefined) ?? (fm['feature-id'] as string | undefined);
+                    if (fid !== undefined && ids.has(fid)) {
+                        out.push({ wbs, path, featureId: fid });
+                    }
+                } catch {
+                    // skip unparseable
+                }
             }
         }
         out.sort((a, b) => a.wbs.localeCompare(b.wbs));

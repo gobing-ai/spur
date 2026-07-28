@@ -507,6 +507,58 @@ describe('FeatureService', () => {
             cleanup();
         });
 
+        test('R2b: multi-folder corpus — feature_id edges outside active tasksDir are updated', async () => {
+            // Dogfood 2026-07-28: move reported tasksUpdated:[] when tasks lived in
+            // docs/tasks2/tasks3 while FeatureService only scanned active tasksDir.
+            const r = mkdtempSync(join(tmpdir(), 'spur-fs-move-mf-'));
+            const fdir = join(r, 'features');
+            const tdir = join(r, 'tasks');
+            const tdir2 = join(r, 'tasks2');
+            const fs = createNodeFileSystem(r);
+            await fs.ensureDir(fdir);
+            await fs.ensureDir(tdir);
+            await fs.ensureDir(tdir2);
+            const write = new PlanningWriteService({ fs });
+            // Seed features + a task in the secondary folder only.
+            const s = new FeatureService({
+                fs,
+                featuresDir: fdir,
+                tasksDir: tdir,
+                foldersConfig: {
+                    folders: {
+                        tasks: { base_counter: 0 },
+                        tasks2: { base_counter: 100 },
+                    },
+                },
+                writeService: write,
+            });
+            await s.create('Foundation'); // A
+            await s.create('Sub', 'A'); // A1
+            await s.create('Other'); // B
+            // Hand-write a task in tasks2 linked to A1 (not in active tasksDir).
+            writeFileSync(
+                join(tdir2, '0100_secondary.md'),
+                [
+                    '---',
+                    'schema_version: 1',
+                    'name: "secondary"',
+                    'status: backlog',
+                    'feature_id: A1',
+                    'created_at: 2026-07-28T00:00:00.000Z',
+                    'updated_at: 2026-07-28T00:00:00.000Z',
+                    '---',
+                    '',
+                    '# 0100 secondary',
+                ].join('\n'),
+            );
+            const result = await s.move('A1', 'B');
+            expect(result.mapping.A1).toBe('B1');
+            expect(result.tasksUpdated).toContain('0100');
+            const task = await fs.readFile(join(tdir2, '0100_secondary.md'));
+            expect(task).toContain('feature_id: B1');
+            rmSync(r, { recursive: true, force: true });
+        });
+
         test('R3: --dry-run reports the plan with ZERO writes', async () => {
             const { svc: s, featuresDir, tasksDir, fs, cleanup } = await seedMoveCorpus();
             const result = await s.move('A1', 'B', { dryRun: true });

@@ -360,6 +360,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                     writeService: new PlanningWriteServiceImpl({ fs, projectName: 'spur', emitter: lazyEmitter }),
                     featuresDir: folders.featuresDir,
                     tasksDir: folders.tasksDir,
+                    foldersConfig: folders.foldersConfig,
                     projectName: 'spur',
                 });
             }

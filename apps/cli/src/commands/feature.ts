@@ -434,7 +434,15 @@ async function makeService(context: CliContext, folderOverride?: string): Promis
         ...(lifecycle ? { lifecycle } : {}),
         emitter: makePlanningEmitter(context),
     });
-    return new FeatureService({ fs: context.fs, writeService, featuresDir, tasksDir });
+    // Pass foldersConfig so move/refresh scan every phase folder (tasks, tasks2, tasks3, …)
+    // when rewriting task feature_id edges — not only the active tasksDir.
+    return new FeatureService({
+        fs: context.fs,
+        writeService,
+        featuresDir,
+        tasksDir,
+        foldersConfig: resolved.foldersConfig,
+    });
 }
 
 async function assertFeatureCheckPass(
