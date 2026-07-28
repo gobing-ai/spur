@@ -6,7 +6,7 @@
     },
     "plugins": [
         {
-            "version": "0.3.24",
+            "version": "0.3.25",
             "name": "sp",
             "source": "./plugins/sp",
             "description": "Spur - my harness toolkits"
