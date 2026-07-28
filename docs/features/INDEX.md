@@ -37,6 +37,7 @@
     ├── [verifying] **H4**: sp plugin next-layer UX — dev-next router and dogfood hardening ([H4_sp-plugin-next-layer-ux-dev-next-router-and-dogfood-hardening.md](./H4_sp-plugin-next-layer-ux-dev-next-router-and-dogfood-hardening.md))
     └── [verifying] **H5**: sp plugin token-efficient reliable execution architecture ([H5_sp-plugin-token-efficient-reliable-execution-architecture.md](./H5_sp-plugin-token-efficient-reliable-execution-architecture.md))
 [done] **I**: sp plugin hands-off ready ([I_sp-plugin-hands-off-ready.md](./I_sp-plugin-hands-off-ready.md))
+    └── [active] **I1**: dev-idea: drop --design force path + idea-evaluation taste gate ([I1_dev-idea-drop-design-force-path-idea-evaluation-taste-gate.md](./I1_dev-idea-drop-design-force-path-idea-evaluation-taste-gate.md))
 [active] **J**: Observability board module ([J_observabilities-board-module.md](./J_observabilities-board-module.md))
     ├── [done] **J1**: Observability System Events Table Redesign ([J1_observability-system-events-table-redesign.md](./J1_observability-system-events-table-redesign.md))
     └── [verifying] **J2**: System Events Payload and Wiring Enrichment ([J2_system-events-payload-and-wiring-enrichment.md](./J2_system-events-payload-and-wiring-enrichment.md))
