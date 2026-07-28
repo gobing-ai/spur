@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: []
 created_at: "2026-07-28T06:28:47.106Z"
-updated_at: "2026-07-28T17:25:32.252Z"
+updated_at: "2026-07-28T19:49:03.698Z"
 done_forced: "true"
 done_reason: "Verify evidence equivalent: commits 00238972 + 48ccf27; full bun run check green (3725 pass/0 fail, typecheck clean) against published @gobing-ai/ts-* 0.4.12; Solution/Testing/Review filled with P1-P4 table; CLI bundle rebuilt. Override per task 0292: implement-mode session completed work before pipeline/verify steps ran."
 ---
@@ -173,12 +173,12 @@ Cross-repo fix: upstream `@gobing-ai/ts-dual-workflow-engine` 0.4.11 → 0.4.12 
 
 ## Spur monorepo
 
-- **R4/R5 — pre-approval bypass (idea-pipeline.yaml).** Added `discovery → feature-create` edge guarded by `test "${vars.profile}" = auto && test "${vars.idea_approved}" = true`, declared BEFORE `discovery → idea-eval` so pre-approved runs skip the paused taste gate entirely. Same pattern already used by `system-design → design-approval`.
-- **R6 — `continue --yes` help.** `apps/cli/src/commands/workflow.ts:221`: clarified option text — bypasses CLI resume confirmation; persisted workflow HITL answer remains the transition input.
-- **R7 — trace failure reasons.** `packages/app/src/services/workflow-service.ts`: `stampFailureReason()` stamps `result.reason` into `runs.metadata_json` via `json_set`; called from both `run()` and `continuePaused()`. Surfaced in `workflow trace` human + JSON.
+- **R4/R5 — pre-approval bypass (idea-pipeline.yaml).** Added `discovery → feature-create` edge guarded by `test "${vars.profile}" = auto && test "${vars.idea_approved}" = true`, declared BEFORE `discovery → idea-eval` so pre-approved runs skip the paused taste gate entirely. Same pattern already used by `system-design → design-approval`. Ordering is asserted by `packages/app/tests/workflow/idea-pipeline-definition.test.ts` (added by the 2026-07-28 re-audit).
+- **R6 — `continue --yes` help.** `apps/cli/src/commands/workflow.ts:350`: clarified option text — bypasses CLI resume confirmation; persisted workflow HITL answer remains the transition input. (Anchor was recorded as `:221` at close; later commits shifted it — `:221` now resolves to unrelated async-run trace output.)
+- **R7 — trace failure reasons.** `packages/app/src/services/workflow-service.ts:561-566` `stampFailureReason()` delegates to `RunDao.stampFailureReason` (`packages/domain/src/dao/run-dao.ts:89`), which merges `result.reason` into `runs.metadata_json` via `json_set` without replacing existing metadata; called from both `run()` (`:410`) and `continuePaused()` (`:551`). Surfaced in `workflow trace` human + JSON. (The merge primitive moved into the DAO in commit `1564cb85`; at close it lived inline in `workflow-service.ts`.)
 - **R8 — discovery artifact provenance.**
-  - `workflow-service.ts` `run()`: injects `__runId` into workflow vars (`{ ...(opts.vars ?? {}), __runId: runId }`); survives pause/resume via R1–R3 effectiveVars.
-  - `idea-pipeline.yaml`: declared `__runId: ""` in `vars:`; replaced blind `rm -f` of discovery artifacts with timestamped archive (`.spur/run/idea-archive/<timestamp>/`); discovery `agent.run` input instructs appending a `run_id`/`generated_at` provenance footer.
+  - `packages/app/src/services/workflow-service.ts:392-395` `run()`: injects `__runId` into workflow vars (`{ ...(opts.vars ?? {}), __runId: runId }`); survives pause/resume via R1–R3 effectiveVars.
+  - `idea-pipeline.yaml`: declared `__runId: ""` in `vars:`; replaced blind `rm -f` of discovery artifacts with timestamped archive (`.spur/run/idea-archive/<timestamp>/`); discovery `agent.run` input instructs appending a `run_id`/`generated_at` provenance footer. **Unexercised** — see Testing.
 - **R9 — integration coverage.** `packages/app/tests/services/workflow-service.test.ts`: 5 new tests — `__runId` injection (shell-observable, no-vars default, caller-vars coexist) and pause/resume var persistence (`hitl.confirm` → `__hitlAnswer` survives resume through guarded transition; backward-compat degradation when `effectiveVars` stripped).
 
 ## Release / consumption (R10)
@@ -186,46 +186,113 @@ Cross-repo fix: upstream `@gobing-ai/ts-dual-workflow-engine` 0.4.11 → 0.4.12 
 - Engine version 0.4.11 → 0.4.12 (8 lockstep `@gobing-ai/*` packages).
 - Spur `package.json` catalog: all 8 entries bumped to 0.4.12.
 - `.bun` dist hot-swapped; CLI bundle rebuilt (`apps/cli/spur.js`).
+- Catalog has since moved to 0.4.14 (commit `45ac4598`); re-audit confirmed the fix symbols survive that bump.
 
 ## Dogfood (R12)
 
 - `idea-pipeline.yaml` validates clean.
 - Dry-run `profile=auto,idea_approved=true`: `discovery → feature-create` taken directly (skips `idea-eval` pause); trace shows `failureReason: iteration-bound-exceeded` (R7 working).
 - Dry-run `profile=standard,idea_approved=false`: correctly pauses at `idea-eval`.
+- **Dry-run only.** No live run executed discovery or allocated a feature, so R12's stated proof obligations remain open — see Testing.
 ### Testing
-## Regression commands and outcomes
+**Re-audit 2026-07-28** — `/sp:dev-verify 0366 --force --focus all --fix all`, followed by a fix pass
+that added executable coverage and a **live (non-dry-run) dogfood**. Verified against the consumed
+`@gobing-ai/ts-dual-workflow-engine@0.4.14` (catalog moved 0.4.12 → 0.4.14 in `45ac4598` after this
+task closed; the fix symbols survive that bump).
+
+**Commands run this turn**
 
 ```bash
-cd ~/xprojects/ts-libs/packages/dual-workflow-engine && bun test
+bun run lint          # exit 0 — biome clean + 7 workspace typechecks green
+bun run test          # 3768 pass / 3 fail / 3771 across 226 files (+11 new tests)
 ```
-**Result:** 334 pass, 0 fail. New file `tests/pause-resume-vars.test.ts` (4 tests) covers R1–R3 vars persistence across pause/resume.
 
-```bash
-cd packages/app && bun test
+The 3 full-suite failures are **sandbox denials, not regressions**: 2× `Bun.serve({ port: 0 })`
+bind failure, 1× `EPERM: operation not permitted, posix_spawn 'ps'`. The pre-change baseline had the
+same 3, and the only source change this run is added test files.
+
+**Live dogfood run (R12)** — `bd6503de-f4dc-40f4-a151-0021fe69496e`, real agent, not `--dry-run`:
+
 ```
-**Result:** 1043 pass, 0 fail (5 new tests in `workflow-service.test.ts`).
-
-- `run — __runId injection (R8 of 0366)` (3 tests): shell action observes injected `__runId`; works with no caller vars; caller-provided vars coexist.
-- `run — pause/resume var persistence (R9 of 0366)` (2 tests): `hitl.confirm` sets `__hitlAnswer` during paused state's `onEnter`; survives resume; downstream shell captures `__hitlAnswer|__runId|seedVar`; guarded transition (`test "${vars.__hitlAnswer}" = yes`) passes after resume. Backward-compat test strips `effectiveVars` from snapshot → guard fails gracefully with `reason: 'no-passing-transition'` (no crash).
-
-- `workflow-service.test.ts` ~line 466: `surfaces terminal failure reason in trace entry (R7 of 0366)` — passes.
-- Dogfood dry-run confirmed `failureReason: "iteration-bound-exceeded"` stamped in `workflow trace --json`.
-
-```bash
-cd packages/app && bunx tsc --noEmit
+start -> discovery -> feature-create      (transitionsTaken=2)
+  discovery       agent.run  347058ms  OK
+  feature-create  agent.run  101257ms  FAILED
+  reason: agent.run (claude) exited 0 but expected file is absent: .spur/run/idea-feature-id.txt
 ```
-**Result:** clean (no errors).
 
-```bash
-bun run --filter @gobing-ai/spur build:bundle
-```
-**Result:** `spur.js` rebuilt (3.23 MB); `__runId` and `stampFailureReason` present in bundle.
+States entered, from `workflow_states`: `start`, `discovery`, `feature-create` — **`idea-eval` was
+never entered**. That is the 0366 defect proven fixed in a live run, not a dry-run.
 
-- `spur workflow validate config/workflows/idea-pipeline.yaml` → valid.
-- Dry-run `profile=auto,idea_approved=true` → `discovery → feature-create` (bypass works, R4/R5).
-- Dry-run `profile=standard,idea_approved=false` → pauses at `idea-eval` (interactive path intact).
+**Per-requirement traceability**
 
-R1–R12 all addressed at the engine or Spur-service layer with real-action integration tests (not just `always`-guard pausers). Engine vars-persistence unit tests + Spur service-layer integration tests with `hitl.confirm`, shell guards, and run-level `--vars`.
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 persist effective-vars snapshot | MET | `packages/app/tests/services/workflow-service.test.ts:710`; **live** — run `bd6503de` snapshot carries `effectiveVars.__runId = bd6503de-…` |
+| R2 preserve `__hitlAnswer` across paused→running | MET | `packages/app/tests/services/workflow-service.test.ts:710` asserts captured `yes\|persist-1\|seeded` |
+| R3 preserve non-HITL overrides | MET | same test; **live** — `idea_approved=true`, `design_approved=true`, full idea text persisted in `effectiveVars` |
+| R4 pre-approval bypasses taste gate | MET | `config/workflows/idea-pipeline.yaml:263-275` + `packages/app/tests/workflow/idea-pipeline-definition.test.ts`; **live** — `idea-eval` absent from `workflow_states` for run `bd6503de` |
+| R5 interactive gate default-deny + resumable, no rerun/duplicate | MET | `packages/app/tests/services/workflow-service.test.ts` — side-effect counting across pause+resume proves discovery fires once and feature-create once; **live** — discovery `agent.run` executed exactly once |
+| R6 `continue --yes` defined unambiguously | MET | `apps/cli/src/commands/workflow.ts:350` (corrected anchor; recorded `:221` was stale) |
+| R7 persist terminal failure reasons in trace | MET | `packages/app/src/services/workflow-service.ts:561-566` → `packages/domain/src/dao/run-dao.ts:89` `json_set` merge; test at `packages/app/tests/services/workflow-service.test.ts:466`; **live ×2** — both failed runs stamped `failureReason`, surfaced in `workflow trace` human **and** `--json` |
+| R8 discovery-artifact provenance + retain/cleanup | MET | `packages/app/src/services/workflow-service.ts:392-395` (3 tests) + archive-policy tests lifting the command from the YAML; **live** — the previously orphaned report was archived to `.spur/run/idea-archive/20260728-123725/`, not deleted |
+| R9 producer-driven integration coverage | MET | `packages/app/tests/services/workflow-service.test.ts:659-767` — real `hitl.confirm`, run-level vars, `setVars`, pause, persisted-state resume, shell-guarded transition |
+| R10 release engine, bump catalog, rebuild CLI, prove vs consumed pkg | MET | engine 0.4.14 in `node_modules` carries the fix symbols; `apps/cli/spur.js` carries all 4 |
+| R11 backward compat for pre-fix snapshots | MET | `packages/app/tests/services/workflow-service.test.ts:732` strips `effectiveVars` → graceful `no-passing-transition`, no crash |
+| R12 re-dogfood through both gates | **PARTIAL** | 2 of 3 obligations proven live: **one discovery execution** (exactly one `agent.run`, 347s, exit 0) and **continuation past the taste gate** (`discovery → feature-create`, `idea-eval` skipped). **One feature allocation not proven** — feature-create's agent exited 0 without writing `.spur/run/idea-feature-id.txt`; corpus unchanged at 45 features / 18 tasks |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Interactive approval survives pause and resume | MET | test | `packages/app/tests/services/workflow-service.test.ts:710` |
+| Explicit prior approval bypasses the idea gate | MET | live run | run `bd6503de` — no prompt rendered, no paused `idea-eval` row persisted, next executed state was `feature-create` |
+| Explicit taste approval bypasses both taste gates | PARTIAL | static+test | idea-gate bypass proven live; design-gate bypass proven only by the definition test — the run failed before reaching `system-design` |
+| Resume preserves action-set variables | MET | test | `packages/app/tests/services/workflow-service.test.ts:710` — guard on `vars.__hitlAnswer` passes after resume |
+| A failed continuation remains diagnosable | MET | live + test | `packages/app/tests/services/workflow-service.test.ts:466`; live trace names the reason in human and JSON |
+| Recovery does not duplicate side effects | MET | test | side-effect log counts discovery=1 and feature-create=1 across pause+resume |
+
+**Verdict: PARTIAL** — no core requirement is UNMET. R12 and the both-gates scenario remain PARTIAL
+solely because no agent in this environment can complete a file-producing step (see below), not
+because of any defect in the 0366 change set.
+
+**Environment blocker (not a Spur defect)**
+
+Live agent steps cannot write files here, which is what stopped R12 short:
+
+- `omp` — the pipeline default — dies on `SQLITE_READONLY` opening its own state DB under the
+  sandbox (`agent.run … exited with code 3`).
+- `codex` — `failed to initialize in-process app-server client: Operation not permitted`.
+- `claude` — runs and exits 0, but the `@gobing-ai/ts-ai-runner` shim invokes
+  `claude -p <input> --output-format text` with no `--allowedTools`/permission flag, so headless
+  file writes are denied. Discovery burned 347s and emitted no artifact.
+
+Closing R12 fully requires either an unsandboxed session with a working `omp`, or an upstream
+`ts-ai-runner` shim that grants write capability to headless prompt invocations.
+
+**Fix-pass changes made this run**
+
+- Added `packages/app/tests/workflow/idea-pipeline-definition.test.ts` (9 tests): bypass-edge
+  ordering and guards for both taste gates, plus the R8 retain policy — the archive command is
+  lifted from the YAML, so reintroducing a blind `rm -f` fails the test.
+- Added 2 tests to `packages/app/tests/services/workflow-service.test.ts`: side-effect counting
+  across pause+resume (R5 / no-duplicate AC), and a same-row assertion that the paused state and its
+  `effectiveVars` are persisted atomically.
+- Corrected stale citations in `### Solution`: the R6 anchor (line 221 → line 350 of
+  `apps/cli/src/commands/workflow.ts`) and the R7 mechanism, now attributed to
+  `RunDao.stampFailureReason`.
+- Rewrote `.spur/run/0366-verdict.json` (gitignored) with the live evidence and per-claim confidence.
+
+Coverage: not re-measured; the fix pass added tests only, no new runtime code path.
+
+**Confidence**
+
+| Claim | Confidence | Basis |
+|-------|-----------|-------|
+| R1–R11 MET | **HIGH** | Every anchor re-read at its cited lines this run; 3768 tests pass; R1/R3/R4/R7/R8 additionally corroborated by a live run's persisted state |
+| R12 PARTIAL (2 of 3 obligations) | **HIGH** | Directly observable: `workflow_states` lists exactly `start`/`discovery`/`feature-create`; corpus counts unchanged at 45/18 |
+| Environment blocker diagnosis | **HIGH** | Each agent's failure reproduced directly: `SQLITE_READONLY` (omp), `Operation not permitted` (codex), and the shim's argv read at `node_modules/@gobing-ai/ts-ai-runner/src/agents/shims.ts:85-91` (claude) |
+| 3 suite failures pre-existing | **HIGH** | Identical count of 3 before any change; only added test files this run |
+| Upstream engine per-file attribution in `### Solution` | **MEDIUM** | Fix behavior proven HIGH via tests + consumed-package symbols; the per-file `ts-libs` change list was not re-derived |
 ### Review
 **Disposition: PASS (verified-complete).**
 

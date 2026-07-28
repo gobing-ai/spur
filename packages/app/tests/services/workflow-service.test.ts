@@ -766,6 +766,126 @@ terminalStates:
         });
     });
 
+    // R5 + AC "Recovery does not duplicate side effects" (0366): resuming a paused
+    // run must not re-execute the onEnter of states already left behind. In the
+    // idea pipeline those onEnters are the expensive/irreversible ones — discovery
+    // (a 5-6 minute agent.run) and feature-create (allocates a real feature id).
+    // The states here stand in for exactly those two, each appending a line to a
+    // side-effect log so re-execution is counted, not inferred.
+    describe('run — resume does not duplicate prior side effects (R5 of 0366)', () => {
+        const RECOVERY_YAML = `name: recovery-no-dup
+kind: state-machine
+initialState: discovery
+vars:
+  __hitlAnswer: ""
+states:
+  - id: discovery
+    onEnter:
+      - kind: shell
+        options:
+          command: 'mkdir -p .spur/run && echo discovery >> .spur/run/side-effects.log'
+  - id: gate
+    pause: true
+    onEnter:
+      - kind: hitl.confirm
+        options:
+          prompt: approve?
+  - id: feature-create
+    onEnter:
+      - kind: shell
+        options:
+          command: 'mkdir -p .spur/run && echo feature-create >> .spur/run/side-effects.log'
+  - id: done
+transitions:
+  - from: discovery
+    to: gate
+    guard: { kind: always }
+  - from: gate
+    to: feature-create
+    guard:
+      kind: shell
+      options:
+        command: 'test "\${vars.__hitlAnswer}" = yes'
+  - from: feature-create
+    to: done
+    guard: { kind: always }
+terminalStates:
+  - done
+`;
+
+        /** Count how many times a given side effect fired. */
+        function occurrences(log: string, marker: string): number {
+            return log.split('\n').filter((line) => line.trim() === marker).length;
+        }
+
+        test('discovery runs once and feature-create runs once across pause + resume', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-recovery-'));
+            const wfDir = join(dir, '.spur', 'workflows');
+            await mkdir(wfDir, { recursive: true });
+            const wfPath = join(wfDir, 'recovery.yaml');
+            await writeFile(wfPath, RECOVERY_YAML);
+
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const paused = await svc.run(wfPath, { runId: 'recovery-1' });
+            expect(paused.status).toBe('paused');
+            expect(paused.finalState).toBe('gate');
+
+            // Discovery already fired; feature-create is still gated behind the pause.
+            const atPause = await readFile(join(dir, '.spur', 'run', 'side-effects.log'), 'utf8');
+            expect(occurrences(atPause, 'discovery')).toBe(1);
+            expect(occurrences(atPause, 'feature-create')).toBe(0);
+
+            const resumed = await svc.continuePaused('recovery-1');
+            expect(resumed.status).toBe('done');
+
+            // The whole point: resume re-entered neither discovery nor the gate,
+            // and allocated exactly one feature.
+            const afterResume = await readFile(join(dir, '.spur', 'run', 'side-effects.log'), 'utf8');
+            expect(occurrences(afterResume, 'discovery')).toBe(1);
+            expect(occurrences(afterResume, 'feature-create')).toBe(1);
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        // Design claim 2 (0366): vars are persisted atomically with the state
+        // snapshot, so a crash can never pair a new state with stale vars. Proven
+        // structurally: the paused phase and its effectiveVars live in the SAME
+        // workflow_states row, so there is no window where one is written without
+        // the other.
+        test('the paused snapshot carries state and effectiveVars in one row', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-atomic-'));
+            const wfDir = join(dir, '.spur', 'workflows');
+            await mkdir(wfDir, { recursive: true });
+            const wfPath = join(wfDir, 'recovery.yaml');
+            await writeFile(wfPath, RECOVERY_YAML);
+
+            const db = await createMigratedDb({ url: ':memory:' });
+            const svc = new WorkflowAppService({
+                cwd: dir,
+                getDb: async () => db,
+                agentService: () => ({ run: async () => 0 }) as unknown as AgentService,
+                ruleService: () =>
+                    ({ evaluate: async () => ({ exitCode: 0, findings: [] }) }) as unknown as RuleService,
+                hitlResponder: () => ({ respond: async () => ({ value: 'yes' }) }),
+            });
+            await svc.run(wfPath, { runId: 'atomic-1', vars: { seedVar: 'seeded' } });
+
+            const row = (await db.queryFirst(
+                `SELECT state, data_json FROM workflow_states WHERE run_id = ? ORDER BY rowid DESC LIMIT 1`,
+                'atomic-1',
+            )) as { state: string; data_json: string } | undefined;
+
+            expect(row).toBeDefined();
+            const snapshot = JSON.parse(row?.data_json ?? '{}') as {
+                effectiveVars?: Record<string, string>;
+            };
+            // Same row: the paused state AND the vars that were live at that state.
+            expect(row?.state).toBe('gate');
+            expect(snapshot.effectiveVars?.__hitlAnswer).toBe('yes');
+            expect(snapshot.effectiveVars?.seedVar).toBe('seeded');
+            await rm(dir, { recursive: true, force: true });
+        });
+    });
+
     describe('run — pipeline link (R1, task 0071)', () => {
         const PIPELINE_YAML = `name: task-pipeline
 kind: state-machine
