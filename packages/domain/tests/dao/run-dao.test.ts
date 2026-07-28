@@ -209,6 +209,22 @@ describe('RunDao', () => {
             adapter.close();
         });
 
+        test('stampFailureReason merges with existing metadata', async () => {
+            const adapter = await setup();
+            const dao = new RunDao(adapter);
+            const run = await dao.open({ agent: 'pi' });
+            await dao.stampMetadata(run.id, { dryRun: true });
+
+            await dao.stampFailureReason(run.id, 'no-passing-transition');
+
+            const row = await dao.traceRowById(run.id);
+            expect(JSON.parse(row?.metadata_json ?? '{}')).toEqual({
+                dryRun: true,
+                failureReason: 'no-passing-transition',
+            });
+            adapter.close();
+        });
+
         test('setPid and getPid round-trip', async () => {
             const adapter = await setup();
             const dao = new RunDao(adapter);

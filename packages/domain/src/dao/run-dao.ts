@@ -85,6 +85,21 @@ export class RunDao extends EntityDao<typeof runs, typeof runs.id> {
         return this.adapter.run('UPDATE runs SET metadata_json = ? WHERE id = ?', JSON.stringify(metadata), runId);
     }
 
+    /** Merge a terminal workflow failure reason without replacing existing metadata. */
+    stampFailureReason(runId: string, reason: string): Promise<void> {
+        return this.adapter.run(
+            `UPDATE runs
+             SET metadata_json = json_set(
+                 COALESCE(NULLIF(metadata_json, ''), '{}'),
+                 '$.failureReason',
+                 ?1
+             )
+             WHERE id = ?2`,
+            reason,
+            runId,
+        );
+    }
+
     /**
      * Find runs stuck in a non-terminal status (`running`/`pending`) that started
      * before `cutoffIso`. These are orphans — a process was killed (timeout, crash,
