@@ -123,6 +123,7 @@ data/
 # Nested .spur dirs are test/dev scaffold leaks — only the root .spur/ is canonical
 apps/**/.spur/
 packages/**/.spur/
+docs/**/.spur/
 logs/
 .tmp/
 **/.tmp-*/
