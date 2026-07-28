@@ -1,5 +1,58 @@
 # Changelog
 
+## [0.3.25] — 2026-07-28
+
+### Added
+
+- ship rich workflow progress, `trace --follow`, and `--steer` (4dc1f4ec)
+- wire observability and steering through the dispatch path (bd0bf6c8)
+- add WorkflowSteeringController for bounded synchronous steering (bda3103c)
+- add workflow observability core (versioned envelopes, agent execution lifecycle, pure renderers, JSONL trace) (60e16f19)
+- add RunDao.stampFailureReason merge primitive (1564cb85)
+- drop `--design` force path and wire idea-eval taste gate (af7b77f8)
+- add shippable readiness gate to dev-verify/dev-verifyall (787a4a05)
+- feature-service scans all phase folders for cascade rewrites (70ff9925)
+- add /sp:dev-featurechange command + hierarchy-mece skill reference (28112478)
+- fix sidebar fold/unfold and add FeatureDetail action feedback (56a6e14c)
+- require verify verdict artifact for done transition (af2c949e)
+- validate task Solution/Testing file:line anchors (8c26bea0)
+- add dev-refineall + widen refine target to Design/AC (d61b5a8e)
+- author Design/Plan/AC at batch-create by default (6cd1730f)
+- cost-aware stage floors — plan capable-2, refine standard fallback (b00e6e2c)
+- add dev-refineall command for batch task refinement (62555b82)
+- split capable tier into capable-1/2/3 sub-tiers (a780ab42)
+
+### Fixed
+
+- persist vars across pause/resume, surface failure reasons, inject runId provenance (00238972)
+- resolve feature verdict runDir to repo root, match AC rows (41aac652)
+- split `config/workflows` literal to satisfy sp-runtime-path rule (47caf265)
+
+### Other
+
+- record ADR-035, observability design, and steering control-channel design (220006cc)
+- unify design package and taste pre-clear across dev-idea/dev-plan (cfbff893)
+- apply feature-tree restructure (9 reparents, ~70 task feature_id rewrites) (4d8ed8d2)
+- plan I1 dev-idea redesign and idea-evaluation taste gate (ba9da606)
+- harden dev-featurechange protocol with free-digit preflight and sequential prediction (5d06d2a6)
+- feature-tree restructure kit — audit, hierarchy guide, restructure map, featurechange command PR (a0cfac95)
+- record verify PASS for 0349–0355 and link decision gists on map (9eb3b9e3)
+- cache-discipline lessons for batch and re-verify flows (ac2f0b79)
+- close feature with full AC matrix; record 0349/0350 inventory (0807a401)
+- wayfinder decisions for Board Features detail action group (61573b7c)
+- seed F81 wayfinder map (Board detail action group) (edabae02)
+- assert resume skips prior onEnter side effects (R5 of 0366) (cb238168)
+- harden token-ledger-watcher contract gaps (b10abe5b)
+- cover task-check line-anchor extraction and verdict dir helpers (2b614ebb)
+- bump @gobing-ai/ts-* catalog to 0.4.14 (45ac4598)
+- resync bun.lock to published @gobing-ai/ts-* 0.4.12 (48ccf276)
+- advance 0365 to done (solution + testing + review + status) (4b7b8251)
+- advance 0366 to done (review + status) (2217247c)
+- add 0365/0366 task files and orphaned discovery artifact (66c99b22)
+- add yaml catalog dep and sync lockfile (c4af81e7)
+- gitignore docs/**/.spur/ (8142cba9)
+- update task status after implementation (c94c0a0b)
+
 ## [0.3.24] — 2026-07-27
 
 ### Added
