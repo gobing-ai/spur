@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: N
+feature_id: H4
 parent_wbs: null
 priority: P1
 tags: ["workstream:dogfood", "impl", "dogfood-1.2"]
 dependencies: ["0274"]
 created_at: "2026-07-17T01:13:58.102Z"
-updated_at: "2026-07-17T06:04:37.432Z"
+updated_at: "2026-07-28T00:32:17.832Z"
 ---
 
 ## 0276. Dogfood @1.2 contract enforcement (finalize, fixtures, tests)

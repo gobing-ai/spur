@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: O
+feature_id: H5
 parent_wbs: null
 priority: P1
 tags: ["wave-2", "context-envelope", "feature-O"]
 dependencies: []
 created_at: "2026-07-20T03:32:22.423Z"
-updated_at: "2026-07-21T02:39:59.362Z"
+updated_at: "2026-07-28T00:32:55.969Z"
 ---
 
 ## 0305. Implement context-envelope layers and canonical serialization

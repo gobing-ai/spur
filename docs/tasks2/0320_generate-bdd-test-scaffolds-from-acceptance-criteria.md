@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: Q
+feature_id: F9
 parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-24T19:16:11.465Z"
-updated_at: "2026-07-24T22:09:11.479Z"
+updated_at: "2026-07-28T00:33:05.808Z"
 ---
 
 ## 0320. Generate BDD test scaffolds from Acceptance Criteria

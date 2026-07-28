@@ -6,13 +6,13 @@ description: ""
 status: cancelled
 type: task
 profile: standard
-feature_id: R2
+feature_id: F822
 parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-26T20:07:45.935Z"
-updated_at: "2026-07-26T22:44:39.347Z"
+updated_at: "2026-07-28T00:33:24.711Z"
 ---
 
 ## 0337. Features tree: resolve cancelled-glyph light-canvas contrast, then complete the Spur token swap (AC R10)

@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: O
+feature_id: H5
 parent_wbs: "0314"
 priority: P2
 tags: []
 dependencies: ["0315"]
 created_at: "2026-07-23T06:11:55.082Z"
-updated_at: "2026-07-23T17:35:01.166Z"
+updated_at: "2026-07-28T00:33:00.049Z"
 ---
 
 ## 0316. Add dev-debug and dev-daily thin commands and normalize daily-summary env/links

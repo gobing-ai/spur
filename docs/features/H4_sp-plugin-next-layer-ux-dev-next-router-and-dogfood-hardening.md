@@ -1,6 +1,6 @@
 ---
 schema_version: 1
-id: "N"
+id: "H4"
 name: "sp plugin next-layer UX — dev-next router and dogfood hardening"
 status: verifying
 priority: P1
@@ -9,7 +9,7 @@ tags:
   - sp-plugin
   - meta
 created_at: "2026-07-17T00:53:58.309Z"
-updated_at: "2026-07-25T19:33:14.782Z"
+updated_at: "2026-07-28T00:31:34.481Z"
 ---
 
 # N: sp plugin next-layer UX — dev-next router and dogfood hardening
@@ -246,3 +246,4 @@ _No linked tasks._
 - 2026-07-16 — Wayfinder map charted from `/sp:dev-brainstorm --wayfind` discovery interview (decisions locked in ## Notes).
 - 2026-07-25T19:33:14.555Z backlog → active (system)
 - 2026-07-25T19:33:14.782Z active → verifying (system)
+- 2026-07-28T00:31:34.481Z moved N → H4 (system)

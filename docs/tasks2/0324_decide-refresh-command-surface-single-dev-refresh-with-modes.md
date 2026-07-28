@@ -6,13 +6,13 @@ description: ""
 status: done
 type: meta
 profile: standard
-feature_id: R
+feature_id: F82
 parent_wbs: null
 priority: P2
 tags: ["meta"]
 dependencies: ["0322", "0323"]
 created_at: "2026-07-24T23:40:28.090Z"
-updated_at: "2026-07-25T00:23:59.537Z"
+updated_at: "2026-07-28T00:33:07.149Z"
 ---
 
 ## 0324. Decide refresh command surface: single dev-refresh with modes vs dev-refresh + dev-refreshall

@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: L
+feature_id: J2
 parent_wbs: null
 priority: P1
 tags: ["observability", "agent", "team", "wiring", "server"]
 dependencies: []
 created_at: "2026-07-10T00:02:02.995Z"
-updated_at: "2026-07-12T04:27:07.467Z"
+updated_at: "2026-07-28T00:32:05.628Z"
 ---
 
 ## 0237. Wire TeamOrchestrator events bus so agent lifecycle events reach system event tap

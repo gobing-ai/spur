@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: R2
+feature_id: F822
 parent_wbs: null
 priority: P2
 tags: ["web", "features", "a11y", "prefactor"]
 dependencies: []
 created_at: "2026-07-26T00:26:23.914Z"
-updated_at: "2026-07-26T18:15:45.839Z"
+updated_at: "2026-07-28T00:33:28.930Z"
 ---
 
 ## 0332. Features tree: make the status icon self-describing and vocabulary-linked

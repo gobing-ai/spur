@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: N
+feature_id: H4
 parent_wbs: null
 priority: P1
 tags: []
 dependencies: ["0276", "0277"]
 created_at: "2026-07-17T06:11:43.445Z"
-updated_at: "2026-07-17T06:25:41.965Z"
+updated_at: "2026-07-28T00:32:07.123Z"
 ---
 
 ## 0278. Dogfood residual hardening from 0277 dogfood reports (done-gate, cost, self-validate)

@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: K
+feature_id: J1
 parent_wbs: null
 priority: P2
 tags: ["observability", "system-events", "table", "color-coding", "accessibility"]
 dependencies: []
 created_at: "2026-07-07T23:26:15.293Z"
-updated_at: "2026-07-07T23:59:55.808Z"
+updated_at: "2026-07-28T00:31:55.684Z"
 ---
 
 ## 0223. System Events table view with color-coded event names

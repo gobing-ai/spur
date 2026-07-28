@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: R2
+feature_id: F822
 parent_wbs: null
 priority: P2
 tags: ["web", "features", "ui"]
 dependencies: ["0332"]
 created_at: "2026-07-26T00:26:23.950Z"
-updated_at: "2026-07-26T18:55:20.992Z"
+updated_at: "2026-07-28T00:33:26.181Z"
 ---
 
 ## 0333. Features tree: move status to a fixed leading slot and drop the text label

@@ -1,12 +1,12 @@
 ---
 schema_version: 1
-id: "P"
+id: "D1"
 name: "workflow run observability — enriched step lines, FSM transitions, async follow"
 status: verifying
 priority: P2
 tags: []
 created_at: "2026-07-21T20:46:29.481Z"
-updated_at: "2026-07-25T19:33:21.408Z"
+updated_at: "2026-07-28T00:31:37.075Z"
 ---
 
 # P: workflow run observability — enriched step lines, FSM transitions, async follow
@@ -205,3 +205,4 @@ than direct-writing the corpus. Read the scope from `### Background`.
 ## History
 - 2026-07-25T19:33:21.180Z backlog → active (system)
 - 2026-07-25T19:33:21.408Z active → verifying (system)
+- 2026-07-28T00:31:37.075Z moved P → D1 (system)

@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: O
+feature_id: H5
 parent_wbs: null
 priority: P1
 tags: ["wave-1", "cli", "dependencies", "feature-O"]
 dependencies: []
 created_at: "2026-07-20T01:54:25.281Z"
-updated_at: "2026-07-20T23:18:51.377Z"
+updated_at: "2026-07-28T00:32:35.646Z"
 ---
 
 ## 0303. Implement the CLI-safe task dependency mutation verb

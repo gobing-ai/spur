@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: R1
+feature_id: F821
 parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-25T00:27:56.004Z"
-updated_at: "2026-07-25T22:08:51.435Z"
+updated_at: "2026-07-28T00:33:14.507Z"
 ---
 
 ## 0331. Normalize legacy 'Done' task statuses to canonical done

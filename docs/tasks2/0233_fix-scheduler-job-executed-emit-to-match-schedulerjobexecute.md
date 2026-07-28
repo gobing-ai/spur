@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: L
+feature_id: J2
 parent_wbs: null
 priority: P2
 tags: ["observability", "bug", "scheduler"]
 dependencies: []
 created_at: "2026-07-09T23:04:54.453Z"
-updated_at: "2026-07-12T04:09:36.560Z"
+updated_at: "2026-07-28T00:32:04.291Z"
 ---
 
 ## 0233. Fix scheduler.job.executed emit to match SchedulerJobExecutedDetail contract

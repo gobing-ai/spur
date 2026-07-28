@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: O
+feature_id: H5
 parent_wbs: "0314"
 priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-23T06:11:52.580Z"
-updated_at: "2026-07-23T17:34:58.691Z"
+updated_at: "2026-07-28T00:32:40.975Z"
 ---
 
 ## 0315. Harden sp command contracts — dev-review modes, safe handover, least-privilege tools

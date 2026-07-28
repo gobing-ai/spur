@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: R1
+feature_id: F821
 parent_wbs: null
 priority: P2
 tags: []
 dependencies: ["0327"]
 created_at: "2026-07-25T00:27:48.753Z"
-updated_at: "2026-07-25T16:52:53.214Z"
+updated_at: "2026-07-28T00:33:19.057Z"
 ---
 
 ## 0328. Wire feature sync into task-pipeline record, wrapup feature-transition, and dev-verify PASS

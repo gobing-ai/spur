@@ -6,13 +6,13 @@ description: ""
 status: done
 type: brainstorm
 profile: standard
-feature_id: O
+feature_id: H5
 parent_wbs: null
 priority: P1
 tags: ["wayfinder:research", "workstream:workflow", "simplification"]
 dependencies: []
 created_at: "2026-07-18T17:29:34.902Z"
-updated_at: "2026-07-19T23:53:22.854Z"
+updated_at: "2026-07-28T00:32:24.676Z"
 ---
 
 ## 0288. Map and simplify .spur workflows onto canonical stages

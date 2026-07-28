@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: R2
+feature_id: F822
 parent_wbs: null
 priority: P2
 tags: ["web", "features", "a11y", "tokens"]
 dependencies: []
 created_at: "2026-07-26T00:26:23.967Z"
-updated_at: "2026-07-26T20:09:08.723Z"
+updated_at: "2026-07-28T00:33:23.355Z"
 done_forced: "true"
 done_reason: "Operator accepted the designed R4 hard-stop outcome at the pipeline approve gate (2026-07-26, runall batch R2): cancelled-glyph light contrast 2.30:1 < 3:1 blocks the token swap; AC R10 carried by follow-up task 0338. Task requirements R1-R4 all MET per verify; verdict PARTIAL solely on the deferred R10."
 ---

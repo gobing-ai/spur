@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: L
+feature_id: J2
 parent_wbs: null
 priority: P1
 tags: ["observability", "workflow", "wiring", "server"]
 dependencies: []
 created_at: "2026-07-10T00:02:02.992Z"
-updated_at: "2026-07-12T04:23:04.758Z"
+updated_at: "2026-07-28T00:31:59.762Z"
 ---
 
 ## 0236. Wire observabilityBus in server context to enable verb-form workflow events

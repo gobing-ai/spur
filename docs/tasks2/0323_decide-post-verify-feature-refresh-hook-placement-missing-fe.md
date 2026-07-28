@@ -6,13 +6,13 @@ description: ""
 status: done
 type: meta
 profile: standard
-feature_id: R
+feature_id: F82
 parent_wbs: null
 priority: P2
 tags: ["meta"]
 dependencies: []
 created_at: "2026-07-24T23:40:25.668Z"
-updated_at: "2026-07-25T00:02:54.045Z"
+updated_at: "2026-07-28T00:33:11.395Z"
 ---
 
 ## 0323. Decide post-verify feature-refresh hook placement, missing-feature-id UX, and unattended policy

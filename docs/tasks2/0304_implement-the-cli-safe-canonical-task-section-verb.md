@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: O
+feature_id: H5
 parent_wbs: null
 priority: P1
 tags: ["wave-1", "cli", "sections", "feature-O"]
 dependencies: []
 created_at: "2026-07-20T01:54:25.288Z"
-updated_at: "2026-07-21T00:57:25.111Z"
+updated_at: "2026-07-28T00:32:39.621Z"
 ---
 
 ## 0304. Implement the CLI-safe canonical task-section verb

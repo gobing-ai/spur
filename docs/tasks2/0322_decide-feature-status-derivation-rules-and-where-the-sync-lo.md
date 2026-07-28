@@ -6,13 +6,13 @@ description: ""
 status: done
 type: meta
 profile: standard
-feature_id: R
+feature_id: F82
 parent_wbs: null
 priority: P2
 tags: ["meta"]
 dependencies: []
 created_at: "2026-07-24T23:40:23.228Z"
-updated_at: "2026-07-24T23:59:40.874Z"
+updated_at: "2026-07-28T00:33:09.920Z"
 ---
 
 ## 0322. Decide feature-status derivation rules and where the sync logic lives

@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: R1
+feature_id: F821
 parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-25T00:27:46.310Z"
-updated_at: "2026-07-25T16:04:49.501Z"
+updated_at: "2026-07-28T00:33:16.343Z"
 ---
 
 ## 0327. Implement feature-status derivation engine, spur feature sync verb, and Board sync endpoint

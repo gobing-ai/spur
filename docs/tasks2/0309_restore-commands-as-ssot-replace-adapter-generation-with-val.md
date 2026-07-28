@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: O
+feature_id: H5
 parent_wbs: null
 priority: P2
 tags: []
 dependencies: ["0308"]
 created_at: "2026-07-21T19:37:11.213Z"
-updated_at: "2026-07-21T20:21:47.756Z"
+updated_at: "2026-07-28T00:32:28.899Z"
 ---
 
 ## 0309. Restore commands as SSOT: replace adapter generation with validation, delete codex adapters

@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: K
+feature_id: J1
 parent_wbs: null
 priority: P2
 tags: ["observability", "system-events", "liveness", "sse"]
 dependencies: []
 created_at: "2026-07-07T23:26:15.290Z"
-updated_at: "2026-07-07T23:48:38.290Z"
+updated_at: "2026-07-28T00:31:53.910Z"
 ---
 
 ## 0222. Liveness status strip for System Events header

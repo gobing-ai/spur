@@ -6,13 +6,13 @@ description: ""
 status: done
 type: brainstorm
 profile: standard
-feature_id: O
+feature_id: H5
 parent_wbs: null
 priority: P1
 tags: ["wayfinder:grilling", "workstream:ux", "dev-next"]
 dependencies: []
 created_at: "2026-07-18T17:29:34.868Z"
-updated_at: "2026-07-19T18:56:17.969Z"
+updated_at: "2026-07-28T00:32:26.218Z"
 ---
 
 ## 0283. Design the golden-path command surface around dev-next

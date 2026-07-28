@@ -6,13 +6,13 @@ description: ""
 status: done
 type: brainstorm
 profile: standard
-feature_id: N
+feature_id: H4
 parent_wbs: null
 priority: P1
 tags: ["wayfinder:research", "workstream:dogfood"]
 dependencies: []
 created_at: "2026-07-17T00:54:28.899Z"
-updated_at: "2026-07-17T01:12:46.930Z"
+updated_at: "2026-07-28T00:32:19.179Z"
 ---
 
 ## 0273. Audit dogfood-testing@1.1 for contract gaps and token waste

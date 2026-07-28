@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: O
+feature_id: H5
 parent_wbs: "0314"
 priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-23T06:59:26.486Z"
-updated_at: "2026-07-23T18:22:52.822Z"
+updated_at: "2026-07-28T00:32:27.594Z"
 ---
 
 ## 0318. Complete the R10 least-privilege allowed-tools sweep across all sp command wrappers

@@ -1,12 +1,12 @@
 ---
 schema_version: 1
-id: "K"
+id: "J1"
 name: "Observability System Events Table Redesign"
 status: done
 priority: P2
 tags: []
 created_at: "2026-07-07T23:15:49.635Z"
-updated_at: "2026-07-25T19:33:17.564Z"
+updated_at: "2026-07-28T00:31:31.754Z"
 ---
 
 # K: Observability System Events Table Redesign
@@ -152,3 +152,4 @@ _No linked tasks._
 - 2026-07-25T19:33:17.100Z backlog → active (system)
 - 2026-07-25T19:33:17.331Z active → verifying (system)
 - 2026-07-25T19:33:17.564Z verifying → done (system)
+- 2026-07-28T00:31:31.754Z moved K → J1 (system)

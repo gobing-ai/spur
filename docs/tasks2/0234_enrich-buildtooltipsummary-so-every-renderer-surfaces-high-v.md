@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: L
+feature_id: J2
 parent_wbs: null
 priority: P2
 tags: ["observability", "web", "tooltip"]
 dependencies: []
 created_at: "2026-07-09T23:04:54.456Z"
-updated_at: "2026-07-12T04:11:55.835Z"
+updated_at: "2026-07-28T00:32:01.608Z"
 ---
 
 ## 0234. Enrich buildTooltipSummary so every renderer surfaces high-value diagnostic fields

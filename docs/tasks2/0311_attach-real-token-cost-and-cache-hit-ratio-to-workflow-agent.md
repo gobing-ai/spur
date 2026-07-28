@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: P
+feature_id: D1
 parent_wbs: null
 priority: P2
 tags: []
 dependencies: ["0310"]
 created_at: "2026-07-21T22:42:52.950Z"
-updated_at: "2026-07-21T23:58:10.906Z"
+updated_at: "2026-07-28T00:33:01.687Z"
 ---
 
 ## 0311. Attach real token cost and cache-hit ratio to workflow agent.run steps via history join

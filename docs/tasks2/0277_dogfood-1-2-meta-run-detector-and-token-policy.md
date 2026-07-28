@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: N
+feature_id: H4
 parent_wbs: null
 priority: P1
 tags: ["workstream:dogfood", "impl", "dogfood-1.2"]
 dependencies: ["0276"]
 created_at: "2026-07-17T01:13:59.542Z"
-updated_at: "2026-07-17T06:21:22.517Z"
+updated_at: "2026-07-28T00:32:12.422Z"
 ---
 
 ## 0277. Dogfood @1.2 meta-run detector and token policy

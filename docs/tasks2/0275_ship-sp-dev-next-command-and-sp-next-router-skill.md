@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: N
+feature_id: H4
 parent_wbs: null
 priority: P1
 tags: ["workstream:dev-next", "impl"]
 dependencies: ["0270", "0271", "0272"]
 created_at: "2026-07-17T01:09:03.002Z"
-updated_at: "2026-07-17T02:24:12.974Z"
+updated_at: "2026-07-28T00:32:20.640Z"
 ---
 
 ## 0275. Ship /sp:dev-next command and sp:next-router skill

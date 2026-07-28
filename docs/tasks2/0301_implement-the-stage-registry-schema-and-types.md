@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: O
+feature_id: H5
 parent_wbs: null
 priority: P1
 tags: ["wave-1", "stage-registry", "feature-O"]
 dependencies: []
 created_at: "2026-07-20T01:54:25.237Z"
-updated_at: "2026-07-20T05:36:33.400Z"
+updated_at: "2026-07-28T00:32:42.347Z"
 ---
 
 ## 0301. Implement the stage-registry schema and types

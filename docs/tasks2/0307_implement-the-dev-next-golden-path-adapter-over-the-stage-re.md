@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: O
+feature_id: H5
 parent_wbs: null
 priority: P1
 tags: ["wave-2", "dev-next", "golden-path", "feature-O"]
 dependencies: ["0283"]
 created_at: "2026-07-20T03:32:22.462Z"
-updated_at: "2026-07-21T05:31:08.022Z"
+updated_at: "2026-07-28T00:32:57.334Z"
 ---
 
 ## 0307. Implement the dev-next golden-path adapter over the stage registry

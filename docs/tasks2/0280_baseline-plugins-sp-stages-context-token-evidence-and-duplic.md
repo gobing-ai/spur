@@ -6,13 +6,13 @@ description: ""
 status: done
 type: brainstorm
 profile: standard
-feature_id: O
+feature_id: H5
 parent_wbs: null
 priority: P1
 tags: ["wayfinder:research", "workstream:baseline", "sp-plugin"]
 dependencies: []
 created_at: "2026-07-18T17:29:34.845Z"
-updated_at: "2026-07-18T19:11:20.710Z"
+updated_at: "2026-07-28T00:32:53.859Z"
 ---
 
 ## 0280. Baseline plugins/sp stages, context, token evidence, and duplication

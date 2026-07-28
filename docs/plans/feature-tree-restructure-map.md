@@ -40,8 +40,8 @@ Do **not** re-scan the whole tree for dogfood — apply from this file.
 | N | sp plugin next-layer UX | verifying | **reparent-under:H** | H | *dry-run* (e.g. H4) | H | Plugin UX continuation of H | same | yes if root docs cite N |
 | O | sp plugin token-efficient architecture | verifying | **reparent-under:H** | H | *dry-run* (e.g. H5) | H | Architecture of H plugin | same | yes if root docs cite O |
 | P | workflow run observability | verifying | **reparent-under:D** | D | *dry-run* (e.g. D1) | M | Object is workflow run CLI/engine | same | yes if root docs cite P |
-| Q | AC-verifiable execution + gates | done | **reparent-under:F** | F | *dry-run* (e.g. F9) | M | Planning validation capability | same | yes if root docs cite Q |
-| R | Feature status feedback loop | active | **reparent-under:F** | F | *dry-run* (e.g. F next free) | M | Corpus status is planning | R1/R2 cascade with R | yes if root docs cite R |
+| Q | AC-verifiable execution + gates | done | **reparent-under:F** | F | F9 (only free digit under F) | M | Planning validation; F has 8 children already | same | root docs often false-positive on letter Q |
+| R | Feature status feedback loop | active | **reparent-under:F8** | F8 | F82 (+ R1→F821, R2→F822) | H | **Dogfood fix:** cannot both reparent Q+R under F (only F9 free, DD-14 ≤9). Status UX + derivation sit with Features board F8; cascade children. | R1/R2 cascade | careful single-letter grep |
 
 **Non-root already correct**
 
@@ -62,8 +62,10 @@ Do **not** re-scan the whole tree for dogfood — apply from this file.
 
 1. **Wave 1 (H conf):** `K → J`, `L → J`  
 2. **Wave 2 (H conf):** `N → H`, `O → H`  
-3. **Wave 3 (M conf — confirm if needed):** `P → D`, `Q → F`, `R → F`  
+3. **Wave 3:** `P → D`, `Q → F` (→F9), `R → F8` (→F82; not under F — digit capacity)  
 4. Optional rename-only: J title grammar (“Observability”); shorten M name  
+
+**Apply-order note (dogfood 2026-07-28):** Independent `--dry-run` calls for two siblings under the same parent both predict the same next id (e.g. K and L both show `J1`). Real apply is sequential — first wins `J1`, second gets `J2`. Always apply in listed order; re-dry-run after each move when predicting ids.
 
 Each step: `spur feature move <id> --parent <p> --dry-run` then apply; then `spur feature refresh`; `spur feature check`.
 
@@ -71,3 +73,22 @@ Each step: `spur feature move <id> --parent <p> --dry-run` then apply; then `spu
 
 - Audit: `docs/tasks3/0356_audit-feature-roots-a-r-evidence-backed-merge-reparent-keep-.md`  
 - Hierarchy rules: `plugins/sp/skills/spur-cli/references/features/hierarchy-mece.md`
+
+
+## Applied mapping (dogfood 2026-07-28)
+
+| old_id | new_id | disposition |
+| --- | --- | --- |
+| K | J1 | reparent-under:J |
+| L | J2 | reparent-under:J |
+| N | H4 | reparent-under:H |
+| O | H5 | reparent-under:H |
+| P | D1 | reparent-under:D |
+| Q | F9 | reparent-under:F |
+| R | F82 | reparent-under:F8 |
+| R1 | F821 | cascade with R |
+| R2 | F822 | cascade with R |
+
+**Post-apply:** `spur feature move` returned `tasksUpdated: []` for every row; task `feature_id` edges in `docs/tasks2`/`docs/tasks3` were rewired manually via `spur task update <wbs> --feature <new>` (~70 tasks). Command protocol now documents this multi-folder gap.
+
+**R placement change:** original audit said R→F; F only had free digit F9 (Q took it). Dogfood revised R→F8 (Features board).

@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: R1
+feature_id: F821
 parent_wbs: null
 priority: P2
 tags: []
 dependencies: ["0328", "0329"]
 created_at: "2026-07-25T00:27:53.584Z"
-updated_at: "2026-07-25T21:42:05.410Z"
+updated_at: "2026-07-28T00:33:20.442Z"
 ---
 
 ## 0330. Backfill drifted corpus via /sp:dev-refresh --all (operator-confirmed)

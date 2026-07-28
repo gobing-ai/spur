@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: R
+feature_id: F82
 parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-24T23:40:32.947Z"
-updated_at: "2026-07-25T03:33:35.466Z"
+updated_at: "2026-07-28T00:33:13.093Z"
 ---
 
 ## 0326. Board: add status filter menu to Features panel header

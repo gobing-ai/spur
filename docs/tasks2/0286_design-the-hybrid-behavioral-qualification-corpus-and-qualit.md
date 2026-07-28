@@ -6,13 +6,13 @@ description: ""
 status: done
 type: brainstorm
 profile: standard
-feature_id: O
+feature_id: H5
 parent_wbs: null
 priority: P1
 tags: ["wayfinder:research", "workstream:evaluation", "model-qualification"]
 dependencies: []
 created_at: "2026-07-18T17:29:34.889Z"
-updated_at: "2026-07-19T23:52:58.189Z"
+updated_at: "2026-07-28T00:32:46.147Z"
 ---
 
 ## 0286. Design the hybrid behavioral qualification corpus and quality gates

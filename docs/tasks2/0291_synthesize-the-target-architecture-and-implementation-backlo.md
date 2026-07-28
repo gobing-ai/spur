@@ -6,13 +6,13 @@ description: ""
 status: done
 type: brainstorm
 profile: standard
-feature_id: O
+feature_id: H5
 parent_wbs: null
 priority: P1
 tags: ["wayfinder:grilling", "workstream:synthesis", "architecture"]
 dependencies: []
 created_at: "2026-07-18T17:29:34.923Z"
-updated_at: "2026-07-20T00:23:08.366Z"
+updated_at: "2026-07-28T00:32:49.003Z"
 ---
 
 ## 0291. Synthesize the target architecture and implementation backlog

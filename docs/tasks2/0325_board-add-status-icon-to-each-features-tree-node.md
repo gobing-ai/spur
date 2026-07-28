@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: R
+feature_id: F82
 parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-24T23:40:30.512Z"
-updated_at: "2026-07-25T00:59:50.756Z"
+updated_at: "2026-07-28T00:33:08.536Z"
 ---
 
 ## 0325. Board: add status icon to each Features tree node

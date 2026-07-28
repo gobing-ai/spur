@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: N
+feature_id: H4
 parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-18T22:51:48.132Z"
-updated_at: "2026-07-19T00:13:21.702Z"
+updated_at: "2026-07-28T00:32:21.950Z"
 ---
 
 ## 0294. Fix consolidated open findings from 2026-07-18 dogfood runs (0280/0292/0293)

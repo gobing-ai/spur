@@ -327,7 +327,7 @@ Scaffold BDD `test.todo` stubs from task Acceptance Criteria into `<workspace>/t
 | `spur migrate [--json]` | Temporary helper: apply CLI-owned schema migrations; reports `{ ok, applied }`. |
 | `spur --help` / `spur --version` | Commander-rendered usage / binary version (ADR-014). |
 
-### 1.3 Agent command surface — commands as SSOT (feature O, ADR-032)
+### 1.3 Agent command surface — commands as SSOT (feature H5 (was O), ADR-032)
 
 The `plugins/sp` agent-facing command surface (31 Claude Code `/sp:dev-*` slash wrappers) is
 **hand-authored** — each `commands/<name>.md` is the authoritative, directly-editable source.

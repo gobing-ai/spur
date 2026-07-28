@@ -6,13 +6,13 @@ description: ""
 status: done
 type: brainstorm
 profile: standard
-feature_id: O
+feature_id: H5
 parent_wbs: null
 priority: P1
 tags: ["wayfinder:research", "workstream:cache", "source-driven"]
 dependencies: []
 created_at: "2026-07-18T17:29:34.855Z"
-updated_at: "2026-07-19T03:36:38.076Z"
+updated_at: "2026-07-28T00:32:38.357Z"
 ---
 
 ## 0281. Verify Claude and Codex prompt-cache and usage telemetry semantics

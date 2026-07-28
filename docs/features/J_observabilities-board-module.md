@@ -1,12 +1,12 @@
 ---
 schema_version: 1
 id: "J"
-name: "Observabilities board module"
+name: Observability board module
 status: active
 priority: P2
 tags: []
 created_at: "2026-07-03T23:28:28.509Z"
-updated_at: "2026-07-14T00:24:03.447Z"
+updated_at: "2026-07-28T00:37:44.978Z"
 ---
 
 # J: Observabilities board module

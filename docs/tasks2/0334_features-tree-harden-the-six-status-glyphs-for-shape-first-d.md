@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: R2
+feature_id: F822
 parent_wbs: null
 priority: P2
 tags: ["web", "features", "a11y", "design"]
 dependencies: []
 created_at: "2026-07-26T00:26:23.958Z"
-updated_at: "2026-07-26T19:33:02.946Z"
+updated_at: "2026-07-28T00:33:30.273Z"
 ---
 
 ## 0334. Features tree: harden the six status glyphs for shape-first distinguishability

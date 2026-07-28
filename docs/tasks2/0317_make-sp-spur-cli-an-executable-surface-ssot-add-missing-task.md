@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: O
+feature_id: H5
 parent_wbs: "0314"
 priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-23T06:11:57.566Z"
-updated_at: "2026-07-23T17:35:03.639Z"
+updated_at: "2026-07-28T00:32:34.311Z"
 ---
 
 ## 0317. Make sp:spur-cli an executable surface SSOT — add missing task verbs, fix section set

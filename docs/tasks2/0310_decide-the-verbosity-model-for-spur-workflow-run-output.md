@@ -6,13 +6,13 @@ description: ""
 status: done
 type: brainstorm
 profile: standard
-feature_id: P
+feature_id: D1
 parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-21T20:48:47.838Z"
-updated_at: "2026-07-21T22:57:36.195Z"
+updated_at: "2026-07-28T00:33:02.980Z"
 ---
 
 ## 0310. Decide the verbosity model for spur workflow run output

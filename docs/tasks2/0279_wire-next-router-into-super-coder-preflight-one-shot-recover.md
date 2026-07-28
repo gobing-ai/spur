@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: N
+feature_id: H4
 parent_wbs: null
 priority: P1
 tags: []
 dependencies: ["0275"]
 created_at: "2026-07-17T06:34:53.279Z"
-updated_at: "2026-07-17T06:43:49.588Z"
+updated_at: "2026-07-28T00:32:09.626Z"
 ---
 
 ## 0279. Wire next-router into super-coder (preflight + one-shot recovery)

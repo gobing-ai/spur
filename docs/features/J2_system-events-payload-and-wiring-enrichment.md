@@ -1,12 +1,12 @@
 ---
 schema_version: 1
-id: "L"
+id: "J2"
 name: "System Events Payload and Wiring Enrichment"
 status: verifying
 priority: P2
 tags: []
 created_at: "2026-07-09T22:47:56.455Z"
-updated_at: "2026-07-25T19:33:15.814Z"
+updated_at: "2026-07-28T00:31:32.943Z"
 ---
 
 # L: System Events Payload and Wiring Enrichment
@@ -152,3 +152,4 @@ _No linked tasks._
 ## History
 - 2026-07-09T23:06:50.530Z backlog → active (system)
 - 2026-07-25T19:33:15.814Z active → verifying (system)
+- 2026-07-28T00:31:32.943Z moved L → J2 (system)

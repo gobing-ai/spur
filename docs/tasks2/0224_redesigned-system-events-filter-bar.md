@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: K
+feature_id: J1
 parent_wbs: null
 priority: P2
 tags: ["observability", "system-events", "filters", "ux", "accessibility"]
 dependencies: []
 created_at: "2026-07-07T23:26:15.294Z"
-updated_at: "2026-07-08T00:33:29.303Z"
+updated_at: "2026-07-28T00:31:52.618Z"
 ---
 
 ## 0224. Redesigned System Events filter bar

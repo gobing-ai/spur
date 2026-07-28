@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: O
+feature_id: H5
 parent_wbs: null
 priority: P1
 tags: ["wave-1", "stage-registry", "validation", "feature-O"]
 dependencies: []
 created_at: "2026-07-20T01:54:25.274Z"
-updated_at: "2026-07-20T06:51:13.639Z"
+updated_at: "2026-07-28T00:32:58.697Z"
 ---
 
 ## 0302. Implement the stage-registry validator

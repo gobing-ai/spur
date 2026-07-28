@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: Q
+feature_id: F9
 parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-24T19:16:13.884Z"
-updated_at: "2026-07-24T22:33:06.031Z"
+updated_at: "2026-07-28T00:33:04.387Z"
 ---
 
 ## 0321. Add stable finding codes and config-driven severity to task and feature check

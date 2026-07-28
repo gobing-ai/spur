@@ -1,12 +1,12 @@
 ---
 schema_version: 1
-id: "Q"
+id: "F9"
 name: "AC-verifiable execution: BDD test scaffolds and tunable validation gates"
 status: done
 priority: P2
 tags: []
 created_at: "2026-07-24T19:15:55.798Z"
-updated_at: "2026-07-25T19:33:21.131Z"
+updated_at: "2026-07-28T00:31:38.321Z"
 ---
 
 # Q: AC-verifiable execution: BDD test scaffolds and tunable validation gates
@@ -81,3 +81,4 @@ _No linked tasks._
 - 2026-07-25T19:33:20.656Z backlog → active (system)
 - 2026-07-25T19:33:20.890Z active → verifying (system)
 - 2026-07-25T19:33:21.131Z verifying → done (system)
+- 2026-07-28T00:31:38.321Z moved Q → F9 (system)

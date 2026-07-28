@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: N
+feature_id: H4
 parent_wbs: null
 priority: P2
 tags: ["sp-plugin", "verify", "dogfood-followup"]
 dependencies: []
 created_at: "2026-07-26T23:50:31.199Z"
-updated_at: "2026-07-27T15:45:43.205Z"
+updated_at: "2026-07-28T00:32:11.104Z"
 ---
 
 ## 0341. dev-verify/verifyall: no 'not started' verdict cell, and duplicate follow-up task creation

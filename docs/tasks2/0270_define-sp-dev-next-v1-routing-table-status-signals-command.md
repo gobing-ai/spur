@@ -6,13 +6,13 @@ description: ""
 status: done
 type: brainstorm
 profile: standard
-feature_id: N
+feature_id: H4
 parent_wbs: null
 priority: P1
 tags: ["wayfinder:grilling", "workstream:dev-next"]
 dependencies: []
 created_at: "2026-07-17T00:54:24.636Z"
-updated_at: "2026-07-17T01:03:06.375Z"
+updated_at: "2026-07-28T00:32:15.111Z"
 ---
 
 ## 0270. Define /sp:dev-next v1 routing table (status × signals → command)

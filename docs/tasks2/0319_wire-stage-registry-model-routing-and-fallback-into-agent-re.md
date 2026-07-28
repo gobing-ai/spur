@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: O
+feature_id: H5
 parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-24T19:15:58.233Z"
-updated_at: "2026-07-24T21:12:56.917Z"
+updated_at: "2026-07-28T00:32:31.618Z"
 ---
 
 ## 0319. Wire stage-registry model routing and fallback into agent resolution

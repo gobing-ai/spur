@@ -6,13 +6,13 @@ description: ""
 status: done
 type: brainstorm
 profile: standard
-feature_id: N
+feature_id: H4
 parent_wbs: null
 priority: P1
 tags: ["wayfinder:grilling", "workstream:dev-next"]
 dependencies: ["0270", "0271"]
 created_at: "2026-07-17T00:54:27.284Z"
-updated_at: "2026-07-17T01:09:01.684Z"
+updated_at: "2026-07-28T00:32:16.459Z"
 ---
 
 ## 0272. Specify /sp:dev-next CLI surface, flags, and stop conditions

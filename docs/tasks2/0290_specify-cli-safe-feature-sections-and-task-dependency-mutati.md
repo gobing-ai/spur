@@ -6,13 +6,13 @@ description: ""
 status: done
 type: brainstorm
 profile: standard
-feature_id: O
+feature_id: H5
 parent_wbs: null
 priority: P1
 tags: ["wayfinder:research", "workstream:corpus", "cli-gap"]
 dependencies: []
 created_at: "2026-07-18T17:29:34.916Z"
-updated_at: "2026-07-19T23:53:47.509Z"
+updated_at: "2026-07-28T00:32:52.268Z"
 ---
 
 ## 0290. Specify CLI-safe feature sections and task dependency mutation

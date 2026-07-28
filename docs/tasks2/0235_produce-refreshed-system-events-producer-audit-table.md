@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: L
+feature_id: J2
 parent_wbs: null
 priority: P3
 tags: ["observability", "docs", "audit"]
 dependencies: []
 created_at: "2026-07-09T23:04:54.457Z"
-updated_at: "2026-07-12T04:16:48.897Z"
+updated_at: "2026-07-28T00:32:02.974Z"
 ---
 
 ## 0235. Produce refreshed system-events producer-audit table

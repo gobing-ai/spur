@@ -1,12 +1,12 @@
 ---
 schema_version: 1
-id: "R1"
+id: "F821"
 name: "Feature status sync: derivation engine, refresh command, hook wiring"
 status: active
 priority: P2
 tags: []
 created_at: "2026-07-25T00:27:36.676Z"
-updated_at: "2026-07-25T21:37:45.001Z"
+updated_at: "2026-07-28T00:31:39.627Z"
 ---
 
 # R1: Feature status sync: derivation engine, refresh command, hook wiring
@@ -40,3 +40,4 @@ _No linked tasks._
 
 ## History
 - 2026-07-25T21:37:45.001Z backlog → active (system)
+- 2026-07-28T00:31:39.627Z moved R1 → F821 (system)

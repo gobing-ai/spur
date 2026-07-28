@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: O
+feature_id: H5
 parent_wbs: null
 priority: P2
 tags: []
 dependencies: []
 created_at: "2026-07-22T23:19:26.674Z"
-updated_at: "2026-07-23T11:31:50.000Z"
+updated_at: "2026-07-28T00:32:47.571Z"
 ---
 
 ## 0314. Harden the sp slash-command surface and add debug/daily entry points

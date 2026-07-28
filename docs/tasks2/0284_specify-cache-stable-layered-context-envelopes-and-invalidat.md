@@ -6,13 +6,13 @@ description: ""
 status: done
 type: brainstorm
 profile: standard
-feature_id: O
+feature_id: H5
 parent_wbs: null
 priority: P1
 tags: ["wayfinder:grilling", "workstream:cache", "context-envelope"]
 dependencies: []
 created_at: "2026-07-18T17:29:34.875Z"
-updated_at: "2026-07-19T23:52:19.488Z"
+updated_at: "2026-07-28T00:32:30.270Z"
 ---
 
 ## 0284. Specify cache-stable layered context envelopes and invalidation

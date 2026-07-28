@@ -6,13 +6,13 @@ description: ""
 status: done
 type: brainstorm
 profile: standard
-feature_id: N
+feature_id: H4
 parent_wbs: null
 priority: P1
 tags: ["wayfinder:grilling", "workstream:dogfood"]
 dependencies: ["0273"]
 created_at: "2026-07-17T00:54:30.293Z"
-updated_at: "2026-07-17T01:14:30.647Z"
+updated_at: "2026-07-28T00:32:13.737Z"
 ---
 
 ## 0274. Lock dogfood hardening v1.2 work package from audit

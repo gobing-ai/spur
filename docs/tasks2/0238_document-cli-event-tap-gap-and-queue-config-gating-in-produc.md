@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: L
+feature_id: J2
 parent_wbs: null
 priority: P2
 tags: ["observability", "documentation", "audit"]
 dependencies: []
 created_at: "2026-07-10T00:02:02.996Z"
-updated_at: "2026-07-12T04:37:24.764Z"
+updated_at: "2026-07-28T00:31:58.519Z"
 ---
 
 ## 0238. Document CLI event-tap gap and queue config gating in producer audit

@@ -1,12 +1,12 @@
 ---
 schema_version: 1
-id: "R"
+id: "F82"
 name: "Feature status feedback loop: derivation sync, refresh command, Board status UX"
 status: active
 priority: P2
 tags: []
 created_at: "2026-07-24T23:39:28.101Z"
-updated_at: "2026-07-25T19:33:13.775Z"
+updated_at: "2026-07-28T00:31:39.627Z"
 ---
 
 # R: Feature status feedback loop: derivation sync, refresh command, Board status UX
@@ -85,3 +85,4 @@ Graduated 2026-07-24 → feature R1 (derivation engine + `spur feature sync` ver
 - Auto-creating features for orphan tasks beyond feature-link-helper's existing confirm flow.
 ## History
 - 2026-07-25T19:33:13.775Z backlog → active (system)
+- 2026-07-28T00:31:39.627Z moved R → F82 (system)

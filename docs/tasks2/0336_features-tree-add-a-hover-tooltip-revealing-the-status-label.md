@@ -6,13 +6,13 @@ description: ""
 status: done
 type: task
 profile: standard
-feature_id: R2
+feature_id: F822
 parent_wbs: null
 priority: P2
 tags: ["web", "features", "ui"]
 dependencies: ["0332"]
 created_at: "2026-07-26T00:26:23.975Z"
-updated_at: "2026-07-26T22:08:20.255Z"
+updated_at: "2026-07-28T00:33:22.060Z"
 ---
 
 ## 0336. Features tree: add a hover tooltip revealing the status label

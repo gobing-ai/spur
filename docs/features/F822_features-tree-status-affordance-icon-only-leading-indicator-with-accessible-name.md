@@ -1,12 +1,12 @@
 ---
 schema_version: 1
-id: "R2"
+id: "F822"
 name: "Features tree status affordance: icon-only leading indicator with accessible name"
 status: done
 priority: P2
 tags: []
 created_at: "2026-07-26T00:12:26.757Z"
-updated_at: "2026-07-26T23:12:36.577Z"
+updated_at: "2026-07-28T00:31:39.627Z"
 ---
 
 # R2: Features tree status affordance: icon-only leading indicator with accessible name
@@ -194,3 +194,4 @@ _No linked tasks._
 - 2026-07-26T23:12:36.251Z backlog → active (system)
 - 2026-07-26T23:12:36.423Z active → verifying (system)
 - 2026-07-26T23:12:36.577Z verifying → done (system)
+- 2026-07-28T00:31:39.627Z moved R2 → F822 (system)
