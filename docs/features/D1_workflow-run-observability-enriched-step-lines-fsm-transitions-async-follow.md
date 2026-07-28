@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-07-21T20:46:29.481Z"
-updated_at: "2026-07-28T00:31:37.075Z"
+updated_at: "2026-07-28T18:27:03.530Z"
 ---
 
 # P: workflow run observability — enriched step lines, FSM transitions, async follow
@@ -76,41 +76,67 @@ never graduates back onto the frontier; it returns only if the destination is re
   concurrent step execution, which the engine does not do today. Noted in the fog, not chased here.
 ## Acceptance Criteria
 ```gherkin
-# Destination criteria for feature P. These describe the DESIGN being locked,
-# not the shipped rendering — implementation acceptance belongs to the task
-# batch this design produces.
-Feature: workflow run observability — design destination
+Feature: observable and steerable workflow execution
 
-  Scenario: The engine seam is designed and released
-    Given ticket 0310 is done
-    When the design record is read
-    Then the widened contract carrying action options to the observability seam is specified
-    And backward compatibility for existing WorkflowPersistenceAdapter implementors is demonstrated
-    And the mirror-never-alter-persistence invariant is confirmed intact
-    And a ts-libs version and catalog bump path is named
+  Scenario: Rich progress is the human default
+    Given a synchronous human workflow run containing agent.run
+    When the action starts and remains active
+    Then output identifies the run, state, action, resolved agent, and redacted invocation
+    And periodic output reports elapsed time and timeout budget
+    And completion reports duration, outcome, and usage or unavailable
 
-  Scenario: The verbosity model and line formats are decided
-    Given ticket 0310 is done
-    When the design record is read
-    Then the levels exposed by `spur workflow run` are named and specified
-    And a line format carrying agent, truncated invocation, and duration is specified
-    And a truncation and redaction policy is written down
-    And `shell` steps are covered, not only `agent.run`
-    And verbose-mode FSM transition rendering is specified
-    And the format reserves a slot for per-agent.run token cost
-    And an `unavailable` rendering is specified for absent cost telemetry
+  Scenario: Output modes remain composable and machine-safe
+    Given the same workflow run
+    When default, quiet or silent, verbose, and JSON modes are selected
+    Then each human mode emits only its documented detail level
+    And JSON remains a valid stable machine stream with no interactive or prose contamination
 
-  Scenario: Long and detached runs are observable
-    Given ticket 0310 is done
-    When the design record is read
-    Then a progress transport for `--async` runs is decided
-    And a liveness mechanism for multi-minute steps is decided
-    And non-TTY behavior is specified for both
+  Scenario: Interim output is streamed without losing the final answer
+    Given a supported synchronous agent.run action emits stdout and stderr over time
+    When live output is enabled by the selected human mode
+    Then bounded redacted chunks appear before action completion
+    And the action's buffered final answer and response validation remain correct
+    And a slow terminal cannot deadlock or exhaust memory
+
+  Scenario: Detached runs can be followed
+    Given a workflow was started asynchronously in another process
+    When the operator runs workflow trace with follow mode
+    Then persisted events are replayed in order and new events continue to appear
+    And following terminates with the run's final status and reason
+
+  Scenario: Agent lifecycle correlation is complete
+    Given execution enters through agent.run or spur agent run
+    When start, output, heartbeat, finish, failure, or cancellation events are observed
+    Then every event carries a non-empty run id and the required action or execution identity
+    And nested execution is not double-counted
+
+  Scenario: A secret never reaches an observability sink
+    Given prompts, commands, environment values, output chunks, or steering notes contain known secrets
+    When events are emitted, persisted, rendered, and followed
+    Then all configured secrets are redacted before every sink
+    And payload truncation cannot reveal the removed material
+
+  Scenario: Bounded steering changes only a safe active run
+    Given a synchronous run is paused at a declared steering boundary
+    When the operator sends continue, note, retry, or abort with the expected state version
+    Then the engine acknowledges exactly one request and performs the permitted transition
+    And stale, duplicate, unauthorized, or unsafe-retry requests are rejected with a reason
+
+  Scenario: Cancellation reaches the child process and trace
+    Given an active agent subprocess
+    When steering abort or Ctrl-C cancels the run
+    Then cancellation propagates to the process group
+    And partial output is finalized
+    And the durable trace records who or what cancelled the run and the final reason
 ```
 ## Tasks
 
 <!-- AUTO-GENERATED by spur feature refresh -->
-_No linked tasks._
+| WBS | Task | Status |
+| --- | ---- | ------ |
+| 0310 | Decide the verbosity model for spur workflow run output | done |
+| 0311 | Attach real token cost and cache-hit ratio to workflow agent.run steps via history join | done |
+| 0365 | Implement workflow run observability, live output, and steering foundations | wip |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

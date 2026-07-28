@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Implement workflow run observability, live output, and steering foundations"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: D1
@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: ["0366"]
 created_at: "2026-07-28T06:28:47.045Z"
-updated_at: "2026-07-28T06:33:19.488Z"
+updated_at: "2026-07-28T18:57:27.552Z"
 ---
 
 ## 0365. Implement workflow run observability, live output, and steering foundations
@@ -172,17 +172,135 @@ Console and optional JSONL file output consume the same redacted envelope. Prese
 10. Run focused upstream suites, Spur autofix/spur-check/lint/test/test-cf/build, then dogfood foreground,
     detached-follow, streamed, steering, redaction, and cancellation scenarios.
 ### Solution
+Implemented the complete observability, streaming, trace, and safe-steering slice with no deferred runtime
+requirements:
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- `packages/app/src/observability/agent-execution.ts:98` and
+  `packages/app/tests/observability/agent-execution.test.ts:10` define and verify the shared versioned agent
+  lifecycle, bounded asynchronous relay, liveness, explicit unavailable usage, observer isolation, and
+  redaction—including configured secrets split across process chunks.
+- `packages/app/src/services/agent-service.ts:594` and
+  `packages/app/tests/services/agent-service.test.ts:1402` route direct and workflow dispatch through that
+  lifecycle with upstream output/correlation/cancellation seams and no nested double count.
+- `packages/app/src/workflow/actions/agent-run.ts:74`,
+  `packages/app/src/workflow/builtins.ts:30`, `packages/app/src/services/workflow-service.ts:730`, and
+  `packages/app/tests/workflow/actions/agent-run.test.ts:144` connect persisted action identity, per-attempt
+  execution identity, live events, retry attempts, notes, and abort propagation to workflow execution.
+- `packages/app/src/workflow/steering.ts:84` and
+  `packages/app/tests/workflow/steering.test.ts:24` implement targeted/versioned/idempotent
+  `continue|note|retry|abort` commands, actor/deadline validation, bounded policy, immutable completed
+  history, safe retry policy, redacted acknowledgements, and deterministic timeout defaults.
+- `packages/app/src/workflow/observability.ts:29`,
+  `packages/app/src/workflow/step-reporter.ts:53`,
+  `packages/app/tests/workflow/observability.test.ts:77`, and
+  `packages/app/tests/workflow/step-reporter.test.ts:12` provide correlated workflow envelopes,
+  allow-listed metadata, non-empty finish correlation, pure detail renderers, transitions, failure reasons,
+  liveness, and explicit unavailable usage.
+- `packages/app/src/workflow/trace-writer.ts:6` and
+  `packages/app/tests/workflow/trace-writer.test.ts:10` add the append-only schema-v1 JSONL projection under
+  `.spur/runs/workflow/`, covering every workflow, agent, and steering event.
+- `apps/cli/src/commands/workflow.ts:118`, `apps/cli/src/index.ts:156`,
+  `apps/cli/tests/commands/workflow.test.ts:299`, and `apps/cli/tests/commands/workflow.test.ts:468` ship
+  default-rich human progress, quiet/silent/verbose/detail compatibility, byte-safe JSON, trace-file
+  propagation, persisted `trace --follow`, local `--steer`, live fake-agent streaming, and mode conflicts.
+- `packages/domain/src/dao/run-dao.ts:89`,
+  `packages/app/src/services/workflow-service.ts:561`, and
+  `packages/domain/tests/dao/run-dao.test.ts:209` keep failure-reason persistence behind the domain DAO.
+- `packages/app/src/index.ts:10` exports the new application seams without bypassing package boundaries.
+- `package.json:32` and `bun.lock:1` consume the released `@gobing-ai/ts-*` 0.4.14 catalog. Upstream releases
+  provide `ProcessOptions.onOutput`, `AgentRunOptions.onOutput/correlation`,
+  `ActionRunContext.actionId`, and Unix descendant process-group cancellation; the latter was dogfood-found,
+  fixed, released, and then proven from the rebuilt Spur binary.
+- `docs/00_ADR.md:844`, `docs/04_DESIGN.md:260`,
+  `docs/design/workflow-observability.md:1`,
+  `docs/design/workflow-steering-control-channel.md:1`, and `AGENTS.md:218` record ADR-035, public CLI/event
+  contracts, redaction/backpressure bounds, and the intentionally design-only cross-process protocol.
+- `docs/features/D1_workflow-run-observability-enriched-step-lines-fsm-transitions-async-follow.md:1`,
+  `docs/features/INDEX.md:1`, and this task were synchronized through `spur feature/task` CLI verbs.
 
+The bounded verification repair pass additionally fixed malformed steering deadlines, steering mutations
+against completed actions, non-finite/unbounded steering policy values, output/heartbeat delivery order, and
+cross-chunk secret disclosure. No runtime requirement remains deferred; cross-process steering remains
+design-only exactly as R12 requires.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | docs/design/workflow-observability.md:44 — producer/subscriber/persistence audit |
+| R2 | MET | packages/app/src/workflow/observability.ts:29 and packages/app/src/observability/agent-execution.ts:8 — versioned correlated identities |
+| R3 | MET | packages/app/src/services/agent-service.ts:616 and packages/app/src/workflow/observability.ts:234 — released output/correlation/action metadata seams consumed |
+| R4 | MET | packages/app/src/workflow/step-reporter.ts:53 — resolved execution, elapsed/budget, outcome/reason, unavailable usage |
+| R5 | MET | apps/cli/src/commands/workflow.ts:118 and apps/cli/tests/commands/workflow.test.ts:299 — composable human detail modes and stable JSON |
+| R6 | MET | packages/app/src/observability/agent-execution.ts:145 and packages/app/tests/observability/agent-execution.test.ts:61 — bounded pre-sink redaction including split chunks |
+| R7 | MET | packages/app/src/observability/agent-execution.ts:145 and packages/app/src/services/agent-service.ts:616 — bounded non-blocking tee with buffered final result |
+| R8 | MET | apps/cli/src/commands/workflow.ts:633 and apps/cli/tests/commands/workflow.test.ts:1137 — persisted replay/follow to terminal status |
+| R9 | MET | packages/app/tests/services/agent-service.test.ts:1402 — direct/workflow lifecycle parity and no double count |
+| R10 | MET | packages/app/src/workflow/steering.ts:84 and packages/app/tests/workflow/steering.test.ts:24 — targeted/versioned commands, ack/nack, idempotency, timeout, cancellation |
+| R11 | MET | packages/app/src/workflow/steering.ts:181 and packages/app/tests/workflow/steering.test.ts:90 — immutable completion and explicit idempotent retry gate |
+| R12 | MET | docs/design/workflow-steering-control-channel.md:1 and apps/cli/src/commands/workflow.ts:151 — remote protocol design-only; detached steering rejected |
+| R13 | MET | packages/app/src/workflow/trace-writer.ts:6 and packages/app/tests/workflow/trace-writer.test.ts:10 — schema-v1 append-only trace under .spur/runs/workflow |
+| R14 | MET | bun run test — exit 0: 3760 tests, 11424 assertions, 99.18% lines; compiled dogfood PASS |
+| R15 | MET | package.json:32 — released @gobing-ai/ts-* 0.4.14 catalog; publish run 30388111243 succeeded; rebuilt CLI dogfood PASS |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Rich progress is the human default | MET | test | apps/cli/tests/commands/workflow.test.ts:282 plus bun run test exit 0 |
+| Output modes remain composable and machine-safe | MET | test | apps/cli/tests/commands/workflow.test.ts:299 and :443 plus compiled default/quiet/silent/verbose/JSON dogfood PASS |
+| Interim output is streamed without losing the final answer | MET | test | apps/cli/tests/commands/workflow.test.ts:510 and packages/app/tests/observability/agent-execution.test.ts:41 |
+| Detached runs can be followed | MET | test | apps/cli/tests/commands/workflow.test.ts:1137 plus compiled async trace-follow dogfood PASS |
+| Agent lifecycle correlation is complete | MET | test | packages/app/tests/services/agent-service.test.ts:1402 and packages/app/tests/workflow/actions/agent-run.test.ts:144 |
+| A secret never reaches an observability sink | MET | test | packages/app/tests/observability/agent-execution.test.ts:10 and :61; trace/file/console dogfood redaction PASS |
+| Bounded steering changes only a safe active run | MET | test | packages/app/tests/workflow/steering.test.ts:24 and packages/app/tests/workflow/actions/agent-run.test.ts:144 |
+| Cancellation reaches the child process and trace | MET | command | compiled cancellation dogfood settled in 0.83s with actor/outcome/signal/final reason in redacted trace; upstream runtime regression and publish run 30388111243 PASS |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**Functional traceability**
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `docs/design/workflow-observability.md:44` inventories producer, projection, subscribers, and durable source. |
+| R2 | MET | `packages/app/src/workflow/observability.ts:29`, `packages/app/src/workflow/observability.ts:282`, and `packages/app/src/observability/agent-execution.ts:8` define versioned identity and monotonic correlation. |
+| R3 | MET | Released `ts-runtime`, `ts-ai-runner`, and `ts-dual-workflow-engine` 0.4.14 seams are consumed at `packages/app/src/services/agent-service.ts:616` and `packages/app/src/workflow/observability.ts:234`. |
+| R4 | MET | `packages/app/src/workflow/step-reporter.ts:53` renders resolved execution, elapsed/budget, outcome, reason, and unavailable usage. |
+| R5 | MET | `apps/cli/src/commands/workflow.ts:118` implements and validates default/quiet/silent/verbose/detail/JSON modes. |
+| R6 | MET | `packages/app/src/observability/agent-execution.ts:145`, `packages/app/src/workflow/observability.ts:139`, and `packages/app/src/workflow/steering.ts:205` redact and bound before sink delivery. |
+| R7 | MET | `packages/app/src/observability/agent-execution.ts:145` provides the bounded relay; `packages/app/src/services/agent-service.ts:616` tees it while retaining the buffered result. |
+| R8 | MET | `apps/cli/src/commands/workflow.ts:633` replays/polls persisted timelines to terminal status. |
+| R9 | MET | `packages/app/src/services/agent-service.ts:306` and `packages/app/src/services/agent-service.ts:388` share one lifecycle; `packages/app/tests/services/agent-service.test.ts:1402` proves parity/no double count. |
+| R10 | MET | `packages/app/src/workflow/steering.ts:84` implements targeted commands, version checks, ack/nack, actor/deadline, idempotency, timeout, and cancellation. |
+| R11 | MET | `packages/app/src/workflow/steering.ts:181` rejects completed-history mutation and `packages/app/src/workflow/steering.ts:194` policy-gates failed-attempt retries. |
+| R12 | MET | `docs/design/workflow-steering-control-channel.md:1` is design-only; runtime rejects detached steering at `apps/cli/src/commands/workflow.ts:151`. |
+| R13 | MET | `packages/app/src/workflow/trace-writer.ts:6` writes schema-v1 append-only traces only under `.spur/runs/workflow/`. |
+| R14 | MET | Producer/CLI suites cover TTY-mode policy, machine modes, async follow, cancellation, pressure, redaction, unavailable usage, and failures; compiled dogfood covers the end-to-end surface. |
+| R15 | MET | `package.json:32` consumes published 0.4.14 packages; upstream publish run `30388111243` succeeded and the rebuilt binary passed compiled dogfood. |
 
+Functional Verdict: PASS
+
+**SECUA findings**
+
+| Priority | Dimension | Status | Evidence and disposition |
+| --- | --- | --- | --- |
+| P1 | Security | FIXED | Cross-chunk configured-secret disclosure was closed at `packages/app/src/observability/agent-execution.ts:145`; regression at `packages/app/tests/observability/agent-execution.test.ts:61`. |
+| P2 | Correctness/Security | FIXED | Malformed deadlines, non-finite/unbounded policies, empty notes/IDs, and completed-action abort were rejected/capped at `packages/app/src/workflow/steering.ts:164`; regressions at `packages/app/tests/workflow/steering.test.ts:90` and `packages/app/tests/workflow/steering.test.ts:173`. |
+| P2 | Correctness | FIXED | Queued output now drains before a later heartbeat so observer order agrees with event sequence at `packages/app/src/observability/agent-execution.ts:135`. |
+| P3 | All | NONE | No unresolved minor finding after the repair pass. |
+| P4 | Architecture | NONE | No speculative seam or structural follow-up is required for this task. |
+
+**Architecture/deepening assessment**
+
+No blocker, major, minor, or advisory deepening candidate remains. The new lifecycle, steering controller,
+trace writer, pure renderer, CLI adapter, and domain DAO each own non-trivial behavior behind a narrow tested
+surface. Dependency direction remains `apps/cli -> packages/app -> packages/domain` plus published
+`@gobing-ai/ts-*` facades; cross-process control is deliberately not smuggled through the EventBus.
+
+**Disposition**
+
+No unresolved review finding. The diff is large because the approved task is an end-to-end cross-package
+slice plus its upstream release, but its concerns are separated by existing package seams and independently
+tested. Review Verdict: PASS.
 ### References
 - Feature D1: `docs/features/D1_workflow-run-observability-enriched-step-lines-fsm-transitions-async-follow.md`
 - Locked design task: `docs/tasks2/0310_decide-the-verbosity-model-for-spur-workflow-run-output.md`
@@ -197,3 +315,6 @@ Console and optional JSONL file output consume the same redacted envelope. Prese
 - Workflow CLI: `apps/cli/src/commands/workflow.ts`
 - Blocking correctness task: 0366
 ### History
+- 2026-07-28T17:30:55.988Z todo → wip (system)
+- 2026-07-28T18:55:47.937Z wip → testing (system)
+- 2026-07-28T18:56:45.861Z testing → done (system)
