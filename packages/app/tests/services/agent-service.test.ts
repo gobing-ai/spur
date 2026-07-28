@@ -4,7 +4,14 @@ import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import type { AgentName, AgentRunResult, AuthState } from '@gobing-ai/ts-ai-runner';
 import { TIER1_PRIORITY } from '@gobing-ai/ts-ai-runner';
-import { type AgentConfig, type AgentRunDeps, AgentService, type AgentServiceOutput } from '../../src/index';
+import { EventBus } from '@gobing-ai/ts-infra';
+import {
+    type AgentConfig,
+    type AgentExecutionEvent,
+    type AgentRunDeps,
+    AgentService,
+    type AgentServiceOutput,
+} from '../../src/index';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1392,6 +1399,43 @@ describe('AgentService.runCapture', () => {
 // ---------------------------------------------------------------------------
 
 describe('AgentService.runTraced', () => {
+    test('direct and workflow dispatch use the same correlated lifecycle without double-counting', async () => {
+        const eventBus = new EventBus<Record<string, (event: unknown) => void>>();
+        const directEvents: AgentExecutionEvent[] = [];
+        eventBus.on('agent.execution', (event) => directEvents.push(event as AgentExecutionEvent));
+        const service = new AgentService({
+            cwd: process.cwd(),
+            env: { API_TOKEN: 'configured-secret' },
+            output: nullOutput(),
+            events: eventBus,
+        });
+        const { deps, runner } = mockDeps();
+        runner.runPromptCommand.mockImplementation(
+            (_agent: unknown, _prompt: unknown, options: { onOutput?: (output: unknown) => void }) => {
+                options.onOutput?.({
+                    stream: 'stdout',
+                    chunk: 'live configured-secret',
+                    timestamp: new Date().toISOString(),
+                });
+                return Promise.resolve(makeRunResult({ stdout: 'live configured-secret final' }));
+            },
+        );
+
+        await service.run('direct prompt', { agent: 'pi', 'run-id': 'direct-run' }, deps);
+        expect(directEvents.map((event) => event.kind)).toEqual(['started', 'output', 'finished']);
+        expect(directEvents.every((event) => event.runId === 'direct-run')).toBe(true);
+        expect(JSON.stringify(directEvents)).not.toContain('configured-secret');
+
+        const workflowEvents: AgentExecutionEvent[] = [];
+        await service.runTraced('workflow prompt', { agent: 'pi' }, deps, {
+            correlation: { runId: 'workflow-run', actionId: 'action-1', executionId: 'execution-1' },
+            observer: (event) => workflowEvents.push(event),
+            heartbeatMs: 0,
+        });
+        expect(workflowEvents.map((event) => event.kind)).toEqual(['started', 'output', 'finished']);
+        expect(workflowEvents.every((event) => event.actionId === 'action-1')).toBe(true);
+    });
+
     test('redacts prompt-bearing argv and translated source before trace persistence (R1)', async () => {
         const svc = makeService();
         const deps = makeSimpleDeps('pi');

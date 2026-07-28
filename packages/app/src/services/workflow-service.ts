@@ -33,6 +33,7 @@ import { createNodeFileSystem, parseYamlObject } from '@gobing-ai/ts-runtime';
 import type { HostAllowlist, HttpRequester } from '../workflow/actions/http-request';
 import { registerSpurBuiltins } from '../workflow/builtins';
 import { ObservableWorkflowAdapter, type WorkflowObservabilityBus } from '../workflow/observability';
+import type { WorkflowSteeringController } from '../workflow/steering';
 import type { AgentService } from './agent-service';
 import { bridgeEventBus } from './event-bridge';
 import type { RuleService } from './rule-service';
@@ -163,6 +164,8 @@ export interface WorkflowRunOptions {
      * the group id for a group-wide SIGTERM.
      */
     recordSelfPid?: boolean;
+    /** Synchronous in-process steering only; intentionally never serialized for detached runs. */
+    steeringController?: WorkflowSteeringController;
 }
 
 /** A paused run discovered for `spur workflow continue` (E3). */
@@ -382,6 +385,7 @@ export class WorkflowAppService {
         const svc = await this.createEngineService({
             recordSelfPid: opts.recordSelfPid === true,
             events: eventsBus,
+            steeringController: opts.steeringController,
         });
         const runId = opts.runId ?? crypto.randomUUID();
         const isDry = opts.dryRun === true;
@@ -559,11 +563,7 @@ export class WorkflowAppService {
             return;
         }
         const db = await this.ctx.getDb();
-        await db.run(
-            "UPDATE runs SET metadata_json = json_set(COALESCE(NULLIF(metadata_json, ''), '{}'), '$.failureReason', ?) WHERE id = ?",
-            result.reason,
-            runId,
-        );
+        await new RunDao(db).stampFailureReason(runId, result.reason);
     }
 
     /** Resolve a workflow definition by its `name` field, scanning the search paths. */
@@ -730,15 +730,22 @@ export class WorkflowAppService {
     }
 
     private async createEngineService(
-        opts: { recordSelfPid?: boolean; events?: EventBus<Record<string, (event: unknown) => void>> } = {},
+        opts: {
+            recordSelfPid?: boolean;
+            events?: EventBus<Record<string, (event: unknown) => void>>;
+            steeringController?: WorkflowSteeringController;
+        } = {},
     ): Promise<EngineWorkflowService> {
         const host = createDefaultWorkflowEngineHost();
+        const bus = this.ctx.observabilityBus?.();
         registerSpurBuiltins(host, {
             agentService: this.ctx.agentService(),
             ruleService: this.ctx.ruleService(),
             hitlResponder: this.ctx.hitlResponder(),
             httpRequester: this.ctx.httpRequester?.(),
             hostAllowlist: this.ctx.hostAllowlist?.(),
+            ...(bus !== undefined ? { observabilityBus: bus } : {}),
+            ...(opts.steeringController !== undefined ? { steeringController: opts.steeringController } : {}),
         });
         const db = await this.ctx.getDb();
         let persistence: WorkflowPersistenceAdapter = new DbWorkflowPersistenceAdapter(db);
@@ -747,7 +754,6 @@ export class WorkflowAppService {
         if (opts.recordSelfPid === true) {
             persistence = withSelfPidRecording(persistence, db);
         }
-        const bus = this.ctx.observabilityBus?.();
         const adapter = bus ? new ObservableWorkflowAdapter(persistence, bus) : persistence;
         return new EngineWorkflowService(host, adapter);
     }

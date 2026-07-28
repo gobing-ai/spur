@@ -10,6 +10,14 @@ export {
     hitlConfirmDefault,
     LockTimeoutError,
 } from './errors';
+export {
+    type AgentExecutionEvent,
+    AgentExecutionLifecycle,
+    type AgentExecutionObserver,
+    type AgentExecutionOptions,
+    configuredSecretValues,
+    redactAndBound,
+} from './observability/agent-execution';
 export type {
     AgentConfig,
     AgentExecutorConfig,
@@ -289,6 +297,7 @@ export {
 export {
     ObservableWorkflowAdapter,
     type WorkflowActionFinishedEvent,
+    type WorkflowActionMetadata,
     type WorkflowActionStartedEvent,
     type WorkflowObservabilityBus,
     type WorkflowObservabilityEventMap,
@@ -297,5 +306,26 @@ export {
     type WorkflowRunStartedEvent,
     type WorkflowTransitionEvent,
 } from './workflow/observability';
+export {
+    parseSteeringPolicy,
+    type SteeringAck,
+    type SteeringActionPolicy,
+    type SteeringCommand,
+    type SteeringDecision,
+    type SteeringOperation,
+    type SteeringRetryPolicy,
+    type SteeringSnapshot,
+    type SteeringState,
+    WorkflowSteeringController,
+} from './workflow/steering';
 // Workflow step reporter — pure event→line / def→plan formatters for CLI progress (0114)
-export { renderRunPlan, renderStepLine, type StepEvent, type StepLineRenderer } from './workflow/step-reporter';
+export {
+    renderActionHeartbeat,
+    renderRunPlan,
+    renderStepLine,
+    type StepEvent,
+    type StepLineRenderer,
+    type StepRenderOptions,
+    type WorkflowOutputDetail,
+} from './workflow/step-reporter';
+export { WorkflowTraceWriter } from './workflow/trace-writer';

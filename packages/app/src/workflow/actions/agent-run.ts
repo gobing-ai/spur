@@ -4,7 +4,10 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join } from 'node:path';
 import { promisify } from 'node:util';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
+import type { AgentExecutionObserver } from '../../observability/agent-execution';
 import type { AgentRunInvocation, AgentRunTracedResult, AgentService } from '../../services/agent-service';
+import type { WorkflowObservabilityBus } from '../observability';
+import { parseSteeringPolicy, type WorkflowSteeringController } from '../steering';
 
 const execFileAsync = promisify(execFile);
 
@@ -73,7 +76,11 @@ export class AgentRunActionRunner implements ActionRunner {
 
     private readonly agentService: AgentService;
 
-    constructor(agentService: AgentService) {
+    constructor(
+        agentService: AgentService,
+        private readonly observabilityBus?: WorkflowObservabilityBus,
+        private readonly steeringController?: WorkflowSteeringController,
+    ) {
         this.agentService = agentService;
     }
 
@@ -130,7 +137,45 @@ export class AgentRunActionRunner implements ActionRunner {
         // trace (R1). The legacy capture/non-capture branch collapses into a
         // single dispatch path — `capture` now only controls whether the
         // stdout is surfaced as `data.answer`.
-        const traced = await this.agentService.runTraced(input, flags);
+        const observer: AgentExecutionObserver | undefined =
+            this.observabilityBus === undefined
+                ? undefined
+                : (event) => {
+                      void this.observabilityBus?.emit('workflow.agent', event);
+                  };
+        const actionId = context.actionId ?? `${context.runId}:${context.stateOrNodeId}`;
+        const steeringPolicy = parseSteeringPolicy(options);
+        let steeringSignal = this.steeringController?.begin(context.runId, actionId, steeringPolicy);
+        let steeringNote: string | undefined;
+        let traced: AgentRunTracedResult;
+        while (true) {
+            traced = await this.agentService.runTraced(input, flags, undefined, {
+                correlation: {
+                    runId: context.runId,
+                    executionId: crypto.randomUUID(),
+                    actionId,
+                },
+                ...(observer !== undefined ? { observer } : {}),
+                ...(steeringSignal !== undefined ? { signal: steeringSignal } : {}),
+            });
+            if (this.steeringController === undefined) break;
+            const decision = await this.steeringController.boundary(traced.exitCode === 0);
+            if (decision.operation === 'retry') {
+                steeringSignal = this.steeringController.nextAttempt();
+                continue;
+            }
+            if (decision.operation === 'note') steeringNote = decision.note;
+            if (decision.operation === 'abort' && traced.exitCode === 0) {
+                traced = {
+                    ...traced,
+                    exitCode: 3,
+                    signal: 'STEERING_ABORT',
+                    message: 'aborted at steering boundary',
+                };
+            }
+            break;
+        }
+        this.steeringController?.complete();
         const { exitCode, stdout: answer } = traced;
         const ok = exitCode === 0;
         const invocation = traced.invocation;
@@ -177,7 +222,12 @@ export class AgentRunActionRunner implements ActionRunner {
             error,
             // Latch: mark the session open after the first successful agent.run so later
             // steps auto-continue (Q8). Requires engine setVars (F1, ≥0.3.9).
-            setVars: ok ? { __agentSession: 'open' } : undefined,
+            setVars: ok
+                ? {
+                      __agentSession: 'open',
+                      ...(steeringNote !== undefined ? { __steeringNote: steeringNote } : {}),
+                  }
+                : undefined,
         };
     }
 }

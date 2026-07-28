@@ -27,6 +27,11 @@ import {
 } from '@gobing-ai/ts-ai-runner';
 import type { EventBus } from '@gobing-ai/ts-infra';
 import { NodeProcessExecutor, type OutputPolicy, type ProcessRegistry } from '@gobing-ai/ts-runtime';
+import {
+    AgentExecutionLifecycle,
+    type AgentExecutionOptions,
+    configuredSecretValues,
+} from '../observability/agent-execution';
 import { bridgeEventBus } from './event-bridge';
 
 // ---------------------------------------------------------------------------
@@ -301,7 +306,10 @@ export class AgentService {
         flags: Record<string, string | boolean>,
         deps?: AgentRunDeps,
     ): Promise<number> {
-        const outcome = await this.executeRun(prompt, flags, deps, { silent: false });
+        const outcome = await this.executeRun(prompt, flags, deps, {
+            silent: false,
+            execution: this.defaultExecutionOptions(flags),
+        });
         if (!outcome.ok) {
             this.ctx.output.error(outcome.message);
             return outcome.exitCode;
@@ -380,8 +388,13 @@ export class AgentService {
         prompt: string | undefined,
         flags: Record<string, string | boolean>,
         deps?: AgentRunDeps,
+        execution?: AgentExecutionOptions,
     ): Promise<AgentRunTracedResult> {
-        const outcome = await this.executeRun(prompt, flags, deps, { silent: true, nonInteractive: true });
+        const outcome = await this.executeRun(prompt, flags, deps, {
+            silent: true,
+            nonInteractive: true,
+            execution: execution ?? this.defaultExecutionOptions(flags),
+        });
         if (!outcome.ok) {
             return { exitCode: outcome.exitCode, stdout: '', message: outcome.message };
         }
@@ -417,7 +430,7 @@ export class AgentService {
         prompt: string | undefined,
         flags: Record<string, string | boolean>,
         deps: AgentRunDeps | undefined,
-        options: { silent: boolean; nonInteractive?: boolean },
+        options: { silent: boolean; nonInteractive?: boolean; execution?: AgentExecutionOptions },
     ): Promise<
         | { ok: true; result: AgentRunResult; invocation: AgentRunInvocation }
         | { ok: false; exitCode: number; message: string }
@@ -581,22 +594,69 @@ export class AgentService {
         let result: AgentRunResult;
         const controller = new AbortController();
         const onTerminate = () => controller.abort();
+        const onExternalAbort = () => controller.abort();
+        const lifecycle = new AgentExecutionLifecycle(
+            options.execution?.observer,
+            options.execution?.correlation,
+            configuredSecretValues(this.ctx.env),
+            options.execution?.heartbeatMs,
+        );
+        lifecycle.start({
+            agent,
+            ...(model !== undefined ? { model } : {}),
+            invocation: `${invocation.command} ${invocation.argv.join(' ')}`,
+            ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+        });
+        const dispatchStartedAt = Date.now();
         try {
             process.on('SIGTERM', onTerminate);
             process.on('SIGINT', onTerminate);
+            options.execution?.signal?.addEventListener('abort', onExternalAbort, { once: true });
+            if (options.execution?.signal?.aborted === true) controller.abort();
             result = await runner.runPromptCommand(agent, promptOptions, {
                 cwd: cwd || undefined,
                 ...(timeoutMs !== undefined ? { timeout: timeoutMs } : {}),
                 signal: controller.signal,
+                correlation: lifecycle.identity,
+                onOutput: (output) => lifecycle.observe(output),
             });
         } catch (error) {
+            lifecycle.finish({
+                exitCode: null,
+                durationMs: Date.now() - dispatchStartedAt,
+                ...(controller.signal.aborted ? { reason: 'cancelled' } : {}),
+                ...(!controller.signal.aborted
+                    ? { reason: error instanceof Error ? error.message : String(error) }
+                    : {}),
+            });
             return { ok: false, exitCode: 2, message: error instanceof Error ? error.message : String(error) };
         } finally {
             process.off('SIGTERM', onTerminate);
             process.off('SIGINT', onTerminate);
+            options.execution?.signal?.removeEventListener('abort', onExternalAbort);
         }
+        lifecycle.finish({
+            exitCode: result.exitCode,
+            durationMs: result.durationMs,
+            ...(result.signal !== undefined ? { signal: result.signal } : {}),
+            ...(controller.signal.aborted && result.signal === undefined ? { reason: 'cancelled' } : {}),
+        });
 
         return { ok: true, result, invocation };
+    }
+
+    private defaultExecutionOptions(flags: Record<string, string | boolean>): AgentExecutionOptions {
+        const runId = stringFlag(flags, 'run-id', '') || crypto.randomUUID();
+        const observer =
+            this.ctx.events === undefined
+                ? undefined
+                : (event: import('../observability/agent-execution').AgentExecutionEvent) => {
+                      void this.ctx.events?.emit('agent.execution', event);
+                  };
+        return {
+            correlation: { runId, executionId: crypto.randomUUID() },
+            ...(observer !== undefined ? { observer } : {}),
+        };
     }
 
     // -------------------------------------------------------------------------

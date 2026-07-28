@@ -12,6 +12,8 @@ import { HitlSelectActionRunner } from './actions/hitl-select';
 import { type HostAllowlist, HttpRequestActionRunner, type HttpRequester } from './actions/http-request';
 import { ResponseValidateActionRunner, type ResponseValidateEngine } from './actions/response-validate';
 import { RuleCheckActionRunner } from './actions/rule-check';
+import type { WorkflowObservabilityBus } from './observability';
+import type { WorkflowSteeringController } from './steering';
 /** Dependencies injected into spur-specific built-in action runners. */
 export interface SpurWorkflowBuiltinsOptions {
     agentService: AgentService;
@@ -21,12 +23,17 @@ export interface SpurWorkflowBuiltinsOptions {
     httpRequester?: HttpRequester;
     hostAllowlist?: HostAllowlist;
     responseValidateEngine?: ResponseValidateEngine;
+    observabilityBus?: WorkflowObservabilityBus;
+    steeringController?: WorkflowSteeringController;
 }
 
 /** Register all spur-specific built-in action runners on a workflow host. */
 export function registerSpurBuiltins(host: WorkflowEngineHost, options: SpurWorkflowBuiltinsOptions): void {
     const fileSystem = options.fileSystem ?? createNodeFileSystem();
-    host.registerAction(new AgentRunActionRunner(options.agentService), 'builtin');
+    host.registerAction(
+        new AgentRunActionRunner(options.agentService, options.observabilityBus, options.steeringController),
+        'builtin',
+    );
     host.registerAction(new RuleCheckActionRunner(options.ruleService), 'builtin');
     host.registerAction(new FileExistsActionRunner(fileSystem), 'builtin');
     host.registerAction(new FileReadActionRunner(fileSystem), 'builtin');

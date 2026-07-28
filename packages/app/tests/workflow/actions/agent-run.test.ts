@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { ActionRunContext } from '@gobing-ai/ts-dual-workflow-engine';
 import type { AgentRunInvocation, AgentRunTracedResult, AgentService } from '../../../src/services/agent-service';
 import { AgentRunActionRunner } from '../../../src/workflow/actions/agent-run';
+import { type SteeringCommand, WorkflowSteeringController } from '../../../src/workflow/steering';
 
 function makeCtx(overrides: Partial<ActionRunContext> = {}): ActionRunContext {
     return { runId: 'test-1', stateOrNodeId: 's1', workdir: '/tmp', vars: {}, env: {}, ...overrides };
@@ -137,6 +138,123 @@ describe('AgentRunActionRunner', () => {
         const runner = new AgentRunActionRunner(svc);
         await runner.execute({ input: 'hi' }, makeCtx({ workdir: '/fallback' }));
         expect(capturedFlags.cwd).toBe('/fallback');
+    });
+});
+
+describe('AgentRunActionRunner steering', () => {
+    function activeCommand(
+        controller: WorkflowSteeringController,
+        operation: SteeringCommand['operation'],
+        note?: string,
+    ): SteeringCommand {
+        const snapshot = controller.snapshot;
+        if (snapshot === undefined) throw new Error('missing steering snapshot');
+        return {
+            commandId: crypto.randomUUID(),
+            runId: snapshot.runId,
+            actionId: snapshot.actionId,
+            expectedState: snapshot.state,
+            expectedVersion: snapshot.version,
+            operation,
+            ...(note !== undefined ? { note } : {}),
+            actor: 'operator',
+            deadlineAt: new Date(Date.now() + 1000).toISOString(),
+        };
+    }
+
+    async function waitForBoundary(controller: WorkflowSteeringController, afterVersion = 0): Promise<void> {
+        for (let index = 0; index < 50; index += 1) {
+            const snapshot = controller.snapshot;
+            if (snapshot?.state === 'boundary' && snapshot.version > afterVersion) return;
+            await Bun.sleep(1);
+        }
+        throw new Error('steering boundary was not reached');
+    }
+
+    test('retries only under an explicit idempotent policy and preserves the outer action identity', async () => {
+        const controller = new WorkflowSteeringController();
+        const actionIds: Array<string | undefined> = [];
+        let calls = 0;
+        const service = {
+            runTraced: async (
+                _input: string | undefined,
+                _flags: Record<string, string | boolean>,
+                _deps: unknown,
+                execution: { correlation?: { actionId?: string } },
+            ) => {
+                calls += 1;
+                actionIds.push(execution.correlation?.actionId);
+                return {
+                    exitCode: calls === 1 ? 3 : 0,
+                    stdout: calls === 1 ? 'failed' : 'recovered',
+                    invocation: invocation(),
+                };
+            },
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(service, undefined, controller);
+        const pending = runner.execute(
+            {
+                input: 'retry me',
+                steeringBoundary: true,
+                retryPolicy: { idempotent: true, maxAttempts: 2 },
+            },
+            makeCtx({ actionId: 'persisted-action-1' }),
+        );
+
+        await waitForBoundary(controller);
+        const firstBoundaryVersion = controller.snapshot?.version ?? 0;
+        expect(controller.submit(activeCommand(controller, 'retry')).accepted).toBe(true);
+        await waitForBoundary(controller, firstBoundaryVersion);
+        expect(controller.submit(activeCommand(controller, 'continue')).accepted).toBe(true);
+
+        await expect(pending).resolves.toMatchObject({ ok: true });
+        expect(calls).toBe(2);
+        expect(actionIds).toEqual(['persisted-action-1', 'persisted-action-1']);
+    });
+
+    test('redacts steering notes before carrying them to the next safe boundary', async () => {
+        const controller = new WorkflowSteeringController(undefined, ['note-secret']);
+        const runner = new AgentRunActionRunner(svcWithRunTraced({ exitCode: 0 }), undefined, controller);
+        const pending = runner.execute(
+            { input: 'note me', steeringBoundary: true },
+            makeCtx({ actionId: 'persisted-action-2' }),
+        );
+
+        await waitForBoundary(controller);
+        expect(controller.submit(activeCommand(controller, 'note', 'remember note-secret')).accepted).toBe(true);
+
+        const result = await pending;
+        expect(result.setVars?.__steeringNote).toBe('remember [REDACTED]');
+    });
+
+    test('abort propagates to the active AgentService signal and returns a cancelled action', async () => {
+        const controller = new WorkflowSteeringController();
+        const service = {
+            runTraced: async (
+                _input: string | undefined,
+                _flags: Record<string, string | boolean>,
+                _deps: unknown,
+                execution: { signal?: AbortSignal },
+            ): Promise<AgentRunTracedResult> =>
+                await new Promise((resolve) => {
+                    execution.signal?.addEventListener(
+                        'abort',
+                        () => resolve({ exitCode: 3, stdout: 'partial', signal: 'SIGTERM', durationMs: 5 }),
+                        { once: true },
+                    );
+                }),
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(service, undefined, controller);
+        const pending = runner.execute(
+            { input: 'abort me', steeringBoundary: true },
+            makeCtx({ actionId: 'persisted-action-3' }),
+        );
+        await Bun.sleep(1);
+
+        expect(controller.submit(activeCommand(controller, 'abort')).accepted).toBe(true);
+        const result = await pending;
+        expect(result).toMatchObject({ ok: false });
+        expect(result.error).toContain('SIGTERM');
     });
 });
 
