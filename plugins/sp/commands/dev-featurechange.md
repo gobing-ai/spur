@@ -36,21 +36,43 @@ CLI-gated feature-tree restructure orchestrator. Executes dispositions from a ma
 
 **Parse map**
 
-- Read `--map`. Collect rows where disposition is not `keep`.
+- Read `--map`. Collect rows where disposition is not `keep` (typically `reparent-under:<parent>`).
 - Filter by `--limit` / `--wave` if set.
-- Wave defaults from map: **1** = K→J, L→J · **2** = N→H, O→H · **3** = P→D, Q→F, R→F.
+- Wave defaults from map: **1** = K→J, L→J · **2** = N→H, O→H · **3** = P→D, Q→F, R→F8.
 
-**Dry-run plan (always)**
+**Free-digit preflight (mandatory before dry-run report)**
 
-For each selected reparent row:
+Group selected reparent rows by `new_parent`. For each parent:
 
 ```bash
-spur feature move <old_id> --parent <new_parent> --dry-run --json
+spur feature list --json
 ```
 
-Record `mapping` and `tasksUpdated[]`. Plan `spur feature refresh` + `spur feature check --json`. For root **`docs/*.md` only** (not nested folders): search for old ids; list hits. Do **not** rewrite `docs/features/`, `docs/tasks*/`, `plugins/`, `apps/`, `AGENTS.md` in v1.
+Count current children (ids where `id` starts with parent and length = parent.length+1, digit 1–9).  
+`free = 9 - childCount`. If `rowsUnderParent.length > free`, **abort the plan** with a clear error naming the parent, free slots, and competing old_ids. Do not apply a partial wave.
 
-Print blast-radius table: old_id | disposition | dry-run new_id | tasks | docs/*.md hits.
+**Dry-run plan (always) — sequential prediction**
+
+Do **not** fire independent dry-runs that all claim the same next id. Walk rows **in apply order** and maintain a local occupancy set:
+
+1. Start with real children of each parent from `spur feature list --json`.
+2. For each row: run `spur feature move <old_id> --parent <new_parent> --dry-run --json` **or** predict next free digit from the occupancy set (prefer live dry-run when only one pending under that parent).
+3. After predicting `new_id`, add it to the occupancy set so the next sibling under the same parent gets the next free digit.
+4. Record `mapping` and `tasksUpdated[]` from each dry-run (with multi-folder scan, tasksUpdated should list every linked WBS).
+
+Plan `spur feature refresh` + `spur feature check --json` after apply.
+
+**Root docs/\*.md references (high-confidence only)**
+
+Scan only `docs/*.md` (docs root, not nested folders). For single-letter feature ids, **do not** use bare `\\bX\\b`. Prefer:
+
+- `feature <id>` / `feature <id>,` / `(feature <id>`
+- Feature file basename stems from INDEX
+- Markdown links to `./<id>_…md`
+
+Skip pure English uses of the letter. Do **not** rewrite `docs/features/`, `docs/tasks*/`, `plugins/`, `apps/`, `AGENTS.md` in v1.
+
+Print blast-radius table: old_id | disposition | predicted new_id | tasks | docs hits.
 
 Stop if only dry-run (or neither flag — treat as dry-run).
 
@@ -62,25 +84,34 @@ Unless `--yes`, use `AskUserQuestion` (or explicit operator “apply”) with th
 
 Forbidden: raw Write/Edit of feature or task corpus to change IDs. Required: harness CLI.
 
+Apply rows **in the same order** as the dry-run plan:
+
 ```bash
 spur feature move <old_id> --parent <new_parent> --json
+```
+
+After all moves (or per wave):
+
+```bash
 spur feature refresh --json
 spur feature check --json
 ```
 
-After moves, refresh and check as above. Task edges: prefer `feature move` cascade. If a task remains stale:
+Task edges: `feature move` rewrites `feature_id` across **all** configured task folders (via `foldersConfig`). Safety check:
+
+```bash
+rg -n '^feature_id: <old_id>$' docs/tasks docs/tasks2 docs/tasks3
+```
+
+If any stale edges remain, fix with:
 
 ```bash
 spur task update <wbs> --feature <new_id> --json
 ```
 
-**Root docs/\*.md references**
-
-For each renamed id, update only `docs/*.md` at the docs root (e.g. `docs/05_FEATURES.md`). Skip hits inside `docs/features/` or `docs/tasks*`.
-
 **Report**
 
-Emit applied mapping, CLI exit codes, check summary, docs files touched, residual skips.
+Emit applied mapping, CLI exit codes, check summary, docs files touched, residual skips, free-digit preflight result.
 
 **merge-into (v1)**
 

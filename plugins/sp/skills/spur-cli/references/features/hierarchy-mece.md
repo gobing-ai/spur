@@ -138,7 +138,8 @@ Authoritative seed for restructure mapping lives in task 0356 Solution and
 | **reparent-under:J** | K L |
 | **reparent-under:H** | N O |
 | **reparent-under:D** | P |
-| **reparent-under:F** | Q R |
+| **reparent-under:F** | Q (→F9; only free F digit) |
+| **reparent-under:F8** | R (→F82; F full at 8/9 children — cannot place both Q and R under F) |
 | **merge-into** | *(none)* |
 
 **Rejected merges:** B∪H (name-only overlap); J∪K body-merge (use reparent for K/L).
