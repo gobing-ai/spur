@@ -90,7 +90,9 @@ default executor `omp` — "current agent" is not expressible on the pipeline su
 `--auto` (no confirmations), `--force` (bypass the terminal-status guard), `--fix
 <none|blockers-first|all>` (post-verdict repair), `--focus <all|security|efficiency|correctness|usability|architecture>`
 (SECUA dimensions), `--bdd` (strict Gherkin scenario-to-test check), `--next` (on PASS,
-auto-transition `testing → done`; on PARTIAL/FAIL, stop).
+auto-transition `testing → done`; on PARTIAL/FAIL, stop),
+`--skip-shippable` (alias `--skip-shipable`) — disable the feature-level **Shippable readiness
+gate** that otherwise runs when `--fix all` and a feature context exists (see Step 13).
 
 ### Step 2 — Status guard
 
@@ -332,11 +334,88 @@ to drift guards. The Testing write-back MUST name the exact artifact path and li
 pass touched (e.g. `.spur/run/0299-verdict.json:12-18 (re-evaluated R2 evidence after fix)`) so the
 mutation is discoverable from the tracked task file alone, without diffing untracked directories.
 
-### Step 13 — Report
+### Step 13 — Shippable readiness gate (feature-level)
 
-Show the verdict, the per-requirement table, and the gate outcome (cleared / blocked). Under the
-pipeline this is consumed by the gate; for a direct `/sp:dev-verify` invocation it's the operator's
-summary.
+Per-task PASS is **not** the same as “this feature is ready to ship.” After Steps 11–12, when the
+gate is **active**, evaluate feature AC satisfaction via the existing CLI (do not invent a second
+framework).
+
+**When active**
+
+| Condition | Gate |
+|-----------|------|
+| `--fix all` **and** feature context **and** **not** `--skip-shippable` / `--skip-shipable` | **ON** |
+| `--fix` is `none` or `blockers-first` | **OFF** (optional note: shippable not evaluated) |
+| No feature context | **N/A** |
+
+**Feature context**
+
+- Single verify: task frontmatter `feature_id` (or `feature-id`).
+- verifyall: `--feature <id>`, or every task in the frozen set shares the same non-empty `feature_id`.
+- Otherwise: `Shippable: N/A (no feature context)` — do not fail.
+
+**Procedure (must run when active)**
+
+1. Write verdicts only to **repo-root** `.spur/run/<wbs>-verdict.json` (CLI SSOT; never
+   `docs/.spur/run` or other nested `.spur` trees). Ephemeral scratch may use `/tmp` or
+   `/private/tmp`. Requirement / AC row `id`s in the verdict MUST match feature scenario titles
+   (or `AC-N` aliases) so satisfaction can mark MET.
+2. Run:
+
+   ```bash
+   spur feature check <featureId> --json
+   spur task list --feature <featureId> --json
+   ```
+
+3. Classify **Shippable: PASS** only if **all** of:
+   - No finding whose code/message indicates **linked but unverified** scenarios
+     (`L4_SCENARIO_UNVERIFIED` / “linked but unverified”).
+   - No **orphan / uncovered** feature scenarios (`L4_ORPHAN_SCENARIOS`,
+     `L4_UNCOVERED_FEATURE_SCENARIO` / no covering task).
+   - No **incomplete** linked tasks: every task with this `feature_id` is `done` or `cancelled`
+     (always under this gate — not only when the feature status is `verifying`).
+4. Emit a fixed block (answer file + operator summary). Examples:
+
+   ```
+   Shippable: PASS
+   Feature: I1
+   ```
+
+   ```
+   Shippable: FAIL
+   Feature: I1
+   Reasons:
+   - scenario "R1 — …" linked but unverified (covering 0360)
+   - incomplete tasks: 0364
+   Recovery:
+   - Graduate/implement work for unverified ship AC and re-verify those WBS, or
+   - Align task AC titles to feature scenarios + ensure PASS+MET verdict rows, or
+   - Use --skip-shippable only if this run is deliberately non-ship (research map only)
+   ```
+
+5. **Outcome folding**
+   - **FAIL shippable:** the run is **not clean**. verifyall batch rollup must be at least
+     **PARTIAL** (or **FAIL** if any task already FAIL). Include `"shippable": false` in `--json`
+     batch summaries. Single verify: keep the per-task `Verdict: PASS|…` line, but always print
+     `Shippable: FAIL` — do not present the session as feature-ready; if `--next` is set, state that
+     feature ship is still blocked.
+   - **PASS shippable:** print `Shippable: PASS`; per-task verdicts unchanged.
+   - **N/A / skipped:** print `Shippable: N/A …` or `Shippable: SKIPPED (--skip-shippable)`.
+
+**`--fix all` may repair** verdict id mismatches and in-task Testing gaps for WBS already in the
+set. It must **not** auto-create implement tasks for ship gaps — report Recovery instead.
+
+**verifyall:** run this step **once** after all per-task verifies (and their fix passes), not once
+per WBS.
+
+Full flag matrix and ops notes: [spur-dev/references/dev-operations.md](../spur-dev/references/dev-operations.md)
+§ verify / verifyall.
+
+### Step 14 — Report
+
+Show the per-task verdict, the per-requirement table, the gate outcome (cleared / blocked), and the
+**Shippable:** line from Step 13 when applicable. Under the pipeline the task verdict is consumed by
+the done-gate; for a direct `/sp:dev-verify` invocation the full report is the operator's summary.
 
 **`--next` on an already-terminal task (no-op surfacing).** When `--next` is invoked on a task
 already at `done` or `cancelled`, the transition cannot fire. The verify report line MUST state the
@@ -374,6 +453,8 @@ is not expressible on the pipeline surface.
 | "It's a small diff, one AC — full traceability is overkill." | Diff size does not scale the honesty bar. Every AC gets a row in the traceability table regardless of diff size. |
 | "This objective AC reads fine — `llm-judge` can clear it." | Objective AC (a test exists, a command exits 0, a file contains X) cannot be cleared by judgment alone; it needs the literal command evidence. |
 | "PARTIAL is close enough to ship." | PARTIAL/FAIL leave the task at `testing` and surface to the operator. Rounding PARTIAL up to PASS is the exact dishonesty this gate exists to catch. |
+| "All tasks PASS — the feature is shippable." | Per-task PASS can be research-only. Under `--fix all`, Step 13 must run `spur feature check`; missing implement cover ⇒ `Shippable: FAIL`. |
+| "I'll skip feature check; the map looks done." | Without `--skip-shippable`, shippable is mandatory when `--fix all` + feature context. Omitting Step 13 is a gate skip. |
 
 ## Red Flags
 
@@ -383,6 +464,8 @@ is not expressible on the pipeline surface.
 - Softening a FAIL to PARTIAL, or PARTIAL to PASS, to avoid surfacing to the operator.
 - Skipping `spur task check <wbs> --strict-core` because "it passed last run" — stale evidence is not evidence.
 - Findings written as "looks good" with no `file:line` anchor.
+- `verifyall --feature … --fix all` reporting all-task PASS without a `Shippable:` line.
+- Treating research/grilling tickets as ship cover for feature AC scenarios they do not implement.
 
 ## When to use
 
@@ -408,6 +491,8 @@ Do **not** use this skill for:
 4. **`PASS` is the only clear.** `PARTIAL` blocks the gate — there is no "good enough" pass.
 5. **Bounded fix loop.** `--fix` retries once per requirement, then reports residuals — don't loop
    forever chasing a stubborn UNMET.
+6. **Task PASS ≠ feature shippable.** When Step 13 is active, emit `Shippable:` and fold FAIL into
+   batch cleanliness. Never auto-create implement tasks to clear shippable.
 
 ---
 

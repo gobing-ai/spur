@@ -207,6 +207,24 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(verdictSchema).toContain("evidenceType: 'test' | 'command' | 'static-ref'");
     });
 
+    test('R21b — shippable readiness gate on verify/verifyall (default with --fix all)', () => {
+        const verifyCmd = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-verify.md'), 'utf8');
+        const verifyallCmd = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-verifyall.md'), 'utf8');
+        const skill = readFileSync(join(SKILLS_DIR, 'code-verification', 'SKILL.md'), 'utf8');
+        const ops = readFileSync(join(SKILLS_DIR, 'spur-dev', 'references', 'dev-operations.md'), 'utf8');
+
+        for (const text of [verifyCmd, verifyallCmd]) {
+            expect(text).toContain('--skip-shippable');
+            expect(text).toMatch(/--skip-shipable/);
+        }
+        expect(skill).toContain('### Step 13 — Shippable readiness gate');
+        expect(skill).toContain('Shippable: PASS');
+        expect(skill).toContain('Shippable: FAIL');
+        expect(skill).toContain('spur feature check');
+        expect(ops).toContain('Shippable readiness');
+        expect(ops).toContain('--skip-shippable');
+    });
+
     test('R22 — dogfood reports include always-on dual-path delivery, mandatory ledger, and computed cache methodology', () => {
         const command = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-dogfood.md'), 'utf8');
         const skill = readFileSync(join(SKILLS_DIR, 'dogfood-testing', 'SKILL.md'), 'utf8');

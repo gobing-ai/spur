@@ -71,6 +71,8 @@ Activate sp:wayfinder when:
 
 The map is a `spur feature` — its description IS the map body. Every investigation ticket is a `spur task` child of that feature. No new data model needed; sp already has the nouns (feature, task, dependency graph, WBS, status lifecycle).
 
+**Shippable destinations:** If the map destination is a **shippable implementation** (code lands, not design-doc-only), research/grilling tickets alone are not “feature done.” After investigation tickets close, graduate implement work into tasks; close the map only when `/sp:dev-verifyall --feature <id> --fix all` reports **`Shippable: PASS`** (or use `--skip-shippable` only for deliberate non-ship audits). Per-task research PASS is not enough — see `sp:code-verification` Step 13.
+
 ### 2. The Destination Fixes the Scope
 
 The destination is a one-line statement of what reaching the end of this map looks like — the spec, decision, or change this effort is finding its way to. Every session orients to it before choosing a ticket. Scope is fixed by the destination: work beyond it is out of scope, not fog.
