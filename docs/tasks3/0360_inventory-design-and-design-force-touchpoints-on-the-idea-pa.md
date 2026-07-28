@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: []
 created_at: "2026-07-28T03:21:51.586Z"
-updated_at: "2026-07-28T03:32:50.110Z"
+updated_at: "2026-07-28T04:02:26.155Z"
 done_forced: "true"
 done_reason: "Research-only task: inventory/change-map written to Solution; no code changes to verify"
 ---
@@ -108,11 +108,33 @@ Feature: Idea-path --design / design=force inventory
 
 17 must-change touchpoints across 5 unique files (+ 1 mirror copy at `.spur/workflows/`). All edits are deletions or enum collapses — no new code. The `design` var on the idea path becomes `auto | skip` (2-value enum); the `--design` CLI flag is removed from `dev-idea` only. `/sp:dev-plan` retains its own `--design` flag independently.
 ### Testing
-Research task — no code changes, no tests to run. Verification is AC traceability only.
+**Mode:** research / wayfinder inventory (no runtime code). Re-verified 2026-07-28 under `/sp:dev-verifyall --feature I1 --auto --force --focus all --fix all`.
 
-- **AC: "Idea-path touchpoints listed"** — PASS. Solution table lists 17 touchpoints with `file:line` evidence from grep across `plugins/sp/commands/dev-idea.md`, `config/workflows/idea-pipeline.yaml`, `.spur/workflows/idea-pipeline.yaml`, `plugins/sp/skills/spur-dev/references/dev-operations.md`, and `plugins/sp/skills/brainstorm/SKILL.md`.
-- **AC: "Scope split recorded"** — PASS. Every touchpoint is tagged must-change (I1) or leave-alone (out of scope) with explicit rationale.
-- **AC: "Change map is actionable"** — PASS. Each must-change entry has a one-line intended edit (e.g. "Remove `[--design]` from arg-hint", "Collapse to `auto | skip`").
+**Coverage:** N/A (documentation-only change; no runtime code path added).
+
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 List idea-path `--design` / force touchpoints | MET | Solution must-change table rows 1–17 with path:line anchors; re-read this turn: `plugins/sp/commands/dev-idea.md:3,14,17-18,23` still contain `--design` / `force`; `config/workflows/idea-pipeline.yaml:11,19-21,143,262,302` still have force branches; `dev-operations.md:68,255,257,259`; `brainstorm/SKILL.md:189` |
+| R2 Must-change vs leave-alone split | MET | Solution **Must-change for I1** (17 rows) vs **Leave alone** (dev-plan / planning-workflow / plan §6) — plan `--design` intentionally out of scope |
+| R3 Actionable intended edit per file | MET | Each of 17 rows has a one-line intended edit (remove flag / collapse enum / drop force guard) |
+| R4 No implementation of removal | MET | Live tree still has `--design` on idea surfaces (citations above); inventory-only |
+| R5 Map I1 Decisions so far gist | MET | `docs/features/I1_*.md` Decisions so far includes 0360 one-liner (fixed this verify pass under `--fix all`) |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: Idea-path touchpoints listed | MET | static | Solution inventory table 17 rows + file:line evidence re-verified this run |
+| Scenario: Scope split recorded | MET | static | Must-change vs Leave alone sections with rationale |
+| Scenario: Change map is actionable | MET | static | Per-row intended edit column; no pipeline edits performed |
+
+**Design conformance:** N/A (issue/research template; Design section empty by design).
+
+**SECUA:** N/A — research inventory only; no production code in change scope. No secrets, injection, or runtime surfaces.
+
+**Fix pass (`--fix all`):** R5 was UNMET (map gist missing). Appended 0360–0363 gists to feature I1 Notes Decisions so far; cleared graduated fog. Artifact: feature section update via `spur feature update I1 --section Notes`.
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->

@@ -7,20 +7,23 @@
 # No state in this pipeline inlines another pipeline's state graph (no-nesting principle,
 # design §System Principles 4).
 #
-# Shape: start -> discovery -> feature-create -> ac-generate -> feature-check
-#          -> system-design (conditional: needs_design signal or --design)
+# Shape: start -> discovery -> idea-eval -> feature-create -> ac-generate -> feature-check
+#          -> system-design (conditional: needs_design signal)
 #          -> design-approval (taste HITL gate; not auto-clicked by --auto)
 #          -> decompose -> batch-create -> handoff
+#        (idea-eval rejection -> cancelled)
 #        (feature-check failure routes back to ac-generate; batch-create failure to decompose).
 #
 # Vars (passed as a JSON object via `--vars`):
 #   idea     — the idea text (required), e.g. --vars '{"idea":"add a --dry-run flag to dev-wrap"}'
 #   profile  — set --vars '{"profile":"auto"}' to skip objective HITL gates (feature-check, batch-create)
-#   design   — "auto" (default, signal-driven), "force" (--design), "skip" (--skip-design)
+#   design   — "auto" (default, signal-driven) or "skip" (--skip-design). No force path.
 #              Unified: skip also means omit per-task Design in batch-create (scaffold only;
-#              refine fills later). Default/force: decompose must author batch item `design`.
+#              refine fills later). Default: decompose must author batch item `design`.
 #   design_approved — "true" only when the operator explicitly approved the design in-session;
 #              lets profile=auto route around the design-approval taste gate (default "false")
+#   idea_approved — "true" only when the operator explicitly approved the idea-eval report
+#              in-session; lets profile=auto route around the idea-eval taste gate (default "false")
 #   spurBin  — PATH-independent spur invocation (overridden by CLI at run start)
 #   agent    — agent for agent.run steps (default: omp)
 #
@@ -29,9 +32,9 @@
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: idea-pipeline
-description: "Idea to feature + AC + task batch: discovery, feature-create, ac-generate, feature-check, system-design, decompose, batch-create, handoff"
-# Worst legal auto path with advertised caps: start/discovery/feature/ac plus 2 AC retries,
-# design, one design rejection, decompose plus 2 batch retries, handoff ≈22 transitions.
+description: "Idea to feature + AC + task batch: discovery, idea-eval, feature-create, ac-generate, feature-check, system-design, decompose, batch-create, handoff"
+# Worst legal auto path with advertised caps: start/discovery/idea-eval/feature/ac plus 2 AC
+# retries, design, one design rejection, decompose plus 2 batch retries, handoff ≈24 transitions.
 # Keep a small cushion so the explicit retry caps fail first, not the engine bound.
 iterationBound: 25
 initialState: start
@@ -44,6 +47,7 @@ vars:
   profile: "standard"
   design: "auto"
   design_approved: "false"
+  idea_approved: "false"
   featureId: ""
   __hitlAnswer: ""
   spurBin: "spur"
@@ -64,7 +68,7 @@ states:
           command: "${vars.spurBin} agent doctor ${vars.agent}"
       - kind: shell
         options:
-          command: 'mkdir -p .spur/run && rm -f .spur/run/idea-ac-retry-count .spur/run/idea-decompose-retry-count .spur/run/idea-feature-id.txt .spur/run/idea-ac-content.md .spur/run/idea-ac-done.txt .spur/run/idea-task-batch.json .spur/run/idea-batch-create.done .spur/run/idea-batch-create.failed'
+          command: 'mkdir -p .spur/run && rm -f .spur/run/idea-ac-retry-count .spur/run/idea-decompose-retry-count .spur/run/idea-feature-id.txt .spur/run/idea-ac-content.md .spur/run/idea-ac-done.txt .spur/run/idea-task-batch.json .spur/run/idea-batch-create.done .spur/run/idea-batch-create.failed .spur/run/idea-eval-report.md .spur/run/idea-needs-design.json'
 
   - id: discovery
     description: >
@@ -72,24 +76,41 @@ states:
       and record a design summary. The brainstorm ALWAYS records a design summary
       ("nothing is too simple" pattern). The brainstorm also emits a needs_design
       boolean signal written to .spur/run/idea-needs-design.json — this determines
-      whether the system-design state runs.
+      whether the system-design state runs. As its terminal artifact for the idea path,
+      brainstorm also emits the idea-evaluation report to .spur/run/idea-eval-report.md
+      (template: plugins/sp/skills/spur-dev/references/idea-evaluation.md).
     onEnter:
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: "Run sp:brainstorm for the idea: ${vars.idea}. The skill owns the approach-generation, design summary, and `needs_design` signal criteria; emit .spur/run/idea-needs-design.json ({\"needs_design\": true|false}) and the design summary per the skill's `Design Approval Gate` and `The needs_design signal` sections."
+          input: "Run sp:brainstorm for the idea: ${vars.idea}. The skill owns the approach-generation, design summary, and `needs_design` signal criteria; emit .spur/run/idea-needs-design.json ({\"needs_design\": true|false}) and the design summary per the skill's `Design Approval Gate` and `The needs_design signal` sections. Also emit the idea-evaluation report to .spur/run/idea-eval-report.md per plugins/sp/skills/spur-dev/references/idea-evaluation.md (urgency/necessity 0–5, premises, pros/cons, alternatives, enhanced idea, recommendation)."
           timeoutMs: ${vars.stepTimeoutMs}
+
+  - id: idea-eval
+    description: >
+      HITL taste gate. Discovery has produced the idea-evaluation report
+      (.spur/run/idea-eval-report.md) with urgency/necessity scores, premises,
+      pros/cons, and a recommendation. The operator reviews and approves or
+      rejects. This gate is NOT auto-clicked by --auto (taste gate, like
+      design-approval). Only routes around when vars.idea_approved=true
+      (explicit prior approval).
+    pause: true
+    onEnter:
+      - kind: hitl.confirm
+        options:
+          prompt: "Review the idea evaluation report (.spur/run/idea-eval-report.md). Approve to create a feature, or reject to cancel? (Reject creates no feature.)"
 
   - id: feature-create
     description: >
       Create a feature via spur feature create, or select an existing feature id.
       The agent writes the feature id to .spur/run/idea-feature-id.txt for subsequent
-      states to read.
+      states to read. Prefer the enhanced idea from .spur/run/idea-eval-report.md as
+      context; do not overwrite vars.idea.
     onEnter:
       - kind: agent.run
         options:
           agent: ${vars.agent}
-          input: "Create a feature for the idea: ${vars.idea}. Use 'spur feature create \"<name>\" --json' to create it. Write the feature id to .spur/run/idea-feature-id.txt. If an existing feature is appropriate, use its id instead."
+          input: "Create a feature for the idea: ${vars.idea}. Read .spur/run/idea-eval-report.md if present for the enhanced idea and scores. Use 'spur feature create \"<name>\" --json' to create it. Write the feature id to .spur/run/idea-feature-id.txt. If an existing feature is appropriate, use its id instead."
           expectFile: .spur/run/idea-feature-id.txt
           timeoutMs: ${vars.stepTimeoutMs}
       - kind: file.read.into-var
@@ -140,7 +161,7 @@ states:
   - id: system-design
     description: >
       Dispatch sp:sys-architecture to produce the system design. This state runs
-      only when needs_design=true (or --design forces it). The agent creates ADR
+      only when needs_design=true (design=auto signal path). The agent creates ADR
       entries, architecture updates, and design satellites through constitution rules.
       The design-approval state follows (taste gate).
     onEnter:
@@ -232,12 +253,36 @@ transitions:
     guard:
       kind: always
 
-  # ── discovery -> feature-create ──
+  # ── discovery -> idea-eval ──
   - from: discovery
-    to: feature-create
-    description: Discovery complete — create or select a feature.
+    to: idea-eval
+    description: Discovery complete — gate on idea evaluation taste decision.
     guard:
       kind: always
+
+  # ── idea-eval: auto-skip (profile=auto + idea_approved) OR approve/reject HITL ──
+  # Declaration order: auto-skip FIRST (same pattern as system-design → design-approval).
+  - from: idea-eval
+    to: feature-create
+    description: profile=auto AND idea_approved=true — skip idea-eval taste gate.
+    guard:
+      kind: shell
+      options:
+        command: 'test "${vars.profile}" = auto && test "${vars.idea_approved}" = true'
+  - from: idea-eval
+    to: feature-create
+    description: Idea evaluation approved — create or select a feature.
+    guard:
+      kind: shell
+      options:
+        command: 'test "${vars.__hitlAnswer}" = yes'
+  - from: idea-eval
+    to: cancelled
+    description: Idea evaluation rejected or cancelled — no feature created.
+    guard:
+      kind: shell
+      options:
+        command: 'test "${vars.__hitlAnswer}" = no || test "${vars.__hitlAnswer}" = cancel'
 
   # ── feature-create -> ac-generate ──
   - from: feature-create
@@ -252,14 +297,14 @@ transitions:
   # routes directly to the appropriate next state. Under interactive, the always fallback enters
   # the feature-check state whose onEnter hitl.confirm pauses for operator confirmation.
   #
-  # Auto-skip 1: pass + design route → system-design
+  # Auto-skip 1: pass + design route → system-design (design=auto + needs_design != false)
   - from: ac-generate
     to: system-design
     description: "profile=auto, check passed, design route — run system design."
     guard:
       kind: shell
       options:
-        command: 'test "${vars.profile}" = auto && ${vars.spurBin} feature check ${vars.featureId} --strict && (test "${vars.design}" = force || (test "${vars.design}" = auto && test "$(jq -r .needs_design .spur/run/idea-needs-design.json 2>/dev/null)" != false))'
+        command: 'test "${vars.profile}" = auto && ${vars.spurBin} feature check ${vars.featureId} --strict && test "${vars.design}" = auto && test "$(jq -r .needs_design .spur/run/idea-needs-design.json 2>/dev/null)" != false'
   # Auto-skip 2: pass + skip-design route → decompose
   - from: ac-generate
     to: decompose
@@ -299,7 +344,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "${vars.__hitlAnswer}" = yes && ${vars.spurBin} feature check ${vars.featureId} --strict && (test "${vars.design}" = force || (test "${vars.design}" = auto && test "$(jq -r .needs_design .spur/run/idea-needs-design.json 2>/dev/null)" != false))'
+        command: 'test "${vars.__hitlAnswer}" = yes && ${vars.spurBin} feature check ${vars.featureId} --strict && test "${vars.design}" = auto && test "$(jq -r .needs_design .spur/run/idea-needs-design.json 2>/dev/null)" != false'
   - from: feature-check
     to: decompose
     description: Feature check passed, skip-design route — go directly to decompose.

@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: []
 created_at: "2026-07-28T03:21:53.100Z"
-updated_at: "2026-07-28T03:34:20.465Z"
+updated_at: "2026-07-28T04:02:27.451Z"
 done_forced: "true"
 done_reason: "Prototype-only task: template + filled example + home recommendation written to Solution; no code changes to verify"
 ---
@@ -171,11 +171,33 @@ Recommendation: `plugins/sp/skills/spur-dev/references/idea-evaluation.md`
 
 Rationale: The template is consumed by the idea-pipeline agent at the `idea-eval` state — that agent is orchestrated by `sp:spur-dev`, making the `spur-dev/references/` directory the natural home (alongside `decision-brief.md` which it follows). It should NOT live under `brainstorm/` because brainstorm owns discovery, not the evaluation gate. Final ownership may be confirmed in 0362 (agent contract).
 ### Testing
-Prototype task — no code changes, no tests to run. Verification is AC traceability only.
+**Mode:** prototype / wayfinder (no runtime code). Re-verified 2026-07-28 under `/sp:dev-verifyall --feature I1 --auto --force --focus all --fix all`.
 
-- **AC: "Template covers required dimensions"** — PASS. Solution template includes all required sections: enhanced idea statement, urgency 0–5, necessity 0–5, premises, pros, cons, alternatives, recommendation (proceed/reshape/drop), and approve/reject prompt. Score guide with 0–5 definitions included.
-- **AC: "Filled example exists"** — PASS. Solution includes a complete filled example using the idea-evaluation taste gate itself as the sample idea, showing realistic scores (urgency 3, necessity 4) with rationale prose.
-- **AC: "Home path recommended"** — PASS. Solution recommends `plugins/sp/skills/spur-dev/references/idea-evaluation.md:1` as long-term home with rationale (consumed by spur-dev-orchestrated pipeline; aligns with `decision-brief.md` in same directory; brainstorm owns discovery, not evaluation).
+**Coverage:** N/A (documentation-only change; no runtime code path added).
+
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 Template with all required dimensions | MET | Solution §1 template includes Enhanced Idea, Scores (urgency/necessity 0–5), Premises, Pros, Cons, Better Alternatives, Recommendation (proceed\|reshape\|drop), Approve/Reject; score guide 0–5 defined |
+| R2 Decision-brief norms alignment | MET | Solution cites `decision-brief.md:10`; recommendation mandatory; stakes plain English; no second HITL SSOT |
+| R3 Long-term home recommended | MET | Solution recommends `plugins/sp/skills/spur-dev/references/idea-evaluation.md` (ownership deferred to 0362, which confirmed) |
+| R4 No pipeline wire-up | MET | No idea-pipeline.yaml / command edits from this ticket; prototype in Solution only |
+| R5 Map I1 gist | MET | I1 Decisions so far includes 0361 one-liner (fixed this verify pass under `--fix all`) |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: Template covers required dimensions | MET | static | Template body in Solution; keywords urgency/necessity/premises/pros/cons/alternative/recommend/approve/reject/enhanced all present |
+| Scenario: Filled example exists | MET | static | Solution §2 filled example for post-discovery taste gate idea |
+| Scenario: Home path recommended | MET | static | Recommended path `plugins/sp/skills/spur-dev/references/idea-evaluation.md` |
+
+**Design conformance:** N/A (prototype issue).
+
+**SECUA:** N/A — markdown prototype only.
+
+**Fix pass (`--fix all`):** R5 was UNMET; map gist written on I1 this pass.
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->

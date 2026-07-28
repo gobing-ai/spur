@@ -186,11 +186,29 @@ of an unnecessary design step is low; the cost of skipping a needed one is high.
 
 **Flag overrides** (consumed by `idea-pipeline.yaml` / plan, not brainstorm itself):
 
-- `--design` forces `system-design` (feature satellite) regardless of signal; task `### Design` still
-  defaults **on** in the later batch.
-- `--skip-design` (unified): skips `system-design` **and** omits per-task `design` fields at
-  batch-create (scaffold only). Brainstorm design summary is still recorded. Refine is the fallback
-  for blank task Design.
+- **Idea path (`/sp:dev-idea`):** there is no `--design` force flag. Design is default-on via the
+  `needs_design` signal (`design=auto`); only `--skip-design` opts out of system-design **and**
+  omits per-task `design` fields at batch-create (scaffold only). Brainstorm design summary is still
+  recorded. Refine is the fallback for blank task Design.
+- **Plan path (`/sp:dev-plan`):** still supports `--design` to force the feature satellite regardless
+  of the seam heuristic; task `### Design` still defaults **on** in the later batch unless
+  `--skip-design`.
+
+### Idea-evaluation report (idea path)
+
+When brainstorm runs under `idea-pipeline` discovery, it MUST also emit a filled
+**idea-evaluation report** to `.spur/run/idea-eval-report.md` using the template SSOT
+[`spur-dev/references/idea-evaluation.md`](../spur-dev/references/idea-evaluation.md):
+
+- Enhanced idea statement (sidecar — does **not** overwrite the operator's original idea text)
+- Urgency and necessity scores (0–5) with one-line rationales
+- Premises, pros, cons, better alternatives (if any)
+- Recommendation (`proceed` | `reshape` | `drop`) + stakes
+- Approve / reject prompt for the `idea-eval` taste gate
+
+This report is the terminal discovery artifact for the idea path alongside `idea-needs-design.json`
+and the design summary. The pipeline `idea-eval` state is HITL-only; it does not re-author the
+report.
 
 ### Auto-mode behavior
 

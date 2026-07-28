@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: ["0362", "0360"]
 created_at: "2026-07-28T03:21:55.875Z"
-updated_at: "2026-07-28T03:37:24.523Z"
+updated_at: "2026-07-28T04:02:30.177Z"
 done_forced: "true"
 done_reason: "Research/design task: YAML insertion plan written to Solution with file:line evidence; no code changes to verify"
 ---
@@ -197,11 +197,34 @@ The `idea-eval` state follows `design-approval` precedent exactly:
   - If `idea_approved=false` (default) → state enters, pauses for `hitl.confirm`, waits for operator
 - This means `--auto` without `--idea-approved` still pauses at idea-eval — consistent with Auto-Decision Principle #5 (taste decisions always surface to human)
 ### Testing
-Research/design task — no code changes, no tests to run. Verification is AC traceability only.
+**Mode:** research / YAML design plan (no runtime code). Re-verified 2026-07-28 under `/sp:dev-verifyall --feature I1 --auto --force --focus all --fix all`.
 
-- **AC: "State graph specified"** — PASS. Solution specifies the new `idea-eval` state (HITL-only, `pause: true`, `hitl.confirm`), all changed/removed/added transitions (discovery → idea-eval → feature-create/cancelled), auto-skip guard, and the updated state graph shape. Cites precedent from `config/workflows/idea-pipeline.yaml:153` (design-approval) and `config/workflows/idea-pipeline.yaml:334` (auto-skip guard pattern).
-- **AC: "Force path removal planned"** — PASS. Solution lists every `design=force` branch planned for deletion: guard at `config/workflows/idea-pipeline.yaml:262` (ac-generate → system-design), guard at `config/workflows/idea-pipeline.yaml:302` (feature-check → system-design), plus 5 comment updates. Each has a specific edit (remove `test "${vars.design}" = force ||`, collapse enum to `auto|skip`).
-- **AC: "Taste gate under --auto specified"** — PASS. Solution states `profile=auto` still pauses at `idea-eval` unless `idea_approved=true` (explicit prior-approval var). Auto-skip guard: `test "${vars.profile}" = auto && test "${vars.idea_approved}" = true`. Mirrors `design-approval` → `decompose` pattern at `config/workflows/idea-pipeline.yaml:334`.
+**Coverage:** N/A (documentation-only change; no runtime code path added).
+
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 Post-discovery flow specified | MET | Solution planned graph: discovery → idea-eval → (approve) feature-create \| (reject) cancelled; new state YAML sketch with pause+hitl.confirm |
+| R2 design var collapse planned | MET | Solution §3 lists force-branch removals at idea-pipeline.yaml:11,19-21,143,262,302 (anchors re-read this run — force still present, plan-only) |
+| R3 HITL taste-gate mechanism | MET | Solution: pause:true + hitl.confirm; auto-skip only when profile=auto && idea_approved=true; precedent design-approval L153 + system-design→decompose auto-skip ~L336 |
+| R4 iterationBound / validate | MET | Solution §7: bound stays 25; §8: `spur workflow validate` on config + .spur copies |
+| R5 No YAML edit in this ticket | MET | idea-pipeline still lacks idea-eval state; discovery→feature-create still present |
+| R6 Map I1 gist + implement ready | MET | I1 Decisions so far includes 0363 one-liner; fog notes implement tasks ready to graduate |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: State graph specified | MET | static | Solution planned graph + idea-eval state + transitions |
+| Scenario: Force path removal planned | MET | static | §3 line list with force guard deletions |
+| Scenario: Taste gate under --auto specified | MET | static | idea_approved auto-skip guard pattern |
+
+**Design conformance:** N/A (research plan).
+
+**SECUA:** N/A — design plan only; no production edits.
+
+**Fix pass (`--fix all`):** R6 was UNMET; map gist written on I1 this pass. `.spur/run/0363-verdict.json` written this run.
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->

@@ -65,7 +65,7 @@ each would be scope creep for one-liner procedures.
 | 13a | parallel | `dev-parallel` | `Skill()` | `sp:parallel-execution` | `--tasks <selector> [--feature <id>] [--mode <fan-out\|review-panel\|investigation>] [--agent <name\|auto>] [--json]` |
 | 14 | wrap | `dev-wrap` | `Skill()` | `spur workflow run` (wrapup-pipeline) | `<wbs> [--auto] [--merge]` |
 | 15 | wrapall | `dev-wrapall` | `Skill()` | `spur workflow run` (wrapup-pipeline) | `[--since <iso>] [--feature <id>] [--status <s>] [--auto] [--merge]` |
-| 16 | idea | `dev-idea` | `Skill()` | `spur workflow run` (idea-pipeline) | `"<idea>" [--auto] [--design] [--skip-design] [--design-approved]` |
+| 16 | idea | `dev-idea` | `Skill()` | `spur workflow run` (idea-pipeline) | `"<idea>" [--auto] [--skip-design] [--design-approved] [--idea-approved]` |
 
 ---
 
@@ -254,21 +254,22 @@ must not be changed without updating the backing skill.
 ### 16. idea
 
 - **Purpose:** Turn a vague idea into a feature with AC and a decomposed task batch — the unified entry point for the planning half.
-- **Inputs:** `"<idea>"` (required, positional, quoted). `--auto` skips objective HITL gates (feature-check, batch-create); design-approval still pauses (taste gate). `--design` forces the system-design step to run. `--skip-design` skips system-design (brainstorm design summary still recorded). `--design-approved` marks the design explicitly approved in the current operator session (see below).
+- **Inputs:** `"<idea>"` (required, positional, quoted). `--auto` skips objective HITL gates (feature-check, batch-create); **idea-eval** and **design-approval** still pause (taste gates) unless prior-approval flags are set. `--skip-design` skips system-design (brainstorm design summary still recorded). `--design-approved` marks the design explicitly approved in the current operator session. `--idea-approved` marks the idea-evaluation report explicitly approved (routes around idea-eval under `--auto`). There is **no** `--design` force flag on the idea path.
 - **Backing:** `spur workflow run .spur/workflows/idea-pipeline.yaml` — direct workflow invocation.
-- **Behavior:** Builds `--vars '{"idea":"<text>","profile":"interactive|auto","design":"auto|force|skip"}'` and invokes the idea pipeline. The pipeline runs: discovery (sp:brainstorm, records design summary + emits `needs_design` signal) -> feature-create -> ac-generate -> feature-check (objective gate) -> system-design (conditional, via `needs_design` signal or `--design`/`--skip-design` flags) -> design-approval (taste HITL gate) -> decompose (sp:spec-decomposition) -> batch-create (objective gate) -> handoff. The pipeline STOPS at handoff — tasks are created but NOT executed. No pipeline nesting — idea-pipeline does not call task-pipeline or feature-dev.
+- **Behavior:** Builds `--vars '{"idea":"<text>","profile":"interactive|auto","design":"auto|skip","design_approved":"false|true","idea_approved":"false|true"}'` and invokes the idea pipeline. The pipeline runs: discovery (sp:brainstorm — design summary + `needs_design` + idea-eval report) -> **idea-eval** (taste HITL; reject → cancelled) -> feature-create -> ac-generate -> feature-check (objective gate) -> system-design (conditional, via `needs_design` signal or `--skip-design`) -> design-approval (taste HITL) -> decompose (sp:spec-decomposition) -> batch-create (objective gate) -> handoff. The pipeline STOPS at handoff — tasks are created but NOT executed. No pipeline nesting — idea-pipeline does not call task-pipeline or feature-dev.
 - **Delegation:** Direct `spur workflow run .spur/workflows/idea-pipeline.yaml` (no `Skill()` call — the command builds the vars JSON and invokes the workflow directly via `Bash`).
-- **Design package (`--design` / `--skip-design`, unified with plan):**
+- **Idea-evaluation gate:** After discovery, the operator reviews `.spur/run/idea-eval-report.md` (template SSOT: [idea-evaluation.md](idea-evaluation.md)). Approve continues; reject/cancel terminates with no feature. Under `--auto`, still pauses unless `idea_approved=true` (`--idea-approved`). Enhanced idea is a sidecar — `vars.idea` is not overwritten.
+- **Design package (`--skip-design` only on idea path):**
 
   | Flags | Feature satellite (`system-design`) | Task `### Design` in batch |
   |---|---|---|
   | (default) | seam / `needs_design` signal | **author `design` on each batch item** |
-  | `--design` | always run | **author `design` on each batch item** |
   | `--skip-design` | skip (keep brainstorm summary) | **omit `design`** — refine fallback later |
 
   Ties lean design — when the signal is ambiguous, `system-design` runs. Task Design defaults on
-  unless `--skip-design`.
+  unless `--skip-design`. (Plan path may still use `--design` to force the satellite; idea path does not.)
 - **`--design-approved`:** sets `design_approved=true` for an explicitly approved design in the current operator session; under `--auto`, routes around the design-approval taste gate. The `design_approved` var semantics are owned by [cross-cutting.md](cross-cutting.md) § "Design Approval Gate" — not duplicated here.
+- **`--idea-approved`:** sets `idea_approved=true` for an explicitly approved idea-eval report in the current operator session; under `--auto`, routes around the idea-eval taste gate.
 
 ---
 

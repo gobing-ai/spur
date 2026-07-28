@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: ["0361"]
 created_at: "2026-07-28T03:21:54.623Z"
-updated_at: "2026-07-28T03:35:51.678Z"
+updated_at: "2026-07-28T04:02:28.863Z"
 done_forced: "true"
 done_reason: "Grilling/decision task: contract decisions written to Solution with file:line evidence; no code changes to verify"
 ---
@@ -119,11 +119,34 @@ Contract summary:
 - `plugins/sp/commands/dev-idea.md:3` — add `[--idea-approved]` to arg-hint
 - `plugins/sp/commands/dev-idea.md:23` — add `"idea_approved":"false|true"` to `--vars` JSON
 ### Testing
-Grilling/decision task — no code changes, no tests to run. Verification is AC traceability only.
+**Mode:** grilling / wayfinder decision (no runtime code). Re-verified 2026-07-28 under `/sp:dev-verifyall --feature I1 --auto --force --focus all --fix all`.
 
-- **AC: "Ownership decided"** — PASS. Solution names `sp:brainstorm` (discovery) as report author, not a dedicated pipeline state. Rationale cites precedent from `config/workflows/idea-pipeline.yaml:153` (design-approval is a non-agent HITL-only state).
-- **AC: "Artifacts and enhanced-idea flow decided"** — PASS. Artifact path: `.spur/run/idea-eval-report.md`. Enhanced idea is a sidecar (NOT overwriting `vars.idea`). Template home: `plugins/sp/skills/spur-dev/references/idea-evaluation.md:1` (per 0361). Rationale cites `.spur/run/` convention from `config/workflows/idea-pipeline.yaml:67`.
-- **AC: "Reject and re-entry decided"** — PASS. Reject → `cancelled` terminal (already declared at `config/workflows/idea-pipeline.yaml:40`). No cleanup. Re-entry: `--idea-approved` flag mirroring `--design-approved` pattern (`config/workflows/idea-pipeline.yaml:22`); always-pause under `--auto` unless `idea_approved=true`.
+**Coverage:** N/A (documentation-only change; no runtime code path added).
+
+**Per-Requirement Traceability**
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 Ownership decision | MET | Solution R1: extend discovery/`sp:brainstorm` (not separate agent.run); cites design-approval non-agent HITL at `config/workflows/idea-pipeline.yaml:153` (re-read: `- id: design-approval`) |
+| R2 Artifacts + enhanced-idea flow | MET | Solution R2: `.spur/run/idea-eval-report.md` sidecar; `vars.idea` not overwritten; template home per 0361 |
+| R3 Reject path | MET | Solution R3: reject → `cancelled` (terminal at idea-pipeline.yaml:40); no discovery cleanup; next-start cleans `.spur/run` (L67) |
+| R4 Re-entry under --auto | MET | Solution R4: always-pause; add `idea_approved` / `--idea-approved` mirror of `design_approved` |
+| R5 No YAML/code impl | MET | Decisions only in Solution; pipeline still discovery→feature-create (L236 area) without idea-eval state |
+| R6 Map I1 gist | MET | I1 Decisions so far includes 0362 one-liner (fixed this verify pass under `--fix all`) |
+
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| Scenario: Ownership decided | MET | static | Solution R1 names brainstorm/discovery ownership |
+| Scenario: Artifacts and enhanced-idea flow decided | MET | static | Solution R2 sidecar path + vars.idea preserved |
+| Scenario: Reject and re-entry decided | MET | static | Solution R3+R4 cancelled + idea_approved |
+
+**Design conformance:** N/A (grilling).
+
+**SECUA:** N/A — decision-only.
+
+**Fix pass (`--fix all`):** R6 was UNMET; map gist written on I1 this pass.
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
