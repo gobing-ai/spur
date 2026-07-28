@@ -107,6 +107,7 @@ list this README is checked against.
 | `dev-unit` | Generate or extend tests until the unit target is met |
 | `dev-wrap` | Wrap up a single completed task — learnings, metrics, doc-sync, optional feature transition and branch cleanup |
 | `dev-refresh` | Refresh feature status by feature ID, task WBS, or batch sweep via spur feature sync |
+| `dev-featurechange` | Restructure feature tree from a mapping file — dry-run/apply via `spur feature move`, task edges, root `docs/*.md` only |
 
 #### Lifecycle — batch and parallel
 
@@ -318,7 +319,7 @@ Skills contain zero validation logic — the CLI is the gate.
 
 Thin slash-command wrappers that parse user arguments and delegate to the corresponding skill. Each
 command is a user-facing entry point that bridges natural language to skill invocation. There are
-**32 commands** (see the Command index above for the full list), organized by the surface they wrap:
+**33 commands** (see the Command index above for the full list), organized by the surface they wrap:
 
 | Prefix | Count | Delegates to | Purpose |
 | -------- | ------- | ------------- | --------- |
@@ -340,7 +341,7 @@ no per-platform artifacts — only the platform-independent thin wrappers.
 **Thin-wrapper contract** is enforced by `scripts/validate-commands.ts`:
 
 ```bash
-bun plugins/sp/scripts/validate-commands.ts            # validate all 32 commands
+bun plugins/sp/scripts/validate-commands.ts            # validate all 33 commands
 bun plugins/sp/scripts/validate-commands.ts --json     # machine-readable output
 ```
 
@@ -444,7 +445,7 @@ the hard gate that the soft skill cannot enforce on its own.
 ```mermaid
 graph TB
     subgraph "User entry points"
-        CMD["Commands<br/>32 slash commands<br/>/sp:dev-plan, /sp:dev-runall, /sp:dev-refineall, /sp:rule-add, ..."]
+        CMD["Commands<br/>33 slash commands<br/>/sp:dev-plan, /sp:dev-runall, /sp:dev-refineall, /sp:rule-add, ..."]
         AGENT["Agents<br/>3 subagents<br/>expert-spur, super-coder, super-reviewer"]
         HOOK["PreToolUse hook<br/>Write|Edit matcher"]
     end

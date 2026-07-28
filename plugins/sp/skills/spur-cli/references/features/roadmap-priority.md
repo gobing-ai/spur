@@ -22,6 +22,11 @@ Feature hierarchy should be user-facing first:
 - Technical modules, package names, and endpoints belong in prose or notes, not as the primary tree
   shape unless the product itself is developer-facing infrastructure.
 
+**Normative create/extend rules (MECE, root gate, merge vs reparent):** see
+[hierarchy-mece.md](hierarchy-mece.md). Load that file before `spur feature create` of a new root or
+any bulk restructure. This section only states the product-facing intent; hierarchy-mece is the
+checklist.
+
 Use `spur feature move <id> --parent <id>` to restructure. Never hand-edit IDs; `move` cascade-renames
 descendants and preserves the tree invariant.
 

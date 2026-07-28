@@ -51,6 +51,12 @@ spur feature create "Task CLI" --parent H1            # → H1<n>
 To restructure, use `move` — never hand-edit an ID. `move <id> --parent <new>` re-parents the
 subtree and **cascade-renames** every descendant; omit `--parent` to lift it to a top-level group.
 
+**Before create or restructure (judgment, not CLI):** load
+[features/hierarchy-mece.md](features/hierarchy-mece.md) — MECE sibling sets, **sparse cautious
+roots**, extend-vs-create decision procedure, merge vs reparent, depth/width limits. `/sp:dev-plan`,
+`/sp:dev-idea`, and `/sp:dev-featurechange` must follow that checklist so new work prefers an
+existing parent over a new letter.
+
 ## Editing a feature: status, fields, and sections
 
 `update` is multi-mode (status, field, and/or section — not all require mutual exclusion, but each
@@ -143,6 +149,9 @@ as prose or notes unless the product surface is developer infrastructure. Priori
 (`spur feature update <id> --field priority --value P1`), while status is lifecycle state
 (`backlog → active → verifying → blocked → done → cancelled`). Do not conflate the two.
 
+**Structure first:** [features/hierarchy-mece.md](features/hierarchy-mece.md) (MECE roots, when to
+extend vs create). **Then priority:** [features/roadmap-priority.md](features/roadmap-priority.md).
+
 For roadmap adjustment, apply the RICE/MoSCoW and strategy guidance from `sp:spur-dev`'s product
 planning reference, then apply accepted deterministic changes through `spur feature update`,
 `spur feature move`, `spur feature refresh`, and `spur feature check`.
@@ -172,6 +181,7 @@ restated as prose here. This is what `sp:spur-dev`'s feature-check gate loop run
 | --------- | ------ |
 | [features/verbs.md](features/verbs.md) | Per-verb flag detail, JSON shapes, the 4 check layers |
 | [features/acceptance-criteria.md](features/acceptance-criteria.md) | Gherkin template, R-numbering, `@core`/`@edge`, traceability mechanics |
+| [features/hierarchy-mece.md](features/hierarchy-mece.md) | MECE roots, create/extend/reparent/merge rules, root gate, depth limits |
 | [features/roadmap-priority.md](features/roadmap-priority.md) | Roadmap hierarchy, priority/status conventions, and feature-tree adjustment workflow |
 
 ## See also
