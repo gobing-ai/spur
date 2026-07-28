@@ -1,7 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import type { WorkflowPersistenceAdapter, WorkflowRunRecord } from '@gobing-ai/ts-dual-workflow-engine';
 import { EventBus } from '@gobing-ai/ts-infra';
-import { ObservableWorkflowAdapter, type WorkflowObservabilityEventMap } from '../../src/workflow/observability';
+import {
+    ObservableWorkflowAdapter,
+    projectActionMetadata,
+    type WorkflowObservabilityEventMap,
+} from '../../src/workflow/observability';
 
 // A minimal in-memory persistence stub that records the calls it received, so each test
 // asserts BOTH that the decorator delegated (persistence is unchanged) AND that it emitted
@@ -117,21 +121,39 @@ describe('ObservableWorkflowAdapter', () => {
         expect(phases).toEqual([{ phase: 's2', status: 'running' }]);
     });
 
-    test('action start/finish: returns the inner actionId AND emits both action events', async () => {
+    test('action start/finish: emits correlated, ordered, redacted action events', async () => {
         const { adapter } = stubAdapter();
         const bus = new EventBus<WorkflowObservabilityEventMap>();
-        const started: string[] = [];
-        const finished: Array<{ actionId: string; ok: boolean }> = [];
-        bus.on('workflow.action.started', (e) => started.push(e.actionId));
-        bus.on('workflow.action.finished', (e) => finished.push({ actionId: e.actionId, ok: e.ok }));
+        const started: Array<{ actionId: string; sequence: number; invocation?: string }> = [];
+        const finished: Array<{ actionId: string; ok: boolean; runId: string; sequence: number }> = [];
+        bus.on('workflow.action.started', (e) =>
+            started.push({ actionId: e.actionId, sequence: e.sequence, invocation: e.metadata?.invocation }),
+        );
+        bus.on('workflow.action.finished', (e) =>
+            finished.push({ actionId: e.actionId, ok: e.ok, runId: e.runId, sequence: e.sequence }),
+        );
 
         const dec = new ObservableWorkflowAdapter(adapter, bus);
-        const id = await dec.saveActionStart('run-1', 'implement', 'agent.run');
-        await dec.saveActionFinalize(id, 'done', 42, true);
+        await dec.createRun(record);
+        const id = await dec.saveActionStart('run-1', 'implement', 'agent.run', {
+            input: 'sk-super-secret raw prompt',
+        });
+        await dec.saveActionFinalize(id, 'done', 42, true, { ok: true });
 
         expect(id).toBe('action-1'); // inner id propagated unchanged
-        expect(started).toEqual(['action-1']);
-        expect(finished).toEqual([{ actionId: 'action-1', ok: true }]);
+        expect(started).toEqual([{ actionId: 'action-1', sequence: 2, invocation: '[prompt 26 chars]' }]);
+        expect(finished).toEqual([{ actionId: 'action-1', ok: true, runId: 'run-1', sequence: 3 }]);
+    });
+
+    test('does not emit an action finish when its run cannot be correlated', async () => {
+        const { adapter } = stubAdapter();
+        const bus = new EventBus<WorkflowObservabilityEventMap>();
+        let emitted = 0;
+        bus.on('workflow.action.finished', () => emitted++);
+
+        await new ObservableWorkflowAdapter(adapter, bus).saveActionFinalize('unknown', 'failed', 10, false);
+
+        expect(emitted).toBe(0);
     });
 
     test('finalizeRun: emits workflow.run.finalized with the terminal status', async () => {
@@ -143,6 +165,22 @@ describe('ObservableWorkflowAdapter', () => {
         await new ObservableWorkflowAdapter(adapter, bus).finalizeRun('run-1', 'done', '2026-06-23T01:00:00.000Z');
 
         expect(seen).toEqual(['done']);
+    });
+
+    test('retains correlation for an action finish that arrives after run finalization', async () => {
+        const { adapter } = stubAdapter();
+        const bus = new EventBus<WorkflowObservabilityEventMap>();
+        const seen: Array<{ runId: string; workflowName?: string; sequence: number }> = [];
+        bus.on('workflow.action.finished', (event) =>
+            seen.push({ runId: event.runId, workflowName: event.workflowName, sequence: event.sequence }),
+        );
+        const dec = new ObservableWorkflowAdapter(adapter, bus);
+        await dec.createRun(record);
+        const actionId = await dec.saveActionStart('run-1', 'implement', 'agent.run');
+        await dec.finalizeRun('run-1', 'done', '2026-06-23T01:00:00.000Z');
+        await dec.saveActionFinalize(actionId, 'done', 10, true);
+
+        expect(seen).toEqual([{ runId: 'run-1', workflowName: 'task-pipeline', sequence: 4 }]);
     });
 
     test('savePhase: delegates AND emits workflow.phase with phase + status', async () => {
@@ -178,5 +216,25 @@ describe('ObservableWorkflowAdapter', () => {
         expect(calls).toContain('saveWorkflowState');
         expect(calls).toContain('loadRun');
         expect(emitted).toBe(0); // non-lifecycle paths are silent
+    });
+});
+
+describe('projectActionMetadata', () => {
+    test('never forwards raw prompt or shell command text', () => {
+        expect(projectActionMetadata('agent.run', { input: 'Bearer highly-sensitive-value' })).toEqual({
+            invocation: '[prompt 29 chars]',
+        });
+        expect(projectActionMetadata('shell', { command: 'curl -H "Authorization: Bearer secret"' })).toEqual({
+            invocation: '[shell command redacted]',
+        });
+    });
+
+    test('bounds allow-listed labels after redaction', () => {
+        const metadata = projectActionMetadata('agent.run', {
+            agent: `api_key=${'x'.repeat(400)}`,
+            input: '/sp:dev-run 0365 --auto',
+        });
+        expect(metadata?.agent).toBe('[REDACTED]');
+        expect(metadata?.invocation).toBe('/sp:dev-run');
     });
 });

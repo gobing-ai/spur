@@ -19,16 +19,34 @@ import type {
     WorkflowStatus,
 } from '@gobing-ai/ts-dual-workflow-engine';
 import type { EventBus } from '@gobing-ai/ts-infra';
+import type { AgentExecutionEvent } from '../observability/agent-execution';
+import type { SteeringAck } from './steering';
 
 /** The engine does not export its reseed-result type; derive it from the interface. */
 type ReseedResult = Awaited<ReturnType<WorkflowPersistenceAdapter['reseedRun']>>;
 
 /** Base fields every workflow observability event carries. */
 interface WorkflowEventBase {
+    /** Envelope schema version. Increment only for a breaking payload change. */
+    schemaVersion: 1;
+    /** Unique event identity for replay/deduplication. */
+    eventId: string;
+    /** Monotonic sequence within one run. */
+    sequence: number;
     /** The run this event belongs to. */
     runId: string;
+    /** Workflow definition name, when known. */
+    workflowName?: string;
     /** ISO timestamp the event was emitted. */
     at: string;
+}
+
+/** Bounded, trace-safe projection of resolved action options. */
+export interface WorkflowActionMetadata {
+    agent?: string;
+    model?: string;
+    invocation?: string;
+    timeoutMs?: number;
 }
 
 /** A run has been created and is about to execute its first state. */
@@ -65,6 +83,8 @@ export interface WorkflowActionStartedEvent extends WorkflowEventBase {
     node: string;
     /** The action kind (e.g. `agent.run`, `shell`, `hitl.confirm`). */
     kind: string;
+    /** Redacted resolved metadata; raw prompts, commands, and environment never cross this seam. */
+    metadata?: WorkflowActionMetadata;
 }
 /** An action finished, carrying its outcome and timing. */
 export interface WorkflowActionFinishedEvent extends WorkflowEventBase {
@@ -76,6 +96,12 @@ export interface WorkflowActionFinishedEvent extends WorkflowEventBase {
     durationMs: number;
     /** Whether the action succeeded. */
     ok: boolean;
+    /** State/node copied from the correlated start event. */
+    node: string;
+    /** Action kind copied from the correlated start event. */
+    kind: string;
+    /** Trace-safe result summary; absent when the action returned no result. */
+    result?: { error?: string; usage: 'unavailable' };
 }
 
 /**
@@ -89,12 +115,54 @@ export type WorkflowObservabilityEventMap = {
     'workflow.transition': (event: WorkflowTransitionEvent) => void;
     'workflow.action.started': (event: WorkflowActionStartedEvent) => void;
     'workflow.action.finished': (event: WorkflowActionFinishedEvent) => void;
+    /** Unified agent lifecycle emitted by both direct and workflow dispatch paths. */
+    'workflow.agent': (event: AgentExecutionEvent) => void;
+    'workflow.steering': (event: SteeringAck) => void;
 };
 
 /** The typed event bus consumers subscribe to for the live per-step workflow stream. */
 export type WorkflowObservabilityBus = EventBus<WorkflowObservabilityEventMap>;
 
 const now = (): string => new Date().toISOString();
+const MAX_FIELD_LENGTH = 256;
+const SECRET_PATTERN = /(?:sk-[a-z0-9_-]{8,}|(?:api[_-]?key|token|secret|password)\s*[:=]\s*\S+|bearer\s+\S+)/gi;
+
+function bounded(value: string): string {
+    const redacted = value.replace(SECRET_PATTERN, '[REDACTED]');
+    return redacted.length <= MAX_FIELD_LENGTH ? redacted : `${redacted.slice(0, MAX_FIELD_LENGTH)}…`;
+}
+
+/**
+ * Project resolved action options into an intentionally small allow-list. Prompt
+ * bodies and shell commands are summarized, never copied to an event payload.
+ */
+export function projectActionMetadata(
+    kind: string,
+    options?: Record<string, unknown>,
+): WorkflowActionMetadata | undefined {
+    if (options === undefined) return undefined;
+    const metadata: WorkflowActionMetadata = {};
+    if (typeof options.agent === 'string' && options.agent !== '') metadata.agent = bounded(options.agent);
+    if (typeof options.model === 'string' && options.model !== '') metadata.model = bounded(options.model);
+    if (typeof options.timeoutMs === 'number' && Number.isFinite(options.timeoutMs)) {
+        metadata.timeoutMs = Math.max(0, options.timeoutMs);
+    }
+    const input = typeof options.input === 'string' ? options.input.trim() : '';
+    if (kind === 'agent.run' && input !== '') {
+        const command = input.startsWith('/') ? input.split(/\s+/, 1)[0] : undefined;
+        metadata.invocation = command === undefined ? `[prompt ${input.length} chars]` : bounded(command);
+    } else if (kind === 'shell' && typeof options.command === 'string') {
+        metadata.invocation = '[shell command redacted]';
+    }
+    return Object.keys(metadata).length === 0 ? undefined : metadata;
+}
+
+function projectResult(result: unknown): { error?: string; usage: 'unavailable' } | undefined {
+    if (result === undefined) return undefined;
+    if (typeof result !== 'object' || result === null) return { usage: 'unavailable' };
+    const error = 'error' in result && typeof result.error === 'string' ? bounded(result.error) : undefined;
+    return { ...(error !== undefined ? { error } : {}), usage: 'unavailable' };
+}
 
 /**
  * Wraps a `WorkflowPersistenceAdapter`, delegating every call unchanged while
@@ -102,6 +170,10 @@ const now = (): string => new Date().toISOString();
  * read paths and non-lifecycle methods pass straight through.
  */
 export class ObservableWorkflowAdapter implements WorkflowPersistenceAdapter {
+    private readonly sequences = new Map<string, number>();
+    private readonly workflowNames = new Map<string, string>();
+    private readonly actions = new Map<string, { runId: string; node: string; kind: string }>();
+
     constructor(
         private readonly inner: WorkflowPersistenceAdapter,
         private readonly bus: WorkflowObservabilityBus,
@@ -109,26 +181,29 @@ export class ObservableWorkflowAdapter implements WorkflowPersistenceAdapter {
 
     async createRun(record: WorkflowRunRecord): Promise<void> {
         await this.inner.createRun(record);
+        this.workflowNames.set(record.id, record.workflow_name);
         await this.bus.emit('workflow.run.started', {
-            runId: record.id,
+            ...this.envelope(record.id),
             workflowName: record.workflow_name,
-            at: now(),
         });
     }
 
     async finalizeRun(runId: string, status: WorkflowStatus, completedAt: string): Promise<void> {
         await this.inner.finalizeRun(runId, status, completedAt);
-        await this.bus.emit('workflow.run.finalized', { runId, status, at: completedAt });
+        await this.bus.emit('workflow.run.finalized', { ...this.envelope(runId, completedAt), status });
+        // Do not clear correlation state here: the upstream engine deliberately
+        // finalizes action rows fire-and-forget, so a late action-finished projection
+        // may arrive after the run-finalized projection on the same adapter instance.
     }
 
     async savePhase(runId: string, phase: string, status: WorkflowStatus): Promise<void> {
         await this.inner.savePhase(runId, phase, status);
-        await this.bus.emit('workflow.phase', { runId, phase, status, at: now() });
+        await this.bus.emit('workflow.phase', { ...this.envelope(runId), phase, status });
     }
 
     async saveTransition(runId: string, from: string, to: string, trigger: string | null): Promise<void> {
         await this.inner.saveTransition(runId, from, to, trigger);
-        await this.bus.emit('workflow.transition', { runId, from, to, trigger, at: now() });
+        await this.bus.emit('workflow.transition', { ...this.envelope(runId), from, to, trigger });
     }
     /**
      * Atomic equivalent of saveTransition + saveWorkflowState (+ optional savePhase):
@@ -146,15 +221,32 @@ export class ObservableWorkflowAdapter implements WorkflowPersistenceAdapter {
         phase?: { phase: string; status: WorkflowStatus },
     ): Promise<void> {
         await this.inner.commitTransition(runId, from, to, trigger, _state, _data, phase);
-        await this.bus.emit('workflow.transition', { runId, from, to, trigger, at: now() });
+        await this.bus.emit('workflow.transition', { ...this.envelope(runId), from, to, trigger });
         if (phase) {
-            await this.bus.emit('workflow.phase', { runId, phase: phase.phase, status: phase.status, at: now() });
+            await this.bus.emit('workflow.phase', {
+                ...this.envelope(runId),
+                phase: phase.phase,
+                status: phase.status,
+            });
         }
     }
 
-    async saveActionStart(runId: string, node: string, kind: string): Promise<string> {
-        const actionId = await this.inner.saveActionStart(runId, node, kind);
-        await this.bus.emit('workflow.action.started', { runId, actionId, node, kind, at: now() });
+    async saveActionStart(
+        runId: string,
+        node: string,
+        kind: string,
+        options?: Record<string, unknown>,
+    ): Promise<string> {
+        const actionId = await this.inner.saveActionStart(runId, node, kind, options);
+        this.actions.set(actionId, { runId, node, kind });
+        const metadata = projectActionMetadata(kind, options);
+        await this.bus.emit('workflow.action.started', {
+            ...this.envelope(runId),
+            actionId,
+            node,
+            kind,
+            ...(metadata !== undefined ? { metadata } : {}),
+        });
         return actionId;
     }
 
@@ -167,16 +259,38 @@ export class ObservableWorkflowAdapter implements WorkflowPersistenceAdapter {
         redactor?: ActionRedactor,
     ): Promise<void> {
         await this.inner.saveActionFinalize(actionId, status, durationMs, ok, result, redactor);
-        // runId is not a param of this hook; the actionId correlates back to its run on the
-        // consumer side (action_runs.run_id). The board joins on actionId for the finish event.
+        const action = this.actions.get(actionId);
+        if (action === undefined) {
+            // The decorator may be attached after an action started (process resume).
+            // Suppress an uncorrelated event instead of violating the non-empty runId contract.
+            return;
+        }
+        this.actions.delete(actionId);
+        const projected = projectResult(result);
         await this.bus.emit('workflow.action.finished', {
-            runId: '',
+            ...this.envelope(action.runId),
             actionId,
             status,
             durationMs,
             ok,
-            at: now(),
+            node: action.node,
+            kind: action.kind,
+            ...(projected !== undefined ? { result: projected } : {}),
         });
+    }
+
+    private envelope(runId: string, at = now()): WorkflowEventBase {
+        const sequence = (this.sequences.get(runId) ?? 0) + 1;
+        this.sequences.set(runId, sequence);
+        const workflowName = this.workflowNames.get(runId);
+        return {
+            schemaVersion: 1,
+            eventId: crypto.randomUUID(),
+            sequence,
+            runId,
+            ...(workflowName !== undefined ? { workflowName } : {}),
+            at,
+        };
     }
 
     // ── pass-through (non-lifecycle / read paths) ──

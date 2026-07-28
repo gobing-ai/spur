@@ -14,35 +14,119 @@
  */
 
 import type { WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
-import type { WorkflowActionFinishedEvent, WorkflowActionStartedEvent, WorkflowPhaseEvent } from './observability';
+import type { AgentExecutionEvent } from '../observability/agent-execution';
+import type {
+    WorkflowActionFinishedEvent,
+    WorkflowActionStartedEvent,
+    WorkflowPhaseEvent,
+    WorkflowTransitionEvent,
+} from './observability';
 
 /** The subset of observability events the CLI reporter renders as progress lines. */
-export type StepEvent = WorkflowActionStartedEvent | WorkflowActionFinishedEvent | WorkflowPhaseEvent;
+export type StepEvent =
+    | AgentExecutionEvent
+    | WorkflowActionStartedEvent
+    | WorkflowActionFinishedEvent
+    | WorkflowPhaseEvent
+    | WorkflowTransitionEvent;
+/** Human workflow progress content depth, independent from JSON machine mode. */
+export type WorkflowOutputDetail = 'minimal' | 'invocation' | 'full';
+/** Options accepted by pure workflow progress renderers. */
+export interface StepRenderOptions {
+    detail?: WorkflowOutputDetail;
+}
 
 /** A reporter maps one event to a display line, or `null` to emit nothing. */
 export type StepLineRenderer = (event: StepEvent) => string | null;
 
+const isAgentExecution = (e: StepEvent): e is AgentExecutionEvent => 'executionId' in e;
 const isActionStarted = (e: StepEvent): e is WorkflowActionStartedEvent => 'kind' in e && 'node' in e;
 const isActionFinished = (e: StepEvent): e is WorkflowActionFinishedEvent => 'durationMs' in e && 'ok' in e;
 const isPhase = (e: StepEvent): e is WorkflowPhaseEvent => 'phase' in e;
+const isTransition = (e: StepEvent): e is WorkflowTransitionEvent => 'from' in e && 'to' in e;
 
 /**
  * Render a single progress line for a workflow observability event, or `null`
  * when the event has no operator-facing line. Action-started lines mark the
  * blind-spot entry; action-finished lines close it with outcome + duration.
  */
-export function renderStepLine(event: StepEvent): string | null {
+export function renderStepLine(event: StepEvent, options: StepRenderOptions = {}): string | null {
+    const detail = options.detail ?? 'invocation';
+    if (isAgentExecution(event)) {
+        if (event.kind === 'output') {
+            if (detail === 'minimal') return null;
+            const label = event.stream === 'stderr' ? 'stderr' : 'stdout';
+            return `[run ${event.runId}]   ${label}> ${event.chunk.replace(/\s+$/, '')}`;
+        }
+        if (event.kind === 'heartbeat') {
+            if (detail === 'minimal') return null;
+            const budget =
+                event.timeoutMs === undefined
+                    ? 'unbounded'
+                    : `${formatDuration(Math.max(0, event.timeoutMs - event.elapsedMs))} remaining`;
+            return `[run ${event.runId}] … agent execution · elapsed=${formatDuration(event.elapsedMs)} · budget=${budget}`;
+        }
+        if (event.kind === 'dropped') {
+            return detail === 'minimal'
+                ? null
+                : `[run ${event.runId}] … output pressure · dropped=${event.chunks} chunks`;
+        }
+        if (event.kind === 'started') {
+            if (detail === 'minimal') return null;
+            const model = event.model === undefined ? '' : `(${event.model})`;
+            const full = detail === 'full' ? ` · execution=${event.executionId}` : '';
+            return `[run ${event.runId}]   agent=${event.agent}${model} => ${event.invocation}${full}`;
+        }
+        const mark = event.outcome === 'done' ? '✓' : '✗';
+        const full = detail === 'full' ? ` · execution=${event.executionId}` : '';
+        return detail === 'minimal'
+            ? null
+            : `[run ${event.runId}] ${mark} agent ${event.outcome} (${formatDuration(event.durationMs)}) · usage ${event.usage}${event.reason ? ` · ${event.reason}` : ''}${full}`;
+    }
     if (isActionFinished(event)) {
         const mark = event.ok ? '✓' : '✗';
-        return `  ${mark} ${event.status} (${formatDuration(event.durationMs)})`;
+        if (detail === 'minimal') return `  ${mark} ${event.status} (${formatDuration(event.durationMs)})`;
+        const failure = event.result?.error === undefined ? '' : ` · ${event.result.error}`;
+        const full = detail === 'full' ? ` · action=${event.actionId} · seq=${event.sequence}` : '';
+        return `[run ${event.runId}] ${mark} ${event.node}/${event.kind} (${formatDuration(event.durationMs)}) · usage ${event.result?.usage ?? 'unavailable'}${failure}${full}`;
     }
     if (isActionStarted(event)) {
-        return `  → ${event.node}: ${event.kind}…`;
+        if (detail === 'minimal') return `  → ${event.node}: ${event.kind}…`;
+        const agent = event.metadata?.agent ?? 'unavailable';
+        const model = event.metadata?.model ?? 'unavailable';
+        const invocation = event.metadata?.invocation ?? 'unavailable';
+        const timeout =
+            event.metadata?.timeoutMs === undefined ? 'unbounded' : formatDuration(event.metadata.timeoutMs);
+        const full = detail === 'full' ? ` · action=${event.actionId} · seq=${event.sequence}` : '';
+        return `[run ${event.runId}] → ${event.node}/${event.kind} · agent=${agent} · model=${model} => ${invocation} · timeout=${timeout}${full}`;
     }
     if (isPhase(event)) {
-        return `▶ ${event.phase} [${event.status}]`;
+        return detail === 'minimal'
+            ? `▶ ${event.phase} [${event.status}]`
+            : `[run ${event.runId}] ▶ ${event.phase} [${event.status}]`;
+    }
+    if (isTransition(event)) {
+        if (detail !== 'full') return null;
+        return `[run ${event.runId}] ↪ ${event.from} → ${event.to}${event.trigger ? ` [${event.trigger}]` : ''} · seq=${event.sequence}`;
     }
     return null;
+}
+
+/** Render liveness for an action that has not yet produced a finish event. */
+export function renderActionHeartbeat(
+    event: WorkflowActionStartedEvent,
+    elapsedMs: number,
+    options: StepRenderOptions = {},
+): string | null {
+    const detail = options.detail ?? 'invocation';
+    if (detail === 'minimal') return null;
+    const elapsed = formatDuration(elapsedMs);
+    const budget =
+        event.metadata?.timeoutMs === undefined
+            ? 'unbounded'
+            : `${formatDuration(Math.max(0, event.metadata.timeoutMs - elapsedMs))} remaining`;
+    const full = detail === 'full' ? ` · action=${event.actionId}` : '';
+    return `[run ${event.runId}] … ${event.node}/${event.kind} · elapsed=${elapsed} · budget=${budget}${full}`;
 }
 
 /**
