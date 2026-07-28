@@ -21,8 +21,11 @@ than `spur agent run` (delegated to the installed agent).
 git clone <repo> && cd spur-new && bun install
 bun run apps/cli/src/index.ts --help
 
+# From Bun
+bun add -g @gobing-ai/spur
+
 # From npm
-npm i -g @gobing-ai/spur-cli
+npm i -g @gobing-ai/spur
 spur --help
 
 # Standalone binary (Bun-less machines)
@@ -35,20 +38,20 @@ Verify: `spur --version` → `0.3.1`; `spur agent doctor` checks every detected 
 
 12 command groups, every command supports `--json`:
 
-| Command | Purpose |
-|---|---|
-| `spur init` | Scaffold a local Spur project (`.spur/`) |
-| `spur status` | Show project, Git, and optional path status |
-| `spur agent` | Run and inspect supported coding agents + team agent specs |
-| `spur rule` | Manage constraint rules and presets |
+| Command         | Purpose                                                           |
+| --------------- | ----------------------------------------------------------------- |
+| `spur init`     | Scaffold a local Spur project (`.spur/`)                          |
+| `spur status`   | Show project, Git, and optional path status                       |
+| `spur agent`    | Run and inspect supported coding agents + team agent specs        |
+| `spur rule`     | Manage constraint rules and presets                               |
 | `spur workflow` | Validate, execute, observe, cancel, and clean workflow YAML files |
-| `spur task` | Manage tasks (WBS-numbered, markdown-backed) — 12 verbs |
-| `spur feature` | Manage features (hierarchical IDs) — 8 verbs |
-| `spur history` | Import and analyze coding-agent history |
-| `spur message` | Send and inspect durable inter-agent messages |
-| `spur team` | Coordinate team agent assignments and status |
-| `spur serve` | Start the Spur web server (local fallback) |
-| `spur migrate` | Apply CLI-owned schema migrations |
+| `spur task`     | Manage tasks (WBS-numbered, markdown-backed) — 12 verbs           |
+| `spur feature`  | Manage features (hierarchical IDs) — 8 verbs                      |
+| `spur history`  | Import and analyze coding-agent history                           |
+| `spur message`  | Send and inspect durable inter-agent messages                     |
+| `spur team`     | Coordinate team agent assignments and status                      |
+| `spur serve`    | Start the Spur web server (local fallback)                        |
+| `spur migrate`  | Apply CLI-owned schema migrations                                 |
 
 ### Architecture Diagram
 
@@ -126,20 +129,20 @@ mechanics; the CLI guide points here for the 26-step view.
 
 **Per-command reference:**
 
-| Command | Reference |
-|---|---|
-| `spur init` | [cmd_init.md](./cmd_init.md) |
-| `spur agent` | [cmd_agent.md](./cmd_agent.md) |
-| `spur history` | [cmd_history.md](./cmd_history.md) |
-| `spur rule` | [cmd_rule.md](./cmd_rule.md) |
+| Command         | Reference                            |
+| --------------- | ------------------------------------ |
+| `spur init`     | [cmd_init.md](./cmd_init.md)         |
+| `spur agent`    | [cmd_agent.md](./cmd_agent.md)       |
+| `spur history`  | [cmd_history.md](./cmd_history.md)   |
+| `spur rule`     | [cmd_rule.md](./cmd_rule.md)         |
 | `spur workflow` | [cmd_workflow.md](./cmd_workflow.md) |
-| `spur task` | [cmd_task.md](./cmd_task.md) |
-| `spur feature` | [cmd_feature.md](./cmd_feature.md) |
-| `spur message` | [cmd_message.md](./cmd_message.md) |
-| `spur team` | [cmd_team.md](./cmd_team.md) |
-| `spur status` | [cmd_status.md](./cmd_status.md) |
-| `spur migrate` | [cmd_migrate.md](./cmd_migrate.md) |
-| `spur serve` | [cmd_serve.md](./cmd_serve.md) |
+| `spur task`     | [cmd_task.md](./cmd_task.md)         |
+| `spur feature`  | [cmd_feature.md](./cmd_feature.md)   |
+| `spur message`  | [cmd_message.md](./cmd_message.md)   |
+| `spur team`     | [cmd_team.md](./cmd_team.md)         |
+| `spur status`   | [cmd_status.md](./cmd_status.md)     |
+| `spur migrate`  | [cmd_migrate.md](./cmd_migrate.md)   |
+| `spur serve`    | [cmd_serve.md](./cmd_serve.md)       |
 
 ### References
 
