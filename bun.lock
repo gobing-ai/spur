@@ -27,7 +27,7 @@
     },
     "apps/cli": {
       "name": "@gobing-ai/spur",
-      "version": "0.3.17",
+      "version": "0.3.24",
       "bin": {
         "spur": "spur.js",
       },
@@ -118,6 +118,7 @@
         "@types/react-dom": "19.2.2",
         "happy-dom": "20.10.4",
         "typescript": "catalog:",
+        "yaml": "catalog:",
       },
     },
     "packages/app": {
