@@ -3,13 +3,13 @@
  * Behavioral tests for WorkflowAppService live in packages/app/tests/services/workflow-service.test.ts.
  */
 import { describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { TimelineEvent, WorkflowTraceTimeline } from '@gobing-ai/spur-app';
+import { type TimelineEvent, WorkflowSteeringController, type WorkflowTraceTimeline } from '@gobing-ai/spur-app';
 import type { ActionCost } from '@gobing-ai/spur-domain';
 import { createMigratedDb } from '@gobing-ai/spur-domain';
-import { formatActionCost, formatTraceTimeline } from '../../src/commands/workflow';
+import { followTrace, formatActionCost, formatTraceTimeline, submitSteeringLine } from '../../src/commands/workflow';
 import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
 import { createCapturedOutput, createTempProject, runCli } from '../helpers';
@@ -289,10 +289,79 @@ terminalStates:
         expect(exitCode).toBe(0);
         // Human (non-json) sync run now prints a plan preview + live progress (0114),
         // then the result line. Assert the result is present rather than exact-array
-        // equality, and that the preview led the output.
+        // equality, and that the correlated run header led the output.
         expect(output.messages).toContain('workflow done: cli-test-flow -> done');
-        expect(output.messages[0]?.startsWith('plan:')).toBe(true);
+        expect(output.messages[0]).toBe('Run: plain-run');
+        expect(output.messages.some((message) => message.startsWith('plan:'))).toBe(true);
         await rm(dir, { recursive: true, force: true });
+    });
+
+    test('run output modes preserve final summary, silence, verbose detail, and JSON isolation', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'workflow.yaml');
+        await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
+
+        const quiet = createCapturedOutput();
+        expect(
+            await main(['workflow', 'run', '--quiet', '--run-id', 'quiet-run', workflowFile], {
+                output: quiet,
+                cwd: dir,
+                dbUrl: ':memory:',
+            }),
+        ).toBe(0);
+        expect(quiet.messages).toEqual(['workflow done: cli-test-flow -> done']);
+
+        const silent = createCapturedOutput();
+        expect(
+            await main(['workflow', 'run', '--silent', '--run-id', 'silent-run', workflowFile], {
+                output: silent,
+                cwd: dir,
+                dbUrl: ':memory:',
+            }),
+        ).toBe(0);
+        expect(silent.messages).toEqual([]);
+
+        const verbose = createCapturedOutput();
+        expect(
+            await main(['workflow', 'run', '--verbose', '--run-id', 'verbose-run', workflowFile], {
+                output: verbose,
+                cwd: dir,
+                dbUrl: ':memory:',
+            }),
+        ).toBe(0);
+        expect(verbose.messages.some((message) => message.includes('seq='))).toBe(true);
+
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('run rejects contradictory human output modes', async () => {
+        const output = createCapturedOutput();
+        const exitCode = await main(['workflow', 'run', '--quiet', '--verbose', '/tmp/workflow.yaml'], {
+            output,
+            dbUrl: ':memory:',
+        });
+        expect(exitCode).toBe(2);
+        expect(output.errors).toContain('--quiet and --verbose are mutually exclusive');
+    });
+
+    test('run rejects silent mixed with another human mode and invalid detail', async () => {
+        const mixed = createCapturedOutput();
+        expect(
+            await main(['workflow', 'run', '--silent', '--quiet', '/tmp/workflow.yaml'], {
+                output: mixed,
+                dbUrl: ':memory:',
+            }),
+        ).toBe(2);
+        expect(mixed.errors).toContain('--silent cannot be combined with --quiet or --verbose');
+
+        const invalid = createCapturedOutput();
+        expect(
+            await main(['workflow', 'run', '--detail', 'debug', '/tmp/workflow.yaml'], {
+                output: invalid,
+                dbUrl: ':memory:',
+            }),
+        ).toBe(2);
+        expect(invalid.errors).toContain('--detail must be one of: minimal, invocation, full');
     });
 
     test('run subcommand forwards --dry-run so failing actions are not executed', async () => {
@@ -396,6 +465,139 @@ terminalStates:
         await rm(dir, { recursive: true, force: true });
     });
 
+    test('run --trace-file writes the redacted schema-versioned bus projection under the run root', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'workflow.yaml');
+        await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
+
+        expect(
+            await main(['workflow', 'run', '--trace-file', '--run-id', 'trace-file-run', workflowFile], {
+                output: nullOutput(),
+                cwd: dir,
+                dbUrl: ':memory:',
+            }),
+        ).toBe(0);
+
+        const tracePath = join(dir, '.spur', 'runs', 'workflow', 'trace-file-run.jsonl');
+        const records = (await readFile(tracePath, 'utf8'))
+            .trim()
+            .split('\n')
+            .map((line) => JSON.parse(line));
+        expect(records.length).toBeGreaterThan(1);
+        expect(records.every((record) => record.traceSchemaVersion === 1)).toBe(true);
+        expect(records.map((record) => record.traceSequence)).toEqual(
+            Array.from({ length: records.length }, (_, index) => index + 1),
+        );
+        expect(records.some((record) => record.type === 'workflow.run.finalized')).toBe(true);
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('run rejects steering in machine and detached modes', async () => {
+        for (const incompatible of ['--json', '--async']) {
+            const output = createCapturedOutput();
+            expect(
+                await main(['workflow', 'run', '--steer', incompatible, '/tmp/workflow.yaml'], {
+                    output,
+                    dbUrl: ':memory:',
+                }),
+            ).toBe(2);
+            expect(output.errors).toContain(
+                '--steer is synchronous and in-process; it cannot be combined with --json or --async',
+            );
+        }
+    });
+
+    test('run --steer streams a fake agent and records the safe boundary timeout acknowledgement', async () => {
+        const dir = await createTempProject();
+        const binDir = join(dir, 'bin');
+        await mkdir(binDir);
+        const fakeClaude = join(binDir, 'claude');
+        await writeFile(
+            fakeClaude,
+            [
+                '#!/bin/sh',
+                'if [ "$1" = "--version" ]; then',
+                '  echo "claude 1.0.0"',
+                '  exit 0',
+                'fi',
+                'printf "live-one\\n"',
+            ].join('\n'),
+        );
+        await chmod(fakeClaude, 0o755);
+        const workflowFile = join(dir, 'steer.yaml');
+        await writeFile(
+            workflowFile,
+            [
+                'name: cli-steer-flow',
+                'kind: state-machine',
+                'initialState: start',
+                'states:',
+                '  - id: start',
+                '    onEnter:',
+                '      - kind: agent.run',
+                '        options:',
+                '          input: hello',
+                '          agent: claude',
+                '          steeringBoundary: true',
+                '          steeringTimeoutMs: 20',
+                '  - id: done',
+                'transitions:',
+                '  - from: start',
+                '    to: done',
+                'terminalStates: [done]',
+            ].join('\n'),
+        );
+        const messages: string[] = [];
+        const errors: string[] = [];
+        const output: CommandOutput = {
+            write: (message) => {
+                messages.push(message);
+            },
+            error: (message) => errors.push(message),
+        };
+
+        const originalPath = process.env.PATH;
+        process.env.PATH = `${binDir}:${originalPath ?? ''}`;
+        try {
+            expect(
+                await main(['workflow', 'run', '--steer', '--run-id', 'steer-run', workflowFile], {
+                    output,
+                    cwd: dir,
+                    env: { ...process.env },
+                    dbUrl: ':memory:',
+                }),
+            ).toBe(0);
+        } finally {
+            process.env.PATH = originalPath;
+        }
+        expect(messages.some((message) => message.includes('agent=claude'))).toBe(true);
+        expect(messages.some((message) => message.includes('stdout> live-one'))).toBe(true);
+        expect(messages.some((message) => message.startsWith('[steer] boundary'))).toBe(true);
+        expect(
+            messages.some(
+                (message) =>
+                    message.startsWith('[steer] ack continue') &&
+                    message.includes('boundary timeout defaulted to continue'),
+            ),
+        ).toBe(true);
+        expect(messages).toContain('workflow done: cli-steer-flow -> done');
+        expect(errors).toEqual([]);
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('submitSteeringLine accepts valid input and reports malformed local commands', async () => {
+        const controller = new WorkflowSteeringController();
+        controller.begin('run-line', 'action-line', { boundary: true, timeoutMs: 1000 });
+        const decision = controller.boundary(true);
+        const errors: string[] = [];
+
+        submitSteeringLine(controller, { error: (message) => errors.push(message) }, 'continue');
+        await expect(decision).resolves.toEqual({ operation: 'continue' });
+        submitSteeringLine(controller, { error: (message) => errors.push(message) }, 'not-a-command');
+
+        expect(errors).toEqual(['[steer] ignored command: not-a-command']);
+    });
+
     // ── trace ──
 
     test('trace subcommand (json) returns 0', async () => {
@@ -416,6 +618,22 @@ terminalStates:
     test('trace subcommand rejects invalid --last', async () => {
         const exitCode = await main(['workflow', 'trace', '--last', '0'], { output: nullOutput(), dbUrl: ':memory:' });
         expect(exitCode).toBe(1);
+    });
+
+    test('trace validates follow target, JSON compatibility, and poll interval', async () => {
+        expect(await main(['workflow', 'trace', '--follow'], { output: nullOutput(), dbUrl: ':memory:' })).toBe(1);
+        expect(
+            await main(['workflow', 'trace', 'run-1', '--follow', '--json'], {
+                output: nullOutput(),
+                dbUrl: ':memory:',
+            }),
+        ).toBe(1);
+        expect(
+            await main(['workflow', 'trace', 'run-1', '--follow', '--poll', '10'], {
+                output: nullOutput(),
+                dbUrl: ':memory:',
+            }),
+        ).toBe(1);
     });
 
     test('trace subcommand rejects invalid --status', async () => {
@@ -913,5 +1131,61 @@ describe('formatTraceTimeline cost footer', () => {
     test('omits the hint when every agent.run step is joined', () => {
         const out = formatTraceTimeline(makeTimeline([makeActionEvent(makeCost())]));
         expect(out).not.toContain('spur history import');
+    });
+});
+
+describe('followTrace', () => {
+    test('replays persisted events, emits action updates, and stops at terminal status', async () => {
+        const running: WorkflowTraceTimeline = {
+            run: {
+                runId: 'r1',
+                workflowName: 'wf',
+                mode: 'sync',
+                status: 'running',
+                startedAt: '2026-01-15T10:00:00.000Z',
+                completedAt: null,
+                isDryRun: false,
+            },
+            events: [
+                {
+                    kind: 'action',
+                    actionId: 'a1',
+                    node: 'work',
+                    actionKind: 'agent.run',
+                    status: 'running',
+                    duration: '',
+                    ok: false,
+                    label: ' (in-flight)',
+                },
+            ],
+        };
+        const done: WorkflowTraceTimeline = {
+            run: { ...running.run, status: 'done', completedAt: '2026-01-15T10:01:00.000Z' },
+            events: [
+                {
+                    kind: 'action',
+                    actionId: 'a1',
+                    node: 'work',
+                    actionKind: 'agent.run',
+                    status: 'done',
+                    duration: '60000ms',
+                    ok: true,
+                    label: ' ✓',
+                },
+            ],
+        };
+        let call = 0;
+        const writes: string[] = [];
+        await followTrace(
+            { trace: async () => (call++ === 0 ? running : done) } as never,
+            'r1',
+            50,
+            (line) => writes.push(line),
+            async () => undefined,
+        );
+
+        expect(writes[0]).toContain('agent.run');
+        expect(writes.some((line) => line.includes('60000ms'))).toBe(true);
+        expect(writes.at(-1)).toBe('Run finalized: done');
     });
 });

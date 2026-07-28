@@ -1,7 +1,11 @@
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
+import { createInterface } from 'node:readline';
+import { setTimeout as sleep } from 'node:timers/promises';
 import type { Command } from '@commander-js/extra-typings';
 import {
+    configuredSecretValues,
+    renderActionHeartbeat,
     renderRunPlan,
     renderStepLine,
     type StepEvent,
@@ -10,8 +14,11 @@ import {
     type WorkflowListEntry,
     type WorkflowListResult,
     type WorkflowObservabilityBus,
+    type WorkflowOutputDetail,
+    WorkflowSteeringController,
     type WorkflowTraceListResult,
     type WorkflowTraceTimeline,
+    WorkflowTraceWriter,
 } from '@gobing-ai/spur-app';
 import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import { loadWorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
@@ -47,6 +54,16 @@ function parseVars(raw: string | undefined): Record<string, string> | undefined 
         vars[key] = value;
     }
     return vars;
+}
+
+/** Submit one local steering line and report malformed input without throwing. */
+export function submitSteeringLine(
+    controller: WorkflowSteeringController,
+    output: { error(message: string): void },
+    line: string,
+): void {
+    const ack = controller.submitLine(line);
+    if (ack === undefined) output.error(`[steer] ignored command: ${line}`);
 }
 
 /** Read configured workflow search paths, defaulting to `['.spur/workflows/']`. */
@@ -110,8 +127,45 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             'Start the workflow in the background and exit immediately — monitor with `spur workflow trace <run-id>`',
         )
         .option('--no-plan', 'Suppress the run-start plan preview (synchronous runs only)')
+        .option('--quiet', 'Suppress plan and per-step progress; keep the final summary')
+        .option('--silent', 'Suppress all routine output; errors still set a non-zero exit status')
+        .option('--verbose', 'Include transitions and correlation diagnostics in human progress')
+        .option('--detail <level>', 'Human detail level: minimal, invocation, or full')
+        .option('--trace-file', 'Append a redacted schema-versioned JSONL trace under .spur/runs/workflow/')
+        .option('--steer', 'Accept local in-process steering commands on stdin at declared action boundaries')
         .option('--json', 'Output machine-readable JSON where supported')
         .action(async (file, options) => {
+            const json = options.json === true;
+            const silent = !json && options.silent === true;
+            const quiet = !json && options.quiet === true;
+            if (!json && options.quiet === true && options.verbose === true) {
+                context.output.error('--quiet and --verbose are mutually exclusive');
+                context.setExitCode(2);
+                return;
+            }
+            if (!json && options.silent === true && (options.quiet === true || options.verbose === true)) {
+                context.output.error('--silent cannot be combined with --quiet or --verbose');
+                context.setExitCode(2);
+                return;
+            }
+            if (options.steer === true && (json || options.async === true)) {
+                context.output.error(
+                    '--steer is synchronous and in-process; it cannot be combined with --json or --async',
+                );
+                context.setExitCode(2);
+                return;
+            }
+            const requestedDetail = options.detail as string | undefined;
+            if (requestedDetail !== undefined && !['minimal', 'invocation', 'full'].includes(requestedDetail)) {
+                context.output.error('--detail must be one of: minimal, invocation, full');
+                context.setExitCode(2);
+                return;
+            }
+            const detail: WorkflowOutputDetail =
+                options.verbose === true
+                    ? 'full'
+                    : ((requestedDetail as WorkflowOutputDetail | undefined) ?? 'invocation');
+
             // When --async, spawn a detached child process that runs the workflow
             // synchronously and exit immediately with the run ID. The child is its
             // own session/process-group LEADER (`detached: true` → setsid), so it
@@ -131,6 +185,9 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 if (options.dryRun) {
                     cmd.push('--dry-run');
                 }
+                if (options.traceFile) {
+                    cmd.push('--trace-file');
+                }
                 try {
                     const child = spawn(spurBin, cmd, {
                         stdio: 'ignore',
@@ -149,20 +206,22 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                         vars: { spurBin: resolveSpurBin(), ...parseVars(options.vars) },
                         dryRun: options.dryRun || undefined,
                     });
-                    context.output.write(
-                        options.json
-                            ? toJson(result)
-                            : `workflow ${result.status}: ${result.workflowName} -> ${result.finalState} (async spawn failed, ran sync)`,
-                    );
+                    if (json) context.output.write(toJson(result));
+                    else if (!silent) {
+                        context.output.write(
+                            `workflow ${result.status}: ${result.workflowName} -> ${result.finalState} (async spawn failed, ran sync)`,
+                        );
+                    }
                     context.setExitCode(result.status === 'done' ? 0 : 1);
                     return;
                 }
                 const asyncResult = { runId, status: 'started', workflowName: file };
-                context.output.write(
-                    options.json
-                        ? toJson(asyncResult)
-                        : `Started async run: ${runId}\nMonitor with: spur workflow trace ${runId}`,
-                );
+                if (json) context.output.write(toJson(asyncResult));
+                else if (!silent) {
+                    context.output.write(
+                        `Started async run: ${runId}\nMonitor with: spur workflow trace ${runId} --follow`,
+                    );
+                }
                 context.setExitCode(0);
                 return;
             }
@@ -177,9 +236,20 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             // run-start plan preview and a live per-step progress stream. Both are suppressed
             // under --json (machine output stays byte-identical) and never reach the detached
             // --async path (ignored stdio). commander negates --no-plan to options.plan=false.
-            const human = options.json !== true;
+            const runId = options.runId || crypto.randomUUID();
+            const humanProgress = !json && !quiet && !silent;
             let bus: WorkflowObservabilityBus | undefined;
-            if (human) {
+            let traceWriter: WorkflowTraceWriter | undefined;
+            const heartbeats = new Map<string, ReturnType<typeof setInterval>>();
+            if (humanProgress || options.traceFile === true || options.steer === true) {
+                bus = new EventBus();
+            }
+            if (options.traceFile === true && bus !== undefined) {
+                traceWriter = new WorkflowTraceWriter(context.cwd, runId);
+                traceWriter.attach(bus);
+            }
+            if (humanProgress && bus !== undefined) {
+                context.output.write(`Run: ${runId}`);
                 if (options.plan !== false) {
                     try {
                         const def = await loadWorkflowDef(resolve(context.cwd, file), { validateSchema: false });
@@ -188,29 +258,88 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                         // Preview is advisory — a parse failure must not block the run.
                     }
                 }
-                bus = new EventBus();
                 const report = (event: StepEvent): void => {
-                    const line = renderStepLine(event);
+                    const line = renderStepLine(event, { detail });
                     if (line !== null) context.output.write(line);
                 };
                 bus.on('workflow.phase', report);
-                bus.on('workflow.action.started', report);
-                bus.on('workflow.action.finished', report);
+                if (detail === 'full') bus.on('workflow.transition', report);
+                bus.on('workflow.action.started', (event) => {
+                    report(event);
+                    const startedAt = Date.parse(event.at);
+                    const timer = setInterval(() => {
+                        const line = renderActionHeartbeat(event, Math.max(0, Date.now() - startedAt), { detail });
+                        if (line !== null) context.output.write(line);
+                    }, 30_000);
+                    timer.unref?.();
+                    heartbeats.set(event.actionId, timer);
+                });
+                bus.on('workflow.action.finished', (event) => {
+                    const timer = heartbeats.get(event.actionId);
+                    if (timer !== undefined) clearInterval(timer);
+                    heartbeats.delete(event.actionId);
+                    report(event);
+                });
+                bus.on('workflow.agent', (event) => {
+                    if (event.kind === 'started' && event.actionId !== undefined) {
+                        const timer = heartbeats.get(event.actionId);
+                        if (timer !== undefined) clearInterval(timer);
+                        heartbeats.delete(event.actionId);
+                    }
+                    report(event);
+                });
+            }
+            const steeringController =
+                options.steer === true
+                    ? new WorkflowSteeringController(
+                          (ack) => {
+                              void bus?.emit('workflow.steering', ack);
+                              context.output.write(
+                                  `[steer] ${ack.accepted ? 'ack' : 'nack'} ${ack.operation} · ${ack.reason ?? `version=${ack.version}`}`,
+                              );
+                          },
+                          configuredSecretValues(context.env),
+                          new Set(['operator']),
+                          (snapshot) => {
+                              if (snapshot.state === 'boundary') {
+                                  context.output.write(
+                                      `[steer] boundary action=${snapshot.actionId} version=${snapshot.version} · commands: continue | note <text> | retry | abort`,
+                                  );
+                              }
+                          },
+                      )
+                    : undefined;
+            const steeringInput =
+                steeringController === undefined
+                    ? undefined
+                    : createInterface({ input: process.stdin, terminal: process.stdin.isTTY === true });
+            if (steeringInput !== undefined && steeringController !== undefined) {
+                steeringInput.on('line', submitSteeringLine.bind(undefined, steeringController, context.output));
             }
 
-            const result = await makeSvc(options.json, bus).run(file, {
-                runId: options.runId || undefined,
-                vars,
-                dryRun: options.dryRun || undefined,
-                // Async worker self-records its pid so `spur workflow cancel` can
-                // signal the live process group (set by the --async launcher).
-                recordSelfPid: process.env.SPUR_ASYNC_WORKER === '1',
-            });
-            context.output.write(
-                options.json
-                    ? toJson(result)
-                    : `workflow ${result.status}: ${result.workflowName} -> ${result.finalState}`,
-            );
+            let result: Awaited<ReturnType<WorkflowAppService['run']>>;
+            try {
+                result = await makeSvc(json, bus).run(file, {
+                    runId,
+                    vars,
+                    dryRun: options.dryRun || undefined,
+                    // Async worker self-records its pid so `spur workflow cancel` can
+                    // signal the live process group (set by the --async launcher).
+                    recordSelfPid: process.env.SPUR_ASYNC_WORKER === '1',
+                    ...(steeringController !== undefined ? { steeringController } : {}),
+                });
+            } finally {
+                for (const timer of heartbeats.values()) clearInterval(timer);
+                heartbeats.clear();
+                await traceWriter?.flush();
+                steeringInput?.close();
+            }
+            if (json) context.output.write(toJson(result));
+            else if (!silent) {
+                context.output.write(
+                    `workflow ${result.status}: ${result.workflowName} -> ${result.finalState}${typeof result.reason === 'string' ? ` — ${result.reason}` : ''}`,
+                );
+            }
             context.setExitCode(result.status === 'done' ? 0 : 1);
         });
 
@@ -344,6 +473,8 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .option('--status <status>', 'Filter by status: done, failed, running')
         .option('--since <iso-date>', 'Filter runs started on or after this date')
         .option('--last <n>', 'Limit results (default 20)', '20')
+        .option('--follow', 'Replay a run timeline and poll persisted state until it becomes terminal')
+        .option('--poll <ms>', 'Follow polling interval in milliseconds', '1000')
         .option('--json', 'Output machine-readable JSON where supported')
         .action(async (runId, options) => {
             const svc = makeSvc();
@@ -353,9 +484,29 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 context.setExitCode(1);
                 return;
             }
+            const pollMs = parseInt(options.poll, 10);
+            if (Number.isNaN(pollMs) || pollMs < 50) {
+                context.output.error('--poll must be an integer of at least 50ms');
+                context.setExitCode(1);
+                return;
+            }
+            if (options.follow === true && runId === undefined) {
+                context.output.error('--follow requires a run-id');
+                context.setExitCode(1);
+                return;
+            }
+            if (options.follow === true && options.json === true) {
+                context.output.error('--follow is a human streaming mode and cannot be combined with --json');
+                context.setExitCode(1);
+                return;
+            }
             if (options.status !== undefined && !['done', 'failed', 'running'].includes(options.status)) {
                 context.output.error('--status must be one of: done, failed, running');
                 context.setExitCode(1);
+                return;
+            }
+            if (options.follow === true && runId !== undefined) {
+                await followTrace(svc, runId, pollMs, (line) => context.output.write(line));
                 return;
             }
             const result = runId
@@ -448,16 +599,7 @@ export function formatTraceTimeline(result: WorkflowTraceTimeline): string {
         '',
     ];
     for (const event of events) {
-        if (event.kind === 'phase') {
-            const ts = event.startedAt ?? event.completedAt ?? '';
-            lines.push(`  ${event.phase.padEnd(20)} ${event.status.padEnd(10)} ${ts}`);
-        } else if (event.kind === 'transition') {
-            const guard = event.trigger ? `  [${event.trigger}]` : '';
-            lines.push(`    → ${event.to}${guard}`);
-        } else {
-            const costSuffix = formatActionCost(event);
-            lines.push(`    ⚡ ${event.actionKind.padEnd(15)} ${event.duration.padEnd(6)}${event.label}${costSuffix}`);
-        }
+        lines.push(formatTimelineEvent(event));
     }
     // Import is a precondition, not a trigger (R6): when any agent.run step has no
     // joinable usage, point the operator at `history import` rather than auto-running it (AC2).
@@ -468,6 +610,69 @@ export function formatTraceTimeline(result: WorkflowTraceTimeline): string {
         lines.push('', 'Some agent.run steps show cost n/a — run `spur history import` to populate cost.');
     }
     return lines.join('\n').trimEnd();
+}
+
+function formatTimelineEvent(event: TimelineEvent): string {
+    if (event.kind === 'phase') {
+        const ts = event.startedAt ?? event.completedAt ?? '';
+        return `  ${event.phase.padEnd(20)} ${event.status.padEnd(10)} ${ts}`;
+    }
+    if (event.kind === 'transition') {
+        const guard = event.trigger ? `  [${event.trigger}]` : '';
+        return `    → ${event.to}${guard}`;
+    }
+    const costSuffix = formatActionCost(event);
+    return `    ⚡ ${event.actionKind.padEnd(15)} ${event.duration.padEnd(6)}${event.label}${costSuffix}`;
+}
+
+/**
+ * Replay persisted timeline rows, then poll for inserts/updates until the run is
+ * terminal. Updated action rows are emitted again (in-flight → finished), while
+ * identical snapshots are deduplicated by a stable serialized fingerprint.
+ */
+export async function followTrace(
+    service: Pick<WorkflowAppService, 'trace'>,
+    runId: string,
+    pollMs: number,
+    write: (line: string) => void,
+    wait: (ms: number) => Promise<unknown> = (ms) => sleep(ms),
+): Promise<void> {
+    let missingAttempts = 0;
+    let timeline: WorkflowTraceTimeline;
+    while (true) {
+        try {
+            timeline = await service.trace(runId);
+            break;
+        } catch (error) {
+            if (!String(error).includes('Run not found') || missingAttempts >= 20) throw error;
+            missingAttempts++;
+            await wait(pollMs);
+        }
+    }
+
+    write(formatTraceTimeline(timeline));
+    const seen = new Set(timeline.events.map((event) => JSON.stringify(event)));
+    if (isTerminalTraceStatus(timeline.run.status)) return;
+
+    while (true) {
+        await wait(pollMs);
+        const next = await service.trace(runId);
+        for (const event of next.events) {
+            const fingerprint = JSON.stringify(event);
+            if (seen.has(fingerprint)) continue;
+            seen.add(fingerprint);
+            write(formatTimelineEvent(event));
+        }
+        if (isTerminalTraceStatus(next.run.status)) {
+            const reason = next.run.failureReason ? ` — ${next.run.failureReason}` : '';
+            write(`Run finalized: ${next.run.status}${reason}`);
+            return;
+        }
+    }
+}
+
+function isTerminalTraceStatus(status: string): boolean {
+    return status !== 'running' && status !== 'pending';
 }
 
 /**

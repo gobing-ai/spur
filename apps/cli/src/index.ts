@@ -157,7 +157,7 @@ export function bannerText(): string {
 /** CLI entry point extracted for test coverage. Does NOT call process.exit(). */
 export async function runCli(): Promise<number> {
     const argv = process.argv.slice(2);
-    if (!argv.includes('--json')) {
+    if (!argv.some((arg) => arg === '--json' || arg === '--quiet' || arg === '--silent')) {
         consoleOutput.write(bannerText());
     }
     return main();
