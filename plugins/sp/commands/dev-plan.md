@@ -1,6 +1,6 @@
 ---
 description: Plan a feature from a description — intake → feature create → AC generation → feature check gate → decomposition → batch-create (Design by default)
-argument-hint: "\"<description>\" [--feature <id>] [--parent <feature-id>] [--agent <name|auto>] [--design] [--skip-design] [--auto] [--design-approved]"
+argument-hint: "\"<description>\" [--feature <id>] [--parent <feature-id>] [--agent <name|auto>] [--skip-design] [--auto] [--approve-taste]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---
 
@@ -11,12 +11,19 @@ Wraps the **sp:spur-dev** skill.
 ## Usage
 
 ```
-/sp:dev-plan "<description>" [--feature <id>] [--parent <feature-id>] [--agent <name|auto>] [--design] [--skip-design] [--auto] [--design-approved]
+/sp:dev-plan "<description>"
+  [--feature <id>] [--parent <feature-id>] [--agent <name|auto>]
+  [--auto]              # skip objective HITL where the plan path supports it
+  [--skip-design]       # design package off (satellite + task Design)
+  [--approve-taste]     # with --auto: skip design-approval taste pause when applicable
 ```
 
-Design package (unified): default fills per-task `### Design` in the batch and the feature satellite
-when the seam heuristic fires. `--design` forces the satellite on (task Design still default-on).
-`--skip-design` skips the satellite **and** leaves task Design blank — refine is the fallback.
+**Design package (unified with `/sp:dev-idea`):** Design is **on by default**. Default fills
+per-task `### Design` in the batch and the feature satellite when the seam heuristic fires
+(ties lean **design**). There is **no** `--design` force flag — only **`--skip-design`** opts out.
+
+**Taste re-entry:** `--approve-taste` is the same flag as on `dev-idea` (sets prior design approval
+for taste gates). Alias: `--design-approved` (prefer `--approve-taste`).
 
 ## Implementation
 

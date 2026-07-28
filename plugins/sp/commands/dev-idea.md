@@ -1,6 +1,6 @@
 ---
 description: Turn a vague idea into a feature with AC and a decomposed task batch — discovery, idea-eval, feature-create, AC, feature-check, system-design, decompose, batch-create (Design by default), handoff
-argument-hint: "\"<idea>\" [--auto] [--skip-design] [--design-approved] [--idea-approved]"
+argument-hint: "\"<idea>\" [--auto] [--skip-design] [--approve-taste]"
 allowed-tools: ["Bash", "Read", "AskUserQuestion"]
 ---
 
@@ -11,20 +11,42 @@ Wraps the **idea-pipeline.yaml** workflow.
 ## Usage
 
 ```
-/sp:dev-idea "<idea>" [--auto] [--skip-design] [--design-approved] [--idea-approved]
+/sp:dev-idea "<idea>"
+  [--auto]              # skip objective HITL only (feature-check, batch-create)
+  [--skip-design]       # design package off (system-design + task Design)
+  [--approve-taste]     # with --auto: skip idea-eval + design-approval pauses
 ```
 
-**Design package (unified):** `design` var `auto` (default) | `skip` (`--skip-design`).
-Default authors per-task `design` in the batch; `--skip-design` leaves Design blank (refine later).
-There is no `--design` force flag — Design is default-on; only `--skip-design` opts out.
+| Flag | Axis | Effect |
+|------|------|--------|
+| *(none)* | interactive | All HITL; design package on by default |
+| `--auto` | HITL depth | Skip **objective** gates; **taste** gates still pause |
+| `--skip-design` | scope | No system-design; omit per-task Design (refine later) |
+| `--approve-taste` | taste re-entry | Only meaningful with `--auto`: sets `idea_approved` + `design_approved` so idea-eval and design-approval do not pause |
 
-**Idea-evaluation taste gate:** After discovery, the pipeline pauses on an idea-evaluation report
-(urgency/necessity, premises, pros/cons, alternatives). Approve continues to feature-create; reject
-cancels with no feature. `--auto` still pauses unless `--idea-approved` marks prior in-session
-approval (`idea_approved=true`).
+There is **no** `--design` force flag. Design is default-on; only `--skip-design` opts out.
+
+**Aliases (one-release / scripts):** `--idea-approved` and `--design-approved` still map into the same
+vars as subsets of `--approve-taste` (`idea_approved` / `design_approved`). Prefer `--approve-taste`.
 
 ## Implementation
 
+Map flags → workflow vars, then:
+
 ```bash
-spur workflow run .spur/workflows/idea-pipeline.yaml --vars '{"idea":"<text>","profile":"interactive|auto","design":"auto|skip","design_approved":"false|true","idea_approved":"false|true"}'
+spur workflow run .spur/workflows/idea-pipeline.yaml --vars '{
+  "idea":"<text>",
+  "profile":"interactive|auto",
+  "design":"auto|skip",
+  "design_approved":"false|true",
+  "idea_approved":"false|true"
+}'
 ```
+
+| Flag | Vars |
+|------|------|
+| `--auto` | `profile=auto` |
+| `--skip-design` | `design=skip` |
+| `--approve-taste` | `idea_approved=true` **and** `design_approved=true` |
+| `--idea-approved` (alias) | `idea_approved=true` |
+| `--design-approved` (alias) | `design_approved=true` |

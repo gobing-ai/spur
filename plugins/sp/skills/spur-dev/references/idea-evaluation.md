@@ -77,4 +77,4 @@ Stakes: <plain-English cost of proceeding vs not; reversibility; blast radius>
 | HITL state | `idea-eval` in `idea-pipeline.yaml` |
 | Approve | continue → `feature-create` |
 | Reject / cancel | → `cancelled` (no feature) |
-| `--auto` | still pauses unless `idea_approved=true` / `--idea-approved` |
+| `--auto` | still pauses unless taste pre-cleared (`--approve-taste` → `idea_approved=true`) |

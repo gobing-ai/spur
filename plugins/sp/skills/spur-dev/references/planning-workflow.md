@@ -16,8 +16,9 @@ vague description
   → GATE: spur feature check   (BDD validator; loop until clean)
   → decomposition (prompt work) → task-batch JSON
   → GATE: task-batch.schema.json + spur task batch-create (atomic: all-or-nothing)
-  → design doc (conditional: --design always / --auto agent-decides) → docs/design/<slug>.md + 04 index
+  → design doc (conditional: seam heuristic under default; skip with --skip-design) → docs/design/<slug>.md + 04 index
 ```
+
 
 The planning half transforms a description into a validated feature file with acceptance
 criteria, then decomposes it into a batch of tasks. Two CLI gates make LLM regressions
@@ -153,41 +154,42 @@ re-run `spur task refresh-roster <parent-wbs>` to re-emit it after a child statu
 `batch-create`. See `sp:spec-decomposition` ("Parent (umbrella) tasks") for the roster format and
 the parent-completion rule.
 
-## Step 5.5: Design package (unified `--skip-design`)
+## Step 5.5: Design package (unified `--skip-design` only)
 
-Two design surfaces, **one operator flag**:
+Two design surfaces, **one operator opt-out** (aligned with `/sp:dev-idea`):
 
 | Surface | What | Default |
 |---------|------|---------|
-| **Feature satellite** | `docs/design/<slug>.md` + `04_DESIGN.md` index | On when seam heuristic / `--design` forces; off with `--skip-design` |
+| **Feature satellite** | `docs/design/<slug>.md` + `04_DESIGN.md` index | On when seam heuristic fires; **ties lean design**; off only with `--skip-design` |
 | **Task `### Design`** | Per-task WHAT/WHY in each batch item's `design` field | **On by default** at decompose/batch-create; off with `--skip-design` |
+
+There is **no** `--design` force flag. Design is **on by default**; **`--skip-design`** is the only
+opt-out.
 
 **`--skip-design` (unified):** skip the feature satellite **and** leave task `design` empty (scaffold
 only). Refine is the **fallback** that fills blank Design before implement.
 
-**`--design`:** force the feature satellite even when the seam heuristic would skip. Does **not**
-skip task Design — task Design still defaults on unless `--skip-design`.
-
 | Flags | Feature satellite | Task `### Design` in batch |
 |-------|-------------------|----------------------------|
-| (default / `--auto`) | seam heuristic | **author `design` on each item** |
-| `--design` | always | **author `design` on each item** |
+| (default / `--auto`) | seam heuristic (ties lean **design**) | **author `design` on each item** |
 | `--skip-design` | skip | **omit `design`** (refine later) |
 
 A task's in-file `### Design` is code-level and narrow. The feature satellite is cross-cutting. Both
 are part of the same planning "design package" controlled by `--skip-design`.
 
-**The seam heuristic (the `--auto` decision).** A design doc is warranted when the feature introduces
-an **ADR-worthy** change — anything that shifts a boundary another engineer must reason about:
+**The seam heuristic (default / `--auto` decision).** A design doc is warranted when the feature
+introduces an **ADR-worthy** change — anything that shifts a boundary another engineer must reason
+about:
 
 - a **new command** or a new flag that changes a command's contract,
 - a **new module / package / service** (a new `apps/*` or `packages/*`, a new app-layer service),
 - a **new schema** — a DB table/migration, a Zod config key, a DTO/contract shape,
 - a **new transport / boundary** — an oRPC seam, an auth boundary, a job-queue or EventBus topic.
 
-If the work is internal to one module, a bug fix, a doc/chore, or a refactor with no boundary change,
-**skip** — note the skip in the report. When in doubt under `--auto`, lean skip; the operator can
-re-run with explicit `--design`.
+If the work is clearly internal to one module, a bug fix, a doc/chore, or a refactor with no boundary
+change, **skip** — note the skip in the report. **When in doubt, lean design** (same ties rule as
+idea-path `needs_design`). Use `--skip-design` only when the operator wants no satellite and blank
+task Design.
 
 **Authoring (skill-prose — no CLI verb).** The `04` index is a hand-curated derived doc
 (constitution §4.5 rule 4 / §6.5), so write it directly, in the fixed **detail-first then index**
@@ -202,7 +204,7 @@ order (§4.5 rule 5 / sync trigger **T9**):
 2. **Index second.** Add or update the satellite's row in `docs/04_DESIGN.md §0` (the `| Satellite |
    Area | Status |` table) — pointer + one-line area + status only, never a restatement of the body.
 
-**Idempotency (re-runnable).** `/sp:dev-plan … --design` may run many times for one feature. If the
+**Idempotency (re-runnable).** `/sp:dev-plan` may run many times for one feature. If the
 satellite already exists: **update in place** — merge new design content into its sections, refresh
 its `updated_at`, and leave its existing `04` index row alone (or adjust only its status). **Never**
 overwrite the whole file, create a second satellite, or add a duplicate index row. The invariant

@@ -186,13 +186,11 @@ of an unnecessary design step is low; the cost of skipping a needed one is high.
 
 **Flag overrides** (consumed by `idea-pipeline.yaml` / plan, not brainstorm itself):
 
-- **Idea path (`/sp:dev-idea`):** there is no `--design` force flag. Design is default-on via the
-  `needs_design` signal (`design=auto`); only `--skip-design` opts out of system-design **and**
-  omits per-task `design` fields at batch-create (scaffold only). Brainstorm design summary is still
-  recorded. Refine is the fallback for blank task Design.
-- **Plan path (`/sp:dev-plan`):** still supports `--design` to force the feature satellite regardless
-  of the seam heuristic; task `### Design` still defaults **on** in the later batch unless
-  `--skip-design`.
+- **Idea path (`/sp:dev-idea`) and plan path (`/sp:dev-plan`):** there is **no** `--design` force
+  flag. Design is **on by default**. Only **`--skip-design`** opts out (idea: skip system-design +
+  omit per-task `design`; plan: skip feature satellite + omit per-task `design`). Brainstorm design
+  summary is still recorded. Ties lean design (`needs_design` / seam heuristic). Refine is the
+  fallback for blank task Design.
 
 ### Idea-evaluation report (idea path)
 

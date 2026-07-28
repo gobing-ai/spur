@@ -374,10 +374,11 @@ The Design Approval Gate is the taste gate between system design and decompositi
 
 **Auto-mode behavior:**
 
-- `--auto` routes around the `design-approval` HITL state BEFORE entry only when
-  `vars.design_approved = true` (representing explicit prior approval from the operator).
-- Without explicit prior approval, `--auto` still pauses at `design-approval` — taste gates
-  are not auto-clicked (Auto-Decision Principle #5).
+- `--auto` routes around taste HITL states BEFORE entry only when the matching pre-clear vars are
+  true. CLI **`--approve-taste`** (idea + plan) sets `design_approved=true` and, on the idea path,
+  also `idea_approved=true`. Aliases: `--design-approved` / `--idea-approved` set one var each.
+- Without explicit prior approval, `--auto` still pauses at idea-eval and design-approval — taste
+  gates are not auto-clicked (Auto-Decision Principle #5).
 - The brainstorm design summary is ALWAYS recorded, regardless of `--auto` — `--auto` does not
   bypass the "nothing is too simple" pattern.
 
@@ -389,11 +390,10 @@ determine routing:
 
 | `design` var | `needs_design` signal | Route |
 |---|---|---|
-| `force` | (ignored) | `system-design` -> `design-approval` -> `decompose` |
 | `skip` | (ignored) | `decompose` (skip system-design; brainstorm summary still recorded) |
 | `auto` | `true` | `system-design` -> `design-approval` -> `decompose` |
 | `auto` | `false` | `decompose` (skip system-design) |
 | `auto` | (missing) | `system-design` (ties lean design) |
 
-See [brainstorm/SKILL.md](../../brainstorm/SKILL.md) § "Design Approval Gate" for the brainstorm-side
-contract (6 patterns + `needs_design` criteria).
+There is no `design=force` / `--design` path. See [brainstorm/SKILL.md](../../brainstorm/SKILL.md) §
+"Design Approval Gate" for the brainstorm-side contract (6 patterns + `needs_design` criteria).

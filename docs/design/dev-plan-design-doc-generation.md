@@ -1,7 +1,11 @@
-# Design — `/sp:dev-plan` design-doc generation (`--design` / `--auto`)
+# Design — `/sp:dev-plan` design-doc generation (design by default / `--skip-design`)
 
 Owning task: [`0124`](../tasks/0124_add-design-auto-design-doc-generation-to-sp-dev-plan-plannin.md).
 Surface index row: [`04_DESIGN.md §0`](../04_DESIGN.md). Feature: `F` (Planning).
+
+**2026-07-28 contract update:** aligned with `/sp:dev-idea` — **no `--design` force flag**.
+Design package is **on by default**; sole opt-out is **`--skip-design`**. Seam-heuristic ties
+lean **design** (was: lean skip under `--auto`).
 
 ## Problem
 
@@ -16,7 +20,7 @@ was a disconnected, easily-skipped side activity.
 ## Decision
 
 Add a conditional **Step 5.5: Design doc** to the planning half, between batch-create (Step 5) and
-refine (Step 6), controlled by two flags on the `/sp:dev-plan` entry point.
+refine (Step 6), controlled by the unified design package on `/sp:dev-plan`.
 
 **Why `dev-plan`, not `dev-refine`** — design satellites are *feature-level* (one per surface area,
 indexed by area in `04 §0`). `dev-refine` runs per-WBS task and owns each task's narrow in-file
@@ -34,18 +38,17 @@ after the fact.
 
 ## Behavior — the flag contract
 
-Three states, with `--design` taking precedence over `--auto`:
-
 | Flags | Action |
 |-------|--------|
-| `--design` (± `--auto`) | **Always** author/update the satellite + `04` index. `--design` wins; `--auto` ignored. |
-| `--auto` (no `--design`) | **Agent decides** from intake via the seam heuristic; author iff a seam is detected, else skip. Reports either way; no confirmation pause. |
-| neither | **Skip** — no satellite, no `04` change. Default; preserves current behavior byte-for-byte. |
+| (default) / `--auto` | **Seam heuristic** for feature satellite (ties lean **design**). **Always** author per-task `### Design` in the batch. Report either way; no confirmation pause. |
+| `--skip-design` | **Skip** satellite **and** omit per-task `design` fields (scaffold only; refine fills later). Sole design opt-out. |
 
-### The seam heuristic (the `--auto` decision)
+There is **no** `--design` force flag (removed 2026-07-28; same contract as `/sp:dev-idea`).
 
-Author **iff** the feature introduces an ADR-worthy boundary change — a seam another engineer must
-reason about:
+### The seam heuristic
+
+Author the satellite **iff** the feature introduces an ADR-worthy boundary change — a seam another
+engineer must reason about:
 
 - a **new command**, or a new flag that changes a command's contract;
 - a **new module / package / service** (`apps/*`, `packages/*`, an app-layer service);
@@ -53,7 +56,8 @@ reason about:
 - a **new transport / boundary** — oRPC seam, auth boundary, job-queue/EventBus topic.
 
 Internal-to-one-module work, bug fixes, docs/chores, and boundary-preserving refactors **skip**.
-Under `--auto`, ties lean skip — the operator can re-run with explicit `--design`.
+**When in doubt, lean design.** Use `--skip-design` only when the operator wants no satellite and
+blank task Design.
 
 ## Mechanism — authoring (detail-first, then index: §4.5 rule 5 / T9)
 
@@ -66,7 +70,7 @@ Under `--auto`, ties lean skip — the operator can re-run with explicit `--desi
 
 ## Idempotency
 
-`/sp:dev-plan … --design` is re-runnable for one feature. If the satellite exists: **update in
+`/sp:dev-plan` is re-runnable for one feature. If the satellite exists: **update in
 place** — merge new content into existing sections, refresh `updated_at`, leave the `04` row alone
 (or adjust only its status). Never overwrite the whole file, create a second satellite, or add a
 duplicate index row. Invariant (§4.5 rule 1): exactly one `04 §0` row per satellite; every satellite
@@ -76,27 +80,28 @@ reachable from exactly one row.
 
 **In:** `plugins/sp/commands/dev-plan.md` (flags + truth table); `planning-workflow.md` (Step 5.5 +
 diagram); `SKILL.md` (`planning_steps`, diagram, routing row); `decomposition.md` (task-Design vs
-satellite disambiguation note).
+satellite disambiguation note); alignment with idea-path design package.
 
 **Out:** a `spur` CLI verb (rejected above); changes to `dev-refine`'s per-task `### Design` section;
 the corpus-migration / board slice; any `app`/`domain`/`cli` TypeScript.
 
 ## Consequences
 
-> **Idempotency verified (2026-06-25).** A second `/sp:dev-plan --design` run on feature `F`
+> **Idempotency verified (2026-06-25).** A second `/sp:dev-plan` design pass on feature `F`
 > reused this slug, took the update-in-place path (Edit, not Write), and produced no duplicate
 > satellite and no duplicate `04 §0` row — confirming AC2. This note *is* that re-run's merge.
 
-- Design becomes a pipeline step instead of a side activity, but stays **opt-in** — no surprise
-  writes when neither flag is passed.
+- Design is a pipeline step with **default-on** package behavior; opt-out is explicit
+  (`--skip-design`).
 - The `04` index gains entries authored by the skill; the hand-curated contract (§4.5 rule 4) is
   preserved because the skill follows the same detail-first ordering a human would.
-- `--auto`'s seam heuristic is judgment, not a gate — false negatives are recoverable via explicit
-  `--design`; false positives produce a reviewable (deletable) satellite.
+- Seam heuristic is judgment, not a gate — false negatives are recoverable by re-running plan
+  without `--skip-design` after clarifying ADR-worthiness; false positives produce a reviewable
+  (deletable) satellite.
 
 ## References
 
 - `docs/99_PROJECT_CONSTITUTION.md` §4.5 (index + satellite), §5 T9 (sync order), §6.5 (`04` is a
   hand-maintained derived doc).
-- `plugins/sp/skills/spur-dev/references/planning-workflow.md` §Step 5.5 — the runtime procedure.
-- `plugins/sp/commands/dev-plan.md` — the flag entry point.
+- `plugins/sp/skills/spur-dev/references/planning-workflow.md` Step 5.5 (SSOT procedure).
+- `/sp:dev-idea` design package (same `--skip-design`-only contract).

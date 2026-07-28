@@ -70,9 +70,10 @@ vague description
   → GATE: spur feature check   (BDD validator; loop until clean)
   → decomposition (prompt work) → task-batch JSON
   → GATE: task-batch.schema.json + spur task batch-create (atomic: all-or-nothing)
-  → design doc (conditional: --design / --auto) → docs/design/<slug>.md + 04 index
+  → design doc (conditional: seam heuristic; opt out with --skip-design) → docs/design/<slug>.md + 04 index
   → refine (per task, just-in-time, before execution)
 ```
+
 
 Full procedure: **[references/planning-workflow.md](references/planning-workflow.md)**.
 

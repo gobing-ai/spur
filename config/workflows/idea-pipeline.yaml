@@ -20,10 +20,11 @@
 #   design   — "auto" (default, signal-driven) or "skip" (--skip-design). No force path.
 #              Unified: skip also means omit per-task Design in batch-create (scaffold only;
 #              refine fills later). Default: decompose must author batch item `design`.
-#   design_approved — "true" only when the operator explicitly approved the design in-session;
+#   design_approved — "true" when taste pre-cleared (CLI --approve-taste or alias --design-approved);
 #              lets profile=auto route around the design-approval taste gate (default "false")
-#   idea_approved — "true" only when the operator explicitly approved the idea-eval report
-#              in-session; lets profile=auto route around the idea-eval taste gate (default "false")
+#   idea_approved — "true" when taste pre-cleared (CLI --approve-taste or alias --idea-approved);
+#              lets profile=auto route around the idea-eval taste gate (default "false")
+#   CLI --approve-taste sets both design_approved and idea_approved to true.
 #   spurBin  — PATH-independent spur invocation (overridden by CLI at run start)
 #   agent    — agent for agent.run steps (default: omp)
 #
