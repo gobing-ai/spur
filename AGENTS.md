@@ -218,7 +218,7 @@ spur <noun> --help
 | `agent`    | Run / list / doctor / agent specs |
 | `history`  | Import / analyze agent history    |
 | `rule`     | Constraints → **`sp:spur-cli`**   |
-| `workflow` | Engine → **`sp:spur-cli`**        |
+| `workflow` | Engine + run progress/follow → **`sp:spur-cli`** |
 | `message`  | Inter-agent messages              |
 | `team`     | Assign / start / stop / status    |
 | `task`     | Task corpus → **`sp:spur-cli`**   |

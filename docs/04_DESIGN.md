@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.4.0
+version: 1.5.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-07-27
+updated_at: 2026-07-28
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -28,7 +28,7 @@ detail-first then index (§4.5 rule 5 / T9).
 | [`server-side-adjustment-design.md`](design/server-side-adjustment-design.md) | Server/Web slice — ServerContext, runtime-safe imports, EventBus/JobQueue/Scheduler wiring, oRPC surface | design (in progress) |
 | [`server-side-adjustment-feature-finalized.md`](design/server-side-adjustment-feature-finalized.md) | Server/Web — finalized feature decisions for the above | finalized |
 | [`spur-team-mode-design.md`](design/spur-team-mode-design.md) | Team mode — agent specs, inbox, `TeamService` | design |
-| [`workflow-observability.md`](design/workflow-observability.md) | `spur workflow run` DX — run-start plan preview + live EventBus step progress; board reuse (0114) | implemented |
+| [`workflow-observability.md`](design/workflow-observability.md) | Workflow run observability — correlated EventBus projection, human output levels, durable trace follow, producer audit (0114/0310/0365) | partial |
 | [`dev-plan-design-doc-generation.md`](design/dev-plan-design-doc-generation.md) | `/sp:dev-plan` design-doc step — design by default / `--skip-design` only, seam heuristic (ties lean design), satellite + index authoring (0124) | implemented |
 | [`dev-agent-flag-and-dogfood-skill.md`](design/dev-agent-flag-and-dogfood-skill.md) | `--agent` on dev-refine/plan/brainstorm (threaded, not theater) + `sp:dogfood-testing` backbone extraction with enhanced report/ledger (0125) | implemented |
 | [`e2e-workflow-for-system-development.md`](design/e2e-workflow-for-system-development.md) | End-to-end workflow system for system development — pipeline architecture, design step auto-detection, HITL gate model, doc-sync boundary (0167) | design |
@@ -257,19 +257,26 @@ overrides the global root and suppresses the bundled fallback for a hermetic run
   `ts-rule-engine` `RulePersistenceAdapter`; Spur writes via `DbRulePersistenceAdapter`).
 Backed by `ts-rule-engine`. Help dispatch per §1.0.
 
-#### `spur workflow validate <workflow.yaml> [--json] [--no-schema]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--json]` · `spur workflow continue [run-id] [--yes] [--json]` · `spur workflow list [--json]` · `spur workflow trace [run-id] [--workflow <name>] [--status <s>] [--since <date>] [--last <n>] [--json]`
+#### `spur workflow validate <workflow.yaml> [--json] [--no-schema]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--detail <minimal|invocation|full>] [--quiet|--silent|--verbose] [--trace-file] [--steer] [--json]` · `spur workflow continue [run-id] [--yes] [--json]` · `spur workflow list [--json]` · `spur workflow trace [run-id] [--workflow <name>] [--status <s>] [--since <date>] [--last <n>] [--follow] [--poll <ms>] [--json]`
 - `validate <file>` — load + Zod-validate a workflow definition.
 - `run <file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan]` — execute; prints `<status>: <name> -> <finalState>`;
   exit 1 unless `done`. `--vars` takes a JSON object of per-run variable overrides
   (e.g. `--vars '{"taskId":"0042"}'`), merged over the workflow's `vars` for `${vars.*}` resolution.
   `--dry-run` validates the definition and walks the transition graph without executing actions
   — useful for verifying workflow structure before committing side effects.
-  **Observability (0114, synchronous human runs only):** before executing, prints a run-start plan
-  preview (`plan: <state> → … → <terminal>`, from the parsed definition) and then streams live
-  per-step progress from the workflow EventBus (`▶ <state> [<status>]`, `→ <node>: <kind>…`,
-  `✓ <status> (<duration>)`). Suppressed under `--json` (envelope stays byte-identical) and on the
-  detached `--async` path (ignored stdio → use `spur workflow trace`); `--no-plan` suppresses only
-  the preview. Mechanism: [`design/workflow-observability.md`](design/workflow-observability.md).
+  **Observability (0114/0310/0365, synchronous human runs):** default output prints the run id,
+  plan, correlated phase/action lines, resolved agent/model, redacted invocation summary, bounded live
+  stdout/stderr, timeout budget, 30-second liveness, duration/outcome, and explicit `usage unavailable`.
+  `--detail minimal` retains compact lines; `--detail invocation` is the default; `--verbose`
+  implies full correlation and FSM transitions. `--quiet` keeps only the final summary;
+  `--silent` suppresses routine output. `--json` emits only the existing result object.
+  `--trace-file` appends the schema-versioned redacted stream under
+  `.spur/runs/workflow/<run-id>.jsonl` and propagates to the detached child. `--steer` enables
+  synchronous in-process `continue|note|retry|abort` commands at an action's declared
+  `steeringBoundary`; it conflicts with `--json` and `--async`, and retry additionally requires an
+  explicit idempotent `retryPolicy`. `--no-plan` remains orthogonal. Mechanism, backpressure, redaction,
+  and control boundaries:
+  [`design/workflow-observability.md`](design/workflow-observability.md).
   `--async` starts the run in a detached background process and returns the run id immediately.
 - `continue [run-id] [--yes]` — resume a paused (HITL) run (E3, design §6 / D04). Omit `run-id` to
   discover the most-recent paused run and confirm (skipped with `--yes`). Resolves the run's
@@ -281,6 +288,9 @@ Backed by `ts-rule-engine`. Help dispatch per §1.0.
 - `trace` — query persisted workflow run history. No argument: list recent runs (default last 20,
   newest first) with filters `--workflow`, `--status`, `--since`, `--last`. With `<run-id>`:
   per-run timeline of state entries, transitions, and action executions interleaved by `created_at`.
+  `--follow` requires a run id, replays that durable timeline, polls every `--poll` milliseconds
+  (default 1000; minimum 50), emits changed action rows, and exits at terminal status. It is a
+  human stream and cannot be combined with `--json`.
   Action lines include the action kind, duration when finalized, and an in-flight/success/failure marker.
   **Per-step cost (0311):** `agent.run` lines also carry token cost + cache-hit joined from imported
   history ETL rows — ` · $X.XXX · cache Y%` for an exact session-id join (R1a), ` · ~$…` when the

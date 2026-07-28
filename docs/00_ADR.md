@@ -839,3 +839,25 @@ CSS-only tooltip that carries no accessible name by design, keeping the name on 
 `docs/plans/2026-07-25-feature-tree-status-icon-brainstorm.md`,
 `apps/web/src/modules/features/status-icons.tsx`, `apps/web/src/styles/global.css`.
 
+---
+
+## ADR-035: Workflow Observability Is Read-Only; Steering Uses a Separate Safe-Boundary Controller
+
+**Status:** Accepted · **Date:** 2026-07-28
+
+**Decision.** Keep `WorkflowObservabilityBus` a read-only projection of persisted workflow lifecycle and
+correlated agent execution. Live process output is a bounded tee: observers receive redacted chunks while
+the canonical buffered answer remains unchanged. Synchronous steering uses a separate in-process command
+controller at workflow-declared action boundaries, with command identity, target/version checks,
+authorization, deadline, ack/nack, and policy-gated retry. Do not enable cross-process steering until a
+durable authenticated, ordered, crash-recoverable command protocol receives its own approval.
+
+**Why.** An EventBus is suitable for low-latency observation but supplies neither command durability nor
+cross-process authentication, ordering, idempotency, or crash recovery. Treating passive events as control
+requests would let stale or duplicated messages mutate execution history. Conversely, inheriting child
+stdio would expose progress but destroy the buffered non-interactive contract used by response validation.
+The separate controller and tee preserve both safety boundaries.
+
+**Detail:** `docs/design/workflow-observability.md`,
+`docs/design/workflow-steering-control-channel.md`,
+`packages/app/src/workflow/steering.ts`, `packages/app/src/observability/agent-execution.ts`.
