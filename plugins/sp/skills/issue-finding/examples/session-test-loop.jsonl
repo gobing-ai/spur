@@ -1,0 +1,23 @@
+{"type":"session","timestamp":"2026-07-29T12:00:00.000Z","id":"fixture-session-test-loop"}
+{"type":"title","title":"Run0376 fixture — repeated failing tests"}
+{"type":"message","timestamp":"2026-07-29T12:01:00.000Z","message":{"role":"assistant","content":[{"type":"toolCall","name":"bash","input":{"command":"bun test packages/app/tests/services/feature-check.test.ts"}}]}}
+{"type":"message","timestamp":"2026-07-29T12:03:00.000Z","message":{"role":"tool","content":[{"type":"toolResult","name":"bash","output":"error: 2 tests failed\nGuardDeniedError: not applicable here"}]}}
+{"type":"message","timestamp":"2026-07-29T12:04:00.000Z","message":{"role":"assistant","content":[{"type":"toolCall","name":"bash","input":{"command":"bun test packages/app/tests/services/feature-check.test.ts"}}]}}
+{"type":"message","timestamp":"2026-07-29T12:06:00.000Z","message":{"role":"tool","content":[{"type":"toolResult","name":"bash","output":"error: 2 tests failed"}]}}
+{"type":"message","timestamp":"2026-07-29T12:07:00.000Z","message":{"role":"assistant","content":[{"type":"toolCall","name":"bash","input":{"command":"bun test packages/app/tests/services/feature-check.test.ts"}}]}}
+{"type":"message","timestamp":"2026-07-29T12:09:00.000Z","message":{"role":"tool","content":[{"type":"toolResult","name":"bash","output":"error: 2 tests failed"}]}}
+{"type":"message","timestamp":"2026-07-29T12:10:00.000Z","message":{"role":"assistant","content":[{"type":"toolCall","name":"bash","input":{"command":"bun test packages/app/tests/services/feature-check.test.ts"}}]}}
+{"type":"message","timestamp":"2026-07-29T12:12:00.000Z","message":{"role":"tool","content":[{"type":"toolResult","name":"bash","output":"error: 2 tests failed"}]}}
+{"type":"message","timestamp":"2026-07-29T12:13:00.000Z","message":{"role":"assistant","content":[{"type":"toolCall","name":"bash","input":{"command":"git stash"}}]}}
+{"type":"message","timestamp":"2026-07-29T12:14:00.000Z","message":{"role":"assistant","content":[{"type":"toolCall","name":"bash","input":{"command":"git status && git diff"}}]}}
+{"type":"message","timestamp":"2026-07-29T12:15:00.000Z","message":{"role":"assistant","content":[{"type":"toolCall","name":"bash","input":{"command":"spur task check 0376"}}]}}
+{"type":"message","timestamp":"2026-07-29T12:16:00.000Z","message":{"role":"tool","content":[{"type":"toolResult","name":"bash","output":"error: L3 format failure — bare :line citation"}]}}
+{"type":"message","timestamp":"2026-07-29T12:17:00.000Z","message":{"role":"assistant","content":[{"type":"toolCall","name":"bash","input":{"command":"spur task check 0376"}}]}}
+{"type":"message","timestamp":"2026-07-29T12:18:00.000Z","message":{"role":"tool","content":[{"type":"toolResult","name":"bash","output":"error: L3 format failure"}]}}
+{"type":"message","timestamp":"2026-07-29T12:19:00.000Z","message":{"role":"assistant","content":[{"type":"toolCall","name":"bash","input":{"command":"spur task check 0376"}}]}}
+{"type":"compaction","timestamp":"2026-07-29T12:20:00.000Z"}
+{"type":"compaction","timestamp":"2026-07-29T12:25:00.000Z"}
+{"type":"compaction","timestamp":"2026-07-29T12:30:00.000Z"}
+{"type":"compaction","timestamp":"2026-07-29T12:35:00.000Z"}
+{"type":"compaction","timestamp":"2026-07-29T12:40:00.000Z"}
+{"type":"compaction","timestamp":"2026-07-29T12:45:00.000Z"}

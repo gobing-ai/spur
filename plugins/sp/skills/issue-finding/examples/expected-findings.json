@@ -1,0 +1,27 @@
+{
+    "fixture": "session-test-loop.jsonl",
+    "source": "omp",
+    "description": "Synthetic OMP session for dogfood/self-check of sp:issue-finding IDENTIFY signals.",
+    "expectedCategories": [
+        {
+            "id": "test-loop",
+            "minIdenticalCommandRuns": 3,
+            "commandContains": "bun test packages/app/tests/services/feature-check.test.ts",
+            "minSeverity": "S1"
+        },
+        {
+            "id": "guard",
+            "minSpurTaskCheckRuns": 3,
+            "commandContains": "spur task check 0376"
+        },
+        {
+            "id": "git-red-herring",
+            "commands": ["git stash", "git status && git diff"]
+        },
+        {
+            "id": "compaction",
+            "minCompactions": 6
+        }
+    ],
+    "smokeCommand": "/sp:dev-findissue --sessions plugins/sp/skills/issue-finding/examples/session-test-loop.jsonl --no-task"
+}

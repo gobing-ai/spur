@@ -1,0 +1,15 @@
+name: issue-finding
+description: "Forensic analysis of coding-agent session logs — discover performance
+  bottlenecks and behavioral anti-patterns, rank root causes by time cost, propose
+  targeted fixes, and optionally create a structured spur task via CLI-gated writes.
+  Supports optional topic focus, multi-source session roots, and --no-task/--json report modes."
+version: 1.1.0
+icon: 🛡
+category: debugging
+tags:
+  - analysis-core
+  - issue-finding
+  - session-logs
+  - performance
+  - post-mortem
+  - bottlenecks
