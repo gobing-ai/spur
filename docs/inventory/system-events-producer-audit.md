@@ -1,6 +1,6 @@
 # System Events Producer Audit
 
-> Verified 2026-07-09 against production source after tasks 0221, 0226, 0233, 0236, 0237.
+> Verified 2026-07-09 against production source after tasks 0221, 0226, 0233, 0236, 0237; extended 2026-07-28 by task 0367 (`workflow.agent`, `workflow.steering`).
 > **Supersedes** the scattered producer-wiring findings in task 0226
 > (`docs/tasks2/0226_system-events-real-producer-wiring-review-findings.md`) and
 > the task-0221 emit-site inventory (`docs/inventory/0221-emit-sites.md`).
@@ -16,7 +16,7 @@
 | conditional | ◐ | The producer exists but `spur serve` does not perform the registration needed to activate it. |
 | unwired | ❌ | No production emit path reaches the server bus. |
 
-## Audit table — all 58 catalog entries
+## Audit table — all 60 catalog entries
 
 Source of truth: `SYSTEM_EVENT_CATALOG` in `packages/app/src/services/event-names.ts`.
 
@@ -120,6 +120,8 @@ Source of truth: `SYSTEM_EVENT_CATALOG` in `packages/app/src/services/event-name
 | 51 | `workflow.hitl.response` | `run-lifecycle.ts:325`; app `hitl-*.ts:41,48,41` | engine bridge | ✅ reachable (redacted payload) |
 | 52 | `workflow.hitl.note` | `host.ts:113` | engine bridge → host `context.events` | ✅ reachable (redacted: `message`) |
 | 53 | `workflow.custom` | `host.ts:130` | engine bridge | ✅ reachable |
+| 54 | `workflow.agent` | `agent-run.ts:144` (`AgentRunActionRunner`) — unified `AgentExecutionEvent` lifecycle (kind: started/output/heartbeat/dropped/finished) | `ctx.workflowService()` → `observabilityBus: () => eventsBus` → `AgentRunActionRunner.observabilityBus.emit('workflow.agent', event)` | ✅ reachable (diagnostic tier; high-volume `output`/`heartbeat` kinds) |
+| 55 | `workflow.steering` | `steering.ts:295` (`WorkflowSteeringController.onAck` → `bus.emit('workflow.steering', ack)`) | CLI `workflow.ts:294` → `new WorkflowSteeringController((ack) => bus?.emit('workflow.steering', ack))` | ⚠️ nested-CLI deferred (emitted on CLI-local bus; no server-side tap path) |
 
 > **Task 0236 wiring.** The server `workflowService()` accessor (`context.ts:396–410`) now passes both `events: () => eventsBus` (engine bridge → engine-native names) AND `observabilityBus: () => eventsBus` (→ `ObservableWorkflowAdapter` → verb-form names). This activates the 6 adapter-emitted verb-form events (`workflow.run.finalized`, `workflow.phase`, `workflow.transition`, `workflow.action.started`, `workflow.action.finished`, plus a second `workflow.run.started`). `workflow.run.started` fires from both paths — accepted as harmless v1 duplication; dedup deferred.
 
@@ -127,28 +129,28 @@ Source of truth: `SYSTEM_EVENT_CATALOG` in `packages/app/src/services/event-name
 
 | # | Catalog entry | Emit site | Bus path to tap | Status |
 | --- | --- | --- | --- | --- |
-| 54 | `api.request.error` | `error-handler.ts:176` (`globalErrorHandler`) | `c.get('ctx')?.eventBus()?.emit(...)` | ✅ reachable |
+| 56 | `api.request.error` | `error-handler.ts:176` (`globalErrorHandler`) | `c.get('ctx')?.eventBus()?.emit(...)` | ✅ reachable |
 
 ### Bus diagnostics (bus.\*)
 
 | # | Catalog entry | Emit site | Bus path to tap | Status |
 | --- | --- | --- | --- | --- |
-| 55 | `bus.emit.done` | `event-bus.ts:272` | internal `lifecycleBus` only | 🔬 diagnostic-only |
-| 56 | `bus.emit.noop` | `event-bus.ts:282` | internal `lifecycleBus` only | 🔬 diagnostic-only |
-| 57 | `bus.handler.error` | `event-bus.ts:293` | internal `lifecycleBus` only | 🔬 diagnostic-only |
-| 58 | `bus.handler.async.enqueued` | `event-bus.ts:304` | internal `lifecycleBus` only | 🔬 diagnostic-only |
+| 57 | `bus.emit.done` | `event-bus.ts:272` | internal `lifecycleBus` only | 🔬 diagnostic-only |
+| 58 | `bus.emit.noop` | `event-bus.ts:282` | internal `lifecycleBus` only | 🔬 diagnostic-only |
+| 59 | `bus.handler.error` | `event-bus.ts:293` | internal `lifecycleBus` only | 🔬 diagnostic-only |
+| 60 | `bus.handler.async.enqueued` | `event-bus.ts:304` | internal `lifecycleBus` only | 🔬 diagnostic-only |
 
 ## Summary
 
 | Classification | Count | Events |
 | --- | --- | --- |
-| ✅ reachable | 52 | All planning, queue (except `queue.stats`), scheduler, message, process, agent, rule (parent-level), workflow (default tier), `api.request.error` |
+| ✅ reachable | 53 | All planning, queue (except `queue.stats`), scheduler, message, process, agent, rule (parent-level), workflow (default tier + `workflow.agent` diagnostic), `api.request.error` |
 | ◐ conditional | 1 | `queue.stats` |
 | 🔬 diagnostic-only | 5 | `workflow.guard.evaluated`, `bus.emit.done/noop`, `bus.handler.error`, `bus.handler.async.enqueued` |
-| ⚠️ nested-CLI deferred | 0 (residual) | `rule.*` and `agent.invoke.*` fire at parent level (✅); child-internal emissions are process-local (see footer) |
+| ⚠️ nested-CLI deferred | 1 | `workflow.steering` (emitted on CLI-local bus via `WorkflowSteeringController.onAck`; no server-side tap path) |
 | ❌ unwired | **0** | — |
 
-**All default-tier catalog entries now have a confirmed production emit path to the server bus**, except `queue.stats` (conditional — requires scheduler-registry wiring that `spur serve` does not perform) and the `bus.*` family (diagnostic-only by design — separate internal bus).
+**All default-tier catalog entries now have a confirmed production emit path to the server bus**, except `queue.stats` (conditional — requires scheduler-registry wiring that `spur serve` does not perform), the `bus.*` family (diagnostic-only by design — separate internal bus), and `workflow.steering` (nested-CLI deferred — emitted on the CLI-local bus, not the server bus). `workflow.agent` is diagnostic-tier but reachable via `observabilityBus`.
 
 ## Systemic Observability Gaps
 

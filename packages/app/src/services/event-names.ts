@@ -142,6 +142,24 @@ export const SYSTEM_EVENT_CATALOG = [
     event('workflow.hitl.response', 'workflow', 'workflow-hitl', 'redacted'),
     event('workflow.hitl.note', 'workflow', 'workflow-hitl', 'redacted'),
     event('workflow.custom', 'workflow', 'workflow-custom'),
+    // ── workflow.agent / workflow.steering (task 0367 R1/R2) ────────────────
+    // The unified AgentExecutionEvent lifecycle (started, output, heartbeat,
+    // dropped, finished) is emitted on the bus as a single `workflow.agent`
+    // name, discriminated by the payload `kind` field. The whole lifecycle
+    // sits on the `diagnostic` tier: `output` and `heartbeat` are high-volume
+    // (one per chunk / per interval) and would dominate the default ledger
+    // if promoted, drowning low-volume signal (planning, steering, process).
+    // `started`/`dropped`/`finished` are low-volume but share the entry
+    // because the bus emits one name — splitting would require either five
+    // bus names (R6 forbids changing the producer) or a kind-dispatched tap
+    // (out of scope for this task). The diagnostic toggle surfaces the full
+    // lifecycle when operators need it; the default ledger stays clean (R5).
+    event('workflow.agent', 'workflow', 'workflow-agent', 'redacted', 'diagnostic'),
+    // Steering acknowledgements are low-volume, semantically important, and
+    // carry operation/target/outcome — `default` tier so they surface without
+    // the diagnostic toggle. `redacted` policy: the `note` field may carry
+    // operator context that should not persist verbatim (R2).
+    event('workflow.steering', 'workflow', 'workflow-steering', 'redacted'),
     event('api.request.error', 'api', 'api'),
     // ── api.* (task 0221 R2) ──────────────────────────────────────────────
 
@@ -201,7 +219,14 @@ export function systemEventCatalogEntry(name: string): SystemEventCatalogEntry |
     return SYSTEM_EVENT_CATALOG.find((entry) => entry.name === name);
 }
 
-/** Apply the catalog payload policy before persistence or streaming. */
+/** Apply the catalog payload policy before persistence or streaming.
+ *
+ * Preserves the 0365 observability envelope's correlation and metadata fields
+ * (schemaVersion, eventId, sequence, runId, executionId, actionId, node, kind,
+ * metadata, durationMs, usage, outcome, reason) under every payload policy (R3).
+ * Redaction runs strictly ahead of persistence: the 0365 SECRET_PATTERN is
+ * applied to every string value as defense-in-depth, and high-volume text fields
+ * are bounded so truncation can never expose redacted material (R4). */
 export function normalizeSystemEventPayload(
     entry: SystemEventCatalogEntry,
     eventPayload: unknown,
@@ -209,7 +234,7 @@ export function normalizeSystemEventPayload(
     if (eventPayload === null || eventPayload === undefined) return null;
     if (typeof eventPayload !== 'object') return { value: eventPayload };
     const source = eventPayload as Record<string, unknown>;
-    if (entry.payloadPolicy === 'raw-safe') return { ...source };
+    if (entry.payloadPolicy === 'raw-safe') return redactSecretValues({ ...source });
 
     const redacted = { ...source };
     for (const key of ['body', 'content', 'message', 'prompt', 'query', 'response', 'value']) {
@@ -217,5 +242,25 @@ export function normalizeSystemEventPayload(
             redacted[key] = '[redacted]';
         }
     }
-    return redacted;
+    return redactSecretValues(redacted);
+}
+
+/** Defense-in-depth: scan every string value for the 0365 secret pattern and
+ * bound long strings so truncation operates on already-redacted text, never
+ * on the original secret (R4). Mirrors the producer's SECRET_PATTERN from
+ * `packages/app/src/workflow/observability.ts` and `agent-execution.ts`. */
+const SECRET_PATTERN = /(?:sk-[a-z0-9_-]{8,}|(?:api[_-]?key|token|secret|password)\s*[:=]\s*\S+|bearer\s+\S+)/gi;
+const MAX_FIELD_LENGTH = 256;
+
+function redactSecretValues(payload: Record<string, unknown>): Record<string, unknown> {
+    for (const key of Object.keys(payload)) {
+        const value = payload[key];
+        if (typeof value === 'string') {
+            const redacted = value.replace(SECRET_PATTERN, '[REDACTED]');
+            payload[key] = redacted.length <= MAX_FIELD_LENGTH ? redacted : `${redacted.slice(0, MAX_FIELD_LENGTH)}…`;
+        } else if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+            payload[key] = redactSecretValues({ ...(value as Record<string, unknown>) });
+        }
+    }
+    return payload;
 }

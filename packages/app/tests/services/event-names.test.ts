@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import type { SystemEventCatalogEntry } from '../../src/services/event-names';
 import {
+    normalizeSystemEventPayload,
     PLANNING_EVENT_NAMES,
     SYSTEM_EVENT_CATALOG,
     SYSTEM_EVENT_CATALOG_METADATA,
@@ -9,7 +11,16 @@ import {
     SYSTEM_EVENT_PERSISTED_NAMES,
     SYSTEM_EVENT_PREFIXES,
     SYSTEM_EVENT_STREAMED_NAMES,
+    systemEventCatalogEntry,
 } from '../../src/services/event-names';
+
+/** Fail-loud catalog lookup so tests get a definite entry without the non-null assertion
+ * (forbidden by biome lint/style/noNonNullAssertion under --error-on-warnings). */
+function requireEntry(name: string): SystemEventCatalogEntry {
+    const entry = systemEventCatalogEntry(name);
+    if (!entry) throw new Error(`catalog entry missing: ${name}`);
+    return entry;
+}
 
 describe('SYSTEM_EVENT_CATALOG', () => {
     test('includes the core task lifecycle events', () => {
@@ -147,5 +158,154 @@ describe('SYSTEM_EVENT_CATALOG', () => {
         expect(SYSTEM_EVENT_DIAGNOSTIC_NAMES).toContain('bus.emit.done');
         expect(SYSTEM_EVENT_DIAGNOSTIC_NAMES).toContain('bus.emit.noop');
         expect(SYSTEM_EVENT_DIAGNOSTIC_NAMES).toContain('bus.handler.async.enqueued');
+    });
+
+    test('registers workflow.agent and workflow.steering catalog entries (task 0367 R1/R2)', () => {
+        // R1: unified agent execution lifecycle — single entry, kind-discriminated
+        const agentEntry = SYSTEM_EVENT_CATALOG.find((e) => e.name === 'workflow.agent');
+        expect(agentEntry).toBeDefined();
+        expect(agentEntry?.source).toBe('workflow');
+        expect(agentEntry?.renderer).toBe('workflow-agent');
+        expect(agentEntry?.payloadPolicy).toBe('redacted');
+        // R5: diagnostic tier — output/heartbeat are high-volume
+        expect(agentEntry?.tier).toBe('diagnostic');
+        expect(SYSTEM_EVENT_DIAGNOSTIC_NAMES).toContain('workflow.agent');
+
+        // R2: steering acknowledgements — default tier, redacted
+        const steeringEntry = SYSTEM_EVENT_CATALOG.find((e) => e.name === 'workflow.steering');
+        expect(steeringEntry).toBeDefined();
+        expect(steeringEntry?.source).toBe('workflow');
+        expect(steeringEntry?.renderer).toBe('workflow-steering');
+        expect(steeringEntry?.payloadPolicy).toBe('redacted');
+        expect(steeringEntry?.tier).toBe('default');
+        expect(SYSTEM_EVENT_DEFAULT_NAMES).toContain('workflow.steering');
+    });
+});
+
+describe('normalizeSystemEventPayload (task 0367 R3/R4)', () => {
+    test('preserves 0365 envelope correlation fields under redacted policy (R3)', () => {
+        const entry = requireEntry('workflow.agent');
+        const payload = {
+            schemaVersion: 1,
+            eventId: 'evt-001',
+            sequence: 42,
+            runId: 'run-001',
+            executionId: 'exec-001',
+            actionId: 'act-001',
+            node: 'step-3',
+            kind: 'started',
+            metadata: { correlationId: 'corr-1' },
+            durationMs: 1500,
+            usage: 'unavailable',
+            outcome: 'success',
+            reason: 'completed',
+            body: 'agent output text',
+        };
+        const result = normalizeSystemEventPayload(entry, payload);
+        expect(result).not.toBeNull();
+        // Envelope fields survive (R3)
+        expect(result?.schemaVersion).toBe(1);
+        expect(result?.eventId).toBe('evt-001');
+        expect(result?.sequence).toBe(42);
+        expect(result?.runId).toBe('run-001');
+        expect(result?.executionId).toBe('exec-001');
+        expect(result?.actionId).toBe('act-001');
+        expect(result?.node).toBe('step-3');
+        expect(result?.kind).toBe('started');
+        expect(result?.metadata).toEqual({ correlationId: 'corr-1' });
+        expect(result?.durationMs).toBe(1500);
+        expect(result?.usage).toBe('unavailable');
+        expect(result?.outcome).toBe('success');
+        expect(result?.reason).toBe('completed');
+        // High-risk text field is redacted by fixed-key list
+        expect(result?.body).toBe('[redacted]');
+    });
+
+    test('preserves 0365 envelope fields under raw-safe policy (R3)', () => {
+        const entry = requireEntry('workflow.steering');
+        // raw-safe is not used by these entries, but test the path anyway
+        const rawSafeEntry = { ...entry, payloadPolicy: 'raw-safe' as const };
+        const payload = {
+            schemaVersion: 1,
+            commandId: 'cmd-1',
+            runId: 'run-001',
+            actionId: 'act-001',
+            operation: 'continue',
+            actor: 'operator',
+            accepted: true,
+            state: 'running',
+            version: 2,
+            note: 'proceed with caution',
+        };
+        const result = normalizeSystemEventPayload(rawSafeEntry, payload);
+        expect(result).not.toBeNull();
+        expect(result?.schemaVersion).toBe(1);
+        expect(result?.commandId).toBe('cmd-1');
+        expect(result?.runId).toBe('run-001');
+        expect(result?.actionId).toBe('act-001');
+        expect(result?.operation).toBe('continue');
+        expect(result?.actor).toBe('operator');
+        expect(result?.accepted).toBe(true);
+        expect(result?.state).toBe('running');
+        expect(result?.version).toBe(2);
+        expect(result?.note).toBe('proceed with caution');
+    });
+
+    test('redacts 0365 SECRET_PATTERN matches in string values (R4)', () => {
+        const entry = requireEntry('workflow.agent');
+        const payload = {
+            kind: 'output',
+            runId: 'run-001',
+            body: 'the api_key=sk-live-abc1234567890 was leaked',
+            reason: 'bearer token=abc123 in stderr',
+        };
+        const result = normalizeSystemEventPayload(entry, payload);
+        expect(result).not.toBeNull();
+        // body is fixed-key redacted first, then secret scan on the marker (no-op)
+        expect(result?.body).toBe('[redacted]');
+        // reason is not in the fixed-key list → secret scan applies
+        expect(result?.reason).not.toContain('bearer');
+        expect(result?.reason).not.toContain('abc123');
+        expect(result?.reason).toContain('[REDACTED]');
+    });
+
+    test('redacts secrets in nested objects under raw-safe policy (R4)', () => {
+        const entry = requireEntry('workflow.agent');
+        const rawSafeEntry = { ...entry, payloadPolicy: 'raw-safe' as const };
+        const payload = {
+            kind: 'output',
+            metadata: {
+                correlationId: 'corr-1',
+                secret: 'password=hunter2',
+            },
+        };
+        const result = normalizeSystemEventPayload(rawSafeEntry, payload);
+        expect(result).not.toBeNull();
+        const metadata = result?.metadata as { correlationId: string; secret: string };
+        expect(metadata.correlationId).toBe('corr-1');
+        expect(metadata.secret).toContain('[REDACTED]');
+        expect(metadata.secret).not.toContain('hunter2');
+    });
+
+    test('bounds long string values to prevent truncation exposing redacted material (R4)', () => {
+        const entry = requireEntry('workflow.agent');
+        const rawSafeEntry = { ...entry, payloadPolicy: 'raw-safe' as const };
+        const longText = 'x'.repeat(500);
+        const payload = { kind: 'output', reason: longText };
+        const result = normalizeSystemEventPayload(rawSafeEntry, payload);
+        expect(result).not.toBeNull();
+        expect((result?.reason as string).length).toBeLessThanOrEqual(257); // 256 + ellipsis
+    });
+
+    test('returns null for null/undefined payloads', () => {
+        const entry = requireEntry('workflow.agent');
+        expect(normalizeSystemEventPayload(entry, null)).toBeNull();
+        expect(normalizeSystemEventPayload(entry, undefined)).toBeNull();
+    });
+
+    test('wraps primitive payloads in { value }', () => {
+        const entry = requireEntry('workflow.agent');
+        const result = normalizeSystemEventPayload(entry, 42);
+        expect(result).toEqual({ value: 42 });
     });
 });
