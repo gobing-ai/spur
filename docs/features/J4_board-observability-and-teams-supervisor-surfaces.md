@@ -2,11 +2,11 @@
 schema_version: 1
 id: "J4"
 name: "Board observability and Teams supervisor surfaces"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-07-29T00:09:34.646Z"
-updated_at: "2026-07-29T17:13:35.595Z"
+updated_at: "2026-07-29T21:14:22.293Z"
 ---
 
 # J4: Board observability and Teams supervisor surfaces
@@ -266,3 +266,5 @@ Feature: Board observability and Teams supervisor surfaces
 
 ## History
 - 2026-07-29T17:13:35.595Z backlog → active (system)
+- 2026-07-29T21:10:01.412Z active → verifying (system)
+- 2026-07-29T21:14:22.293Z verifying → done (system)

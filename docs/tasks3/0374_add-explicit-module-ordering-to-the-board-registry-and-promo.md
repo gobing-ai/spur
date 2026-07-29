@@ -12,7 +12,7 @@ priority: P2
 tags: ["board", "web", "registry"]
 dependencies: []
 created_at: "2026-07-29T00:15:02.315Z"
-updated_at: "2026-07-29T17:14:13.294Z"
+updated_at: "2026-07-29T21:05:24.413Z"
 ---
 
 ## 0374. Add explicit module ordering to the board registry and promote Observability to first module
@@ -22,12 +22,12 @@ updated_at: "2026-07-29T17:14:13.294Z"
 Board module order is currently an accident of alphabetization: `discoverViaGlob` sorts discovered modules by id (apps/web/src/modules/discover.ts:73) and `discoverViaFs` sorts directory names (:139), yielding features, observability, task-kanban, teams. `defaultModule` is simply `enabledList()[0]` (registry.ts:53), so Features is also the default landing route. The `WebModule` contract (modules/types.ts) has no ordering field at all, so the only way to reorder today is to rename a directory — which would break the id and route the registry validates on. The operator wants Observability first; this task makes ordering declarative instead of incidental.
 
 ### Requirements
-- [ ] R1. Add an optional ordering key to the `WebModule` interface and honour it in discovery for both the glob path and the fs-fallback path.
-- [ ] R2. Ordering must be partial: modules declaring the key sort by it; modules without it retain their existing relative order after them, so no untouched module changes position unexpectedly.
-- [ ] R3. Set Observability's ordering so it is the first enabled module and therefore the default landing route.
-- [ ] R4. Preserve the registry's fail-fast duplicate id and duplicate route validation, and the disable/enable slot-restoration behaviour.
-- [ ] R5. Keep discovery pure and deterministic — the same inputs must always yield the same ordering, as the registry factory contract requires.
-- [ ] R6. Cover the ordering comparator in the fs-fallback path, which is the branch reachable under bun test.
+- [x] R1. Add an optional ordering key to the `WebModule` interface and honour it in discovery for both the glob path and the fs-fallback path.
+- [x] R2. Ordering must be partial: modules declaring the key sort by it; modules without it retain their existing relative order after them, so no untouched module changes position unexpectedly.
+- [x] R3. Set Observability's ordering so it is the first enabled module and therefore the default landing route.
+- [x] R4. Preserve the registry's fail-fast duplicate id and duplicate route validation, and the disable/enable slot-restoration behaviour.
+- [x] R5. Keep discovery pure and deterministic — the same inputs must always yield the same ordering, as the registry factory contract requires.
+- [x] R6. Cover the ordering comparator in the fs-fallback path, which is the branch reachable under bun test.
 ### Acceptance Criteria
 ```gherkin
 Scenario: R1 — Observability is the Board's first module and default landing route
@@ -78,24 +78,35 @@ Add an optional `readonly order?: number` to the `WebModule` interface (modules/
 
 **Rationale:** Single partial-ordering comparator layered on top of each path's existing deterministic pre-sort (id / dir-name). `Array.prototype.sort` is stable (Bun/V8/JavaScriptCore), so undeclared modules retain their relative position. Registry validation, slot restoration, and `defaultModule = enabledList()[0]` are untouched - they inherit the promoted order from discovery.
 ### Testing
-**Pipeline verify results**
+**Forced verification result:** PASS
 
-- Verdict: PASS (from verdict artifact)
+| Requirement | Status | Fresh evidence |
+| --- | --- | --- |
+| R1 | MET | `WebModule.order` and both discovery paths are exercised by `apps/web/tests/modules/discover.test.ts`. |
+| R2 | MET | Comparator tests cover declared ordering and stable relative order for undeclared modules. |
+| R3 | MET | Registry discovery asserts Observability is first; route selection remains derived from the first enabled module. |
+| R4 | MET | Existing duplicate-id, duplicate-route, and slot-restoration tests pass unchanged. |
+| R5 | MET | Discovery is a pure stable sort over deterministic inputs. |
+| R6 | MET | The fs-fallback ordering branch is covered by the discovery suite. |
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | `types.ts:12-13` adds `readonly order?: number` to WebModule; `discover.ts:57-66` `compareModules` honours it; applied at `:91` (glob) and `:175` (fs) |
-| R2 | MET | `discover.ts:62-65` - declared sort ascending, undeclared return 0 (stable sort preserves order); `discover.test.ts:95-114` covers all 3 branches |
-| R3 | MET | `observability/index.tsx:18` sets `order: 0`; `discover.test.ts:267-272` asserts `discovered[0].id === 'observability'` |
-| R4 | MET | No changes to registry validation or slot restoration; only a sort step added to discovery |
-| R5 | MET | `compareModules` is pure; pre-sorts (id/dir-name) deterministic; `Array.prototype.sort` stable |
-| R6 | MET | `discover.test.ts:209-227` covers fs-fallback ordering with declared + undeclared modules |
+| Acceptance criterion | Status | Evidence |
+| --- | --- | --- |
+| Scenario: R1 — Observability is the Board's first module and default landing route | MET | Test: `apps/web/tests/modules/discover.test.ts` in the 137-test focused run and full 3,941-test suite. |
+| Scenario: R2 — Explicit ordering is declarative and partial | MET | Test: glob and fs-fallback comparator cases in `apps/web/tests/modules/discover.test.ts`. |
 
-| Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
-| Scenario: R1 - Observability is the Board's first module and default landing route | MET | test | `discover.test.ts:267-272` asserts `discovered[0].id === 'observability'` and `order === 0` |
-| Scenario: R2 - Explicit ordering is declarative and partial | MET | test | `discover.test.ts:139-158` (glob) and `:209-227` (fs) verify declared modules sort by order, undeclared retain position |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+**Checks**
+
+- Focused J4 slice: 137 pass, 0 fail.
+- `bun run lint`: PASS (Biome plus all workspace typechecks).
+- `bun run test`: PASS (3,941 pass, 0 fail; 12,217 assertions).
+- `bun run build`: PASS.
+- Design conformance: PASS; existing module-registry contract preserved.
+- SECUA: PASS; no blocker or major finding.
+- Repository-wide warning: `bun run spur-check` is blocked by the pre-existing out-of-scope `sp-runtime-path` hit at `plugins/sp/skills/issue-finding/SKILL.md:172`.
+- Infrastructure warning: `bun run test-cf` crashed twice in the Cloudflare worker pool with SIGSEGV before test discovery; no assertion ran.
+- Coverage: N/A (verification-only; the repository suite's aggregate report was not used as task-specific coverage).
+
+Verdict artifact: `.spur/run/0374-verdict.json:1`.
 ### Review
 **Functional traceability** - all 6 requirements MET.
 

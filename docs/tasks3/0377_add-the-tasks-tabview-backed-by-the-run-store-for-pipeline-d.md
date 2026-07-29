@@ -12,7 +12,7 @@ priority: P0
 tags: ["board", "web", "observability", "run-store"]
 dependencies: ["0373"]
 created_at: "2026-07-29T00:15:02.357Z"
-updated_at: "2026-07-29T18:37:43.536Z"
+updated_at: "2026-07-29T21:05:52.429Z"
 ---
 
 ## 0377. Add the Tasks tabview backed by the run store for pipeline digest, phase progress, and action log
@@ -22,13 +22,13 @@ updated_at: "2026-07-29T18:37:43.536Z"
 The operator asked for a task digest with progress and log, noting the Tasks module shows task detail but never pipeline progress. That data has never been on the Board: it lives in the run store (390 runs, 501 action runs with node/kind/status/duration, 412 task_run_links joining WBS to run id) which had no HTTP surface until J3's runs API. Building this on the event ledger instead — the obvious symmetry with the Jobs tab — would yield almost nothing, because `task.*` is 9 percent of a heavily-evicted ledger and carries only status flips, no phase or action detail. The 2026-07-28 decision therefore made the run store the primary backing, with corpus events as a secondary lane so CLI-only edits that never triggered a run are not lost.
 
 ### Requirements
-- [ ] R1. List pipeline runs with their linked task WBS, workflow name, status, and start time, including runs with no task link.
-- [ ] R2. Expand a run into its ordered phase progress, distinguishing the active phase from completed and failed ones.
-- [ ] R3. Show the per-action log for a run with node, kind, status, and duration, and the reason for a failed action.
-- [ ] R4. Provide a secondary lane of `task.*` and `feature.*` corpus events for work with no associated run, visually distinguishable from run-backed activity.
-- [ ] R5. Degrade per-row: a run whose detail request fails or returns not-found shows an inline error while the rest of the list stays usable.
-- [ ] R6. Follow the module's existing tab contract — append to `OBSERVABILITY_TABS` as data with a stable id, without modifying the shell.
-- [ ] R7. Apply the same untrusted-input narrowing discipline used by the other tabs to the new runs API responses.
+- [x] R1. List pipeline runs with their linked task WBS, workflow name, status, and start time, including runs with no task link.
+- [x] R2. Expand a run into its ordered phase progress, distinguishing the active phase from completed and failed ones.
+- [x] R3. Show the per-action log for a run with node, kind, status, and duration, and the reason for a failed action.
+- [x] R4. Provide a secondary lane of `task.*` and `feature.*` corpus events for work with no associated run, visually distinguishable from run-backed activity.
+- [x] R5. Degrade per-row: a run whose detail request fails or returns not-found shows an inline error while the rest of the list stays usable.
+- [x] R6. Follow the module's existing tab contract — append to `OBSERVABILITY_TABS` as data with a stable id, without modifying the shell.
+- [x] R7. Apply the same untrusted-input narrowing discipline used by the other tabs to the new runs API responses.
 ### Acceptance Criteria
 ```gherkin
 Scenario: R13 — Pipeline runs are listed with their task and status
@@ -79,66 +79,48 @@ Scenario: R17 — A run whose detail is unavailable degrades gracefully
 10. **Append to `OBSERVABILITY_TABS` (R6)** — add `{ id: 'tasks', label: 'Tasks', component: TasksTab }` to the array in `apps/web/src/modules/observability/tabs.ts:29` (append-only; do not reorder/rename existing ids; no `ObservabilityShell.tsx` or `index.tsx` edit). *(R6)*
 11. **Smoke check** — board dev server, activate the Tasks tab: list loads from `/api/runs`; WBS badges appear for linked runs and "unlinked" for orphans; expand shows ordered phases + action log with durations; a stopped/missing run shows an inline error while the list stays usable; the corpus lane shows `task.*`/`feature.*` events visually distinct from runs. *(R1–R7, R13–R17)*
 ### Solution
-**Change map.**
+**Change map**
 
-1. `apps/web/src/modules/observability/TasksTab.tsx` (new, 744 lines) - `TasksTab` component:
-   - Wire types mirroring `RunStore*` interfaces (`RunListEntry`, `RunPhase`, `RunTransition`, `RunAction`, `RunDetail`, `RunListResult`, `WbsLink`).
-   - Narrowing guards - each `(value: unknown): T | null`, field-by-field `typeof` checks, `null` on any mismatch (R7): `parseRunListEntry` (`TasksTab.tsx:83`), `parseRunListResponse` (`TasksTab.tsx:108`), `parseRunPhase` (`TasksTab.tsx:125`), `parseRunAction` (`TasksTab.tsx:139`), `parseRunDetail` (`TasksTab.tsx:162`), `parseWbsLinksResponse` (`TasksTab.tsx:190`).
-   - List fetch (`GET /api/runs?limit=50`) with `AbortController` + `fetchWithTimeout` (`TasksTab.tsx:291`); list-level error state on failure (R1).
-   - `runId->wbs` index built on mount: fetches `/api/tasks?limit=200` (`TasksTab.tsx:317`), then for each WBS calls `/api/runs/by-wbs/:wbs` (`TasksTab.tsx:331`), collecting `runId -> wbs` (R1 linked WBS).
-   - Per-row expand: `GET /api/runs/:runId` (`TasksTab.tsx:388`) with isolated error handling per row; failed fetch shows inline error, list stays usable (R2, R3, R5).
-   - Phase progress: ordered phases with active/completed/failed distinction via icon + badge variant (R2).
-   - Action log: node, kind, status, formatted duration (`formatDuration` from SystemEventsTab), failure reason extracted from `resultSummary` when `ok === false` (R3).
-   - Secondary corpus lane: `GET /api/events/history?prefix=task&limit=50` and `?prefix=feature&limit=50` (`TasksTab.tsx:292-293`), reusing `parseHistoryResponse` from SystemEventsTab; visually distinct (dashed border, "corpus-only" badge) (R4).
-   - Empty state: "No pipeline runs yet." when runs list is empty (R1).
-   - Component entry: `export default function TasksTab()` (`TasksTab.tsx:275`).
+- `apps/web/src/modules/observability/TasksTab.tsx:83` validates run-list entries; the adjacent parsers validate list, phase, action, detail, and WBS-link payloads before rendering (R7).
+- `apps/web/src/modules/observability/TasksTab.tsx:280` implements the run-centric tab, including list/detail loading, WBS correlation, isolated row expansion, phase progress, action logs, and empty/error states (R1–R5).
+- `apps/web/src/modules/observability/TasksTab.tsx:292` loads the secondary `task.*` and `feature.*` corpus lanes through server-side prefix filters (R4).
+- `apps/web/src/modules/observability/tabs.ts:33` registers the stable `tasks` tab as data without changing the shell (R6).
+- `apps/web/tests/modules/observability/components.test.tsx:1524` verifies per-row degradation; the surrounding Tasks-tab cases cover linked/unlinked runs, phases, actions, corpus activity, malformed payloads, empty state, and tab registration.
 
-2. `apps/web/src/modules/observability/tabs.ts:33` - appended `{ id: 'tasks', label: 'Tasks', component: TasksTab }` to `OBSERVABILITY_TABS` (R6, append-only, no shell edit).
+**Rationale**
 
-3. `apps/web/tests/modules/observability/components.test.tsx` (333 lines added, 1567 total) - 10 new tests:
-   - R1: list runs with WBS link, workflow name, status, start time, unlinked badge.
-   - R2: expand to ordered phase progress with active/completed/failed distinction.
-   - R3: per-action log with node, kind, status, duration, failure reason.
-   - R4: secondary corpus lane with task.*/feature.* events, visually distinct.
-   - R5: per-row degrade when detail fetch fails (inline error, list stays usable).
-   - R7 (list): malformed run list entries silently dropped.
-   - R7 (detail): malformed phases/actions silently dropped.
-   - R1 (empty): empty state when no runs exist.
-   - R6: registered in OBSERVABILITY_TABS with correct id and label.
-
-**Rationale.** The tab is run-centric: the run store is the only source with phase/action detail. Corpus events are a secondary lane so CLI-only edits (no run) are not lost. The `runId->wbs` index is built client-side from J3's WBS->runs endpoint (no server change). Per-row expand isolation ensures one failed detail never blanks the list.
+The run store remains authoritative for phase/action detail; corpus events are a separate lane for work with no run. Detail failures are isolated per row so one unavailable run never disables the list.
 ### Testing
-**Commands run.**
+**Forced verification result:** PASS after one repair pass
 
-```bash
-bun run lint          # biome + tsc --noEmit - all workspaces clean
-bun run format        # biome --write - no changes needed
-bun test apps/web/tests/modules/observability/components.test.tsx
-bun run test          # full monorepo suite
-```
+| Requirement | Status | Fresh evidence |
+| --- | --- | --- |
+| R1 | MET | Run rows expose WBS, workflow, status, and start time; `parseWbsLinksResponse` now accepts the real `{ wbs, links, count }` response (`apps/web/src/modules/observability/TasksTab.tsx:191`). |
+| R2 | MET | Per-run expansion renders ordered phase progress with terminal/active distinctions. |
+| R3 | MET | Action log exposes node, kind, status, duration, and failure reason. |
+| R4 | MET | The secondary corpus-only task/feature event lane remains distinct. |
+| R5 | MET | Detail-fetch failure is isolated to the expanded run row. |
+| R6 | MET | Tasks remains a stable data-driven Observability tab. |
+| R7 | MET | All run, phase, action, and WBS-link responses are runtime narrowed. |
 
-**Outcomes.**
+| Acceptance criterion | Status | Evidence |
+| --- | --- | --- |
+| Scenario: R13 — Pipeline runs are listed with their task and status | MET | Component fixture now uses the production WBS-link envelope and renders its badge. |
+| Scenario: R14 — A run expands into phase progress | MET | Ordered phase-progress component test passes. |
+| Scenario: R15 — A run's action log is readable | MET | Action-log component test passes. |
+| Scenario: R16 — Corpus-only task activity is not lost | MET | Corpus-lane task/feature event test passes. |
+| Scenario: R17 — A run whose detail is unavailable degrades gracefully | MET | Per-row failure-degradation test passes. |
 
-- Lint: clean (0 errors, 0 warnings).
-- Typecheck: all 5 workspaces pass.
-- Component tests: 45 pass, 0 fail, 231 expect() calls (10 new TasksTab tests + 35 existing).
-- Full suite: 3928 pass, 0 fail, 12137 expect() calls across 231 files.
+**Checks**
 
-**New tests (10).**
+- Focused J4 slice: 137 pass, 0 fail.
+- `bun run lint`: PASS; `bun run test`: PASS (3,941/0); `bun run build`: PASS.
+- Design conformance: PASS; list/detail failure isolation and data-driven tab registration preserved.
+- SECUA: PASS; response-envelope acceptance still narrows each link and embedded run.
+- Repository warnings: out-of-scope Spur rule hit at `plugins/sp/skills/issue-finding/SKILL.md:172`; Cloudflare pool SIGSEGV before test discovery on both attempts.
+- Coverage: N/A (verification-only; the repository suite's aggregate report was not used as task-specific coverage).
 
-| Test | Requirement | What it asserts |
-|------|------------|-----------------|
-| lists pipeline runs with WBS link, workflow name, status, start time | R1 | WBS badge, workflow name, status badge, unlinked badge |
-| expands a run into ordered phase progress with active/completed/failed | R2 | All 4 phases render, failed status visible |
-| shows per-action log with node, kind, status, duration, failure reason | R3 | Action Log section, node, kind badge, duration (300ms), failure reason |
-| renders secondary corpus lane with task.*/feature.* events | R4 | Corpus Activity header, corpus-only badge, task.updated + feature.created events |
-| degrades per-row when run detail fetch fails | R5 | Inline error "Failed to load run detail", list stays usable |
-| narrows untrusted run list input - malformed entries dropped | R7 | Only valid run renders; bad-id-type, missing-status, null, string entries dropped |
-| narrows untrusted run detail - malformed phases/actions dropped | R7 | Only valid phase + action render; malformed entries dropped |
-| renders empty state when no runs exist | R1 | "No pipeline runs yet." |
-| is registered in OBSERVABILITY_TABS | R6 | id='tasks', label='Tasks' |
-
-**Coverage.** TasksTab.tsx: 81.67% functions, 94.99% lines (within the 90% line gate for non-tsx). The uncovered lines are error-handling edge cases in the WBS-index build path (non-fatal catch blocks).
+Verdict artifact: `.spur/run/0377-verdict.json:1`.
 ### Review
 | Priority | Finding | File:Line | Status |
 |----------|---------|-----------|--------|

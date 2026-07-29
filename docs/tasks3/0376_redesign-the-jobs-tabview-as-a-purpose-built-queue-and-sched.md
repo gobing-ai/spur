@@ -12,7 +12,7 @@ priority: P1
 tags: ["board", "web", "observability", "jobs"]
 dependencies: ["0368", "0372"]
 created_at: "2026-07-29T00:15:02.349Z"
-updated_at: "2026-07-29T18:14:43.596Z"
+updated_at: "2026-07-29T21:05:27.152Z"
 ---
 
 ## 0376. Redesign the Jobs tabview as a purpose-built queue and scheduler view over a filtered query
@@ -22,12 +22,12 @@ updated_at: "2026-07-29T18:14:43.596Z"
 JobsTab fetches the newest 50 events across all prefixes and then filters in the browser for names starting with `queue.` or `scheduler.` (JobsTab.tsx:103, :114-117). It appears to work only because those three heartbeat events are 89.8 percent of the ledger — the moment J3 demotes them to the diagnostic tier, this client-side slice will frequently return nothing. The rendering is also raw: each event is a card with a `JSON.stringify(payload, null, 2)` block (:181-183), so job identity, state, attempt count, duration, and failure reason are buried in a pretty-printed blob rather than being columns an operator can scan.
 
 ### Requirements
-- [ ] R1. Load job events through the J3 server-side prefix filter instead of slicing a client-side page of all events.
-- [ ] R2. Present job identity, job type, state, attempt or retry count, duration, and failure reason as first-class scannable fields rather than a raw JSON dump.
-- [ ] R3. Correlate the enqueue, retry, completion, and failure events of one job so an operator can read a single job's story.
-- [ ] R4. Keep the four queue counters (pending, processing, completed, failed) visible and visually distinct from the event list.
-- [ ] R5. Render an explicit empty state when no job events match, never a perpetual loading indicator.
-- [ ] R6. Keep the existing untrusted-input narrowing discipline for both the stats and the history responses.
+- [x] R1. Load job events through the J3 server-side prefix filter instead of slicing a client-side page of all events.
+- [x] R2. Present job identity, job type, state, attempt or retry count, duration, and failure reason as first-class scannable fields rather than a raw JSON dump.
+- [x] R3. Correlate the enqueue, retry, completion, and failure events of one job so an operator can read a single job's story.
+- [x] R4. Keep the four queue counters (pending, processing, completed, failed) visible and visually distinct from the event list.
+- [x] R5. Render an explicit empty state when no job events match, never a perpetual loading indicator.
+- [x] R6. Keep the existing untrusted-input narrowing discipline for both the stats and the history responses.
 ### Acceptance Criteria
 ```gherkin
 Scenario: R9 — Job events come from a server-side filtered query
@@ -88,14 +88,34 @@ Redesigned JobsTab as a purpose-built queue and scheduler view over J3's server-
 
 **R6 (runtime narrowing).** `parseStatsResponse` returns `null` on any shape failure (`apps/web/src/modules/observability/JobsTab.tsx:27-48`). `parseHistoryResponse` (from SystemEventsTab) drops malformed rows. `narrowJobFields` degrades unknown/malformed fields to `undefined`, never throws (`apps/web/src/modules/observability/JobsTab.tsx:94-123`). All four fetch responses are null-checked before use (`apps/web/src/modules/observability/JobsTab.tsx:253-258`).
 ### Testing
-**Pipeline verify results**
+**Forced verification result:** PASS after one repair pass
 
-- Verdict: PASS (from verdict artifact)
+| Requirement | Status | Fresh evidence |
+| --- | --- | --- |
+| R1 | MET | Queue and scheduler histories are fetched through separate server-side prefix queries. |
+| R2 | MET | Structured cards expose identity, type, state, attempt, failure, and explicit duration. |
+| R3 | MET | Queue lifecycle rows are grouped by job id; `jobThreadDurationMs` derives elapsed story time (`apps/web/src/modules/observability/JobsTab.tsx:229`, `:399`). |
+| R4 | MET | Pending, processing, completed, and failed counters remain a distinct header band. |
+| R5 | MET | Resolved empty histories render the explicit empty state. |
+| R6 | MET | Stats, history, and payload fields remain runtime narrowed. |
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| — | — | No requirements recorded; verify verdict PASS |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+| Acceptance criterion | Status | Evidence |
+| --- | --- | --- |
+| Scenario: R9 — Job events come from a server-side filtered query | MET | Component tests assert both `prefix=queue` and `prefix=scheduler` fetches. |
+| Scenario: R10 — A job row surfaces identity, state, timing, and failure reason | MET | Test: correlated story renders derived `60.0s` duration (`apps/web/tests/modules/observability/components.test.tsx:1254`) alongside structured fields. |
+| Scenario: R11 — Queue counters remain visible alongside the event view | MET | Component counter-band assertions pass. |
+| Scenario: R12 — An empty job history renders an explicit empty state | MET | Component empty-history assertion passes. |
+
+**Checks**
+
+- Focused J4 slice: 137 pass, 0 fail.
+- `bun run lint`: PASS; `bun run test`: PASS (3,941/0); `bun run build`: PASS.
+- Design conformance: PASS; two-query merge, per-job threading, and authoritative counters preserved.
+- SECUA: PASS; no operator-derived prefix and all external payloads are narrowed.
+- Repository warnings: out-of-scope Spur rule hit at `plugins/sp/skills/issue-finding/SKILL.md:172`; Cloudflare pool SIGSEGV before test discovery on both attempts.
+- Coverage: N/A (verification-only; the repository suite's aggregate report was not used as task-specific coverage).
+
+Verdict artifact: `.spur/run/0376-verdict.json:1`.
 ### Review
 **Functional traceability** - all 6 requirements (R1-R6) MET.
 

@@ -12,7 +12,7 @@ priority: P1
 tags: ["board", "web", "teams", "supervisor"]
 dependencies: ["0371"]
 created_at: "2026-07-29T00:15:02.364Z"
-updated_at: "2026-07-29T18:52:31.902Z"
+updated_at: "2026-07-29T21:05:29.910Z"
 ---
 
 ## 0378. Add the Supervisor tabview as the Teams module's first and default-active tab
@@ -22,14 +22,14 @@ updated_at: "2026-07-29T18:52:31.902Z"
 The Teams module opens on Terminal (tabs.ts:15-20, TeamsShell selects the first entry), giving no team-wide operational overview. The nearest thing, the Activity tab, is a flat six-column event table that filters on the `'team.'` and `'supervisor.'` prefixes (ActivityTab.tsx:72) which have never fired — the `team.*` family did not exist until J3 authored it. This task builds the per-team, per-member operational view the operator asked for, on top of that new family plus the existing `agent.*`, `process.*`, and `message.*` events and the live GET /api/team/teams roster already served by `useTeamsData`. Note the tab contract in tabs.ts is documented as append-only with id-stable entries; placing Supervisor first is a deliberate exception to that ordering note and must be recorded, not silently taken.
 
 ### Requirements
-- [ ] R1. Add Supervisor as the Teams module's first tab and make it the default-active tab, while keeping Terminal, Process, Message, and Activity reachable with their ids unchanged.
-- [ ] R2. Show each team with its members, member id, agent type, and current state, making running members visually distinguishable from stopped ones.
-- [ ] R3. Show per-member uptime since start and the time and kind of the most recent activity, derived from the team and agent lifecycle events.
-- [ ] R4. Reflect team and member lifecycle events as they arrive, without requiring a manual page reload.
-- [ ] R5. Expose the existing start, stop, up, and down controls with behaviour identical to the current Teams surfaces, refreshing the view after a mutation completes.
-- [ ] R6. Render a configured team with an empty roster as an explicit empty-roster state rather than omitting it.
-- [ ] R7. Surface an error when the roster feed fails while keeping already-loaded event-derived activity visible.
-- [ ] R8. Reuse the shared `useTeamsData` feed rather than adding a third polling implementation, and record the tab-ordering exception against the append-only note in tabs.ts.
+- [x] R1. Add Supervisor as the Teams module's first tab and make it the default-active tab, while keeping Terminal, Process, Message, and Activity reachable with their ids unchanged.
+- [x] R2. Show each team with its members, member id, agent type, and current state, making running members visually distinguishable from stopped ones.
+- [x] R3. Show per-member uptime since start and the time and kind of the most recent activity, derived from the team and agent lifecycle events.
+- [x] R4. Reflect team and member lifecycle events as they arrive, without requiring a manual page reload.
+- [x] R5. Expose the existing start, stop, up, and down controls with behaviour identical to the current Teams surfaces, refreshing the view after a mutation completes.
+- [x] R6. Render a configured team with an empty roster as an explicit empty-roster state rather than omitting it.
+- [x] R7. Surface an error when the roster feed fails while keeping already-loaded event-derived activity visible.
+- [x] R8. Reuse the shared `useTeamsData` feed rather than adding a third polling implementation, and record the tab-ordering exception against the append-only note in tabs.ts.
 ### Acceptance Criteria
 ```gherkin
 Scenario: R18 — Supervisor is the Teams module's first and default-active tab
@@ -109,28 +109,39 @@ New `SupervisorTab` component inserted as the first and default-active Teams tab
 - Inline controls (start/stop/up/down) with identical URLs and mutate-then-`reload()` pattern from TerminalTab - identical behavior, no delegation indirection.
 - `Button variant="primary"` used for the Start button instead of a non-existent `success` variant (Button.tsx only supports primary/ghost/error/outline/accent/warning).
 ### Testing
-**Commands run:**
+**Forced verification result:** PASS after one repair pass
 
-1. `bun test apps/web/tests/modules/teams/components.test.tsx` - 46 pass, 0 fail, 234 expect() calls. Includes 11 new SupervisorTab tests covering R1-R7.
-2. `bun test apps/web/tests/modules/teams/tabs.test.ts` - 5 pass, 0 fail. Updated stable-order test asserts 5 tabs with supervisor first.
-3. `bun test apps/web/` - 594 pass, 0 fail, 1950 expect() calls across 32 files. No regressions.
-4. `bun run lint` (biome check + typecheck) - clean across all 557 files. No type errors.
-5. `bun test` (full monorepo) - 3939 pass, 0 fail, 12199 expect() calls across 231 files.
+| Requirement | Status | Fresh evidence |
+| --- | --- | --- |
+| R1 | MET | Supervisor remains the first and default Teams tab; prior tab ids remain reachable. |
+| R2 | MET | Team/member rows expose id, type, and running/stopped state. |
+| R3 | MET | Member uptime and latest activity remain derived from lifecycle events. |
+| R4 | MET | History and SSE lifecycle events continue updating activity without reload. |
+| R5 | MET | Existing start/stop/up/down controls and confirmation paths remain available. |
+| R6 | MET | Configured empty rosters render explicitly. |
+| R7 | MET | Roster errors now stay inside the stable view while event-derived activity remains rendered (`apps/web/src/modules/teams/SupervisorTab.tsx:218`, `:372`). |
+| R8 | MET | Supervisor still reuses `useTeamsData`; no polling implementation was added. |
 
-**Coverage (teams module):**
-- tabs.ts: 100% lines
-- useTeamsData.ts: 100% lines
-- rpc-client.ts: 100% lines (improved from 66.67%/81.40% prior session)
+| Acceptance criterion | Status | Evidence |
+| --- | --- | --- |
+| Scenario: R18 — Supervisor is the Teams module's first and default-active tab | MET | Teams-shell and tab-order tests pass. |
+| Scenario: R19 — Each team shows its members and their live state | MET | Roster member/state component test passes. |
+| Scenario: R20 — Member rows surface uptime and last activity | MET | Uptime/latest-activity component test passes. |
+| Scenario: R21 — Team lifecycle events drive the view | MET | Live SSE update component test passes. |
+| Scenario: R22 — Existing team controls are available from Supervisor | MET | Start/stop/up/down mutation tests pass. |
+| Scenario: R23 — A team with no members renders an explicit empty state | MET | Empty-roster component test passes. |
+| Scenario: R24 — Supervisor degrades when the roster feed fails | MET | Roster-outage regression asserts event activity stays visible below the error banner. |
 
-**New tests (components.test.tsx):**
-- R1: Supervisor is the default-active tab in TeamsShell (verifies `useState('supervisor')`)
-- R2: Team roster renders member id, agent type, and running/stopped status badge
-- R3: Per-member uptime and last-activity derived from events
-- R4: Live SSE event updates last-activity without page reload
-- R5: Start button POSTs start URL; Stop shows confirm modal then POSTs stop; Up POSTs team up; Down shows confirm modal then POSTs team down
-- R6: Error-degraded banner when roster fetch fails; empty-roster card for team with zero members
-- R7: Untrusted event payload narrowed via `toRow` without crashing
-- Tab count updated from 4 to 5 in tabs.test.ts
+**Checks**
+
+- Focused J4 slice: 137 pass, 0 fail.
+- `bun run lint`: PASS; `bun run test`: PASS (3,941/0); `bun run build`: PASS.
+- Design conformance: PASS; stable shell, shared data feed, and event-derived degraded lane preserved.
+- SECUA: PASS; lifecycle payloads still pass through `toRow` narrowing and mutations use existing URLs.
+- Repository warnings: out-of-scope Spur rule hit at `plugins/sp/skills/issue-finding/SKILL.md:172`; Cloudflare pool SIGSEGV before test discovery on both attempts.
+- Coverage: N/A (verification-only; the repository suite's aggregate report was not used as task-specific coverage).
+
+Verdict artifact: `.spur/run/0378-verdict.json:1`.
 ### Review
 | Priority | Finding | File:Line | Status |
 |----------|---------|-----------|--------|

@@ -12,7 +12,7 @@ priority: P1
 tags: ["board", "web", "observability"]
 dependencies: ["0369", "0372"]
 created_at: "2026-07-29T00:15:02.339Z"
-updated_at: "2026-07-29T17:20:29.519Z"
+updated_at: "2026-07-29T21:05:25.818Z"
 ---
 
 ## 0375. Rebuild the System Events tabview on server-side queries and surface the enriched envelope fields
@@ -22,13 +22,13 @@ updated_at: "2026-07-29T17:20:29.519Z"
 SystemEventsTab fetches the newest 100 rows once (SystemEventsTab.tsx:44, :432-451) and then does all filtering in the browser — prefix pills, tier, time window, and search scope all run inside a `useMemo` over that fixed window (:508-542). With the ledger dominated by heartbeat noise, filtering for a prefix that is not in the newest 100 returns nothing and there is no way to page back. Detail is also thin: `buildTooltipSummary` caps at 4 label/value pairs (:401) and renders only on CSS hover (:880-894), so it is unreachable on touch and cannot show the correlation and outcome fields the J3 envelopes now carry. This task repoints the tabview at J3's filtered, paginated query surface and gives the enriched fields a real home.
 
 ### Requirements
-- [ ] R1. Replace client-side filtering with the J3 server-side query params (`prefix`, `names`, `runId`, `actor`) and cursor pagination; matching events outside the newest page must be reachable.
-- [ ] R2. Surface run and action identity, duration, and outcome on the row itself, not only in a hover affordance.
-- [ ] R3. Render explicitly-unavailable usage as unavailable; never substitute a zero.
-- [ ] R4. Replace the hover-only tooltip with a persistent, dismissible detail affordance showing the full redacted envelope, keyboard reachable and usable without a pointer.
-- [ ] R5. Keep the SSE live tail, the tri-state connection indicator, and the rolling event-rate strip working while a filter is active.
-- [ ] R6. Preserve the existing runtime narrowing discipline: a row or frame failing schema validation is dropped without breaking the remaining rows.
-- [ ] R7. Keep the responsive collapse behaviour and the existing accessibility contract for the filter controls.
+- [x] R1. Replace client-side filtering with the J3 server-side query params (`prefix`, `names`, `runId`, `actor`) and cursor pagination; matching events outside the newest page must be reachable.
+- [x] R2. Surface run and action identity, duration, and outcome on the row itself, not only in a hover affordance.
+- [x] R3. Render explicitly-unavailable usage as unavailable; never substitute a zero.
+- [x] R4. Replace the hover-only tooltip with a persistent, dismissible detail affordance showing the full redacted envelope, keyboard reachable and usable without a pointer.
+- [x] R5. Keep the SSE live tail, the tri-state connection indicator, and the rolling event-rate strip working while a filter is active.
+- [x] R6. Preserve the existing runtime narrowing discipline: a row or frame failing schema validation is dropped without breaking the remaining rows.
+- [x] R7. Keep the responsive collapse behaviour and the existing accessibility contract for the filter controls.
 ### Acceptance Criteria
 ```gherkin
 Scenario: R3 — Filtering is applied server-side, not over a fixed client window
@@ -105,20 +105,37 @@ Repointed `SystemEventsTab.tsx` at J3's server-side filtered, cursor-paginated `
 
 **Search scope.** All search is client-side substring (name/actor/payload/all) using `filter` (not `debouncedFilter`) for instant UX; the debounced filter still drives server refetch. Removed `names`/`actor` from `ActiveFilter` and `serializeFilter` because the server params do exact matching, not free-text search.
 ### Testing
-**Pipeline verify results**
+**Forced verification result:** PASS after one repair pass
 
-- Verdict: PASS (from verdict artifact)
+| Requirement | Status | Fresh evidence |
+| --- | --- | --- |
+| R1 | MET | `serializeFilter` now sends exact name/actor scope values and `historyUrl` serializes server query and cursor parameters (`apps/web/src/modules/observability/SystemEventsTab.tsx:552`, `:64`). |
+| R2 | MET | Rows visibly stack run and action identity and show outcome (`apps/web/src/modules/observability/SystemEventsTab.tsx:1218`, `:1264`, `:1289`). |
+| R3 | MET | `formatUsage` renders absent usage as `unavailable` and the detail panel exposes it (`apps/web/src/modules/observability/SystemEventsTab.tsx:395`, `:1334`). |
+| R4 | MET | Native detail toggle and persistent detail region remain keyboard/touch reachable. |
+| R5 | MET | SSE parsing propagates correlation fields and live frames remain gated by the active filter (`apps/web/src/modules/observability/SystemEventsTab.tsx:309`, `:775`). |
+| R6 | MET | History rows and SSE envelopes retain per-record null-on-malformed narrowing. |
+| R7 | MET | Responsive table collapse and accessible native filter controls remain intact. |
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1. Server-side queries + cursor pagination | MET | `historyUrl()` serializes prefix/names/runId/actor/since/cursor/limit (`apps/web/src/modules/observability/SystemEventsTab.tsx:64-90`); `parseHistoryResponse()` reads `nextCursor`/`hasMore` (`:191-211`); query state machine `idle\ |
-| R2. Row identity + outcome on row | MET | `EventTableRow` renders 7 columns including Run and Outcome (`apps/web/src/modules/observability/SystemEventsTab.tsx:1101-1230`); outcome derived from `payload.outcome`/`status`/`ok` |
-| R3. Unavailable ≠ zero | MET | `formatAvailability()` returns 'unavailable' for null/undefined/empty/non-finite/objects/arrays (`apps/web/src/modules/observability/SystemEventsTab.tsx:368-378`); applied to runId, sequence, durationMs, outcome |
-| R4. Persistent detail panel | MET | `<button aria-expanded>` toggle expands `<section aria-label="Detail for …">` (`apps/web/src/modules/observability/SystemEventsTab.tsx:1172-1230`); keyboard reachable (native button Enter/Space); Escape collapses; "Close (Esc)" button |
-| R5. SSE + liveness under filter | MET | SSE `useEffect` intact; `es.onmessage` gates through `matchesClientFilter` (`apps/web/src/modules/observability/SystemEventsTab.tsx:744-752`); tri-state indicator + `LivenessStrip` render; shown/total read `page.length` |
-| R6. Runtime narrowing | MET | `parseHistoryRow` returns null on shape failure (`:215-240`); `parseSseEnvelope` returns null (`:303`); `parseHistoryResponse` drops malformed rows without aborting page (`:205-208`); null response sets error state |
-| R7. Responsive + a11y | MET | `useMediaQuery('(max-width: 639px)')` collapses layout (`apps/web/src/modules/observability/SystemEventsTab.tsx:1057`, `:1101`); filter controls use native button/input/select with fieldset/legend/aria-live |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+| Acceptance criterion | Status | Evidence |
+| --- | --- | --- |
+| Scenario: R3 — Filtering is applied server-side, not over a fixed client window | MET | Test: serializer produces `names` and `actor` server params (`apps/web/tests/modules/observability/components.test.tsx:653`). |
+| Scenario: R4 — A correlated event row surfaces its identity and outcome | MET | Test: correlated row exposes run/action/outcome (`apps/web/tests/modules/observability/components.test.tsx:660`). |
+| Scenario: R5 — Absent usage is shown as unavailable, never as zero | MET | Test: expanded detail contains `usage: unavailable` (`apps/web/tests/modules/observability/components.test.tsx:706`). |
+| Scenario: R6 — Event detail is inspectable without hover | MET | Component tests exercise the native detail toggle and persistent region. |
+| Scenario: R7 — The live tail and the liveness strip keep working under the new query path | MET | Existing SSE/liveness component cases pass in the focused and full suites. |
+| Scenario: R8 — A malformed row or frame never breaks the tabview | MET | Existing malformed history/SSE narrowing cases pass. |
+
+**Checks**
+
+- Focused J4 slice: 137 pass, 0 fail.
+- `bun run lint`: PASS; `bun run test`: PASS (3,941/0); `bun run build`: PASS.
+- Design conformance: PASS; server-filtered cursor path and persistent detail affordance preserved.
+- SECUA: PASS; query values are encoded, untrusted envelopes are narrowed, and stored redaction boundaries are unchanged.
+- Repository warnings: out-of-scope Spur rule hit at `plugins/sp/skills/issue-finding/SKILL.md:172`; Cloudflare pool SIGSEGV before test discovery on both attempts.
+- Coverage: N/A (verification-only; the repository suite's aggregate report was not used as task-specific coverage).
+
+Verdict artifact: `.spur/run/0375-verdict.json:1`.
 ### Review
 **Functional traceability** - all 7 requirements MET. Code committed in `9ff3b4c5`.
 
