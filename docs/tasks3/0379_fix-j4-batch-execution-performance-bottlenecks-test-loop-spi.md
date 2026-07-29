@@ -6,13 +6,13 @@ description: ""
 status: done
 type: meta
 profile: standard
-feature_id: J4
+feature_id: H51
 parent_wbs: null
 priority: P2
 tags: ["meta"]
 dependencies: []
 created_at: "2026-07-29T19:13:27.778Z"
-updated_at: "2026-07-29T21:16:14.911Z"
+updated_at: "2026-07-29T21:51:44.487Z"
 ---
 
 ## 0379. Fix J4 batch execution performance bottlenecks: test-loop spinning, L3 guard format discovery, lifecycle transition errors, and context pressure
@@ -27,12 +27,12 @@ The J4 implementation batch completed with passing task verdicts but consumed di
 - [x] R5. Document the real lifecycle transition graph and guarded transitions in `config/workflows/task-pipeline.yaml`.
 - [x] R6. Add source-before-git-state debugging guidance to `sp:sys-debugging`.
 ### Acceptance Criteria
-- [x] AC1. Repeated identical test failures trigger source inspection, a falsifiable hypothesis, and an edit before another retry.
-- [x] AC2. The task-section reference exposes the real lifecycle graph, citation shape, review table, verdict schema, and canonical section names.
-- [x] AC3. Test guidance favors focused execution and compact output while preserving the real exit status.
-- [x] AC4. Pipeline guidance batches Solution, Testing, and Review before the first task check.
-- [x] AC5. The workflow source documents valid task transitions and the guards on `wip -> testing` and `testing -> done`.
-- [x] AC6. Debugging guidance prioritizes the failing test and source over unrelated git state.
+- [x] R1 — AC1. Repeated identical test failures trigger source inspection, a falsifiable hypothesis, and an edit before another retry.
+- [x] R2 — AC2. The task-section reference exposes the real lifecycle graph, citation shape, review table, verdict schema, and canonical section names.
+- [x] R3 — AC3. Test guidance favors focused execution and compact output while preserving the real exit status.
+- [x] R4 — AC4. Pipeline guidance batches Solution, Testing, and Review before the first task check.
+- [x] R5 — AC5. The workflow source documents valid task transitions and the guards on `wip -> testing` and `testing -> done`.
+- [x] R6 — AC6. Debugging guidance prioritizes the failing test and source over unrelated git state.
 ### Q&A
 **Q: Why create a separate meta task instead of fixing the issues inline during J4 execution?**
 
@@ -90,48 +90,80 @@ Each entry skill links its detailed reference. The structural test verifies the 
 
 - `plugins/sp/skills/code-testing/SKILL.md:48` links the repeated-failure breaker and compact-output discipline (R1, R3).
 - `plugins/sp/skills/code-testing/references/test-loop-breaker.md:1` defines the identical-signature stop condition, source/hypothesis/edit sequence, and retry caps (R1).
-- `plugins/sp/skills/code-testing/references/test-output-discipline.md:1` defines focused execution, concise reporters, safe filtering, and exit-status preservation (R3).
+- `plugins/sp/skills/code-testing/references/test-output-discipline.md:1` defines focused execution, concise reporters, safe filtering, and exact Bash/zsh runner-status preservation (R3).
 - `plugins/sp/skills/spur-cli/references/tasks/section-editing.md:94` links the L3 guard cheat sheet; `plugins/sp/skills/spur-cli/references/tasks/l3-guard-cheatsheet.md:1` records the source-grounded lifecycle, citation, review, verdict, and section formats (R2).
-- `plugins/sp/skills/spur-dev/SKILL.md:120` links `plugins/sp/skills/spur-dev/references/section-batching.md:1`, which batches Solution, Testing, and Review before checking (R4).
+- `plugins/sp/skills/spur-dev/SKILL.md:120` links `plugins/sp/skills/spur-dev/references/section-batching.md:1`, which stages Solution, Testing, and Review before the first task check (R4).
 - `config/workflows/task-pipeline.yaml:4` documents the real task lifecycle and guarded transitions without changing workflow execution (R5).
 - `plugins/sp/skills/sys-debugging/SKILL.md:28` makes source and failing-test inspection precede unrelated git-state investigation (R6).
-- `plugins/sp/tests/skill-structure.test.ts:904` verifies all six guardrails, their entry-skill links, and their correspondence with the lifecycle workflow.
+- `plugins/sp/tests/skill-structure.test.ts:904` verifies all six guardrails, their entry-skill links, matrix compatibility, and lifecycle source agreement.
+- `config/tasks/section-matrix.yaml:135` permits causal evidence on `meta` tasks by making Root Cause optional across their lifecycle; `docs/04_DESIGN.md:759` records the surface contract.
+- `packages/app/src/services/feature-check.ts:422` applies checklist parsing in both reverse feature coverage and scenario-satisfaction checks; `packages/app/tests/services/feature-check.test.ts:842` prevents regression.
+- `docs/features/H51_batch-execution-reliability-guardrails.md:1` gives the six process acceptance criteria a truthful feature owner outside J4.
 
 **Rationale**
 
-Each guardrail lives with the competency that owns the behavior and is linked from its entry skill. The regression test checks discoverability and source agreement so future prompt drift becomes a failing test instead of a repeated batch failure.
+Each guardrail lives with the competency that owns the behavior and is linked from its entry skill.
+The regression tests check discoverability and source agreement so future prompt drift becomes a
+failing test instead of a repeated batch failure. Closure repairs keep task metadata truthful:
+process-level ACs link to H51, meta tasks can retain causal analysis, and checklist-form task ACs
+participate in feature coverage and verdict verification.
 ### Root Cause
 
 ### Testing
-**Pipeline verify results**
+**Fresh forced verification — 2026-07-29**
 
-- Verdict: PASS (from verdict artifact)
+- Verdict: PASS after the bounded closure-repair pass.
+- Gitignored evidence: `.spur/run/0379-verdict.json` uses canonical `AC-1` through `AC-6` IDs;
+  `docs/dogfood/2026-07-29-H51-batch-execution-reliability-guardrails-trace.md` maps H51 to the
+  original 0379 dogfood run without claiming a second execution.
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | plugins/sp/skills/code-testing/references/test-loop-breaker.md:1 defines the repeated-signature breaker, hypothesis/edit gate, and retry caps. |
-| R2 | MET | plugins/sp/skills/spur-cli/references/tasks/l3-guard-cheatsheet.md:1 documents the source-grounded lifecycle and section formats. |
-| R3 | MET | plugins/sp/skills/code-testing/references/test-output-discipline.md:1 documents focused, compact test output with exit-status preservation. |
-| R4 | MET | plugins/sp/skills/spur-dev/references/section-batching.md:1 defines the prepare-all-sections-before-check protocol. |
-| R5 | MET | config/workflows/task-pipeline.yaml:4 documents the real lifecycle and guarded transitions; workflow validation passed. |
-| R6 | MET | plugins/sp/skills/sys-debugging/SKILL.md:28 makes source/test inspection precede unrelated git-state investigation. |
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `plugins/sp/skills/code-testing/references/test-loop-breaker.md:15` requires source inspection, a falsifiable hypothesis, one edit, and bounded retries. |
+| R2 | MET | `plugins/sp/skills/spur-cli/references/tasks/l3-guard-cheatsheet.md:11` covers the lifecycle, citations, P1–P4 table, verdict schema, and canonical sections. |
+| R3 | MET | `plugins/sp/skills/code-testing/references/test-output-discipline.md:11` requires focused output and exact Bash/zsh runner-status preservation. |
+| R4 | MET | `plugins/sp/skills/spur-dev/references/section-batching.md:16` stages Solution, Testing, and Review before the first task check. |
+| R5 | MET | `config/workflows/task-pipeline.yaml:23` documents the lifecycle and guarded transitions; workflow validation returned `valid=true`. |
+| R6 | MET | `plugins/sp/skills/sys-debugging/SKILL.md:28` prioritizes assertion/source inspection over unrelated git state. |
 
-| Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
-| AC1 | MET | test | plugins/sp/tests/skill-structure.test.ts:904 verifies the breaker is linked and contains its source/hypothesis/edit and cap contract. |
-| AC2 | MET | test | plugins/sp/tests/skill-structure.test.ts:904 verifies cheat-sheet linkage, required formats, and lifecycle source agreement. |
-| AC3 | MET | test | plugins/sp/tests/skill-structure.test.ts:904 verifies compact output and pipefail/PIPESTATUS guidance. |
-| AC4 | MET | test | plugins/sp/tests/skill-structure.test.ts:904 verifies section batching is linked and requires all three output sections before checking. |
-| AC5 | MET | command | spur workflow validate config/workflows/task-pipeline.yaml returned valid=true. |
-| AC6 | MET | test | plugins/sp/tests/skill-structure.test.ts:904 verifies the source-before-git-state guidance. |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| AC-1 | MET | test | `plugins/sp/tests/skill-structure.test.ts:904`; full suite covers the R54 test-loop contract. |
+| AC-2 | MET | test | `plugins/sp/tests/skill-structure.test.ts:935`; R54 verifies cheat-sheet discovery and formats. |
+| AC-3 | MET | test | `plugins/sp/tests/skill-structure.test.ts:923`; R54 verifies focused output and exact Bash/zsh status propagation. |
+| AC-4 | MET | test | `plugins/sp/tests/skill-structure.test.ts:957`; R54 asserts staging precedes the first task check. |
+| AC-5 | MET | command | `bun run apps/cli/src/index.ts workflow validate config/workflows/task-pipeline.yaml --json` returned `ok=true`, `valid=true`. |
+| AC-6 | MET | test | `plugins/sp/tests/skill-structure.test.ts:968`; R54 verifies source-before-git-state guidance. |
+
+| Check | Status | Fresh evidence |
+| --- | --- | --- |
+| closure-regression | PASS | `packages/app/tests/services/feature-check.test.ts:842` proves checklist-form task ACs cover and verify feature scenarios; included in the full suite. |
+| autofix | PASS | `bun run autofix`: Biome fixed one formatting delta; all seven workspace typechecks exited 0. |
+| spur-check | PASS | `bun run spur-check`: 34/34 pre-check rules; 3,942 tests, 0 failures, 12,268 assertions; 99.36% functions / 99.20% lines; coverage and TSDoc passed. |
+| lint | PASS | Included in `spur-check`: 561 files clean with no warnings; all workspace typechecks exited 0. |
+| test-cf | PASS | `bun run test-cf`: 1 Worker test file and 1 test passed. |
+| build | PASS | `bun run build`: CLI, server, and web builds exited 0; only the existing Vite chunk-size advisory remains. |
+| worker-dry-run | PASS | `bunx wrangler deploy --dry-run --config apps/server/wrangler.toml`: 931.44 KiB upload / 157.72 KiB gzip; dry-run exited 0. |
+| task-strict | PASS | `spur task check 0379 --strict --json`: no findings. |
+| feature-strict | PASS | `spur feature check H51 --strict --json` and `spur feature check J4 --strict --json`: no findings; both features are done. |
+| docs-sync | PASS | T3 is reflected in `docs/04_DESIGN.md` with version bump; H51 satellite plus refreshed `docs/features/INDEX.md` satisfy T4/T9. |
+
+Coverage: 99.36% functions / 99.20% lines from the fresh full repository suite.
 ### Review
-**SECU findings** (pipeline verify step — verdict: PASS)
+**SECUA findings** (forced closure verification — verdict: PASS)
 
 | Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | SECUA | — | No security, efficiency, correctness, usability, or architecture blocker found; all five changed skills validate. |
-| P4 | Quality gates | — | autofix, 34/34 Spur rules, lint/typecheck, 3,941 tests, coverage, TSDoc, test-cf, build, workflow validation, and Wrangler dry-run all pass. |
+| --- | --- | --- | --- |
+| P4 | Security | — | No secret, permission, or untrusted-input surface changed; the 34-rule pre-check passed. |
+| P4 | Efficiency | `plugins/sp/skills/code-testing/references/test-output-discipline.md:11` | Focused test selection and compact output retain the runner's exact exit status. |
+| P4 | Correctness | `packages/app/src/services/feature-check.ts:422` | Checklist-form task ACs now participate in both reverse feature coverage and scenario verification; regression coverage passes. |
+| P4 | Usability | `plugins/sp/skills/spur-dev/references/section-batching.md:16` | Agents stage the complete evidence trio before the first check, reducing write/check retries. |
+| P4 | Architecture | `docs/features/H51_batch-execution-reliability-guardrails.md:1` | Process ACs have a dedicated H5 child instead of claiming coverage of the J4 product surface. |
+| P4 | Quality gates | — | Autofix, lint/typecheck, 34/34 rules, 3,942 tests, coverage, TSDoc, test-cf, build, workflow validation, Wrangler dry-run, task strict, H51 strict, and J4 strict all pass. |
+
+No unresolved task-scoped finding remains. The older H5 parent has a separate corpus-sharding
+warning because its linked tasks live in `docs/tasks2` while the current feature checker resolves
+the active `docs/tasks3` folder; H51 and task 0379 are independently strict-clean.
 ### References
 - **J4 batch execution report**: `/skill:sp-dev-runall --feature J4 --auto --next --agent omp` output (Main session, 2026-07-29)
 - **Performance analysis source**: Session JSONL logs at `~/.omp/agent/sessions/-xprojects-spur-new/`
