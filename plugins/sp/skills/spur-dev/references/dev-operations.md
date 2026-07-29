@@ -32,6 +32,12 @@ each would be scope creep for one-liner procedures.
 > backbone skill (which owns the 4-phase dogfood protocol, the live ledger, and the report template);
 > it does not map to a numbered dev-* operation. See its command file and the backing skill for details.
 
+> **`dev-findissue`** is not in this table. It is a thin `Skill()` wrapper over **`sp:issue-finding`**
+> (session-log forensics → optional CLI-gated fix task). Hygiene / post-batch analysis — not a spine
+> pipeline stage. See `plugins/sp/commands/dev-findissue.md` and
+> `plugins/sp/skills/issue-finding/SKILL.md`. After a slow `/sp:dev-runall`, prefer
+> `/sp:dev-findissue [<topic>]` before re-running the batch.
+
 > **`dev-next`** is likewise not a numbered spine operation. It is a thin `Skill()` wrapper over the
 > **`sp:next-router`** skill — a status→command *meta-router* that dispatches into the operations
 > above (refine/run/verify/unit/wrap/…) via TABLE A/B/C; it never implements an operation itself.

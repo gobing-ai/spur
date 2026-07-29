@@ -21,14 +21,24 @@ bun test --reporter=dots
 bun test tests/foo.test.ts --reporter=dots
 bun test tests/foo.test.ts --test-name-pattern "specific behavior" --reporter=dots
 
-# Last resort: filtered diagnostics with pipeline failure preserved.
+# Last resort when only pass/fail matters: filtered diagnostics with pipeline failure preserved.
 set -o pipefail
 bun test tests/foo.test.ts 2>&1 | rg -i -A 5 'fail|error' | tail -30
+
+# Recommended when the exact Bun exit status must be returned.
+test_log=$(mktemp)
+trap 'rm -f "$test_log"' EXIT
+test_status=0
+bun test tests/foo.test.ts >"$test_log" 2>&1 || test_status=$?
+rg -i -A 5 'fail|error' "$test_log" | tail -30 || true
+exit "$test_status"
 ```
 
-Never infer PASS from filtered text. Capture and report the command's real exit code. Without
-`pipefail`, `grep`/`rg` or `tail` can return zero after the test process failed, producing a false
-green.
+Never infer PASS from filtered text. `pipefail` preserves failure semantics, but it does not
+necessarily return the test process's exact status: a later `rg` with no matches can make a green
+test look red. Prefer the captured-log pattern above when the caller needs the real Bun status. If
+a direct pipeline is unavoidable, capture the first stage immediately with `${PIPESTATUS[0]}` in
+Bash or `$pipestatus[1]` in zsh, then return that value explicitly.
 
 ## Context budget
 
