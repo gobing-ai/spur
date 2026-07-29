@@ -12,7 +12,7 @@ priority: P1
 tags: ["board", "web", "observability"]
 dependencies: ["0369", "0372"]
 created_at: "2026-07-29T00:15:02.339Z"
-updated_at: "2026-07-29T05:51:39.477Z"
+updated_at: "2026-07-29T10:32:23.328Z"
 ---
 
 ## 0375. Rebuild the System Events tabview on server-side queries and surface the enriched envelope fields
@@ -87,13 +87,46 @@ Repoint the tabview at J3's server-side filtered, cursor-paginated `/api/events/
 
 10. **(Verify)** Smoke-test: with a filter active, confirm (a) "Load older" advances the cursor and prepends no duplicates, (b) an SSE frame for a non-matching prefix does not appear, (c) a row with `runId=null` shows `unavailable` not `0`, (d) the detail panel opens via keyboard and dismisses via Escape, (e) a malformed row in the response is dropped without an error state. Unit-test the `formatAvailability` invariant and the `parseHistoryRow` optional-field acceptance. → AC: R3, R4, R5, R6, R7, R8.
 ### Solution
+Repointed `SystemEventsTab.tsx` at J3's server-side filtered, cursor-paginated `/api/events/history` and gave the enriched envelope fields a persistent, keyboard-reachable detail panel.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**R1 (server-side queries + cursor pagination).** `SystemEventRow` gains optional `runId?`, `entityKind?`, `entityId?`, `sequence?` (line ~30). `HistoryResponse` gains `nextCursor: string | null` and `hasMore: boolean` (line ~50). `historyUrl()` serializes `prefix`, `names`, `runId`, `actor`, `since`, `cursor`, `limit` into the query string, omitting empty params (line ~130). `parseHistoryRow()` accepts the four correlation fields as optional, never required, so pre-0369 rows still parse (line ~215). `parseHistoryResponse()` reads `nextCursor`/`hasMore` with back-compat defaults (line ~180). The main component replaces the `filteredEvents` `useMemo` with a query state machine: `idle | loading | loaded | error`, `page`, `nextCursor`, `hasMore`, `loadingMore`. `loadPage(filter, cursor?)` fetches, parses, and sets state; a `MALFORMED_CURSOR`/`UNKNOWN_PREFIX` 400 surfaces as `error`, never a silent fallback to page 1. Filter mutations are debounced ≥250ms; `loadMore()` appends older pages when `hasMore`. Client-side filtering (`matchesClientFilter`) applies prefix, tier, scoped search, time-window, and runId for instant UI response while the debounced filter drives server refetch.
 
+**R2 (row identity + outcome).** `SystemEventsTable` renders 7 columns (Time | Event | Actor | Prefix | Tier | Run | Outcome). `EventTableRow` surfaces `runId` and `outcome` (from `payload.outcome`/`status`/`ok`) as inline cells; compact layout collapses Run/Outcome into the Event cell under 640px.
+
+**R3 (unavailable ≠ zero).** `formatAvailability(value)` returns `'unavailable'` for `null`/`undefined`/`''`/non-finite/objects/arrays, the stringified value otherwise. Applied to `runId`, `sequence`, `durationMs`, and `outcome` - never substitutes `0` or `-`.
+
+**R4 (persistent detail panel).** Replaced the `role="tooltip"` `group-hover:block` block with a `<button aria-expanded>` toggle on each row that expands a `<section aria-label="Detail for …">` panel below the row. The panel shows correlation columns (run, entity, sequence, duration, outcome), the full renderer-aware pair list from `buildTooltipSummary` (4-cap removed), and the raw redacted `JSON.stringify(payload)`. Keyboard: Enter/Space toggles via native button, Escape collapses. Touch-reachable (no `:hover` dependency). A "Close (Esc)" button is also rendered.
+
+**R5 (SSE + liveness under filter).** SSE `useEffect` and `useRollingEventRate` kept intact. `es.onmessage` gates incoming frames through `matchesClientFilter` before prepend, so a non-matching prefix does not pollute the stream. The tri-state indicator and `LivenessStrip` keep rendering; `shown`/`total` read `page.length`.
+
+**R6 (runtime narrowing).** `parseHistoryRow`/`parseSseEnvelope` return `null` per element on any shape failure. `parseHistoryResponse` drops malformed rows without aborting the page (returns the valid rows with `loaded` state). A `null` `parseHistoryResponse` sets `error`.
+
+**R7 (responsive + a11y).** `useMediaQuery('(max-width: 639px)')` collapses to 2-column layout. Filter controls retain native `<button>`/`<input type="radio">`/`<select>` semantics with `fieldset`/`legend`/`aria-live`.
+
+**Search scope.** All search is client-side substring (name/actor/payload/all) using `filter` (not `debouncedFilter`) for instant UX; the debounced filter still drives server refetch. Removed `names`/`actor` from `ActiveFilter` and `serializeFilter` because the server params do exact matching, not free-text search.
 ### Testing
+**Verification commands:**
+- `bun run autofix` — clean (no fixes applied)
+- `bun run lint` — clean (biome check + typecheck, 0 warnings)
+- `bun run test` — 3915 pass, 0 fail across 231 files
+- `bun run build` — clean (web build succeeded)
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Observability module tests (99 pass, 0 fail):**
 
+`system-events-tab.test.ts` (62 tests):
+- `formatDuration`: unchanged.
+- `buildTooltipSummary`: updated "caps at 4 pairs" → "surfaces all priority fields (no cap - detail panel needs full envelope)"; queue renderer now surfaces 5 pairs (Job, ID, Duration, Status, Error) since the cap is removed; AC fixture test changed `toBeLessThanOrEqual(4)` → `toBe(4)`.
+- `formatAvailability` (6 tests): null/undefined/empty → 'unavailable'; non-finite → 'unavailable'; finite numbers stringified; booleans stringified; non-empty strings as-is; objects/arrays → 'unavailable'; R3 invariant (absent ≠ '0').
+- `parseHistoryRow` (5 tests): well-formed row with all fields; minimal row without optional fields; nullable correlation columns (pre-0369 rows); null for missing required fields; null for non-object payload.
+- `parseHistoryResponse` (6 tests): complete response with pagination; null nextCursor; defaults when absent (back-compat); drops malformed rows without aborting page (R6); null for non-object input; null when events not array.
+- `historyUrl` (9 tests): limit only; prefix param; names param (URL-encoded); actor param; runId param; since param; cursor param; all params combined; omits empty/undefined params.
+
+`components.test.tsx` (32 tests, 3 updated):
+- "5 columns" → "7 columns (task 0223 R1/R3 + 0375 R2)": expects `['Time', 'Event', 'Actor', 'Prefix', 'Tier', 'Run', 'Outcome']`.
+- "event-name cell carries a tooltip" → "event-name cell has an expand button that toggles a detail panel (task 0375 R4)": asserts `button[aria-expanded]` exists, clicking expands a `section[aria-label^="Detail for"]` with `<dl>` summary and `<pre>` payload.
+- "tooltip renders typed summary" → "detail panel renders typed summary and is keyboard-toggleable (task 0225 R3 + 0375 R4)": asserts toggle button `aria-expanded` transitions, detail panel appears/disappears on click.
+
+`tabs.test.ts` (5 tests): unchanged, verifies OBSERVABILITY_TABS structure.
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->

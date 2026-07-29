@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { buildTooltipSummary, formatDuration } from '../../../src/modules/observability/SystemEventsTab';
+import {
+    buildTooltipSummary,
+    formatAvailability,
+    formatDuration,
+    historyUrl,
+    parseHistoryResponse,
+    parseHistoryRow,
+} from '../../../src/modules/observability/SystemEventsTab';
 
 /**
  * Task 0234 — tooltip enrichment. `buildTooltipSummary` projects a row payload
@@ -39,7 +46,7 @@ describe('buildTooltipSummary', () => {
         expect(buildTooltipSummary('task.updated', {}, 'planning')).toBeNull();
     });
 
-    test('caps at 4 pairs even when more priority fields are present', () => {
+    test('surfaces all priority fields (no cap - detail panel needs full envelope)', () => {
         const summary = buildTooltipSummary(
             'queue.job.completed',
             {
@@ -53,9 +60,11 @@ describe('buildTooltipSummary', () => {
             'queue',
         );
         expect(summary).not.toBeNull();
-        expect(summary?.length).toBe(4);
-        // First four priority fields win; `extra` is never surfaced.
+        // R4 (task 0375): no 4-pair cap - all 5 priority fields surface.
+        expect(summary?.length).toBe(5);
         const labels = (summary ?? []).map((p) => p.label);
+        expect(labels).toEqual(['Job', 'ID', 'Duration', 'Status', 'Error']);
+        // `extra` is never surfaced - it's not a known queue field.
         expect(labels).not.toContain('Extra');
     });
 
@@ -104,12 +113,12 @@ describe('buildTooltipSummary', () => {
                 { label: 'ID', value: 'job_42' },
                 { label: 'Duration', value: '1.5s' },
                 { label: 'Status', value: 'failed' },
-                // Error would be pair #5, dropped by the 4-pair cap.
+                { label: 'Error', value: 'timeout' },
             ]);
         });
 
         // AC: Queue renderer surfaces status, duration, and error (type key, 150ms)
-        test('AC fixture: type+jobId+status+durationMs within 4-pair cap', () => {
+        test('AC fixture: type+jobId+status+durationMs (4 pairs, no error)', () => {
             const summary = buildTooltipSummary(
                 'queue.job.completed',
                 { jobId: 'j1', type: 'smoke', status: 'completed', durationMs: 150 },
@@ -121,7 +130,7 @@ describe('buildTooltipSummary', () => {
                 { label: 'Duration', value: '150ms' },
                 { label: 'Status', value: 'completed' },
             ]);
-            expect(summary?.length).toBeLessThanOrEqual(4);
+            expect(summary?.length).toBe(4);
         });
 
         // AC: Queue renderer surfaces error on a failed job (no duration → Error fits)
@@ -221,7 +230,7 @@ describe('buildTooltipSummary', () => {
         });
 
         // AC: Process/agent surfaces command, exit, duration, and pid
-        test('AC fixture: command + exit + 42.0s + pid within 4-pair budget', () => {
+        test('AC fixture: command + exit + 42.0s + pid (4 pairs)', () => {
             const summary = buildTooltipSummary(
                 'process.exited',
                 { command: 'spur agent run', exitCode: 0, durationMs: 42_000, pid: 12_345 },
@@ -385,5 +394,293 @@ describe('buildTooltipSummary', () => {
     test('infers planning renderer for task.* events when no renderer passed', () => {
         const summary = buildTooltipSummary('task.updated', { entityId: 't1', to: 'wip' });
         expect(summary).toContainEqual({ label: 'Entity', value: 't1' });
+    });
+});
+
+describe('formatAvailability', () => {
+    test('returns "unavailable" for null, undefined, and empty string', () => {
+        expect(formatAvailability(null)).toBe('unavailable');
+        expect(formatAvailability(undefined)).toBe('unavailable');
+        expect(formatAvailability('')).toBe('unavailable');
+    });
+
+    test('returns "unavailable" for non-finite numbers (NaN, Infinity)', () => {
+        expect(formatAvailability(Number.NaN)).toBe('unavailable');
+        expect(formatAvailability(Number.POSITIVE_INFINITY)).toBe('unavailable');
+        expect(formatAvailability(Number.NEGATIVE_INFINITY)).toBe('unavailable');
+    });
+
+    test('returns the value as string for finite numbers', () => {
+        expect(formatAvailability(0)).toBe('0');
+        expect(formatAvailability(42)).toBe('42');
+        expect(formatAvailability(3.14)).toBe('3.14');
+    });
+
+    test('returns the value as string for booleans', () => {
+        expect(formatAvailability(true)).toBe('true');
+        expect(formatAvailability(false)).toBe('false');
+    });
+
+    test('returns non-empty strings as-is', () => {
+        expect(formatAvailability('run_42')).toBe('run_42');
+        expect(formatAvailability('completed')).toBe('completed');
+    });
+
+    test('returns "unavailable" for objects and arrays', () => {
+        expect(formatAvailability({})).toBe('unavailable');
+        expect(formatAvailability([1, 2])).toBe('unavailable');
+    });
+
+    test('never substitutes zero for absent usage (R3 invariant)', () => {
+        // The load-bearing invariant: absent must render as 'unavailable', NOT '0'.
+        expect(formatAvailability(null)).not.toBe('0');
+        expect(formatAvailability(undefined)).not.toBe('0');
+        expect(formatAvailability('')).not.toBe('0');
+    });
+});
+
+describe('parseHistoryRow', () => {
+    test('parses a well-formed row with all fields', () => {
+        const row = parseHistoryRow({
+            id: 'evt_1',
+            eventName: 'task.updated',
+            occurredAt: '2025-01-01T00:00:00Z',
+            actor: 'agent-alpha',
+            prefix: 'task',
+            renderer: 'planning',
+            payload: { entityId: 't1', to: 'wip' },
+            runId: 'run_42',
+            entityKind: 'task',
+            entityId: '0001',
+            sequence: 7,
+        });
+        expect(row).not.toBeNull();
+        expect(row?.id).toBe('evt_1');
+        expect(row?.eventName).toBe('task.updated');
+        expect(row?.occurredAt).toBe('2025-01-01T00:00:00Z');
+        expect(row?.actor).toBe('agent-alpha');
+        expect(row?.prefix).toBe('task');
+        expect(row?.renderer).toBe('planning');
+        expect(row?.payload).toEqual({ entityId: 't1', to: 'wip' });
+        expect(row?.runId).toBe('run_42');
+        expect(row?.entityKind).toBe('task');
+        expect(row?.entityId).toBe('0001');
+        expect(row?.sequence).toBe(7);
+    });
+
+    test('parses a minimal row without optional fields', () => {
+        const row = parseHistoryRow({
+            id: 'evt_2',
+            eventName: 'bus.subscribe',
+            occurredAt: '2025-01-01T00:00:00Z',
+            actor: null,
+            payload: null,
+        });
+        expect(row).not.toBeNull();
+        expect(row?.actor).toBeNull();
+        expect(row?.payload).toBeNull();
+        expect(row?.runId).toBeUndefined();
+        expect(row?.entityKind).toBeUndefined();
+        expect(row?.entityId).toBeUndefined();
+        expect(row?.sequence).toBeUndefined();
+    });
+
+    test('handles nullable correlation columns (pre-0369 rows)', () => {
+        const row = parseHistoryRow({
+            id: 'evt_3',
+            eventName: 'task.updated',
+            occurredAt: '2025-01-01T00:00:00Z',
+            actor: null,
+            payload: {},
+            runId: null,
+            entityKind: null,
+            entityId: null,
+            sequence: null,
+        });
+        expect(row).not.toBeNull();
+        expect(row?.runId).toBeNull();
+        expect(row?.entityKind).toBeNull();
+        expect(row?.entityId).toBeNull();
+        expect(row?.sequence).toBeNull();
+    });
+
+    test('returns null for missing required fields', () => {
+        expect(parseHistoryRow(null)).toBeNull();
+        expect(parseHistoryRow(undefined)).toBeNull();
+        expect(parseHistoryRow({})).toBeNull();
+        expect(parseHistoryRow({ id: 'x' })).toBeNull();
+        expect(parseHistoryRow({ id: 'x', eventName: 'e' })).toBeNull();
+        expect(parseHistoryRow({ id: 123, eventName: 'e', occurredAt: 't' })).toBeNull();
+        expect(parseHistoryRow({ id: 'x', eventName: 123, occurredAt: 't' })).toBeNull();
+        expect(parseHistoryRow({ id: 'x', eventName: 'e', occurredAt: 123 })).toBeNull();
+    });
+
+    test('returns null for non-object payload that is not null', () => {
+        const row = parseHistoryRow({
+            id: 'x',
+            eventName: 'e',
+            occurredAt: 't',
+            actor: null,
+            payload: 'not-an-object',
+        });
+        expect(row).toBeNull();
+    });
+
+    test('returns null for non-string/non-null actor', () => {
+        const row = parseHistoryRow({
+            id: 'x',
+            eventName: 'e',
+            occurredAt: 't',
+            actor: 42,
+            payload: null,
+        });
+        expect(row).toBeNull();
+    });
+});
+
+describe('parseHistoryResponse', () => {
+    test('parses a complete response with pagination fields', () => {
+        const body = parseHistoryResponse({
+            events: [{ id: 'e1', eventName: 'task.updated', occurredAt: 't1', actor: null, payload: null }],
+            count: 1,
+            nextCursor: 'opaque-cursor',
+            hasMore: true,
+            catalog: [
+                { name: 'task.updated', prefix: 'task', source: 'planning', renderer: 'planning', tier: 'default' },
+            ],
+        });
+        expect(body).not.toBeNull();
+        expect(body?.events.length).toBe(1);
+        expect(body?.count).toBe(1);
+        expect(body?.nextCursor).toBe('opaque-cursor');
+        expect(body?.hasMore).toBe(true);
+        expect(body?.catalog?.length).toBe(1);
+    });
+
+    test('handles null nextCursor (no more pages)', () => {
+        const body = parseHistoryResponse({
+            events: [],
+            count: 0,
+            nextCursor: null,
+            hasMore: false,
+        });
+        expect(body).not.toBeNull();
+        expect(body?.nextCursor).toBeNull();
+        expect(body?.hasMore).toBe(false);
+    });
+
+    test('defaults nextCursor to null and hasMore to false when absent (back-compat)', () => {
+        const body = parseHistoryResponse({
+            events: [],
+            count: 0,
+        });
+        expect(body).not.toBeNull();
+        expect(body?.nextCursor).toBeNull();
+        expect(body?.hasMore).toBe(false);
+    });
+
+    test('drops malformed rows without aborting the page (R6)', () => {
+        const body = parseHistoryResponse({
+            events: [
+                { id: 'good', eventName: 'task.updated', occurredAt: 't', actor: null, payload: null },
+                { id: 123 }, // malformed - missing fields
+                null, // malformed
+                'not-an-object', // malformed
+                { id: 'also-good', eventName: 'bus.subscribe', occurredAt: 't2', actor: 'x', payload: {} },
+            ],
+            count: 4,
+            nextCursor: null,
+            hasMore: false,
+        });
+        expect(body).not.toBeNull();
+        expect(body?.events.length).toBe(2);
+        expect(body?.events[0]?.id).toBe('good');
+        expect(body?.events[1]?.id).toBe('also-good');
+    });
+
+    test('returns null for non-object input', () => {
+        expect(parseHistoryResponse(null)).toBeNull();
+        expect(parseHistoryResponse(undefined)).toBeNull();
+        expect(parseHistoryResponse('string')).toBeNull();
+        expect(parseHistoryResponse(42)).toBeNull();
+    });
+
+    test('returns null when events is not an array', () => {
+        expect(parseHistoryResponse({ events: 'not-array', count: 0 })).toBeNull();
+        expect(parseHistoryResponse({ events: null, count: 0 })).toBeNull();
+    });
+
+    test('returns null when count is not a number', () => {
+        expect(parseHistoryResponse({ events: [], count: 'zero' })).toBeNull();
+        expect(parseHistoryResponse({ events: [], count: null })).toBeNull();
+    });
+});
+
+describe('historyUrl', () => {
+    test('builds a URL with limit only when no filters', () => {
+        const url = historyUrl({});
+        expect(url).toContain('/events/history?');
+        expect(url).toContain('limit=100');
+    });
+
+    test('serializes prefix param', () => {
+        const url = historyUrl({ prefix: 'task' });
+        expect(url).toContain('prefix=task');
+    });
+
+    test('serializes names param', () => {
+        const url = historyUrl({ names: 'task.updated,task.created' });
+        expect(url).toContain('names=task.updated%2Ctask.created');
+    });
+
+    test('serializes actor param', () => {
+        const url = historyUrl({ actor: 'agent-alpha' });
+        expect(url).toContain('actor=agent-alpha');
+    });
+
+    test('serializes runId param', () => {
+        const url = historyUrl({ runId: 'run_42' });
+        expect(url).toContain('runId=run_42');
+    });
+
+    test('serializes since param', () => {
+        const url = historyUrl({ since: '2025-01-01T00:00:00Z' });
+        expect(url).toContain('since=2025-01-01T00%3A00%3A00Z');
+    });
+
+    test('serializes cursor param', () => {
+        const url = historyUrl({ cursor: 'opaque-keyset-token' });
+        expect(url).toContain('cursor=opaque-keyset-token');
+    });
+
+    test('combines all params', () => {
+        const url = historyUrl({
+            prefix: 'task',
+            names: 'task.updated',
+            actor: 'alpha',
+            runId: 'r1',
+            since: '2025-01-01T00:00:00Z',
+            cursor: 'cur',
+            limit: 50,
+        });
+        expect(url).toContain('limit=50');
+        expect(url).toContain('prefix=task');
+        expect(url).toContain('names=task.updated');
+        expect(url).toContain('actor=alpha');
+        expect(url).toContain('runId=r1');
+        expect(url).toContain('since=');
+        expect(url).toContain('cursor=cur');
+    });
+
+    test('encodes special characters in params', () => {
+        const url = historyUrl({ actor: 'user@example.com' });
+        expect(url).toContain('actor=user%40example.com');
+    });
+
+    test('omits empty/undefined params', () => {
+        const url = historyUrl({ prefix: '', names: undefined, actor: '' });
+        expect(url).not.toContain('prefix=');
+        expect(url).not.toContain('names=');
+        expect(url).not.toContain('actor=');
     });
 });

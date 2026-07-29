@@ -219,7 +219,7 @@ describe('observability components', () => {
         expect(getByText('4 of 4 shown')).toBeDefined();
     });
 
-    test('system events tab renders a table with sticky header and the 5 columns (task 0223 R1/R3)', async () => {
+    test('system events tab renders a table with sticky header and the 7 columns (task 0223 R1/R3 + 0375 R2)', async () => {
         installObservabilityFetchMock();
         const { container, queryAllByText } = render(<SystemEventsTab />);
 
@@ -231,7 +231,7 @@ describe('observability components', () => {
         expect(thead?.className).toContain('sticky');
         const headers = table?.querySelectorAll('thead th');
         const headerLabels = Array.from(headers ?? []).map((th) => th.textContent?.trim());
-        expect(headerLabels).toEqual(['Time', 'Event', 'Actor', 'Prefix', 'Tier']);
+        expect(headerLabels).toEqual(['Time', 'Event', 'Actor', 'Prefix', 'Tier', 'Run', 'Outcome']);
     });
 
     test('event names are colored by a stable prefix-to-color map (task 0223 R4/R5/R6)', async () => {
@@ -253,28 +253,39 @@ describe('observability components', () => {
         expect(queryAllByText('queue').length).toBeGreaterThan(0);
     });
 
-    test('event-name cell carries a tooltip with a typed summary, never raw JSON (task 0223 R8)', async () => {
+    test('event-name cell has an expand button that toggles a detail panel (task 0375 R4)', async () => {
         installObservabilityFetchMock();
         const { queryAllByText, container } = render(<SystemEventsTab />);
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
 
-        // The tooltip element exists for the queue row (which has renderer
-        // 'queue' + payload {jobId, type}) and surfaces `Job Kind` / `Job ID`.
-        // We assert via the tooltip role since happy-dom does not propagate
-        // group-hover CSS, but the tooltip is in the DOM.
-        const tooltip = container.querySelector('[role="tooltip"]');
-        expect(tooltip).not.toBeNull();
-        // R8: tooltip contains the typed detail labels (e.g. "Job Kind:"),
-        // NOT raw JSON. We assert no `<pre>` block with JSON.stringify output
-        // appears inside any tooltip.
-        const tooltips = container.querySelectorAll('[role="tooltip"]');
-        for (const t of tooltips) {
-            expect(t.querySelector('pre')).toBeNull();
-        }
-        // At least one tooltip has a `<dl>` (renderer summary rows).
-        const tooltipWithDl = container.querySelector('[role="tooltip"] dl');
-        expect(tooltipWithDl).not.toBeNull();
+        // R4: the hover-only tooltip is replaced by a row-anchored expandable
+        // region. Each row has a toggle button with aria-expanded.
+        const toggleButtons = container.querySelectorAll('button[aria-expanded]');
+        expect(toggleButtons.length).toBeGreaterThan(0);
+
+        // Detail panel is not present until a toggle is clicked.
+        let detailPanels = container.querySelectorAll('section[aria-label^="Detail for"]');
+        expect(detailPanels.length).toBe(0);
+
+        // Click the first toggle to expand the detail panel.
+        await act(async () => {
+            const btn = toggleButtons[0];
+            if (btn) fireEvent.click(btn);
+        });
+
+        // The detail panel is now in the DOM.
+        detailPanels = container.querySelectorAll('section[aria-label^="Detail for"]');
+        expect(detailPanels.length).toBe(1);
+
+        // R4: detail panel contains the typed summary as a <dl>, NOT raw JSON.
+        // The panel renders correlation columns + renderer summary + raw payload.
+        const dl = detailPanels[0]?.querySelector('dl');
+        expect(dl).not.toBeNull();
+        // Raw payload IS shown (as a <pre>), but it is server-redacted, not
+        // client-re-redacted (R6 - client never re-redacts).
+        const pre = detailPanels[0]?.querySelector('pre');
+        expect(pre).not.toBeNull();
     });
 
     test('system events tab derives prefix filters from catalog metadata', async () => {
@@ -552,20 +563,37 @@ describe('observability components', () => {
         expect(tierCell?.textContent?.trim()).toMatch(/default|diagnostic/);
     });
 
-    test('tooltip renders typed summary on event-name cell (task 0225 R3)', async () => {
+    test('detail panel renders typed summary and is keyboard-toggleable (task 0225 R3 + 0375 R4)', async () => {
         installObservabilityFetchMock();
         const { container, queryAllByText } = render(<SystemEventsTab />);
 
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
 
-        // The tooltip has role="tooltip", is hidden by default, and reveals
-        // on group-hover only (rows are no longer focusable).
-        const tooltip = container.querySelector('[role="tooltip"]');
-        expect(tooltip).not.toBeNull();
-        expect(tooltip?.className).toContain('hidden');
-        expect(tooltip?.className).toContain('group-hover:block');
-        // Tooltip never exposes raw JSON (no <pre> element).
-        expect(tooltip?.querySelector('pre')).toBeNull();
+        // R4: the hover-only tooltip is replaced by a row-anchored expandable
+        // region. The toggle button is keyboard-focusable and toggles via
+        // Enter/Space (native button behavior). The detail panel is absent
+        // until toggled.
+        const toggleButtons = container.querySelectorAll('button[aria-expanded]');
+        expect(toggleButtons.length).toBeGreaterThan(0);
+        expect(toggleButtons[0]?.getAttribute('aria-expanded')).toBe('false');
+
+        // Expand via click - detail panel appears with a typed <dl> summary.
+        await act(async () => {
+            const btn = toggleButtons[0];
+            if (btn) fireEvent.click(btn);
+        });
+        expect(toggleButtons[0]?.getAttribute('aria-expanded')).toBe('true');
+        const detailPanel = container.querySelector('section[aria-label^="Detail for"]');
+        expect(detailPanel).not.toBeNull();
+        expect(detailPanel?.querySelector('dl')).not.toBeNull();
+
+        // Collapse via click - detail panel disappears.
+        await act(async () => {
+            const btn = toggleButtons[0];
+            if (btn) fireEvent.click(btn);
+        });
+        expect(toggleButtons[0]?.getAttribute('aria-expanded')).toBe('false');
+        expect(container.querySelector('section[aria-label^="Detail for"]')).toBeNull();
     });
 
     test('filter bar controls are keyboard-focusable native elements (task 0225 R4)', async () => {

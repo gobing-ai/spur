@@ -11,22 +11,31 @@ export interface SystemEventRow {
     prefix?: string;
     renderer?: string;
     payload: Record<string, unknown> | null;
+    /** Indexed correlation columns (task 0369). Nullable - pre-migration rows are null. */
+    runId?: string | null;
+    entityKind?: string | null;
+    entityId?: string | null;
+    sequence?: number | null;
 }
 
 interface EventCatalogEntry {
     name: string;
     prefix: string;
     source: string;
-    /** Optional tier — only present when the server ships it (task 0221 R5). */
+    /** Optional tier - only present when the server ships it (task 0221 R5). */
     tier?: string;
     renderer: string;
 }
 
 /** Wire shape of the `/api/events/history` JSON envelope. */
-interface HistoryResponse {
+export interface HistoryResponse {
     events: SystemEventRow[];
     count: number;
     catalog?: EventCatalogEntry[];
+    /** Opaque keyset cursor for the next older page (null when no more). */
+    nextCursor: string | null;
+    /** Whether older rows exist beyond this page. */
+    hasMore: boolean;
 }
 
 /** Wire shape of one SSE envelope pushed by the planning stream. */
@@ -40,12 +49,43 @@ interface SseEnvelope {
 }
 
 const sseUrl = () => `${resolveApiUrl()}/events/planning`;
-const historyUrl = (limit: number) => `${resolveApiUrl()}/events/history?limit=${limit}`;
 const HISTORY_LIMIT = 100;
 
 /**
- * Stable prefix → tailwind text-color mapping (task 0223 R4). Hand-curated so
- * the color is deterministic across renders (not a hash of the event name) —
+ * Build a history URL with server-side filter params + opaque cursor.
+ *
+ * `prefix` (single selected prefix or omitted), `names` (search-when-scope=name,
+ * comma-joined), `actor` (search-when-scope=actor), `runId`, `since` (time-window),
+ * `limit` (page size), and `cursor` (opaque, from `nextCursor`).
+ *
+ * Tier has no direct server param - it is a client-side post-filter on the returned
+ * page only, since the catalog tier is metadata, not a SQL column.
+ */
+export function historyUrl(params: {
+    prefix?: string;
+    names?: string;
+    actor?: string;
+    runId?: string;
+    since?: string;
+    limit?: number;
+    cursor?: string;
+}): string {
+    const base = `${resolveApiUrl()}/events/history`;
+    const qs: string[] = [];
+    const limit = params.limit ?? HISTORY_LIMIT;
+    qs.push(`limit=${limit}`);
+    if (params.prefix) qs.push(`prefix=${encodeURIComponent(params.prefix)}`);
+    if (params.names) qs.push(`names=${encodeURIComponent(params.names)}`);
+    if (params.actor) qs.push(`actor=${encodeURIComponent(params.actor)}`);
+    if (params.runId) qs.push(`runId=${encodeURIComponent(params.runId)}`);
+    if (params.since) qs.push(`since=${encodeURIComponent(params.since)}`);
+    if (params.cursor) qs.push(`cursor=${encodeURIComponent(params.cursor)}`);
+    return `${base}?${qs.join('&')}`;
+}
+
+/**
+ * Stable prefix -> tailwind text-color mapping (task 0223 R4). Hand-curated so
+ * the color is deterministic across renders (not a hash of the event name) -
  * every operator reading the same prefix sees the same color, and the prefix
  * label is still rendered alongside so color is never the only signal (R5).
  * Unknown prefixes fall back to the neutral `text-spur-text-muted` (R6).
@@ -77,6 +117,39 @@ function getPrefixColor(prefix: string | undefined): string {
 type SseStatus = 'connecting' | 'live' | 'errored';
 
 /**
+ * Query state machine (task 0375 R1). Replaces the client-side `filteredEvents`
+ * `useMemo` over a fixed 100-row window. The server filters in SQL; the client
+ * drives pagination via the opaque keyset cursor.
+ */
+type QueryStatus = 'idle' | 'loading' | 'loaded' | 'error';
+
+/** Active filter params sent to the server on each page fetch. */
+interface ActiveFilter {
+    prefix?: string;
+    runId?: string;
+    since?: string;
+}
+
+/** UI filter state - the raw controls before debounce/serialization. */
+interface FilterState {
+    selectedPrefixes: Set<string>;
+    searchQuery: string;
+    searchScope: 'all' | 'name' | 'actor' | 'payload';
+    tierFilter: 'all' | 'default' | 'diagnostic';
+    timeWindow: 'all' | '30s' | '5m';
+    runId: string;
+}
+
+const DEFAULT_FILTER: FilterState = {
+    selectedPrefixes: new Set(),
+    searchQuery: '',
+    searchScope: 'all',
+    tierFilter: 'all',
+    timeWindow: 'all',
+    runId: '',
+};
+
+/**
  * Trail of recent event timestamps used to compute the rolling
  * "N events / 60s" rate. We keep absolute epoch ms so the rate stays correct
  * across tab clock drift and is trivially sliceable for the trailing window.
@@ -87,7 +160,7 @@ function useRollingEventRate(): { rate: number; recordEvent: () => void } {
 
     // Re-tick every second so the rate reflects the *trailing* 60-second window
     // (R2). The interval is a coarse timer; the actual rate may lag a frame
-    // behind the wall clock, which is fine — this is a human-facing indicator.
+    // behind the wall clock, which is fine - this is a human-facing indicator.
     useEffect(() => {
         const id = window.setInterval(() => {
             const cutoff = Date.now() - 60_000;
@@ -112,29 +185,34 @@ function useRollingEventRate(): { rate: number; recordEvent: () => void } {
 
 /**
  * Runtime-narrow an unknown network payload into a `HistoryResponse`, or
- * return `null` when the shape is wrong. Network input is untrusted — a
+ * return `null` when the shape is wrong. Network input is untrusted - a
  * single bad row from the server must not crash the tab.
  */
-function parseHistoryResponse(value: unknown): HistoryResponse | null {
+export function parseHistoryResponse(value: unknown): HistoryResponse | null {
     if (value === null || typeof value !== 'object') return null;
     if (!('events' in value) || !('count' in value)) return null;
     const rawEvents = (value as { events: unknown }).events;
     if (!Array.isArray(rawEvents)) return null;
     const count = (value as { count: unknown }).count;
     if (typeof count !== 'number') return null;
+    // nextCursor/hasMore are additive - back-compat: absent => no more pages.
+    const rawNextCursor = (value as { nextCursor?: unknown }).nextCursor;
+    const nextCursor = typeof rawNextCursor === 'string' ? rawNextCursor : rawNextCursor === null ? null : null;
+    const rawHasMore = (value as { hasMore?: unknown }).hasMore;
+    const hasMore = typeof rawHasMore === 'boolean' ? rawHasMore : false;
     const events: SystemEventRow[] = [];
     for (const raw of rawEvents) {
         const row = parseHistoryRow(raw);
-        if (!row) return null;
+        if (!row) continue; // R6: drop malformed rows without aborting the page
         events.push(row);
     }
     const rawCatalog = (value as { catalog?: unknown }).catalog;
     const catalog = Array.isArray(rawCatalog) ? parseCatalog(rawCatalog) : undefined;
-    return { events, count, ...(catalog ? { catalog } : {}) };
+    return { events, count, nextCursor, hasMore, ...(catalog ? { catalog } : {}) };
 }
 
-/** Runtime-narrow one history row. */
-function parseHistoryRow(value: unknown): SystemEventRow | null {
+/** Runtime-narrow one history row. Returns null on any shape failure (R6). */
+export function parseHistoryRow(value: unknown): SystemEventRow | null {
     if (value === null || typeof value !== 'object') return null;
     const obj = value as Record<string, unknown>;
     if (typeof obj.id !== 'string') return null;
@@ -145,27 +223,48 @@ function parseHistoryRow(value: unknown): SystemEventRow | null {
     const actor = obj.actor;
     if (actor !== null && typeof actor !== 'string') return null;
     const payload = obj.payload;
-    if (payload === null) {
-        return {
-            id: obj.id,
-            eventName: obj.eventName,
-            occurredAt: obj.occurredAt,
-            actor,
-            ...(prefix ? { prefix } : {}),
-            ...(renderer ? { renderer } : {}),
-            payload: null,
-        };
-    }
-    if (typeof payload !== 'object') return null;
-    return {
+    // Correlation columns - optional, nullable, never required (R6: pre-0369 rows).
+    const runId = typeof obj.runId === 'string' ? obj.runId : obj.runId === null ? null : undefined;
+    const entityKind = typeof obj.entityKind === 'string' ? obj.entityKind : obj.entityKind === null ? null : undefined;
+    const entityId = typeof obj.entityId === 'string' ? obj.entityId : obj.entityId === null ? null : undefined;
+    const sequence =
+        typeof obj.sequence === 'number' && Number.isFinite(obj.sequence)
+            ? obj.sequence
+            : obj.sequence === null
+              ? null
+              : undefined;
+    const base = {
         id: obj.id,
         eventName: obj.eventName,
         occurredAt: obj.occurredAt,
         actor,
         ...(prefix ? { prefix } : {}),
         ...(renderer ? { renderer } : {}),
-        payload: payload as Record<string, unknown>,
     };
+    if (payload === null) {
+        return { ...base, payload: null, ...optionalCorrelation(runId, entityKind, entityId, sequence) };
+    }
+    if (typeof payload !== 'object') return null;
+    return {
+        ...base,
+        payload: payload as Record<string, unknown>,
+        ...optionalCorrelation(runId, entityKind, entityId, sequence),
+    };
+}
+
+/** Spread correlation fields only when they were present on the wire. */
+function optionalCorrelation(
+    runId: string | null | undefined,
+    entityKind: string | null | undefined,
+    entityId: string | null | undefined,
+    sequence: number | null | undefined,
+): Partial<SystemEventRow> {
+    const out: Partial<SystemEventRow> = {};
+    if (runId !== undefined) out.runId = runId;
+    if (entityKind !== undefined) out.entityKind = entityKind;
+    if (entityId !== undefined) out.entityId = entityId;
+    if (sequence !== undefined) out.sequence = sequence;
+    return out;
 }
 
 function parseCatalog(values: unknown[]): EventCatalogEntry[] | undefined {
@@ -196,7 +295,7 @@ function parseCatalog(values: unknown[]): EventCatalogEntry[] | undefined {
 
 /**
  * Runtime-narrow an unknown SSE frame into an {@link SseEnvelope}, or return
- * `null` when the frame is malformed. Network input is untrusted — the server
+ * `null` when the frame is malformed. Network input is untrusted - the server
  * may push a keepalive comment (`: keepalive\n\n`) that we silently drop at
  * the EventSource layer, but a hand-rolled frame must still be checked
  * before being read into the row shape.
@@ -258,6 +357,26 @@ export function formatDuration(ms: unknown): string | null {
     if (typeof ms !== 'number' || !Number.isFinite(ms)) return null;
     if (ms < 1000) return `${ms}ms`;
     return `${(ms / 1000).toFixed(1)}s`;
+}
+
+/**
+ * R3 (task 0375): render explicitly-unavailable usage as the literal token
+ * `unavailable` - never `0`, never `-`, never blank. Absent/null/undefined/''/
+ * non-finite numeric inputs all yield `'unavailable'`. This is the load-bearing
+ * invariant for R3.
+ */
+export function formatAvailability(value: unknown): string {
+    if (value === null || value === undefined) return 'unavailable';
+    if (typeof value === 'string') {
+        if (value.length === 0) return 'unavailable';
+        return value;
+    }
+    if (typeof value === 'number') {
+        if (!Number.isFinite(value)) return 'unavailable';
+        return String(value);
+    }
+    if (typeof value === 'boolean') return String(value);
+    return 'unavailable';
 }
 
 export function buildTooltipSummary(
@@ -376,7 +495,7 @@ export function buildTooltipSummary(
         case 'workflow-custom': {
             push('Workflow', pickString('workflow', 'workflowName', 'name'));
             push('Run', pickString('runId', 'run', 'id'));
-            // R10 / design §2.2: first non-null of phase → transition → action
+            // R10 / design §2.2: first non-null of phase -> transition -> action
             // becomes a single labeled pair (not all three).
             const phase = pickString('phase');
             const transition = pickString('transition');
@@ -398,59 +517,216 @@ export function buildTooltipSummary(
             break;
     }
 
-    return summary.length > 0 ? summary.slice(0, 4) : null;
+    // R4 (task 0375): no 4-pair cap - the detail panel shows the full pair list.
+    return summary.length > 0 ? summary : null;
+}
+
+/** Serialize UI filter state into the server-side query params. */
+function serializeFilter(filter: FilterState): ActiveFilter {
+    const out: ActiveFilter = {};
+    // Prefix: when exactly one prefix is selected, send it as a server param.
+    // Multiple selected prefixes cannot be expressed as a single `prefix=` param,
+    // so they fall back to client-side post-filter on the returned page.
+    if (filter.selectedPrefixes.size === 1) {
+        out.prefix = [...filter.selectedPrefixes][0];
+    }
+    // Search is client-side substring across all scopes - no server param.
+    // (Server `names`/`actor` params do exact matching, not free-text search.)
+    if (filter.runId.trim() !== '') out.runId = filter.runId.trim();
+    if (filter.timeWindow !== 'all') {
+        const ms = filter.timeWindow === '30s' ? 30_000 : 5 * 60_000;
+        out.since = new Date(Date.now() - ms).toISOString();
+    }
+    return out;
 }
 
 /**
- * System Events tab (task 0189 R5).
+ * Client-side post-filter predicate applied to the current page for immediate
+ * UX. Also gates SSE prepend so a non-matching frame is silently dropped (R5).
+ *
+ * All filter dimensions are applied client-side so the UI responds instantly
+ * to control changes. The debounced `serializeFilter` drives the server query
+ * in parallel, which narrows the paginated result set.
+ */
+function matchesClientFilter(
+    evt: {
+        eventName: string;
+        occurredAt: string;
+        actor: string | null;
+        prefix?: string;
+        payload?: Record<string, unknown> | null;
+        runId?: string | null;
+    },
+    filter: FilterState,
+    tierByName: Map<string, string>,
+): boolean {
+    // Prefix: when any prefixes are selected, filter client-side for immediate
+    // UX. Single prefix also goes to the server; multi-prefix is client-only.
+    if (filter.selectedPrefixes.size >= 1) {
+        const prefix = evt.prefix ?? evt.eventName.split('.')[0] ?? evt.eventName;
+        if (!filter.selectedPrefixes.has(prefix)) return false;
+    }
+    if (filter.tierFilter !== 'all') {
+        const entryTier = tierByName.get(evt.eventName);
+        if (entryTier !== filter.tierFilter) {
+            if (!(filter.tierFilter === 'default' && entryTier === undefined)) return false;
+        }
+    }
+    // Search: client-side substring match, scoped to the selected field(s).
+    if (filter.searchQuery.trim() !== '') {
+        const query = filter.searchQuery.toLowerCase();
+        let matches = false;
+        if (filter.searchScope === 'name' || filter.searchScope === 'all') {
+            matches = matches || evt.eventName.toLowerCase().includes(query);
+        }
+        if (filter.searchScope === 'actor' || filter.searchScope === 'all') {
+            matches = matches || (evt.actor?.toLowerCase().includes(query) ?? false);
+        }
+        if (filter.searchScope === 'payload' && evt.payload) {
+            matches = matches || JSON.stringify(evt.payload).toLowerCase().includes(query);
+        }
+        if (!matches) return false;
+    }
+    // Time-window: client-side filter for immediate UX (also sent to server).
+    if (filter.timeWindow !== 'all') {
+        const ms = filter.timeWindow === '30s' ? 30_000 : 5 * 60_000;
+        const cutoff = Date.now() - ms;
+        const eventTime = new Date(evt.occurredAt).getTime();
+        if (Number.isNaN(eventTime) || eventTime < cutoff) return false;
+    }
+    // Run ID: client-side filter for immediate UX (also sent to server).
+    if (filter.runId.trim() !== '') {
+        if (evt.runId !== filter.runId.trim()) return false;
+    }
+    return true;
+}
+
+/**
+ * System Events tab (task 0189 R5, rebuilt on server-side queries in 0375).
  *
  * Initial fetch loads the most recent `HISTORY_LIMIT` rows from
- * `/api/events/history` newest-first. After mount, an `EventSource` against
- * `/api/events/planning` appends each fired event to the top of the list so
- * the operator sees live activity without a refresh.
+ * `/api/events/history` newest-first, with server-side filter params. After
+ * mount, an `EventSource` against `/api/events/planning` prepends each fired
+ * event to the top of the list - but only if it passes the active filter (R5).
+ * A "Load older" affordance advances the opaque keyset cursor to page backward.
  *
  * The cap-and-prune contract is server-side: this tab never assumes the
- * ledger will fit in memory — the render set is bounded by `HISTORY_LIMIT`
- * (newest-first), and any SSE envelope whose `eventName === 'connected'`
- * (the stream's initial signal) is dropped to avoid a duplicate first row.
+ * ledger will fit in memory. Filter changes are debounced (≥250ms) so the
+ * input does not fire a request per keystroke.
  */
 export default function SystemEventsTab() {
-    const [events, setEvents] = useState<SystemEventRow[] | null>(null);
+    const [page, setPage] = useState<SystemEventRow[]>([]);
     const [catalog, setCatalog] = useState<EventCatalogEntry[]>([]);
-    const [error, setError] = useState<string | null>(null);
-    const [selectedPrefixes, setSelectedPrefixes] = useState<Set<string>>(new Set());
-    const [searchQuery, setSearchQuery] = useState<string>('');
-    const [searchScope, setSearchScope] = useState<'all' | 'name' | 'actor' | 'payload'>('all');
-    const [tierFilter, setTierFilter] = useState<'all' | 'default' | 'diagnostic'>('all');
-    const [timeWindow, setTimeWindow] = useState<'all' | '30s' | '5m'>('all');
+    const [queryStatus, setQueryStatus] = useState<QueryStatus>('idle');
+    const [queryError, setQueryError] = useState<string | null>(null);
+    const [nextCursor, setNextCursor] = useState<string | null>(null);
+    const [hasMore, setHasMore] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
+
+    const [filter, setFilter] = useState<FilterState>(DEFAULT_FILTER);
+    // Debounced filter - the actual server query driver.
+    const [debouncedFilter, setDebouncedFilter] = useState<FilterState>(DEFAULT_FILTER);
+
     // Liveness strip state (task 0222). `sseStatus` is tri-state so the
     // indicator can render connecting/live/errored distinctly.
     const [sseStatus, setSseStatus] = useState<SseStatus>('connecting');
     const { rate, recordEvent } = useRollingEventRate();
 
-    // Initial history fetch.
+    // Tier lookup map for client-side tier post-filter + SSE gate.
+    const tierByName = useMemo(() => {
+        const map = new Map<string, string>();
+        for (const entry of catalog) {
+            if (entry.tier) map.set(entry.name, entry.tier);
+        }
+        return map;
+    }, [catalog]);
+
+    // Debounce filter mutations (≥250ms) so the input fires one request per
+    // settled change, not per keystroke.
     useEffect(() => {
+        const handle = window.setTimeout(() => {
+            setDebouncedFilter(filter);
+        }, 250);
+        return () => window.clearTimeout(handle);
+    }, [filter]);
+
+    const activeFilter = useMemo(() => serializeFilter(debouncedFilter), [debouncedFilter]);
+
+    // Initial + filter-change fetch (resets the page to the newest page).
+    const fetchIdRef = useRef(0);
+    useEffect(() => {
+        const myId = ++fetchIdRef.current;
         const controller = new AbortController();
+        setQueryStatus('loading');
+        setQueryError(null);
         (async () => {
             try {
                 const res = await fetchWithTimeout(
-                    new Request(historyUrl(HISTORY_LIMIT), { signal: controller.signal }),
+                    new Request(historyUrl({ ...activeFilter, limit: HISTORY_LIMIT }), {
+                        signal: controller.signal,
+                    }),
                 );
-                if (!res.ok) throw new Error(`history fetch failed: ${res.status}`);
+                if (!res.ok) {
+                    const body: unknown = await res.json().catch(() => null);
+                    const code = (body as { code?: string } | null)?.code;
+                    if (code === 'UNKNOWN_PREFIX' || code === 'MALFORMED_CURSOR') {
+                        throw new Error(`${code}: ${(body as { error?: string }).error ?? res.status}`);
+                    }
+                    throw new Error(`history fetch failed: ${res.status}`);
+                }
                 const raw: unknown = await res.json();
                 const body = parseHistoryResponse(raw);
                 if (!body) throw new Error('history response failed schema validation');
-                setEvents(body.events);
+                if (myId !== fetchIdRef.current) return; // stale - a newer fetch superseded us
+                setPage(body.events);
                 if (body.catalog) setCatalog(body.catalog);
+                setNextCursor(body.nextCursor);
+                setHasMore(body.hasMore);
+                setQueryStatus('loaded');
             } catch (err) {
                 if (controller.signal.aborted) return;
-                setError(err instanceof Error ? err.message : String(err));
+                if (myId !== fetchIdRef.current) return;
+                setQueryError(err instanceof Error ? err.message : String(err));
+                setQueryStatus('error');
             }
         })();
         return () => controller.abort();
-    }, []);
+    }, [activeFilter]);
 
-    // Live tail via SSE — appends each new event to the top of the list.
+    // Load older: append the next page via the opaque cursor.
+    const loadMore = useCallback(async () => {
+        if (!hasMore || loadingMore || nextCursor === null) return;
+        setLoadingMore(true);
+        try {
+            const res = await fetchWithTimeout(
+                new Request(historyUrl({ ...activeFilter, limit: HISTORY_LIMIT, cursor: nextCursor })),
+            );
+            if (!res.ok) throw new Error(`history fetch failed: ${res.status}`);
+            const raw: unknown = await res.json();
+            const body = parseHistoryResponse(raw);
+            if (!body) throw new Error('history response failed schema validation');
+            // Append older rows; dedup by id to guard against cursor edge cases.
+            setPage((prev) => {
+                const seen = new Set(prev.map((e) => e.id));
+                const older = body.events.filter((e) => !seen.has(e.id));
+                return [...prev, ...older];
+            });
+            if (body.catalog) setCatalog(body.catalog);
+            setNextCursor(body.nextCursor);
+            setHasMore(body.hasMore);
+        } catch (err) {
+            setQueryError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setLoadingMore(false);
+        }
+    }, [hasMore, loadingMore, nextCursor, activeFilter]);
+
+    // Live tail via SSE - prepends each new event to the top of the list,
+    // but only if it passes the active filter (R5).
+    const filterRef = useRef(filter);
+    filterRef.current = filter;
+    const tierRef = useRef(tierByName);
+    tierRef.current = tierByName;
     useEffect(() => {
         if (typeof EventSource === 'undefined') return;
         const es = new EventSource(sseUrl());
@@ -466,8 +742,27 @@ export default function SystemEventsTab() {
             try {
                 const raw: unknown = JSON.parse(msg.data);
                 const envelope = parseSseEnvelope(raw);
-                if (!envelope) return; // malformed frame — drop silently
+                if (!envelope) return; // malformed frame - drop silently
                 if (envelope.eventName === 'connected') return;
+                // R5: gate SSE prepend by the active filter so a non-matching
+                // frame does not pollute the filtered view.
+                const currentFilter = filterRef.current;
+                const currentTier = tierRef.current;
+                if (
+                    !matchesClientFilter(
+                        {
+                            eventName: envelope.eventName,
+                            occurredAt: envelope.occurredAt,
+                            actor: envelope.actor,
+                            ...(envelope.prefix ? { prefix: envelope.prefix } : {}),
+                            payload: envelope.payload,
+                        },
+                        currentFilter,
+                        currentTier,
+                    )
+                ) {
+                    return;
+                }
                 const row: SystemEventRow = {
                     id: `live-${envelope.occurredAt}-${envelope.eventName}`,
                     eventName: envelope.eventName,
@@ -477,10 +772,10 @@ export default function SystemEventsTab() {
                     ...(envelope.renderer ? { renderer: envelope.renderer } : {}),
                     payload: envelope.payload,
                 };
-                setEvents((prev) => (prev ? [row, ...prev].slice(0, HISTORY_LIMIT) : [row]));
+                setPage((prev) => [row, ...prev]);
                 recordEvent();
             } catch {
-                // Drop malformed frames silently — a bad row must not break the live tail.
+                // Drop malformed frames silently - a bad row must not break the live tail.
             }
         };
         return () => es.close();
@@ -491,87 +786,52 @@ export default function SystemEventsTab() {
             Array.from(
                 new Set([
                     ...catalog.map((entry) => entry.prefix),
-                    ...(events ?? []).map((evt) => evt.prefix ?? evt.eventName.split('.')[0] ?? evt.eventName),
+                    ...page.map((evt) => evt.prefix ?? evt.eventName.split('.')[0] ?? evt.eventName),
                 ]),
             ).sort(),
-        [catalog, events],
+        [catalog, page],
     );
 
     // R6: clear-filters is visible iff at least one filter deviates from default.
     const filtersActive =
-        selectedPrefixes.size > 0 ||
-        searchQuery.trim() !== '' ||
-        searchScope !== 'all' ||
-        tierFilter !== 'all' ||
-        timeWindow !== 'all';
-
-    const filteredEvents = useMemo(() => {
-        const list = events ?? [];
-        const windowMs = timeWindow === '30s' ? 30_000 : timeWindow === '5m' ? 5 * 60_000 : null;
-        const windowCutoff = windowMs !== null ? Date.now() - windowMs : null;
-
-        return list.filter((evt) => {
-            // Multi-select prefix (R2: empty set means "all").
-            if (selectedPrefixes.size > 0) {
-                const prefix = evt.prefix ?? evt.eventName.split('.')[0] ?? evt.eventName;
-                if (!selectedPrefixes.has(prefix)) return false;
-            }
-            if (tierFilter !== 'all') {
-                const entryTier = catalog.find((entry) => entry.name === evt.eventName)?.tier;
-                if (entryTier !== tierFilter) {
-                    if (!(tierFilter === 'default' && entryTier === undefined)) return false;
-                }
-            }
-            if (windowCutoff !== null) {
-                const ts = Date.parse(evt.occurredAt);
-                // Events without a parseable timestamp fall outside a strict window — drop them.
-                if (!Number.isFinite(ts) || ts < windowCutoff) return false;
-            }
-            if (searchQuery.trim() !== '') {
-                const query = searchQuery.toLowerCase();
-                const matchesName = evt.eventName.toLowerCase().includes(query);
-                const matchesActor = evt.actor?.toLowerCase().includes(query);
-                const matchesPayload = evt.payload && JSON.stringify(evt.payload).toLowerCase().includes(query);
-                if (searchScope === 'name' && !matchesName) return false;
-                if (searchScope === 'actor' && !matchesActor) return false;
-                if (searchScope === 'payload' && !matchesPayload) return false;
-                if (searchScope === 'all' && !matchesName && !matchesActor && !matchesPayload) return false;
-            }
-            return true;
-        });
-    }, [events, selectedPrefixes, tierFilter, catalog, timeWindow, searchQuery, searchScope]);
+        filter.selectedPrefixes.size > 0 ||
+        filter.searchQuery.trim() !== '' ||
+        filter.searchScope !== 'all' ||
+        filter.tierFilter !== 'all' ||
+        filter.timeWindow !== 'all' ||
+        filter.runId.trim() !== '';
 
     const clearFilters = useCallback(() => {
-        setSelectedPrefixes(new Set());
-        setSearchQuery('');
-        setSearchScope('all');
-        setTierFilter('all');
-        setTimeWindow('all');
+        setFilter(DEFAULT_FILTER);
     }, []);
 
     const togglePrefix = useCallback((prefix: string) => {
-        setSelectedPrefixes((prev) => {
-            const next = new Set(prev);
+        setFilter((prev) => {
+            const next = new Set(prev.selectedPrefixes);
             if (next.has(prefix)) next.delete(prefix);
             else next.add(prefix);
-            return next;
+            return { ...prev, selectedPrefixes: next };
         });
     }, []);
 
-    if (error) {
+    if (queryStatus === 'error') {
         return (
             <div className="p-4 text-sm text-error" role="alert">
-                Failed to load event history: {error}
+                Failed to load event history: {queryError}
             </div>
         );
     }
-    if (events === null) {
+    if (queryStatus === 'idle' || queryStatus === 'loading') {
         return (
             <div className="flex items-center justify-center h-32 text-spur-text-muted text-sm">
                 <Loading size="sm" /> Loading event history…
             </div>
         );
     }
+
+    // Client-side post-filter for immediate UX. The debounced filter drives
+    // the server query; the immediate filter drives the visible rows.
+    const visiblePage = page.filter((evt) => matchesClientFilter(evt, filter, tierByName));
 
     return (
         <div className="flex flex-col h-full overflow-hidden">
@@ -584,21 +844,27 @@ export default function SystemEventsTab() {
                     existing layout is not pushed below the fold (R4). R1: tri-state indicator
                     with color + text label (R6). R7: the rolling rate + count live in a polite
                     aria-live region so screen readers announce updates without interrupting. */}
-                <LivenessStrip status={sseStatus} rate={rate} shown={filteredEvents.length} total={events.length} />
+                <LivenessStrip
+                    status={sseStatus}
+                    rate={rate}
+                    shown={visiblePage.length}
+                    total={page.length}
+                    hasMore={hasMore}
+                />
             </div>
 
             {/* Filter bar (task 0224). Three rows: prefix pill chips (R1/R2),
                 tier segmented toggle + time-window segmented toggle (R3/R5),
-                search input + scope toggle + clear + inline count (R4/R6/R7). */}
+                search input + scope toggle + runId input + clear + inline count (R4/R6/R7). */}
             <div className="px-4 py-2 border-b border-spur-border bg-base-100 shrink-0 flex flex-col gap-2">
-                {/* R1/R2: prefix pill chips — multi-select, colored to match the table. */}
+                {/* R1/R2: prefix pill chips - multi-select, colored to match the table. */}
                 <fieldset
                     className="flex flex-wrap items-center gap-1.5 border-0 p-0 m-0"
                     aria-label="Filter by prefix"
                 >
                     <legend className="sr-only">Filter by prefix</legend>
                     {prefixOptions.map((prefix) => {
-                        const active = selectedPrefixes.has(prefix);
+                        const active = filter.selectedPrefixes.has(prefix);
                         const colorClass = getPrefixColor(prefix);
                         return (
                             <button
@@ -623,8 +889,8 @@ export default function SystemEventsTab() {
                     {/* R3: tier segmented toggle. */}
                     <SegmentedToggle
                         label="Tier"
-                        value={tierFilter}
-                        onChange={setTierFilter}
+                        value={filter.tierFilter}
+                        onChange={(v) => setFilter((prev) => ({ ...prev, tierFilter: v }))}
                         options={[
                             { value: 'all', label: 'All' },
                             { value: 'default', label: 'Default' },
@@ -634,8 +900,8 @@ export default function SystemEventsTab() {
                     {/* R5: time-window quick filter. */}
                     <SegmentedToggle
                         label="Window"
-                        value={timeWindow}
-                        onChange={setTimeWindow}
+                        value={filter.timeWindow}
+                        onChange={(v) => setFilter((prev) => ({ ...prev, timeWindow: v }))}
                         options={[
                             { value: 'all', label: 'All' },
                             { value: '30s', label: '30s' },
@@ -645,8 +911,13 @@ export default function SystemEventsTab() {
                     {/* R4: search input with inline scope selector. */}
                     <div className="flex items-center gap-1 flex-1 min-w-[220px]">
                         <select
-                            value={searchScope}
-                            onChange={(e) => setSearchScope(e.target.value as typeof searchScope)}
+                            value={filter.searchScope}
+                            onChange={(e) =>
+                                setFilter((prev) => ({
+                                    ...prev,
+                                    searchScope: e.target.value as FilterState['searchScope'],
+                                }))
+                            }
                             className="bg-base-200 border border-spur-border rounded px-1.5 py-0.5 text-[11px] text-spur-text focus:outline-none focus:ring-2 focus:ring-spur-text/40 cursor-pointer"
                             aria-label="Search scope"
                         >
@@ -659,12 +930,22 @@ export default function SystemEventsTab() {
                             size="sm"
                             variant="bordered"
                             placeholder="Search…"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            value={filter.searchQuery}
+                            onChange={(e) => setFilter((prev) => ({ ...prev, searchQuery: e.target.value }))}
                             className="flex-1 min-w-[120px] input-sm"
-                            aria-label={`Search ${searchScope}`}
+                            aria-label={`Search ${filter.searchScope}`}
                         />
                     </div>
+                    {/* Run ID filter - server-side param (task 0375 R1). */}
+                    <Input
+                        size="sm"
+                        variant="bordered"
+                        placeholder="run id…"
+                        value={filter.runId}
+                        onChange={(e) => setFilter((prev) => ({ ...prev, runId: e.target.value }))}
+                        className="w-32 input-sm"
+                        aria-label="Filter by run id"
+                    />
                     {/* R6: clear-filters button (visible iff filters active). */}
                     {filtersActive && (
                         <button
@@ -678,18 +959,32 @@ export default function SystemEventsTab() {
                     )}
                     {/* R7: inline result count. */}
                     <span aria-live="polite" className="text-[11px] font-mono text-spur-text-muted whitespace-nowrap">
-                        {filteredEvents.length} of {events.length}
+                        {visiblePage.length} of {page.length}
                     </span>
                 </div>
             </div>
-            {filteredEvents.length === 0 ? (
+            {visiblePage.length === 0 ? (
                 <div className="p-4 text-sm text-spur-text-muted italic flex-1 overflow-y-auto">
-                    {events.length === 0
+                    {page.length === 0
                         ? 'No system events yet. New events from the planning bus will appear here in real time.'
                         : 'No events match the active filters.'}
                 </div>
             ) : (
-                <SystemEventsTable rows={filteredEvents} catalog={catalog} />
+                <SystemEventsTable rows={visiblePage} catalog={catalog} />
+            )}
+            {/* Load older affordance - advances the opaque keyset cursor (R1). */}
+            {hasMore && (
+                <div className="px-4 py-2 border-t border-spur-border bg-base-100 shrink-0 flex justify-center">
+                    <button
+                        type="button"
+                        onClick={loadMore}
+                        disabled={loadingMore}
+                        data-load-older
+                        className="text-[11px] text-spur-text-muted hover:text-spur-text px-3 py-1 rounded border border-spur-border/40 hover:border-spur-text/40 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-wait focus:outline-none focus:ring-2 focus:ring-spur-text/40"
+                    >
+                        {loadingMore ? 'Loading…' : 'Load older'}
+                    </button>
+                </div>
             )}
         </div>
     );
@@ -703,7 +998,8 @@ export default function SystemEventsTab() {
  *     redundant with the label so a colorblind operator or screen-reader user
  *     still gets the signal (R6).
  *   - Rolling rate (R2): "N events / 60s" reflecting the trailing window.
- *   - Filtered count (R3): "N of M shown" where M is the loaded total.
+ *   - Filtered count (R3): "N of M shown" where M is the loaded page total,
+ *     plus a "· more available" hint when the server has older pages (R1).
  *
  * The indicator dot is `role="status"` (live status, not a control), and the
  * numeric values sit in an `aria-live="polite"` region so screen readers
@@ -714,11 +1010,13 @@ function LivenessStrip({
     rate,
     shown,
     total,
+    hasMore,
 }: {
     status: SseStatus;
     rate: number;
     shown: number;
     total: number;
+    hasMore: boolean;
 }) {
     const dotClass = useMemo(() => {
         switch (status) {
@@ -731,7 +1029,7 @@ function LivenessStrip({
         }
     }, [status]);
 
-    // Pulse keyframe only on the "live" dot — the connecting and errored
+    // Pulse keyframe only on the "live" dot - the connecting and errored
     // states use a static dot to avoid implying healthy liveness.
     const dotStyle = status === 'live' ? ({ animation: 'spur-pulse 1.6s ease-in-out infinite' } as const) : undefined;
 
@@ -745,19 +1043,19 @@ function LivenessStrip({
                 {rate} events / 60s
             </span>
             <span aria-live="polite" aria-atomic="true">
-                {shown} of {total} shown
+                {shown} of {total} shown{hasMore ? ' · more available' : ''}
             </span>
         </div>
     );
 }
 
 /**
- * useMediaQuery — narrow-viewport detection for the responsive table
+ * useMediaQuery - narrow-viewport detection for the responsive table
  * collapse (task 0225 R1). SSR-safe: defaults to `false` so the server
  * render and the first client render match; updates after mount.
  */
 function useMediaQuery(query: string): boolean {
-    // useSyncExternalStore is not available — fall back to a state+listener
+    // useSyncExternalStore is not available - fall back to a state+listener
     // pair. React 18's useSyncExternalStore would be ideal, but this module
     // doesn't pull it in. Instead we use a manual subscription that updates
     // state on query changes.
@@ -778,11 +1076,11 @@ function useMediaQuery(query: string): boolean {
 /**
  * Dense table view (task 0223) replacing the previous card list.
  *
- * Layout: 5 columns (Time | Event | Actor | Prefix | Tier) with a sticky
- * `<thead>` (R3) and compact rows (~28px) so at least 20 rows are visible
- * on a standard viewport (R2). Each row is a single click/keyboard target
- * that toggles an expanded panel below showing the typed EventDetails
- * renderer output + RawPayloadView — no duplication of detail rendering (R9).
+ * Layout: 7 columns (Time | Event | Actor | Prefix | Tier | Run | Outcome) with
+ * a sticky `<thead>` (R3) and compact rows (~28px) so at least 20 rows are
+ * visible on a standard viewport (R2). Each row is a keyboard-toggleable
+ * detail target (R4) that expands a panel below showing the full redacted
+ * envelope - no duplication of detail rendering (R9).
  *
  * The container is the vertical scroll host; sticky positioning is on the
  * `<thead>` so the column labels stay visible regardless of scroll position.
@@ -797,9 +1095,9 @@ function SystemEventsTable({ rows, catalog }: { rows: SystemEventRow[]; catalog:
     }, [catalog]);
 
     // R1 (task 0225): under 640px the table collapses to a 2-column stacked
-    // layout (Time | Event + Actor). The Prefix / Tier columns are hidden
-    // and the Event cell stacks the actor below the event name so the row
-    // never exceeds the viewport width.
+    // layout (Time | Event + Actor). The Prefix / Tier / Run / Outcome columns
+    // are hidden and the Event cell stacks the actor + identity below the event
+    // name so the row never exceeds the viewport width.
     const isCompact = useMediaQuery('(max-width: 639px)');
 
     return (
@@ -811,6 +1109,8 @@ function SystemEventsTable({ rows, catalog }: { rows: SystemEventRow[]; catalog:
                     {!isCompact && <col className="w-32" />}
                     {!isCompact && <col className="w-24" />}
                     {!isCompact && <col className="w-24" />}
+                    {!isCompact && <col className="w-28" />}
+                    {!isCompact && <col className="w-28" />}
                 </colgroup>
                 <thead className="sticky top-0 z-10 bg-base-200">
                     <tr className="text-left text-spur-text-muted uppercase tracking-wide text-[10px]">
@@ -835,6 +1135,16 @@ function SystemEventsTable({ rows, catalog }: { rows: SystemEventRow[]; catalog:
                                 Tier
                             </th>
                         )}
+                        {!isCompact && (
+                            <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
+                                Run
+                            </th>
+                        )}
+                        {!isCompact && (
+                            <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
+                                Outcome
+                            </th>
+                        )}
                     </tr>
                 </thead>
                 <tbody>
@@ -853,9 +1163,14 @@ function SystemEventsTable({ rows, catalog }: { rows: SystemEventRow[]; catalog:
 }
 
 /**
- * with the typed detail summary from the EventDetails renderers (R8) —
- * replacing the former row-expand interaction. Time is shown in local
- * "MMM D HH:mm:ss" format without the year.
+ * Event table row with a persistent, keyboard-reachable detail panel (R4).
+ *
+ * R2 (task 0375): run/action identity, duration, and outcome are surfaced on
+ * the row itself (Run + Outcome columns), not only in a hover affordance.
+ * R3: absent usage is rendered as `unavailable`, never as `0` or `-`.
+ * R4: the hover-only tooltip is replaced by a row-anchored expandable region
+ * toggled by a `<button aria-expanded>` - keyboard reachable (Enter/Space
+ * toggles, Escape collapses) and touch-usable (no `:hover` dependency).
  */
 function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: string; compact: boolean }) {
     const prefix = event.prefix ?? event.eventName.split('.')[0] ?? event.eventName;
@@ -864,49 +1179,156 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
         [event.eventName, event.payload, event.renderer],
     );
     const colorClass = getPrefixColor(prefix);
+    const [expanded, setExpanded] = useState(false);
+
+    // R3: run identity and outcome - absent => 'unavailable', never zero/blank.
+    const runId = formatAvailability(event.runId);
+    const duration = formatDuration(
+        event.payload && typeof event.payload === 'object'
+            ? (event.payload as Record<string, unknown>).durationMs
+            : undefined,
+    );
+    const outcome = formatAvailability(
+        event.payload && typeof event.payload === 'object'
+            ? ((event.payload as Record<string, unknown>).outcome ??
+                  (event.payload as Record<string, unknown>).status ??
+                  (event.payload as Record<string, unknown>).ok)
+            : undefined,
+    );
+    const entityLabel =
+        event.entityKind && event.entityId
+            ? `${event.entityKind}:${event.entityId}`
+            : formatAvailability(event.entityKind ?? event.entityId);
+
+    const onToggle = useCallback(() => setExpanded((prev) => !prev), []);
+    const onKeyDown = useCallback((e: React.KeyboardEvent) => {
+        if (e.key === 'Escape') {
+            setExpanded(false);
+            e.stopPropagation();
+        }
+    }, []);
 
     return (
-        <tr className="group hover:bg-base-200/60 transition-colors" style={{ height: compact ? undefined : 28 }}>
-            <td className="px-3 py-1 border-b border-spur-border/40 font-mono text-spur-text-muted whitespace-nowrap align-top">
-                {formatLocalTime(event.occurredAt)}
-            </td>
-            <td className="px-3 py-1 border-b border-spur-border/40 relative align-top">
-                <div className="flex flex-col gap-0.5">
-                    <span className={`font-mono font-semibold break-all ${colorClass}`}>{event.eventName}</span>
-                    {compact && event.actor && (
-                        <span className="text-[10px] text-spur-text-muted">by {event.actor}</span>
-                    )}
-                </div>
-                {summary && (
-                    <div
-                        role="tooltip"
-                        className="pointer-events-none absolute left-0 top-full mt-1 z-20 hidden group-hover:block bg-base-300 border border-spur-border rounded shadow-lg p-2 text-[11px] text-spur-text min-w-[180px] max-w-[min(360px,90vw)] whitespace-normal"
-                    >
-                        <dl className="space-y-0.5">
-                            {summary.map((row) => (
-                                <div key={row.label} className="flex gap-2">
-                                    <dt className="text-spur-text-muted shrink-0">{row.label}:</dt>
-                                    <dd className="font-mono break-all">{row.value}</dd>
-                                </div>
-                            ))}
-                        </dl>
+        <>
+            <tr className="group hover:bg-base-200/60 transition-colors" style={{ height: compact ? undefined : 28 }}>
+                <td className="px-3 py-1 border-b border-spur-border/40 font-mono text-spur-text-muted whitespace-nowrap align-top">
+                    {formatLocalTime(event.occurredAt)}
+                </td>
+                <td className="px-3 py-1 border-b border-spur-border/40 relative align-top">
+                    <div className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-1.5">
+                            <button
+                                type="button"
+                                aria-expanded={expanded}
+                                aria-controls={`detail-${event.id}`}
+                                aria-label={`${expanded ? 'Collapse' : 'Expand'} detail for ${event.eventName}`}
+                                onClick={onToggle}
+                                onKeyDown={onKeyDown}
+                                className="inline-flex items-center justify-center w-4 h-4 text-spur-text-muted hover:text-spur-text text-[10px] transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-spur-text/40 shrink-0"
+                            >
+                                {expanded ? '▾' : '▸'}
+                            </button>
+                            <span className={`font-mono font-semibold break-all ${colorClass}`}>{event.eventName}</span>
+                        </div>
+                        {compact && (
+                            <div className="flex flex-col gap-0.5 text-[10px] text-spur-text-muted">
+                                {event.actor && <span>by {event.actor}</span>}
+                                <span>run: {runId}</span>
+                                <span>
+                                    outcome: {outcome}
+                                    {duration ? ` · ${duration}` : ''}
+                                </span>
+                            </div>
+                        )}
                     </div>
+                </td>
+                {!compact && (
+                    <td className="px-3 py-0 border-b border-spur-border/40 text-spur-text-muted whitespace-nowrap align-top">
+                        {event.actor ?? 'unavailable'}
+                    </td>
                 )}
-            </td>
-            {!compact && (
-                <td className="px-3 py-0 border-b border-spur-border/40 text-spur-text-muted whitespace-nowrap align-top">
-                    {event.actor ?? '—'}
-                </td>
+                {!compact && (
+                    <td className="px-3 py-0 border-b border-spur-border/40 font-mono align-top">
+                        <span className={colorClass}>{prefix}</span>
+                    </td>
+                )}
+                {!compact && (
+                    <td className="px-3 py-0 border-b border-spur-border/40 text-spur-text-muted align-top">{tier}</td>
+                )}
+                {!compact && (
+                    <td className="px-3 py-0 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-top">
+                        {runId}
+                    </td>
+                )}
+                {!compact && (
+                    <td className="px-3 py-0 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-top">
+                        {outcome}
+                        {duration && <span className="text-spur-text-muted/60"> · {duration}</span>}
+                    </td>
+                )}
+            </tr>
+            {expanded && (
+                <tr>
+                    <td colSpan={compact ? 2 : 7} className="px-3 py-2 border-b border-spur-border/40 bg-base-300/40">
+                        <section
+                            id={`detail-${event.id}`}
+                            aria-label={`Detail for ${event.eventName}`}
+                            onKeyDown={onKeyDown}
+                            tabIndex={-1}
+                            className="flex flex-col gap-2 text-[11px] text-spur-text max-w-full"
+                        >
+                            {/* Correlation columns (R2): run, entity, sequence. */}
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px]">
+                                <span>
+                                    <span className="text-spur-text-muted">run:</span> {runId}
+                                </span>
+                                <span>
+                                    <span className="text-spur-text-muted">entity:</span> {entityLabel}
+                                </span>
+                                <span>
+                                    <span className="text-spur-text-muted">sequence:</span>{' '}
+                                    {formatAvailability(event.sequence)}
+                                </span>
+                                {duration && (
+                                    <span>
+                                        <span className="text-spur-text-muted">duration:</span> {duration}
+                                    </span>
+                                )}
+                                <span>
+                                    <span className="text-spur-text-muted">outcome:</span> {outcome}
+                                </span>
+                            </div>
+                            {/* Renderer-aware pair list (no 4-cap - R4). */}
+                            {summary && (
+                                <dl className="space-y-0.5">
+                                    {summary.map((row) => (
+                                        <div key={row.label} className="flex gap-2">
+                                            <dt className="text-spur-text-muted shrink-0">{row.label}:</dt>
+                                            <dd className="font-mono break-all">{row.value}</dd>
+                                        </div>
+                                    ))}
+                                </dl>
+                            )}
+                            {/* Full redacted envelope (raw JSON). Redaction is server-side. */}
+                            <div className="border-t border-spur-border/40 pt-1">
+                                <div className="text-spur-text-muted text-[10px] mb-0.5">payload (redacted):</div>
+                                <pre className="font-mono text-[10px] text-spur-text-muted overflow-x-auto whitespace-pre-wrap break-all">
+                                    {JSON.stringify(event.payload, null, 2)}
+                                </pre>
+                            </div>
+                            {/* Dismiss button - Escape also works via onKeyDown above. */}
+                            <button
+                                type="button"
+                                onClick={() => setExpanded(false)}
+                                className="self-start text-[10px] text-spur-text-muted hover:text-error px-2 py-0.5 rounded border border-spur-border/40 hover:border-error/40 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-spur-text/40"
+                            >
+                                Close (Esc)
+                            </button>
+                        </section>
+                    </td>
+                </tr>
             )}
-            {!compact && (
-                <td className="px-3 py-0 border-b border-spur-border/40 font-mono align-top">
-                    <span className={colorClass}>{prefix}</span>
-                </td>
-            )}
-            {!compact && (
-                <td className="px-3 py-0 border-b border-spur-border/40 text-spur-text-muted align-top">{tier}</td>
-            )}
-        </tr>
+        </>
     );
 }
 
@@ -916,7 +1338,7 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
  * filter (All | 30s | 5m).
  *
  * Built as a `role="group"` with a visually-hidden label and three
- * `<button role="radio" aria-checked>` children — keyboard users can tab to
+ * `<input type="radio">` children - keyboard users can tab to
  * the group and arrow between options.
  */
 function SegmentedToggle<V extends string>({
