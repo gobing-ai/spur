@@ -178,7 +178,8 @@ Monorepo scripts (not product verbs):
 bun run lint       # biome + per-workspace tsc --noEmit
 bun run format     # biome --write
 bun run test       # bun test --coverage (all workspaces)
-bun run test-cf    # Cloudflare Workers Vitest (server)
+bun run test-cf    # Cloudflare Workers Vitest against the real Worker entry
+bunx wrangler deploy --dry-run --config apps/server/wrangler.toml  # Worker bundle + dist/web asset-path gate
 bun run clean && bun run build
 bun run check      # lint + test
 bun run dev        # all workspace dev

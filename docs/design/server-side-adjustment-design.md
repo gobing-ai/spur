@@ -2,9 +2,9 @@
 doc: server-side-adjustment-design
 owns: HOW — mechanism, module interface shapes, wiring, layout, manifest format
 authority: design (derived from server-side-adjustment-feature-drafted v0.3)
-version: 0.2.1
-revision: incorporates operator feedback 2026-06-14 — mermaid diagrams; ts-runtime as the runtime-adaptation seam (enhance-first rule); SSE design complete (implementation deferred); oRPC link interceptor API corrected against installed @orpc/client@1.14.4 + @orpc/shared@1.14.4; all 6 open items resolved.
-updated_at: 2026-07-18
+version: 0.3.0
+revision: 2026-07-29 — ADR-036 splits the Worker-safe HTTP composition root from the Bun-only application graph and corrects the Workers Static Assets build path.
+updated_at: 2026-07-29
 derived_from: [server-side-adjustment-feature-drafted v0.3, 00_ADR, 03_ARCHITECTURE, codebase]
 read_before: implementing the server/web adjustment
 edit_rules: 99 §6.4
@@ -30,8 +30,8 @@ land in `04_DESIGN.md` in the same commit a command ships.
   `implement(contract)`, OpenAPI generated, client via `OpenAPILink`.
 - ADR-017: CLI bootstrap on `runNodeApplication`; `.spur/config.yaml` with a portable `bootstrap:`
   section. The server reuses the identical wiring.
-- ADR-019: two entries (`worker.ts` for Cloudflare via `runApplication`; `index.ts` for Bun via
-  `runNodeApplication`) sharing `bootstrap.ts`.
+- ADR-019/ADR-036: two entries (`worker.ts` for Cloudflare via `runApplication`; `index.ts` for Bun
+  via `runNodeApplication`) with separate composition roots over portable HTTP primitives.
 - ADR-021: apps are transport wrappers; functionality lives in `packages/app`. Both CLI commands
   and server routes call the same services — one write path, one lock domain.
 - ADR-022: lifecycle transitions go through `spur workflow` definitions; the markdown `status` is
@@ -694,12 +694,13 @@ exceed it, they're dropped. Configurable via `server.shutdownTimeoutMs` in a fut
 
 ```toml
 [assets]
-directory = "../web/dist"
+directory = "../../dist/web"
 not_found_handling = "single-page-application"
 ```
 
-The Worker's `fetch` handler checks the assets binding first; unmatched routes fall through to
-`createApp(appRt).fetch` for API handling.
+Workers Static Assets handles the SPA. Unmatched API routes fall through to
+`createWorkerApp(env).fetch`; Bun-only corpus, SQLite, scheduler, queue, and process-control routes
+return 503 because their dependencies do not exist in the Worker runtime.
 
 **Local-fallback:** Hono `serveStatic` from `webDistPath`. `createApp` mounts it after the API
 routes:
@@ -1496,7 +1497,7 @@ main = "src/worker.ts"
 compatibility_date = "2026-05-30"
 
 [assets]
-directory = "../web/dist"
+directory = "../../dist/web"
 not_found_handling = "single-page-application"
 ```
 

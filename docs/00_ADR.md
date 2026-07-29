@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.0.0
+version: 1.1.0
 owner: Robin Min
-updated_at: 2026-06-12
+updated_at: 2026-07-29
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -861,3 +861,18 @@ The separate controller and tee preserve both safety boundaries.
 **Detail:** `docs/design/workflow-observability.md`,
 `docs/design/workflow-steering-control-channel.md`,
 `packages/app/src/workflow/steering.ts`, `packages/app/src/observability/agent-execution.ts`.
+
+---
+
+## ADR-036: Cloudflare Workers Use a Dedicated Portable HTTP Composition Root
+
+**Status:** Accepted · **Date:** 2026-07-29
+
+**Decision.** The Bun server and Cloudflare Worker use separate composition roots over shared
+portable HTTP primitives; the Worker root exposes only routes whose dependency graph is
+Workers-safe and never imports local filesystem, process-control, or Bun SQLite services.
+
+**Why.** A shared eager app factory pulled Bun-only transitive dependencies into the Worker bundle,
+making the documented Worker deployment fail before startup.
+
+**Detail:** `docs/03_ARCHITECTURE.md §2`; `docs/04_DESIGN.md §5.1`.

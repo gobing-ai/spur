@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.6.0
+version: 1.7.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-07-28
+updated_at: 2026-07-29
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -560,7 +560,7 @@ One config object per source: `source` discriminant, `displayName`, `filePattern
 
 Web (`apps/web`) renders live health from the typed oRPC client. Deeper read surface is Phase 4.
 
-### 5.1 Bootstrap (ADR-019)
+### 5.1 Bootstrap (ADR-019, ADR-036)
 
 The server bootstraps through `@gobing-ai/ts-infra` using a runtime-aware split:
 
@@ -569,15 +569,17 @@ The server bootstraps through `@gobing-ai/ts-infra` using a runtime-aware split:
 | `src/index.ts` (Bun) | `runNodeApplication` | `ts-infra/application-node` | No (uses `node:fs`) |
 | `src/worker.ts` (CF Workers) | `runApplication` | `ts-infra/application` | Yes |
 
-**Shared seam (`src/bootstrap.ts`):**
+**Runtime seams:**
 
-| Export | Role |
-|--------|------|
-| `serverBootstrapConfig(env)` | Common `logging`/`telemetry`/`events` block with test-mute guard |
-| `createApp(appRt?)` | Hono app factory; optional `ApplicationRuntime` threads `logger`/`events`/`db` into Hono context + oRPC handler `context` |
+| Export | Runtime | Role |
+|--------|---------|------|
+| `serverBootstrapConfig(env)` | Shared | Portable `logging`/`telemetry`/`events` config with test-mute guard |
+| `createApp(appRt?, opts?)` | Bun | Full Hono module registry, oRPC context, and local static assets |
+| `createWorkerApp(env?)` | Workers | Health, readiness, project identity, OpenAPI, and explicit 503 for local-runtime API routes |
 
 The Worker entry uses a **lazy singleton** (`let rtPromise`) — no top-level await, `runApplication`
-initialized on first `fetch`. The Bun entry uses `runNodeApplication` mirroring the CLI (ADR-017).
+initialized on first `fetch`. Its static asset directory is `../../dist/web`, resolved relative to
+`apps/server/wrangler.toml`. The Bun entry uses `runNodeApplication` mirroring the CLI (ADR-017).
 ## 6. Plugin System (Removed — ADR-012 amended 2026-06-09)
 
 > **Amendment (2026-06-09):** The standalone `@gobing-ai/spur-plugin-sdk` is deleted. The bare

@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.2.0
+version: 1.3.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-06-12
+updated_at: 2026-07-29
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -115,17 +115,17 @@ flowchart TD
 The CLI never calls an engine around the service layer (ADR-021); engines reach SQLite only
 through persistence adapters constructed from `packages/domain`.
 
-The server/web tier is today a thin read-oriented slice (health vertical, Phase 4 expansion);
-its real shape — including the planning-layer board — is the pending server/web design task
-(ADR-021.b). The server bootstrap splits by runtime (ADR-019):
+The server/web tier is a local-first planning and operations board. Its bootstrap splits by runtime
+(ADR-019, amended by ADR-036):
 
 - **Bun entry (`index.ts`)** → `runNodeApplication` (`@gobing-ai/ts-infra/application-node`):
-  YAML config loading, file log sink, owned DB adapter, `Bun.serve` started inside `start(appRt)`.
+  YAML config loading, file log sink, owned DB adapter, full module registry, and local static assets.
 - **Worker entry (`worker.ts`)** → portable `runApplication` (`@gobing-ai/ts-infra/application`):
-  lazy singleton (cached promise, no top-level await), inline config, zero `node:*` imports.
+  lazy singleton plus `createWorkerApp`; health/OpenAPI routes and static-asset fallback only.
 
-Both entries share `src/bootstrap.ts` (`createApp`, `serverBootstrapConfig`) — the Hono app
-factory and bootstrap config block are runtime-agnostic.
+`src/server-config.ts` is shared and runtime-agnostic. `src/bootstrap.ts` is the Bun composition
+root; `src/worker-app.ts` is the Worker-safe HTTP root. The Worker graph must not import
+`node:*`, `bun:*`, local filesystem, SQLite, scheduler, queue, or process-control implementations.
 ## 3. CLI Architecture (`apps/cli`)
 
 No file inventory here — that rots (99 §6.4 lesson); boundaries only:
