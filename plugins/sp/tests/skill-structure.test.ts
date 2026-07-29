@@ -276,6 +276,79 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         statSync(join(skillDir, 'references', 'result-synthesis.md'));
     });
 
+    test('R24b — issue-finding skill, session-formats reference, and correct GENERATE CLI recipes', () => {
+        const skillDir = join(SKILLS_DIR, 'issue-finding');
+        const skill = readFileSync(join(skillDir, 'SKILL.md'), 'utf8');
+        const sessionFormats = readFileSync(join(skillDir, 'references', 'session-formats.md'), 'utf8');
+        const command = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-findissue.md'), 'utf8');
+        const fixture = readFileSync(join(skillDir, 'examples', 'session-test-loop.jsonl'), 'utf8');
+        const expected = JSON.parse(readFileSync(join(skillDir, 'examples', 'expected-findings.json'), 'utf8')) as {
+            expectedCategories: Array<{ id: string; commandContains?: string; minIdenticalCommandRuns?: number }>;
+        };
+        statSync(join(skillDir, 'agents', 'openai.yaml'));
+
+        // Thin command delegates to the skill SSOT.
+        expect(command).toContain('Skill(skill="sp:issue-finding", args="$ARGUMENTS")');
+        expect(command).toMatch(/argument-hint:.*\[<topic>\]/);
+        expect(command).toContain('--source');
+        expect(command).toContain('--severity');
+        expect(command).toContain('--min-cost');
+        expect(command).toContain('--no-task');
+        expect(command).toContain('--json');
+
+        // Optional topic + multi-source honesty live on the skill.
+        expect(skill).toContain('[topic]');
+        expect(skill).toContain('Smart positional');
+        expect(skill).toContain('--source');
+        expect(skill).toContain('--min-cost');
+        expect(skill).toContain('Bottleneck severity');
+        expect(skill).toContain('Task priority');
+        expect(skill).toContain('session-formats.md');
+        expect(skill).toContain('/sp:rule-scan');
+        expect(skill).toContain('examples/session-test-loop.jsonl');
+        expect(sessionFormats).toContain('~/.omp/agent/sessions/');
+        expect(sessionFormats).toContain('~/.claude/projects/');
+        expect(sessionFormats).toContain('spur history import');
+        // Runtime-path boundary: no build-time config/{workflows,...} literals in skill packaging.
+        expect(skill).not.toMatch(/config\/(plugins|rules|tasks|templates|workflows)/);
+        expect(sessionFormats).not.toMatch(/config\/(plugins|rules|tasks|templates|workflows)/);
+
+        // GENERATE must teach live CLI surface — assert only fenced bash recipes.
+        const bashBlocks = [...skill.matchAll(/```bash\n([\s\S]*?)```/g)].map((m) => m[1]);
+        expect(bashBlocks.length).toBeGreaterThan(0);
+        const bashJoined = bashBlocks.join('\n');
+        expect(bashJoined).toContain('--template meta');
+        expect(bashJoined).not.toContain('--template.meta');
+        expect(bashJoined).not.toMatch(/--name\s/);
+        expect(bashJoined).not.toContain('--section."');
+        expect(bashJoined).toContain('--section Background --from-file');
+        expect(skill).toContain('spur task update <wbs> --priority');
+        // Task priority is P0–P3 (CLI); bottleneck severity is S0–S2.
+        // Table cells escape pipes as \| — accept either escaped or raw form in prose.
+        expect(skill.includes('--priority <P0\\|P1\\|P2\\|P3>') || skill.includes('--priority <P0|P1|P2|P3>')).toBe(
+            true,
+        );
+        expect(skill).toContain('**S0**');
+        expect(skill).toContain('**S1**');
+        expect(skill).toContain('**S2**');
+
+        // Fixture carries IDENTIFY signals for the documented categories.
+        const categoryIds = expected.expectedCategories.map((c) => c.id);
+        expect(categoryIds).toContain('test-loop');
+        expect(categoryIds).toContain('guard');
+        expect(categoryIds).toContain('git-red-herring');
+        expect(categoryIds).toContain('compaction');
+        const testCmd = 'bun test packages/app/tests/services/feature-check.test.ts';
+        const testCmdHits = fixture.split('\n').filter((line) => line.includes(testCmd)).length;
+        expect(testCmdHits).toBeGreaterThanOrEqual(3);
+        expect(
+            fixture.split('\n').filter((line) => line.includes('"type":"compaction"')).length,
+        ).toBeGreaterThanOrEqual(6);
+        expect(fixture).toContain('spur task check 0376');
+        expect(fixture).toContain('git stash');
+        expect(fixture).toContain('"type":"toolCall"');
+    });
+
     test('R25 — sys-debugging skill and protocol reference exist (task 0165)', () => {
         const d = join(SKILLS_DIR, 'sys-debugging');
         statSync(join(d, 'SKILL.md'));
@@ -531,7 +604,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const ROUTER_SKILLS = new Set(['spur-dev', 'spur-cli']);
         const NON_ROUTER_BUDGET = 350;
         const ROUTER_BUDGET = 600;
-        const AGGREGATE_BUDGET = 7000; // scales with skill count (24 skills post-0275 next-router); per-skill caps below are the real bloat guard
+        const AGGREGATE_BUDGET = 7200; // scales with skill count (26 skills incl. issue-finding); per-skill caps below are the real bloat guard
 
         let aggregate = 0;
         const offenders: string[] = [];
@@ -927,6 +1000,9 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(outputDiscipline).toContain('--reporter=dots');
         expect(outputDiscipline).toContain('--test-name-pattern');
         expect(outputDiscipline).toContain('set -o pipefail');
+        expect(outputDiscipline).toContain(['$', '{PIPESTATUS[0]}'].join(''));
+        expect(outputDiscipline).toContain('$pipestatus[1]');
+        expect(outputDiscipline).toContain('exit "$test_status"');
         expect(outputDiscipline).toContain('target under 500 tokens');
 
         const sectionEditing = readFileSync(
@@ -951,7 +1027,10 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const spine = readFileSync(join(SKILLS_DIR, 'spur-dev', 'SKILL.md'), 'utf8');
         expect(spine).toContain('references/section-batching.md');
         const batching = readFileSync(join(SKILLS_DIR, 'spur-dev', 'references', 'section-batching.md'), 'utf8');
-        expect(batching).toContain('Stage complete, body-only `Solution`, `Testing`, and `Review`');
+        const stageIndex = batching.indexOf('Stage complete, body-only `Solution`, `Testing`, and `Review`');
+        const firstCheckIndex = batching.indexOf('Run `spur task check <wbs> --json` once');
+        expect(stageIndex).toBeGreaterThan(-1);
+        expect(firstCheckIndex).toBeGreaterThan(stageIndex);
         expect(batching).toContain('two task checks per task');
 
         const pipeline = readFileSync(join(WORKFLOWS_DIR, 'task-pipeline.yaml'), 'utf8');
@@ -962,5 +1041,12 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const debugging = readFileSync(join(SKILLS_DIR, 'sys-debugging', 'SKILL.md'), 'utf8');
         expect(debugging).toContain('### Source before git state');
         expect(debugging).toContain('A stash touching different files has no causal evidence');
+
+        const sectionMatrix = readFileSync(join(REPO_ROOT, 'config', 'tasks', 'section-matrix.yaml'), 'utf8');
+        const metaMatrix = sectionMatrix.slice(
+            sectionMatrix.indexOf('  meta:'),
+            sectionMatrix.indexOf('  brainstorm:'),
+        );
+        expect(metaMatrix).toContain('Root Cause');
     });
 });

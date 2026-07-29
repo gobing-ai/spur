@@ -797,6 +797,27 @@ describe('(i) task 0316 — dev-debug and dev-daily entry points', () => {
         expect(implSection(raw)).toContain('$ARGUMENTS');
         expect(raw).not.toContain('Skill(skill="sp:daily-summary"');
     });
+
+    test('dev-findissue wrapper passes contract gates and delegates to sp:issue-finding', () => {
+        const raw = readFileSync(join(COMMANDS_DIR, 'dev-findissue.md'), 'utf8');
+        expect(raw).toContain('description:');
+        expect(raw).toMatch(/^argument-hint:.*\[<topic>\]/m);
+        expect(raw).toContain('allowed-tools: ["Bash", "Read", "Write", "Grep", "Glob", "Skill"]');
+        expect(raw).toContain('# Dev Find Issue');
+        expect(raw).toContain('## Usage');
+        expect(raw).toContain('## Implementation');
+        expect(implSection(raw)).toContain('Skill(skill="sp:issue-finding", args="$ARGUMENTS")');
+        // Topic + multi-source filters surface on the thin wrapper (skill owns protocol depth).
+        expect(raw).toContain('--source');
+        expect(raw).toContain('--severity');
+        expect(raw).toContain('--category');
+        expect(raw).toContain('--min-cost');
+        expect(raw).toContain('--no-task');
+        expect(raw).toContain('--json');
+        // Skill SSOT exists for target resolution.
+        expect(existsSync(join(SKILLS_DIR, 'issue-finding', 'SKILL.md'))).toBe(true);
+        expect(existsSync(join(SKILLS_DIR, 'issue-finding', 'examples', 'session-test-loop.jsonl'))).toBe(true);
+    });
 });
 
 // ─── (j) task 0318 — least-privilege allowed-tools sweep ───────────────────
