@@ -1113,6 +1113,22 @@ filters, composed with `name`/`since` under AND. `GET /api/events/history` proje
 columns additively as `runId`, `entityKind`, `entityId`, `sequence`; no existing response
 field is renamed, dropped, or re-typed.
 
+**Server-side filters + keyset pagination (task 0372).** Filters run in SQL (never by
+post-filtering a prefetched page). Order is `occurred_at DESC, id DESC` so a keyset
+cursor is a total order under concurrent inserts.
+
+| Surface | Contract |
+| --- | --- |
+| `GET /api/events/history` | Newest-first page over `system_events` |
+| Query (v1, preserved) | `name`, `since`, `limit` (default **100**, max **500**) |
+| Query (0372) | `prefix`, `names` (comma or repeated), `runId`, `actor`, `cursor` |
+| Success body | `{ events, count, catalog, nextCursor, hasMore }` — `nextCursor`/`hasMore` are additive |
+| `nextCursor` | Opaque base64url keyset of the last returned row when `hasMore`; else `null` |
+| `prefix` | Cataloged family only (`SYSTEM_EVENT_PREFIXES`); unknown → **400** `{ error, code: "UNKNOWN_PREFIX" }` |
+| `cursor` | Malformed → **400** `{ error, code: "MALFORMED_CURSOR" }` — never falls back to unfiltered |
+| DAO filters | `prefix` (`LIKE 'prefix.%'`), `names` (`IN`), `actor`, `before: { occurred_at, id }` exclusive keyset |
+| Stability | Newer concurrent inserts do not reappear on later pages; rows older than the cursor are not skipped |
+
 
 ## Team + Message HTTP Routes (0256)
 

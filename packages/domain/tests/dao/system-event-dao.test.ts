@@ -492,4 +492,154 @@ describe('SystemEventDao', () => {
 
         adapter.close();
     });
+
+    test('query filters by prefix in SQL (R18)', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        await dao.insert({
+            id: 'sev_task',
+            event_name: 'task.created',
+            occurred_at: '2026-07-04T01:00:00.000Z',
+        });
+        await dao.insert({
+            id: 'sev_workflow',
+            event_name: 'workflow.phase',
+            occurred_at: '2026-07-04T02:00:00.000Z',
+        });
+        await dao.insert({
+            id: 'sev_queue',
+            event_name: 'queue.job.enqueued',
+            occurred_at: '2026-07-04T03:00:00.000Z',
+        });
+
+        const rows = await dao.query({ prefix: 'task' });
+        expect(rows).toHaveLength(1);
+        expect(rows[0]?.event_name).toBe('task.created');
+
+        adapter.close();
+    });
+
+    test('query filters by multi-value names (R18)', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        for (const name of ['task.created', 'task.updated', 'feature.created']) {
+            await dao.insert({
+                id: createId('sev'),
+                event_name: name,
+                occurred_at: '2026-07-04T01:00:00.000Z',
+            });
+        }
+
+        const rows = await dao.query({ names: ['task.created', 'feature.created'] });
+        expect(rows).toHaveLength(2);
+        expect(rows.map((r) => r.event_name).sort()).toEqual(['feature.created', 'task.created']);
+
+        adapter.close();
+    });
+
+    test('query filters by actor (R19)', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        await dao.insert({
+            id: createId('sev'),
+            event_name: 'task.updated',
+            occurred_at: '2026-07-04T01:00:00.000Z',
+            actor: 'operator',
+        });
+        await dao.insert({
+            id: createId('sev'),
+            event_name: 'task.updated',
+            occurred_at: '2026-07-04T02:00:00.000Z',
+            actor: 'agent-1',
+        });
+        await dao.insert({
+            id: createId('sev'),
+            event_name: 'task.updated',
+            occurred_at: '2026-07-04T03:00:00.000Z',
+            actor: null,
+        });
+
+        const rows = await dao.query({ actor: 'operator' });
+        expect(rows).toHaveLength(1);
+        expect(rows[0]?.actor).toBe('operator');
+
+        adapter.close();
+    });
+
+    test('keyset cursor is stable under concurrent newer inserts (R20)', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        // Seed five rows in ascending time so page1 = newest two.
+        for (let i = 1; i <= 5; i++) {
+            await dao.insert({
+                id: `sev_${i}`,
+                event_name: 'task.updated',
+                occurred_at: `2026-07-04T0${i}:00:00.000Z`,
+            });
+        }
+
+        const page1 = await dao.query({ limit: 2 });
+        expect(page1.map((r) => r.id)).toEqual(['sev_5', 'sev_4']);
+        const page1Last = page1[1];
+        expect(page1Last).toBeDefined();
+        if (!page1Last) throw new Error('expected page1 last row');
+        const cursor = { occurred_at: page1Last.occurred_at, id: page1Last.id };
+
+        // Concurrent write: a brand-new event newer than everything on page 1.
+        await dao.insert({
+            id: 'sev_new',
+            event_name: 'task.updated',
+            occurred_at: '2026-07-04T09:00:00.000Z',
+        });
+
+        const page2 = await dao.query({ before: cursor, limit: 2 });
+        // No already-returned event reappears; no older event is skipped.
+        expect(page2.map((r) => r.id)).toEqual(['sev_3', 'sev_2']);
+        expect(page2.every((r) => r.id !== 'sev_5' && r.id !== 'sev_4' && r.id !== 'sev_new')).toBe(true);
+
+        const page2Last = page2[1];
+        expect(page2Last).toBeDefined();
+        if (!page2Last) throw new Error('expected page2 last row');
+        const page3 = await dao.query({
+            before: { occurred_at: page2Last.occurred_at, id: page2Last.id },
+            limit: 2,
+        });
+        expect(page3.map((r) => r.id)).toEqual(['sev_1']);
+
+        adapter.close();
+    });
+
+    test('keyset cursor tie-breaks equal timestamps by id', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        const ts = '2026-07-04T12:00:00.000Z';
+        // Lexicographic id order: a < b < c → DESC page order is c, b, a.
+        for (const id of ['sev_a', 'sev_b', 'sev_c']) {
+            await dao.insert({ id, event_name: 'task.updated', occurred_at: ts });
+        }
+
+        const page1 = await dao.query({ limit: 2 });
+        expect(page1.map((r) => r.id)).toEqual(['sev_c', 'sev_b']);
+        const page1Last = page1[1];
+        expect(page1Last).toBeDefined();
+        if (!page1Last) throw new Error('expected page1 last row');
+
+        const page2 = await dao.query({
+            before: { occurred_at: page1Last.occurred_at, id: page1Last.id },
+            limit: 2,
+        });
+        expect(page2.map((r) => r.id)).toEqual(['sev_a']);
+
+        adapter.close();
+    });
 });

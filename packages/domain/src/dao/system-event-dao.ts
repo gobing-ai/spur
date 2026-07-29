@@ -36,10 +36,33 @@ export interface CreateSystemEventInput {
     sequence?: number | null;
 }
 
+/**
+ * Exclusive keyset cursor for newest-first pagination (task 0372).
+ * Rows strictly older than `(occurred_at, id)` are returned; concurrent inserts
+ * with a newer timestamp cannot reappear on later pages.
+ */
+export interface SystemEventQueryCursor {
+    /** ISO timestamp of the last row of the previous page. */
+    occurred_at: string;
+    /** Primary key of the last row of the previous page (tie-break). */
+    id: string;
+}
+
 /** Filter options for {@link SystemEventDao.query}. */
 export interface SystemEventQuery {
     /** Filter by event name (e.g. `task.updated`). */
     name?: string;
+    /**
+     * Multi-value event-name filter (task 0372). Applied as `event_name IN (...)`.
+     * Empty arrays are ignored (no filter).
+     */
+    names?: readonly string[];
+    /**
+     * Event-name prefix filter (task 0372), e.g. `task` → `event_name LIKE 'task.%'`.
+     * Catalog validation is the caller's responsibility (history endpoint rejects
+     * uncataloged prefixes before reaching the DAO).
+     */
+    prefix?: string;
     /** ISO timestamp — only events strictly newer than this are returned. */
     since?: string;
     /** Filter by run id (task 0369 correlation column). */
@@ -48,6 +71,13 @@ export interface SystemEventQuery {
     entity_kind?: string;
     /** Filter by entity id. */
     entity_id?: string;
+    /** Filter by actor column (task 0372). */
+    actor?: string;
+    /**
+     * Exclusive keyset cursor (task 0372). When set, only rows strictly older
+     * than this position are returned (`ORDER BY occurred_at DESC, id DESC`).
+     */
+    before?: SystemEventQueryCursor;
     /** Max rows to return (newest first). Default 100. */
     limit?: number;
 }
@@ -150,39 +180,73 @@ export class SystemEventDao {
         }
     }
     /**
-     * Query events newest-first, optionally filtered by `name`, `since`
-     * (ISO timestamp, exclusive), and the indexed correlation columns
-     * (`run_id`, `entity_kind`, `entity_id` — task 0369). Filters compose with
-     * AND, so `{ entity_kind, entity_id }` resolves one entity's stream through
-     * `idx_system_events_entity` in a single indexed round trip rather than a
-     * client-side scan of the newest-N window.
+     * Query events newest-first, optionally filtered by name(s), prefix, since,
+     * actor, the indexed correlation columns (`run_id`, `entity_kind`,
+     * `entity_id` — task 0369), and an exclusive keyset cursor (`before` —
+     * task 0372). Filters compose with AND and are applied in SQL, never by
+     * post-filtering a prefetched page.
+     *
+     * Ordering is `occurred_at DESC, id DESC` so a `(occurred_at, id)` cursor is
+     * a total order: concurrent inserts newer than the cursor cannot reappear on
+     * later pages, and rows older than the cursor are never skipped.
      *
      * Returns `[]` if the table is absent (e.g. an unmigrated DB) so a missing
      * ledger never breaks the history endpoint.
      */
     async query(spec: SystemEventQuery = {}): Promise<SystemEventRow[]> {
         const limit = spec.limit ?? 100;
-        // Filters are assembled rather than branched: five optional predicates
-        // would otherwise need 32 hand-written statements.
-        const filters: Array<{ column: string; op: string; value: string }> = [];
-        if (spec.name !== undefined) filters.push({ column: 'event_name', op: '=', value: spec.name });
-        if (spec.since !== undefined) filters.push({ column: 'occurred_at', op: '>', value: spec.since });
-        if (spec.run_id !== undefined) filters.push({ column: 'run_id', op: '=', value: spec.run_id });
-        if (spec.entity_kind !== undefined) filters.push({ column: 'entity_kind', op: '=', value: spec.entity_kind });
-        if (spec.entity_id !== undefined) filters.push({ column: 'entity_id', op: '=', value: spec.entity_id });
+        // Clause fragments + bound params assembled together so IN / LIKE /
+        // keyset predicates share one parameter counter with the simple equals.
+        const clauses: string[] = [];
+        const params: Array<string | number> = [];
+        const pushEq = (column: string, value: string) => {
+            params.push(value);
+            clauses.push(`${column} = ?${params.length}`);
+        };
 
-        const where =
-            filters.length === 0
-                ? ''
-                : `WHERE ${filters.map((f, index) => `${f.column} ${f.op} ?${index + 1}`).join(' AND ')}`;
-        const params: Array<string | number> = [...filters.map((f) => f.value), limit];
+        if (spec.name !== undefined) pushEq('event_name', spec.name);
+        if (spec.names !== undefined && spec.names.length > 0) {
+            const placeholders: string[] = [];
+            for (const name of spec.names) {
+                params.push(name);
+                placeholders.push(`?${params.length}`);
+            }
+            clauses.push(`event_name IN (${placeholders.join(', ')})`);
+        }
+        if (spec.prefix !== undefined) {
+            // Prefix is a cataloged family name (`task`, `workflow`, …), never a
+            // user-supplied LIKE pattern — still escape LIKE metacharacters so a
+            // future prefix containing `_` cannot broaden the match.
+            const escaped = spec.prefix.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_');
+            params.push(`${escaped}.%`);
+            clauses.push(`event_name LIKE ?${params.length} ESCAPE '\\'`);
+        }
+        if (spec.since !== undefined) {
+            params.push(spec.since);
+            clauses.push(`occurred_at > ?${params.length}`);
+        }
+        if (spec.run_id !== undefined) pushEq('run_id', spec.run_id);
+        if (spec.entity_kind !== undefined) pushEq('entity_kind', spec.entity_kind);
+        if (spec.entity_id !== undefined) pushEq('entity_id', spec.entity_id);
+        if (spec.actor !== undefined) pushEq('actor', spec.actor);
+        if (spec.before !== undefined) {
+            // Exclusive keyset: strictly older than the previous page's last row.
+            params.push(spec.before.occurred_at);
+            const atIdx = params.length;
+            params.push(spec.before.id);
+            const idIdx = params.length;
+            clauses.push(`(occurred_at < ?${atIdx} OR (occurred_at = ?${atIdx} AND id < ?${idIdx}))`);
+        }
+
+        const where = clauses.length === 0 ? '' : `WHERE ${clauses.join(' AND ')}`;
+        params.push(limit);
 
         try {
             return await this.db.queryAll<SystemEventRow>(
                 `SELECT ${SYSTEM_EVENT_COLUMNS}
                  FROM system_events
                  ${where}
-                 ORDER BY occurred_at DESC
+                 ORDER BY occurred_at DESC, id DESC
                  LIMIT ?${params.length}`,
                 ...params,
             );

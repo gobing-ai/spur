@@ -11,6 +11,7 @@ export {
     type CreateSystemEventInput,
     SystemEventDao,
     type SystemEventQuery,
+    type SystemEventQueryCursor,
     type SystemEventRetentionQuota,
     type SystemEventRetentionQuotas,
     type SystemEventRow,
