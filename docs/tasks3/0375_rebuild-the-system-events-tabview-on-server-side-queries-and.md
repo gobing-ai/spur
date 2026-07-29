@@ -12,7 +12,7 @@ priority: P1
 tags: ["board", "web", "observability"]
 dependencies: ["0369", "0372"]
 created_at: "2026-07-29T00:15:02.339Z"
-updated_at: "2026-07-29T00:25:36.101Z"
+updated_at: "2026-07-29T05:51:39.477Z"
 ---
 
 ## 0375. Rebuild the System Events tabview on server-side queries and surface the enriched envelope fields
@@ -43,13 +43,49 @@ Scenario: R8 — A malformed row or frame never breaks the tabview
 <!-- Clarifications and decisions made during refinement. Keep empty if none. -->
 
 ### Design
+Repoint the tabview at J3's server-side filtered, cursor-paginated `/api/events/history` and give the enriched envelope fields a persistent, keyboard-reachable home. The filter bar stops being a client-side `useMemo` over a fixed 100-row window and becomes a set of query params (`prefix`, `names`, `runId`, `actor`) sent to the server; a keyset cursor (`nextCursor`/`hasMore` already in the J3 response, `apps/server/src/modules/events/index.ts:303-333`) pages backward through matching events that fall outside the newest page. The SSE live tail, tri-state indicator, and rolling event-rate strip stay on the same header row and keep running; live frames are client-gated against the active filter before prepend so a filter does not pollute the stream (the SSE channel is a single multiplexed push of all planning events and cannot be retro-filtered server-side).
 
-<!-- Chosen implementation approach, key tradeoffs, invariants, and impacted surfaces. -->
+**Tradeoffs.** Server-side filtering trades an instant in-memory filter for a network round-trip per filter change. It wins because the fixed window is the root defect: a prefix absent from the newest 100 rows returns nothing today and there is no way to page back (`SystemEventsTab.tsx:432-451`, `:508-542`). Debounce filter mutations (≥250 ms) so the input does not fire a request per keystroke. Keyset cursor over offset: the server already implements an exclusive `(occurred_at, id)` cursor (`packages/domain/src/dao/system-event-dao.ts:231-238`) that is stable under concurrent inserts; the client treats `nextCursor` as opaque and never synthesizes it. Persistent detail panel over CSS-hover tooltip: hover is unreachable on touch and cannot show the full envelope (`SystemEventsTab.tsx:880-894`); a row-anchored, dismissible, keyboard-toggleable panel costs vertical space but is the only way to satisfy R4. The 4-pair cap in `buildTooltipSummary` (`:401`) is dropped; the same renderer-aware extraction feeds the detail panel without a cap.
 
+**Invariants.**
+- Absent usage is rendered as `unavailable`, never as `0` or blank (R3). `usage`/`durationMs`/`outcome` absent on the row or `null` in the payload ⇒ the literal token `unavailable`.
+- A malformed row or SSE frame is dropped without breaking its neighbours: `parseHistoryRow`/`parseSseEnvelope` already return `null` per element (`SystemEventsTab.tsx:137-169`, `:204-233`); extend them to accept the new correlation fields as optional, never required.
+- The cursor is opaque to the client; a `MALFORMED_CURSOR`/`UNKNOWN_PREFIX` 400 surfaces as an error state, never a silent fallback to page 1 (server enforces, `index.ts:269-289`).
+- SSE prepend only inserts a frame that passes the active filter; a frame failing the filter is silently dropped so the live tail stays coherent under a filter (R5).
+- Redaction is server-side and already complete: `normalizeSystemEventPayload` runs ahead of persistence (`packages/app/src/services/event-names.ts:244-263`), so the "full redacted envelope" is the stored `payload` plus the correlation columns — the client never re-redacts.
+
+**Impacted surfaces.**
+- `apps/web/src/modules/observability/SystemEventsTab.tsx:6-14` — `SystemEventRow`: add optional `runId?`, `entityKind?`, `entityId?`, `sequence?`.
+- `SystemEventsTab.tsx:25-30` — `HistoryResponse`: add `nextCursor: string | null`, `hasMore: boolean`.
+- `SystemEventsTab.tsx:43` — `historyUrl`: accept filter params (`prefix`, `names`, `runId`, `actor`) + `cursor`; drop the fixed-`limit`-only signature.
+- `SystemEventsTab.tsx:118-134` — `parseHistoryResponse`: read `nextCursor`/`hasMore`; keep `count`/`catalog` back-compat.
+- `SystemEventsTab.tsx:137-169` — `parseHistoryRow`: accept the four correlation fields as optional strings/number.
+- `SystemEventsTab.tsx:263-402` — `buildTooltipSummary`: drop the `.slice(0, 4)` cap (`:401`); rename/repurpose as the detail-panel renderer (full pair list, no cap).
+- `SystemEventsTab.tsx:417-696` — main component: replace the `filteredEvents` `useMemo` (`:508-542`) with a server-query state machine (idle/loading/loaded/error + `nextCursor`/`hasMore`/`loadingMore`); debounce filter→param mapping; add a "Load older" affordance; gate SSE prepend by the active filter.
+- `SystemEventsTab.tsx:576-694` — render: add "Load older" button when `hasMore`; add row identity/outcome columns; mount the detail panel.
+- `SystemEventsTab.tsx:790-853` — `SystemEventsTable`: add Run / Outcome columns (compact-collapse under 640 px stays).
+- `SystemEventsTab.tsx:860-911` — `EventTableRow`: remove the `role="tooltip"` `group-hover:block` block (`:880-894`); render run/action/duration/outcome on the row; add a keyboard-toggleable detail region.
+- `apps/server/src/modules/events/index.ts:245-334` — no change; consumed as-is.
 ### Plan
+1. **(R1)** Extend `SystemEventRow` (`SystemEventsTab.tsx:6-14`) with optional `runId?`, `entityKind?`, `entityId?`, `sequence?`; extend `HistoryResponse` (`:25-30`) with `nextCursor: string | null` and `hasMore: boolean`. Extend `parseHistoryRow` (`:137-169`) to accept the four correlation fields as optional (string/string/string/number) - never required, so a pre-0369 row still parses. Extend `parseHistoryResponse` (`:118-134`) to read `nextCursor`/`hasMore`. → AC: R3 (filtering server-side).
 
-<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
+2. **(R1)** Replace `historyUrl` (`:43`) with a builder that serializes the active filter: `prefix` (single selected prefix or omitted), `names` (search-when-scope=name, comma-joined), `actor` (search-when-scope=actor), `runId` (new optional input), `limit` (page size, default 100), and `cursor` (opaque, from `nextCursor`). Drop the fixed `HISTORY_LIMIT`-only signature. Map `tierFilter` and `timeWindow` to server params where the server supports them (tier has no direct server param - keep it as a client-side post-filter on the returned page only, since the catalog tier is metadata not a SQL column; `timeWindow` maps to `since=`). → AC: R3.
 
+3. **(R1, cursor state machine)** Replace the `filteredEvents` `useMemo` (`:508-542`) with a query state machine: states `idle | loading | loaded | error`; `page: SystemEventRow[]`; `nextCursor: string | null`; `hasMore: boolean`; `loadingMore: boolean`. `loadPage(filter, cursor?)` calls the new history URL, parses via `parseHistoryResponse`, and on success sets `loaded` + `page` + `nextCursor` + `hasMore`; on 400 `UNKNOWN_PREFIX`/`MALFORMED_CURSOR` sets `error` (never falls back to page 1). A `loadMore()` appends the older page to `page` when `hasMore && !loadingMore`, advancing `nextCursor`. Debounce filter mutations (≥250 ms) so the input fires one request per settled change, not per keystroke. → AC: R3.
+
+4. **(R5)** Keep the SSE `useEffect` (`:454-487`) and `useRollingEventRate` (`:84-111`) intact. Add a client-side filter gate in `es.onmessage`: build the same predicate the server filter encodes (prefix match, name/actor search, runId, since-cutoff) and `return` early on a non-matching frame so only matching events prepend. The tri-state `sseStatus` and the `LivenessStrip` (`:712-752`) keep rendering; `shown`/`total` now read `page.length`/`page.length` (the server total is not returned - show `page.length shown` plus `hasMore ? '· more available' : ''`). → AC: R7.
+
+5. **(R2)** Surface run/action identity, duration, and outcome on the row. In `EventTableRow` (`:860-911`), read `event.runId`, `event.entityKind:entityId`, and from `payload` pick `durationMs` (via existing `formatDuration`, `:257-261`), `outcome`/`status`/`ok`. Render these as inline mono cells/badges in the Event column (compact) or new Run/Outcome columns (wide, `SystemEventsTable` `:790-853`). Drop the hover-only `role="tooltip"` `group-hover:block` block (`:880-894`). → AC: R4.
+
+6. **(R3, unavailable-vs-zero invariant)** Wherever a numeric/identity field is absent (`null`/`undefined`/`''`/non-finite `durationMs`), render the literal token `unavailable` - never `0`, never `-`, never blank. Add a `formatAvailability(value): string` helper returning the value or `'unavailable'`. This is the load-bearing invariant for R3. → AC: R5.
+
+7. **(R4)** Add a persistent, dismissible detail affordance. Replace the hover tooltip with a row-anchored expandable region: a `<button aria-expanded>` on the row toggles a panel below the row that renders the full redacted envelope - the renderer-aware pair list from `buildTooltipSummary` with the 4-cap removed (`:401`), plus a raw `JSON.stringify(payload)` block and the correlation columns (`runId`, `entityKind:entityId`, `sequence`). Keyboard: Enter/Space toggles, Escape collapses, the panel is in the tab order. Touch-reachable (no `:hover` dependency). → AC: R6.
+
+8. **(R6)** Preserve runtime narrowing: keep `parseHistoryRow`/`parseSseEnvelope` returning `null` on any shape failure so a single bad row/frame is dropped without aborting the page (`:137-169`, `:204-233`). The query state machine treats a `null` `parseHistoryResponse` as `error`, but a page with some-rows-dropped is still `loaded`. Add a regression test: a history response with one malformed row yields a loaded page minus that row, not an error. → AC: R8.
+
+9. **(R7)** Preserve the responsive collapse (`useMediaQuery`, `:759-776`) and the filter-control a11y contract: `SegmentedToggle` radio group (`:922-962`), prefix `fieldset`/`legend`/`role="switch"` (`:595-621`), `aria-live` count (`:680-682`). The new Run/Outcome columns collapse under 640 px into the Event cell; the detail panel is full-width regardless of viewport. → AC: R7 (filter a11y) + R7 (liveness under filter, covered in step 4).
+
+10. **(Verify)** Smoke-test: with a filter active, confirm (a) "Load older" advances the cursor and prepends no duplicates, (b) an SSE frame for a non-matching prefix does not appear, (c) a row with `runId=null` shows `unavailable` not `0`, (d) the detail panel opens via keyboard and dismisses via Escape, (e) a malformed row in the response is dropped without an error state. Unit-test the `formatAvailability` invariant and the `parseHistoryRow` optional-field acceptance. → AC: R3, R4, R5, R6, R7, R8.
 ### Solution
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->
