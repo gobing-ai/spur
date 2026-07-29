@@ -103,10 +103,10 @@ function narrowJobFields(eventName: string, payload: Record<string, unknown> | n
         return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
     };
     const suffix = eventName.split('.').pop() ?? '';
+    fields.durationMs = pickNumber('durationMs');
     if (suffix === 'executed') {
         // scheduler.job.executed -> { name, durationMs, error? }
         fields.name = pickString('name');
-        fields.durationMs = pickNumber('durationMs');
         fields.error = pickString('error');
     } else {
         // queue.job.* -> { jobId, type, ... }
@@ -223,6 +223,15 @@ function groupJobEvents(events: SystemEventRow[]): JobListItem[] {
         }
     }
     return items;
+}
+
+/** Total queue-story duration from the oldest to newest correlated event. */
+function jobThreadDurationMs(events: SystemEventRow[]): number | null {
+    if (events.length < 2) return null;
+    const newest = Date.parse(events[0]?.occurredAt ?? '');
+    const oldest = Date.parse(events.at(-1)?.occurredAt ?? '');
+    if (!Number.isFinite(newest) || !Number.isFinite(oldest)) return null;
+    return Math.max(0, newest - oldest);
 }
 
 /** Jobs tab: queue status cards plus recent queue/scheduler events. */
@@ -354,11 +363,9 @@ function JobEventCard({ row }: { row: SystemEventRow }) {
                                 attempt <span className="font-mono text-spur-text">{fields.attempt}</span>
                             </span>
                         )}
-                        {durationLabel !== null && (
-                            <span>
-                                duration <span className="font-mono text-spur-text">{durationLabel}</span>
-                            </span>
-                        )}
+                        <span>
+                            duration <span className="font-mono text-spur-text">{durationLabel ?? 'unavailable'}</span>
+                        </span>
                         {fields.error !== undefined && (
                             <span className="text-error truncate max-w-md" title={fields.error}>
                                 {fields.error}
@@ -389,7 +396,13 @@ function JobThreadCard({ item }: { item: JobThreadItem }) {
     const fields = useMemo(() => (latest ? narrowJobFields(latest.eventName, latest.payload) : null), [latest]);
     if (!latest || !fields) return null;
     const jobState = deriveJobState(latest.eventName);
-    const durationLabel = fields.durationMs !== undefined ? formatDuration(fields.durationMs) : null;
+    const storyDuration = jobThreadDurationMs(item.events);
+    const durationLabel =
+        fields.durationMs !== undefined
+            ? formatDuration(fields.durationMs)
+            : storyDuration !== null
+              ? formatDuration(storyDuration)
+              : null;
 
     return (
         <li>
@@ -415,11 +428,9 @@ function JobThreadCard({ item }: { item: JobThreadItem }) {
                                 attempt <span className="font-mono text-spur-text">{fields.attempt}</span>
                             </span>
                         )}
-                        {durationLabel !== null && (
-                            <span>
-                                duration <span className="font-mono text-spur-text">{durationLabel}</span>
-                            </span>
-                        )}
+                        <span>
+                            duration <span className="font-mono text-spur-text">{durationLabel ?? 'unavailable'}</span>
+                        </span>
                         {fields.error !== undefined && (
                             <span className="text-error truncate max-w-md" title={fields.error}>
                                 {fields.error}

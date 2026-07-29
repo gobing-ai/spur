@@ -189,9 +189,14 @@ function parseRunDetail(v: unknown): RunDetail | null {
 }
 
 function parseWbsLinksResponse(v: unknown): WbsLink[] | null {
-    if (!Array.isArray(v)) return null;
+    const rawLinks = Array.isArray(v)
+        ? v
+        : v !== null && typeof v === 'object' && Array.isArray((v as Record<string, unknown>).links)
+          ? ((v as Record<string, unknown>).links as unknown[])
+          : null;
+    if (!rawLinks) return null;
     const links: WbsLink[] = [];
-    for (const item of v) {
+    for (const item of rawLinks) {
         if (item === null || typeof item !== 'object') continue;
         const o = item as Record<string, unknown>;
         if (!isStr(o.runId) || !isStr(o.kind) || !isStr(o.linkedAt)) continue;

@@ -213,32 +213,27 @@ export default function SupervisorTab() {
         [reload],
     );
 
-    // ── Error-degraded state (R7) ─────────────────────────────────────────
-    if (error && teams.length === 0) {
-        return (
-            <div className="p-4 text-sm text-error" role="alert" data-supervisor-tab-error>
-                Failed to load teams: {error}
-            </div>
-        );
-    }
-    if (teams.length === 0 && !error) {
-        return (
-            <div className="p-4 text-sm text-spur-text-muted" data-supervisor-tab-loading>
-                Loading teams…
-            </div>
-        );
-    }
-
     return (
         <div className="flex flex-col h-full overflow-y-auto" data-supervisor-tab>
             {/* Roster error banner (R7) - keep teams + activity visible */}
-            {error && (
-                <div
-                    className="px-3 py-1 text-xs text-error bg-error/10 border-b border-error/30"
-                    role="alert"
-                    data-supervisor-roster-error
-                >
-                    Roster feed error: {error}. Showing last-known state.
+            {error && teams.length === 0 ? (
+                <div className="p-4 text-sm text-error" role="alert" data-supervisor-tab-error>
+                    Failed to load teams: {error}. Event-derived activity remains available below.
+                </div>
+            ) : (
+                error && (
+                    <div
+                        className="px-3 py-1 text-xs text-error bg-error/10 border-b border-error/30"
+                        role="alert"
+                        data-supervisor-roster-error
+                    >
+                        Roster feed error: {error}. Showing last-known state.
+                    </div>
+                )
+            )}
+            {teams.length === 0 && !error && (
+                <div className="p-4 text-sm text-spur-text-muted" data-supervisor-tab-loading>
+                    Loading teams…
                 </div>
             )}
             {actionError && (
@@ -373,6 +368,40 @@ export default function SupervisorTab() {
                     </Card>
                 ))}
             </div>
+
+            {/* Event-derived activity survives a roster outage (R7 / AC R24). */}
+            {enrichedRows !== null && (
+                <section
+                    className="border-t border-spur-border bg-base-300/40"
+                    aria-label="Recent team activity"
+                    data-supervisor-activity
+                >
+                    <div className="px-3 py-2 text-[10px] uppercase tracking-wide font-semibold text-spur-text-muted">
+                        Recent team activity
+                    </div>
+                    {enrichedRows.length === 0 ? (
+                        <div className="px-3 pb-3 text-xs text-spur-text-muted italic">No team activity yet.</div>
+                    ) : (
+                        <ul className="px-3 pb-3 space-y-1">
+                            {enrichedRows.slice(0, 20).map((row) => (
+                                <li
+                                    key={row.id}
+                                    className="flex items-center gap-2 flex-wrap text-[10px] text-spur-text-muted"
+                                    data-supervisor-activity-row={row.eventName}
+                                >
+                                    <span className="font-mono">{formatTime(row.occurredAt)}</span>
+                                    <Badge variant="outline" size="xs">
+                                        {row.eventName}
+                                    </Badge>
+                                    {row.teamId && <span>{row.teamId}</span>}
+                                    {row.memberLabel && <span className="font-mono">{row.memberLabel}</span>}
+                                    {row.actor && <span>{row.actor}</span>}
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </section>
+            )}
 
             {/* Stop confirm modal (R5) - mirrors TerminalTab.tsx:336-373 */}
             <Modal

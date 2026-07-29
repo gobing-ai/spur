@@ -5,7 +5,7 @@ import InboxTab from '../../../src/modules/observability/InboxTab';
 import JobsTab from '../../../src/modules/observability/JobsTab';
 import ObservabilityShell from '../../../src/modules/observability/ObservabilityShell';
 import ProcessListTab from '../../../src/modules/observability/ProcessListTab';
-import SystemEventsTab from '../../../src/modules/observability/SystemEventsTab';
+import SystemEventsTab, { historyUrl, serializeFilter } from '../../../src/modules/observability/SystemEventsTab';
 import TasksTab from '../../../src/modules/observability/TasksTab';
 import ToolUsingTab from '../../../src/modules/observability/ToolUsingTab';
 import { OBSERVABILITY_TABS } from '../../../src/modules/observability/tabs';
@@ -643,6 +643,70 @@ describe('observability components', () => {
         expect(container.querySelector('section[aria-label^="Detail for"]')).toBeNull();
     });
 
+    test('system event name and actor scopes serialize into the server query (0375 R1/R3)', () => {
+        const base = {
+            selectedPrefixes: new Set<string>(),
+            tierFilter: 'all' as const,
+            timeWindow: 'all' as const,
+            runId: '',
+        };
+        const nameUrl = historyUrl(serializeFilter({ ...base, searchQuery: 'task.created', searchScope: 'name' }));
+        const actorUrl = historyUrl(serializeFilter({ ...base, searchQuery: 'operator', searchScope: 'actor' }));
+
+        expect(nameUrl).toContain('names=task.created');
+        expect(actorUrl).toContain('actor=operator');
+    });
+
+    test('system event row exposes run/action/outcome and explicit unavailable usage (0375 R2/R3)', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/events/history')) {
+                return jsonResponse({
+                    events: [
+                        {
+                            id: 'evt-correlated',
+                            eventName: 'workflow.action.done',
+                            occurredAt: '2026-07-29T12:00:00.000Z',
+                            actor: 'runner',
+                            runId: 'run-42',
+                            payload: {
+                                actionId: 'action-7',
+                                durationMs: 125,
+                                outcome: 'success',
+                                usage: null,
+                            },
+                        },
+                    ],
+                    count: 1,
+                    catalog: [
+                        {
+                            name: 'workflow.action.done',
+                            prefix: 'workflow',
+                            source: 'workflow',
+                            renderer: 'workflow-action',
+                        },
+                    ],
+                    nextCursor: null,
+                    hasMore: false,
+                });
+            }
+            return new Response('not found', { status: 404 });
+        }) as unknown as typeof fetch);
+
+        const view = render(<SystemEventsTab />);
+        await waitFor(() => expect(view.getByText('workflow.action.done')).toBeDefined());
+        const row = view.getByText('workflow.action.done').closest('tr') as HTMLTableRowElement;
+        expect(row.textContent).toContain('run-42');
+        expect(row.textContent).toContain('action-7');
+        expect(row.textContent).toContain('success');
+        expect(row.textContent).toContain('125ms');
+
+        fireEvent.click(row.querySelector('button[aria-expanded]') as HTMLButtonElement);
+        const detail = view.container.querySelector('section[aria-label="Detail for workflow.action.done"]');
+        expect(detail?.textContent).toContain('usage: unavailable');
+        expect(detail?.textContent).not.toContain('usage: 0');
+    });
+
     test('filter bar controls are keyboard-focusable native elements (task 0225 R4)', async () => {
         installObservabilityFetchMock();
         const { container, queryAllByText } = render(<SystemEventsTab />);
@@ -1186,6 +1250,8 @@ describe('observability components', () => {
         expect(getByText('ECONNREFUSED')).toBeDefined();
         // Scheduler duration surfaces.
         expect(getByText('1.3s')).toBeDefined();
+        // Queue story duration is derived from the oldest to newest correlated event.
+        expect(getByText('60.0s')).toBeDefined();
         // Raw JSON blob should NOT be visible by default (collapsed in <details>).
         expect(queryByText('"jobId"')).toBeNull();
     });
@@ -1366,7 +1432,8 @@ describe('observability components', () => {
             // WBS index: by-wbs links
             if (url.includes('/runs/by-wbs/')) {
                 const wbs = url.split('/runs/by-wbs/')[1]?.split('?')[0];
-                return jsonResponse(wbsLinks[wbs ?? ''] ?? []);
+                const links = wbsLinks[wbs ?? ''] ?? [];
+                return jsonResponse({ wbs, links, count: links.length });
             }
             // R4: corpus lane - task events
             if (url.includes('prefix=task')) {

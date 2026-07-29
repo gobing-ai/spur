@@ -46,6 +46,10 @@ interface SseEnvelope {
     prefix?: string;
     renderer?: string;
     payload: Record<string, unknown> | null;
+    runId?: string | null;
+    entityKind?: string | null;
+    entityId?: string | null;
+    sequence?: number | null;
 }
 
 const sseUrl = () => `${resolveApiUrl()}/events/planning`;
@@ -126,6 +130,8 @@ type QueryStatus = 'idle' | 'loading' | 'loaded' | 'error';
 /** Active filter params sent to the server on each page fetch. */
 interface ActiveFilter {
     prefix?: string;
+    names?: string;
+    actor?: string;
     runId?: string;
     since?: string;
 }
@@ -310,24 +316,30 @@ function parseSseEnvelope(value: unknown): SseEnvelope | null {
     const actor = obj.actor;
     if (actor !== null && typeof actor !== 'string') return null;
     const payload = obj.payload;
-    if (payload === null) {
-        return {
-            eventName: obj.eventName,
-            occurredAt: obj.occurredAt,
-            actor,
-            ...(prefix ? { prefix } : {}),
-            ...(renderer ? { renderer } : {}),
-            payload: null,
-        };
-    }
-    if (typeof payload !== 'object') return null;
+    if (payload !== null && typeof payload !== 'object') return null;
+    const payloadRecord = payload as Record<string, unknown> | null;
+    const runIdValue = obj.runId ?? payloadRecord?.runId;
+    const entityKindValue = obj.entityKind ?? payloadRecord?.entityKind;
+    const entityIdValue = obj.entityId ?? payloadRecord?.entityId;
+    const sequenceValue = obj.sequence ?? payloadRecord?.sequence;
+    const runId = typeof runIdValue === 'string' ? runIdValue : runIdValue === null ? null : undefined;
+    const entityKind =
+        typeof entityKindValue === 'string' ? entityKindValue : entityKindValue === null ? null : undefined;
+    const entityId = typeof entityIdValue === 'string' ? entityIdValue : entityIdValue === null ? null : undefined;
+    const sequence =
+        typeof sequenceValue === 'number' && Number.isFinite(sequenceValue)
+            ? sequenceValue
+            : sequenceValue === null
+              ? null
+              : undefined;
     return {
         eventName: obj.eventName,
         occurredAt: obj.occurredAt,
         actor,
         ...(prefix ? { prefix } : {}),
         ...(renderer ? { renderer } : {}),
-        payload: payload as Record<string, unknown>,
+        payload: payloadRecord,
+        ...optionalCorrelation(runId, entityKind, entityId, sequence),
     };
 }
 
@@ -376,6 +388,21 @@ export function formatAvailability(value: unknown): string {
         return String(value);
     }
     if (typeof value === 'boolean') return String(value);
+    return 'unavailable';
+}
+
+/** Usage may be a scalar or a structured token/cost projection; absence is explicit. */
+export function formatUsage(value: unknown): string {
+    if (value === null || value === undefined || value === '') return 'unavailable';
+    if (typeof value === 'number') return Number.isFinite(value) ? String(value) : 'unavailable';
+    if (typeof value === 'string' || typeof value === 'boolean') return String(value);
+    if (typeof value === 'object') {
+        try {
+            return JSON.stringify(value);
+        } catch {
+            return 'unavailable';
+        }
+    }
     return 'unavailable';
 }
 
@@ -522,7 +549,7 @@ export function buildTooltipSummary(
 }
 
 /** Serialize UI filter state into the server-side query params. */
-function serializeFilter(filter: FilterState): ActiveFilter {
+export function serializeFilter(filter: FilterState): ActiveFilter {
     const out: ActiveFilter = {};
     // Prefix: when exactly one prefix is selected, send it as a server param.
     // Multiple selected prefixes cannot be expressed as a single `prefix=` param,
@@ -530,8 +557,12 @@ function serializeFilter(filter: FilterState): ActiveFilter {
     if (filter.selectedPrefixes.size === 1) {
         out.prefix = [...filter.selectedPrefixes][0];
     }
-    // Search is client-side substring across all scopes - no server param.
-    // (Server `names`/`actor` params do exact matching, not free-text search.)
+    // The history endpoint's name and actor filters are exact-match. Preserve the
+    // broader client-side substring behavior for "all"/"payload", but route the
+    // exact field scopes through SQL so older matching rows remain pageable.
+    const query = filter.searchQuery.trim();
+    if (query !== '' && filter.searchScope === 'name') out.names = query;
+    if (query !== '' && filter.searchScope === 'actor') out.actor = query;
     if (filter.runId.trim() !== '') out.runId = filter.runId.trim();
     if (filter.timeWindow !== 'all') {
         const ms = filter.timeWindow === '30s' ? 30_000 : 5 * 60_000;
@@ -756,6 +787,7 @@ export default function SystemEventsTab() {
                             actor: envelope.actor,
                             ...(envelope.prefix ? { prefix: envelope.prefix } : {}),
                             payload: envelope.payload,
+                            ...(envelope.runId !== undefined ? { runId: envelope.runId } : {}),
                         },
                         currentFilter,
                         currentTier,
@@ -771,6 +803,7 @@ export default function SystemEventsTab() {
                     ...(envelope.prefix ? { prefix: envelope.prefix } : {}),
                     ...(envelope.renderer ? { renderer: envelope.renderer } : {}),
                     payload: envelope.payload,
+                    ...optionalCorrelation(envelope.runId, envelope.entityKind, envelope.entityId, envelope.sequence),
                 };
                 setPage((prev) => [row, ...prev]);
                 recordEvent();
@@ -1181,19 +1214,14 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
     const colorClass = getPrefixColor(prefix);
     const [expanded, setExpanded] = useState(false);
 
-    // R3: run identity and outcome - absent => 'unavailable', never zero/blank.
+    // R2/R3: identity/outcome/usage - absent => 'unavailable', never zero/blank.
     const runId = formatAvailability(event.runId);
-    const duration = formatDuration(
-        event.payload && typeof event.payload === 'object'
-            ? (event.payload as Record<string, unknown>).durationMs
-            : undefined,
-    );
+    const payload = event.payload;
+    const actionId = formatAvailability(payload?.actionId ?? payload?.action ?? payload?.node ?? payload?.kind);
+    const usage = formatUsage(payload?.usage);
+    const duration = formatDuration(payload && typeof payload === 'object' ? payload.durationMs : undefined);
     const outcome = formatAvailability(
-        event.payload && typeof event.payload === 'object'
-            ? ((event.payload as Record<string, unknown>).outcome ??
-                  (event.payload as Record<string, unknown>).status ??
-                  (event.payload as Record<string, unknown>).ok)
-            : undefined,
+        payload && typeof payload === 'object' ? (payload.outcome ?? payload.status ?? payload.ok) : undefined,
     );
     const entityLabel =
         event.entityKind && event.entityId
@@ -1234,6 +1262,7 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                             <div className="flex flex-col gap-0.5 text-[10px] text-spur-text-muted">
                                 {event.actor && <span>by {event.actor}</span>}
                                 <span>run: {runId}</span>
+                                <span>action: {actionId}</span>
                                 <span>
                                     outcome: {outcome}
                                     {duration ? ` · ${duration}` : ''}
@@ -1257,7 +1286,8 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                 )}
                 {!compact && (
                     <td className="px-3 py-0 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-top">
-                        {runId}
+                        <span className="block">run: {runId}</span>
+                        <span className="block">action: {actionId}</span>
                     </td>
                 )}
                 {!compact && (
@@ -1283,6 +1313,9 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                                     <span className="text-spur-text-muted">run:</span> {runId}
                                 </span>
                                 <span>
+                                    <span className="text-spur-text-muted">action:</span> {actionId}
+                                </span>
+                                <span>
                                     <span className="text-spur-text-muted">entity:</span> {entityLabel}
                                 </span>
                                 <span>
@@ -1296,6 +1329,9 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                                 )}
                                 <span>
                                     <span className="text-spur-text-muted">outcome:</span> {outcome}
+                                </span>
+                                <span>
+                                    <span className="text-spur-text-muted">usage:</span> {usage}
                                 </span>
                             </div>
                             {/* Renderer-aware pair list (no 4-cap - R4). */}

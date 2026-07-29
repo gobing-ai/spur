@@ -1675,7 +1675,7 @@ describe('teams module components', () => {
         );
     });
 
-    test('SupervisorTab shows error-degraded banner when roster fetch fails (0378 R6)', async () => {
+    test('SupervisorTab preserves event activity when the roster fetch fails (0378 R7/R24)', async () => {
         setFetchForTesting((async (input: RequestInfo | URL) => {
             const url = input instanceof Request ? input.url : String(input);
             if (url.includes('/team/teams')) {
@@ -1684,7 +1684,19 @@ describe('teams module components', () => {
                     headers: { 'content-type': 'application/json' },
                 });
             }
-            if (url.includes('/events/history')) return jsonResponse({ events: [] });
+            if (url.includes('/events/history')) {
+                return jsonResponse({
+                    events: [
+                        {
+                            id: 'activity-during-outage',
+                            eventName: 'team.member.stopped',
+                            occurredAt: '2026-07-29T12:00:00.000Z',
+                            actor: 'planner',
+                            payload: { teamId: 'alpha', memberLabel: 'planner', agentType: 'claude' },
+                        },
+                    ],
+                });
+            }
             return jsonResponse({ ok: true });
         }) as unknown as typeof fetch);
 
@@ -1693,6 +1705,9 @@ describe('teams module components', () => {
         await waitFor(() => expect(container.querySelector('[data-supervisor-tab-error]')).not.toBeNull());
         const errEl = container.querySelector('[data-supervisor-tab-error]') as HTMLElement;
         expect(errEl.textContent).toContain('Failed to load teams');
+        await waitFor(() =>
+            expect(container.querySelector('[data-supervisor-activity-row="team.member.stopped"]')).not.toBeNull(),
+        );
     });
 
     test('SupervisorTab narrows untrusted event payload without crashing (0378 R7)', async () => {
