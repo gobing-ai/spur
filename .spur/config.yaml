@@ -65,10 +65,10 @@ agent:
     #   agent: omp
     #   model: opencode/glm-5.2
     #   tier: standard
-    # - name: omp-zai-volc
-    #   agent: omp
-    #   model: volc/glm-5.2
-    #   tier: standard
+    - name: omp-zai-volc
+      agent: omp
+      model: volc/glm-5.2
+      tier: standard
     - name: omp-zai-ollama
       agent: omp
       model: ollama/glm-5.2:cloud
@@ -97,9 +97,9 @@ agent:
     - name: grok
       agent: grok
       tier: capable-2
-    - name: claude
-      agent: claude
-      tier: capable-3
+    # - name: claude
+    #   agent: claude
+    #   tier: capable-3
     - name: codex
       agent: codex
       tier: capable-3
