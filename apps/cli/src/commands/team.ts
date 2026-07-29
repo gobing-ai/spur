@@ -1,13 +1,17 @@
 import type { Command } from '@commander-js/extra-typings';
 import {
     type MaterializeResult,
+    type SystemEventBus,
     type TeamListing,
     TeamService,
+    type TeamServiceEventBus,
     type TeamStatusEntry,
     type TeardownResult,
 } from '@gobing-ai/spur-app';
+import { EventBus } from '@gobing-ai/ts-infra';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
+import { attachSystemEventLedger, type CliSystemEventLedger } from '../system-event-ledger';
 
 // ── Injectable fetch seam for tests ───────────────────────────────────
 let _testFetch: typeof fetch | undefined;
@@ -100,10 +104,16 @@ export function registerTeamCommand(program: Command, context: CliContext): void
 
 /** `spur team assign <task-id> <agent-id>` */
 async function runTeamAssign(taskId: string, agentId: string, context: CliContext): Promise<number> {
-    const svc = new TeamService(context);
-    await svc.assignTask(taskId, agentId);
-    context.output.write(`assigned ${taskId} → ${agentId}`);
-    return 0;
+    // CLI ledger so team.member.assigned reaches system_events without serve (0371 R6).
+    const { svc, ledger } = await makeTeamServiceWithLedger(context);
+    try {
+        await svc.assignTask(taskId, agentId);
+        context.output.write(`assigned ${taskId} → ${agentId}`);
+        return 0;
+    } finally {
+        await ledger.flush();
+        ledger.unsubscribe();
+    }
 }
 
 /** `spur team status [--json] [--server <url>]` */
@@ -331,42 +341,64 @@ function formatTeamBlock(team: TeamListing): string {
     return [header, ...rows].join('\n');
 }
 
+/**
+ * TeamService + CLI EventBus ledger for team.* durability (task 0371 R6).
+ * Same attach pattern as workflow/agent (task 0370): bus → registerSystemEventTap
+ * → SystemEventDao. Mutations still succeed if the ledger attach fails.
+ */
+async function makeTeamServiceWithLedger(
+    context: CliContext,
+): Promise<{ svc: TeamService; ledger: CliSystemEventLedger }> {
+    const bus = new EventBus() as SystemEventBus;
+    const ledger = await attachSystemEventLedger(bus, context);
+    const svc = new TeamService({
+        ...context,
+        eventBus: bus as unknown as TeamServiceEventBus,
+    });
+    return { svc, ledger };
+}
+
 /** `spur team up <team> [--check] [--server <url>] [--json]` — materialize + best-effort start. */
 async function runTeamUp(
     team: string,
     options: { check?: boolean; server: string; json?: boolean },
     context: CliContext,
 ): Promise<number> {
-    const svc = new TeamService(context);
-    let result: MaterializeResult;
+    const { svc, ledger } = await makeTeamServiceWithLedger(context);
     try {
-        result = await svc.materializeTeam(team, { check: options.check === true });
-    } catch (error) {
-        context.output.error(error instanceof Error ? error.message : String(error));
-        return 1;
-    }
-
-    // Best-effort start of autostart members when the server is reachable (0252 up-scope).
-    const started: string[] = [];
-    if (options.check !== true && result.upserted.length > 0) {
-        const specs = await svc.listAgentSpecs();
-        const autostart = specs.filter((spec) => spec.autoStart === true && result.upserted.includes(spec.id));
-        for (const spec of autostart) {
-            const res = await performTeamStart(spec.id, { server: options.server });
-            if ('ok' in res && res.ok === true) started.push(spec.id);
+        let result: MaterializeResult;
+        try {
+            result = await svc.materializeTeam(team, { check: options.check === true });
+        } catch (error) {
+            context.output.error(error instanceof Error ? error.message : String(error));
+            return 1;
         }
-    }
 
-    if (options.json === true) {
-        context.output.write(toJson({ ...result, started }));
-    } else {
-        const verb = options.check === true ? 'would materialize' : 'materialized';
-        const startNote = started.length > 0 ? `, started ${started.length}` : '';
-        context.output.write(
-            `team ${team}: ${verb} ${result.upserted.length} member(s), prune ${result.orphaned.length}${startNote}`,
-        );
+        // Best-effort start of autostart members when the server is reachable (0252 up-scope).
+        const started: string[] = [];
+        if (options.check !== true && result.upserted.length > 0) {
+            const specs = await svc.listAgentSpecs();
+            const autostart = specs.filter((spec) => spec.autoStart === true && result.upserted.includes(spec.id));
+            for (const spec of autostart) {
+                const res = await performTeamStart(spec.id, { server: options.server });
+                if ('ok' in res && res.ok === true) started.push(spec.id);
+            }
+        }
+
+        if (options.json === true) {
+            context.output.write(toJson({ ...result, started }));
+        } else {
+            const verb = options.check === true ? 'would materialize' : 'materialized';
+            const startNote = started.length > 0 ? `, started ${started.length}` : '';
+            context.output.write(
+                `team ${team}: ${verb} ${result.upserted.length} member(s), prune ${result.orphaned.length}${startNote}`,
+            );
+        }
+        return 0;
+    } finally {
+        await ledger.flush();
+        ledger.unsubscribe();
     }
-    return 0;
 }
 
 /** `spur team down <team> [--purge] [--server <url>] [--json]` — teardown + best-effort stop. */
@@ -375,26 +407,31 @@ async function runTeamDown(
     options: { purge?: boolean; server: string; json?: boolean },
     context: CliContext,
 ): Promise<number> {
-    const svc = new TeamService(context);
-    let result: TeardownResult;
+    const { svc, ledger } = await makeTeamServiceWithLedger(context);
     try {
-        result = await svc.teardownTeam(team, { purge: options.purge === true });
-    } catch (error) {
-        context.output.error(error instanceof Error ? error.message : String(error));
-        return 1;
-    }
+        let result: TeardownResult;
+        try {
+            result = await svc.teardownTeam(team, { purge: options.purge === true });
+        } catch (error) {
+            context.output.error(error instanceof Error ? error.message : String(error));
+            return 1;
+        }
 
-    // Best-effort stop of the team's members when the server is reachable.
-    const stopped: string[] = [];
-    for (const id of result.stopped) {
-        const res = await performTeamStop(id, { server: options.server });
-        if ('ok' in res && res.ok === true) stopped.push(id);
-    }
+        // Best-effort stop of the team's members when the server is reachable.
+        const stopped: string[] = [];
+        for (const id of result.stopped) {
+            const res = await performTeamStop(id, { server: options.server });
+            if ('ok' in res && res.ok === true) stopped.push(id);
+        }
 
-    if (options.json === true) {
-        context.output.write(toJson({ ...result, stopped }));
-    } else {
-        context.output.write(`team ${team}: stopped ${stopped.length}, purged ${result.purged.length}`);
+        if (options.json === true) {
+            context.output.write(toJson({ ...result, stopped }));
+        } else {
+            context.output.write(`team ${team}: stopped ${stopped.length}, purged ${result.purged.length}`);
+        }
+        return 0;
+    } finally {
+        await ledger.flush();
+        ledger.unsubscribe();
     }
-    return 0;
 }

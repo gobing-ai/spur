@@ -43,17 +43,21 @@ export interface TeamServiceContext {
     /** Filesystem port for reading/writing task files. */
     fs: FileSystem;
     /**
-     * Optional EventBus for message lifecycle events (`message.sent|replied`).
-     * When absent (CLI default), message sends/replies still succeed — they
-     * just don't publish. The server injects its bus so the tap persists and
-     * SSE streams the events (single emission point, identical CLI/server behavior).
+     * Optional EventBus for message lifecycle events (`message.sent|replied`)
+     * and team lifecycle events (`team.up|down`, `team.member.*`). When absent
+     * (CLI default without a ledger attach), those operations still succeed —
+     * they just don't publish. The server injects its bus so the tap persists
+     * and SSE streams the events; CLI `team up|down|assign` attaches a local
+     * bus + ledger (task 0371 R6).
      */
-    eventBus?: MessageEventBus;
+    eventBus?: TeamServiceEventBus;
     /**
      * Optional EventBus for agent lifecycle events (`agent.started`,
      * `agent.stopped`, `agent.invoke.*`, `agent.message.sent`). When absent,
      * TeamOrchestrator runs without publishing — the server injects its bus
      * so the system_events tap persists and SSE streams agent lifecycle.
+     * TeamService also bridges `agent.started|stopped` → `team.member.*` on
+     * {@link eventBus} when both are present (task 0371 R2).
      */
     events?: EventBus<AgentEvents>;
 }
@@ -71,10 +75,49 @@ export interface MessageEventPayload {
     createdAt: string;
 }
 
-/** Bus shape consumed by TeamService — pub/sub over message event names. */
+/**
+ * Metadata-only payload for team lifecycle events (`team.up` / `team.down`).
+ * Carries the team id and resulting member set size (J3 R15); never command
+ * lines or message bodies (task 0371 R3).
+ */
+export interface TeamLifecycleEventPayload {
+    teamId: string;
+    /** Count of members after the operation (upserted for up; stopped for down). */
+    memberCount: number;
+    /** Operation outcome label (`ok`, `check`, `purged`, …). */
+    outcome: string;
+}
+
+/**
+ * Metadata-only payload for member-scoped team events
+ * (`team.member.assigned|started|stopped`). Unresolved roster fields stay
+ * null rather than dropping the event (task 0371 R5 / J3 R17).
+ */
+export interface TeamMemberEventPayload {
+    teamId: string | null;
+    memberId: string | null;
+    agentType: string | null;
+    /** Operation outcome label (`ok`, `assigned`, `started`, `stopped`, …). */
+    outcome: string;
+    /** Optional task id for assignment events. */
+    taskId?: string | null;
+}
+
+/** Bus shape for message lifecycle events (legacy alias of {@link TeamServiceEventBus}). */
 export type MessageEventBus = EventBus<
     Record<'message.sent' | 'message.replied', (event: MessageEventPayload) => void>
 >;
+
+/** Bus shape consumed by TeamService — message + team lifecycle event names. */
+export type TeamServiceEventBus = EventBus<{
+    'message.sent': (event: MessageEventPayload) => void;
+    'message.replied': (event: MessageEventPayload) => void;
+    'team.up': (event: TeamLifecycleEventPayload) => void;
+    'team.down': (event: TeamLifecycleEventPayload) => void;
+    'team.member.assigned': (event: TeamMemberEventPayload) => void;
+    'team.member.started': (event: TeamMemberEventPayload) => void;
+    'team.member.stopped': (event: TeamMemberEventPayload) => void;
+}>;
 
 /** Result of enqueuing or threading a message. */
 export interface SendResult {
@@ -426,6 +469,17 @@ export class TeamService {
         doc.setFrontmatterField('assignee', agentId);
         // Atomic temp+rename: a raw writeFile can leave a torn SSOT task file on crash.
         await atomicWriteAsync(path, doc.serialize(), taskId, fs);
+
+        // Member assignment event (task 0371 R1/R2). Roster lookup is best-effort:
+        // an unknown member still emits with null unresolved fields (R5 / R17).
+        const identity = await this.resolveMemberIdentity(agentId);
+        this.emitTeamMemberEvent('team.member.assigned', {
+            teamId: identity.teamId,
+            memberId: agentId,
+            agentType: identity.agentType,
+            outcome: 'assigned',
+            taskId,
+        });
     }
 
     // -------------------------------------------------------------------------
@@ -605,6 +659,7 @@ export class TeamService {
         const orphaned = existingTeamSpecs.filter((s) => !desiredIds.has(s.id));
 
         if (opts?.check) {
+            // Dry-run does not transition team state — no lifecycle event (R15).
             return {
                 teamId,
                 upserted: toUpsert.map((s) => s.id),
@@ -622,12 +677,20 @@ export class TeamService {
             await deleteAgentSpecFile(spec.id, this.configDir);
         }
 
-        return {
+        const result: MaterializeResult = {
             teamId,
             upserted: toUpsert.map((s) => s.id),
             orphaned: orphaned.map((s) => s.id),
             written: true,
         };
+        // Team up lifecycle (task 0371 R1/R2 / J3 R15): cataloged event with
+        // team id + resulting member set size. Metadata only.
+        this.emitTeamLifecycleEvent('team.up', {
+            teamId,
+            memberCount: result.upserted.length,
+            outcome: 'ok',
+        });
+        return result;
     }
 
     /**
@@ -646,11 +709,18 @@ export class TeamService {
             }
         }
 
-        return {
+        const result: TeardownResult = {
             teamId,
             purged: opts?.purge ? generated.map((s) => s.id) : [],
             stopped: teamSpecs.map((s) => s.id),
         };
+        // Team down lifecycle (task 0371 R1/R2 / J3 R15).
+        this.emitTeamLifecycleEvent('team.down', {
+            teamId,
+            memberCount: result.stopped.length,
+            outcome: opts?.purge ? 'purged' : 'ok',
+        });
+        return result;
     }
 
     // -------------------------------------------------------------------------
@@ -685,15 +755,90 @@ export class TeamService {
         }
     }
 
+    /**
+     * Publish a team lifecycle event (`team.up` / `team.down`) when a bus is
+     * wired. Same failure isolation as {@link emitMessageEvent} (task 0371).
+     */
+    private emitTeamLifecycleEvent(name: 'team.up' | 'team.down', payload: TeamLifecycleEventPayload): void {
+        const bus = this.ctx.eventBus;
+        if (!bus) return;
+        try {
+            bus.emit(name, payload);
+        } catch {
+            // Swallow — event is observable metadata only.
+        }
+    }
+
+    /**
+     * Publish a member-scoped team event when a bus is wired. Payload fields
+     * may be null (unknown roster) — the event is never dropped (R5).
+     */
+    private emitTeamMemberEvent(
+        name: 'team.member.assigned' | 'team.member.started' | 'team.member.stopped',
+        payload: TeamMemberEventPayload,
+    ): void {
+        const bus = this.ctx.eventBus;
+        if (!bus) return;
+        try {
+            bus.emit(name, payload);
+        } catch {
+            // Swallow — event is observable metadata only.
+        }
+    }
+
+    /**
+     * Best-effort roster join for a composed agent id (`teamId-memberId`).
+     * Missing roster rows yield null fields — never throws (R5 / R17).
+     */
+    private async resolveMemberIdentity(agentId: string): Promise<{ teamId: string | null; agentType: string | null }> {
+        try {
+            const specs = await loadAgentSpecs(this.configDir);
+            const spec = specs.find((s) => s.id === agentId);
+            if (!spec) return { teamId: null, agentType: null };
+            const teamTag = spec.tags?.find((t) => t.startsWith('team:'));
+            return {
+                teamId: teamTag ? teamTag.slice('team:'.length) : null,
+                agentType: typeof spec.type === 'string' && spec.type.length > 0 ? spec.type : null,
+            };
+        } catch {
+            return { teamId: null, agentType: null };
+        }
+    }
+
     private async inboxRecentDao(): Promise<InboxRecentDao> {
         const db = await this.ctx.getDb();
         return new InboxRecentDao(db);
     }
 
     private orchestrator(): Promise<TeamOrchestrator> {
-        this.orchestratorPromise ??= this.inboxDao().then(
-            (dao) => new TeamOrchestrator(this.configDir, dao, { events: this.ctx.events }),
-        );
+        this.orchestratorPromise ??= this.inboxDao().then((dao) => {
+            const orch = new TeamOrchestrator(this.configDir, dao, { events: this.ctx.events });
+            // Bridge TeamOrchestrator agent lifecycle → team.member.* so the
+            // team family reaches the ledger from the orchestrator path
+            // (task 0371 R2). SupervisorService emits the same names on the
+            // serve/process path; both are cataloged and idempotent as rows.
+            orch.on('agent.started', (event) => {
+                void this.resolveMemberIdentity(event.agentId).then((identity) => {
+                    this.emitTeamMemberEvent('team.member.started', {
+                        teamId: identity.teamId,
+                        memberId: event.agentId,
+                        agentType: event.agentType ?? identity.agentType,
+                        outcome: 'started',
+                    });
+                });
+            });
+            orch.on('agent.stopped', (event) => {
+                void this.resolveMemberIdentity(event.agentId).then((identity) => {
+                    this.emitTeamMemberEvent('team.member.stopped', {
+                        teamId: identity.teamId,
+                        memberId: event.agentId,
+                        agentType: identity.agentType,
+                        outcome: 'stopped',
+                    });
+                });
+            });
+            return orch;
+        });
         return this.orchestratorPromise;
     }
 

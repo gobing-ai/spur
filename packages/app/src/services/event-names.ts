@@ -11,6 +11,7 @@ export type SystemEventSource =
     | 'workflow'
     | 'rule'
     | 'agent'
+    | 'team'
     | 'bus'
     | 'api';
 /** Visibility tier for board consumers. Diagnostic entries only persist/stream when the runtime toggle is on. */
@@ -106,6 +107,16 @@ export const SYSTEM_EVENT_CATALOG = [
     event('agent.started', 'agent', 'agent'),
     event('agent.stopped', 'agent', 'agent'),
     event('agent.message.sent', 'agent', 'agent'),
+
+    // ── team.* (task 0371 R1) ─────────────────────────────────────────────
+    // Team lifecycle + member attribution for the Teams Activity / Supervisor
+    // surfaces (J3 R15–R17). Default tier, metadata-only: team id, member set
+    // size / memberId, agentType, outcome — never message bodies or argv.
+    event('team.up', 'team', 'team'),
+    event('team.down', 'team', 'team'),
+    event('team.member.assigned', 'team', 'team'),
+    event('team.member.started', 'team', 'team'),
+    event('team.member.stopped', 'team', 'team'),
 
     // ── rule.* (task 0221 R2/R3) ──────────────────────────────────────────
     event('rule.run.start', 'rule', 'rule'),

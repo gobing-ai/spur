@@ -13,15 +13,16 @@ import {
 
 /**
  * Extract the actor for SSE envelopes. Mirrors `packages/app` system-event-tap
- * (task 0226 F5 + 0269 agentId fallback). Inlined — not imported from
- * `@gobing-ai/spur-app` — to keep the Cloudflare Worker bundle free of the
- * heavy spur-app runtime dependency.
+ * (task 0226 F5 + 0269 agentId fallback + 0371 memberId). Inlined — not
+ * imported from `@gobing-ai/spur-app` — to keep the Cloudflare Worker bundle
+ * free of the heavy spur-app runtime dependency.
  */
 function extractSystemEventActor(event: unknown): string | null {
     if (event && typeof event === 'object') {
         const obj = event as Record<string, unknown>;
         if (typeof obj.actor === 'string' && obj.actor.length > 0) return obj.actor;
         if (typeof obj.agentId === 'string' && obj.agentId.length > 0) return obj.agentId;
+        if (typeof obj.memberId === 'string' && obj.memberId.length > 0) return obj.memberId;
     }
     return null;
 }

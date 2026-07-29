@@ -43,10 +43,26 @@ export interface ProcessEventPayload {
     agentType?: string;
 }
 
-/** Bus shape for process lifecycle events consumed by SupervisorService. */
-export type ProcessEventBus = EventBus<
-    Record<'process.spawned' | 'process.exited' | 'process.stopped', (event: ProcessEventPayload) => void>
->;
+/**
+ * Metadata-only payload for supervisor-emitted `team.member.started|stopped`
+ * (task 0371 R2). Mirrors {@link ProcessEventPayload} identity fields so the
+ * team.* family is attributable without reading process.* rows.
+ */
+export interface SupervisorTeamMemberEventPayload {
+    teamId: string | null;
+    memberId: string | null;
+    agentType: string | null;
+    outcome: string;
+}
+
+/** Bus shape for process + team.member lifecycle events from SupervisorService. */
+export type ProcessEventBus = EventBus<{
+    'process.spawned': (event: ProcessEventPayload) => void;
+    'process.exited': (event: ProcessEventPayload) => void;
+    'process.stopped': (event: ProcessEventPayload) => void;
+    'team.member.started': (event: SupervisorTeamMemberEventPayload) => void;
+    'team.member.stopped': (event: SupervisorTeamMemberEventPayload) => void;
+}>;
 
 /** Construction options for {@link SupervisorService}. */
 export interface SupervisorOptions {
@@ -98,6 +114,8 @@ export class SupervisorService {
     private readonly processExecutor: ProcessExecutor;
     private readonly eventBus: ProcessEventBus;
     private readonly configDir: string;
+    /** Agent ids that already emitted `team.member.stopped` via explicit stop(). */
+    private readonly teamMemberStopEmitted = new Set<string>();
     private readonly ringBufferSize: number;
     private readonly processes = new Map<string, { handle: PipeProcess; entry: ProcessEntry }>();
     private readonly ringBuffers = new Map<string, ProcessFrame[]>();
@@ -206,6 +224,15 @@ export class SupervisorService {
             teamId,
             agentType: spec.type,
         });
+        // Team member state (task 0371 R2/R3): cataloged team.member.started so
+        // the Activity tab's `team.` filter has a real producer. Unknown team
+        // tags yield null teamId — event still fires (R5).
+        this.emitTeamMember('team.member.started', {
+            teamId,
+            memberId: agentId,
+            agentType: spec.type ?? null,
+            outcome: 'started',
+        });
 
         // Watch for exit — restart on abnormal exit (0253 R3)
         void handle.exited.then(async (code) => {
@@ -217,6 +244,18 @@ export class SupervisorService {
                 teamId: entry.teamId ?? null,
                 ...(entry.agentType ? { agentType: entry.agentType } : {}),
             });
+            // Member state on natural exit/crash only. Explicit stop() already
+            // emitted `team.member.stopped` — avoid double rows (task 0371).
+            if (!this.teamMemberStopEmitted.has(agentId)) {
+                this.emitTeamMember('team.member.stopped', {
+                    teamId: entry.teamId ?? null,
+                    memberId: agentId,
+                    agentType: entry.agentType ?? null,
+                    outcome: code === 0 ? 'exited' : 'errored',
+                });
+            } else {
+                this.teamMemberStopEmitted.delete(agentId);
+            }
 
             // Normal exit (code 0) or stop-initiated: record and clean up.
             if (code === 0 || entry.status === 'stopped') {
@@ -259,6 +298,10 @@ export class SupervisorService {
         const proc = this.processes.get(agentId);
         if (proc?.entry.status !== 'running') return;
 
+        // Claim team.member.stopped before kill so the exit handler does not
+        // double-emit when the process exits (task 0371). Status stays `running`
+        // until after the wait so final status semantics match prior behavior.
+        this.teamMemberStopEmitted.add(agentId);
         proc.handle.kill('SIGTERM');
 
         // Bounded graceful wait (3 s)
@@ -289,6 +332,12 @@ export class SupervisorService {
             pid: proc.entry.pid,
             teamId: proc.entry.teamId ?? null,
             ...(proc.entry.agentType ? { agentType: proc.entry.agentType } : {}),
+        });
+        this.emitTeamMember('team.member.stopped', {
+            teamId: proc.entry.teamId ?? null,
+            memberId: agentId,
+            agentType: proc.entry.agentType ?? null,
+            outcome: 'stopped',
         });
     }
 
@@ -390,6 +439,17 @@ export class SupervisorService {
     }
 
     private emit(name: 'process.spawned' | 'process.exited' | 'process.stopped', payload: ProcessEventPayload): void {
+        try {
+            this.eventBus.emit(name, payload);
+        } catch {
+            // Bus failure must not break process management.
+        }
+    }
+
+    private emitTeamMember(
+        name: 'team.member.started' | 'team.member.stopped',
+        payload: SupervisorTeamMemberEventPayload,
+    ): void {
         try {
             this.eventBus.emit(name, payload);
         } catch {

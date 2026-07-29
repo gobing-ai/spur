@@ -155,7 +155,14 @@ export {
     type RuleValidateServiceResult as RuleValidateResult,
     type RuleValidateServiceResult,
 } from './services/rule-service';
-export type { ProcessEntry, ProcessFrame, SupervisorOptions } from './services/supervisor-service';
+export type {
+    ProcessEntry,
+    ProcessEventBus,
+    ProcessEventPayload,
+    ProcessFrame,
+    SupervisorOptions,
+    SupervisorTeamMemberEventPayload,
+} from './services/supervisor-service';
 export { SupervisorService } from './services/supervisor-service';
 export type { SystemEventEmitterLogger } from './services/system-event-emitter';
 export { SystemEventEmitter } from './services/system-event-emitter';
@@ -233,8 +240,11 @@ export type {
     RecentMessageRow,
     RecentMessagesResult,
     SendResult,
+    TeamLifecycleEventPayload,
     TeamListing,
+    TeamMemberEventPayload,
     TeamServiceContext,
+    TeamServiceEventBus,
     TeamServiceOutput,
     TeamStatusEntry,
     TeamStatusResult,

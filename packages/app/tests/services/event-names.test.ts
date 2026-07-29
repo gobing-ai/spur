@@ -180,6 +180,25 @@ describe('SYSTEM_EVENT_CATALOG', () => {
         expect(steeringEntry?.tier).toBe('default');
         expect(SYSTEM_EVENT_DEFAULT_NAMES).toContain('workflow.steering');
     });
+
+    test('registers team.* catalog entries (task 0371 R1)', () => {
+        const names = [
+            'team.up',
+            'team.down',
+            'team.member.assigned',
+            'team.member.started',
+            'team.member.stopped',
+        ] as const;
+        for (const name of names) {
+            const entry = requireEntry(name);
+            expect(entry.source).toBe('team');
+            expect(entry.renderer).toBe('team');
+            expect(entry.payloadPolicy).toBe('metadata-only');
+            expect(entry.tier).toBe('default');
+            expect(SYSTEM_EVENT_DEFAULT_NAMES).toContain(name);
+            expect(SYSTEM_EVENT_PREFIXES).toContain('team');
+        }
+    });
 });
 
 describe('normalizeSystemEventPayload (task 0367 R3/R4)', () => {

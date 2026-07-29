@@ -578,5 +578,8 @@ describe('upstream system event wiring (task 0221 R3 + task 0226 R8)', () => {
         expect(extractSystemEventActor({ agentId: 'alpha-planner', pid: 1 })).toBe('alpha-planner');
         // Explicit actor wins over agentId.
         expect(extractSystemEventActor({ actor: 'op', agentId: 'alpha-planner' })).toBe('op');
+        // 0371 R4: team.* payloads use memberId when agentId/actor are absent.
+        expect(extractSystemEventActor({ memberId: 'alpha-planner' })).toBe('alpha-planner');
+        expect(extractSystemEventActor({ agentId: 'alpha-coder', memberId: 'local-id' })).toBe('alpha-coder');
     });
 });

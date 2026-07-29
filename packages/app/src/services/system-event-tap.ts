@@ -136,13 +136,15 @@ export function safeStringify(event: unknown): string | null {
  * Extract the actor for system-event persistence / SSE. Prefer an explicit
  * `actor` field (task 0226 F5); fall back to `agentId` so process lifecycle
  * payloads (`process.spawned|exited|stopped`) surface identity on the Teams
- * Activity board (0269 residual).
+ * Activity board (0269 residual); then `memberId` for the team.* family
+ * (task 0371 R4) when the payload uses member identity rather than agentId.
  */
 export function extractSystemEventActor(event: unknown): string | null {
     if (event && typeof event === 'object') {
         const obj = event as Record<string, unknown>;
         if (typeof obj.actor === 'string' && obj.actor.length > 0) return obj.actor;
         if (typeof obj.agentId === 'string' && obj.agentId.length > 0) return obj.agentId;
+        if (typeof obj.memberId === 'string' && obj.memberId.length > 0) return obj.memberId;
     }
     return null;
 }

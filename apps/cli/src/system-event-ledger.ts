@@ -8,8 +8,9 @@
  * shared {@link SystemEventDao} — one canonical serialization (normalize + actor
  * + correlation), failure isolation (log + swallow), and diagnostic-tier gating.
  *
- * Wired only on CLI execution verbs (`spur workflow run` / `continue`,
- * `spur agent run`). Read-only verbs never open the ledger path here; the
+ * Wired on CLI execution verbs (`spur workflow run` / `continue`,
+ * `spur agent run`) and team lifecycle verbs (`spur team up` / `down` /
+ * `assign` — task 0371). Read-only verbs never open the ledger path here; the
  * planning emitter remains separately lazy for task/feature mutations.
  */
 

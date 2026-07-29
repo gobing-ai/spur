@@ -64,13 +64,13 @@ function createMockExecutor(): MockExecutor {
 
 interface MockBus {
     bus: ProcessEventBus;
-    emits: Array<{ event: string; payload: ProcessEventPayload }>;
+    emits: Array<{ event: string; payload: ProcessEventPayload | Record<string, unknown> }>;
 }
 
 function createMockBus(): MockBus {
-    const emits: Array<{ event: string; payload: ProcessEventPayload }> = [];
+    const emits: Array<{ event: string; payload: ProcessEventPayload | Record<string, unknown> }> = [];
     const bus = {
-        emit: (event: string, payload: ProcessEventPayload): void => {
+        emit: (event: string, payload: ProcessEventPayload | Record<string, unknown>): void => {
             emits.push({ event, payload });
         },
     } as unknown as ProcessEventBus;
@@ -119,6 +119,15 @@ describe('SupervisorService', () => {
             const spawned = emits.find((e) => e.event === 'process.spawned');
             expect(spawned).toBeDefined();
             expect(spawned?.payload.agentId).toBe('alpha');
+            // task 0371: team.member.started accompanies process.spawned
+            const memberStarted = emits.find((e) => e.event === 'team.member.started');
+            expect(memberStarted).toBeDefined();
+            expect(memberStarted?.payload).toMatchObject({
+                memberId: 'alpha',
+                teamId: null,
+                agentType: 'pi',
+                outcome: 'started',
+            });
         });
 
         test('resolves teamId from spec.tags (team:<id>) and tags the process entry (spur#0267 R1)', async () => {
@@ -150,6 +159,14 @@ describe('SupervisorService', () => {
             expect(spawned?.payload.teamId).toBe('red-squad');
             expect(spawned?.payload.agentType).toBe('claude');
             expect(spawned?.payload.agentId).toBe('team-alpha');
+            // 0371 R16: team.member.started is attributable to team + agent type.
+            const memberStarted = emits.find((e) => e.event === 'team.member.started');
+            expect(memberStarted?.payload).toMatchObject({
+                teamId: 'red-squad',
+                memberId: 'team-alpha',
+                agentType: 'claude',
+                outcome: 'started',
+            });
         });
 
         test('leaves teamId null when spec has no team tag (spur#0267 R1)', async () => {
@@ -257,6 +274,13 @@ describe('SupervisorService', () => {
             const stopped = emits.find((e) => e.event === 'process.stopped');
             expect(stopped).toBeDefined();
             expect(stopped?.payload.agentId).toBe('alpha');
+            // task 0371: exactly one team.member.stopped on explicit stop (no double with exit)
+            const memberStopped = emits.filter((e) => e.event === 'team.member.stopped');
+            expect(memberStopped).toHaveLength(1);
+            expect(memberStopped[0]?.payload).toMatchObject({
+                memberId: 'alpha',
+                outcome: 'stopped',
+            });
         });
 
         test('is a no-op when process is not running', async () => {
