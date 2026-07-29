@@ -1,7 +1,8 @@
 import type { ApplicationRuntime, InfraEvents } from '@gobing-ai/ts-infra/application';
 import { runApplication } from '@gobing-ai/ts-infra/application';
 import type { Hono } from 'hono';
-import { createApp, serverBootstrapConfig } from './bootstrap';
+import { serverBootstrapConfig } from './server-config';
+import { createWorkerApp } from './worker-app';
 
 type AppRuntime = ApplicationRuntime<unknown, InfraEvents>;
 
@@ -9,13 +10,8 @@ type AppRuntime = ApplicationRuntime<unknown, InfraEvents>;
 export type BootstrapFn = (env: Record<string, string | undefined>) => Promise<AppRuntime>;
 
 const defaultBootstrap: BootstrapFn = (env) => {
-    // The Cloudflare Worker `env` arg carries request bindings, not NODE_ENV.
-    // Fall back to the runtime env so `bun test` (NODE_ENV=test) disables
-    // logging — otherwise initializeLogger() reconfigures LogTape with a
-    // console sink and leaks JSON log lines from every later app.* logger.
-    const merged = env.NODE_ENV === undefined ? { ...env, NODE_ENV: process.env.NODE_ENV } : env;
     return runApplication({
-        config: serverBootstrapConfig(merged),
+        config: serverBootstrapConfig(env),
         async start(_appRt: ApplicationRuntime) {
             // No server-level side effects — the app is created lazily on
             // first request and cached for the isolate's lifetime.
@@ -57,9 +53,9 @@ export function resetRuntime(): void {
 /** Cloudflare Worker fetch entrypoint for the server app. */
 export default {
     async fetch(request: Request, env?: Record<string, string | undefined>) {
-        const appRt = await getRuntime(env ?? {});
+        await getRuntime(env ?? {});
         if (!cachedApp) {
-            cachedApp = createApp(appRt);
+            cachedApp = createWorkerApp(env);
         }
         return cachedApp.fetch(request, env);
     },

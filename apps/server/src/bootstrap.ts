@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import type { ApplicationRuntime, LoggingOptions } from '@gobing-ai/ts-infra/application';
+import type { ApplicationRuntime } from '@gobing-ai/ts-infra/application';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { OpenAPIHandler } from '@orpc/openapi/fetch';
 import { Hono } from 'hono';
@@ -17,102 +17,9 @@ declare module 'hono' {
     }
 }
 
-export type { ApplicationRuntime, LoggingOptions };
-
-/**
- * Resolved server boot configuration read by the system-events tap and SSE.
- *
- * `events.retention` (task 0368 R3) is operator-facing per-prefix quota
- * resolution: `default` is the fallback quota for any catalog prefix without
- * an explicit `prefixes` override; `prefixes` is the per-prefix override map.
- * Both are optional — {@link resolveRetentionQuotas} applies the documented
- * compiled-in default when neither is set.
- */
-export interface ServerBootConfig {
-    logging: LoggingOptions;
-    telemetry: { enabled: boolean };
-    events: {
-        enabled: boolean;
-        diagnostic: boolean;
-        retention?: { default?: number; prefixes?: Record<string, number> };
-    };
-    jobqueue: { enabled: boolean };
-    scheduler: { enabled: boolean };
-    /** Agent spec ids to autostart at serve boot (comma-separated, task 0195/0207). */
-    teamAutostart: string[];
-}
-
-/**
- * Shared bootstrap configuration for the portable `runApplication` block.
- *
- * Reads environment variables to produce a resolved {@link ServerBootConfig}:
- * `NODE_ENV === 'test'` mutes logging and disables the job queue and scheduler;
- * `SPUR_DIAGNOSTIC_EVENTS=1` enables the diagnostic system-events tier;
- * `SPUR_TEAM_AUTOSTART` is a comma-separated list of agent spec ids autostarted
- * at serve boot (task 0195/0207).
- *
- * Retention (task 0368): `SPUR_EVENT_RETENTION_DEFAULT` sets the per-prefix
- * fallback quota; `SPUR_EVENT_RETENTION_<UPPER_PREFIX>` overrides a single
- * prefix (e.g. `SPUR_EVENT_RETENTION_TASK=5000`). Unset → compiled-in default.
- */
-export function serverBootstrapConfig(env: Record<string, string | undefined>): ServerBootConfig {
-    const isTest = env.NODE_ENV === 'test';
-    const raw = env.SPUR_TEAM_AUTOSTART;
-    const teamAutostart = raw
-        ? raw
-              .split(',')
-              .map((s) => s.trim())
-              .filter((s) => s.length > 0)
-        : [];
-    // SPUR_DIAGNOSTIC_EVENTS=1 turns on the diagnostic tier of system events
-    // (`bus.*`, `workflow.guard.evaluated`, `workflow.transition.*` internals).
-    // Off by default — they are noisy and recursive-prone.
-    const diagnosticEvents = env.SPUR_DIAGNOSTIC_EVENTS === '1' || env.SPUR_DIAGNOSTIC_EVENTS === 'true';
-    // Task 0368 R3: per-prefix retention quotas parsed from env. A prefix
-    // override is only honored when it parses to a non-negative integer; a
-    // malformed value is dropped (never aborts boot over a tunable).
-    const retentionDefault = parseRetentionNumber(env.SPUR_EVENT_RETENTION_DEFAULT);
-    const retentionPrefixes = parseRetentionPrefixes(env);
-    return {
-        logging: { enabled: !isTest, level: (env.SPUR_LOG_LEVEL as LoggingOptions['level']) ?? 'info', console: false },
-        telemetry: { enabled: false },
-        events: {
-            enabled: true,
-            diagnostic: diagnosticEvents,
-            retention: {
-                ...(retentionDefault !== undefined ? { default: retentionDefault } : {}),
-                ...(Object.keys(retentionPrefixes).length > 0 ? { prefixes: retentionPrefixes } : {}),
-            },
-        },
-        jobqueue: { enabled: !isTest },
-        scheduler: { enabled: !isTest },
-        teamAutostart,
-    };
-}
-
-/** Parse a retention env value as a non-negative integer; drop if malformed. */
-function parseRetentionNumber(raw: string | undefined): number | undefined {
-    if (raw === undefined || raw.trim() === '') return undefined;
-    const n = Number(raw);
-    if (!Number.isInteger(n) || n < 0) return undefined;
-    return n;
-}
-
-/** Collect `SPUR_EVENT_RETENTION_<UPPER_PREFIX>` overrides into a map. */
-function parseRetentionPrefixes(env: Record<string, string | undefined>): Record<string, number> {
-    const out: Record<string, number> = {};
-    for (const [key, value] of Object.entries(env)) {
-        const match = /^SPUR_EVENT_RETENTION_(.+)$/.exec(key);
-        if (!match || match[1] === 'DEFAULT') continue;
-        const prefix = match[1];
-        if (!prefix) continue;
-        const quota = parseRetentionNumber(value);
-        if (quota === undefined) continue;
-        // Env var suffix is the uppercased prefix; catalog prefixes are lowercase.
-        out[prefix.toLowerCase()] = quota;
-    }
-    return out;
-}
+export type { ApplicationRuntime, LoggingOptions } from '@gobing-ai/ts-infra/application';
+export type { ServerBootConfig } from './server-config';
+export { serverBootstrapConfig } from './server-config';
 /**
  * Create the Hono app that mounts middleware, oRPC API, static assets, and SPA fallback.
  *
