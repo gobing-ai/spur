@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Badge, Card, CardBody, Loading } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
-import type { SystemEventRow } from './SystemEventsTab';
+import { formatDuration, parseHistoryResponse, type SystemEventRow } from './SystemEventsTab';
 
 interface JobStats {
     pending: number;
@@ -14,11 +14,6 @@ interface StatsResponse {
     stats: JobStats;
 }
 
-interface HistoryResponse {
-    events: SystemEventRow[];
-    count: number;
-}
-
 interface JobsState {
     stats: JobStats;
     events: SystemEventRow[];
@@ -26,7 +21,7 @@ interface JobsState {
 
 const API_URL = resolveApiUrl();
 const JOB_STATS_URL = `${API_URL}/jobs/stats`;
-const EVENTS_HISTORY_URL = `${API_URL}/events/history`;
+const HISTORY_URL = `${API_URL}/events/history`;
 const JOB_HISTORY_LIMIT = 50;
 
 function parseStatsResponse(value: unknown): StatsResponse | null {
@@ -52,40 +47,182 @@ function parseStatsResponse(value: unknown): StatsResponse | null {
     };
 }
 
-function parseHistoryResponse(value: unknown): HistoryResponse | null {
-    if (value === null || typeof value !== 'object') return null;
-    const rawEvents = (value as { events?: unknown }).events;
-    const count = (value as { count?: unknown }).count;
-    if (!Array.isArray(rawEvents) || typeof count !== 'number') return null;
-    const events: SystemEventRow[] = [];
-    for (const raw of rawEvents) {
-        const row = parseEventRow(raw);
-        if (!row) return null;
-        events.push(row);
-    }
-    return { events, count };
+/**
+ * Typed extraction of job-event fields from an event payload. Narrowing-only:
+ * unknown / malformed fields degrade to `undefined`, never throw. Field names
+ * are keyed to the ts-infra event payload shapes (`@gobing-ai/ts-infra/src/events.ts`).
+ */
+interface JobEventFields {
+    /** Producer-stamped job correlator (queue.job.* payloads). */
+    jobId?: string;
+    /** Job type label (queue.job.* use `type`; scheduler uses `name`). */
+    type?: string;
+    /** Scheduler job name - surfaced separately so scheduler rows read correctly. */
+    name?: string;
+    /** 0-indexed attempt count on `queue.job.failed` / `queue.job.retrying`. */
+    attempt?: number;
+    /** Failure reason on `queue.job.failed`; optional error on `scheduler.job.executed`. */
+    error?: string;
+    /** Execution duration on `scheduler.job.executed`. */
+    durationMs?: number;
 }
 
-function parseEventRow(value: unknown): SystemEventRow | null {
-    if (value === null || typeof value !== 'object') return null;
-    const obj = value as Record<string, unknown>;
-    if (typeof obj.id !== 'string') return null;
-    if (typeof obj.eventName !== 'string') return null;
-    if (typeof obj.occurredAt !== 'string') return null;
-    const actor = obj.actor;
-    if (actor !== null && typeof actor !== 'string') return null;
-    const payload = obj.payload;
-    if (payload === null) {
-        return { id: obj.id, eventName: obj.eventName, occurredAt: obj.occurredAt, actor, payload: null };
+/**
+ * Derive a human job-state label from the event-name suffix. The suffix is the
+ * load-bearing discriminator - `queue.job.enqueued` -> "pending",
+ * `queue.job.completed` -> "completed", etc. Returns `null` for non-job events
+ * (consumer lifecycle, stats) so callers can skip a state badge.
+ */
+function deriveJobState(eventName: string): string | null {
+    const suffix = eventName.split('.').pop() ?? '';
+    switch (suffix) {
+        case 'enqueued':
+            return 'pending';
+        case 'retrying':
+            return 'retrying';
+        case 'completed':
+            return 'completed';
+        case 'failed':
+            return 'failed';
+        case 'executed':
+            return 'executed';
+        default:
+            return null;
     }
-    if (typeof payload !== 'object') return null;
-    return {
-        id: obj.id,
-        eventName: obj.eventName,
-        occurredAt: obj.occurredAt,
-        actor,
-        payload: payload as Record<string, unknown>,
+}
+
+function narrowJobFields(eventName: string, payload: Record<string, unknown> | null): JobEventFields {
+    const fields: JobEventFields = {};
+    if (!payload) return fields;
+    const pickString = (key: string): string | undefined => {
+        const v = payload[key];
+        return typeof v === 'string' && v.length > 0 ? v : undefined;
     };
+    const pickNumber = (key: string): number | undefined => {
+        const v = payload[key];
+        return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+    };
+    const suffix = eventName.split('.').pop() ?? '';
+    if (suffix === 'executed') {
+        // scheduler.job.executed -> { name, durationMs, error? }
+        fields.name = pickString('name');
+        fields.durationMs = pickNumber('durationMs');
+        fields.error = pickString('error');
+    } else {
+        // queue.job.* -> { jobId, type, ... }
+        fields.jobId = pickString('jobId');
+        fields.type = pickString('type');
+        if (suffix === 'failed' || suffix === 'retrying') {
+            fields.attempt = pickNumber('attempt');
+        }
+        if (suffix === 'failed') {
+            fields.error = pickString('error');
+        }
+    }
+    return fields;
+}
+
+/** Badge variant for a job state label. */
+function stateBadgeVariant(state: string): 'neutral' | 'info' | 'success' | 'warning' | 'error' {
+    switch (state) {
+        case 'completed':
+        case 'executed':
+            return 'success';
+        case 'retrying':
+            return 'warning';
+        case 'failed':
+            return 'error';
+        default:
+            return 'neutral';
+    }
+}
+
+/**
+ * Merge two newest-first event pages into one newest-first list. Both prefix
+ * pages arrive sorted by `occurredAt` descending (server ORDER BY); standard
+ * O(n) merge of two sorted lists. Ties broken by stable queue-before-scheduler
+ * ordering so cross-prefix determinism holds in tests.
+ */
+function mergeByOccurredAtDesc(queue: SystemEventRow[], scheduler: SystemEventRow[]): SystemEventRow[] {
+    const merged: SystemEventRow[] = [];
+    let i = 0;
+    let j = 0;
+    while (i < queue.length && j < scheduler.length) {
+        const q = queue[i];
+        const s = scheduler[j];
+        if (q && s && q.occurredAt >= s.occurredAt) {
+            merged.push(q);
+            i++;
+        } else if (s) {
+            merged.push(s);
+            j++;
+        } else if (q) {
+            merged.push(q);
+            i++;
+        } else {
+            break;
+        }
+    }
+    while (i < queue.length) {
+        const item = queue[i];
+        if (item) merged.push(item);
+        i++;
+    }
+    while (j < scheduler.length) {
+        const item = scheduler[j];
+        if (item) merged.push(item);
+        j++;
+    }
+    return merged;
+}
+
+/**
+ * A collapsed per-job thread: one or more `queue.job.*` events sharing a
+ * `jobId`, ordered newest-first. The header surfaces the latest event's
+ * state/attempt/error so an operator can read the job's story at a glance;
+ * the disclosure lists the full event sequence (R3).
+ */
+interface JobThreadItem {
+    kind: 'thread';
+    jobId: string;
+    events: SystemEventRow[];
+}
+
+/** A standalone event not grouped under a jobId (scheduler, consumer, stats). */
+interface StandaloneItem {
+    kind: 'standalone';
+    row: SystemEventRow;
+}
+
+type JobListItem = JobThreadItem | StandaloneItem;
+
+/**
+ * Correlate `queue.job.*` events by `payload.jobId` into collapsed per-job
+ * threads ordered by most-recent event; scheduler/consumer/stats rows stay
+ * standalone. Events arrive newest-first from the merged page, so the first
+ * sighting of a jobId fixes the thread's list position and subsequent events
+ * for the same jobId append to that thread (R3).
+ */
+function groupJobEvents(events: SystemEventRow[]): JobListItem[] {
+    const items: JobListItem[] = [];
+    const threads = new Map<string, JobThreadItem>();
+    for (const row of events) {
+        const isQueueJob = row.eventName.startsWith('queue.job.');
+        const jobId = isQueueJob ? narrowJobFields(row.eventName, row.payload).jobId : undefined;
+        if (jobId !== undefined) {
+            const existing = threads.get(jobId);
+            if (existing) {
+                existing.events.push(row);
+            } else {
+                const thread: JobThreadItem = { kind: 'thread', jobId, events: [row] };
+                threads.set(jobId, thread);
+                items.push(thread);
+            }
+        } else {
+            items.push({ kind: 'standalone', row });
+        }
+    }
+    return items;
 }
 
 /** Jobs tab: queue status cards plus recent queue/scheduler events. */
@@ -97,24 +234,30 @@ export default function JobsTab() {
         const controller = new AbortController();
         (async () => {
             try {
-                const [statsRes, eventsRes] = await Promise.all([
+                const [statsRes, queueRes, schedulerRes] = await Promise.all([
                     fetchWithTimeout(new Request(JOB_STATS_URL, { signal: controller.signal })),
                     fetchWithTimeout(
-                        new Request(`${EVENTS_HISTORY_URL}?limit=${JOB_HISTORY_LIMIT}`, { signal: controller.signal }),
+                        new Request(`${HISTORY_URL}?prefix=queue&limit=${JOB_HISTORY_LIMIT}`, {
+                            signal: controller.signal,
+                        }),
+                    ),
+                    fetchWithTimeout(
+                        new Request(`${HISTORY_URL}?prefix=scheduler&limit=${JOB_HISTORY_LIMIT}`, {
+                            signal: controller.signal,
+                        }),
                     ),
                 ]);
                 if (!statsRes.ok) throw new Error(`job stats fetch failed: ${statsRes.status}`);
-                if (!eventsRes.ok) throw new Error(`job history fetch failed: ${eventsRes.status}`);
+                if (!queueRes.ok) throw new Error(`queue history fetch failed: ${queueRes.status}`);
+                if (!schedulerRes.ok) throw new Error(`scheduler history fetch failed: ${schedulerRes.status}`);
                 const statsBody = parseStatsResponse((await statsRes.json()) as unknown);
-                const historyBody = parseHistoryResponse((await eventsRes.json()) as unknown);
+                const queueBody = parseHistoryResponse((await queueRes.json()) as unknown);
+                const schedulerBody = parseHistoryResponse((await schedulerRes.json()) as unknown);
                 if (!statsBody) throw new Error('job stats response failed schema validation');
-                if (!historyBody) throw new Error('job history response failed schema validation');
-                setState({
-                    stats: statsBody.stats,
-                    events: historyBody.events.filter(
-                        (evt) => evt.eventName.startsWith('queue.') || evt.eventName.startsWith('scheduler.'),
-                    ),
-                });
+                if (!queueBody) throw new Error('queue history response failed schema validation');
+                if (!schedulerBody) throw new Error('scheduler history response failed schema validation');
+                const events = mergeByOccurredAtDesc(queueBody.events, schedulerBody.events);
+                setState({ stats: statsBody.stats, events });
             } catch (err) {
                 if (controller.signal.aborted) return;
                 setError(err instanceof Error ? err.message : String(err));
@@ -139,20 +282,20 @@ export default function JobsTab() {
     }
 
     const stats = [
-        ['Pending', state.stats.pending],
-        ['Processing', state.stats.processing],
-        ['Completed', state.stats.completed],
-        ['Failed', state.stats.failed],
+        ['Pending', state.stats.pending, 'text-spur-text'],
+        ['Processing', state.stats.processing, 'text-info'],
+        ['Completed', state.stats.completed, 'text-success'],
+        ['Failed', state.stats.failed, 'text-error'],
     ] as const;
 
     return (
-        <div className="flex flex-col h-full overflow-hidden">
+        <div className="flex flex-col h-full overflow-hidden" data-jobs-tab>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 p-3 border-b border-spur-border bg-base-200 shrink-0">
-                {stats.map(([label, value]) => (
+                {stats.map(([label, value, color]) => (
                     <Card key={label} variant="compact" className="bg-base-100 border border-spur-border">
                         <CardBody className="p-3 gap-1">
                             <span className="text-[10px] uppercase text-spur-text-muted font-semibold">{label}</span>
-                            <span className="text-xl font-semibold text-spur-text tabular-nums">{value}</span>
+                            <span className={`text-xl font-semibold tabular-nums ${color}`}>{value}</span>
                         </CardBody>
                     </Card>
                 ))}
@@ -162,32 +305,164 @@ export default function JobsTab() {
                 <span className="ml-2 text-xs text-spur-text-muted">{state.events.length} event(s)</span>
             </div>
             {state.events.length === 0 ? (
-                <div className="p-4 text-sm text-spur-text-muted italic">No job events yet.</div>
+                <div className="p-4 text-sm text-spur-text-muted italic" data-jobs-empty>
+                    No job events yet - the queue has not processed any jobs.
+                </div>
             ) : (
-                <ul className="flex-1 overflow-y-auto p-2 space-y-2" data-jobs-tab>
-                    {state.events.map((evt) => (
-                        <li key={evt.id}>
-                            <Card variant="compact" className="bg-base-200 border border-spur-border">
-                                <CardBody className="p-3 gap-1">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <Badge variant="outline" size="xs">
-                                            {evt.eventName}
-                                        </Badge>
-                                        <span className="text-[10px] text-spur-text-muted ml-auto font-mono">
-                                            {evt.occurredAt}
-                                        </span>
-                                    </div>
-                                    {evt.payload !== null && Object.keys(evt.payload).length > 0 && (
-                                        <pre className="text-[11px] text-spur-text-muted bg-base-300 rounded p-2 overflow-x-auto">
-                                            {JSON.stringify(evt.payload, null, 2)}
-                                        </pre>
-                                    )}
-                                </CardBody>
-                            </Card>
-                        </li>
-                    ))}
+                <ul className="flex-1 overflow-y-auto p-2 space-y-2">
+                    {groupJobEvents(state.events).map((item) =>
+                        item.kind === 'thread' ? (
+                            <JobThreadCard key={`thread-${item.jobId}`} item={item} />
+                        ) : (
+                            <JobEventCard key={item.row.id} row={item.row} />
+                        ),
+                    )}
                 </ul>
             )}
         </div>
+    );
+}
+
+/** One structured job-event row: scannable fields + collapsed raw payload. */
+function JobEventCard({ row }: { row: SystemEventRow }) {
+    const fields = useMemo(() => narrowJobFields(row.eventName, row.payload), [row.eventName, row.payload]);
+    const jobState = deriveJobState(row.eventName);
+    const isScheduler = row.eventName.startsWith('scheduler.');
+    const identity = isScheduler ? (fields.name ?? 'scheduler') : (fields.jobId ?? 'job');
+    const typeLabel = isScheduler ? 'scheduler' : (fields.type ?? 'unknown');
+    const durationLabel = fields.durationMs !== undefined ? formatDuration(fields.durationMs) : null;
+
+    return (
+        <li>
+            <Card variant="compact" className="bg-base-200 border border-spur-border">
+                <CardBody className="p-3 gap-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        {jobState !== null && (
+                            <Badge variant={stateBadgeVariant(jobState)} size="xs">
+                                {jobState}
+                            </Badge>
+                        )}
+                        <span className="text-xs font-mono text-spur-text font-semibold">{identity}</span>
+                        <Badge variant="outline" size="xs">
+                            {typeLabel}
+                        </Badge>
+                        <span className="text-[10px] text-spur-text-muted ml-auto font-mono">{row.occurredAt}</span>
+                    </div>
+                    <div className="flex items-center gap-3 flex-wrap text-[11px] text-spur-text-muted">
+                        {fields.attempt !== undefined && (
+                            <span>
+                                attempt <span className="font-mono text-spur-text">{fields.attempt}</span>
+                            </span>
+                        )}
+                        {durationLabel !== null && (
+                            <span>
+                                duration <span className="font-mono text-spur-text">{durationLabel}</span>
+                            </span>
+                        )}
+                        {fields.error !== undefined && (
+                            <span className="text-error truncate max-w-md" title={fields.error}>
+                                {fields.error}
+                            </span>
+                        )}
+                        {!isScheduler && fields.type === undefined && <span className="italic">unknown job type</span>}
+                    </div>
+                    {row.payload !== null && Object.keys(row.payload).length > 0 && (
+                        <details className="mt-1">
+                            <summary className="text-[10px] text-spur-text-muted cursor-pointer select-none">
+                                raw payload
+                            </summary>
+                            <pre className="text-[10px] text-spur-text-muted bg-base-300 rounded p-2 overflow-x-auto mt-1">
+                                {JSON.stringify(row.payload, null, 2)}
+                            </pre>
+                        </details>
+                    )}
+                </CardBody>
+            </Card>
+        </li>
+    );
+}
+
+/** A collapsed per-job thread: header shows the latest event's state/fields,
+ * disclosure lists the full event sequence (R3). */
+function JobThreadCard({ item }: { item: JobThreadItem }) {
+    // biome-ignore lint/style/noNonNullAssertion: groupJobEvents invariant guarantees events[0] exists
+    const latest = item.events[0]!;
+    const fields = useMemo(() => narrowJobFields(latest.eventName, latest.payload), [latest]);
+    const jobState = deriveJobState(latest.eventName);
+    const durationLabel = fields.durationMs !== undefined ? formatDuration(fields.durationMs) : null;
+
+    return (
+        <li>
+            <Card variant="compact" className="bg-base-200 border border-spur-border">
+                <CardBody className="p-3 gap-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        {jobState !== null && (
+                            <Badge variant={stateBadgeVariant(jobState)} size="xs">
+                                {jobState}
+                            </Badge>
+                        )}
+                        <span className="text-xs font-mono text-spur-text font-semibold">{item.jobId}</span>
+                        {fields.type !== undefined && (
+                            <Badge variant="outline" size="xs">
+                                {fields.type}
+                            </Badge>
+                        )}
+                        <span className="text-[10px] text-spur-text-muted ml-auto font-mono">{latest.occurredAt}</span>
+                    </div>
+                    <div className="flex items-center gap-3 flex-wrap text-[11px] text-spur-text-muted">
+                        {fields.attempt !== undefined && (
+                            <span>
+                                attempt <span className="font-mono text-spur-text">{fields.attempt}</span>
+                            </span>
+                        )}
+                        {durationLabel !== null && (
+                            <span>
+                                duration <span className="font-mono text-spur-text">{durationLabel}</span>
+                            </span>
+                        )}
+                        {fields.error !== undefined && (
+                            <span className="text-error truncate max-w-md" title={fields.error}>
+                                {fields.error}
+                            </span>
+                        )}
+                        <span className="italic">{item.events.length} event(s)</span>
+                    </div>
+                    {item.events.length > 1 && (
+                        <details className="mt-1">
+                            <summary className="text-[10px] text-spur-text-muted cursor-pointer select-none">
+                                event sequence ({item.events.length})
+                            </summary>
+                            <ol className="mt-1 space-y-1">
+                                {item.events.map((evt) => {
+                                    const evtFields = narrowJobFields(evt.eventName, evt.payload);
+                                    return (
+                                        <li
+                                            key={evt.id}
+                                            className="text-[10px] text-spur-text-muted flex items-center gap-2"
+                                        >
+                                            <span className="font-mono">{evt.occurredAt}</span>
+                                            <span>{evt.eventName}</span>
+                                            {evtFields.attempt !== undefined && (
+                                                <span>attempt {evtFields.attempt}</span>
+                                            )}
+                                        </li>
+                                    );
+                                })}
+                            </ol>
+                        </details>
+                    )}
+                    {latest.payload !== null && Object.keys(latest.payload).length > 0 && (
+                        <details className="mt-1">
+                            <summary className="text-[10px] text-spur-text-muted cursor-pointer select-none">
+                                raw payload
+                            </summary>
+                            <pre className="text-[10px] text-spur-text-muted bg-base-300 rounded p-2 overflow-x-auto mt-1">
+                                {JSON.stringify(latest.payload, null, 2)}
+                            </pre>
+                        </details>
+                    )}
+                </CardBody>
+            </Card>
+        </li>
     );
 }
