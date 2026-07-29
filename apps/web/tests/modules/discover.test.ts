@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+    compareModules,
     discoverModules,
     discoverViaFs,
     discoverViaGlob,
@@ -91,6 +92,26 @@ describe('isWebModule', () => {
     });
 });
 
+describe('compareModules', () => {
+    test('both declared: sorts ascending by order', () => {
+        expect(compareModules(shape({ order: 2 }), shape({ order: 1 }))).toBe(1);
+        expect(compareModules(shape({ order: 1 }), shape({ order: 2 }))).toBe(-1);
+        expect(compareModules(shape({ order: 1 }), shape({ order: 1 }))).toBe(0);
+    });
+
+    test('only a declared: a sorts before b', () => {
+        expect(compareModules(shape({ order: 5 }), shape({}))).toBe(-1);
+    });
+
+    test('only b declared: a sorts after b', () => {
+        expect(compareModules(shape({}), shape({ order: 5 }))).toBe(1);
+    });
+
+    test('neither declared: returns 0 (stable sort preserves input order)', () => {
+        expect(compareModules(shape({}), shape({}))).toBe(0);
+    });
+});
+
 describe('discoverViaGlob', () => {
     test('collects valid modules and sorts them by id', () => {
         const b = shape({ id: 'b', route: 'b' });
@@ -117,6 +138,23 @@ describe('discoverViaGlob', () => {
 
     test('returns empty when the glob yields nothing', () => {
         expect(discoverViaGlob(() => ({}))).toEqual([]);
+    });
+
+    test('declared-order modules sort first by order, undeclared follow in id order (AC Scenario 2)', () => {
+        // Given out of id order; zeta declares order:0, alpha declares order:1, beta/gamma undeclared.
+        const zeta = shape({ id: 'zeta', route: 'zeta', order: 0 });
+        const alpha = shape({ id: 'alpha', route: 'alpha', order: 1 });
+        const beta = shape({ id: 'beta', route: 'beta' });
+        const gamma = shape({ id: 'gamma', route: 'gamma' });
+        const fakeGlob = () => ({
+            './zeta/index.tsx': { module: zeta },
+            './alpha/index.tsx': { module: alpha },
+            './beta/index.tsx': { module: beta },
+            './gamma/index.tsx': { module: gamma },
+        });
+        const result = discoverViaGlob(fakeGlob);
+        // id pre-sort -> [alpha, beta, gamma, zeta]; compareModules lifts declared -> [zeta(0), alpha(1), beta, gamma]
+        expect(result.map((m) => m.id)).toEqual(['zeta', 'alpha', 'beta', 'gamma']);
     });
 });
 
@@ -168,6 +206,26 @@ describe('discoverViaFs', () => {
         expect(result.map((m) => m.id)).toEqual(['good', 'ts-only']);
     });
 
+    test('declared-order modules sort first by order, undeclared retain dir-name order (R6 / AC Scenario 2)', () => {
+        // gamma-dir hosts order:0, alpha-dir undeclared, beta-dir hosts order:1.
+        // dir-name pre-sort -> [alpha-dir, beta-dir, gamma-dir]; require order matches.
+        // compareModules lifts declared -> [gamma(0), beta(1), alpha(undeclared, retains position)].
+        const gamma = shape({ id: 'gamma', route: 'gamma', order: 0 });
+        const alpha = shape({ id: 'alpha', route: 'alpha' });
+        const beta = shape({ id: 'beta', route: 'beta', order: 1 });
+        const seam: FsSeam = {
+            readdirSync: () => [dirent('gamma-dir'), dirent('alpha-dir'), dirent('beta-dir')],
+            tryRequire: (p) => {
+                if (p.endsWith('gamma-dir/index.tsx')) return { module: gamma };
+                if (p.endsWith('alpha-dir/index.tsx')) return { module: alpha };
+                if (p.endsWith('beta-dir/index.tsx')) return { module: beta };
+                throw new Error('no such module');
+            },
+        };
+        const result = discoverViaFs('/fake/root', seam);
+        expect(result.map((m) => m.id)).toEqual(['gamma', 'beta', 'alpha']);
+    });
+
     test('skips a dir whose module exports are not WebModule-shaped (readModule null, no throw)', () => {
         const seam: FsSeam = {
             readdirSync: () => [dirent('no-export')],
@@ -204,5 +262,12 @@ describe('discoverModules (real fs fallback under bun test)', () => {
             expect(typeof mod.route).toBe('string');
             expect(typeof mod.component).toBe('function');
         }
+    });
+
+    test('observability is the first discovered module and therefore the default landing route (AC Scenario 1)', () => {
+        const discovered = discoverModules();
+        expect(discovered.length).toBeGreaterThan(0);
+        expect(discovered[0]?.id).toBe('observability');
+        expect(discovered[0]?.order).toBe(0);
     });
 });

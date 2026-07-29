@@ -16,4 +16,5 @@ export const module: WebModule = {
     route: 'observability',
     component: ObservabilityShell,
     sidebarLabel: 'Observability',
+    order: 0,
 };

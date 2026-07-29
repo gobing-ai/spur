@@ -56,6 +56,23 @@ export function isWebModule(value: unknown): value is WebModule {
 }
 
 /**
+ * Partial-ordering comparator for declarative module ordering.
+ *
+ * Declared modules (with `order`) sort ascending by `order`; undeclared modules
+ * retain their existing relative order (the comparator returns `0`, so the stable
+ * sort preserves the input sequence). Applied as a final sort in both discovery
+ * paths on top of each path's deterministic pre-sort (id / directory name).
+ */
+export function compareModules(a: WebModule, b: WebModule): number {
+    const aHas = typeof a.order === 'number';
+    const bHas = typeof b.order === 'number';
+    if (aHas && bHas) return (a.order as number) - (b.order as number);
+    if (aHas) return -1;
+    if (bHas) return 1;
+    return 0;
+}
+
+/**
  * Build-runtime path: scan the default root via `import.meta.glob`.
  *
  * Exported with an injectable glob dependency so the branch (always live in the
@@ -71,6 +88,8 @@ export function discoverViaGlob(globFn: (pattern: string, opts: Record<string, u
     }
     // Sort within root by id for deterministic order (glob return order is unspecified).
     found.sort((a, b) => a.id.localeCompare(b.id));
+    // Lift declared-order modules (stable sort preserves the id pre-sort for the rest).
+    found.sort(compareModules);
     return found;
 }
 
@@ -153,5 +172,7 @@ export function discoverViaFs(root: string, seam: FsSeam): WebModule[] {
             }
         }
     }
+    // Lift declared-order modules (stable sort preserves the dir-name pre-sort for the rest).
+    found.sort(compareModules);
     return found;
 }
