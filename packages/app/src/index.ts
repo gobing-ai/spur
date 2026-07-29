@@ -156,6 +156,30 @@ export {
     type RuleValidateServiceResult,
 } from './services/rule-service';
 export type {
+    RunStoreAction,
+    RunStoreDetail,
+    RunStoreListEntry,
+    RunStoreListQuery,
+    RunStoreListResult,
+    RunStorePhase,
+    RunStoreServiceContext,
+    RunStoreTransition,
+    RunStoreWbsLink,
+} from './services/run-store-service';
+export {
+    clampRunStoreLimit,
+    decodeRunListCursor,
+    encodeRunListCursor,
+    RUN_STORE_LIST_DEFAULT_LIMIT,
+    RUN_STORE_LIST_MAX_LIMIT,
+    RUN_STORE_WBS_DEFAULT_LIMIT,
+    RUN_STORE_WBS_MAX_LIMIT,
+    RunStoreBadCursorError,
+    RunStoreNotFoundError,
+    RunStoreService,
+    summarizeActionResult,
+} from './services/run-store-service';
+export type {
     ProcessEntry,
     ProcessEventBus,
     ProcessEventPayload,

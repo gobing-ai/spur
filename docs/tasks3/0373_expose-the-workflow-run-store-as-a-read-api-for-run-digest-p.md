@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Expose the workflow run store as a read API for run digest, phase progress, and action log"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: J3
@@ -12,7 +12,7 @@ priority: P0
 tags: ["observability", "api", "run-store", "data-plane"]
 dependencies: []
 created_at: "2026-07-29T00:14:03.040Z"
-updated_at: "2026-07-29T00:25:31.251Z"
+updated_at: "2026-07-29T04:12:04.886Z"
 ---
 
 ## 0373. Expose the workflow run store as a read API for run digest, phase progress, and action log
@@ -41,25 +41,70 @@ Scenario: R25 — Run detail for an unknown run id is a clean not-found
 <!-- Clarifications and decisions made during refinement. Keep empty if none. -->
 
 ### Design
+**Approach.** Thin HTTP module over a new application `RunStoreService` that composes existing domain DAOs (`RunDao`, `PhaseRunDao`, `TransitionRunDao`, `ActionRunDao`, `TaskRunLinkDao`). No new tables; no `ts-db` import in `apps/server` (ADR-021 / R5).
 
-<!-- Chosen implementation approach, key tradeoffs, invariants, and impacted surfaces. -->
+**Surfaces.**
+- `GET /api/runs` — list with `status`, `limit` (default 50 / max 200), opaque keyset `cursor` on `(started_at DESC, id DESC)`.
+- `GET /api/runs/:runId` — digest + ordered phases / transitions / actions; unknown id → 404 `{ error, code: RUN_NOT_FOUND, runId }`.
+- `GET /api/runs/by-wbs/:wbs` — every `task_run_links` row with link kind + run digest; empty list (not error) when none.
 
+**Redaction (R6).** `result_json` never crosses the wire raw. `summarizeActionResult` applies the same SECRET_PATTERN + sensitive-key blanking + field length bound as the event-path normalizer, projecting a `resultSummary` on each action.
+
+**Invariants.**
+- Unknown run id never yields a partial or fabricated object.
+- Malformed list cursor → 400, never silent page-1 fallback.
+- DAO SQL stays in domain; redaction + composition in app; HTTP mapping only in server.
+
+**Impacted.** `packages/domain` (RunDao agent + keyset), `packages/app` (RunStoreService), `apps/server` (runs module + context wiring), `docs/04_DESIGN.md` (T3).
 ### Plan
-
-<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
-
+1. Extend `RunDao.traceRows` / `traceRowById` with `agent` and exclusive keyset `before`.
+2. Add `RunStoreService` (list / getDetail / listByWbs + cursor + result redaction) and export from `@gobing-ai/spur-app`.
+3. Add `runsModule` (`GET /api/runs`, `/api/runs/by-wbs/:wbs`, `/api/runs/:runId`), wire `runStoreService()` on `ServerContext`, register in builtins.
+4. Tests: domain keyset/agent, app service AC R1–R6, server HTTP 200/400/404.
+5. Document the surface in `docs/04_DESIGN.md` (T3 same-commit).
+6. Write `## Solution` change-map.
 ### Solution
+**Change map**
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File:line | What / why |
+| --- | --- |
+| `packages/domain/src/dao/run-dao.ts:38` | `traceRows` / `traceRowById` project `agent` and accept exclusive keyset `before` (`started_at DESC, id DESC`) for list paging. |
+| `packages/app/src/services/run-store-service.ts:258` | New `RunStoreService`: `list`, `getDetail`, `listByWbs`; cursor encode/decode; `summarizeActionResult` applies event-path SECRET_PATTERN + sensitive-key blanking (R6). |
+| `packages/app/src/index.ts` | Public exports for the service, types, and cursor helpers. |
+| `apps/server/src/modules/runs/index.ts:19` | Thin Hono `runsModule`: `GET /api/runs`, `/api/runs/by-wbs/:wbs`, `/api/runs/:runId` — transport only, no SQL / no ts-db (R5). |
+| `apps/server/src/context.ts:492` | Lazy `runStoreService()` on `ServerContext`. |
+| `apps/server/src/modules/registry.ts` | Register `runs` in builtins. |
+| `docs/04_DESIGN.md:1133` | Document the run-store read API (T3 same-commit). |
+| Tests | `packages/domain/tests/dao/run-dao.test.ts`, `packages/app/tests/services/run-store-service.test.ts`, `apps/server/tests/modules/runs/index.test.ts`, registry name list. |
 
+**Rationale.** The run store is the only durable pipeline digest; the Board had no HTTP path to it. Layering follows ADR-021: DAOs own SQL, the app service owns composition + redaction, the server module maps HTTP only. Keyset paging mirrors the 0372 events/history pattern.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `run-dao.ts:38-77` + `run-store-service.ts:261-288` + `GET /api/runs` |
+| R2 | MET | `getDetail` `294-331` phases/transitions/actions + `resultSummary` |
+| R3 | MET | `listByWbs` `338-359` empty list for unknown WBS |
+| R4 | MET | `RUN_NOT_FOUND` → HTTP 404 |
+| R5 | MET | thin `runsModule`, no ts-db import |
+| R6 | MET | SECRET_PATTERN + sensitive keys + 256 bound |
+| R7 | MET | `docs/04_DESIGN.md:1133-1162` |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**Disposition:** APPROVE · Functional PASS · SECUA no blocker/major · architecture advisory only.
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P3 | E | `packages/app/src/services/run-store-service.ts:348-356` | `listByWbs` does sequential `traceRowById` per link (N+1). Acceptable under default limit 50 / max 200; batch-by-id if WBS fan-out becomes hot. |
+| P4 | A | `run-store-service.ts:17-23` vs `event-names.ts:251-264` | SECRET_PATTERN / sensitive-key set re-declared vs event path — same discipline today; extract shared wire-redact helper if either path evolves. |
+| P4 | S | `run-store-service.ts:195-228` + `runs/index.ts:62-74` | `result_json` never raw on wire; SECRET_PATTERN + sensitive-key blanking + 256 bound; unknown id → clean 404 `RUN_NOT_FOUND` (no partial object). |
+| P4 | C | `run-store-service.ts:141-174` + `runs/index.ts:40-44` | Malformed list cursor → 400 `MALFORMED_CURSOR`, never silent page-1 fallback. |
+| P4 | tests-pass | task surfaces | `bun test` domain+app+server: 42 pass / 0 fail (2026-07-28 verify run). |
 
+**Functional:** R1–R7 MET · AC R22–R25 MET. **Design:** DONE (thin Hono + RunStoreService + DAO keyset + DESIGN.md). **Gate:** clear approve; residual risks non-blocking.
 ### References
 
 J3
@@ -67,3 +112,6 @@ J3
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-07-29T04:01:00.719Z todo → wip (system)
+- 2026-07-29T04:05:47.569Z wip → testing (system)
+- 2026-07-29T04:12:04.886Z testing → done (system)

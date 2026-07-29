@@ -1130,6 +1130,38 @@ cursor is a total order under concurrent inserts.
 | Stability | Newer concurrent inserts do not reappear on later pages; rows older than the cursor are not skipped |
 
 
+## Workflow run-store read API (0373)
+
+The durable record of what a pipeline did lives in the workflow run store
+(`runs`, `phase_runs`, `transition_runs`, `action_runs`, `task_run_links`) —
+not in the `system_events` ledger. Task 0373 exposes a **raw Hono** read surface
+over that store so the Board (J4 Tasks tabview) can show a task digest with
+progress and action log. Query composition and `result_json` redaction live in
+`RunStoreService` (`packages/app`); the server module is transport-only and does
+not import `ts-db` (ADR-021).
+
+| Surface | Contract |
+| --- | --- |
+| `GET /api/runs` | Newest-first list over `runs` |
+| Query | `status`, `limit` (default **50**, max **200**), `cursor` (opaque keyset) |
+| Success body | `{ runs, count, nextCursor, hasMore }` |
+| List entry | `{ id, workflowName, status, mode, agent, startedAt, completedAt }` |
+| `cursor` | Malformed → **400** `{ error, code: "MALFORMED_CURSOR" }` |
+| Order | `started_at DESC, id DESC` exclusive keyset (stable under concurrent inserts) |
+| `GET /api/runs/:runId` | One run + ordered `phases`, `transitions`, `actions` |
+| Action fields | `id, node, kind, status, durationMs, ok, resultSummary, startedAt, completedAt` |
+| `resultSummary` | Redacted/bounded projection of `result_json` (same SECRET_PATTERN + sensitive-key blanking as the event path); never the raw blob |
+| Unknown id | **404** `{ error, code: "RUN_NOT_FOUND", runId }` — no partial/fabricated object |
+| `GET /api/runs/by-wbs/:wbs` | Every `task_run_links` row for the WBS with link `kind` + run digest |
+| Empty WBS | **200** `{ wbs, links: [], count: 0 }` — not an error |
+| Optional query | `limit` (default **50**, max **200**) on the WBS lookup |
+
+**Layering.** Domain DAOs own SQL (`RunDao.traceRows` / `traceRowById` with `agent` +
+keyset `before`; `PhaseRunDao` / `TransitionRunDao` / `ActionRunDao` /
+`TaskRunLinkDao`). `RunStoreService` composes them and redacts. `runsModule`
+maps HTTP ↔ service results only.
+
+
 ## Team + Message HTTP Routes (0256)
 
 The board's team supervision and inter-agent messaging surface is **raw Hono handlers** (not oRPC).

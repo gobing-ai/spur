@@ -170,6 +170,33 @@ describe('RunDao', () => {
             adapter.close();
         });
 
+        test('traceRows projects agent and supports exclusive keyset before (task 0373)', async () => {
+            const adapter = await setup();
+            const dao = new RunDao(adapter);
+            await adapter.run(
+                `INSERT INTO runs (id, workflow_name, mode, status, agent, started_at, completed_at, metadata_json, created_at, updated_at)
+                 VALUES
+                   ('run_a', 'pipe', 'state-machine', 'done', 'omp', '2026-07-01T10:00:00.000Z', '2026-07-01T10:01:00.000Z', '{}', 1, 1),
+                   ('run_b', 'pipe', 'state-machine', 'done', 'pi', '2026-07-01T11:00:00.000Z', '2026-07-01T11:01:00.000Z', '{}', 2, 2),
+                   ('run_c', 'pipe', 'state-machine', 'running', 'claude', '2026-07-01T12:00:00.000Z', NULL, '{}', 3, 3)`,
+            );
+
+            const first = await dao.traceRows({ limit: 1 });
+            expect(first).toHaveLength(1);
+            const head = first[0];
+            expect(head?.id).toBe('run_c');
+            expect(head?.agent).toBe('claude');
+            expect(head).toBeDefined();
+
+            const next = await dao.traceRows({
+                limit: 10,
+                before: { started_at: head?.started_at ?? '', id: head?.id ?? '' },
+            });
+            expect(next.map((r) => r.id)).toEqual(['run_b', 'run_a']);
+            expect(next[0]?.agent).toBe('pi');
+            adapter.close();
+        });
+
         test('traceRowById returns run-level fields', async () => {
             const adapter = await setup();
             const dao = new RunDao(adapter);
@@ -181,6 +208,7 @@ describe('RunDao', () => {
             expect(row?.id).toBe(run.id);
             expect(row?.status).toBe('running');
             expect(row?.workflow_name).toBeDefined();
+            expect(row?.agent).toBe('pi');
             adapter.close();
         });
 

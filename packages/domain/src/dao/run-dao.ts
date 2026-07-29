@@ -34,40 +34,56 @@ export class RunDao extends EntityDao<typeof runs, typeof runs.id> {
     // ── Trace queries (raw SQL — engine-writes use TEXT timestamps that
     //    differ from the integer schema; parameterized SQL handles this.)
 
-    /** Raw row shape returned by trace queries. */
-    traceRows(filter: { workflow?: string; status?: string; since?: string; limit: number }): Promise<
+    /** Raw row shape returned by trace / run-store list queries. */
+    traceRows(filter: {
+        workflow?: string;
+        status?: string;
+        since?: string;
+        /** Exclusive keyset: rows strictly older than this cursor (task 0373). */
+        before?: { started_at: string; id: string };
+        limit: number;
+    }): Promise<
         Array<{
             id: string;
             workflow_name: string;
             mode: string;
             status: string;
+            agent: string | null;
             started_at: string;
             completed_at: string | null;
             metadata_json: string;
         }>
     > {
         return this.adapter.queryAll(
-            `SELECT id, workflow_name, mode, status, started_at, completed_at, metadata_json
+            `SELECT id, workflow_name, mode, status, agent, started_at, completed_at, metadata_json
              FROM runs
              WHERE (?1 IS NULL OR workflow_name = ?1)
                AND (?2 IS NULL OR status = ?2)
                AND (?3 IS NULL OR started_at >= ?3)
-             ORDER BY started_at DESC
-             LIMIT ?4`,
+               AND (
+                 ?4 IS NULL
+                 OR started_at < ?4
+                 OR (started_at = ?4 AND id < ?5)
+               )
+             ORDER BY started_at DESC, id DESC
+             LIMIT ?6`,
             filter.workflow ?? null,
             filter.status ?? null,
             filter.since ?? null,
+            filter.before?.started_at ?? null,
+            filter.before?.id ?? null,
             filter.limit,
         );
     }
 
-    /** Fetch a single run row by id for trace timeline. */
+    /** Fetch a single run row by id for trace timeline / run-store detail. */
     traceRowById(runId: string): Promise<
         | {
               id: string;
               workflow_name: string;
               mode: string;
               status: string;
+              agent: string | null;
               started_at: string;
               completed_at: string | null;
               metadata_json: string;
@@ -75,7 +91,7 @@ export class RunDao extends EntityDao<typeof runs, typeof runs.id> {
         | undefined
     > {
         return this.adapter.queryFirst(
-            'SELECT id, workflow_name, mode, status, started_at, completed_at, metadata_json FROM runs WHERE id = ?',
+            'SELECT id, workflow_name, mode, status, agent, started_at, completed_at, metadata_json FROM runs WHERE id = ?',
             runId,
         );
     }

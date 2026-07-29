@@ -6,6 +6,7 @@ import type {
     PlanningFolders,
     ProcessInventoryService,
     RuleService,
+    RunStoreService,
     SupervisorService,
     TaskService,
     TeamService,
@@ -24,6 +25,7 @@ import {
     PlanningWriteService as PlanningWriteServiceImpl,
     ProcessInventoryService as ProcessInventoryServiceImpl,
     RuleService as RuleServiceImpl,
+    RunStoreService as RunStoreServiceImpl,
     SupervisorService as SupervisorServiceImpl,
     TaskService as TaskServiceImpl,
     TeamService as TeamServiceImpl,
@@ -187,6 +189,13 @@ export interface ServerContext {
     systemEventDao(): Promise<SystemEventDao>;
 
     /**
+     * Lazy run-store read service (task 0373) — list / detail / WBS lookup over
+     * `runs` + child tables. Application layer owns query composition + redaction;
+     * the HTTP module stays thin (ADR-021).
+     */
+    runStoreService(): RunStoreService;
+
+    /**
      * Resolved planning folders (phase folders) from `.spur/config.yaml` (via
      * serve.ts), or schema defaults when no config/FS is available. The task.folders
      * endpoint derives its response from this — never reads `docs/.tasks/config.jsonc`.
@@ -306,6 +315,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
     let agentSvc: AgentService | undefined;
     let ruleSvc: RuleService | undefined;
     let workflowSvc: WorkflowAppService | undefined;
+    let runStoreSvc: RunStoreService | undefined;
     let systemEventDaoPromise: Promise<SystemEventDao> | undefined;
     let jobQueuePromise: Promise<ServerJobQueue> | undefined;
     let queueConsumerPromise: Promise<ServerQueueConsumer<unknown>> | undefined;
@@ -477,6 +487,13 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
         async systemEventDao(): Promise<SystemEventDao> {
             systemEventDaoPromise ??= this.getDb().then((db) => new SystemEventDao(db));
             return systemEventDaoPromise;
+        },
+
+        runStoreService(): RunStoreService {
+            runStoreSvc ??= new RunStoreServiceImpl({
+                getDb: this.getDb.bind(this),
+            });
+            return runStoreSvc;
         },
 
         planningFolders(): PlanningFolders {
