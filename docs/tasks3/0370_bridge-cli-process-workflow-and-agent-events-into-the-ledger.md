@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Bridge CLI-process workflow and agent events into the ledger via the task-0249 direct-DAO pattern"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: J3
@@ -12,7 +12,7 @@ priority: P0
 tags: ["observability", "cli-bridge", "data-plane"]
 dependencies: ["0367", "0369"]
 created_at: "2026-07-29T00:14:03.018Z"
-updated_at: "2026-07-29T00:25:23.948Z"
+updated_at: "2026-07-29T03:33:28.902Z"
 ---
 
 ## 0370. Bridge CLI-process workflow and agent events into the ledger via the task-0249 direct-DAO pattern
@@ -40,25 +40,62 @@ Scenario: R14 — A ledger write failure never breaks the CLI run
 <!-- Clarifications and decisions made during refinement. Keep empty if none. -->
 
 ### Design
+**Approach.** Mirror task 0249's direct-DAO durability for EventBus producers:
+- Planning used `SystemEventEmitter` because mutations call `EventEmitter.emit(PlanningEvent)` with no bus.
+- Workflow/agent already emit on a process-local `EventBus`, so the dual is `registerSystemEventTap` → `SystemEventDao` (same normalize / actor / correlation / R5 isolation as the server tap and the planning emitter).
 
-<!-- Chosen implementation approach, key tradeoffs, invariants, and impacted surfaces. -->
+**CLI attach point.** `apps/cli/src/system-event-ledger.ts` exports `attachSystemEventLedger(bus, context)` — opens the shared SQLite ledger, registers the catalog tap (diagnostic tier only when toggled), returns `{ flush, unsubscribe }` with failure isolation on attach.
 
+**Wiring.**
+- `spur workflow run` / `continue`: always construct a local `EventBus` (not only for human progress / `--trace-file` / `--steer`); pass it as both `observabilityBus` and `events` to `WorkflowAppService`; attach the ledger and flush in `finally`.
+- `spur agent run`: `context.agentService({ events: bus })` with the same attach. Workflow path intentionally leaves `AgentService.events` unset so a workflow-dispatched `agent.run` emits only the `workflow.agent` series (0365 R9 / R4 no double-count).
+- `continuePaused` now forwards the engine `events` bus the same way `run()` does.
+
+**Out of scope.** CLI `rule.*` / `message.*` / supervisor `process.*`; child-of-child IPC; server-side JSONL ingestion (operator declined).
 ### Plan
-
-<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
-
+1. Add `attachSystemEventLedger` helper (`apps/cli/src/system-event-ledger.ts`).
+2. Wire workflow run/continue + agent run to the ledger bus.
+3. Extend `CliContext.agentService(opts?)` for optional events while preserving agentConfig.
+4. Tests: unit (attach fail / correlation / diagnostic / persist fail) + integration (workflow run → ledger rows).
+5. Update producer audit (R7): workflow/agent CLI reachable; Gap 4 narrowed to child-of-child.
+6. Write Solution change-map.
 ### Solution
+| File | Change |
+| --- | --- |
+| `apps/cli/src/system-event-ledger.ts:41` | **New.** `attachSystemEventLedger` — CLI EventBus → `registerSystemEventTap` → `SystemEventDao`; attach failures log+swallow (R5); diagnostic toggle (R6). |
+| `apps/cli/src/commands/workflow.ts:259` | `run`: always build a local bus; wire both `observabilityBus` + `events`; attach ledger; flush/unsubscribe in `finally`. Leave workflow's `agentService()` without events (R4). |
+| `apps/cli/src/commands/workflow.ts:374` | `continue`: same ledger attach + bus wiring as `run`. |
+| `apps/cli/src/commands/agent.ts:299` | `runAgentRun` attaches ledger + `context.agentService({ events: bus })` for cataloged `agent.invoke.*`. |
+| `apps/cli/src/context.ts:35` | `agentService(options?)` accepts optional `events`/`processRegistry`; expose `agentConfig` on context. |
+| `packages/app/src/services/workflow-service.ts:537` | `continuePaused` forwards engine `events` bus like `run()` (0370 parity). |
+| `apps/cli/tests/system-event-ledger.test.ts:34` | Unit: attach fail, non-Error fail, correlation `run_id`, diagnostic skip, persist fail (R5). |
+| `apps/cli/tests/commands/workflow-system-events.test.ts:61` | Integration: `spur workflow run` → `workflow.*` rows with `run_id`; silent path; validate is read-only. |
+| `docs/inventory/system-events-producer-audit.md` | R7: workflow/agent CLI ✅; Gap 1 partially closed; Gap 4 narrowed to child-of-child residual. |
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+The Board never saw CLI-driven workflow/agent events because the server tap is process-local to `spur serve`. Reusing the proven 0249 direct-DAO path via the EventBus tap dual makes CLI runs visible without server-side JSONL ingestion, preserves 0365 redaction/normalization, correlates by `runId`, and isolates sink failures so observability never breaks a run.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: UNKNOWN (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| — | — | No requirements recorded; verify verdict UNKNOWN |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**Review date:** 2026-07-28
+**Mode:** `/sp-dev-review` + `/sp-dev-verify --fix all` (P1–P4 table required for L3)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Pri | File | Finding | Recommendation |
+| --- | --- | --- | --- |
+| P1 | (none) | No blockers — all R1–R7 MET; AC R12–R14 MET with executable evidence | None |
+| P2 | (none) | No major SECUA or design-conformance gaps | None |
+| P3 | apps/cli/src/commands/workflow.ts:259,374 | `bus as unknown as SystemEventBus` double-cast at ledger attach; CLI never plumbs `diagnosticEnabled` from config (always hard-off) | Align bus types in spur-app; optional config parity with serve.ts diagnostic toggle |
+| P4 | apps/cli/src/commands/workflow.ts:363-413 | No E2E for continue HITL ledger path; R13 dual-count absence is static+unit | Accept for scope; continue shares unit-tested attach helper |
 
+**Residual risk:** Gap 4 child-of-child residual (documented OOS). CLI diagnostic config not plumbed (P3).
+
+**Disposition:** APPROVE — functional + SECUA PASS; architecture advisory only.
 ### References
 
 J3
@@ -66,3 +103,6 @@ J3
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-07-29T03:19:51.152Z todo → wip (system)
+- 2026-07-29T03:26:39.916Z wip → testing (system)
+- 2026-07-29T03:33:28.902Z testing → done (system)

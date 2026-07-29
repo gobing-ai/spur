@@ -9,6 +9,7 @@ import {
     renderRunPlan,
     renderStepLine,
     type StepEvent,
+    type SystemEventBus,
     type TimelineEvent,
     WorkflowAppService,
     type WorkflowListEntry,
@@ -26,6 +27,7 @@ import { EventBus } from '@gobing-ai/ts-infra';
 import { EMBEDDED_SPUR_SCHEMAS } from '../config/embedded-schemas';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
+import { attachSystemEventLedger } from '../system-event-ledger';
 import { resolveSpurBin } from '../workflow/resolve-spur-bin';
 
 /**
@@ -79,18 +81,32 @@ async function resolveWorkflowPaths(cwd: string): Promise<string[]> {
 /** Register `spur workflow` commands. */
 export function registerWorkflowCommand(program: Command, context: CliContext): void {
     // `json` selects the HITL responder: interactive prompts must never fire under --json
-    // (they would corrupt the JSON stream). Only `run` invokes actions, so only it passes json=true.
-    const makeSvc = (json?: boolean, observabilityBus?: WorkflowObservabilityBus) =>
+    // (they would corrupt the JSON stream). Only `run`/`continue` invoke actions, so only
+    // those pass json=true. When a bus is supplied it is shared by both seams:
+    //   - `observabilityBus` → ObservableWorkflowAdapter verb-form events + workflow.agent
+    //   - `events` → engine-native workflow.* names (run-lifecycle / HITL / custom)
+    // Task 0370 attaches a SystemEventDao tap to that bus so CLI-driven runs land in
+    // the shared ledger the Board reads (same direct-DAO pattern as task 0249).
+    const makeSvc = (json?: boolean, bus?: WorkflowObservabilityBus) =>
         new WorkflowAppService({
             cwd: context.cwd,
             getDb: () => context.getDb(),
+            // Intentionally leave AgentService without a server-style events bus: the
+            // workflow-dispatched agent lifecycle is the single `workflow.agent` series
+            // (0365 R9 / 0370 R4). Wiring AiRunner.events here would dual-emit
+            // `agent.invoke.*` for the same execution.
             agentService: () => context.agentService(),
             ruleService: () => context.ruleService(),
             hitlResponder: () => context.hitlResponder(json),
             // Resolve bundled-workflow `$schema` refs from the embedded map rather than
             // node_modules, so validate works in a --compile binary and from any cwd.
             embeddedSchemas: () => EMBEDDED_SPUR_SCHEMAS,
-            ...(observabilityBus ? { observabilityBus: () => observabilityBus } : {}),
+            ...(bus
+                ? {
+                      observabilityBus: () => bus,
+                      events: () => bus as unknown as SystemEventBus,
+                  }
+                : {}),
         });
 
     const workflow = program.command('workflow').summary('validate and execute workflow YAML files');
@@ -232,23 +248,22 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             // spurBin is a default, overridable only if a caller deliberately sets it).
             const vars = { spurBin: resolveSpurBin(), ...parseVars(options.vars) };
 
-            // Observability DX (0114): for synchronous, human-facing runs only, print a
-            // run-start plan preview and a live per-step progress stream. Both are suppressed
-            // under --json (machine output stays byte-identical) and never reach the detached
-            // --async path (ignored stdio). commander negates --no-plan to options.plan=false.
+            // Observability: always build a CLI-local bus so engine + adapter events
+            // reach the system_events ledger (task 0370). Human progress / --trace-file
+            // / --steer reuse the same bus; under --json the progress handlers stay off
+            // so machine output remains byte-identical. commander negates --no-plan to
+            // options.plan=false.
             const runId = options.runId || crypto.randomUUID();
             const humanProgress = !json && !quiet && !silent;
-            let bus: WorkflowObservabilityBus | undefined;
+            const bus: WorkflowObservabilityBus = new EventBus();
+            const ledger = await attachSystemEventLedger(bus as unknown as SystemEventBus, context);
             let traceWriter: WorkflowTraceWriter | undefined;
             const heartbeats = new Map<string, ReturnType<typeof setInterval>>();
-            if (humanProgress || options.traceFile === true || options.steer === true) {
-                bus = new EventBus();
-            }
-            if (options.traceFile === true && bus !== undefined) {
+            if (options.traceFile === true) {
                 traceWriter = new WorkflowTraceWriter(context.cwd, runId);
                 traceWriter.attach(bus);
             }
-            if (humanProgress && bus !== undefined) {
+            if (humanProgress) {
                 context.output.write(`Run: ${runId}`);
                 if (options.plan !== false) {
                     try {
@@ -293,7 +308,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 options.steer === true
                     ? new WorkflowSteeringController(
                           (ack) => {
-                              void bus?.emit('workflow.steering', ack);
+                              void bus.emit('workflow.steering', ack);
                               context.output.write(
                                   `[steer] ${ack.accepted ? 'ack' : 'nack'} ${ack.operation} · ${ack.reason ?? `version=${ack.version}`}`,
                               );
@@ -332,6 +347,8 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 for (const timer of heartbeats.values()) clearInterval(timer);
                 heartbeats.clear();
                 await traceWriter?.flush();
+                await ledger.flush();
+                ledger.unsubscribe();
                 steeringInput?.close();
             }
             if (json) context.output.write(toJson(result));
@@ -351,7 +368,11 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .option('--json', 'Output machine-readable JSON where supported')
         .action(async (runId, options) => {
             const json = options.json === true;
-            const svc = makeSvc(json);
+            // Resume path shares the 0370 ledger bridge so continued runs also
+            // surface workflow.* rows (adapter verb-form + engine-native).
+            const bus: WorkflowObservabilityBus = new EventBus();
+            const ledger = await attachSystemEventLedger(bus as unknown as SystemEventBus, context);
+            const svc = makeSvc(json, bus);
             try {
                 let targetId = runId;
                 if (targetId === undefined) {
@@ -386,6 +407,9 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             } catch (err) {
                 context.output.error(String(err));
                 context.setExitCode(1);
+            } finally {
+                await ledger.flush();
+                ledger.unsubscribe();
             }
         });
 

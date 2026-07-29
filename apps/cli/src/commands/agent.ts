@@ -1,7 +1,15 @@
 import type { Command } from '@commander-js/extra-typings';
-import { type AgentRunDeps, AgentService, type AgentSpecInput, TeamService } from '@gobing-ai/spur-app';
+import {
+    type AgentRunDeps,
+    AgentService,
+    type AgentSpecInput,
+    type SystemEventBus,
+    TeamService,
+} from '@gobing-ai/spur-app';
+import { EventBus } from '@gobing-ai/ts-infra';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
+import { attachSystemEventLedger } from '../system-event-ledger';
 
 export type { AgentRunDeps };
 
@@ -281,22 +289,32 @@ export async function runAgentRun(
     flags: Record<string, string | boolean>,
     deps?: AgentRunDeps,
 ): Promise<number> {
-    // Use the context-built service so the validated `agent` config (executors +
-    // phase map, 0126) is threaded into resolution. Constructing a bare service here
-    // would drop agentConfig and silently disable phase-aware `--agent auto`.
-    const svc = context.agentService();
-    // `--drain` is DB-backed, so it is resolved in the command layer (where getDb
-    // lives) rather than in the app service. The addressed `--agent <id>` names a
-    // message recipient (an agent spec id), which is a different namespace from the
-    // coding-agent type the runner resolves. When a matching spec exists we drain
-    // its inbox into the prompt and rewrite `--agent` to the spec's underlying type
-    // so resolution still works; in Phase 1-3 there is no live stdin, so prepending
-    // is how deferred messages reach the agent.
-    if (flags.drain === true) {
-        const { prompt: drained, flags: rewritten } = await drainIntoPrompt(prompt, context, flags);
-        return svc.run(drained, rewritten, deps);
+    // Task 0370: direct `spur agent run` emits cataloged `agent.invoke.*` on a
+    // CLI-local bus with a SystemEventDao tap — the EventBus dual of task 0249's
+    // SystemEventEmitter for planning. Workflow-dispatched agent.run stays on the
+    // workflow path (`workflow.agent` series only) so a nested execution never
+    // double-counts (R4). Route through context.agentService({ events }) so the
+    // validated agentConfig (0126) is still threaded into resolution.
+    const bus = new EventBus() as SystemEventBus;
+    const ledger = await attachSystemEventLedger(bus, context);
+    const svc = context.agentService({ events: bus });
+    try {
+        // `--drain` is DB-backed, so it is resolved in the command layer (where getDb
+        // lives) rather than in the app service. The addressed `--agent <id>` names a
+        // message recipient (an agent spec id), which is a different namespace from the
+        // coding-agent type the runner resolves. When a matching spec exists we drain
+        // its inbox into the prompt and rewrite `--agent` to the spec's underlying type
+        // so resolution still works; in Phase 1-3 there is no live stdin, so prepending
+        // is how deferred messages reach the agent.
+        if (flags.drain === true) {
+            const { prompt: drained, flags: rewritten } = await drainIntoPrompt(prompt, context, flags);
+            return await svc.run(drained, rewritten, deps);
+        }
+        return await svc.run(prompt, flags, deps);
+    } finally {
+        await ledger.flush();
+        ledger.unsubscribe();
     }
-    return svc.run(prompt, flags, deps);
 }
 
 /**

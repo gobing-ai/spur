@@ -535,7 +535,11 @@ export class WorkflowAppService {
      * @param runId The run to resume.
      */
     async continuePaused(runId: string): Promise<WorkflowRunResult> {
-        const svc = await this.createEngineService();
+        // Same dual-bus wiring as run() (task 0370): adapter verb-form events via
+        // observabilityBus inside createEngineService, engine-native names via the
+        // resume options `events` field. CLI attaches a SystemEventDao tap to both.
+        const eventsBus = this.ctx.events?.();
+        const svc = await this.createEngineService({ events: eventsBus });
         const run = await svc.listPausedRuns();
         const target = run.find((r) => r.id === runId);
         if (target === undefined) {
@@ -547,7 +551,10 @@ export class WorkflowAppService {
                 `Cannot resume run "${runId}": workflow definition "${target.workflow_name}" not found in the workflow search paths.`,
             );
         }
-        const result = await svc.resumeRun(workflow, runId, { workdir: this.ctx.cwd });
+        const result = await svc.resumeRun(workflow, runId, {
+            workdir: this.ctx.cwd,
+            ...(eventsBus !== undefined ? { events: bridgeEventBus(eventsBus) } : {}),
+        });
         await this.stampFailureReason(runId, result);
         return result as WorkflowRunResult;
     }

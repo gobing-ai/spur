@@ -1,6 +1,6 @@
 import { dirname, join, resolve } from 'node:path';
 import { isatty } from 'node:tty';
-import { type AgentConfig, AgentService, RuleService } from '@gobing-ai/spur-app';
+import { type AgentConfig, AgentService, type AgentServiceContext, RuleService } from '@gobing-ai/spur-app';
 import { buildConfigFromEnv, DEFAULT_DATABASE_URL, IN_MEMORY_DATABASE_URL } from '@gobing-ai/spur-config';
 import { createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
 import type { HitlResponder } from '@gobing-ai/ts-dual-workflow-engine';
@@ -8,6 +8,9 @@ import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
 import type { CommandOutput } from './output';
 import { ClackHitlResponder } from './workflow/hitl/clack-responder';
 import { DefaultHitlResponder } from './workflow/hitl/default-responder';
+
+/** Optional overrides when constructing an {@link AgentService} from the CLI context. */
+export type AgentServiceOptions = Pick<AgentServiceContext, 'events' | 'processRegistry'>;
 
 /** Runtime dependencies shared by CLI commands. */
 export interface CliContext {
@@ -18,7 +21,18 @@ export interface CliContext {
     fs: FileSystem;
     output: CommandOutput;
     getDb(): Promise<DbAdapter>;
-    agentService(): AgentService;
+    /**
+     * Validated `agent` config block (executors + phase map) from the project
+     * config, when present. Threaded into every {@link agentService} construction
+     * so phase-aware `--agent auto` works (task 0126 / 0370).
+     */
+    agentConfig?: AgentConfig;
+    /**
+     * Build an {@link AgentService}. Optional overrides let the direct
+     * `spur agent run` path attach a CLI EventBus for the system_events ledger
+     * (task 0370) without the workflow path inheriting it (R4 no double-count).
+     */
+    agentService(options?: AgentServiceOptions): AgentService;
     ruleService(): RuleService;
     /**
      * Create a HITL responder: interactive Clack only when stdout is a TTY AND output is not `--json`,
@@ -65,7 +79,18 @@ export function createCliContext(options: {
         setExitCode: options.setExitCode ?? noopSetExitCode,
         output: options.output,
         getDb,
-        agentService: () => new AgentService({ cwd, env, output: options.output, agentConfig: options.agentConfig }),
+        ...(options.agentConfig !== undefined ? { agentConfig: options.agentConfig } : {}),
+        agentService: (serviceOptions?: AgentServiceOptions) =>
+            new AgentService({
+                cwd,
+                env,
+                output: options.output,
+                agentConfig: options.agentConfig,
+                ...(serviceOptions?.events !== undefined ? { events: serviceOptions.events } : {}),
+                ...(serviceOptions?.processRegistry !== undefined
+                    ? { processRegistry: serviceOptions.processRegistry }
+                    : {}),
+            }),
         ruleService: () => new RuleService({ cwd, env, fs, output: options.output, getDb }),
         hitlResponder: (json?: boolean) => {
             if (isatty(1) && json !== true) return new ClackHitlResponder();

@@ -1,10 +1,10 @@
 # System Events Producer Audit
 
-> Verified 2026-07-09 against production source after tasks 0221, 0226, 0233, 0236, 0237; extended 2026-07-28 by task 0367 (`workflow.agent`, `workflow.steering`).
+> Verified 2026-07-09 against production source after tasks 0221, 0226, 0233, 0236, 0237; extended 2026-07-28 by task 0367 (`workflow.agent`, `workflow.steering`); extended 2026-07-28 by task 0370 (CLI → ledger bridge for `workflow.*` / `agent.*`).
 > **Supersedes** the scattered producer-wiring findings in task 0226
 > (`docs/tasks2/0226_system-events-real-producer-wiring-review-findings.md`) and
 > the task-0221 emit-site inventory (`docs/inventory/0221-emit-sites.md`).
-> This is the single source of truth for producer reachability as of feature L.
+> This is the single source of truth for producer reachability as of feature L / J3.
 
 ## Status legend
 
@@ -73,15 +73,17 @@ Source of truth: `SYSTEM_EVENT_CATALOG` in `packages/app/src/services/event-name
 
 | # | Catalog entry | Emit site | Bus path to tap | Status |
 | --- | --- | --- | --- | --- |
-| 21 | `agent.invoke.start` | `ai-runner.ts:138` | `ctx.agentService()` → `events: bridgeAgentEvents(eventsBus)` → `AiRunner` | ✅ reachable (parent-level; child-internal is ⚠️) |
-| 22 | `agent.invoke.exit` | `ai-runner.ts:156` | same | ✅ reachable (parent-level; child-internal is ⚠️) |
+| 21 | `agent.invoke.start` | `ai-runner.ts:138` | **Board:** `ctx.agentService()` → `events: bridgeAgentEvents(eventsBus)` → `AiRunner`. **CLI:** `spur agent run` → `agentService({ events })` → `attachSystemEventLedger` → `SystemEventDao` (task 0370) | ✅ Board **and** CLI reachable (parent-level; child-of-child is ⚠️) |
+| 22 | `agent.invoke.exit` | `ai-runner.ts:156` | same | ✅ Board **and** CLI reachable (parent-level; child-of-child is ⚠️) |
 | 23 | `agent.started` | `team-orchestrator.ts:73` | `ctx.teamService()` → `events: eventsBus` → `TeamOrchestrator({ events })` (task 0237) | ✅ reachable |
 | 24 | `agent.stopped` | `team-orchestrator.ts:86` | same | ✅ reachable |
 | 25 | `agent.message.sent` | `team-orchestrator.ts:98` | same | ✅ reachable |
 
 > **Task 0237 wiring.** `TeamServiceContext` now carries `events?: EventBus<AgentEvents>`; the server passes `events: eventsBus` in the `teamService()` accessor (`context.ts:349–353`). `TeamService.orchestrator()` forwards `{ events: this.ctx.events }` to the `TeamOrchestrator` constructor (`team-service.ts:379–384`). All three `agent.*` lifecycle events now reach the tap.
 >
-> **Nested-CLI residual.** `agent.invoke.*` fires at the parent `AiRunner` level (reachable). When the parent spawns a child agent process for `sp:dev-* --auto`, the child's own `AiRunner`/`TeamOrchestrator` instances emit on their process-local bus — those emissions are ⚠️ nested-CLI deferred (see footer).
+> **Task 0370 — CLI agent durability.** Direct `spur agent run` attaches a CLI-local EventBus and `registerSystemEventTap` (same DAO path as task 0249's `SystemEventEmitter`) so cataloged `agent.invoke.*` rows land in the shared ledger. Workflow-dispatched `agent.run` does **not** wire `AgentService.events` — its lifecycle is the single `workflow.agent` series (0365 R9 / 0370 R4 no double-count).
+>
+> **Child-of-child residual.** Parent-level CLI and Board emits are reachable. When a child agent process itself spawns a nested agent (or runs `spur workflow run` / `spur agent run` inside its session without the 0370 bridge surviving re-exec), those emissions are ⚠️ child-of-child deferred (see Gap 4).
 
 ### Rule (rule.\*)
 
@@ -97,33 +99,35 @@ Source of truth: `SYSTEM_EVENT_CATALOG` in `packages/app/src/services/event-name
 
 | # | Catalog entry | Emit site | Bus path to tap | Status |
 | --- | --- | --- | --- | --- |
-| 31 | `workflow.run.started` | `run-lifecycle.ts:150`; also `observability.ts:112` | `ctx.workflowService()` → `events: () => eventsBus` (engine bridge) AND `observabilityBus: () => eventsBus` (adapter, task 0236) | ✅ reachable (dual-emit; see note) |
-| 32 | `workflow.run.done` | `run-lifecycle.ts:226` | engine bridge | ✅ reachable |
-| 33 | `workflow.run.failed` | `run-lifecycle.ts:240` | engine bridge | ✅ reachable |
-| 34 | `workflow.run.finalized` | `observability.ts:121` | adapter via `observabilityBus` (task 0236) | ✅ reachable |
-| 35 | `workflow.run.paused` | `run-lifecycle.ts:256`; `service.ts:143` | engine bridge | ✅ reachable |
-| 36 | `workflow.run.resumed` | `run-lifecycle.ts:268`; `service.ts:143` | engine bridge | ✅ reachable |
-| 37 | `workflow.run.reseeded` | `service.ts:117` | engine bridge | ✅ reachable |
-| 38 | `workflow.node.enter` | `run-lifecycle.ts:195` | engine bridge | ✅ reachable |
-| 39 | `workflow.phase` | `observability.ts:126` | adapter via `observabilityBus` (task 0236) | ✅ reachable |
-| 40 | `workflow.node.transition` | `run-lifecycle.ts:211` | engine bridge | ✅ reachable |
-| 41 | `workflow.transition` | `observability.ts:131` | adapter via `observabilityBus` (task 0236) | ✅ reachable |
-| 42 | `workflow.transition.requested` | `service.ts:265` | engine bridge | ✅ reachable |
-| 43 | `workflow.transition.denied` | `service.ts:288` | engine bridge | ✅ reachable |
-| 44 | `workflow.action.start` | `run-lifecycle.ts:274` | engine bridge | ✅ reachable |
-| 45 | `workflow.action.started` | `observability.ts:136` | adapter via `observabilityBus` (task 0236) | ✅ reachable |
-| 46 | `workflow.action.done` | `run-lifecycle.ts:280` | engine bridge | ✅ reachable |
-| 47 | `workflow.action.finished` | `observability.ts:151` | adapter via `observabilityBus` (task 0236) | ✅ reachable |
-| 48 | `workflow.action.failed_continue` | `run-lifecycle.ts:297` | engine bridge | ✅ reachable |
+| 31 | `workflow.run.started` | `run-lifecycle.ts:150`; also `observability.ts:112` | **Board:** `ctx.workflowService()` → `events` + `observabilityBus` → tap. **CLI:** `workflow run/continue` always builds a local bus + `attachSystemEventLedger` → `SystemEventDao` (task 0370) | ✅ Board **and** CLI reachable (dual-emit; see note) |
+| 32 | `workflow.run.done` | `run-lifecycle.ts:226` | same | ✅ Board **and** CLI reachable |
+| 33 | `workflow.run.failed` | `run-lifecycle.ts:240` | same | ✅ Board **and** CLI reachable |
+| 34 | `workflow.run.finalized` | `observability.ts:121` | adapter via `observabilityBus` (task 0236 / 0370) | ✅ Board **and** CLI reachable |
+| 35 | `workflow.run.paused` | `run-lifecycle.ts:256`; `service.ts:143` | same | ✅ Board **and** CLI reachable |
+| 36 | `workflow.run.resumed` | `run-lifecycle.ts:268`; `service.ts:143` | same | ✅ Board **and** CLI reachable |
+| 37 | `workflow.run.reseeded` | `service.ts:117` | same | ✅ Board **and** CLI reachable |
+| 38 | `workflow.node.enter` | `run-lifecycle.ts:195` | same | ✅ Board **and** CLI reachable |
+| 39 | `workflow.phase` | `observability.ts:126` | adapter via `observabilityBus` (task 0236 / 0370) | ✅ Board **and** CLI reachable |
+| 40 | `workflow.node.transition` | `run-lifecycle.ts:211` | same | ✅ Board **and** CLI reachable |
+| 41 | `workflow.transition` | `observability.ts:131` | adapter via `observabilityBus` (task 0236 / 0370) | ✅ Board **and** CLI reachable |
+| 42 | `workflow.transition.requested` | `service.ts:265` | same | ✅ Board **and** CLI reachable (diagnostic tier) |
+| 43 | `workflow.transition.denied` | `service.ts:288` | same | ✅ Board **and** CLI reachable (diagnostic tier) |
+| 44 | `workflow.action.start` | `run-lifecycle.ts:274` | same | ✅ Board **and** CLI reachable |
+| 45 | `workflow.action.started` | `observability.ts:136` | adapter via `observabilityBus` (task 0236 / 0370) | ✅ Board **and** CLI reachable |
+| 46 | `workflow.action.done` | `run-lifecycle.ts:280` | same | ✅ Board **and** CLI reachable |
+| 47 | `workflow.action.finished` | `observability.ts:151` | adapter via `observabilityBus` (task 0236 / 0370) | ✅ Board **and** CLI reachable |
+| 48 | `workflow.action.failed_continue` | `run-lifecycle.ts:297` | same | ✅ Board **and** CLI reachable |
 | 49 | `workflow.guard.evaluated` | `run-lifecycle.ts:308` | engine bridge | 🔬 diagnostic-only (high-volume) |
-| 50 | `workflow.hitl.ask` | `run-lifecycle.ts:320`; app `hitl-confirm.ts:29`, `hitl-select.ts:35`, `hitl-input.ts:29` | engine bridge | ✅ reachable (redacted payload) |
-| 51 | `workflow.hitl.response` | `run-lifecycle.ts:325`; app `hitl-*.ts:41,48,41` | engine bridge | ✅ reachable (redacted payload) |
-| 52 | `workflow.hitl.note` | `host.ts:113` | engine bridge → host `context.events` | ✅ reachable (redacted: `message`) |
-| 53 | `workflow.custom` | `host.ts:130` | engine bridge | ✅ reachable |
-| 54 | `workflow.agent` | `agent-run.ts:144` (`AgentRunActionRunner`) — unified `AgentExecutionEvent` lifecycle (kind: started/output/heartbeat/dropped/finished) | `ctx.workflowService()` → `observabilityBus: () => eventsBus` → `AgentRunActionRunner.observabilityBus.emit('workflow.agent', event)` | ✅ reachable (diagnostic tier; high-volume `output`/`heartbeat` kinds) |
-| 55 | `workflow.steering` | `steering.ts:295` (`WorkflowSteeringController.onAck` → `bus.emit('workflow.steering', ack)`) | CLI `workflow.ts:294` → `new WorkflowSteeringController((ack) => bus?.emit('workflow.steering', ack))` | ⚠️ nested-CLI deferred (emitted on CLI-local bus; no server-side tap path) |
+| 50 | `workflow.hitl.ask` | `run-lifecycle.ts:320`; app `hitl-confirm.ts:29`, `hitl-select.ts:35`, `hitl-input.ts:29` | same | ✅ Board **and** CLI reachable (redacted payload) |
+| 51 | `workflow.hitl.response` | `run-lifecycle.ts:325`; app `hitl-*.ts:41,48,41` | same | ✅ Board **and** CLI reachable (redacted payload) |
+| 52 | `workflow.hitl.note` | `host.ts:113` | engine bridge → host `context.events` | ✅ Board **and** CLI reachable (redacted: `message`) |
+| 53 | `workflow.custom` | `host.ts:130` | engine bridge | ✅ Board **and** CLI reachable |
+| 54 | `workflow.agent` | `agent-run.ts:144` (`AgentRunActionRunner`) — unified `AgentExecutionEvent` lifecycle (kind: started/output/heartbeat/dropped/finished) | **Board:** `observabilityBus` → tap. **CLI:** same bus + ledger attach (task 0370); diagnostic tier — needs toggle | ✅ Board **and** CLI reachable (diagnostic tier; high-volume `output`/`heartbeat` kinds) |
+| 55 | `workflow.steering` | `steering.ts:295` (`WorkflowSteeringController.onAck` → `bus.emit('workflow.steering', ack)`) | CLI `workflow.ts` → local bus + `attachSystemEventLedger` (task 0370) | ✅ CLI reachable when `--steer` (default tier) |
 
 > **Task 0236 wiring.** The server `workflowService()` accessor (`context.ts:396–410`) now passes both `events: () => eventsBus` (engine bridge → engine-native names) AND `observabilityBus: () => eventsBus` (→ `ObservableWorkflowAdapter` → verb-form names). This activates the 6 adapter-emitted verb-form events (`workflow.run.finalized`, `workflow.phase`, `workflow.transition`, `workflow.action.started`, `workflow.action.finished`, plus a second `workflow.run.started`). `workflow.run.started` fires from both paths — accepted as harmless v1 duplication; dedup deferred.
+>
+> **Task 0370 — CLI workflow durability.** `spur workflow run` / `continue` always construct a CLI-local EventBus (not only for human progress / `--trace-file` / `--steer`) and attach `registerSystemEventTap` → `SystemEventDao` via `attachSystemEventLedger`. Both `events` and `observabilityBus` share that bus, matching the server dual-emit. Sink failures are logged and swallowed (R5). Diagnostic-tier members (`workflow.agent`, `workflow.guard.evaluated`, `workflow.transition.requested|denied`) stay out of the ledger unless the diagnostic toggle is on (R6).
 
 ### API (api.\*)
 
@@ -144,27 +148,27 @@ Source of truth: `SYSTEM_EVENT_CATALOG` in `packages/app/src/services/event-name
 
 | Classification | Count | Events |
 | --- | --- | --- |
-| ✅ reachable | 53 | All planning, queue (except `queue.stats`), scheduler, message, process, agent, rule (parent-level), workflow (default tier + `workflow.agent` diagnostic), `api.request.error` |
+| ✅ reachable | 54 | All planning, queue (except `queue.stats`), scheduler, message, process, agent, rule (parent-level), workflow (default tier + diagnostic when toggle on; CLI + Board for workflow/agent via 0370), `api.request.error`, `workflow.steering` (CLI `--steer`) |
 | ◐ conditional | 1 | `queue.stats` |
 | 🔬 diagnostic-only | 5 | `workflow.guard.evaluated`, `bus.emit.done/noop`, `bus.handler.error`, `bus.handler.async.enqueued` |
-| ⚠️ nested-CLI deferred | 1 | `workflow.steering` (emitted on CLI-local bus via `WorkflowSteeringController.onAck`; no server-side tap path) |
+| ⚠️ child-of-child deferred | 0 catalog rows (residual scope — see Gap 4) | Nested agent-inside-agent without surviving the 0370 bridge |
 | ❌ unwired | **0** | — |
 
-**All default-tier catalog entries now have a confirmed production emit path to the server bus**, except `queue.stats` (conditional — requires scheduler-registry wiring that `spur serve` does not perform), the `bus.*` family (diagnostic-only by design — separate internal bus), and `workflow.steering` (nested-CLI deferred — emitted on the CLI-local bus, not the server bus). `workflow.agent` is diagnostic-tier but reachable via `observabilityBus`.
+**All default-tier catalog entries now have a confirmed production emit path to the server bus and/or the shared CLI ledger**, except `queue.stats` (conditional — requires scheduler-registry wiring that `spur serve` does not perform) and the `bus.*` family (diagnostic-only by design — separate internal bus). `workflow.agent` is diagnostic-tier but reachable via `observabilityBus` (Board + CLI when the diagnostic toggle is on). Task 0370 closed the CLI gap for `workflow.*` and direct `agent.invoke.*`.
 
 ## Systemic Observability Gaps
 
 Four architectural constraints affect observability completeness but are **not bugs** — they are deliberate scope boundaries. Documented here so operators interpret "missing" events correctly.
 
-### Gap 1 — CLI event-tap gap (CLI-driven work is invisible to the Board; `task.*`/`feature.*` closed by task 0249)
+### Gap 1 — CLI event-tap gap (partially closed: planning by 0249, workflow/agent by 0370)
 
-The `system_events` persistence tap (`registerSystemEventTap`) is registered **only** in `apps/server/src/serve.ts:274`, gated by `bootConfig.events.enabled`. The CLI runtime (`apps/cli/src/context.ts`) constructs no tap — it builds only `agentService`, `ruleService`, and `hitlResponder` on a CLI-local bus that is never persisted.
+The server `system_events` persistence tap (`registerSystemEventTap`) is registered in `apps/server/src/serve.ts`, gated by `bootConfig.events.enabled`. The CLI no longer relies solely on that path for every family:
 
-**Consequence:** when an operator runs `spur rule run`, `spur workflow run` directly from the shell, the services emit events on a process-local `EventBus` that dies with the process. Those events never appear in Board system_events. The Board is a **server-side observability surface**; CLI-driven work operates outside it by design.
+**Task 0249 — Planning CLI durability.** `task.*` / `feature.*` persist on the CLI mutation path via a durable `SystemEventEmitter` wired into `task.ts` / `feature.ts` (`makePlanningEmitter` in `planning-emitter.ts`) → `SystemEventDao`. Sink failures are logged and swallowed (R5).
 
-**Affected prefixes:** `rule.*`, `workflow.*`, `agent.*`, `message.*`, `process.*` — all catalog entries **except** `task.*` / `feature.*`, which now have a CLI-durable path (task 0249, see below). The events themselves are correctly emitted — there is simply no persistent tap on the CLI path for these remaining families.
+**Task 0370 — Workflow/agent CLI durability.** `spur workflow run` / `continue` always build a CLI-local EventBus and attach `registerSystemEventTap` via `attachSystemEventLedger` (`apps/cli/src/system-event-ledger.ts`). Direct `spur agent run` does the same for `agent.invoke.*`. Same canonical serialization as the server tap; R5 failure isolation; diagnostic-tier gating (R6). Workflow-dispatched `agent.run` emits only the `workflow.agent` series (no `AgentService.events` on that path — R4).
 
-**Task 0249 — Planning CLI durability (ts-libs 0049 handoff).** `task.*` / `feature.*` now persist on the CLI mutation path via a durable `SystemEventEmitter` wired into `task.ts:612` and `feature.ts:366` (`makePlanningEmitter` in `planning-emitter.ts`). The emitter writes straight into the shared `system_events` ledger through `SystemEventDao`, reusing the same `normalizeSystemEventPayload` / `extractSystemEventActor` as the server tap (one canonical serialization, not a fork). Sink failures are logged and swallowed (R5) so the file mutation never aborts. No double-write on the Board path: the CLI emitter is wired only in the CLI `makeService` builders, not the server (R6). Originating handoff: ts-libs [0049](../../../xprojects/ts-libs/docs/tasks/0049_diagnosis_fix_missing_system_events_in_observability_tabview.md).
+**Still CLI-invisible (parent-process CLI only):** `rule.*`, `message.*`, `process.spawned/exited/stopped` when driven from the shell without a server bus. Those families remain Board-driven for durability.
 
 **Observability path classification:**
 
@@ -172,9 +176,9 @@ The `system_events` persistence tap (`registerSystemEventTap`) is registered **o
 | --- | --- | --- |
 | `task.*`, `feature.*` | **Board:** server API → `planningBus` → tap. **CLI:** `SystemEventEmitter` → `SystemEventDao` (task 0249) | ✅ Board **and** CLI reachable |
 | `rule.*` | server API → `RuleService.events` → tap | ✅ when Board-driven; ❌ when CLI-driven |
-| `workflow.*` | server API → engine bridge + `observabilityBus` → tap | ✅ when Board-driven; ❌ when CLI-driven |
+| `workflow.*` | **Board:** engine bridge + `observabilityBus` → tap. **CLI:** local bus + `attachSystemEventLedger` (task 0370) | ✅ Board **and** CLI reachable |
 | `message.*` | server API → `TeamService.eventBus` → tap | ✅ when Board-driven; ❌ when CLI-driven |
-| `agent.*` | server API → `TeamOrchestrator.events` → tap | ✅ when Board-driven; ❌ when CLI-driven |
+| `agent.*` | **Board:** `TeamOrchestrator` / `AiRunner` → tap. **CLI:** `spur agent run` → ledger (task 0370); workflow path uses `workflow.agent` only | ✅ Board **and** CLI reachable (direct agent + workflow) |
 | `process.spawned/exited/stopped` | server API → `SupervisorService.eventBus` → tap | ✅ when Board-driven; ❌ when CLI-driven |
 | `process.started` | agent-run side-channel → `NodeProcessExecutor.processEvents` → tap | ◐ only during agent runs (see Gap 3) |
 | `queue.*` | config-gated (see Gap 2) | ◐ |
@@ -195,17 +199,19 @@ All seven `queue.*` catalog entries are wired through `createQueueConsumer` (`co
 
 **Consequence:** `process.started` appears in system_events only when an agent run triggers a subprocess via `NodeProcessExecutor`. It does NOT fire for supervisor-managed agent spawns (those emit `process.spawned`). Operators filtering for "process started" should use `process.spawned` as the authoritative process-birth event; `process.started` is a secondary signal correlated to agent-run subprocesses.
 
-### Gap 4 — Nested-CLI context (child agent internal events are process-local)
+### Gap 4 — Child-of-child residual (narrowed by task 0370)
 
-When the Board triggers a task action that runs `sp:dev-* --auto`, the parent process spawns a child agent. The **parent-level** lifecycle events (`agent.invoke.start/exit`, `process.started/exited`) ARE captured on the server bus. But events emitted **inside the child's own session** — e.g. if the child runs `spur workflow run` or `spur rule run` — fire on the child's process-local `EventBus` and do not cross the process boundary.
+**Before 0370:** any CLI-process `workflow.*` / `agent.*` emission was invisible to the ledger (Gap 1). That parent-CLI gap is closed: a child agent that runs `spur workflow run` or `spur agent run` as a real CLI invocation writes through `attachSystemEventLedger` into the shared SQLite ledger the Board reads — no server bus hop required.
 
-**Consequence:** `rule.*`, `workflow.*`, and `agent.*` events emitted inside a child agent subprocess are ⚠️ **nested-CLI deferred** — they are correctly emitted but never reach the Board. This is a documented v1 scope limit. Bridging child-internal events to the parent bus requires an explicit IPC channel (deferred).
+**Residual (⚠️ child-of-child):** when a child agent process itself spawns a *further* nested agent (or embeds engine execution without going through the CLI attach points), those innermost emissions remain process-local unless they re-enter `spur workflow run` / `spur agent run`. Bridging arbitrary in-process child buses to a parent without the CLI entry surface still requires an explicit IPC channel (deferred; out of scope for J3).
+
+**Also still deferred from Gap 1:** CLI-driven `rule.*` / `message.*` / supervisor `process.*` without a server bus.
 
 ## Footer notes
 
-### 1. Nested-CLI context (⚠️ deferred scope limit)
+### 1. Child-of-child context (⚠️ deferred scope limit — narrowed by 0370)
 
-Board-triggered task actions run `sp:dev-* --auto` as AI-driven slash commands via `ctx.agentService()` (`serve.ts:137–145`). The **parent-level** process/agent lifecycle events (`agent.invoke.start/exit`, `process.started/exited`) ARE captured. However, events emitted **inside the child agent's own session** — e.g. if the child itself runs `spur workflow run` or `spur rule run` — do NOT cross the process boundary. The child's `EventBus` is in-memory and process-local. This is a documented v1 scope limit: the Board observes parent-level agent/process lifecycle; child-internal events require an explicit IPC bridge (deferred).
+Board-triggered task actions run `sp:dev-* --auto` as AI-driven slash commands via `ctx.agentService()` (`serve.ts:137–145`). Parent-level process/agent lifecycle events ARE captured. A child that re-enters the Spur CLI (`spur workflow run`, `spur agent run`) now persists its own `workflow.*` / `agent.invoke.*` rows via task 0370. Events that never re-enter those CLI attach points (embedded engine use, third-level nesting without CLI) remain process-local — explicit IPC bridge deferred.
 
 ### 2. Single-queue architecture (no `queueName` field)
 

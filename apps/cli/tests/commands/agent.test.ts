@@ -33,23 +33,31 @@ describe('agent command (main)', () => {
     });
 });
 
-describe('runAgentRun service wiring (0126)', () => {
+describe('runAgentRun service wiring (0126 / 0370)', () => {
     // Regression: runAgentRun must resolve through context.agentService() so the
     // validated `agent` config (executors + phase map) reaches resolution. A bare
     // `new AgentService(...)` here silently drops agentConfig and disables phase-aware auto.
-    test('routes through context.agentService(), not a bare service', async () => {
+    // Task 0370 threads a CLI EventBus via agentService({ events }) for the ledger tap.
+    test('routes through context.agentService({ events }), preserving agentConfig', async () => {
         const run = mock(() => Promise.resolve(0));
-        const agentService = mock(() => ({ run }) as unknown as ReturnType<CliContext['agentService']>);
+        const agentService = mock(
+            (_opts?: { events?: unknown }) => ({ run }) as unknown as ReturnType<CliContext['agentService']>,
+        );
         const context = {
             cwd: process.cwd(),
             env: {},
             output: nullOutput(),
+            getDb: async () => {
+                throw new Error('ledger attach is best-effort in this unit test');
+            },
             agentService,
         } as unknown as CliContext;
 
         const code = await runAgentRun('/sp:dev-run 0126', context, { agent: 'auto' });
         expect(code).toBe(0);
         expect(agentService).toHaveBeenCalledTimes(1);
+        // events bus is the 0370 ledger bridge; agentConfig is closed over by the factory.
+        expect(agentService.mock.calls[0]?.[0]).toMatchObject({ events: expect.anything() });
         expect(run).toHaveBeenCalledWith('/sp:dev-run 0126', { agent: 'auto' }, undefined);
     });
 });
