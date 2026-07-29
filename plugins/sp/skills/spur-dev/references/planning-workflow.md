@@ -284,5 +284,12 @@ SKIP — sections already meet L3: sections-considered=[Background, Requirements
 This is the expected outcome for a task that is already well-specified. Under `--auto`, a SKIP is not an error — it means no gap was found. The operator can verify by reading the check output or the task file directly. Synthesis is only invoked when a real gap exists in a target section (including empty/placeholder Design or AC).
 
 > **Requirements formatting:** author R-items as a GitHub task-list checkbox — `- [ ] R1. <text>`
-> — so progress is trackable in the file. The L3 check accepts the `- [ ] Rn.` / `- Rn.` / `Rn.`
-> forms; keep the `Rn.` (period) token so the R-numbering rule recognizes it.
+> — one per line, so progress is trackable in the file. Keep the `Rn.` (period) token inside the
+> marker so the R-numbering rule recognizes it.
+>
+> The L3 check *tolerates* `- Rn.` and bare `Rn.` for backward compatibility with the existing
+> corpus — that tolerance is **not** permission to emit them. A bare `Rn.` line carries no markdown
+> list marker, so consecutive items collapse into one run-on paragraph in the Board's markdown
+> preview while `spur task check` still passes. Emit the checkbox form on every write path
+> (refine synthesis, `spur task update --section`, and `batch-create` bodies — see
+> `sp:spec-decomposition` → `references/decomposition.md`, "Section bodies are markdown").

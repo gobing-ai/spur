@@ -45,6 +45,28 @@ rejected, and a single rejected item fails the whole batch (all-or-nothing).
 > `acceptance_criteria` for content, and record ordering in `background` prose (the WBS-level
 > `dependencies` frontmatter is set later, not at batch create).
 
+### Section bodies are markdown — format them as markdown
+
+Every body field is written into the task file verbatim and rendered by the Board's markdown
+preview. **A body is not a plain-text blob**: consecutive lines with no list marker collapse into a
+single run-on paragraph on render, even though they look like separate items in the JSON source.
+
+**`requirements` — always author R-items as a GitHub task-list checkbox, one per line:**
+
+```json
+"requirements": "- [ ] R1. <text>\n- [ ] R2. <text>\n- [ ] R3. <text>"
+```
+
+`R1. <text>\nR2. <text>` (no marker) is the trap. `spur task check` **accepts** it — the L3
+R-numbering rule matches the bare `Rn.` token — so nothing fails, and the defect only surfaces later
+as an unreadable paragraph in Board preview. Do not rely on `check` to catch this. Keep the `Rn.`
+(period) token inside the marker so R-numbering still resolves; see the canonical rule in
+`sp:spur-dev` → `references/planning-workflow.md`.
+
+Applies to the other body fields too: `plan` as an ordered list (`1. …\n2. …`), `acceptance_criteria`
+as a fenced ```` ```gherkin ```` block, and any enumeration inside `background` or `design` as a
+`- ` list.
+
 ### Design at create (default) vs `--skip-design`
 
 **Default (no `--skip-design` on `/sp:dev-plan` / `/sp:dev-idea`):** every batch item for
@@ -384,6 +406,7 @@ The payload is a top-level JSON **array** (no `tasks` wrapper):
     "feature_id": "A1",
     "priority": "P0",
     "background": "Implements: R1 — User can create a task with required fields",
+    "requirements": "- [ ] R1. Accept a title and an optional description on POST /tasks.\n- [ ] R2. Reject an empty title with a 400 and a reason.\n- [ ] R3. Allocate the task file through the CLI-gated write path.",
     "design": "Approach: POST /tasks via existing TaskService.create.\nRejected: ad-hoc SQL in handler.\nInvariants: CLI-gated corpus writes only.",
     "plan": "1. Contract\n2. Handler\n3. Tests",
     "acceptance_criteria": "Scenario: create succeeds\n  Given a valid title\n  When POST /tasks\n  Then a task file is allocated"
@@ -410,3 +433,4 @@ The payload is a top-level JSON **array** (no `tasks` wrapper):
 | `priority` not `P0`–`P3` | Use the canonical priority scale. |
 | Unknown field (e.g. `sections`, `dependencies`, `tasks` wrapper) | The item schema is strict — use only the documented fields; the payload is a bare array. |
 | `parent_wbs` as a number (`0042`) | Quote it: `"0042"` — leading-zero numerics fail the 4-digit string schema. |
+| `requirements` items written as bare `R1.` lines | Prefix each with `- [ ] ` — bare lines pass `check` but render as one paragraph in Board preview. See "Section bodies are markdown" above. |
