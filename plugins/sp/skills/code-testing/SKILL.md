@@ -45,6 +45,10 @@ task-scoped workflows, gap categorization, coverage-vs-quality rules, escalation
 mechanics (commands, coverage parsing, idioms, gotchas) live in the adapters:
 [references/stacks/](references/stacks/) — `bun-ts.md`, `python.md`, `go.md`.
 
+When a test is red, apply the **[test-loop breaker](references/test-loop-breaker.md)** before
+re-running it. Keep command output bounded without hiding the exit status by following
+**[test-output discipline](references/test-output-discipline.md)**.
+
 ## Composition with the discipline + implementation skills
 
 - **`sp:spur-tdd`** — they compose: TDD *designs* the tests (red-green-refactor, behavior naming,

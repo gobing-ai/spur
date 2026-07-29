@@ -169,7 +169,7 @@ so they can be preserved and not accidentally broken.
    comment, hook, etc.)
 2. **Target location** — exact file path where the fix should be applied
    - Skill guidance: `skills/<skill-name>/SKILL.md` or `skills/<skill-name>/references/<name>.md`
-   - Pipeline comments: `config/workflows/task-pipeline.yaml`
+   - Pipeline comments: `.spur/workflows/task-pipeline.yaml`
    - CLI reference: `skills/spur-cli/references/tasks/section-editing.md`
 3. **Proposed content** — the actual text or code block to add
 4. **Expected impact** — estimated time saved per future run

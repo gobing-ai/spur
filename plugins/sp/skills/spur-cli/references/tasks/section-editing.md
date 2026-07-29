@@ -89,3 +89,7 @@ spur task update 0040 wip
 
 The `wip→testing` and `testing→done` transitions run a `check` guard (§7.5) — fill the gated
 sections (`Testing`, `Review`, `Solution`) before attempting the transition, or it will be blocked.
+
+Before authoring pipeline output for the first time, read the
+**[L3 guard format cheat sheet](l3-guard-cheatsheet.md)**. It centralizes the lifecycle graph,
+Solution citation rule, Review table shape, verdict artifact schema, and canonical section names.

@@ -117,7 +117,7 @@ reference for the half you're operating; do not duplicate its content here.
 | Continue | execution | `spur feature update` / `refresh` | [execution-workflow.md](references/execution-workflow.md) |
 | Batch run | execution | `sp:super-coder` + `spur workflow run` | [execution-batch.md](references/execution-batch.md) |
 | Parallel fan-out | execution | `sp:parallel-execution` decision framework | [execution-batch.md](references/execution-batch.md) |
-| All writes (both halves) | — | CLI-gated section editing | [cross-cutting.md](references/cross-cutting.md) |
+| All writes (both halves) | — | CLI-gated section editing | [cross-cutting.md](references/cross-cutting.md) · [section-batching.md](references/section-batching.md) |
 
 ## When to use
 
@@ -176,6 +176,8 @@ for "what's actually in file Y" or for resources that sit outside the step seque
 - [references/gate-checklists.md](references/gate-checklists.md) — checkbox checklists for the
   five gates (feature-check, batch-create, precheck, review, verify). Each checklist is a
   `- [ ]` list of prerequisites an agent verifies before entering the gate.
+- [references/section-batching.md](references/section-batching.md) — first-write protocol for
+  staging Solution, Testing, and Review together before one task check.
 - [references/ac-style-guide.md](references/ac-style-guide.md) — BDD scenario authoring:
   R-numbering, the two AC tiers, scenario-title stability, Gherkin template usage.
 - [references/feature-link-helper.md](references/feature-link-helper.md) — opt-in,

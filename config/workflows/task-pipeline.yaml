@@ -20,6 +20,15 @@
 kind: state-machine
 name: task-pipeline
 description: "Standard task execution pipeline (precheck → implement → test → review → approve → verify → record → done)"
+# Task entity lifecycle (owned by task-lifecycle.yaml):
+#   normal: backlog → todo → wip → testing → done
+#   blocked is bidirectional with todo/wip/testing; done may reopen to wip.
+#   any non-terminal state may transition to cancelled.
+# Guards:
+#   wip → testing:  spur task check <wbs>
+#   testing → done: spur task check <wbs> --strict-core, then PASS-verdict provenance
+# Invalid: todo → testing, todo → done, and wip → done.
+# Pipeline states below are orchestration states, not task statuses.
 iterationBound: 20
 initialState: precheck
 terminalStates:

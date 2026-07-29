@@ -900,4 +900,67 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         }
         expect(missingSuite).toEqual([]);
     });
+
+    test('R54 — J4 execution-efficiency guardrails are discoverable and source-grounded (0379)', () => {
+        const testingSkill = readFileSync(join(SKILLS_DIR, 'code-testing', 'SKILL.md'), 'utf8');
+        expect(testingSkill).toContain('references/test-loop-breaker.md');
+        expect(testingSkill).toContain('references/test-output-discipline.md');
+
+        const loopBreaker = readFileSync(
+            join(SKILLS_DIR, 'code-testing', 'references', 'test-loop-breaker.md'),
+            'utf8',
+        );
+        for (const marker of [
+            'After two identical failure signatures',
+            'falsifiable hypothesis',
+            'Make one source or test edit',
+            'Hard cap: three executions',
+            'must not exceed five test executions',
+        ]) {
+            expect(loopBreaker).toContain(marker);
+        }
+
+        const outputDiscipline = readFileSync(
+            join(SKILLS_DIR, 'code-testing', 'references', 'test-output-discipline.md'),
+            'utf8',
+        );
+        expect(outputDiscipline).toContain('--reporter=dots');
+        expect(outputDiscipline).toContain('--test-name-pattern');
+        expect(outputDiscipline).toContain('set -o pipefail');
+        expect(outputDiscipline).toContain('target under 500 tokens');
+
+        const sectionEditing = readFileSync(
+            join(SKILLS_DIR, 'spur-cli', 'references', 'tasks', 'section-editing.md'),
+            'utf8',
+        );
+        expect(sectionEditing).toContain('l3-guard-cheatsheet.md');
+        const cheatSheet = readFileSync(
+            join(SKILLS_DIR, 'spur-cli', 'references', 'tasks', 'l3-guard-cheatsheet.md'),
+            'utf8',
+        );
+        for (const marker of [
+            'backlog → todo → wip → testing → done',
+            'Solution: `file:line`',
+            'Review: populated P1–P4 table',
+            'Verdict artifact',
+            'Canonical section names',
+        ]) {
+            expect(cheatSheet).toContain(marker);
+        }
+
+        const spine = readFileSync(join(SKILLS_DIR, 'spur-dev', 'SKILL.md'), 'utf8');
+        expect(spine).toContain('references/section-batching.md');
+        const batching = readFileSync(join(SKILLS_DIR, 'spur-dev', 'references', 'section-batching.md'), 'utf8');
+        expect(batching).toContain('Stage complete, body-only `Solution`, `Testing`, and `Review`');
+        expect(batching).toContain('two task checks per task');
+
+        const pipeline = readFileSync(join(WORKFLOWS_DIR, 'task-pipeline.yaml'), 'utf8');
+        expect(pipeline).toContain('normal: backlog → todo → wip → testing → done');
+        expect(pipeline).toContain('wip → testing:  spur task check <wbs>');
+        expect(pipeline).toContain('testing → done: spur task check <wbs> --strict-core');
+
+        const debugging = readFileSync(join(SKILLS_DIR, 'sys-debugging', 'SKILL.md'), 'utf8');
+        expect(debugging).toContain('### Source before git state');
+        expect(debugging).toContain('A stash touching different files has no causal evidence');
+    });
 });

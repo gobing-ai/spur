@@ -25,6 +25,20 @@ A disciplined debugging protocol: build a feedback loop → isolate → identify
 
 ## The protocol
 
+### Source before git state
+
+For a failing test, inspect in this order:
+
+1. The failing assertion and its fixture.
+2. The component/module under test and its immediate caller.
+3. A falsifiable hypothesis.
+4. One minimal edit.
+5. The narrow regression command.
+
+Do not inspect stashes, branches, or unrelated diffs unless the failure mentions a missing/path
+problem, follows a checkout/rebase/stash operation, or was introduced by a known git-state change.
+A stash touching different files has no causal evidence and is not a debugging lead.
+
 ### Phase 1 — Build the feedback loop
 
 The deliverable of Phase 1 is not "I reproduced it" — it is **ONE named command**, already run at
