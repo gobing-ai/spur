@@ -23,10 +23,10 @@ describe('TEAMS_TABS', () => {
         expect(new Set(ids).size).toBe(ids.length);
     });
 
-    test('contains the 4 v1 tabs in stable order', () => {
-        // 0260: Roster removed per M1. Terminal, Messages, Activity — append-only/id-stable.
+    test('contains the 5 v1 tabs in stable order with Supervisor first (0378 R1)', () => {
+        // 0378: Supervisor added as first+default tab. Append-only/id-stable.
         const ids = TEAMS_TABS.map((t) => t.id);
-        expect(ids).toEqual(['terminal', 'processes', 'messages', 'activity']);
+        expect(ids).toEqual(['supervisor', 'terminal', 'processes', 'messages', 'activity']);
     });
 
     test('component fields are resolvable React component types', () => {

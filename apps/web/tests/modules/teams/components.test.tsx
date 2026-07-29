@@ -13,6 +13,7 @@ import ActivityTab, {
 } from '../../../src/modules/teams/ActivityTab';
 import MessagesTab, { parseMessagesFeed } from '../../../src/modules/teams/MessagesTab';
 import ProcessesTab, { buildWatchRows, filterWatchRows } from '../../../src/modules/teams/ProcessesTab';
+import SupervisorTab from '../../../src/modules/teams/SupervisorTab';
 import TeamsShell from '../../../src/modules/teams/TeamsShell';
 import TerminalTab from '../../../src/modules/teams/TerminalTab';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
@@ -137,15 +138,15 @@ afterAll(async () => {
 });
 
 describe('teams module components', () => {
-    test('TeamsShell renders exactly the 4 v1 tabs with stable labels (0262)', async () => {
+    test('TeamsShell renders exactly the 5 v1 tabs with stable labels (0378)', async () => {
         setFetchForTesting((async () => jsonResponse({ teams: [] })) as unknown as typeof fetch);
         const { getByRole, container } = render(<TeamsShell />);
 
-        for (const label of ['Terminal', 'Process', 'Message', 'Activity']) {
+        for (const label of ['Supervisor', 'Terminal', 'Process', 'Message', 'Activity']) {
             expect(getByRole('tab', { name: label })).toBeDefined();
         }
-        // The shell renders no more and no fewer than the 4 declared tabs.
-        expect(container.querySelectorAll('[role="tab"]').length).toBe(4);
+        // The shell renders no more and no fewer than the 5 declared tabs.
+        expect(container.querySelectorAll('[role="tab"]').length).toBe(5);
         // 0269 R1: shared TeamControlStrip is gone from the shell.
         expect(container.querySelector('[data-team-control-strip]')).toBeNull();
     });
@@ -1329,5 +1330,427 @@ describe('teams module components', () => {
             const filtered = filterWatchRows(rows, { runningOnly: false, source: 'all', team: 'all' });
             expect(filtered).toHaveLength(rows.length);
         });
+    });
+
+    // ── SupervisorTab (0378) ──────────────────────────────────────────────
+
+    test('SupervisorTab renders as the default-active tab in TeamsShell (0378 R1)', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/team/teams')) {
+                return jsonResponse({ teams: [{ teamId: 'alpha', name: 'Alpha', members: [] }] });
+            }
+            if (url.includes('/events/history')) return jsonResponse({ events: [] });
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { container } = render(<TeamsShell />);
+
+        // Supervisor tab button is the first tab and is selected by default.
+        const supTab = await waitFor(() => {
+            const el = container.querySelector('[role="tab"][aria-selected="true"]') as HTMLElement | null;
+            expect(el).not.toBeNull();
+            return el as HTMLElement;
+        });
+        expect(supTab.textContent).toContain('Supervisor');
+        // Supervisor panel is rendered.
+        await waitFor(() => expect(container.querySelector('[data-supervisor-tab]')).not.toBeNull());
+    });
+
+    test('SupervisorTab shows team roster with member id, type, and running/stopped status (0378 R2)', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/team/teams')) {
+                return jsonResponse({
+                    teams: [
+                        {
+                            teamId: 'alpha',
+                            name: 'Alpha',
+                            members: [
+                                { id: 'planner', type: 'claude', status: 'running' },
+                                { id: 'coder', type: 'codex', status: 'stopped' },
+                            ],
+                        },
+                    ],
+                });
+            }
+            if (url.includes('/events/history')) return jsonResponse({ events: [] });
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { container, getByText } = render(<SupervisorTab />);
+
+        await waitFor(() => expect(container.querySelector('[data-supervisor-tab]')).not.toBeNull());
+
+        // Team name is visible.
+        expect(getByText('Alpha')).toBeDefined();
+        // Both members rendered with their ids.
+        expect(container.querySelector('[data-supervisor-member-row="planner"]')).not.toBeNull();
+        expect(container.querySelector('[data-supervisor-member-row="coder"]')).not.toBeNull();
+        // Running member shows running badge; stopped shows stopped.
+        const plannerRow = container.querySelector('[data-supervisor-member-row="planner"]') as HTMLElement;
+        expect(plannerRow.textContent).toContain('running');
+        expect(plannerRow.textContent).toContain('claude');
+        const coderRow = container.querySelector('[data-supervisor-member-row="coder"]') as HTMLElement;
+        expect(coderRow.textContent).toContain('stopped');
+        expect(coderRow.textContent).toContain('codex');
+    });
+
+    test('SupervisorTab shows per-member uptime and last activity from events (0378 R3)', async () => {
+        const startedIso = '2026-07-20T10:00:00.000Z';
+        const activityIso = '2026-07-20T10:05:00.000Z';
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/team/teams')) {
+                return jsonResponse({
+                    teams: [
+                        {
+                            teamId: 'alpha',
+                            name: 'Alpha',
+                            members: [{ id: 'planner', type: 'claude', status: 'running' }],
+                        },
+                    ],
+                });
+            }
+            if (url.includes('/events/history')) {
+                return jsonResponse({
+                    events: [
+                        {
+                            id: 'evt-1',
+                            eventName: 'team.member.started',
+                            occurredAt: startedIso,
+                            actor: 'planner',
+                            payload: { teamId: 'alpha', memberLabel: 'planner' },
+                        },
+                        {
+                            id: 'evt-2',
+                            eventName: 'agent.completed',
+                            occurredAt: activityIso,
+                            actor: 'planner',
+                            payload: { teamId: 'alpha', memberLabel: 'planner' },
+                        },
+                    ],
+                });
+            }
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { container } = render(<SupervisorTab />);
+
+        // Uptime element exists and shows "up" prefix.
+        const uptimeEl = await waitFor(() => {
+            const el = container.querySelector('[data-supervisor-uptime="planner"]') as HTMLElement | null;
+            expect(el).not.toBeNull();
+            return el as HTMLElement;
+        });
+        expect(uptimeEl.textContent).toContain('up ');
+        expect(uptimeEl.textContent).not.toBe('up -');
+
+        // Last activity shows the event name.
+        const lastActEl = container.querySelector('[data-supervisor-last-activity="planner"]') as HTMLElement;
+        expect(lastActEl.textContent).toContain('agent.completed');
+    });
+
+    test('SupervisorTab reflects live SSE events by updating last activity (0378 R4)', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/team/teams')) {
+                return jsonResponse({
+                    teams: [
+                        {
+                            teamId: 'alpha',
+                            name: 'Alpha',
+                            members: [{ id: 'planner', type: 'claude', status: 'running' }],
+                        },
+                    ],
+                });
+            }
+            if (url.includes('/events/history')) return jsonResponse({ events: [] });
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { container } = render(<SupervisorTab />);
+
+        await waitFor(() => expect(container.querySelector('[data-supervisor-tab]')).not.toBeNull());
+
+        // Initially no last activity.
+        let lastActEl = container.querySelector('[data-supervisor-last-activity="planner"]') as HTMLElement;
+        expect(lastActEl.textContent).toContain('last: -');
+
+        // Simulate a live SSE event.
+        await act(async () => {
+            const es = FakeEventSource.instances[0];
+            expect(es).toBeDefined();
+            const esInstance = es as FakeEventSource;
+            esInstance.onmessage?.({
+                data: JSON.stringify({
+                    id: 'evt-live',
+                    eventName: 'agent.completed',
+                    occurredAt: '2026-07-20T11:00:00.000Z',
+                    actor: 'planner',
+                    payload: { teamId: 'alpha', memberLabel: 'planner' },
+                }),
+            } as MessageEvent);
+        });
+
+        // Last activity should now show the event name.
+        await waitFor(() => {
+            lastActEl = container.querySelector('[data-supervisor-last-activity="planner"]') as HTMLElement;
+            expect(lastActEl.textContent).toContain('agent.completed');
+        });
+    });
+
+    test('SupervisorTab start button POSTs start URL for stopped member (0378 R5)', async () => {
+        const posts: { url: string; method: string }[] = [];
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const req = input instanceof Request ? input : new Request(String(input));
+            if (req.url.includes('/team/teams')) {
+                return jsonResponse({
+                    teams: [
+                        {
+                            teamId: 'alpha',
+                            name: 'Alpha',
+                            members: [{ id: 'coder', type: 'codex', status: 'stopped' }],
+                        },
+                    ],
+                });
+            }
+            if (req.method === 'POST') posts.push({ url: req.url, method: req.method });
+            if (req.url.includes('/events/history')) return jsonResponse({ events: [] });
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { container } = render(<SupervisorTab />);
+
+        const toggleBtn = await waitFor(() => {
+            const el = container.querySelector('[data-supervisor-toggle="coder"]') as HTMLButtonElement | null;
+            expect(el).not.toBeNull();
+            return el as HTMLButtonElement;
+        });
+        expect(toggleBtn.textContent).toContain('Start');
+        act(() => fireEvent.click(toggleBtn));
+
+        // No confirmation modal for start.
+        expect(container.querySelector('[data-stop-confirm-modal]')).toBeNull();
+
+        await waitFor(() =>
+            expect(posts.some((p) => p.url.includes('/team/agents/coder/start') && p.method === 'POST')).toBe(true),
+        );
+    });
+
+    test('SupervisorTab stop button shows confirmation modal before POSTing stop (0378 R5)', async () => {
+        const posts: { url: string; method: string }[] = [];
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const req = input instanceof Request ? input : new Request(String(input));
+            if (req.url.includes('/team/teams')) {
+                return jsonResponse({
+                    teams: [
+                        {
+                            teamId: 'alpha',
+                            name: 'Alpha',
+                            members: [{ id: 'planner', type: 'claude', status: 'running' }],
+                        },
+                    ],
+                });
+            }
+            if (req.method === 'POST') posts.push({ url: req.url, method: req.method });
+            if (req.url.includes('/events/history')) return jsonResponse({ events: [] });
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { container } = render(<SupervisorTab />);
+
+        const toggleBtn = await waitFor(() => {
+            const el = container.querySelector('[data-supervisor-toggle="planner"]') as HTMLButtonElement | null;
+            expect(el).not.toBeNull();
+            return el as HTMLButtonElement;
+        });
+        expect(toggleBtn.textContent).toContain('Stop');
+        act(() => fireEvent.click(toggleBtn));
+
+        // Confirmation modal appears.
+        const modal = await waitFor(() => {
+            const el = container.querySelector('[data-stop-confirm-modal]') as HTMLElement | null;
+            expect(el).not.toBeNull();
+            return el as HTMLElement;
+        });
+        expect(modal.textContent).toContain('Stop member?');
+        expect(posts.filter((p) => p.url.includes('/stop'))).toHaveLength(0);
+
+        // Confirm -> stop POST fires.
+        const confirmBtn = await waitFor(() => {
+            const el = container.querySelector('[data-stop-confirm-confirm]') as HTMLButtonElement | null;
+            expect(el).not.toBeNull();
+            return el as HTMLButtonElement;
+        });
+        act(() => fireEvent.click(confirmBtn));
+
+        await waitFor(() =>
+            expect(posts.some((p) => p.url.includes('/team/agents/planner/stop') && p.method === 'POST')).toBe(true),
+        );
+    });
+
+    test('SupervisorTab Up button POSTs team up URL (0378 R5)', async () => {
+        const posts: { url: string; method: string }[] = [];
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const req = input instanceof Request ? input : new Request(String(input));
+            if (req.url.includes('/team/teams')) {
+                return jsonResponse({
+                    teams: [
+                        {
+                            teamId: 'alpha',
+                            name: 'Alpha',
+                            members: [{ id: 'planner', type: 'claude', status: 'stopped' }],
+                        },
+                    ],
+                });
+            }
+            if (req.method === 'POST') posts.push({ url: req.url, method: req.method });
+            if (req.url.includes('/events/history')) return jsonResponse({ events: [] });
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { container } = render(<SupervisorTab />);
+
+        const upBtn = await waitFor(() => {
+            const el = container.querySelector('[data-supervisor-team-up="alpha"]') as HTMLButtonElement | null;
+            expect(el).not.toBeNull();
+            return el as HTMLButtonElement;
+        });
+        act(() => fireEvent.click(upBtn));
+
+        await waitFor(() =>
+            expect(posts.some((p) => p.url.includes('/team/alpha/up') && p.method === 'POST')).toBe(true),
+        );
+    });
+
+    test('SupervisorTab Down button shows confirmation modal before POSTing down (0378 R5)', async () => {
+        const posts: { url: string; method: string }[] = [];
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const req = input instanceof Request ? input : new Request(String(input));
+            if (req.url.includes('/team/teams')) {
+                return jsonResponse({
+                    teams: [
+                        {
+                            teamId: 'alpha',
+                            name: 'Alpha',
+                            members: [{ id: 'planner', type: 'claude', status: 'running' }],
+                        },
+                    ],
+                });
+            }
+            if (req.method === 'POST') posts.push({ url: req.url, method: req.method });
+            if (req.url.includes('/events/history')) return jsonResponse({ events: [] });
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { container } = render(<SupervisorTab />);
+
+        const downBtn = await waitFor(() => {
+            const el = container.querySelector('[data-supervisor-team-down="alpha"]') as HTMLButtonElement | null;
+            expect(el).not.toBeNull();
+            return el as HTMLButtonElement;
+        });
+        act(() => fireEvent.click(downBtn));
+
+        // Confirmation modal appears.
+        const modal = await waitFor(() => {
+            const el = container.querySelector('[data-down-confirm-modal]') as HTMLElement | null;
+            expect(el).not.toBeNull();
+            return el as HTMLElement;
+        });
+        expect(modal.textContent).toContain('Bring team down?');
+        expect(posts.filter((p) => p.url.includes('/down'))).toHaveLength(0);
+
+        // Confirm -> down POST fires.
+        const confirmBtn = await waitFor(() => {
+            const el = container.querySelector('[data-down-confirm-confirm]') as HTMLButtonElement | null;
+            expect(el).not.toBeNull();
+            return el as HTMLButtonElement;
+        });
+        act(() => fireEvent.click(confirmBtn));
+
+        await waitFor(() =>
+            expect(posts.some((p) => p.url.includes('/team/alpha/down') && p.method === 'POST')).toBe(true),
+        );
+    });
+
+    test('SupervisorTab shows error-degraded banner when roster fetch fails (0378 R6)', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/team/teams')) {
+                return new Response(JSON.stringify({ error: 'connection refused' }), {
+                    status: 500,
+                    headers: { 'content-type': 'application/json' },
+                });
+            }
+            if (url.includes('/events/history')) return jsonResponse({ events: [] });
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { container } = render(<SupervisorTab />);
+
+        await waitFor(() => expect(container.querySelector('[data-supervisor-tab-error]')).not.toBeNull());
+        const errEl = container.querySelector('[data-supervisor-tab-error]') as HTMLElement;
+        expect(errEl.textContent).toContain('Failed to load teams');
+    });
+
+    test('SupervisorTab narrows untrusted event payload without crashing (0378 R7)', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/team/teams')) {
+                return jsonResponse({
+                    teams: [
+                        {
+                            teamId: 'alpha',
+                            name: 'Alpha',
+                            members: [{ id: 'planner', type: 'claude', status: 'running' }],
+                        },
+                    ],
+                });
+            }
+            if (url.includes('/events/history')) {
+                // Malformed events array - toRow should reject all, no crash.
+                return jsonResponse({
+                    events: [
+                        null,
+                        'not-an-object',
+                        { id: 123, eventName: 'team.member.started' },
+                        {
+                            id: 'good',
+                            eventName: 'agent.started',
+                            occurredAt: '2026-07-20T10:00:00Z',
+                            actor: 'planner',
+                        },
+                    ],
+                });
+            }
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { container } = render(<SupervisorTab />);
+
+        // Component renders without crashing despite malformed events.
+        await waitFor(() => expect(container.querySelector('[data-supervisor-tab]')).not.toBeNull());
+        expect(container.querySelector('[data-supervisor-member-row="planner"]')).not.toBeNull();
+    });
+
+    test('SupervisorTab shows empty roster message for team with no members (0378 R6)', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/team/teams')) {
+                return jsonResponse({
+                    teams: [{ teamId: 'empty', name: 'Empty', members: [] }],
+                });
+            }
+            if (url.includes('/events/history')) return jsonResponse({ events: [] });
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { container } = render(<SupervisorTab />);
+
+        await waitFor(() => expect(container.querySelector('[data-supervisor-empty-roster="empty"]')).not.toBeNull());
+        const el = container.querySelector('[data-supervisor-empty-roster="empty"]') as HTMLElement;
+        expect(el.textContent).toContain('No members configured');
     });
 });

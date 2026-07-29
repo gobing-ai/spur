@@ -2,6 +2,7 @@ import type { ComponentType } from 'react';
 import ActivityTab from './ActivityTab';
 import MessagesTab from './MessagesTab';
 import ProcessesTab from './ProcessesTab';
+import SupervisorTab from './SupervisorTab';
 import TerminalTab from './TerminalTab';
 
 /** Tab contract for the Teams module (0254 R2). Append-only, id-stable. */
@@ -11,8 +12,9 @@ export interface TeamsTab {
     readonly component: ComponentType;
 }
 
-/** v1 tabs: Terminal, Processes, Messages, Activity (0262 — Processes added per M1 R5). */
+/** v1 tabs: Supervisor (default, 0378 R1), Terminal, Processes, Messages, Activity. */
 export const TEAMS_TABS: readonly TeamsTab[] = [
+    { id: 'supervisor', label: 'Supervisor', component: SupervisorTab },
     { id: 'terminal', label: 'Terminal', component: TerminalTab },
     { id: 'processes', label: 'Process', component: ProcessesTab },
     { id: 'messages', label: 'Message', component: MessagesTab },

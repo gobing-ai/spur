@@ -3,7 +3,7 @@ import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 import { type TeamGroup, useTeamsData } from './useTeamsData';
 
 /** One row on the Teams activity timeline (0254 R7, 0269 R9). */
-interface ActivityRow {
+export interface ActivityRow {
     id: string;
     eventName: string;
     occurredAt: string;
@@ -64,8 +64,8 @@ export function prependActivityRow(prev: ActivityRow[] | null, row: ActivityRow)
     return next;
 }
 
-const historyUrl = () => `${resolveApiUrl()}/events/history?limit=${MAX_ACTIVITY_ROWS}`;
-const sseUrl = () => `${resolveApiUrl()}/events/planning`;
+export const historyUrl = () => `${resolveApiUrl()}/events/history?limit=${MAX_ACTIVITY_ROWS}`;
+export const sseUrl = () => `${resolveApiUrl()}/events/planning`;
 
 /** Event-name prefixes that belong on the Teams activity timeline (0254 R7):
  * agent lifecycle, inter-agent messages, team + supervisor process events. */
@@ -118,7 +118,7 @@ export function toRow(value: unknown): ActivityRow | null {
     };
 }
 
-function parseHistory(value: unknown): ActivityRow[] | null {
+export function parseHistory(value: unknown): ActivityRow[] | null {
     if (value === null || typeof value !== 'object' || !('events' in value)) return null;
     const events = (value as { events: unknown }).events;
     if (!Array.isArray(events)) return null;
