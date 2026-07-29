@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react';
 import JobsTab from './JobsTab';
 import SystemEventsTab from './SystemEventsTab';
+import TasksTab from './TasksTab';
 import ToolUsingTab from './ToolUsingTab';
 
 /**
@@ -10,7 +11,7 @@ import ToolUsingTab from './ToolUsingTab';
  * List) can append entries without touching the shell component. The shell maps
  * over this array; new tabs only need a component + a label.
  *
- * Append-only contract: never reorder or rename an entry — the board's tab
+ * Append-only contract: never reorder or rename an entry - the board's tab
  * strip and any persisted user state (e.g. last-selected tab) key on the id.
  */
 export interface ObservabilityTab {
@@ -29,5 +30,6 @@ export interface ObservabilityTab {
 export const OBSERVABILITY_TABS: readonly ObservabilityTab[] = [
     { id: 'system-events', label: 'System Events', component: SystemEventsTab },
     { id: 'jobs', label: 'Jobs', component: JobsTab },
+    { id: 'tasks', label: 'Tasks', component: TasksTab },
     { id: 'tool-using', label: 'Tool Using', component: ToolUsingTab },
 ];

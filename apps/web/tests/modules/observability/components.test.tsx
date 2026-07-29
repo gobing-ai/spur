@@ -6,7 +6,9 @@ import JobsTab from '../../../src/modules/observability/JobsTab';
 import ObservabilityShell from '../../../src/modules/observability/ObservabilityShell';
 import ProcessListTab from '../../../src/modules/observability/ProcessListTab';
 import SystemEventsTab from '../../../src/modules/observability/SystemEventsTab';
+import TasksTab from '../../../src/modules/observability/TasksTab';
 import ToolUsingTab from '../../../src/modules/observability/ToolUsingTab';
+import { OBSERVABILITY_TABS } from '../../../src/modules/observability/tabs';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 class FakeEventSource {
@@ -1230,5 +1232,336 @@ describe('observability components', () => {
         expect(getByText('3')).toBeDefined();
         expect(getByText('42')).toBeDefined();
         expect(getByText('2')).toBeDefined();
+    });
+
+    // -----------------------------------------------------------------------
+    // TasksTab (task 0377) - pipeline run list backed by run store
+    // -----------------------------------------------------------------------
+
+    function installTasksFetchMock(opts?: {
+        runs?: unknown[];
+        runDetail?: Record<string, unknown>;
+        tasks?: unknown[];
+        wbsLinks?: Record<string, unknown[]>;
+        corpusTaskEvents?: unknown[];
+        corpusFeatureEvents?: unknown[];
+        runDetailStatus?: number;
+    }): string[] {
+        const calls: string[] = [];
+        const runs = opts?.runs ?? [
+            {
+                id: 'run-1',
+                workflowName: 'task-pipeline',
+                status: 'completed',
+                mode: 'auto',
+                agent: 'omp',
+                startedAt: '2026-07-04T20:00:00.000Z',
+                completedAt: '2026-07-04T20:05:00.000Z',
+            },
+            {
+                id: 'run-2',
+                workflowName: null,
+                status: 'running',
+                mode: null,
+                agent: null,
+                startedAt: '2026-07-04T20:10:00.000Z',
+                completedAt: null,
+            },
+        ];
+        const tasks = opts?.tasks ?? [{ wbs: '0377' }];
+        const wbsLinks = opts?.wbsLinks ?? {
+            '0377': [{ runId: 'run-1', kind: 'task', linkedAt: '2026-07-04T20:00:01.000Z', run: runs[0] }],
+        };
+        const runDetail = opts?.runDetail ?? {
+            run: runs[0],
+            phases: [
+                {
+                    phase: 'precheck',
+                    status: 'completed',
+                    startedAt: '2026-07-04T20:00:00.000Z',
+                    completedAt: '2026-07-04T20:00:30.000Z',
+                },
+                {
+                    phase: 'implement',
+                    status: 'completed',
+                    startedAt: '2026-07-04T20:00:30.000Z',
+                    completedAt: '2026-07-04T20:03:00.000Z',
+                },
+                {
+                    phase: 'review',
+                    status: 'failed',
+                    startedAt: '2026-07-04T20:03:00.000Z',
+                    completedAt: '2026-07-04T20:04:00.000Z',
+                },
+                { phase: 'verify', status: 'pending', startedAt: null, completedAt: null },
+            ],
+            transitions: [
+                { from: 'precheck', to: 'implement', trigger: 'auto' },
+                { from: 'implement', to: 'review', trigger: 'auto' },
+            ],
+            actions: [
+                {
+                    id: 'a1',
+                    node: 'precheck',
+                    kind: 'gate',
+                    status: 'completed',
+                    durationMs: 300,
+                    ok: true,
+                    resultSummary: 'all clear',
+                    startedAt: '2026-07-04T20:00:00.000Z',
+                    completedAt: '2026-07-04T20:00:30.000Z',
+                },
+                {
+                    id: 'a2',
+                    node: 'review',
+                    kind: 'review',
+                    status: 'failed',
+                    durationMs: 5000,
+                    ok: false,
+                    resultSummary: { error: 'lint errors found' },
+                    startedAt: '2026-07-04T20:03:00.000Z',
+                    completedAt: '2026-07-04T20:04:00.000Z',
+                },
+            ],
+        };
+        const corpusTaskEvents = opts?.corpusTaskEvents ?? [
+            {
+                id: 'ce-1',
+                eventName: 'task.updated',
+                occurredAt: '2026-07-04T20:02:00.000Z',
+                actor: 'operator',
+                payload: { wbs: '0377', status: 'wip' },
+            },
+        ];
+        const corpusFeatureEvents = opts?.corpusFeatureEvents ?? [
+            {
+                id: 'ce-2',
+                eventName: 'feature.created',
+                occurredAt: '2026-07-04T20:01:00.000Z',
+                actor: 'operator',
+                payload: { id: 'J4' },
+            },
+        ];
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            calls.push(url);
+            // R1: run list
+            if (url.includes('/runs?limit=') && !url.includes('/by-wbs/')) {
+                return jsonResponse({ runs, count: runs.length, nextCursor: null, hasMore: false });
+            }
+            // R2/R3: run detail
+            if (url.match(/\/runs\/[^/]+$/) && !url.includes('by-wbs')) {
+                if (opts?.runDetailStatus && opts.runDetailStatus !== 200) {
+                    return new Response(JSON.stringify({ error: 'detail fetch failed' }), {
+                        status: opts.runDetailStatus,
+                        headers: { 'content-type': 'application/json' },
+                    });
+                }
+                return jsonResponse(runDetail);
+            }
+            // WBS index: task list
+            if (url.includes('/tasks?limit=')) {
+                return jsonResponse({ items: tasks });
+            }
+            // WBS index: by-wbs links
+            if (url.includes('/runs/by-wbs/')) {
+                const wbs = url.split('/runs/by-wbs/')[1]?.split('?')[0];
+                return jsonResponse(wbsLinks[wbs ?? ''] ?? []);
+            }
+            // R4: corpus lane - task events
+            if (url.includes('prefix=task')) {
+                return jsonResponse({ events: corpusTaskEvents, count: corpusTaskEvents.length, catalog: [] });
+            }
+            // R4: corpus lane - feature events
+            if (url.includes('prefix=feature')) {
+                return jsonResponse({ events: corpusFeatureEvents, count: corpusFeatureEvents.length, catalog: [] });
+            }
+            return new Response('not found', { status: 404 });
+        }) as unknown as typeof fetch);
+        return calls;
+    }
+
+    test('tasks tab lists pipeline runs with WBS link, workflow name, status, start time (R1)', async () => {
+        installTasksFetchMock();
+        const { getByText, queryAllByText } = render(<TasksTab />);
+
+        await waitFor(() => expect(queryAllByText('task-pipeline').length).toBeGreaterThan(0));
+        // R1: linked WBS badge (appears in run row + possibly corpus lane)
+        expect(queryAllByText('0377').length).toBeGreaterThan(0);
+        // R1: workflow name
+        expect(getByText('task-pipeline')).toBeDefined();
+        // R1: status badge
+        expect(getByText('completed')).toBeDefined();
+        // R1: unlinked run shows "unlinked" badge
+        expect(getByText('unlinked')).toBeDefined();
+    });
+
+    test('tasks tab expands a run into ordered phase progress with active/completed/failed (R2)', async () => {
+        installTasksFetchMock();
+        const { getByText, queryAllByText, container } = render(<TasksTab />);
+
+        await waitFor(() => expect(queryAllByText('task-pipeline').length).toBeGreaterThan(0));
+
+        // Click the run row to expand
+        const runRow = container.querySelector('[data-tasks-tab] button[aria-expanded="false"]');
+        expect(runRow).not.toBeNull();
+        fireEvent.click(runRow as Element);
+
+        // R2: phases render in order with status distinction
+        await waitFor(() => expect(getByText('Phases')).toBeDefined());
+        expect(queryAllByText('precheck').length).toBeGreaterThan(0);
+        expect(queryAllByText('implement').length).toBeGreaterThan(0);
+        expect(queryAllByText('review').length).toBeGreaterThan(0);
+        expect(queryAllByText('verify').length).toBeGreaterThan(0);
+        // R2: failed phase is distinguishable (error badge)
+        expect(queryAllByText('failed').length).toBeGreaterThan(0);
+    });
+
+    test('tasks tab shows per-action log with node, kind, status, duration, failure reason (R3)', async () => {
+        installTasksFetchMock();
+        const { getByText, queryAllByText, container } = render(<TasksTab />);
+
+        await waitFor(() => expect(queryAllByText('task-pipeline').length).toBeGreaterThan(0));
+
+        const runRow = container.querySelector('[data-tasks-tab] button[aria-expanded="false"]');
+        fireEvent.click(runRow as Element);
+
+        // R3: action log renders
+        await waitFor(() => expect(getByText('Action Log')).toBeDefined());
+        // R3: node name (also appears as phase name, so queryAll)
+        expect(queryAllByText('precheck').length).toBeGreaterThan(0);
+        // R3: kind badge
+        expect(getByText('gate')).toBeDefined();
+        expect(queryAllByText('review').length).toBeGreaterThan(0);
+        // R3: duration formatted (300ms)
+        expect(getByText('300ms')).toBeDefined();
+        // R3: failure reason from resultSummary.error
+        expect(getByText('lint errors found')).toBeDefined();
+    });
+
+    test('tasks tab renders secondary corpus lane with task.*/feature.* events (R4)', async () => {
+        installTasksFetchMock();
+        const { getByText, queryAllByText } = render(<TasksTab />);
+
+        await waitFor(() => expect(queryAllByText('task-pipeline').length).toBeGreaterThan(0));
+
+        // R4: corpus lane is visually distinct (dashed border, "corpus-only" badge)
+        await waitFor(() => expect(getByText('Corpus Activity')).toBeDefined());
+        expect(getByText('corpus-only')).toBeDefined();
+        // R4: task.* event
+        expect(getByText('task.updated')).toBeDefined();
+        // R4: feature.* event
+        expect(getByText('feature.created')).toBeDefined();
+    });
+
+    test('tasks tab degrades per-row when run detail fetch fails (R5)', async () => {
+        installTasksFetchMock({ runDetailStatus: 500 });
+        const { getByText, queryAllByText, container } = render(<TasksTab />);
+
+        await waitFor(() => expect(queryAllByText('task-pipeline').length).toBeGreaterThan(0));
+
+        const runRow = container.querySelector('[data-tasks-tab] button[aria-expanded="false"]');
+        fireEvent.click(runRow as Element);
+
+        // R5: inline error shows, list stays usable
+        await waitFor(() => expect(getByText(/Failed to load run detail/)).toBeDefined());
+        // List is still visible
+        expect(getByText('task-pipeline')).toBeDefined();
+    });
+
+    test('tasks tab narrows untrusted run list input - malformed entries dropped (R7)', async () => {
+        installTasksFetchMock({
+            runs: [
+                {
+                    id: 'run-good',
+                    workflowName: 'valid',
+                    status: 'completed',
+                    mode: 'auto',
+                    agent: 'omp',
+                    startedAt: '2026-07-04T20:00:00.000Z',
+                    completedAt: null,
+                },
+                { id: 12345, workflowName: 'bad-id-type' }, // missing required fields + wrong types
+                { id: 'run-no-status', workflowName: 'missing-status' }, // missing status
+                null, // null entry
+                'string-not-object', // wrong type
+            ],
+        });
+        const { queryAllByText, getByText } = render(<TasksTab />);
+
+        await waitFor(() => expect(queryAllByText('valid').length).toBeGreaterThan(0));
+        // R7: only the valid run renders
+        expect(getByText('valid')).toBeDefined();
+        expect(queryAllByText('bad-id-type')).toHaveLength(0);
+        expect(queryAllByText('missing-status')).toHaveLength(0);
+    });
+
+    test('tasks tab narrows untrusted run detail - malformed phases/actions dropped (R7)', async () => {
+        installTasksFetchMock({
+            runDetail: {
+                run: {
+                    id: 'run-1',
+                    workflowName: 'task-pipeline',
+                    status: 'completed',
+                    mode: 'auto',
+                    agent: 'omp',
+                    startedAt: '2026-07-04T20:00:00.000Z',
+                    completedAt: null,
+                },
+                phases: [
+                    {
+                        phase: 'precheck',
+                        status: 'completed',
+                        startedAt: '2026-07-04T20:00:00.000Z',
+                        completedAt: null,
+                    },
+                    { phase: 123, status: 'bad-phase-type' }, // wrong type
+                    null, // null phase
+                    'string', // wrong type
+                ],
+                transitions: [],
+                actions: [
+                    {
+                        id: 'a1',
+                        node: 'precheck',
+                        kind: 'gate',
+                        status: 'completed',
+                        durationMs: 300,
+                        ok: true,
+                        resultSummary: null,
+                        startedAt: null,
+                        completedAt: null,
+                    },
+                    { id: 999, node: 'bad-action' }, // missing fields
+                    null,
+                ],
+            },
+        });
+        const { getByText, queryAllByText, container } = render(<TasksTab />);
+
+        await waitFor(() => expect(queryAllByText('task-pipeline').length).toBeGreaterThan(0));
+
+        const runRow = container.querySelector('[data-tasks-tab] button[aria-expanded="false"]');
+        fireEvent.click(runRow as Element);
+
+        await waitFor(() => expect(getByText('Phases')).toBeDefined());
+        // R7: only valid phase renders
+        expect(queryAllByText('precheck').length).toBeGreaterThan(0);
+        // R7: only valid action renders
+        await waitFor(() => expect(getByText('Action Log')).toBeDefined());
+        expect(getByText('gate')).toBeDefined();
+    });
+
+    test('tasks tab renders empty state when no runs exist (R1)', async () => {
+        installTasksFetchMock({ runs: [], corpusTaskEvents: [], corpusFeatureEvents: [] });
+        const { getByText } = render(<TasksTab />);
+
+        await waitFor(() => expect(getByText(/No pipeline runs yet/)).toBeDefined());
+    });
+
+    test('tasks tab is registered in OBSERVABILITY_TABS (R6)', () => {
+        const tasksTab = OBSERVABILITY_TABS.find((t) => t.id === 'tasks');
+        expect(tasksTab).toBeDefined();
+        expect(tasksTab?.label).toBe('Tasks');
     });
 });
