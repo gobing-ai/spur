@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Add explicit module ordering to the board registry and promote Observability to first module"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: J4
@@ -12,7 +12,7 @@ priority: P2
 tags: ["board", "web", "registry"]
 dependencies: []
 created_at: "2026-07-29T00:15:02.315Z"
-updated_at: "2026-07-29T16:26:13.666Z"
+updated_at: "2026-07-29T17:14:13.294Z"
 ---
 
 ## 0374. Add explicit module ordering to the board registry and promote Observability to first module
@@ -66,28 +66,51 @@ Add an optional `readonly order?: number` to the `WebModule` interface (modules/
 9. **(R4)** Run the existing `apps/web/tests/modules/registry.test.ts` suite unchanged - it is the regression guard for duplicate id/route validation (registry.ts:74-94) and disable/enable slot restoration (registry.ts:56-61). No new registry test: `order` does not touch validation or slot logic.
 10. **(AC Scenario 1)** Verify end-to-end: after steps 1-5, `discoverModules()` places observability first and `defaultModule?.id === 'observability'`. Extend the `discoverModules` integration block (discover.test.ts:180-208) to assert the first discovered id is `observability`.
 ### Solution
-- `apps/web/src/modules/types.ts:12-13` — Added `readonly order?: number;` to `WebModule` (after `sidebarLabel`). Optional field; no existing caller breaks.
-- `apps/web/src/modules/discover.ts:58-73` — Added exported `compareModules(a, b)` partial-ordering comparator. Both declared → `a.order - b.order`; only `a` declared → `-1`; only `b` declared → `1`; neither → `0` (stable sort preserves input order).
-- `apps/web/src/modules/discover.ts:91-92` — `discoverViaGlob`: kept id pre-sort, appended `found.sort(compareModules)` to lift declared-order modules.
-- `apps/web/src/modules/discover.ts:175-176` — `discoverViaFs`: kept dir-name pre-sort, appended `found.sort(compareModules)` before return.
-- `apps/web/src/modules/observability/index.tsx:19` — Added `order: 0` to the observability `module` export. With no other module declaring `order`, observability sorts first → `defaultModule` becomes observability.
-- `apps/web/tests/modules/discover.test.ts:95-113` — `compareModules` unit tests: both-declared ascending, only-a, only-b, neither (returns 0).
-- `apps/web/tests/modules/discover.test.ts:143-158` — `discoverViaGlob` ordering test (AC Scenario 2): declared modules sort first by `order`, undeclared follow in id order.
-- `apps/web/tests/modules/discover.test.ts:209-227` — `discoverViaFs` ordering test (R6): declared modules sort first by `order`, undeclared retain dir-name position.
-- `apps/web/tests/modules/discover.test.ts:267-272` — `discoverModules` integration test (AC Scenario 1): asserts `discovered[0].id === 'observability'` and `order === 0`.
+- `apps/web/src/modules/types.ts:12-13` - Added `readonly order?: number;` to `WebModule` (after `sidebarLabel`). Optional field; no existing caller breaks.
+- `apps/web/src/modules/discover.ts:55-66` - Added `compareModules(a, b)` partial-ordering comparator: declared modules (with `order`) sort ascending; undeclared return `0` so stable sort preserves their relative position.
+- `apps/web/src/modules/discover.ts:91` - `discoverViaGlob`: applied `found.sort(compareModules)` after the existing id pre-sort.
+- `apps/web/src/modules/discover.ts:175` - `discoverViaFs`: applied `found.sort(compareModules)` after the existing dir-name pre-sort.
+- `apps/web/src/modules/observability/index.tsx:18` - Set `order: 0` on the observability module so it sorts first and becomes `defaultModule = enabledList()[0]`.
+- `apps/web/tests/modules/discover.test.ts:92-114` - `compareModules` unit tests: both-declared ascending, one-declared lifts, neither-declared returns 0.
+- `apps/web/tests/modules/discover.test.ts:143-158` - `discoverViaGlob` ordering test (AC Scenario 2): declared modules sort first by `order`, undeclared follow in id order.
+- `apps/web/tests/modules/discover.test.ts:209-227` - `discoverViaFs` ordering test (R6): declared modules sort first by `order`, undeclared retain dir-name position.
+- `apps/web/tests/modules/discover.test.ts:267-272` - `discoverModules` integration test (AC Scenario 1): asserts `discovered[0].id === 'observability'` and `order === 0`.
 
-**Rationale:** Single partial-ordering comparator layered on top of each path's existing deterministic pre-sort (id / dir-name). `Array.prototype.sort` is stable (Bun/V8/JavaScriptCore), so undeclared modules retain their relative position. Registry validation, slot restoration, and `defaultModule = enabledList()[0]` are untouched — they inherit the promoted order from discovery.
+**Rationale:** Single partial-ordering comparator layered on top of each path's existing deterministic pre-sort (id / dir-name). `Array.prototype.sort` is stable (Bun/V8/JavaScriptCore), so undeclared modules retain their relative position. Registry validation, slot restoration, and `defaultModule = enabledList()[0]` are untouched - they inherit the promoted order from discovery.
 ### Testing
-- `bun test apps/web/tests/modules/discover.test.ts` — 25 pass, 0 fail, 63 expect() calls. `discover.ts` at 100% function coverage / 100% line coverage in the discover-only run.
-- `bun test apps/web/tests/modules/registry.test.ts` — 14 pass, 0 fail, 27 expect() calls. Registry validation (duplicate id/route) and slot restoration regressions green (R4).
-- AC Scenario 1 (R3): `discoverModules()[0].id === 'observability'` and `order === 0` — verified by integration test at discover.test.ts:267-272.
-- AC Scenario 2 (R1/R2): declared modules sort first by `order` ascending, undeclared retain relative order — verified in both `discoverViaGlob` (discover.test.ts:143-158) and `discoverViaFs` (discover.test.ts:209-227).
-- R6: fs-fallback comparator covered by discover.test.ts:209-227 (the branch reachable under `bun test`).
-- R5: determinism is structural — comparator is pure, `Array.prototype.sort` is stable; no extra test needed (registry "same inputs → same ordering" contract inherits this).
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `types.ts:12-13` adds `readonly order?: number` to WebModule; `discover.ts:57-66` `compareModules` honours it; applied at `:91` (glob) and `:175` (fs) |
+| R2 | MET | `discover.ts:62-65` - declared sort ascending, undeclared return 0 (stable sort preserves order); `discover.test.ts:95-114` covers all 3 branches |
+| R3 | MET | `observability/index.tsx:18` sets `order: 0`; `discover.test.ts:267-272` asserts `discovered[0].id === 'observability'` |
+| R4 | MET | No changes to registry validation or slot restoration; only a sort step added to discovery |
+| R5 | MET | `compareModules` is pure; pre-sorts (id/dir-name) deterministic; `Array.prototype.sort` stable |
+| R6 | MET | `discover.test.ts:209-227` covers fs-fallback ordering with declared + undeclared modules |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 - Observability is the Board's first module and default landing route | MET | test | `discover.test.ts:267-272` asserts `discovered[0].id === 'observability'` and `order === 0` |
+| Scenario: R2 - Explicit ordering is declarative and partial | MET | test | `discover.test.ts:139-158` (glob) and `:209-227` (fs) verify declared modules sort by order, undeclared retain position |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**Functional traceability** - all 6 requirements MET.
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECUA review findings:**
 
+| Priority | Finding | File:Line | Status |
+|----------|---------|-----------|--------|
+| P1 | None | - | - |
+| P2 | None | - | - |
+| P3 | `as number` cast in comparator could use narrowing helper for consistency | `apps/web/src/modules/discover.ts:63-64` | Accepted - guarded by `typeof` check, not a defect |
+| P4 | JSDoc on `order` field is a single long line; could wrap for readability | `apps/web/src/modules/types.ts:12` | Accepted - style preference, not actionable |
+
+**Architecture depth:** Pure `compareModules` comparator layered on each path's existing deterministic pre-sort. No coupling introduced; `WebModule` interface extension is backward-compatible (optional field). Sort applied at discovery boundary so registry factory and downstream consumers inherit ordering without modification.
+
+**Disposition:** PASS - no blockers (P1/P2), no major findings. P3/P4 are advisory only.
 ### References
 
 J4
@@ -95,3 +118,6 @@ J4
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-07-29T17:11:12.249Z todo → wip (system)
+- 2026-07-29T17:13:14.662Z wip → testing (system)
+- 2026-07-29T17:14:13.294Z testing → done (system)
