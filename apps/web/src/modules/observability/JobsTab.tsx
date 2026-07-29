@@ -385,9 +385,9 @@ function JobEventCard({ row }: { row: SystemEventRow }) {
 /** A collapsed per-job thread: header shows the latest event's state/fields,
  * disclosure lists the full event sequence (R3). */
 function JobThreadCard({ item }: { item: JobThreadItem }) {
-    // biome-ignore lint/style/noNonNullAssertion: groupJobEvents invariant guarantees events[0] exists
-    const latest = item.events[0]!;
-    const fields = useMemo(() => narrowJobFields(latest.eventName, latest.payload), [latest]);
+    const latest = item.events[0];
+    const fields = useMemo(() => (latest ? narrowJobFields(latest.eventName, latest.payload) : null), [latest]);
+    if (!latest || !fields) return null;
     const jobState = deriveJobState(latest.eventName);
     const durationLabel = fields.durationMs !== undefined ? formatDuration(fields.durationMs) : null;
 

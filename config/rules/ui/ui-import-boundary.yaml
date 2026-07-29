@@ -33,14 +33,17 @@ rules:
     description: >
       daisyUI COMPONENT classes (btn, card, badge, modal, ...) must not appear in
       className strings outside `apps/web/src/components/ui/`. Layout/utility classes
-      (flex, grid, gap-*, p-*) are unaffected — the pattern is anchored to a
-      className context and word-bounded to the component-class allowlist only.
-      `components/ui/` stays excluded: it is the sanctioned class-authoring site.
+      (flex, grid, gap-*, p-*, select-none, [user-select:none]) are unaffected -
+      the pattern is anchored to a className context and word-bounded to the
+      component-class allowlist only. `select` is matched as a standalone class
+      token (followed by whitespace or quote) to avoid colliding with Tailwind's
+      `select-*` utilities and CSS `user-select` property. `components/ui/` stays
+      excluded: it is the sanctioned class-authoring site.
     severity: error
     evaluator:
       type: rg
       config:
-        pattern: "className=[\"'][^\"']*\\b(btn|card|badge|modal|menu|navbar|drawer|tabs|alert|dropdown|collapse|join|tooltip|loading|select|checkbox|toggle)\\b"
+        pattern: "className=[\"'][^\"']*\\b(btn|card|badge|modal|menu|navbar|drawer|tabs|alert|dropdown|collapse|join|tooltip|loading|checkbox|toggle)\\b|className=[\"'][^\"']*\\bselect[\\s\"']"
     include:
       - "apps/web/src/**/*.tsx"
     exclude:
