@@ -226,12 +226,16 @@ plugins/sp/
 │   ├── reverse-engineering/         # Codebase reverse engineering / HLD / audit
 │   │   ├── agents/openai.yaml
 │   │   └── SKILL.md
+│   ├── issue-finding/               # Session-log forensics → fix task generation
+│   │   ├── agents/openai.yaml
+│   │   ├── examples/{session-test-loop.jsonl, expected-findings.json}
+│   │   └── references/session-formats.md
 │   ├── sys-architecture/            # Architecture / ADR judgment competency
 │   │   └── references/decision-method.md
 │   ├── sys-debugging/               # Structured debugging protocol
 │   │   └── references/debugging-protocol.md
 │   └── wayfinder/                   # Multi-session investigation maps (SKILL.md only)
-├── commands/                        # 31 slash-command wrappers — the SSOT (hand-editable thin wrappers; see Commands below)
+├── commands/                        # 34 slash-command wrappers — the SSOT (hand-editable thin wrappers; see Commands below)
 ├── agents/                          # 3 specialist subagents (expert-spur, super-coder, super-reviewer)
 ├── hooks/                           # hooks.json + task-write-guard.{ts,test.ts} + context-{session-start,post-tool,session-stop}.ts
 │                                    # + careful-guard.{ts,test.ts} + context-hooks.test.ts + token-estimate.test.ts
@@ -297,6 +301,7 @@ surface or run one workflow. All skills target the same five platforms: `claude-
 | `daily-summary` | 1.0.0 | Daily summary report generator — orchestrates ccusage CLI + git history into structured markdown summaries |
 | `doc-evolve` | 1.0 | Key-document evolution per `docs/99_PROJECT_CONSTITUTION.md` — drift audits, same-commit sync checks, frontmatter-contract verification, machine-appended lessons |
 | `reverse-engineering` | 1.1 | Codebase analysis / HLD generation / audit — depth-driven reverse engineering with orthogonal mode, focus, and format controls; backs `/sp:dev-reverse` |
+| `issue-finding` | 1.1 | Session-log forensics — multi-source discovery, bottleneck ranking, optional topic focus, CLI-gated fix task generation; backs `/sp:dev-findissue` |
 | `indexed-context` | 1.0 | Cross-agent project context — anatomy/learnings/pitfalls/buglog/memory in `.spur/context/`; hook-tracked token-ledger; graceful degradation on agents without hooks |
 
 Each skill directory contains:
@@ -309,7 +314,7 @@ Each skill directory contains:
   per-stack adapters.
 - Executable TypeScript helpers live under plugin-level `scripts/<skill>/` (e.g. `daily-summary`,
   `dogfood-testing`) — split from the prompt layer (`skills/`), with their suites in `tests/<skill>/`.
-- Some skills (`brainstorm`, `daily-summary`, `reverse-engineering`) carry `agents/openai.yaml` for multi-model dispatch.
+- Some skills (`brainstorm`, `daily-summary`, `reverse-engineering`, `issue-finding`) carry `agents/openai.yaml` for multi-model dispatch.
 
 **Design principle:** Skills are **knowledge, not execution**. They describe *what to do and why*;
 the `spur` CLI performs every deterministic, corpus-mutating operation and validates before writing.
@@ -319,11 +324,11 @@ Skills contain zero validation logic — the CLI is the gate.
 
 Thin slash-command wrappers that parse user arguments and delegate to the corresponding skill. Each
 command is a user-facing entry point that bridges natural language to skill invocation. There are
-**33 commands** (see the Command index above for the full list), organized by the surface they wrap:
+**34 commands** (see the Command index above for the full list), organized by the surface they wrap:
 
 | Prefix | Count | Delegates to | Purpose |
 | -------- | ------- | ------------- | --------- |
-| `dev-*` | 25 | `sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:code-simplification`, `sp:next-router`, `sp:brainstorm`, `sp:dogfood-testing`, `sp:parallel-execution`, `sp:sys-debugging`, `sp:daily-summary`, inline | The dev-workflow surface — planning, execution, batch, wrap-up, review/verify, hygiene |
+| `dev-*` | 28 | `sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:code-simplification`, `sp:next-router`, `sp:brainstorm`, `sp:dogfood-testing`, `sp:parallel-execution`, `sp:sys-debugging`, `sp:daily-summary`, `sp:issue-finding`, `sp:reverse-engineering`, inline | The dev-workflow surface — planning, execution, batch, wrap-up, review/verify, hygiene |
 | `rule-*` | 3 | `sp:spur-cli` | The rule surface — `rule-add`, `rule-refine`, `rule-scan` |
 | `workflow-*` | 2 | `sp:spur-cli` | The workflow surface — `workflow-add`, `workflow-refine` |
 | `spur-init` | 1 | `sp:doc-evolve` | Project bootstrap (`spur init`) with doc-evolve integration |
@@ -333,7 +338,7 @@ Each command file contains:
 - YAML frontmatter (`description`, `argument-hint`, `allowed-tools`).
 - A delegation block: `Skill(skill="sp:<skill-name>", args="<operation> $ARGUMENTS")`.
 
-**Commands as SSOT (ADR-032).** The 31 `.md` files in `commands/` are the authoritative,
+**Commands as SSOT (ADR-032).** The 34 `.md` files in `commands/` are the authoritative,
 hand-editable source for the operator command surface. Per-platform adapters are **install-time
 output** owned by `superskill` (`superskill install sp`) and never committed here. Plugin `sp` ships
 no per-platform artifacts — only the platform-independent thin wrappers.
@@ -341,7 +346,7 @@ no per-platform artifacts — only the platform-independent thin wrappers.
 **Thin-wrapper contract** is enforced by `scripts/validate-commands.ts`:
 
 ```bash
-bun plugins/sp/scripts/validate-commands.ts            # validate all 33 commands
+bun plugins/sp/scripts/validate-commands.ts            # validate all 34 commands
 bun plugins/sp/scripts/validate-commands.ts --json     # machine-readable output
 ```
 

@@ -1,6 +1,6 @@
 ---
 description: "Review agent session logs, identify performance bottlenecks and behavioral anti-patterns, and generate a structured task file with proposed fixes. Triggers: post-mortem, performance analysis, session review, find issues, identify bottlenecks"
-argument-hint: "[--sessions <glob>] [--feature <id>] [--template <name>] [--priority <P1|P2|P3|P4>] [--no-task] [--json]"
+argument-hint: "[<topic>] [--sessions <glob>] [--source <auto|omp|claude|codex|gemini|opencode|antigravity|openclaw|pi>] [--feature <id>] [--template <meta|issue|standard>] [--priority <P0|P1|P2|P3>] [--severity <S0|S1|S2>] [--category <list>] [--since <iso>] [--until <iso>] [--top <n>] [--min-cost <duration>] [--strict-topic] [--use-history] [--no-task] [--json]"
 allowed-tools: ["Bash", "Read", "Write", "Grep", "Glob", "Skill"]
 ---
 
@@ -13,24 +13,35 @@ task file via `spur task create`.
 ## Usage
 
 ```
-/sp:dev-findissue                                    # analyze most recent sessions for cwd
-/sp:dev-findissue --sessions "~/.omp/.../2026-07-29T*"
-/sp:dev-findissue --feature J4 --priority P2
-/sp:dev-findissue --no-task                          # report findings to stdout only
-/sp:dev-findissue --json                             # emit findings as JSON
+/sp:dev-findissue
+/sp:dev-findissue "test-loop spinning"
+/sp:dev-findissue --sessions "~/.omp/agent/sessions/-xprojects-spur-new/2026-07-29T*"
+/sp:dev-findissue "L3 guard format discovery" --feature H51 --priority P1 --severity S1
+/sp:dev-findissue --category test-loop,guard --min-cost 30m --no-task
+/sp:dev-findissue --source claude --since 2026-07-28 --json
+/sp:dev-findissue --sessions plugins/sp/skills/issue-finding/examples/session-test-loop.jsonl --no-task
 ```
 
 | Argument | Description | Default |
 |----------|-------------|---------|
-| `--sessions <glob>` | Session JSONL file(s) or directory to analyze | most recent for cwd |
+| `[topic]` | Optional focus text or smart positional (path/glob → sessions; category phrase → filter) | (full taxonomy) |
+| `--sessions <glob>` | Session JSONL file(s) or directory | most recent for resolved source |
+| `--source <name>` | `auto`, `omp`, `claude`, `codex`, `gemini`, `opencode`, `antigravity`, `openclaw`, `pi` | `auto` |
 | `--feature <id>` | Feature ID to link the generated task to | (none) |
-| `--template <name>` | Task template: `meta` (umbrella) or `standard` (single issue) | `meta` |
-| `--priority <P1\|P2\|P3\|P4>` | Priority of the generated task | `P2` |
-| `--no-task` | Report findings to stdout only; do not create a task | off |
-| `--json` | Emit findings as JSON instead of creating a task | off |
+| `--template <name>` | `meta` (umbrella), `issue` (single), or `standard` | `meta` |
+| `--priority <P0\|P1\|P2\|P3>` | Task frontmatter priority (not bottleneck severity) | `P2` |
+| `--severity <S0\|S1\|S2>` | Minimum bottleneck severity to keep | (all) |
+| `--category <list>` | Comma-separated category ids (`test-loop`, `guard`, …) | `all` |
+| `--since` / `--until` | Session start time bounds | (none) |
+| `--top <n>` | Cap number of fixes/requirements | (no cap) |
+| `--min-cost <duration>` | Drop findings under this waste floor (`30m`, `2h`) | (none) |
+| `--strict-topic` | Drop off-topic findings even if severe | off |
+| `--use-history` | Optional `spur history` import/analyze for cost aggregates | off |
+| `--no-task` | Markdown report only | off |
+| `--json` | JSON findings only (no task) | off |
 
-**See also:** `/sp:dev-runall` (batch execution), `/sp:dev-dogfood` (end-to-end testing),
-`sp:daily-summary` (activity reporting), `sp:reverse-engineering` (codebase archaeology).
+**See also:** skill `sp:issue-finding` (SSOT), `/sp:dev-runall`, `/sp:dev-dogfood`,
+`sp:daily-summary`, `sp:reverse-engineering`.
 
 ## Implementation
 
