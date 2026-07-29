@@ -422,7 +422,7 @@ export class FeatureCheckService extends PlanningCheckService {
             let stillOrphan = new Set(checkAcCoverage(acBody, '').orphans);
             for (const taskAc of linkedTaskAc) {
                 if (stillOrphan.size === 0) break;
-                const orphanedByThisTask = new Set(checkAcCoverage(acBody, taskAc).orphans);
+                const orphanedByThisTask = new Set(checkAcCoverage(acBody, taskAc, parseChecklist(taskAc)).orphans);
                 // A scenario covered by THIS task drops out of the orphan set.
                 stillOrphan = new Set([...stillOrphan].filter((o) => orphanedByThisTask.has(o)));
             }
@@ -531,7 +531,11 @@ export class FeatureCheckService extends PlanningCheckService {
             for (const task of linkedTasks) {
                 // checkAcCoverage returns `orphans` = feature scenarios NOT covered
                 // by this task. If the scenario is NOT in orphans, this task covers it.
-                const taskCov = checkAcCoverage(`Feature: x\n  Scenario: ${sc.title}\n    Given x`, task.ac);
+                const taskCov = checkAcCoverage(
+                    `Feature: x\n  Scenario: ${sc.title}\n    Given x`,
+                    task.ac,
+                    parseChecklist(task.ac),
+                );
                 if (!taskCov.orphans.includes(sc.title)) {
                     linked.push({ wbs: task.wbs, status: task.status });
                 }

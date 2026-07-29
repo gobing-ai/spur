@@ -839,6 +839,95 @@ describe('FeatureCheckService', () => {
         expect(cov[0]?.severity).toBe('warning'); // orphans are warnings, never errors (DD-09)
     });
 
+    test('0379 regression: linked task checklist covers and verifies feature scenarios', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-fc-0379-checklist-'));
+        const featuresDir = join(dir, 'features');
+        const tasksDir = join(dir, 'tasks');
+        const runDir = join(dir, '.spur', 'run');
+        mkdirSync(featuresDir, { recursive: true });
+        mkdirSync(tasksDir, { recursive: true });
+        mkdirSync(runDir, { recursive: true });
+        writeFileSync(
+            join(featuresDir, 'A_checklist.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'id: "A"',
+                'name: "Checklist coverage"',
+                'status: done',
+                'priority: P1',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# A: Checklist coverage',
+                '',
+                '## Goal',
+                '',
+                'g',
+                '',
+                '## Scope',
+                '',
+                'In scope: x',
+                '',
+                '## Acceptance Criteria',
+                '',
+                'Feature: Checklist coverage',
+                '',
+                '  Scenario: R1 — alpha',
+                '    Given x',
+                '    When y',
+                '    Then z',
+                '',
+                '## Tasks',
+                '',
+                '| WBS | Task | Status |',
+                '| --- | --- | --- |',
+                '| 0001 | covers alpha | done |',
+            ].join('\n'),
+        );
+        writeFileSync(
+            join(tasksDir, '0001_alpha.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'name: "covers alpha"',
+                'status: done',
+                'feature_id: A',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '## 0001. covers alpha',
+                '',
+                '### Acceptance Criteria',
+                '',
+                '- [x] R1 — alpha',
+            ].join('\n'),
+        );
+        writeFileSync(
+            join(runDir, '0001-verdict.json'),
+            JSON.stringify({
+                verdict: 'PASS',
+                requirements: [],
+                acceptanceCriteria: [{ id: 'AC-1', status: 'MET' }],
+            }),
+        );
+
+        const svc = new FeatureCheckService(createNodeFileSystem());
+        const result = await svc.check(join(featuresDir, 'A_checklist.md'), 'A', {
+            strict: true,
+            featuresDir,
+            tasksDir,
+            runDir,
+        });
+
+        expect(result.findings.filter((f) => f.code === 'L4.uncovered-feature-scenario')).toHaveLength(0);
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(0);
+        expect(result.pass).toBe(true);
+        rmSync(dir, { recursive: true, force: true });
+    });
+
     test('L4: no orphan warning when a task links the feature via feature_id', async () => {
         const featureDir = mkdtempSync(join(tmpdir(), 'spur-fc-linked-feat-'));
         const tasksDir = mkdtempSync(join(tmpdir(), 'spur-fc-linked-tasks-'));
