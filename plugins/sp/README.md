@@ -127,6 +127,7 @@ list this README is checked against.
 | `dev-debug` | Systematic debugging protocol — reproduce, isolate, diagnose root cause, apply minimal fix, and verify with regression tests |
 | `dev-daily` | Generate a daily summary report from agent usage data, git history, and notes |
 | `dev-dogfood` | Dogfood an agent skill/command/CLI — drive it end-to-end with bounded auto-fix, self-monitor, and emit a comprehensive report |
+| `dev-findissue` | Review agent session logs, identify performance bottlenecks and behavioral anti-patterns, and generate a structured task file with proposed fixes |
 | `dev-fixall` | Fix all lint, type, and test errors systematically across the working tree |
 | `dev-simplify` | Simplify recently-changed code for clarity without changing behavior — incremental, test-after-each, revert on regression |
 | `dev-arch` | Survey a codebase (or module tree) for shallow modules and deepening opportunities — emit a ranked MARKDOWN candidate report that feeds the planning half; never auto-refactors |
@@ -167,9 +168,8 @@ dispatches five competency skills by function — design (`sp:sys-architecture`)
 and verification (`sp:code-verification`) — plus a CLI facade (`sp:spur-cli`, one reference per
 `spur` noun) and standalone technique skills (`sp:next-router`, `sp:spur-tdd`, `sp:brainstorm`,
 `sp:wayfinder`, `sp:sys-debugging`, `sp:code-review`, `sp:code-simplification`, `sp:code-improvement`,
-`sp:functional-review`, `sp:doubt-driven-development`, `sp:source-driven-development`,
 `sp:parallel-execution`, `sp:branch-workflow`, `sp:doc-evolve`, `sp:dogfood-testing`,
-`sp:daily-summary`, `sp:reverse-engineering`, `sp:indexed-context`). See
+`sp:daily-summary`, `sp:reverse-engineering`, `sp:issue-finding`, `sp:indexed-context`). See
 [skills/spur-dev/SKILL.md](skills/spur-dev/SKILL.md)'s Step routing table for which skill owns which
 pipeline step.
 
@@ -177,7 +177,7 @@ pipeline step.
 
 ```
 plugins/sp/
-├── skills/                          # Domain knowledge + workflow docs (25 skills)
+├── skills/                          # Domain knowledge + workflow docs (26 skills)
 │   ├── brainstorm/                  # Structured ideation workflow
 │   │   ├── agents/openai.yaml
 │   │   ├── examples/ideation-example.md
