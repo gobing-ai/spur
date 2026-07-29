@@ -12,7 +12,7 @@ priority: P2
 tags: ["board", "web", "registry"]
 dependencies: []
 created_at: "2026-07-29T00:15:02.315Z"
-updated_at: "2026-07-29T05:49:29.842Z"
+updated_at: "2026-07-29T16:26:13.666Z"
 ---
 
 ## 0374. Add explicit module ordering to the board registry and promote Observability to first module
@@ -66,13 +66,24 @@ Add an optional `readonly order?: number` to the `WebModule` interface (modules/
 9. **(R4)** Run the existing `apps/web/tests/modules/registry.test.ts` suite unchanged - it is the regression guard for duplicate id/route validation (registry.ts:74-94) and disable/enable slot restoration (registry.ts:56-61). No new registry test: `order` does not touch validation or slot logic.
 10. **(AC Scenario 1)** Verify end-to-end: after steps 1-5, `discoverModules()` places observability first and `defaultModule?.id === 'observability'`. Extend the `discoverModules` integration block (discover.test.ts:180-208) to assert the first discovered id is `observability`.
 ### Solution
+- `apps/web/src/modules/types.ts:12-13` — Added `readonly order?: number;` to `WebModule` (after `sidebarLabel`). Optional field; no existing caller breaks.
+- `apps/web/src/modules/discover.ts:58-73` — Added exported `compareModules(a, b)` partial-ordering comparator. Both declared → `a.order - b.order`; only `a` declared → `-1`; only `b` declared → `1`; neither → `0` (stable sort preserves input order).
+- `apps/web/src/modules/discover.ts:91-92` — `discoverViaGlob`: kept id pre-sort, appended `found.sort(compareModules)` to lift declared-order modules.
+- `apps/web/src/modules/discover.ts:175-176` — `discoverViaFs`: kept dir-name pre-sort, appended `found.sort(compareModules)` before return.
+- `apps/web/src/modules/observability/index.tsx:19` — Added `order: 0` to the observability `module` export. With no other module declaring `order`, observability sorts first → `defaultModule` becomes observability.
+- `apps/web/tests/modules/discover.test.ts:95-113` — `compareModules` unit tests: both-declared ascending, only-a, only-b, neither (returns 0).
+- `apps/web/tests/modules/discover.test.ts:143-158` — `discoverViaGlob` ordering test (AC Scenario 2): declared modules sort first by `order`, undeclared follow in id order.
+- `apps/web/tests/modules/discover.test.ts:209-227` — `discoverViaFs` ordering test (R6): declared modules sort first by `order`, undeclared retain dir-name position.
+- `apps/web/tests/modules/discover.test.ts:267-272` — `discoverModules` integration test (AC Scenario 1): asserts `discovered[0].id === 'observability'` and `order === 0`.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+**Rationale:** Single partial-ordering comparator layered on top of each path's existing deterministic pre-sort (id / dir-name). `Array.prototype.sort` is stable (Bun/V8/JavaScriptCore), so undeclared modules retain their relative position. Registry validation, slot restoration, and `defaultModule = enabledList()[0]` are untouched — they inherit the promoted order from discovery.
 ### Testing
-
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
-
+- `bun test apps/web/tests/modules/discover.test.ts` — 25 pass, 0 fail, 63 expect() calls. `discover.ts` at 100% function coverage / 100% line coverage in the discover-only run.
+- `bun test apps/web/tests/modules/registry.test.ts` — 14 pass, 0 fail, 27 expect() calls. Registry validation (duplicate id/route) and slot restoration regressions green (R4).
+- AC Scenario 1 (R3): `discoverModules()[0].id === 'observability'` and `order === 0` — verified by integration test at discover.test.ts:267-272.
+- AC Scenario 2 (R1/R2): declared modules sort first by `order` ascending, undeclared retain relative order — verified in both `discoverViaGlob` (discover.test.ts:143-158) and `discoverViaFs` (discover.test.ts:209-227).
+- R6: fs-fallback comparator covered by discover.test.ts:209-227 (the branch reachable under `bun test`).
+- R5: determinism is structural — comparator is pure, `Array.prototype.sort` is stable; no extra test needed (registry "same inputs → same ordering" contract inherits this).
 ### Review
 
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
