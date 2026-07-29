@@ -1,4 +1,7 @@
 /** Event payload retention policy before persistence or streaming. */
+import { redactAndBound } from '../observability/agent-execution';
+
+/** Persistence/streaming policy applied to one cataloged system-event payload. */
 export type SystemEventPayloadPolicy = 'metadata-only' | 'redacted' | 'raw-safe';
 
 /** Registered source family for a board-observable system event. */
@@ -241,11 +244,14 @@ export function systemEventCatalogEntry(name: string): SystemEventCatalogEntry |
 export function normalizeSystemEventPayload(
     entry: SystemEventCatalogEntry,
     eventPayload: unknown,
+    secretValues: readonly string[] = [],
 ): Record<string, unknown> | null {
     if (eventPayload === null || eventPayload === undefined) return null;
-    if (typeof eventPayload !== 'object') return { value: eventPayload };
+    if (typeof eventPayload !== 'object') {
+        return { value: redactSecretValue(eventPayload, secretValues) };
+    }
     const source = eventPayload as Record<string, unknown>;
-    if (entry.payloadPolicy === 'raw-safe') return redactSecretValues({ ...source });
+    if (entry.payloadPolicy === 'raw-safe') return redactSecretValues({ ...source }, secretValues);
 
     const redacted = { ...source };
     for (const key of ['body', 'content', 'message', 'prompt', 'query', 'response', 'value']) {
@@ -253,25 +259,28 @@ export function normalizeSystemEventPayload(
             redacted[key] = '[redacted]';
         }
     }
-    return redactSecretValues(redacted);
+    return redactSecretValues(redacted, secretValues);
 }
 
-/** Defense-in-depth: scan every string value for the 0365 secret pattern and
- * bound long strings so truncation operates on already-redacted text, never
- * on the original secret (R4). Mirrors the producer's SECRET_PATTERN from
- * `packages/app/src/workflow/observability.ts` and `agent-execution.ts`. */
-const SECRET_PATTERN = /(?:sk-[a-z0-9_-]{8,}|(?:api[_-]?key|token|secret|password)\s*[:=]\s*\S+|bearer\s+\S+)/gi;
+/** Defense-in-depth: scan every string value, including values nested in arrays,
+ * for the 0365 secret pattern and configured secrets before bounding (R4). */
 const MAX_FIELD_LENGTH = 256;
 
-function redactSecretValues(payload: Record<string, unknown>): Record<string, unknown> {
+function redactSecretValue(value: unknown, secretValues: readonly string[]): unknown {
+    if (typeof value === 'string') return redactAndBound(value, secretValues, MAX_FIELD_LENGTH);
+    if (Array.isArray(value)) return value.map((item) => redactSecretValue(item, secretValues));
+    if (value !== null && typeof value === 'object') {
+        return redactSecretValues({ ...(value as Record<string, unknown>) }, secretValues);
+    }
+    return value;
+}
+
+function redactSecretValues(
+    payload: Record<string, unknown>,
+    secretValues: readonly string[],
+): Record<string, unknown> {
     for (const key of Object.keys(payload)) {
-        const value = payload[key];
-        if (typeof value === 'string') {
-            const redacted = value.replace(SECRET_PATTERN, '[REDACTED]');
-            payload[key] = redacted.length <= MAX_FIELD_LENGTH ? redacted : `${redacted.slice(0, MAX_FIELD_LENGTH)}…`;
-        } else if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-            payload[key] = redactSecretValues({ ...(value as Record<string, unknown>) });
-        }
+        payload[key] = redactSecretValue(payload[key], secretValues);
     }
     return payload;
 }

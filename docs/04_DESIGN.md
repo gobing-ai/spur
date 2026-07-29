@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.5.0
+version: 1.6.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-07-28
@@ -1050,6 +1050,14 @@ The `SPUR_DIAGNOSTIC_EVENTS` flag ships through `serverBootstrapConfig(env).even
 building the stream name list. Diagnostic entries remain in the catalog so the UI can
 filter them by `tier` once the toggle is enabled — no CLI restart required.
 
+**Payload normalization.** `normalizeSystemEventPayload(entry, payload, secretValues?)` applies
+the catalog payload policy before persistence/streaming. Sensitive keys are blanked for non-raw-safe
+policies; the 0365 credential pattern and supplied configured secret values are replaced recursively
+across primitive strings, objects, and arrays before each string is bounded to 256 characters.
+`registerSystemEventTap(..., { secretValues })` and `SystemEventEmitter(..., retention, secretValues)`
+carry this optional input. Server and CLI composition roots derive it with
+`configuredSecretValues(env)`; callers that omit it still receive credential-pattern redaction.
+
 **Source families (task 0221 R2).** `SystemEventSource` is the producer family
 (`planning | queue | scheduler | message | process | workflow | rule | agent | bus | api`).
 The catalog declaration order is the canonical order; `SYSTEM_EVENT_PREFIXES` is derived
@@ -1150,7 +1158,7 @@ not import `ts-db` (ADR-021).
 | Order | `started_at DESC, id DESC` exclusive keyset (stable under concurrent inserts) |
 | `GET /api/runs/:runId` | One run + ordered `phases`, `transitions`, `actions` |
 | Action fields | `id, node, kind, status, durationMs, ok, resultSummary, startedAt, completedAt` |
-| `resultSummary` | Redacted/bounded projection of `result_json` (same SECRET_PATTERN + sensitive-key blanking as the event path); never the raw blob |
+| `resultSummary` | Redacted/bounded projection of `result_json`: sensitive-key blanking plus recursive credential-pattern and configured-secret replacement; never the raw blob |
 | Unknown id | **404** `{ error, code: "RUN_NOT_FOUND", runId }` — no partial/fabricated object |
 | `GET /api/runs/by-wbs/:wbs` | Every `task_run_links` row for the WBS with link `kind` + run digest |
 | Empty WBS | **200** `{ wbs, links: [], count: 0 }` — not an error |
@@ -1158,7 +1166,8 @@ not import `ts-db` (ADR-021).
 
 **Layering.** Domain DAOs own SQL (`RunDao.traceRows` / `traceRowById` with `agent` +
 keyset `before`; `PhaseRunDao` / `TransitionRunDao` / `ActionRunDao` /
-`TaskRunLinkDao`). `RunStoreService` composes them and redacts. `runsModule`
+`TaskRunLinkDao`). `RunStoreService({ getDb, secretValues? })` composes them and redacts.
+`summarizeActionResult(resultJson, secretValues?)` owns the trace-safe projection. `runsModule`
 maps HTTP ↔ service results only.
 
 

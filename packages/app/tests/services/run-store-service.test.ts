@@ -89,6 +89,15 @@ describe('summarizeActionResult (R6)', () => {
         expect(items[1]).toContain('[REDACTED]');
     });
 
+    test('redacts configured secret values that do not match the credential pattern', () => {
+        const secret = 'workspace-private-value';
+        const summary = summarizeActionResult(JSON.stringify({ note: `prefix:${secret}:suffix` }), [secret]) as {
+            note: string;
+        };
+        expect(summary.note).toBe('prefix:[REDACTED]:suffix');
+        expect(JSON.stringify(summary)).not.toContain(secret);
+    });
+
     test('bounds long strings after redaction', () => {
         // Secret near the start so length-bound (prefix keep) still shows the redaction.
         const long = `token=supersecretvalue ${'plain-detail '.repeat(40)}`;

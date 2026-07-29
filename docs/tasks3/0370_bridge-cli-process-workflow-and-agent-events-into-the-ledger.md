@@ -12,7 +12,7 @@ priority: P0
 tags: ["observability", "cli-bridge", "data-plane"]
 dependencies: ["0367", "0369"]
 created_at: "2026-07-29T00:14:03.018Z"
-updated_at: "2026-07-29T03:33:28.902Z"
+updated_at: "2026-07-29T04:50:51.734Z"
 ---
 
 ## 0370. Bridge CLI-process workflow and agent events into the ledger via the task-0249 direct-DAO pattern
@@ -22,13 +22,13 @@ updated_at: "2026-07-29T03:33:28.902Z"
 The ledger holds zero `workflow.*` and zero `agent.*` rows — ever — while the same database holds 390 rows in `runs` and 501 in `action_runs`. The work happened; the events did not survive. Cause is Gap 4 in docs/inventory/system-events-producer-audit.md: workflow and agent execution runs in the CLI process, whose EventBus is process-local and never reaches the server tap. Task 0249 already solved this exact problem for `task.*` and `feature.*` by having the CLI write through `SystemEventEmitter` to `SystemEventDao` directly (audit table rows 1-6, emit sites task.ts:612 and feature.ts:366). This task extends that proven path to the workflow and agent families, which is what finally makes task 0365's entire observability investment visible on the Board. Operator decision on 2026-07-28 selected this over server-side ingestion of the .spur/runs/workflow/*.jsonl traces; those traces remain the CLI-side replay artifact.
 
 ### Requirements
-- [ ] R1. Route cataloged `workflow.*` and `agent.*` events emitted in the CLI process through the `SystemEventEmitter` → `SystemEventDao` path, mirroring the task-0249 wiring.
-- [ ] R2. Preserve 0365 redaction and payload bounds ahead of every write; no raw prompt, command, environment value, or output chunk reaches the ledger.
-- [ ] R3. Persist the envelope's correlation fields so a CLI-driven run is joinable to its `runs` row by run id.
-- [ ] R4. Emit exactly one lifecycle series per agent execution — a workflow-dispatched `agent.run` must not double-count against the direct `spur agent run` path (the 0365 R9 invariant).
-- [ ] R5. A ledger write failure must be logged and swallowed; a workflow run must never fail because observability persistence failed.
-- [ ] R6. Respect the tier decisions from the catalog task — diagnostic-tier lifecycle members stay out of the ledger unless the toggle is on.
-- [ ] R7. Update the producer audit table's status column for the newly-reachable entries and narrow the Gap 4 note to the residual child-of-child case.
+- [x] R1. Route cataloged `workflow.*` and `agent.*` events emitted in the CLI process through the `SystemEventEmitter` → `SystemEventDao` path, mirroring the task-0249 wiring.
+- [x] R2. Preserve 0365 redaction and payload bounds ahead of every write; no raw prompt, command, environment value, or output chunk reaches the ledger.
+- [x] R3. Persist the envelope's correlation fields so a CLI-driven run is joinable to its `runs` row by run id.
+- [x] R4. Emit exactly one lifecycle series per agent execution — a workflow-dispatched `agent.run` must not double-count against the direct `spur agent run` path (the 0365 R9 invariant).
+- [x] R5. A ledger write failure must be logged and swallowed; a workflow run must never fail because observability persistence failed.
+- [x] R6. Respect the tier decisions from the catalog task — diagnostic-tier lifecycle members stay out of the ledger unless the toggle is on.
+- [x] R7. Update the producer audit table's status column for the newly-reachable entries and narrow the Gap 4 note to the residual child-of-child case.
 ### Acceptance Criteria
 ```gherkin
 Scenario: R12 — A CLI-driven workflow run becomes visible on the data plane
@@ -74,14 +74,36 @@ Scenario: R14 — A ledger write failure never breaks the CLI run
 
 The Board never saw CLI-driven workflow/agent events because the server tap is process-local to `spur serve`. Reusing the proven 0249 direct-DAO path via the EventBus tap dual makes CLI runs visible without server-side JSONL ingestion, preserves 0365 redaction/normalization, correlates by `runId`, and isolates sink failures so observability never breaks a run.
 ### Testing
-**Pipeline verify results**
+**Forced verifyall result: PASS**
 
-- Verdict: UNKNOWN (from verdict artifact)
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `apps/cli/src/system-event-ledger.ts:42-88`; workflow/agent attach sites |
+| R2 | MET | `apps/cli/src/system-event-ledger.ts:68`; `apps/cli/tests/system-event-ledger.test.ts:103-132` |
+| R3 | MET | `apps/cli/tests/system-event-ledger.test.ts:65-91,152-177`; `apps/cli/tests/commands/workflow-system-events.test.ts:62-88` |
+| R4 | MET | `apps/cli/src/commands/workflow.ts:94-100`; static command confirms no workflow `AgentService.events` bus |
+| R5 | MET | `apps/cli/src/system-event-ledger.ts:64-75`; `apps/cli/tests/system-event-ledger.test.ts:35-63,180-209` |
+| R6 | MET | `apps/cli/tests/system-event-ledger.test.ts:94-149` |
+| R7 | MET | `docs/inventory/system-events-producer-audit.md:139-144,183` |
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| — | — | No requirements recorded; verify verdict UNKNOWN |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| R12 — A CLI-driven workflow run becomes visible on the data plane | MET | test | `apps/cli/tests/commands/workflow-system-events.test.ts:62-88` |
+| R13 — Agent lifecycle from a CLI run is correlated, not double-counted | MET | command | source invariant command exit 0 plus `apps/cli/tests/system-event-ledger.test.ts:65-177` |
+| R14 — A ledger write failure never breaks the CLI run | MET | test | `apps/cli/tests/system-event-ledger.test.ts:35-63,180-209` |
+
+**Fresh commands**
+
+- `bun run test` → 3,878 pass, 0 fail, 11,951 assertions; exit 0.
+- `rg -n "agentService: \\(\\) => context.agentService\\(\\)" apps/cli/src/commands/workflow.ts` → exit 0.
+
+**Coverage:** root per-file line/function ≥90% gate passed.
+
+**SECUA:** no blocker/major; sink isolation, configured-secret propagation, and single-series wiring are intact.
+
+**Fix-pass disclosure:** `.spur/run/0370-verdict.json:1-74` regenerated; prior UNKNOWN Testing evidence was replaced with complete traceability.
 ### Review
 **Review date:** 2026-07-28
 **Mode:** `/sp-dev-review` + `/sp-dev-verify --fix all` (P1–P4 table required for L3)

@@ -12,7 +12,7 @@ priority: P1
 tags: ["observability", "retention", "data-plane"]
 dependencies: ["0367"]
 created_at: "2026-07-29T00:14:03.002Z"
-updated_at: "2026-07-29T01:55:54.337Z"
+updated_at: "2026-07-29T04:49:43.536Z"
 ---
 
 ## 0368. Demote the self-observation heartbeat to diagnostic tier and replace the flat ledger cap with per-prefix retention quotas
@@ -52,48 +52,33 @@ Scenario: R4 — Retention degrades safely on an unmigrated ledger
 <!-- Filled during implementation: file:line change map and concise rationale. -->
 
 ### Testing
-**Per-Requirement Traceability**
+**Forced verifyall result: PASS**
 
 | Req | Status | Evidence |
 |-----|--------|----------|
-| R1 — Heartbeat demoted to diagnostic tier | MET | `packages/app/src/services/event-names.ts:87-88,93` (three events → tier diagnostic); `packages/app/src/services/system-event-tap.ts:57` (skip when toggle off); `packages/app/tests/services/system-event-tap.test.ts:240` (R1 scenario) |
-| R2 — Per-prefix retention replaces flat cap | MET | `packages/domain/src/dao/system-event-dao.ts:82-103` (pruneQuotas per-prefix); `packages/domain/tests/dao/system-event-dao.test.ts:178` (cross-prefix isolation) |
-| R3 — Quotas from config + documented default | MET | `packages/app/src/services/system-event-retention.ts:14,29` (resolver + default); `apps/server/src/bootstrap.ts:71-114` (env parsing); `packages/app/tests/services/system-event-retention.test.ts` (4 tests) |
-| R4 — Prune non-fatal on unmigrated ledger | MET | `packages/domain/src/dao/system-event-dao.ts:111-116` (catch → return 0); `packages/domain/tests/dao/system-event-dao.test.ts:253` |
-| R5 — Insert-time backstop + return-count | MET | `packages/app/src/services/system-event-tap.ts:102`; `packages/app/src/services/system-event-emitter.ts:65`; `packages/domain/tests/dao/system-event-dao.test.ts:142` (count asserted) |
-| R6 — Seeded 90/10 noise ratio survival | MET | `packages/domain/tests/dao/system-event-dao.test.ts:293` (90 queue + 10 task → 70 evicted, 10 task survive) |
+| R1 | MET | `packages/app/src/services/event-names.ts:88-93`; `packages/app/tests/services/system-event-tap.test.ts:307-316` |
+| R2 | MET | `packages/domain/src/dao/system-event-dao.ts:133-171`; `packages/domain/tests/dao/system-event-dao.test.ts:178-212` |
+| R3 | MET | `packages/app/src/services/system-event-retention.ts:34`; `packages/app/tests/services/system-event-retention.test.ts:8-45` |
+| R4 | MET | `packages/domain/src/dao/system-event-dao.ts:142-176`; `packages/domain/tests/dao/system-event-dao.test.ts:254-261` |
+| R5 | MET | `packages/app/src/services/system-event-tap.ts:111-117`; `packages/app/src/services/system-event-emitter.ts:69-75` |
+| R6 | MET | `packages/domain/tests/dao/system-event-dao.test.ts:446-492` |
 
 **Acceptance Criteria Verification**
 
 | AC | Status | Evidence Type | Evidence |
 |----|--------|---------------|----------|
-| R1 — heartbeat leaves default tier | MET | test | `packages/app/tests/services/system-event-tap.test.ts:240` |
-| R2 — per-prefix retention protects signal | MET | test | `packages/domain/tests/dao/system-event-dao.test.ts:293` |
-| R3 — quotas are configuration | MET | test | `packages/app/tests/services/system-event-retention.test.ts` |
-| R4 — safe degradation on unmigrated ledger | MET | test | `packages/domain/tests/dao/system-event-dao.test.ts:253` |
+| R1 — The self-observation heartbeat leaves the default tier | MET | test | `packages/app/tests/services/system-event-tap.test.ts:307-316` |
+| R2 — Per-prefix retention protects low-volume signal from high-volume noise | MET | test | `packages/domain/tests/dao/system-event-dao.test.ts:178-212,446-492` |
+| R3 — Retention quotas are configuration, not compiled constants | MET | test | `packages/app/tests/services/system-event-retention.test.ts:8-45` |
+| R4 — Retention degrades safely on an unmigrated ledger | MET | test | `packages/domain/tests/dao/system-event-dao.test.ts:254-261` |
 
-**SECUA Review**
+**Fresh command:** `bun run test` → 3,878 pass, 0 fail, 11,951 assertions; exit 0.
 
-No blocker / major / minor findings.
-- Security: retention env values parsed defensively (non-integer/negative dropped, never aborts boot). No new attack surface.
-- Correctness: per-prefix `LIKE` scoping in `DELETE` prevents cross-prefix eviction; R6 seeded test proves low-volume survival under 90% noise.
-- Efficiency: insert-time prune narrowed via `prefix` argument (single-prefix loop); scheduled job resolves quotas once at boot.
-- Architecture: policy lives in one place (`resolveRetentionQuotas`); DAO stays policy-free; tap/emitter receive pre-resolved quotas.
+**Coverage:** root per-file line/function ≥90% gate passed.
 
-**Commands run this turn**
+**SECUA:** no blocker/major; prefix-scoped deletion and defensive configuration parsing remain correct.
 
-- `bun test packages/domain/tests/dao/system-event-dao.test.ts packages/app/tests/services/system-event-{tap,emitter,retention}.test.ts apps/server/tests/serve.test.ts` → 57 pass, 0 fail.
-- `bun run lint` (biome + tsc across all workspaces) → clean.
-- `spur task check 0368 --strict-core` → pass (warnings only; no errors).
-
-Coverage: `packages/domain/src/dao/system-event-dao.ts` 100%, `packages/app/src/services/system-event-retention.ts` 100%.
-
-Verdict artifact: `.spur/run/0368-verdict.json` (verdict PASS; 6 requirements MET, 4 acceptanceCriteria MET).
-
-Fix-pass disclosures (`--fix all`):
-- Added `packages/app/tests/services/system-event-tap.test.ts:240` — R1 diagnostic-tier skip test (closes the R1 coverage gap).
-- Created `packages/app/tests/services/system-event-retention.test.ts` — R3 resolver evidence (default, override, sibling, unknown-key).
-- `bun run format` rewrote the new tap test to biome format (1 file fixed).
+**Fix-pass disclosure:** `.spur/run/0368-verdict.json:1-75` regenerated; this Testing section replaced stale evidence only.
 ### Review
 | Priority | Finding | Location | Status |
 |---|---|---|---|

@@ -306,6 +306,23 @@ describe('normalizeSystemEventPayload (task 0367 R3/R4)', () => {
         expect(metadata.secret).not.toContain('hunter2');
     });
 
+    test('redacts configured secrets in primitive payloads and nested arrays (R4)', () => {
+        const entry = requireEntry('workflow.agent');
+        const configuredSecret = 'local-config-secret';
+
+        const primitive = normalizeSystemEventPayload(entry, configuredSecret, [configuredSecret]);
+        expect(primitive).toEqual({ value: '[REDACTED]' });
+
+        const rawSafeEntry = { ...entry, payloadPolicy: 'raw-safe' as const };
+        const nested = normalizeSystemEventPayload(
+            rawSafeEntry,
+            { metadata: { values: ['plain', `prefix:${configuredSecret}:suffix`] } },
+            [configuredSecret],
+        );
+        expect(JSON.stringify(nested)).toContain('[REDACTED]');
+        expect(JSON.stringify(nested)).not.toContain(configuredSecret);
+    });
+
     test('bounds long string values to prevent truncation exposing redacted material (R4)', () => {
         const entry = requireEntry('workflow.agent');
         const rawSafeEntry = { ...entry, payloadPolicy: 'raw-safe' as const };

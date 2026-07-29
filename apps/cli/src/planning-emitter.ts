@@ -13,7 +13,7 @@
  * swallowed so the file mutation still succeeds (R5).
  */
 
-import { type EventEmitter, type PlanningEvent, SystemEventEmitter } from '@gobing-ai/spur-app';
+import { configuredSecretValues, type EventEmitter, type PlanningEvent, SystemEventEmitter } from '@gobing-ai/spur-app';
 import { SystemEventDao } from '@gobing-ai/spur-domain';
 import type { CliContext } from './context';
 
@@ -39,7 +39,12 @@ export function makePlanningEmitter(context: CliContext): EventEmitter {
     return {
         async emit(event: PlanningEvent): Promise<void> {
             try {
-                cached ??= new SystemEventEmitter(new SystemEventDao(await context.getDb()), logger);
+                cached ??= new SystemEventEmitter(
+                    new SystemEventDao(await context.getDb()),
+                    logger,
+                    {},
+                    configuredSecretValues(context.env ?? {}),
+                );
                 await cached.emit(event);
             } catch (error) {
                 // Lazy DB resolution can itself fail (e.g. unmigrated workspace);

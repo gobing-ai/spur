@@ -47,7 +47,11 @@ export function registerSystemEventTap(
     bus: SystemEventBus,
     dao: SystemEventDao,
     logger: Pick<Logger, 'warn' | 'debug'>,
-    options: { diagnosticEnabled?: boolean; retention?: SystemEventRetentionConfig } = {},
+    options: {
+        diagnosticEnabled?: boolean;
+        retention?: SystemEventRetentionConfig;
+        secretValues?: readonly string[];
+    } = {},
 ): SystemEventTap {
     const handlers = new Map<string, (event: unknown) => void>();
     const inFlight = new Set<Promise<void>>();
@@ -69,7 +73,7 @@ export function registerSystemEventTap(
                     event_name: entry.name,
                     occurred_at: new Date().toISOString(),
                     actor: extractSystemEventActor(event),
-                    payload_json: safeStringify(normalizeSystemEventPayload(entry, event)),
+                    payload_json: safeStringify(normalizeSystemEventPayload(entry, event, options.secretValues)),
                     // Indexed correlation columns (task 0369): derived from the
                     // same event the payload is serialized from, so a row's
                     // columns and payload can never disagree.

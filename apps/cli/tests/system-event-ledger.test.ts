@@ -13,8 +13,16 @@ import { attachSystemEventLedger } from '../src/system-event-ledger';
 import { type CapturedOutput, createCapturedOutput } from './helpers';
 
 /** Minimal CliContext surface used by the ledger attach helper. */
-function fakeContext(opts: { getDb?: () => Promise<unknown>; output?: CapturedOutput }): {
-    context: { output: CapturedOutput; getDb: () => Promise<unknown> };
+function fakeContext(opts: {
+    getDb?: () => Promise<unknown>;
+    output?: CapturedOutput;
+    env?: Record<string, string | undefined>;
+}): {
+    context: {
+        output: CapturedOutput;
+        getDb: () => Promise<unknown>;
+        env: Record<string, string | undefined>;
+    };
     output: CapturedOutput;
 } {
     const output = opts.output ?? createCapturedOutput();
@@ -22,6 +30,7 @@ function fakeContext(opts: { getDb?: () => Promise<unknown>; output?: CapturedOu
         output,
         context: {
             output,
+            env: opts.env ?? {},
             getDb:
                 opts.getDb ??
                 (async () => {
@@ -85,6 +94,37 @@ describe('attachSystemEventLedger', () => {
             expect(started?.run_id).toBe('run-corr-1');
             expect(started?.payload_json).toContain('cli-test-flow');
 
+            ledger.unsubscribe();
+        } finally {
+            await db.close();
+        }
+    });
+
+    test('redacts configured CLI secrets before ledger persistence (R2)', async () => {
+        const db = await createMigratedDbAdapter(undefined, undefined, ':memory:');
+        try {
+            const secret = 'workspace-private-value';
+            const { context } = fakeContext({
+                getDb: async () => db,
+                env: { SPUR_API_TOKEN: secret },
+            });
+            const bus = new EventBus() as SystemEventBus;
+            const ledger = await attachSystemEventLedger(bus, context as never);
+
+            bus.emit('workflow.run.started', {
+                schemaVersion: 1,
+                eventId: 'evt-secret',
+                sequence: 1,
+                runId: 'run-secret',
+                workflowName: `flow-${secret}`,
+                at: '2026-07-28T12:00:00.000Z',
+            });
+            await ledger.flush();
+
+            const rows = await new SystemEventDao(db).query({ limit: 50 });
+            const started = rows.find((r) => r.event_name === 'workflow.run.started');
+            expect(started?.payload_json).toContain('[REDACTED]');
+            expect(started?.payload_json).not.toContain(secret);
             ledger.unsubscribe();
         } finally {
             await db.close();

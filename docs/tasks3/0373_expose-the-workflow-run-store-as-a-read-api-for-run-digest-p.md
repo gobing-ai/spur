@@ -12,7 +12,7 @@ priority: P0
 tags: ["observability", "api", "run-store", "data-plane"]
 dependencies: []
 created_at: "2026-07-29T00:14:03.040Z"
-updated_at: "2026-07-29T04:12:04.886Z"
+updated_at: "2026-07-29T04:51:00.045Z"
 ---
 
 ## 0373. Expose the workflow run store as a read API for run digest, phase progress, and action log
@@ -22,13 +22,13 @@ updated_at: "2026-07-29T04:12:04.886Z"
 The real record of what a task's pipeline did lives in the run store — `runs` (390 rows), `phase_runs`, `transition_runs`, `action_runs` (501 rows, each with node, kind, status, duration_ms, ok, result_json), and `task_run_links` (412 rows joining WBS to run id). This data is durable, correlated, and already written by CLI-driven runs, unlike the event ledger. It has no HTTP surface at all, and the Board consumes none of it: the server exposes only /api/jobs/stats, /api/observability/*, /api/team/*, /api/events/*, and the task/feature modules. The operator asked for a task digest with progress and log; this run store is the only source that actually has it, and the 2026-07-28 decision selected it as the primary backing for the J4 Tasks tabview.
 
 ### Requirements
-- [ ] R1. Add a runs list endpoint returning run id, workflow name, status, mode, agent, started-at, and completed-at, with paging and status filtering.
-- [ ] R2. Add a run detail endpoint returning the run's ordered phases with status, its transitions with from/to/trigger, and its actions with node, kind, status, duration, ok, and a trace-safe result summary.
-- [ ] R3. Add a WBS lookup returning every linked run with its link kind, and an empty list — not an error — for a WBS with no links.
-- [ ] R4. Return a clean not-found with a reason for an unknown run id; never a partial or fabricated run object.
-- [ ] R5. Keep the transport thin: query logic belongs in the domain DAOs and the application layer per ADR-021, and apps/server must not import ts-db.
-- [ ] R6. Apply the same redaction discipline as the event path to any `result_json` content crossing the wire.
-- [ ] R7. Document the new surface in docs/04_DESIGN.md in the same commit as the code, per the T3 same-commit rule.
+- [x] R1. Add a runs list endpoint returning run id, workflow name, status, mode, agent, started-at, and completed-at, with paging and status filtering.
+- [x] R2. Add a run detail endpoint returning the run's ordered phases with status, its transitions with from/to/trigger, and its actions with node, kind, status, duration, ok, and a trace-safe result summary.
+- [x] R3. Add a WBS lookup returning every linked run with its link kind, and an empty list — not an error — for a WBS with no links.
+- [x] R4. Return a clean not-found with a reason for an unknown run id; never a partial or fabricated run object.
+- [x] R5. Keep the transport thin: query logic belongs in the domain DAOs and the application layer per ADR-021, and apps/server must not import ts-db.
+- [x] R6. Apply the same redaction discipline as the event path to any `result_json` content crossing the wire.
+- [x] R7. Document the new surface in docs/04_DESIGN.md in the same commit as the code, per the T3 same-commit rule.
 ### Acceptance Criteria
 ```gherkin
 Scenario: R22 — Runs are listable with their status and workflow
@@ -79,20 +79,34 @@ Scenario: R25 — Run detail for an unknown run id is a clean not-found
 
 **Rationale.** The run store is the only durable pipeline digest; the Board had no HTTP path to it. Layering follows ADR-021: DAOs own SQL, the app service owns composition + redaction, the server module maps HTTP only. Keyset paging mirrors the 0372 events/history pattern.
 ### Testing
-**Pipeline verify results**
+**Forced verifyall result: PASS**
 
-- Verdict: PASS (from verdict artifact)
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `packages/domain/src/dao/run-dao.ts:38-77`; `packages/app/tests/services/run-store-service.test.ts:136`; `packages/domain/tests/dao/run-dao.test.ts:173` |
+| R2 | MET | `packages/app/src/services/run-store-service.ts:289-328`; `packages/app/tests/services/run-store-service.test.ts:185-234` |
+| R3 | MET | `packages/app/src/services/run-store-service.ts:333-356`; `packages/app/tests/services/run-store-service.test.ts:251-295` |
+| R4 | MET | `apps/server/src/modules/runs/index.ts:62-78`; `apps/server/tests/modules/runs/index.test.ts:114-132` |
+| R5 | MET | thin server module and application-service composition at `packages/app/src/services/run-store-service.ts:246-253` |
+| R6 | MET | `packages/app/src/services/run-store-service.ts:191-222,322`; `packages/app/tests/services/run-store-service.test.ts:46-101,185-234` |
+| R7 | MET | `docs/04_DESIGN.md:1143-1171` |
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | `run-dao.ts:38-77` + `run-store-service.ts:261-288` + `GET /api/runs` |
-| R2 | MET | `getDetail` `294-331` phases/transitions/actions + `resultSummary` |
-| R3 | MET | `listByWbs` `338-359` empty list for unknown WBS |
-| R4 | MET | `RUN_NOT_FOUND` → HTTP 404 |
-| R5 | MET | thin `runsModule`, no ts-db import |
-| R6 | MET | SECRET_PATTERN + sensitive keys + 256 bound |
-| R7 | MET | `docs/04_DESIGN.md:1133-1162` |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| R22 — Runs are listable with their status and workflow | MET | test | `packages/app/tests/services/run-store-service.test.ts:136-183`; `packages/domain/tests/dao/run-dao.test.ts:173-201` |
+| R23 — A run's phases, transitions, and actions are readable as one detail view | MET | test | `packages/app/tests/services/run-store-service.test.ts:185-234` |
+| R24 — A task's runs are reachable by WBS | MET | test | `packages/app/tests/services/run-store-service.test.ts:251-295`; `apps/server/tests/modules/runs/index.test.ts:134-161` |
+| R25 — Run detail for an unknown run id is a clean not-found | MET | test | `packages/app/tests/services/run-store-service.test.ts:237-249`; `apps/server/tests/modules/runs/index.test.ts:114-132` |
+
+**Fresh command:** `bun run test` → 3,878 pass, 0 fail, 11,951 assertions; exit 0.
+
+**Coverage:** root per-file line/function ≥90% gate passed.
+
+**SECUA:** no blocker/major after fix. `resultSummary` receives configured secret values and recursively redacts/bounds every string; bounded WBS N+1 remains advisory.
+
+**Fix-pass disclosure:** `packages/app/src/services/run-store-service.ts:191-222,322`, `apps/server/src/context.ts:492-497`, regression tests, `docs/04_DESIGN.md:1143-1171`, and `.spur/run/0373-verdict.json:1-80` were regenerated/re-verified.
 ### Review
 **Disposition:** APPROVE · Functional PASS · SECUA no blocker/major · architecture advisory only.
 

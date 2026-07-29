@@ -12,7 +12,7 @@ priority: P1
 tags: ["observability", "event-catalog", "data-plane"]
 dependencies: []
 created_at: "2026-07-29T00:14:02.988Z"
-updated_at: "2026-07-29T01:17:12.621Z"
+updated_at: "2026-07-29T04:50:46.335Z"
 ---
 
 ## 0367. Catalog the 0365 observability envelope contract and preserve it through payload normalization
@@ -22,13 +22,13 @@ updated_at: "2026-07-29T01:17:12.621Z"
 Task 0365 built versioned correlated observability envelopes — schemaVersion, eventId, sequence, runId, executionId, actionId, node, kind, redacted metadata, durationMs, and an explicit `usage: 'unavailable'` — and emitted them on the WorkflowObservabilityBus (packages/app/src/workflow/observability.ts:111-121, packages/app/src/observability/agent-execution.ts:9-65). Two of those event names, `workflow.agent` (the unified AgentExecutionEvent lifecycle) and `workflow.steering` (SteeringAck), are absent from SYSTEM_EVENT_CATALOG entirely (packages/app/src/services/event-names.ts:77-153), so the tap never subscribes to them and the Board can never see them. Worse, `normalizeSystemEventPayload` (event-names.ts:205-221) is a shallow copy that blanks a fixed key list; it has no concept of the 0365 envelope and its policy branches were written before those fields existed. This task makes the catalog and the normalizer aware of the contract 0365 actually ships. It is the first task in J3 because the tiering, correlation, and bridge tasks all key off catalog entries.
 
 ### Requirements
-- [ ] R1. Register catalog entries for the unified agent execution lifecycle (`started`, `output`, `heartbeat`, `dropped`, `finished`) with an appropriate source, renderer, tier, and payload policy.
-- [ ] R2. Register a catalog entry for steering acknowledgements carrying operation, target, and outcome.
-- [ ] R3. Extend `normalizeSystemEventPayload` so the 0365 envelope's correlation and metadata fields (schemaVersion, eventId, sequence, runId, executionId, actionId, node, kind, metadata, durationMs, usage, outcome, reason) survive normalization under every payload policy.
-- [ ] R4. Keep redaction strictly ahead of persistence: configured secrets and the 0365 SECRET_PATTERN must not survive normalization, and bounding/truncation must not expose removed material.
-- [ ] R5. Choose tiers deliberately — high-volume members of the lifecycle (notably `output` and `heartbeat`) must not become default-tier ledger noise; document the reasoning inline.
-- [ ] R6. Do not change what the WorkflowObservabilityBus emits; this task adapts the catalog and normalizer to the existing producer contract.
-- [ ] R7. Extend the producer audit table at docs/inventory/system-events-producer-audit.md with the new entries and their reachability status.
+- [x] R1. Register catalog entries for the unified agent execution lifecycle (`started`, `output`, `heartbeat`, `dropped`, `finished`) with an appropriate source, renderer, tier, and payload policy.
+- [x] R2. Register a catalog entry for steering acknowledgements carrying operation, target, and outcome.
+- [x] R3. Extend `normalizeSystemEventPayload` so the 0365 envelope's correlation and metadata fields (schemaVersion, eventId, sequence, runId, executionId, actionId, node, kind, metadata, durationMs, usage, outcome, reason) survive normalization under every payload policy.
+- [x] R4. Keep redaction strictly ahead of persistence: configured secrets and the 0365 SECRET_PATTERN must not survive normalization, and bounding/truncation must not expose removed material.
+- [x] R5. Choose tiers deliberately — high-volume members of the lifecycle (notably `output` and `heartbeat`) must not become default-tier ledger noise; document the reasoning inline.
+- [x] R6. Do not change what the WorkflowObservabilityBus emits; this task adapts the catalog and normalizer to the existing producer contract.
+- [x] R7. Extend the producer audit table at docs/inventory/system-events-producer-audit.md with the new entries and their reachability status.
 ### Acceptance Criteria
 ```gherkin
 Scenario: R8 — The unified agent lifecycle is a cataloged, observable event
@@ -78,27 +78,37 @@ Change map (catalog + normalizer adapt to the existing 0365 producer; producers 
 
 R6 verification: `git diff HEAD -- packages/app/src/workflow/observability.ts packages/app/src/observability/agent-execution.ts packages/app/src/workflow/steering.ts` is empty — producers unchanged.
 ### Testing
-**Pipeline verify results**
+**Forced verifyall result: PASS**
 
-- Verdict: PASS (from verdict artifact)
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `packages/app/src/services/event-names.ts:158-170`; `packages/app/tests/services/event-names.test.ts:163-172` |
+| R2 | MET | `packages/app/src/services/event-names.ts:175`; `packages/app/tests/services/event-names.test.ts:175-181` |
+| R3 | MET | `packages/app/src/services/event-names.ts:243-261`; `packages/app/tests/services/event-names.test.ts:204-270` |
+| R4 | MET | `packages/app/src/services/event-names.ts:265-284`; `packages/app/tests/services/event-names.test.ts:273-334`; CLI ledger regression at `apps/cli/tests/system-event-ledger.test.ts:103` |
+| R5 | MET | `packages/app/src/services/event-names.ts:158-170` |
+| R6 | MET | producer-only diff command exited 0 |
+| R7 | MET | `docs/inventory/system-events-producer-audit.md:139-140` |
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | event-names.ts:157 workflow.agent (diagnostic, redacted); test event-names.test.ts:163-172 |
-| R2 | MET | event-names.ts:162 workflow.steering (default, redacted); test event-names.test.ts:174-181 |
-| R3 | MET | event-names.ts:230-246 envelope fields survive; tests event-names.test.ts:186-252 |
-| R4 | MET | event-names.ts:248-266 redactSecretValues+SECRET_PATTERN+MAX_FIELD_LENGTH; tests event-names.test.ts:254-310 |
-| R5 | MET | event-names.ts:149-156 inline tier reasoning; test asserts diagnostic |
-| R6 | MET | producer diff empty (observability.ts/agent-execution.ts/steering.ts) re-verified this run |
-| R7 | MET | docs/inventory/system-events-producer-audit.md rows 54-55 + summary re-counted |
+**Acceptance Criteria Verification**
 
-| Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
-| R8 | MET | test | event-names.test.ts:163-172 (catalog presence + diagnostic tier) |
-| R9 | MET | test | event-names.test.ts:174-181 (steering default tier + redacted) |
-| R10 | MET | test | event-names.test.ts:186-252 (envelope preservation redacted + raw-safe) |
-| R11 | MET | test | event-names.test.ts:254-310 (secret redaction, nested, length, null/primitive) |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| R8 — The unified agent lifecycle is a cataloged, observable event | MET | test | `packages/app/tests/services/event-names.test.ts:163-172` |
+| R9 — Steering acknowledgements are observable | MET | test | `packages/app/tests/services/event-names.test.ts:175-181` |
+| R10 — Envelope enrichment survives payload normalization | MET | test | `packages/app/tests/services/event-names.test.ts:204-270` |
+| R11 — Secrets never reach the ledger | MET | test | `packages/app/tests/services/event-names.test.ts:273-334`; `apps/cli/tests/system-event-ledger.test.ts:103` |
+
+**Fresh commands**
+
+- `bun run test` → 3,878 pass, 0 fail, 11,951 assertions; exit 0.
+- `git diff --exit-code 76278d6^ 76278d6 -- packages/app/src/workflow/observability.ts packages/app/src/observability/agent-execution.ts packages/app/src/workflow/steering.ts` → exit 0.
+
+**Coverage:** root per-file line/function ≥90% gate passed.
+
+**SECUA:** no blocker/major after fix. Configured secrets, primitive strings, nested arrays, and credential patterns are redacted before bounds/persistence.
+
+**Fix-pass disclosure:** `packages/app/src/services/event-names.ts:243-284`, `packages/app/tests/services/event-names.test.ts:273-334`, CLI/server secret-value propagation, and `.spur/run/0367-verdict.json:1-80` were regenerated/re-verified.
 ### Review
 | Priority | Finding | Location | Status |
 |---|---|---|---|

@@ -1,5 +1,6 @@
 import type { DbAdapter } from '@gobing-ai/spur-domain';
 import { ActionRunDao, PhaseRunDao, RunDao, TaskRunLinkDao, TransitionRunDao } from '@gobing-ai/spur-domain';
+import { redactAndBound } from '../observability/agent-execution';
 
 /** Default page size for GET /api/runs `limit` (task 0373). */
 export const RUN_STORE_LIST_DEFAULT_LIMIT = 50;
@@ -10,13 +11,6 @@ export const RUN_STORE_WBS_DEFAULT_LIMIT = 50;
 /** Ceiling for WBS-linked run lookups — caps unbounded client requests. */
 export const RUN_STORE_WBS_MAX_LIMIT = 200;
 
-/**
- * Mirrors the 0365 / event-path SECRET_PATTERN (see `event-names.ts`,
- * `workflow/observability.ts`). Applied to every string that crosses the wire
- * from `result_json` (task 0373 R6).
- */
-const SECRET_PATTERN = /(?:sk-[a-z0-9_-]{8,}|(?:api[_-]?key|token|secret|password)\s*[:=]\s*\S+|bearer\s+\S+)/gi;
-
 /** Bound on each string field after redaction so truncation never exposes secrets. */
 const MAX_FIELD_LENGTH = 256;
 
@@ -26,6 +20,7 @@ const SENSITIVE_KEYS = new Set(['body', 'content', 'message', 'prompt', 'query',
 /** Runtime deps for the run-store read service — DB only (ADR-021 thin transport). */
 export interface RunStoreServiceContext {
     getDb(): Promise<DbAdapter>;
+    secretValues?: readonly string[];
 }
 
 /** One row in the run list / WBS-linked run list. */
@@ -193,39 +188,38 @@ export function clampRunStoreLimit(
  * - Blanks sensitive keys (prompt/body/…) the same way the event normalizer does.
  * - Applies SECRET_PATTERN to every string and bounds field length.
  */
-export function summarizeActionResult(resultJson: string | null): unknown {
+export function summarizeActionResult(resultJson: string | null, secretValues: readonly string[] = []): unknown {
     if (resultJson === null || resultJson === '') return null;
     let parsed: unknown;
     try {
         parsed = JSON.parse(resultJson);
     } catch {
-        return { summary: redactString(resultJson) };
+        return { summary: redactString(resultJson, secretValues) };
     }
-    return redactValue(parsed);
+    return redactValue(parsed, secretValues);
 }
 
-function redactString(value: string): string {
-    const redacted = value.replace(SECRET_PATTERN, '[REDACTED]');
-    return redacted.length <= MAX_FIELD_LENGTH ? redacted : `${redacted.slice(0, MAX_FIELD_LENGTH)}…`;
+function redactString(value: string, secretValues: readonly string[]): string {
+    return redactAndBound(value, secretValues, MAX_FIELD_LENGTH);
 }
 
-function redactValue(value: unknown): unknown {
+function redactValue(value: unknown, secretValues: readonly string[]): unknown {
     if (value === null || value === undefined) return value;
-    if (typeof value === 'string') return redactString(value);
+    if (typeof value === 'string') return redactString(value, secretValues);
     if (typeof value === 'number' || typeof value === 'boolean') return value;
-    if (Array.isArray(value)) return value.map((item) => redactValue(item));
+    if (Array.isArray(value)) return value.map((item) => redactValue(item, secretValues));
     if (typeof value === 'object') {
         const out: Record<string, unknown> = {};
         for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
             if (SENSITIVE_KEYS.has(key)) {
                 out[key] = '[redacted]';
             } else {
-                out[key] = redactValue(child);
+                out[key] = redactValue(child, secretValues);
             }
         }
         return out;
     }
-    return redactString(String(value));
+    return redactString(String(value), secretValues);
 }
 
 function toListEntry(row: {
@@ -325,7 +319,7 @@ export class RunStoreService {
                 status: a.status,
                 durationMs: a.duration_ms,
                 ok: a.ok === null ? null : a.ok === 1,
-                resultSummary: summarizeActionResult(a.result_json),
+                resultSummary: summarizeActionResult(a.result_json, this.ctx.secretValues),
                 startedAt: a.started_at,
                 completedAt: a.completed_at,
             })),

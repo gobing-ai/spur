@@ -17,6 +17,7 @@ import {
     AgentService as AgentServiceImpl,
     BusPlanningEventEmitter,
     bridgeEventBus,
+    configuredSecretValues,
     createPsProcessInspector,
     type EventEmitter,
     FeatureService as FeatureServiceImpl,
@@ -492,6 +493,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
         runStoreService(): RunStoreService {
             runStoreSvc ??= new RunStoreServiceImpl({
                 getDb: this.getDb.bind(this),
+                secretValues: configuredSecretValues(options.env ?? process.env),
             });
             return runStoreSvc;
         },

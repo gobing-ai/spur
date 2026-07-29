@@ -1,6 +1,7 @@
 import { dirname, isAbsolute, join } from 'node:path';
 import {
     AgentService,
+    configuredSecretValues,
     JobHandlerRegistry,
     JobWorkerService,
     resolveAutostartSet,
@@ -304,6 +305,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                     registerSystemEventTap(ctx.eventBus(), dao, appRt.logger, {
                         diagnosticEnabled: bootConfig.events.diagnostic === true,
                         retention: bootConfig.events.retention,
+                        secretValues: configuredSecretValues(env),
                     });
                     appRt.logger.debug('system_events tap registered', {
                         diagnostic: bootConfig.events.diagnostic === true,

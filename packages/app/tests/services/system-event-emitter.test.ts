@@ -101,6 +101,22 @@ describe('SystemEventEmitter', () => {
         expect(logger.warns).toHaveLength(0);
     });
 
+    test('redacts configured secrets before the planning event reaches the DAO', async () => {
+        const dao = new FakeSystemEventDao();
+        const secret = 'planning-private-value';
+        const emitter = new SystemEventEmitter(
+            dao as unknown as SystemEventDao,
+            new CapturingLogger() as unknown as SystemEventEmitterLogger,
+            {},
+            [secret],
+        );
+
+        await emitter.emit(makeEvent({ event: 'task.transitioned', from: `contains ${secret}` }));
+
+        expect(dao.inserted[0]?.payload_json).toContain('[REDACTED]');
+        expect(dao.inserted[0]?.payload_json).not.toContain(secret);
+    });
+
     test('persists entity identity into the indexed correlation columns', async () => {
         // The CLI write path must land the same correlation columns as the
         // server tap, or a CLI-driven status change is invisible to an

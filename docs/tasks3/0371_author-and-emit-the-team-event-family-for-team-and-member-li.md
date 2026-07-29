@@ -12,7 +12,7 @@ priority: P1
 tags: ["observability", "teams", "data-plane"]
 dependencies: ["0367"]
 created_at: "2026-07-29T00:14:03.025Z"
-updated_at: "2026-07-29T03:47:01.884Z"
+updated_at: "2026-07-29T04:50:54.511Z"
 ---
 
 ## 0371. Author and emit the team.* event family for team and member lifecycle
@@ -22,13 +22,13 @@ updated_at: "2026-07-29T03:47:01.884Z"
 There is no `team.*` event family anywhere in SYSTEM_EVENT_CATALOG. Team lifecycle operations — `spur team up`, `down`, `assign`, and the server's POST /api/team/:team/up and /down — emit nothing. The only adjacent signal is `agent.started`/`agent.stopped` from TeamOrchestrator and `process.spawned|exited|stopped` from SupervisorService, of which the entire ledger holds 3 rows. Meanwhile the Teams Activity tab already filters for the `'team.'` and `'supervisor.'` prefixes (ActivityTab.tsx:72) — prefixes that have never once fired. The Supervisor tabview in feature J4 has no data to render until this family exists, which is precisely the gap the operator anticipated when requesting it.
 
 ### Requirements
-- [ ] R1. Define the `team.*` catalog entries covering team up, team down, member assignment, and member state change, with renderers, tiers, and payload policies consistent with the existing families.
-- [ ] R2. Emit them from the owning services (TeamService, TeamOrchestrator, SupervisorService) on the injected event bus, following the existing `agent.*` wiring precedent from task 0237.
-- [ ] R3. Payloads carry `teamId`, `memberId`, and `agentType` plus the operation outcome; they stay metadata-only, with no message bodies or command lines.
-- [ ] R4. Resolve the row `actor` to the member identity via the existing `extractSystemEventActor` contract, extending it only if the member identity is not already reachable through `actor` or `agentId`.
-- [ ] R5. An event referencing a member absent from the current roster must persist with null unresolved fields rather than being dropped.
-- [ ] R6. Ensure the events reach the ledger from both the server path and the CLI path, consistent with the bridge task.
-- [ ] R7. Add the new entries to the producer audit table with emit site and reachability status.
+- [x] R1. Define the `team.*` catalog entries covering team up, team down, member assignment, and member state change, with renderers, tiers, and payload policies consistent with the existing families.
+- [x] R2. Emit them from the owning services (TeamService, TeamOrchestrator, SupervisorService) on the injected event bus, following the existing `agent.*` wiring precedent from task 0237.
+- [x] R3. Payloads carry `teamId`, `memberId`, and `agentType` plus the operation outcome; they stay metadata-only, with no message bodies or command lines.
+- [x] R4. Resolve the row `actor` to the member identity via the existing `extractSystemEventActor` contract, extending it only if the member identity is not already reachable through `actor` or `agentId`.
+- [x] R5. An event referencing a member absent from the current roster must persist with null unresolved fields rather than being dropped.
+- [x] R6. Ensure the events reach the ledger from both the server path and the CLI path, consistent with the bridge task.
+- [x] R7. Add the new entries to the producer audit table with emit site and reachability status.
 ### Acceptance Criteria
 ```gherkin
 Scenario: R15 — Team lifecycle transitions emit cataloged events
@@ -72,20 +72,33 @@ Change map (task 0371 — author and emit the `team.*` event family):
 
 Rationale: follow message/process emit pattern (optional bus, failure-isolated); CLI durability matches 0370 ledger attach; Activity tab `team.` prefix now has producers.
 ### Testing
-**Pipeline verify results**
+**Forced verifyall result: PASS**
 
-- Verdict: PASS (from verdict artifact)
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `packages/app/src/services/event-names.ts:115-126`; `packages/app/tests/services/event-names.test.ts:184` |
+| R2 | MET | `packages/app/src/services/team-service.ts:688,718,820-838`; `packages/app/src/services/supervisor-service.ts:230-336` |
+| R3 | MET | `packages/app/tests/services/team-service.test.ts:1060-1141` |
+| R4 | MET | `packages/app/src/services/system-event-tap.ts:146-152`; `apps/server/tests/upstream-system-events-wiring.test.ts:581-583` |
+| R5 | MET | `packages/app/tests/services/team-service.test.ts:1129-1141` |
+| R6 | MET | `apps/cli/src/commands/team.ts:107,353`; full wiring suite exit 0 |
+| R7 | MET | `docs/inventory/system-events-producer-audit.md:3,165-171` |
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 catalog `team.*` | MET |  |
-| R2 emit sites + bridge | MET |  |
-| R3 metadata-only payloads | MET |  |
-| R4 actor → agentId → memberId | MET |  |
-| R5 unknown member still persists | MET |  |
-| R6 Board + CLI ledger paths | MET |  |
-| R7 producer audit rows 26–30 | MET |  |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| R15 — Team lifecycle transitions emit cataloged events | MET | test | `packages/app/tests/services/team-service.test.ts:1060-1105,1232` |
+| R16 — Member state changes are attributable to a team and an agent type | MET | test | `packages/app/tests/services/team-service.test.ts:1106-1120`; `apps/server/tests/upstream-system-events-wiring.test.ts:581-583` |
+| R17 — A team event for an unknown member still persists | MET | test | `packages/app/tests/services/team-service.test.ts:1129-1141` |
+
+**Fresh command:** `bun run test` → 3,878 pass, 0 fail, 11,951 assertions; exit 0.
+
+**Coverage:** root per-file line/function ≥90% gate passed.
+
+**SECUA:** no blocker/major; dual-producer noise remains a non-blocking P3 advisory.
+
+**Fix-pass disclosure:** `.spur/run/0371-verdict.json:1-74` regenerated; empty requirement evidence cells were repaired.
 ### Review
 **Disposition:** approve (no blocker/major findings)
 

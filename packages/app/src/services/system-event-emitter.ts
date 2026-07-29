@@ -42,6 +42,7 @@ export class SystemEventEmitter implements EventEmitter {
         private readonly dao: SystemEventDao,
         private readonly logger: SystemEventEmitterLogger,
         retention: SystemEventRetentionConfig = {},
+        private readonly secretValues: readonly string[] = [],
     ) {
         // Resolve once at construction (task 0368 R3): absent config falls back
         // to the documented per-prefix default. Insert-time prune (R5) scopes to
@@ -60,7 +61,7 @@ export class SystemEventEmitter implements EventEmitter {
                 event_name: entry.name,
                 occurred_at: event.at,
                 actor: extractSystemEventActor(event),
-                payload_json: safeStringify(normalizeSystemEventPayload(entry, event)),
+                payload_json: safeStringify(normalizeSystemEventPayload(entry, event, this.secretValues)),
                 // Indexed correlation columns (task 0369). Planning events carry
                 // `entity: { kind, id }`; the shared extractor keeps this path's
                 // derivation identical to the server tap's.

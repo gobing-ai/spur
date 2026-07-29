@@ -308,6 +308,8 @@ when the task used the pipeline.
 - Cross-workspace: `@gobing-ai/<pkg>` only.
 - `vendors/` and `drizzle/_legacy_reference/` — never modify.
 - No secrets / `.env*` in git; agent API keys are the agent’s concern.
+- Observability persistence/wire projections receive configured secret values at composition roots
+  and redact recursively before payload bounds.
 - No `.github/workflows/` edits without approval.
 - Surgical diffs only.
 - Surface code + `docs/04_DESIGN.md` same commit (T3); use `sp:doc-evolve` sync-check.

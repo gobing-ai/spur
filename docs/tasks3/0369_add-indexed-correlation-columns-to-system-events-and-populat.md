@@ -12,7 +12,7 @@ priority: P1
 tags: ["observability", "schema", "migration", "data-plane"]
 dependencies: ["0367"]
 created_at: "2026-07-29T00:14:03.009Z"
-updated_at: "2026-07-29T03:16:38.299Z"
+updated_at: "2026-07-29T04:50:49.129Z"
 ---
 
 ## 0369. Add indexed correlation columns to system_events and populate them from the event envelope
@@ -22,12 +22,12 @@ updated_at: "2026-07-29T03:16:38.299Z"
 `system_events` is `(id, event_name, occurred_at, actor, payload_json)` with indexes only on `occurred_at` and `event_name` (packages/domain/src/migrations.ts:78-87). There is no run, entity, or sequence column, so `SystemEventDao.query` can only filter on exact `event_name` plus `since` plus `limit` (system-event-dao.ts). Every richer filter the Board wants — this run, this task, this member — must therefore be done client-side over a fixed newest-N window, which is exactly why JobsTab slices the newest 50 in the browser (JobsTab.tsx:114). The 0365 envelopes now carry runId, actionId, and sequence, and planning events carry entity identity; making those queryable columns is what turns every J4 tabview into one indexed round trip.
 
 ### Requirements
-- [ ] R1. Add `run_id`, `entity_kind`, `entity_id`, and `sequence` columns to `system_events` through a new top-level `drizzle/*.sql` migration carrying the `_spur_cli_` marker, wired into `CLI_SCHEMA_SQL`.
-- [ ] R2. Add indexes supporting the query patterns J3's read API needs (at minimum `run_id` and the `entity_kind`/`entity_id` pair).
-- [ ] R3. Populate the columns in both write paths — the server `SystemEventTap` and the CLI `SystemEventEmitter` — deriving them from the 0365 envelope and from planning event payloads.
-- [ ] R4. Keep the columns nullable: pre-migration rows and events with no correlation must persist and read back cleanly with nulls.
-- [ ] R5. The migration must be idempotent and must not rewrite or backfill existing payloads.
-- [ ] R6. Surface the new fields on the history endpoint's row projection without breaking the current response shape for existing consumers.
+- [x] R1. Add `run_id`, `entity_kind`, `entity_id`, and `sequence` columns to `system_events` through a new top-level `drizzle/*.sql` migration carrying the `_spur_cli_` marker, wired into `CLI_SCHEMA_SQL`.
+- [x] R2. Add indexes supporting the query patterns J3's read API needs (at minimum `run_id` and the `entity_kind`/`entity_id` pair).
+- [x] R3. Populate the columns in both write paths — the server `SystemEventTap` and the CLI `SystemEventEmitter` — deriving them from the 0365 envelope and from planning event payloads.
+- [x] R4. Keep the columns nullable: pre-migration rows and events with no correlation must persist and read back cleanly with nulls.
+- [x] R5. The migration must be idempotent and must not rewrite or backfill existing payloads.
+- [x] R6. Surface the new fields on the history endpoint's row projection without breaking the current response shape for existing consumers.
 ### Acceptance Criteria
 ```gherkin
 Scenario: R5 — Correlated events persist their identity in queryable columns
@@ -101,25 +101,32 @@ Each entry cites the first changed line per file (`file:line`).
 | `packages/domain/tests/dao/migrations.test.ts:84` |
 | `packages/domain/tests/dao/system-event-dao.test.ts:294` |
 ### Testing
-**Pipeline verify results**
+**Forced verifyall result: PASS**
 
-- Verdict: PASS (from verdict artifact)
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `drizzle/0008_spur_cli_system_events_correlation.sql:1-18`; `packages/domain/tests/dao/migrations.test.ts:71-89` |
+| R2 | MET | `drizzle/0008_spur_cli_system_events_correlation.sql:20-21` |
+| R3 | MET | `packages/app/src/services/system-event-tap.ts:73-80`; `packages/app/src/services/system-event-emitter.ts:64-68`; tests at `packages/app/tests/services/system-event-tap.test.ts:145,171` |
+| R4 | MET | `packages/domain/tests/dao/migrations.test.ts:259-273`; `packages/app/tests/services/system-event-tap.test.ts:194` |
+| R5 | MET | `packages/domain/tests/dao/migrations.test.ts:264-288` |
+| R6 | MET | `apps/server/src/modules/events/index.ts:319-324`; `apps/server/tests/modules/events/history.test.ts:312,342` |
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET |  |
-| R2 | MET |  |
-| R3 | MET |  |
-| R4 | MET |  |
-| R5 | MET |  |
-| R6 | MET |  |
+**Acceptance Criteria Verification**
 
-| Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
-| R5 — Correlated events persist their identity in queryable columns | MET | test | packages/app/tests/services/system-event-tap.test.ts:145; packages/domain/tests/dao/system-event-dao.test.ts:294; apps/server/tests/modules/events/history.test.ts:129 |
-| R6 — Planning events persist their entity identity | MET | test | packages/app/tests/services/system-event-tap.test.ts:171; packages/app/tests/services/system-event-emitter.test.ts:104; packages/domain/tests/dao/system-event-dao.test.ts:317 |
-| R7 — Pre-migration rows remain readable | MET | test | packages/domain/tests/dao/migrations.test.ts:223; apps/server/tests/modules/events/history.test.ts:159 |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| R5 — Correlated events persist their identity in queryable columns | MET | test | `packages/app/tests/services/system-event-tap.test.ts:145` |
+| R6 — Planning events persist their entity identity | MET | test | `packages/app/tests/services/system-event-tap.test.ts:171`; `packages/app/tests/services/system-event-emitter.test.ts:117-121` |
+| R7 — Pre-migration rows remain readable | MET | test | `packages/domain/tests/dao/migrations.test.ts:259-273`; `apps/server/tests/modules/events/history.test.ts:342` |
+
+**Fresh command:** `bun run test` → 3,878 pass, 0 fail, 11,951 assertions; exit 0.
+
+**Coverage:** root per-file line/function ≥90% gate passed.
+
+**SECUA:** no blocker/major; nullable/idempotent migration and shared correlation derivation remain correct.
+
+**Fix-pass disclosure:** `.spur/run/0369-verdict.json:1-69` regenerated; empty requirement evidence cells were repaired.
 ### Review
 **SECU findings** (pipeline verify step — verdict: PASS)
 

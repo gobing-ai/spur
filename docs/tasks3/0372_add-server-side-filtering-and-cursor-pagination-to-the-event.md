@@ -12,7 +12,7 @@ priority: P1
 tags: ["observability", "api", "data-plane"]
 dependencies: ["0369"]
 created_at: "2026-07-29T00:14:03.033Z"
-updated_at: "2026-07-29T03:58:39.777Z"
+updated_at: "2026-07-29T04:50:57.445Z"
 ---
 
 ## 0372. Add server-side filtering and cursor pagination to the event history query surface
@@ -22,12 +22,12 @@ updated_at: "2026-07-29T03:58:39.777Z"
 GET /api/events/history accepts only `name`, `since`, and `limit` (apps/server/src/modules/events/index.ts:163-190), and `SystemEventDao.query` mirrors that. Consequently every Board filter — prefix pills, tier, time window, search scope in SystemEventsTab, and the queue/scheduler predicate in JobsTab — runs in the browser over whatever the newest 100 (or 50) rows happen to be. With the ledger dominated by heartbeat noise, that window rarely contains what the operator filtered for, and there is no way to page back to it. Once the correlation columns exist, these filters become cheap indexed queries; this task exposes them.
 
 ### Requirements
-- [ ] R1. Add `prefix`, `names` (multi-value), `runId`, and `actor` filters to `SystemEventDao.query` and to GET /api/events/history, backed by the correlation-column indexes.
-- [ ] R2. Add cursor-based pagination that is stable under concurrent writes — paging must not repeat an already-returned event nor skip one older than the cursor.
-- [ ] R3. Reject an uncataloged prefix or a malformed cursor with a client error and a reason; never silently fall back to an unfiltered result set.
-- [ ] R4. Preserve the existing response envelope (`events`, `count`, `catalog`) and the current `name`/`since`/`limit` behaviour for existing consumers.
-- [ ] R5. Keep the endpoint's `limit` ceiling and default, and apply filters in SQL rather than post-filtering a fetched page.
-- [ ] R6. Return the correlation fields on each row so clients can group without re-parsing payloads.
+- [x] R1. Add `prefix`, `names` (multi-value), `runId`, and `actor` filters to `SystemEventDao.query` and to GET /api/events/history, backed by the correlation-column indexes.
+- [x] R2. Add cursor-based pagination that is stable under concurrent writes — paging must not repeat an already-returned event nor skip one older than the cursor.
+- [x] R3. Reject an uncataloged prefix or a malformed cursor with a client error and a reason; never silently fall back to an unfiltered result set.
+- [x] R4. Preserve the existing response envelope (`events`, `count`, `catalog`) and the current `name`/`since`/`limit` behaviour for existing consumers.
+- [x] R5. Keep the endpoint's `limit` ceiling and default, and apply filters in SQL rather than post-filtering a fetched page.
+- [x] R6. Return the correlation fields on each row so clients can group without re-parsing payloads.
 ### Acceptance Criteria
 ```gherkin
 Scenario: R18 — History can be filtered by prefix server-side
@@ -63,19 +63,33 @@ Server-side filters and stable keyset pagination for the event history surface (
 
 **Invariants:** filters apply in SQL (R5); correlation fields still projected (R6); existing `name`/`since`/`limit` behaviour preserved (R4); uncataloged prefix / bad cursor → client error, no silent drop (R3).
 ### Testing
-**Pipeline verify results**
+**Forced verifyall result: PASS**
 
-- Verdict: PASS (from verdict artifact)
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `packages/domain/src/dao/system-event-dao.ts:52-80,195-239`; `apps/server/tests/modules/events/history.test.ts:187` |
+| R2 | MET | `packages/domain/src/dao/system-event-dao.ts:40-46,231-239`; `packages/domain/tests/dao/system-event-dao.test.ts:575`; `apps/server/tests/modules/events/history.test.ts:248-267` |
+| R3 | MET | `apps/server/tests/modules/events/history.test.ts:209,229` |
+| R4 | MET | `apps/server/src/modules/events/index.ts:319-324`; `apps/server/tests/modules/events/history.test.ts:312` |
+| R5 | MET | `packages/domain/src/dao/system-event-dao.ts:195-239`; endpoint limit tests in full suite |
+| R6 | MET | `apps/server/src/modules/events/index.ts:319-324`; `apps/server/tests/modules/events/history.test.ts:312,342` |
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 filters | MET | `packages/domain/src/dao/system-event-dao.ts:207-231` + HTTP forward |
-| R2 stable keyset | MET | exclusive `(occurred_at, id)` + concurrent-write tests |
-| R3 reject bad prefix/cursor | MET | 400 `UNKNOWN_PREFIX` / `MALFORMED_CURSOR`, no DAO call |
-| R4 envelope preserved | MET | `events`/`count`/`catalog` + additive `nextCursor`/`hasMore` |
-| R5 SQL + limit ceiling | MET | WHERE assembly; default 100 / max 500 |
-| R6 correlation fields | MET | `runId`/`entityKind`/`entityId`/`sequence` projected |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+**Acceptance Criteria Verification**
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| R18 — History can be filtered by prefix server-side | MET | test | `packages/domain/tests/dao/system-event-dao.test.ts:496,524`; `apps/server/tests/modules/events/history.test.ts:187` |
+| R19 — History can be filtered by run and by actor | MET | test | `packages/domain/tests/dao/system-event-dao.test.ts:361,544`; `apps/server/tests/modules/events/history.test.ts:187` |
+| R20 — History pagination is stable under concurrent writes | MET | test | `packages/domain/tests/dao/system-event-dao.test.ts:575`; `apps/server/tests/modules/events/history.test.ts:248-267` |
+| R21 — An unknown prefix or malformed cursor is rejected cleanly | MET | test | `apps/server/tests/modules/events/history.test.ts:209-245` |
+
+**Fresh command:** `bun run test` → 3,878 pass, 0 fail, 11,951 assertions; exit 0.
+
+**Coverage:** root per-file line/function ≥90% gate passed.
+
+**SECUA:** no blocker/major; actor-index and corrupt-JSON handling remain non-blocking advisories.
+
+**Fix-pass disclosure:** `.spur/run/0372-verdict.json:1-75` regenerated; Testing now carries complete AC evidence.
 ### Review
 **Disposition:** APPROVE · Functional PASS · SECUA no blocker/major · architecture advisory only.
 

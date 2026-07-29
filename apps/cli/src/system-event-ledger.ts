@@ -14,7 +14,12 @@
  * planning emitter remains separately lazy for task/feature mutations.
  */
 
-import { registerSystemEventTap, type SystemEventBus, type SystemEventTap } from '@gobing-ai/spur-app';
+import {
+    configuredSecretValues,
+    registerSystemEventTap,
+    type SystemEventBus,
+    type SystemEventTap,
+} from '@gobing-ai/spur-app';
 import { SystemEventDao } from '@gobing-ai/spur-domain';
 import type { CliContext } from './context';
 
@@ -60,6 +65,7 @@ export async function attachSystemEventLedger(
         const dao = new SystemEventDao(await context.getDb());
         tap = registerSystemEventTap(bus, dao, logger, {
             diagnosticEnabled: options.diagnosticEnabled === true,
+            secretValues: configuredSecretValues(context.env ?? {}),
         });
     } catch (error) {
         // Unmigrated workspace / locked DB / missing table: log + continue.
