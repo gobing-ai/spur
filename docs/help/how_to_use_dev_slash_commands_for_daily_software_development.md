@@ -51,7 +51,7 @@ artifacts (with optional feature transition and irreversible branch cleanup).
 
 ## The command map
 
-The `sp` plugin provides **31 commands** across planning, execution, operations/hygiene, wrap-up, and authoring:
+The `sp` plugin provides **34 commands** across planning, execution, operations/hygiene, wrap-up, and authoring:
 
 | Command | Phase / Category | What it does | Backed by |
 |---------|------------------|--------------|-----------|
@@ -60,6 +60,7 @@ The `sp` plugin provides **31 commands** across planning, execution, operations/
 | `/sp:dev-plan` | Planning | Feature → BDD AC → `feature check` gate → decompose → `batch-create` gate → optional design doc (`--design`/`--auto`) | `sp:spur-dev` (planning) |
 | `/sp:dev-idea` | Planning | Unified entry: vague idea → feature + AC + task batch (the `idea-pipeline.yaml` workflow). Stops at handoff — no task execution. | `spur workflow run idea-pipeline.yaml` |
 | `/sp:dev-refine` | Planning→Exec | Fill a task's AC / Design / Plan just-in-time via Q&A | `sp:spur-dev` |
+| `/sp:dev-refineall` | Planning (Batch) | Batch-refine tasks under a feature or selector before runall | `sp:spur-dev` (`refineall`) |
 | `/sp:dev-run` | Execution | Run a task: full pipeline, or `--mode implement` for just the code | `sp:spur-dev` (execution) |
 | `/sp:dev-runall` | Exec (Batch) | Run a **batch** of tasks through their pipelines in dependency-correct order (set resolve → topo-sort → per-task run → batch report) | `sp:spur-dev` (`runall` op → `sp:super-coder`) |
 | `/sp:dev-parallel` | Exec (Batch) | Fan out independent tasks or investigations in parallel via subagents | `sp:parallel-execution` |
@@ -68,12 +69,14 @@ The `sp` plugin provides **31 commands** across planning, execution, operations/
 | `/sp:dev-verify` | Execution | Map requirements → evidence; emit a PASS/PARTIAL/FAIL verdict | `sp:code-verification` |
 | `/sp:dev-verifyall` | Exec (Batch) | Batch-verify tasks against requirements and AC, producing consolidated report | `sp:code-verification` |
 | `/sp:dev-refresh` | Execution | Refresh feature status by feature ID, task WBS, or batch sweep via `spur feature sync` | `spur feature sync` |
+| `/sp:dev-featurechange` | Planning | Restructure feature tree from a mapping file (CLI-gated moves + task edges) | `sp:spur-cli` / inline procedure |
 | `/sp:dev-fixall` | Hygiene | Systematically loop lint, typecheck, and test checks until clean across working tree | inline |
 | `/sp:dev-simplify` | Hygiene | Simplify recently-changed code for clarity without changing behavior | `sp:code-simplification` |
 | `/sp:dev-debug` | Operations | Systematic debugging protocol — reproduce, isolate, diagnose root cause, apply minimal fix, and verify with regression tests | `sp:sys-debugging` |
 | `/sp:dev-daily` | Operations | Generate a daily summary report from agent usage data, git history, and notes (honors `SP_DAILY_SUMMARY_NO_PROMPT`) | `sp:daily-summary` |
 | `/sp:dev-handover` | Operations | Write an honest handover doc when blocked (`docs/handover/<date>-<slug>.md` SSOT + non-destructive task pointer append) | `sp:spur-dev` (`dev-operations.md`) |
 | `/sp:dev-dogfood` | Operations | Drive a command/skill/CLI end-to-end, fix-within-budget, emit a structured report | `sp:dogfood-testing` |
+| `/sp:dev-findissue` | Operations | Review agent session logs, rank performance bottlenecks, optionally create a fix task (`sp:issue-finding`; optional `[topic]`) | `sp:issue-finding` |
 | `/sp:dev-arch` | Operations | Survey codebase for shallow modules and deepening opportunities | `sp:code-improvement` |
 | `/sp:dev-reverse` | Operations | Depth-driven codebase reverse engineering / HLD generation / audit | `sp:reverse-engineering` |
 | `/sp:dev-gitmsg` | Operations | Draft Conventional-Commits message from staged changes | inline |
