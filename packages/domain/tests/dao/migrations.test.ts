@@ -10,6 +10,7 @@ import {
     CLI_SCHEMA_SQL,
     loadSqlMigrations,
     RUNS_EXTERNAL_KEY_COLUMN_SCHEMA_SQL,
+    SYSTEM_EVENTS_CORRELATION_COLUMNS_SCHEMA_SQL,
 } from '../../src/migrations';
 
 describe('db migrations', () => {
@@ -57,8 +58,8 @@ describe('db migrations', () => {
     });
 
     describe('CLI_MIGRATIONS', () => {
-        test('has foundation, team-inbox, rule-history, planning, queue-jobs, run-pid, system-events, and runs-external-key migrations', () => {
-            expect(CLI_MIGRATIONS).toHaveLength(8);
+        test('has foundation, team-inbox, rule-history, planning, queue-jobs, run-pid, system-events, runs-external-key, and system-events-correlation migrations', () => {
+            expect(CLI_MIGRATIONS).toHaveLength(9);
             expect(CLI_MIGRATIONS[0]?.id).toBe('0000_spur_cli_foundation');
             expect(CLI_MIGRATIONS[1]?.id).toBe('0001_spur_cli_team_inbox');
             expect(CLI_MIGRATIONS[2]?.id).toBe('0002_spur_cli_rule_history');
@@ -67,6 +68,7 @@ describe('db migrations', () => {
             expect(CLI_MIGRATIONS[5]?.id).toBe('0005_spur_cli_run_pid');
             expect(CLI_MIGRATIONS[6]?.id).toBe('0006_spur_cli_system_events');
             expect(CLI_MIGRATIONS[7]?.id).toBe('0007_spur_cli_runs_external_key');
+            expect(CLI_MIGRATIONS[8]?.id).toBe('0008_spur_cli_system_events_correlation');
         });
 
         test('run-pid migration adds a pid column to runs', () => {
@@ -77,6 +79,21 @@ describe('db migrations', () => {
             expect(CLI_MIGRATIONS[7]?.sql).toBe(RUNS_EXTERNAL_KEY_COLUMN_SCHEMA_SQL);
             expect(CLI_MIGRATIONS[7]?.sql).toContain('ALTER TABLE runs ADD COLUMN external_key');
             expect(CLI_MIGRATIONS[7]?.addColumnIfMissing).toEqual({ table: 'runs', column: 'external_key' });
+        });
+
+        test('system-events-correlation migration adds the four indexed columns to legacy ledgers', () => {
+            expect(CLI_MIGRATIONS[8]?.sql).toBe(SYSTEM_EVENTS_CORRELATION_COLUMNS_SCHEMA_SQL);
+            for (const column of ['run_id TEXT', 'entity_kind TEXT', 'entity_id TEXT', 'sequence INTEGER']) {
+                expect(CLI_MIGRATIONS[8]?.sql).toContain(`ALTER TABLE system_events ADD COLUMN ${column}`);
+            }
+            expect(CLI_MIGRATIONS[8]?.addColumnIfMissing).toEqual({ table: 'system_events', column: 'sequence' });
+        });
+
+        test('system-events-correlation migration rewrites no payloads', () => {
+            // R5: the migration is columns + indexes only. An UPDATE here would
+            // mutate rows the ledger promises to keep append-only.
+            expect(SYSTEM_EVENTS_CORRELATION_COLUMNS_SCHEMA_SQL).not.toContain('UPDATE');
+            expect(SYSTEM_EVENTS_CORRELATION_COLUMNS_SCHEMA_SQL).not.toContain('payload_json');
         });
 
         test('queue-jobs migration creates queue_jobs', () => {
@@ -115,9 +132,10 @@ describe('db migrations', () => {
                 { id: '0001_spur_cli_team_inbox', sql: 'CREATE TABLE IF NOT EXISTS inbox_messages (id TEXT);' },
             ]);
             // 0002 rule-history + 0003 planning + 0004 queue-jobs + 0005 run-pid
-            // + 0006 system-events + 0007 runs-external-key applied on top.
+            // + 0006 system-events + 0007 runs-external-key
+            // + 0008 system-events-correlation applied on top.
             const applied = await applyCliMigrations(adapter);
-            expect(applied).toBe(6);
+            expect(applied).toBe(7);
             // 0005 and 0007 backfilled columns on the legacy runs table.
             const cols = await adapter.queryAll<{ name: string }>('PRAGMA table_info(runs)');
             expect(cols.some((c) => c.name === 'pid')).toBe(true);
@@ -150,7 +168,9 @@ describe('db migrations', () => {
             ]);
 
             const applied = await applyCliMigrations(adapter);
-            expect(applied).toBe(7); // renamed inbox + rule + planning + queue-jobs + run-pid + system-events + runs-external-key
+            // renamed inbox + rule + planning + queue-jobs + run-pid + system-events
+            // + runs-external-key + system-events-correlation
+            expect(applied).toBe(8);
             await adapter.run(
                 'INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
                 'm1',
@@ -197,6 +217,94 @@ describe('db migrations', () => {
             expect(applied).toBe(1);
             const cols = await adapter.queryAll<{ name: string }>('PRAGMA table_info(runs)');
             expect(cols.filter((c) => c.name === 'external_key')).toHaveLength(1);
+            adapter.close();
+        });
+
+        test('legacy pre-0369 ledger gains the correlation columns without losing its rows', async () => {
+            const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            // A DB journaled through 0007 whose system_events table carries only
+            // the five original columns — the exact shape drizzle/0006 ships.
+            await applyCliMigrations(adapter, [
+                {
+                    id: '0006_spur_cli_system_events',
+                    sql: `CREATE TABLE IF NOT EXISTS system_events (
+                        id TEXT PRIMARY KEY,
+                        event_name TEXT NOT NULL,
+                        occurred_at TEXT NOT NULL,
+                        actor TEXT,
+                        payload_json TEXT
+                    );`,
+                },
+            ]);
+            await adapter.run(
+                `INSERT INTO system_events (id, event_name, occurred_at, actor, payload_json)
+                 VALUES ('sev_legacy', 'task.updated', '2026-07-04T01:00:00.000Z', 'operator', '{"entityId":"0001"}')`,
+            );
+
+            const applied = await applyCliMigrations(adapter, [
+                {
+                    id: '0008_spur_cli_system_events_correlation',
+                    sql: SYSTEM_EVENTS_CORRELATION_COLUMNS_SCHEMA_SQL,
+                    addColumnIfMissing: { table: 'system_events', column: 'sequence' },
+                },
+            ]);
+            expect(applied).toBe(1);
+
+            const cols = await adapter.queryAll<{ name: string; type: string; notnull: number }>(
+                'PRAGMA table_info(system_events)',
+            );
+            for (const name of ['run_id', 'entity_kind', 'entity_id', 'sequence']) {
+                const col = cols.find((c) => c.name === name);
+                expect(col).toBeDefined();
+                // Nullable (R4) — pre-migration rows have no correlation to carry.
+                expect(col?.notnull).toBe(0);
+            }
+            expect(cols.find((c) => c.name === 'sequence')?.type).toBe('INTEGER');
+
+            // R5: the pre-migration row survives with its payload untouched and
+            // nulls in every new column.
+            const row = await adapter.queryFirst<{
+                payload_json: string;
+                run_id: string | null;
+                sequence: number | null;
+            }>('SELECT payload_json, run_id, sequence FROM system_events WHERE id = ?', 'sev_legacy');
+            expect(row?.payload_json).toBe('{"entityId":"0001"}');
+            expect(row?.run_id).toBeNull();
+            expect(row?.sequence).toBeNull();
+            adapter.close();
+        });
+
+        test('fresh DB journals system-events-correlation without duplicate-column errors', async () => {
+            const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            await applyCliMigrations(adapter);
+
+            const cols = await adapter.queryAll<{ name: string }>('PRAGMA table_info(system_events)');
+            expect(cols.filter((c) => c.name === 'sequence')).toHaveLength(1);
+            expect(cols.filter((c) => c.name === 'run_id')).toHaveLength(1);
+            const row = await adapter.queryFirst<{ id: string }>(
+                'SELECT id FROM "__spur_cli_migrations" WHERE id = ?',
+                '0008_spur_cli_system_events_correlation',
+            );
+            expect(row?.id).toBe('0008_spur_cli_system_events_correlation');
+
+            const secondApplied = await applyCliMigrations(adapter);
+            expect(secondApplied).toBe(0);
+            adapter.close();
+        });
+
+        test('fresh DB indexes run_id and the entity pair for the J3 read API', async () => {
+            const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+            await applyCliMigrations(adapter);
+
+            const indexes = await adapter.queryAll<{ name: string }>('PRAGMA index_list(system_events)');
+            const names = indexes.map((i) => i.name);
+            expect(names).toContain('idx_system_events_run_id');
+            expect(names).toContain('idx_system_events_entity');
+
+            // The entity index must be the (kind, id) pair — a single-column
+            // index cannot serve the "this task's stream" lookup.
+            const entityCols = await adapter.queryAll<{ name: string }>('PRAGMA index_info(idx_system_events_entity)');
+            expect(entityCols.map((c) => c.name)).toEqual(['entity_kind', 'entity_id']);
             adapter.close();
         });
     });

@@ -291,6 +291,165 @@ describe('SystemEventDao', () => {
         adapter.close();
     });
 
+    test('persists and reads back run correlation from the 0365 envelope', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        await dao.insert({
+            id: createId('sev'),
+            event_name: 'workflow.phase',
+            occurred_at: '2026-07-04T01:00:00.000Z',
+            run_id: 'run_abc',
+            sequence: 7,
+        });
+
+        const rows = await dao.query();
+        expect(rows[0]?.run_id).toBe('run_abc');
+        expect(rows[0]?.sequence).toBe(7);
+        // Disjoint identity: a run event carries no entity.
+        expect(rows[0]?.entity_kind).toBeNull();
+        expect(rows[0]?.entity_id).toBeNull();
+
+        adapter.close();
+    });
+
+    test('persists and reads back entity correlation from a planning event', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        await dao.insert({
+            id: createId('sev'),
+            event_name: 'task.updated',
+            occurred_at: '2026-07-04T01:00:00.000Z',
+            entity_kind: 'task',
+            entity_id: '0369',
+        });
+
+        const rows = await dao.query();
+        expect(rows[0]?.entity_kind).toBe('task');
+        expect(rows[0]?.entity_id).toBe('0369');
+        expect(rows[0]?.run_id).toBeNull();
+        expect(rows[0]?.sequence).toBeNull();
+
+        adapter.close();
+    });
+
+    test('an event with no correlation persists and reads back with nulls', async () => {
+        // R4: correlation is optional — the pre-0369 insert shape still works.
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        await dao.insert({
+            id: createId('sev'),
+            event_name: 'queue.job.enqueued',
+            occurred_at: '2026-07-04T01:00:00.000Z',
+        });
+
+        const rows = await dao.query();
+        expect(rows).toHaveLength(1);
+        expect(rows[0]?.run_id).toBeNull();
+        expect(rows[0]?.entity_kind).toBeNull();
+        expect(rows[0]?.entity_id).toBeNull();
+        expect(rows[0]?.sequence).toBeNull();
+
+        adapter.close();
+    });
+
+    test('query filters by run_id', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        for (const runId of ['run_a', 'run_b', 'run_a']) {
+            await dao.insert({
+                id: createId('sev'),
+                event_name: 'workflow.phase',
+                occurred_at: '2026-07-04T01:00:00.000Z',
+                run_id: runId,
+            });
+        }
+        // An uncorrelated row must not leak into a run-scoped query.
+        await dao.insert({
+            id: createId('sev'),
+            event_name: 'workflow.phase',
+            occurred_at: '2026-07-04T01:00:00.000Z',
+        });
+
+        const rows = await dao.query({ run_id: 'run_a' });
+        expect(rows).toHaveLength(2);
+        expect(rows.every((r) => r.run_id === 'run_a')).toBe(true);
+
+        adapter.close();
+    });
+
+    test('query filters by the entity_kind + entity_id pair', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        // Same id under two kinds — the pair, not either column alone, selects one stream.
+        await dao.insert({
+            id: createId('sev'),
+            event_name: 'task.updated',
+            occurred_at: '2026-07-04T01:00:00.000Z',
+            entity_kind: 'task',
+            entity_id: 'J3',
+        });
+        await dao.insert({
+            id: createId('sev'),
+            event_name: 'feature.updated',
+            occurred_at: '2026-07-04T02:00:00.000Z',
+            entity_kind: 'feature',
+            entity_id: 'J3',
+        });
+
+        const rows = await dao.query({ entity_kind: 'task', entity_id: 'J3' });
+        expect(rows).toHaveLength(1);
+        expect(rows[0]?.event_name).toBe('task.updated');
+
+        adapter.close();
+    });
+
+    test('query composes correlation filters with name, since, and limit', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new SystemEventDao(adapter);
+
+        for (let i = 0; i < 4; i++) {
+            await dao.insert({
+                id: createId('sev'),
+                event_name: 'task.updated',
+                occurred_at: `2026-07-04T0${i}:00:00.000Z`,
+                entity_kind: 'task',
+                entity_id: '0369',
+            });
+        }
+        // Same entity, different name — must be excluded by the name filter.
+        await dao.insert({
+            id: createId('sev'),
+            event_name: 'task.created',
+            occurred_at: '2026-07-04T05:00:00.000Z',
+            entity_kind: 'task',
+            entity_id: '0369',
+        });
+
+        const rows = await dao.query({
+            name: 'task.updated',
+            since: '2026-07-04T00:00:00.000Z',
+            entity_kind: 'task',
+            entity_id: '0369',
+            limit: 2,
+        });
+        expect(rows).toHaveLength(2);
+        // Newest two of the three matching rows (T03, T02).
+        expect(rows.map((r) => r.occurred_at)).toEqual(['2026-07-04T03:00:00.000Z', '2026-07-04T02:00:00.000Z']);
+
+        adapter.close();
+    });
+
     test('R6 — seeded 90/10 noise ratio: low-volume rows survive high-volume pressure', async () => {
         // Mirror the observed production histogram: ~90% heartbeat noise
         // (queue.*, scheduler.*) against ~10% signal (task.*, feature.*).

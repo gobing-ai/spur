@@ -185,6 +185,13 @@ export const eventsModule: ServerModule = {
                 prefix: systemEventCatalogEntry(row.event_name)?.prefix ?? row.event_name.split('.')[0],
                 renderer: systemEventCatalogEntry(row.event_name)?.renderer ?? 'generic',
                 payload: row.payload_json ? JSON.parse(row.payload_json) : null,
+                // Indexed correlation columns (task 0369). Purely additive: every
+                // existing field keeps its name and meaning, and pre-migration
+                // rows surface these as null rather than being dropped (R6).
+                runId: row.run_id,
+                entityKind: row.entity_kind,
+                entityId: row.entity_id,
+                sequence: row.sequence,
             }));
             return c.json({ events, count: events.length, catalog: SYSTEM_EVENT_CATALOG_METADATA });
         });

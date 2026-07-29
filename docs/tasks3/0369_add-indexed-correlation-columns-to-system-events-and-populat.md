@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Add indexed correlation columns to system_events and populate them from the event envelope"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: J3
@@ -12,7 +12,7 @@ priority: P1
 tags: ["observability", "schema", "migration", "data-plane"]
 dependencies: ["0367"]
 created_at: "2026-07-29T00:14:03.009Z"
-updated_at: "2026-07-29T00:25:21.508Z"
+updated_at: "2026-07-29T03:16:38.299Z"
 ---
 
 ## 0369. Add indexed correlation columns to system_events and populate them from the event envelope
@@ -47,17 +47,89 @@ Scenario: R7 — Pre-migration rows remain readable
 <!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
 
 ### Solution
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+| Change (`file:line`) |
+|----------------------|
+| `apps/server/src/modules/events/index.ts:188` |
+| `apps/server/tests/modules/events/history.test.ts:129` |
+| `apps/server/tests/modules/events/history.test.ts:25` |
+| `apps/server/tests/modules/events/history.test.ts:36` |
+| `apps/server/tests/modules/events/history.test.ts:61` |
+| `packages/app/src/index.ts:169` |
+| `packages/app/src/index.ts:173` |
+| `packages/app/src/services/system-event-emitter.ts:21` |
+| `packages/app/src/services/system-event-emitter.ts:64` |
+| `packages/app/src/services/system-event-tap.ts:1` |
+| `packages/app/src/services/system-event-tap.ts:105` |
+| `packages/app/src/services/system-event-tap.ts:110` |
+| `packages/app/src/services/system-event-tap.ts:115` |
+| `packages/app/src/services/system-event-tap.ts:150` |
+| `packages/app/src/services/system-event-tap.ts:64` |
+| `packages/app/tests/services/system-event-emitter.test.ts:104` |
+| `packages/app/tests/services/system-event-tap.test.ts:10` |
+| `packages/app/tests/services/system-event-tap.test.ts:145` |
+| `packages/app/tests/services/system-event-tap.test.ts:327` |
+| `packages/domain/src/dao/system-event-dao.ts:10` |
+| `packages/domain/src/dao/system-event-dao.ts:153` |
+| `packages/domain/src/dao/system-event-dao.ts:165` |
+| `packages/domain/src/dao/system-event-dao.ts:180` |
+| `packages/domain/src/dao/system-event-dao.ts:182` |
+| `packages/domain/src/dao/system-event-dao.ts:184` |
+| `packages/domain/src/dao/system-event-dao.ts:186` |
+| `packages/domain/src/dao/system-event-dao.ts:29` |
+| `packages/domain/src/dao/system-event-dao.ts:45` |
+| `packages/domain/src/dao/system-event-dao.ts:75` |
+| `packages/domain/src/dao/system-event-dao.ts:82` |
+| `packages/domain/src/dao/system-event-dao.ts:89` |
+| `packages/domain/src/dao/system-event-dao.ts:96` |
+| `packages/domain/src/index.ts:28` |
+| `packages/domain/src/migrations.ts:150` |
+| `packages/domain/src/migrations.ts:185` |
+| `packages/domain/src/migrations.ts:211` |
+| `packages/domain/src/migrations.ts:73` |
+| `packages/domain/src/migrations.ts:86` |
+| `packages/domain/src/migrations.ts:95` |
+| `packages/domain/tests/dao/migrations.test.ts:13` |
+| `packages/domain/tests/dao/migrations.test.ts:135` |
+| `packages/domain/tests/dao/migrations.test.ts:138` |
+| `packages/domain/tests/dao/migrations.test.ts:171` |
+| `packages/domain/tests/dao/migrations.test.ts:222` |
+| `packages/domain/tests/dao/migrations.test.ts:61` |
+| `packages/domain/tests/dao/migrations.test.ts:71` |
+| `packages/domain/tests/dao/migrations.test.ts:84` |
+| `packages/domain/tests/dao/system-event-dao.test.ts:294` |
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET |  |
+| R2 | MET |  |
+| R3 | MET |  |
+| R4 | MET |  |
+| R5 | MET |  |
+| R6 | MET |  |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R5 — Correlated events persist their identity in queryable columns | MET | test | packages/app/tests/services/system-event-tap.test.ts:145; packages/domain/tests/dao/system-event-dao.test.ts:294; apps/server/tests/modules/events/history.test.ts:129 |
+| R6 — Planning events persist their entity identity | MET | test | packages/app/tests/services/system-event-tap.test.ts:171; packages/app/tests/services/system-event-emitter.test.ts:104; packages/domain/tests/dao/system-event-dao.test.ts:317 |
+| R7 — Pre-migration rows remain readable | MET | test | packages/domain/tests/dao/migrations.test.ts:223; apps/server/tests/modules/events/history.test.ts:159 |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (pipeline verify step — verdict: PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | tests-pass | — | 87/87 targeted tests green (system-event-dao, migrations, system-event-tap, system-event-emitter, history) |
+| P4 | design-conformance | — | empty task Design; docs/04_DESIGN.md §7.10 matches implementation |
+| P4 | evidence-rule-pass | — | all 3 AC rows use test evidence |
+| P4 | migration-idempotent | — | addColumnIfMissing sequence; second apply returns 0 |
+| P4 | spur-task-check | — | spur task check 0369 --strict-core pass |
 ### References
 
 J3
@@ -65,3 +137,5 @@ J3
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-07-29T03:13:22.828Z todo → testing (system)
+- 2026-07-29T03:16:38.299Z testing → done (system)

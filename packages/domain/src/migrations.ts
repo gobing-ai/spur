@@ -70,9 +70,12 @@ CREATE INDEX IF NOT EXISTS queue_jobs_ready_idx ON queue_jobs (status, next_retr
 /**
  * DDL for the `system_events` table — a capped append-only ledger of planning
  * and system events persisted by the server EventBus tap (task 0189 wave A /
- * 0198). Indexed on `occurred_at` (history query newest-first + since-filter)
- * and `event_name` (per-stream board tabs). Kept byte-compatible with
- * `drizzle/0006_spur_cli_system_events.sql`.
+ * 0198). Indexed on `occurred_at` (history query newest-first + since-filter),
+ * `event_name` (per-stream board tabs), `run_id`, and the
+ * `(entity_kind, entity_id)` pair (task 0369 indexed correlation columns).
+ * Kept byte-compatible with `drizzle/0006_spur_cli_system_events.sql` for the
+ * five original columns; the correlation columns ship only in the embedded
+ * schema and migration `0008` (the historical drizzle file is inert).
  */
 export const SYSTEM_EVENTS_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS system_events (
@@ -80,11 +83,17 @@ CREATE TABLE IF NOT EXISTS system_events (
     event_name TEXT NOT NULL,
     occurred_at TEXT NOT NULL,
     actor TEXT,
-    payload_json TEXT
+    payload_json TEXT,
+    run_id TEXT,
+    entity_kind TEXT,
+    entity_id TEXT,
+    sequence INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_system_events_occurred_at ON system_events (occurred_at);
 CREATE INDEX IF NOT EXISTS idx_system_events_event_name ON system_events (event_name);
+CREATE INDEX IF NOT EXISTS idx_system_events_run_id ON system_events (run_id);
+CREATE INDEX IF NOT EXISTS idx_system_events_entity ON system_events (entity_kind, entity_id);
 `;
 
 /** SQL that creates the Spur CLI-owned domain tables plus package-owned tables. */
@@ -139,6 +148,30 @@ ALTER TABLE runs ADD COLUMN external_key TEXT;
 `;
 
 /**
+ * Add the indexed correlation columns (`run_id`, `entity_kind`, `entity_id`,
+ * `sequence`) to legacy `system_events` tables created before task 0369.
+ *
+ * Fresh databases already get these columns (and their indexes) from
+ * `SYSTEM_EVENTS_SCHEMA_SQL` in the `0000` foundation, so this migration uses
+ * `addColumnIfMissing` to journal itself without executing the ALTERs when the
+ * columns are already present — the `runs.external_key` precedent. `sequence`
+ * is the representative guard column: the four columns are only ever added
+ * together, so its absence identifies a pre-0369 table.
+ *
+ * No payload rewrite or backfill (R5): pre-migration rows keep their existing
+ * `payload_json` and read back with nulls in every correlation column.
+ */
+export const SYSTEM_EVENTS_CORRELATION_COLUMNS_SCHEMA_SQL = `
+ALTER TABLE system_events ADD COLUMN run_id TEXT;
+ALTER TABLE system_events ADD COLUMN entity_kind TEXT;
+ALTER TABLE system_events ADD COLUMN entity_id TEXT;
+ALTER TABLE system_events ADD COLUMN sequence INTEGER;
+
+CREATE INDEX IF NOT EXISTS idx_system_events_run_id ON system_events (run_id);
+CREATE INDEX IF NOT EXISTS idx_system_events_entity ON system_events (entity_kind, entity_id);
+`;
+
+/**
  * Built-in migrations for compiled binaries and test use. `0000` provisions a
  * fresh database with the full current schema (inbox included); `0001` is the
  * incremental step that adds `inbox_messages` to databases created before team
@@ -149,7 +182,9 @@ ALTER TABLE runs ADD COLUMN external_key TEXT;
  * `0005` adds the `pid` column to `runs` for subprocess cancellation (task 0140);
  * `0006` adds the `system_events` ledger persisted by the server EventBus tap
  * (observabilities board v1, task 0189 wave A / 0198); `0007` backfills
- * `runs.external_key` for databases whose `runs` table predates that column.
+ * `runs.external_key` for databases whose `runs` table predates that column;
+ * `0008` backfills the indexed `system_events` correlation columns
+ * (`run_id`, `entity_kind`, `entity_id`, `sequence`) for pre-0369 ledgers.
  * All are idempotent (`CREATE TABLE IF NOT EXISTS`), so applying them in sequence is
  * safe regardless of the database's age.
  */
@@ -172,6 +207,11 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         id: '0007_spur_cli_runs_external_key',
         sql: RUNS_EXTERNAL_KEY_COLUMN_SCHEMA_SQL,
         addColumnIfMissing: { table: 'runs', column: 'external_key' },
+    },
+    {
+        id: '0008_spur_cli_system_events_correlation',
+        sql: SYSTEM_EVENTS_CORRELATION_COLUMNS_SCHEMA_SQL,
+        addColumnIfMissing: { table: 'system_events', column: 'sequence' },
     },
 ];
 

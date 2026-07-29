@@ -18,7 +18,7 @@ import { normalizeSystemEventPayload, systemEventCatalogEntry } from './event-na
 import type { EventEmitter, PlanningEvent } from './planning-write-service';
 import type { SystemEventRetentionConfig } from './system-event-retention';
 import { resolveRetentionQuotas } from './system-event-retention';
-import { extractSystemEventActor, safeStringify } from './system-event-tap';
+import { extractSystemEventActor, extractSystemEventCorrelation, safeStringify } from './system-event-tap';
 
 /** Minimal logger surface required by {@link SystemEventEmitter}. */
 export type SystemEventEmitterLogger = Pick<Logger, 'warn'>;
@@ -61,6 +61,10 @@ export class SystemEventEmitter implements EventEmitter {
                 occurred_at: event.at,
                 actor: extractSystemEventActor(event),
                 payload_json: safeStringify(normalizeSystemEventPayload(entry, event)),
+                // Indexed correlation columns (task 0369). Planning events carry
+                // `entity: { kind, id }`; the shared extractor keeps this path's
+                // derivation identical to the server tap's.
+                ...extractSystemEventCorrelation(event),
             });
             // Insert-time per-prefix prune backstop (R5): scope to the just-written
             // prefix so planning overflow can never evict other prefixes' rows.

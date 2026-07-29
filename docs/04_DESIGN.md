@@ -1079,6 +1079,40 @@ analogous tests for `rule.run.start`, `agent.invoke.start`, and `workflow.run.st
 are added in 0221 by emitting the upstream event through a service constructed with
 `events: ctx.eventBus()` and asserting `dao.query({ name })` returns a row.
 
+### 7.10 System event correlation columns (task 0369)
+
+`system_events` carries four nullable correlation columns beside the original five,
+so a run- or entity-scoped read is one indexed round trip instead of a client-side
+scan of the newest-N window:
+
+| Column        | Type      | Source                                                    |
+| ------------- | --------- | --------------------------------------------------------- |
+| `run_id`      | `TEXT`    | 0365 envelope `runId` (`workflow.*`, agent events)        |
+| `sequence`    | `INTEGER` | 0365 envelope `sequence` — monotonic within one run       |
+| `entity_kind` | `TEXT`    | Planning event `entity.kind` (`task`, `feature`)          |
+| `entity_id`   | `TEXT`    | Planning event `entity.id`                                |
+
+Indexes: `idx_system_events_run_id` and the pair index `idx_system_events_entity
+(entity_kind, entity_id)` — the pair, because entity ids are only unique within a kind.
+
+**Derivation.** `extractSystemEventCorrelation` (`packages/app/src/services/system-event-tap.ts`)
+is the single derivation, shared by both write paths — the server tap
+(`registerSystemEventTap`) and the CLI planning emitter (`SystemEventEmitter`) — the
+same one-canonical-derivation contract `extractSystemEventActor` holds for actor. Every
+column is nullable: an event carrying neither run nor entity identity persists nulls.
+
+**Migration.** `0008_spur_cli_system_events_correlation` adds the columns and indexes to
+pre-0369 ledgers. It is columns-and-indexes only — no payload rewrite or backfill, so
+pre-migration rows keep their `payload_json` and read back with nulls. Fresh databases
+get the columns from the `0000` foundation DDL, so the migration carries
+`addColumnIfMissing: { table: 'system_events', column: 'sequence' }` and journals itself
+without executing the ALTERs (the `runs.external_key` precedent).
+
+**Read surface.** `SystemEventDao.query` accepts `run_id`, `entity_kind`, and `entity_id`
+filters, composed with `name`/`since` under AND. `GET /api/events/history` projects the
+columns additively as `runId`, `entityKind`, `entityId`, `sequence`; no existing response
+field is renamed, dropped, or re-typed.
+
 
 ## Team + Message HTTP Routes (0256)
 

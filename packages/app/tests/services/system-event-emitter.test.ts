@@ -101,6 +101,26 @@ describe('SystemEventEmitter', () => {
         expect(logger.warns).toHaveLength(0);
     });
 
+    test('persists entity identity into the indexed correlation columns', async () => {
+        // The CLI write path must land the same correlation columns as the
+        // server tap, or a CLI-driven status change is invisible to an
+        // entity-scoped query (task 0369 R3).
+        const dao = new FakeSystemEventDao();
+        const emitter = new SystemEventEmitter(
+            dao as unknown as SystemEventDao,
+            new CapturingLogger() as unknown as SystemEventEmitterLogger,
+        );
+
+        await emitter.emit(makeEvent({ event: 'task.updated', entity: { kind: 'task', id: '0369' } }));
+
+        const row = dao.inserted[0];
+        expect(row?.entity_kind).toBe('task');
+        expect(row?.entity_id).toBe('0369');
+        // Planning events carry no run identity.
+        expect(row?.run_id).toBeNull();
+        expect(row?.sequence).toBeNull();
+    });
+
     test('emits feature.created with the entity kind carried through', async () => {
         const dao = new FakeSystemEventDao();
         const emitter = new SystemEventEmitter(

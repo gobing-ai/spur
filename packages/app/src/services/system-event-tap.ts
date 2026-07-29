@@ -1,4 +1,9 @@
-import { createId, type SystemEventDao, type SystemEventRetentionQuotas } from '@gobing-ai/spur-domain';
+import {
+    type CreateSystemEventInput,
+    createId,
+    type SystemEventDao,
+    type SystemEventRetentionQuotas,
+} from '@gobing-ai/spur-domain';
 import type { EventBus, Logger } from '@gobing-ai/ts-infra';
 import { normalizeSystemEventPayload, SYSTEM_EVENT_CATALOG } from './event-names';
 import type { SystemEventRetentionConfig } from './system-event-retention';
@@ -56,10 +61,23 @@ export function registerSystemEventTap(
         // runtime switch — consult it, not the flags.
         if (entry.tier === 'diagnostic' && !diagnosticEnabled) continue;
         const handler = (event: unknown) => {
-            const occurredAt = new Date().toISOString();
-            const payloadJson = safeStringify(normalizeSystemEventPayload(entry, event));
-            const actor = extractSystemEventActor(event);
-            const p = persist(dao, entry.prefix, entry.name, occurredAt, actor, payloadJson, quotas, logger);
+            const p = persist(
+                dao,
+                entry.prefix,
+                {
+                    id: createId('sev'),
+                    event_name: entry.name,
+                    occurred_at: new Date().toISOString(),
+                    actor: extractSystemEventActor(event),
+                    payload_json: safeStringify(normalizeSystemEventPayload(entry, event)),
+                    // Indexed correlation columns (task 0369): derived from the
+                    // same event the payload is serialized from, so a row's
+                    // columns and payload can never disagree.
+                    ...extractSystemEventCorrelation(event),
+                },
+                quotas,
+                logger,
+            );
             inFlight.add(p);
             p.finally(() => inFlight.delete(p));
         };
@@ -84,26 +102,20 @@ export function registerSystemEventTap(
 async function persist(
     dao: SystemEventDao,
     prefix: string,
-    name: string,
-    occurredAt: string,
-    actor: string | null,
-    payloadJson: string | null,
+    input: CreateSystemEventInput,
     quotas: SystemEventRetentionQuotas,
     logger: Pick<Logger, 'warn' | 'debug'>,
 ): Promise<void> {
     try {
-        await dao.insert({
-            id: createId('sev'),
-            event_name: name,
-            occurred_at: occurredAt,
-            actor,
-            payload_json: payloadJson,
-        });
+        await dao.insert(input);
         // Insert-time per-prefix prune backstop (R5): scope to the just-written
         // prefix so one prefix's overflow can never evict another prefix's rows.
         await dao.pruneQuotas(quotas, prefix);
     } catch (error) {
-        logger.warn('system_events tap: persist failed', { name, error: stringifyError(error) });
+        logger.warn('system_events tap: persist failed', {
+            name: input.event_name,
+            error: stringifyError(error),
+        });
     }
 }
 
@@ -133,6 +145,48 @@ export function extractSystemEventActor(event: unknown): string | null {
         if (typeof obj.agentId === 'string' && obj.agentId.length > 0) return obj.agentId;
     }
     return null;
+}
+
+/**
+ * Correlation identity persisted into the indexed `system_events` columns
+ * (task 0369). Every field is nullable: an event carrying neither run nor
+ * entity identity persists with nulls and still reads back cleanly (R4).
+ */
+export interface SystemEventCorrelation {
+    run_id: string | null;
+    entity_kind: string | null;
+    entity_id: string | null;
+    sequence: number | null;
+}
+
+/**
+ * Extract the indexed correlation columns from an event (task 0369). Shared by
+ * the persistence tap and the CLI planning emitter so both write paths derive
+ * identity identically — the same one-canonical-derivation contract
+ * {@link extractSystemEventActor} holds for actor.
+ *
+ * Two producers feed it: the 0365 observability envelope, whose `workflow.*`
+ * and agent events carry `runId` plus a monotonic `sequence`; and planning
+ * events, whose `task.*` / `feature.*` payloads carry `entity: { kind, id }`.
+ * The two are disjoint in practice, but nothing here assumes that — an event
+ * carrying both persists both.
+ */
+export function extractSystemEventCorrelation(event: unknown): SystemEventCorrelation {
+    const correlation: SystemEventCorrelation = { run_id: null, entity_kind: null, entity_id: null, sequence: null };
+    if (!event || typeof event !== 'object') return correlation;
+    const obj = event as Record<string, unknown>;
+
+    if (typeof obj.runId === 'string' && obj.runId.length > 0) correlation.run_id = obj.runId;
+    // Reject non-finite sequences rather than persisting NaN into an INTEGER column.
+    if (typeof obj.sequence === 'number' && Number.isFinite(obj.sequence)) correlation.sequence = obj.sequence;
+
+    const entity = obj.entity;
+    if (entity && typeof entity === 'object') {
+        const { kind, id } = entity as Record<string, unknown>;
+        if (typeof kind === 'string' && kind.length > 0) correlation.entity_kind = kind;
+        if (typeof id === 'string' && id.length > 0) correlation.entity_id = id;
+    }
+    return correlation;
 }
 
 function stringifyError(error: unknown): string {

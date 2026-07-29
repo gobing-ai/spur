@@ -7,7 +7,7 @@ import type {
 } from '@gobing-ai/spur-domain';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { normalizeSystemEventPayload } from '../../src/services/event-names';
-import { registerSystemEventTap } from '../../src/services/system-event-tap';
+import { extractSystemEventCorrelation, registerSystemEventTap } from '../../src/services/system-event-tap';
 
 /** In-memory fake DAO recording every insert and pruneQuotas call. */
 class FakeSystemEventDao {
@@ -142,6 +142,73 @@ describe('registerSystemEventTap', () => {
         expect(payload).toEqual({ runId: 'run-1', message: '[redacted]', node: 'review' });
     });
 
+    test('persists run correlation from the 0365 envelope into the indexed columns', async () => {
+        const dao = fakeDao();
+        const bus = new EventBus<Record<string, (event: unknown) => void>>();
+        const tap = registerSystemEventTap(bus, dao, new CapturingLogger());
+
+        await bus.emit('workflow.phase', {
+            schemaVersion: 1,
+            eventId: 'evt_1',
+            sequence: 3,
+            runId: 'run_abc',
+            at: '2026-07-04T01:00:00.000Z',
+            phase: 'implement',
+            status: 'running',
+        });
+        await tap.flush();
+
+        const fake = dao as unknown as FakeSystemEventDao;
+        const row = fake.inserted[0];
+        expect(row?.run_id).toBe('run_abc');
+        expect(row?.sequence).toBe(3);
+        expect(row?.entity_kind).toBeNull();
+        expect(row?.entity_id).toBeNull();
+
+        tap.unsubscribe();
+    });
+
+    test('persists entity correlation from a planning event into the indexed columns', async () => {
+        const dao = fakeDao();
+        const bus = new EventBus<Record<string, (event: unknown) => void>>();
+        const tap = registerSystemEventTap(bus, dao, new CapturingLogger());
+
+        // BusPlanningEventEmitter publishes the whole PlanningEvent, so the
+        // bus payload carries `entity: { kind, id }`.
+        await bus.emit('task.updated', {
+            event: 'task.updated',
+            entity: { kind: 'task', id: '0369' },
+            at: '2026-07-04T01:00:00.000Z',
+        });
+        await tap.flush();
+
+        const fake = dao as unknown as FakeSystemEventDao;
+        const row = fake.inserted[0];
+        expect(row?.entity_kind).toBe('task');
+        expect(row?.entity_id).toBe('0369');
+        expect(row?.run_id).toBeNull();
+
+        tap.unsubscribe();
+    });
+
+    test('an event with no correlation persists nulls rather than being dropped', async () => {
+        const dao = fakeDao();
+        const bus = new EventBus<Record<string, (event: unknown) => void>>();
+        const tap = registerSystemEventTap(bus, dao, new CapturingLogger());
+
+        await bus.emit('task.created', { entityId: '0001' });
+        await tap.flush();
+
+        const fake = dao as unknown as FakeSystemEventDao;
+        expect(fake.inserted).toHaveLength(1);
+        expect(fake.inserted[0]?.run_id).toBeNull();
+        expect(fake.inserted[0]?.entity_kind).toBeNull();
+        expect(fake.inserted[0]?.entity_id).toBeNull();
+        expect(fake.inserted[0]?.sequence).toBeNull();
+
+        tap.unsubscribe();
+    });
+
     test('persist failure is logged and does not reject bus.emit', async () => {
         const dao = fakeDao({ failOn: 1 });
         const bus = new EventBus<Record<string, (event: unknown) => void>>();
@@ -255,5 +322,41 @@ describe('registerSystemEventTap', () => {
         expect(fake.inserted.map((r) => r.event_name)).toEqual(['task.created']);
 
         tap.unsubscribe();
+    });
+});
+
+describe('extractSystemEventCorrelation', () => {
+    const empty = { run_id: null, entity_kind: null, entity_id: null, sequence: null };
+
+    test('returns all-null for non-object events', () => {
+        expect(extractSystemEventCorrelation(null)).toEqual(empty);
+        expect(extractSystemEventCorrelation(undefined)).toEqual(empty);
+        expect(extractSystemEventCorrelation('task.created')).toEqual(empty);
+    });
+
+    test('ignores empty-string identities rather than persisting blanks', () => {
+        expect(extractSystemEventCorrelation({ runId: '', entity: { kind: '', id: '' } })).toEqual(empty);
+    });
+
+    test('rejects a non-finite sequence rather than writing NaN to an INTEGER column', () => {
+        expect(extractSystemEventCorrelation({ sequence: Number.NaN }).sequence).toBeNull();
+        expect(extractSystemEventCorrelation({ sequence: '3' }).sequence).toBeNull();
+        // Zero is a legitimate sequence and must survive.
+        expect(extractSystemEventCorrelation({ sequence: 0 }).sequence).toBe(0);
+    });
+
+    test('ignores a non-object entity field', () => {
+        expect(extractSystemEventCorrelation({ entity: 'task' })).toEqual(empty);
+    });
+
+    test('an event carrying both run and entity identity persists both', () => {
+        expect(
+            extractSystemEventCorrelation({ runId: 'run_1', sequence: 2, entity: { kind: 'task', id: '0369' } }),
+        ).toEqual({
+            run_id: 'run_1',
+            entity_kind: 'task',
+            entity_id: '0369',
+            sequence: 2,
+        });
     });
 });

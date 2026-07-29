@@ -166,9 +166,11 @@ export {
 } from './services/system-event-retention';
 export {
     extractSystemEventActor,
+    extractSystemEventCorrelation,
     type PlanningEventBus,
     registerSystemEventTap,
     type SystemEventBus,
+    type SystemEventCorrelation,
     type SystemEventTap,
 } from './services/system-event-tap';
 export type { CheckFindings, CheckResult as TaskCheckResult, SectionMatrix } from './services/task-check';
