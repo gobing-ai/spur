@@ -136,7 +136,7 @@ Feature: observable and steerable workflow execution
 | --- | ---- | ------ |
 | 0310 | Decide the verbosity model for spur workflow run output | done |
 | 0311 | Attach real token cost and cache-hit ratio to workflow agent.run steps via history join | done |
-| 0365 | Implement workflow run observability, live output, and steering foundations | wip |
+| 0365 | Implement workflow run observability, live output, and steering foundations | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
