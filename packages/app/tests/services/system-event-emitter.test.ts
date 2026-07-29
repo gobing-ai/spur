@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import type { CreateSystemEventInput, SystemEventDao, SystemEventRow } from '@gobing-ai/spur-domain';
+import type {
+    CreateSystemEventInput,
+    SystemEventDao,
+    SystemEventRetentionQuota,
+    SystemEventRow,
+} from '@gobing-ai/spur-domain';
 import type { PlanningEvent } from '../../src/services/planning-write-service';
 import { SystemEventEmitter, type SystemEventEmitterLogger } from '../../src/services/system-event-emitter';
 
@@ -12,7 +17,7 @@ class FakeSystemEventDao {
     readonly inserted: CreateSystemEventInput[] = [];
     private readonly failOn?: number;
     private attempts = 0;
-    readonly pruneCalls: number[] = [];
+    readonly pruneCalls: Array<{ quotas: SystemEventRetentionQuota[]; prefix?: string }> = [];
 
     constructor(opts: { failOn?: number } = {}) {
         this.failOn = opts.failOn;
@@ -26,8 +31,8 @@ class FakeSystemEventDao {
         this.inserted.push(input);
     }
 
-    async prune(cap: number): Promise<number> {
-        this.pruneCalls.push(cap);
+    async pruneQuotas(quotas: SystemEventRetentionQuota[], prefix?: string): Promise<number> {
+        this.pruneCalls.push({ quotas, prefix });
         return 0;
     }
 
@@ -89,8 +94,10 @@ describe('SystemEventEmitter', () => {
         expect(payload?.event).toBe('task.transitioned');
         expect(payload?.from).toBe('todo');
         expect(payload?.to).toBe('wip');
-        // Cap honored (R7) — prune called once per insert with SYSTEM_EVENTS_CAP.
-        expect(dao.pruneCalls).toEqual([10_000]);
+        // Insert-time per-prefix prune (R5): called once, scoped to the just-
+        // written prefix so planning overflow never evicts other prefixes.
+        expect(dao.pruneCalls).toHaveLength(1);
+        expect(dao.pruneCalls[0]?.prefix).toBe('task');
         expect(logger.warns).toHaveLength(0);
     });
 
@@ -161,10 +168,10 @@ describe('SystemEventEmitter', () => {
         await emitter.emit(makeEvent({ event: 'task.created', entity: { kind: 'task', id: '0001' } }));
         await emitter.emit(makeEvent({ event: 'task.updated', entity: { kind: 'task', id: '0001' } }));
         await emitter.emit(makeEvent({ event: 'task.transitioned', entity: { kind: 'task', id: '0001' } }));
-
         expect(dao.inserted).toHaveLength(3);
-        // One prune per persisted row — cap enforcement stays on the emit path,
-        // mirroring the server tap.
-        expect(dao.pruneCalls).toEqual([10_000, 10_000, 10_000]);
+        // One per-prefix prune per persisted row — eviction stays on the emit
+        // path, scoped to the just-written prefix (R5).
+        expect(dao.pruneCalls).toHaveLength(3);
+        expect(dao.pruneCalls.every((c) => c.prefix === 'task')).toBe(true);
     });
 });

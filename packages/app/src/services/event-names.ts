@@ -84,12 +84,12 @@ export const SYSTEM_EVENT_CATALOG = [
 
     event('queue.consumer.started', 'queue', 'queue'),
     event('queue.consumer.stopped', 'queue', 'queue'),
-    event('queue.job.enqueued', 'queue', 'queue'),
-    event('queue.job.completed', 'queue', 'queue'),
+    event('queue.job.enqueued', 'queue', 'queue', 'metadata-only', 'diagnostic'),
+    event('queue.job.completed', 'queue', 'queue', 'metadata-only', 'diagnostic'),
     event('queue.job.failed', 'queue', 'queue'),
     event('queue.job.retrying', 'queue', 'queue'),
     event('queue.stats', 'queue', 'queue'),
-    event('scheduler.job.executed', 'scheduler', 'scheduler'),
+    event('scheduler.job.executed', 'scheduler', 'scheduler', 'metadata-only', 'diagnostic'),
 
     // Message events are metadata-only. Message bodies stay in inbox storage.
     event('message.sent', 'message', 'message'),

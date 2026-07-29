@@ -31,11 +31,25 @@ export interface SystemEventQuery {
 }
 
 /**
- * DAO for the capped append-only `system_events` ledger, written by the server
- * EventBus tap (task 0189 wave A / 0198). The cap is enforced by the caller via
- * {@link prune}; the DAO itself owns no policy constant. Raw SQL over `DbAdapter`
- * — same pattern as {@link PlanningEventDao}; apps/server never imports ts-db.
+ * DAO for the append-only `system_events` ledger, written by the server
+ * EventBus tap (task 0189 wave A / 0198) and the CLI planning emitter
+ * (task 0249). Retention is enforced per-prefix by the caller via
+ * {@link pruneQuotas}; the DAO itself owns no policy constant. Raw SQL over
+ * `DbAdapter` — same pattern as {@link PlanningEventDao}; apps/server never
+ * imports ts-db.
  */
+
+/** A single per-prefix retention quota: keep at most `quota` rows for `prefix`. */
+export interface SystemEventRetentionQuota {
+    /** Event-name prefix (e.g. `task`, `queue`) this quota applies to. */
+    prefix: string;
+    /** Maximum rows to retain for this prefix; older rows are pruned. */
+    quota: number;
+}
+
+/** Ordered set of per-prefix retention quotas consumed by {@link SystemEventDao.pruneQuotas}. */
+export type SystemEventRetentionQuotas = ReadonlyArray<SystemEventRetentionQuota>;
+
 export class SystemEventDao {
     constructor(private readonly db: DbAdapter) {}
 
@@ -43,36 +57,63 @@ export class SystemEventDao {
     async insert(input: CreateSystemEventInput): Promise<void> {
         await this.db.run(
             `INSERT INTO system_events (id, event_name, occurred_at, actor, payload_json)
-             VALUES (?, ?, ?, ?, ?)`,
-            [input.id, input.event_name, input.occurred_at, input.actor ?? null, input.payload_json ?? null],
+             VALUES (?1, ?2, ?3, ?4, ?5)`,
+            input.id,
+            input.event_name,
+            input.occurred_at,
+            input.actor ?? null,
+            input.payload_json ?? null,
         );
     }
 
     /**
-     * Delete the oldest rows beyond `cap`, keeping at most `cap` most-recent rows.
-     * No-op when the table holds `cap` or fewer rows. Called by the tap after each
-     * insert (insert-time prune backstop; moves to a scheduled job when 0190 lands).
-     * Returns the number of rows deleted for observability/testing.
+     * Delete the oldest rows beyond each prefix's retention quota (R2).
+     * Scoping is per-prefix: one prefix's overflow can never evict another
+     * prefix's rows. When `prefix` is supplied, only that prefix's quota is
+     * enforced — used by the insert-time backstop for efficiency. No-op when
+     * the table holds `quota` or fewer rows for every pruned prefix.
+     *
+     * Returns the total number of rows deleted across all pruned prefixes
+     * (R5 — return-count contract).
+     *
+     * A missing or unmigrated `system_events` table logs and returns 0,
+     * never throws (R4) — mirrors {@link query}'s safety pattern.
      */
-    async prune(cap: number): Promise<number> {
-        // Correlated delete: identify the cutoff row id (the cap-th newest by
-        // occurred_at) and delete everything strictly older than it. A single
-        // statement keeps this atomic and avoids a separate count round-trip.
-        const before = await this.db.queryFirst<{ c: number }>('SELECT COUNT(*) AS c FROM system_events');
-        await this.db.run(
-            `DELETE FROM system_events
-             WHERE id IN (
-                 SELECT id FROM system_events
-                 WHERE id NOT IN (
-                     SELECT id FROM system_events
-                     ORDER BY occurred_at DESC
-                     LIMIT ?1
-                 )
-             )`,
-            [cap],
-        );
-        const after = await this.db.queryFirst<{ c: number }>('SELECT COUNT(*) AS c FROM system_events');
-        return (before?.c ?? 0) - (after?.c ?? 0);
+    async pruneQuotas(quotas: SystemEventRetentionQuotas, prefix?: string): Promise<number> {
+        try {
+            const entries = prefix !== undefined ? quotas.filter((q) => q.prefix === prefix) : quotas;
+            let deleted = 0;
+            for (const { prefix: p, quota } of entries) {
+                const pattern = `${p}.%`;
+                const before = await this.db.queryFirst<{ c: number }>(
+                    'SELECT COUNT(*) AS c FROM system_events WHERE event_name LIKE ?1',
+                    pattern,
+                );
+                await this.db.run(
+                    `DELETE FROM system_events
+                     WHERE event_name LIKE ?1
+                     AND id NOT IN (
+                         SELECT id FROM system_events
+                         WHERE event_name LIKE ?1
+                         ORDER BY occurred_at DESC
+                         LIMIT ?2
+                     )`,
+                    pattern,
+                    quota,
+                );
+                const after = await this.db.queryFirst<{ c: number }>(
+                    'SELECT COUNT(*) AS c FROM system_events WHERE event_name LIKE ?1',
+                    pattern,
+                );
+                deleted += (before?.c ?? 0) - (after?.c ?? 0);
+            }
+            return deleted;
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('no such table: system_events')) {
+                return 0;
+            }
+            throw error;
+        }
     }
     /**
      * Query events newest-first, optionally filtered by `name` and/or `since`

@@ -159,11 +159,15 @@ export type { ProcessEntry, ProcessFrame, SupervisorOptions } from './services/s
 export { SupervisorService } from './services/supervisor-service';
 export type { SystemEventEmitterLogger } from './services/system-event-emitter';
 export { SystemEventEmitter } from './services/system-event-emitter';
+export type { SystemEventRetentionConfig } from './services/system-event-retention';
+export {
+    DEFAULT_SYSTEM_EVENT_RETENTION_QUOTA,
+    resolveRetentionQuotas,
+} from './services/system-event-retention';
 export {
     extractSystemEventActor,
     type PlanningEventBus,
     registerSystemEventTap,
-    SYSTEM_EVENTS_CAP,
     type SystemEventBus,
     type SystemEventTap,
 } from './services/system-event-tap';

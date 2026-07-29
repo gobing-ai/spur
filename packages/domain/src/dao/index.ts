@@ -11,6 +11,8 @@ export {
     type CreateSystemEventInput,
     SystemEventDao,
     type SystemEventQuery,
+    type SystemEventRetentionQuota,
+    type SystemEventRetentionQuotas,
     type SystemEventRow,
 } from './system-event-dao';
 export { type CreateTaskRunLinkInput, TaskRunLinkDao, type TaskRunLinkRow } from './task-run-link-dao';

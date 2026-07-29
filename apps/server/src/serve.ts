@@ -5,6 +5,7 @@ import {
     JobWorkerService,
     resolveAutostartSet,
     resolvePlanningFolders,
+    resolveRetentionQuotas,
     type TaskActionJob,
 } from '@gobing-ai/spur-app';
 import { IN_MEMORY_DATABASE_URL } from '@gobing-ai/spur-config';
@@ -16,7 +17,7 @@ import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { createApp, serverBootstrapConfig } from './bootstrap';
 import { createServerContext, type ServerContext, type ServerScheduler } from './context';
-import { registerSystemEventTap, SYSTEM_EVENTS_CAP } from './modules/events/system-event-tap';
+import { registerSystemEventTap } from './modules/events/system-event-tap';
 import { openUrl } from './open-url';
 
 /** Built-in queue job kind for scheduled system_events retention pruning. */
@@ -302,6 +303,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                     const dao = new SystemEventDao(await ctx.getDb());
                     registerSystemEventTap(ctx.eventBus(), dao, appRt.logger, {
                         diagnosticEnabled: bootConfig.events.diagnostic === true,
+                        retention: bootConfig.events.retention,
                     });
                     appRt.logger.debug('system_events tap registered', {
                         diagnostic: bootConfig.events.diagnostic === true,
@@ -315,9 +317,13 @@ export async function startServer(options: StartServerOptions, deps: StartServer
 
             if (bootConfig.jobqueue.enabled) {
                 const registry = new JobHandlerRegistry();
+                // Scheduled per-prefix retention prune (task 0368 R2): every
+                // catalog prefix is pruned to its resolved quota on the cron.
+                // Quotas resolved once here; the job body is a thin DAO call.
+                const retentionQuotas = resolveRetentionQuotas(bootConfig.events.retention);
                 registry.register(SYSTEM_EVENTS_PRUNE_JOB, async () => {
                     const dao = await ctx.systemEventDao();
-                    await dao.prune(SYSTEM_EVENTS_CAP);
+                    await dao.pruneQuotas(retentionQuotas);
                 });
                 registry.register(SMOKE_JOB, async () => {});
                 registry.register(TASK_ACTION_JOB, async (payload) => {

@@ -12,11 +12,13 @@
  * so the underlying file mutation still succeeds (R5).
  */
 
-import { createId, type SystemEventDao } from '@gobing-ai/spur-domain';
+import { createId, type SystemEventDao, type SystemEventRetentionQuotas } from '@gobing-ai/spur-domain';
 import type { Logger } from '@gobing-ai/ts-infra';
 import { normalizeSystemEventPayload, systemEventCatalogEntry } from './event-names';
 import type { EventEmitter, PlanningEvent } from './planning-write-service';
-import { extractSystemEventActor, SYSTEM_EVENTS_CAP, safeStringify } from './system-event-tap';
+import type { SystemEventRetentionConfig } from './system-event-retention';
+import { resolveRetentionQuotas } from './system-event-retention';
+import { extractSystemEventActor, safeStringify } from './system-event-tap';
 
 /** Minimal logger surface required by {@link SystemEventEmitter}. */
 export type SystemEventEmitterLogger = Pick<Logger, 'warn'>;
@@ -34,10 +36,18 @@ export type SystemEventEmitterLogger = Pick<Logger, 'warn'>;
  * same ledger the tabview reads (R4).
  */
 export class SystemEventEmitter implements EventEmitter {
+    private readonly quotas: SystemEventRetentionQuotas;
+
     constructor(
         private readonly dao: SystemEventDao,
         private readonly logger: SystemEventEmitterLogger,
-    ) {}
+        retention: SystemEventRetentionConfig = {},
+    ) {
+        // Resolve once at construction (task 0368 R3): absent config falls back
+        // to the documented per-prefix default. Insert-time prune (R5) scopes to
+        // the just-written prefix so planning overflow never evicts other tiers.
+        this.quotas = resolveRetentionQuotas(retention);
+    }
 
     async emit(event: PlanningEvent): Promise<void> {
         const entry = systemEventCatalogEntry(event.event);
@@ -52,8 +62,9 @@ export class SystemEventEmitter implements EventEmitter {
                 actor: extractSystemEventActor(event),
                 payload_json: safeStringify(normalizeSystemEventPayload(entry, event)),
             });
-            // Honor the append-only cap (R7) — mirror the tap's insert-time prune.
-            await this.dao.prune(SYSTEM_EVENTS_CAP);
+            // Insert-time per-prefix prune backstop (R5): scope to the just-written
+            // prefix so planning overflow can never evict other prefixes' rows.
+            await this.dao.pruneQuotas(this.quotas, entry.prefix);
         } catch (error) {
             // Failure isolation (R5): log + swallow. Never throw to the caller —
             // a sink write error must not abort or roll back the file mutation.

@@ -1,12 +1,18 @@
 import { describe, expect, test } from 'bun:test';
-import type { CreateSystemEventInput, SystemEventDao, SystemEventRow } from '@gobing-ai/spur-domain';
+import type {
+    CreateSystemEventInput,
+    SystemEventDao,
+    SystemEventRetentionQuota,
+    SystemEventRow,
+} from '@gobing-ai/spur-domain';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { normalizeSystemEventPayload } from '../../src/services/event-names';
 import { registerSystemEventTap } from '../../src/services/system-event-tap';
 
-/** In-memory fake DAO recording every insert; optionally throws to exercise failure isolation. */
+/** In-memory fake DAO recording every insert and pruneQuotas call. */
 class FakeSystemEventDao {
     readonly inserted: CreateSystemEventInput[] = [];
+    readonly pruneCalls: Array<{ quotas: SystemEventRetentionQuota[]; prefix?: string }> = [];
     private readonly failOn?: number;
     private attempts = 0;
 
@@ -22,7 +28,8 @@ class FakeSystemEventDao {
         this.inserted.push(input);
     }
 
-    async prune(): Promise<number> {
+    async pruneQuotas(quotas: SystemEventRetentionQuota[], prefix?: string): Promise<number> {
+        this.pruneCalls.push({ quotas, prefix });
         return 0;
     }
 
@@ -209,5 +216,44 @@ describe('registerSystemEventTap', () => {
 
         tap.unsubscribe();
         expect(logger.warns).toHaveLength(1);
+    });
+
+    test('persist prunes per-prefix — only the just-written prefix is pruned (R5)', async () => {
+        const dao = fakeDao();
+        const bus = new EventBus<Record<string, (event: unknown) => void>>();
+        const logger = new CapturingLogger();
+
+        const tap = registerSystemEventTap(bus, dao, logger);
+        await bus.emit('task.created', { entityId: '0001' });
+        await tap.flush();
+
+        const fake = dao as unknown as FakeSystemEventDao;
+        expect(fake.pruneCalls).toHaveLength(1);
+        // The just-written prefix is passed for scoped eviction.
+        expect(fake.pruneCalls[0]?.prefix).toBe('task');
+        // Quotas resolved from defaults cover the catalog prefixes.
+        expect(fake.pruneCalls[0]?.quotas.length).toBeGreaterThan(0);
+        expect(fake.pruneCalls[0]?.quotas.some((q) => q.prefix === 'task')).toBe(true);
+
+        tap.unsubscribe();
+    });
+    test('R1 — diagnostic heartbeat events skip persistence when diagnostic toggle is off', async () => {
+        const dao = fakeDao();
+        const bus = new EventBus<Record<string, (event: unknown) => void>>();
+        const tap = registerSystemEventTap(bus, dao, new CapturingLogger());
+
+        // The three self-observation heartbeat events are demoted to the
+        // diagnostic tier; without the toggle they must not persist.
+        await bus.emit('queue.job.enqueued', { jobId: 'j1' });
+        await bus.emit('queue.job.completed', { jobId: 'j1' });
+        await bus.emit('scheduler.job.executed', { jobId: 'j1' });
+        // A default-tier event still persists, proving the tap is wired.
+        await bus.emit('task.created', { entityId: '0001' });
+        await tap.flush();
+
+        const fake = dao as unknown as FakeSystemEventDao;
+        expect(fake.inserted.map((r) => r.event_name)).toEqual(['task.created']);
+
+        tap.unsubscribe();
     });
 });

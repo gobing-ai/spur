@@ -1,9 +1,18 @@
-import { createId, type SystemEventDao } from '@gobing-ai/spur-domain';
+import { createId, type SystemEventDao, type SystemEventRetentionQuotas } from '@gobing-ai/spur-domain';
 import type { EventBus, Logger } from '@gobing-ai/ts-infra';
 import { normalizeSystemEventPayload, SYSTEM_EVENT_CATALOG } from './event-names';
+import type { SystemEventRetentionConfig } from './system-event-retention';
+import { resolveRetentionQuotas } from './system-event-retention';
 
-/** Cap for the append-only system_events ledger (task 0189). */
-export const SYSTEM_EVENTS_CAP = 10_000;
+/**
+ * Retention quotas resolved for every catalog prefix. Resolved once at tap
+ * registration from the operator-facing {@link SystemEventRetentionConfig}
+ * (task 0368 R3); never a compiled-in constant as the only knob.
+ *
+ * The tap receives a pre-resolved list (server boot resolves from config, the
+ * CLI emitter resolves via the app default) so the tap stays a pure sink and
+ * the policy lives in one place.
+ */
 
 /** Canonical server bus shape consumed by the system-event tap. */
 export type SystemEventBus = EventBus<Record<string, (event: unknown) => void>>;
@@ -23,17 +32,23 @@ export interface SystemEventTap {
  * cataloged event is normalized/redacted and persisted as a `system_events` row.
  * A per-handler try/catch isolates persistence failures from other bus
  * subscribers — a tap failure is logged and swallowed, never thrown.
+ *
+ * Retention (task 0368 R2/R3): the insert-time backstop prunes only the just-
+ * written prefix, scoping eviction so one prefix's overflow never evicts
+ * another's. Quotas are resolved once from {@link SystemEventRetentionConfig};
+ * absent config falls back to {@link DEFAULT_SYSTEM_EVENT_RETENTION_QUOTA}.
  */
 export function registerSystemEventTap(
     bus: SystemEventBus,
     dao: SystemEventDao,
     logger: Pick<Logger, 'warn' | 'debug'>,
-    options: { diagnosticEnabled?: boolean } = {},
+    options: { diagnosticEnabled?: boolean; retention?: SystemEventRetentionConfig } = {},
 ): SystemEventTap {
     const handlers = new Map<string, (event: unknown) => void>();
     const inFlight = new Set<Promise<void>>();
 
     const diagnosticEnabled = options.diagnosticEnabled === true;
+    const quotas = resolveRetentionQuotas(options.retention);
     for (const entry of SYSTEM_EVENT_CATALOG) {
         // Diagnostic entries only persist/stream when the toggle is on (R5).
         // `persisted`/`streamed` flags are always `true` on the catalog entry
@@ -44,7 +59,7 @@ export function registerSystemEventTap(
             const occurredAt = new Date().toISOString();
             const payloadJson = safeStringify(normalizeSystemEventPayload(entry, event));
             const actor = extractSystemEventActor(event);
-            const p = persist(dao, entry.name, occurredAt, actor, payloadJson, logger);
+            const p = persist(dao, entry.prefix, entry.name, occurredAt, actor, payloadJson, quotas, logger);
             inFlight.add(p);
             p.finally(() => inFlight.delete(p));
         };
@@ -68,10 +83,12 @@ export function registerSystemEventTap(
 
 async function persist(
     dao: SystemEventDao,
+    prefix: string,
     name: string,
     occurredAt: string,
     actor: string | null,
     payloadJson: string | null,
+    quotas: SystemEventRetentionQuotas,
     logger: Pick<Logger, 'warn' | 'debug'>,
 ): Promise<void> {
     try {
@@ -82,8 +99,9 @@ async function persist(
             actor,
             payload_json: payloadJson,
         });
-        // Insert-time prune backstop; moves to a scheduled job when task 0190 lands.
-        await dao.prune(SYSTEM_EVENTS_CAP);
+        // Insert-time per-prefix prune backstop (R5): scope to the just-written
+        // prefix so one prefix's overflow can never evict another prefix's rows.
+        await dao.pruneQuotas(quotas, prefix);
     } catch (error) {
         logger.warn('system_events tap: persist failed', { name, error: stringifyError(error) });
     }

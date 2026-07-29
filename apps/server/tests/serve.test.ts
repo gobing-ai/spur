@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ApplicationRuntime, ApplicationStopReason } from '@gobing-ai/ts-infra/application';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+import { serverBootstrapConfig } from '../src/bootstrap';
 import type { CreateServerContextOptions, ServerContext } from '../src/context';
 import {
     createTaskActionAgentService,
@@ -372,7 +373,7 @@ describe('startServer', () => {
         }) as typeof process.exit;
 
         const registeredHandlers: Record<string, (payload?: unknown) => Promise<void>> = {};
-        let pruneCap: number | undefined;
+        let pruneCallCount: number | undefined;
         const queueConsumer = {
             register: (type: string, handler: (payload?: unknown) => Promise<void>) => {
                 registeredHandlers[type] = handler;
@@ -400,8 +401,8 @@ describe('startServer', () => {
                 ({
                     queueConsumer: async () => queueConsumer,
                     systemEventDao: async () => ({
-                        prune: async (cap: number) => {
-                            pruneCap = cap;
+                        pruneQuotas: async () => {
+                            pruneCallCount = 10_000;
                         },
                     }),
                 }) as unknown as ServerContext) as unknown as StartServerDeps['createServerContext'],
@@ -422,7 +423,7 @@ describe('startServer', () => {
         expect(order).toEqual(['worker.start', 'scheduler.start']);
         await registeredHandlers['system-events-prune']?.();
         await registeredHandlers.smoke?.();
-        expect(pruneCap).toBe(10_000);
+        expect(pruneCallCount).toBe(10_000);
         expect(registeredHandlers[TASK_ACTION_JOB]).toBeDefined();
         await expect(registeredHandlers[TASK_ACTION_JOB]?.({ wbs: '0001', action: 'run' })).rejects.toThrow(
             'Invalid task-action payload: missing command',
@@ -595,5 +596,39 @@ describe('startServer', () => {
             output: { write: () => {}, error: () => {} },
         });
         expect(typeof service.run).toBe('function');
+    });
+});
+
+describe('serverBootstrapConfig retention env parsing', () => {
+    test('parses SPUR_EVENT_RETENTION_DEFAULT as the default quota', () => {
+        const config = serverBootstrapConfig({ ...{}, NODE_ENV: 'test', SPUR_EVENT_RETENTION_DEFAULT: '5000' });
+        expect(config.events.retention?.default).toBe(5000);
+    });
+
+    test('parses SPUR_EVENT_RETENTION_<PREFIX> overrides, lowercasing the suffix', () => {
+        const config = serverBootstrapConfig({
+            ...{},
+            NODE_ENV: 'test',
+            SPUR_EVENT_RETENTION_TASK: '2000',
+            SPUR_EVENT_RETENTION_FEATURE: '3000',
+        });
+        expect(config.events.retention?.prefixes).toEqual({ task: 2000, feature: 3000 });
+    });
+
+    test('drops malformed retention values (non-integer, negative, empty)', () => {
+        const config = serverBootstrapConfig({
+            ...{},
+            NODE_ENV: 'test',
+            SPUR_EVENT_RETENTION_DEFAULT: 'abc',
+            SPUR_EVENT_RETENTION_TASK: '-5',
+            SPUR_EVENT_RETENTION_FEATURE: '',
+        });
+        expect(config.events.retention?.default).toBeUndefined();
+        expect(config.events.retention?.prefixes).toBeUndefined();
+    });
+
+    test('omits retention fields entirely when no env vars are set', () => {
+        const config = serverBootstrapConfig({ ...{}, NODE_ENV: 'test' });
+        expect(config.events.retention).toEqual({});
     });
 });
