@@ -1,12 +1,13 @@
 import type { DbAdapter } from '@gobing-ai/spur-domain';
 import { ActionRunDao, PhaseRunDao, RunDao, TaskRunLinkDao, TransitionRunDao } from '@gobing-ai/spur-domain';
 
-/** Default and ceiling for GET /api/runs `limit` (task 0373). */
+/** Default page size for GET /api/runs `limit` (task 0373). */
 export const RUN_STORE_LIST_DEFAULT_LIMIT = 50;
+/** Ceiling for GET /api/runs `limit` — caps unbounded client requests. */
 export const RUN_STORE_LIST_MAX_LIMIT = 200;
-
-/** WBS lookup default cap — operators rarely need more linked runs in one page. */
+/** Default page size for WBS-linked run lookups (task 0373). */
 export const RUN_STORE_WBS_DEFAULT_LIMIT = 50;
+/** Ceiling for WBS-linked run lookups — caps unbounded client requests. */
 export const RUN_STORE_WBS_MAX_LIMIT = 200;
 
 /**

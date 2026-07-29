@@ -82,15 +82,6 @@ export interface SystemEventQuery {
     limit?: number;
 }
 
-/**
- * DAO for the append-only `system_events` ledger, written by the server
- * EventBus tap (task 0189 wave A / 0198) and the CLI planning emitter
- * (task 0249). Retention is enforced per-prefix by the caller via
- * {@link pruneQuotas}; the DAO itself owns no policy constant. Raw SQL over
- * `DbAdapter` — same pattern as {@link PlanningEventDao}; apps/server never
- * imports ts-db.
- */
-
 /** A single per-prefix retention quota: keep at most `quota` rows for `prefix`. */
 export interface SystemEventRetentionQuota {
     /** Event-name prefix (e.g. `task`, `queue`) this quota applies to. */
@@ -106,6 +97,14 @@ export type SystemEventRetentionQuotas = ReadonlyArray<SystemEventRetentionQuota
 const SYSTEM_EVENT_COLUMNS =
     'id, event_name, occurred_at, actor, payload_json, run_id, entity_kind, entity_id, sequence';
 
+/**
+ * DAO for the append-only `system_events` ledger, written by the server
+ * EventBus tap (task 0189 wave A / 0198) and the CLI planning emitter
+ * (task 0249). Retention is enforced per-prefix by the caller via
+ * {@link pruneQuotas}; the DAO itself owns no policy constant. Raw SQL over
+ * `DbAdapter` — same pattern as {@link PlanningEventDao}; apps/server never
+ * imports ts-db.
+ */
 export class SystemEventDao {
     constructor(private readonly db: DbAdapter) {}
 
