@@ -135,25 +135,25 @@ variants:
   meta:
     backlog:
       required: [Background]
-      optional: [Requirements, Acceptance Criteria, Q&A, Design, Plan, Solution, Testing, Review]
+      optional: [Requirements, Acceptance Criteria, Q&A, Design, Plan, Root Cause, Solution, Testing, Review]
     todo:
       required: [Background, Plan]
-      optional: [Requirements, Acceptance Criteria, Q&A, Design, Solution, Testing, Review]
+      optional: [Requirements, Acceptance Criteria, Q&A, Design, Root Cause, Solution, Testing, Review]
     wip:
       required: [Background, Plan]
-      optional: [Requirements, Acceptance Criteria, Q&A, Design, Solution, Testing, Review]
+      optional: [Requirements, Acceptance Criteria, Q&A, Design, Root Cause, Solution, Testing, Review]
     testing:
       required: [Background, Plan]
-      optional: [Requirements, Acceptance Criteria, Q&A, Design, Solution, Testing, Review]
+      optional: [Requirements, Acceptance Criteria, Q&A, Design, Root Cause, Solution, Testing, Review]
     done:
       required: [Background, Plan]
-      optional: [Requirements, Acceptance Criteria, Q&A, Design, Solution, Testing, Review]
+      optional: [Requirements, Acceptance Criteria, Q&A, Design, Root Cause, Solution, Testing, Review]
     blocked:
       required: [Background]
-      optional: [Requirements, Acceptance Criteria, Q&A, Design, Plan, Solution, Testing, Review]
+      optional: [Requirements, Acceptance Criteria, Q&A, Design, Plan, Root Cause, Solution, Testing, Review]
     cancelled:
       required: []
-      optional: [Background, Requirements, Acceptance Criteria, Q&A, Design, Plan, Solution, Testing, Review]
+      optional: [Background, Requirements, Acceptance Criteria, Q&A, Design, Plan, Root Cause, Solution, Testing, Review]
 
   # Brainstorm template (minimal idea capture).
   brainstorm:

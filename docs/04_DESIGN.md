@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.7.0
+version: 1.8.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-07-29
@@ -759,7 +759,9 @@ status → { required, optional, forbidden } section lists, evaluated by `spur t
 `spur feature check` (the L2 layer, design §3.2). `spur task check` resolves the variant from
 `fm.template ?? 'standard'` (not `type`). Ships permissive (warning-first); the hard-gate core is the
 `done` status (Solution + Testing + Review required, `gate: true`) plus the AC/Solution/Review format
-rules. Authority for matrix semantics: design §3 (the L2 layer), delivery §3.2.
+rules. `Root Cause` is optional for `meta` tasks because process/chore investigations may retain
+causal evidence without adopting the stricter `issue` template. Authority for matrix semantics:
+design §3 (the L2 layer), delivery §3.2.
 
 **Matrix-driven creation (single producer).** The same matrix drives which sections a *new* task
 file carries, **per variant**. `spur task create` / `batch-create` render the body via the canonical
