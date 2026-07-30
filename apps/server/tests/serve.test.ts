@@ -91,15 +91,83 @@ function makeDeps(overrides: Partial<StartServerDeps> = {}): StartServerDeps {
     };
 }
 
+/**
+ * WHY this harness exists (CI SIGTERM / truncated suite):
+ * `startServer` always registers real SIGINT/SIGTERM handlers that async-call
+ * `process.exit(0)`. Tests that invoke those handlers fire-and-forget the async
+ * shutdown; if `afterEach` restores the real `process.exit` before shutdown
+ * finishes, the whole bun test process dies mid-suite (no summary, remaining
+ * files never run). On CI that often surfaces as exit 143 (SIGTERM).
+ *
+ * Rules for every `startServer` test:
+ * 1. Install process mocks BEFORE startServer (never leave real handlers).
+ * 2. When exercising shutdown, await `exitCalled` so the mock is still in place.
+ * 3. afterEach strips any leaked SIGINT/SIGTERM listeners and restores globals.
+ */
+type SigHandler = () => void | Promise<void>;
+
 describe('startServer', () => {
-    let origServe: typeof Bun.serve;
-    let origExit: typeof process.exit;
-    let origOn: typeof process.on;
+    let origServe: typeof Bun.serve | undefined;
+    let origExit: typeof process.exit | undefined;
+    let origOn: typeof process.on | undefined;
+    let origOff: typeof process.off | undefined;
+
+    function installProcessMocks(): {
+        sigHandlers: Record<string, SigHandler>;
+        exitCodes: number[];
+        /** Resolves when the mocked process.exit is first invoked. */
+        exitCalled: Promise<number>;
+    } {
+        if (!origServe) origServe = Bun.serve;
+        if (!origExit) origExit = process.exit;
+        if (!origOn) origOn = process.on;
+        if (!origOff) origOff = process.off;
+
+        const sigHandlers: Record<string, SigHandler> = {};
+        process.on = ((event: string, handler: SigHandler) => {
+            sigHandlers[event] = handler;
+            return process;
+        }) as typeof process.on;
+        // process.off must not touch real listeners while process.on is mocked.
+        process.off = ((event: string, handler: SigHandler) => {
+            if (sigHandlers[event] === handler) delete sigHandlers[event];
+            return process;
+        }) as typeof process.off;
+
+        const exitCodes: number[] = [];
+        let resolveExit!: (code: number) => void;
+        const exitCalled = new Promise<number>((resolve) => {
+            resolveExit = resolve;
+        });
+        process.exit = ((code?: number) => {
+            const c = code ?? 0;
+            exitCodes.push(c);
+            resolveExit(c);
+        }) as typeof process.exit;
+
+        return { sigHandlers, exitCodes, exitCalled };
+    }
 
     afterEach(() => {
-        if (origServe) Bun.serve = origServe;
-        if (origExit) process.exit = origExit;
-        if (origOn) process.on = origOn;
+        // Drop any real handlers a test accidentally registered, then restore.
+        process.removeAllListeners('SIGINT');
+        process.removeAllListeners('SIGTERM');
+        if (origServe) {
+            Bun.serve = origServe;
+            origServe = undefined;
+        }
+        if (origExit) {
+            process.exit = origExit;
+            origExit = undefined;
+        }
+        if (origOn) {
+            process.on = origOn;
+            origOn = undefined;
+        }
+        if (origOff) {
+            process.off = origOff;
+            origOff = undefined;
+        }
     });
 
     test('exports as a function', () => {
@@ -116,11 +184,12 @@ describe('startServer', () => {
         expect(typeof scheduler.start).toBe('function');
         expect(typeof scheduler.stop).toBe('function');
         expect(typeof scheduler.register).toBe('function');
+        // Real adapters may hold timers — always stop so the suite can exit.
+        if (typeof scheduler.stop === 'function') await scheduler.stop();
     });
 
     test('start callback wires Bun.serve and serves health', async () => {
-        origServe = Bun.serve;
-
+        installProcessMocks();
         let capturedFetch: ((req: Request) => Response | Promise<Response>) | undefined;
         Bun.serve = ((opts: { fetch: (req: Request) => Response | Promise<Response> }) => {
             capturedFetch = opts.fetch;
@@ -137,7 +206,7 @@ describe('startServer', () => {
     });
 
     test('opens the browser to /board when openBrowser is true and web dist exists', async () => {
-        origServe = Bun.serve;
+        installProcessMocks();
         Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
 
         const webDistPath = mkdtempSync(join(tmpdir(), 'spur-web-dist-open-'));
@@ -157,7 +226,7 @@ describe('startServer', () => {
     });
 
     test('opens /api/health when openBrowser is true but board assets are missing', async () => {
-        origServe = Bun.serve;
+        installProcessMocks();
         Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
 
         let openedUrl: string | undefined;
@@ -180,7 +249,7 @@ describe('startServer', () => {
     });
 
     test('passes resolved webDistPath into ServerContext for static board serving', async () => {
-        origServe = Bun.serve;
+        installProcessMocks();
         Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
 
         const webDistPath = mkdtempSync(join(tmpdir(), 'spur-web-dist-'));
@@ -201,7 +270,7 @@ describe('startServer', () => {
     });
 
     test('passes dbUrl into ServerContext and ensures its parent directory', async () => {
-        origServe = Bun.serve;
+        installProcessMocks();
         Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
 
         const dbDir = mkdtempSync(join(tmpdir(), 'spur-server-db-'));
@@ -231,7 +300,7 @@ describe('startServer', () => {
     });
 
     test('falls back to undefined webDistPath when configured static board path is missing', async () => {
-        origServe = Bun.serve;
+        installProcessMocks();
         Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
 
         let capturedOptions: CreateServerContextOptions | undefined;
@@ -265,7 +334,7 @@ describe('startServer', () => {
     });
 
     test('does not open the browser when openBrowser is false (--no-open)', async () => {
-        origServe = Bun.serve;
+        installProcessMocks();
         Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
 
         let opened = false;
@@ -282,15 +351,7 @@ describe('startServer', () => {
     });
 
     test('scheduler branch and signal handlers covered via injected deps', async () => {
-        origServe = Bun.serve;
-        origExit = process.exit;
-        origOn = process.on;
-
-        const sigHandlers: Record<string, () => void> = {};
-        process.on = ((event: string, handler: () => void) => {
-            sigHandlers[event] = handler;
-            return process;
-        }) as typeof process.on;
+        const { sigHandlers, exitCodes, exitCalled } = installProcessMocks();
 
         let serverStopped = false;
         let schedulerStopped = false;
@@ -303,10 +364,6 @@ describe('startServer', () => {
                 serverStopped = true;
             },
         })) as unknown as typeof Bun.serve;
-
-        process.exit = ((code: number) => {
-            expect(code).toBe(0);
-        }) as typeof process.exit;
 
         const deps = makeDeps({
             serverBootstrapConfig: () => ({
@@ -343,41 +400,124 @@ describe('startServer', () => {
 
         const sigint = sigHandlers.SIGINT;
         if (!sigint) throw new Error('SIGINT handler not registered');
-        await sigint();
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        sigint();
+        // Await full async shutdown so process.exit mock is still installed.
+        await exitCalled;
         expect(serverStopped).toBe(true);
-
         expect(schedulerStopped).toBe(true);
+        expect(exitCodes).toEqual([0]);
         expect(logMessages.some((m) => m.msg === 'Shutting down server')).toBe(true);
         expect(logMessages.some((m) => m.msg === 'Scheduler started')).toBe(true);
+    });
+
+    test('SIGTERM shutdown path and concurrent double-signal latch', async () => {
+        // WHY: onSigTerm was unhit (line 446); concurrent second signal must hit
+        // the shuttingDown early-return so process.exit runs only once.
+        const { sigHandlers, exitCodes, exitCalled } = installProcessMocks();
+        let stopAllCalls = 0;
+        const logMessages: { msg: string; data?: Record<string, unknown> }[] = [];
+
+        Bun.serve = (() => ({
+            stop: () => {},
+            port: 5002,
+        })) as unknown as typeof Bun.serve;
+
+        const runtimeWithWarn = (): ApplicationRuntime => {
+            const rt = fakeRuntime(logMessages);
+            rt.logger.warn = (msg: string, data?: Record<string, unknown>) => {
+                logMessages.push({ msg, data });
+            };
+            return rt;
+        };
+
+        await startServer(
+            { port: 5002, host: '127.0.0.1', openBrowser: false, keepAlive: false },
+            makeDeps({
+                runNodeApplication: (async (opts: {
+                    config: unknown;
+                    start: (rt: ApplicationRuntime) => Promise<void>;
+                }) => {
+                    const rt = runtimeWithWarn();
+                    await opts.start(rt);
+                    return rt;
+                }) as unknown as StartServerDeps['runNodeApplication'],
+                createServerContext: (() =>
+                    ({
+                        supervisor: () => ({
+                            stopAll: async () => {
+                                stopAllCalls += 1;
+                                throw new Error('supervisor already drained');
+                            },
+                        }),
+                    }) as unknown as ServerContext) as unknown as StartServerDeps['createServerContext'],
+            }),
+        );
 
         const sigterm = sigHandlers.SIGTERM;
-        if (!sigterm) throw new Error('SIGTERM handler not registered');
-        process.exit = ((_code: number) => {}) as typeof process.exit;
-        await sigterm();
+        const sigint = sigHandlers.SIGINT;
+        if (!sigterm || !sigint) throw new Error('signal handlers not registered');
+
+        // Fire both synchronously: first starts shutdown (sets latch), second
+        // exercises the early return without a second process.exit.
+        sigterm();
+        sigint();
+        await exitCalled;
+
+        expect(exitCodes).toEqual([0]);
+        expect(stopAllCalls).toBe(1);
+        expect(logMessages.some((m) => m.msg === 'Shutting down server' && m.data?.signal === 'SIGTERM')).toBe(true);
+        expect(logMessages.some((m) => m.msg === 'Supervisor shutdown error')).toBe(true);
+    });
+
+    test('runTaskActionJob / runFeatureActionJob use ctx.agentService when default factory is kept', async () => {
+        // Hits the default-createAgentService branch (ctx.agentService()) and the
+        // production output write/error sinks (invoked via a custom factory).
+        let agentRunCalls = 0;
+        const ctx = {
+            cwd: '/tmp/spur-workspace',
+            eventBus: () => ({ emit: () => {}, on: () => {}, off: () => {} }),
+            agentService: () => ({
+                run: async () => {
+                    agentRunCalls += 1;
+                    return 0;
+                },
+            }),
+        } as unknown as ServerContext;
+
+        await runTaskActionJob(ctx, {}, { wbs: '0001', action: 'run', command: '/sp:dev-run 0001' });
+        await runFeatureActionJob(ctx, {}, { featureId: 'F1', action: 'plan', command: 'spur dev plan --feature F1' });
+        expect(agentRunCalls).toBe(2);
+
+        const writes: string[] = [];
+        const errors: string[] = [];
+        await runTaskActionJob(
+            { cwd: '/tmp/w', eventBus: () => ({ emit: () => {} }) } as unknown as ServerContext,
+            {},
+            { wbs: '0003', action: 'run', command: '/sp:dev-run 0003' },
+            (options) => ({
+                run: async () => {
+                    // Call the production empty sinks passed into createAgentService.
+                    options.output.write('out');
+                    options.output.error('err');
+                    writes.push('out');
+                    errors.push('err');
+                    return 0;
+                },
+            }),
+        );
+        expect(writes).toEqual(['out']);
+        expect(errors).toEqual(['err']);
     });
 
     test('starts the queue worker when jobqueue is enabled and stops it before server close', async () => {
-        origServe = Bun.serve;
-        origExit = process.exit;
-        origOn = process.on;
-
-        const sigHandlers: Record<string, () => void> = {};
+        const { sigHandlers, exitCalled } = installProcessMocks();
         const order: string[] = [];
-        process.on = ((event: string, handler: () => void) => {
-            sigHandlers[event] = handler;
-            return process;
-        }) as typeof process.on;
 
         Bun.serve = (() => ({
             stop: () => {
                 order.push('server.stop');
             },
         })) as unknown as typeof Bun.serve;
-
-        process.exit = ((code: number) => {
-            expect(code).toBe(0);
-        }) as typeof process.exit;
 
         const registeredHandlers: Record<string, (payload?: unknown) => Promise<void>> = {};
         let pruneCallCount: number | undefined;
@@ -439,8 +579,8 @@ describe('startServer', () => {
         await expect(registeredHandlers[FEATURE_ACTION_JOB]?.({})).rejects.toThrow();
         const sigint = sigHandlers.SIGINT;
         if (!sigint) throw new Error('SIGINT handler not registered');
-        await sigint();
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        sigint();
+        await exitCalled;
         expect(order).toEqual(['worker.start', 'scheduler.start', 'scheduler.stop', 'worker.stop', 'server.stop']);
     });
 
@@ -678,28 +818,18 @@ describe('startServer', () => {
     });
 
     test('registers listening port in ProjectRegistry and resets to 0 on SIGINT', async () => {
-        origServe = Bun.serve;
-        origExit = process.exit;
-        origOn = process.on;
+        const { sigHandlers, exitCalled } = installProcessMocks();
 
         const tempDir = mkdtempSync(join(tmpdir(), 'spur-serve-registry-'));
         const projectsFile = join(tempDir, 'projects.json');
         const prevProjectsFile = process.env.SPUR_PROJECTS_FILE;
         process.env.SPUR_PROJECTS_FILE = projectsFile;
 
-        const sigHandlers: Record<string, () => void | Promise<void>> = {};
-        process.on = ((event: string, handler: () => void | Promise<void>) => {
-            sigHandlers[event] = handler;
-            return process;
-        }) as typeof process.on;
-
         const listenPort = 5555;
         Bun.serve = (() => ({
             port: listenPort,
             stop: () => {},
         })) as unknown as typeof Bun.serve;
-
-        process.exit = ((_code: number) => {}) as typeof process.exit;
 
         try {
             await startServer(
@@ -720,8 +850,8 @@ describe('startServer', () => {
 
             const sigint = sigHandlers.SIGINT;
             if (!sigint) throw new Error('SIGINT handler not registered');
-            await sigint();
-            await new Promise((r) => setTimeout(r, 20));
+            sigint();
+            await exitCalled;
 
             const afterStop = JSON.parse(readFileSync(projectsFile, 'utf8')) as {
                 projects: Array<{ path: string; port: number; name: string }>;
@@ -748,7 +878,7 @@ describe('startServer', () => {
     });
 
     test('handles autostart when autostartIds are present and logs error on failure', async () => {
-        origServe = Bun.serve;
+        installProcessMocks();
         Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
 
         const prevAutostart = process.env.SPUR_TEAM_AUTOSTART;
@@ -796,22 +926,12 @@ describe('startServer', () => {
     });
 
     test('handles ProjectRegistry.upsert and setPort failures gracefully without throwing', async () => {
-        origServe = Bun.serve;
-        origExit = process.exit;
-        origOn = process.on;
-
-        const sigHandlers: Record<string, () => void | Promise<void>> = {};
-        process.on = ((event: string, handler: () => void | Promise<void>) => {
-            sigHandlers[event] = handler;
-            return process;
-        }) as typeof process.on;
+        const { sigHandlers, exitCalled } = installProcessMocks();
 
         Bun.serve = (() => ({
             port: 5556,
             stop: () => {},
         })) as unknown as typeof Bun.serve;
-
-        process.exit = ((_code: number) => {}) as typeof process.exit;
 
         const { ProjectRegistry } = await import('@gobing-ai/spur-app');
         const origUpsert = ProjectRegistry.prototype.upsert;
@@ -827,17 +947,13 @@ describe('startServer', () => {
         try {
             await startServer({ port: 5556, host: '127.0.0.1', openBrowser: false, keepAlive: false }, makeDeps());
 
-            // Shutdown signal
             const sigint = sigHandlers.SIGINT;
-            if (sigint) {
-                await sigint();
-            }
+            if (!sigint) throw new Error('SIGINT handler not registered');
+            sigint();
+            await exitCalled;
         } finally {
             ProjectRegistry.prototype.upsert = origUpsert;
             ProjectRegistry.prototype.setPort = origSetPort;
-            if (origServe) Bun.serve = origServe;
-            if (origExit) process.exit = origExit;
-            if (origOn) process.on = origOn;
         }
     });
 

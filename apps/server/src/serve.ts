@@ -437,7 +437,21 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 appRt.logger.warn('Failed to register project in ProjectRegistry', { error: String(err) });
             }
 
+            // Named handlers so shutdown can detach them before process.exit —
+            // otherwise tests (and double-signals) keep firing into a dying process.
+            let shuttingDown = false;
+            const onSigInt = () => {
+                void shutdown('SIGINT');
+            };
+            const onSigTerm = () => {
+                void shutdown('SIGTERM');
+            };
+
             const shutdown = async (signal: string) => {
+                if (shuttingDown) return;
+                shuttingDown = true;
+                process.off('SIGINT', onSigInt);
+                process.off('SIGTERM', onSigTerm);
                 appRt.logger.info('Shutting down server', { signal });
                 try {
                     await projectRegistry.setPort(projectCwd, 0);
@@ -456,8 +470,8 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 process.exit(0);
             };
 
-            process.on('SIGINT', () => void shutdown('SIGINT'));
-            process.on('SIGTERM', () => void shutdown('SIGTERM'));
+            process.on('SIGINT', onSigInt);
+            process.on('SIGTERM', onSigTerm);
 
             const url = `http://${options.host}:${options.port}`;
 
