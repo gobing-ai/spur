@@ -1,12 +1,44 @@
-import { describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import { createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
 import { type ConstraintRule, RuleEngine, type RuleEngineResult } from '@gobing-ai/ts-rule-engine';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import type { Colorize, RuleServiceContext, RuleServiceOutput } from '../../src/services/rule-service';
 import { RuleService } from '../../src/services/rule-service';
+
+// ---------------------------------------------------------------------------
+// Fake `rg` on PATH — unit tests must not require a system ripgrep install.
+// ---------------------------------------------------------------------------
+//
+// recommended-pre-check (and many bundled rules) use evaluator type `rg`, which
+// spawns the real `rg` binary. GHA ubuntu-latest does not ship ripgrep; without
+// a stub, ProcessExecutor returns exitCode null and RipgrepEvaluator throws
+// "rg failed (exit null)" — or, on some Bun/Linux paths, the spawn ENOENT
+// surfaces as a test failure. A stub that exits 1 (no matches) makes forbid
+// and require modes both produce zero findings so service unit tests stay
+// hermetic.
+
+let fakeRgDir: string | undefined;
+let previousPathForRg: string | undefined;
+
+beforeAll(() => {
+    fakeRgDir = mkdtempSync(join(tmpdir(), 'spur-fake-rg-'));
+    const fakeRg = join(fakeRgDir, 'rg');
+    // Exit 1 = "no matches" / "no files" for both --json and --files-without-match.
+    writeFileSync(fakeRg, '#!/bin/sh\nexit 1\n', 'utf8');
+    chmodSync(fakeRg, 0o755);
+    previousPathForRg = process.env.PATH;
+    process.env.PATH = `${fakeRgDir}${delimiter}${previousPathForRg ?? ''}`;
+});
+
+afterAll(() => {
+    if (previousPathForRg === undefined) delete process.env.PATH;
+    else process.env.PATH = previousPathForRg;
+    if (fakeRgDir !== undefined) rmSync(fakeRgDir, { recursive: true, force: true });
+});
 
 // ---------------------------------------------------------------------------
 // Test helpers

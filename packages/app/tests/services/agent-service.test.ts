@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from 'bun:test';
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import type { AgentName, AgentRunResult, AuthState } from '@gobing-ai/ts-ai-runner';
@@ -1467,24 +1467,43 @@ describe('AgentService.runTraced', () => {
         const fixtureDir = mkdtempSync(join(tmpdir(), 'spur-0295-omp-'));
         const executable = join(fixtureDir, 'omp');
         const previousPath = process.env.PATH;
+        // Portable Python fixture — not `#!/usr/bin/env bun`. Spawning a second
+        // bun runtime via shebang under timeout:'1500' cold-starts past the bound
+        // on GHA and maps to exit 3. Absolute python3 avoids PATH lookups via env.
+        // Observation is also written to a sibling file so the continue+timeout
+        // path still proves argv handling when the kill drops pipe stdout.
+        const obsFile = join(fixtureDir, 'omp-obs.json');
         writeFileSync(
             executable,
-            `#!/usr/bin/env bun
-const args = Bun.argv.slice(2);
-const promptIndex = args.indexOf('-p');
-const observation = {
-    prompt: promptIndex >= 0 ? args[promptIndex + 1] : '',
-    stdinInteractive: process.stdin.isTTY === true,
-    continue: args.includes('-c'),
-    noSession: args.includes('--no-session'),
-};
-console.log(JSON.stringify(observation));
-if (observation.continue) await Bun.sleep(2500);
+            `#!/usr/bin/python3
+import json, os, sys, time
+args = sys.argv[1:]
+prompt = ""
+if "-p" in args:
+    i = args.index("-p")
+    if i + 1 < len(args):
+        prompt = args[i + 1]
+obs = {
+    "prompt": prompt,
+    "stdinInteractive": os.isatty(0),
+    "continue": "-c" in args,
+    "noSession": "--no-session" in args,
+}
+payload = json.dumps(obs)
+obs_path = os.environ.get("SPUR_OMP_OBS_FILE")
+if obs_path:
+    with open(obs_path, "w", encoding="utf-8") as fh:
+        fh.write(payload)
+print(payload, flush=True)
+sys.stdout.flush()
+if obs["continue"]:
+    time.sleep(2.5)
 `,
             'utf8',
         );
         chmodSync(executable, 0o755);
         process.env.PATH = `${fixtureDir}${delimiter}${previousPath ?? ''}`;
+        process.env.SPUR_OMP_OBS_FILE = obsFile;
 
         const deps: AgentRunDeps = {
             detector: {
@@ -1508,7 +1527,7 @@ if (observation.continue) await Bun.sleep(2500);
             const prompt = '/sp:dev-run 0295 --mode implement --auto';
             const fresh = await svc.runTraced(prompt, { agent: 'omp', timeout: '1500' }, deps);
             expect(fresh.exitCode).toBe(0);
-            const freshObservation = JSON.parse(fresh.stdout) as {
+            const freshObservation = JSON.parse(fresh.stdout || readFileSync(obsFile, 'utf8')) as {
                 prompt: string;
                 stdinInteractive: boolean;
                 continue: boolean;
@@ -1531,11 +1550,15 @@ if (observation.continue) await Bun.sleep(2500);
             const elapsedMs = Date.now() - startedAt;
             expect(stale.exitCode).toBe(3);
             expect(elapsedMs).toBeLessThan(2000);
-            expect(stale.stdout).toContain('"continue":true');
+            // Prefer pipe stdout; fall back to the side-channel file when timeout
+            // kills the child before buffered stdout is fully drained.
+            const staleBody = stale.stdout.length > 0 ? stale.stdout : readFileSync(obsFile, 'utf8');
+            expect(staleBody).toContain('"continue": true');
             expect(stale.invocation?.continue).toBe(true);
             expect(stale.invocation?.argv).toContain('-c');
             expect(stale.invocation?.argv).not.toContain('--no-session');
         } finally {
+            delete process.env.SPUR_OMP_OBS_FILE;
             if (previousPath === undefined) delete process.env.PATH;
             else process.env.PATH = previousPath;
             rmSync(fixtureDir, { recursive: true, force: true });

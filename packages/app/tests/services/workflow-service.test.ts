@@ -584,6 +584,10 @@ terminalStates:
     // discovery artifacts can stamp run provenance. The var must be observable
     // by shell actions and survive the full run.
     describe('run — __runId injection (R8 of 0366)', () => {
+        // Absolute /bin/* binaries: bare `mkdir`/`printf` look up PATH inside
+        // `/bin/sh -c`. If a prior test left PATH without /bin (or empty), the
+        // shell action fails with exit 127 → run status "failed" and no capture
+        // file (CI symptom). Absolute paths keep the action hermetic.
         const RUNID_YAML = `name: runid-inject
 kind: state-machine
 initialState: start
@@ -594,7 +598,10 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: 'mkdir -p .spur/run && printf "%s" "\${vars.__runId}" > .spur/run/captured-runid.txt'
+          command: /bin/sh
+          args:
+            - -c
+            - '/bin/mkdir -p .spur/run && /usr/bin/printf "%s" "\${vars.__runId}" > .spur/run/captured-runid.txt'
   - id: done
 transitions:
   - from: start
@@ -610,7 +617,7 @@ terminalStates:
 
             const svc = new WorkflowAppService(makeCtx(dir));
             const result = await svc.run(path, { runId: 'inject-test-1' });
-            expect(result.status).toBe('done');
+            expect(result.status, `run failed: ${String(result.reason ?? '')}`).toBe('done');
 
             const captured = await readFile(join(dir, '.spur', 'run', 'captured-runid.txt'), 'utf8');
             expect(captured).toBe('inject-test-1');
@@ -623,7 +630,8 @@ terminalStates:
             await writeFile(path, RUNID_YAML);
 
             const svc = new WorkflowAppService(makeCtx(dir));
-            await svc.run(path, { runId: 'auto-runid-1' });
+            const result = await svc.run(path, { runId: 'auto-runid-1' });
+            expect(result.status, `run failed: ${String(result.reason ?? '')}`).toBe('done');
 
             const captured = await readFile(join(dir, '.spur', 'run', 'captured-runid.txt'), 'utf8');
             expect(captured).toBe('auto-runid-1');
@@ -643,7 +651,8 @@ terminalStates:
             await writeFile(path, MIX_YAML);
 
             const svc = new WorkflowAppService(makeCtx(dir));
-            await svc.run(path, { runId: 'mix-1', vars: { taskId: '0099' } });
+            const result = await svc.run(path, { runId: 'mix-1', vars: { taskId: '0099' } });
+            expect(result.status, `run failed: ${String(result.reason ?? '')}`).toBe('done');
 
             const captured = await readFile(join(dir, '.spur', 'run', 'captured-runid.txt'), 'utf8');
             expect(captured).toBe('mix-1|0099');
@@ -678,7 +687,10 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: 'mkdir -p .spur/run && printf "%s|%s|%s" "\${vars.__hitlAnswer}" "\${vars.__runId}" "\${vars.seedVar}" > .spur/run/captured-vars.txt'
+          command: /bin/sh
+          args:
+            - -c
+            - '/bin/mkdir -p .spur/run && /usr/bin/printf "%s|%s|%s" "\${vars.__hitlAnswer}" "\${vars.__runId}" "\${vars.seedVar}" > .spur/run/captured-vars.txt'
   - id: done
 transitions:
   - from: start
@@ -689,7 +701,10 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "\${vars.__hitlAnswer}" = yes'
+        command: /bin/sh
+        args:
+          - -c
+          - 'test "\${vars.__hitlAnswer}" = yes'
   - from: after
     to: done
     guard: { kind: always }
@@ -783,7 +798,10 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: 'mkdir -p .spur/run && echo discovery >> .spur/run/side-effects.log'
+          command: /bin/sh
+          args:
+            - -c
+            - '/bin/mkdir -p .spur/run && /bin/echo discovery >> .spur/run/side-effects.log'
   - id: gate
     pause: true
     onEnter:
@@ -794,7 +812,10 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: 'mkdir -p .spur/run && echo feature-create >> .spur/run/side-effects.log'
+          command: /bin/sh
+          args:
+            - -c
+            - '/bin/mkdir -p .spur/run && /bin/echo feature-create >> .spur/run/side-effects.log'
   - id: done
 transitions:
   - from: discovery
@@ -805,7 +826,10 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "\${vars.__hitlAnswer}" = yes'
+        command: /bin/sh
+        args:
+          - -c
+          - 'test "\${vars.__hitlAnswer}" = yes'
   - from: feature-create
     to: done
     guard: { kind: always }

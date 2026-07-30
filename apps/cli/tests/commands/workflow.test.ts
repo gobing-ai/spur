@@ -568,7 +568,10 @@ terminalStates:
                 }),
             ).toBe(0);
         } finally {
-            process.env.PATH = originalPath;
+            // Assigning undefined stringifies to "undefined" and breaks later tests'
+            // shell PATH (mkdir not found → workflow status failed on CI).
+            if (originalPath === undefined) delete process.env.PATH;
+            else process.env.PATH = originalPath;
         }
         expect(messages.some((message) => message.includes('agent=claude'))).toBe(true);
         expect(messages.some((message) => message.includes('stdout> live-one'))).toBe(true);
