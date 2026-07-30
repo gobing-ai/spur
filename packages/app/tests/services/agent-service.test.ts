@@ -1467,37 +1467,46 @@ describe('AgentService.runTraced', () => {
         const fixtureDir = mkdtempSync(join(tmpdir(), 'spur-0295-omp-'));
         const executable = join(fixtureDir, 'omp');
         const previousPath = process.env.PATH;
-        // Portable Python fixture — not `#!/usr/bin/env bun`. Spawning a second
-        // bun runtime via shebang under timeout:'1500' cold-starts past the bound
-        // on GHA and maps to exit 3. Absolute python3 avoids PATH lookups via env.
-        // Observation is also written to a sibling file so the continue+timeout
-        // path still proves argv handling when the kill drops pipe stdout.
+        // Portable POSIX /bin/sh fixture — zero external dependencies (no Python,
+        // no extra runtime startup overhead). Starts in <1ms cross-platform.
         const obsFile = join(fixtureDir, 'omp-obs.json');
         writeFileSync(
             executable,
-            `#!/usr/bin/python3
-import json, os, sys, time
-args = sys.argv[1:]
-prompt = ""
-if "-p" in args:
-    i = args.index("-p")
-    if i + 1 < len(args):
-        prompt = args[i + 1]
-obs = {
-    "prompt": prompt,
-    "stdinInteractive": os.isatty(0),
-    "continue": "-c" in args,
-    "noSession": "--no-session" in args,
-}
-payload = json.dumps(obs)
-obs_path = os.environ.get("SPUR_OMP_OBS_FILE")
-if obs_path:
-    with open(obs_path, "w", encoding="utf-8") as fh:
-        fh.write(payload)
-print(payload, flush=True)
-sys.stdout.flush()
-if obs["continue"]:
-    time.sleep(2.5)
+            `#!/bin/sh
+prompt=""
+cont=false
+nosess=false
+prev=""
+for arg in "$@"; do
+    if [ "$prev" = "-p" ]; then
+        prompt="$arg"
+    fi
+    if [ "$arg" = "-c" ]; then
+        cont=true
+    fi
+    if [ "$arg" = "--no-session" ]; then
+        nosess=true
+    fi
+    prev="$arg"
+done
+
+if [ -t 0 ]; then
+    tty=true
+else
+    tty=false
+fi
+
+payload="{\\"prompt\\": \\"$prompt\\", \\"stdinInteractive\\": $tty, \\"continue\\": $cont, \\"noSession\\": $nosess}"
+
+if [ -n "$SPUR_OMP_OBS_FILE" ]; then
+    printf "%s" "$payload" > "$SPUR_OMP_OBS_FILE"
+fi
+
+printf "%s\\n" "$payload"
+
+if [ "$cont" = "true" ]; then
+    exec sleep 2.5
+fi
 `,
             'utf8',
         );

@@ -597,7 +597,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: 'mkdir -p .spur/run && printf "%s" "\${vars.__runId}" > .spur/run/captured-runid.txt'
+          command: 'echo "\${vars.__runId}" > captured-runid.txt'
   - id: done
 transitions:
   - from: start
@@ -615,8 +615,8 @@ terminalStates:
             const result = await svc.run(path, { runId: 'inject-test-1' });
             expect(result.status, `run failed: ${String(result.reason ?? '')}`).toBe('done');
 
-            const captured = await readFile(join(dir, '.spur', 'run', 'captured-runid.txt'), 'utf8');
-            expect(captured).toBe('inject-test-1');
+            const captured = await readFile(join(dir, 'captured-runid.txt'), 'utf8');
+            expect(captured.trim()).toBe('inject-test-1');
             await rm(dir, { recursive: true, force: true });
         });
 
@@ -629,19 +629,31 @@ terminalStates:
             const result = await svc.run(path, { runId: 'auto-runid-1' });
             expect(result.status, `run failed: ${String(result.reason ?? '')}`).toBe('done');
 
-            const captured = await readFile(join(dir, '.spur', 'run', 'captured-runid.txt'), 'utf8');
-            expect(captured).toBe('auto-runid-1');
+            const captured = await readFile(join(dir, 'captured-runid.txt'), 'utf8');
+            expect(captured.trim()).toBe('auto-runid-1');
             await rm(dir, { recursive: true, force: true });
         });
 
         test('caller-provided vars are preserved alongside __runId', async () => {
-            // Separate workflow that also captures a caller-provided var alongside __runId.
-            const MIX_YAML = RUNID_YAML.replace('vars:\n  __runId: ""', 'vars:\n  __runId: ""\n  taskId: ""').replace(
-                // biome-ignore lint/suspicious/noTemplateCurlyInString: intentional — matches ${vars.*} literal in the YAML template
-                'printf "%s" "${vars.__runId}"',
-                // biome-ignore lint/suspicious/noTemplateCurlyInString: intentional — matches ${vars.*} literal in the YAML template
-                'printf "%s|%s" "${vars.__runId}" "${vars.taskId}"',
-            );
+            const MIX_YAML = `name: runid-inject
+kind: state-machine
+initialState: start
+vars:
+  __runId: ""
+  taskId: ""
+states:
+  - id: start
+    onEnter:
+      - kind: shell
+        options:
+          command: 'echo "\${vars.__runId}|\${vars.taskId}" > captured-runid.txt'
+  - id: done
+transitions:
+  - from: start
+    to: done
+terminalStates:
+  - done
+`;
             const dir = await mkdtemp(join(tmpdir(), 'spur-wf-runid-vars-'));
             const path = join(dir, 'test.yaml');
             await writeFile(path, MIX_YAML);
@@ -650,8 +662,8 @@ terminalStates:
             const result = await svc.run(path, { runId: 'mix-1', vars: { taskId: '0099' } });
             expect(result.status, `run failed: ${String(result.reason ?? '')}`).toBe('done');
 
-            const captured = await readFile(join(dir, '.spur', 'run', 'captured-runid.txt'), 'utf8');
-            expect(captured).toBe('mix-1|0099');
+            const captured = await readFile(join(dir, 'captured-runid.txt'), 'utf8');
+            expect(captured.trim()).toBe('mix-1|0099');
             await rm(dir, { recursive: true, force: true });
         });
     });
@@ -683,7 +695,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: 'mkdir -p .spur/run && printf "%s|%s|%s" "\${vars.__hitlAnswer}" "\${vars.__runId}" "\${vars.seedVar}" > .spur/run/captured-vars.txt'
+          command: 'echo "\${vars.__hitlAnswer}|\${vars.__runId}|\${vars.seedVar}" > captured-vars.txt'
   - id: done
 transitions:
   - from: start
@@ -729,8 +741,8 @@ terminalStates:
             // - __hitlAnswer: set by hitl.confirm during gate.onEnter (setVars mutation)
             // - __runId: injected by WorkflowAppService.run()
             // - seedVar: caller-provided run-level var
-            const captured = await readFile(join(dir, '.spur', 'run', 'captured-vars.txt'), 'utf8');
-            expect(captured).toBe('yes|persist-1|seeded');
+            const captured = await readFile(join(dir, 'captured-vars.txt'), 'utf8');
+            expect(captured.trim()).toBe('yes|persist-1|seeded');
             await rm(dir, { recursive: true, force: true });
         });
 
@@ -788,7 +800,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: 'mkdir -p .spur/run && echo discovery >> .spur/run/side-effects.log'
+          command: 'echo discovery >> side-effects.log'
   - id: gate
     pause: true
     onEnter:
@@ -799,7 +811,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: 'mkdir -p .spur/run && echo feature-create >> .spur/run/side-effects.log'
+          command: 'echo feature-create >> side-effects.log'
   - id: done
 transitions:
   - from: discovery
@@ -836,7 +848,7 @@ terminalStates:
             expect(paused.finalState).toBe('gate');
 
             // Discovery already fired; feature-create is still gated behind the pause.
-            const atPause = await readFile(join(dir, '.spur', 'run', 'side-effects.log'), 'utf8');
+            const atPause = await readFile(join(dir, 'side-effects.log'), 'utf8');
             expect(occurrences(atPause, 'discovery')).toBe(1);
             expect(occurrences(atPause, 'feature-create')).toBe(0);
 
@@ -845,7 +857,7 @@ terminalStates:
 
             // The whole point: resume re-entered neither discovery nor the gate,
             // and allocated exactly one feature.
-            const afterResume = await readFile(join(dir, '.spur', 'run', 'side-effects.log'), 'utf8');
+            const afterResume = await readFile(join(dir, 'side-effects.log'), 'utf8');
             expect(occurrences(afterResume, 'discovery')).toBe(1);
             expect(occurrences(afterResume, 'feature-create')).toBe(1);
             await rm(dir, { recursive: true, force: true });
