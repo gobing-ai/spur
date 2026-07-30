@@ -970,12 +970,8 @@ terminalStates:
 
             const db = await createMigratedDb({ url: ':memory:' });
             const svc = new WorkflowAppService({
-                cwd: dir,
+                ...makeCtx(dir),
                 getDb: async () => db,
-                agentService: () => ({ run: async () => 0 }) as unknown as AgentService,
-                ruleService: () =>
-                    ({ evaluate: async () => ({ exitCode: 0, findings: [] }) }) as unknown as RuleService,
-                hitlResponder: () => ({ respond: async () => ({ value: 'yes' }) }),
             });
             await svc.run(wfPath, { runId: 'atomic-1', vars: { seedVar: 'seeded' } });
 
