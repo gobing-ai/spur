@@ -37,6 +37,33 @@ export function createCapturedOutput(): CapturedOutput {
     };
 }
 
+/**
+ * Install a Bun.spawn mock that fakes only `spur serve …` and passthroughs
+ * everything else. On Bun, execa uses Bun.spawn — a total stub breaks concurrent
+ * ProcessExecutor tests (workflow shell, agent, rules) with exitCode null.
+ *
+ * @param serveExitCode - Fake serve child's exitCode (`null` = still running).
+ * @returns Restore function for `finally`.
+ */
+export function installServeSpawnMock(serveExitCode: number | null = null): () => void {
+    const original = Bun.spawn;
+    const fakeChild = {
+        exitCode: serveExitCode,
+        unref: () => {},
+        pid: 0,
+        exited: Promise.resolve(serveExitCode),
+    };
+    Bun.spawn = ((first: unknown, second?: unknown) => {
+        if (Array.isArray(first) && first.map(String).includes('serve')) {
+            return fakeChild;
+        }
+        return (original as (...args: unknown[]) => unknown)(first, second);
+    }) as typeof Bun.spawn;
+    return () => {
+        Bun.spawn = original;
+    };
+}
+
 /** Result of a subprocess CLI invocation. */
 export interface CliResult {
     /** Process exit code. `null` when the process was killed by a signal. */

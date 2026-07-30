@@ -8,11 +8,19 @@ let spawnCalls: { argv: string[]; options: unknown }[];
 
 beforeEach(() => {
     spawnCalls = [];
-    // @ts-expect-error — Bun.spawn mock for test isolation
-    Bun.spawn = (argv: string[], options?: unknown) => {
-        spawnCalls.push({ argv, options });
-        return { killed: false, pid: 0, exited: Promise.resolve(0) };
-    };
+    // Passthrough mock: only intercept browser-open argv. On Bun, execa uses
+    // Bun.spawn — a total stub hangs concurrent ProcessExecutor tests.
+    Bun.spawn = ((first: unknown, second?: unknown) => {
+        if (Array.isArray(first)) {
+            const argv = first.map(String);
+            const bin = argv[0];
+            if (bin === 'open' || bin === 'cmd' || bin === 'xdg-open') {
+                spawnCalls.push({ argv, options: second });
+                return { killed: false, pid: 0, exited: Promise.resolve(0) };
+            }
+        }
+        return (originalSpawn as (...args: unknown[]) => unknown)(first, second);
+    }) as typeof Bun.spawn;
 });
 
 afterEach(() => {

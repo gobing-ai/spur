@@ -71,3 +71,52 @@ export function createCapturedOutput(): CapturedOutput {
         },
     };
 }
+
+// ─── Bun.spawn isolation ────────────────────────────────────────────────
+
+/**
+ * Minimal handle for a mocked detached `spur serve` spawn.
+ *
+ * `exitCode: null` means "still running" so startRegisteredProject's health
+ * poll can succeed against a pre-opened test port without a real serve.
+ */
+export interface MockServeChild {
+    exitCode: number | null;
+    unref: () => void;
+    pid: number;
+    exited: Promise<number | null>;
+}
+
+/**
+ * Install a Bun.spawn mock that intercepts only `spur serve …` argv and
+ * delegates every other spawn to the real implementation.
+ *
+ * **Why passthrough is mandatory:** on Bun, `execa` (used by ProcessExecutor)
+ * is implemented via `Bun.spawn`. A total stub returning `{ exitCode: null,
+ * unref() {} }` hangs or null-exits concurrent workflow shell / agent / rule
+ * tests across files. Only the serve-start path needs to be fake.
+ *
+ * @param serveExitCode - Exit code the fake serve child reports (`null` = still live).
+ * @returns Restore function; call from `finally`.
+ */
+export function installServeSpawnMock(serveExitCode: number | null = null): () => void {
+    const original = Bun.spawn;
+    const fakeChild: MockServeChild = {
+        exitCode: serveExitCode,
+        unref: () => {},
+        pid: 0,
+        exited: Promise.resolve(serveExitCode),
+    };
+
+    // Bun.spawn has two call shapes: array argv, and options-object (execa).
+    Bun.spawn = ((first: unknown, second?: unknown) => {
+        if (Array.isArray(first) && first.map(String).includes('serve')) {
+            return fakeChild;
+        }
+        return (original as (...args: unknown[]) => unknown)(first, second);
+    }) as typeof Bun.spawn;
+
+    return () => {
+        Bun.spawn = original;
+    };
+}

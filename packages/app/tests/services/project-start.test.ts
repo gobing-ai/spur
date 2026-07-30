@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ProjectRegistry } from '../../src/services/project-registry';
 import { resolveSpurServeCommand, startRegisteredProject } from '../../src/services/project-start';
+import { installServeSpawnMock } from '../helpers';
 
 describe('project-start', () => {
     let tempDir: string;
@@ -78,11 +79,8 @@ describe('project-start', () => {
         const targetPort = (server.address() as { port: number }).port;
         const origAllocate = ProjectRegistry.prototype.allocatePort;
         ProjectRegistry.prototype.allocatePort = async () => targetPort;
-        const origSpawn = Bun.spawn;
-        Bun.spawn = (() => ({
-            exitCode: null,
-            unref: () => {},
-        })) as unknown as typeof Bun.spawn;
+        // Passthrough mock: only fake `serve`; leave Bun.spawn intact for execa.
+        const restoreSpawn = installServeSpawnMock(null);
 
         try {
             const result = await startRegisteredProject(registry, 'TildeStart', {
@@ -93,7 +91,7 @@ describe('project-start', () => {
             expect(result.port).toBe(targetPort);
             expect(result.path.startsWith('~')).toBe(false);
         } finally {
-            Bun.spawn = origSpawn;
+            restoreSpawn();
             ProjectRegistry.prototype.allocatePort = origAllocate;
             server.close();
         }
@@ -160,11 +158,8 @@ describe('project-start', () => {
 
     it('startRegisteredProject throws error when port polling times out', async () => {
         await registry.upsert({ name: 'TimeoutApp', path: tempDir, port: 0 });
-        const origSpawn = Bun.spawn;
-        Bun.spawn = (() => ({
-            exitCode: null,
-            unref: () => {},
-        })) as unknown as typeof Bun.spawn;
+        // Still-running fake serve, but no real listener on the allocated port.
+        const restoreSpawn = installServeSpawnMock(null);
 
         try {
             await expect(
@@ -175,17 +170,13 @@ describe('project-start', () => {
                 }),
             ).rejects.toThrow(/failed to start on port/);
         } finally {
-            Bun.spawn = origSpawn;
+            restoreSpawn();
         }
     });
 
     it('startRegisteredProject throws error immediately when child exits before port ready', async () => {
         await registry.upsert({ name: 'ExitedApp', path: tempDir, port: 0 });
-        const origSpawn = Bun.spawn;
-        Bun.spawn = (() => ({
-            exitCode: 1,
-            unref: () => {},
-        })) as unknown as typeof Bun.spawn;
+        const restoreSpawn = installServeSpawnMock(1);
 
         try {
             await expect(
@@ -196,7 +187,7 @@ describe('project-start', () => {
                 }),
             ).rejects.toThrow(/exited with code 1/);
         } finally {
-            Bun.spawn = origSpawn;
+            restoreSpawn();
         }
     });
 });

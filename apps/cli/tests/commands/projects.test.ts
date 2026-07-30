@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ProjectRegistry } from '@gobing-ai/spur-app';
 import { main } from '../../src/index';
+import { installServeSpawnMock } from '../helpers';
 
 describe('spur projects CLI command', () => {
     let tempDir: string;
@@ -202,11 +203,8 @@ describe('spur projects CLI command', () => {
         const origAllocate = ProjectRegistry.prototype.allocatePort;
         ProjectRegistry.prototype.allocatePort = async () => targetPort;
 
-        const origSpawn = Bun.spawn;
-        Bun.spawn = (() => ({
-            exitCode: null,
-            unref: () => {},
-        })) as unknown as typeof Bun.spawn;
+        // Passthrough mock: only fake `serve`; leave Bun.spawn intact for execa.
+        const restoreSpawn = installServeSpawnMock(null);
 
         try {
             const mockJson = createMockOutput();
@@ -217,7 +215,7 @@ describe('spur projects CLI command', () => {
             expect(jsonExit).toBe(0);
             expect(mockJson.getText()).toContain('"running": true');
         } finally {
-            Bun.spawn = origSpawn;
+            restoreSpawn();
             ProjectRegistry.prototype.allocatePort = origAllocate;
             server.close();
         }
@@ -233,11 +231,7 @@ describe('spur projects CLI command', () => {
         const origAllocate = ProjectRegistry.prototype.allocatePort;
         ProjectRegistry.prototype.allocatePort = async () => targetPort;
 
-        const origSpawn = Bun.spawn;
-        Bun.spawn = (() => ({
-            exitCode: null,
-            unref: () => {},
-        })) as unknown as typeof Bun.spawn;
+        const restoreSpawn = installServeSpawnMock(null);
 
         try {
             const mockJson = createMockOutput();
@@ -248,7 +242,7 @@ describe('spur projects CLI command', () => {
             expect(jsonExit).toBe(0);
             expect(mockJson.getText()).toContain('"running": true');
         } finally {
-            Bun.spawn = origSpawn;
+            restoreSpawn();
             ProjectRegistry.prototype.allocatePort = origAllocate;
             server.close();
         }

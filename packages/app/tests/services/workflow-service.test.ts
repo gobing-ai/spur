@@ -584,10 +584,9 @@ terminalStates:
     // discovery artifacts can stamp run provenance. The var must be observable
     // by shell actions and survive the full run.
     describe('run — __runId injection (R8 of 0366)', () => {
-        // Absolute /bin/* binaries: bare `mkdir`/`printf` look up PATH inside
-        // `/bin/sh -c`. If a prior test left PATH without /bin (or empty), the
-        // shell action fails with exit 127 → run status "failed" and no capture
-        // file (CI symptom). Absolute paths keep the action hermetic.
+        // Absolute /bin/* binaries inside a bare `command` (engine wraps as
+        // `/bin/sh -c <line>`). Bare `mkdir`/`printf` look up PATH; if a prior
+        // test left PATH without /bin the shell exits 127 → status "failed".
         const RUNID_YAML = `name: runid-inject
 kind: state-machine
 initialState: start
@@ -598,10 +597,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: /bin/sh
-          args:
-            - -c
-            - '/bin/mkdir -p .spur/run && /usr/bin/printf "%s" "\${vars.__runId}" > .spur/run/captured-runid.txt'
+          command: '/bin/mkdir -p .spur/run && /usr/bin/printf "%s" "\${vars.__runId}" > .spur/run/captured-runid.txt'
   - id: done
 transitions:
   - from: start
@@ -687,10 +683,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: /bin/sh
-          args:
-            - -c
-            - '/bin/mkdir -p .spur/run && /usr/bin/printf "%s|%s|%s" "\${vars.__hitlAnswer}" "\${vars.__runId}" "\${vars.seedVar}" > .spur/run/captured-vars.txt'
+          command: '/bin/mkdir -p .spur/run && /usr/bin/printf "%s|%s|%s" "\${vars.__hitlAnswer}" "\${vars.__runId}" "\${vars.seedVar}" > .spur/run/captured-vars.txt'
   - id: done
 transitions:
   - from: start
@@ -701,10 +694,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: /bin/sh
-        args:
-          - -c
-          - 'test "\${vars.__hitlAnswer}" = yes'
+        command: 'test "\${vars.__hitlAnswer}" = yes'
   - from: after
     to: done
     guard: { kind: always }
@@ -798,10 +788,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: /bin/sh
-          args:
-            - -c
-            - '/bin/mkdir -p .spur/run && /bin/echo discovery >> .spur/run/side-effects.log'
+          command: '/bin/mkdir -p .spur/run && /bin/echo discovery >> .spur/run/side-effects.log'
   - id: gate
     pause: true
     onEnter:
@@ -812,10 +799,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: /bin/sh
-          args:
-            - -c
-            - '/bin/mkdir -p .spur/run && /bin/echo feature-create >> .spur/run/side-effects.log'
+          command: '/bin/mkdir -p .spur/run && /bin/echo feature-create >> .spur/run/side-effects.log'
   - id: done
 transitions:
   - from: discovery
@@ -826,10 +810,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: /bin/sh
-        args:
-          - -c
-          - 'test "\${vars.__hitlAnswer}" = yes'
+        command: 'test "\${vars.__hitlAnswer}" = yes'
   - from: feature-create
     to: done
     guard: { kind: always }
