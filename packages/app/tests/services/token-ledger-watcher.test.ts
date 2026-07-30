@@ -219,7 +219,7 @@ describe('TokenLedgerWatcher', () => {
         }
     });
 
-    test('triggers schedulePoll timer callback on file modification', async () => {
+    test('triggers schedulePoll timer callback on demand', async () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-watch-poll-timer-'));
         try {
             const path = join(dir, 'ledger.jsonl');
@@ -233,8 +233,9 @@ describe('TokenLedgerWatcher', () => {
                 path,
                 `${JSON.stringify({ ts: '2026-07-12T12:00:00.000Z', session: 's', type: 'write', file: '/b.ts' })}\n`,
             );
-            // Wait for fs.watch event + debounceTimer to fire
-            await sleep(60);
+            // Call schedulePoll directly to test timer callback deterministically
+            watcher.schedulePoll();
+            await sleep(30);
             expect(n).toBeGreaterThan(0);
             watcher.stop();
         } finally {

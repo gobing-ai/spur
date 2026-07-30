@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { basename } from 'node:path';
+import { basename, resolve } from 'node:path';
 import { isPortLive, normalizeProjectPath, type ProjectRegistry } from './project-registry';
 
 /** Result of starting (or attaching to) a registered project serve instance. */
@@ -30,6 +30,10 @@ export interface ProjectStartOptions {
  * never reuse the server entry as argv[1] (that spawned the wrong program).
  */
 export function resolveSpurServeCommand(): string[] {
+    if (process.env.SPUR_CLI_PATH && existsSync(process.env.SPUR_CLI_PATH)) {
+        return [process.execPath, process.env.SPUR_CLI_PATH];
+    }
+
     const argv1 = process.argv[1];
     if (typeof argv1 === 'string' && argv1.length > 0) {
         const base = argv1.replace(/\\/g, '/');
@@ -41,6 +45,11 @@ export function resolveSpurServeCommand(): string[] {
         ) {
             return [process.execPath, argv1];
         }
+    }
+
+    const monorepoCli = resolve(process.cwd(), 'apps/cli/src/index.ts');
+    if (existsSync(monorepoCli)) {
+        return [process.execPath, monorepoCli];
     }
 
     const fromPath = typeof Bun !== 'undefined' && typeof Bun.which === 'function' ? Bun.which('spur') : null;

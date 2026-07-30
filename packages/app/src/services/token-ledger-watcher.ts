@@ -103,7 +103,8 @@ export class TokenLedgerWatcher {
         }
     }
 
-    private schedulePoll(): void {
+    /** Visible for tests — schedule a debounced poll. */
+    schedulePoll(): void {
         if (this.debounceTimer) clearTimeout(this.debounceTimer);
         this.debounceTimer = setTimeout(() => {
             this.debounceTimer = undefined;

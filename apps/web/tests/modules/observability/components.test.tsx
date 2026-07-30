@@ -278,7 +278,7 @@ describe('observability components', () => {
         expect(thead?.className).toContain('sticky');
         const headers = table?.querySelectorAll('thead th');
         const headerLabels = Array.from(headers ?? []).map((th) => th.textContent?.trim());
-        expect(headerLabels).toEqual(['Time', 'Event', 'Actor', 'Prefix', 'Tier', 'Run', 'Outcome']);
+        expect(headerLabels).toEqual(['Time', 'Event', 'Actor', 'Entity', 'Prefix', 'Tier', 'Run', 'Outcome']);
     });
 
     test('event names are colored by a stable prefix-to-color map (task 0223 R4/R5/R6)', async () => {
@@ -608,12 +608,13 @@ describe('observability components', () => {
         const taskRow = taskSpans[0]?.closest('tr') as HTMLTableRowElement;
         expect(taskRow).not.toBeNull();
 
-        const prefixSpan = taskRow.querySelector('td:nth-child(4) span');
+        // Columns: Time | Event | Actor | Entity | Prefix | Tier | Run | Outcome
+        const prefixSpan = taskRow.querySelector('td:nth-child(5) span');
         expect(prefixSpan).not.toBeNull();
         expect(prefixSpan?.textContent).toBe('task');
         expect(prefixSpan?.className).toContain('text-emerald-400');
 
-        const tierCell = taskRow.querySelector('td:nth-child(5)');
+        const tierCell = taskRow.querySelector('td:nth-child(6)');
         expect(tierCell?.textContent?.trim()).toMatch(/default|diagnostic/);
     });
 

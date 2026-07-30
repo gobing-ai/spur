@@ -199,7 +199,14 @@ describe('spur projects CLI command', () => {
         const server = createServer();
         await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
         const targetPort = (server.address() as { port: number }).port;
+        const origAllocate = ProjectRegistry.prototype.allocatePort;
         ProjectRegistry.prototype.allocatePort = async () => targetPort;
+
+        const origSpawn = Bun.spawn;
+        Bun.spawn = (() => ({
+            exitCode: null,
+            unref: () => {},
+        })) as unknown as typeof Bun.spawn;
 
         try {
             const mockJson = createMockOutput();
@@ -210,6 +217,8 @@ describe('spur projects CLI command', () => {
             expect(jsonExit).toBe(0);
             expect(mockJson.getText()).toContain('"running": true');
         } finally {
+            Bun.spawn = origSpawn;
+            ProjectRegistry.prototype.allocatePort = origAllocate;
             server.close();
         }
     });
@@ -221,7 +230,14 @@ describe('spur projects CLI command', () => {
         const server = createServer();
         await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
         const targetPort = (server.address() as { port: number }).port;
+        const origAllocate = ProjectRegistry.prototype.allocatePort;
         ProjectRegistry.prototype.allocatePort = async () => targetPort;
+
+        const origSpawn = Bun.spawn;
+        Bun.spawn = (() => ({
+            exitCode: null,
+            unref: () => {},
+        })) as unknown as typeof Bun.spawn;
 
         try {
             const mockJson = createMockOutput();
@@ -232,6 +248,8 @@ describe('spur projects CLI command', () => {
             expect(jsonExit).toBe(0);
             expect(mockJson.getText()).toContain('"running": true');
         } finally {
+            Bun.spawn = origSpawn;
+            ProjectRegistry.prototype.allocatePort = origAllocate;
             server.close();
         }
     });

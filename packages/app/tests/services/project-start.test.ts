@@ -109,18 +109,39 @@ describe('project-start', () => {
         }
     });
 
-    it('resolveSpurServeCommand throws error when process.argv[1] does not match and spur is not on PATH', () => {
+    it('resolveSpurServeCommand throws error when process.argv[1] does not match, spur is not on PATH, and monorepo CLI absent', () => {
         const origArgv = process.argv[1];
         const origWhich = Bun.which;
+        const origCwd = process.cwd;
         try {
             process.argv[1] = '/usr/bin/other-app';
+            process.cwd = () => tempDir;
             Bun.which = () => null;
             expect(() => resolveSpurServeCommand()).toThrow(/Could not resolve the spur CLI/);
         } finally {
             if (origArgv !== undefined) {
                 process.argv[1] = origArgv;
             }
+            process.cwd = origCwd;
             Bun.which = origWhich;
+        }
+    });
+
+    it('resolveSpurServeCommand prefers SPUR_CLI_PATH when set', () => {
+        const origEnv = process.env.SPUR_CLI_PATH;
+        try {
+            const fakeCli = join(tempDir, 'fake-spur.js');
+            const { writeFileSync } = require('node:fs');
+            writeFileSync(fakeCli, '#!/usr/bin/env node');
+            process.env.SPUR_CLI_PATH = fakeCli;
+            const cmd = resolveSpurServeCommand();
+            expect(cmd).toEqual([process.execPath, fakeCli]);
+        } finally {
+            if (origEnv !== undefined) {
+                process.env.SPUR_CLI_PATH = origEnv;
+            } else {
+                delete process.env.SPUR_CLI_PATH;
+            }
         }
     });
 

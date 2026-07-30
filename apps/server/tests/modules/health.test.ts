@@ -185,7 +185,14 @@ describe('healthModule', () => {
         const server = createServer();
         await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
         const targetPort = (server.address() as { port: number }).port;
+        const origAllocate = ProjectRegistry.prototype.allocatePort;
         ProjectRegistry.prototype.allocatePort = async () => targetPort;
+
+        const origSpawn = Bun.spawn;
+        Bun.spawn = (() => ({
+            exitCode: null,
+            unref: () => {},
+        })) as unknown as typeof Bun.spawn;
 
         try {
             const app = new Hono();
@@ -202,6 +209,8 @@ describe('healthModule', () => {
             expect(body.running).toBe(true);
             expect(body.port).toBe(targetPort);
         } finally {
+            Bun.spawn = origSpawn;
+            ProjectRegistry.prototype.allocatePort = origAllocate;
             server.close();
         }
     });
@@ -210,7 +219,14 @@ describe('healthModule', () => {
         const server = createServer();
         await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
         const targetPort = (server.address() as { port: number }).port;
+        const origAllocate = ProjectRegistry.prototype.allocatePort;
         ProjectRegistry.prototype.allocatePort = async () => targetPort;
+
+        const origSpawn = Bun.spawn;
+        Bun.spawn = (() => ({
+            exitCode: null,
+            unref: () => {},
+        })) as unknown as typeof Bun.spawn;
 
         try {
             const app = new Hono();
@@ -226,6 +242,8 @@ describe('healthModule', () => {
             const body = (await res.json()) as { running: boolean; url: string };
             expect(body.running).toBe(true);
         } finally {
+            Bun.spawn = origSpawn;
+            ProjectRegistry.prototype.allocatePort = origAllocate;
             server.close();
         }
     });

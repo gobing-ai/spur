@@ -5,6 +5,7 @@ import {
     extractEventRowIdentity,
     formatAvailability,
     formatDuration,
+    formatEntityLabel,
     historyUrl,
     parseHistoryResponse,
     parseHistoryRow,
@@ -468,6 +469,27 @@ describe('tokenizeJson / buildPayloadTooltip', () => {
         expect(tip?.text).toContain('smoke');
         expect(tip?.tokens.length).toBeGreaterThan(0);
         expect(tip?.tokens.map((t) => t.text).join('')).toBe(tip?.text);
+    });
+});
+
+describe('formatEntityLabel', () => {
+    test('formats kind : id from indexed columns', () => {
+        expect(formatEntityLabel({ entityKind: 'task', entityId: '0388' })).toBe('task : 0388');
+    });
+
+    test('falls back to payload.entity when columns are empty', () => {
+        expect(
+            formatEntityLabel({
+                entityKind: null,
+                entityId: null,
+                payload: { entity: { kind: 'feature', id: 'K1' } },
+            }),
+        ).toBe('feature : K1');
+    });
+
+    test('returns unavailable when entity is absent', () => {
+        expect(formatEntityLabel({ entityKind: null, entityId: null, payload: null })).toBe('unavailable');
+        expect(formatEntityLabel({ payload: { jobId: 'j1' } })).toBe('unavailable');
     });
 });
 

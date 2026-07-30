@@ -548,6 +548,31 @@ export function buildPayloadTooltip(payload: Record<string, unknown> | null): {
 }
 
 /**
+ * Combine entity kind + id for the Entity column.
+ * Prefers indexed `entityKind`/`entityId` columns (task 0369), then payload.entity.
+ * Format: `kind : id` when both present.
+ */
+export function formatEntityLabel(event: {
+    entityKind?: string | null;
+    entityId?: string | null;
+    payload?: Record<string, unknown> | null;
+}): string {
+    let kind = typeof event.entityKind === 'string' && event.entityKind.length > 0 ? event.entityKind : null;
+    let id = typeof event.entityId === 'string' && event.entityId.length > 0 ? event.entityId : null;
+
+    if ((!kind || !id) && event.payload && typeof event.payload.entity === 'object' && event.payload.entity) {
+        const ent = event.payload.entity as Record<string, unknown>;
+        if (!kind && typeof ent.kind === 'string' && ent.kind.length > 0) kind = ent.kind;
+        if (!id && typeof ent.id === 'string' && ent.id.length > 0) id = ent.id;
+    }
+
+    if (kind && id) return `${kind} : ${id}`;
+    if (kind) return kind;
+    if (id) return id;
+    return 'unavailable';
+}
+
+/**
  * Extract display identity for a system-event row. Pure + exported for unit tests.
  */
 export function extractEventRowIdentity(event: {
@@ -1305,8 +1330,8 @@ function useMediaQuery(query: string): boolean {
 /**
  * Dense table view (task 0223) replacing the previous card list.
  *
- * Layout: 7 columns (Time | Event | Actor | Prefix | Tier | Run | Outcome) with
- * a sticky `<thead>` (R3) and compact rows (~28px) so at least 20 rows are
+ * Layout: 8 columns (Time | Event | Actor | Entity | Prefix | Tier | Run | Outcome)
+ * with a sticky `<thead>` (R3) and compact rows (~28px) so at least 20 rows are
  * visible on a standard viewport (R2). Each row is a keyboard-toggleable
  * detail target (R4) that expands a panel below showing the full redacted
  * envelope - no duplication of detail rendering (R9).
@@ -1336,12 +1361,13 @@ function SystemEventsTable({ rows, catalog }: { rows: SystemEventRow[]; catalog:
               jobId/runId appears. Run/Outcome are wider than the original w-28 so
               correlators truncate cleanly instead of wrapping into the next cell.
             */}
-            <table className="w-full min-w-[720px] text-xs border-separate border-spacing-0 table-fixed">
+            <table className="w-full min-w-[800px] text-xs border-separate border-spacing-0 table-fixed">
                 <colgroup>
                     <col className={isCompact ? 'w-24' : 'w-36'} />
                     {/* Event: fixed 20% so long names truncate instead of stealing Run/Outcome. */}
                     <col className="w-[20%]" />
-                    {!isCompact && <col className="w-28" />}
+                    {!isCompact && <col className="w-24" />}
+                    {!isCompact && <col className="w-32" />}
                     {!isCompact && <col className="w-20" />}
                     {!isCompact && <col className="w-20" />}
                     {/* Run: doubled from w-40 → w-80 so jobId/runId correlators fit. */}
@@ -1359,6 +1385,11 @@ function SystemEventsTable({ rows, catalog }: { rows: SystemEventRow[]; catalog:
                         {!isCompact && (
                             <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
                                 Actor
+                            </th>
+                        )}
+                        {!isCompact && (
+                            <th scope="col" className="font-semibold px-3 py-1.5 border-b border-spur-border">
+                                Entity
                             </th>
                         )}
                         {!isCompact && (
@@ -1442,10 +1473,11 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
     );
     const { run: runId, action: actionId, outcome, duration } = identity;
     const usage = formatUsage(event.payload?.usage);
-    const entityLabel =
-        event.entityKind && event.entityId
-            ? `${event.entityKind}:${event.entityId}`
-            : formatAvailability(event.entityKind ?? event.entityId);
+    const entityLabel = formatEntityLabel({
+        entityKind: event.entityKind,
+        entityId: event.entityId,
+        payload: event.payload,
+    });
     const actorLabel = event.actor && event.actor.length > 0 ? event.actor : 'unavailable';
 
     /** Pretty-printed + tokenized payload for the event-name hover tooltip. */
@@ -1703,6 +1735,11 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                         {compact && (
                             <div className="flex flex-col gap-0.5 text-[10px] text-spur-text-muted min-w-0">
                                 {event.actor && <span className="truncate">by {event.actor}</span>}
+                                {entityLabel !== 'unavailable' && (
+                                    <span className="truncate" title={entityLabel}>
+                                        entity: {entityLabel}
+                                    </span>
+                                )}
                                 <span className="truncate" title={`run ${runId}`}>
                                     run: {runId}
                                 </span>
@@ -1725,6 +1762,15 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                         title={actorLabel}
                     >
                         {actorLabel}
+                    </td>
+                )}
+                {!compact && (
+                    <td
+                        className="px-3 py-1 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-middle truncate"
+                        title={entityLabel}
+                        data-testid="system-event-entity"
+                    >
+                        {entityLabel}
                     </td>
                 )}
                 {!compact && (
@@ -1763,7 +1809,7 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
             </tr>
             {expanded && (
                 <tr>
-                    <td colSpan={compact ? 2 : 7} className="px-3 py-2 border-b border-spur-border/40 bg-base-300/40">
+                    <td colSpan={compact ? 2 : 8} className="px-3 py-2 border-b border-spur-border/40 bg-base-300/40">
                         <section
                             id={`detail-${event.id}`}
                             aria-label={`Detail for ${event.eventName}`}
