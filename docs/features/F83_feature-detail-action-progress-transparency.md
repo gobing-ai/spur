@@ -1,0 +1,118 @@
+---
+schema_version: 1
+id: "F83"
+name: "Feature detail action progress transparency"
+status: backlog
+priority: P1
+tags: []
+created_at: "2026-07-29T23:18:23.620Z"
+updated_at: "2026-07-29T23:18:56.196Z"
+---
+
+# F83: Feature detail action progress transparency
+
+## Goal
+Provide real-time progress transparency for Features detail dynamic action buttons by implementing the deferred F81 async job-queue runner, correlating `queue.job.*` SSE events by `runId`, and showing a closable floating progress layer so operators can monitor long-running actions without blocking the detail panel.
+## Scope
+- In:
+  - `FeatureService.fulfillAction` (mirror `TaskService.fulfillAction`) and a `feature-action` job kind consumed by the existing server job queue
+  - Cut over `POST /features/{id}/action` from the current stub to enqueue + return `{ runId, action, status: 'queued' }` (`FeatureActionResponse`)
+  - Sole sync exception remains read-only `check` (F81/0352)
+  - Confirm-before-enqueue order preserved for ops that already confirm (F81/0353)
+  - Widen Features board SSE client beyond `feature.*` to admit `queue.job.*` lifecycle events
+  - Correlate client-stored `runId` with SSE `payload.jobId` through lifecycle states: confirmed → queued → running → succeeded | failed | retrying
+  - Closable floating progress layer on the Features module (dismiss hides UI; job continues; re-open from a compact status chip while non-terminal)
+  - Mount Board-shell listener for the existing `api-error` CustomEvent as the terminal failure surface when the panel is closed
+  - Unit/integration tests for contract shape, enqueue path, SSE filter matching, and panel state transitions
+- Out:
+  - Cancelling in-flight feature-action jobs from the UI (reserved state only)
+  - Feature-scoped full activity stream / new Observability tab
+  - Shared cross-module `ActionRunner` extraction (F81 deferred)
+  - Distributed tracing / OpenTelemetry
+  - Redesign of the full action membership matrix (owned by F81 design map)
+  - Task Kanban action-group redesign
+## Acceptance Criteria
+```gherkin
+Feature: Feature detail action progress transparency
+
+@core
+Scenario: R1 — Feature action enqueue returns runId and queued status
+  Given a feature is shown in the Features detail panel
+  And the feature-action job consumer is registered
+  When the operator confirms and dispatches a non-check action (e.g. brainstorm or plan)
+  Then the server enqueues a feature-action job
+  And the response is `{ ok: true, data: { runId, action, status: 'queued' } }`
+  And the action handler is no longer a no-op stub
+
+@core
+Scenario: R2 — SSE admits queue.job events for feature actions
+  Given the Features board is open with an active EventSource on /api/events/planning
+  When a queue.job.enqueued, queue.job.completed, queue.job.failed, or queue.job.retrying event is streamed
+  Then the Features client processes the event (does not drop it solely for lacking a feature. prefix)
+  And when the event's payload.jobId matches a tracked feature-action runId the progress UI advances
+
+@core
+Scenario: R3 — Floating progress layer shows live lifecycle
+  Given the operator has dispatched a feature action that returned a runId
+  When queue.job lifecycle events arrive for that runId
+  Then a closable floating progress layer is visible
+  And it shows the current state among queued, running, succeeded, failed, and retrying
+  And on succeeded or failed the layer reaches a terminal presentation without blocking the detail body
+
+@core
+Scenario: R4 — Dismissing the layer does not cancel the job
+  Given the floating progress layer is open for an in-flight feature action
+  When the operator closes (dismisses) the layer
+  Then the job continues on the server
+  And a compact status chip (or equivalent affordance) remains while the action is non-terminal
+  And the operator can re-open the floating layer from that affordance
+
+@core
+Scenario: R5 — Terminal failure surfaces when the layer is closed
+  Given a feature-action job fails terminally (queue.job.failed)
+  And the floating progress layer is not open
+  When the client receives the failure signal
+  Then a global error toast (or equivalent Board-shell surface) shows the failure
+  And the dead-lettered api-error CustomEvent channel has a production listener
+
+@core
+Scenario: R6 — check remains the sole synchronous exception
+  Given the operator runs feature check from the board (when exposed)
+  When check is invoked
+  Then it does not enqueue a feature-action job
+  And findings or errors return on the RPC response path without a floating progress runId lifecycle
+
+@edge
+Scenario: R7 — Stale or unmatched queue events do not corrupt another feature's UI
+  Given feature A has a tracked runId and feature B is selected in the detail panel
+  When a queue.job event arrives whose jobId does not match feature B's tracked runId
+  Then feature B's progress UI does not change state for that event
+```
+## Tasks
+
+<!-- AUTO-GENERATED by spur feature refresh -->
+| WBS | Task | Status |
+| --- | ---- | ------ |
+| 0385 | FeatureActionResponse contract and FeatureService.fulfillAction | todo |
+| 0386 | Server feature-action job consumer and action handler cutover | todo |
+| 0387 | Features SSE queue.job admission and runId correlation hook | todo |
+| 0388 | FloatingActionProgress layer, re-open chip, and api-error toast | todo |
+<!-- END AUTO-GENERATED -->
+
+## Notes
+**Parent:** F8 (Features board module). Sibling of F81 (design map, done) and F82 (status feedback).
+
+**Implements deferred F81 contracts:**
+- 0352 — async job-queue runner Option A
+- 0353 — confirm-before-enqueue (preserve existing modals)
+- 0354 — observability via queue_jobs + queue.job.* SSE; upgrades MV chip to floating layer
+
+**Load-bearing reuse:**
+- `TaskService.fulfillAction` (`packages/app/src/services/task-service.ts`)
+- `queue.job.*` already in SYSTEM_EVENT_CATALOG and streamed by `/api/events/planning`
+- Jobs / System Events tabs remain deep-dive; floating layer is the in-context surface
+
+**Discovery artifacts:**
+- `docs/plans/2026-07-29-feature-action-progress-transparency-brainstorm.md`
+- `.spur/run/idea-eval-report.md`
+## History

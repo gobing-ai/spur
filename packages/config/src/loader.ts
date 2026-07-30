@@ -40,6 +40,7 @@ export {
     listBundledTemplateFiles,
     resetBundledConfigCache,
 } from './bundled-config';
+export * from './projects';
 export { renderTemplate } from './template-renderer';
 
 // ---- Types ----

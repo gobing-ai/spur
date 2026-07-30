@@ -472,3 +472,5 @@ export function buildConfigFromEnv(env: Record<string, string | undefined> = pro
         },
     });
 }
+
+export * from './projects';

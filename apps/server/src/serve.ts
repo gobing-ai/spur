@@ -1,14 +1,16 @@
-import { dirname, isAbsolute, join } from 'node:path';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 import {
     AgentService,
     configuredSecretValues,
     JobHandlerRegistry,
     JobWorkerService,
+    ProjectRegistry,
     resolveAutostartSet,
     resolvePlanningFolders,
     resolveRetentionQuotas,
     type TaskActionJob,
 } from '@gobing-ai/spur-app';
+
 import { IN_MEMORY_DATABASE_URL } from '@gobing-ai/spur-config';
 import { loadSpurConfig, resolveConfigFile } from '@gobing-ai/spur-config/loader';
 import { SystemEventDao } from '@gobing-ai/spur-domain';
@@ -351,8 +353,22 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 hostname: options.host,
             });
 
+            const projectRegistry = new ProjectRegistry();
+            const projectCwd = process.cwd();
+            const projectName = basename(projectCwd);
+            try {
+                await projectRegistry.upsert({ path: projectCwd, name: projectName, port: server.port });
+            } catch (err) {
+                appRt.logger.warn('Failed to register project in ProjectRegistry', { error: String(err) });
+            }
+
             const shutdown = async (signal: string) => {
                 appRt.logger.info('Shutting down server', { signal });
+                try {
+                    await projectRegistry.setPort(projectCwd, 0);
+                } catch (err) {
+                    appRt.logger.warn('Failed to deregister project port in ProjectRegistry', { error: String(err) });
+                }
                 if (scheduler) await scheduler.stop();
                 if (jobWorker) await jobWorker.stop();
                 try {

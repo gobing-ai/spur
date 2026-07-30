@@ -34,6 +34,8 @@ detail-first then index (§4.5 rule 5 / T9).
 | [`e2e-workflow-for-system-development.md`](design/e2e-workflow-for-system-development.md) | End-to-end workflow system for system development — pipeline architecture, design step auto-detection, HITL gate model, doc-sync boundary (0167) | design |
 | [`portable-agents-harness-contract.md`](design/portable-agents-harness-contract.md) | `spur init` root `AGENTS.md` seed — complementary Spur/Superskill ownership, portable routing, conditional root `DESIGN.md` | implemented |
 | [`feature-tree-status-affordance.md`](design/feature-tree-status-affordance.md) | Board Features tree — icon-only leading status indicator, accessible-name contract, glyph silhouettes, semantic-token convergence (ADR-034, feature R2) | implemented |
+| [`feature-action-progress-transparency.md`](design/feature-action-progress-transparency.md) | Features detail action progress — F83 job-queue runner, queue.job.* SSE correlation, floating progress layer (implements F81/0352–0354) | design |
+| [`project-switcher.md`](design/project-switcher.md) | Multi-project Spur Board switcher — registry, serve lifecycle, switcher UI (K1) | design |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
 > history); the bare-`<slug>.md` convention (§4.5 rule 2) applies to **new** satellites. See
@@ -334,7 +336,9 @@ Scaffold BDD `test.todo` stubs from task Acceptance Criteria into `<workspace>/t
 |---------|----------|
 | `spur status [path] [--json]` | Project health: `ok`/exit 0 requires a valid `.spur/config.yaml`; `packageJson` is an independent optional fact. Also reports Git context, team agent spec ids under `.spur/agents/`, and optional path metadata (size, isFile, isDirectory). |
 | `spur serve [--port <n>] [--host <addr>] [--no-open] [--cwd <path>] [--json]` | Start the web server (local fallback) and serve the Spur Board SPA when static assets resolve. Options: `--port` (env PORT, default 3000), `--host` (env HOST, default localhost), `--no-open` skip browser, `--json` print {port,url,pid}. Board assets ship in the npm package as `web/` next to `spur.js` (`resolveWebDistPath`); without them `/board` returns JSON 404 and the server logs a warning. |
+| `spur projects [add|remove|list|start|stop] [args] [--json]` | Multi-project registry management: `add <path>` registers project, `remove <target>` unregisters, `list` shows registered projects and health status, `start <target>` spawns server on allocated port, `stop <target>` stops server process. `--json` shapes for scripting. |
 | `spur migrate [--json]` | Temporary helper: apply CLI-owned schema migrations; reports `{ ok, applied }`. |
+
 | `spur --help` / `spur --version` | Commander-rendered usage / binary version (ADR-014). |
 
 ### 1.3 Agent command surface — commands as SSOT (feature H5 (was O), ADR-032)

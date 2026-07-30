@@ -137,6 +137,7 @@ export type {
     SupervisorOverlayEntry,
 } from './services/process-inventory-service';
 export { ProcessInventoryService } from './services/process-inventory-service';
+export { isPortAvailable, isPortLive, normalizeProjectPath, ProjectRegistry } from './services/project-registry';
 export {
     type Colorize,
     type FailOnSeverity,

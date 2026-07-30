@@ -23,7 +23,9 @@ import { registerHistoryCommand } from './commands/history';
 import { registerInitCommand } from './commands/init';
 import { registerMessageCommand } from './commands/message';
 import { registerMigrateCommand } from './commands/migrate';
+import { registerProjectsCommand } from './commands/projects';
 import { registerRuleCommand } from './commands/rule';
+
 import { registerServeCommand } from './commands/serve';
 import { registerStatusCommand } from './commands/status';
 import { registerTaskCommand } from './commands/task';
@@ -129,7 +131,9 @@ async function runCommandDispatch(
     registerInitCommand(program, context);
     registerMessageCommand(program, context);
     registerMigrateCommand(program, context);
+    registerProjectsCommand(program, context);
     registerRuleCommand(program, context);
+
     registerStatusCommand(program, context);
     registerServeCommand(program, context);
     registerTeamCommand(program, context);

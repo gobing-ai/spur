@@ -876,3 +876,20 @@ Workers-safe and never imports local filesystem, process-control, or Bun SQLite 
 making the documented Worker deployment fail before startup.
 
 **Detail:** `docs/03_ARCHITECTURE.md §2`; `docs/04_DESIGN.md §5.1`.
+
+---
+
+## ADR-037: User-Global Project Registry for Multi-Project Board Switching
+
+**Status:** Accepted · **Date:** 2026-07-29
+
+**Decision.** Multi-project Spur Board discovery and lifecycle use a user-global file registry at
+`~/.config/spur/projects.json` (`port: 0` = stopped). Local `spur serve` instances register and
+deregister themselves (in-process hub); the board switcher lists and can start projects via that
+registry. Launchd/daemon supervision is deferred but must reuse the same file contract.
+
+**Why.** Port memorization and per-project terminal sessions are the multi-project pain point; a
+cwd-local store cannot coordinate projects, and a full daemon is overbuilt while Spur is still
+under active local development.
+
+**Detail:** `docs/design/project-switcher.md`; feature `K1` (`docs/features/K1_project-switcher.md`); parent umbrella `K` Features module (Spur Board).

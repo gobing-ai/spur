@@ -3,6 +3,7 @@ import { NavLink } from 'react-router';
 import { Button } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../lib/rpc-client';
 import { modules } from '../modules/registry';
+import ProjectSwitcher from './ProjectSwitcher';
 import ThemeToggle from './ThemeToggle';
 
 /** Sidebar title shown until the server identifies the project (and on fetch failure). */
@@ -94,9 +95,8 @@ export default function LeftSidebar({ collapsed, onToggle, onMobileClose }: Prop
             ) : (
                 // Expanded: fold control before theme toggle (restores the pre-regression order).
                 <div className="flex items-center justify-between gap-1 p-3 border-b border-spur-border shrink-0">
-                    <span className="min-w-0 flex-1 text-sm font-semibold text-spur-text truncate" title={projectName}>
-                        {projectName}
-                    </span>
+                    <ProjectSwitcher currentName={projectName} />
+
                     <div className="flex items-center gap-0.5 shrink-0">
                         <SidebarFoldButton collapsed={false} onToggle={onToggle} />
                         <ThemeToggle />

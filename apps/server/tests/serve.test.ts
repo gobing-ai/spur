@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import type { ApplicationRuntime, ApplicationStopReason } from '@gobing-ai/ts-infra/application';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { serverBootstrapConfig } from '../src/bootstrap';
@@ -339,7 +339,9 @@ describe('startServer', () => {
         const sigint = sigHandlers.SIGINT;
         if (!sigint) throw new Error('SIGINT handler not registered');
         await sigint();
+        await new Promise((resolve) => setTimeout(resolve, 0));
         expect(serverStopped).toBe(true);
+
         expect(schedulerStopped).toBe(true);
         expect(logMessages.some((m) => m.msg === 'Shutting down server')).toBe(true);
         expect(logMessages.some((m) => m.msg === 'Scheduler started')).toBe(true);
@@ -587,6 +589,67 @@ describe('startServer', () => {
                 failingAgentService,
             ),
         ).rejects.toThrow('Task action verify for 0001 failed with exit code 2');
+    });
+
+    test('registers listening port in ProjectRegistry and resets to 0 on SIGINT', async () => {
+        origServe = Bun.serve;
+        origExit = process.exit;
+        origOn = process.on;
+
+        const tempDir = mkdtempSync(join(tmpdir(), 'spur-serve-registry-'));
+        const projectsFile = join(tempDir, 'projects.json');
+        const prevProjectsFile = process.env.SPUR_PROJECTS_FILE;
+        process.env.SPUR_PROJECTS_FILE = projectsFile;
+
+        const sigHandlers: Record<string, () => void | Promise<void>> = {};
+        process.on = ((event: string, handler: () => void | Promise<void>) => {
+            sigHandlers[event] = handler;
+            return process;
+        }) as typeof process.on;
+
+        const listenPort = 5555;
+        Bun.serve = (() => ({
+            port: listenPort,
+            stop: () => {},
+        })) as unknown as typeof Bun.serve;
+
+        process.exit = ((_code: number) => {}) as typeof process.exit;
+
+        try {
+            await startServer(
+                { port: listenPort, host: '127.0.0.1', openBrowser: false, keepAlive: false },
+                makeDeps(),
+            );
+
+            // Allow the async upsert to settle if needed
+            await new Promise((r) => setTimeout(r, 20));
+
+            expect(existsSync(projectsFile)).toBe(true);
+            const registered = JSON.parse(readFileSync(projectsFile, 'utf8')) as {
+                projects: Array<{ path: string; port: number; name: string }>;
+            };
+            const cwdEntry = registered.projects.find((p) => p.name === basename(process.cwd()));
+            expect(cwdEntry).toBeDefined();
+            expect(cwdEntry?.port).toBe(listenPort);
+
+            const sigint = sigHandlers.SIGINT;
+            if (!sigint) throw new Error('SIGINT handler not registered');
+            await sigint();
+            await new Promise((r) => setTimeout(r, 20));
+
+            const afterStop = JSON.parse(readFileSync(projectsFile, 'utf8')) as {
+                projects: Array<{ path: string; port: number; name: string }>;
+            };
+            const stopped = afterStop.projects.find((p) => p.name === basename(process.cwd()));
+            expect(stopped?.port).toBe(0);
+        } finally {
+            if (prevProjectsFile === undefined) {
+                delete process.env.SPUR_PROJECTS_FILE;
+            } else {
+                process.env.SPUR_PROJECTS_FILE = prevProjectsFile;
+            }
+            rmSync(tempDir, { recursive: true, force: true });
+        }
     });
 
     test('createTaskActionAgentService builds the real task action runner facade', () => {
