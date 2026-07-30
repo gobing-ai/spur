@@ -3,33 +3,10 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ProjectRegistry } from '@gobing-ai/spur-app';
+import { ProjectRegistry, setDetachedServeSpawnForTests } from '@gobing-ai/spur-app';
 import { Hono } from 'hono';
 import type { ServerContext } from '../../src/context';
 import { healthModule } from '../../src/modules/health';
-
-/**
- * Fake only `spur serve …` spawns; passthrough all others.
- * On Bun, execa uses Bun.spawn — a total stub null-exits concurrent ProcessExecutor tests.
- */
-function installServeSpawnMock(serveExitCode: number | null = null): () => void {
-    const original = Bun.spawn;
-    const fakeChild = {
-        exitCode: serveExitCode,
-        unref: () => {},
-        pid: 0,
-        exited: Promise.resolve(serveExitCode),
-    };
-    Bun.spawn = ((first: unknown, second?: unknown) => {
-        if (Array.isArray(first) && first.map(String).includes('serve')) {
-            return fakeChild;
-        }
-        return (original as (...args: unknown[]) => unknown)(first, second);
-    }) as typeof Bun.spawn;
-    return () => {
-        Bun.spawn = original;
-    };
-}
 
 describe('healthModule', () => {
     let tempDir: string;
@@ -211,7 +188,8 @@ describe('healthModule', () => {
         const origAllocate = ProjectRegistry.prototype.allocatePort;
         ProjectRegistry.prototype.allocatePort = async () => targetPort;
 
-        const restoreSpawn = installServeSpawnMock(null);
+        // Injectable serve fake — never reassign Bun.spawn (breaks ProcessExecutor).
+        setDetachedServeSpawnForTests(() => ({ exitCode: null, unref: () => {} }));
 
         try {
             const app = new Hono();
@@ -228,7 +206,7 @@ describe('healthModule', () => {
             expect(body.running).toBe(true);
             expect(body.port).toBe(targetPort);
         } finally {
-            restoreSpawn();
+            setDetachedServeSpawnForTests(undefined);
             ProjectRegistry.prototype.allocatePort = origAllocate;
             server.close();
         }
@@ -241,7 +219,7 @@ describe('healthModule', () => {
         const origAllocate = ProjectRegistry.prototype.allocatePort;
         ProjectRegistry.prototype.allocatePort = async () => targetPort;
 
-        const restoreSpawn = installServeSpawnMock(null);
+        setDetachedServeSpawnForTests(() => ({ exitCode: null, unref: () => {} }));
 
         try {
             const app = new Hono();
@@ -257,7 +235,7 @@ describe('healthModule', () => {
             const body = (await res.json()) as { running: boolean; url: string };
             expect(body.running).toBe(true);
         } finally {
-            restoreSpawn();
+            setDetachedServeSpawnForTests(undefined);
             ProjectRegistry.prototype.allocatePort = origAllocate;
             server.close();
         }

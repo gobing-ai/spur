@@ -12,7 +12,6 @@
  * `requestTransition` / `reseedRun` (E2 external transition API).
  */
 
-import { readFile } from 'node:fs/promises';
 import { createId, type DbAdapter, type TaskRunLinkDao } from '@gobing-ai/spur-domain';
 import {
     createDefaultWorkflowEngineHost,
@@ -21,6 +20,7 @@ import {
     loadWorkflowDef,
     type StateMachineWorkflowDef,
 } from '@gobing-ai/ts-dual-workflow-engine';
+import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import type { EntityRef, LifecyclePort, TransitionResult } from '../services/planning-write-service';
 import { extractReviewSectionBody, hasPopulatedPriorityTable } from '../services/task-check';
 
@@ -247,7 +247,8 @@ export class LifecycleAdapter implements LifecyclePort {
             return this.opts.readTaskMarkdown(ref);
         }
         try {
-            return await readFile(ref.filePath, 'utf8');
+            const fs = createNodeFileSystem(this.opts.cwd);
+            return await fs.readFile(ref.filePath);
         } catch {
             return null;
         }

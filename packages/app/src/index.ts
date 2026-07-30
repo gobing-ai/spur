@@ -146,9 +146,13 @@ export type {
 export { ProcessInventoryService } from './services/process-inventory-service';
 export { isPortAvailable, isPortLive, normalizeProjectPath, ProjectRegistry } from './services/project-registry';
 export {
+    type DetachedServeChild,
+    type DetachedServeSpawn,
+    type DetachedServeSpawnOptions,
     type ProjectStartOptions,
     type ProjectStartResult,
     resolveSpurServeCommand,
+    setDetachedServeSpawnForTests,
     startRegisteredProject,
 } from './services/project-start';
 export {

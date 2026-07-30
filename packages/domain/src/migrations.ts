@@ -1,9 +1,9 @@
-import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { DbAdapter } from '@gobing-ai/ts-db';
 import { WORKFLOW_ENGINE_SCHEMA_SQL } from '@gobing-ai/ts-dual-workflow-engine';
 import { HISTORY_IMPORT_SCHEMA_SQL } from '@gobing-ai/ts-llm-jsonl-importer';
 import { RULE_ENGINE_SCHEMA_SQL } from '@gobing-ai/ts-rule-engine';
+import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { DOMAIN_SCHEMA_SQL, PLANNING_SCHEMA_SQL } from './schema';
 
 /** Embedded CLI migration used when no migration folder is available. */
@@ -253,7 +253,9 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
 
 /** Load SQL migration files from a regenerated local migration folder. */
 export async function loadSqlMigrations(folder: string): Promise<CliMigration[]> {
-    const entries = (await readdir(folder))
+    const fs = createNodeFileSystem();
+    const rawEntries = await fs.readDir(folder);
+    const entries = rawEntries
         .filter((entry) => entry.endsWith('.sql') && entry.includes(CLI_MIGRATION_FILE_MARKER))
         .sort((left, right) => left.localeCompare(right));
 
@@ -261,7 +263,7 @@ export async function loadSqlMigrations(folder: string): Promise<CliMigration[]>
     for (const entry of entries) {
         migrations.push({
             id: entry.replace(/\.sql$/, ''),
-            sql: await Bun.file(join(folder, entry)).text(),
+            sql: await fs.readFile(join(folder, entry)),
         });
     }
     return migrations.length > 0 ? migrations : CLI_MIGRATIONS;

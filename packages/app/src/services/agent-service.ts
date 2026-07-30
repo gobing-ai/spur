@@ -1,4 +1,3 @@
-import { stat } from 'node:fs/promises';
 import { isatty } from 'node:tty';
 import {
     type CapabilityTier,
@@ -26,7 +25,12 @@ import {
     translateSlashCommand,
 } from '@gobing-ai/ts-ai-runner';
 import type { EventBus } from '@gobing-ai/ts-infra';
-import { NodeProcessExecutor, type OutputPolicy, type ProcessRegistry } from '@gobing-ai/ts-runtime';
+import {
+    createNodeFileSystem,
+    NodeProcessExecutor,
+    type OutputPolicy,
+    type ProcessRegistry,
+} from '@gobing-ai/ts-runtime';
 import {
     AgentExecutionLifecycle,
     type AgentExecutionOptions,
@@ -895,9 +899,9 @@ export class AgentService {
         return { ok: true };
     }
 
-    private async statCwd(cwd: string): Promise<Awaited<ReturnType<typeof stat>> | null> {
+    private async statCwd(cwd: string) {
         try {
-            return await stat(cwd);
+            return await createNodeFileSystem(this.ctx.cwd).stat(cwd);
         } catch {
             return null;
         }

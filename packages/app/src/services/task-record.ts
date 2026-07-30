@@ -11,8 +11,7 @@
  * Design: docs/tasks/0108_*.md; ADR-022 (orchestration is configuration).
  */
 
-import { execSync } from 'node:child_process';
-import type { FileSystem } from '@gobing-ai/ts-runtime';
+import { BunSyncProcessExecutor, type FileSystem } from '@gobing-ai/ts-runtime';
 
 /**
  * Escape pipe characters in a string so they don't break markdown table cells.
@@ -342,11 +341,14 @@ function extractChangedFiles(diffText: string): string[] {
  */
 export function gitDiffU0(cwd?: string): string {
     try {
-        return execSync("git diff -U0 HEAD -- '*.ts' '*.tsx' '*.js'", {
-            cwd,
-            encoding: 'utf-8',
-            timeout: 10_000,
+        // ProcessExecutor seam (no-direct-process-spawn). Git expands pathspecs itself.
+        const result = new BunSyncProcessExecutor().runSync({
+            command: 'git',
+            args: ['diff', '-U0', 'HEAD', '--', '*.ts', '*.tsx', '*.js'],
+            ...(cwd !== undefined ? { cwd } : {}),
+            rejectOnError: false,
         });
+        return result.exitCode === 0 ? result.stdout : '';
     } catch {
         return '';
     }

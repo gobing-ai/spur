@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -24,11 +23,40 @@ import {
 import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import { loadWorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import { EventBus } from '@gobing-ai/ts-infra';
+import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { EMBEDDED_SPUR_SCHEMAS } from '../config/embedded-schemas';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
 import { attachSystemEventLedger } from '../system-event-ledger';
 import { resolveSpurBin } from '../workflow/resolve-spur-bin';
+
+/** POSIX single-quote for `sh -c` argv embedding. */
+function shQuote(value: string): string {
+    return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * Launch a long-lived async workflow worker via ProcessExecutor + nohup.
+ * Avoids direct child_process.spawn (no-direct-process-spawn).
+ */
+async function spawnAsyncWorkflowWorker(spurBin: string, cmd: string[]): Promise<void> {
+    const line = [spurBin, ...cmd].map(shQuote).join(' ');
+    const env: Record<string, string> = {};
+    for (const [key, value] of Object.entries(process.env)) {
+        if (value !== undefined) env[key] = value;
+    }
+    env.SPUR_ASYNC_WORKER = '1';
+    await new NodeProcessExecutor().run({
+        command: process.platform === 'win32' ? 'cmd' : '/bin/sh',
+        args:
+            process.platform === 'win32'
+                ? ['/c', `start /b "" ${[spurBin, ...cmd].map((c) => `"${c.replace(/"/g, '""')}"`).join(' ')}`]
+                : ['-c', `nohup ${line} </dev/null >/dev/null 2>&1 &`],
+        env,
+        forceBuffered: true,
+        rejectOnError: false,
+    });
+}
 
 /**
  * Parse the `--vars` flag into a string→string map, or `undefined` when absent.
@@ -205,18 +233,10 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     cmd.push('--trace-file');
                 }
                 try {
-                    const child = spawn(spurBin, cmd, {
-                        stdio: 'ignore',
-                        detached: true,
-                        // Mark the child as the async worker so it self-records its
-                        // own pid (== group id) onto the run row at creation time.
-                        env: { ...process.env, SPUR_ASYNC_WORKER: '1' },
-                    });
-                    // Detach: let the parent exit without waiting on the child.
-                    child.unref();
+                    // Detached via ProcessExecutor + nohup (SPUR_ASYNC_WORKER set in env).
+                    await spawnAsyncWorkflowWorker(spurBin, cmd);
                 } catch {
-                    // If spawn throws (e.g. in a runtime without child_process), fall
-                    // through to the sync path so the workflow still runs.
+                    // If spawn throws, fall through to the sync path so the workflow still runs.
                     const result = await makeSvc(options.json).run(file, {
                         runId,
                         vars: { spurBin: resolveSpurBin(), ...parseVars(options.vars) },

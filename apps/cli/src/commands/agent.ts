@@ -7,6 +7,7 @@ import {
     TeamService,
 } from '@gobing-ai/spur-app';
 import { EventBus } from '@gobing-ai/ts-infra';
+import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
 import { attachSystemEventLedger } from '../system-event-ledger';
@@ -254,8 +255,21 @@ async function runAgentEdit(id: string | undefined, context: CliContext): Promis
         context.output.write(path);
         return 0;
     }
-    const proc = Bun.spawn([...editorArgv, path], { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
-    return await proc.exited;
+    // Interactive $EDITOR via ProcessExecutor (stream/TTY). See no-direct-process-spawn.
+    const [editorCmd, ...editorArgs] = editorArgv;
+    if (editorCmd === undefined) {
+        context.output.write(path);
+        return 0;
+    }
+    const result = await new NodeProcessExecutor({
+        output: { mode: 'stream', isTTY: true },
+    }).run({
+        command: editorCmd,
+        args: [...editorArgs, path],
+        forceBuffered: false,
+        rejectOnError: false,
+    });
+    return result.exitCode ?? 1;
 }
 
 /** `spur agent delete <id> [--force]` */

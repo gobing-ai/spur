@@ -1,5 +1,5 @@
-import { appendFile, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import type { WorkflowObservabilityBus } from './observability';
 
 /** Append-only, schema-versioned JSONL projection of the redacted workflow event bus. */
@@ -37,8 +37,9 @@ export class WorkflowTraceWriter {
             event,
         })}\n`;
         this.pending = this.pending.then(async () => {
-            await mkdir(dirname(this.path), { recursive: true });
-            await appendFile(this.path, line, 'utf8');
+            const fs = createNodeFileSystem();
+            await fs.ensureDir(dirname(this.path));
+            await fs.appendFile(this.path, line);
         });
     }
 }

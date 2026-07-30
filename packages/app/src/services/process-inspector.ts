@@ -5,6 +5,8 @@
  * spawning real processes. Production uses {@link createPsProcessInspector}.
  */
 
+import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
+
 /** One row from a host process table (pre-tree-filter). */
 export interface OsProcessRow {
     pid: number;
@@ -122,14 +124,17 @@ export function createPsProcessInspector(
 }
 
 async function defaultRunPs(): Promise<string> {
-    const proc = Bun.spawn([...PS_LIST_ARGV], { stdout: 'pipe', stderr: 'pipe' });
-    const [stdout, stderr, exitCode] = await Promise.all([
-        new Response(proc.stdout).text(),
-        new Response(proc.stderr).text(),
-        proc.exited,
-    ]);
-    if (exitCode !== 0) {
-        throw new Error(`ps failed (exit ${exitCode}): ${stderr.trim() || 'no stderr'}`);
+    // ProcessExecutor seam — do not Bun.spawn here (no-direct-process-spawn +
+    // concurrent-test isolation: execa uses Bun.spawn under the hood on Bun).
+    const [command, ...args] = PS_LIST_ARGV;
+    const result = await new NodeProcessExecutor().run({
+        command: command ?? 'ps',
+        args,
+        forceBuffered: true,
+        rejectOnError: false,
+    });
+    if (result.exitCode !== 0) {
+        throw new Error(`ps failed (exit ${result.exitCode}): ${result.stderr.trim() || 'no stderr'}`);
     }
-    return stdout;
+    return result.stdout;
 }

@@ -1,15 +1,10 @@
-import { execFile } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join } from 'node:path';
-import { promisify } from 'node:util';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
+import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { AgentExecutionObserver } from '../../observability/agent-execution';
 import type { AgentRunInvocation, AgentRunTracedResult, AgentService } from '../../services/agent-service';
 import type { WorkflowObservabilityBus } from '../observability';
 import { parseSteeringPolicy, type WorkflowSteeringController } from '../steering';
-
-const execFileAsync = promisify(execFile);
 
 /** Bound the stdout/stderr tail captured into the partial-work artifact (R2b). */
 const PARTIAL_ARTIFACT_TAIL_CHARS = 4000;
@@ -182,14 +177,16 @@ export class AgentRunActionRunner implements ActionRunner {
 
         if (capture && answerFile !== undefined) {
             const target = isAbsolute(answerFile) ? answerFile : join(cwd, answerFile);
-            await mkdir(dirname(target), { recursive: true });
-            await writeFile(target, answer, 'utf8');
+            const fs = createNodeFileSystem(cwd);
+            await fs.ensureDir(dirname(target));
+            await fs.writeFile(target, answer);
         }
 
         // R6-S2a: verify expected side-effect artifact exists after exit-0.
         if (ok && expectFile !== undefined) {
             const target = isAbsolute(expectFile) ? expectFile : join(cwd, expectFile);
-            if (!existsSync(target)) {
+            const fs = createNodeFileSystem(cwd);
+            if (!(await fs.exists(target))) {
                 return {
                     ok: false,
                     data: buildResultData(exitCode, agentLabel, capture, answer, invocation),
@@ -342,8 +339,9 @@ async function writePartialWorkArtifact(
         ].join('\n');
 
         const target = join(cwd, '.spur', 'run', `${context.runId}-${context.stateOrNodeId}-partial.md`);
-        await mkdir(dirname(target), { recursive: true });
-        await writeFile(target, body, 'utf8');
+        const fs = createNodeFileSystem(cwd);
+        await fs.ensureDir(dirname(target));
+        await fs.writeFile(target, body);
     } catch {
         // Best-effort — never let artifact-writing mask the real failure.
     }
@@ -351,8 +349,15 @@ async function writePartialWorkArtifact(
 
 async function gitDiffStat(cwd: string): Promise<string> {
     try {
-        const { stdout } = await execFileAsync('git', ['diff', '--stat'], { cwd, maxBuffer: 1024 * 1024 });
-        return stdout.trim();
+        const result = await new NodeProcessExecutor().run({
+            command: 'git',
+            args: ['diff', '--stat'],
+            cwd,
+            maxOutput: 1024 * 1024,
+            forceBuffered: true,
+            rejectOnError: false,
+        });
+        return result.exitCode === 0 ? result.stdout.trim() : '';
     } catch {
         return '';
     }

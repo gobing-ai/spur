@@ -1,7 +1,7 @@
-import { existsSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import { isPortLive, ProjectRegistry, startRegisteredProject } from '@gobing-ai/spur-app';
+import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
 
@@ -20,7 +20,7 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
             try {
                 const absolutePath = resolve(context.cwd, pathArg);
 
-                if (!existsSync(absolutePath)) {
+                if (!(await context.fs.exists(absolutePath))) {
                     throw new Error(`Directory does not exist: ${absolutePath}`);
                 }
                 const name = options.name ?? basename(absolutePath);
@@ -169,13 +169,15 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                     // SIGTERM ourselves (or our parent) — tests and in-process
                     // listeners share the port with the CLI, and Linux `fuser`
                     // correctly returns the host PID, which would suicide the
-                    // suite (CI exit 143).
+                    // suite (CI exit 143). Use ProcessExecutor (not Bun.spawn).
                     try {
-                        const ps = Bun.spawn(['fuser', `${entry.port}/tcp`], {
-                            stdout: 'pipe',
-                            stderr: 'ignore',
+                        const result = await new NodeProcessExecutor().run({
+                            command: 'fuser',
+                            args: [`${entry.port}/tcp`],
+                            forceBuffered: true,
+                            rejectOnError: false,
                         });
-                        const outputStr = await new Response(ps.stdout).text();
+                        const outputStr = `${result.stdout}\n${result.stderr}`;
                         const pids = outputStr
                             .trim()
                             .split(/\s+/)

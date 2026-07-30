@@ -1,56 +1,55 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, mock, test } from 'bun:test';
+import type { ProcessExecutor, ProcessResult } from '@gobing-ai/ts-runtime';
 import { openUrl } from '../src/open-url';
 
-const originalSpawn = Bun.spawn;
+function okResult(command: string, args: string[]): ProcessResult {
+    return { command, args, exitCode: 0, stdout: '', stderr: '', durationMs: 0 };
+}
+
+function mockExecutor(): {
+    executor: ProcessExecutor;
+    calls: { command: string; args: string[] }[];
+} {
+    const calls: { command: string; args: string[] }[] = [];
+    const executor = {
+        run: mock(async (options: { command: string; args?: string[] }) => {
+            const args = options.args ?? [];
+            calls.push({ command: options.command, args });
+            return okResult(options.command, args);
+        }),
+        runStreaming: mock(() => {
+            throw new Error('runStreaming not used by openUrl');
+        }),
+    } as unknown as ProcessExecutor;
+    return { executor, calls };
+}
+
 const originalPlatform = process.platform;
 
-let spawnCalls: { argv: string[]; options: unknown }[];
-
-beforeEach(() => {
-    spawnCalls = [];
-    // Passthrough mock: only intercept browser-open argv. On Bun, execa uses
-    // Bun.spawn — a total stub hangs concurrent ProcessExecutor tests.
-    Bun.spawn = ((first: unknown, second?: unknown) => {
-        if (Array.isArray(first)) {
-            const argv = first.map(String);
-            const bin = argv[0];
-            if (bin === 'open' || bin === 'cmd' || bin === 'xdg-open') {
-                spawnCalls.push({ argv, options: second });
-                return { killed: false, pid: 0, exited: Promise.resolve(0) };
-            }
-        }
-        return (originalSpawn as (...args: unknown[]) => unknown)(first, second);
-    }) as typeof Bun.spawn;
-});
-
 afterEach(() => {
-    Bun.spawn = originalSpawn;
     Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
 });
 
 describe('openUrl', () => {
-    test('on darwin, spawns `open <url>` with ignored stdio', async () => {
+    test('on darwin, runs `open <url>` via ProcessExecutor', async () => {
         Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
-        await openUrl('http://localhost:9999');
-        expect(spawnCalls).toHaveLength(1);
-        expect(spawnCalls[0]?.argv).toEqual(['open', 'http://localhost:9999']);
-        expect(spawnCalls[0]?.options).toEqual({ stdio: ['ignore', 'ignore', 'ignore'] });
+        const { executor, calls } = mockExecutor();
+        await openUrl('http://localhost:9999', { executor });
+        expect(calls).toEqual([{ command: 'open', args: ['http://localhost:9999'] }]);
     });
 
-    test('on win32, spawns `cmd /c start "" <url>`', async () => {
+    test('on win32, runs `cmd /c start "" <url>`', async () => {
         Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
-        await openUrl('http://localhost:9999');
-        expect(spawnCalls).toHaveLength(1);
-        // `start` is a cmd.exe builtin — the empty `""` title arg stops `start`
-        // from consuming the URL as a window title.
-        expect(spawnCalls[0]?.argv).toEqual(['cmd', '/c', 'start', '', 'http://localhost:9999']);
+        const { executor, calls } = mockExecutor();
+        await openUrl('http://localhost:9999', { executor });
+        expect(calls).toEqual([{ command: 'cmd', args: ['/c', 'start', '', 'http://localhost:9999'] }]);
     });
 
-    test('on linux, spawns `xdg-open <url>`', async () => {
+    test('on linux, runs `xdg-open <url>`', async () => {
         Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
-        await openUrl('http://localhost:9999');
-        expect(spawnCalls).toHaveLength(1);
-        expect(spawnCalls[0]?.argv).toEqual(['xdg-open', 'http://localhost:9999']);
+        const { executor, calls } = mockExecutor();
+        await openUrl('http://localhost:9999', { executor });
+        expect(calls).toEqual([{ command: 'xdg-open', args: ['http://localhost:9999'] }]);
     });
 
     test('exports as a function', () => {

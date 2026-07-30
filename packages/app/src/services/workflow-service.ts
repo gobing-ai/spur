@@ -1,6 +1,3 @@
-import type { Stats } from 'node:fs';
-import { access, lstat, readdir, readFile, realpath } from 'node:fs/promises';
-
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
@@ -777,12 +774,8 @@ export class WorkflowAppService {
 // ---------------------------------------------------------------------------
 
 async function fileExists(path: string): Promise<boolean> {
-    try {
-        await access(path);
-        return true;
-    } catch {
-        return false;
-    }
+    const fs = createNodeFileSystem();
+    return await fs.exists(path);
 }
 
 /**
@@ -791,31 +784,32 @@ async function fileExists(path: string): Promise<boolean> {
  */
 async function scanWorkflowFiles(rootPath: string, source: 'project' | 'global'): Promise<WorkflowListEntry[]> {
     const entries: WorkflowListEntry[] = [];
+    const fs = createNodeFileSystem();
 
-    let rootStat: Stats;
-    try {
-        rootStat = await lstat(rootPath);
-    } catch {
-        return entries; // path doesn't exist — empty
+    const rootStat = await fs.stat(rootPath);
+    if (!rootStat?.isDirectory()) {
+        return entries;
     }
 
-    // Resolve symlink to real path for directory walking
-    const realPath = rootStat.isSymbolicLink() ? await realpath(rootPath) : rootPath;
+    const realPath = fs.realPath ? await fs.realPath(rootPath) : rootPath;
 
-    const dirents = await readdir(realPath, { withFileTypes: true, recursive: true });
-    for (const dirent of dirents) {
-        if (!dirent.isFile()) continue;
-        const name = dirent.name;
-        if (!name.endsWith('.yaml') && !name.endsWith('.yml')) continue;
-
-        const fullPath = resolve(dirent.parentPath, name);
-        // Display path: rootPath-relative when under the root, else absolute
-        const displayPath = fullPath.startsWith(rootPath) ? fullPath.slice(rootPath.length + 1) : fullPath;
-
-        const meta = await extractWorkflowMeta(fullPath);
-        entries.push({ ...meta, path: displayPath, source });
+    async function walk(dirPath: string): Promise<void> {
+        const names = await fs.readDir(dirPath);
+        for (const name of names) {
+            const fullPath = resolve(dirPath, name);
+            const st = await fs.stat(fullPath);
+            if (!st) continue;
+            if (st.isDirectory()) {
+                await walk(fullPath);
+            } else if (st.isFile() && (name.endsWith('.yaml') || name.endsWith('.yml'))) {
+                const displayPath = fullPath.startsWith(rootPath) ? fullPath.slice(rootPath.length + 1) : fullPath;
+                const meta = await extractWorkflowMeta(fullPath);
+                entries.push({ ...meta, path: displayPath, source });
+            }
+        }
     }
 
+    await walk(realPath);
     return entries;
 }
 
@@ -824,7 +818,8 @@ async function extractWorkflowMeta(
     filePath: string,
 ): Promise<Pick<WorkflowListEntry, 'name' | 'kind' | 'valid' | 'error'>> {
     try {
-        const text = await readFile(filePath, 'utf-8');
+        const fs = createNodeFileSystem();
+        const text = await fs.readFile(filePath);
         const parsed = parseYamlObject(text);
         if (typeof parsed !== 'object' || parsed === null) {
             return { name: '<unparseable>', kind: 'unknown', valid: false, error: 'Top-level value is not an object' };

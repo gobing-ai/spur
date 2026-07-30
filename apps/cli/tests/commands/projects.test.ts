@@ -3,9 +3,8 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ProjectRegistry } from '@gobing-ai/spur-app';
+import { ProjectRegistry, setDetachedServeSpawnForTests } from '@gobing-ai/spur-app';
 import { main } from '../../src/index';
-import { installServeSpawnMock } from '../helpers';
 
 describe('spur projects CLI command', () => {
     let tempDir: string;
@@ -203,8 +202,8 @@ describe('spur projects CLI command', () => {
         const origAllocate = ProjectRegistry.prototype.allocatePort;
         ProjectRegistry.prototype.allocatePort = async () => targetPort;
 
-        // Passthrough mock: only fake `serve`; leave Bun.spawn intact for execa.
-        const restoreSpawn = installServeSpawnMock(null);
+        // Inject fake serve spawn — never reassign Bun.spawn (breaks execa/ProcessExecutor).
+        setDetachedServeSpawnForTests(() => ({ exitCode: null, unref: () => {} }));
 
         try {
             const mockJson = createMockOutput();
@@ -215,7 +214,7 @@ describe('spur projects CLI command', () => {
             expect(jsonExit).toBe(0);
             expect(mockJson.getText()).toContain('"running": true');
         } finally {
-            restoreSpawn();
+            setDetachedServeSpawnForTests(undefined);
             ProjectRegistry.prototype.allocatePort = origAllocate;
             server.close();
         }
@@ -231,7 +230,7 @@ describe('spur projects CLI command', () => {
         const origAllocate = ProjectRegistry.prototype.allocatePort;
         ProjectRegistry.prototype.allocatePort = async () => targetPort;
 
-        const restoreSpawn = installServeSpawnMock(null);
+        setDetachedServeSpawnForTests(() => ({ exitCode: null, unref: () => {} }));
 
         try {
             const mockJson = createMockOutput();
@@ -242,7 +241,7 @@ describe('spur projects CLI command', () => {
             expect(jsonExit).toBe(0);
             expect(mockJson.getText()).toContain('"running": true');
         } finally {
-            restoreSpawn();
+            setDetachedServeSpawnForTests(undefined);
             ProjectRegistry.prototype.allocatePort = origAllocate;
             server.close();
         }

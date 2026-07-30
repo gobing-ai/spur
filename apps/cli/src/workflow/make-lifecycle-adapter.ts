@@ -23,15 +23,13 @@ function globalConfigRoot(context: CliContext): string {
 }
 
 /**
- * Resolve the workflow YAML path for a given profile, in priority order:
- *   1. Bundled config root  (shipped `workflows/<name>.yaml` in source / npm package)
- *   2. Project-local path   (`.spur/workflows/<name>.yaml` seeded by `spur init`)
- *   3. Global seeded config (`~/.config/spur/workflows/<name>.yaml` seeded by `spur init`)
+ * Resolve the workflow YAML for a given profile across the three priority tiers.
  *
- * The project-local fallback handles the case where the running binary has no
- * sibling `config/` directory (e.g. a compiled single-file binary, or a globally-
- * installed release) but the project was initialised with `spur init` and carries
- * its own copy of the workflow YAML under `.spur/workflows/`. The global fallback
+ * 1. Bundled config root (built npm or repo root bundled workflows tree in dev).
+ * 2. Project-local `.spur/workflows/<name>.yaml`.
+ * 3. Global seeded config `~/.config/spur/workflows/<name>.yaml`.
+ *
+ * The fallback to `~/.config/spur/workflows/` (3) when the bundled root is absent
  * (0071 R5) covers the common case: a compiled binary (no bundled root) running in a
  * project whose `.spur/workflows/` predates a lifecycle-workflow addition or was
  * never fully seeded, but whose `~/.config/spur/workflows/` — seeded once by any

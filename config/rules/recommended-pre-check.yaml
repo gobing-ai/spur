@@ -11,3 +11,4 @@ extends:
   - boundary
   - surface
   - ui
+  - strict

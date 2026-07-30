@@ -23,7 +23,7 @@ import {
     type TaskFrontmatter,
     taskFrontmatterSchema,
 } from '@gobing-ai/spur-domain';
-import type { FileSystem } from '@gobing-ai/ts-runtime';
+import { type FileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { parse as parseYaml } from 'yaml';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -441,14 +441,17 @@ const ISO_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{
  */
 async function loadGitLastModified(cwd: string, dir: string): Promise<Map<string, string>> {
     try {
-        const proc = Bun.spawn(['git', 'log', '--format=%aI', '--name-only', '-z', '--', dir], {
+        // ProcessExecutor seam (no-direct-process-spawn). Large buffer for full corpus walk.
+        const result = await new NodeProcessExecutor().run({
+            command: 'git',
+            args: ['log', '--format=%aI', '--name-only', '-z', '--', dir],
             cwd,
-            stdout: 'pipe',
-            stderr: 'pipe',
+            maxOutput: 32 * 1024 * 1024,
+            forceBuffered: true,
+            rejectOnError: false,
         });
-        const output = await new Response(proc.stdout).text();
-        if ((await proc.exited) !== 0) return new Map();
-        return parseGitNameOnlyZ(output);
+        if (result.exitCode !== 0) return new Map();
+        return parseGitNameOnlyZ(result.stdout);
     } catch {
         // git unavailable — every lookup misses, same as the old per-file failure.
         return new Map();

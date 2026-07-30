@@ -32,6 +32,7 @@ import {
     taskStatusIcon,
     UNIVERSAL_SECTIONS,
 } from '@gobing-ai/spur-domain';
+import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { type Colorize, makeColorize, shouldColor } from '../colors';
 import { EMBEDDED_SPUR_SCHEMAS } from '../config/embedded-schemas';
 import type { CliContext } from '../context';
@@ -703,7 +704,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             const answerPath = options.fromAnswer ?? `.spur/run/${wbs}-verify-answer.txt`;
             let answerText: string;
             try {
-                answerText = readFileSync(answerPath, 'utf-8');
+                answerText = await context.fs.readFile(context.fs.resolve(answerPath));
             } catch {
                 context.output.error(`Answer file not found: ${answerPath}`);
                 context.setExitCode(1);
@@ -718,9 +719,8 @@ export function registerTaskCommand(program: Command, context: CliContext): void
 
             // Emit verdict artifact.
             const jsonOut = JSON.stringify({ wbs, ...result, source: 'spur-task-verdict' }, null, 2);
-            const { mkdirSync, writeFileSync } = await import('node:fs');
-            mkdirSync('.spur/run', { recursive: true });
-            writeFileSync(`.spur/run/${wbs}-verdict.json`, `${jsonOut}\n`);
+            await context.fs.ensureDir('.spur/run');
+            await context.fs.writeFile(`.spur/run/${wbs}-verdict.json`, `${jsonOut}\n`);
 
             if (options.json) {
                 context.output.write(jsonOut);
@@ -749,7 +749,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             const inputPath = options.fromFile ?? '.spur/run/verifyall-batch-input.json';
             let raw: string;
             try {
-                raw = readFileSync(inputPath, 'utf-8');
+                raw = await context.fs.readFile(context.fs.resolve(inputPath));
             } catch {
                 context.output.error(`Batch input file not found: ${inputPath}`);
                 context.setExitCode(1);
@@ -1179,9 +1179,10 @@ async function loadSectionMatrix(projectRoot: string): Promise<SectionMatrix> {
 }
 
 async function loadSectionMatrixUncached(projectRoot: string): Promise<SectionMatrix> {
+    const fs = createNodeFileSystem(projectRoot);
     // 1. Project-local: .spur/tasks/section-matrix.yaml
-    const localPath = join(projectRoot, '.spur', 'tasks', 'section-matrix.yaml');
-    if (existsSync(localPath)) {
+    const localPath = fs.resolve('.spur', 'tasks', 'section-matrix.yaml');
+    if (await fs.exists(localPath)) {
         const data = await loadStructuredSpurConfig(localPath, {
             validateJsonSchema: true,
             embeddedSchemas: EMBEDDED_SPUR_SCHEMAS,
@@ -1192,7 +1193,7 @@ async function loadSectionMatrixUncached(projectRoot: string): Promise<SectionMa
     const root = bundledConfigRoot();
     if (root !== null) {
         const matrixPath = join(root, 'tasks', 'section-matrix.yaml');
-        if (existsSync(matrixPath)) {
+        if (await fs.exists(matrixPath)) {
             const data = await loadStructuredSpurConfig(matrixPath, {
                 validateJsonSchema: true,
                 embeddedSchemas: EMBEDDED_SPUR_SCHEMAS,

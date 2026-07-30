@@ -1,6 +1,6 @@
-import { execFileSync } from 'node:child_process';
 import { platform } from 'node:os';
 import type { HitlAnswer, HitlRequest, HitlResponder } from '@gobing-ai/ts-dual-workflow-engine';
+import { BunSyncProcessExecutor } from '@gobing-ai/ts-runtime';
 // node-notifier lives behind this tiny wrapper module: referencing it from here directly
 // (statically or via dynamic import()) destroys this file's per-file coverage attribution
 // under Bun's V8 coverage — see desktop-notify.ts.
@@ -16,7 +16,7 @@ export interface DesktopNotifierHitlResponderConfig {
     inputDefault?: string;
     /** Platform override (test seam); defaults to the live `os.platform()`. */
     platform?: string;
-    /** osascript runner (test seam); defaults to a real `execFileSync('osascript', …)`. */
+    /** osascript runner (test seam); defaults to a real ProcessExecutor osascript run. */
     runOsascript?: (script: string) => string;
     /** Notification sink (test seam); defaults to `desktopNotify` (node-notifier). */
     notify?: (title: string, message: string) => void;
@@ -27,7 +27,13 @@ export interface DesktopNotifierHitlResponderConfig {
  * Exported so the default path stays testable with a harmless non-dialog script.
  */
 export function runOsascriptDefault(script: string): string {
-    return execFileSync('osascript', ['-e', script], { encoding: 'utf8', timeout: 30000 }).trim();
+    // ProcessExecutor seam (no-direct-process-spawn) — sync path for modal dialogs.
+    const result = new BunSyncProcessExecutor().runSync({
+        command: 'osascript',
+        args: ['-e', script],
+        rejectOnError: true,
+    });
+    return result.stdout.trim();
 }
 
 /**
