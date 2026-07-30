@@ -72,11 +72,17 @@ describe('project-start', () => {
         }
 
         // Pre-open a port so allocatePort + health poll succeeds without a real spur serve.
+        // Mock Bun.spawn so we never leave a detached `spur serve` orphan.
         const server = createServer();
         await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
         const targetPort = (server.address() as { port: number }).port;
         const origAllocate = ProjectRegistry.prototype.allocatePort;
         ProjectRegistry.prototype.allocatePort = async () => targetPort;
+        const origSpawn = Bun.spawn;
+        Bun.spawn = (() => ({
+            exitCode: null,
+            unref: () => {},
+        })) as unknown as typeof Bun.spawn;
 
         try {
             const result = await startRegisteredProject(registry, 'TildeStart', {
@@ -87,6 +93,7 @@ describe('project-start', () => {
             expect(result.port).toBe(targetPort);
             expect(result.path.startsWith('~')).toBe(false);
         } finally {
+            Bun.spawn = origSpawn;
             ProjectRegistry.prototype.allocatePort = origAllocate;
             server.close();
         }

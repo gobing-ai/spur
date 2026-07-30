@@ -1003,9 +1003,10 @@ terminalStates:
         const finalRow = await db.queryFirst<{ status: string }>('SELECT status FROM runs WHERE id = ?', runId);
         expect(finalRow?.status).toBe('failed');
 
-        // Safety net: if the group somehow survived, reap it so the test host stays clean.
+        // Safety net: if the worker somehow survived, reap the single pid (not the
+        // group — group kill of a non-leader or of pid 0 would hit the test runner).
         try {
-            process.kill(-pid, 'SIGKILL');
+            process.kill(pid, 'SIGKILL');
         } catch {
             // already gone — fine
         }

@@ -73,6 +73,12 @@ const PIPELINE_LINK_KIND = 'pipeline';
  * truth.
  */
 function signalSubprocess(pid: number): boolean {
+    // Refuse self-kill and POSIX specials:
+    // - pid <= 1: 0/-0 = own process group; 1/-1 = init / all processes
+    // - process.pid / ppid: would tear down the CLI or test runner (CI SIGTERM 143)
+    if (!Number.isInteger(pid) || pid <= 1) return false;
+    if (pid === process.pid || pid === process.ppid) return false;
+
     // Group kill first: reaches the worker + its agent grandchild in one signal.
     try {
         process.kill(-pid, 'SIGTERM');

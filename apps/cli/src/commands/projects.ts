@@ -165,20 +165,34 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                 }
 
                 if (entry.port > 0) {
-                    // Signal process running on port if reachable
+                    // Signal process(es) bound to the port. Best-effort: never
+                    // SIGTERM ourselves (or our parent) — tests and in-process
+                    // listeners share the port with the CLI, and Linux `fuser`
+                    // correctly returns the host PID, which would suicide the
+                    // suite (CI exit 143).
                     try {
-                        const ps = Bun.spawn(['fuser', `${entry.port}/tcp`], { stdout: 'pipe', stderr: 'ignore' });
+                        const ps = Bun.spawn(['fuser', `${entry.port}/tcp`], {
+                            stdout: 'pipe',
+                            stderr: 'ignore',
+                        });
                         const outputStr = await new Response(ps.stdout).text();
                         const pids = outputStr
                             .trim()
                             .split(/\s+/)
                             .map(Number)
-                            .filter((n) => n > 0);
+                            .filter((n) => Number.isInteger(n) && n > 1);
+                        const self = process.pid;
+                        const parent = process.ppid;
                         for (const pid of pids) {
-                            process.kill(pid, 'SIGTERM');
+                            if (pid === self || pid === parent) continue;
+                            try {
+                                process.kill(pid, 'SIGTERM');
+                            } catch {
+                                // ESRCH / EPERM — ignore per-pid
+                            }
                         }
                     } catch {
-                        // Best-effort process kill
+                        // Best-effort process kill (fuser missing, etc.)
                     }
                     await registry.setPort(entry.path, 0);
                 }

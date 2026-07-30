@@ -274,6 +274,8 @@ describe('spur projects CLI command', () => {
 
     it('should stop a registered project with active port via CLI', async () => {
         const registry = new ProjectRegistry(projectsFile);
+        // Listen in THIS process so Linux `fuser <port>/tcp` returns our pid.
+        // Production stop must skip self/ppid — otherwise CI dies with SIGTERM 143.
         const server = createServer();
         await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
         const activePort = (server.address() as { port: number }).port;
@@ -281,7 +283,7 @@ describe('spur projects CLI command', () => {
         try {
             await registry.upsert({ name: 'ActiveStop', path: projectPath, port: activePort });
 
-            // Stop JSON
+            // Stop JSON — must not kill the test runner even when fuser reports us.
             const mockJson = createMockOutput();
             const exitJson = await main(['projects', 'stop', 'ActiveStop', '--json'], {
                 cwd: tempDir,
@@ -289,8 +291,10 @@ describe('spur projects CLI command', () => {
             });
             expect(exitJson).toBe(0);
             expect(mockJson.getText()).toContain('"stopped": "ActiveStop"');
+            // Still alive after stop (would not reach here if we SIGTERM'd ourselves).
+            expect(process.pid).toBeGreaterThan(0);
 
-            // Stop text
+            // Stop text (port already cleared — no fuser path)
             const mockText = createMockOutput();
             const exitText = await main(['projects', 'stop', 'ActiveStop'], {
                 cwd: tempDir,
