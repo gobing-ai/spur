@@ -218,4 +218,27 @@ describe('TokenLedgerWatcher', () => {
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+    test('triggers schedulePoll timer callback on file modification', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-watch-poll-timer-'));
+        try {
+            const path = join(dir, 'ledger.jsonl');
+            writeFileSync(path, '');
+            const watcher = new TokenLedgerWatcher({ ledgerPath: path, debounceMs: 10 });
+            let n = 0;
+            watcher.subscribe(() => {
+                n += 1;
+            });
+            appendFileSync(
+                path,
+                `${JSON.stringify({ ts: '2026-07-12T12:00:00.000Z', session: 's', type: 'write', file: '/b.ts' })}\n`,
+            );
+            // Wait for fs.watch event + debounceTimer to fire
+            await sleep(60);
+            expect(n).toBeGreaterThan(0);
+            watcher.stop();
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
 });
