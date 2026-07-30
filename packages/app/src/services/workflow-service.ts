@@ -26,7 +26,7 @@ import {
     type WorkflowPersistenceAdapter,
 } from '@gobing-ai/ts-dual-workflow-engine';
 import type { EventBus } from '@gobing-ai/ts-infra';
-import { createNodeFileSystem, parseYamlObject } from '@gobing-ai/ts-runtime';
+import { createNodeFileSystem, type ProcessExecutor, parseYamlObject } from '@gobing-ai/ts-runtime';
 import type { HostAllowlist, HttpRequester } from '../workflow/actions/http-request';
 import { registerSpurBuiltins } from '../workflow/builtins';
 import { ObservableWorkflowAdapter, type WorkflowObservabilityBus } from '../workflow/observability';
@@ -286,6 +286,8 @@ export interface WorkflowAppServiceContext {
     hitlResponder(): HitlResponder;
     httpRequester?(): HttpRequester;
     hostAllowlist?(): HostAllowlist;
+    /** Optional ProcessExecutor override. When provided, shell actions and guards use this executor instead of default NodeProcessExecutor. */
+    processExecutor?(): ProcessExecutor;
     /**
      * Optional observability bus. When provided, per-step lifecycle hooks are
      * mirrored onto it (run/phase/transition/action events) for live consumers
@@ -746,7 +748,8 @@ export class WorkflowAppService {
             steeringController?: WorkflowSteeringController;
         } = {},
     ): Promise<EngineWorkflowService> {
-        const host = createDefaultWorkflowEngineHost();
+        const processExec = this.ctx.processExecutor?.();
+        const host = createDefaultWorkflowEngineHost(processExec !== undefined ? { processExecutor: processExec } : {});
         const bus = this.ctx.observabilityBus?.();
         registerSpurBuiltins(host, {
             agentService: this.ctx.agentService(),

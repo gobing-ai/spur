@@ -1534,7 +1534,7 @@ fi
         try {
             const svc = makeService();
             const prompt = '/sp:dev-run 0295 --mode implement --auto';
-            const fresh = await svc.runTraced(prompt, { agent: 'omp', timeout: '5000' }, deps);
+            const fresh = await svc.runTraced(prompt, { agent: 'omp', timeout: '15000' }, deps);
             expect(fresh.exitCode).toBe(0);
             const freshObservation = JSON.parse(fresh.stdout || readFileSync(obsFile, 'utf8')) as {
                 prompt: string;

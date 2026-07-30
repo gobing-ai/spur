@@ -21,6 +21,98 @@ terminalStates:
   - done
 `;
 
+import { execSync } from 'node:child_process';
+import { appendFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import type { PipeProcess, ProcessExecutor, ProcessOptions, ProcessResult } from '@gobing-ai/ts-runtime';
+
+class TestProcessExecutor implements ProcessExecutor {
+    async run(options: ProcessOptions): Promise<ProcessResult> {
+        const cwd = options.cwd || process.cwd();
+        const cmd = options.args?.[0] === '-c' && options.args?.[1] ? options.args[1] : options.command;
+
+        // Handle echo redirects: echo "text" > file or echo "text" >> file
+        const echoMatch = cmd.match(/^echo\s+"?([^">]*)"?\s*(>>|>)\s*(.+)$/);
+        if (echoMatch) {
+            const text = echoMatch[1] ?? '';
+            const op = echoMatch[2] ?? '>';
+            const file = echoMatch[3] ?? '';
+            const targetPath = resolve(cwd, file.trim());
+            if (op === '>>') {
+                appendFileSync(targetPath, `${text.trim()}\n`, 'utf8');
+            } else {
+                writeFileSync(targetPath, `${text.trim()}\n`, 'utf8');
+            }
+            return {
+                command: options.command,
+                args: options.args ?? [],
+                exitCode: 0,
+                stdout: '',
+                stderr: '',
+                durationMs: 1,
+            };
+        }
+
+        // Handle test commands: test "val1" = val2
+        const testMatch = cmd.match(/^test\s+"?([^"=]*)"?\s*=\s*"?([^"]*)"?$/);
+        if (testMatch) {
+            const left = testMatch[1] ?? '';
+            const right = testMatch[2] ?? '';
+            const ok = left.trim() === right.trim();
+            return {
+                command: options.command,
+                args: options.args ?? [],
+                exitCode: ok ? 0 : 1,
+                stdout: '',
+                stderr: '',
+                durationMs: 1,
+            };
+        }
+
+        // Handle touch & exit: touch <file> && exit 1
+        const touchMatch = cmd.match(/^touch\s+(.+)\s+&&\s+exit\s+(\d+)$/);
+        if (touchMatch) {
+            const file = touchMatch[1] ?? '';
+            const code = touchMatch[2] ?? '0';
+            writeFileSync(resolve(cwd, file.trim()), '', 'utf8');
+            return {
+                command: options.command,
+                args: options.args ?? [],
+                exitCode: parseInt(code, 10),
+                stdout: '',
+                stderr: '',
+                durationMs: 1,
+            };
+        }
+
+        try {
+            const stdout = execSync(cmd, { cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+            return {
+                command: options.command,
+                args: options.args ?? [],
+                exitCode: 0,
+                stdout,
+                stderr: '',
+                durationMs: 1,
+            };
+        } catch (e) {
+            const err = e as { status?: number; stdout?: Buffer; stderr?: Buffer };
+            return {
+                command: options.command,
+                args: options.args ?? [],
+                exitCode: typeof err.status === 'number' ? err.status : 1,
+                stdout: err.stdout?.toString() ?? '',
+                stderr: err.stderr?.toString() ?? '',
+                durationMs: 1,
+            };
+        }
+    }
+
+    runStreaming(): PipeProcess {
+        throw new Error('Streaming process execution is not required in workflow unit tests.');
+    }
+}
+
 function makeCtx(cwd = process.cwd()) {
     let db: ReturnType<typeof createMigratedDb> | undefined;
     return {
@@ -32,6 +124,7 @@ function makeCtx(cwd = process.cwd()) {
         agentService: () => ({ run: async () => 0 }) as unknown as AgentService,
         ruleService: () => ({ evaluate: async () => ({ exitCode: 0, findings: [] }) }) as unknown as RuleService,
         hitlResponder: () => ({ respond: async () => ({ value: 'yes' }) }),
+        processExecutor: () => new TestProcessExecutor(),
     };
 }
 
