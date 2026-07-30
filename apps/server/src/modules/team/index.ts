@@ -128,12 +128,14 @@ export const teamModule: ServerModule = {
             const closed = { current: false };
             const signal = c.req.raw.signal;
             let heartbeatInterval: ReturnType<typeof setInterval> | undefined;
+            let pollInterval: ReturnType<typeof setInterval> | undefined;
             let closeController: () => void = () => {};
 
             const teardown = () => {
                 if (closed.current) return;
                 closed.current = true;
                 if (heartbeatInterval) clearInterval(heartbeatInterval);
+                if (pollInterval) clearInterval(pollInterval);
                 signal.removeEventListener('abort', teardown);
                 closeController();
             };
@@ -180,31 +182,23 @@ export const teamModule: ServerModule = {
                         return;
 
                     // ── 3. Live tail: poll the ring buffer for frames past the watermark ──
-                    const pollInterval = setInterval(() => {
+                    pollInterval = setInterval(() => {
                         if (closed.current) {
-                            clearInterval(pollInterval);
+                            if (pollInterval) clearInterval(pollInterval);
                             return;
                         }
                         for (const frame of supervisor.getRingBuffer(id)) {
                             if (frame.seq <= lastSeq) continue;
                             if (!enqueueFrame(closed, controller, encoder, frame)) {
-                                clearInterval(pollInterval);
+                                teardown();
                                 return;
                             }
                             lastSeq = frame.seq;
                         }
                     }, 500);
-
-                    // Stop polling when stream closes
-                    const origClose = closeController;
-                    closeController = () => {
-                        clearInterval(pollInterval);
-                        origClose();
-                    };
                 },
 
                 cancel() {
-                    closeController = () => {};
                     teardown();
                 },
             });
