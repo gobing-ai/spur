@@ -597,7 +597,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: '/bin/mkdir -p .spur/run && /usr/bin/printf "%s" "\${vars.__runId}" > .spur/run/captured-runid.txt'
+          command: 'mkdir -p .spur/run && printf "%s" "\${vars.__runId}" > .spur/run/captured-runid.txt'
   - id: done
 transitions:
   - from: start
@@ -683,7 +683,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: '/bin/mkdir -p .spur/run && /usr/bin/printf "%s|%s|%s" "\${vars.__hitlAnswer}" "\${vars.__runId}" "\${vars.seedVar}" > .spur/run/captured-vars.txt'
+          command: 'mkdir -p .spur/run && printf "%s|%s|%s" "\${vars.__hitlAnswer}" "\${vars.__runId}" "\${vars.seedVar}" > .spur/run/captured-vars.txt'
   - id: done
 transitions:
   - from: start
@@ -788,7 +788,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: '/bin/mkdir -p .spur/run && /bin/echo discovery >> .spur/run/side-effects.log'
+          command: 'mkdir -p .spur/run && echo discovery >> .spur/run/side-effects.log'
   - id: gate
     pause: true
     onEnter:
@@ -799,7 +799,7 @@ states:
     onEnter:
       - kind: shell
         options:
-          command: '/bin/mkdir -p .spur/run && /bin/echo feature-create >> .spur/run/side-effects.log'
+          command: 'mkdir -p .spur/run && echo feature-create >> .spur/run/side-effects.log'
   - id: done
 transitions:
   - from: discovery
