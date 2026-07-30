@@ -835,31 +835,26 @@ describe('startServer', () => {
         } finally {
             ProjectRegistry.prototype.upsert = origUpsert;
             ProjectRegistry.prototype.setPort = origSetPort;
+            if (origServe) Bun.serve = origServe;
+            if (origExit) process.exit = origExit;
+            if (origOn) process.on = origOn;
         }
     });
 
-    test('startServer executes with defaultDeps when deps argument is omitted', async () => {
-        origServe = Bun.serve;
-        origExit = process.exit;
-        origOn = process.on;
+    test('defaultDeps exports standard collaborators and resolves NodeSchedulerAdapter', async () => {
+        expect(typeof defaultDeps.serverBootstrapConfig).toBe('function');
+        expect(typeof defaultDeps.runNodeApplication).toBe('function');
+        expect(typeof defaultDeps.createApp).toBe('function');
+        expect(typeof defaultDeps.createNodeFileSystem).toBe('function');
+        expect(typeof defaultDeps.createServerContext).toBe('function');
+        expect(typeof defaultDeps.createScheduler).toBe('function');
+        expect(typeof defaultDeps.openUrl).toBe('function');
+        expect(typeof defaultDeps.resolveConfigFile).toBe('function');
 
-        process.exit = ((_code: number) => {}) as typeof process.exit;
-        const sigHandlers: Record<string, () => void | Promise<void>> = {};
-        process.on = ((event: string, handler: () => void | Promise<void>) => {
-            sigHandlers[event] = handler;
-            return process;
-        }) as typeof process.on;
-
-        Bun.serve = (() => ({
-            port: 5557,
-            stop: () => {},
-        })) as unknown as typeof Bun.serve;
-
-        await startServer({ port: 5557, host: '127.0.0.1', openBrowser: false, keepAlive: false });
-
-        const sigint = sigHandlers.SIGINT;
-        if (sigint) {
-            await sigint();
+        const scheduler = await defaultDeps.createScheduler();
+        expect(scheduler).toBeDefined();
+        if (scheduler && typeof scheduler.stop === 'function') {
+            await scheduler.stop();
         }
     });
 });

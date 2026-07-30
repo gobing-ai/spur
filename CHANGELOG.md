@@ -1,5 +1,49 @@
 # Changelog
 
+## [0.3.27] — 2026-07-30
+
+### Added
+
+- feature action job stream, progress tracking UI, and project start service (F83) (40ece606)
+- add multi-project registry, spur projects CLI, server endpoints, and UI switcher (aa6498c9)
+- add issue-finding skill and dev-findissue command (37d0a12c, 36e858ab)
+- redesign JobsTab as purpose-built queue/scheduler view (c45e5ef6)
+- add Tasks tabview backed by run store (53f36a02)
+- add Supervisor tab as Teams default (ba3ea3c5)
+- rebuild system events tabview on server-side queries (9ff3b4c5)
+- add explicit module ordering to board registry (dbf2fa2f)
+- redact configured secrets across observability surfaces (ed75fa9e)
+- workflow run store read API (55b18904)
+- event history filtering + pagination read API (464b1123)
+- author and emit team.* event family for team/member lifecycle (91e60536)
+- bridge CLI process/workflow/agent events into the ledger (c3775124)
+- add correlation columns to system_events + migration (9503a238)
+- demote heartbeat to diagnostic tier + per-prefix retention quotas (1809a48e)
+- catalog 0365 observability envelope contract + preservation tests (76278d6c)
+
+### Fixed
+
+- resolve CI test race conditions, mock Bun.spawn, and stabilize token ledger watcher test (79aafc4e)
+- pass parseChecklist to checkAcCoverage for checklist-form task AC coverage (bb18b834)
+- repair J4 board tab surfaces (01cb442d)
+- fix no-daisyui-class-leak false positive on Tailwind select-none (b6c00208)
+- resolve every-export-has-tsdoc post-check violations (6ad8e8a0)
+
+### Changed
+
+- split Worker-safe HTTP root and portable server config (93085672)
+- update command map 31→34; add dev-refineall, dev-featurechange, dev-findissue rows (1628af87)
+- add H51 batch execution reliability guardrails feature (e117b1e6)
+- add J4 batch-execution guardrails (ed1a146f)
+- allow Root Cause section on meta tasks; bump design v1.8.0 (6d492046)
+
+### Other
+
+- update skill-structure and command-contract test suite for 34 commands (382f6ebb)
+- update spur-dev and code-testing guardrail references (9b823c02)
+- add unit test for token ledger watcher schedulePoll timer callback (8ec5e376)
+- sync ADR-036 and J4 board surface docs (f3cadc09)
+
 ## [0.3.25] — 2026-07-28
 
 ### Added
