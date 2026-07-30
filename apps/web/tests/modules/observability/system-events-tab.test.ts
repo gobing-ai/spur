@@ -1,11 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import {
+    buildPayloadTooltip,
     buildTooltipSummary,
+    extractEventRowIdentity,
     formatAvailability,
     formatDuration,
     historyUrl,
     parseHistoryResponse,
     parseHistoryRow,
+    tokenizeJson,
 } from '../../../src/modules/observability/SystemEventsTab';
 
 /**
@@ -436,6 +439,90 @@ describe('formatAvailability', () => {
         expect(formatAvailability(null)).not.toBe('0');
         expect(formatAvailability(undefined)).not.toBe('0');
         expect(formatAvailability('')).not.toBe('0');
+    });
+});
+
+describe('tokenizeJson / buildPayloadTooltip', () => {
+    test('tokenizes keys, strings, numbers, and keywords', () => {
+        const json = JSON.stringify({ jobId: 'abc', n: 42, ok: true, missing: null }, null, 2);
+        const tokens = tokenizeJson(json);
+        const kinds = tokens.map((t) => t.kind);
+        expect(kinds).toContain('key');
+        expect(kinds).toContain('string');
+        expect(kinds).toContain('number');
+        expect(kinds).toContain('keyword');
+        expect(kinds).toContain('punct');
+        // Key tokens keep the surrounding quotes from pretty-print.
+        expect(tokens.some((t) => t.kind === 'key' && t.text.includes('jobId'))).toBe(true);
+        expect(tokens.some((t) => t.kind === 'string' && t.text.includes('abc'))).toBe(true);
+        expect(tokens.some((t) => t.kind === 'number' && t.text === '42')).toBe(true);
+        expect(tokens.some((t) => t.kind === 'keyword' && t.text === 'true')).toBe(true);
+        expect(tokens.some((t) => t.kind === 'keyword' && t.text === 'null')).toBe(true);
+    });
+
+    test('buildPayloadTooltip returns null for empty payload and tokens for objects', () => {
+        expect(buildPayloadTooltip(null)).toBeNull();
+        expect(buildPayloadTooltip({})).toBeNull();
+        const tip = buildPayloadTooltip({ type: 'smoke', durationMs: 12 });
+        expect(tip).not.toBeNull();
+        expect(tip?.text).toContain('smoke');
+        expect(tip?.tokens.length).toBeGreaterThan(0);
+        expect(tip?.tokens.map((t) => t.text).join('')).toBe(tip?.text);
+    });
+});
+
+describe('extractEventRowIdentity', () => {
+    test('prefers indexed runId and payload actionId/outcome for workflow events', () => {
+        const id = extractEventRowIdentity({
+            eventName: 'workflow.action.done',
+            runId: 'run-42',
+            payload: { actionId: 'action-7', outcome: 'success', durationMs: 125 },
+        });
+        expect(id.run).toBe('run-42');
+        expect(id.action).toBe('action-7');
+        expect(id.outcome).toBe('success');
+        expect(id.duration).toBe('125ms');
+    });
+
+    test('maps queue.job.* jobId/type and derives outcome from event name', () => {
+        const enqueued = extractEventRowIdentity({
+            eventName: 'queue.job.enqueued',
+            runId: null,
+            payload: { jobId: 'ea874dc4-cb7f-4bd1-bb47-fbe3c175b737', type: 'system-events-prune' },
+        });
+        expect(enqueued.run).toBe('ea874dc4-cb7f-4bd1-bb47-fbe3c175b737');
+        expect(enqueued.action).toBe('system-events-prune');
+        expect(enqueued.outcome).toBe('pending');
+
+        const completed = extractEventRowIdentity({
+            eventName: 'queue.job.completed',
+            runId: null,
+            payload: { jobId: 'ea874dc4-cb7f-4bd1-bb47-fbe3c175b737', type: 'system-events-prune' },
+        });
+        expect(completed.outcome).toBe('completed');
+    });
+
+    test('maps scheduler.job.executed name + durationMs and derives outcome', () => {
+        const id = extractEventRowIdentity({
+            eventName: 'scheduler.job.executed',
+            runId: null,
+            payload: { name: 'smoke', durationMs: 47 },
+        });
+        expect(id.run).toBe('unavailable');
+        expect(id.action).toBe('smoke');
+        expect(id.outcome).toBe('executed');
+        expect(id.duration).toBe('47ms');
+    });
+
+    test('queue.consumer lifecycle has no correlator but derives started/stopped outcome', () => {
+        const started = extractEventRowIdentity({
+            eventName: 'queue.consumer.started',
+            runId: null,
+            payload: null,
+        });
+        expect(started.run).toBe('unavailable');
+        expect(started.action).toBe('unavailable');
+        expect(started.outcome).toBe('started');
     });
 });
 

@@ -92,11 +92,18 @@ export function createFeatureHandlers(ctx: ServerContext) {
             await ctx.featureService().updateBody(input.id, input.body);
             return { ok: true as const, data: {} };
         }),
-        action: os.feature.action.handler(async () => {
-            // Workflow action dispatch (brainstorm/plan) — full spur agent run
-            // integration deferred to task F7 follow-up (needs job queue wiring).
-            // Returns ok: true so the UI button flow doesn't block.
-            return { ok: true as const, data: {} };
+        action: os.feature.action.handler(async ({ input }) => {
+            const jobQueue = await ctx.jobQueue();
+            const result = await ctx.featureService().fulfillAction(
+                input.id,
+                input.action,
+                async (job) => {
+                    const runId = await jobQueue.enqueue('feature-action', job);
+                    return runId;
+                },
+                { channel: input.channel, skipDeps: input.skipDeps },
+            );
+            return { ok: true as const, data: result };
         }),
 
         children: os.feature.children.handler(async ({ input }) => {

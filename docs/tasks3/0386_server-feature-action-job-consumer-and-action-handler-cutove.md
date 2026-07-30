@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Server feature-action job consumer and action handler cutover"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: F83
@@ -12,7 +12,7 @@ priority: P1
 tags: []
 dependencies: []
 created_at: "2026-07-29T23:22:42.905Z"
-updated_at: "2026-07-29T23:23:31.513Z"
+updated_at: "2026-07-30T00:15:03.999Z"
 ---
 
 ## 0386. Server feature-action job consumer and action handler cutover
@@ -60,15 +60,23 @@ Invariants: jobId returned to client equals FeatureActionResponse.runId; no new 
 4. Tests for handler + consumer happy/fail paths.
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- [apps/server/src/serve.ts:36](file:///Users/robin/xprojects/spur-new/apps/server/src/serve.ts#L36): Exported `FEATURE_ACTION_JOB` constant, `parseFeatureActionJob`, and `runFeatureActionJob`. Registered `FEATURE_ACTION_JOB` in `JobHandlerRegistry`.
+- [apps/server/src/modules/feature/handlers.ts:95](file:///Users/robin/xprojects/spur-new/apps/server/src/modules/feature/handlers.ts#L95): Cut over `action` handler to call `ctx.featureService().fulfillAction` and enqueue `feature-action` jobs into `jobQueue`.
+- [apps/server/tests/modules/feature/handlers.test.ts:325](file:///Users/robin/xprojects/spur-new/apps/server/tests/modules/feature/handlers.test.ts#L325): Added unit tests for feature action handler enqueue behavior.
+- [apps/server/tests/serve.test.ts:597](file:///Users/robin/xprojects/spur-new/apps/server/tests/serve.test.ts#L597): Added unit tests for `parseFeatureActionJob` and `runFeatureActionJob`.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- `bun test apps/server/tests/modules/feature/handlers.test.ts apps/server/tests/serve.test.ts --coverage` (43 pass, 0 fail).
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Finding | Action |
+| --- | --- | --- |
+| P1 | None — FEATURE_ACTION_JOB matches TASK_ACTION_JOB pattern | Verified |
+| P2 | None — action handler delegates enqueue to fulfillAction | Verified |
+| P3 | None — check endpoint remains synchronous exception | Verified |
+| P4 | None — Unit tests cover parsing, execution, and error handling | Verified |
 
 ### References
 
@@ -77,3 +85,6 @@ F83
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-07-30T00:15:00.067Z todo → wip (system)
+- 2026-07-30T00:15:02.130Z wip → testing (system)
+- 2026-07-30T00:15:03.999Z testing → done (system)

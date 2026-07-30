@@ -79,6 +79,8 @@ export type {
 } from './services/feature-check';
 export { DEFAULT_FEATURE_MATRIX, FeatureCheckService } from './services/feature-check';
 export type {
+    FeatureActionJob,
+    FeatureActionName,
     FeatureServiceContext,
     FeatureShowResult,
     FeatureSummary,
@@ -87,7 +89,12 @@ export type {
     FeatureSyncProposal,
     FeatureSyncResult,
 } from './services/feature-service';
-export { FeatureService } from './services/feature-service';
+export {
+    FEATURE_ACTION_COMMANDS,
+    FEATURE_ACTION_NAMES,
+    FeatureService,
+    isFeatureActionName,
+} from './services/feature-service';
 export {
     ALL_FINDING_CODES,
     FINDING_CODES,
@@ -138,6 +145,12 @@ export type {
 } from './services/process-inventory-service';
 export { ProcessInventoryService } from './services/process-inventory-service';
 export { isPortAvailable, isPortLive, normalizeProjectPath, ProjectRegistry } from './services/project-registry';
+export {
+    type ProjectStartOptions,
+    type ProjectStartResult,
+    resolveSpurServeCommand,
+    startRegisteredProject,
+} from './services/project-start';
 export {
     type Colorize,
     type FailOnSeverity,

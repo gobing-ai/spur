@@ -90,6 +90,10 @@ agent:
       agent: pi
       model: "k3[1m]"
       tier: capable-1
+    - name: omp-k3-ollama
+      agent: omp
+      model: ollama/kimi-k3:cloud
+      tier: capable-1
     - name: omp-deepseek
       agent: omp
       model: deepseek/deepseek-v4-pro

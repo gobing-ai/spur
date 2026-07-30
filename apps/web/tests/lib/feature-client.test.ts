@@ -155,7 +155,10 @@ describe('saveFeatureBody', () => {
 
 describe('dispatchFeatureAction', () => {
     test('sends post request and returns action response', async () => {
-        const responseData = { ok: true as const };
+        const responseData = {
+            ok: true as const,
+            data: { runId: 'job-1', action: 'plan', status: 'queued' as const },
+        };
         setFetch(() => jsonResponse(200, responseData));
         const result = await dispatchFeatureAction({ id: 'A', action: 'plan' });
         expect(result).toEqual(responseData);

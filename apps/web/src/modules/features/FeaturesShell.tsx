@@ -6,6 +6,7 @@ import { resolveApiUrl } from '../../lib/rpc-client';
 import FeatureDetail from './FeatureDetail';
 import FeatureTree from './FeatureTree';
 import NewFeaturePanel from './NewFeaturePanel';
+import { isFeaturesSseEvent } from './sse-helpers';
 import { FEATURE_STATUSES, FeatureStatusIcon } from './status-icons';
 
 const sseUrl = () => `${resolveApiUrl()}/events/planning`;
@@ -83,7 +84,7 @@ export default function FeaturesShell() {
         };
     }, [showFilterMenu]);
 
-    // Live tail: SSE-driven refetch on feature.* events.
+    // Live tail: SSE-driven refetch on feature.* and queue.job.* events.
     useEffect(() => {
         if (typeof EventSource === 'undefined') return;
         const es = new EventSource(sseUrl());
@@ -91,12 +92,15 @@ export default function FeaturesShell() {
             try {
                 const raw: unknown = JSON.parse(frame.data);
                 const name = (raw as { eventName?: string }).eventName;
-                if (!name?.startsWith('feature.')) return;
+                if (!isFeaturesSseEvent(name)) return;
                 void load();
                 // Also refresh the detail if a feature is selected and its data may have
                 // changed. `featureId` is unchanged in that case, so the panel needs an
                 // explicit nudge — fetching here instead would just discard the result.
-                if (selectedId && (name === 'feature.updated' || name === 'feature.transitioned')) {
+                if (
+                    selectedId &&
+                    (name === 'feature.updated' || name === 'feature.transitioned' || name === 'queue.job.completed')
+                ) {
                     setDetailRefreshKey((n) => n + 1);
                 }
             } catch {

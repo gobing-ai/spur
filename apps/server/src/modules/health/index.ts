@@ -1,6 +1,5 @@
-import { existsSync } from 'node:fs';
 import { basename } from 'node:path';
-import { isPortLive, normalizeProjectPath, ProjectRegistry } from '@gobing-ai/spur-app';
+import { isPortLive, normalizeProjectPath, ProjectRegistry, startRegisteredProject } from '@gobing-ai/spur-app';
 import type { Hono } from 'hono';
 import type { ServerContext } from '../../context';
 import type { ServerModule } from '../types';
@@ -95,62 +94,22 @@ export const healthModule: ServerModule = {
                 return c.json({ error: 'Missing name or path in request body' }, 400);
             }
 
-            const registry = new ProjectRegistry();
-            let entry = (await registry.getByName(target)) ?? (await registry.getByPath(target));
-            if (!entry) {
-                const absPath = normalizeProjectPath(target);
-                if (existsSync(absPath)) {
-                    entry = await registry.upsert({ path: absPath, name: basename(absPath), port: 0 });
-                } else {
-                    return c.json({ error: `Project not found: ${target}` }, 404);
-                }
-            }
-
-            if (entry.port > 0 && (await isPortLive(entry.port))) {
+            try {
+                const registry = new ProjectRegistry();
+                const result = await startRegisteredProject(registry, target);
                 return c.json({
-                    name: entry.name,
-                    path: entry.path,
-                    port: entry.port,
+                    name: result.name,
+                    path: result.path,
+                    port: result.port,
                     running: true,
-                    url: `http://localhost:${entry.port}`,
+                    alreadyRunning: result.alreadyRunning,
+                    url: result.url,
                 });
+            } catch (err) {
+                const message = err instanceof Error ? err.message : String(err);
+                const status = message.includes('not found') ? 404 : 500;
+                return c.json({ error: message }, status);
             }
-
-            const allocatedPort = await registry.allocatePort();
-            const spurBin = process.argv[1] ?? 'spur';
-            const child = Bun.spawn(
-                [process.execPath, spurBin, 'serve', '--cwd', entry.path, '--port', String(allocatedPort), '--no-open'],
-                {
-                    cwd: entry.path,
-                    detached: true,
-                    stdio: ['ignore', 'ignore', 'ignore'],
-                },
-            );
-            child.unref();
-
-            let live = false;
-            for (let i = 0; i < 50; i++) {
-                await new Promise((r) => setTimeout(r, 100));
-                if (await isPortLive(allocatedPort)) {
-                    live = true;
-                    break;
-                }
-            }
-
-            if (!live) {
-                return c.json({ error: `Failed to start server for ${entry.name} on port ${allocatedPort}` }, 500);
-            }
-
-            await registry.setPort(entry.path, allocatedPort);
-            const updated = (await registry.getByPath(entry.path)) ?? entry;
-
-            return c.json({
-                name: updated.name,
-                path: updated.path,
-                port: allocatedPort,
-                running: true,
-                url: `http://localhost:${allocatedPort}`,
-            });
         });
     },
 };

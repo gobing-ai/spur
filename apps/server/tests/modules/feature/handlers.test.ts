@@ -41,6 +41,11 @@ describe('feature handlers', () => {
                 }),
                 collectTasksByFeature: async () => new Map([['F3', [{}, {}]]]),
                 updateBody: async () => {},
+                fulfillAction: async (_id: string, action: string) => ({
+                    runId: 'job-1',
+                    action,
+                    status: 'queued' as const,
+                }),
                 ...overrides,
             }),
             taskService: () => ({
@@ -49,6 +54,7 @@ describe('feature handlers', () => {
                 }),
                 updateField: async () => {},
             }),
+            jobQueue: async () => ({ enqueue: async () => 'job-1' }),
         } as unknown as ServerContext;
     }
 
@@ -320,5 +326,56 @@ describe('feature handlers', () => {
         await expect(fn({ input: { id: 'F3', direction: 'push' } })).rejects.toThrow(
             'Push sync (feature->tasks cascade) is not implemented',
         );
+    });
+
+    test('action handler delegates to fulfillAction and returns queued runId', async () => {
+        let enqueuedKind = '';
+        let enqueuedPayload: unknown;
+        const mockJobQueue = {
+            enqueue: async (kind: string, payload: unknown) => {
+                enqueuedKind = kind;
+                enqueuedPayload = payload;
+                return 'job-feat-123';
+            },
+        };
+        const ctx = {
+            ...makeCtx({
+                fulfillAction: async (
+                    id: string,
+                    action: string,
+                    enqueue: (job: unknown) => Promise<string>,
+                    options?: { channel?: string },
+                ) => {
+                    const runId = await enqueue({
+                        featureId: id,
+                        action,
+                        command: 'spur dev brainstorm --feature F3',
+                        channel: options?.channel,
+                    });
+                    return { runId, action, status: 'queued' };
+                },
+            }),
+            jobQueue: async () => mockJobQueue,
+        } as unknown as ServerContext;
+
+        const handlers = createFeatureHandlers(ctx);
+        const fn = handlers.action['~orpc'].handler as unknown as (opts: {
+            input: { id: string; action: 'brainstorm' | 'plan'; channel?: string };
+        }) => Promise<{ ok: boolean; data: { runId: string; action: string; status: string } }>;
+
+        const result = await fn({ input: { id: 'F3', action: 'brainstorm', channel: 'claude' } });
+        expect(result.ok).toBe(true);
+        expect(result.data).toEqual({
+            runId: 'job-feat-123',
+            action: 'brainstorm',
+            status: 'queued',
+        });
+        expect(enqueuedKind).toBe('feature-action');
+        expect(enqueuedPayload).toEqual({
+            featureId: 'F3',
+            action: 'brainstorm',
+            command: 'spur dev brainstorm --feature F3',
+            channel: 'claude',
+        });
     });
 });

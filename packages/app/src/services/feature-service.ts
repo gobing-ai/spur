@@ -85,6 +85,32 @@ export interface FeatureShowResult extends FeatureSummary {
     content: string;
 }
 
+/** Job enqueued when a feature action is invoked. */
+export interface FeatureActionJob {
+    featureId: string;
+    action: string;
+    command: string;
+    channel?: string;
+    skipDeps?: boolean;
+}
+
+/** Supported feature action names array. */
+export const FEATURE_ACTION_NAMES = ['brainstorm', 'plan'] as const;
+
+/** Union type of supported feature action names. */
+export type FeatureActionName = (typeof FEATURE_ACTION_NAMES)[number];
+
+/** Check if an action name is a supported feature action. */
+export function isFeatureActionName(action: string): action is FeatureActionName {
+    return (FEATURE_ACTION_NAMES as readonly string[]).includes(action as FeatureActionName);
+}
+
+/** Map supported feature action names to their CLI command invocations. */
+export const FEATURE_ACTION_COMMANDS: Record<FeatureActionName, (id: string) => string> = {
+    brainstorm: (id) => `spur dev brainstorm --feature ${id}`,
+    plan: (id) => `spur dev plan --feature ${id}`,
+};
+
 const FEATURE_FILE_RE = /^([A-Z][1-9]*)_(.+)\.md$/;
 
 /**
@@ -873,6 +899,37 @@ Feature: ${name}
 
 ## History
 `;
+    }
+
+    /**
+     * Fulfill an asynchronous feature action request by enqueuing a job and
+     * returning the `runId`. Note: `check` remains the sole synchronous exception
+     * and does NOT go through `fulfillAction` (per F81/0352).
+     *
+     * @throws if the feature file does not exist or action is unsupported.
+     */
+    async fulfillAction(
+        featureId: string,
+        action: string,
+        enqueue: (job: FeatureActionJob) => Promise<string>,
+        options?: { channel?: string; skipDeps?: boolean },
+    ): Promise<{ runId: string; action: string; status: 'queued' }> {
+        const feature = await this.show(featureId);
+        if (!feature) {
+            throw new Error(`Feature not found: ${featureId}`);
+        }
+        if (!isFeatureActionName(action)) {
+            throw new Error(`Unsupported feature action: ${action}`);
+        }
+
+        const runId = await enqueue({
+            featureId,
+            action,
+            command: FEATURE_ACTION_COMMANDS[action](featureId),
+            channel: options?.channel,
+            skipDeps: options?.skipDeps,
+        });
+        return { runId, action, status: 'queued' };
     }
 }
 

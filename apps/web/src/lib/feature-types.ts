@@ -65,6 +65,11 @@ export interface FeatureActionInput {
 /** Response for POST /features/{id}/action. */
 export interface FeatureActionResponse {
     ok: true;
+    data: {
+        runId: string;
+        action: string;
+        status: 'queued';
+    };
 }
 
 /** Input for POST /features/{id}/children — create child feature. */

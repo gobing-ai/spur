@@ -9,9 +9,14 @@ import type { CreateServerContextOptions, ServerContext } from '../src/context';
 import {
     createTaskActionAgentService,
     defaultDeps,
+    FEATURE_ACTION_JOB,
+    handleFeatureActionJob,
+    handleTaskActionJob,
+    parseFeatureActionJob,
     parseTaskActionJob,
     registerSchedulerEntries,
     resolveWebDistPath,
+    runFeatureActionJob,
     runTaskActionJob,
     type StartServerDeps,
     startServer,
@@ -430,6 +435,8 @@ describe('startServer', () => {
         await expect(registeredHandlers[TASK_ACTION_JOB]?.({ wbs: '0001', action: 'run' })).rejects.toThrow(
             'Invalid task-action payload: missing command',
         );
+        expect(registeredHandlers[FEATURE_ACTION_JOB]).toBeDefined();
+        await expect(registeredHandlers[FEATURE_ACTION_JOB]?.({})).rejects.toThrow();
         const sigint = sigHandlers.SIGINT;
         if (!sigint) throw new Error('SIGINT handler not registered');
         await sigint();
@@ -591,6 +598,85 @@ describe('startServer', () => {
         ).rejects.toThrow('Task action verify for 0001 failed with exit code 2');
     });
 
+    test('parseFeatureActionJob validates feature action payload shape', () => {
+        expect(FEATURE_ACTION_JOB).toBe('feature-action');
+        expect(
+            parseFeatureActionJob({
+                featureId: 'F3',
+                action: 'brainstorm',
+                command: 'spur dev brainstorm --feature F3',
+                channel: 'claude',
+            }),
+        ).toEqual({
+            featureId: 'F3',
+            action: 'brainstorm',
+            command: 'spur dev brainstorm --feature F3',
+            channel: 'claude',
+            skipDeps: undefined,
+        });
+
+        expect(() => parseFeatureActionJob(null)).toThrow('expected object');
+        expect(() => parseFeatureActionJob({ action: 'brainstorm' })).toThrow('missing featureId/action');
+        expect(() => parseFeatureActionJob({ featureId: 'F3', action: 'brainstorm', command: '  ' })).toThrow(
+            'missing command',
+        );
+    });
+
+    test('runFeatureActionJob executes feature action agent runner', async () => {
+        const calls: { prompt: string; flags: Record<string, unknown> }[] = [];
+        const createAgentService: Parameters<typeof runFeatureActionJob>[3] = () => ({
+            run: async (prompt: string, flags?: Record<string, string | boolean>) => {
+                calls.push({ prompt, flags: (flags ?? {}) as Record<string, unknown> });
+                return 0;
+            },
+        });
+        const ctx = {
+            cwd: '/tmp/spur-workspace',
+            eventBus: () => ({ emit: () => {} }),
+        } as unknown as ServerContext;
+
+        await runFeatureActionJob(
+            ctx,
+            {},
+            { featureId: 'F3', action: 'brainstorm', command: 'spur dev brainstorm --feature F3', channel: 'claude' },
+            createAgentService,
+        );
+
+        expect(calls).toEqual([
+            {
+                prompt: 'spur dev brainstorm --feature F3',
+                flags: { cwd: '/tmp/spur-workspace', json: true, agent: 'claude' },
+            },
+        ]);
+
+        const failingAgentService: Parameters<typeof runFeatureActionJob>[3] = () => ({
+            run: async () => 1,
+        });
+        await expect(
+            runFeatureActionJob(
+                ctx,
+                {},
+                { featureId: 'F3', action: 'plan', command: 'spur dev plan --feature F3' },
+                failingAgentService,
+            ),
+        ).rejects.toThrow('Feature action plan for F3 failed with exit code 1');
+    });
+
+    test('handleTaskActionJob and handleFeatureActionJob execute job runners', async () => {
+        const ctx = {
+            cwd: '/tmp/spur-workspace',
+            eventBus: () => ({ emit: () => {} }),
+        } as unknown as ServerContext;
+
+        await expect(handleTaskActionJob(ctx, {}, { wbs: '0001', action: 'verify', command: '  ' })).rejects.toThrow(
+            'missing command',
+        );
+
+        await expect(
+            handleFeatureActionJob(ctx, {}, { featureId: 'F1', action: 'plan', command: '  ' }),
+        ).rejects.toThrow('missing command');
+    });
+
     test('registers listening port in ProjectRegistry and resets to 0 on SIGINT', async () => {
         origServe = Bun.serve;
         origExit = process.exit;
@@ -659,6 +745,122 @@ describe('startServer', () => {
             output: { write: () => {}, error: () => {} },
         });
         expect(typeof service.run).toBe('function');
+    });
+
+    test('handles autostart when autostartIds are present and logs error on failure', async () => {
+        origServe = Bun.serve;
+        Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
+
+        const prevAutostart = process.env.SPUR_TEAM_AUTOSTART;
+        process.env.SPUR_TEAM_AUTOSTART = 'agent-1,agent-2';
+
+        let startedIds: string[] = [];
+        try {
+            // Happy path
+            await startServer(
+                { port: 4400, host: '127.0.0.1', openBrowser: false, keepAlive: false },
+                makeDeps({
+                    createServerContext: (() => ({
+                        supervisor: () => ({
+                            startAutostart: async (ids: string[]) => {
+                                startedIds = ids;
+                            },
+                        }),
+                    })) as unknown as StartServerDeps['createServerContext'],
+                }),
+            );
+            expect(startedIds).toEqual(['agent-1', 'agent-2']);
+
+            // Failure path
+            await expect(
+                startServer(
+                    { port: 4401, host: '127.0.0.1', openBrowser: false, keepAlive: false },
+                    makeDeps({
+                        createServerContext: (() => ({
+                            supervisor: () => ({
+                                startAutostart: async () => {
+                                    throw new Error('Autostart supervisor error');
+                                },
+                            }),
+                        })) as unknown as StartServerDeps['createServerContext'],
+                    }),
+                ),
+            ).rejects.toThrow('Autostart supervisor error');
+        } finally {
+            if (prevAutostart !== undefined) {
+                process.env.SPUR_TEAM_AUTOSTART = prevAutostart;
+            } else {
+                delete process.env.SPUR_TEAM_AUTOSTART;
+            }
+        }
+    });
+
+    test('handles ProjectRegistry.upsert and setPort failures gracefully without throwing', async () => {
+        origServe = Bun.serve;
+        origExit = process.exit;
+        origOn = process.on;
+
+        const sigHandlers: Record<string, () => void | Promise<void>> = {};
+        process.on = ((event: string, handler: () => void | Promise<void>) => {
+            sigHandlers[event] = handler;
+            return process;
+        }) as typeof process.on;
+
+        Bun.serve = (() => ({
+            port: 5556,
+            stop: () => {},
+        })) as unknown as typeof Bun.serve;
+
+        process.exit = ((_code: number) => {}) as typeof process.exit;
+
+        const { ProjectRegistry } = await import('@gobing-ai/spur-app');
+        const origUpsert = ProjectRegistry.prototype.upsert;
+        const origSetPort = ProjectRegistry.prototype.setPort;
+
+        ProjectRegistry.prototype.upsert = async () => {
+            throw new Error('Disk full');
+        };
+        ProjectRegistry.prototype.setPort = async () => {
+            throw new Error('Lock failed');
+        };
+
+        try {
+            await startServer({ port: 5556, host: '127.0.0.1', openBrowser: false, keepAlive: false }, makeDeps());
+
+            // Shutdown signal
+            const sigint = sigHandlers.SIGINT;
+            if (sigint) {
+                await sigint();
+            }
+        } finally {
+            ProjectRegistry.prototype.upsert = origUpsert;
+            ProjectRegistry.prototype.setPort = origSetPort;
+        }
+    });
+
+    test('startServer executes with defaultDeps when deps argument is omitted', async () => {
+        origServe = Bun.serve;
+        origExit = process.exit;
+        origOn = process.on;
+
+        process.exit = ((_code: number) => {}) as typeof process.exit;
+        const sigHandlers: Record<string, () => void | Promise<void>> = {};
+        process.on = ((event: string, handler: () => void | Promise<void>) => {
+            sigHandlers[event] = handler;
+            return process;
+        }) as typeof process.on;
+
+        Bun.serve = (() => ({
+            port: 5557,
+            stop: () => {},
+        })) as unknown as typeof Bun.serve;
+
+        await startServer({ port: 5557, host: '127.0.0.1', openBrowser: false, keepAlive: false });
+
+        const sigint = sigHandlers.SIGINT;
+        if (sigint) {
+            await sigint();
+        }
     });
 });
 

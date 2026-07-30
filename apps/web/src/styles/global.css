@@ -98,6 +98,29 @@
     background-color: rgba(239, 68, 68, 0.1);
 }
 
+/*
+ * System Events payload tooltip — dark prettylights-aligned JSON tokens.
+ * Used by `tokenizeJson` spans in SystemEventsTab (zero-dep highlighter).
+ */
+[data-testid="system-event-payload-tooltip"] .json-tok-key {
+    color: #7ee787; /* prettylights entity-tag — object keys */
+}
+[data-testid="system-event-payload-tooltip"] .json-tok-string {
+    color: #a5d6ff; /* prettylights string */
+}
+[data-testid="system-event-payload-tooltip"] .json-tok-number {
+    color: #79c0ff; /* prettylights constant */
+}
+[data-testid="system-event-payload-tooltip"] .json-tok-keyword {
+    color: #ff7b72; /* prettylights keyword — true/false/null */
+}
+[data-testid="system-event-payload-tooltip"] .json-tok-punct {
+    color: #8b949e; /* prettylights comment — braces/colons */
+}
+[data-testid="system-event-payload-tooltip"] .json-tok-plain {
+    color: #c9d1d9;
+}
+
 [data-testid="detail-body"] .wmde-markdown .mermaid-diagram svg {
     max-width: 100%;
     height: auto;

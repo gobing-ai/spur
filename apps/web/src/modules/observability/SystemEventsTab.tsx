@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Input, Loading } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 
@@ -389,6 +390,201 @@ export function formatAvailability(value: unknown): string {
     }
     if (typeof value === 'boolean') return String(value);
     return 'unavailable';
+}
+
+/**
+ * Identity / outcome fields for the System Events table row.
+ *
+ * Queue and scheduler events rarely carry `runId` / `outcome` on the envelope —
+ * they use `jobId` + `type` / `name` + event-name suffix instead (JobsTab already
+ * understands this shape). Without these fallbacks every queue.* row shows four
+ * stacked "unavailable" cells and blows the narrow Run/Outcome columns.
+ */
+export interface EventRowIdentity {
+    /** Primary correlator: workflow runId, else queue jobId. */
+    run: string;
+    /** Secondary label: actionId/node, else job type / scheduler name. */
+    action: string;
+    /** Terminal/status label: payload outcome, else derived from event suffix. */
+    outcome: string;
+    /** Compact duration or null when absent. */
+    duration: string | null;
+}
+
+/** Map lifecycle event-name suffixes to a short outcome label. */
+function deriveOutcomeFromEventName(eventName: string): string | null {
+    const suffix = eventName.split('.').pop() ?? '';
+    switch (suffix) {
+        case 'enqueued':
+            return 'pending';
+        case 'completed':
+            return 'completed';
+        case 'failed':
+            return 'failed';
+        case 'retrying':
+            return 'retrying';
+        case 'executed':
+            return 'executed';
+        case 'started':
+            return 'started';
+        case 'stopped':
+            return 'stopped';
+        case 'spawned':
+            return 'spawned';
+        case 'exited':
+            return 'exited';
+        default:
+            return null;
+    }
+}
+
+/** Token kinds produced by {@link tokenizeJson} for payload tooltips. */
+export type JsonTokenKind = 'key' | 'string' | 'number' | 'keyword' | 'punct' | 'ws' | 'plain';
+
+export interface JsonToken {
+    id: string;
+    kind: JsonTokenKind;
+    text: string;
+}
+
+/**
+ * Tokenize pretty-printed JSON for lightweight syntax highlighting.
+ * Zero deps — keeps the tooltip free of Prism/shiki while still coloring keys,
+ * strings, numbers, and keywords against the dark prettylights palette.
+ */
+export function tokenizeJson(json: string): JsonToken[] {
+    const tokens: JsonToken[] = [];
+    let i = 0;
+    while (i < json.length) {
+        const ch = json[i] ?? '';
+
+        if (ch === '"') {
+            let j = i + 1;
+            while (j < json.length) {
+                if (json[j] === '\\') {
+                    j += 2;
+                    continue;
+                }
+                if (json[j] === '"') {
+                    j += 1;
+                    break;
+                }
+                j += 1;
+            }
+            const text = json.slice(i, j);
+            let k = j;
+            while (k < json.length && /\s/.test(json[k] ?? '')) k += 1;
+            const isKey = json[k] === ':';
+            const kind = isKey ? 'key' : 'string';
+            tokens.push({ id: `tok-${tokens.length}-${kind}`, kind, text });
+            i = j;
+            continue;
+        }
+
+        if (ch === '-' || (ch >= '0' && ch <= '9')) {
+            let j = i + 1;
+            while (j < json.length && /[0-9.eE+-]/.test(json[j] ?? '')) j += 1;
+            tokens.push({ id: `tok-${tokens.length}-number`, kind: 'number', text: json.slice(i, j) });
+            i = j;
+            continue;
+        }
+
+        if (json.startsWith('true', i) || json.startsWith('null', i)) {
+            tokens.push({ id: `tok-${tokens.length}-kw`, kind: 'keyword', text: json.slice(i, i + 4) });
+            i += 4;
+            continue;
+        }
+        if (json.startsWith('false', i)) {
+            tokens.push({ id: `tok-${tokens.length}-kw`, kind: 'keyword', text: json.slice(i, i + 5) });
+            i += 5;
+            continue;
+        }
+
+        if ('{}[]:,'.includes(ch)) {
+            tokens.push({ id: `tok-${tokens.length}-punct`, kind: 'punct', text: ch });
+            i += 1;
+            continue;
+        }
+
+        if (/\s/.test(ch)) {
+            let j = i + 1;
+            while (j < json.length && /\s/.test(json[j] ?? '')) j += 1;
+            tokens.push({ id: `tok-${tokens.length}-ws`, kind: 'ws', text: json.slice(i, j) });
+            i = j;
+            continue;
+        }
+
+        tokens.push({ id: `tok-${tokens.length}-plain`, kind: 'plain', text: ch });
+        i += 1;
+    }
+    return tokens;
+}
+
+const JSON_TOKEN_CLASS: Record<JsonTokenKind, string> = {
+    key: 'json-tok-key',
+    string: 'json-tok-string',
+    number: 'json-tok-number',
+    keyword: 'json-tok-keyword',
+    punct: 'json-tok-punct',
+    ws: '',
+    plain: 'json-tok-plain',
+};
+
+/**
+ * Pretty-print + tokenize a payload for the event-name hover tooltip.
+ * Returns null when there is nothing useful to show.
+ */
+export function buildPayloadTooltip(payload: Record<string, unknown> | null): {
+    text: string;
+    tokens: JsonToken[];
+} | null {
+    if (!payload || Object.keys(payload).length === 0) return null;
+    try {
+        const text = JSON.stringify(payload, null, 2);
+        return { text, tokens: tokenizeJson(text) };
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Extract display identity for a system-event row. Pure + exported for unit tests.
+ */
+export function extractEventRowIdentity(event: {
+    eventName: string;
+    runId?: string | null;
+    payload: Record<string, unknown> | null;
+}): EventRowIdentity {
+    const payload = event.payload;
+    const pickString = (...keys: string[]): string | undefined => {
+        if (!payload) return undefined;
+        for (const key of keys) {
+            const value = payload[key];
+            if (typeof value === 'string' && value.length > 0) return value;
+        }
+        return undefined;
+    };
+
+    // Run: indexed runId first; queue jobs use jobId as the durable correlator.
+    const runRaw = event.runId && event.runId.length > 0 ? event.runId : pickString('jobId', 'runId');
+    const run = formatAvailability(runRaw);
+
+    // Action: workflow action identity, else job type / scheduler job name.
+    const actionRaw = pickString('actionId', 'action', 'node', 'kind', 'type', 'name');
+    const action = formatAvailability(actionRaw);
+
+    // Outcome: explicit payload fields, else derive from the event-name suffix.
+    const payloadOutcome = payload ? (payload.outcome ?? payload.status ?? payload.ok) : undefined;
+    let outcome: string;
+    if (payloadOutcome !== null && payloadOutcome !== undefined && payloadOutcome !== '') {
+        outcome = formatAvailability(payloadOutcome);
+    } else {
+        const derived = deriveOutcomeFromEventName(event.eventName);
+        outcome = derived ?? 'unavailable';
+    }
+
+    const duration = formatDuration(payload?.durationMs);
+    return { run, action, outcome, duration };
 }
 
 /** Usage may be a scalar or a structured token/cost projection; absence is explicit. */
@@ -1134,16 +1330,23 @@ function SystemEventsTable({ rows, catalog }: { rows: SystemEventRow[]; catalog:
     const isCompact = useMediaQuery('(max-width: 639px)');
 
     return (
-        <section className="flex-1 overflow-y-auto" data-system-events-tab aria-label="System events">
-            <table className="w-full text-xs border-separate border-spacing-0 table-fixed">
+        <section className="flex-1 overflow-y-auto min-w-0" data-system-events-tab aria-label="System events">
+            {/*
+              table-fixed + min-w-0 keeps columns from shoving neighbors when a long
+              jobId/runId appears. Run/Outcome are wider than the original w-28 so
+              correlators truncate cleanly instead of wrapping into the next cell.
+            */}
+            <table className="w-full min-w-[720px] text-xs border-separate border-spacing-0 table-fixed">
                 <colgroup>
-                    <col className={isCompact ? 'w-24' : 'w-44'} />
-                    <col />
+                    <col className={isCompact ? 'w-24' : 'w-36'} />
+                    {/* Event: fixed 20% so long names truncate instead of stealing Run/Outcome. */}
+                    <col className="w-[20%]" />
+                    {!isCompact && <col className="w-28" />}
+                    {!isCompact && <col className="w-20" />}
+                    {!isCompact && <col className="w-20" />}
+                    {/* Run: doubled from w-40 → w-80 so jobId/runId correlators fit. */}
+                    {!isCompact && <col className="w-80" />}
                     {!isCompact && <col className="w-32" />}
-                    {!isCompact && <col className="w-24" />}
-                    {!isCompact && <col className="w-24" />}
-                    {!isCompact && <col className="w-28" />}
-                    {!isCompact && <col className="w-28" />}
                 </colgroup>
                 <thead className="sticky top-0 z-10 bg-base-200">
                     <tr className="text-left text-spur-text-muted uppercase tracking-wide text-[10px]">
@@ -1198,13 +1401,17 @@ function SystemEventsTable({ rows, catalog }: { rows: SystemEventRow[]; catalog:
 /**
  * Event table row with a persistent, keyboard-reachable detail panel (R4).
  *
- * R2 (task 0375): run/action identity, duration, and outcome are surfaced on
- * the row itself (Run + Outcome columns), not only in a hover affordance.
- * R3: absent usage is rendered as `unavailable`, never as `0` or `-`.
- * R4: the hover-only tooltip is replaced by a row-anchored expandable region
- * toggled by a `<button aria-expanded>` - keyboard reachable (Enter/Space
- * toggles, Escape collapses) and touch-usable (no `:hover` dependency).
+ * Payload tip interaction (pin-to-copy):
+ * 1. Hover event name → ephemeral preview under the name
+ * 2. Click event name (or Enter/Space) → pin fixed tip so select/copy works
+ * 3. Esc / outside click / close → unlock
+ *
+ * Click-the-name is the pin trigger (not “click outside while hovering”), because
+ * leaving the name to click elsewhere hides the hover tip first.
  */
+/** Cross-row event so only one payload tooltip stays pinned at a time. */
+const PAYLOAD_TOOLTIP_PIN_EVENT = 'system-events-payload-tooltip-pin';
+
 function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: string; compact: boolean }) {
     const prefix = event.prefix ?? event.eventName.split('.')[0] ?? event.eventName;
     const summary = useMemo(
@@ -1213,38 +1420,231 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
     );
     const colorClass = getPrefixColor(prefix);
     const [expanded, setExpanded] = useState(false);
+    /** Hover preview — kept briefly after leave so the pointer can reach a pin control. */
+    const [hoveringName, setHoveringName] = useState(false);
+    /**
+     * Locked tooltip: click the event name pins a fixed, interactive bubble so the
+     * user can select/copy. Esc or a later outside click unlocks.
+     */
+    const [pinned, setPinned] = useState(false);
+    const [pinPos, setPinPos] = useState<{ x: number; y: number } | null>(null);
+    const tooltipRef = useRef<HTMLDivElement>(null);
+    const nameBtnRef = useRef<HTMLButtonElement>(null);
+    /** Ignore unlock for a short window after pin so the pin click cannot dismiss. */
+    const ignoreUnlockUntilRef = useRef(0);
+    const hoverLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // R2/R3: identity/outcome/usage - absent => 'unavailable', never zero/blank.
-    const runId = formatAvailability(event.runId);
-    const payload = event.payload;
-    const actionId = formatAvailability(payload?.actionId ?? payload?.action ?? payload?.node ?? payload?.kind);
-    const usage = formatUsage(payload?.usage);
-    const duration = formatDuration(payload && typeof payload === 'object' ? payload.durationMs : undefined);
-    const outcome = formatAvailability(
-        payload && typeof payload === 'object' ? (payload.outcome ?? payload.status ?? payload.ok) : undefined,
+    // R2/R3: identity/outcome/usage — absent => 'unavailable', never zero/blank.
+    // Queue/scheduler events use jobId/type/name; extractEventRowIdentity maps those.
+    const identity = useMemo(
+        () => extractEventRowIdentity({ eventName: event.eventName, runId: event.runId, payload: event.payload }),
+        [event.eventName, event.runId, event.payload],
     );
+    const { run: runId, action: actionId, outcome, duration } = identity;
+    const usage = formatUsage(event.payload?.usage);
     const entityLabel =
         event.entityKind && event.entityId
             ? `${event.entityKind}:${event.entityId}`
             : formatAvailability(event.entityKind ?? event.entityId);
+    const actorLabel = event.actor && event.actor.length > 0 ? event.actor : 'unavailable';
 
-    const onToggle = useCallback(() => setExpanded((prev) => !prev), []);
-    const onKeyDown = useCallback((e: React.KeyboardEvent) => {
-        if (e.key === 'Escape') {
-            setExpanded(false);
-            e.stopPropagation();
+    /** Pretty-printed + tokenized payload for the event-name hover tooltip. */
+    const payloadTooltip = useMemo(() => buildPayloadTooltip(event.payload), [event.payload]);
+    const tooltipOpen = Boolean(payloadTooltip && (hoveringName || pinned));
+
+    const clearHoverLeaveTimer = useCallback(() => {
+        if (hoverLeaveTimerRef.current !== null) {
+            clearTimeout(hoverLeaveTimerRef.current);
+            hoverLeaveTimerRef.current = null;
         }
     }, []);
+
+    const unlockTooltip = useCallback(() => {
+        setPinned(false);
+        setPinPos(null);
+    }, []);
+
+    const pinTooltipAt = useCallback(
+        (clientX: number, clientY: number) => {
+            if (!payloadTooltip) return;
+            // Guard against the pin click / subsequent bubble phase unlocking immediately.
+            ignoreUnlockUntilRef.current = performance.now() + 400;
+            setPinned(true);
+            setHoveringName(false);
+            clearHoverLeaveTimer();
+            // Prefer stable coords under the name when cursor coords are missing (keyboard).
+            const x = Number.isFinite(clientX) && clientX > 0 ? clientX : 8;
+            const y = Number.isFinite(clientY) && clientY > 0 ? clientY : 8;
+            setPinPos({ x, y });
+            window.dispatchEvent(new CustomEvent(PAYLOAD_TOOLTIP_PIN_EVENT, { detail: { id: event.id } }));
+        },
+        [event.id, payloadTooltip, clearHoverLeaveTimer],
+    );
+
+    const pinFromNameElement = useCallback(
+        (el: HTMLElement, clientX?: number, clientY?: number) => {
+            const rect = el.getBoundingClientRect();
+            const x = clientX && clientX > 0 ? clientX : rect.left;
+            const y = clientY && clientY > 0 ? clientY + 4 : rect.bottom + 6;
+            pinTooltipAt(x, y);
+        },
+        [pinTooltipAt],
+    );
+
+    // Another row pinned → release this one.
+    useEffect(() => {
+        const onOtherPin = (e: Event) => {
+            const id = (e as CustomEvent<{ id: string }>).detail?.id;
+            if (id !== event.id) unlockTooltip();
+        };
+        window.addEventListener(PAYLOAD_TOOLTIP_PIN_EVENT, onOtherPin);
+        return () => window.removeEventListener(PAYLOAD_TOOLTIP_PIN_EVENT, onOtherPin);
+    }, [event.id, unlockTooltip]);
+
+    // While pinned: outside click or Escape unlocks. Clicks inside the tip (select/copy) keep it open.
+    useEffect(() => {
+        if (!pinned) return;
+        const onPointerDown = (e: PointerEvent) => {
+            if (performance.now() < ignoreUnlockUntilRef.current) return;
+            if (tooltipRef.current?.contains(e.target as Node)) return;
+            // Re-clicking this event name should keep the tip pinned (not flash off).
+            if (nameBtnRef.current?.contains(e.target as Node)) return;
+            unlockTooltip();
+        };
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                unlockTooltip();
+                e.stopPropagation();
+            }
+        };
+        document.addEventListener('pointerdown', onPointerDown, true);
+        document.addEventListener('keydown', onKey, true);
+        return () => {
+            document.removeEventListener('pointerdown', onPointerDown, true);
+            document.removeEventListener('keydown', onKey, true);
+        };
+    }, [pinned, unlockTooltip]);
+
+    useEffect(
+        () => () => {
+            clearHoverLeaveTimer();
+        },
+        [clearHoverLeaveTimer],
+    );
+
+    const onToggle = useCallback(() => setExpanded((prev) => !prev), []);
+    const onKeyDown = useCallback(
+        (e: React.KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                if (pinned) {
+                    unlockTooltip();
+                    e.stopPropagation();
+                    return;
+                }
+                setExpanded(false);
+                e.stopPropagation();
+            }
+        },
+        [pinned, unlockTooltip],
+    );
+
+    const tooltipNode =
+        payloadTooltip && tooltipOpen ? (
+            <div
+                ref={tooltipRef}
+                role="tooltip"
+                data-testid="system-event-payload-tooltip"
+                data-pinned={pinned ? 'true' : 'false'}
+                className={
+                    pinned
+                        ? 'pointer-events-auto fixed z-50 rounded shadow-lg p-2.5 text-[11px] min-w-[min(400px,90vw)] max-w-[min(840px,95vw)] whitespace-normal border border-[#30363d] bg-[#0d1117] text-[#c9d1d9] select-text cursor-text'
+                        : // Hover preview: interactive enough to hit "Pin" without leaving the name first.
+                          'pointer-events-auto absolute left-0 top-full mt-1 z-30 rounded shadow-lg p-2.5 text-[11px] min-w-[min(400px,90vw)] max-w-[min(840px,95vw)] whitespace-normal border border-[#30363d] bg-[#0d1117] text-[#c9d1d9]'
+                }
+                style={pinned && pinPos ? { top: pinPos.y, left: pinPos.x } : undefined}
+                onMouseEnter={() => {
+                    // Keep hover open while the pointer is over the tip (bridge from the name).
+                    clearHoverLeaveTimer();
+                    setHoveringName(true);
+                }}
+                onMouseLeave={() => {
+                    if (pinned) return;
+                    clearHoverLeaveTimer();
+                    hoverLeaveTimerRef.current = setTimeout(() => setHoveringName(false), 150);
+                }}
+                onPointerDown={(e) => {
+                    // Keep select/copy clicks inside the bubble from unlocking.
+                    if (pinned) e.stopPropagation();
+                }}
+            >
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <div className="text-[10px] text-[#8b949e] font-sans">
+                        payload
+                        {pinned
+                            ? ' · select to copy · Esc / outside click to close'
+                            : ' · click event name or Pin to lock for copy'}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                        {!pinned && (
+                            <button
+                                type="button"
+                                data-testid="system-event-payload-tooltip-pin"
+                                className="text-[10px] text-[#c9d1d9] hover:text-white px-1.5 py-0.5 rounded border border-[#30363d] bg-[#21262d] cursor-pointer"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    const anchor = nameBtnRef.current;
+                                    if (anchor) {
+                                        pinFromNameElement(anchor);
+                                    } else {
+                                        pinTooltipAt(e.clientX, e.clientY);
+                                    }
+                                }}
+                            >
+                                Pin
+                            </button>
+                        )}
+                        {pinned && (
+                            <button
+                                type="button"
+                                data-testid="system-event-payload-tooltip-close"
+                                className="text-[10px] text-[#8b949e] hover:text-[#c9d1d9] px-1 rounded border border-[#30363d] cursor-pointer"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    unlockTooltip();
+                                }}
+                            >
+                                close
+                            </button>
+                        )}
+                    </div>
+                </div>
+                <pre
+                    className="font-mono text-[10px] overflow-x-auto max-h-80 overflow-y-auto whitespace-pre-wrap break-all m-0 leading-relaxed select-text"
+                    data-testid="system-event-payload-json"
+                >
+                    {payloadTooltip.tokens.map((tok) =>
+                        tok.kind === 'ws' ? (
+                            <span key={tok.id}>{tok.text}</span>
+                        ) : (
+                            <span key={tok.id} className={JSON_TOKEN_CLASS[tok.kind]}>
+                                {tok.text}
+                            </span>
+                        ),
+                    )}
+                </pre>
+            </div>
+        ) : null;
 
     return (
         <>
             <tr className="group hover:bg-base-200/60 transition-colors" style={{ height: compact ? undefined : 28 }}>
-                <td className="px-3 py-1 border-b border-spur-border/40 font-mono text-spur-text-muted whitespace-nowrap align-top">
+                <td className="px-3 py-1 border-b border-spur-border/40 font-mono text-spur-text-muted whitespace-nowrap align-middle">
                     {formatLocalTime(event.occurredAt)}
                 </td>
-                <td className="px-3 py-1 border-b border-spur-border/40 relative align-top">
-                    <div className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-1.5">
+                <td className="px-3 py-1 border-b border-spur-border/40 relative align-middle min-w-0">
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                        <div className="flex items-center gap-1.5 min-w-0">
                             <button
                                 type="button"
                                 aria-expanded={expanded}
@@ -1256,14 +1656,62 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                             >
                                 {expanded ? '▾' : '▸'}
                             </button>
-                            <span className={`font-mono font-semibold break-all ${colorClass}`}>{event.eventName}</span>
+                            {/*
+                              Hover → preview tip (with Pin control).
+                              Click event name / Pin → lock tip for select & copy.
+                              Esc or outside click → unlock.
+                            */}
+                            <div className="relative min-w-0 max-w-full">
+                                <button
+                                    ref={nameBtnRef}
+                                    type="button"
+                                    className={`font-mono font-semibold truncate block max-w-full text-left cursor-pointer bg-transparent border-0 p-0 ${colorClass}`}
+                                    data-testid="system-event-name"
+                                    aria-label={`Payload for ${event.eventName}. Hover to preview; click to pin for select and copy.`}
+                                    onMouseEnter={() => {
+                                        clearHoverLeaveTimer();
+                                        setHoveringName(true);
+                                    }}
+                                    onMouseLeave={() => {
+                                        // Delay hide so the user can move into the tip / hit Pin.
+                                        clearHoverLeaveTimer();
+                                        hoverLeaveTimerRef.current = setTimeout(() => {
+                                            if (!pinned) setHoveringName(false);
+                                        }, 200);
+                                    }}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        if (!payloadTooltip) return;
+                                        if (pinned) return;
+                                        pinFromNameElement(e.currentTarget, e.clientX, e.clientY);
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            if (!payloadTooltip || pinned) return;
+                                            pinFromNameElement(e.currentTarget);
+                                        }
+                                    }}
+                                >
+                                    {event.eventName}
+                                </button>
+                                {/* Absolute under the name while hovering (not pinned). */}
+                                {!pinned && tooltipNode}
+                            </div>
                         </div>
                         {compact && (
-                            <div className="flex flex-col gap-0.5 text-[10px] text-spur-text-muted">
-                                {event.actor && <span>by {event.actor}</span>}
-                                <span>run: {runId}</span>
-                                <span>action: {actionId}</span>
-                                <span>
+                            <div className="flex flex-col gap-0.5 text-[10px] text-spur-text-muted min-w-0">
+                                {event.actor && <span className="truncate">by {event.actor}</span>}
+                                <span className="truncate" title={`run ${runId}`}>
+                                    run: {runId}
+                                </span>
+                                {actionId !== 'unavailable' && (
+                                    <span className="truncate" title={`action ${actionId}`}>
+                                        action: {actionId}
+                                    </span>
+                                )}
+                                <span className="truncate">
                                     outcome: {outcome}
                                     {duration ? ` · ${duration}` : ''}
                                 </span>
@@ -1272,27 +1720,43 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                     </div>
                 </td>
                 {!compact && (
-                    <td className="px-3 py-0 border-b border-spur-border/40 text-spur-text-muted whitespace-nowrap align-top">
-                        {event.actor ?? 'unavailable'}
+                    <td
+                        className="px-3 py-1 border-b border-spur-border/40 text-spur-text-muted whitespace-nowrap align-middle truncate"
+                        title={actorLabel}
+                    >
+                        {actorLabel}
                     </td>
                 )}
                 {!compact && (
-                    <td className="px-3 py-0 border-b border-spur-border/40 font-mono align-top">
+                    <td className="px-3 py-1 border-b border-spur-border/40 font-mono align-middle">
                         <span className={colorClass}>{prefix}</span>
                     </td>
                 )}
                 {!compact && (
-                    <td className="px-3 py-0 border-b border-spur-border/40 text-spur-text-muted align-top">{tier}</td>
-                )}
-                {!compact && (
-                    <td className="px-3 py-0 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-top">
-                        <span className="block">run: {runId}</span>
-                        <span className="block">action: {actionId}</span>
+                    <td className="px-3 py-1 border-b border-spur-border/40 text-spur-text-muted align-middle">
+                        {tier}
                     </td>
                 )}
                 {!compact && (
-                    <td className="px-3 py-0 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-top">
-                        {outcome}
+                    <td className="px-3 py-1 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-middle min-w-0">
+                        {/*
+                          Single truncated correlator on the row; secondary action/type
+                          only when present. Avoids the double "run: unavailable /
+                          action: unavailable" stack that overflowed w-28 columns.
+                        */}
+                        <div className="truncate" title={runId}>
+                            {runId}
+                        </div>
+                        {actionId !== 'unavailable' && (
+                            <div className="truncate text-spur-text-muted/70" title={actionId}>
+                                {actionId}
+                            </div>
+                        )}
+                    </td>
+                )}
+                {!compact && (
+                    <td className="px-3 py-1 border-b border-spur-border/40 font-mono text-[10px] text-spur-text-muted align-middle whitespace-nowrap">
+                        <span title={outcome}>{outcome}</span>
                         {duration && <span className="text-spur-text-muted/60"> · {duration}</span>}
                     </td>
                 )}
@@ -1364,6 +1828,8 @@ function EventTableRow({ event, tier, compact }: { event: SystemEventRow; tier: 
                     </td>
                 </tr>
             )}
+            {/* Pinned tip is position:fixed — portal to body so <tbody> doesn't clip/invalidate markup. */}
+            {pinned && tooltipNode && typeof document !== 'undefined' ? createPortal(tooltipNode, document.body) : null}
         </>
     );
 }

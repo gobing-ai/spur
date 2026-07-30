@@ -4,6 +4,7 @@ import { Button } from '@/ui';
 import { loadLayoutState, saveLayoutState } from '../lib/layout-state';
 import { getModule } from '../modules/registry';
 import type { WebModule } from '../modules/types';
+import ApiErrorToast from './ApiErrorToast';
 import LeftSidebar from './LeftSidebar';
 import MainWorkspace from './MainWorkspace';
 import ResizeHandle from './ResizeHandle';
@@ -157,6 +158,7 @@ export default function BoardLayout() {
                     </RightPanel>
                 </ActiveModuleContext.Provider>
             </div>
+            <ApiErrorToast />
         </>
     );
 }

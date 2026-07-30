@@ -289,10 +289,14 @@ describe('observability components', () => {
 
         // R4: `task` prefix maps to a fixed color, not a hash. The text-color
         // class is deterministic across renders.
-        const taskName = queryAllByText('task.created').find((n) => n.tagName === 'SPAN');
-        expect(taskName?.className).toContain('text-emerald-400');
-        const queueName = queryAllByText('queue.job.completed').find((n) => n.tagName === 'SPAN');
-        expect(queueName?.className).toContain('text-orange-400');
+        const isNameEl = (n: Element) => {
+            const tag = n.tagName.toLowerCase();
+            return tag === 'button' || tag === 'span';
+        };
+        const taskName = queryAllByText('task.created').find(isNameEl);
+        expect(String(taskName?.className ?? '')).toContain('text-emerald-400');
+        const queueName = queryAllByText('queue.job.completed').find(isNameEl);
+        expect(String(queueName?.className ?? '')).toContain('text-orange-400');
 
         // R5: the prefix label is always rendered alongside the color in the
         // dedicated Prefix column.
@@ -596,7 +600,10 @@ describe('observability components', () => {
         await waitFor(() => expect(queryAllByText('task.created').length).toBeGreaterThan(0));
 
         // Find the row containing `task.created` then inspect its Prefix/Tier cells.
-        const taskSpans = queryAllByText('task.created').filter((n) => n.tagName === 'SPAN');
+        const taskSpans = queryAllByText('task.created').filter((n) => {
+            const tag = n.tagName.toLowerCase();
+            return tag === 'button' || tag === 'span';
+        });
         expect(taskSpans.length).toBeGreaterThan(0);
         const taskRow = taskSpans[0]?.closest('tr') as HTMLTableRowElement;
         expect(taskRow).not.toBeNull();
@@ -705,6 +712,194 @@ describe('observability components', () => {
         const detail = view.container.querySelector('section[aria-label="Detail for workflow.action.done"]');
         expect(detail?.textContent).toContain('usage: unavailable');
         expect(detail?.textContent).not.toContain('usage: 0');
+    });
+
+    test('event name hover tooltip renders the original payload JSON', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/events/history')) {
+                return jsonResponse({
+                    events: [
+                        {
+                            id: 'evt-tip',
+                            eventName: 'queue.job.completed',
+                            occurredAt: '2026-07-29T17:02:26.000Z',
+                            actor: null,
+                            runId: null,
+                            payload: {
+                                jobId: 'job-tip-1',
+                                type: 'system-events-prune',
+                            },
+                        },
+                    ],
+                    count: 1,
+                    catalog: [
+                        {
+                            name: 'queue.job.completed',
+                            prefix: 'queue',
+                            source: 'queue',
+                            renderer: 'metadata-only',
+                        },
+                    ],
+                    nextCursor: null,
+                    hasMore: false,
+                });
+            }
+            return new Response('not found', { status: 404 });
+        }) as unknown as typeof fetch);
+
+        const view = render(<SystemEventsTab />);
+        await waitFor(() => expect(view.getByTestId('system-event-name')).toBeDefined());
+        // Hover the event name to open the ephemeral tooltip.
+        fireEvent.mouseEnter(view.getByTestId('system-event-name'));
+        const tip = await waitFor(() => view.getByTestId('system-event-payload-tooltip'));
+        expect(tip.getAttribute('role')).toBe('tooltip');
+        expect(tip.getAttribute('data-pinned')).toBe('false');
+        expect(tip.textContent).toContain('job-tip-1');
+        expect(tip.textContent).toContain('system-events-prune');
+        // Pretty-printed JSON shape
+        expect(tip.textContent).toContain('jobId');
+    });
+
+    test('payload tooltip pins on outside click and unlocks on Esc', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/events/history')) {
+                return jsonResponse({
+                    events: [
+                        {
+                            id: 'evt-pin',
+                            eventName: 'queue.job.enqueued',
+                            occurredAt: '2026-07-29T17:02:26.000Z',
+                            actor: null,
+                            runId: null,
+                            payload: { jobId: 'job-pin-1', type: 'smoke' },
+                        },
+                    ],
+                    count: 1,
+                    catalog: [
+                        {
+                            name: 'queue.job.enqueued',
+                            prefix: 'queue',
+                            source: 'queue',
+                            renderer: 'metadata-only',
+                        },
+                    ],
+                    nextCursor: null,
+                    hasMore: false,
+                });
+            }
+            return new Response('not found', { status: 404 });
+        }) as unknown as typeof fetch);
+
+        const view = render(<SystemEventsTab />);
+        await waitFor(() => expect(view.getByTestId('system-event-name')).toBeDefined());
+
+        // Primary pin trigger: click the event name (no need to leave the hover target).
+        // Pinned tips portal to document.body.
+        fireEvent.click(view.getByTestId('system-event-name'));
+        await waitFor(() => {
+            const tip = document.querySelector('[data-testid="system-event-payload-tooltip"]');
+            expect(tip?.getAttribute('data-pinned')).toBe('true');
+        });
+        const pinnedTip = document.querySelector('[data-testid="system-event-payload-tooltip"]') as HTMLElement;
+        expect(pinnedTip.className).toContain('pointer-events-auto');
+        expect(pinnedTip.textContent).toContain('job-pin-1');
+        expect(pinnedTip.textContent).toContain('select to copy');
+
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await waitFor(() => expect(document.querySelector('[data-testid="system-event-payload-tooltip"]')).toBeNull());
+    });
+
+    test('payload tooltip Pin control locks the tip while hovering', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/events/history')) {
+                return jsonResponse({
+                    events: [
+                        {
+                            id: 'evt-pin-btn',
+                            eventName: 'queue.job.completed',
+                            occurredAt: '2026-07-29T17:02:26.000Z',
+                            actor: null,
+                            runId: null,
+                            payload: { jobId: 'job-pin-btn', type: 'smoke' },
+                        },
+                    ],
+                    count: 1,
+                    catalog: [
+                        {
+                            name: 'queue.job.completed',
+                            prefix: 'queue',
+                            source: 'queue',
+                            renderer: 'metadata-only',
+                        },
+                    ],
+                    nextCursor: null,
+                    hasMore: false,
+                });
+            }
+            return new Response('not found', { status: 404 });
+        }) as unknown as typeof fetch);
+
+        const view = render(<SystemEventsTab />);
+        await waitFor(() => expect(view.getByTestId('system-event-name')).toBeDefined());
+        fireEvent.mouseEnter(view.getByTestId('system-event-name'));
+        const pinBtn = await waitFor(() => view.getByTestId('system-event-payload-tooltip-pin'));
+        fireEvent.click(pinBtn);
+        await waitFor(() => {
+            const tip = document.querySelector('[data-testid="system-event-payload-tooltip"]');
+            expect(tip?.getAttribute('data-pinned')).toBe('true');
+        });
+        expect(document.querySelector('[data-testid="system-event-payload-tooltip"]')?.textContent).toContain(
+            'job-pin-btn',
+        );
+    });
+
+    test('queue.job rows surface jobId/type and derived outcome instead of stacked unavailable (layout fix)', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/events/history')) {
+                return jsonResponse({
+                    events: [
+                        {
+                            id: 'evt-queue',
+                            eventName: 'queue.job.completed',
+                            occurredAt: '2026-07-29T17:02:26.000Z',
+                            actor: null,
+                            runId: null,
+                            payload: {
+                                jobId: 'ea874dc4-cb7f-4bd1-bb47-fbe3c175b737',
+                                type: 'system-events-prune',
+                            },
+                        },
+                    ],
+                    count: 1,
+                    catalog: [
+                        {
+                            name: 'queue.job.completed',
+                            prefix: 'queue',
+                            source: 'queue',
+                            renderer: 'metadata-only',
+                            tier: 'diagnostic',
+                        },
+                    ],
+                    nextCursor: null,
+                    hasMore: false,
+                });
+            }
+            return new Response('not found', { status: 404 });
+        }) as unknown as typeof fetch);
+
+        const view = render(<SystemEventsTab />);
+        await waitFor(() => expect(view.getByText('queue.job.completed')).toBeDefined());
+        const row = view.getByText('queue.job.completed').closest('tr') as HTMLTableRowElement;
+        expect(row.textContent).toContain('ea874dc4-cb7f-4bd1-bb47-fbe3c175b737');
+        expect(row.textContent).toContain('system-events-prune');
+        expect(row.textContent).toContain('completed');
+        // Must not double-stack the unavailable labels that broke the Run column layout.
+        expect(row.textContent).not.toContain('run: unavailable');
+        expect(row.textContent).not.toContain('action: unavailable');
     });
 
     test('filter bar controls are keyboard-focusable native elements (task 0225 R4)', async () => {

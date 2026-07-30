@@ -16,8 +16,10 @@ import MarkdownBody from '../task-kanban/MarkdownBody';
 import NewTaskPanel from '../task-kanban/NewTaskPanel';
 import type { TaskSummary } from '../task-kanban/types';
 import { useTasks } from '../task-kanban/useTasks';
+import FloatingActionProgress from './FloatingActionProgress';
 import { FEATURE_ACTION_LABELS, FEATURE_STATUS_ACTIONS, FSM_ACTIONS, FSM_TRANSITION_TARGET } from './feature-actions';
 import NewFeaturePanel from './NewFeaturePanel';
+import { useFeatureActionProgress } from './useFeatureActionProgress';
 
 interface FeatureDetailProps {
     featureId: string;
@@ -64,6 +66,10 @@ export default function FeatureDetail({ featureId, onClose, refreshKey = 0 }: Fe
     const [syncDirection, setSyncDirection] = useState<SyncDirection>('push');
     const [showNewTaskPanel, setShowNewTaskPanel] = useState(false);
     const [showNewFeaturePanel, setShowNewFeaturePanel] = useState(false);
+
+    // Progress tracking hook (Task 0387 / Task 0388)
+    const { progress, trackAction } = useFeatureActionProgress(featureId);
+    const [isProgressDismissed, setIsProgressDismissed] = useState(false);
 
     /**
      * Id of the feature currently painted in the panel. Used so background reloads
@@ -371,11 +377,15 @@ export default function FeatureDetail({ featureId, onClose, refreshKey = 0 }: Fe
                         : 'Sync finished — no status change was needed.',
                 });
             } else {
-                await dispatchFeatureAction({
+                const res = await dispatchFeatureAction({
                     id: featureId,
                     action: action as 'brainstorm' | 'plan',
                     channel: selectedChannel,
                 });
+                if (res?.data?.runId) {
+                    trackAction(res.data.runId, action);
+                    setIsProgressDismissed(false);
+                }
                 // Agent runs async; body not updated yet. Don't clobber an open draft.
                 await reloadFeature({ body: false });
                 setActionFeedback({
@@ -860,6 +870,14 @@ export default function FeatureDetail({ featureId, onClose, refreshKey = 0 }: Fe
                 parentId={featureId}
                 onClose={() => setShowNewFeaturePanel(false)}
                 onCreated={handleFeatureCreated}
+            />
+
+            {/* Floating Action Progress Layer & Chip (Task 0388) */}
+            <FloatingActionProgress
+                progress={progress}
+                isDismissed={isProgressDismissed}
+                onDismiss={() => setIsProgressDismissed(true)}
+                onReopen={() => setIsProgressDismissed(false)}
             />
         </div>
     );

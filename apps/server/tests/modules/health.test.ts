@@ -182,9 +182,9 @@ describe('healthModule', () => {
         const registry = new ProjectRegistry(projectsFile);
         await registry.upsert({ name: 'StoppedApp', path: tempDir, port: 0 });
 
-        const targetPort = 3991;
         const server = createServer();
-        await new Promise<void>((resolve) => server.listen(targetPort, '127.0.0.1', () => resolve()));
+        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+        const targetPort = (server.address() as { port: number }).port;
         ProjectRegistry.prototype.allocatePort = async () => targetPort;
 
         try {
@@ -207,9 +207,9 @@ describe('healthModule', () => {
     });
 
     test('/api/projects/start auto-registers target path if existing directory on disk', async () => {
-        const targetPort = 3990;
         const server = createServer();
-        await new Promise<void>((resolve) => server.listen(targetPort, '127.0.0.1', () => resolve()));
+        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+        const targetPort = (server.address() as { port: number }).port;
         ProjectRegistry.prototype.allocatePort = async () => targetPort;
 
         try {

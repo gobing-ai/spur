@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
-import { isPortLive, ProjectRegistry } from '@gobing-ai/spur-app';
+import { isPortLive, ProjectRegistry, startRegisteredProject } from '@gobing-ai/spur-app';
 import type { CliContext } from '../context';
 import { toJson } from '../output';
 
@@ -118,90 +118,28 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
         .action(async (target, options) => {
             try {
                 const registry = new ProjectRegistry();
-                let entry = (await registry.getByName(target)) ?? (await registry.getByPath(target));
-
-                if (!entry) {
-                    // Try auto-add if target is an existing path
-                    const absPath = resolve(context.cwd, target);
-
-                    if (existsSync(absPath)) {
-                        entry = await registry.upsert({ path: absPath, name: basename(absPath), port: 0 });
-                    } else {
-                        throw new Error(`Project not found in registry: "${target}"`);
-                    }
-                }
-
-                // Check if already running
-                if (entry.port > 0 && (await isPortLive(entry.port))) {
-                    if (options.json) {
-                        context.output.write(
-                            toJson({
-                                ok: true,
-                                project: entry,
-                                running: true,
-                                url: `http://localhost:${entry.port}`,
-                            }),
-                        );
-                    } else {
-                        context.output.write(
-                            `Project "${entry.name}" is already running at http://localhost:${entry.port}`,
-                        );
-                    }
-                    return;
-                }
-
-                // Allocate port
-                const allocatedPort = options.port ?? (await registry.allocatePort());
-
-                // Spawn spur serve detached
-                const spurBin = process.argv[1] ?? 'spur';
-                const child = Bun.spawn(
-                    [
-                        process.execPath,
-                        spurBin,
-                        'serve',
-                        '--cwd',
-                        entry.path,
-                        '--port',
-                        String(allocatedPort),
-                        '--no-open',
-                    ],
-                    {
-                        cwd: entry.path,
-                        detached: true,
-                        stdio: ['ignore', 'ignore', 'ignore'],
-                    },
-                );
-                child.unref();
-
-                // Poll for health
-                let live = false;
-                for (let i = 0; i < 50; i++) {
-                    await new Promise((r) => setTimeout(r, 100));
-                    if (await isPortLive(allocatedPort)) {
-                        live = true;
-                        break;
-                    }
-                }
-
-                if (!live) {
-                    throw new Error(`Project "${entry.name}" failed to start on port ${allocatedPort}`);
-                }
-
-                await registry.setPort(entry.path, allocatedPort);
-                const updated = (await registry.getByPath(entry.path)) ?? entry;
+                const result = await startRegisteredProject(registry, target, {
+                    port: typeof options.port === 'number' && !Number.isNaN(options.port) ? options.port : undefined,
+                });
 
                 if (options.json) {
                     context.output.write(
                         toJson({
                             ok: true,
-                            project: updated,
+                            project: {
+                                name: result.name,
+                                path: result.path,
+                                port: result.port,
+                            },
                             running: true,
-                            url: `http://localhost:${allocatedPort}`,
+                            alreadyRunning: result.alreadyRunning,
+                            url: result.url,
                         }),
                     );
+                } else if (result.alreadyRunning) {
+                    context.output.write(`Project "${result.name}" is already running at ${result.url}`);
                 } else {
-                    context.output.write(`Started project "${updated.name}" on http://localhost:${allocatedPort}`);
+                    context.output.write(`Started project "${result.name}" on ${result.url}`);
                 }
             } catch (err) {
                 const message = err instanceof Error ? err.message : String(err);
@@ -229,7 +167,6 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                 if (entry.port > 0) {
                     // Signal process running on port if reachable
                     try {
-                        // Attempt process kill on listener pid or TCP port signal
                         const ps = Bun.spawn(['fuser', `${entry.port}/tcp`], { stdout: 'pipe', stderr: 'ignore' });
                         const outputStr = await new Response(ps.stdout).text();
                         const pids = outputStr

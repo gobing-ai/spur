@@ -2,6 +2,7 @@ import { basename, dirname, isAbsolute, join } from 'node:path';
 import {
     AgentService,
     configuredSecretValues,
+    type FeatureActionJob,
     JobHandlerRegistry,
     JobWorkerService,
     ProjectRegistry,
@@ -31,6 +32,9 @@ export const SMOKE_JOB = 'smoke';
 
 /** Built-in queue job kind for board-triggered task workflow actions. */
 export const TASK_ACTION_JOB = 'task-action';
+
+/** Built-in queue job kind for board-triggered feature workflow actions. */
+export const FEATURE_ACTION_JOB = 'feature-action';
 
 const SYSTEM_EVENTS_PRUNE_CRON = '300000';
 const SMOKE_CRON = '600000';
@@ -190,6 +194,78 @@ export async function runTaskActionJob(
     }
 }
 
+/** Parse and validate the queue payload for a board-triggered feature workflow action. */
+export function parseFeatureActionJob(payload: unknown): FeatureActionJob {
+    if (typeof payload !== 'object' || payload === null) {
+        throw new Error('Invalid feature-action payload: expected object');
+    }
+    const candidate = payload as Partial<FeatureActionJob>;
+    if (typeof candidate.featureId !== 'string' || typeof candidate.action !== 'string') {
+        throw new Error('Invalid feature-action payload: missing featureId/action');
+    }
+    if (typeof candidate.command !== 'string' || candidate.command.trim() === '') {
+        throw new Error('Invalid feature-action payload: missing command');
+    }
+    return {
+        featureId: candidate.featureId,
+        action: candidate.action,
+        command: candidate.command,
+        channel: typeof candidate.channel === 'string' ? candidate.channel : undefined,
+        skipDeps: typeof candidate.skipDeps === 'boolean' ? candidate.skipDeps : undefined,
+    };
+}
+
+/**
+ * Execute a validated feature-action job by dispatching its mapped command to the
+ * selected local agent.
+ */
+export async function runFeatureActionJob(
+    ctx: ServerContext,
+    env: Record<string, string | undefined>,
+    payload: unknown,
+    createAgentService: (options: ConstructorParameters<typeof AgentService>[0]) => {
+        run: AgentService['run'];
+    } = createTaskActionAgentService,
+) {
+    const job = parseFeatureActionJob(payload);
+    const agentService =
+        createAgentService === createTaskActionAgentService
+            ? ctx.agentService()
+            : createAgentService({
+                  cwd: ctx.cwd,
+                  env,
+                  events: ctx.eventBus(),
+                  output: { write: () => {}, error: () => {} },
+              });
+    const flags: Record<string, string | boolean> = {
+        cwd: ctx.cwd,
+        json: true,
+        ...(job.channel !== undefined ? { agent: job.channel } : {}),
+    };
+    const exitCode = await agentService.run(job.command, flags);
+    if (exitCode !== 0) {
+        throw new Error(`Feature action ${job.action} for ${job.featureId} failed with exit code ${exitCode}`);
+    }
+}
+
+/** Execute task action job payload. */
+export async function handleTaskActionJob(
+    ctx: ServerContext,
+    env: Record<string, string | undefined>,
+    payload: unknown,
+): Promise<void> {
+    await runTaskActionJob(ctx, env, payload);
+}
+
+/** Execute feature action job payload. */
+export async function handleFeatureActionJob(
+    ctx: ServerContext,
+    env: Record<string, string | undefined>,
+    payload: unknown,
+): Promise<void> {
+    await runFeatureActionJob(ctx, env, payload);
+}
+
 /**
  * Resolve the directory that holds the built Spur Board (Astro) static assets.
  *
@@ -330,9 +406,8 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                     await dao.pruneQuotas(retentionQuotas);
                 });
                 registry.register(SMOKE_JOB, async () => {});
-                registry.register(TASK_ACTION_JOB, async (payload) => {
-                    await runTaskActionJob(ctx, env, payload);
-                });
+                registry.register(TASK_ACTION_JOB, (payload) => handleTaskActionJob(ctx, env, payload));
+                registry.register(FEATURE_ACTION_JOB, (payload) => handleFeatureActionJob(ctx, env, payload));
                 jobWorker = new JobWorkerService({
                     consumer: await ctx.queueConsumer(),
                     registry,

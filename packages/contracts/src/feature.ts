@@ -104,8 +104,17 @@ export const featureActionInputSchema = z.object({
     skipDeps: z.boolean().optional(),
 });
 
-/** Action response: `{ ok: true }`. */
-export const featureActionResponseSchema = apiSuccessSchema(z.object({}));
+/** Result payload returned on feature action enqueue. */
+export const featureActionResultSchema = z.object({
+    runId: z.string(),
+    action: z.string(),
+    status: z.literal('queued'),
+});
+/** Result shape returned when a feature action job is enqueued. */
+export type FeatureActionResult = z.infer<typeof featureActionResultSchema>;
+
+/** Action response: `{ ok: true, data: { runId, action, status: 'queued' } }`. */
+export const featureActionResponseSchema = apiSuccessSchema(featureActionResultSchema);
 
 /** Create-child input (POST /features/{id}/children). */
 export const featureCreateChildInputSchema = z.object({

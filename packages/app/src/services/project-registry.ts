@@ -29,11 +29,14 @@ export function normalizeProjectPath(pathInput: string): string {
     return expanded;
 }
 
-/** Check if a TCP port is currently listening on localhost. */
-export async function isPortLive(port: number, timeoutMs = 200): Promise<boolean> {
-    if (port <= 0) return false;
+/**
+ * Probe one host/port for a live TCP listener.
+ * Bun.serve({ hostname: 'localhost' }) often binds IPv6-only on macOS, so
+ * callers of {@link isPortLive} must try both families.
+ */
+async function isPortLiveOnHost(port: number, host: string, timeoutMs: number): Promise<boolean> {
     return new Promise<boolean>((resolve) => {
-        const socket = connect({ port, host: '127.0.0.1', timeout: timeoutMs });
+        const socket = connect({ port, host, timeout: timeoutMs });
         socket.on('connect', () => {
             socket.destroy();
             resolve(true);
@@ -47,6 +50,20 @@ export async function isPortLive(port: number, timeoutMs = 200): Promise<boolean
             resolve(false);
         });
     });
+}
+
+/**
+ * Check if a TCP port is currently listening on localhost (IPv4 or IPv6).
+ *
+ * Important: probing only `127.0.0.1` misses servers bound to `::1` when the
+ * bind host is `localhost` (common Bun/macOS dual-stack behavior). That made
+ * project-start health polls fail even after `spur serve` was up.
+ */
+export async function isPortLive(port: number, timeoutMs = 200): Promise<boolean> {
+    if (port <= 0) return false;
+    if (await isPortLiveOnHost(port, '127.0.0.1', timeoutMs)) return true;
+    if (await isPortLiveOnHost(port, '::1', timeoutMs)) return true;
+    return false;
 }
 
 /** Check if a port can be bound by a new server on localhost. */
@@ -145,8 +162,31 @@ export class ProjectRegistry {
         renameSync(tmpFile, this.filePath);
     }
 
-    /** List all registered projects, running stale-heal check first. */
+    /**
+     * Rewrite hand-edited `~/…` (or other non-canonical) paths to absolute
+     * normalized form. Spawning with `cwd: "~/xprojects/foo"` fails with a
+     * misleading ENOENT on the bun binary — tilde is not expanded by posix_spawn.
+     */
+    async healTildePaths(): Promise<void> {
+        return this.withLock(async () => {
+            const data = this.readRaw();
+            let changed = false;
+            for (const project of data.projects) {
+                const normalized = normalizeProjectPath(project.path);
+                if (normalized !== project.path) {
+                    project.path = normalized;
+                    changed = true;
+                }
+            }
+            if (changed) {
+                this.writeRaw(data);
+            }
+        });
+    }
+
+    /** List all registered projects, healing paths + stale ports first. */
     async list(): Promise<ProjectEntry[]> {
+        await this.healTildePaths();
         await this.healStale();
         return this.readRaw().projects;
     }

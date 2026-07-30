@@ -764,4 +764,45 @@ updated_at: "${new Date().toISOString()}"
             expect(res.results.some((r) => r.proposal.featureId === feat.ref.id)).toBe(true);
         });
     });
+
+    describe('fulfillAction', () => {
+        test('enqueues supported action for existing feature and returns queued result', async () => {
+            const feat = await svc.create('Action Test Feat');
+            let enqueuedJob: unknown;
+
+            const res = await svc.fulfillAction(
+                feat.ref.id,
+                'brainstorm',
+                async (job) => {
+                    enqueuedJob = job;
+                    return 'job-123';
+                },
+                { channel: 'claude' },
+            );
+
+            expect(res).toEqual({
+                runId: 'job-123',
+                action: 'brainstorm',
+                status: 'queued',
+            });
+            expect(enqueuedJob).toEqual({
+                featureId: feat.ref.id,
+                action: 'brainstorm',
+                command: `spur dev brainstorm --feature ${feat.ref.id}`,
+                channel: 'claude',
+                skipDeps: undefined,
+            });
+        });
+
+        test('throws error when feature does not exist', async () => {
+            await expect(svc.fulfillAction('Z999', 'brainstorm', async () => 'job-999')).rejects.toThrow();
+        });
+
+        test('throws error for unsupported action name', async () => {
+            const feat = await svc.create('Invalid Action Feat');
+            await expect(svc.fulfillAction(feat.ref.id, 'unsupported_action', async () => 'job-123')).rejects.toThrow(
+                'Unsupported feature action: unsupported_action',
+            );
+        });
+    });
 });

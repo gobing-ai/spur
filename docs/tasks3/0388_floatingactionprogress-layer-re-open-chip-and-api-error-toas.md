@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "FloatingActionProgress layer, re-open chip, and api-error toast"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: F83
@@ -12,7 +12,7 @@ priority: P1
 tags: []
 dependencies: []
 created_at: "2026-07-29T23:22:42.919Z"
-updated_at: "2026-07-29T23:23:34.201Z"
+updated_at: "2026-07-30T00:17:30.019Z"
 ---
 
 ## 0388. FloatingActionProgress layer, re-open chip, and api-error toast
@@ -65,15 +65,24 @@ Invariants: confirm-before-enqueue unchanged; dismiss is client-only.
 4. Tests with happy-dom / existing web test patterns.
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- [apps/web/src/modules/features/FloatingActionProgress.tsx:18](file:///Users/robin/xprojects/spur-new/apps/web/src/modules/features/FloatingActionProgress.tsx#L18): Implemented `FloatingActionProgress` layer and compact re-open chip component.
+- [apps/web/src/components/ApiErrorToast.tsx:11](file:///Users/robin/xprojects/spur-new/apps/web/src/components/ApiErrorToast.tsx#L11): Implemented `ApiErrorToast` global component listening for `api-error` CustomEvent.
+- [apps/web/src/components/BoardLayout.tsx:160](file:///Users/robin/xprojects/spur-new/apps/web/src/components/BoardLayout.tsx#L160): Mounted `ApiErrorToast` at the Board layout root.
+- [apps/web/src/modules/features/FeatureDetail.tsx:384](file:///Users/robin/xprojects/spur-new/apps/web/src/modules/features/FeatureDetail.tsx#L384): Armed progress hook on `dispatchAgentAction` success and rendered `FloatingActionProgress`.
+- [apps/web/tests/modules/features/FloatingActionProgress.test.tsx:15](file:///Users/robin/xprojects/spur-new/apps/web/tests/modules/features/FloatingActionProgress.test.tsx#L15): Added unit tests for open panel, dismiss, compact chip, and terminal failure toast dispatching.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- `bun test apps/web/tests/modules/features/FloatingActionProgress.test.tsx` (6 pass, 0 fail).
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Finding | Action |
+| --- | --- | --- |
+| P1 | None — FloatingActionProgress renders live status driven by SSE correlation hook | Verified |
+| P2 | None — Dismissing progress layer keeps compact chip without cancelling server job | Verified |
+| P3 | None — ApiErrorToast catches terminal failure when progress layer is dismissed | Verified |
+| P4 | None — Unit tests cover all render states and user interaction callbacks | Verified |
 
 ### References
 
@@ -82,3 +91,6 @@ F83
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-07-30T00:17:26.451Z todo → wip (system)
+- 2026-07-30T00:17:28.391Z wip → testing (system)
+- 2026-07-30T00:17:30.019Z testing → done (system)

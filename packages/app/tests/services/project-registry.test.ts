@@ -154,6 +154,40 @@ describe('ProjectRegistry', () => {
         expect(await isPortLive(59999)).toBe(false);
     });
 
+    it('should detect IPv6 localhost listeners (Bun.serve hostname localhost)', async () => {
+        const server = createServer();
+        await new Promise<void>((resolve) => server.listen(0, '::1', () => resolve()));
+        const address = server.address();
+        const port = typeof address === 'object' && address ? address.port : 0;
+        try {
+            expect(port).toBeGreaterThan(0);
+            expect(await isPortLive(port)).toBe(true);
+        } finally {
+            server.close();
+        }
+    });
+
+    it('should heal tilde paths to absolute on list', async () => {
+        const tildePath = `~/tmp-spur-registry-heal-test-${Date.now()}`;
+        // Write a hand-edited registry entry with a tilde path (as users often do).
+        writeFileSync(
+            projectsFile,
+            JSON.stringify(
+                {
+                    schema_version: 1,
+                    projects: [{ name: 'TildeProj', path: tildePath, port: 0 }],
+                },
+                null,
+                2,
+            ),
+            'utf-8',
+        );
+        const projects = await registry.list();
+        expect(projects).toHaveLength(1);
+        expect(projects[0]?.path.startsWith('~')).toBe(false);
+        expect(projects[0]?.path).toBe(normalizeProjectPath(tildePath));
+    });
+
     it('should correctly report isPortAvailable for occupied and invalid ports', async () => {
         expect(await isPortAvailable(0)).toBe(false);
         expect(await isPortAvailable(70000)).toBe(false);

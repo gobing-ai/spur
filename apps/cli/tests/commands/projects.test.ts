@@ -196,9 +196,9 @@ describe('spur projects CLI command', () => {
     });
 
     it('should handle start for an un-registered target path (auto-register)', async () => {
-        const targetPort = 3993;
         const server = createServer();
-        await new Promise<void>((resolve) => server.listen(targetPort, '127.0.0.1', () => resolve()));
+        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+        const targetPort = (server.address() as { port: number }).port;
         ProjectRegistry.prototype.allocatePort = async () => targetPort;
 
         try {
@@ -218,9 +218,9 @@ describe('spur projects CLI command', () => {
         const registry = new ProjectRegistry(projectsFile);
         await registry.upsert({ name: 'StoppedProj', path: projectPath, port: 0 });
 
-        const targetPort = 3992;
         const server = createServer();
-        await new Promise<void>((resolve) => server.listen(targetPort, '127.0.0.1', () => resolve()));
+        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+        const targetPort = (server.address() as { port: number }).port;
         ProjectRegistry.prototype.allocatePort = async () => targetPort;
 
         try {

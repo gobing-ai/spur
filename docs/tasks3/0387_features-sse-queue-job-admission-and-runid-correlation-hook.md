@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Features SSE queue.job admission and runId correlation hook"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: F83
@@ -12,7 +12,7 @@ priority: P1
 tags: []
 dependencies: []
 created_at: "2026-07-29T23:22:42.912Z"
-updated_at: "2026-07-29T23:23:32.819Z"
+updated_at: "2026-07-30T00:16:28.250Z"
 ---
 
 ## 0387. Features SSE queue.job admission and runId correlation hook
@@ -57,15 +57,23 @@ Invariants: runId not required for correctness after re-entry (F81/0352); only f
 4. Wire FeaturesShell refresh path to still use feature.* for tree/detail.
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- [apps/web/src/modules/features/sse-helpers.ts:11](file:///Users/robin/xprojects/spur-new/apps/web/src/modules/features/sse-helpers.ts#L11): Implemented `isFeaturesSseEvent`, `extractJobId`, `matchJobId`, and `reduceFeatureActionProgress` state machine reducer.
+- [apps/web/src/modules/features/useFeatureActionProgress.ts:18](file:///Users/robin/xprojects/spur-new/apps/web/src/modules/features/useFeatureActionProgress.ts#L18): Implemented `useFeatureActionProgress` hook with `runId` correlation and clean SSE listener teardown.
+- [apps/web/src/modules/features/FeaturesShell.tsx:90](file:///Users/robin/xprojects/spur-new/apps/web/src/modules/features/FeaturesShell.tsx#L90): Widened SSE event admission to include `queue.job.*` events via `isFeaturesSseEvent`.
+- [apps/web/tests/modules/features/sse-helpers.test.ts:9](file:///Users/robin/xprojects/spur-new/apps/web/tests/modules/features/sse-helpers.test.ts#L9): Added unit tests for filter predicate, correlation matching, and state machine transitions.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- `bun test apps/web/tests/modules/features/sse-helpers.test.ts` (8 pass, 0 fail).
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Finding | Action |
+| --- | --- | --- |
+| P1 | None — isFeaturesSseEvent admits queue.job.* without dropping feature.* | Verified |
+| P2 | None — matchJobId prevents cross-feature progress state corruption | Verified |
+| P3 | None — EventSource cleans up on unmount in useFeatureActionProgress | Verified |
+| P4 | None — Unit tests cover all branches of progress reducer and helpers | Verified |
 
 ### References
 
@@ -74,3 +82,6 @@ F83
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-07-30T00:16:24.225Z todo → wip (system)
+- 2026-07-30T00:16:25.933Z wip → testing (system)
+- 2026-07-30T00:16:28.250Z testing → done (system)
