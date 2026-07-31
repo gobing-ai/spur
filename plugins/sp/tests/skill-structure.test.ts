@@ -129,7 +129,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
 
     test('R16d — no retired skill/agent name is referenced anywhere in the plugin', () => {
         // Retired in Wave A (noun-skills + noun-experts + expert-dev). The spur-cli facade and
-        // expert-spur subagent replaced them; super-coder absorbed expert-dev's single-task role.
+        // expert-spur subagent replaced them; the batch-driver role now lives in super-planner (0391).
         const retired = [
             'spur-tasks',
             'spur-features',
@@ -384,13 +384,13 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
     });
 
     test('R29 — parallel batch contracts are not internally contradictory', () => {
-        const superCoder = readFileSync(join(AGENTS_DIR, 'super-coder.md'), 'utf8');
+        const superPlanner = readFileSync(join(AGENTS_DIR, 'super-planner.md'), 'utf8');
         const executionBatch = readFileSync(join(SKILLS_DIR, 'spur-dev', 'references', 'execution-batch.md'), 'utf8');
         const devRunall = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-runall.md'), 'utf8');
         const devParallel = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-parallel.md'), 'utf8');
 
-        expect(superCoder).toContain('sp:parallel-execution');
-        expect(superCoder).not.toContain('Never run tasks in parallel (v1)');
+        expect(superPlanner).toContain('sp:parallel-execution');
+        expect(superPlanner).not.toContain('Never run tasks in parallel (v1)');
         expect(executionBatch).toContain('optional parallel fan-out');
         expect(devRunall).toContain('--mode <sequential|parallel>');
         expect(devRunall).toContain('--feature <id>');
@@ -701,7 +701,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         // future edit that strips the anatomy fails the gate instead of silently rotting.
         const loadBearing = [
             'code-verification',
-            'spur-tdd',
+            'test-driven-development',
             'sys-debugging',
             'code-implementation',
             'spec-decomposition',
@@ -821,7 +821,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const disciplines = ['ledger', 'cheapest model', 'pre-judge the reviewer'];
         for (const p of [
             join(SKILLS_DIR, 'parallel-execution', 'SKILL.md'),
-            join(AGENTS_DIR, 'super-coder.md'),
+            join(AGENTS_DIR, 'super-planner.md'),
             join(SKILLS_DIR, 'spur-dev', 'references', 'execution-batch.md'),
         ]) {
             const text = readFileSync(p, 'utf8').toLowerCase();
@@ -1048,5 +1048,102 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             sectionMatrix.indexOf('  brainstorm:'),
         );
         expect(metaMatrix).toContain('Root Cause');
+    });
+    test('R55 - every sp: skill declared in agent frontmatter resolves to a skill directory (0389 R6)', () => {
+        // Agent frontmatter `skills:` lists sp:<name> skills the agent may invoke at runtime. A
+        // dangling declaration (e.g. sp:anti-hallucination, which ships under the cc: plugin, or a
+        // non-existent sp:tasks) is a silent mis-route. R16b guards sp: references in body text but
+        // only flags spur-/code-/sys-/spec-/expert- prefixed names; frontmatter skills: entries use
+        // bare names (anti-hallucination, tasks) that R16b skips. This assertion parses the skills:
+        // field directly and resolves each sp: entry to a directory under skills/.
+        const offenders: string[] = [];
+        for (const file of readdirSync(AGENTS_DIR).filter((f) => f.endsWith('.md'))) {
+            const text = readFileSync(join(AGENTS_DIR, file), 'utf8');
+            const frontmatter = text.split('---')[1] ?? '';
+            const skillsLine = frontmatter.match(/^skills:\s*\[(.*)\]/m)?.[1] ?? '';
+            for (const match of skillsLine.matchAll(/\bsp:([a-z][a-z0-9-]+)\b/g)) {
+                const name = match[1];
+                if (!skillDirs.includes(name)) {
+                    offenders.push(`${file} -> sp:${name}`);
+                }
+            }
+        }
+        expect(offenders).toEqual([]);
+    });
+    test('R56 - four-agent build/orchestration split is non-overlapping (0391)', () => {
+        // H6 inversion: super-planner owns batch orchestration; super-coder owns build competencies;
+        // super-reviewer owns review; expert-spur owns corpus CLI. No agent may cross into another's
+        // core competency in a way that re-blends the split.
+        const planner = readFileSync(join(AGENTS_DIR, 'super-planner.md'), 'utf8');
+        const coder = readFileSync(join(AGENTS_DIR, 'super-coder.md'), 'utf8');
+        const reviewer = readFileSync(join(AGENTS_DIR, 'super-reviewer.md'), 'utf8');
+        const spur = readFileSync(join(AGENTS_DIR, 'expert-spur.md'), 'utf8');
+
+        // All four agent files exist and are non-empty.
+        expect(planner.length).toBeGreaterThan(0);
+        expect(coder.length).toBeGreaterThan(0);
+        expect(reviewer.length).toBeGreaterThan(0);
+        expect(spur.length).toBeGreaterThan(0);
+
+        // Non-overlap: build agent does not reference the batch SSOT; planner does not declare a
+        // build competency skill; reviewer owns verification; spur owns the CLI facade.
+        expect(coder).not.toContain('execution-batch.md');
+        expect(planner).not.toContain('sp:code-implementation');
+        expect(reviewer).toContain('sp:code-verification');
+        expect(spur).toContain('sp:spur-cli');
+        // AC1 mutual-exclusivity for the other two agents: reviewer must declare it never
+        // implements a fix (does not cross into build); spur must declare it never drives the
+        // planning/execution lifecycle (does not cross into orchestration). Without these, a
+        // future edit could drop the boundary text and re-blend the four-way split with no
+        // structural signal - the same failure mode R56 exists to prevent for coder/planner.
+        expect(reviewer).toContain('Never implement a fix');
+        expect(spur).toContain('Never drive the planning/execution lifecycle');
+
+        // Planner owns the batch driver loop (references execution-batch.md); coder owns build
+        // competencies (references the four competency skills).
+        expect(planner).toContain('execution-batch.md');
+        expect(coder).toContain('sp:code-implementation');
+        expect(coder).toContain('sp:sys-architecture');
+        expect(coder).toContain('sp:code-testing');
+        expect(coder).toContain('sp:sys-debugging');
+
+        // R3 / AC "Polling stays out of the planner body": the spur workflow trace polling loop
+        // lives in the command/script layer, not as agent reasoning. Assert the planner explicitly
+        // delegates polling to the script layer (positive contract) and names it as transport, not
+        // reasoning. Without this, a future edit could inline a poll loop into the planner body and
+        // no structural test would catch the re-blend.
+        expect(planner).toContain('script layer');
+        expect(planner).toContain('not planner reasoning');
+        // The build agent must not describe a poll loop either.
+        expect(coder).not.toMatch(/spur workflow trace/);
+
+        // R5 / AC "Routing frontmatter matches the new charters": each agent's frontmatter
+        // description must carry its own triggers and drop the other's, so the routing layer
+        // selects correctly. Extract the description field from the frontmatter block.
+        const fm = (file: string) => file.split('---')[1] ?? '';
+        const plannerDesc = fm(planner).toLowerCase();
+        const coderDesc = fm(coder).toLowerCase();
+        // Planner description carries orchestration triggers, not build triggers.
+        expect(plannerDesc).toMatch(/run all tasks|drive the batch|dev-runall|execution orchestration/);
+        expect(plannerDesc).not.toMatch(/\bimplement\b|\bwrite the code\b|\bdebug this\b/);
+        // Coder description carries build triggers, not orchestration triggers.
+        expect(coderDesc).toMatch(/\bimplement\b|\bwrite the code\b|\bfix this bug\b|\bdebug\b/);
+        expect(coderDesc).not.toMatch(/run all tasks|drive the batch|dev-runall/);
+
+        // R7 / AC "cite the shared housekeeping and dispatch-surface references": both agents cite
+        // the done-time housekeeping reference and the dispatch-surface reference by path.
+        for (const [label, text] of [
+            ['super-planner', planner],
+            ['super-coder', coder],
+        ] as const) {
+            expect(text, `${label} must cite done-housekeeping.md`).toContain('done-housekeeping.md');
+            expect(text, `${label} must cite dispatch-surface.md`).toContain('dispatch-surface.md');
+        }
+
+        // Positive charter ownership (AC "non-overlapping and correctly named"): planner owns
+        // product/project management + execution orchestration; coder owns the build competencies.
+        expect(planner.toLowerCase()).toContain('product');
+        expect(planner.toLowerCase()).toContain('project management');
+        expect(planner.toLowerCase()).toContain('orchestration');
     });
 });

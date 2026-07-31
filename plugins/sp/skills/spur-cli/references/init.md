@@ -1,11 +1,54 @@
 ---
 name: init
-description: "Post-scaffold init validation for /sp:spur-init — Phase 1.5 functional-validation probes (spur status / task create __probe__ / workflow validate with halt-on-failure) and Phase 1.6 rule-glob adaptation (LLM-as-judge layout classification, local-layer shadow writes, zero kind:error acceptance)."
+description: "spur-cli noun reference for `spur init` and `spur status`: CLI verbs (init scaffold with --name/--force/--minimal, status with --json) plus post-scaffold init validation for /sp:spur-init - Phase 1.5 functional-validation probes and Phase 1.6 rule-glob adaptation."
 see_also:
   - spur-cli
 ---
 
-# spur init — Validation Probes and Rule Glob Adaptation
+# spur init / spur status - CLI verbs and post-scaffold validation
+
+## CLI verbs
+
+| Verb | Purpose | Key flags |
+| ---- | ------- | --------- |
+| `init` | Scaffold a new Spur project in the current directory | `--name <name>` `--force` `--minimal` `--json` |
+| `status [path]` | Show project and git status for a Spur project | `--json` |
+
+### `spur init` - scaffold a Spur project
+
+```bash
+spur init                            # interactive: prompt for project name
+spur init --name my-project          # non-interactive
+spur init --name my-project --force  # overwrite existing .spur/ files
+spur init --minimal                  # skip optional scaffolding (rules, workflows)
+spur init --json                     # machine-readable
+```
+
+Materializes the `.spur/` directory tree with config, docs, rules, and workflow templates. The
+post-scaffold validation probes (Phase 1.5 / 1.6, below) run immediately after this verb completes.
+
+#### Flags
+
+| Flag | Purpose |
+|------|---------|
+| `--name <name>` | Project name (skips interactive prompt). |
+| `--force` | Overwrite existing `.spur/` files. Without it, existing files are preserved. |
+| `--minimal` | Skip optional scaffolding (rules presets, workflow templates). Core config + docs only. |
+| `--json` | Output machine-readable JSON instead of interactive summary. |
+
+### `spur status [path]` - project and git status
+
+```bash
+spur status                          # current directory
+spur status /path/to/project         # specific project
+spur status --json                   # machine-readable
+```
+
+Reports the project's Spur configuration state (init status, feature/task counts, rule preset
+health) and git working-tree status. Optional `[path]` argument targets a different project
+directory.
+
+## Post-scaffold validation
 
 Two probes sit between the deterministic scaffold (`spur init`) and the non-deterministic doc
 customization: Phase 1.5 (functional validation) confirms the fresh tree is immediately functional;

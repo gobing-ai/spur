@@ -110,3 +110,7 @@ Report using this template:
 
 - **Claude Code:** native — `Bash` runs the `spur` CLI; `Skill()` invokes `sp:spur-cli`.
 - **Other platforms:** agents are optional wrappers. Invoke `sp:spur-cli` directly.
+
+## Dispatch surface
+
+When you dispatch corpus work to another agent, choose the execution surface per [dispatch-surface.md](../skills/parallel-execution/references/dispatch-surface.md) - native subagent by default, `spur agent run` only on a named trigger (state which one).

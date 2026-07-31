@@ -75,10 +75,7 @@ web_modules/
 out
 # Nuxt.js build / generate output
 .nuxt
-spur.js
-/spur-cli
-# Legacy bundle layout (pre package-root config/); may still appear from old builds
-/apps/cli/spur-cli
+
 # Bundled default config copied into the CLI package for npm publish (bundle-config)
 /apps/cli/config
 # Board static assets copied into the CLI package for npm publish (bundle-web)
@@ -119,11 +116,20 @@ dist/
 dist/
 # Database files
 data/
-.spur/spur.db*
+
+# Legacy bundle layout (pre package-root config/); may still appear from old builds
+/spur-cli
+/apps/cli/spur-cli
 # Nested .spur dirs are test/dev scaffold leaks — only the root .spur/ is canonical
-apps/**/.spur/
-packages/**/.spur/
-docs/**/.spur/
+spur.js
+/.spur/spur.db*
+/apps/**/.spur/
+/packages/**/.spur/
+/docs/**/.spur/
+/.spur/run
+/.spur/context/.session*.json
+/.spur/context/token-ledger.jsonl
+
 logs/
 .tmp/
 **/.tmp-*/
@@ -156,7 +162,6 @@ docs/.ftree/
 /.antigravitycli/
 .ant-colony/
 !.env.example
-/.spur/run
 /.rulesync
 
 /apps/web/coverage
@@ -167,5 +172,4 @@ docs/.ftree/
 /docs/memo.md
 
 .scratch/
-# Spur indexed-context (machine-generated)
-.spur/context/
+/.pi-subagents/

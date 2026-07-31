@@ -22,7 +22,7 @@ in `cross-cutting.md`. Neither file restates the other's content.
 **spine** — the thin orchestration skill (`sp:spur-dev`) that drives the planning→execution
 lifecycle by running gates and dispatching competency skills; it contains no domain logic of
 its own.
-Avoid: *orchestrator* (ambiguous with `sp:super-coder`, the batch orchestrator agent),
+Avoid: *orchestrator* (ambiguous with `sp:super-planner`, the batch orchestrator agent),
 *controller*, *coordinator*.
 
 **competency** — a deep, functionally-scoped skill (`sp:sys-architecture`,

@@ -33,7 +33,7 @@ flowchart LR
   P -->|handoff| CB
   CB -->|/sp:dev-refine| R[/sp:dev-refine<br/>fill AC / Design / Plan/]
   R -->|/sp:dev-run| X[/sp:dev-run<br/>task-pipeline.yaml/]
-  CB -->|/sp:dev-runall| XA[/sp:dev-runall<br/>batch driver + super-coder/]
+  CB -->|/sp:dev-runall| XA[/sp:dev-runall<br/>batch driver + super-planner/]
   X -->|done| D([Task done])
   XA -->|done| D
   D -->|/sp:dev-wrap or /sp:dev-wrapall| W[/sp:dev-wrap / -wrapall<br/>wrapup-pipeline.yaml/]
@@ -54,7 +54,7 @@ artifacts (with optional feature transition and irreversible branch cleanup).
 The `sp` plugin provides **34 commands** across planning, execution, operations/hygiene, wrap-up, and authoring:
 
 | Command | Phase / Category | What it does | Backed by |
-|---------|------------------|--------------|-----------|
+| --------- | ------------------ | -------------- | ----------- |
 | `/sp:dev-next` | Router | **Status-aware router** — inspect a task WBS or feature frontier, pick the single best next `/sp:dev-*` step, and dispatch it (`--dry-run` to preview, `--once` to stop child's chain) | `sp:next-router` |
 | `/sp:dev-brainstorm` | Planning | Grilling interview → options with trade-offs → land an artifact (`--task` or `--feature`) | `sp:brainstorm` |
 | `/sp:dev-plan` | Planning | Feature → BDD AC → `feature check` gate → decompose → `batch-create` gate → optional design doc (`--design`/`--auto`) | `sp:spur-dev` (planning) |
@@ -62,7 +62,7 @@ The `sp` plugin provides **34 commands** across planning, execution, operations/
 | `/sp:dev-refine` | Planning→Exec | Fill a task's AC / Design / Plan just-in-time via Q&A | `sp:spur-dev` |
 | `/sp:dev-refineall` | Planning (Batch) | Batch-refine tasks under a feature or selector before runall | `sp:spur-dev` (`refineall`) |
 | `/sp:dev-run` | Execution | Run a task: full pipeline, or `--mode implement` for just the code | `sp:spur-dev` (execution) |
-| `/sp:dev-runall` | Exec (Batch) | Run a **batch** of tasks through their pipelines in dependency-correct order (set resolve → topo-sort → per-task run → batch report) | `sp:spur-dev` (`runall` op → `sp:super-coder`) |
+| `/sp:dev-runall` | Exec (Batch) | Run a **batch** of tasks through their pipelines in dependency-correct order (set resolve → topo-sort → per-task run → batch report) | `sp:spur-dev` (`runall` op → `sp:super-planner`) |
 | `/sp:dev-parallel` | Exec (Batch) | Fan out independent tasks or investigations in parallel via subagents | `sp:parallel-execution` |
 | `/sp:dev-unit` | Execution | Generate or extend tests until unit target is met; measure coverage | `sp:code-testing` |
 | `/sp:dev-review` | Execution | Multi-dimensional review (functional traceability + SECUA framework + architectural depth; WBS mode writes `Review`, Path mode is advisory) | `sp:code-verification` |
@@ -256,7 +256,7 @@ spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"0042","pro
 Three bundled workflows cover the altitudes (the two new 0167 workflows are in italics):
 
 | Workflow | Drives | Shape |
-|----------|--------|-------|
+| ---------- | -------- | ------- |
 | `task-pipeline.yaml` | one task | precheck → implement → test → review → approve → verify → record → done |
 | `feature-dev.yaml` | a whole feature | brainstorm → plan → execute-tasks (loops every task through `task-pipeline`) → feature-verify → done |
 | `planning-pipeline.yaml` | front-half only | phasing → feature-id → design-gen → design-approval → handoff |
@@ -277,7 +277,7 @@ completion unattended: `spur workflow run config/workflows/feature-dev.yaml --va
 execute (not a whole feature's lifecycle — just "run these tasks through their
 pipelines"), `/sp:dev-runall` is the batch driver. It resolves the set, topo-sorts by
 dependencies, runs each through `task-pipeline.yaml`, and emits a batch report. The batch
-orchestrator is `sp:super-coder`; it owns the spaces *between* task runs (set resolution,
+orchestrator is `sp:super-planner`; it owns the spaces *between* task runs (set resolution,
 ordering, failure policy), never the steps inside a single task:
 
 ```bash
@@ -394,7 +394,7 @@ expressible there. `auto` resolves the current runtime to its canonical name; `<
 >
 > **Exception — `/sp:dev-runall --agent` pins the step executor, not the orchestrator.**
 > `dev-runall` runs N pipelines; each `agent.run` step resolves to the `--agent` value
-> (threaded into every per-task `vars.agent`). But `sp:super-coder` is always the batch
+> (threaded into every per-task `vars.agent`). But `sp:super-planner` is always the batch
 > orchestrator — it runs the loop in its own context and is never replaced by `--agent`.
 > Same dual-surface contract as `dev-run`, scaled across the batch.
 

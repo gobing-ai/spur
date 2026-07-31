@@ -22,7 +22,7 @@ next steps.
 > `task-pipeline.yaml`. For **batch** execution (a set of tasks in dependency-correct order), see
 > **[execution-batch.md](execution-batch.md)** — it layers set resolution, topological ordering, a
 > failure policy, and a batch report on top of this same verbatim pipeline, driven by the
-> `sp:super-coder` orchestrator via `/sp:dev-runall`.
+> `sp:super-planner` orchestrator via `/sp:dev-runall`.
 
 This file owns **how operations sequence** in the pipeline. What each operation *does*
 (`implement`, `unit`, `review`, `verify`) is defined once in
@@ -42,7 +42,7 @@ Each stage maps to one operation. The pipeline calls the operation; the operatio
 one thing and yields, so the **pipeline (not the agent) owns the loop**.
 
 | Stage | Operation | Defined in |
-|-------|-----------|------------|
+| ------- | ----------- | ------------ |
 | `implement` | `/sp:dev-run --mode implement <wbs>` — write the code that satisfies the task; author `## Solution`. | [dev-operations.md §4 run](dev-operations.md) → `sp:code-implementation` |
 | `test` | `/sp:dev-unit <target> --auto` — extend/generate tests to the coverage target. | [dev-operations.md §1 unit](dev-operations.md) → `sp:code-testing` |
 | `review` | `/sp:dev-review <wbs>` — SECUA-framework review of the diff. | [dev-operations.md §2 review](dev-operations.md) |
@@ -203,7 +203,7 @@ mode is decided mechanically from `$ARGUMENTS`, then the dispatch runs. This is 
 deterministic resolution, not agent discretion.
 
 | `$ARGUMENTS` carries | Resolved mode | Dispatch |
-|---|---|---|
+| --- | --- | --- |
 | `--next` (with or without `--mode implement`) | `implement` | `implement $ARGUMENTS` |
 | `--next` **and** explicit `--mode full` | `implement` + **MANDATORY warning** (below) | `implement $ARGUMENTS` |
 | `--mode full` (no `--next`) | `full` | `run $ARGUMENTS` |
@@ -254,7 +254,6 @@ configured with `agent: omp` + `model: <provider/model>` passes doctor if `omp` 
 installed, even if the model is unavailable. If an `agent.run` times out with no useful
 diagnostic, suspect the model, not the agent binary.
 
-
 ## Checkpoint read on resume
 
 When resuming a paused or interrupted pipeline run (`--continue`), read the latest checkpoint
@@ -269,6 +268,7 @@ The checkpoint's YAML frontmatter contains `session_id`, `workflow`, `task_wbs`,
 know where the run left off and what to do next. Checkpoints are written by the pipeline's
 checkpoint actions after every HITL gate decision and every phase transition. See
 [cross-cutting.md](cross-cutting.md) § "Session Checkpoint Convention" for the full format.
+
 ## Step 3: Continue
 
 After a completed task, decide next action:

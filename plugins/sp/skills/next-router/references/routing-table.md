@@ -13,7 +13,7 @@ dispatcher: resolve target → load corpus → apply primary table → optional 
 
 ## Batch consumers (task 0279)
 
-`sp:super-coder` (via `/sp:dev-runall`) **reads** TABLE A STOP preconditions for:
+`sp:super-planner` (via `/sp:dev-runall`) **reads** TABLE A STOP preconditions for:
 
 1. **Preflight** — skip pipeline launch when A2/A7/A8/A9 would stop `dev-next` (`batch-preflight.ts`).
 2. **One-shot recovery** — after a failed pipeline, map status → primary hop (A1/A3/A5/A6/A7) at most once.

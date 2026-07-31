@@ -1,6 +1,6 @@
 ---
 name: spur-cli
-description: "The CLI facade for the `spur` command surface — one reference per noun (task/feature/rule/workflow): verbs, flags, `--json` shapes, exit codes, the CLI-gated write contract. NOT for driving the lifecycle (that is the spine, sp:spur-dev). Triggers: \"spur task\", \"spur feature\", \"spur rule\", \"spur workflow\", \"create a task\", \"task check\", \"batch-create\", or looking up any spur CLI verb or convention."
+description: "The CLI facade for the `spur` command surface - one reference per noun (task/feature/rule/workflow/agent/message/team/init/status/serve): verbs, flags, `--json` shapes, exit codes, the CLI-gated write contract. NOT for driving the lifecycle (that is the spine, sp:spur-dev). Triggers: \"spur task\", \"spur feature\", \"spur rule\", \"spur workflow\", \"spur agent\", \"spur message\", \"spur team\", \"spur status\", \"spur init\", \"spur serve\", \"create a task\", \"task check\", \"batch-create\", or looking up any spur CLI verb or convention."
 license: Apache-2.0
 metadata:
   author: spur
@@ -14,6 +14,12 @@ metadata:
     - feature
     - rule
     - workflow
+    - agent
+    - message
+    - team
+    - status
+    - init
+    - serve
   openclaw:
     emoji: "🧰"
 ---
@@ -21,7 +27,7 @@ metadata:
 # spur-cli — the CLI facade for the Spur command surface
 
 `spur-cli` is the single reference for operating the **`spur` command-line surface**. Each `spur`
-noun (`task`, `feature`, `rule`, `workflow`) has one reference file that documents *what each verb
+noun (`task`, `feature`, `rule`, `workflow`, `agent`, `message`, `team`, `init`, `status`, `serve`) has one reference file that documents *what each verb
 is, how to use it well, its flags, `--json` shapes, and exit codes*. This skill is a **facade /
 dispatch reference** — it tells you which verb does what and routes you to the noun's detail. It is
 **not** an orchestrator and contains **no competency logic**: the skill knows *how to invoke*; the
@@ -29,7 +35,7 @@ CLI knows *what is valid*; the **spine** (`sp:spur-dev`) knows *how to drive the
 
 ## Noun routing
 
-Pick the noun, read its reference. Each Tier A reference owns that noun's full verb catalog and conventions.
+Pick the noun, read its reference. Each Tier A and Tier B reference owns that noun's full verb catalog and conventions.
 
 | Tier | Noun | Operate | Reference |
 |------|------|---------|-----------|
@@ -37,10 +43,25 @@ Pick the noun, read its reference. Each Tier A reference owns that noun's full v
 | **Tier A** | **feature** | Feature tree: author with hierarchical IDs (DD-14), acceptance criteria (Gherkin), status lifecycle, move subtrees, `check --json` | [references/features.md](references/features.md) |
 | **Tier A** | **rule** | Constraint quality gate: run presets, author rules, fine-tune, validate rule files/presets, extend engine | [references/rules.md](references/rules.md) |
 | **Tier A** | **workflow** | Dual-mode workflow runtime: author state-machine / transition-flow workflows, validate, run, read traces | [references/workflows.md](references/workflows.md) |
-| **Tier B** | **init** / **status** | Project initialization validation probes & layout classification; status overview | [references/init.md](references/init.md) (`spur status`) |
-| **Tier B** | **agent** / **history** / **message** / **team** / **migrate** / **serve** | Long-tail nouns — read `spur <noun> --help` for specific flags | Last-resort `--help` |
+| **Tier B** | **agent** | Coding-agent execution surface: run prompts via detected/named agents, manage team agent specs, persistent self-draining loop, readiness check | [references/agent.md](references/agent.md) |
+| **Tier B** | **message** | Durable inter-agent messaging: send, inbox, reply, watch | [references/message.md](references/message.md) |
+| **Tier B** | **team** | Team coordination and supervision: assign, status, up/down rosters, start/stop supervised processes | [references/team.md](references/team.md) |
+| **Tier B** | **init** / **status** | Project scaffolding (`init`) + status overview; post-scaffold init validation probes & layout classification | [references/init.md](references/init.md) |
+| **Tier B** | **serve** | Local web server fallback: Task Kanban + team supervisor API | [references/serve.md](references/serve.md) |
+| **Tier C** | **history** / **migrate** / **projects** / **help** | Excluded while immature (see exclusion reasons below). Read `spur <noun> --help` as last resort | Last-resort `--help` |
 
-**Execute-First Contract:** Load `sp:spur-cli` references first to execute Tier A commands directly without calling `spur --help`. Use `spur <noun> --help` only as a last resort for version skew, unlisted long-tail flags, or parity assertion failures.
+**Execute-First Contract:** Load `sp:spur-cli` references first to execute Tier A and Tier B commands directly without calling `spur --help`. Use `spur <noun> --help` only as a last resort for Tier C nouns, version skew, unlisted long-tail flags, or parity assertion failures.
+
+### Tier C exclusion reasons
+
+These nouns are intentionally undocumented - each has a concrete immaturity reason, not an oversight:
+
+| Noun | Reason |
+|------|--------|
+| `history` | `report` verb is a TODO stub (`spur history report` prints a marker); surface is still converging. |
+| `migrate` | Zero verbs - bare `spur migrate --json` runs schema migrations. No verb catalog to document. |
+| `projects` | Multi-project management surface (`add`/`remove`/`list`/`start`/`stop`); still evolving and not yet stable enough for a reference. |
+| `help` | Auto-generated by Commander.js; not a real noun. |
 
 Each noun's per-topic detail lives one level deeper under `references/<noun>/` (e.g.
 `references/tasks/verbs.md`, `references/tasks/section-editing.md`, `references/features/acceptance-criteria.md`,
@@ -83,11 +104,18 @@ the whole point of this facade is that the CLI surface has a single, scalable ho
 
 ## See also
 
-- **[references/init.md](references/init.md)** — post-scaffold init validation: the Phase 1.5
-  functional-validation probes and the Phase 1.6 rule-glob adaptation (`LLM-as-judge` layout
-  classification, local-layer shadow writes) that run after `spur init` and before doc
-  customization (`/sp:spur-init`).
-- **`sp:spur-dev`** — the spine that dispatches these verbs into the planning +
+- **[references/agent.md](references/agent.md)** - coding-agent execution surface (`run`, `loop`,
+  spec management). Cross-references the
+  [dispatch-surface rule](../parallel-execution/references/dispatch-surface.md).
+- **[references/message.md](references/message.md)** - durable inter-agent messaging (`send`,
+  `inbox`, `reply`, `watch`).
+- **[references/team.md](references/team.md)** - team coordination and supervision (`assign`,
+  `status`, `up`/`down`, `start`/`stop`).
+- **[references/serve.md](references/serve.md)** - local web server fallback (Task Kanban + team
+  supervisor API).
+- **[references/init.md](references/init.md)** - `spur init` / `spur status` CLI verbs and
+  post-scaffold init validation (Phase 1.5/1.6 probes).
+- **`sp:spur-dev`** - the spine that dispatches these verbs into the planning +
   execution lifecycle. Use it to *drive* work; use this facade to *look up or operate a verb*.
 - **`sp:expert-spur`** — the subagent that loads this facade for multi-step, multi-noun corpus work
   in its own context window.

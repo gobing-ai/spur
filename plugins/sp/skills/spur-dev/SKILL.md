@@ -48,13 +48,13 @@ and verification each became a standalone competency skill, leaving this spine t
 **The competencies the spine dispatches:**
 
 | Unit of work | Competency skill |
-|--------------|------------------|
+| -------------- | ------------------ |
 | Design / ADR judgment (shape a task) | `sp:sys-architecture` |
 | Feature/spec → task batch | `sp:spec-decomposition` |
 | Implement to spec | `sp:code-implementation` |
 | Coverage / test extension | `sp:code-testing` |
 | Review (multi-dimensional) | `sp:code-verification` + `sp:functional-review` + `sp:code-improvement` |
-| Test-first discipline (composed in) | `sp:spur-tdd` |
+| Test-first discipline (composed in) | `sp:test-driven-development` |
 
 CLI verb usage for any `spur` noun lives in the `sp:spur-cli` facade. This spine owns only the
 lifecycle, the gates, and the section-write contract (`cross-cutting.md`).
@@ -73,7 +73,6 @@ vague description
   → design doc (conditional: seam heuristic; opt out with --skip-design) → docs/design/<slug>.md + 04 index
   → refine (per task, just-in-time, before execution)
 ```
-
 
 Full procedure: **[references/planning-workflow.md](references/planning-workflow.md)**.
 
@@ -99,7 +98,7 @@ Each step delegates to a CLI verb and is documented in exactly one reference fil
 reference for the half you're operating; do not duplicate its content here.
 
 | Step | Half | CLI gate | Reference |
-|------|------|----------|-----------|
+| ------ | ------ | ---------- | ----------- |
 | Intake | planning | — (prompt work) | [planning-workflow.md](references/planning-workflow.md) · [product-planning.md](references/product-planning.md) |
 | Feature create + AC | planning | `spur feature create` | [planning-workflow.md](references/planning-workflow.md) · [ac-style-guide.md](references/ac-style-guide.md) |
 | Feature check gate | planning | `spur feature check` | [planning-workflow.md](references/planning-workflow.md) |
@@ -115,7 +114,7 @@ reference for the half you're operating; do not duplicate its content here.
 | Review / verify (dispatch) | execution | `sp:dev-review` → `sp:code-verification` + `sp:functional-review` + `sp:code-improvement` | competency skills — the spine dispatches, does not inline |
 | Operation catalog | execution | `sp:dev-*` operations | [dev-operations.md](references/dev-operations.md) (spine dispatch table) |
 | Continue | execution | `spur feature update` / `refresh` | [execution-workflow.md](references/execution-workflow.md) |
-| Batch run | execution | `sp:super-coder` + `spur workflow run` | [execution-batch.md](references/execution-batch.md) |
+| Batch run | execution | `sp:super-planner` + `spur workflow run` | [execution-batch.md](references/execution-batch.md) |
 | Parallel fan-out | execution | `sp:parallel-execution` decision framework | [execution-batch.md](references/execution-batch.md) |
 | All writes (both halves) | — | CLI-gated section editing | [cross-cutting.md](references/cross-cutting.md) · [section-batching.md](references/section-batching.md) |
 
@@ -194,7 +193,7 @@ for "what's actually in file Y" or for resources that sit outside the step seque
 - **`sp:functional-review`** owns requirements traceability (R{n} → file:line evidence, per-requirement MET/PARTIAL/UNMET, FunctionalVerdict artifact). Phase 8b gate.
 - **`sp:code-improvement`** owns architectural deepening (5 signals: shallow module, tight coupling, wrong seam, weak locality, poor test surface; severity blocker/major/minor/advisory).
 
-- **`sp:spur-tdd`** — the test-first discipline `code-implementation` and `code-testing` compose with.
+- **`sp:test-driven-development`** — the test-first discipline `code-implementation` and `code-testing` compose with.
 
 **Config & companions (no single pipeline step owns these):**
 

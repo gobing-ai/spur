@@ -166,7 +166,7 @@ Commands above are thin wrappers; the actual logic lives in `skills/`. The spine
 dispatches five competency skills by function — design (`sp:sys-architecture`), decomposition
 (`sp:spec-decomposition`), implementation (`sp:code-implementation`), testing (`sp:code-testing`),
 and verification (`sp:code-verification`) — plus a CLI facade (`sp:spur-cli`, one reference per
-`spur` noun) and standalone technique skills (`sp:next-router`, `sp:spur-tdd`, `sp:brainstorm`,
+`spur` noun) and standalone technique skills (`sp:next-router`, `sp:test-driven-development`, `sp:brainstorm`,
 `sp:wayfinder`, `sp:sys-debugging`, `sp:code-review`, `sp:code-simplification`, `sp:code-improvement`,
 `sp:parallel-execution`, `sp:branch-workflow`, `sp:doc-evolve`, `sp:dogfood-testing`,
 `sp:daily-summary`, `sp:reverse-engineering`, `sp:issue-finding`, `sp:indexed-context`). See
@@ -222,7 +222,7 @@ plugins/sp/
 │   │   └── references/  # ac-style-guide, cross-cutting, decision-brief, dev-operations,
 │   │                      execution-batch, execution-workflow, feature-link-helper,
 │   │                      gate-checklists, glossary, planning-workflow, product-planning  (11 files)
-│   ├── spur-tdd/                    # TDD workflow companion (SKILL.md only)
+│   ├── test-driven-development/                    # TDD workflow companion (SKILL.md only)
 │   ├── reverse-engineering/         # Codebase reverse engineering / HLD / audit
 │   │   ├── agents/openai.yaml
 │   │   └── SKILL.md
@@ -236,7 +236,7 @@ plugins/sp/
 │   │   └── references/debugging-protocol.md
 │   └── wayfinder/                   # Multi-session investigation maps (SKILL.md only)
 ├── commands/                        # 34 slash-command wrappers — the SSOT (hand-editable thin wrappers; see Commands below)
-├── agents/                          # 3 specialist subagents (expert-spur, super-coder, super-reviewer)
+├── agents/                          # 4 specialist subagents (expert-spur, super-coder, super-planner, super-reviewer)
 ├── hooks/                           # hooks.json + task-write-guard.{ts,test.ts} + context-{session-start,post-tool,session-stop}.ts
 │                                    # + careful-guard.{ts,test.ts} + context-hooks.test.ts + token-estimate.test.ts
 ├── scripts/                         # Executable helpers, split from prompts (ADR-031) — validate-commands.ts (thin-wrapper validator), batch-preflight.ts + scripts/<skill>/
@@ -295,7 +295,7 @@ surface or run one workflow. All skills target the same five platforms: `claude-
 | `parallel-execution` | 1.0 | Fan-out decision framework — when to parallelize, four proven fan-out patterns, and result synthesis; backs `/sp:dev-parallel` |
 | `sys-debugging` | 1.0 | Structured debugging protocol — reproduce→isolate→root cause→fix→regression test; "ask the debugger before the LLM" principle |
 | `branch-workflow` | 1.0 | Branch-lifecycle discipline — create→worktree→commit→self-review→merge→cleanup; git worktree patterns for parallel branches |
-| `spur-tdd` | 1.0.0 | TDD workflow companion — red-green-refactor cycle, behavior-first test design, AAA structure, data builders, mock-at-boundary anti-patterns |
+| `test-driven-development` | 1.0.0 | TDD workflow companion — red-green-refactor cycle, behavior-first test design, AAA structure, data builders, mock-at-boundary anti-patterns |
 | `brainstorm` | 1.0.0 | Structured ideation workflow — generate solution options with trade-offs and confidence scoring |
 | `wayfinder` | 1.0.0 | Multi-session investigation maps — chart a spur feature as the map when the destination itself is foggy, then resolve one ticket per session until the route is clear |
 | `daily-summary` | 1.0.0 | Daily summary report generator — orchestrates ccusage CLI + git history into structured markdown summaries |
@@ -366,28 +366,28 @@ parse `$ARGUMENTS` and forward to the skill, which owns the workflow knowledge.
 #### 3. Agents (`agents/`)
 
 Specialist subagents that run in isolated context windows. Three shapes: **expert agents** route a
-request to the single skill they own; **`super-coder`** drives one task end-to-end or a
+request to the single skill they own; **`super-planner`** drives one task end-to-end or a
 dependency-ordered task batch through the `sp:spur-dev` pipeline; **`super-reviewer`** runs the
 multi-dimensional review (functional traceability + SECUA + architectural depth) standalone or as
 the pipeline's Phase 7 review step.
 
 | Agent | Shape | Delegates to | Color | Trigger examples |
-|-------|-------|-------------|-------|------------------|
+| ------- | ------- | ------------- | ------- | ------------------ |
 | `expert-spur` | expert | `sp:spur-cli` | green | "create tasks", "feature lifecycle", "add a rule", "author a workflow" |
-| `super-coder` | orchestrator | `sp:spur-dev` + `sp:dogfood-testing` | green | "run this task end to end", "run all tasks", "run the batch", "runall" |
+| `super-planner` | orchestrator | `sp:spur-dev` + `sp:dogfood-testing` | green | "run this task end to end", "run all tasks", "run the batch", "runall" |
 | `super-reviewer` | reviewer | `sp:code-verification` + `sp:functional-review` + `sp:code-improvement` | crimson | "review this", "check the code", "SECUA review", "run task 0042 through review" |
 
 Each agent has:
 
-- `skills: [sp:<skill-name>]` — bound to one skill (`expert-spur`), two (`sp:spur-dev` +
-  `sp:dogfood-testing` for `super-coder`), or five (`super-reviewer` adds `sp:anti-hallucination`
-  and `sp:tasks` to its three review dimensions).
+- `skills: [sp:<skill-name>]` - bound to one (`expert-spur`), four (`sp:spur-dev`,
+  `sp:parallel-execution`, `sp:dogfood-testing`, `sp:next-router` for `super-planner`), or three
+  (`sp:code-verification`, `sp:functional-review`, `sp:code-improvement` for `super-reviewer`).
 - `model: inherit` — inherits the parent session's model.
 - `color` — roster display accent.
 - `tools` — allowed tool set (`Read`, `Grep`, `Glob`, `Bash`, `Skill`).
 
 **Design principle:** Agents are **delegates, not implementors**. They never contain domain logic.
-`expert-spur` routes CLI corpus work to `sp:spur-cli`; `super-coder` drives the single-task/batch
+`expert-spur` routes CLI corpus work to `sp:spur-cli`; `super-planner` drives the single-task/batch
 loop (the algorithm lives in `sp:spur-dev/references/execution-batch.md`); `super-reviewer` fans a
 review out across its three skill dimensions without reaching into individual pipeline steps. For a
 single well-scoped operation, the matching `/sp:*` command is lighter; for work spanning multiple
@@ -399,7 +399,7 @@ Event-driven enforcement that runs automatically without user invocation. `hooks
 four handlers:
 
 | Event | Matcher | Handler | Timeout |
-|-------|---------|---------|---------|
+| ------- | --------- | --------- | --------- |
 | `PreToolUse` | `Write\|Edit` | `superskill hook run sp task-write-guard` | 10s |
 | `PostToolUse` | `Bash\|Grep\|Glob\|Read\|Write\|Edit` | `superskill hook run sp context-post-tool` | 5s |
 | `SessionStart` | — | `superskill hook run sp context-session-start` | 5s |
@@ -431,11 +431,11 @@ live at plugin level: `scripts/<skill>/` with their suites at `tests/<skill>/`; 
 hold `SKILL.md` and prompt-side companions only.
 
 | Script | Role |
-|--------|------|
+| -------- | ------ |
 | `hooks/task-write-guard.ts` | Compatibility shim for older installs that still execute the script path directly. Forwards stdin to the stable PATH command `superskill hook run sp task-write-guard`, mirrors parseable PreToolUse decisions, and fails open if the runtime is unavailable. Performs no source-tree CLI lookup. |
 | `hooks/context-*.ts` | Runtime for the three registered context hooks (session-start, post-tool, session-stop) — token-cost estimation + ledger append for `sp:indexed-context` |
 | `hooks/careful-guard.ts` | Opt-in destructive-command guard (unwired — see Hooks above) |
-| `scripts/batch-preflight.ts` | Pure TABLE A STOP evaluation for `super-coder` — skip doomed pipeline launches without spawning a Skill subprocess; recovery hints map stuck statuses to a single `/sp:dev-*` hop |
+| `scripts/batch-preflight.ts` | Pure TABLE A STOP evaluation for `super-planner` — skip doomed pipeline launches without spawning a Skill subprocess; recovery hints map stuck statuses to a single `/sp:dev-*` hop |
 | `scripts/dogfood-testing/detect-pipeline-driving.ts` | Word-boundary detector for pipeline-driving testees (leading-space invariant) |
 | `scripts/dogfood-testing/validate-report.ts` | Pure `validateReport(md)` — footer-mandatory + 7-check finalize-or-abort contract with stable error codes |
 | `scripts/daily-summary/{daily-summary,logger}.ts` | ccusage + git-history orchestration helpers for `sp:daily-summary` |
@@ -451,7 +451,7 @@ the hard gate that the soft skill cannot enforce on its own.
 graph TB
     subgraph "User entry points"
         CMD["Commands<br/>33 slash commands<br/>/sp:dev-plan, /sp:dev-runall, /sp:dev-refineall, /sp:rule-add, ..."]
-        AGENT["Agents<br/>3 subagents<br/>expert-spur, super-coder, super-reviewer"]
+        AGENT["Agents<br/>4 subagents<br/>expert-spur, super-coder, super-planner, super-reviewer"]
         HOOK["PreToolUse hook<br/>Write|Edit matcher"]
     end
 
@@ -467,7 +467,7 @@ graph TB
         SKILL_DS["daily-summary<br/>daily report generator"]
         SKILL_DOC["doc-evolve<br/>document drift + sync"]
         SKILL_DOG["dogfood-testing<br/>dogfood protocol + report"]
-        SKILL_TDD["spur-tdd<br/>TDD workflow companion"]
+        SKILL_TDD["test-driven-development<br/>TDD workflow companion"]
     end
 
     subgraph "Execution layer"

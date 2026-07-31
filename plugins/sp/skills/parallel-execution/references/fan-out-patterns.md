@@ -19,6 +19,7 @@ Four proven patterns for parallel subagent execution. Each pattern has a distinc
 **Token cost:** ~N × 3k tokens per subagent + ~2k synthesis.
 
 **Decision criteria:**
+
 - Single question with multiple search strategies
 - No dependency between search angles
 - Results must be deduped (different angles may find the same thing)
@@ -34,6 +35,7 @@ Four proven patterns for parallel subagent execution. Each pattern has a distinc
 **Token cost:** ~N × 5k tokens per subagent + ~3k synthesis.
 
 **Decision criteria:**
+
 - Single artifact with multiple quality dimensions
 - Dimensions are independent (security findings don't depend on perf findings)
 - Synthesis must surface conflicts (e.g., perf improvement that weakens security)
@@ -44,11 +46,12 @@ Four proven patterns for parallel subagent execution. Each pattern has a distinc
 
 ### 3. Independent-Task Batch
 
-**Use when:** M tasks with zero dependency edges between them. Each task runs through its pipeline independently. This is the `sp:super-coder` parallel mode.
+**Use when:** M tasks with zero dependency edges between them. Each task runs through its pipeline independently. This is the `sp:super-planner` parallel mode.
 
 **Token cost:** ~M × 8k tokens per task + ~3k batch synthesis.
 
 **Decision criteria:**
+
 - Multiple tasks from the same batch
 - Topo-sort confirms zero dependency edges between the selected subset
 - No file-overlap conflicts (different tasks touch different files)
@@ -65,6 +68,7 @@ Four proven patterns for parallel subagent execution. Each pattern has a distinc
 **Token cost:** ~N × 4k tokens per subagent + ~2k synthesis.
 
 **Decision criteria:**
+
 - Single factual or testable claim
 - Subagents are prompted to REFUTE (adversarial stance)
 - Vote threshold: ≥ majority must affirm for the claim to survive
@@ -77,7 +81,7 @@ Four proven patterns for parallel subagent execution. Each pattern has a distinc
 ## When-to-use decision table
 
 | Work shape | Pattern | N recommended |
-|------------|---------|---------------|
+| ------------ | --------- | --------------- |
 | One question, multiple search angles | N-way investigation | 3–5 |
 | One artifact, multiple quality dimensions | Competency-lens review | 3–4 |
 | M independent tasks | Independent-task batch | 2–8 (budget-limited) |

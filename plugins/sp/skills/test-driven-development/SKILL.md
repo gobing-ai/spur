@@ -1,5 +1,5 @@
 ---
-name: spur-tdd
+name: test-driven-development
 description: "Test-driven development discipline: red-green-refactor, behavior-first test design, AAA structure, naming, data builders, mock-at-boundary anti-patterns. Triggers: \"write tests first\", \"TDD\", \"red-green-refactor\", \"characterization test\", \"contract test\", \"how to structure/name a test\"."
 license: Apache-2.0
 version: 1.0.0
@@ -30,14 +30,14 @@ patterns that make a test worth keeping. This is the **how to write a good test*
 **Where it sits in the testing surface:**
 
 | Concern | Owner |
-|---------|-------|
-| How to *design/structure/name* a test (this skill) | `sp:spur-tdd` |
+| --------- | ------- |
+| How to *design/structure/name* a test (this skill) | `sp:test-driven-development` |
 | How to *extend coverage / fill gaps* on existing code | `sp:code-testing` → `references/unit-testing.md` |
 | Per-stack commands, coverage parsing, idioms, gotchas | `sp:code-testing` → `references/stacks/<stack>.md` |
 | Writing the implementation the test drives | `sp:code-implementation` |
 | Debugging *why* a test fails | `sp:code-implementation` → `references/debugging.md` |
 
-Use `spur-tdd` when writing code test-first; use `sp:code-testing` when filling coverage on code that
+Use `test-driven-development` when writing code test-first; use `sp:code-testing` when filling coverage on code that
 already exists. They compose: TDD designs the tests, `sp:code-testing` proves the coverage.
 
 ## When to use
@@ -72,7 +72,7 @@ still passes after the business rule changes is the wrong test.
 Match the situation to a workflow:
 
 | Situation | Workflow |
-|-----------|----------|
+| ----------- | ---------- |
 | New feature/component/endpoint | **Classic TDD** — one test per behavior, red→green→refactor |
 | Bug fix | **Regression-first** — write a test that reproduces the bug, watch it fail, then fix |
 | Untested legacy code | **Characterization** — write tests capturing *current* behavior first, then change |
@@ -138,7 +138,7 @@ describe('Calculator', () => {
 ```
 
 | Good | Bad |
-|------|-----|
+| ------ | ----- |
 | `throws on invalid input` | `testValidateFunction` (implementation) |
 | `returns empty array for no matches` | `testItWorks` (restates the test) |
 | `when user is admin, allows delete` | `test1`, `test2` (generic) |
@@ -165,7 +165,7 @@ Mock what crosses a process/IO boundary; never mock the code under test or its i
 collaborators.
 
 | Mock | Don't mock |
-|------|------------|
+| ------ | ------------ |
 | Database queries | Internal utilities |
 | Network / API calls | Business logic |
 | File system | Pure / deterministic functions |
@@ -176,7 +176,7 @@ collaborators.
 Before writing an assertion, run the gate question:
 
 | Anti-pattern | Gate question |
-|--------------|---------------|
+| -------------- | --------------- |
 | Testing mocks | "Am I asserting real behavior, or just that a mock exists?" |
 | Test-only production methods | "Is this only used by tests?" → move to test utilities |
 | Mocking without understanding | "What side effects does the real dependency have? Does the test rely on them?" |
@@ -203,7 +203,7 @@ const mock = {
 ## Common Rationalizations
 
 | Rationalization | Reality |
-|---|---|
+| --- | --- |
 | "I'll write the test after the code — same result, faster." | Test-after tests what the code *does*, not what it *should* do; it rubber-stamps bugs. Red-first is the only proof the test can fail. |
 | "This code is too obvious to need a test." | "Obvious" code is where off-by-one and null-path bugs hide. If it ships to a production path, it earns a behavior test. |
 | "I tested it manually, it works." | Manual checks are not repeatable and vanish at the next change. A regression test is the only durable proof. |

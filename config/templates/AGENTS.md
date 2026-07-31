@@ -33,10 +33,10 @@ All product development work goes through the harness by default.
 ### Harness tool routing
 
 | Need | Route to | Avoid |
-|------|----------|--------|
+| ------ | ---------- | -------- |
 | Plan a feature (intake → AC → tasks) | `/sp:dev-plan`, `/sp:dev-idea` | Freeform feature files without gates |
-| Drive one task end-to-end | `/sp:dev-run <wbs>` or **`sp:super-coder`** | Implement with no task / no pipeline |
-| Batch or parallel task runs | `/sp:dev-runall`, `/sp:dev-parallel` → **`sp:super-coder`** | Unordered multi-task thrash |
+| Drive one task end-to-end | `/sp:dev-run <wbs>` or **`sp:super-planner`** | Implement with no task / no pipeline |
+| Batch or parallel task runs | `/sp:dev-runall`, `/sp:dev-parallel` → **`sp:super-planner`** | Unordered multi-task thrash |
 | Batch-refine tasks under a feature | `/sp:dev-refineall --feature <id> --auto` | Hand-looping `/sp:dev-refine` per WBS |
 | Multi-step corpus CLI (tasks/features/rules/workflows) | **`sp:expert-spur`** | Raw Write/Edit on corpus files |
 | Look up `spur` verbs / flags / `--json` | Skill **`sp:spur-cli`** | Inventing flags from memory |
@@ -59,7 +59,7 @@ All product development work goes through the harness by default.
 2. **Gates before done** — `spur task check` / `spur feature check` / `spur rule run`; pipeline done
    needs a real verify **PASS**.
 3. **`--json` for machines** — parse CLI with `--json`.
-4. **Route, don’t invent** — verbs → `sp:spur-cli`; lifecycle → `/sp:dev-*` / `sp:super-coder`;
+4. **Route, don’t invent** — verbs → `sp:spur-cli`; lifecycle → `/sp:dev-*` / `sp:super-planner`;
    multi-noun corpus → `sp:expert-spur`; review → `sp:super-reviewer`; docs process → `sp:doc-evolve`.
 5. **Keep tool ownership explicit** — project lifecycle/corpus/gates → Spur; plugin installation and
    capability lifecycle → Superskill. Do not hand-maintain per-platform adapters Superskill generates.
@@ -84,7 +84,7 @@ authority first, then derived docs, then this file.
 ### Doc map
 
 | Doc | Owns | Authority | When |
-|------|------|-----------|------|
+| ------ | ------ | ----------- | ------ |
 | `docs/00_ADR.md` | **WHY** | Authoritative (content) | Structural change; dated entry before diverging |
 | `docs/01_PRD.md` | **WHAT** | Authoritative on scope | New feature/command |
 | `docs/02_ROADMAP.md` | **WHEN** | Derived | Phase placement |
@@ -134,7 +134,7 @@ _(Fill from package manifests / README — or during `sp:doc-evolve` customize.)
 ## Spur CLI surface
 
 **Not the verb catalog.** For `task` / `feature` / `rule` / `workflow` flags, exit codes, and
-`--json` shapes → skill **`sp:spur-cli`**. Lifecycle → `/sp:dev-*` / **`sp:super-coder`**.
+`--json` shapes → skill **`sp:spur-cli`**. Lifecycle → `/sp:dev-*` / **`sp:super-planner`**.
 Multi-noun corpus campaigns → **`sp:expert-spur`**.
 
 ```bash

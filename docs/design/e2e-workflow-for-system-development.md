@@ -47,7 +47,7 @@ flowchart TD
     subgraph Execution["Execution Half — task → done (single + batch)"]
         direction TB
         RunOne["▶️ dev-run &lt;wbs&gt; --mode full<br/>[task-pipeline.yaml]<br/>precheck → implement → test →<br/>review → approve → verify →<br/>record → done"]:::exec
-        RunBatch["⏩ dev-runall --tasks &lt;selector&gt;<br/>[sp:super-coder batch driver]<br/>resolve → freeze → topo-sort →<br/>per-task task-pipeline.yaml<br/>(sequential \| parallel)"]:::exec
+        RunBatch["⏩ dev-runall --tasks &lt;selector&gt;<br/>[sp:super-planner batch driver]<br/>resolve → freeze → topo-sort →<br/>per-task task-pipeline.yaml<br/>(sequential \| parallel)"]:::exec
         FeatureDev["🌐 feature-dev --feature &lt;id&gt;<br/>[feature-dev.yaml]<br/>brainstorm → plan →<br/>execute-tasks → feature-verify → done"]:::exec
         Implement["🔨 dev-run &lt;wbs&gt; --mode implement<br/>[sp:code-implementation]<br/>single implement step"]:::exec
         Unit["🧪 dev-unit &lt;target&gt;<br/>[sp:code-testing]<br/>coverage-driven test extension"]:::exec
@@ -172,7 +172,7 @@ flowchart TD
 The diagram is the authoritative visual; the linear map is the operator-friendly companion.
 
 | Stage | Slash command(s) | Owning pipeline / skill | Output |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Intake / ideation | `/sp:dev-brainstorm <topic>` | `sp:brainstorm` | Decision tree + brainstorm artifact in `docs/plans/...` |
 | Unified idea entry | `/sp:dev-idea "<idea>"` | `idea-pipeline.yaml` | Feature file + task batch (handoff, no execution) |
 | Front-half plan | `/sp:dev-plan "<desc>"` | `planning-pipeline.yaml` | Design doc + feature with AC; handoff |
@@ -182,7 +182,7 @@ The diagram is the authoritative visual; the linear map is the operator-friendly
 | Test pass | `/sp:dev-unit <target>` | `sp:code-testing` | Coverage-driven test extension |
 | Code review | `/sp:dev-review <wbs>` | `sp:code-verification review` | `## Review` findings (SECUA) |
 | Requirements verify | `/sp:dev-verify <wbs>` | `sp:code-verification verify` | PASS/PARTIAL/FAIL verdict |
-| Batch run | `/sp:dev-runall --tasks <sel>` | `sp:super-coder` + `task-pipeline.yaml` | Batch report; topological execution |
+| Batch run | `/sp:dev-runall --tasks <sel>` | `sp:super-planner` + `task-pipeline.yaml` | Batch report; topological execution |
 | Feature umbrella | `/sp:dev-runall --feature <id>` | `feature-dev.yaml` | Verified feature end-to-end |
 | Wrap one | `/sp:dev-wrap <wbs>` | `wrapup-pipeline.yaml` | Learnings + metrics + doc-sync |
 | Wrap batch | `/sp:dev-wrapall [--feature/--since/--status]` | `wrapup-pipeline.yaml` | Batch wrap-up + optional feature transition |
@@ -249,7 +249,7 @@ eight workflows is 56 states; the 26 above are the operator-walked operational s
 Workflow paths have two valid forms in this repository:
 
 | Path | Role | Rule |
-|---|---|---|
+| --- | --- | --- |
 | `.spur/workflows/<name>.yaml` | Project-facing workflow root used by operators, plugin commands, and seeded local config | Prefer this path in command examples and wrapper command docs. |
 | `config/workflows/<name>.yaml` | Physical repo source for this checkout; `.spur/workflows` is a symlink to it | Edit either path only when you understand they are the same inode in this repo. Do not copy between them. |
 
@@ -283,7 +283,7 @@ phase), **entity lifecycle FSMs** (guard status transitions), and **canonical ex
 reference).
 
 | Workflow | Path | Category | Phase / role | Entry point | Terminal states | Status |
-|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- |
 | `basic.yaml` | `.spur/workflows/basic.yaml` | Example | Generic implement/check/fix loop | direct `spur workflow run` | `done`, `failed` | existing |
 | `feature-lifecycle.yaml` | `.spur/workflows/feature-lifecycle.yaml` | Entity FSM | Feature status FSM | `spur feature update` | `done`, `cancelled` | existing |
 | `task-lifecycle.yaml` | `.spur/workflows/task-lifecycle.yaml` | Entity FSM | Task status FSM | `spur task update` | `done`, `cancelled` | existing |
@@ -309,7 +309,7 @@ backlog -> active -> verifying -> done
 Required guards:
 
 | Transition | Guard |
-|---|---|
+| --- | --- |
 | `backlog -> active` | always |
 | `active -> verifying` | `spur feature check <id>` |
 | `verifying -> done` | `spur feature check <id> --strict` |
@@ -450,7 +450,7 @@ start
 Required actions:
 
 | State | Action |
-|---|---|
+| --- | --- |
 | `discovery` | Dispatch `sp:brainstorm`; write a brainstorm artifact and emit `needs_design`. |
 | `feature-create` | Use `spur feature create` or select an existing feature id. |
 | `ac-generate` | Generate AC using `ac-style-guide.md`; write through `spur feature update`. |
@@ -503,7 +503,7 @@ start
 Required actions:
 
 | State | Action |
-|---|---|
+| --- | --- |
 | `task-resolve` | Resolve explicit tasks or wrapper-selected task list; reject empty selection. |
 | `doc-sync` | Dispatch `sp:doc-evolve` once for the batch. |
 | `learning-capture` | Append working learnings to `.spur/memory/learnings.md`. |
@@ -525,7 +525,7 @@ Rules:
 The system has two related design mechanisms:
 
 | Mechanism | Pipeline | Input | Output | Default |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | Brainstorm design summary | `idea-pipeline.yaml` discovery | vague idea | short design summary in brainstorm artifact | always |
 | System architecture step | `idea-pipeline.yaml` system-design | feature + AC + brainstorm signal | ADR entries, architecture updates, design satellites | run unless confidently trivial |
 | Design satellite generation | `planning-pipeline.yaml` design-gen | known slug/task | `docs/design/<slug>.md` | controlled by `dev-plan --design/--auto` |
@@ -533,14 +533,14 @@ The system has two related design mechanisms:
 `needs_design` criteria:
 
 | Signal | Criteria |
-|---|---|
+| --- | --- |
 | `true` | multiple subsystems, schema/config/DTO change, new module/package/service, new transport/boundary, new dependency, cross-cutting convention |
 | `false` | single-module fix, docs/chores, boundary-preserving refactor, existing pattern with no architectural impact |
 
 Flag truth table:
 
 | Flags | Signal | Route |
-|---|---|---|
+| --- | --- | --- |
 | `--design` | ignored | run `system-design` |
 | `--skip-design` | ignored | skip `system-design`; keep brainstorm summary |
 | neither | `true` | run `system-design` |
@@ -551,7 +551,7 @@ Flag truth table:
 Gate taxonomy:
 
 | Gate | Pipeline | Decision type | Auto route allowed |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `phasing` | planning | objective (whether to stage a roadmap phase) | yes (skip entry under profile=auto) |
 | `design-approval` | idea/planning | taste / architecture approval | no by default; `design_approved=true` |
 | `feature-check` | idea | objective schema/check result | yes |
@@ -581,7 +581,7 @@ a thin wrapper: it builds `--vars` JSON, delegates to the backing skill or pipel
 paused run ids back to the operator.
 
 | Command | Workflow | Required flags/options | Contract |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `/sp:dev-brainstorm` | (no pipeline) | `"<topic>"`, `--depth`, `--options`, `--task` / `--feature`, `--next` | Inline grilling interview + `sp:brainstorm` ideation; exits to `--task` (one task) or `--feature` (validated feature). |
 | `/sp:dev-plan` | `.spur/workflows/planning-pipeline.yaml` | `"<desc>"`, `--feature`, `--parent`, `--design`, `--auto`, `--agent` | Known idea/slug to design handoff via `sp:spur-dev plan`. |
 | `/sp:dev-refine` | (no pipeline) | `<wbs>`, `--focus`, `--auto`, `--next`, `--agent` | Task requirements gap analysis + section writes; chains to `dev-run` under `--next`. |
@@ -616,14 +616,14 @@ Wrapper duties (for commands that invoke pipelines directly):
 (the FSM runs subprocesses; the calling agent cannot block on itself).
 
 | Surface | Default (no flag) | Explicit `--agent <name>` / `auto` |
-|---|---|---|
+| --- | --- | --- |
 | Inline | Run in the current session, write sections directly | Spawn via `spur agent run` |
 | Pipeline | Spawn the configured default executor (`omp`) | Spawn that explicit agent |
 
 ## Memory And Telemetry Artifacts
 
 | Artifact | Format | Writer | Purpose | Corpus-gated |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `.spur/memory/learnings.md` | Markdown | `wrapup-pipeline.yaml` | Working learnings grouped by date/task | no |
 | `.spur/memory/wrapup-metrics.jsonl` | JSONL | `wrapup-pipeline.yaml` | Per-task wrap-up telemetry | no |
 | `.spur/memory/sessions/<session>.md` | Markdown + YAML frontmatter | all long-running pipelines | Resume checkpoint | no |
@@ -677,7 +677,7 @@ One file per session (`<date>-<wbs-or-feature>`); resumed sessions overwrite the
 ## Documentation Boundaries
 
 | Operation | When | Writes |
-|---|---|---|
+| --- | --- | --- |
 | Initial system design | before decomposition/code | `docs/00_ADR.md`, `docs/03_ARCHITECTURE.md`, `docs/04_DESIGN.md`, `docs/design/*` as needed |
 | Post-implementation doc sync | after task/feature execution | drift repairs in docs, lessons in `docs/99_PROJECT_CONSTITUTION.md §8` |
 | Working learning capture | during wrap-up | `.spur/memory/learnings.md` |
@@ -690,7 +690,7 @@ allowed to repair drift and promote lessons. Neither step writes task or feature
 All workflow files in this system use:
 
 | Field | Required value |
-|---|---|
+| --- | --- |
 | `$schema` | `@gobing-ai/spur/schemas/state-machine-workflow.schema.json` |
 | `kind` | `state-machine` |
 | `initialState` | existing state id |
@@ -719,7 +719,7 @@ Repository-local CI or tests may validate `config/workflows/*.yaml` directly.
 Task 0167 extends `plugins/sp/tests/skill-structure.test.ts` without renumbering existing R29.
 
 | Invariant | Coverage |
-|---|---|
+| --- | --- |
 | R30 | `dev-idea`, `dev-wrap`, and `dev-wrapall` command docs exist, have valid frontmatter, and delegate to the correct workflows. |
 | R31 | `gate-checklists.md` exists and is linked from `plugins/sp/skills/spur-dev/SKILL.md`. |
 | R32 | `dev-operations.md` registers `idea`, `wrap`, and `wrapall`. |
@@ -772,7 +772,7 @@ Seven non-negotiable invariants apply across the entire spur-dev lifecycle. Thes
 ## Acceptance Trace
 
 | Acceptance | Design coverage |
-|---|---|
+| --- | --- |
 | AC1 | R30-R35 invariants section |
 | AC2 | workflow validation contract |
 | AC3 | `idea-pipeline.yaml` contract |

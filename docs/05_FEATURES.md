@@ -38,7 +38,7 @@ curated narrative view; the ID tree is the authoritative satellite roster.
 ## 1. Foundation
 
 | Feature | Status | Acceptance |
-|---------|--------|-----------|
+| --------- | -------- | ----------- |
 | Bun-workspace monorepo, no Turborepo | ✅ | `bun run --filter '*'` orchestrates; no `turbo.json` |
 | ts-base tooling (Biome, Lefthook, tsconfig presets) | ✅ | `bun run lint` gate green |
 | ts-libs infra deps via semver | ✅ | all `@gobing-ai/ts-*` via root catalog at `^0.3.16` |
@@ -49,7 +49,7 @@ curated narrative view; the ID tree is the authoritative satellite roster.
 ## 2. CLI Core
 
 | Feature | Status | Acceptance |
-|---------|--------|-----------|
+| --------- | -------- | ----------- |
 | Commander dispatch + help/version (ADR-014) | ✅ | one `Command` registers all nouns; `--json` everywhere |
 | `spur init` scaffold | ✅ | writes `.spur/config.yaml` (ADR-017); seeds global config + local `.spur/` |
 | `spur status [path]` | ✅ | reports config/package/git context and optional path metadata |
@@ -59,7 +59,7 @@ curated narrative view; the ID tree is the authoritative satellite roster.
 ## 3. Agents (`ts-ai-runner`)
 
 | Feature | Status | Acceptance |
-|---------|--------|-----------|
+| --------- | -------- | ----------- |
 | `spur agent list` (detection) | ✅ | installed/missing per known agent |
 | `spur agent doctor [agent]` (readiness) | ✅ | usable/needs-auth/missing + tier; exit on tier-1 failure |
 | `spur agent run <prompt>` (execution + capture) | 🔶 | single-shot migrated, pending verification; team-mode pending verification (triage M12) |
@@ -68,7 +68,7 @@ curated narrative view; the ID tree is the authoritative satellite roster.
 ## 4. Rules (`ts-rule-engine`)
 
 | Feature | Status | Acceptance |
-|---------|--------|-----------|
+| --------- | -------- | ----------- |
 | `spur rule run` (preset/file/rule, `--fail-on`) | ✅ | evaluates rules, returns findings + exit code |
 | Built-in evaluators: regex/rg, path/file-exist, forbidden-import, exit-code, secrets-scanner, agent-detection | ✅ | covered by ts-libs tests |
 | Text + JSON formatters | ✅ | host-registered |
@@ -83,7 +83,7 @@ curated narrative view; the ID tree is the authoritative satellite roster.
 ## 5. Workflows (`ts-dual-workflow-engine`)
 
 | Feature | Status | Acceptance |
-|---------|--------|-----------|
+| --------- | -------- | ----------- |
 | `spur workflow validate` (YAML + Zod) | ✅ | rejects invalid definitions |
 | `spur workflow run` (FSM driver + persistence) | ✅ | runs to terminal state; persists run |
 | `spur workflow list` | ✅ | lists persisted runs |
@@ -98,7 +98,7 @@ curated narrative view; the ID tree is the authoritative satellite roster.
 ## 6. History (`ts-llm-jsonl-importer` + analytics consumer)
 
 | Feature | Status | Acceptance |
-|---------|--------|-----------|
+| --------- | -------- | ----------- |
 | `spur history import` (full/incremental/force-file) | ✅ | validated-before-persist; checkpointed; idempotent |
 | 7 source definitions (pi, claude, codex, gemini, opencode, antigravity, openclaw) | ✅ | one `SourceDefinition` each |
 | Configurable splitting (one-to-one/one-to-many/custom) | ✅ | declarative `splitConfig` |
@@ -111,7 +111,7 @@ curated narrative view; the ID tree is the authoritative satellite roster.
 ## 7. Team Mode (`ts-ai-runner` team primitives + `TeamService`)
 
 | Feature | Status | Acceptance |
-|---------|--------|-----------|
+| --------- | -------- | ----------- |
 | `inbox_messages` migration + schema composition | ✅ | `0001_spur_cli_team_inbox`; table usable after `applyCliMigrations` |
 | `TeamService` (app layer) over `TeamOrchestrator`/`MessageService` | ✅ | send/inbox/reply, specs, status, assign; 100% covered |
 | `spur message send\|inbox\|reply` | ✅ | durable queue; reply threads to original sender via `in_reply_to` |
@@ -125,7 +125,7 @@ curated narrative view; the ID tree is the authoritative satellite roster.
 ## 8. Server / Web (read surface)
 
 | Feature | Status | Acceptance |
-|---------|--------|-----------|
+| --------- | -------- | ----------- |
 | Hono app + oRPC OpenAPI handler | ✅ | `/api/health`, `/openapi.json` |
 | Bun + Cloudflare Worker entrypoints | ✅ | shared app at module scope; `test-cf` green |
 | Astro web + typed oRPC client | ✅ | renders live health |
@@ -138,7 +138,7 @@ Decomposition and per-item dispositions live in
 `docs/plans/2026-06-10-rd3-migration-feature-list.md`; rows here track headline status only.
 
 | Feature | Status | Acceptance |
-|---------|--------|-----------|
+| --------- | -------- | ----------- |
 | Collective design stage (schemas, lifecycle design, server/web design task, skill contract) | ✅ | Stage D done; `04 §7.1–7.6` filled; waves implemented |
 | Task management (`spur task` CRUD/WBS/sections/check) | ✅ | agents drive the two hot paths across the 7 corpora; check validates schema + matrix. `migrate` verb wired (A17); live `docs/tasks2/` corpus normalized 2026-07-04 (task 0192); `kanban.md` generation retired |
 | Variant templates + Section-Status-Matrix + format rules | ✅ | warning-first enforcement; hard core (AC/Solution/Review formats) gates |
@@ -148,17 +148,17 @@ Decomposition and per-item dispositions live in
 | Local board + launcher | 💤 | settled by the Stage-D server/web design task (ADR-021 consequence b) |
 | Spec-driven pipeline (sp planning fat skill / `sp:spur-dev`) | ✅ | description → feature file with Gherkin AC → linked tasks, every LLM output CLI-validated |
 | Task-pipeline workflow + HITL continue + result writer + record verb (0108) | ✅ | `spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"NNNN"}'`; `continue` resumes a paused run; `record` verb moves result-write logic from YAML shell to tested service; pipeline-pause integration deferred (task 0071 R4); `task_run_links` kind=pipeline pending (task 0071 R1) |
-| Batch task execution (`/sp:dev-runall` + `sp:super-coder` orchestrator, task 0141) | ✅ | `/sp:dev-runall --tasks <selector>` runs a set through the per-task pipeline in dependency order; selectors: explicit WBS / status pseudo-list / `feature:<id>` / `ready`; set frozen at kickoff, Kahn topo-sort, cycle→abort, unmet out-of-set dep→block subtree; stop-the-batch default + `--keep-going`; orchestration is prose in `execution-batch.md` driven by `sp:super-coder` (ADR-022, zero engine code). Parallel execution + within-step Q&A deferred to task 0142 (the latter blocked on workspace/inbox/team-mode modules) |
+| Batch task execution (`/sp:dev-runall` + `sp:super-planner` orchestrator, task 0141) | ✅ | `/sp:dev-runall --tasks <selector>` runs a set through the per-task pipeline in dependency order; selectors: explicit WBS / status pseudo-list / `feature:<id>` / `ready`; set frozen at kickoff, Kahn topo-sort, cycle→abort, unmet out-of-set dep→block subtree; stop-the-batch default + `--keep-going`; orchestration is prose in `execution-batch.md` driven by `sp:super-planner` (ADR-022, zero engine code). Parallel execution + within-step Q&A deferred to task 0142 (the latter blocked on workspace/inbox/team-mode modules) |
 | Front-half planning pipeline + docs scaffold (task 0088) | ✅ | `spur init` scaffolds `docs/` stubs (preserve-marked, never clobbered); `/sp:spur-init` command customizes fresh project; `sp:spur-plan` skill + `planning-pipeline.yaml` (phasing → feature-ID → design-gen → approval → handoff); validates against workspace schema; hands off to `sp:spur-dev` |
 | `plugins/sp` Fat Skills + thin command/subagent wrappers (ADR-023) | ✅ | skills are SSOT; commands/subagents wrap skills; ADR-016-filtered command set |
-| Functional skill split — thin spine + competency skills (ADR-028, task 0161) | 🔶 | `sp:spur-dev` shrunk to a thin orchestration spine that dispatches deep competency skills (`sp:sys-architecture`, `sp:spec-decomposition`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`; `sp:spur-tdd` referenced discipline); the four `spur-<noun>` skills consolidated into the `sp:spur-cli` facade (one reference per noun); `expert-spur` replaces the four noun-experts; `super-coder` absorbs `expert-dev`. Waves A–C done (facade + competencies + spine shrink + binding proof + R16/R20 assertions in the gate). Plugin self-contained (no vendors/rd3 refs). Remaining: a live full-pipeline binding run |
+| Functional skill split — thin spine + competency skills (ADR-028, task 0161) | 🔶 | `sp:spur-dev` shrunk to a thin orchestration spine that dispatches deep competency skills (`sp:sys-architecture`, `sp:spec-decomposition`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`; `sp:test-driven-development` referenced discipline); the four `spur-<noun>` skills consolidated into the `sp:spur-cli` facade (one reference per noun); `expert-spur` replaces the four noun-experts; `super-coder` absorbs `expert-dev`. Waves A–C done (facade + competencies + spine shrink + binding proof + R16/R20 assertions in the gate). Plugin self-contained (no vendors/rd3 refs). Remaining: a live full-pipeline binding run |
 | Verifier skill + pipeline completion gate (ADR-026, tasks 0105–0106) | ✅ | `sp:code-verification` (verify + review modes) backs `/sp:dev-verify` / `/sp:dev-review`; emits `.spur/run/<wbs>-verdict.json`; `task-pipeline.yaml` gates `verify → record` on `verdict==PASS` (else `→ failed`); `implement` step split to `/sp:dev-run --mode implement` (de-recurses `/sp:dev-run --mode full`). Done: skill + commands + gate + workflow-validate/lint green, gate logic proven. Gate logic verified end-to-end: dogfood run on 0101 (task 0105 R5) confirmed verify→record gate; done-gate + section-ownership (task 0106) confirmed record→done gate + Solution/Testing/Review auto-population |
 | Multi-dimensional review capability (task 0227) | ✅ | `sp:super-reviewer` agent (standalone + pipeline Phase 7) dispatches three review dimensions: `sp:code-verification` (SECUA), `sp:functional-review` (requirements traceability, FunctionalVerdict), `sp:code-improvement` (5 architectural deepening signals). `/sp:dev-review` rewritten: dual-mode (WBS\|path), `--focus <dims>`, `--next` flag. Guardrail references: `receiving-code-review.md`, `verification-before-completion.md`. `spur-dev/SKILL.md` competency table updated. `code-verification` cross-refs updated. |
 
 ## 10. Deferred (needs design before build)
 
 | Feature | Why deferred |
-|---------|--------------|
+| --------- | -------------- |
 | Asset SSOT model / `spur asset inspect` | Old `@spur/assets` discarded; rebuild only if needed |
 | Rich `spur inspect <run-id>` (timeline/events/gates) | Depends on Phase 2 run model |
 | Plugin **substrate** (SDK, discovery, registries, trust ladder) | 🔶 Partial — ADR-012 amended; mechanism `03 §11`, shapes `04 §6`. Shipped now means ts-infra lifecycle core only. Spur-side SDK, discovery/loader/CLI, server route seam, registries, and trust ladder are removed/deferred until a real plugin consumer exists. |

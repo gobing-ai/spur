@@ -339,6 +339,7 @@ local `.spur`) is unchanged; **no symlinks** participate in the install or init 
 > `spur-cli/config` for already-installed legacy packages.
 
 Ownership splits by concern:
+
 - **`@gobing-ai/ts-rule-engine` keeps only generic demo rules** — one example per builtin evaluator
   (`no-biome-suppressions`, `coverage-gate`, `tsdoc-exports`, `test-location`) plus a generic
   `example.yaml` preset its own tests reference. It no longer ships Spur-specific presets.
@@ -394,7 +395,7 @@ interface, and an equivalent wrapper adds a translation layer, a drift surface, 
 decision test, applied per candidate:
 
 | Candidate | Verdict |
-|-----------|---------|
+| ----------- | --------- |
 | Deterministic + single CLI verb (e.g. `spur rule run`/`validate`/`list`) | **CLI directly — no command.** The skill still drives it in natural language. |
 | A complex/multi-step CLI dance the LLM would orchestrate reliably | **Command** — it simplifies a real workflow. |
 | Fuzzy human intent → a reliable generated/edited artifact (e.g. NL → validated YAML rule) | **Command** — this is the LLM's value. |
@@ -413,7 +414,6 @@ small, honest, and aligned with where an LLM actually beats a deterministic tool
 **Detail:** the operation taxonomy and per-operation contracts live in
 `plugins/sp/skills/spur-rules/references/operations.md`; this ADR governs the command-vs-CLI-vs-subagent
 choice for any future Spur plugin surface.
-
 
 ---
 
@@ -643,8 +643,8 @@ gate (replacing rd3's `--postflight-verify`).
 asserting `spur task check` before `done`. Each section is owned by one pipeline step. Trigger:
 task 0106 (task 0101 reached `done` while failing its own check).
 
-
 ---
+
 ## ADR-027: Config Loading Is `spur-config`-Owned; Core/Loader Split; Legacy Config Retired
 
 **Status:** Accepted · **Date:** 2026-06-26
@@ -893,3 +893,36 @@ cwd-local store cannot coordinate projects, and a full daemon is overbuilt while
 under active local development.
 
 **Detail:** `docs/design/project-switcher.md`; feature `K1` (`docs/features/K1_project-switcher.md`); parent umbrella `K` Features module (Spur Board).
+
+---
+
+## ADR-038: A `spur` CLI Surface Change Requires a Same-Change `spur-cli` Skill Update
+
+**Status:** Accepted · **Date:** 2026-07-31
+
+**Decision.** Any change to the `spur` CLI surface — a new verb or flag on a covered noun, or the
+removal of one — requires a same-change update to the corresponding `plugins/sp/skills/spur-cli`
+reference. The coupling is enforced by a parity test
+(`plugins/sp/tests/spur-cli-parity.test.ts`) that fails the build when a verb or flag in
+`apps/cli/src/commands/*.ts` is absent from its reference (forward direction) or when a reference
+documents a verb or flag the CLI no longer provides (reverse/phantom direction). Covered nouns:
+task, feature, rule, workflow, agent, message, team, status, init, serve. Excluded Tier C nouns
+(history, migrate, projects, help) are skipped via a named ignore-list with a stated reason each.
+
+This ADR also records the **dispatch-surface rule** as a composition over ADR-033: the dispatch-
+surface reference (`plugins/sp/skills/parallel-execution/references/dispatch-surface.md`) decides
+*which execution surface* carries a unit of work (native subagent vs `spur agent run`); ADR-033
+retains ownership of *model-tier selection* through the stage registry `model_policy`. The two
+decisions compose — dispatch-surface picks the surface, ADR-033 picks the tier — and neither
+duplicates the other.
+
+**Why.** CLI↔skill drift recurred silently before H6: 3 undocumented verbs and 16 uncited flags
+accumulated because nothing connected `apps/cli/src/commands/` to the skill that documents it. An
+ADR without an enforcement mechanism is a wish; the parity test is the mechanism, and it is
+bidirectional so a removed verb does not leave a reference advertising a command that no longer
+exists. ADR-013 governs `--help` output shape and is adjacent but not applicable — it does not
+govern a documentation artifact in a different tree, so this is a new decision rather than an
+amendment.
+
+**Detail:** `plugins/sp/skills/spur-cli/SKILL.md` (noun routing + Tier C exclusions);
+`plugins/sp/tests/spur-cli-parity.test.ts` (enforcement); `plugins/sp/skills/parallel-execution/references/dispatch-surface.md` (composition over ADR-033); feature `H6`.

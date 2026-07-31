@@ -5,7 +5,7 @@
 > For the **slash-command layer** (the `sp` plugin) layered on top of these CLI verbs —
 > `/sp:dev-plan`, `/sp:dev-run`, `/sp:dev-verify`, `/sp:dev-wrap`, the batch family
 > `/sp:dev-runall` / `/sp:dev-parallel` / `/sp:dev-verifyall` / `/sp:dev-wrapall`, the
-> status-aware router `/sp:dev-next`, and the `sp:super-coder` / `sp:super-reviewer` /
+> status-aware router `/sp:dev-next`, and the `sp:super-planner` / `sp:super-coder` / `sp:super-reviewer` /
 > `sp:expert-spur` agents — see
 > [How to Use the `sp:dev-*` Slash Commands](./how_to_use_dev_slash_commands_for_daily_software_development.md).
 > §6 below shows how that layer shortcuts the daily loop; §7 walks a full workday driven
@@ -92,7 +92,7 @@ spur init --force            # recreate files that already exist
 What `init` creates under `.spur/`:
 
 | Path | Purpose |
-|---|---|
+| --- | --- |
 | `config.yaml` | Project config (single surface, ADR-017 — supersedes the legacy `config.json`) |
 | `agents/.gitkeep` | Team-mode agent specs dir (created regardless of `--minimal`) |
 | `rules/` | Constraint rule presets (project layer) |
@@ -427,6 +427,7 @@ spur rule trace --since 2026-06-01 --last 50
 ```
 
 **Rule sources (layered, highest-priority first):**
+
 1. `SPUR_RULES_PATH` env var
 2. Local `.spur/rules/` (project layer)
 3. Global `~/.config/spur/rules/` (user layer, or `SPUR_GLOBAL_RULES_DIR`)
@@ -488,7 +489,7 @@ spur workflow trace --since 2026-06-01 --last 50
 **Bundled workflows** (in `config/workflows/`):
 
 | Workflow | Purpose | Phase |
-|---|---|---|
+| --- | --- | --- |
 | `basic.yaml` | Canonical implement → check → fix → done loop | Example |
 | `task-lifecycle.yaml` | Task status transitions (backlog → todo → wip → testing → done) | Entity FSM |
 | `feature-lifecycle.yaml` | Feature status transitions (backlog → active → verifying → done) | Entity FSM |
@@ -640,13 +641,13 @@ for these before hand-driving the verbs — they call the same `spur` commands d
 never a parallel process.
 
 | Shortcut | Replaces (roughly) | When |
-|---|---|---|
+| --- | --- | --- |
 | `/sp:dev-next <wbs\|feature-id>` | "which verb next?" guessing | You want the **single best next step** for a task or feature frontier. `sp:next-router` inspects status, applies light gates, and dispatches exactly one `/sp:dev-*` command (or stops with a reason). New — also backs the `--next` auto-chains. |
-| `/sp:dev-runall --feature <id>` (or `--tasks feature:<id>`) | Steps 3–6 hand-walked per task | Drive a **batch** of tasks through `task-pipeline.yaml` in dependency-correct order. Delegates to **`sp:super-coder`** — the batch driver now **preflights** each WBS against stop-conditions (`plugins/sp/scripts/batch-preflight.ts`) and does at most **one** recovery hop via `sp:next-router` before continue/halt. |
+| `/sp:dev-runall --feature <id>` (or `--tasks feature:<id>`) | Steps 3–6 hand-walked per task | Drive a **batch** of tasks through `task-pipeline.yaml` in dependency-correct order. Delegates to **`sp:super-planner`** — the batch driver now **preflights** each WBS against stop-conditions (`plugins/sp/scripts/batch-preflight.ts`) and does at most **one** recovery hop via `sp:next-router` before continue/halt. |
 | `/sp:dev-parallel --feature <id>` | Sequential batch when tasks are independent | Fan out a proven-independent subset across subagents (`sp:parallel-execution`); serializes on dependency / file-overlap / budget failure. |
 | `/sp:dev-verifyall` / `/sp:dev-wrapall` | Per-task verify/wrap loops | Batch-verify a feature's tasks, then batch-wrap (learnings, metrics, doc-sync, feature transition). |
 
-Single task? `/sp:dev-run <wbs>` (or delegate to `sp:super-coder` directly). Review-only?
+Single task? `/sp:dev-run <wbs>` (or delegate to `sp:super-planner` directly). Review-only?
 `sp:super-reviewer`. CLI corpus campaigns across many tasks/features/rules? `sp:expert-spur`.
 
 Full composition walkthrough in the slash-command guide linked at the top of this doc.
@@ -833,7 +834,7 @@ features:
 ### Environment variables
 
 | Variable | Purpose |
-|---|---|
+| --- | --- |
 | `DATABASE_URL` | Override the SQLite DB path (default: `<cwd>/.spur/spur.db`). Use `:memory:` for ephemeral. |
 | `SPUR_RULES_PATH` | Additional rule root (highest priority) |
 | `SPUR_GLOBAL_RULES_DIR` | Override global rules dir (default: `~/.config/spur/rules`). Setting this suppresses the bundled fallback. |

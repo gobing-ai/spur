@@ -1,6 +1,6 @@
 ---
 description: Verify a batch of tasks against their requirements and Acceptance Criteria — batch traceability check producing per-task verdicts and a summary report
-argument-hint: "--tasks <selector> [--feature <id>] [--agent <name|auto>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--json] [--skip-shippable]"
+argument-hint: "--tasks <selector> [--feature <id>] [--agent <name|auto>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
@@ -11,8 +11,20 @@ Wraps the **sp:spur-dev** and **sp:code-verification** skills.
 ## Usage
 
 ```
-/sp:dev-verifyall --tasks <selector> [--feature <id>] [--agent <name|auto>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--json] [--skip-shippable]
+/sp:dev-verifyall --tasks <selector> [--feature <id>] [--agent <name|auto>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable]
 ```
+
+Flags: `--tasks <selector>` (required unless `--feature`), `--feature <id>` (sugar for
+`feature:<id>`), shared verify flags (`--agent`, `--fix`, `--focus`, `--bdd`, `--auto`, `--force`),
+`--next` (per-task lifecycle chaining — see below), `--json`, `--skip-shippable`.
+
+**`--next` (per-task lifecycle chaining):** for each task whose verdict is **PASS**, transition
+`testing → done` through the FSM with the `--strict-core` Review L3 guard honored; a task whose
+verdict is **PARTIAL** or **FAIL** does **not** transition (it stays `testing` as review-pending).
+One task's non-PASS never blocks another task's transition — each task's verdict is its own.
+Transitions run **before** the shippable gate (R3), so `spur feature check` observes the final
+statuses. Do not confuse with `--keep-going` (batch failure policy, dev-runall) or `--continue`
+(resume from checkpoint) — see the three-axis distinction in `dev-operations.md`.
 
 **Shippable readiness** (feature-level): when `--fix all` and a feature context exists
 (`--feature` or a unique shared `feature_id` across the set), after all per-task verifies the

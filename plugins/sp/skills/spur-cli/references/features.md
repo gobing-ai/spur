@@ -27,8 +27,9 @@ what* or *how to write a scenario*, this skill.
 | `advance <id>` | Walk forward along the legal lifecycle path to a target status | `--to <status>` (default `done`) `--folder` `--json` |
 | `list` | List features, filtered | `--status <s>` `--priority <p>` `--folder` `--json` |
 | `move <id>` | Re-parent a subtree (cascade-rename of descendants) | `--parent <id>` `--dry-run` `--folder` `--json` |
-| `refresh` | Rebuild INDEX + tree + each feature's `## Tasks` (files win) | `--folder` `--json` |
+| `refresh` | Rebuild INDEX + tree + each feature's `## Tasks` (files win) | `--feature <id>` `--folder` `--json` |
 | `check [id]` | Validate one feature / the tree; the 4-layer gate | `--strict` `--folder` `--json` |
+| `sync [id]` | Sync feature status with linked task states | `--all` `--dry-run` `--force` `--folder` `--json` |
 
 All verbs accept `--json` and `--folder <path>`.
 
@@ -141,6 +142,8 @@ the AC coverage map. Habits that keep it green:
 - **Before `verifying`**, run `spur feature check <id> --json` and clear: orphan scenarios (AC with
   no task), coverage orphans (tasks claiming AC that doesn't exist), and broken edges.
 - **Run `refresh` after hand-edits** so the `## Tasks` block and tree reflect the files (files win).
+- **Scope `refresh` to one feature** with `--feature <id>` when only one feature's task links changed
+  (INDEX.md is still regenerated for the whole tree): `spur feature refresh --feature H2`.
 
 ## Roadmap and priority habits
 
@@ -167,6 +170,30 @@ spur feature check --strict --json  # warnings → failures
 The 4-layer validator (frontmatter, AC syntax, children-limit/structure, L4 traceability) emits its
 verdict and findings as JSON. **Query this, don't re-derive it** — the rules live in the CLI, never
 restated as prose here. This is what `sp:spur-dev`'s feature-check gate loop runs.
+
+## Status sync - `sync`
+
+`spur feature sync` keeps a feature's lifecycle status honest against the states of its linked
+tasks - if all tasks are `done`, the feature should advance to `done`; if tasks reopen, the feature
+reopens. It computes a proposal (`from -> to` with a `reason`) and, unless `--dry-run`, applies it.
+
+```bash
+spur feature sync H2 --json                    # one feature
+spur feature sync H2 --dry-run --json          # propose only, no write
+spur feature sync --all --json                 # every feature with linked tasks
+spur feature sync H2 --force                   # apply a reopen proposal without confirmation
+spur feature sync H2 --folder docs/custom-tasks --json   # non-default tasks folder
+```
+
+- **`[id]`** syncs one feature; **`--all`** syncs every feature with linked tasks. One of the two is
+  required - exit `2` if neither is given.
+- **`--dry-run`** reports proposed transitions without applying. **`--force`** applies a *reopen*
+  proposal (status moving backward) without interactive confirmation.
+- **`--json`** single-feature emits `{ proposal, applied, appliedHops[] }`; `--all` emits
+  `{ totalFeatures, evaluated, updatedCount, results[] }` where each result is the single-feature
+  shape. `proposal` is
+  `{ featureId, from, to, reason, requiresConfirm?, gateBlocked?, gateFindings?, hops? }`.
+- **Exit codes:** `0` success (including NOOP), `1` error, `2` invalid usage (no id and no `--all`).
 
 ## What this skill is NOT
 

@@ -80,7 +80,7 @@ plugins/sp/
 │   │       ├── execution-workflow.md
 │   │       ├── gate-checklists.md
 │   │       └── planning-workflow.md
-│   ├── spur-tdd/                    # TDD workflow companion (v1.0.0)
+│   ├── test-driven-development/                    # TDD workflow companion (v1.0.0)
 │   └── sys-architecture/            # Architecture / ADR judgment competency (v1.0)
 │       └── references/decision-method.md
 ├── commands/                        # Slash command definitions (23)
@@ -115,7 +115,7 @@ plugins/sp/
 | `sys-debugging`       | 1.0     | claude-code, codex, openclaw, opencode, antigravity | Structured debugging protocol — reproduce→isolate→root cause→fix→regression test; "ask the debugger before the LLM" principle, 15-minute escalation rule                                                                                               |
 | `code-review`         | 1.0     | claude-code, codex, openclaw, opencode, antigravity | Code review workflow — pre-commit self-review checklist (6 categories, catches 60-80% of issues), structured review requests with SECUA lenses, findings processing                                                                                    |
 | `branch-workflow`     | 1.0     | claude-code, codex, openclaw, opencode, antigravity | Branch-lifecycle discipline — create→worktree→commit→self-review→merge→cleanup; git worktree patterns for parallel branches                                                                                                                            |
-| `spur-tdd`            | 1.0.0   | claude-code, codex, antigravity, opencode, openclaw | TDD workflow companion — red-green-refactor cycle, behavior-first test design, AAA structure, data builders, and mock-at-boundary anti-patterns                                                                                                        |
+| `test-driven-development`            | 1.0.0   | claude-code, codex, antigravity, opencode, openclaw | TDD workflow companion — red-green-refactor cycle, behavior-first test design, AAA structure, data builders, and mock-at-boundary anti-patterns                                                                                                        |
 | `brainstorm`          | 1.0.0   | claude-code, codex, antigravity, opencode, openclaw | Structured ideation workflow — generate solution options with trade-offs, confidence scoring; delegates verification to `cc:anti-hallucination`                                                                                                        |
 | `daily-summary`       | 1.0.0   | claude-code, codex, antigravity, opencode, openclaw | Daily summary report generator — orchestrates ccusage CLI + git history into structured markdown summaries                                                                                                                                             |
 | `doc-evolve`          | 1.0     | claude-code, codex, openclaw, opencode, antigravity | Key-document evolution per `docs/99_PROJECT_CONSTITUTION.md` — drift audits, same-commit sync checks, frontmatter-contract verification, and machine-appended lessons                                                                                  |
@@ -152,21 +152,21 @@ Each command file contains:
 
 ### 3. Agents (`agents/`)
 
-**Purpose:** Specialist subagents that run in isolated context windows. Two shapes: **expert agents** route a request to the single skill they own; **`super-coder`** drives one task end-to-end or a dependency-ordered task batch through the `sp:spur-dev` pipeline.
+**Purpose:** Specialist subagents that run in isolated context windows. Two shapes: **expert agents** route a request to the single skill they own; **`super-planner`** drives one task end-to-end or a dependency-ordered task batch through the `sp:spur-dev` pipeline.
 
 | Agent         | Shape        | Delegates To                         | Color | Trigger Examples                                                                               |
 | ------------- | ------------ | ------------------------------------ | ----- | ---------------------------------------------------------------------------------------------- |
 | `expert-spur` | expert       | `sp:spur-cli`                        | green | "create tasks", "feature lifecycle", "add a rule", "author a workflow"                         |
-| `super-coder` | orchestrator | `sp:spur-dev` + `sp:dogfood-testing` | green | "run this task end to end", "run all tasks", "run the batch", "execute the todo set", "runall" |
+| `super-planner` | orchestrator | `sp:spur-dev` + `sp:dogfood-testing` | green | "run this task end to end", "run all tasks", "run the batch", "execute the todo set", "runall" |
 
 Each agent has:
 
-- `skills: [sp:<skill-name>]` — bound to one skill (`expert-spur`) or two (`sp:spur-dev` + `sp:dogfood-testing` for `super-coder`)
+- `skills: [sp:<skill-name>]` — bound to one skill (`expert-spur`) or two (`sp:spur-dev` + `sp:dogfood-testing` for `super-planner`)
 - `model: inherit` — inherits the parent session's model
 - `color` — roster display accent
 - `tools` — allowed tool set (`Read`, `Grep`, `Glob`, `Bash`, `Skill`)
 
-**Design principle:** Agents are **delegates, not implementors**. They never contain domain logic. `expert-spur` routes CLI corpus work to `sp:spur-cli`; `super-coder` drives the single-task/batch loop (the algorithm lives in `sp:spur-dev/references/execution-batch.md`) without reaching into individual pipeline steps. For a single well-scoped operation, the matching `/sp:*` command is lighter; for work spanning multiple phases or a batch, the agent provides an isolated context window.
+**Design principle:** Agents are **delegates, not implementors**. They never contain domain logic. `expert-spur` routes CLI corpus work to `sp:spur-cli`; `super-planner` drives the single-task/batch loop (the algorithm lives in `sp:spur-dev/references/execution-batch.md`) without reaching into individual pipeline steps. For a single well-scoped operation, the matching `/sp:*` command is lighter; for work spanning multiple phases or a batch, the agent provides an isolated context window.
 
 ### 4. Hooks (`hooks/`)
 
@@ -217,7 +217,7 @@ graph TB
         SKILL_DS["daily-summary<br/>Daily report generator"]
         SKILL_DOC["doc-evolve<br/>Document drift + sync"]
         SKILL_DOG["dogfood-testing<br/>Dogfood protocol + report"]
-        SKILL_TDD["spur-tdd<br/>TDD workflow companion"]
+        SKILL_TDD["test-driven-development<br/>TDD workflow companion"]
     end
 
     subgraph "Execution Layer"
@@ -436,7 +436,7 @@ family and the verification guard.
 | `indexed-context`       | `sp`        | ⏳ Deferred | L01 — design agent-agnostic shape later                                                                                                                                                                              |
 | `sys-testing`           | `sp`        | ✅ Done     | Ported to `sp:code-testing` (`unit-testing.md` + per-stack adapters under `references/stacks/`).                                                                                                                     |
 | `advanced-testing`      | `sp`        | 🔀 Partial  | Advanced techniques are folded into `sp:code-testing`; no standalone command until usage proves routing value.                                                                                                       |
-| `tdd-workflow`          | `sp`        | ✅ Done     | Ported to `sp:spur-tdd` (standalone discipline); pairs with `sp:code-testing` and `sp:code-implementation`.                                                                                                          |
+| `tdd-workflow`          | `sp`        | ✅ Done     | Ported to `sp:test-driven-development` (standalone discipline); pairs with `sp:code-testing` and `sp:code-implementation`.                                                                                                          |
 | `sys-debugging`         | `sp`        | 🔀 Partial  | Folded into `sp:code-implementation` as root-cause-first workflow for failed gates, runtime defects, and unclear test failures; no standalone command.                                                               |
 | `sys-developing`        | `sp`        | 🔀 Partial  | Selective production patterns folded into `sp:code-implementation`; broad API/Docker/DB catalogs stay deferred until a concrete need appears.                                                                        |
 | `code-implement-common` | `sp`        | ✅ Done     | Ported to `sp:code-implementation` as task-driven implementation discipline, progress persistence, and handoff guidance.                                                                                             |
@@ -457,7 +457,7 @@ family and the verification guard.
 | `handover`              | `sp`        | ⏳ Deferred | M01 — prompt skill                                                                                                                                                                                                   |
 | `quick-grep`            | `sp`        | 🔀 Absorbed | rg-usage guidance stays a prompt skill; CLI wrapper rejected (L05)                                                                                                                                                   |
 | _— (new)_               | `sp`        | ➖ N/A      | `doc-evolve` created fresh (constitution-native; no rd3 ancestor)                                                                                                                                                    |
-| _— (new)_               | `sp`        | ➖ N/A      | `spur-dev`, `spur-cli`, `sys-architecture`, `spec-decomposition`, `code-implementation`, `code-testing`, `code-verification`, `dogfood-testing`, `spur-tdd` created fresh or extracted as the Spur companion surface |
+| _— (new)_               | `sp`        | ➖ N/A      | `spur-dev`, `spur-cli`, `sys-architecture`, `spec-decomposition`, `code-implementation`, `code-testing`, `code-verification`, `dogfood-testing`, `test-driven-development` created fresh or extracted as the Spur companion surface |
 | `spur-plan`             | `sp`        | ❌ Removed  | Thin stub placeholder removed 2026-06-30 — the full planning narrative lives in `sp:spur-dev` and `/sp:dev-plan` delegates to it directly.                                                                           |
 
 ### Commands (rd3 → destination)
@@ -526,7 +526,7 @@ kept a **much smaller set** (19). The `cc` plugin took the meta-agent authoring 
 ### Agents (rd3 → destination)
 
 rd3 shipped 13 agents. The `sp` plugin now keeps `expert-spur` (the CLI-corpus expert) plus
-`super-coder` (single-task and batch pipeline driver); `cc` kept 5 authoring experts. The old
+`super-planner` (single-task and batch pipeline driver); `cc` kept 5 authoring experts. The old
 "super-\*" orchestration roles were folded into skills/engine capabilities.
 
 | rd3 agent          | Destination | Status              | Note                                                                                                                                                                |
@@ -536,7 +536,7 @@ rd3 shipped 13 agents. The `sp` plugin now keeps `expert-spur` (the CLI-corpus e
 | `expert-agent`     | `cc`        | ✅ Done             | `cc` `expert-agent`                                                                                                                                                 |
 | `expert-hook`      | `cc`        | ✅ Done             | `cc` `expert-hook`                                                                                                                                                  |
 | `expert-magent`    | `cc`        | ✅ Done             | `cc` `expert-magent`                                                                                                                                                |
-| `super-coder`      | `sp`        | ✅ Done             | Retained as `sp:super-coder` single-task + batch pipeline driver                                                                                                    |
+| `super-coder`      | `sp`        | ✅ Done             | Retained as `sp:super-coder` (build); single-task + batch pipeline driving moved to `sp:super-planner`                                                                                                    |
 | `super-tester`     | `sp`        | 🔀 Absorbed         | Into `sp:code-testing` + `sp:super-coder` pipeline runs                                                                                                             |
 | `super-reviewer`   | `sp`        | 🔀 Absorbed         | Into `sp:code-verification` + `sp:super-coder` pipeline runs                                                                                                        |
 | `super-pm`         | `sp`        | ❌ Rejected for now | Wrapper-on-wrapper over `sp:spur-dev`, `sp:spur-cli`, and `sp:doc-evolve`; reconsider only if PM work repeatedly needs an isolated context beyond existing experts. |
@@ -544,7 +544,7 @@ rd3 shipped 13 agents. The `sp` plugin now keeps `expert-spur` (the CLI-corpus e
 | `jon-snow`         | `sp`        | 🔀 Absorbed         | Into `sp:spur-dev` spine + `sp:super-coder` full runs                                                                                                               |
 | `knowledge-seeker` | `sp`        | ⏳ Deferred         | With the L-group research skills                                                                                                                                    |
 | `second-brain`     | `sp`        | ⏳ Deferred         | L01 — with `indexed-context`                                                                                                                                        |
-| _— (new)_          | `sp`        | ➖ N/A              | `expert-spur` (CLI-corpus expert) and `super-coder` (single-task + batch pipeline driver) — created fresh                                                           |
+| _— (new)_          | `sp`        | ➖ N/A              | `expert-spur` (CLI-corpus expert) and `super-planner` (single-task + batch pipeline driver) — created fresh                                                           |
 
 ### Hooks (rd3 → destination)
 
@@ -586,7 +586,7 @@ They stay live in `rd3` until the core stabilizes; deferral breaks nothing.
   and removed 2026-06-30 — its planning narrative already lives in `sp:spur-dev`. Product-management
   judgment moved into the existing planning/roadmap references; code-docs → `doc-evolve`; quick-grep
   stays a prompt skill.
-- **5 rd3 "super-\*" agents → 1 in `sp`**: `super-coder` owns single-task + batch pipeline driving;
+- **5 rd3 "super-\*" agents → 1 in `sp`**: `super-planner` owns single-task + batch pipeline driving;
   implementation/testing/review work routes to the functional competencies.
 - **ADR-016 command pruning**: 46 rd3 commands → 19 in `sp` (only commands that convert
   non-deterministic intent survived; pure CLI forwarders were rejected).

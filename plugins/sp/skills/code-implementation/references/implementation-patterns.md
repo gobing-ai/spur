@@ -40,7 +40,7 @@ unblocks the requirement.
 Use this sequence:
 
 1. **Map requirement to files.** Identify the module, seam, config, docs, or tests that must change.
-2. **Choose a test strategy.** Use `sp:spur-tdd` for test-first work, or `sp:code-testing` for
+2. **Choose a test strategy.** Use `sp:test-driven-development` for test-first work, or `sp:code-testing` for
    gap-filling coverage on existing code.
 3. **Implement in a small slice.** Keep the first slice narrow enough to verify.
 4. **Run the narrow check.** Fix root causes, not symptoms.

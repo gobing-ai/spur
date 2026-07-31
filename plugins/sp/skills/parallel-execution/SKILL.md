@@ -17,12 +17,12 @@ metadata:
     - result-synthesis
 see_also:
   - sp:spur-dev
-  - sp:super-coder
+  - sp:super-planner
 ---
 
 # sp:parallel-execution — Parallel Execution & Fan-Out
 
-The parallel-execution competency — decide when to fan out independent work across subagents, choose the right fan-out pattern, and synthesize parallel results. This skill owns the **decision framework** (when to parallelize) and the **execution patterns** (how to structure fan-out); the spine (`sp:spur-dev`) and batch orchestrator (`sp:super-coder`) consult it when they encounter independent work.
+The parallel-execution competency — decide when to fan out independent work across subagents, choose the right fan-out pattern, and synthesize parallel results. This skill owns the **decision framework** (when to parallelize) and the **execution patterns** (how to structure fan-out); the spine (`sp:spur-dev`) and batch orchestrator (`sp:super-planner`) consult it when they encounter independent work.
 
 This is a **competency skill** — it teaches the agent *how* to parallelize, not *what* to parallelize. The spine owns the lifecycle and task selection; this skill owns the fan-out mechanics.
 
@@ -68,9 +68,10 @@ Full synthesis methodology: [result-synthesis.md](references/result-synthesis.md
 
 ## Subagent execution disciplines
 
-When you dispatch work to a subagent — a fan-out worker, an adversarial reviewer, a research angle —
+When you dispatch work to a subagent - a fan-out worker, an adversarial reviewer, a research angle -
 four disciplines keep the dispatch reliable and cheap. They apply to every pattern above and are the
-SSOT the batch orchestrator (`sp:super-coder`) and [execution-batch.md](../spur-dev/references/execution-batch.md) point back to.
+SSOT the batch orchestrator (`sp:super-planner`) and [execution-batch.md](../spur-dev/references/execution-batch.md) point back to. The choice of which **execution surface** carries the dispatch
+(native subagent vs `spur agent run`) is decided by [dispatch-surface.md](references/dispatch-surface.md) - apply it before these disciplines.
 
 ### Hand artifacts as files, not pasted context
 
@@ -102,7 +103,7 @@ was meant to avoid. Let the reviewer reach its own conclusion.
 ## Integration with the spine
 
 - **`sp:spur-dev`** owns task selection and lifecycle. When a batch contains independent tasks, the spine consults this skill for the fan-out pattern.
-- **`sp:super-coder`** is the orchestrator that executes the fan-out. Its parallel mode (documented in its agent definition) applies the patterns from this skill.
+- **`sp:super-planner`** is the orchestrator that executes the fan-out. Its parallel mode (documented in its agent definition) applies the patterns from this skill.
 - **`/sp:dev-parallel`** is the thin slash-command entry point that delegates to this skill.
 
 ## When to use
@@ -115,7 +116,7 @@ was meant to avoid. Let the reviewer reach its own conclusion.
 Do **not** use this skill for:
 - Sequential pipeline execution — that is `sp:spur-dev`'s execution half.
 - Single-task lifecycle — that is `sp:spur-dev` (`/sp:dev-run`).
-- Batch orchestration logic — that is `sp:super-coder` (the orchestrator); this skill is the *decision support* it consults.
+- Batch orchestration logic — that is `sp:super-planner` (the orchestrator); this skill is the *decision support* it consults.
 
 ## Gotchas
 
@@ -126,22 +127,21 @@ Do **not** use this skill for:
 
 ## References
 
-| Reference | Covers |
-|-----------|--------|
 | [fan-out-patterns.md](references/fan-out-patterns.md) | Four fan-out patterns, per-pattern token-cost estimates, when-to-use decision table |
 | [result-synthesis.md](references/result-synthesis.md) | Merge/dedup/conflict-resolution strategies, anti-patterns, unified-report template |
+| [dispatch-surface.md](references/dispatch-surface.md) | Native subagent vs `spur agent run` decision rule: default, four escalation triggers, naming requirement, ADR-033 composition, sandbox reliability tax |
 
 ## See also
 
 - **`sp:spur-dev`** — the orchestration spine that consults this skill for fan-out decisions.
-- **`sp:super-coder`** — the batch orchestrator that executes fan-out patterns.
+- **`sp:super-planner`** — the batch orchestrator that executes fan-out patterns.
 - **`/sp:dev-parallel`** — the slash command entry point for parallel execution.
 
 ## Platform Notes
 
 ### Claude Code
 
-Native — `Skill()` delegation and `spur agent run` for subagent spawns. The decision framework is consumed by the agent in-session; fan-out execution uses `spur agent run <prompt> --agent <name>` for each subagent.
+Native - `Skill()`/`Task()` delegation for subagent spawns. The decision framework is consumed by the agent in-session; fan-out execution uses the **native subagent by default** and escalates to `spur agent run <prompt> --agent <name>` only when a named trigger in [dispatch-surface.md](references/dispatch-surface.md) applies.
 
 ### Codex / OpenClaw / OpenCode / Antigravity
 

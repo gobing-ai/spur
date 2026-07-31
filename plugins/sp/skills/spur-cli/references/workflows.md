@@ -89,12 +89,12 @@ The skill's logic divides by **whether the LLM adds value**:
 | Operation | Backed by | Input | Output (done-when) |
 | --------- | --------- | ----- | ------------------ |
 | `validate` | `spur workflow validate` (CLI) | `<file> [--no-schema]` | Schema + semantic verdict |
-| `run` | `spur workflow run` (CLI) | `<file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan]` | Terminal state reached (sync) or run started (async); trace readable |
+| `run` | `spur workflow run` (CLI) | `<file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--quiet/--silent/--verbose] [--detail <level>] [--trace-file] [--steer]` | Terminal state reached (sync) or run started (async); trace readable |
 | `continue` | `spur workflow continue` (CLI) | `[run-id] [--yes]` | Resume a paused HITL run (omit id → most recent paused) |
 | `cancel` | `spur workflow cancel` (CLI) | `<run-id>` | Single non-terminal run marked failed (SIGTERM async worker when live) |
 | `clean` | `spur workflow clean` (CLI) | `[--older-than <min>] [--force] [--dry-run]` | Bulk-finalize stale `running`/`pending` runs as failed |
 | `list` | `spur workflow list` (CLI) | — | Available workflow **YAML definition files** (not run records) |
-| `trace` | `spur workflow trace` (CLI) | `[run-id] [--workflow <n>] [--status <s>] [--since <iso>] [--last <n>]` | Run history list or per-run timeline |
+| `trace` | `spur workflow trace` (CLI) | `[run-id] [--workflow <n>] [--status <s>] [--since <iso>] [--last <n>] [--follow] [--poll <ms>]` | Run history list or per-run timeline |
 | `add` | agent procedure | `"<nl-description>" [--kind <state-machine\|transition-flow>] [--file <path>]` | **Mode chosen (confirmed)** → first reconciled against existing workflows (extend an existing flow rather than duplicate) → YAML authored in real schema shape → **validated AND dry-run** (reaches the expected terminal state) → [add](workflows/operations.md#add) |
 | `refine` | agent procedure | `<workflow-file> [--intent "<goal>"] [--dry-run]` | Smallest change meeting the intent, re-validated and re-dry-run; `--dry-run` emits a diff only → [refine](workflows/operations.md#refine) |
 
@@ -162,16 +162,39 @@ short of the expected terminal state points at a guard/condition that never pass
 or an `iterationBound` exhausted by a runaway loop. Fix the **specific** definition flaw — no drive-by
 restructuring — then re-run. Loop until the run reaches the expected terminal state.
 
+### Run output and observability flags
+
+The `run` verb has six output/observability flags beyond the core `--dry-run`/`--async`/`--no-plan`.
+All six are ignored under `--json` (machine output stays byte-identical):
+
+```bash
+spur workflow run ./workflows/approval.yaml --quiet                # final summary only
+spur workflow run ./workflows/approval.yaml --silent               # errors only (non-zero exit on failure)
+spur workflow run ./workflows/approval.yaml --verbose              # transitions + correlation diagnostics
+spur workflow run ./workflows/approval.yaml --detail minimal       # tersest human output
+spur workflow run ./workflows/approval.yaml --trace-file           # persist redacted JSONL trace
+spur workflow run ./workflows/approval.yaml --steer                # interactive steering on stdin
+```
+
+- **`--quiet`**, **`--silent`**, **`--verbose`** are mutually constraining: `--quiet` and `--verbose`
+  are exclusive (exit `2`); `--silent` cannot combine with either (exit `2`).
+- **`--detail <level>`** sets human verbosity: `minimal` (state changes only), `invocation` (default;
+  per-step headers), `full` (transitions + correlation). `--verbose` is shorthand for `--detail full`.
+- **`--trace-file`** appends a redacted, schema-versioned JSONL trace under `.spur/runs/workflow/`
+  for post-run analysis - independent of human/JSON output.
+- **`--steer`** is synchronous and in-process: it cannot combine with `--json` or `--async` (exit `2`).
+  It accepts steering commands on stdin at declared action boundaries for interactive control.
+
 ## Command surface
 
 ```
 spur workflow validate <file> [--no-schema] [--json]
-spur workflow run      <file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--json]
+spur workflow run      <file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--quiet/--silent/--verbose] [--detail <level>] [--trace-file] [--steer] [--json]
 spur workflow continue [run-id] [--yes] [--json]
 spur workflow cancel   <run-id> [--json]
 spur workflow clean    [--older-than <minutes>] [--force] [--dry-run] [--json]
 spur workflow list     [--json]
-spur workflow trace    [run-id] [--workflow <name>] [--status <s>] [--since <iso>] [--last <n>] [--json]
+spur workflow trace    [run-id] [--workflow <name>] [--status <s>] [--since <iso>] [--last <n>] [--follow] [--poll <ms>] [--json]
 ```
 
 | Flag (on `run`) | Effect |
@@ -180,6 +203,12 @@ spur workflow trace    [run-id] [--workflow <name>] [--status <s>] [--since <iso
 | `--dry-run` | Validate and walk transitions **without** executing actions. |
 | `--async` | Start in the background and exit with `runId`; monitor via `spur workflow trace <run-id>`. |
 | `--no-plan` | Suppress the human run-start plan preview (sync human runs only; ignored under `--json`/`--async`). |
+| `--quiet` | Suppress plan and per-step progress; keep the final summary. |
+| `--silent` | Suppress all routine output; errors still set a non-zero exit status. |
+| `--verbose` | Include transitions and correlation diagnostics in human progress (implies `--detail full`). |
+| `--detail <level>` | Human detail level: `minimal`, `invocation` (default), or `full`. |
+| `--trace-file` | Append a redacted schema-versioned JSONL trace under `.spur/runs/workflow/`. |
+| `--steer` | Accept in-process steering commands on stdin at declared action boundaries (sync only; incompatible with `--json`/`--async`). |
 
 `validate` and `run` exit non-zero on failure (`run` exits non-zero when the final status is not
 `done`). `list` prints **workflow definition files** available on disk. For run history use `trace`:
@@ -189,6 +218,18 @@ spur workflow list --json
 spur workflow trace --last 10 --json
 spur workflow trace <run-id> --json
 ```
+
+Follow a live run to terminal (human streaming mode):
+
+```bash
+spur workflow trace <run-id> --follow            # stream until terminal (default 1000ms poll)
+spur workflow trace <run-id> --follow --poll 500 # poll every 500ms
+```
+
+- **`--follow`** replays a run timeline and polls persisted state until it becomes terminal. It
+  requires a `run-id` (exit `2` without one) and cannot combine with `--json` (exit `2` - it is a
+  human streaming mode).
+- **`--poll <ms>`** sets the follow polling interval (default `1000`, minimum `50`; exit `2` otherwise).
 
 HITL pause/resume: a run that hits a HITL action pauses; resume with `spur workflow continue [run-id]`
 (`--yes` skips confirmation). Cancel one live/paused run with `cancel <run-id>`; bulk-finalize

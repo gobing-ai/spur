@@ -54,7 +54,7 @@ Mode must not mix action verbs, subject areas, or serialization formats. For exa
 
 - Implementing code changes. Use `sp:code-implementation`.
 - Debugging a specific runtime failure. Use `sp:sys-debugging`.
-- Writing tests. Use `sp:spur-tdd`.
+- Writing tests. Use `sp:test-driven-development`.
 - Quick structural code search. Use grep/glob tools directly.
 - Creating indexed context files. This skill may read `.spur/context/` context, but it must not create or mutate it.
 

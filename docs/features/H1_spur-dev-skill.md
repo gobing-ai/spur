@@ -16,7 +16,7 @@ updated_at: 2026-06-12T23:45:00.000Z
 The Spur daily-workflow skill suite: a **thin orchestration spine** (`sp:spur-dev`) that drives the
 planning→execution lifecycle and **dispatches deep, functionally-decomposed competency skills**
 (`sys-architecture`, `code-implementation`, `code-testing`, `code-verification`, `spec-decomposition`,
-with `spur-tdd` as a referenced discipline), plus a `sp:spur-cli` CLI facade — backing the `sp:dev-*`
+with `test-driven-development` as a referenced discipline), plus a `sp:spur-cli` CLI facade — backing the `sp:dev-*`
 command family and the `expert-spur` / `super-coder` subagents (ADR-028).
 
 ## Scope
@@ -24,7 +24,7 @@ command family and the `expert-spur` / `super-coder` subagents (ADR-028).
 **In scope:**
 - The orchestration spine (`sp:spur-dev`) and the `phase → skill` binding in `task-pipeline.yaml`.
 - The functional competency skills (`sys-architecture`, `code-implementation`, `code-testing`,
-  `code-verification`, `spec-decomposition`) and `spur-tdd` as a referenced discipline.
+  `code-verification`, `spec-decomposition`) and `test-driven-development` as a referenced discipline.
 - The `sp:spur-cli` CLI facade (one reference per noun) and the `expert-spur` / `super-coder` subagents.
 - The ADR-016-filtered `sp:dev-*` command subset (byte-stable surface).
 
@@ -172,10 +172,10 @@ Feature: spur-dev umbrella skill
     Then sys-architecture, code-implementation, and code-testing each exist as standalone skills
     And each has a distinct trigger and owns its re-homed reference files
 
-  Scenario: R9 spur-tdd remains a referenced discipline skill
+  Scenario: R9 test-driven-development remains a referenced discipline skill
     Given two mature systems disagree on whether TDD is its own skill
     When the split is complete
-    Then spur-tdd remains a thin discipline skill referenced by code-implementation and code-testing
+    Then test-driven-development remains a thin discipline skill referenced by code-implementation and code-testing
     And it is not absorbed into either
 
   Scenario: R10 spec-decomposition is extracted after the binding is proven

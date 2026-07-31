@@ -16,7 +16,7 @@ metadata:
 see_also:
   - sp:code-review
   - sp:code-implementation
-  - sp:spur-tdd
+  - sp:test-driven-development
 ---
 
 # code-simplification — the simplification competency
@@ -184,4 +184,4 @@ After a simplification pass, confirm — with evidence, not assertion:
 
 - **`sp:code-review`** — review the simplified diff; the review that flagged complexity hands the fix here.
 - **`sp:code-implementation`** — the implement step that produced the code being simplified.
-- **`sp:spur-tdd`** — the tests that pin behavior are the safety net that makes simplification safe.
+- **`sp:test-driven-development`** — the tests that pin behavior are the safety net that makes simplification safe.

@@ -29,7 +29,7 @@ spine (`sp:spur-dev`) dispatches to at its `test` step (via `/sp:dev-unit`). It 
 Do **not** use this skill for:
 
 - **Writing the implementation** — that is `sp:code-implementation`.
-- **Test-first design (red-green-refactor)** — that is `sp:spur-tdd` (composed with this skill).
+- **Test-first design (red-green-refactor)** — that is `sp:test-driven-development` (composed with this skill).
 - **Functional / requirements verification + review** — that is `sp:code-verification`.
 - **Driving the lifecycle** — that is the spine, `sp:spur-dev`.
 
@@ -51,7 +51,7 @@ re-running it. Keep command output bounded without hiding the exit status by fol
 
 ## Composition with the discipline + implementation skills
 
-- **`sp:spur-tdd`** — they compose: TDD *designs* the tests (red-green-refactor, behavior naming,
+- **`sp:test-driven-development`** — they compose: TDD *designs* the tests (red-green-refactor, behavior naming,
   mock-at-boundary); this skill *runs and extends* the suite for coverage. TDD is the how-to-design;
   this skill is the run/measure/gap-fill.
 - **`sp:code-implementation`** — the implement step writes code; this step proves it. The per-stack
@@ -77,7 +77,7 @@ re-running it. Keep command output bounded without hiding the exit status by fol
 
 - **`sp:spur-dev`** — the spine that dispatches this competency at the `test` step.
 - **`sp:code-implementation`** — writes the code this skill tests; consults these stack adapters.
-- **`sp:spur-tdd`** — the test-first discipline this skill composes with.
+- **`sp:test-driven-development`** — the test-first discipline this skill composes with.
 - **`sp:code-verification`** — functional/requirements verification + review (a distinct gate).
 - **[Verification Before Completion](../spur-dev/references/cross-cutting.md#verification-before-completion)** — no "coverage met / tests pass" claim without fresh, pasted evidence run this turn.
 

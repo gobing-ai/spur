@@ -3,7 +3,7 @@ name: unit-testing
 description: "SSOT for the `unit` operation procedure (language-agnostic spine) — file-focused and task-scoped test workflows, gap categorization, coverage-vs-quality rules, escalation. Backs `/sp:dev-unit` and dev-operations.md §1. Per-stack commands, coverage parsing, and gotchas live in stacks/<stack>.md adapters."
 see_also:
   - code-testing
-  - spur-tdd
+  - test-driven-development
   - dev-operations
 parameters:
   coverage:
@@ -21,7 +21,7 @@ write tests — and yields; it does not implement, review, or verify.
 
 This file is the **coverage half** of the testing surface: how to *fill gaps* on code that already
 exists. For the **design half** — how to write a good test test-first (red-green-refactor, AAA,
-naming, mock-at-boundary) — use the **`sp:spur-tdd`** skill. They compose: TDD designs the tests,
+naming, mock-at-boundary) — use the **`sp:test-driven-development`** skill. They compose: TDD designs the tests,
 the unit op proves the coverage.
 
 **This file is the language-agnostic spine.** It owns the *thinking* — workflows, gap analysis,
@@ -40,7 +40,7 @@ Detect the project stack from its manifest, then load the matching adapter for a
 specifics:
 
 | Manifest signal | Stack | Adapter |
-|-----------------|-------|---------|
+| ----------------- | ------- | --------- |
 | `bun.lock` / `bunfig.toml` | Bun + TypeScript | [stacks/bun-ts.md](stacks/bun-ts.md) |
 | `package.json` with `vitest` / `jest`, no bun lock | Node + TypeScript/JS | [stacks/bun-ts.md](stacks/bun-ts.md) (Node section) |
 | `pyproject.toml` / `pytest` | Python | [stacks/python.md](stacks/python.md) |
@@ -94,7 +94,7 @@ the CLI.
 closure belongs to the pipeline's verify gate.
 
 | Workflow moment | Required status action |
-|-----------------|------------------------|
+| ----------------- | ------------------------ |
 | Start task-scoped testing | Ensure `Solution` + `Plan` exist, backfill `Design` if needed, then `spur task update <wbs> testing` |
 | Testing reveals implementation work remains | `spur task update <wbs> wip` |
 | Testing pass succeeds | Keep current status — do **not** mark `done` |
@@ -128,7 +128,7 @@ Read the coverage report (via the adapter) and categorize each gap before writin
 order top to bottom:
 
 | Category | Example | Strategy | Priority |
-|----------|---------|----------|----------|
+| ---------- | --------- | ---------- | ---------- |
 | Error paths | a thrown/raised error in a guard or catch block | Add error-condition tests | High |
 | Complex logic | nested conditionals, branch matrices | Add parameterized/table-driven tests covering each branch | High |
 | Edge cases | boundary conditions (0, -1, empty, max) | Add boundary-value tests | Medium |
@@ -201,7 +201,7 @@ Advanced testing remains a technique layer, not a new command surface. Use these
 green but confidence is still weak:
 
 | Technique | Use When | Typical Tooling |
-|-----------|----------|-----------------|
+| ----------- | ---------- | ----------------- |
 | Mutation testing | Critical business/security logic needs proof that tests catch real defects. | Stryker, mutmut, PIT, infection |
 | Property-based testing | Algorithms, parsers, serializers, or data transforms have invariants across many inputs. | fast-check, Hypothesis, proptest |
 | Accessibility testing | UI behavior must meet WCAG expectations beyond visual checks. | axe, Pa11y, Playwright accessibility assertions |

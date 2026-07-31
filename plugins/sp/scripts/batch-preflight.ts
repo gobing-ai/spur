@@ -1,5 +1,5 @@
 /**
- * batch-preflight — pure TABLE A STOP evaluation for sp:super-coder (task 0279).
+ * batch-preflight — pure TABLE A STOP evaluation for sp:super-planner (task 0279).
  *
  * Mirrors routing-table.md TABLE A hard-STOP preconditions so the batch driver can
  * skip doomed pipeline launches without spawning a Skill subprocess. Happy-path

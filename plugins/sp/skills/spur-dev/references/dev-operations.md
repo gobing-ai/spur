@@ -22,7 +22,7 @@ The `Skill()` commands back onto six skills: `sp:spur-dev` (planning + execution
 `sp:code-implementation` (single implement step), `sp:code-testing` (unit/coverage work),
 `sp:code-verification` (SECUA review + traceability), `sp:parallel-execution` (fan-out / parallel batch),
 and `sp:brainstorm` (structured ideation). The `runall` operation (#13) is `sp:spur-dev`'s batch entry — it delegates the driver loop to the
-`sp:super-coder` agent (the batch orchestrator) per [execution-batch.md](execution-batch.md).
+`sp:super-planner` agent (the batch orchestrator) per [execution-batch.md](execution-batch.md).
 `dev-parallel` (#13a) is the parallel counterpart. `dev-brainstorm` carries the two artifact exits — `--task` (one task) and `--feature` (validated
 feature with BDD AC; the front-half entry that hands off to `dev-plan`). The 4 `inline` commands
 cover git tooling and operational utilities that have no natural skill home — creating a skill for
@@ -43,34 +43,34 @@ each would be scope creep for one-liner procedures.
 > above (refine/run/verify/unit/wrap/…) via TABLE A/B/C; it never implements an operation itself.
 > See `plugins/sp/skills/next-router/references/routing-table.md` for the routing SSOT.
 >
-> **Batch consumer (task 0279):** `sp:super-coder` / `/sp:dev-runall` **consumes** TABLE A STOP rows
+> **Batch consumer (task 0279):** `sp:super-planner` / `/sp:dev-runall` **consumes** TABLE A STOP rows
 > for preflight + one-shot recovery (`plugins/sp/scripts/batch-preflight.ts`) but keeps
 > `task-pipeline.yaml` as the happy path. Do **not** deep-merge batch orchestration into a loop of
 > `/sp:dev-next`. Single-task "what's next?" stays `/sp:dev-next`; multi-task execution stays
-> `/sp:dev-runall` → super-coder.
+> `/sp:dev-runall` → super-planner.
 
 ## Operation map
 
 | # | Operation | Command | Backing | Skill / Verb | Arg-hint |
-|---|-----------|---------|---------|--------------|----------|
+| --- | ----------- | --------- | --------- | -------------- | ---------- |
 | 1 | unit | `dev-unit` | `Skill()` | `sp:code-testing` | `<target> [--coverage <pct>] [--agent <name\|auto>] [--auto]` |
-| 2 | review | `dev-review` | `Skill()` | `sp:code-verification` (`review`) + `sp:functional-review` + `sp:code-improvement` | `<wbs> [--agent <name\|auto>] [--focus <lens>] [--fix <none\|blockers-first\|all>] [--auto]` |
-| 3 | verify | `dev-verify` | `Skill()` | `sp:code-verification` (`verify`) | `<wbs> [--agent <name\|auto>] [--fix ...] [--focus <lens>] [--bdd] [--auto] [--force] [--skip-shippable]` |
-| 3a | verifyall | `dev-verifyall` | `Skill()` → agent | `sp:spur-dev` (`verifyall`) | `--tasks <selector> [--feature <id>] [--agent <name\|auto>] [--fix ...] [--focus <lens>] [--bdd] [--auto] [--force] [--json] [--skip-shippable]` |
-| 4 | run | `dev-run` | `Skill()` | `sp:spur-dev` (`run` / `implement`) | `<wbs> [--mode <full\|implement>] [--agent <name\|auto>] [--auto]` |
+| 2 | review | `dev-review` | `Skill()` | `sp:code-verification` (`review`) + `sp:functional-review` + `sp:code-improvement` | `[<wbs\|path>] [--agent <name\|auto>] [--focus <dims>] [--fix (deprecated)] [--next (deprecated)]` |
+| 3 | verify | `dev-verify` | `Skill()` | `sp:code-verification` (`verify`) | `<wbs> [--agent <name\|auto>] [--fix <none\|blockers-first\|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--skip-shippable]` |
+| 3a | verifyall | `dev-verifyall` | `Skill()` → agent | `sp:spur-dev` (`verifyall`) | `--tasks <selector> [--feature <id>] [--agent <name\|auto>] [--fix <none\|blockers-first\|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable]` |
+| 4 | run | `dev-run` | `Skill()` | `sp:spur-dev` (`run` / `implement`) | `<wbs> [--mode <full\|implement>] [--agent <name\|auto>] [--auto] [--next] [--wrap] [--continue]` |
 | 5 | refine | `dev-refine` | `Skill()` | `sp:spur-dev` (`refine`) | `<wbs> [--focus <mode>] [--description <text>] [--agent <name\|auto>] [--auto] [--next]` |
 | 5a | refineall | `dev-refineall` | `Skill()` | `sp:spur-dev` (`refineall`) | `--feature <id> \| --tasks <selector> [--focus <mode>] [--description <text>] [--agent <name\|auto>] [--auto] [--keep-going] [--status <s>] [--json] [--next]` |
 | 6 | plan | `dev-plan` | `Skill()` | `sp:spur-dev` (`plan`) | `"<description>" [--feature <id>] [--parent <feature-id>] [--agent <name\|auto>] [--skip-design] [--auto] [--approve-taste]` |
 | 7 | docs | *(no thin wrapper)* | `Skill()` | `sp:doc-evolve` | `"<change description>"` |
 | 8 | changelog | `dev-changelog` | `inline` | git log + conventional-commit grouping | `[--since <ref>] [--until <ref>] [--version <ver>]` |
 | 9 | gitmsg | `dev-gitmsg` | `inline` | per-file diff summary → group → conventional commit | `[--commit] [--squash] [--scope <path>]` |
-| 10 | fixall | `dev-fixall` | `inline` | lint + test fix loop | `[--scope <path>]` |
+| 10 | fixall | `dev-fixall` | `inline` | lint + test fix loop | `[<validation-command>] [--max-retry <n>] [--scope <path>]` |
 | 11 | handover | `dev-handover` | `inline` | structured doc generation | `"<blocker description>"` |
-| 12 | brainstorm | `dev-brainstorm` | `Skill()` | `sp:brainstorm` (`dev-brainstorm`) | `"<topic>" [--depth <basic\|detailed\|comprehensive>] [--options <n>] [--agent <name\|auto>] [--skip-discovery] [--task [<feature-id>]] [--feature [<parent-id>]] [--next]` |
-| 13 | runall | `dev-runall` | `Skill()` → agent | `sp:spur-dev` (`runall`) → `sp:super-coder` | `--tasks <selector> [--feature <id>] [--keep-going] [--auto] [--agent <name\|auto>] [--json] [--wrap] [--continue]` |
+| 12 | brainstorm | `dev-brainstorm` | `Skill()` | `sp:brainstorm` (`dev-brainstorm`) | `<topic> [--depth <basic\|detailed\|comprehensive>] [--options <n>] [--agent <name\|auto>] [--skip-discovery] [--wayfind] [--task [<feature-id>]] [--feature [<parent-id>]] [--next]` |
+| 13 | runall | `dev-runall` | `Skill()` → agent | `sp:spur-dev` (`runall`) → `sp:super-planner` | `--tasks <selector> [--feature <id>] [--mode <sequential\|parallel>] [--keep-going] [--auto] [--agent <name\|auto>] [--json] [--wrap] [--continue]` |
 | 13a | parallel | `dev-parallel` | `Skill()` | `sp:parallel-execution` | `--tasks <selector> [--feature <id>] [--mode <fan-out\|review-panel\|investigation>] [--agent <name\|auto>] [--json]` |
-| 14 | wrap | `dev-wrap` | `Skill()` | `spur workflow run` (wrapup-pipeline) | `<wbs> [--auto] [--merge]` |
-| 15 | wrapall | `dev-wrapall` | `Skill()` | `spur workflow run` (wrapup-pipeline) | `[--since <iso>] [--feature <id>] [--status <s>] [--auto] [--merge]` |
+| 14 | wrap | `dev-wrap` | `Skill()` | `spur workflow run` (wrapup-pipeline) | `<wbs> [--auto] [--merge] [--dry-run]` |
+| 15 | wrapall | `dev-wrapall` | `Skill()` | `spur workflow run` (wrapup-pipeline) | `[--since <iso>] [--feature <id>] [--status <s>] [--auto] [--merge] [--dry-run]` |
 | 16 | idea | `dev-idea` | `Skill()` | `spur workflow run` (idea-pipeline) | `"<idea>" [--auto] [--skip-design] [--approve-taste]` |
 
 ---
@@ -112,7 +112,7 @@ must not be changed without updating the backing skill.
 ### 3a. verifyall
 
 - **Purpose:** Batch verification of a set of tasks (or all tasks under a feature) against their requirements and AC. Produces per-task verdicts + a summary report with aggregate statistics (counts, table, overall batch verdict). With `--fix all`, also evaluates **feature shippable readiness** once for the set.
-- **Inputs:** `--tasks <selector>` (required unless `--feature`). `--feature <id>` (convenience for `--tasks feature:<id>`). Shared verify flags from `dev-verify` (`--agent`, `--fix`, `--focus`, `--bdd`, `--auto`, `--force`, **`--skip-shippable`**). `--json` for machine-readable summary report.
+- **Inputs:** `--tasks <selector>` (required unless `--feature`). `--feature <id>` (convenience for `--tasks feature:<id>`). Shared verify flags from `dev-verify` (`--agent`, `--fix`, `--focus`, `--bdd`, `--auto`, `--force`, **`--skip-shippable`**). `--next` (per-task lifecycle chaining: on a PASS verdict transition `testing → done` through the FSM with `--strict-core` honored; PARTIAL/FAIL does not transition; transitions run **before** the shippable gate so `spur feature check` sees final statuses). `--json` for machine-readable summary report.
 - **Backing:** `sp:spur-dev` skill, `verifyall` operation (resolves the set using the shared selector grammar, dispatches per-task verify via `sp:code-verification` verify mode, writes per-task artifacts, aggregates and emits the batch summary report, then optional shippable gate).
 - **Behavior:** Resolve + freeze the set (supports `--feature` sugar). For each task: apply status guard, requirements traceability + AC + SECUA review, write `## Testing` + verdict.json (per-task fix pass under `--fix`). After the batch: **shippable gate once** when active (see below). Emit a structured summary report (markdown or `--json`). Per-task behavior matches single `dev-verify` (except shippable is batch-once). **Batch verdict rollup is deterministic** — computed by `spur task verifyall-aggregate --from-file <batch-input.json> --json` (a tested service module, not agent discretion). **Per-task outcome grammar:** `PASS` / `PARTIAL` / `FAIL` for implemented tasks; `NOT-STARTED` for tasks that have not entered implementation (status `backlog`/`todo`/`blocked` — reachable only via `--force`). **Rollup rule:** all-NOT-STARTED → `UNKNOWN`; any `FAIL` → `FAIL`; any `PARTIAL` or `UNKNOWN` → `PARTIAL`; all `PASS` → `PASS`. NOT-STARTED rows are *excluded* from the FAIL/PARTIAL rollup (they cannot manufacture a batch failure) but are *reported explicitly* in the summary ("N NOT-STARTED, excluded from rollup"). This closes the 0341 dogfood gap where a healthy feature with 5 PASS + 2 unstarted tasks read as FAIL. **Shippable FAIL:** treat the batch as not clean — force rollup to at least **PARTIAL** and set `"shippable": false` under `--json` even if every task outcome is PASS.
 - **Shippable readiness (default on with `--fix all`):** Active when `--fix all` and feature context exists (`--feature` or unique shared `feature_id`) and not `--skip-shippable`. Procedure: `sp:code-verification` Step 13 once after all per-task legs. Without `--fix all`, do not run the hard gate (optional note: use `--fix all` for ship evaluation).
@@ -142,17 +142,21 @@ must not be changed without updating the backing skill.
   **Solution is not a refine target** (as-built change-map owned by implement). If there are no L3
   findings for any of those sections (regardless of whether the *overall* exit code is 0 — other
   sections may have findings), emit a structured SKIP result instead of synthesizing:
+
   ```
   SKIP — sections already meet L3: sections-considered=[Background, Requirements, Acceptance Criteria, Design, Plan], reason="no L3 findings for target sections" (N L4 advisory: <labels>)
   ```
+
   The `(N L4 advisory: <labels>)` suffix is emitted whenever `spur task check` returned ≥1 L4
   finding — list each L4 finding's one-line label, comma-separated. Omit the suffix when there
   are zero L4 findings. L4 advisories do not block the SKIP; the suffix is informational only.
   Under `--json`/machine consumption, emit the same decision as a structured object so a downstream
   (observe-only) driver need not re-run `spur task check` to reconstruct it:
+
   ```json
   {"result": "SKIP", "sections-considered": ["Background", "Requirements", "Acceptance Criteria", "Design", "Plan"], "reason": "no L3 findings for target sections", "l4Advisories": [{"message": "Missing feature_id — ..."}]}
   ```
+
   Synthesis is only invoked when a real L3 gap exists in a target section. The SKIP result is the normal outcome for a well-specified task under `--auto`; it is not a failure.
   **Scope:** only L3 findings whose `section` ∈ {Background, Requirements, Acceptance Criteria, Design, Plan} count toward the SKIP gate. L3 findings on other sections (e.g. `### Review`, `### Solution`) do not block the SKIP — refine does not own those sections.
   **Variant note:** for templates that omit Design or AC (e.g. `review`, `meta`, `issue`), only apply the target sections that the section-matrix allows at the current status (`spur task check` `requiredSections` / optional list).
@@ -221,10 +225,11 @@ must not be changed without updating the backing skill.
 ### 13. runall
 
 - **Purpose:** Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via `task-pipeline.yaml`, inspect verdicts, apply the failure policy, emit a batch report.
-- **Inputs:** `--tasks <selector>` (required — explicit WBS list, status pseudo-list, `feature:<id>`, or `ready`). `--keep-going` skips a failed task's in-batch dependents and continues independents (default halts on first failure). `--auto` sets `profile=auto` on each per-task run (skips the HITL approve gate). `--agent <name|auto>` is a **pipeline** override merged into each per-task `vars.agent` — pins the step executor, not the orchestrator; omit (default) → spawned steps use the configured default executor (`omp`); current-agent is **not expressible** (subprocess FSM). `--json` emits the report as JSON. `--wrap` triggers `wrapup-pipeline.yaml` after the batch completes.
-- **Backing:** `sp:spur-dev` skill, `runall` operation → delegates the driver loop to the **`sp:super-coder`** agent (the batch orchestrator).
+- **Inputs:** `--tasks <selector>` (required — explicit WBS list, status pseudo-list, `feature:<id>`, or `ready`). `--mode <sequential|parallel>` (default `sequential`; `parallel` fans out a proven-independent subset per `execution-batch.md` § Parallel Execution). `--keep-going` skips a failed task's in-batch dependents and continues independents (default halts on first failure). `--auto` sets `profile=auto` on each per-task run (skips the HITL approve gate). `--agent <name|auto>` is a **pipeline** override merged into each per-task `vars.agent` — pins the step executor, not the orchestrator; omit (default) → spawned steps use the configured default executor (`omp`); current-agent is **not expressible** (subprocess FSM). `--json` emits the report as JSON. `--wrap` triggers `wrapup-pipeline.yaml` after the batch completes. `--continue` resumes an interrupted batch from the latest checkpoint in `.spur/memory/sessions/`. **No `--next`** — runall drives the complete pipeline per task, so every step `--next` could chain to is already inside it; the asymmetry with `dev-run` is deliberate (see R4 rationale below).
+- **Three orthogonal axes (do not confuse):** `--keep-going` = batch failure policy (halt vs skip dependents); `--continue` = resume from checkpoint (pick up an interrupted batch); `--next` = per-task lifecycle chaining (advance status on a verdict — `dev-verify`/`dev-verifyall` only). `routing-table.md` offers `--continue` and `--next` as competing options for the same situation only when the batch was interrupted mid-run; otherwise they address different problems.
+- **Backing:** `sp:spur-dev` skill, `runall` operation → delegates the driver loop to the **`sp:super-planner`** agent (the batch orchestrator).
 - **Behavior:** The orchestrator reads [execution-batch.md](execution-batch.md) and drives: resolve selector → freeze set → topo-sort by `dependencies[]` (Kahn, WBS-ascending tie-break; cycle aborts) → resolve out-of-set deps by status (done → allow, else → block subtree) → run each task via `spur workflow run task-pipeline.yaml --async` + `spur workflow trace` polling → inspect terminal state + `.spur/run/<wbs>-verdict.json` → stop-the-batch default or `--keep-going` subtree skip → emit batch report. Per-task pipeline is invoked **verbatim** — no new FSM, no step edits. `--auto`/`--agent` are the only flags that cross the orchestrator→pipeline boundary (both into per-task `--vars`).
-- **Delegation:** `Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")` → `sp:super-coder` agent.
+- **Delegation:** `Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")` → `sp:super-planner` agent.
 
 ### 14. wrap
 
@@ -239,6 +244,7 @@ must not be changed without updating the backing skill.
     '{tasks:$tasks, profile:$profile, merge:$merge}')
   spur workflow run .spur/workflows/wrapup-pipeline.yaml --vars "$VARS"
   ```
+
 - **Delegation:** Direct `spur workflow run .spur/workflows/wrapup-pipeline.yaml` (no `Skill()` call — the command builds the vars JSON and invokes the workflow directly via `Bash`).
 
 ### 15. wrapall
@@ -254,6 +260,7 @@ must not be changed without updating the backing skill.
     '{tasks:$tasks, feature:$feature, profile:$profile, merge:$merge}')
   spur workflow run .spur/workflows/wrapup-pipeline.yaml --vars "$VARS"
   ```
+
 - **Delegation:** Direct `spur workflow run .spur/workflows/wrapup-pipeline.yaml` (no `Skill()` call — the command resolves tasks and invokes the workflow directly via `Bash`).
 
 ### 16. idea
@@ -271,7 +278,7 @@ must not be changed without updating the backing skill.
 - **Design package (`--skip-design` only):**
 
   | Flags | Feature satellite (`system-design`) | Task `### Design` in batch |
-  |---|---|---|
+  | --- | --- | --- |
   | (default) | seam / `needs_design` signal | **author `design` on each batch item** |
   | `--skip-design` | skip (keep brainstorm summary) | **omit `design`** — refine fallback later |
 
@@ -315,11 +322,13 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
      - Type from the dominant change — `feat` (new functionality) · `fix` (bug fix) · `refactor` (restructuring, no behavior change) · `docs` (documentation only) · `chore` (build/config/tooling) · `perf` · `test` · `style`.
      - Scope from the affected module/package (`cli`, `domain`, `server`, `web`, `app`, …); `--scope` overrides.
      - Message:
+
        ```
        <type>(<scope>): <summary>
 
        <body — optional bullets from the group's per-file sentences>
        ```
+
        Summary: imperative mood, ≤72 chars, lowercase first word, no period. Body: only when the change is non-obvious.
   5. **Resolve groups:** one group → emit its message; multiple groups (default) → emit one message per group **plus a split recommendation** (stage per concern, re-run); `--squash` → collapse to one combined message (dominant type/scope, per-file bullets).
   6. Print the resolved message + a copy-paste `git commit -m` line. With `--commit`: execute it for a single group or under `--squash`; on a multi-group staging without `--squash`, **do not commit** — print the split guidance instead (one `git commit` can't honor per-group messages).
@@ -380,7 +389,7 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
 - **Fix Priority:**
 
   | Priority | Type | Rationale |
-  |----------|------|-----------|
+  | ---------- | ------ | ----------- |
   | 1 | Build/compile | Blocks everything downstream |
   | 2 | Import/module | May cause cascading type failures |
   | 3 | Type errors | Often reveals logic bugs |
@@ -391,11 +400,12 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
 - **Error Patterns — TypeScript:**
 
   | Issue | Root Cause Approach |
-  |-------|---------------------|
+  | ------- | --------------------- |
   | `any` type | Trace where untyped data enters; add types at source |
   | Unused variable | Check if removal breaks anything |
   | Missing return type | Read function to understand actual return |
   | Type mismatch | Compare expected vs. actual; find divergence |
+
 - **Bun/V8 Coverage Quirk.** Bun uses V8's function coverage which does NOT count implicit class constructors:
 
   ```typescript
@@ -417,6 +427,7 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
      - **Rejected approaches:** what was tried and why it didn't work (from the conversation + any prior handover).
      - **Next steps:** concrete actions the next agent should take.
   3. Format as a markdown document:
+
      ```markdown
      # Handover — <task WBS / title>
 
@@ -438,6 +449,7 @@ is the procedure. The backing is a combination of git CLI, `spur` CLI, and agent
      ## Next Steps
      1. <concrete action>
      ```
+
   4. Write the document & associate task:
      - Always write the standalone handover document to `docs/handover/<YYYY-MM-DD>-<slug>.md` (create `docs/handover/` if absent). This document is the durable SSOT.
      - If a task context exists, append a pointer link (`- Handover: [docs/handover/<YYYY-MM-DD>-<slug>.md](docs/handover/<YYYY-MM-DD>-<slug>.md) — <blocker summary>`) into the task's `## References` section (or non-destructively append to `## Notes` if `References` is unavailable), preserving any pre-existing content without replacing or clobbering it.

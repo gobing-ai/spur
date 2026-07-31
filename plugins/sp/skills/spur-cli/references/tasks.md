@@ -22,9 +22,9 @@ does what*, this skill.
 
 | Verb | Purpose | Key flags |
 | ---- | ------- | --------- |
-| `create <title>` | Allocate a new task (race-safe WBS) | `--feature <id>` `--parent <wbs>` `--template <variant>` `--folder` `--json` |
+| `create <title>` | Allocate a new task (race-safe WBS) | `--feature <id>` `--parent <wbs>` `--template <variant>` `--dedupe-within <s>` `--allow-duplicate-name` `--folder` `--json` |
 | `show <wbs>` | Print one task's frontmatter + body | `--folder` `--json` |
-| `update <wbs> [status]` | Lifecycle transition, section replace, **or** frontmatter set | `--section <name> --from-file <path>` `--feature <id>` `--priority <p>` `--no-lifecycle` `--folder` `--json` |
+| `update <wbs> [status]` | Lifecycle transition, section replace, **or** frontmatter set | `--section <name> --from-file <path>` `--feature <id>` `--priority <p>` `--no-lifecycle` `--force-done` `--reason <text>` `--verdict-dir <path>` `--folder` `--json` |
 | `deps <wbs> <op> [values...]` | Mutate `dependencies[]` frontmatter array (ops: `set`, `add`, `remove`, `clear`) | `--folder` `--json` |
 | `sections <wbs> <op> [name]` | Initialize, add, or list canonical task sections (ops: `init`, `add`, `list`) | `--folder` `--json` |
 | `list` | List tasks, filtered | `--status <s>` `--phase <p>` `--parent <wbs>` `--feature <id>` `--folder` `--json` |
@@ -38,6 +38,8 @@ does what*, this skill.
 | `resolve <file-path>` | Map a file path to its owning task WBS | `--strict` `--folder` `--json` |
 | `path <wbs>` | Map a WBS to its absolute task file path (inverse of `resolve`) | `--folder` `--json` |
 | `run-link <wbs>` | Record pipeline run provenance link for task | `--source <src>` `--run-id <id>` `--json` |
+| `verifyall-aggregate` | Aggregate per-task verify outcomes into a batch verdict (NOT-STARTED excluded) | `--from-file <path>` `--json` |
+| `scaffold-tests <wbs>` | Generate BDD test stubs from task Acceptance Criteria | `--file <path>` `--folder` `--json` |
 
 All verbs accept `--json` for machine consumption and `--folder <path>` to target a non-default
 tasks folder. **Exit codes:** `0` success, `1` error, `2` invalid usage.
@@ -59,6 +61,15 @@ The same `--template` axis drives both *which sections the new file carries* (pe
 Section-Status-Matrix) and *its creation status*: a spec'd task (a `--feature` link, or a batch item
 with `background`/`requirements`) is created at **`todo`**; a bare capture is created at **`backlog`**.
 See [tasks/verbs.md](tasks/verbs.md) for the variant detail.
+- **`--dedupe-within <seconds>`** refuses creation if an existing task under the same feature has an
+  identical title created within the last N seconds - a guard against duplicate `batch-create` rows
+  (0341 R4). **`--allow-duplicate-name`** overrides the guard and creates anyway; when set, the dedupe
+  check is skipped entirely even if `--dedupe-within` was also supplied.
+
+```bash
+spur task create "Add email validation" --feature H2 --dedupe-within 300
+spur task create "Add email validation" --feature H2 --dedupe-within 300 --allow-duplicate-name
+```
 
 Many tasks at once (the decomposition output) go through `batch-create` with a JSON **array** file.
 After child creation succeeds, the CLI refreshes each referenced parent roster and advances a parent
@@ -84,6 +95,19 @@ gate blocks the transition (§7.5).
 
 **`--no-lifecycle`** suppresses lifecycle workflow run creation (use during pipeline-driven
 transitions so nested lifecycle runs are not orphaned).
+**Forced-done override** (`--force-done`, paired with `--reason`):
+
+```bash
+spur task update 0040 done --force-done --reason "verify PASS deferred; manual review confirmed"
+spur task update 0040 done --force-done --reason "verify PASS deferred" --verdict-dir .spur/run/ci
+```
+
+- **`--force-done`** allows a `testing->done` transition even when the verify verdict is not PASS
+  (0292); it records an override rather than silently bypassing the gate.
+- **`--reason <text>`** is the rationale for the override, persisted as `done_reason` in frontmatter.
+- **`--verdict-dir <path>`** sets the directory the lifecycle guard reads `<wbs>-verdict.json`
+  artifacts from (default `.spur/run`) - useful when a pipeline writes verdicts to a non-default
+  location.
 
 **Section replace** (file-wins, crash-safe):
 
@@ -131,6 +155,42 @@ spur task record 0040 --verdict-file .spur/run/0040-verdict.json --solution-from
 
 The verdict shape (`wbs`, `verdict`, `requirements[]`, `checks[]`) and the rendered tables are
 documented in [tasks/verbs.md](tasks/verbs.md).
+
+## Batch verdict aggregation - `verifyall-aggregate`
+
+`spur task verifyall-aggregate` replaces agent-discretion rollup prose with deterministic code: it
+reads a JSON array of per-task outcomes and emits a single batch verdict, excluding NOT-STARTED
+tasks from the rollup.
+
+```bash
+spur task verifyall-aggregate --from-file .spur/run/verifyall-batch-input.json --json
+```
+
+- **`--from-file <path>`** points at a JSON array of `{ wbs, outcome, reason? }` rows (default
+  `.spur/run/verifyall-batch-input.json`). `outcome` is one of
+  `PASS · PARTIAL · FAIL · NOT-STARTED · UNKNOWN`.
+- The aggregation rolls up every task **except** NOT-STARTED (those are reported separately in
+  `notStarted[]`). The batch verdict is `FAIL` if any rolled-up task is FAIL; `PARTIAL` if any is
+  PARTIAL; else `PASS`.
+- **`--json`** emits `{ verdict, rolledUp[], notStarted[], summary }` where each entry is
+  `{ wbs, outcome, verdict?, reason? }`.
+- **Exit codes:** `0` on PASS/PARTIAL, `1` on FAIL (and on missing/invalid input), `2` invalid usage.
+
+## Test scaffolding - `scaffold-tests`
+
+`spur task scaffold-tests <wbs>` generates BDD test stubs from a task's `## Acceptance Criteria` -
+one stub per scenario - so a spec'd task lands with a runnable test file from the start.
+
+```bash
+spur task scaffold-tests 0040 --json
+spur task scaffold-tests 0040 --file tests/0040.test.ts
+```
+
+- **`--file <path>`** overrides the default target test file path.
+- **`--json`** emits `{ wbs, targetFile, created, skipped, drifted, driftedScenarios[], warnings[] }`.
+  `drifted`/`driftedScenarios[]` flag scenarios whose AC titles no longer match the existing test
+  names; `warnings[]` carries non-fatal notices.
+- **Exit codes:** `0` success, `1` error (e.g. task WBS not found), `2` invalid usage.
 
 ## The readiness matrix — `check --json`
 

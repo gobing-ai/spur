@@ -31,7 +31,7 @@ to the corpus still goes through `spur task update` (the CLI-gated write contrac
 Do **not** use this skill for:
 
 - **Coverage / gap analysis / test extension** — that is `sp:code-testing`.
-- **Test-first discipline (red-green-refactor)** — that is `sp:spur-tdd` (composed with this skill).
+- **Test-first discipline (red-green-refactor)** — that is `sp:test-driven-development` (composed with this skill).
 - **System design / architecture decisions** — that is `sp:sys-architecture` (decide the shape first).
 - **Review / verification** — that is `sp:code-verification`.
 - **Driving the lifecycle** — that is the spine, `sp:spur-dev`.
@@ -48,7 +48,7 @@ preconditions, task-driven scope, pattern selection, progress persistence, hando
 
 ## Composition with the discipline + test skills
 
-- **`sp:spur-tdd`** — when the work is test-first, this skill composes with the TDD discipline:
+- **`sp:test-driven-development`** — when the work is test-first, this skill composes with the TDD discipline:
   TDD designs the failing test, this skill writes the minimal code to pass it.
 - **`sp:code-testing`** — after implementation, coverage/gap work runs there. The per-stack adapters
   (`stacks/<stack>.md`) that name build/test commands and idioms live in `code-testing` (operationally
@@ -94,7 +94,7 @@ reproduce → isolate → minimal fix → regression guard.
 
 - **`sp:spur-dev`** — the spine that dispatches this competency at the `implement` step.
 - **`sp:code-testing`** — coverage and test extension; owns the per-stack adapters.
-- **`sp:spur-tdd`** — the test-first discipline this skill composes with.
+- **`sp:test-driven-development`** — the test-first discipline this skill composes with.
 - **`sp:sys-architecture`** — decide the design/shape before implementing it.
 - **[Verification Before Completion](../spur-dev/references/cross-cutting.md#verification-before-completion)** — no "done / passing / fixed" claim without fresh, pasted evidence run this turn.
 

@@ -17,4 +17,3 @@ Wraps the **wrapup-pipeline.yaml** workflow.
 ```bash
 spur workflow run .spur/workflows/wrapup-pipeline.yaml --vars '{"tasks":"[\"<wbs>\"]","profile":"interactive|auto","merge":"true|false"}' [--dry-run]
 ```
-

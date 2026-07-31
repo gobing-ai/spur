@@ -21,18 +21,18 @@ everything here assumes a task runs through `.spur/workflows/task-pipeline.yaml`
 **Zero engine code, zero schema changes (ADR-022).** The batch is orchestration over existing seams —
 the status vocabulary (`packages/domain/src/planning/schema.ts`), the `dependencies[]` frontmatter
 field, and the per-task `spur workflow run`. Per ADR-022 ("orchestration is configuration / loops in
-the skill"), the batch driver is **a loop driven by `sp:super-coder` reading this reference**, not a
+the skill"), the batch driver is **a loop driven by `sp:super-planner` reading this reference**, not a
 new meta-workflow FSM. HITL surfacing, per-task verdict inspection, and continue/halt decisions need
 agent judgment between runs that a flat FSM cannot express.
 
 ```
-/sp:dev-runall  →  sp:super-coder (BATCH ORCHESTRATOR)  →  spur workflow run task-pipeline.yaml (task N)
+/sp:dev-runall  →  sp:super-planner (BATCH ORCHESTRATOR)  →  spur workflow run task-pipeline.yaml (task N)
                                                                   │
                                                                   └─ agent.run steps spawn vars.agent (omp/…)
-                                                                     ◄── NOT super-coder's responsibility
+                                                                     ◄── NOT super-planner's responsibility
 ```
 
-`sp:super-coder` owns the spaces **between** task runs: resolve+freeze the set, topo-sort, run each
+`sp:super-planner` owns the spaces **between** task runs: resolve+freeze the set, topo-sort, run each
 task's pipeline in order by default, optionally fan out a proven-independent subset, inspect terminal
 state, decide continue/halt, and emit the batch report. It does **not** decide how an individual
 `agent.run` step (implement/test/review) executes — that stays the pipeline's concern via
@@ -45,7 +45,7 @@ The batch accepts either `--tasks <value>` or the convenience `--feature <id>`.
 **Normalization helper (pseudo-code / comment for implementers):**
 
 ```ts
-// In command layer or batch resolver (before passing to super-coder)
+// In command layer or batch resolver (before passing to super-planner)
 function normalizeArgs(raw: Args): Args {
   const args = { ...raw };
   if (args.feature && !args.tasks) {
@@ -220,7 +220,7 @@ Only two flags cross the orchestrator→pipeline boundary; both are merged into 
 | `--auto` | sets `"profile":"auto"` (skips the HITL approve gate). Omitting it forwards nothing, so the pipeline uses its default profile (standard — HITL pause surfaces to the operator). (R4.2) |
 | `--agent <value>` | sets `"agent":"<value>"` so `agent.run` steps spawn that agent. `--agent auto` resolves the current runtime to its canonical name before merging. Omitting it forwards nothing, so spawned steps resolve to the configured default executor (`omp`). (R4.3) |
 
-`sp:super-coder` remains the batch orchestrator regardless of `--agent` — the flag pins the
+`sp:super-planner` remains the batch orchestrator regardless of `--agent` — the flag pins the
 per-task step executor, not the orchestrator.
 
 ### 3.3 Terminal-state inspection
@@ -307,7 +307,7 @@ The batch verdict: `clean` (all attempted tasks `done`) | `halted` (a failure st
 
 - **Interactive within-step Q&A** — a headless subprocess `agent.run` agent asking the operator a
   real question. This waits for the workspace module + inbox module + `spur agent` team mode.
-  `sp:super-coder` surfaces blockers/HITL only at the **batch boundary** (between task runs), not
+  `sp:super-planner` surfaces blockers/HITL only at the **batch boundary** (between task runs), not
   from inside a pipeline step.
 
 ## AC traceability
@@ -340,9 +340,9 @@ When a batch contains tasks with **zero dependency edges between them** and **no
 4. Dispatch via `spur agent run` per task.
 5. Synthesize results per the [result-synthesis contract](../../parallel-execution/references/result-synthesis.md).
 
-**Parallel vs. sequential:** the default is sequential (topo-sort order). Parallel is an opt-in via `--mode parallel` on `sp:super-coder` or `/sp:dev-parallel`. When in doubt, run sequentially — parallel is only beneficial when tasks are provably independent.
+**Parallel vs. sequential:** the default is sequential (topo-sort order). Parallel is an opt-in via `--mode parallel` on `sp:super-planner` or `/sp:dev-parallel`. When in doubt, run sequentially — parallel is only beneficial when tasks are provably independent.
 
-**See also:** `sp:parallel-execution` skill, `sp:super-coder` agent (parallel mode), `/sp:dev-parallel` command.
+**See also:** `sp:parallel-execution` skill, `sp:super-planner` agent (parallel mode), `/sp:dev-parallel` command.
 
 
 ## Subagent execution disciplines
