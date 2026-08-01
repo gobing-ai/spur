@@ -1642,6 +1642,37 @@ describe('FeatureCheckService', () => {
         cleanup();
     });
 
+    // ── 0398 R7: bracket-tagged verdict rows must still match their scenario ──
+    // requiresExecutableEvidence needs the tag IN the id to keep a static-evidence row at MET,
+    // while matching used to compare the tagged id against an untagged scenario title. Both
+    // rules could not be satisfied at once, so a documentation scenario was unverifiable.
+    test.each([
+        ['[doc-only] alpha'],
+        ['[docs-only] alpha'],
+        ['[non-behavior] alpha'],
+        ['[advisory] alpha'],
+        ['[non-core] alpha'],
+        ['[doc-only] Scenario: alpha'],
+        ['Scenario: [doc-only] alpha'],
+    ])('0398 R7: verdict row id "%s" verifies the untagged scenario "alpha"', async (rowId) => {
+        const { result, cleanup } = await setupScenarioSatisfaction({
+            taskStatus: 'done',
+            verdict: { verdict: 'PASS', requirements: [{ id: rowId, status: 'MET' }] },
+        });
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(0);
+        cleanup();
+    });
+
+    test('0398 R7: a tagged row naming a DIFFERENT scenario still does not verify', async () => {
+        // Guard against the fix over-matching: stripping tags must not make everything match.
+        const { result, cleanup } = await setupScenarioSatisfaction({
+            taskStatus: 'done',
+            verdict: { verdict: 'PASS', requirements: [{ id: '[doc-only] beta', status: 'MET' }] },
+        });
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified').length).toBeGreaterThan(0);
+        cleanup();
+    });
+
     test('0340 R2: linked-but-unverified via todo task emits warning', async () => {
         const { result, cleanup } = await setupScenarioSatisfaction({
             taskStatus: 'todo',

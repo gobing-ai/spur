@@ -636,9 +636,20 @@ export function defaultVerdictRunDir(tasksDir: string): string {
     return join(dirname(tasksDir), '.spur', 'run');
 }
 
-/** True when a verdict row id names the same scenario (title, Scenario: prefix, or AC-N). */
+/**
+ * True when a verdict row id names the same scenario (title, `Scenario:` prefix, bracket tag, or
+ * AC-N alias).
+ *
+ * `normalizeTitle` handles the title forms — including bracket tags since 0398 R7. The alias
+ * comparison is a separate, non-normalized path, so it strips the same prefixes itself; otherwise
+ * `[doc-only] AC-3` would fail to match the alias `AC-3` even though the title path is tolerant.
+ */
 function rowMatchesScenario(id: string, sc: { title: string; normalized: string; alias: string }): boolean {
-    const stripped = id.replace(/^Scenario:\s*/i, '').trim();
+    const stripped = id
+        .replace(/^\[[^\]]*\]\s*/, '')
+        .replace(/^Scenario:\s*/i, '')
+        .replace(/^\[[^\]]*\]\s*/, '')
+        .trim();
     return (
         normalizeTitle(id) === sc.normalized ||
         normalizeTitle(stripped) === sc.normalized ||

@@ -269,3 +269,68 @@ describe('aggregateBatchVerdicts', () => {
         expect(result.summary).toBe('0 PASS, 0 PARTIAL, 0 FAIL, 0 NOT-STARTED (excluded)');
     });
 });
+
+describe('AC evidence-type vocabulary (task 0398 R6)', () => {
+    const answer = (evidenceType: string) =>
+        [
+            '| Req | Status | Evidence |',
+            '|-----|--------|----------|',
+            '| R1 | MET | `src/foo.ts:10` |',
+            '',
+            '| AC | Status | Evidence Type | Evidence |',
+            '|----|--------|---------------|----------|',
+            `| [doc-only] The contract is written down | MET | ${evidenceType} | \`docs/00_ADR.md:899\` |`,
+        ].join('\n');
+
+    test.each([
+        'doc',
+        'docs',
+        'documentation',
+        'static',
+        'static-ref',
+    ])('"%s" normalizes to static-ref instead of dropping the row', (evidenceType) => {
+        const result = deriveVerdict(answer(evidenceType), true);
+        expect(result.acceptanceCriteria).toHaveLength(1);
+        expect(result.acceptanceCriteria?.[0]?.evidenceType).toBe('static-ref');
+        expect(result.acceptanceCriteria?.[0]?.status).toBe('MET');
+    });
+
+    test('an unrecognised evidence type is reported, not silently dropped', () => {
+        const result = deriveVerdict(answer('vibes'), true);
+        // The row is still omitted (it cannot be typed), but the omission is now visible.
+        expect(result.acceptanceCriteria).toHaveLength(0);
+        const dropped = result.checks.find((c) => c.name === 'ac-row-dropped');
+        expect(dropped).toBeDefined();
+        expect(dropped?.status).toBe('fail');
+        expect(dropped?.evidence).toContain('The contract is written down');
+        expect(dropped?.evidence).toContain('vibes');
+        // The diagnostic must teach the vocabulary — that is what cost three regeneration cycles.
+        expect(dropped?.evidence).toContain('static-ref');
+    });
+
+    test('an unrecognised status is reported too', () => {
+        const bad = [
+            '| Req | Status | Evidence |',
+            '|-----|--------|----------|',
+            '| R1 | MET | `src/foo.ts:10` |',
+            '',
+            '| AC | Status | Evidence Type | Evidence |',
+            '|----|--------|---------------|----------|',
+            '| Some scenario | PROBABLY | test | `x.test.ts:1` |',
+        ].join('\n');
+        const dropped = deriveVerdict(bad, true).checks.find((c) => c.name === 'ac-row-dropped');
+        expect(dropped?.evidence).toContain('unrecognised status');
+        expect(dropped?.evidence).toContain('PROBABLY');
+    });
+
+    test('a fully parseable table emits no dropped-row check', () => {
+        const result = deriveVerdict(answer('test'), true);
+        expect(result.checks.find((c) => c.name === 'ac-row-dropped')).toBeUndefined();
+    });
+
+    test('untagged static-ref MET is still demoted to PARTIAL (evidence rule intact)', () => {
+        const untagged = answer('doc').replace('[doc-only] The contract', 'The contract');
+        const result = deriveVerdict(untagged, true);
+        expect(result.acceptanceCriteria?.[0]?.status).toBe('PARTIAL');
+    });
+});

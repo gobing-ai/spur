@@ -42,8 +42,9 @@ export interface VerdictAcceptanceCriteria {
  */
 export function deriveVerdict(answerText: AnswerText, taskCheckPassed: boolean): VerdictResult {
     const requirements = extractRequirements(answerText);
-    const acceptanceCriteria = applyAcceptanceCriteriaEvidenceRule(extractAcceptanceCriteria(answerText));
-    const checks = extractChecks(answerText, taskCheckPassed, acceptanceCriteria);
+    const parsedAc = extractAcceptanceCriteria(answerText);
+    const acceptanceCriteria = applyAcceptanceCriteriaEvidenceRule(parsedAc.rows);
+    const checks = extractChecks(answerText, taskCheckPassed, acceptanceCriteria, parsedAc.dropped);
 
     // If we couldn't parse any requirements, the answer is unparseable.
     if (requirements.length === 0) {
@@ -135,8 +136,13 @@ function normalizeStatus(raw: string): 'MET' | 'PARTIAL' | 'UNMET' | null {
     return null;
 }
 
-function extractAcceptanceCriteria(text: string): VerdictAcceptanceCriteria[] {
+/**
+ * Parse the AC table. Returns the accepted rows plus a description of any row that could not be
+ * normalized, so the caller can surface a diagnostic instead of dropping it silently (0398 R6).
+ */
+function extractAcceptanceCriteria(text: string): { rows: VerdictAcceptanceCriteria[]; dropped: string[] } {
     const rows: VerdictAcceptanceCriteria[] = [];
+    const dropped: string[] = [];
     const lines = text.split('\n');
     let inTable = false;
 
@@ -163,16 +169,26 @@ function extractAcceptanceCriteria(text: string): VerdictAcceptanceCriteria[] {
 
         if (inTable && cells.length >= 4) {
             const id = cells[0] ?? '';
-            const status = normalizeAcceptanceCriteriaStatus(cells[1] ?? '');
-            const evidenceType = normalizeEvidenceType(cells[2] ?? '');
+            const statusRaw = cells[1] ?? '';
+            const evidenceTypeRaw = cells[2] ?? '';
+            const status = normalizeAcceptanceCriteriaStatus(statusRaw);
+            const evidenceType = normalizeEvidenceType(evidenceTypeRaw);
             const evidence = cells[3] ?? '';
             if (status !== null && evidenceType !== null && id.length > 0) {
                 rows.push({ id, status, evidenceType, evidence });
+            } else if (id.length > 0) {
+                // Task 0398 R6: never discard a row in silence. A dropped row used to look
+                // identical to "no AC table", which is what cost three regeneration cycles.
+                dropped.push(
+                    evidenceType === null && status !== null
+                        ? `${id} (unrecognised evidence type "${evidenceTypeRaw}")`
+                        : `${id} (unrecognised status "${statusRaw}")`,
+                );
             }
         }
     }
 
-    return rows;
+    return { rows, dropped };
 }
 
 function normalizeAcceptanceCriteriaStatus(raw: string): VerdictAcceptanceCriteria['status'] | null {
@@ -188,7 +204,18 @@ function normalizeEvidenceType(raw: string): VerdictAcceptanceCriteria['evidence
     const normalized = raw.toLowerCase().trim();
     if (normalized === 'test') return 'test';
     if (normalized === 'command') return 'command';
-    if (normalized === 'static-ref' || normalized === 'static') return 'static-ref';
+    // `doc`/`docs`/`documentation` are the natural words an author reaches for on a
+    // documentation scenario; before task 0398 R6 they normalized to null and the row was
+    // dropped with no diagnostic, so the AC table silently came back empty.
+    if (
+        normalized === 'static-ref' ||
+        normalized === 'static' ||
+        normalized === 'doc' ||
+        normalized === 'docs' ||
+        normalized === 'documentation'
+    ) {
+        return 'static-ref';
+    }
     if (normalized === 'manual-review' || normalized === 'manual') return 'manual-review';
     if (normalized === 'llm-judge' || normalized === 'judge') return 'llm-judge';
     if (normalized === 'n/a' || normalized === 'na') return 'n/a';
@@ -224,6 +251,7 @@ function extractChecks(
     _text: string,
     taskCheckPassed: boolean,
     acceptanceCriteria: VerdictAcceptanceCriteria[],
+    droppedAcRows: string[] = [],
 ): VerdictCheck[] {
     const checks: VerdictCheck[] = [
         {
@@ -258,6 +286,18 @@ function extractChecks(
                 });
             }
         }
+    }
+
+    if (droppedAcRows.length > 0) {
+        checks.push({
+            name: 'ac-row-dropped',
+            status: 'fail',
+            evidence:
+                `${droppedAcRows.length} AC row(s) could not be parsed and were omitted from the verdict: ` +
+                `${droppedAcRows.join('; ')}. Accepted evidence types: test, command, static-ref (aliases: ` +
+                'static, doc, docs, documentation), manual-review, llm-judge, n/a. Accepted statuses: ' +
+                'MET, PARTIAL, UNMET, N/A.',
+        });
     }
 
     if (acceptanceCriteria.length > 0) {
