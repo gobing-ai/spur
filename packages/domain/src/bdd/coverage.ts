@@ -24,11 +24,37 @@ export interface CoverageResult {
 }
 
 /**
+ * Strip leading bracket tags and a `Scenario:` prefix, repeatedly and in any order, so
+ * `[doc-only] Scenario: Foo`, `Scenario: [doc-only] Foo`, and `Foo` reduce alike.
+ *
+ * Bracket tags (`[doc-only]`, `[docs-only]`, `[non-behavior]`, `[advisory]`, `[non-core]`) are
+ * evidence-rule metadata carried *in the AC id* — `requiresExecutableEvidence` reads them there to
+ * decide whether a MET row needs executable evidence. They are not part of the scenario's identity,
+ * so they must not participate in title matching. Before task 0398 R7 they survived normalization,
+ * which made the two rules mutually unsatisfiable for a documentation scenario: tag the row and
+ * `rowMatchesScenario` no longer links it to its feature scenario (→ `L4.scenario-unverified`,
+ * strict advance blocked); leave it untagged and the row is demoted to PARTIAL (→ also unverified).
+ */
+function stripScenarioPrefixes(title: string): string {
+    let out = title.trim();
+    let previous: string;
+    do {
+        previous = out;
+        out = out
+            .replace(/^\[[^\]]*\]\s*/, '')
+            .replace(/^Scenario:\s*/i, '')
+            .replace(/^R\d+\s*[:\-—]?\s*/, '')
+            .trim();
+    } while (out !== previous);
+    return out;
+}
+
+/**
  * Normalize a scenario title for matching: lowercase, collapse whitespace,
- * strip R-id prefixes and common punctuation.
+ * strip bracket tags, a `Scenario:` prefix, R-id prefixes, and common punctuation.
  */
 export function normalizeTitle(title: string): string {
-    return title
+    return stripScenarioPrefixes(title)
         .replace(/^(R\d+)\s*[:\-—]?\s*/, '')
         .trim()
         .toLowerCase()

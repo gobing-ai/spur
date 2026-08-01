@@ -156,3 +156,47 @@ Scenario: User can log in
         expect(result.uncovered).toHaveLength(0);
     });
 });
+
+describe('normalizeTitle — bracket tags (task 0398 R7)', () => {
+    // Bracket tags are evidence-rule metadata (requiresExecutableEvidence reads them in the AC
+    // id). They must not participate in identity matching, or a documentation scenario becomes
+    // unverifiable: tagging breaks the linkage, not tagging demotes the row to PARTIAL.
+    test('strips a leading bracket tag so a tagged id matches its untagged scenario', () => {
+        expect(normalizeTitle('[doc-only] Batch report names every skipped task')).toBe(
+            normalizeTitle('Batch report names every skipped task'),
+        );
+    });
+
+    test('strips a tag ahead of a Scenario: prefix', () => {
+        expect(normalizeTitle('[doc-only] Scenario: R3 — Batch report names every skipped task')).toBe(
+            normalizeTitle('R3 — Batch report names every skipped task'),
+        );
+    });
+
+    test('strips a tag behind a Scenario: prefix', () => {
+        expect(normalizeTitle('Scenario: [advisory] R3 — Batch report names every skipped task')).toBe(
+            normalizeTitle('R3 — Batch report names every skipped task'),
+        );
+    });
+
+    test('strips a tag that follows the R-number', () => {
+        expect(normalizeTitle('R3 — [non-core] Batch report names every skipped task')).toBe(
+            normalizeTitle('Batch report names every skipped task'),
+        );
+    });
+
+    test('strips every recognised tag spelling', () => {
+        const expected = normalizeTitle('The gate runs in the standard suite');
+        for (const tag of ['[doc-only]', '[docs-only]', '[non-behavior]', '[advisory]', '[non-core]']) {
+            expect(normalizeTitle(`${tag} The gate runs in the standard suite`)).toBe(expected);
+        }
+    });
+
+    test('leaves a mid-title bracket alone — only leading metadata is stripped', () => {
+        expect(normalizeTitle('Parser handles [brackets] in prose')).toBe('parser handles [brackets] in prose');
+    });
+
+    test('a tag alone reduces to empty rather than looping forever', () => {
+        expect(normalizeTitle('[doc-only]')).toBe('');
+    });
+});
