@@ -3,7 +3,7 @@ template: issue
 schema_version: 1
 name: "Fix H6 dogfood defects: hook spawn overhead, pipeline agent.run timeouts, and verdict AC parser/linkage traps"
 description: ""
-status: backlog
+status: done
 type: issue
 profile: standard
 feature_id: H7
@@ -12,7 +12,7 @@ priority: P1
 tags: ["bug"]
 dependencies: []
 created_at: "2026-07-31T04:24:04.544Z"
-updated_at: "2026-07-31T05:08:04.315Z"
+updated_at: "2026-08-01T04:13:41.758Z"
 ---
 
 ## 0398. Fix H6 dogfood defects: hook spawn overhead, pipeline agent.run timeouts, and verdict AC parser/linkage traps
@@ -464,17 +464,311 @@ an unattended overnight batch. RC-1 and RC-2 are steady-state taxes on every fut
 fixing on their own merits — but do not expect R2/R3 to move a 20 h batch to 2 h. R4 is the
 requirement that addresses the wall-clock.
 ### Solution
+**6 of 8 requirements implemented. R1 and R2 are blocked by the execution environment, not by the
+work** — see "Not implemented" below. Nothing was partially landed: each requirement below is
+complete with tests.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+#### R4 — pipeline timeout budget
 
+- `config/workflows/task-pipeline.yaml:52` and `apps/cli/config/workflows/task-pipeline.yaml:43` —
+  `stepTimeoutMs` `"600000"` → `"1800000"`, each patched in place (the two copies differ; neither
+  was overwritten with the other). Comment records the H6 evidence (3 of 4 timeouts were `test`
+  steps at the 600 s wall) and carries the same STOP-don't-raise-again rule as `implementTimeoutMs`.
+- Consumed by `test` (:122), `review` (:138), `verify` (:166). `spur workflow validate` passes on
+  both copies.
+
+#### R5 — timeout-recovery runbook
+
+- `plugins/sp/skills/spur-dev/references/done-housekeeping.md` — new `## F6 - Recovering from a
+  pipeline agent.run timeout`, placed before the terminal-gate checklist and matching the F1-F5
+  house style. Five numbered steps: recognise (`*-partial.md`, `exited with code 3`), establish
+  green by hand, finish the abandoned sections (incl. the L3 `review-priority-table` gate), the
+  exact `SPUR_PROVENANCE_OVERRIDE=1 … --force-done --reason` invocation, and the mandatory
+  `spur task verdict --from-answer` follow-up. Closes with an invariant.
+
+#### R6 — evidence-type vocabulary + no silent drops
+
+- `packages/app/src/services/task-verdict.ts:187-207` — `normalizeEvidenceType` maps
+  `doc` / `docs` / `documentation` → `static-ref` alongside the existing `static` alias.
+- `:138-186` — `extractAcceptanceCriteria` now returns `{ rows, dropped }`; an unparseable row is
+  recorded with its id and the offending value instead of vanishing.
+- `:43-46` + `:222-240` — `deriveVerdict` threads `dropped` into `extractChecks`, which emits an
+  `ac-row-dropped` check (status `fail`) naming every dropped row and listing the accepted
+  vocabulary. Reuses the existing `checks[]` diagnostic channel (where `evidence-rule-pass` /
+  `evidence-rule-failed` already live) rather than adding a parallel warnings surface.
+
+#### R7 — bracket tags must not break scenario matching
+
+Root-cause fix in the **shared** helper, not per-caller. All three `normalizeTitle` consumers were
+audited first and all three want the same behavior: `feature-check.ts` (scenario verification),
+`coverage.ts` `checkAcCoverage` (feature↔task AC subset rule), and `packages/domain/src/bdd/scaffold.ts:46` (generated stub
+names — stripping a tag out of a test name is an improvement).
+
+- `packages/domain/src/bdd/coverage.ts` — new `stripScenarioPrefixes` helper, applied at the head of
+  `normalizeTitle`. Strips leading bracket tags, a `Scenario:` prefix, and the `R{n}` prefix in a
+  fixed-point loop, so the three can appear in any order and any repetition.
+- `packages/app/src/services/feature-check.ts:639-659` — `rowMatchesScenario` strips tags on the
+  **alias** path too (that path never went through `normalizeTitle`, so `[doc-only] AC-3` would
+  otherwise still fail to match `AC-3`).
+
+The evidence rule is deliberately untouched: `requiresExecutableEvidence` still reads the tag from
+the id, so tagging still exempts a row. Both halves of the contradiction now hold at once.
+
+#### R3 — SessionStart idempotency
+
+- `plugins/sp/hooks/context-session-start.ts:35-94` — new `resolveActiveSession(dir, now)` and
+  `SESSION_REUSE_IDLE_MS` (4 h). `recordSessionStart` early-returns the in-flight session id and
+  writes nothing — no ledger row, no pointer rewrite.
+- Design option 1 (ancestor-session env var) was investigated and is **unavailable**: nothing in
+  `agent.run` / ts-ai-runner propagates a session id into the child environment, and the hook runs
+  as a short-lived subprocess whose own pid says nothing about the agent's. Fell back to the
+  documented option 2 (recency gate), marked with a `ponytail:` comment naming the ceiling (two
+  genuinely distinct sessions inside the window merge) and the upgrade path.
+- Fail-open contract preserved: every failure path in `resolveActiveSession` returns null, which
+  mints a new session exactly as before.
+
+#### R8 — linkage contract documented
+
+- `plugins/sp/skills/spur-dev/references/ac-style-guide.md` — new `## Verdict AC ↔ feature scenario
+  linkage` section next to "Scenario-title stability". Covers the table shape, the full evidence-type
+  vocabulary incl. the R6 aliases, the four accepted id forms plus bracket tags, the five
+  exempting tags with a worked `[doc-only]` example, the three `--strict` advance preconditions, and
+  an explicit warning to cover every declared scenario rather than the gate's minimum.
+
+#### A pre-existing test encoded the bug
+
+`plugins/sp/hooks/context-hooks.test.ts:91` was named *"is idempotent across two starts — appends a
+second event"* and asserted that two `SessionStart` fires produce two `session_start` rows. That is
+RC-2 written down as intended behavior — the defect shipped with test cover, which is why it
+survived. Rewritten to assert one row per session, with a comment recording what it used to claim
+and why that was wrong.
+
+#### R1 — baseline re-measured; the cold-start framing was wrong, R2's premise partly with it
+
+Re-measured 2026-07-31 after the upstream releases. Still inside the agent sandbox (re-probed:
+`touch ~/xprojects/superskill/.probe` → `Operation not permitted`, `listen 127.0.0.1` → `EPERM`), so
+R1's literal "bare shell" condition is **still unmet**. But the decisive comparison no longer needs
+one, because both runtimes were measured under identical conditions:
+
+| Command | Wall (n=3 avg) |
+|---|---|
+| `bun -e ''` | **2.29 s** |
+| `node -e ''` | **0.02 s** |
+| `superskill --version` | 2.36 s |
+| `spur task resolve <task>.md --strict --json` | 2.39 s |
+
+`node` is ~115× faster than `bun` **in the same sandbox**, so the cost is not a uniform per-spawn
+sandbox tax — it is bun-specific. Applying R1's decision rule (">500 ms → the cold-start tax is
+real"): **real, at 2.29 s.** Every `superskill` and `spur` invocation is ~97% runtime startup;
+`superskill`'s own code contributes ~0.07 s and `spur task resolve`'s ~0.10 s.
+
+Residual caveat: sandbox amplification cannot be ruled out for bun specifically, only for spawning
+in general. The comparison is sound; the absolute 2.29 s may not reproduce on a bare shell.
+
+#### R2 — shipped upstream in superskill 0.3.10, verified here; **the predicted saving was wrong**
+
+`couldBeTaskCorpusPath` is present in the installed bundle
+(installed bundle `dist/index.js`, lines 103087-103091) and is called before the
+ownership spawn at lines 103107-103109, matching the design exactly. `resolveSpurTaskOwnership` still
+spawns (now `await`ed via an executor) for paths that survive it.
+
+**Functional check** — correct in both directions:
+
+- corpus path → `permissionDecision:"deny"` with the spur-CLI reason, exit 0
+- non-corpus path → empty output, exit 0
+
+**Timing check (n=5 each, very low variance):**
+
+| Path | Wall |
+|---|---|
+| `SPUR_WRITE_GUARD=off` — pure hook floor | 2.37 s |
+| non-corpus — prefilter skips the spawn | **2.36 s** (indistinguishable from the floor) |
+| corpus — still spawns `spur task resolve` | 2.48 s |
+
+The prefilter works perfectly: a skipped path costs exactly the floor. **But the saving is ~0.12 s,
+not the ~2.4 s this task predicted.** The 3.7 s figure in `### Background` was derived by *adding*
+two independently-measured cold starts (1.3 s + 2.4 s). That addition was wrong: a child process
+spawned from an already-running process does not pay a second full cold start here — the measured
+marginal cost of the `spur task resolve` spawn is 0.12 s, not 2.39 s.
+
+**Correcting the headline claim of this task:** per-mutation hook cost went from ~2.48 s to ~2.36 s
+(≈5%), not from ~3.7 s to ~1.3 s (≈65%). The dominant cost is the hook process's own bun startup
+(2.37 s), which the prefilter cannot touch and which no change in either repo addresses. R2 was
+still worth doing — it removes a genuinely pointless subprocess and is now free — but it was not the
+large win this task claimed, and RC-1's "≈3.7 s per file mutation" should be read as an
+over-estimate.
+
+The real lever on hook latency is the 2.29 s bun startup, i.e. runtime choice or a resident hook
+process. That is a new, separate problem; do not reopen this task for it.
+#### R3 — upgraded to the exact ancestor signal (ts-ai-runner 0.4.15)
+
+The wall-clock heuristic is no longer the primary path. `@gobing-ai/ts-ai-runner@0.4.15` publishes
+`AGENT_RUN_ID_ENV = 'SPUR_RUN_ID'` and `AiRunner` forwards it into the agent subprocess whenever the
+caller supplies a correlation. Verified that Spur always does: the pipeline's agent.run action
+(`packages/app/src/workflow/actions/agent-run.ts:148-152`) and `spur agent run`
+(`packages/app/src/services/agent-service.ts:661`) both pass `{ runId, executionId, actionId }`.
+execa's `extendEnv` default propagates it transitively, so every descendant of a run — including the
+hook subprocesses the host fires inside it — inherits it.
+
+`resolveActiveSession` (`plugins/sp/hooks/context-session-start.ts`) now resolves in precedence
+order:
+
+1. **`SPUR_RUN_ID` present** → definitively a descendant of an agent run. Reuse the recorded session
+   with **no time bound**. A pipeline step legitimately runs for the full `implementTimeoutMs`
+   (30 min) and batches run for hours, so any wall-clock window would eventually split a run that is
+   provably still in flight. This is the path the H6 defect actually took.
+2. **No marker** → the `SESSION_REUSE_IDLE_MS` window, unchanged.
+
+The signature is now `resolveActiveSession(dir, now, env = process.env)`, and `recordSessionStart`
+threads its own `env` through, so the marker is injectable rather than read from the ambient
+process.
+
+**`SESSION_REUSE_IDLE_MS` was kept, deviating from this task's Plan**, which called its deletion the
+acceptance signal. Reason: the marker is only set on *correlated* paths. Deleting the fallback would
+regress every nesting path that arrives without a correlation (a host spawning its own helpers, or
+an `agent.run` invoked without one) straight back to the original bug, and the set of hosts —
+Claude Code, Codex, pi, omp, Gemini, OpenCode, Antigravity — is not enumerable from here. The
+constant's doc comment now scopes it explicitly as a residual backstop and states the condition for
+deleting it: once every nesting path is known to carry a correlation.
+
+The env var name is a string literal, not an import: this hook is self-contained by design (tasks
+0232/0246) and runs both standalone and from Superskill's bundled runner, so it must not depend on
+the workspace module graph. The literal is a published contract on the ts-ai-runner side.
+
+#### Addendum — R1's conclusion refined after direct testing (2026-08-01)
+
+The R1 entry above concluded "the cold-start tax is real, at 2.29 s" from the bun-vs-node
+differential. A follow-up experiment shows that was **overstated**, and also confirms the
+explanation R2 offered for its own small saving. Four chains, n=3 each:
+
+| Chain | Wall |
+|---|---|
+| shell → `node -e ''` | 0.03 s |
+| shell → `bun -e ''` | 2.29 s |
+| `node` → spawn `bun -e ''` | 2.31 s (fresh bun exec pays full price) |
+| `bun` → spawn `bun -e ''` | 2.31 s **total** — the inner bun costs ≈0.01 s |
+
+Two conclusions, both now tested rather than inferred:
+
+1. **The penalty attaches to exec'ing the `bun` binary, and warms per process tree.** A bun exec'd
+   by an already-running bun is essentially free; one exec'd by `node`, or from the shell, pays the
+   full ~2.28 s. This *confirms* the explanation offered for R2's 0.12 s marginal spawn cost — the
+   hook pays the cold exec, and the `spur task resolve` child it spawns does not. That explanation
+   was previously an untested inference; it is now measured.
+2. **Whether the ~2.28 s survives outside the sandbox is UNVERIFIED.** `node` execs in 0.03 s in the
+   same sandbox, so this is not a uniform exec tax — but a binary-specific penalty is exactly the
+   shape a sandbox signature/validation check would produce, and typical unsandboxed bun startup is
+   an order of magnitude smaller. R1's decision rule was applied to a number that may be a sandbox
+   artifact after all.
+
+**Corrected R1 verdict:** the tax is real *in this environment* and is bun-binary-specific; the
+claim that it is real *generally* is not established and should not be cited as such. The one
+measurement that does transfer is the marginal one: the spawn R2 avoids costs 0.12 s here, and
+would cost less on a box where bun execs quickly — so R2's absolute saving is a ceiling, not a
+floor. This does not change any requirement's status; it narrows what R1's number licenses.
 ### Testing
+43 tests added across 4 files over the task's life. Suite **4104 → 4147 pass**, failure set
+byte-identical to the pre-task baseline throughout.
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+#### Gate output (2026-07-31, against ts-libs 0.4.15 + superskill 0.3.10)
 
+```
+bun run lint          → exit 0 (biome clean; all 6 workspaces typecheck exit 0)
+bun run build         → exit 0
+bun run test          → 4147 pass / 24 fail / 4171 across 242 files
+bun test plugins/sp   → 484 pass / 0 fail   (465 → 477 → 484 across the task)
+spur workflow validate config/workflows/task-pipeline.yaml          → workflow valid
+spur workflow validate apps/cli/config/workflows/task-pipeline.yaml → workflow valid
+```
+
+**The 24 failures are environmental, not regressions.** Identical test names and suites before and
+after every change in this task: `spur projects CLI` (4), `startServer` (3), `createServerContext`
+(1), `healthModule` (3), `rpc client` (2), `project-start` (7), `ProjectRegistry` (4). All are
+port-bind / `ps` denials under the agent sandbox — re-probed this session (`listen 127.0.0.1` →
+`EPERM`). The 2 `expect()` failures inside `serve.test.ts` are downstream of the same denial (those
+tests bind literal ports 4000/5000/5001/5556, so the shutdown-ordering array never fills). Delta
+attributable to this task: **+43 pass, +0 fail**. `bun run test-cf` still cannot run in-sandbox
+(`EPERM` on `listen` in the Vitest pool) and was not run.
+
+#### R3 exact-signal — `plugins/sp/hooks/context-hooks.test.ts` (+7, 38 pass in file)
+
+Marker set → session reused even at 10× the idle window (proves the time bound is bypassed, not
+merely satisfied). Marker absent → the same ancient session is retired by the window (proves the
+fallback still works and the first test is not vacuous). Marker set with `started` missing or
+unparseable → still reused. Empty and whitespace-only marker values → treated as absent and fall
+through to the window. Marker set with no pointer file → still null, so the marker can never
+fabricate a session. Plus a contract pin asserting the literal equals `SPUR_RUN_ID`, which fails
+loudly if ts-ai-runner ever renames it.
+
+#### R3 original — same file (12 tests)
+
+End-to-end via real hook subprocesses: three consecutive `SessionStart` fires append exactly one
+`session_start` and leave `.session.json` naming the original id; a fire after the pointer is
+removed opens a new session; `start → stop → start` yields 2 starts / 1 end. Unit coverage of
+`resolveActiveSession`: recent reuse, past-window null, clock-skew null, five malformed-pointer
+shapes, missing pointer. Every null path mints a new session, preserving the fail-open contract.
+
+#### R7 — `packages/domain/tests/bdd/coverage.test.ts` (7) + `feature-check.test.ts` (8)
+
+Tag stripping at the shared helper across all four orderings and all five tag spellings, a mid-title
+`[bracket]` left intact, and a tag-only title terminating rather than looping. End-to-end through
+the real `FeatureCheckService`: seven tagged id forms verify the untagged scenario with zero
+`L4.scenario-unverified`, plus an over-match guard proving `[doc-only] beta` still does *not* verify
+scenario `alpha`.
+
+#### R6 — `packages/app/tests/services/task-verdict.test.ts` (9)
+
+Five evidence-type aliases normalize to `static-ref` at MET; `vibes` emits an `ac-row-dropped` check
+naming the row, the value, and the vocabulary; an unrecognised status is reported the same way; a
+clean table emits no such check; an *untagged* `static-ref` MET row is still demoted to PARTIAL,
+proving the evidence rule survived R7.
+
+#### R2 — verified by measurement, upstream
+
+Owned by superskill 0.3.10; its suite (43 pass in `hook-run.test.ts`, 778 vs 765 baseline) ran there
+during authoring. Verified *here* by behavior (deny/allow both correct) and by timing (n=5 per path,
+floor 2.37 s / skip 2.36 s / spawn 2.48 s). See `### Solution` — the timing also **falsified this
+task's predicted saving**, which is recorded rather than quietly dropped.
+
+#### Not covered
+
+R1 has no test: it is a measurement, and its literal bare-shell precondition remains unmet inside
+the sandbox. The `node` vs `bun` differential recorded in `### Solution` answers its decision rule
+without one.
 ### Review
+Self-review across the whole task, re-run after the ts-libs 0.4.15 / superskill 0.3.10 releases
+closed the two upstream blockers. Dimensions: functional traceability, SECUA, architecture.
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Finding | Disposition |
+|---|---|---|
+| P1 | **This task's headline cost claim was wrong and is now measured.** `### Background` and RC-1 assert ~3.7 s per file mutation, derived by adding two independently-measured cold starts (1.3 s + 2.4 s). Measured reality with the fix installed: floor 2.37 s, prefilter-skip 2.36 s, spawn path 2.48 s — the avoided spawn is worth **0.12 s, not 2.4 s**. The real saving is ≈5%, not ≈65%. | **Corrected in `### Solution`, not quietly dropped.** R2 remains correct work (a pointless subprocess is gone) but was mis-sized. The dominant cost is the hook's own 2.29 s bun startup, which nothing in either repo addresses. Flagged as a new, separate problem — deliberately not reopened here. |
+| P1 | **R1's literal precondition is still unmet.** No bare shell available; the sandbox persists (re-probed this session). | **Answered by a different route, stated as such.** `node -e ''` at 0.02 s vs `bun -e ''` at 2.29 s *in the same sandbox* shows the cost is bun-specific rather than a uniform spawn tax, which is what R1's decision rule needed. Residual: sandbox amplification of bun specifically cannot be excluded. |
+| P2 | **R3 keeps `SESSION_REUSE_IDLE_MS`, deviating from this task's own Plan**, which named its deletion the acceptance signal. | **Deliberate, justified in `### Solution`.** The marker only exists on correlated paths; deleting the fallback regresses every uncorrelated nesting path to the original bug, across a host set (Claude Code, Codex, pi, omp, Gemini, OpenCode, Antigravity) not enumerable from here. The constant is now scoped in-source as a residual backstop with an explicit deletion condition. Reviewer should confirm they accept the deviation. |
+| P2 | **A pre-existing test encoded the defect.** `plugins/sp/hooks/context-hooks.test.ts:91` asserted two `SessionStart` fires produce two `session_start` rows, under the name "is idempotent". | **Fixed**, with a comment recording the superseded claim. Lesson worth keeping: a test asserting *current* behavior is not a test asserting *intended* behavior. |
+| P3 | **`context-session-stop` remains the unfixed symmetric half.** A nested `SessionEnd` still appends `session_end` and deletes `.session.json`, retiring a session its parent is still using — and it now has an exact signal available to prevent exactly that. | **Out of scope, flagged for follow-up.** R3's text and AC are start-scoped. Cheaper to fix now than before (the same `SPUR_RUN_ID` check applies), which strengthens the case for a follow-up task rather than silently widening this one. |
+| P3 | Ordering bug found during implementation: the first `stripScenarioPrefixes` did not strip the `R{n}` prefix, so `R3 — [doc-only] Foo` kept its tag. | **Fixed** by folding the R-prefix into the same fixed-point loop; regression test added. |
+| P3 | Session ids are minute-granular, so two sessions opened in the same minute share an id. | **Pre-existing, out of scope.** Noted in a test comment so it is not mistaken for R3 fallout. |
+| P4 | `normalizeTitle` is shared by three consumers; changing it widened blast radius beyond `feature-check`. | **Audited before landing.** All three want the behavior; `bun test packages/domain packages/app` shows zero BDD/coverage/verdict/feature-check failures. |
+| P4 | R6 could have added a `warnings[]` field to the verdict artifact. | **Avoided** — reused the existing `checks[]` channel. No schema change, no new consumer contract. |
+| P4 | R3's env var name is a string literal rather than an import from ts-ai-runner. | **Intentional**, and pinned by a test asserting it equals `SPUR_RUN_ID`. The hook is self-contained by design (0232/0246) and must not depend on the workspace module graph; the test converts an invisible coupling into a loud one. |
 
+#### Residual risk
+
+- **Hook latency is still ~2.37 s per fire**, essentially all bun startup. R2 removed the avoidable
+  subprocess; it did not and cannot address the floor. Any future work on hook cost must target the
+  runtime or a resident process, not the guard logic.
+- **`context-session-stop` asymmetry** — nested teardown can still retire a live session.
+- **Idle-window merging** — now confined to uncorrelated paths; ceiling marked in code.
+- **Absolute timings are sandbox-measured.** Relative and differential claims hold; absolutes may not
+  reproduce on a bare shell.
+
+#### Verification honesty
+
+`bun run test-cf` was **not** run — it cannot execute in this sandbox (`EPERM` on `listen`). The 24
+`bun run test` failures are environmental and identical before/after; the delta attributable to this
+task is +43 pass, +0 fail. No test was skipped, `.skip`-ed, or suppressed to reach green, and no
+`biome-ignore` was added. One formatting-only lint failure was introduced by the new tests and fixed
+with `bun run format`, not by relaxing the rule.
 ### References
 #### Source post-mortems
 
@@ -541,3 +835,7 @@ requirement that addresses the wall-clock.
   "Scenario-title stability" (:65).
 - `docs/dogfood/2026-07-31-sp-dev-runall-H6-dogfood.md` — close-out correction note.
 ### History
+- 2026-07-31T05:19:10.875Z backlog → todo (system)
+- 2026-07-31T05:19:13.379Z todo → wip (system)
+- 2026-08-01T04:07:45.866Z wip → testing (system)
+- 2026-08-01T04:08:03.169Z testing → done (system)
