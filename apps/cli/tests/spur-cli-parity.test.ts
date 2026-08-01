@@ -1,25 +1,32 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Command } from 'commander';
-import { registerAgentCommand } from '../../../apps/cli/src/commands/agent';
-import { registerFeatureCommand } from '../../../apps/cli/src/commands/feature';
-import { registerInitCommand } from '../../../apps/cli/src/commands/init';
-import { registerMessageCommand } from '../../../apps/cli/src/commands/message';
-import { registerRuleCommand } from '../../../apps/cli/src/commands/rule';
-import { registerServeCommand } from '../../../apps/cli/src/commands/serve';
-import { registerStatusCommand } from '../../../apps/cli/src/commands/status';
-import { registerTaskCommand } from '../../../apps/cli/src/commands/task';
-import { registerTeamCommand } from '../../../apps/cli/src/commands/team';
-import { registerWorkflowCommand } from '../../../apps/cli/src/commands/workflow';
-import type { CliContext } from '../../../apps/cli/src/context';
+import { Command, type CommandUnknownOpts } from '@commander-js/extra-typings';
+import { registerAgentCommand } from '../src/commands/agent';
+import { registerFeatureCommand } from '../src/commands/feature';
+import { registerInitCommand } from '../src/commands/init';
+import { registerMessageCommand } from '../src/commands/message';
+import { registerRuleCommand } from '../src/commands/rule';
+import { registerServeCommand } from '../src/commands/serve';
+import { registerStatusCommand } from '../src/commands/status';
+import { registerTaskCommand } from '../src/commands/task';
+import { registerTeamCommand } from '../src/commands/team';
+import { registerWorkflowCommand } from '../src/commands/workflow';
+import type { CliContext } from '../src/context';
 
-const PLUGIN_ROOT = join(import.meta.dir, '..');
+// This parity test lives in `apps/cli` rather than beside the plugin it checks, because it must
+// import the CLI's commander definitions to render help in-process. `plugins/sp` is not a workspace
+// member (root `workspaces.packages` is `apps/*` + `packages/*`) and has no package.json, so it
+// declares no dependencies: importing `commander` from there resolved only by falling through to
+// bun's local store on a dev machine and failed outright on a clean CI install. Reaching in via
+// `../../../apps/cli/src/...` also violates the repo's no-deep-relative-cross-package rule. Reading
+// the plugin's reference files by path (below) crosses no module boundary and is fine.
+const PLUGIN_ROOT = join(import.meta.dir, '..', '..', '..', 'plugins', 'sp');
 const SKILLS_DIR = join(PLUGIN_ROOT, 'skills', 'spur-cli');
 const REFS_DIR = join(SKILLS_DIR, 'references');
 
 // Expected Tier A verb sets documented in sp:spur-cli references
-const EXPECTED_TIER_A_VERBS: Record<string, string[]> = {
+const EXPECTED_TIER_A_VERBS = {
     task: [
         'create',
         'show',
@@ -41,33 +48,33 @@ const EXPECTED_TIER_A_VERBS: Record<string, string[]> = {
     feature: ['create', 'show', 'update', 'advance', 'list', 'move', 'refresh', 'check', 'sync'],
     rule: ['run', 'validate', 'list', 'trace'],
     workflow: ['validate', 'run', 'continue', 'clean', 'cancel', 'list', 'trace'],
-};
+} satisfies Record<string, string[]>;
 
 // Critical task verbs required by task 0317
 const CRITICAL_TASK_VERBS = ['deps', 'sections', 'run-link'];
 
 // Expected Tier B verb sets documented in sp:spur-cli references (task 0395)
-const EXPECTED_TIER_B_VERBS: Record<string, string[]> = {
+const EXPECTED_TIER_B_VERBS = {
     agent: ['run', 'loop', 'list', 'doctor', 'create', 'edit', 'delete'],
     message: ['send', 'inbox', 'reply', 'watch'],
     team: ['assign', 'status', 'up', 'down', 'start', 'stop'],
     init: ['init'],
     status: ['status'],
     serve: ['serve'],
-};
+} satisfies Record<string, string[]>;
 
 // Tier C nouns explicitly excluded from documentation with stated reasons (task 0395 R5)
 const EXCLUDED_TIER_C_NOUNS = ['history', 'migrate', 'projects', 'help'];
 
 // Tier B noun -> reference file mapping (init and status share init.md)
-const TIER_B_REF_FILES: Record<string, string> = {
+const TIER_B_REF_FILES = {
     agent: 'agent.md',
     message: 'message.md',
     team: 'team.md',
     init: 'init.md',
     status: 'init.md',
     serve: 'serve.md',
-};
+} satisfies Record<string, string>;
 
 /**
  * Build the live commander tree in-process, once.
@@ -99,25 +106,29 @@ const cliProgram: Command = (() => {
 
     const program = new Command();
     program.name('spur').exitOverride();
-    for (const register of [
-        registerTaskCommand,
-        registerFeatureCommand,
-        registerRuleCommand,
-        registerWorkflowCommand,
-        registerAgentCommand,
-        registerMessageCommand,
-        registerTeamCommand,
-        registerInitCommand,
-        registerStatusCommand,
-        registerServeCommand,
-    ]) {
-        register(program, stubContext);
-    }
+    // Registered one call at a time rather than by looping an array: the register functions carry
+    // slightly different Command generics, so an array collapses them to a union signature that no
+    // single argument satisfies.
+    registerTaskCommand(program, stubContext);
+    registerFeatureCommand(program, stubContext);
+    registerRuleCommand(program, stubContext);
+    registerWorkflowCommand(program, stubContext);
+    registerAgentCommand(program, stubContext);
+    registerMessageCommand(program, stubContext);
+    registerTeamCommand(program, stubContext);
+    registerInitCommand(program, stubContext);
+    registerStatusCommand(program, stubContext);
+    registerServeCommand(program, stubContext);
     return program;
 })();
 
+/** Verbs documented for a noun, tolerant of a `string` key from `Object.entries`. */
+function verbsFor(map: Record<string, string[]>, noun: string): readonly string[] {
+    return map[noun] ?? [];
+}
+
 /** Locate a registered noun command, failing loudly rather than silently asserting against ''. */
-function nounCommand(noun: string): Command {
+function nounCommand(noun: string): CommandUnknownOpts {
     const cmd = cliProgram.commands.find((c) => c.name() === noun);
     if (cmd === undefined) throw new Error(`noun '${noun}' is not registered on the CLI program`);
     return cmd;
@@ -164,8 +175,9 @@ describe('sp:spur-cli reference <-> live CLI parity (R9)', () => {
         );
         const extractConst = (name: string): string[] => {
             const block = mdDocSrc.match(new RegExp(`${name}\\s*=\\s*\\[([^\\]]*)\\]`));
-            if (!block) throw new Error(`${name} not found in domain SSOT`);
-            return [...block[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+            const body = block?.[1];
+            if (body === undefined) throw new Error(`${name} not found in domain SSOT`);
+            return [...body.matchAll(/'([^']+)'/g)].flatMap((m) => (m[1] === undefined ? [] : [m[1]]));
         };
         const sections = new Set([...extractConst('TASK_CANONICAL_SECTIONS'), ...extractConst('UNIVERSAL_SECTIONS')]);
         // Sanity: the extraction actually parsed the SSOT (guards against a silent regex miss).
@@ -221,7 +233,7 @@ describe('sp:spur-cli reference <-> live CLI parity (R9)', () => {
             const refPath = join(REFS_DIR, refFile);
             const refRaw = readFileSync(refPath, 'utf8');
 
-            for (const verb of EXPECTED_TIER_B_VERBS[noun]) {
+            for (const verb of verbsFor(EXPECTED_TIER_B_VERBS, noun)) {
                 expect(refRaw).toContain(`\`${verb}`);
             }
         }
@@ -288,12 +300,14 @@ describe('sp:spur-cli reference <-> live CLI parity (R9)', () => {
             for (const line of refRaw.split('\n')) {
                 if (!line.startsWith('|') || !line.includes('`--')) continue;
                 for (const m of line.matchAll(/`(--[a-z][a-z-]*)/g)) {
-                    refFlags.add(m[1]);
+                    if (m[1] !== undefined) refFlags.add(m[1]);
                 }
             }
 
             // Help for every noun sharing this reference, plus each of its verbs.
-            const allHelpText = nouns.map((noun) => helpTextFor(noun, EXPECTED_TIER_B_VERBS[noun] ?? [])).join('\n');
+            const allHelpText = nouns
+                .map((noun) => helpTextFor(noun, verbsFor(EXPECTED_TIER_B_VERBS, noun)))
+                .join('\n');
 
             for (const flag of refFlags) {
                 expect(allHelpText).toContain(flag);
@@ -320,13 +334,13 @@ describe('sp:spur-cli reference <-> live CLI parity (R9)', () => {
                 for (const line of refRaw.split('\n')) {
                     if (!line.startsWith('|') || !line.includes('`--')) continue;
                     for (const m of line.matchAll(/`(--[a-z][a-z-]*)/g)) {
-                        refFlags.add(m[1]);
+                        if (m[1] !== undefined) refFlags.add(m[1]);
                     }
                 }
             }
 
             // Help for the noun and each of its Tier A verbs.
-            const allHelpText = helpTextFor(noun, EXPECTED_TIER_A_VERBS[noun] ?? []);
+            const allHelpText = helpTextFor(noun, verbsFor(EXPECTED_TIER_A_VERBS, noun));
 
             for (const flag of refFlags) {
                 expect(allHelpText).toContain(flag);
