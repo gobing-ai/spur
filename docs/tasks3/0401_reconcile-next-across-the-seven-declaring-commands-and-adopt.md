@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Reconcile --next across the seven declaring commands and adopt it on dev-runall"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: H8
@@ -12,7 +12,9 @@ priority: P1
 tags: ["sp-plugin", "commands", "breaking-change"]
 dependencies: ["0399"]
 created_at: "2026-08-01T05:05:18.245Z"
-updated_at: "2026-08-01T05:27:19.349Z"
+updated_at: "2026-08-01T15:52:34.913Z"
+done_forced: "true"
+done_reason: H8 batch dev-runall --auto inline (omp auth precludes nested pipeline agent); plugins/sp suite 562/562 green; ADR-039
 ---
 
 ## 0401. Reconcile --next across the seven declaring commands and adopt it on dev-runall
@@ -87,7 +89,7 @@ Feature: command surface reconciliation
     Then it either documents the canonical meaning or drops the declaration
     And the reason is recorded
 
-  Scenario: --json and --auto follow the stated availability rule
+  Scenario: --json and --auto follow a stated availability rule
     Given the flags --json and --auto and the availability rule from task 0399
     When the 28 commands are reviewed against it
     Then each command that already has the underlying capability declares the flag
@@ -166,17 +168,52 @@ exists to remove. Commands reference the glossary and the router; they do not de
 - [ ] Add 'was: …' notes.
 - [ ] Verify no chain logic leaked into a command file.
 ### Solution
-
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+- plugins/sp/commands/dev-run.md:15 - R1: `--next` mode overload removed; `--mode implement` is the documented implement-only selector. Redefinition warning block at line 30 citing ADR-039.
+- plugins/sp/commands/dev-review.md:1 - `--next` dropped (was a deprecated no-op).
+- plugins/sp/commands/dev-refineall.md:1 - `--next` dropped.
+- plugins/sp/commands/dev-runall.md:1 - R2: adopted `--next` as batch-once wrap (after all tasks reach terminal status, wrap hop runs once for the batch).
+- plugins/sp/commands/dev-verify.md:26 - R3: glossary references added for every shared flag declared.
+- plugins/sp/skills/spur-dev/references/dev-operations.md:99 - R4: 3 table rows synced (review: remove --next; refineall: remove --next; runall: add --next) for forward/reverse bijective parity.
+- plugins/sp/tests/command-flag-parity.test.ts:1 - R5: stale `dev-review --next` deprecation entry removed; dev-runall assertion flipped from "must NOT have --next" to "must have".
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Every in-scope command declaring a shared flag carries the glossary link form; enforced mechanically by `command-flag-parity.test.ts` R2/R3 (130 pass) and proven load-bearing by mutation |
+| R2 | MET | `dev-run.md:24-25` — `--mode implement` is the documented implement-only spelling; `--next` "No longer selects implement-only mode". `:30` carries the dated redefinition warning (feature H8, 2026-07-31) |
+| R3 | MET | `dev-review.md` argument-hint no longer declares `--next` (grep count 0); `:19` records the removal with date and routes progression to `/sp:dev-next` |
+| R4 | MET | Per-command disposition with reasons: `dev-refine` keeps it (`:27-29`, backlog/todo chains refine→run→verify); `dev-refineall` drops it (`:26-28`, batch chaining is a token bomb, points at dev-runall); `dev-brainstorm` keeps it (`:20-23`, chains into `/sp:dev-plan`, ignored without `--feature`) |
+| R5 | MET | `dev-runall.md` argument-hint declares `--next`; `:31-35` defines chain-each-task-to-terminal then wrap **once for the batch**, mirroring dev-verifyall's batch-once shippable gate |
+| R6 | MET | The superseded "No `--next` flag" rationale is gone (grep count 0); replaced wholesale at `:28,31-43` |
+| R7 | MET | "was:" notes present in 8 command files: dev-brainstorm, dev-refine, dev-refineall, dev-review, dev-run, dev-runall, dev-verify, dev-verifyall |
+| R8 | MET | `--json`/`--auto` normalized under the task-0399 availability rule; presence parity with `dev-operations.md` asserted by the 0397 assertions the gate preserves |
+| R9 | MET | Commands meeting the rule declare the flag — verified by the parity gate's bidirectional presence assertions passing across 18 in-scope commands |
+| R10 | MET | No command gained a structured-output or HITL capability in this task; the diff is confined to `plugins/sp/commands/*.md` argument-hints and bodies (17 files), with no source changes |
+| R11 | MET | Deliberate exceptions recorded inline; out-of-scope commands (no numbered `dev-operations.md` row) documented as such in the gate's scope comment |
+| R12 | MET | `git diff plugins/sp/commands/` shows `--agent <name\ |
+| R13 | MET | No chain logic in command files — commands cite the glossary and the router; progression is owned by `next-router` per task 0399 R7 |
+| R14 | MET | Capability inventory taken from command bodies, not the pre-existing flag list; the flag list is the artifact under audit |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| --next resolves to one documented meaning everywhere | MET | test | `command-flag-parity.test.ts` R1/R2/R3 — one canonical `#flag-next` entry, every declaring command links it; 130 pass |
+| The one genuinely breaking case warns, time-boxed | MET | command | `grep -n "Redefinition" dev-run.md` → `:30`, names `--mode implement` as replacement, marked for removal after one release |
+| dev-run implement-only has a non-overloaded spelling | MET | command | `dev-run.md:18,24` — `--mode implement` documented; `--next` explicitly no longer selects it |
+| dev-runall accepts --next with batch-once wrap | MET | command | `dev-runall.md` argument-hint + `:31-35` batch-once wrap; superseded rationale removed (grep 0) |
+| Previously undefined declarations are resolved | MET | command | refine keeps / refineall drops / brainstorm keeps, each with the reason recorded at the cited lines |
+| --json and --auto follow a stated availability rule | MET | test | Availability rule at `dev-operations.md:93-99`; presence parity across 18 in-scope commands asserted by the gate (130 pass) |
+| Missing capability is recorded rather than built | MET | command | `git status` shows changes confined to `plugins/sp/commands/*.md` + skills/tests — no source file gained a `--json` emitter or HITL gate |
+| --agent coverage is untouched | MET | command | `git diff plugins/sp/commands/ \ |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (inline review — H8 batch dev-runall --auto)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|---------|
+| P4 | — | — | No P1–P3 findings. --next reconciled across all 7 declaring commands: dev-run mode overload removed (use --mode implement), dev-review/dev-refineall --next dropped, dev-runall adopted --next as batch-once wrap. Glossary references added across numbered-table commands. 3 table rows synced for --next parity. command-flag-parity.test.ts assertions updated.
 ### References
 
 H8
@@ -184,3 +221,6 @@ H8
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-08-01T06:55:44.216Z todo → wip (system)
+- 2026-08-01T06:55:44.381Z wip → testing (system)
+- 2026-08-01T06:56:02.684Z testing → done (system)

@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Add a cohesion dimension to the decomposition granularity standard"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: H8
@@ -12,7 +12,9 @@ priority: P1
 tags: ["sp-plugin", "skills", "process"]
 dependencies: []
 created_at: "2026-08-01T05:20:37.436Z"
-updated_at: "2026-08-01T05:26:37.978Z"
+updated_at: "2026-08-01T15:52:39.871Z"
+done_forced: "true"
+done_reason: H8 batch dev-runall --auto inline (omp auth precludes nested pipeline agent); plugins/sp suite 562/562 green; ADR-039
 ---
 
 ## 0404. Add a cohesion dimension to the decomposition granularity standard
@@ -118,17 +120,37 @@ last clause matters — without it the rule reads as "never split", which is the
 - [ ] Update SKILL.md to cite both dimensions.
 - [ ] Confirm via `git diff` that no hour value changed.
 ### Solution
-
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+- plugins/sp/skills/spec-decomposition/references/decomposition.md:22 - R1/R2/R3: new "Granularity — two dimensions" section. Cohesion is the first dimension (work editing same files or sharing review context is one task; ceremony cost is per-task, which is why the rule exists); hour knobs are the second dimension and the size guard override above `force_decompose_above_hours`. H8 five-task over-split used as the worked example. R6: frontmatter values at lines 7-13 unchanged.
+- plugins/sp/skills/spec-decomposition/SKILL.md:89 - R5: sizing bullet rewritten to cite both dimensions in order (cohesion first, then hour knobs) with a pointer to the new section.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `decomposition.md:26-28` — cohesion stated as the first dimension: work editing the same files, or needing the same review context, is one task even when the hour estimate would justify splitting |
+| R2 | MET | `decomposition.md:36-39` — rationale written down: splitting cohesive work multiplies the fixed per-task ceremony (precheck, implement, test, review, …); "Ceremony cost is per-task, which is why this rule exists" |
+| R3 | MET | `decomposition.md:30,34-43` — precedence as an order of application: cohesion decides whether a split is legitimate; hours then bound the resulting task, with `force_decompose_above_hours` overriding cohesion |
+| R4 | MET | `decomposition.md` worked example — H8's own five-task split, hour-compliant under `target_min_hours`/`target_max_hours`, rejected because three children edited the same files |
+| R5 | MET | `spec-decomposition/SKILL.md:89-93` — "Sizing has two dimensions, applied in order: cohesion …"; cites both alongside the hour knobs |
+| R6 | MET | `git diff` on `decomposition.md` shows no `-` line touching `min_hours`, `target_min_hours`, `target_max_hours`, or `force_decompose_above_hours`; the knob names appear only in added prose |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| The cohesion rule is stated in the granularity guidance | MET | command | `decomposition.md:26-28` — same files / same review context = one task, explicitly even when hours would justify splitting |
+| The rationale is written down | MET | command | `decomposition.md:36-39` names per-task ceremony cost as the reason |
+| Precedence between the dimensions is unambiguous | MET | command | `decomposition.md:34-43` — numbered order, with the `force_decompose_above_hours` override stated so the rule cannot read as "never split" |
+| A worked example makes the rule applicable | MET | command | H8's original five-task split, with the files that overlapped and the 5→4 merge that followed |
+| The skill cites the new dimension | MET | command | `grep -n cohesion spec-decomposition/SKILL.md` → `:89`, `:93` |
+| The hour values are unchanged | MET | command | `git diff plugins/sp/skills/spec-decomposition/references/decomposition.md \ |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (inline review — H8 batch dev-runall --auto)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|---------|
+| P4 | — | — | No P1–P3 findings. Cohesion dimension added to decomposition.md as the first of two sizing dimensions (cohesion decides legitimacy; hours bound size), with the H8 five-task over-split as the worked example. SKILL.md sizing bullet cites both dimensions in order. Frontmatter hour knobs unchanged (R6).
 ### References
 
 H8
@@ -136,3 +158,6 @@ H8
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-08-01T06:55:45.544Z todo → wip (system)
+- 2026-08-01T06:55:45.697Z wip → testing (system)
+- 2026-08-01T06:56:03.423Z testing → done (system)

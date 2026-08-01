@@ -1,6 +1,6 @@
 ---
 description: Refine a batch of tasks via structured Q&A — resolve a set (feature or selector), refine each in dependency-correct order, emit a batch report
-argument-hint: "--feature <id> | --tasks <selector> [--focus <mode>] [--description <text>] [--agent <name|auto>] [--auto] [--keep-going] [--status <s>] [--json] [--next]"
+argument-hint: "--feature <id> | [`--tasks`](../skills/spur-dev/references/dev-operations.md#flag-tasks) <selector> [--focus <mode>] [--description <text>] [--agent <name|auto>] [--auto] [--keep-going] [--status <s>] [--json]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---
 
@@ -16,11 +16,18 @@ operation, applied to a resolved set (typically every task under a feature).
 /sp:dev-refineall --tasks <selector> [shared refine flags…]
 ```
 
-Flags: `--feature` (sugar for `feature:<id>`), `--tasks <selector>`, shared refine flags
-(`--focus`, `--description`, `--agent`, `--auto`, `--next`), plus `--keep-going`,
-`--status` (default `backlog,todo`), `--json`. Prefer `--auto` for batch scale; avoid `--next`
-on large features (use refineall then `/sp:dev-runall`). Full procedure:
-`plugins/sp/skills/spur-dev/references/dev-operations.md` § refineall.
+Flags: [`--feature`](../skills/spur-dev/references/dev-operations.md#flag-feature) (sugar for `feature:<id>`), `--tasks <selector>`, shared refine flags
+([`--focus`](../skills/spur-dev/references/dev-operations.md#flag-focus), [`--description`](../skills/spur-dev/references/dev-operations.md#flag-description), `--agent`, [`--auto`](../skills/spur-dev/references/dev-operations.md#flag-auto)),
+plus [`--keep-going`](../skills/spur-dev/references/dev-operations.md#flag-keep-going),
+[`--status`](../skills/spur-dev/references/dev-operations.md#flag-status) (default `backlog,todo`),
+[`--json`](../skills/spur-dev/references/dev-operations.md#flag-json). Prefer `--auto` for batch
+scale. Full procedure: `plugins/sp/skills/spur-dev/references/dev-operations.md` § refineall.
+
+> **`--next` dropped** (feature H8, 2026-07-31). Batch-level chaining was a token bomb — each refine
+> hop is an LLM call, and a large feature means N refine chains fanned out at once. For batch
+> chaining, run `/sp:dev-refineall` first (this command, no `--next`), then
+> `/sp:dev-runall --feature <id> --next` which chains each task's run → verify → wrap sequentially.
+> **was: `--next` declared with a self-contradicting "avoid --next" warning.**
 
 ## Implementation
 

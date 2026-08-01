@@ -231,7 +231,12 @@ function checkTargetResolution(cmd: ParsedCommand, skillsDir: string, root: stri
         // Check anchor exists
         const content = readFileSync(resolved, 'utf8');
         const headings = content.split('\n').filter((l) => l.startsWith('#'));
-        const anchors = headings.map((l) => slugify(l.replace(/^#+\s*/, '').trim()));
+        const slugAnchors = headings.map((l) => slugify(l.replace(/^#+\s*/, '').trim()));
+        // Honor explicit `**Anchor:** `#id`` directives (the glossary convention in
+        // dev-operations.md) so a shared-flag entry can expose a stable `#flag-<name>`
+        // anchor independent of its heading text.
+        const explicitAnchors = [...content.matchAll(/^\*\*Anchor:\*\*\s*`#([^`]+)`/gm)].map((m) => m[1]);
+        const anchors = [...slugAnchors, ...explicitAnchors];
         if (!anchors.includes(anchor)) {
             violations.push({
                 command: cmd.name,

@@ -86,8 +86,12 @@ the only proof the decomposition is well-formed; never hand-write task files to 
 2. **Batch-create is atomic.** One schema violation rejects everything — validate locally first.
 3. **AC titles are the traceability key.** Map tasks to AC by scenario title (R-prefix stripped on
    match); a renamed scenario after batch-create breaks coverage.
-4. **Size by the standard, not by feel.** The granularity knobs in `decomposition.md` set the
-   min/target/force-split bounds — apply them rather than guessing task size.
+4. **Size by the standard, not by feel.** Sizing has two dimensions, applied in order: **cohesion
+   first** — work that edits the same files or shares a review context is one task even when the
+   hours would permit a split (ceremony cost is per-task); **then the granularity knobs** in
+   `decomposition.md` (`min_hours` / `target_*` / `force_decompose_above_hours`) bound how large a
+   single cohesive task may get before a size-driven split overrides cohesion. Both dimensions,
+   with the H8 worked example, are in `decomposition.md` → "Granularity — two dimensions".
 5. **Cut vertical, not horizontal.** Every task is a thin slice through all the layers a scenario
    touches, independently demoable on its own — never an all-schema/all-API/all-UI layer-task.
    Prefactoring (making the change easy) is its own task, ordered first. Full doctrine, worked

@@ -926,3 +926,83 @@ amendment.
 
 **Detail:** `plugins/sp/skills/spur-cli/SKILL.md` (noun routing + Tier C exclusions);
 `plugins/sp/tests/spur-cli-parity.test.ts` (enforcement); `plugins/sp/skills/parallel-execution/references/dispatch-surface.md` (composition over ADR-033); feature `H6`.
+
+## ADR-039: `--next` is Chain-to-Completion with Propagation — One Glossary Meaning Across All Commands
+
+**Status:** Accepted · **Date:** 2026-07-31
+
+**Decision.** The `--next` flag on `/sp:dev-*` commands is redefined to a single canonical meaning:
+on success, hand the task back to `sp:next-router`, which resolves the next dispatch and re-invokes
+with `--next` still set, until the work is done or a gate stops it. The definition, stop conditions,
+hop bound, and the full shared-flag glossary live in
+`plugins/sp/skills/spur-dev/references/dev-operations.md` § Flag glossary (one entry per shared
+flag). `command-flag-parity.test.ts` was extended (task 0403) to assert every shared flag has
+exactly one glossary entry and each declaring command references it — the gate that failed silently
+under the old four-meaning regime.
+
+This is a **breaking change** for `dev-run --next` invocations that selected implement-only mode;
+the replacement spelling is `--mode implement` (which already existed and is what `routing-table.md`
+A5 already dispatched). All other declaring commands (`dev-verify`, `dev-verifyall`, `dev-refine`,
+`dev-refineall`, `dev-brainstorm`) are subsumed — their old transition becomes the chain's first
+hop, so existing invocations keep working. `dev-review`'s deprecated `--next` no-op was removed
+rather than redefined. `dev-runall` adopted the flag to chain each task to terminal status with the
+wrap hop run **once for the batch**.
+
+**Why.** `--next` carried four incompatible meanings across seven commands for an entire release
+while the parity gate (task 0397) stayed green — it asserted flag-presence parity only, never that
+a flag meant the same thing across commands. The redefinition makes the router the single owner of
+chain progression and the glossary the single source of flag meaning; per-command "what comes after
+me" logic (the defect, duplicated seven times) is now forbidden. The hop bound (8) prevents routing
+cycles from looping forever under propagation.
+
+This ADR composes with ADR-038 (same-change parity enforcement): ADR-038 governs the `spur` CLI
+surface; this decision governs the slash-command flag surface and adds the semantic-anchoring
+dimension ADR-038's presence-parity could not enforce.
+
+**Detail:** `plugins/sp/skills/spur-dev/references/dev-operations.md` § Flag glossary + § `--next`
+chain contract; `plugins/sp/skills/next-router/SKILL.md` (chain progression + hop bound);
+`plugins/sp/skills/next-router/references/routing-table.md` §5 (chain semantics); feature `H8`
+(`docs/features/H8_sp-command-surface-coherence-…md`).
+
+## ADR-040: A Status-Required Section May Not Be Placeholder-Only — Placeholder Is an Unfilled Obligation, Not "Nothing to Validate"
+
+**Status:** Accepted · **Date:** 2026-08-01
+
+**Decision.** `spur task check` gains `L3.required-section-placeholder`, an **error** raised when a
+section the section-matrix declares *required at the task's current status* still contains only the
+shipped scaffold (empty, HTML-comment-only, or `> TBD`). It covers `Testing` and `Solution`, which
+had no such rule; `Requirements` and `Acceptance Criteria` already had equivalents
+(`L3.requirements-empty`, `L3.ac-empty`).
+
+The rule is **matrix-keyed, not status-hardcoded**: it consults `entry.required` for the current
+status rather than naming `done`, so it stays silent where a placeholder is legitimate (`todo`,
+`wip`) and follows the matrix if the requirement set changes.
+
+Severity is error because `testing → done` is gated by `spur task check --strict-core`: this blocks
+the transition until the section is filled, rather than surfacing the gap months later. The message
+names the remedy — `spur task record <wbs>`, which fills `Testing` from the verdict artifact.
+
+**Why.** `Testing` and `Solution` are normally written by the pipeline's `record` step
+(`spur task record`), which renders them from `.spur/run/<wbs>-verdict.json`. Drive a task **inline**
+instead of through `task-pipeline.yaml` — now the common case, since `agent.run` fails under a
+restricted sandbox — and `record` never runs.
+
+Nothing caught the result, because every other L3 `Testing` rule is guarded by
+`!isPlaceholderBody(...)`. That guard is right at `todo`/`wip`, where an empty section is the normal
+state, but it left a hole at the far end: a task could reach `done` carrying the verbatim
+`<!-- Filled during verification: … -->` scaffold and *every* Testing rule would decline to inspect
+it. Feature H8's four tasks (0399/0401/0403/0404) did exactly that, and `spur task check` passed all
+four. A corpus scan found the pattern in **25 of 388** `done` tasks (6.4%).
+
+**Blast radius and why error is safe.** All 25 pre-existing instances live in `docs/tasks` and
+`docs/tasks2` — historical corpora; the active `docs/tasks3` is at zero. No gate runs `task check`
+corpus-wide (`bun run spur-check` is lint + tests), so the new error fires only when someone checks
+one of those tasks directly, or on a *new* done transition. Historical records stay readable while
+the path forward is closed. They were deliberately **not** backfilled: most predate the
+verdict-artifact flow, so there is no artifact to `record` from and filling them would mean
+inventing evidence.
+
+**Detail:** `packages/app/src/services/task-check.ts` (rule, adjacent to the `Testing` coverage
+check); `packages/config/src/finding-codes.ts` (`L3_REQUIRED_SECTION_PLACEHOLDER`);
+`packages/app/src/services/task-record.ts` (`renderTesting` / `renderReview` — what `record` writes);
+`.spur/tasks/section-matrix.yaml` (`done: required: [Solution, Testing, Review]`).

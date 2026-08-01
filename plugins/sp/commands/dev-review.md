@@ -1,6 +1,6 @@
 ---
 description: "Review code for a task or path — multi-dimensional review across functional traceability, SECUA quality, and architectural depth. Triggers: \"review this\", \"check the code\", \"SECUA review\", \"dev review\", \"audit this\"."
-argument-hint: "[<wbs|path>] [--agent <name|auto>] [--focus <dims>] [--fix (deprecated)] [--next (deprecated)]"
+argument-hint: "[<wbs|path>] [--agent <name|auto>] [[`--focus`](../skills/spur-dev/references/dev-operations.md#flag-focus) <dims>] [--fix (deprecated)]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
@@ -10,11 +10,11 @@ Wraps the **sp:functional-review**, **sp:code-verification**, and **sp:code-impr
 
 ## Usage
 
-/sp:dev-review [<wbs|path>] [--agent <name|auto>] [--focus <dims>] [--fix (deprecated)] [--next (deprecated)]
+/sp:dev-review [<wbs|path>] [--agent <name|auto>] [--focus <dims>] [--fix (deprecated)]
 
 ## Implementation
 
 - WBS mode (`<wbs>`): `Skill(skill="sp:functional-review", args="<wbs> $ARGUMENTS")` + `Skill(skill="sp:code-verification", args="review $ARGUMENTS")` + `Skill(skill="sp:code-improvement", args="<wbs> $ARGUMENTS")` (functional traceability + SECUA framework + architectural depth; may write `Review` section to task)
 - Path mode (`<path>`): `Skill(skill="sp:code-verification", args="review $ARGUMENTS")` + `Skill(skill="sp:code-improvement", args="<path> $ARGUMENTS")` (advisory SECUA quality + architectural depth; performs no task mutation)
-- `--fix` / `--next`: Deprecated (no-op + warning message; route remediation to `/sp:dev-verify --fix` and progression to `/sp:dev-next`)
+- `--fix`: Deprecated (no-op + warning message; route remediation to `/sp:dev-verify --fix`). **`--next` removed** (feature H8, 2026-07-31) — it was a deprecated no-op; route progression to `/sp:dev-next`. **was: `--next` deprecated no-op.**
 

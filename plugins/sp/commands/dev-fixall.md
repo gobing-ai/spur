@@ -1,6 +1,6 @@
 ---
 description: Fix all lint, type, and test errors systematically across the working tree
-argument-hint: "[<validation-command>] [--max-retry <n>] [--scope <path>]"
+argument-hint: "[<validation-command>] [--max-retry <n>] [[`--scope`](../skills/spur-dev/references/dev-operations.md#flag-scope) <path>]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Grep", "Glob"]
 ---
 

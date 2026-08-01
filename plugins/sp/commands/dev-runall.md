@@ -1,6 +1,6 @@
 ---
 description: Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via task-pipeline.yaml, emit a batch report
-argument-hint: "--tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <name|auto>] [--json] [--wrap] [--continue]"
+argument-hint: "[`--tasks`](../skills/spur-dev/references/dev-operations.md#flag-tasks) <selector> [[`--feature`](../skills/spur-dev/references/dev-operations.md#flag-feature) <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <name|auto>] [--json] [--wrap] [--next] [--continue]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
@@ -11,30 +11,37 @@ Wraps the **sp:spur-dev** skill.
 ## Usage
 
 ```
-/sp:dev-runall --tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <name|auto>] [--json] [--wrap] [--continue]
+/sp:dev-runall --tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <name|auto>] [--json] [--wrap] [--next] [--continue]
 ```
 
 Flags: `--tasks <selector>` (required — explicit WBS list, status pseudo-list, `feature:<id>`,
-or `ready`), `--feature <id>` (sugar for `feature:<id>`), `--mode <sequential|parallel>`
-(default `sequential`; `parallel` fans out a proven-independent subset — see
-`execution-batch.md` § Parallel Execution), `--keep-going` (batch failure policy — skip a failed
-task's in-batch dependents, continue independents; default halts on first failure), `--auto`
+or `ready`), `--feature <id>` (sugar for `feature:<id>`), [`--mode`](../skills/spur-dev/references/dev-operations.md#flag-mode)
+`<sequential|parallel>` (default `sequential`; `parallel` fans out a proven-independent subset —
+see `execution-batch.md` § Parallel Execution), [`--keep-going`](../skills/spur-dev/references/dev-operations.md#flag-keep-going)
+(batch failure policy — skip a failed task's in-batch dependents, continue independents; default
+halts on first failure), [`--auto`](../skills/spur-dev/references/dev-operations.md#flag-auto)
 (sets `profile=auto` on each per-task run, skipping the HITL approve gate), `--agent <name|auto>`
 (pipeline override merged into each per-task `vars.agent`; pins the step executor, not the
-orchestrator), `--json` (emit the report as JSON), `--wrap` (trigger `wrapup-pipeline.yaml`
-after the batch completes), `--continue` (resume from checkpoint — see below).
+orchestrator), [`--json`](../skills/spur-dev/references/dev-operations.md#flag-json) (emit the
+report as JSON), [`--wrap`](../skills/spur-dev/references/dev-operations.md#flag-wrap) (trigger
+`wrapup-pipeline.yaml` after the batch completes), [`--next`](../skills/spur-dev/references/dev-operations.md#flag-next)
+(chain each task to terminal status, then run the wrap hop **once for the batch** — see below),
+[`--continue`](../skills/spur-dev/references/dev-operations.md#flag-continue) (resume from checkpoint).
 
-**No `--next` flag.** `dev-runall` drives the complete `task-pipeline.yaml` per task, so every
-step `--next` could chain to is already inside the pipeline. `--next` is meaningful on
-`dev-run` (two modes: full vs implement-only) and `dev-verifyall` (a verdict-triggered status
-transition), but a no-op here. Adding it would either do nothing or redefine runall into
-implement-only-then-chain — which is what `dev-refineall --next` already does and what
-`dev-operations.md` warns is a token bomb. The asymmetry with `dev-run` is deliberate.
+**`--next` (batch-once wrap).** [`--next`](../skills/spur-dev/references/dev-operations.md#flag-next)
+is chain-to-completion with propagation. On `dev-runall`, each task in the batch runs its
+`task-pipeline.yaml` to terminal status (the pipeline already drives precheck → implement → test →
+review → approve → verify → record → done); when the batch is complete, the wrap hop runs **once
+for the batch** — mirroring the batch-once shippable gate `dev-verifyall` uses — rather than once
+per task. Without `--next`, `--wrap` is wrap-without-chaining (the single batch wraps without
+advancing the feature lifecycle). **was: `--next` deliberately omitted; the old no-`--next` rationale argued against the old per-task-transition meaning and does not carry.**
 
-**Three orthogonal axes** (do not confuse): `--keep-going` = batch failure policy (does a
-failure halt the batch or skip dependents?); `--continue` = resume from checkpoint (pick up an
-interrupted batch); `--next` = per-task lifecycle chaining (advance status on a verdict —
-dev-verify/dev-verifyall only). See `dev-operations.md` § runall for the full distinction.
+**Three orthogonal axes** (do not confuse): [`--keep-going`](../skills/spur-dev/references/dev-operations.md#flag-keep-going)
+= batch failure policy (does a failure halt the batch or skip dependents?);
+[`--continue`](../skills/spur-dev/references/dev-operations.md#flag-continue) = resume from
+checkpoint (pick up an interrupted batch); [`--next`](../skills/spur-dev/references/dev-operations.md#flag-next)
+= chain each task to terminal status + batch-once wrap. See `dev-operations.md` § runall for the
+full distinction.
 
 ## Implementation
 

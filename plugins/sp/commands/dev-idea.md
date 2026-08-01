@@ -20,9 +20,9 @@ Wraps the **idea-pipeline.yaml** workflow.
 | Flag | Axis | Effect |
 |------|------|--------|
 | *(none)* | interactive | All HITL; design package on by default |
-| `--auto` | HITL depth | Skip **objective** gates; **taste** gates still pause |
-| `--skip-design` | scope | No system-design; omit per-task Design (refine later) |
-| `--approve-taste` | taste re-entry | Only meaningful with `--auto`: sets `idea_approved` + `design_approved` so idea-eval and design-approval do not pause |
+| [`--auto`](../skills/spur-dev/references/dev-operations.md#flag-auto) | HITL depth | Skip **objective** gates; **taste** gates still pause |
+| [`--skip-design`](../skills/spur-dev/references/dev-operations.md#flag-skip-design) | scope | No system-design; omit per-task Design (refine later) |
+| [`--approve-taste`](../skills/spur-dev/references/dev-operations.md#flag-approve-taste) | taste re-entry | Only meaningful with `--auto`: sets `idea_approved` + `design_approved` so idea-eval and design-approval do not pause |
 
 There is **no** `--design` force flag. Design is default-on; only `--skip-design` opts out.
 

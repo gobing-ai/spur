@@ -1,6 +1,6 @@
 ---
 description: Generate or extend tests until the unit target is met
-argument-hint: "<target> [--coverage <n>] [--agent <name|auto>] [--auto]"
+argument-hint: "<target> [--coverage <n>] [--agent <name|auto>] [[`--auto`](../skills/spur-dev/references/dev-operations.md#flag-auto)]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 ---
 

@@ -133,13 +133,25 @@ ties in v1 — `--auto` only skips confirmations *inside* a single chosen comman
 
 ## 5. Chain semantics (success path)
 
-| After successful dispatch | If not `--once` | Notes |
-| --- | --- | --- |
-| `dev-refine … --next` | already chains internally | Router does not double-chain |
-| `dev-run … --next` | already chains to verify | Router does not double-chain |
-| `dev-verify … --next` | already attempts done | Router stops after return |
-| `dev-unit` / `dev-fixall` / `dev-wrap` / `dev-handover` | **no auto re-entry** into router in v1 | Operator re-invokes `/sp:dev-next` for the next hop (keeps token cost bounded) |
-| HITL / guard failure | no chain | Print recovery one-liner with exact re-run command |
+**Canonical definition.** [`--next`](../../spur-dev/references/dev-operations.md#flag-next) is
+chain-to-completion with propagation: on success, hand the task back to `sp:next-router`, which
+resolves the next dispatch and re-invokes with `--next` still set, until the work is done or a gate
+stops it. The full chain contract (stop conditions, hop bound, reporting) lives in the glossary; this
+section is the routing-table projection of it. Per-row `Stop / notes` columns below name the stop
+condition for each route.
+
+| After successful dispatch | If not `--once` | Stop condition | Notes |
+| --- | --- | --- | --- |
+| `dev-refine … --next` | chains to `dev-run` (status → todo+deps) | unmet deps (A2), guard fail, refine guard fail | Router does not double-chain |
+| `dev-run … --next` | chains to `dev-verify` (status → testing) | non-PASS verify verdict, gate fail | Router does not double-chain |
+| `dev-verify … --next` | attempts done (FSM + provenance guards) | PARTIAL/FAIL verdict → stop review-pending; done → chain complete | Router stops after return |
+| `dev-unit` / `dev-fixall` / `dev-wrap` / `dev-handover` | **no auto re-entry** into router in v1 | operator re-invoke | Keeps token cost bounded; operator re-invokes `/sp:dev-next` |
+| HITL / guard failure | no chain | named in `Stop / notes` | Print recovery one-liner with exact re-run command |
+
+**Hop bound: 8.** A chain running under `--next` performs at most **8 primary dispatches** (router
+re-entries). When the bound is hit without terminal task status, the router stops and emits
+**W-CHAIN-BOUND** (routing-cycle suspected, not completion). The bound is sized for refine → run →
+verify → wrap (4 hops) plus probe short-circuits (`dev-fixall`/`dev-unit`).
 
 **Step budget:** one router invocation performs **at most one primary dispatch** (+ whatever that
 command's own `--next` chain does). It does **not** loop `dev-next` on itself (prevents unbounded
@@ -155,6 +167,12 @@ means "only the current step":
 3. Dispatch single step; print P3 with hint to re-run `/sp:dev-next`.
 
 Without `--once`, leave table `--next` intact so refine→run→verify chain runs as today.
+
+> **Redefinition note (feature H8, task 0399, 2026-07-31).** Before the glossary, `--next` carried
+> four incompatible meanings across seven commands; this table was one of the places they collided.
+> Task 0401 reconciled every declaring command against the single definition above. `dev-run --next`
+> as implement-only mode selector is the only genuinely breaking case — replacement is
+> `--mode implement` (row A5 already dispatches that). See ADR-039.
 
 ## 6. Non-routes (explicit)
 

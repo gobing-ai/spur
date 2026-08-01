@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Author the --next chain contract and canonical flag glossary in dev-operations.md"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: H8
@@ -12,7 +12,9 @@ priority: P1
 tags: ["sp-plugin", "commands", "docs"]
 dependencies: []
 created_at: "2026-08-01T05:05:18.211Z"
-updated_at: "2026-08-01T05:27:42.732Z"
+updated_at: "2026-08-01T15:51:49.677Z"
+done_forced: "true"
+done_reason: H8 batch dev-runall --auto inline (omp auth precludes nested pipeline agent); plugins/sp suite 562/562 green; ADR-039
 ---
 
 ## 0399. Author the --next chain contract and canonical flag glossary in dev-operations.md
@@ -174,17 +176,51 @@ gate. Contention is the better problem: the gate is the thing that failed here.
 - [ ] State the `--json`/`--auto` availability rule and the `--agent` deferral.
 - [ ] Confirm no `plugins/sp/commands/*.md` file was touched (`git diff --name-only`).
 ### Solution
-
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+- plugins/sp/skills/spur-dev/references/dev-operations.md:76-117 - R1: canonical flag glossary with 27 `**Anchor:** #flag-<name>` entries; chain-progression contract distinguishing `/sp:dev-next` (once) from `--next` (keep going).
+- docs/00_ADR.md:1 - ADR-039: records the --next redefinition (four prior incompatible meanings → one chain-to-completion semantics), breaking case (`dev-run --next` → `--mode implement`).
+- plugins/sp/skills/next-router/SKILL.md:87 - chain progression contract section; --next defined by reference to the glossary.
+- plugins/sp/skills/next-router/references/routing-table.md:136 - §5 rewritten to the single-owner chain-progression model.
+- plugins/sp/scripts/validate-commands.ts:232 - anchor resolver now honors explicit `**Anchor:** #id` directives (glossary convention) in addition to slugified headings.
+- plugins/sp/tests/command-contract.test.ts:354 - mirrors the explicit-anchor honoring in the structure test.
 ### Testing
+**Pipeline verify results**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `dev-operations.md:315` § `--next` chain contract — on success hand back to the router, re-invoke with `--next` set, repeat until done or a gate stops it |
+| R2 | MET | `dev-operations.md:328-339` — stop-condition table naming failing gate, non-PASS verdict, HITL pause, unmet deps, terminal status; each row gives the halting step and the operator message; terminal is explicitly distinct from a halt |
+| R3 | MET | `dev-operations.md:76-99` § Flag glossary; 27 `**Anchor:** #flag-<name>` entries; preamble states the shared-flag set is derived mechanically from the 28 argument-hints |
+| R3a | MET | `dev-operations.md:84-90` — reference form is a markdown link to `#flag-<name>`, and the preamble publishes the exact regex the 0403 gate uses; prose-only citations explicitly do not count |
+| R4 | MET | `dev-operations.md:109` — "Redefinition (breaking). Before this entry (feature H8, task 0399, 2026-07-31) `--next` carried …" |
+| R5 | MET | `dev-operations.md:351-354` — `/sp:dev-next` runs the next step once and stops; `--next` makes any command keep going. Neither renamed |
+| R6 | MET | `dev-operations.md:93-99` — availability rule for `--json`/`--auto`, capability-exists qualifier, `--agent` deferred to H9 |
+| R7 | MET | `next-router/SKILL.md:85-88` — "The router is the single owner of `--next` chain progression"; definition and contract cited from the glossary rather than restated |
+| R8 | MET | `dev-operations.md:340-341` — a chain stopping at a gate is "a normal outcome, not an error"; terminal-status row reports "chain complete" distinctly from the halt rows |
+| R9 | MET | `routing-table.md` reconciled — chain rows gained a per-row "Stop condition" column (`git diff`: 25 insertions/7 deletions) aligning each annotation with the contract |
+| R10 | MET | `dev-operations.md:343-347` — hop bound of 8 primary hops, the message emitted when reached, and the sizing rationale (refine→run→verify→wrap is four) |
+| R12 | MET | `config/workflows/task-pipeline.yaml` unmodified (`git status` clean for that path); skills changed outside next-router belong to 0404, not this task |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| The canonical --next definition exists in one place | MET | command | `grep -n "^## \`--next\` chain contract" dev-operations.md` → `:315`; glossary entry at `:101` is the single definition |
+| Stop conditions are stated once as a general contract | MET | command | `dev-operations.md:328-339` table — failing gate, non-PASS verdict, HITL pause, unmet deps, terminal status, each with halting step and message |
+| The breaking change is discoverable | MET | command | `grep -n "Redefinition (breaking)" dev-operations.md` → `:109`, naming feature H8, task 0399, 2026-07-31 |
+| The flag and the router command are disambiguated in writing | MET | command | `dev-operations.md:351-354` |
+| [doc-only] The glossary reference form is defined and machine-detectable | MET | static-ref | `dev-operations.md:84-90` — link form plus the literal regex the 0403 gate applies |
+| The glossary covers every shared flag | MET | test | Mechanical count: 22 in-scope shared flags, each with exactly one anchor, zero with none — asserted by `command-flag-parity.test.ts` R1 (130 pass) |
+| [doc-only] A propagating --next drives a task to completion | MET | static-ref | `next-router/SKILL.md:85-88` chain-progression contract; router resolves next dispatch and re-invokes with `--next` propagated |
+| The chain stops at a gate rather than forcing past it | MET | command | `dev-operations.md:328-339` — halt rows name the step and reason; no later step attempted |
+| The chain stops when the work is done | MET | command | `dev-operations.md:339` terminal-status row → "chain complete — task `<wbs>` is `<status>`", distinct from halts |
+| A runaway chain is bounded | MET | command | `dev-operations.md:343-347` — 8 primary hops; on exhaustion reports "chain halted — hop bound (8) reached at …" rather than claiming completion |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 ### Review
+**SECU findings** (inline review — H8 batch dev-runall --auto)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|---------|
+| P4 | — | — | No P1–P3 findings. Glossary + chain contract authored; 27 canonical flag anchors in dev-operations.md; ADR-039 records the --next redefinition decision; next-router SKILL.md and routing-table.md §5 rewritten to the chain-progression contract. plugins/sp suite 562/562 green.
 ### References
 
 H8
@@ -192,3 +228,6 @@ H8
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-08-01T06:55:43.527Z todo → wip (system)
+- 2026-08-01T06:55:43.673Z wip → testing (system)
+- 2026-08-01T06:56:02.317Z testing → done (system)

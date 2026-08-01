@@ -19,6 +19,49 @@ Turning a feature's acceptance criteria into a validated task batch. The LLM pro
 the CLI validates it against `task-batch.schema.json`; nothing is written until the gate
 passes.
 
+## Granularity — two dimensions
+
+The frontmatter `granularity` knobs (`min_hours`, `target_min_hours`, `target_max_hours`,
+`force_decompose_above_hours`) bound a task's *size in hours*. They are the **second** dimension
+of sizing, not the only one. The **first** dimension is **cohesion**: work that edits the same
+files, or that requires the same review context to judge, is one task — *even when the hour
+estimate would justify splitting*.
+
+### Cohesion decides legitimacy; hours bound size
+
+Apply the two in order:
+
+1. **Cohesion first — is the split legitimate at all?** If the candidate children would edit the
+   same file surface, or need to be read together to be reviewed, they are one task. Splitting
+   cohesive work multiplies the fixed per-task ceremony (precheck, implement, test, review,
+   approve, verify, record, done — plus a verdict artifact with full requirement and AC tables,
+   plus gate remediation at each transition) without reducing risk: the reviewer still reads one
+   diff, just across more files. **Ceremony cost is per-task**, which is why this rule exists and
+   why its rationale is written here rather than re-litigated at each decomposition.
+2. **Hours second — is the resulting cohesive task too large?** Only after cohesion says a split is
+   legitimate do the hour knobs bound how large that single cohesive task may get. Above
+   `force_decompose_above_hours`, the size guard overrides cohesion: split even if the children
+   share a review context, because at that size the review itself becomes the risk.
+
+Without the second clause, cohesion reads as "never split" — the opposite failure. The knobs are
+the escape hatch; cohesion is the default.
+
+### Worked example: H8's own first decomposition
+
+Feature H8 ("sp command surface coherence") decomposed into five tasks, each 3–8h — fully inside
+`target_min_hours`/`target_max_hours`. The operator rejected it as over-split, correctly: three of
+the five (0399, 0401, 0402) all edited `dev-operations.md` and the `plugins/sp/commands/*.md`
+surface, so the split created contention over one file surface and tripled the pipeline ceremony
+for a diff a reviewer reads once. The merge (5 → 4, with 0402 absorbed into 0401) removed two full
+sets of precheck/implement/test/review/approve/verify/record/done cycles over content the reviewer
+was always going to read as one diff.
+
+The hour knobs alone permitted the five-task split; cohesion is what flagged it. A numeric proxy
+(`max_files_shared` or similar) would have been wrong often enough to be ignored — two tasks
+touching one shared config file may be genuinely independent, and two tasks touching disjoint
+files may share a review context entirely. Cohesion is a judgment about coupling, and it is stated
+as prose for that reason.
+
 ## The batch schema
 
 `apps/cli/schemas/task-batch.schema.json` (runtime SSOT: the Zod `taskBatchSchema` in

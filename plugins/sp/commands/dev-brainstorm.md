@@ -17,3 +17,8 @@ Wraps the **sp:brainstorm** and **sp:wayfinder** skills.
 - Default: `Skill(skill="sp:brainstorm", args="dev-brainstorm --context <decision-tree> --options <n>")`
 - `--wayfind`: `Skill(skill="sp:wayfinder", args="chart --destination <destination> --context <decision-tree>")`
 
+[`--next`](../skills/spur-dev/references/dev-operations.md#flag-next): chain-to-completion with
+propagation. Only meaningful with [`--feature`](../skills/spur-dev/references/dev-operations.md#flag-feature) (the front-half artifact exit): on a clean
+`feature check`, chain into `/sp:dev-plan --feature <ID>` so the planning half runs end-to-end.
+Ignored without `--feature` (there is no task in a lifecycle to advance). **was: `--next` declared but never defined.**
+

@@ -82,6 +82,44 @@ silently (that is a HITL stop).
 **Step budget:** one router invocation performs **at most one primary dispatch** (+ whatever that
 command's own `--next` chain does). Never self-loop `/sp:dev-next`.
 
+## Chain progression contract (`--next`)
+
+The router is the single owner of `--next` chain progression. The definition of [`--next`](../spur-dev/references/dev-operations.md#flag-next)
+and the full chain contract (stop conditions, hop bound, reporting) live in the glossary; this
+section states the router's side: how a chain propagates, how it stops, and how it reports.
+
+**Single dispatch per invocation.** One router invocation performs **at most one primary dispatch**
+(already stated above as the step budget). Chain continuation is the child's `--next` re-entering
+the router, not the router self-looping. The router never double-chains.
+
+**Propagation.** When the dispatched child completes successfully and its argv carried `--next`
+(i.e. `--once` was not applied), the child re-invokes `/sp:dev-next` with the same target and
+`--next` still set. The router resolves the next dispatch from the **new** task status (which may
+have advanced) and dispatches again. This is the chain: router → child → router → child, until a
+stop condition.
+
+**Hop bound: 8 primary dispatches per `--next` chain.** A chain running under `--next` performs at
+most **8 primary dispatches**. Each router re-entry is one hop. When the bound is reached without a
+terminal task status, the router stops and emits message **W-CHAIN-BOUND** (below): "chain halted —
+hop bound (8) reached at `<step>` without terminal status; this indicates a routing cycle, not
+completion." The bound is sized for the longest legitimate chain (refine → run → verify → wrap is
+four hops; the remaining four absorb probe short-circuits like `dev-fixall`/`dev-unit`).
+
+**Stop conditions.** A chain halts cleanly when a gate fails, the verify verdict is non-PASS, a
+HITL pause fires (taste gate, irreversible gate, multi-candidate fork), dependencies are unmet, or
+the task reaches terminal status. The stop is a normal outcome, not an error: the report names
+which step halted and why ("chain halted at `<step>` — `<cause>`"), distinct from the completion
+report ("chain complete — task `<wbs>` is `<status>`"). The per-row `Stop / notes` column in
+[routing-table.md](references/routing-table.md) §5 names the stop condition for each route.
+
+**Flag vs command.** `/sp:dev-next` (the command) runs the next step **once** and stops; `--next`
+(the flag) makes any command it is passed to **keep going**. `/sp:dev-next <wbs> --next` is valid
+but redundant. See the glossary entry for the disambiguation in full.
+
+| Id | Fires when | Kind |
+|----|-----------|------|
+| W-CHAIN-BOUND | `--next` chain hit the 8-dispatch hop bound without terminal status | warning — stop (routing-cycle suspected) |
+
 ## Operator messages
 
 **[references/messages.md](references/messages.md)** (exact templates, prefixed `dev-next:`). The router fires them by id:

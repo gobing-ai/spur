@@ -1,6 +1,6 @@
 ---
 description: Plan a feature from a description — intake → feature create → AC generation → feature check gate → decomposition → batch-create (Design by default)
-argument-hint: "\"<description>\" [--feature <id>] [--parent <feature-id>] [--agent <name|auto>] [--skip-design] [--auto] [--approve-taste]"
+argument-hint: "\"<description>\" [[`--feature`](../skills/spur-dev/references/dev-operations.md#flag-feature) <id>] [--parent <feature-id>] [--agent <name|auto>] [--skip-design] [[`--auto`](../skills/spur-dev/references/dev-operations.md#flag-auto)] [--approve-taste]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---
 
@@ -20,9 +20,9 @@ Wraps the **sp:spur-dev** skill.
 
 **Design package (unified with `/sp:dev-idea`):** Design is **on by default**. Default fills
 per-task `### Design` in the batch and the feature satellite when the seam heuristic fires
-(ties lean **design**). There is **no** `--design` force flag — only **`--skip-design`** opts out.
+(ties lean **design**). There is **no** `--design` force flag — only **[`--skip-design`](../skills/spur-dev/references/dev-operations.md#flag-skip-design)** opts out.
 
-**Taste re-entry:** `--approve-taste` is the same flag as on `dev-idea` (sets prior design approval
+**Taste re-entry:** [`--approve-taste`](../skills/spur-dev/references/dev-operations.md#flag-approve-taste) is the same flag as on `dev-idea` (sets prior design approval
 for taste gates). Alias: `--design-approved` (prefer `--approve-taste`).
 
 ## Implementation
