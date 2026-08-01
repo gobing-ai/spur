@@ -74,6 +74,82 @@ scenario, it matches by title. Rules:
 - **No synonyms in cross-references.** The title in the feature file and the title in the
   task's AC reference must be byte-identical.
 
+## Verdict AC ↔ feature scenario linkage
+
+How a verify-answer AC table connects back to a feature scenario. Added by task 0398 R8 after the
+H6 batch rediscovered this contract by failure, across three regeneration cycles.
+
+### The AC table shape
+
+`spur task verdict <wbs> --from-answer <file>` parses a four-column table. Both the header and the
+column order matter:
+
+```markdown
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| R3 — Batch report names every skipped task | MET | test | `tests/batch.test.ts:88`; `bun test` exit 0 |
+```
+
+- **Status** — `MET` · `PARTIAL` · `UNMET` · `N/A`.
+- **Evidence Type** — `test` · `command` · `static-ref` (aliases: `static`, `doc`, `docs`,
+  `documentation`) · `manual-review` (alias `manual`) · `llm-judge` (alias `judge`) · `n/a`.
+
+A row whose status or evidence type cannot be parsed is **omitted from the verdict**, but the
+omission is now reported as an `ac-row-dropped` check naming the row and the unrecognised value
+(0398 R6). If a verdict comes back with fewer AC rows than you authored, read that check.
+
+### Four accepted id forms
+
+`rowMatchesScenario` accepts any of these as naming the feature scenario `R3 — Foo`:
+
+| Form | Example |
+|------|---------|
+| Exact title | `R3 — Foo` |
+| Bare title (R-prefix dropped) | `Foo` |
+| `Scenario:` prefix | `Scenario: R3 — Foo` |
+| `AC-N` positional alias | `AC-3` |
+
+Any of the four may additionally carry a **bracket tag** in any position — `[doc-only] R3 — Foo`,
+`Scenario: [advisory] Foo`. Tags are stripped before matching (0398 R7), so tagging never breaks
+the linkage.
+
+### Which tags exempt a row from executable evidence
+
+A `MET` row is silently demoted to `PARTIAL` unless it carries `test` or `command` evidence — the
+executable-evidence rule. Five tags opt a row out, because not every scenario is behavioral:
+
+`[doc-only]` · `[docs-only]` · `[non-behavior]` · `[advisory]` · `[non-core]`
+
+Use one when the scenario asserts documentation or a design decision, and pair it with
+`static-ref`. Do **not** manufacture a token test to dodge the rule — that is the failure mode this
+contract exists to prevent.
+
+```markdown
+| [doc-only] R7 — The linkage contract is written down | MET | static-ref | `ac-style-guide.md` § linkage |
+```
+
+> Before 0398 R7 this row was unusable: the tag was required to keep `MET`, but the tag also broke
+> title matching, so the scenario read as unverified. Both halves now hold at once.
+
+### What `--strict` advance requires
+
+`spur feature advance <id> --to done --strict` treats a scenario as verified only when **all** of
+these hold:
+
+1. A task links to the feature (`feature_id`) and is status `done`.
+2. That task has a verdict artifact at `.spur/run/<wbs>-verdict.json` with top-level `PASS`.
+3. That artifact carries a row — in `requirements` **or** `acceptanceCriteria` — whose id matches
+   the scenario by one of the four forms above, with status `MET`.
+
+Anything less emits `L4.scenario-unverified`.
+
+### Cover every declared scenario, not just the gate's minimum
+
+`spur feature check` only needs **one** matching MET row per *feature* scenario. Satisfying just
+those leaves per-task AC coverage incomplete and nothing will flag it — H6 shipped nine tasks at
+23/48 scenario coverage, one with an empty `acceptanceCriteria` array, and every gate still passed.
+Author one row per scenario declared in the task's own `### Acceptance Criteria`.
+
 ## Gherkin template
 
 Use the canonical BDD template at `.spur/templates/bdd/gherkin.md`. Key rules:

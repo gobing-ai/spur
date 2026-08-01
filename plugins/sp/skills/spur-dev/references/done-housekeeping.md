@@ -62,6 +62,68 @@ the section-editing workflow in `cross-cutting.md` - follow it without exception
 
 Invariant: no `--from-file` staging files left in `/tmp` after the task is done.
 
+## F6 - Recovering from a pipeline `agent.run` timeout
+
+When an `agent.run` step is killed at the timeout wall, the run is dead but the work may be
+partly on disk. Force-done with a provenance override is the sanctioned recovery - it bypasses
+the verify FSM, so it carries obligations. Added by task 0398 R5 after the H6 batch used this
+path six times as tribal knowledge.
+
+**1. Recognise it.** A timeout leaves `.spur/run/<runId>-<step>-partial.md` and the run reports
+`exited with code 3`. That is a killed subprocess, not a failed assertion - do not read the
+partial file as a verdict.
+
+```bash
+ls -la .spur/run/*-partial.md          # handoff files, newest last
+spur workflow trace <run-id>           # confirm the terminal state
+```
+
+**2. Establish green by hand.** The pipeline's `test` step never ran to completion, so nothing
+has verified the tree. You must:
+
+```bash
+bun run lint
+bun run test
+```
+
+Both must pass before you go further. Establish the environmental baseline first if you are in a
+restricted sandbox - port-binding and `ps` denials produce failures that are not yours (see the
+project's sandbox notes). Real regressions are *additional* failures.
+
+**3. Finish the work the step abandoned.** Write the sections the killed step would have written
+(`## Solution`, `## Testing`, and the `## Review` P1-P4 table - the L3 `review-priority-table`
+gate will reject the task without it). Use the normal `--section --from-file` contract.
+
+**4. Force-done with an honest reason.**
+
+```bash
+SPUR_PROVENANCE_OVERRIDE=1 spur task update <wbs> done --force-done \
+  --reason "<step> agent.run timed out at <N>s; recovered manually: lint clean, <suite> pass, sections authored by hand"
+```
+
+The reason is persisted as `done_reason` and is the only record that this task did not earn its
+`done` through the FSM. Name the step, the timeout, and the manual evidence. "Completed" is not
+an acceptable reason.
+
+**5. Regenerate the verdict.** Force-done skips verdict generation, so the task lands `done` with
+no artifact and `spur feature check` will read the scenario as unverified:
+
+```bash
+spur task verdict <wbs> --from-answer .spur/run/<wbs>-verify-answer.txt
+```
+
+Author the answer file with **both** tables - a `| Req | Status | Evidence |` table covering every
+`R{n}`, and an `| AC | Status | Evidence Type | Evidence |` table covering **every declared
+scenario**, not just the ones needed to clear `spur feature check`. The feature gate only requires
+one matching MET row per *feature* scenario; satisfying just those leaves per-task AC coverage
+silently incomplete (H6 shipped at 23/48 that way, with one verdict carrying an empty
+`acceptanceCriteria` array and still reading PASS). See `ac-style-guide.md` §
+"Verdict AC ↔ feature scenario linkage" for the id forms and evidence vocabulary.
+
+**Invariant:** a force-done task has a non-empty `done_reason` naming the timeout, a verdict
+artifact whose AC rows cover every declared scenario, and a green lint/test run recorded in
+`## Testing`.
+
 ## Before you report done - terminal gate (run this every time)
 
 This is the enforcement mechanism for the Definition of Done Housekeeping above. The sections
