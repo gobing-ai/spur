@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.3.28] — 2026-07-31
+
+### Added
+
+- split super-coder (BUILD) from new super-planner (ORCHESTRATION) with mutually exclusive charters; add dispatch-surface rule and promote agent/message/team/init/status/serve to documented Tier B spur-cli nouns (12d377e1)
+- gate CLI<->skill parity bidirectionally; record coupling in ADR-038 (12d377e1)
+- rename `spur-tdd` -> `test-driven-development` (off the spur namespace) (12d377e1)
+- reconcile batch command flag surfaces (`--next` on dev-verifyall, `--mode`/`--continue` on dev-runall) and add `command-flag-parity.test.ts` (12d377e1)
+- extract shared `done-housekeeping` reference; four sp agents cite it (12d377e1)
+- stage H7 dogfood remediation feature and task 0398 (12d377e1)
+- AC-linkage contract and agent.run timeout-recovery runbook in sp docs (21f4aed7)
+
+### Fixed
+
+- strip bracket tags (and `Scenario:`/`R{n}` prefix) in scenario title normalization, so documentation scenarios with `[doc-only]` AC ids are verifiable (a6e792c4)
+- accept `doc`/`docs`/`documentation` evidence aliases and report dropped AC rows via diagnostics instead of vanishing silently (33d65803)
+- make SessionStart idempotent per in-flight session: reuse `SPUR_RUN_ID`-correlated sessions over nested `agent.run` subprocesses (was minting a fresh session per firing — 332 starts vs 157 ends over 18 days) (a467dd62)
+- raise `agent.run` step timeout 600 s -> 1800 s (30 min headroom) for test/review/verify steps (261541ea)
+
+### Other
+
+- bump `@gobing-ai/ts-*` catalog pins `^0.4.14` -> `^0.4.15` — required by the SessionStart fix via `SPUR_RUN_ID` propagation (dc343b69)
+- allow WebFetch for `github.com` in local plugin settings (fae89ec4)
+- record H6/H7 task and feature completion (0c1ec657, 0fa9b454, 039de5fd)
+
 ## [0.3.27] — 2026-07-30
 
 ### Added
