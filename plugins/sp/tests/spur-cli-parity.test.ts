@@ -1,6 +1,18 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Command } from 'commander';
+import { registerAgentCommand } from '../../../apps/cli/src/commands/agent';
+import { registerFeatureCommand } from '../../../apps/cli/src/commands/feature';
+import { registerInitCommand } from '../../../apps/cli/src/commands/init';
+import { registerMessageCommand } from '../../../apps/cli/src/commands/message';
+import { registerRuleCommand } from '../../../apps/cli/src/commands/rule';
+import { registerServeCommand } from '../../../apps/cli/src/commands/serve';
+import { registerStatusCommand } from '../../../apps/cli/src/commands/status';
+import { registerTaskCommand } from '../../../apps/cli/src/commands/task';
+import { registerTeamCommand } from '../../../apps/cli/src/commands/team';
+import { registerWorkflowCommand } from '../../../apps/cli/src/commands/workflow';
+import type { CliContext } from '../../../apps/cli/src/context';
 
 const PLUGIN_ROOT = join(import.meta.dir, '..');
 const SKILLS_DIR = join(PLUGIN_ROOT, 'skills', 'spur-cli');
@@ -56,6 +68,75 @@ const TIER_B_REF_FILES: Record<string, string> = {
     status: 'init.md',
     serve: 'serve.md',
 };
+
+/**
+ * Build the live commander tree in-process, once.
+ *
+ * These tests assert what `spur <noun> [verb] --help` prints. That text is a pure function of the
+ * commander definitions, so obtaining it does not require a subprocess. The previous version
+ * spawned `bun apps/cli/src/index.ts <noun> [verb] --help` once per noun *and* per verb — 66 full
+ * CLI cold starts in this one file. On CI the Tier B probe alone measured 10.4s against bun's 5s
+ * per-test default and failed the build; its Tier A twin survived only by running second with a
+ * warm transpile cache, so the pass/fail split was ordering luck, not a real cost difference.
+ *
+ * `register*Command(program, context)` reads `context` only inside `.action()` handlers, which help
+ * rendering never invokes, so a stub context builds the whole tree: no DB, no config load, no
+ * migrations, no processes. Verified equivalent to the spawned output — every flag and verb token
+ * the spawned `task --help` produced is present in the in-process rendering.
+ *
+ * Built once at module scope and shared by every test here.
+ */
+const cliProgram: Command = (() => {
+    // A structural stand-in for CliContext. Every property access returns a callable proxy, so any
+    // registration-time read resolves harmlessly; the real context is only needed inside `.action()`
+    // handlers, which help rendering never invokes. Cast rather than typed as `any` so the stub
+    // still has to satisfy the parameter the register functions actually declare.
+    const stubContext = new Proxy(function stub() {} as unknown as object, {
+        get: () => stubContext,
+        apply: () => stubContext,
+        set: () => true,
+    }) as unknown as CliContext;
+
+    const program = new Command();
+    program.name('spur').exitOverride();
+    for (const register of [
+        registerTaskCommand,
+        registerFeatureCommand,
+        registerRuleCommand,
+        registerWorkflowCommand,
+        registerAgentCommand,
+        registerMessageCommand,
+        registerTeamCommand,
+        registerInitCommand,
+        registerStatusCommand,
+        registerServeCommand,
+    ]) {
+        register(program, stubContext);
+    }
+    return program;
+})();
+
+/** Locate a registered noun command, failing loudly rather than silently asserting against ''. */
+function nounCommand(noun: string): Command {
+    const cmd = cliProgram.commands.find((c) => c.name() === noun);
+    if (cmd === undefined) throw new Error(`noun '${noun}' is not registered on the CLI program`);
+    return cmd;
+}
+
+/**
+ * Help text for a noun plus every listed verb — the in-process equivalent of concatenating
+ * `<noun> --help` with each `<noun> <verb> --help`.
+ */
+function helpTextFor(noun: string, verbs: readonly string[]): string {
+    const cmd = nounCommand(noun);
+    let text = cmd.helpInformation();
+    for (const verb of verbs) {
+        // Single-verb nouns (init/status/serve) name themselves; they have no subcommand entry.
+        const sub = cmd.commands.find((c) => c.name() === verb);
+        if (sub !== undefined) text += `\n${sub.helpInformation()}`;
+    }
+    return text;
+}
 
 describe('sp:spur-cli reference <-> live CLI parity (R9)', () => {
     test('tasks/verbs.md documents all Tier A task verbs including deps, sections, run-link', () => {
@@ -125,16 +206,9 @@ describe('sp:spur-cli reference <-> live CLI parity (R9)', () => {
         expect(skillRaw).toContain('sections');
     });
 
-    test('live CLI subcommands cover all documented Tier A verbs for each noun', async () => {
-        const cliPath = join(import.meta.dir, '..', '..', '..', 'apps', 'cli', 'src', 'index.ts');
-
+    test('live CLI subcommands cover all documented Tier A verbs for each noun', () => {
         for (const [noun, verbs] of Object.entries(EXPECTED_TIER_A_VERBS)) {
-            const proc = Bun.spawnSync(['bun', cliPath, noun, '--help']);
-            if (proc.exitCode !== 0) {
-                console.error(`CLI error for ${noun}:`, proc.stderr.toString());
-            }
-            expect(proc.exitCode).toBe(0);
-            const helpText = proc.stdout.toString();
+            const helpText = nounCommand(noun).helpInformation();
 
             for (const verb of verbs) {
                 // Every documented verb must be present in live CLI help output
@@ -153,16 +227,14 @@ describe('sp:spur-cli reference <-> live CLI parity (R9)', () => {
         }
     });
 
-    test('live CLI subcommands cover all documented Tier B verbs for each noun', async () => {
-        const cliPath = join(import.meta.dir, '..', '..', '..', 'apps', 'cli', 'src', 'index.ts');
-
+    test('live CLI subcommands cover all documented Tier B verbs for each noun', () => {
         for (const [noun, verbs] of Object.entries(EXPECTED_TIER_B_VERBS)) {
-            const proc = Bun.spawnSync(['bun', cliPath, noun, '--help']);
-            expect(proc.exitCode).toBe(0);
-            const helpText = proc.stdout.toString();
+            const helpText = nounCommand(noun).helpInformation();
 
             for (const verb of verbs) {
-                expect(helpText).toContain(verb);
+                // Single-verb nouns (init/status/serve) name themselves rather than listing a
+                // subcommand, so the noun's own name is what proves the verb exists.
+                expect(noun === verb ? noun : helpText).toContain(verb);
             }
         }
     });
@@ -193,9 +265,7 @@ describe('sp:spur-cli reference <-> live CLI parity (R9)', () => {
         expect(agentRaw).toContain('dispatch-surface');
     });
 
-    test('Tier B reference flags exist in live CLI (no phantom flags, R8)', async () => {
-        const cliPath = join(import.meta.dir, '..', '..', '..', 'apps', 'cli', 'src', 'index.ts');
-
+    test('Tier B reference flags exist in live CLI (no phantom flags, R8)', () => {
         // Group nouns by reference file (init and status share init.md)
         const refToNouns = new Map<string, string[]>();
         for (const [noun, refFile] of Object.entries(TIER_B_REF_FILES)) {
@@ -222,15 +292,8 @@ describe('sp:spur-cli reference <-> live CLI parity (R9)', () => {
                 }
             }
 
-            // Collect CLI help for every noun sharing this reference + all verbs
-            let allHelpText = '';
-            for (const noun of nouns) {
-                allHelpText += Bun.spawnSync(['bun', cliPath, noun, '--help']).stdout.toString();
-                for (const verb of EXPECTED_TIER_B_VERBS[noun]) {
-                    const vh = Bun.spawnSync(['bun', cliPath, noun, verb, '--help']);
-                    allHelpText += `\n${vh.stdout.toString()}${vh.stderr.toString()}`;
-                }
-            }
+            // Help for every noun sharing this reference, plus each of its verbs.
+            const allHelpText = nouns.map((noun) => helpTextFor(noun, EXPECTED_TIER_B_VERBS[noun] ?? [])).join('\n');
 
             for (const flag of refFlags) {
                 expect(allHelpText).toContain(flag);
@@ -241,9 +304,7 @@ describe('sp:spur-cli reference <-> live CLI parity (R9)', () => {
     // R6 phantom detection — Tier A nouns (task/feature/rule/workflow).
     // Symmetric to the Tier B phantom test above: a flag documented in a
     // Tier A reference that the live CLI no longer provides must fail.
-    test('Tier A reference flags exist in live CLI (no phantom flags, R6)', async () => {
-        const cliPath = join(import.meta.dir, '..', '..', '..', 'apps', 'cli', 'src', 'index.ts');
-
+    test('Tier A reference flags exist in live CLI (no phantom flags, R6)', () => {
         const TIER_A_REF_FILES: Record<string, string[]> = {
             task: ['tasks.md', 'tasks/verbs.md'],
             feature: ['features.md'],
@@ -264,17 +325,12 @@ describe('sp:spur-cli reference <-> live CLI parity (R9)', () => {
                 }
             }
 
-            // Gather live CLI help for the noun and each of its Tier A verbs.
-            let allHelpText = '';
-            allHelpText += Bun.spawnSync(['bun', cliPath, noun, '--help']).stdout.toString();
-            for (const verb of EXPECTED_TIER_A_VERBS[noun]) {
-                const vh = Bun.spawnSync(['bun', cliPath, noun, verb, '--help']);
-                allHelpText += `\n${vh.stdout.toString()}${vh.stderr.toString()}`;
-            }
+            // Help for the noun and each of its Tier A verbs.
+            const allHelpText = helpTextFor(noun, EXPECTED_TIER_A_VERBS[noun] ?? []);
 
             for (const flag of refFlags) {
                 expect(allHelpText).toContain(flag);
             }
         }
-    }, 30000);
+    });
 });
