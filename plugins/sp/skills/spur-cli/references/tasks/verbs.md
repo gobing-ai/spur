@@ -340,7 +340,7 @@ unallocated.
 ## Command surface (quick)
 
 ```
-spur task create   <title> [--feature <id>] [--parent <wbs>] [--template <v>] [--folder] [--json]
+spur task create   <title> [--feature <id>] [--parent <wbs>] [--template <v>] [--dedupe-within <seconds>] [--allow-duplicate-name] [--folder] [--json]
 spur task show     <wbs> [--folder] [--json]
 spur task update   <wbs> [status] [--section <n> --from-file <p>] [--feature <id>] [--priority <p>] [--no-lifecycle] [--folder] [--json]
 spur task deps     <wbs> <set|add|remove|clear> [values...] [--folder] [--json]

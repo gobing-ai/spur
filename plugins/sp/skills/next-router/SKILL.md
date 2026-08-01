@@ -47,7 +47,8 @@ silently (that is a HITL stop).
 | `--dry-run` | Print the resolved plan (**P1**) and do not dispatch. |
 | `--once` | Strip `--next` from the shaped child argv so only the current step runs; no router re-entry. |
 | `--auto` | Forward into dispatched children that support it. **Never** breaks multi-candidate HITL ties. |
-| `--agent <name\|auto>` | Forwarded into the dispatched child when that child documents `--agent`. The router itself always runs **inline** (current session). Omit → forward nothing. |
+| `--agent <name\|auto>` | Forwarded into the dispatched child when that child documents `--agent`; selects a subprocess agent. Omit → forward nothing. |
+| `--inline\|--subprocess` | Execution-surface choice forwarded into the child. Router defaults inline; a named escalation trigger overrides `--inline`. |
 | `--full` | When the primary route is `dev-run … --next`, substitute `dev-run <wbs> --mode full` (no `--next`). No effect on non-run routes → warning **W-FULL**. |
 
 ## Protocol (deterministic)
@@ -69,7 +70,8 @@ silently (that is a HITL stop).
 5. **Cardinality** — 0 candidates → stop **U3**; 1 → continue; >1 → HITL stop **U-HITL**
    (decision-brief; `--auto` does not pick a winner).
 6. **Shape child argv** — apply `--once` (strip `--next`), `--full` (run-chain rewrite only),
-   `--auto` / `--agent` forwarding per the Inputs table.
+   `--auto` / `--agent` / execution-surface forwarding per the Inputs table and
+   [cross-cutting.md](../spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 7. **`--dry-run`** → print plan block **P1**; exit success without dispatching.
 8. **Dispatch** — print **P2**, invoke the child:
    - **Claude Code:** `Skill(skill="sp:spur-dev", args="…")` (or the documented backing

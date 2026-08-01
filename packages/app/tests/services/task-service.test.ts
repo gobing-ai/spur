@@ -1289,9 +1289,16 @@ describe('TaskService — dedup guard (task 0341 R4)', () => {
         }
     });
 
-    test('no dedupe-within flag → no guard (legacy behavior preserved)', async () => {
-        await localSvc.create({ title: 'Unguarded V', featureId: 'F' });
-        const result = await localSvc.create({ title: 'Unguarded V', featureId: 'F' });
+    test('feature-scoped creates are guarded by default', async () => {
+        await localSvc.create({ title: 'Default guard', featureId: 'F' });
+        await expect(localSvc.create({ title: 'Default guard', featureId: 'F' })).rejects.toThrow(
+            /duplicate-follow-up/,
+        );
+    });
+
+    test('null dedupe window explicitly disables the default guard', async () => {
+        await localSvc.create({ title: 'Unguarded V', featureId: 'G' });
+        const result = await localSvc.create({ title: 'Unguarded V', featureId: 'G', dedupeWithinSec: null });
         expect(result.ref.kind).toBe('task');
     });
 });

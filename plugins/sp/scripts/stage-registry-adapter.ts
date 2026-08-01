@@ -64,11 +64,25 @@ export interface StageRetryPolicy {
 /** Capability tiers (0343): cheap | standard | capable-1 | capable-2 | capable-3. */
 export type AdapterCapabilityTier = 'cheap' | 'standard' | 'capable-1' | 'capable-2' | 'capable-3';
 
+/**
+ * Objective escalation triggers (task 0405). Self-contained mirror of the
+ * domain `objectiveEscalationTriggerSchema` in
+ * `packages/domain/src/stage-registry/schema.ts` — the authority. Update both
+ * together; `resource-exhaustion` covers rate-limit / quota / token-budget
+ * failures as one class.
+ */
+export type ObjectiveEscalationTrigger =
+    | 'gate-fail'
+    | 'timeout'
+    | 'insufficient-evidence'
+    | 'retry-exhausted'
+    | 'resource-exhaustion';
+
 export interface StageModelPolicy {
     min_tier: AdapterCapabilityTier;
     fallback: Array<{
         tier: AdapterCapabilityTier;
-        trigger: 'gate-fail' | 'timeout' | 'insufficient-evidence' | 'retry-exhausted';
+        trigger: ObjectiveEscalationTrigger;
     }>;
     override_key?: string;
 }

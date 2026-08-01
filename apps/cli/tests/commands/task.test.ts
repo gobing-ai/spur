@@ -130,6 +130,113 @@ describe('spur task CLI', () => {
         expect(content).toContain('feature_id: A');
     });
 
+    // ── create dedup (default-on when --feature is set) ──
+    test('create --feature twice with same title within window exits 3 (duplicate-follow-up)', async () => {
+        const isoCwd = join(import.meta.dir, '..', `.tmp-task-dedup-${Date.now()}`);
+        await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
+        try {
+            const first = createCapturedOutput();
+            await main(['task', 'create', 'Dedup clone', '--feature', 'D1', '--json'], {
+                cwd: isoCwd,
+                output: first,
+            });
+            expect(first.errors.join('')).toBe('');
+            const firstWbs = JSON.parse(lastMessage(first)).ref.id;
+
+            const second = createCapturedOutput();
+            const exitCode = await main(['task', 'create', 'Dedup clone', '--feature', 'D1', '--json'], {
+                cwd: isoCwd,
+                output: second,
+            });
+            expect(exitCode).toBe(3);
+            expect(second.errors).toEqual([]);
+            expect(JSON.parse(lastMessage(second))).toMatchObject({
+                ok: false,
+                error: {
+                    code: 'duplicate-follow-up',
+                    existingWbs: firstWbs,
+                    existingName: 'Dedup clone',
+                    attemptedName: 'Dedup clone',
+                },
+            });
+        } finally {
+            rmSync(isoCwd, { recursive: true, force: true });
+        }
+    });
+
+    test('create --feature --dedupe-within overrides the default window', async () => {
+        const isoCwd = join(import.meta.dir, '..', `.tmp-task-dedup-window-${Date.now()}`);
+        await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
+        try {
+            const first = createCapturedOutput();
+            await main(['task', 'create', 'Window dup', '--feature', 'W1'], {
+                cwd: isoCwd,
+                output: first,
+            });
+            const taskPath = createdPath(first);
+            const content = await readFile(taskPath, 'utf8');
+            const twoMinutesAgo = new Date(Date.now() - 120_000).toISOString();
+            await writeFile(taskPath, content.replaceAll(/(created_at|updated_at): .+/g, `$1: ${twoMinutesAgo}`));
+
+            const second = createCapturedOutput();
+            const exitCode = await main(['task', 'create', 'Window dup', '--feature', 'W1', '--dedupe-within', '60'], {
+                cwd: isoCwd,
+                output: second,
+            });
+            expect(exitCode).toBe(0);
+        } finally {
+            rmSync(isoCwd, { recursive: true, force: true });
+        }
+    });
+
+    for (const invalid of ['0', '-1', '1.5', 'nope', '60junk']) {
+        test(`create rejects invalid --dedupe-within ${invalid}`, async () => {
+            const output = createCapturedOutput();
+            const exitCode = await main(
+                ['task', 'create', 'Invalid window', '--feature', 'W2', '--dedupe-within', invalid],
+                {
+                    cwd,
+                    output,
+                },
+            );
+            expect(exitCode).toBe(2);
+            expect(output.errors.join('')).toContain('--dedupe-within must be a positive integer');
+        });
+    }
+
+    test('create --feature --allow-duplicate-name overrides dedup (exit 0)', async () => {
+        const isoCwd = join(import.meta.dir, '..', `.tmp-task-dedup-allow-${Date.now()}`);
+        await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
+        try {
+            const first = createCapturedOutput();
+            await main(['task', 'create', 'Allow dup', '--feature', 'A1'], { cwd: isoCwd, output: first });
+
+            const second = createCapturedOutput();
+            const exitCode = await main(['task', 'create', 'Allow dup', '--feature', 'A1', '--allow-duplicate-name'], {
+                cwd: isoCwd,
+                output: second,
+            });
+            expect(exitCode).toBe(0);
+        } finally {
+            rmSync(isoCwd, { recursive: true, force: true });
+        }
+    });
+
+    test('create without --feature does not dedup (unscoped)', async () => {
+        const isoCwd = join(import.meta.dir, '..', `.tmp-task-dedup-nofeature-${Date.now()}`);
+        await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
+        try {
+            const first = createCapturedOutput();
+            await main(['task', 'create', 'No scope dup'], { cwd: isoCwd, output: first });
+
+            const second = createCapturedOutput();
+            const exitCode = await main(['task', 'create', 'No scope dup'], { cwd: isoCwd, output: second });
+            expect(exitCode).toBe(0);
+        } finally {
+            rmSync(isoCwd, { recursive: true, force: true });
+        }
+    });
+
     test('create with --parent adds parent_wbs', async () => {
         const output = createCapturedOutput();
         const exitCode = await main(['task', 'create', 'Child task', '--parent', '0042'], { cwd, output });

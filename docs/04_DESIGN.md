@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.8.0
+version: 1.9.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-07-29
+updated_at: 2026-08-01
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -30,7 +30,7 @@ detail-first then index (§4.5 rule 5 / T9).
 | [`spur-team-mode-design.md`](design/spur-team-mode-design.md) | Team mode — agent specs, inbox, `TeamService` | design |
 | [`workflow-observability.md`](design/workflow-observability.md) | Workflow run observability — correlated EventBus projection, human output levels, durable trace follow, producer audit (0114/0310/0365) | partial |
 | [`dev-plan-design-doc-generation.md`](design/dev-plan-design-doc-generation.md) | `/sp:dev-plan` design-doc step — design by default / `--skip-design` only, seam heuristic (ties lean design), satellite + index authoring (0124) | implemented |
-| [`dev-agent-flag-and-dogfood-skill.md`](design/dev-agent-flag-and-dogfood-skill.md) | `--agent` on dev-refine/plan/brainstorm (threaded, not theater) + `sp:dogfood-testing` backbone extraction with enhanced report/ledger (0125) | implemented |
+| [`dev-agent-flag-and-dogfood-skill.md`](design/dev-agent-flag-and-dogfood-skill.md) | Dev execution surface — `--agent` threading (0125), inline default + `--inline\|--subprocess` + named escalation triggers (0406), and `sp:dogfood-testing` extraction | implemented |
 | [`e2e-workflow-for-system-development.md`](design/e2e-workflow-for-system-development.md) | End-to-end workflow system for system development — pipeline architecture, design step auto-detection, HITL gate model, doc-sync boundary (0167) | design |
 | [`portable-agents-harness-contract.md`](design/portable-agents-harness-contract.md) | `spur init` root `AGENTS.md` seed — complementary Spur/Superskill ownership, portable routing, conditional root `DESIGN.md` | implemented |
 | [`feature-tree-status-affordance.md`](design/feature-tree-status-affordance.md) | Board Features tree — icon-only leading status indicator, accessible-name contract, glyph silhouettes, semantic-token convergence (ADR-034, feature R2) | implemented |
@@ -132,11 +132,19 @@ clobbering a configured project. `--json` emits
 
 #### `spur agent run <prompt> [--agent <name>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--stage <id>] [--signal <sig>] [--drain] [--json]`
 
-**The single LLM execution surface.** Every model invocation in Spur routes through this verb — sp
-skills that generate prose (AC, decompositions, reviews), workflow `agent.run` actions, and team-mode
-runs all call `spur agent run`; Spur owns no other path that reaches a model (it is not a BYOK LLM
-platform — ADR/PRD). This keeps agent resolution, auth, slash-command translation, and team identity in
-one place, and is the seam where a future remote/SSE execution channel attaches without touching callers.
+**The subprocess LLM execution surface.** Every out-of-process model invocation in Spur routes
+through this verb: workflow `agent.run` actions, explicit `/sp:dev-* --subprocess` dispatches, and
+team-mode runs. This keeps subprocess agent resolution, auth, slash-command translation, and team
+identity in one place, and is the seam where a future remote/SSE execution channel attaches without
+touching callers.
+
+Model-bearing `/sp:dev-*` commands invoked from a live coding-agent session use the host-native
+skill/subagent surface inline by default; `--inline` makes that choice explicit and `--subprocess`
+forces this verb. The four dispatch-surface triggers override inline: a different model/coding agent,
+headless or unattended execution, a durable auditable run record, or workspace/credential isolation.
+The applied trigger is named. Inline has no isolated workspace, separate run record, independent
+timeout/abort boundary, or tier-selected executor. Direct `spur agent run` and workflow `agent.run`
+remain explicit subprocess surfaces.
 Execute a prompt or slash command via a coding agent. `--agent` (default `auto`) resolves via the
 `agent` config block (0126): the prompt's slash command yields a **phase** — recognized in every
 per-agent surface form, since `spur agent run` may receive an already-translated prompt (`/sp:dev-run`
@@ -160,7 +168,7 @@ executor entry). An explicit selector never consults phase / `default-by-phase` 
 cheapest eligible executor at its `min_tier` (`cheap`/`standard`/`capable-1`/`capable-2`/`capable-3`,
 matched against each executor's `tier` field; 0343 split bare `capable` into quality sub-tiers) and
 escalates along the ordered `fallback` chain when an objective `--signal`
-(`gate-fail`/`timeout`/`insufficient-evidence`/`retry-exhausted`) is supplied (with
+(`gate-fail`/`timeout`/`insufficient-evidence`/`retry-exhausted`/`resource-exhaustion`) is supplied (with
 `--from-executor` naming the current tier). Legacy bare `capable` normalizes to `capable-1` during
 the deprecation window. **Stage floors (cost-aware):** `plan` starts at `capable-2` (escalate to
 `capable-3`) so Design is authored at create by default; `refine` floors at `standard` (fallback
@@ -669,7 +677,7 @@ Source: delivery §1.1, design §10.
 | Command | Flags | Exit | Notes |
 | --------- | ------- | ------ | ------- |
 | `spur task` | — (noun help) | 0 | Lists subcommands if no subcommand given. |
-| `spur task create <title>` | `--feature <id>` `--parent <wbs>` `--template <variant>` `--folder <path>` `--json` | 0/1/2 | Race-safe WBS allocation; `--feature` enables B09 Goal→Background derivation; `--template` selects a section-matrix variant (`standard·feature-impl·issue·review·meta·brainstorm`; default `feature-impl` when `--feature`, else `standard`); unknown variant → exit 2. |
+| `spur task create <title>` | `--feature <id>` `--parent <wbs>` `--template <variant>` `--dedupe-within <seconds>` `--allow-duplicate-name` `--folder <path>` `--json` | 0/1/2/3 | Race-safe WBS allocation; feature-scoped creates reject an identical case-insensitive title created within 300 seconds by default (exit 3, `duplicate-follow-up`); `--dedupe-within` accepts a positive-integer override; `--allow-duplicate-name` disables the guard. `--feature` enables B09 Goal→Background derivation; `--template` selects a section-matrix variant (`standard·feature-impl·issue·review·meta·brainstorm`; default `feature-impl` when `--feature`, else `standard`); unknown variant or invalid dedup window → exit 2. With `--json`, duplicate errors include `error.code`, `existingWbs`, `existingName`, and `attemptedName`. |
 | `spur task show <wbs>` | `--folder <path>` `--json` | 0/1 | Frontmatter is a top-level field in `--json` output. |
 | `spur task update <wbs> <status>` | `--section <name> --from-file <path>` `--feature <id>` `--priority <p>` `--folder <path>` `--json` | 0/1/2 | Status transition runs lifecycle guard; `--section` reads body from file; `--feature`/`--priority` set the scalar frontmatter field on an existing task (the only post-create path, allow-listed to `feature_id`/`parent_wbs`/`priority`). |
 | `spur task list` | `--status <s>` `--phase <p>` `--parent <wbs>` `--feature <id>` `--folder <path>` `--json` | 0/1 | `--phase` is a legacy alias for `--status`; `--feature` filters to tasks carrying that `feature_id` edge (exact match) — the enumeration primitive for feature-level execution loops. Filters combine (AND). |
@@ -987,6 +995,12 @@ authoritative reference for all 13 operations — purpose, inputs, backing, beha
 [`plugins/sp/skills/spur-dev/references/dev-operations.md`](../plugins/sp/skills/spur-dev/references/dev-operations.md).
 The `runall` operation (#13) is the batch entry — it delegates the driver loop to the
 `sp:super-planner` agent per [`execution-batch.md`](../plugins/sp/skills/spur-dev/references/execution-batch.md).
+Model-bearing operations share the execution-surface flags `--inline|--subprocess` and the operator
+selector `--agent <name|auto>`. Inline is the default for a direct command. `--subprocess`, an
+explicit different agent/model, or another named dispatch-surface trigger selects `spur agent run`;
+full workflow-backed operations retain their `agent.run` subprocess actions because their headless
+and durable-record contracts are explicit triggers. The SSOT is
+[`cross-cutting.md`](../plugins/sp/skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 The `review` operation resolves to deterministic modes: WBS mode runs functional traceability (`sp:functional-review`), SECUA framework (`sp:code-verification`), and architectural depth (`sp:code-improvement`), writing findings to the task's `## Review` section; Path mode runs advisory SECUA and architecture with no task mutation. `--fix` is deprecated (no-op + warning; route remediation → `/sp:dev-verify --fix`). `--next` was **removed** from `dev-review` (feature H8, task 0401 R3): it had been a deprecated no-op, and once `--next` was redefined as chain-to-completion with propagation (ADR-039) keeping a no-op spelling of a now-meaningful flag would have been the fourth contradictory meaning. Route progression through `/sp:dev-next`.
 The `handover` operation writes the durable handover SSOT to `docs/handover/<YYYY-MM-DD>-<slug>.md` and appends a pointer link into the task's `References` / `Notes` without clobbering existing content.
 See [`dev-operations.md`](../plugins/sp/skills/spur-dev/references/dev-operations.md).

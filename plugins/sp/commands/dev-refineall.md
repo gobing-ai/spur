@@ -1,6 +1,6 @@
 ---
 description: Refine a batch of tasks via structured Q&A — resolve a set (feature or selector), refine each in dependency-correct order, emit a batch report
-argument-hint: "--feature <id> | [`--tasks`](../skills/spur-dev/references/dev-operations.md#flag-tasks) <selector> [--focus <mode>] [--description <text>] [--agent <name|auto>] [--auto] [--keep-going] [--status <s>] [--json]"
+argument-hint: "--feature <id> | [`--tasks`](../skills/spur-dev/references/dev-operations.md#flag-tasks) <selector> [--focus <mode>] [--description <text>] [[`--agent`](../skills/spur-dev/references/dev-operations.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/dev-operations.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/dev-operations.md#flag-subprocess)] [--auto] [--keep-going] [--status <s>] [--json]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---
 
@@ -12,8 +12,8 @@ operation, applied to a resolved set (typically every task under a feature).
 ## Usage
 
 ```
-/sp:dev-refineall --feature <id> [shared refine flags…]
-/sp:dev-refineall --tasks <selector> [shared refine flags…]
+/sp:dev-refineall --feature <id> [shared refine flags…] [--inline|--subprocess]
+/sp:dev-refineall --tasks <selector> [shared refine flags…] [--inline|--subprocess]
 ```
 
 Flags: [`--feature`](../skills/spur-dev/references/dev-operations.md#flag-feature) (sugar for `feature:<id>`), `--tasks <selector>`, shared refine flags
@@ -31,5 +31,6 @@ scale. Full procedure: `plugins/sp/skills/spur-dev/references/dev-operations.md`
 
 ## Implementation
 
+- Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 - Batch orchestration: `Skill(skill="sp:spur-dev", args="refineall $ARGUMENTS")`
 - Per-task refine (inner): `Skill(skill="sp:spur-dev", args="refine <wbs> $SHARED_FLAGS")`

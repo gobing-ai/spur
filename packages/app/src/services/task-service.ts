@@ -550,12 +550,13 @@ export class TaskService {
         template?: string;
         actor?: string;
         /**
-         * Dedup window in seconds. When set with a featureId, refuse creation if an
+         * Dedup window in seconds. Feature-scoped creates default to 300 seconds;
+         * pass null to disable the guard. When enabled, refuse creation if an
          * existing task under the same feature has an identical (case-insensitive)
          * name and was created within the last N seconds. Guards against the verify
          * fix pass double-creating the same follow-up (task 0341 R4).
          */
-        dedupeWithinSec?: number;
+        dedupeWithinSec?: number | null;
     }): Promise<WriteResult> {
         const folder = this.ctx.tasksDir;
 
@@ -582,12 +583,9 @@ export class TaskService {
             // requested, refuse creation if an existing task under the same feature
             // has an identical (case-insensitive) name and was created within the
             // window. Guards against the verify fix pass double-creating follow-ups.
-            if (params.dedupeWithinSec !== undefined && params.featureId !== undefined) {
-                const collision = await this.findDuplicateFollowUp(
-                    params.featureId,
-                    params.title,
-                    params.dedupeWithinSec,
-                );
+            const dedupeWithinSec = params.dedupeWithinSec === null ? undefined : (params.dedupeWithinSec ?? 300);
+            if (dedupeWithinSec !== undefined && params.featureId !== undefined) {
+                const collision = await this.findDuplicateFollowUp(params.featureId, params.title, dedupeWithinSec);
                 if (collision !== null) {
                     throw new DuplicateFollowUpError(collision.wbs, collision.name, params.title);
                 }

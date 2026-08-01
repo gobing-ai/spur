@@ -141,6 +141,78 @@ describe('AgentRunActionRunner', () => {
     });
 });
 
+describe('AgentRunActionRunner resume-mode fallback (task 0406)', () => {
+    /**
+     * Fake service whose first call returns exitCode 2 (shim dispatch error)
+     * and whose second call returns exitCode 0. Captures every call's flags
+     * so the test can assert the retry dropped `continue`.
+     */
+    function svcFailingThenSucceeding(calls: { flags: Record<string, string | boolean> }[]): AgentService {
+        let attempt = 0;
+        const results: AgentRunTracedResult[] = [
+            { exitCode: 2, stdout: '', message: 'Codex resume mode does not accept a new prompt' },
+            { exitCode: 0, stdout: 'ok', invocation: invocation() },
+        ];
+        return {
+            runTraced: async (_input: string | undefined, flags: Record<string, string | boolean>) => {
+                calls.push({ flags: { ...flags } });
+                return results[attempt++] ?? results[results.length - 1];
+            },
+        } as unknown as AgentService;
+    }
+
+    test('latch=open, exitCode 2 on first call → retries without continue, succeeds', async () => {
+        const calls: { flags: Record<string, string | boolean> }[] = [];
+        const svc = svcFailingThenSucceeding(calls);
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ input: 'verify' }, makeCtx({ vars: { __agentSession: 'open' } }));
+        expect(result.ok).toBe(true);
+        expect(calls).toHaveLength(2);
+        // First call: latch auto-set continue:true
+        expect(calls[0]?.flags.continue).toBe(true);
+        // Retry: continue dropped
+        expect(calls[1]?.flags.continue).toBeUndefined();
+    });
+
+    test('after successful fallback, setVars writes no-resume sentinel', async () => {
+        const calls: { flags: Record<string, string | boolean> }[] = [];
+        const svc = svcFailingThenSucceeding(calls);
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ input: 'verify' }, makeCtx({ vars: { __agentSession: 'open' } }));
+        expect(result.ok).toBe(true);
+        expect(result.setVars).toMatchObject({ __agentSession: 'no-resume' });
+    });
+
+    test('no-resume sentinel on latch inhibits continue on next step', async () => {
+        let capturedFlags: Record<string, string | boolean> = {};
+        const svc = svcCapturingFlags((f) => {
+            capturedFlags = f;
+        });
+        const runner = new AgentRunActionRunner(svc);
+        await runner.execute({ input: 'verify' }, makeCtx({ vars: { __agentSession: 'no-resume' } }));
+        expect(capturedFlags.continue).toBeUndefined();
+    });
+
+    test('exitCode 2 with explicit continue → no retry (author intent)', async () => {
+        const calls: { flags: Record<string, string | boolean> }[] = [];
+        const svc = svcFailingThenSucceeding(calls);
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute(
+            { input: 'verify', continue: true },
+            makeCtx({ vars: { __agentSession: 'open' } }),
+        );
+        expect(result.ok).toBe(false);
+        expect(calls).toHaveLength(1);
+    });
+
+    test('exitCode 2 without latch → no retry (fresh dispatch already failed)', async () => {
+        const svc = svcWithRunTraced({ exitCode: 2, stdout: '', message: 'binary not found' });
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ input: 'verify' }, makeCtx());
+        expect(result.ok).toBe(false);
+    });
+});
+
 describe('AgentRunActionRunner steering', () => {
     function activeCommand(
         controller: WorkflowSteeringController,

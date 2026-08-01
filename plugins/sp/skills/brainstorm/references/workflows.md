@@ -83,8 +83,8 @@ DO NOT implement research directly. Delegate to specialized skills:
    - Use for any external claims
    - Follow source-first protocol
 
-2. Use `spur agent run` for research + synthesis
-   - Use for multi-source consolidation
+2. Delegate research + synthesis inline by default
+   - Run in the current session; escalate to `spur agent run` only on a subprocess trigger
    - Request confidence scoring
 ```
 

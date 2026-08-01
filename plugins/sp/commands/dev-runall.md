@@ -1,6 +1,6 @@
 ---
 description: Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via task-pipeline.yaml, emit a batch report
-argument-hint: "[`--tasks`](../skills/spur-dev/references/dev-operations.md#flag-tasks) <selector> [[`--feature`](../skills/spur-dev/references/dev-operations.md#flag-feature) <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <name|auto>] [--json] [--wrap] [--next] [--continue]"
+argument-hint: "[`--tasks`](../skills/spur-dev/references/dev-operations.md#flag-tasks) <selector> [[`--feature`](../skills/spur-dev/references/dev-operations.md#flag-feature) <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [[`--agent`](../skills/spur-dev/references/dev-operations.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/dev-operations.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/dev-operations.md#flag-subprocess)] [--json] [--wrap] [--next] [--continue]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
@@ -11,7 +11,7 @@ Wraps the **sp:spur-dev** skill.
 ## Usage
 
 ```
-/sp:dev-runall --tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <name|auto>] [--json] [--wrap] [--next] [--continue]
+/sp:dev-runall --tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <name|auto>] [--inline|--subprocess] [--json] [--wrap] [--next] [--continue]
 ```
 
 Flags: `--tasks <selector>` (required — explicit WBS list, status pseudo-list, `feature:<id>`,
@@ -45,4 +45,5 @@ full distinction.
 
 ## Implementation
 
+- Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface). The orchestrator starts inline; each full per-task workflow retains its explicit subprocess boundary.
 - `Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")` → `sp:super-planner` agent

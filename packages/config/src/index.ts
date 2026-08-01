@@ -283,6 +283,20 @@ export function resolveExecutor(
 /**
  * Schema for the `agent` section.
  *
+ * Vocabulary decision (task 0405, R1): the operator surface says **agent**
+ * (the CLI `--agent` flag, this `agent:` config key, the `agent` field inside
+ * each executor naming the canonical coding-agent tool — omp, claude, codex);
+ * the domain surface says **executor** (the named profile that fills a stage
+ * role at a capability tier — `AgentExecutorConfig`, `resolveExecutor`,
+ * `getExecutorTier`, `NormalizedTeamMember.executor`). This split is
+ * deliberate layering, not drift: the operator picks *an agent* (a concrete
+ * tool); the registry reasons about *an executor* (a role filled by whichever
+ * agent meets the tier). The two vocabularies meet here — an `agent:`
+ * section whose `executors[]` each carry an `agent` field — and the boundary
+ * is stated explicitly so it does not decay back into looking like drift. No
+ * alias is retained and no migration is required: both spellings are
+ * authoritative within their own layer.
+ *
  * - `default` — executor selector first, legacy direct agent name second.
  * - `executors` — named `{ name, agent, model? }` profiles; names must be unique.
  * - `default-by-phase` — a `Record<phase, executorSelector>` **map**.

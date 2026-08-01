@@ -142,16 +142,24 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option('--folder <path>', 'Custom tasks folder')
         .option(
             '--dedupe-within <seconds>',
-            'Refuse creation if an existing task under the same feature has an identical name created within the last N seconds (task 0341 R4)',
-            (v: string) => Number.parseInt(v, 10),
+            'Override the default dedup window (seconds). Guard is on (300s) by default when --feature is set.',
+            Number,
         )
-        .option('--allow-duplicate-name', 'Override the --dedupe-within guard (creates anyway)')
+        .option('--allow-duplicate-name', 'Disable the dedup guard entirely (creates anyway)')
         .option('--json', 'Output machine-readable JSON')
         .action(async (title, options) => {
             if (options.template !== undefined && !(TASK_VARIANTS as readonly string[]).includes(options.template)) {
                 context.output.error(
                     `Unknown template variant "${options.template}". Valid: ${TASK_VARIANTS.join(', ')}`,
                 );
+                context.setExitCode(2);
+                return;
+            }
+            if (
+                options.dedupeWithin !== undefined &&
+                (!Number.isInteger(options.dedupeWithin) || options.dedupeWithin <= 0)
+            ) {
+                context.output.error('--dedupe-within must be a positive integer');
                 context.setExitCode(2);
                 return;
             }
@@ -162,9 +170,12 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     featureId: options.feature,
                     parentWbs: options.parent,
                     template: options.template,
-                    // Dedup guard is skipped entirely when --allow-duplicate-name is set,
-                    // even if --dedupe-within was also supplied.
-                    dedupeWithinSec: options.allowDuplicateName ? undefined : options.dedupeWithin,
+                    // Dedup guard: default 300s window when --feature is set (guards
+                    // against the orphan-skeleton + re-create pattern). Explicit
+                    // --dedupe-within overrides the window. --allow-duplicate-name
+                    // disables the guard entirely. Unscoped tasks (no --feature) are
+                    // never guarded — a bare capture has no collision scope.
+                    dedupeWithinSec: options.allowDuplicateName ? null : options.dedupeWithin,
                 });
                 if (options.json) {
                     context.output.write(toJson(result));
@@ -173,7 +184,22 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 }
             } catch (err) {
                 if (err instanceof DuplicateFollowUpError) {
-                    context.output.error(err.message);
+                    if (options.json) {
+                        context.output.write(
+                            toJson({
+                                ok: false,
+                                error: {
+                                    code: 'duplicate-follow-up',
+                                    message: err.message,
+                                    existingWbs: err.existingWbs,
+                                    existingName: err.existingName,
+                                    attemptedName: err.attemptedName,
+                                },
+                            }),
+                        );
+                    } else {
+                        context.output.error(err.message);
+                    }
                     context.setExitCode(3);
                 } else {
                     context.output.error(String(err));

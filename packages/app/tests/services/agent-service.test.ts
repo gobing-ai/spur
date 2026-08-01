@@ -1984,3 +1984,121 @@ describe('AgentService stage-registry adaptive model routing (0319)', () => {
         expect(code).toBe(2);
     });
 });
+
+// ---------------------------------------------------------------------------
+// Tests: AgentService — automatic tier escalation on objective failure (0407)
+// ---------------------------------------------------------------------------
+// R7: Prove by test, not by wiring. These tests inject a resource-exhaustion
+// failure on the starting tier and assert the next tier is selected — and
+// they must FAIL if the escalation path is severed (verified by mutation).
+
+describe('AgentService automatic tier escalation (0407)', () => {
+    // std-exec (pi, standard) → capable-exec (claude, capable-1).
+    // Stage implement has min_tier: standard, so std-exec is the starting tier.
+    const escalationConfig: AgentConfig = {
+        executors: [
+            { name: 'std-exec', agent: 'pi', tier: 'standard' },
+            { name: 'capable-exec', agent: 'claude', tier: 'capable-1' },
+        ],
+    };
+
+    test('R7: exhaustion on starting tier escalates to the next tier and succeeds', async () => {
+        const { errors, output } = captureOutput();
+        const svc = makeService({}, output, escalationConfig);
+
+        // Sequential runner: first dispatch (pi) fails with a rate-limit error,
+        // second dispatch (claude) succeeds. After that, any further calls fail.
+        const results: AgentRunResult[] = [
+            makeRunResult({ exitCode: 1, stderr: 'Error: rate limit exceeded (429)' }),
+            makeRunResult({ exitCode: 0 }),
+        ];
+        let callIndex = 0;
+        const runPromptCommand = mock((_agent: string) => {
+            const idx = Math.min(callIndex++, results.length - 1);
+            return Promise.resolve(results[idx] ?? results[results.length - 1]);
+        });
+        const detector = {
+            detectOne: mock(() =>
+                Promise.resolve({ name: 'pi', installed: true, version: '1.0.0', channels: [], error: null }),
+            ),
+        } as unknown as AgentRunDeps['detector'];
+        const doctorRunner = {
+            runOne: mock(() => Promise.resolve(mockDoctorResult({ usable: true }))),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        const deps = { runner: { runPromptCommand } as unknown as AgentRunDeps['runner'], detector, doctorRunner };
+
+        const code = await svc.run('Implement the task', { agent: 'auto', stage: 'implement', json: false }, deps);
+
+        // Escalation succeeded → exit code 0.
+        expect(code).toBe(0);
+        // Two dispatches: pi (starting tier) then claude (escalated tier).
+        expect(runPromptCommand).toHaveBeenCalledTimes(2);
+        const dispatchedAgents = runPromptCommand.mock.calls.map((c) => c[0] as string);
+        expect(dispatchedAgents).toEqual(['pi', 'claude']);
+        // R3: escalation is observable — the message names what failed and why.
+        expect(errors.some((e) => e.includes('Escalating: std-exec'))).toBe(true);
+        expect(errors.some((e) => e.includes('resource-exhaustion'))).toBe(true);
+        expect(errors.some((e) => e.includes('retrying on capable-exec'))).toBe(true);
+    });
+
+    test('R4/R6: chain exhaustion is reported honestly and bounded', async () => {
+        const { errors, output } = captureOutput();
+        const svc = makeService({}, output, escalationConfig);
+
+        // Runner always fails with rate-limit → both executors are tried then
+        // the chain exhausts (attemptedExecutors dup-check fires before the
+        // maxEscalations bound).
+        const runPromptCommand = mock(() =>
+            Promise.resolve(makeRunResult({ exitCode: 1, stderr: 'Error: 429 Too Many Requests' })),
+        );
+        const detector = {
+            detectOne: mock(() =>
+                Promise.resolve({ name: 'pi', installed: true, version: '1.0.0', channels: [], error: null }),
+            ),
+        } as unknown as AgentRunDeps['detector'];
+        const doctorRunner = {
+            runOne: mock(() => Promise.resolve(mockDoctorResult({ usable: true }))),
+        } as unknown as AgentRunDeps['doctorRunner'];
+        const deps = { runner: { runPromptCommand } as unknown as AgentRunDeps['runner'], detector, doctorRunner };
+
+        const code = await svc.run('Implement the task', { agent: 'auto', stage: 'implement', json: false }, deps);
+
+        // Non-zero exit (the last failed result maps to exit 3).
+        expect(code).not.toBe(0);
+        // Only two executors in the chain → exactly 2 dispatches.
+        expect(runPromptCommand).toHaveBeenCalledTimes(2);
+        // R4: honest exhaustion report naming executors attempted.
+        expect(errors.some((e) => e.includes('Escalation chain exhausted'))).toBe(true);
+        expect(errors.some((e) => e.includes('std-exec') && e.includes('capable-exec'))).toBe(true);
+    });
+
+    test('an escalated dispatch error keeps the invocation paired with the returned result', async () => {
+        const svc = makeService({}, nullOutput(), escalationConfig);
+        const runPromptCommand = mock((agent: string) =>
+            agent === 'pi'
+                ? Promise.resolve(makeRunResult({ exitCode: 1, stderr: 'Error: 429 Too Many Requests' }))
+                : Promise.reject(new Error('dispatch failed')),
+        );
+        const detector = {
+            detectOne: mock(() =>
+                Promise.resolve({ name: 'pi', installed: true, version: '1.0.0', channels: [], error: null }),
+            ),
+        } as unknown as AgentRunDeps['detector'];
+        const doctorRunner = {
+            runOne: mock(() => Promise.resolve(mockDoctorResult({ usable: true }))),
+        } as unknown as AgentRunDeps['doctorRunner'];
+
+        const result = await svc.runTraced(
+            'Implement the task',
+            { agent: 'auto', stage: 'implement' },
+            {
+                runner: { runPromptCommand } as unknown as AgentRunDeps['runner'],
+                detector,
+                doctorRunner,
+            },
+        );
+
+        expect(result.exitCode).toBe(3);
+        expect(result.invocation?.agent).toBe('pi');
+    });
+});

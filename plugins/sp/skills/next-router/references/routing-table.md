@@ -60,7 +60,7 @@ Statuses from `TASK_STATUSES`: backlog | todo | wip | testing | blocked | done |
 | --- | --- | --- | --- | --- | --- | --- |
 | A1 | `status == backlog` | `task.show.status` | `/sp:dev-refine <wbs> --auto --next` | yes (refine skip-gate sections) | **yes** — refine's own `--next` → run → verify | If refine fails guard → stop review-pending |
 | A2 | `status == todo` AND any open dep `status != done` | `dependencies[]` + dep statuses | *(none)* | no | no | **STOP** — blocked by deps; print unmet dep WBS list. Do not invent parallel work. |
-| A3 | `status == todo` AND deps satisfied | `task.show.status` + deps | `/sp:dev-run <wbs> --auto --next` | yes | **yes** — run's `--next` → verify | Prefer chain-link implement path (matches existing auto chain), not full pipeline reimplementation |
+| A3 | `status == todo` AND deps satisfied | `task.show.status` + deps | `/sp:dev-run <wbs> --mode implement --auto --next` | yes | **yes** — implement → verify | Explicit mode prevents the pipeline step from recursively launching full mode (bug-742) |
 | A4 | `status == wip` AND checkpoint exists under `.spur/memory/sessions/*-<wbs>-*` | checkpoint `next_action` | `/sp:dev-run <wbs> --continue` | no | no (continue owns resume) | If continue cannot resume → fall through A5 |
 | A5 | `status == wip` (no usable checkpoint) | `task.show.status` | `/sp:dev-run <wbs> --mode implement --auto --next` | yes | **yes** → verify | Completes implement step then chain |
 | A6 | `status == testing` | `task.show.status` | `/sp:dev-verify <wbs> --auto --next` | yes | **yes** — verify `--next` → done (FSM + provenance guards) | On PARTIAL/FAIL → stop review-pending (do not force done) |

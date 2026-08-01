@@ -56,9 +56,11 @@ Gherkin template. Conventions:
   warnings — the permissive start, per DD-06). Mark edge-case scenarios explicitly.
 - **Scenario-title mapping:** the scenario title is the identity key for traceability edges
   to task files — keep them stable and unique.
-- Use `spur agent run` with the BDD template (`.spur/templates/bdd/gherkin.md`) for
-  generation, or author directly if the feature is simple. **Thread `--agent` through** when the
-  command forwarded one — see [cross-cutting.md → Honor `--agent`](cross-cutting.md).
+- Generate AC inline (current session) with the BDD template
+  (`.spur/templates/bdd/gherkin.md`), or escalate to `spur agent run` only when a
+  [subprocess trigger](cross-cutting.md#inline-default-execution-surface) applies. **Thread
+  `--agent` through** when the command forwarded one. See the
+  [inline-default execution-surface contract](cross-cutting.md#inline-default-execution-surface).
 
 Full authoring conventions: see [ac-style-guide.md](ac-style-guide.md).
 

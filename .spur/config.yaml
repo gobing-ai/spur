@@ -82,6 +82,10 @@ agent:
     #   agent: agy
     #   model: claude-4-6-opus
     #   tier: standard
+    - name: codex-luna
+      agent: codex
+      model: gpt-5.6-luna
+      tier: standard
 
     # capable-1/2/3 — planning, verification, dogfooding (0343)
     # 1 = low output quality within the capable band, 3 = high. Declare
@@ -97,15 +101,16 @@ agent:
     - name: omp-deepseek
       agent: omp
       model: deepseek/deepseek-v4-pro
-      tier: capable-2
+      tier: capable-1
     - name: grok
       agent: grok
       tier: capable-2
-    # - name: claude
-    #   agent: claude
-    #   tier: capable-3
-    - name: codex
+    - name: claude
+      agent: claude
+      tier: capable-3
+    - name: codex-sol
       agent: codex
+      model: gpt-5.6-sol
       tier: capable-3
 
   # `default-by-phase` retired 2026-07-26 (ADR-033). Retained only as a
@@ -131,7 +136,7 @@ agent:
           purpose: "Lead — planning & review"
         - executor: omp-zai
           purpose: "Implementer — code generation"
-        - executor: codex
+        - executor: codex-sol
           purpose: "Verifier — second opinion"
 
 rules:

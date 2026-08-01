@@ -40,7 +40,7 @@ import { z } from 'zod';
  */
 export const STAGE_REGISTRY_SCHEMA_VERSION = {
     major: 1,
-    minor: 0,
+    minor: 1,
 } as const;
 
 /** Schema version shape used by records and consumers. */
@@ -343,9 +343,47 @@ export function normalizeCapabilityTier(value: unknown): unknown {
 export const capabilityTierSchema = z.preprocess(normalizeCapabilityTier, z.enum(CAPABILITY_TIERS));
 
 /**
+ * Objective escalation triggers — the conditions that advance the model
+ * fallback chain. Named for the *condition* (what the policy should act on),
+ * never for a vendor error string.
+ *
+ * Vocabulary (task 0405):
+ * - `gate-fail` — a stage gate returned a non-pass verdict.
+ * - `timeout` — the step exceeded its time budget.
+ * - `insufficient-evidence` — verify could not reach a verdict.
+ * - `retry-exhausted` — the per-stage retry allowance was spent.
+ * - `resource-exhaustion` — rate limit, quota, or token-budget failure. One
+ *   member covers the class: agents surface these differently (HTTP 429,
+ *   quota strings, token-count overflow) but the fallback response is the
+ *   same, and classifying by vendor spelling would push detection into config.
+ *   The 0407 detector classifies from stderr / exit codes into this member.
+ *
+ * Additive only: a new member is a minor schema bump (see
+ * {@link STAGE_REGISTRY_SCHEMA_VERSION}); existing configs keep validating.
+ */
+export const objectiveEscalationTriggerSchema = z.enum([
+    'gate-fail',
+    'timeout',
+    'insufficient-evidence',
+    'retry-exhausted',
+    'resource-exhaustion',
+]);
+
+/** Objective failure or risk signal triggering model policy fallback escalation. */
+export type ObjectiveEscalationSignal = z.infer<typeof objectiveEscalationTriggerSchema>;
+
+/**
  * Adaptive model policy: static minima plus an objective-signal fallback
  * chain. Price is not a primary metric; qualification uses outcome
  * equivalence (0285, 0282 locked).
+ *
+ * Trigger vocabulary (R4, task 0405): one member covers the *resource-
+ * exhaustion* class — rate limits, quota, and token-budget overruns present
+ * differently per agent but mean the same thing to the fallback chain, so a
+ * single class-level member keeps vendor-spelling classification out of
+ * config (the 0407 detector classifies from stderr / exit codes). Named for
+ * the condition, matching the existing four (`gate-fail`, `timeout`,
+ * `insufficient-evidence`, `retry-exhausted`), not for any one error string.
  */
 export const stageModelPolicySchema = z
     .object({
@@ -357,7 +395,7 @@ export const stageModelPolicySchema = z
                 .object({
                     tier: capabilityTierSchema,
                     /** Objective signal that triggers this fallback step. */
-                    trigger: z.enum(['gate-fail', 'timeout', 'insufficient-evidence', 'retry-exhausted']),
+                    trigger: objectiveEscalationTriggerSchema,
                 })
                 .strict(),
         ),
@@ -385,14 +423,6 @@ export const TIER_RANK: Record<CapabilityTier, number> = {
 export function isTierEligible(candidateTier: CapabilityTier, minTier: CapabilityTier): boolean {
     return TIER_RANK[candidateTier] >= TIER_RANK[minTier];
 }
-
-/** Given a StageModelPolicy, returns the minimum starting capability tier. */
-export function pickStartingTier(policy: StageModelPolicy): CapabilityTier {
-    return policy.min_tier;
-}
-
-/** Objective failure or risk signal triggering model policy fallback escalation. */
-export type ObjectiveEscalationSignal = 'gate-fail' | 'timeout' | 'insufficient-evidence' | 'retry-exhausted';
 
 /**
  * Given a StageModelPolicy, an objective signal, and optional current tier,
@@ -698,7 +728,10 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
             // cheap fallback for blank/missing Design — standard floor; escalate to capable-2
             // only when the pre-synthesis SKIP gate fails on target sections.
             min_tier: 'standard',
-            fallback: [{ tier: 'capable-2', trigger: 'gate-fail' }],
+            fallback: [
+                { tier: 'capable-2', trigger: 'gate-fail' },
+                { tier: 'capable-2', trigger: 'resource-exhaustion' },
+            ],
         },
         context_layers: [],
         observability: [],
@@ -718,7 +751,10 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
         model_policy: {
             // Planning/create is the capable-first path (author Design in batch by default).
             min_tier: 'capable-2',
-            fallback: [{ tier: 'capable-3', trigger: 'gate-fail' }],
+            fallback: [
+                { tier: 'capable-3', trigger: 'gate-fail' },
+                { tier: 'capable-3', trigger: 'resource-exhaustion' },
+            ],
         },
         context_layers: [],
         observability: [],
@@ -740,6 +776,7 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
             fallback: [
                 { tier: 'capable-1', trigger: 'gate-fail' },
                 { tier: 'capable-1', trigger: 'timeout' },
+                { tier: 'capable-1', trigger: 'resource-exhaustion' },
             ],
         },
         context_layers: [],
@@ -758,8 +795,11 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
         mutation_class: 'tests',
         retry: { max_attempts: 3, terminal_stop: 'block' },
         model_policy: {
+            fallback: [
+                { tier: 'capable-1', trigger: 'gate-fail' },
+                { tier: 'capable-1', trigger: 'resource-exhaustion' },
+            ],
             min_tier: 'standard',
-            fallback: [{ tier: 'capable-1', trigger: 'gate-fail' }],
         },
         context_layers: [],
         observability: [],
@@ -797,7 +837,10 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
         retry: { max_attempts: 2, terminal_stop: 'block' },
         model_policy: {
             min_tier: 'standard',
-            fallback: [{ tier: 'capable-1', trigger: 'gate-fail' }],
+            fallback: [
+                { tier: 'capable-1', trigger: 'gate-fail' },
+                { tier: 'capable-1', trigger: 'resource-exhaustion' },
+            ],
         },
         context_layers: [],
         observability: [],
@@ -816,7 +859,10 @@ export const REGISTERED_CANONICAL_STAGES: StageRecord[] = [
         retry: { max_attempts: 2, terminal_stop: 'block' },
         model_policy: {
             min_tier: 'standard',
-            fallback: [{ tier: 'capable-1', trigger: 'gate-fail' }],
+            fallback: [
+                { tier: 'capable-1', trigger: 'gate-fail' },
+                { tier: 'capable-1', trigger: 'resource-exhaustion' },
+            ],
         },
         context_layers: [],
         observability: [],

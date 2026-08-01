@@ -2,11 +2,11 @@
 schema_version: 1
 id: "H9"
 name: "Executor selection: inline default, agent/executor naming, and working tier-based fallback"
-status: backlog
+status: done
 priority: P1
 tags: []
 created_at: "2026-08-01T05:21:06.210Z"
-updated_at: "2026-08-01T05:21:52.944Z"
+updated_at: "2026-08-01T21:41:27.658Z"
 ---
 
 # H9: Executor selection: inline default, agent/executor naming, and working tier-based fallback
@@ -137,3 +137,6 @@ Feature: reliable executor selection
 ## Notes
 
 ## History
+- 2026-08-01T18:14:27.052Z backlog → active (system)
+- 2026-08-01T21:29:49.257Z active → verifying (system)
+- 2026-08-01T21:41:27.658Z verifying → done (system)

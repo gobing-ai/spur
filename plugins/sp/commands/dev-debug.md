@@ -1,6 +1,6 @@
 ---
 description: "Systematic debugging protocol — reproduce, isolate, diagnose root cause, apply minimal fix, and verify with regression tests"
-argument-hint: "\"<symptom | failing command>\" [--scope <path>] [--task [<wbs>]]"
+argument-hint: "\"<symptom | failing command>\" [--scope <path>] [--task [<wbs>]] [[`--agent`](../skills/spur-dev/references/dev-operations.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/dev-operations.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/dev-operations.md#flag-subprocess)]"
 allowed-tools: ["Bash", "Read", "Write", "Skill"]
 ---
 
@@ -10,8 +10,9 @@ Wraps the **sp:sys-debugging** skill.
 
 ## Usage
 
-/sp:dev-debug "<symptom | failing command>" [--scope <path>] [--task [<wbs>]]
+/sp:dev-debug "<symptom | failing command>" [--scope <path>] [--task [<wbs>]] [--agent <name|auto>] [--inline|--subprocess]
 
 ## Implementation
 
+- Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 - `Skill(skill="sp:sys-debugging", args="$ARGUMENTS")`

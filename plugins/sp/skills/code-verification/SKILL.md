@@ -84,9 +84,9 @@ The JSON carries `{ wbs, name, status, filePath, content, frontmatter }`. Parse 
   AC targets). AC evaluation is mandatory when this section is non-empty; `--bdd` only tightens the
   scenario-to-test requirement.
 
-Flags: `--agent <name|auto>` (agent override — passed through from the thin wrapper;
-`auto` = resolve from current runtime, `<name>` = explicit override; omit to use the configured
-default executor `omp` — "current agent" is not expressible on the pipeline surface),
+Flags: `--agent <name|auto>` (subprocess agent selector), `--inline|--subprocess` (execution
+surface; inline default, with named escalation triggers taking precedence — see
+[cross-cutting.md](../spur-dev/references/cross-cutting.md#inline-default-execution-surface)),
 `--auto` (no confirmations), `--force` (bypass the terminal-status guard), `--fix
 <none|blockers-first|all>` (post-verdict repair), `--focus <all|security|efficiency|correctness|usability|architecture>`
 (SECUA dimensions), `--bdd` (strict Gherkin scenario-to-test check), `--next` (on PASS,
@@ -310,23 +310,20 @@ checker without pretending a coverage percentage was measured.
 Loop is bounded — if a fix doesn't move a requirement to MET after one retry, report the residual
 and stop (don't thrash).
 
-**Follow-up task create — record-then-create discipline (0341 R4).** When the fix pass defers work
-into a new task under the same feature, do **not** call bare `spur task create` twice for the same
-name. Before creating:
+**Follow-up task create — record-then-reuse discipline (0341 R4).** The CLI dedup guard is **on by
+default** when `--feature <id>` is set: a second `spur task create` with an identical (case-insensitive)
+title under the same feature within 300 seconds exits `3` with `duplicate-follow-up` and names the
+existing WBS. This closes the dogfood double-create where an orphan skeleton + re-create produced
+two task files seconds apart.
 
-1. Read `.spur/run/<wbs>-fix-created.json` (create empty `[]` if missing) — the per-run ledger of
-   follow-ups already minted by this fix pass.
-2. If an entry under the same `feature_id` has an identical (case-insensitive) `name`, **reuse** that
-   WBS and report it; do not create a duplicate.
-3. Otherwise create with CLI guard:
-   `spur task create … --feature <id> --name "<name>" --dedupe-within 300`
-   (5-minute window covers one run). On `duplicate-follow-up` exit 3, parse the existing WBS from
-   the error and reuse it.
-4. Immediately append `{ wbs, name, feature_id, created_at }` to the ledger after a successful create.
+**On `duplicate-follow-up` (exit 3):** parse the existing WBS from the error and **reuse** it —
+populate its sections with `spur task update <wbs> --section …`. Do not call `--allow-duplicate-name`
+unless the operator explicitly authorizes a true second task.
 
-Override only with explicit operator intent (`--allow-duplicate-name` on the create, or operator
-instruction). This closes the dogfood double-create where one deferred requirement produced two
-task files seconds apart.
+**Per-run ledger (belt-and-suspenders).** Maintain `.spur/run/<wbs>-fix-created.json` (empty `[]` if
+missing) as the fix pass's record of follow-ups minted. Before creating, check it for an identical
+name under the same `feature_id`; if found, reuse that WBS. After a successful create (or the CLI
+`duplicate-follow-up` reuse), append `{ wbs, name, feature_id, created_at }` to the ledger.
 
 **Gitignored fix-pass writes (disclosure rule).** Artifacts written under `.spur/run/**` during a
 fix pass are gitignored, so a `--fix all` pass can mutate deliverables invisibly to `git status` and
@@ -432,14 +429,16 @@ The source-oriented path: SECUA review of a task's diff without the full traceab
 Steps 3 + 7 + 10 (Review section only) — no verdict artifact, no `done` gate. Use for a focused
 quality/security audit of changes when the full verify isn't wanted.
 
-Flags: `--agent <name|auto>` (agent override), `--auto` (no confirmations), `--fix
+Flags: `--agent <name|auto>` (subprocess agent selector), `--inline|--subprocess` (execution
+surface), `--auto` (no confirmations), `--fix
 <none|blockers-first|all>` (post-review repair), and `--focus
 <all|security|efficiency|correctness|usability|architecture>` (SECUA dimensions).
 
-**Agent override:** The `--agent <name|auto>` flag (passed through from the thin wrapper
-via `$ARGUMENTS`) controls which agent executes the review. `auto` = resolve from current runtime,
-`<name>` = explicit override; omit to use the configured default executor `omp` — "current agent"
-is not expressible on the pipeline surface.
+**Execution surface:** review runs in the current session by default. `--subprocess` forces a fresh
+process; `--agent <name|auto>` selects that process's agent. A named escalation trigger overrides
+`--inline`. Apply the
+[central contract](../spur-dev/references/cross-cutting.md#inline-default-execution-surface) before
+starting the review.
 
 ---
 

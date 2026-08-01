@@ -11,8 +11,8 @@ import {
     getNextFallback,
     isCompatibleStageVersion,
     isTierEligible,
+    objectiveEscalationTriggerSchema,
     parseStageRecord,
-    pickStartingTier,
     STAGE_ID_PATTERN,
     STAGE_REGISTRY_SCHEMA_VERSION,
     type StageRecord,
@@ -79,7 +79,7 @@ describe('stage-registry vocabulary exports (R1)', () => {
     });
 
     test('exposes the current schema version', () => {
-        expect(STAGE_REGISTRY_SCHEMA_VERSION).toEqual({ major: 1, minor: 0 });
+        expect(STAGE_REGISTRY_SCHEMA_VERSION).toEqual({ major: 1, minor: 1 });
     });
 
     test('exposes the stage-id pattern', () => {
@@ -523,10 +523,6 @@ describe('model_policy helpers & canonical stage registry (0319)', () => {
         expect(isTierEligible('cheap', 'standard')).toBe(false);
     });
 
-    test('pickStartingTier returns min_tier', () => {
-        expect(pickStartingTier({ min_tier: 'standard', fallback: [] })).toBe('standard');
-    });
-
     test('getNextFallback matches signal and higher tier', () => {
         const policy = {
             min_tier: 'standard' as const,
@@ -539,6 +535,55 @@ describe('model_policy helpers & canonical stage registry (0319)', () => {
         expect(res).toEqual({ tier: 'capable-1', trigger: 'gate-fail' });
         const missing = getNextFallback(policy, 'retry-exhausted', 'standard');
         expect(missing).toBeUndefined();
+    });
+
+    // ─── Task 0405: resource-exhaustion trigger (R4/R5/R6) ───────────────
+
+    test('objective escalation trigger vocabulary includes resource-exhaustion (R4)', () => {
+        expect(objectiveEscalationTriggerSchema.options).toContain('resource-exhaustion');
+        // The pre-existing four remain.
+        for (const existing of ['gate-fail', 'timeout', 'insufficient-evidence', 'retry-exhausted'] as const) {
+            expect(objectiveEscalationTriggerSchema.options).toContain(existing);
+        }
+    });
+
+    test('resource-exhaustion is a first-class fallback entry, validating like any trigger (R5)', () => {
+        const parsed = stageModelPolicySchema.parse({
+            min_tier: 'standard',
+            fallback: [{ tier: 'capable-1', trigger: 'resource-exhaustion' }],
+        });
+        expect(parsed.fallback[0]?.trigger).toBe('resource-exhaustion');
+        // getNextFallback treats it exactly like any other signal.
+        const res = getNextFallback(parsed, 'resource-exhaustion', 'standard');
+        expect(res).toEqual({ tier: 'capable-1', trigger: 'resource-exhaustion' });
+    });
+
+    test('existing stage-registry configs validate unchanged under the extended enum (R6)', () => {
+        // A policy using only the pre-existing triggers must still parse.
+        const legacy = stageModelPolicySchema.parse({
+            min_tier: 'standard',
+            fallback: [
+                { tier: 'capable-1', trigger: 'gate-fail' },
+                { tier: 'capable-1', trigger: 'timeout' },
+            ],
+        });
+        expect(legacy.fallback).toHaveLength(2);
+        // Every registered canonical stage's model_policy must still validate.
+        for (const stage of ['plan', 'refine', 'implement', 'verify']) {
+            const record = getCanonicalStage(stage);
+            if (record?.model_policy) {
+                expect(() => stageModelPolicySchema.parse(record.model_policy)).not.toThrow();
+            }
+        }
+    });
+
+    test('resource-exhaustion trigger is additive — unknown triggers still reject', () => {
+        expect(() =>
+            stageModelPolicySchema.parse({
+                min_tier: 'standard',
+                fallback: [{ tier: 'capable-1', trigger: 'quota-exceeded' }],
+            }),
+        ).toThrow();
     });
 
     test('legacy bare capable normalizes to capable-1 in model_policy schema', () => {
@@ -564,9 +609,15 @@ describe('model_policy helpers & canonical stage registry (0319)', () => {
         const plan = getCanonicalStage('plan');
         const refine = getCanonicalStage('refine');
         expect(plan?.model_policy.min_tier).toBe('capable-2');
-        expect(plan?.model_policy.fallback).toEqual([{ tier: 'capable-3', trigger: 'gate-fail' }]);
+        expect(plan?.model_policy.fallback).toEqual([
+            { tier: 'capable-3', trigger: 'gate-fail' },
+            { tier: 'capable-3', trigger: 'resource-exhaustion' },
+        ]);
         expect(refine?.model_policy.min_tier).toBe('standard');
-        expect(refine?.model_policy.fallback).toEqual([{ tier: 'capable-2', trigger: 'gate-fail' }]);
+        expect(refine?.model_policy.fallback).toEqual([
+            { tier: 'capable-2', trigger: 'gate-fail' },
+            { tier: 'capable-2', trigger: 'resource-exhaustion' },
+        ]);
         const planTier = plan?.model_policy.min_tier;
         const refineTier = refine?.model_policy.min_tier;
         expect(planTier).toBeDefined();

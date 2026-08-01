@@ -16,40 +16,81 @@ Laws are, what `--auto` does). [glossary.md](glossary.md) owns **term definition
 like *spine*, *gate*, or *verdict* means). A rule below may use a glossary term by name; it does
 not redefine it.
 
-## Honor `--agent` — the two-surface contract
+## Inline-default execution surface
 
-`--agent` means different things on the two command surfaces. "Current agent" is achievable on
-one and physically impossible on the other, so the contract splits:
+This contract applies when an operator invokes a model-bearing `/sp:dev-*` command from a live
+coding-agent session. **Default: execute the backing skill directly in the current coding-agent
+session.** Do not invoke `spur agent run` when no escalation trigger or operator override applies.
+`--inline` makes that default explicit; it is useful in scripts and audit output but does not alter
+the default.
 
-| Surface | Commands | Default (no `--agent`, or `inherit`) | Explicit `--agent <name>` / `auto` |
-|---|---|---|---|
-| **Inline** | `dev-plan`, `dev-refine`, `dev-refineall` (per-task legs), `dev-brainstorm`, `dev-unit` | Run the model step **in the current session** — do NOT shell to `spur agent run`; write the result via `spur task update --section --from-file` directly | Spawn via `spur agent run "<prompt>" --agent <value>` |
-| **Pipeline** | `dev-run`, `dev-review`, `dev-verify` | Forward nothing — the spawned `agent.run` step uses the configured default executor (`omp`). Current-agent execution is **not expressible** (the FSM runs a subprocess; the calling agent cannot block on itself) | Forward `--agent <value>` into the workflow `vars`, spawning that agent |
+This is a prompt-runtime rule owned by the command wrapper and its backing skill, not a new branch in
+`AgentService`: the current coding agent is already executing the command, so inline means continuing
+in that session. Threading an `inline` option through `AiRunner` would still start a subprocess and
+would therefore be a false implementation.
 
-### Inline surface — the default is in-session
+### Resolution order
 
-Inline commands are already an LLM running in the current session; the model step *is* the agent
-itself. So the default performs synthesis directly from the skill's own context and lands the
-result through the section-editing workflow above — no subprocess. `spur agent run` is invoked
-**only** when the operator forwarded an explicit agent (`<name>` or `auto`) — a deliberate spawn
-of a *different* agent.
+Choose the execution surface positively, in this order:
 
-This is a skill-behavior rule, not a CLI rule. Nothing in `packages/app` gates it; the inline
-skill files carry the instruction to synthesize in-session unless an explicit agent was forwarded.
+1. **Escalation trigger:** if any trigger below applies, use subprocess execution. A trigger selects
+   subprocess even when `--inline` was supplied, and the applied trigger must be named in the
+   dispatch or result.
+2. **Operator override:** `--subprocess` forces subprocess execution even when no objective trigger
+   applies. Report `operator override` rather than inventing one of the four triggers.
+3. **Inline:** otherwise invoke the backing `Skill()` directly in the current session. This is
+   also the meaning of explicit `--inline`; a competency may still use native subagents internally.
 
-### Pipeline surface — current-agent is impossible
+`--inline` and `--subprocess` together are invalid usage. An explicit `--agent <name>` that requires
+a different coding agent is trigger 1 and forces subprocess (wins over `--inline`). `--agent auto`
+or a selector resolving to the current agent does **not** force subprocess on its own: with no other
+trigger or `--subprocess`, the step runs inline because the current agent is already the executor.
+The selector is only consulted when subprocess execution is selected for another reason — a trigger,
+`--subprocess`, or a workflow `agent.run` step — in which case it names the agent for that fresh
+process. Never hardcode an agent: forward the operator's selector; when none was provided, let
+`spur agent run` resolve its configured default.
 
-The dual-workflow FSM runs each stage as a subprocess (`task-pipeline.yaml`'s `agent.run` steps).
-The calling agent cannot block on itself, so there is no way to express "run this stage in the
-current session." The honest default is: forward nothing, and the spawned step resolves to the
-configured default executor. Document this impossibility in pipeline command docs rather than
-implying `inherit` runs the current agent.
+**Single-hop rule:** when subprocess is selected for a single skill dispatch, invoke
+`spur agent run` exactly once. Strip `--inline`, `--subprocess`, and the outer `--agent` selector
+from the command placed in the child prompt; pass the selector to the outer
+`spur agent run --agent <value>` instead. Tell the child that the execution surface is already
+resolved and name the trigger / `operator override`. A command already executing inside that explicit
+subprocess boundary runs its backing skill in that process; it must not spawn another `spur agent run`
+for the same trigger. This prevents recursive dispatch.
 
-### Never hardcode an agent
+**Pipeline-wrapper carve-out:** `dev-run` and `dev-runall` are pipeline wrappers, not single-skill
+dispatches. Their `--agent <value>` does not select the orchestrator's execution surface — it is
+merged into per-task `vars.agent` so the pipeline's own `agent.run` steps spawn that executor (see
+`execution-batch.md` § 3.2). The single-hop strip rule does not apply: the selector must reach the
+workflow vars, not the outer `spur agent run`. The orchestrator itself runs inline in the current
+session; only the pipeline's `agent.run` steps cross the subprocess boundary.
 
-On both surfaces, the selector flows from the command flag so the operator can steer which agent
-does the model work without editing the skill. The only special-case token is `auto` (resolve from
-the current runtime) — every other value is an explicit agent name.
+| Trigger | Subprocess condition | Required report |
+| --- | --- | --- |
+| **Different model or coding agent required** | The requested `--agent` / model cannot be supplied by the host session. | `trigger 1: different model or coding agent required` |
+| **Headless or unattended step** | No live coding-agent session can own the step (scheduled, detached, async worker). | `trigger 2: headless or unattended step` |
+| **Durable auditable run record required** | The caller requires a persisted cost/trace/exit-code record. | `trigger 3: durable auditable run record required` |
+| **Workspace or credential isolation required** | The work must not share the host workspace or credentials. | `trigger 4: workspace or credential isolation required` |
+
+The trigger vocabulary and evidence standard are owned by
+[dispatch-surface.md](../../parallel-execution/references/dispatch-surface.md). If none can be named,
+stay inline.
+
+### Explicit subprocess surfaces are unchanged
+
+Direct `spur agent run` invocations are always subprocess execution. Workflow `agent.run` actions
+are always subprocess execution. Those surfaces already express an explicit process boundary and
+retain their existing resolution, output, timeout, and trace contracts. A full workflow-backed
+operation naturally selects subprocess when it requires trigger 2 or 3; the individual command's
+inline default does not rewrite workflow YAML or fabricate an inline `AgentRunTracedResult`.
+
+### Inline trade-off
+
+Inline avoids process startup and preserves the host session's context and tools. Relative to
+subprocess dispatch it provides **no isolated workspace**, **no separate run record**, **no
+independent timeout or abort boundary**, and **no tier-selected executor**: the executor is the
+current coding agent. If any of those properties is required, name the corresponding trigger and
+use the subprocess path.
 
 ## Every write is CLI-gated
 

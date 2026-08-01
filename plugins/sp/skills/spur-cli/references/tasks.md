@@ -61,14 +61,25 @@ The same `--template` axis drives both *which sections the new file carries* (pe
 Section-Status-Matrix) and *its creation status*: a spec'd task (a `--feature` link, or a batch item
 with `background`/`requirements`) is created at **`todo`**; a bare capture is created at **`backlog`**.
 See [tasks/verbs.md](tasks/verbs.md) for the variant detail.
-- **`--dedupe-within <seconds>`** refuses creation if an existing task under the same feature has an
-  identical title created within the last N seconds - a guard against duplicate `batch-create` rows
-  (0341 R4). **`--allow-duplicate-name`** overrides the guard and creates anyway; when set, the dedupe
-  check is skipped entirely even if `--dedupe-within` was also supplied.
+- **Dedup guard (default-on)** — when `--feature <id>` is set, the CLI refuses creation if an
+  existing task under the same feature has an identical (case-insensitive) title created within the
+  last **300 seconds** (5 min). This prevents the orphan-skeleton + re-create pattern: an agent
+  creates a task, loses context, then creates it again. The guard emits `duplicate-follow-up` with
+  exit code `3` and names the existing WBS — reuse it.
+  - **`--dedupe-within <seconds>`** overrides the default window (e.g. `--dedupe-within 60`).
+  - **`--allow-duplicate-name`** disables the guard entirely (explicit override).
+  - Tasks created without `--feature` are never guarded (no collision scope).
+  - With `--json`, a duplicate emits `{ ok: false, error: { code, message, existingWbs,
+    existingName, attemptedName } }` for deterministic reuse.
 
 ```bash
-spur task create "Add email validation" --feature H2 --dedupe-within 300
-spur task create "Add email validation" --feature H2 --dedupe-within 300 --allow-duplicate-name
+# Default guard is on — second call within 5 min exits 3:
+spur task create "Add email validation" --feature H2
+spur task create "Add email validation" --feature H2  # → duplicate-follow-up, exit 3
+# Narrow the window:
+spur task create "Add email validation" --feature H2 --dedupe-within 60
+# Override (creates anyway):
+spur task create "Add email validation" --feature H2 --allow-duplicate-name
 ```
 
 Many tasks at once (the decomposition output) go through `batch-create` with a JSON **array** file.

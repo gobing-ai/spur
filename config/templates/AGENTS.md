@@ -63,6 +63,9 @@ All product development work goes through the harness by default.
    multi-noun corpus → `sp:expert-spur`; review → `sp:super-reviewer`; docs process → `sp:doc-evolve`.
 5. **Keep tool ownership explicit** — project lifecycle/corpus/gates → Spur; plugin installation and
    capability lifecycle → Superskill. Do not hand-maintain per-platform adapters Superskill generates.
+6. **Run dev skills inline by default** — direct model-bearing `/sp:dev-*` commands execute in the
+   current coding-agent session. `--subprocess` or a named dispatch-surface trigger uses
+   `spur agent run`; direct `spur agent run` and workflow `agent.run` remain subprocess surfaces.
 
 **Platform fallback:** Platforms without slash commands and/or subagents still use the harness.
 Install the plugin through Superskill for the target platform, then use skills `sp:spur-dev`,

@@ -36,7 +36,7 @@ Generate solution options with trade-offs, recommendations, and confidence scori
 **Key distinction:**
 - **`sp:brainstorm`** = Ideation: generate approaches with trade-offs
 - **`sp:wayfinder`** = Wayfinding: chart a multi-session map when the destination itself is foggy
-- **research** = verify and synthesize information (delegate via `spur agent run`)
+- **research** = verify and synthesize information (delegate inline by default — see [inline-default contract](../spur-dev/references/cross-cutting.md#inline-default-execution-surface))
 - **`sp:spur-dev`** = Task creation: structured task breakdown (planning half)
 - **`sp:source-driven-development`** = Verification: source-first claim validation
 
@@ -68,7 +68,7 @@ Activate sp:brainstorm when:
 | "wayfind" / "chart a course" | User needs a multi-session investigation map — escalate to `sp:wayfinder` (Phase 2) |
 
 **NOT for:**
-- Pure research (use `spur agent run` for research instead)
+- Pure research (delegate to research skills inline by default; escalate via `spur agent run` only on a subprocess trigger)
 - Task creation without ideation (use `sp:spur-dev` instead)
 - Fact-checking or verification only (use `sp:source-driven-development` instead)
 - Task file operations (use `sp:spur-cli` instead)
@@ -97,12 +97,11 @@ For verification → sp:source-driven-development
 For synthesis → `spur agent run`
 ```
 
-**Honor `--agent`.** The default is to run synthesis **in the current session** — do not shell to
-`spur agent run`; write the result via `spur task update --section --from-file` directly. Only
-when the invoking command forwarded an explicit agent do you spawn it: `spur agent run "<prompt>"
---agent <value>`, where `<value>` is an explicit `<name>` or `auto` (resolve from current runtime).
-Never hardcode the agent — the selector flows from the command flag. See
-[spur-dev/cross-cutting.md](../spur-dev/references/cross-cutting.md) for the two-surface contract.
+**Resolve the execution surface first.** Run synthesis in the current session by default. Use
+`spur agent run` only for `--subprocess`, an explicit subprocess agent, or a named escalation
+trigger; report the applied trigger or `operator override`. Never hardcode the agent — the selector
+flows from `--agent`. See the
+[inline-default contract](../spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 
 ### 3. Generate 2-3 Approaches
 
@@ -136,7 +135,7 @@ template, source-citation format) is needed only inside each phase, not at the p
 
 ```
 1. INPUT    → Parse (file path or issue description), extract context, clarify if ambiguous
-2. IDEATE   → Generate 2-3 approaches with trade-offs (delegate research via spur agent run)
+2. IDEATE   → Generate 2-3 approaches with trade-offs (delegate research inline; escalate via spur agent run on a trigger)
 3. OUTPUT   → Structured markdown (Overview → Approaches → Recommendations → Next Steps),
               delivered incrementally; saved to docs/plans/YYYY-MM-DD-<topic>-brainstorm.md
 ```
@@ -248,7 +247,7 @@ still pauses unless the operator has encoded prior approval in the workflow vars
 
 ### Other Platforms
 
-- Delegate research via `spur agent run`
+- Delegate research inline by default; escalate via `spur agent run` only on a subprocess trigger (see [inline-default contract](../spur-dev/references/cross-cutting.md#inline-default-execution-surface))
 - Delegate tasks via `sp:spur-dev`
 - Output format is platform-agnostic markdown
 
@@ -360,4 +359,4 @@ A wayfinding escalation **replaces** the standard ideation output. The map featu
 
 ---
 
-**Remember:** Ideation ≠ Research. Generate approaches with trade-offs. Delegate verification to `sp:source-driven-development`. Delegate synthesis/research to `spur agent run`. Delegate task creation to `sp:spur-dev`. When the destination itself is foggy, escalate to `sp:wayfinder` — never force a spec that isn't ready.
+**Remember:** Ideation ≠ Research. Generate approaches with trade-offs. Delegate verification to `sp:source-driven-development`. Delegate synthesis/research inline (escalate to `spur agent run` only on a subprocess trigger). Delegate task creation to `sp:spur-dev`. When the destination itself is foggy, escalate to `sp:wayfinder` — never force a spec that isn't ready.

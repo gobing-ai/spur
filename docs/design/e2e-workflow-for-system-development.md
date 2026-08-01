@@ -582,17 +582,17 @@ paused run ids back to the operator.
 
 | Command | Workflow | Required flags/options | Contract |
 | --- | --- | --- | --- |
-| `/sp:dev-brainstorm` | (no pipeline) | `"<topic>"`, `--depth`, `--options`, `--task` / `--feature`, `--next` | Inline grilling interview + `sp:brainstorm` ideation; exits to `--task` (one task) or `--feature` (validated feature). |
-| `/sp:dev-plan` | `.spur/workflows/planning-pipeline.yaml` | `"<desc>"`, `--feature`, `--parent`, `--design`, `--auto`, `--agent` | Known idea/slug to design handoff via `sp:spur-dev plan`. |
-| `/sp:dev-refine` | (no pipeline) | `<wbs>`, `--focus`, `--auto`, `--next`, `--agent` | Task requirements gap analysis + section writes; chains to `dev-run` under `--next`. |
-| `/sp:dev-run` | `.spur/workflows/task-pipeline.yaml` | `<wbs>`, `--mode full\|implement`, `--auto`, `--wrap`, `--continue`, `--agent` | One task through execution; optional wrap-up after done. |
-| `/sp:dev-runall` | `.spur/workflows/task-pipeline.yaml` per selected task | `--tasks <selector>`, `--mode sequential\|parallel`, `--keep-going`, `--auto`, `--wrap`, `--agent` | Batch execution with dependency/topology handling in the wrapper. `--feature <id>` invokes `feature-dev.yaml`. |
+| `/sp:dev-brainstorm` | (no pipeline) | `"<topic>"`, `--depth`, `--options`, `--task` / `--feature`, `--next`, `--agent`, `--inline\|--subprocess` | Inline grilling interview + `sp:brainstorm` ideation; exits to `--task` (one task) or `--feature` (validated feature). |
+| `/sp:dev-plan` | `.spur/workflows/planning-pipeline.yaml` | `"<desc>"`, `--feature`, `--parent`, `--design`, `--auto`, `--agent`, `--inline\|--subprocess` | Known idea/slug to design handoff via `sp:spur-dev plan`. |
+| `/sp:dev-refine` | (no pipeline) | `<wbs>`, `--focus`, `--auto`, `--next`, `--agent`, `--inline\|--subprocess` | Task requirements gap analysis + section writes; chains to `dev-run --mode implement` under `--next`. |
+| `/sp:dev-run` | `.spur/workflows/task-pipeline.yaml` | `<wbs>`, `--mode full\|implement`, `--auto`, `--wrap`, `--continue`, `--agent`, `--inline\|--subprocess` | One task through execution; implement mode is inline by default, while full workflow actions remain subprocess-backed. |
+| `/sp:dev-runall` | `.spur/workflows/task-pipeline.yaml` per selected task | `--tasks <selector>`, `--mode sequential\|parallel`, `--keep-going`, `--auto`, `--wrap`, `--agent`, `--inline\|--subprocess` | Batch orchestrator starts inline; each full per-task workflow keeps its explicit subprocess boundary. |
 | `/sp:dev-idea` | `.spur/workflows/idea-pipeline.yaml` | `"<idea>"`, `--auto`, `--design`, `--skip-design` | Vague idea to feature + task batch handoff (no execution). |
 | `/sp:dev-wrap` | `.spur/workflows/wrapup-pipeline.yaml` | `<wbs>`, `--auto`, `--merge`, `--dry-run` | Single-task wrap-up. |
 | `/sp:dev-wrapall` | `.spur/workflows/wrapup-pipeline.yaml` | `--since`, `--feature`, `--status`, `--auto`, `--merge`, `--dry-run` | Batch wrap-up. |
-| `/sp:dev-unit` | (no pipeline) | `<target>`, `--coverage`, `--auto`, `--agent` | Coverage-driven test extension via `sp:code-testing`. |
-| `/sp:dev-review` | (no pipeline) | `<wbs>`, `--focus`, `--fix`, `--auto`, `--agent` | SECUA review via `sp:code-verification review`. |
-| `/sp:dev-verify` | (no pipeline) | `<wbs>`, `--fix`, `--focus`, `--bdd`, `--auto`, `--force`, `--next`, `--agent` | Requirements traceability + verdict via `sp:code-verification verify`. `--next` chains to `done`. |
+| `/sp:dev-unit` | (no pipeline) | `<target>`, `--coverage`, `--auto`, `--agent`, `--inline\|--subprocess` | Coverage-driven test extension via `sp:code-testing`. |
+| `/sp:dev-review` | (no pipeline) | `<wbs>`, `--focus`, `--fix`, `--auto`, `--agent`, `--inline\|--subprocess` | SECUA review via `sp:code-verification review`. |
+| `/sp:dev-verify` | (no pipeline) | `<wbs>`, `--fix`, `--focus`, `--bdd`, `--auto`, `--force`, `--next`, `--agent`, `--inline\|--subprocess` | Requirements traceability + verdict via `sp:code-verification verify`. `--next` chains to `done`. |
 | `/sp:dev-changelog` | (inline) | `[--since, --until, --version]` | Conventional-commit changelog. |
 | `/sp:dev-gitmsg` | (inline) | `[--commit, --squash, --scope]` | Conventional commit message(s). |
 | `/sp:dev-fixall` | (inline) | `[--scope]` | Lint + test fix loop. |
@@ -608,17 +608,17 @@ Wrapper duties (for commands that invoke pipelines directly):
 - Surface paused run ids and `spur workflow continue <run-id> --yes` instructions.
 - Never directly mutate task/feature files.
 
-### `--agent` Two-Surface Contract
+### Inline-default execution surface
 
-`--agent` behaves differently on inline commands (`dev-plan`, `dev-refine`, `dev-brainstorm`,
-`dev-unit`) versus pipeline commands (`dev-run`, `dev-review`, `dev-verify`, `dev-runall`).
-"Current agent" is achievable on inline commands and physically impossible on pipeline commands
-(the FSM runs subprocesses; the calling agent cannot block on itself).
+Direct model-bearing dev commands execute their backing skill in the current coding-agent session.
+`--inline` states that default; `--subprocess` forces `spur agent run`. A different agent/model,
+headless or unattended work, a durable auditable record, or workspace/credential isolation also
+forces subprocess and the applied trigger is named. Triggers override `--inline`.
 
-| Surface | Default (no flag) | Explicit `--agent <name>` / `auto` |
-| --- | --- | --- |
-| Inline | Run in the current session, write sections directly | Spawn via `spur agent run` |
-| Pipeline | Spawn the configured default executor (`omp`) | Spawn that explicit agent |
+Direct `spur agent run` and workflow `agent.run` are explicit subprocess surfaces. Inline has no
+isolated workspace, separate run record, independent timeout/abort boundary, or tier-selected
+executor. `--agent` remains the operator-layer coding-agent selector; `executor` remains the
+domain-layer role.
 
 ## Memory And Telemetry Artifacts
 

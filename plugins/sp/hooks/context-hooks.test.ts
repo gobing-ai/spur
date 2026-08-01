@@ -524,7 +524,7 @@ describe('resolveActiveSession — unit (task 0398 R3)', () => {
     test('returns the id when the session is recent', async () => {
         const { resolveActiveSession } = await import('./context-session-start');
         const dir = seed({ session: 'session-2026-07-31-1150', started: '2026-07-31T11:50:00.000Z' });
-        expect(resolveActiveSession(dir, NOW)).toBe('session-2026-07-31-1150');
+        expect(resolveActiveSession(dir, NOW, {})).toBe('session-2026-07-31-1150');
         rmSync(dir, { recursive: true, force: true });
     });
 
@@ -532,14 +532,14 @@ describe('resolveActiveSession — unit (task 0398 R3)', () => {
         const { resolveActiveSession, SESSION_REUSE_IDLE_MS } = await import('./context-session-start');
         const stale = new Date(NOW.getTime() - SESSION_REUSE_IDLE_MS - 1000).toISOString();
         const dir = seed({ session: 'session-old', started: stale });
-        expect(resolveActiveSession(dir, NOW)).toBeNull();
+        expect(resolveActiveSession(dir, NOW, {})).toBeNull();
         rmSync(dir, { recursive: true, force: true });
     });
 
     test('returns null on a future timestamp (clock skew)', async () => {
         const { resolveActiveSession } = await import('./context-session-start');
         const dir = seed({ session: 'session-future', started: '2026-08-01T00:00:00.000Z' });
-        expect(resolveActiveSession(dir, NOW)).toBeNull();
+        expect(resolveActiveSession(dir, NOW, {})).toBeNull();
         rmSync(dir, { recursive: true, force: true });
     });
 
@@ -552,14 +552,14 @@ describe('resolveActiveSession — unit (task 0398 R3)', () => {
     ])('returns null on %s', async (_label, body) => {
         const { resolveActiveSession } = await import('./context-session-start');
         const dir = seed(body);
-        expect(resolveActiveSession(dir, NOW)).toBeNull();
+        expect(resolveActiveSession(dir, NOW, {})).toBeNull();
         rmSync(dir, { recursive: true, force: true });
     });
 
     test('returns null when no pointer file exists', async () => {
         const { resolveActiveSession } = await import('./context-session-start');
         const dir = mkdtempSync(join(tmpdir(), 'spur-sess-none-'));
-        expect(resolveActiveSession(dir, NOW)).toBeNull();
+        expect(resolveActiveSession(dir, NOW, {})).toBeNull();
         rmSync(dir, { recursive: true, force: true });
     });
 });

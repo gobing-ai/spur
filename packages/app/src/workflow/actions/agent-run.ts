@@ -65,6 +65,10 @@ const KIND = 'agent.run';
  * subsequent ones inherit it (continue: true). On success, sets `__agentSession: "open"`.
  * Relies on engine `ActionResult.setVars` (F1, available ≥ 0.3.9); on older engines the
  * field is ignored and the latch degrades to explicit per-step `continue`.
+ *
+ * Resume-mode fallback (task 0406): when the latch auto-sets continue and the agent's
+ * resume mode rejects a new prompt (codex), the action retries once as a fresh dispatch
+ * and writes `__agentSession: "no-resume"` so subsequent steps skip the latch.
  */
 export class AgentRunActionRunner implements ActionRunner {
     readonly kind = KIND;
@@ -90,7 +94,11 @@ export class AgentRunActionRunner implements ActionRunner {
         // unless the step author set `continue` explicitly.
         let continueFlag = asOptionalBoolean(options.continue);
         const latch = context.vars.__agentSession;
-        if (continueFlag === undefined && latch === 'open') {
+        // Track whether the latch (not an explicit step flag) set continue so
+        // the dispatch loop can fall back to a fresh dispatch if the agent's
+        // resume mode rejects a new prompt (task 0406 — codex incompatibility).
+        const latchAutoContinued = continueFlag === undefined && latch === 'open';
+        if (latchAutoContinued) {
             continueFlag = true;
         }
 
@@ -140,37 +148,56 @@ export class AgentRunActionRunner implements ActionRunner {
                   };
         const actionId = context.actionId ?? `${context.runId}:${context.stateOrNodeId}`;
         const steeringPolicy = parseSteeringPolicy(options);
-        let steeringSignal = this.steeringController?.begin(context.runId, actionId, steeringPolicy);
+        let resumeRetried = false;
         let steeringNote: string | undefined;
         let traced: AgentRunTracedResult;
-        while (true) {
-            traced = await this.agentService.runTraced(input, flags, undefined, {
-                correlation: {
-                    runId: context.runId,
-                    executionId: crypto.randomUUID(),
-                    actionId,
-                },
-                ...(observer !== undefined ? { observer } : {}),
-                ...(steeringSignal !== undefined ? { signal: steeringSignal } : {}),
-            });
-            if (this.steeringController === undefined) break;
-            const decision = await this.steeringController.boundary(traced.exitCode === 0);
-            if (decision.operation === 'retry') {
-                steeringSignal = this.steeringController.nextAttempt();
-                continue;
+        // Outer loop: resume-mode fallback (task 0406). If the session latch
+        // auto-set continue and the agent's resume mode rejects a new prompt
+        // (exitCode 2 = shim threw before process launch), retry once as a
+        // fresh dispatch. Agent-agnostic — works for codex and any agent with
+        // the same limitation. The sentinel `__agentSession: 'no-resume'`
+        // written on success prevents future steps from repeating the cycle.
+        for (;;) {
+            steeringNote = undefined;
+            let steeringSignal = this.steeringController?.begin(context.runId, actionId, steeringPolicy);
+            while (true) {
+                traced = await this.agentService.runTraced(input, flags, undefined, {
+                    correlation: {
+                        runId: context.runId,
+                        executionId: crypto.randomUUID(),
+                        actionId,
+                    },
+                    ...(observer !== undefined ? { observer } : {}),
+                    ...(steeringSignal !== undefined ? { signal: steeringSignal } : {}),
+                });
+                if (this.steeringController === undefined) break;
+                const decision = await this.steeringController.boundary(traced.exitCode === 0);
+                if (decision.operation === 'retry') {
+                    steeringSignal = this.steeringController.nextAttempt();
+                    continue;
+                }
+                if (decision.operation === 'note') steeringNote = decision.note;
+                if (decision.operation === 'abort' && traced.exitCode === 0) {
+                    traced = {
+                        ...traced,
+                        exitCode: 3,
+                        signal: 'STEERING_ABORT',
+                        message: 'aborted at steering boundary',
+                    };
+                }
+                break;
             }
-            if (decision.operation === 'note') steeringNote = decision.note;
-            if (decision.operation === 'abort' && traced.exitCode === 0) {
-                traced = {
-                    ...traced,
-                    exitCode: 3,
-                    signal: 'STEERING_ABORT',
-                    message: 'aborted at steering boundary',
-                };
+            this.steeringController?.complete();
+
+            // Resume-mode fallback: exitCode 2 signals a dispatch error (shim
+            // threw before process launch), not an agent failure or timeout.
+            if (!resumeRetried && latchAutoContinued && traced.exitCode === 2) {
+                resumeRetried = true;
+                delete flags.continue;
+                continue;
             }
             break;
         }
-        this.steeringController?.complete();
         const { exitCode, stdout: answer } = traced;
         const ok = exitCode === 0;
         const invocation = traced.invocation;
@@ -218,10 +245,12 @@ export class AgentRunActionRunner implements ActionRunner {
             data: buildResultData(exitCode, agentLabel, capture, answer, invocation),
             error,
             // Latch: mark the session open after the first successful agent.run so later
-            // steps auto-continue (Q8). Requires engine setVars (F1, ≥0.3.9).
+            // steps auto-continue (Q8). When we fell back to a fresh dispatch because
+            // the agent's resume mode rejected continue (task 0406), write 'no-resume'
+            // so subsequent steps skip the latch and avoid repeating the wasted dispatch.
             setVars: ok
                 ? {
-                      __agentSession: 'open',
+                      __agentSession: resumeRetried ? 'no-resume' : 'open',
                       ...(steeringNote !== undefined ? { __steeringNote: steeringNote } : {}),
                   }
                 : undefined,

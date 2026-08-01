@@ -1,6 +1,6 @@
 ---
 description: Verify a batch of tasks against their requirements and Acceptance Criteria — batch traceability check producing per-task verdicts and a summary report
-argument-hint: "[`--tasks`](../skills/spur-dev/references/dev-operations.md#flag-tasks) <selector> [--feature <id>] [--agent <name|auto>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable]"
+argument-hint: "[`--tasks`](../skills/spur-dev/references/dev-operations.md#flag-tasks) <selector> [--feature <id>] [[`--agent`](../skills/spur-dev/references/dev-operations.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/dev-operations.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/dev-operations.md#flag-subprocess)] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
@@ -11,7 +11,7 @@ Wraps the **sp:spur-dev** and **sp:code-verification** skills.
 ## Usage
 
 ```
-/sp:dev-verifyall --tasks <selector> [--feature <id>] [--agent <name|auto>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable]
+/sp:dev-verifyall --tasks <selector> [--feature <id>] [--agent <name|auto>] [--inline|--subprocess] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable]
 ```
 
 Flags: `--tasks <selector>` (required unless [`--feature`](../skills/spur-dev/references/dev-operations.md#flag-feature)), `--feature <id>` (sugar for
@@ -41,6 +41,7 @@ Without `--fix all`, shippable is not evaluated (optional note: use `--fix all` 
 
 ## Implementation
 
+- Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 - Batch orchestration: `Skill(skill="sp:spur-dev", args="verifyall $ARGUMENTS")`
 - Per-task verification (inner): `Skill(skill="sp:code-verification", args="verify <wbs> $SHARED_FLAGS")`
 - Shippable gate: once after the batch (same skill § Shippable readiness gate)

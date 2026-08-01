@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Make tier fallback fire automatically on objective failure"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: H9
@@ -12,7 +12,7 @@ priority: P1
 tags: ["sp-plugin", "executor", "stage-registry", "reliability"]
 dependencies: ["0405"]
 created_at: "2026-08-01T05:22:55.719Z"
-updated_at: "2026-08-01T05:31:02.212Z"
+updated_at: "2026-08-01T22:10:10.984Z"
 ---
 
 ## 0407. Make tier fallback fire automatically on objective failure
@@ -35,7 +35,7 @@ R6. Bound the escalation loop so a repeatedly-failing chain cannot retry indefin
 R7. Prove it by test, not by wiring: start on one tier, inject an exhaustion failure, assert the next tier is selected. The test must fail if the escalation path is disconnected — verify that by mutation, since a test that passes with the path severed is what allowed this defect to ship.
 R8. Use the trigger vocabulary and naming from task 0405.
 ### Acceptance Criteria
-Covers feature scenarios R4, R5, R6, R7 and R9.
+Covers feature scenarios R4, R5, R6, R7, R9, and R10.
 
 ```gherkin
 Feature: automatic tier escalation
@@ -69,11 +69,18 @@ Feature: automatic tier escalation
     When their consumers are enumerated
     Then every exported helper is either used on the selection path or removed
 
-  Scenario: Fallback is proven by test rather than by wiring
+  Scenario: Fallback is proven by test, not by wiring
     Given a stage with a multi-entry fallback chain
     When an exhaustion failure is injected on the starting tier
     Then a test asserts the next tier was selected
     And severing the escalation path makes that test fail
+
+  Scenario: The repository stays green
+    Given the full test suite
+    When all tests run
+    Then typecheck passes with zero errors
+    And the full app and domain test suite passes
+    And lint is clean on changed files
 ```
 ### Q&A
 
@@ -141,17 +148,75 @@ having been called, which would pass with the escalation disconnected.
 - [ ] Add the retry bound.
 - [ ] Write the escalation test, then mutation-check it by severing the path and confirming failure.
 ### Solution
+Escalation loop added to `executeRun`; detection is heuristic pattern-matching on agent output; the dead helper `pickStartingTier` is deleted.
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**Change map**
 
+| Change | Location |
+| --- | --- |
+| Added `resource-exhaustion` fallback entries to all stages with existing chains; deleted `pickStartingTier` | `packages/domain/src/stage-registry/schema.ts:425` |
+| `StageEscalationContext` interface bundled onto `AgentResolveResult.ok.stage` | `packages/app/src/services/agent-service.ts:92` |
+| `resolveStageModelPolicy` populates `stage` context on ok return | `packages/app/src/services/agent-service.ts:817` |
+| `classifyObjectiveFailure` classifier (timeout via signal; resource-exhaustion via regex) | `packages/app/src/services/agent-service.ts:1290` |
+| `executeRun` escalation loop: bound, dispatch, classify, re-resolve, report | `packages/app/src/services/agent-service.ts:543` |
+| `maxEscalations` + `attemptedExecutors` bound (R6) | `packages/app/src/services/agent-service.ts:543` |
+| Escalation signal fed into `getNextFallback` (R2) | `packages/app/src/services/agent-service.ts:875` |
+| Chain-exhaustion report naming executors (R4) | `packages/app/src/services/agent-service.ts:718` |
+| R7 escalation-success test + R4/R6 chain-exhaustion test | `packages/app/tests/services/agent-service.test.ts:1990` |
+
+Removed `pickStartingTier` test from `packages/domain/src/stage-registry/schema.test.ts`; updated fallback-count assertions to include the new `resource-exhaustion` entries.
+
+**Design decisions**
+
+- **Single insertion point.** Both callers (`run`, `runTraced`) funnel through `executeRun` (`packages/app/src/services/agent-service.ts:535`), so detection lives there — no third copy of classification logic.
+- **Bias to precision.** The classifier records what it does *not* catch; extending it is an additive change, not a re-design. A false-positive toward a pricier tier is the costly error direction.
+- **Bound = `policy.fallback.length` + `attemptedExecutors`.** A chain cannot retry indefinitely; the dup-check fires first when executors are fewer than fallback slots (the common case — two executors, three fallback entries).
+- **`runFlags` is a shallow copy** made before the loop; `signal` and `from-executor` are injected on it per escalation so the re-resolve sees the failure context without mutating the caller's flags.
+- **Shim build failure during escalation**: first attempt is a hard return; later attempts push to `output.error` and break the loop — no silent swallow.
+- **JSON output suppression**: escalation reports are gated on `!jsonOutput`. The `resolveStageModelPolicy` "Stage escalation:" message is always emitted when `fromExecutor` is set.
 ### Testing
+**Verification verdict: PASS**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `classifyObjectiveFailure` at `packages/app/src/services/agent-service.ts:1291` detects timeout and precise resource-exhaustion signals. |
+| R2 | MET | `packages/app/src/services/agent-service.ts:701-734` feeds the signal into stage resolution and retries on the selected tier. |
+| R3 | MET | `packages/app/src/services/agent-service.ts:725` reports failed executor/tier, reason, and selected executor/tier; tests assert it. |
+| R4 | MET | `packages/app/src/services/agent-service.ts:715` reports chain exhaustion and attempted executors; tests assert both names. |
+| R5 | MET | `resolveModelPolicyFallback` and `pickStartingTier` are absent; `getNextFallback` has a live consumer. |
+| R6 | MET | `packages/app/src/services/agent-service.ts:543` bounds by fallback length; the attempted-executor set prevents revisits. |
+| R7 | MET | `packages/app/tests/services/agent-service.test.ts:2005` proves a 429 causes `pi` → `claude`; a new regression check covers escalated dispatch errors. |
+| R8 | MET | Classifier and policy share the 0405 `ObjectiveEscalationSignal` vocabulary. |
 
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| R4 — Exhaustion escalates to the next tier without operator involvement | MET | test | 429 is injected without `--signal`; dispatches are `pi`, then `claude`. |
+| R5 — Escalation is observable | MET | test | Diagnostics test asserts failed executor, reason, and retry executor. |
+| R6 — The chain is exhausted honestly | MET | test | Exhaustion test asserts non-zero exit, exactly two dispatches, and both executor names. |
+| The escalation loop is bounded | MET | test | Two configured executors produce exactly two dispatches. |
+| R7 — No specified-but-unused selection machinery remains | MET | command | `rg` finds neither dead helper; `getNextFallback` has live/test consumers. |
+| R9 — Fallback is proven by test, not by wiring | MET | test | Observable second higher-tier dispatch and success are asserted. |
+| R10 — The repository stays green | MET | command | `bun run spur-check`, `bun run test-cf`, and `bun run build` all exited 0. |
+
+| Check | Status | Evidence |
+| --- | --- | --- |
+| design-conformance | pass | Detection is centralized in `executeRun`; retry input/correlation are preserved; loop is bounded. |
+| trace-result-pairing | pass | Fix pass assigns an invocation only after its dispatch returns; regression test prevents prior-result/next-invocation mismatches. |
+| SECUA | pass | One major correctness defect was repaired and covered; no blocker or unresolved major remains. |
+| repository | pass | `bun run spur-check`: 4318 pass, 0 fail; 99.32% functions / 99.28% lines. `bun run test-cf`: 1 passed. `bun run build`: exit 0. |
+
+Fix-pass artifact: `.spur/run/0407-verdict.json:1-31` (fresh evidence plus trace/result-pairing remediation).
 ### Review
+**SECU findings** (pipeline verify step — verdict: PASS)
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
-
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | agent-service tests (escalation + existing) | — | 95 pass / 0 fail (238 expect calls) — includes 2 new 0407 tests + 93 existing. Re-run this turn. |
+| P4 | full app + domain test suite | — | 1966 pass / 0 fail — re-run this turn. |
+| P4 | typecheck | — | bunx tsc --noEmit --pretty: 0 errors. |
+| P4 | lint (changed files) | — | biome check on agent-service.ts, agent-service.test.ts, schema.ts, schema.test.ts: clean, no fixes needed. |
+| P4 | mutation check (R7) | — | Severed classifyObjectiveFailure → return undefined. Both 0407 tests failed (2 fail). Restored → 95 pass. Escalation path is load-bearing for the tests. |
+| P4 | schema tests | — | 52 pass / 0 fail in stage-registry schema.test.ts — includes updated fallback-count assertions with resource-exhaustion entries. |
 ### References
 
 H9
@@ -159,3 +224,6 @@ H9
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-08-01T21:26:21.682Z todo → wip (system)
+- 2026-08-01T21:29:30.586Z wip → testing (system)
+- 2026-08-01T21:29:39.419Z testing → done (system)

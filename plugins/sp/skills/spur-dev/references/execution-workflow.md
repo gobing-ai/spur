@@ -48,13 +48,11 @@ one thing and yields, so the **pipeline (not the agent) owns the loop**.
 | `review` | `/sp:dev-review <wbs>` — SECUA-framework review of the diff. | [dev-operations.md §2 review](dev-operations.md) |
 | `verify` | `sp:code-verification` — requirements traceability + verdict. | [dev-operations.md §3 verify](dev-operations.md) |
 
-**Agent override** for any stage: the `--agent <name|auto>` flag (passed through from
-the thin wrapper via `$ARGUMENTS`) selects the executing agent. Omitting it keeps the
-pipeline default — the spawned `agent.run` step resolves to the configured executor
-(`omp`); **"current agent" is not expressible on the pipeline surface** (the FSM runs a
-subprocess, and the calling agent cannot block on itself). `auto` resolves the current
-runtime to its canonical name before forwarding; `<name>` is an explicit override. See
-[cross-cutting.md](cross-cutting.md) for the full two-surface contract.
+Every workflow `agent.run` stage is an explicit subprocess surface (triggers 2 and 3: headless
+execution plus a durable run record). `--agent <name|auto>` selects that subprocess agent; omitting
+it keeps the pipeline's configured default (`omp`). Direct invocations of the same dev operations
+remain inline by default. See the
+[inline-default execution-surface contract](cross-cutting.md#inline-default-execution-surface).
 
 ## Section ownership — `## Solution`
 
@@ -108,23 +106,11 @@ to its canonical agent name before merging; omitting the flag forwards nothing, 
 step resolves to the configured default executor (`vars.agent` defaults to `"omp"` in the
 pipeline YAML).
 
-**`--next` resolves to the implement step — it is a chain link, not the pipeline driver.** When the
-incoming `$ARGUMENTS` carries `--next`, the mode resolves to `implement` even if `--mode full` was
-passed (or defaulted). `--next` means "advance the task to its next step, then hand off" — it runs
-the single implement step, transitions the task through the FSM (`todo → wip → testing`, guards
-honored), and chains to `/sp:dev-verify <wbs> --auto --next`. On a guard failure it stops as
-review-pending (leave status, surface the blocking finding, do not advance). The full pipeline
-(no `--next`) still runs every stage internally and ends at `done` on its own. The exact chain
-behavior and the review-pending message live in § "`--next` chain — advance to the next step"
-below.
-
-**MANDATORY `--next`-ignored warning (deterministic emission — not optional prose).** When
-`$ARGUMENTS` carries BOTH an explicit `--mode full` AND `--next`, the resolved mode is `implement`
-(the explicit `--mode full` has no effect). In that one case the operator MUST be warned before
-dispatch — emit the literal string in § "Mode resolution (deterministic — run before dispatch)"
-below. The plain `--next` case (no explicit `--mode full`) is the
-intended chain link and emits no warning. This emission is a required procedure step, not a
-"may mention" note — the trigger is mechanical (`$ARGUMENTS` contains both flags).
+**Mode is explicit before dispatch.** The full pipeline is selected by default or by `--mode full`;
+the implement step is selected only by `--mode implement`. `--next` controls lifecycle chaining and
+never changes this choice. In particular, every pipeline implement-stage prompt must contain the
+literal `/sp:dev-run <wbs> --mode implement`; omitting the mode would recursively launch the full
+pipeline (bug-742).
 
 The pipeline (`kind: state-machine`) runs the work loop:
 
@@ -145,12 +131,10 @@ the run:
 
 ## `--next` chain — advance to the next step
 
-`--next` makes `/sp:dev-run` **one link in the linear execution chain**
-(`refine → run → verify → done`), not the whole-pipeline driver. It always operates on the
-**implement** step: when `--next` is present, the mode resolves to `implement` even if `--mode full`
-was passed (full mode runs every step itself, so there is nothing to *advance to* — but rather than
-reject the operator's typed flag, `--next` reinterprets it as "run the implement step, then hand
-off"). This makes `/sp:dev-run <wbs> --auto --next` work as the headline chain link.
+`--next` makes an explicit `/sp:dev-run <wbs> --mode implement` invocation one link in the linear
+execution chain (`refine → run → verify → done`), not the whole-pipeline driver. It never selects
+the implement step by itself. The headline chain link is therefore
+`/sp:dev-run <wbs> --mode implement --auto --next`.
 
 When `--next` is set and implementation succeeds:
 
@@ -181,7 +165,7 @@ When `--next` is set and implementation succeeds:
 ```
 review pending — wip → testing guard failed for <wbs>
   spur task check reported: <blocking finding, e.g. "## Solution section is empty">
-  task left at wip. Resolve the finding, then re-run: /sp:dev-run <wbs> --auto --next
+  task left at wip. Resolve the finding, then re-run: /sp:dev-run <wbs> --mode implement --auto --next
 ```
 
 **Status precondition (R2).** The chain assumes the task is at `todo` or later when step 0 is
@@ -198,32 +182,16 @@ transitions) would defeat the review-pending stop the chain exists to provide.
 
 ## Mode resolution (deterministic — run before dispatch)
 
-`--next` always resolves the mode to `implement` (the chain link), regardless of `--mode`. The
-mode is decided mechanically from `$ARGUMENTS`, then the dispatch runs. This is a
-deterministic resolution, not agent discretion.
+Mode is decided mechanically from `$ARGUMENTS`; `--next` is not part of mode resolution.
 
 | `$ARGUMENTS` carries | Resolved mode | Dispatch |
 | --- | --- | --- |
-| `--next` (with or without `--mode implement`) | `implement` | `implement $ARGUMENTS` |
-| `--next` **and** explicit `--mode full` | `implement` + **MANDATORY warning** (below) | `implement $ARGUMENTS` |
-| `--mode full` (no `--next`) | `full` | `run $ARGUMENTS` |
-| `--mode implement` (no `--next`) | `implement` | `implement $ARGUMENTS` |
+| `--mode full` (with or without `--next`) | `full` | `run $ARGUMENTS` |
+| `--mode implement` (with or without `--next`) | `implement` | `implement $ARGUMENTS` |
 | neither (default) | `full` | `run $ARGUMENTS` |
 
-**MANDATORY warning — emit when `$ARGUMENTS` carries BOTH an explicit `--mode full` AND `--next`.**
-This is the only case `--next` is "ignored" (the operator asked for the full pipeline *and* the
-advance-chain; `--next` won the resolution, so the explicit `--mode full` has no effect). Emit
-this literal string to the operator **before** dispatching — it is a required step, not optional
-prose:
-
-```
-⚠️  --next is ignored in full mode: --next resolves the mode to `implement` (the chain link),
-    so an explicit --mode full has no effect. Running the implement step only. Drop --next to
-    run the full pipeline, or drop --mode full to silence this warning.
-```
-
-The plain `--next` case (no explicit `--mode full`) emits **no** warning — that is the intended
-chain-link behavior, not a silent ignore.
+Pipeline stage prompts always carry `--mode implement`; relying on `--next` to select the step is
+the recursive-pipeline defect fixed by bug-742.
 
 ## Infrastructure failure recognition (mandatory)
 

@@ -337,7 +337,7 @@ When a batch contains tasks with **zero dependency edges between them** and **no
 1. Identify the independent subset from the topo-sorted batch (tasks with no edges to each other).
 2. Check for file-overlap conflicts (two tasks touching the same `file:line` range must serialize).
 3. Verify token budget supports N-way fan-out.
-4. Dispatch via `spur agent run` per task.
+4. Dispatch via `spur agent run` per task (trigger 4: workspace isolation required for parallel fan-out).
 5. Synthesize results per the [result-synthesis contract](../../parallel-execution/references/result-synthesis.md).
 
 **Parallel vs. sequential:** the default is sequential (topo-sort order). Parallel is an opt-in via `--mode parallel` on `sp:super-planner` or `/sp:dev-parallel`. When in doubt, run sequentially — parallel is only beneficial when tasks are provably independent.

@@ -119,7 +119,7 @@ passed, so provenance denied first and Review L3 denied on the retry.
 | # | Gate layer | Triggers denial when | Remediation |
 |---|------------|----------------------|-------------|
 | 1 | **Strict-core + verdict artifact** (`spur task check <wbs> --strict-core` + `done-transition-guard.ts`) | The strict-core check fails, or `.spur/run/<wbs>-verdict.json` is **missing** or has a non-PASS aggregate. **Missing artifact is a deny** (not a silent allow — closes the 0349 "done without verdict" class). The aggregate is recomputed from requirement/AC rows; the harsher of stored and computed wins. | Re-run `/sp:dev-verify <wbs>` until PASS (writes the artifact), or explicitly override with `spur task update <wbs> done --force-done --reason "<why>"`. Docs-only pipelines write a docs PASS stub under `.spur/run/` before `done` (see `docs-pipeline.yaml`). |
-| 2 | **Provenance guard** (`lifecycle-adapter.ts`) | No pipeline-kind run link exists for `<wbs>`. | Run `/sp:dev-run <wbs>` through the pipeline, use `/sp:dev-run <wbs> --auto --next`, or record the audited bypass with `SPUR_PROVENANCE_OVERRIDE=1`. |
+| 2 | **Provenance guard** (`lifecycle-adapter.ts`) | No pipeline-kind run link exists for `<wbs>`. | Run `/sp:dev-run <wbs>` through the full pipeline, use `/sp:dev-run <wbs> --mode implement --auto --next` for the explicit step chain, or record the audited bypass with `SPUR_PROVENANCE_OVERRIDE=1`. |
 | 3 | **Review L3** (`task-check.ts`) | `### Review` is empty, placeholder-only, or lacks a populated P1–P4 findings table. | Run `/sp:dev-review <wbs>`; verify cannot write Review because of the Step 10 prohibition above. |
 
 When the verdict is **PARTIAL/FAIL**, or any gate layer fails: stop as review-pending — surface

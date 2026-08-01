@@ -1,6 +1,6 @@
 ---
 description: Plan a feature from a description — intake → feature create → AC generation → feature check gate → decomposition → batch-create (Design by default)
-argument-hint: "\"<description>\" [[`--feature`](../skills/spur-dev/references/dev-operations.md#flag-feature) <id>] [--parent <feature-id>] [--agent <name|auto>] [--skip-design] [[`--auto`](../skills/spur-dev/references/dev-operations.md#flag-auto)] [--approve-taste]"
+argument-hint: "\"<description>\" [[`--feature`](../skills/spur-dev/references/dev-operations.md#flag-feature) <id>] [--parent <feature-id>] [[`--agent`](../skills/spur-dev/references/dev-operations.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/dev-operations.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/dev-operations.md#flag-subprocess)] [--skip-design] [[`--auto`](../skills/spur-dev/references/dev-operations.md#flag-auto)] [--approve-taste]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---
 
@@ -12,7 +12,7 @@ Wraps the **sp:spur-dev** skill.
 
 ```
 /sp:dev-plan "<description>"
-  [--feature <id>] [--parent <feature-id>] [--agent <name|auto>]
+  [--feature <id>] [--parent <feature-id>] [--agent <name|auto>] [--inline|--subprocess]
   [--auto]              # skip objective HITL where the plan path supports it
   [--skip-design]       # design package off (satellite + task Design)
   [--approve-taste]     # with --auto: skip design-approval taste pause when applicable
@@ -27,5 +27,6 @@ for taste gates). Alias: `--design-approved` (prefer `--approve-taste`).
 
 ## Implementation
 
+- Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 - `Skill(skill="sp:spur-dev", args="plan $ARGUMENTS")`
 - Full Design package + batch `design` field contract: `plugins/sp/skills/spur-dev/references/dev-operations.md` § plan and `planning-workflow.md` Step 5.5.

@@ -4,6 +4,19 @@ Owning task: [`0125`](../tasks/0125_add-agent-to-critical-dev-commands-extract-s
 Surface index: [`04_DESIGN.md §0`](../04_DESIGN.md), operations SSOT
 `plugins/sp/skills/spur-dev/references/dev-operations.md`. Feature: `F` (Planning).
 
+## Task 0406 amendment — inline-default execution
+
+Model-bearing `/sp:dev-*` commands expose `--inline|--subprocess`; inline is the default when the
+operator invokes a command from a live coding-agent session. `--subprocess` forces
+`spur agent run`. A dispatch-surface trigger (different model/agent, headless/unattended, durable
+run record, or workspace/credential isolation) also forces subprocess and must be named; it
+overrides `--inline`. Direct `spur agent run` and workflow `agent.run` remain subprocess surfaces.
+
+The operator selector remains `--agent <name|auto>` per task 0405's vocabulary boundary; an
+explicit different agent is trigger 1. Inline provides no isolated workspace, separate run record,
+independent timeout/abort boundary, or tier-selected executor. The current contract is
+`plugins/sp/skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface`.
+
 ## Problem
 
 Two coupled gaps in the `/sp:dev-*` surface:
@@ -86,5 +99,5 @@ resolution already exists — we only forward the selector).
 - Baseline dogfood that surfaced the P1 catalog gap:
   [`2026-06-25-dev-refine-0125-baseline-dogfood.md`](../dogfood/2026-06-25-dev-refine-0125-baseline-dogfood.md).
 - `plugins/sp/commands/dev-verify.md` — the canonical `--agent` block.
-- `plugins/sp/skills/spur-dev/references/cross-cutting.md` §Honor `--agent` — the threading rule.
+- `plugins/sp/skills/spur-dev/references/cross-cutting.md` §Inline-default execution surface — the threading rule.
 - `plugins/sp/skills/dogfood-testing/SKILL.md` — the extracted backbone skill.

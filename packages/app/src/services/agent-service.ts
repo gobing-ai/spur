@@ -5,6 +5,7 @@ import {
     getNextFallback,
     isTierEligible,
     type ObjectiveEscalationSignal,
+    type StageModelPolicy,
     type StageRecord,
     TIER_RANK,
 } from '@gobing-ai/spur-domain';
@@ -53,6 +54,13 @@ export interface AgentRunDeps {
  * A named executor profile: a canonical coding-agent plus an optional opaque
  * model override. Mirrors the CLI's `AgentExecutorConfig` zod shape structurally
  * (the app layer must not import from `apps/cli`, R3).
+ *
+ * Vocabulary (task 0405, R1): "executor" is the domain-layer term for the role
+ * a stage dispatches (reasoned about by `getExecutorTier`, `isTierEligible`,
+ * the eligible-executor list). The operator surface says "agent" (CLI `--agent`,
+ * the `agent:` config key, this struct's `agent` field naming the canonical
+ * tool). The split is deliberate; the boundary is recorded at
+ * `AgentConfigSchema` in `@gobing-ai/spur-config`. No alias, no migration.
  */
 export interface AgentExecutorConfig {
     name: string;
@@ -76,13 +84,27 @@ export interface AgentConfig {
 export type AgentResolveSource = 'stage' | 'phase' | 'default' | 'priority' | 'explicit';
 
 /**
+ * Stage context carried on a stage-sourced resolution so {@link executeRun} can
+ * auto-escalate on objective failure without operator involvement (0407).
+ * Bundles the policy, the executor name that won (for `from-executor` on
+ * re-resolve), and that executor's tier (for `getNextFallback` step-1).
+ */
+export interface StageEscalationContext {
+    stageId: string;
+    policy: StageModelPolicy;
+    executorName: string;
+    executorTier: CapabilityTier;
+}
+
+/**
  * Result of resolving an execution profile from `--agent` + prompt + config.
  * On success carries the canonical {@link AgentName}, an optional model override
- * (applied only when the user passed no explicit `--model`), and the resolution
- * source for diagnostics.
+ * (applied only when the user passed no explicit `--model`), the resolution
+ * source for diagnostics, and — for stage-sourced resolutions — the escalation
+ * context {@link executeRun} uses to retry on objective failure (0407).
  */
 export type AgentResolveResult =
-    | { ok: true; agent: AgentName; model?: string; source: AgentResolveSource }
+    | { ok: true; agent: AgentName; model?: string; source: AgentResolveSource; stage?: StageEscalationContext }
     | { ok: false; exitCode: number; message: string };
 /**
  * Result from {@link AgentService.runCapture} — exit code + captured answer text,
@@ -510,92 +532,32 @@ export class AgentService {
         if (!resolved.ok) {
             return { ok: false, exitCode: resolved.exitCode, message: resolved.message };
         }
-        const agent = resolved.agent;
+        // Escalation state (0407): mutable per-iteration tracking. `runFlags`
+        // is a shallow copy so each escalation can inject `signal` +
+        // `from-executor` without mutating the caller's flags.
+        const runFlags: Record<string, string | boolean> = { ...flags };
+        let currentAgent: AgentName = resolved.agent;
+        let currentModel = resolved.model;
+        let currentSource = resolved.source;
+        let currentStage = resolved.stage;
+        const maxEscalations = currentStage?.policy.fallback.length ?? 0;
+        const attemptedExecutors = new Set<string>(currentStage ? [currentStage.executorName] : []);
 
-        // Tier-2 warning (suppressed in json/silent mode)
-        if (!jsonOutput && TIER2_AGENTS.has(agent)) {
-            this.ctx.output.error(`Warning: ${agent} is a Tier-2 agent (TUI/gateway only)`);
+        // Tier-2 warning (suppressed in json/silent mode) — first agent only.
+        if (!jsonOutput && TIER2_AGENTS.has(currentAgent)) {
+            this.ctx.output.error(`Warning: ${currentAgent} is a Tier-2 agent (TUI/gateway only)`);
         }
 
-        // slash-command translation
-        const translated =
-            prompt !== undefined && isClaudeStyleSlashCommand(prompt)
-                ? translateSlashCommand(agent, prompt)
-                : undefined;
-        const input = translated ?? prompt;
-
-        // team-mode identity flags map straight through to PromptOptions; the
-        // shim renders them into the agent's identity preamble. `--task` reads the
-        // task file (if present) so the agent gets the task id + title as context.
+        // Flag-derived values that do not change across iterations.
+        const explicitModel = stringFlag(flags, 'model', '') || undefined;
         const purpose = stringFlag(flags, 'purpose', '') || undefined;
         const tags = parseTagsFlag(flags);
         const systemPrompt = stringFlag(flags, 'system-prompt', '') || undefined;
         const taskId = stringFlag(flags, 'task', '') || undefined;
 
-        // Model precedence (R6): explicit `--model` wins; otherwise the resolved
-        // executor's model override (if any) applies.
-        const explicitModel = stringFlag(flags, 'model', '') || undefined;
-        const model = explicitModel ?? resolved.model;
-
-        // build PromptOptions
-        const promptOptions: PromptOptions = {
-            input,
-            continue: continueFlag || undefined,
-            model,
-            mode: mode as 'text' | 'json',
-            ...(purpose !== undefined ? { purpose } : {}),
-            ...(tags !== undefined ? { tags } : {}),
-            ...(systemPrompt !== undefined ? { systemPrompt } : {}),
-            ...(taskId !== undefined ? { taskId } : {}),
-        };
-
-        // Resolve the concrete shim command ONCE (R1 / task 0295): used both for
-        // the dispatch diagnostics line and for the captured invocation that
-        // goes into the workflow run trace. A failure here means the agent
-        // cannot be invoked under the resolved options (e.g. codex resume+prompt).
-        let shimCommand: { command: string; args: string[] };
-        try {
-            // Production AiRunner applies identity context in buildPromptCommand;
-            // use the same builder as dispatch so the trace describes the actual
-            // command. The fallback keeps structural test doubles compatible.
-            shimCommand =
-                typeof runner.buildPromptCommand === 'function'
-                    ? runner.buildPromptCommand(agent, promptOptions, { cwd: cwd || undefined })
-                    : getAgentShim(agent).getPromptCommand(promptOptions);
-            if (!jsonOutput) {
-                const version = (await detector.detectOne(agent)).version;
-                this.ctx.output.error(
-                    `⚙️  ${agent}${version !== null ? ` v${version}` : ''}\n   ${shimCommand.command} ${shimCommand.args.join(' ')}`,
-                );
-            }
-        } catch (error) {
-            return { ok: false, exitCode: 2, message: error instanceof Error ? error.message : String(error) };
-        }
-
-        // Capture the resolved invocation BEFORE dispatch (R1 / task 0295).
-        // Prompt-bearing argv entries and the pre-translation prompt are reduced
-        // to trace-safe summaries; raw prompts/system context must never be
-        // persisted in action_runs.result_json.
-        const traceInput = input === undefined ? undefined : traceSafePrompt(input);
-        const invocation: AgentRunInvocation = {
-            agent,
-            source: resolved.source,
-            command: shimCommand.command,
-            argv: sanitizeInvocationArgv(shimCommand.args, input, traceInput),
-            ...(cwd !== '' ? { cwd } : {}),
-            mode: mode as 'text' | 'json',
-            outputMode,
-            ...(timeoutMs !== undefined ? { timeoutMs } : {}),
-            continue: continueFlag,
-            // NodeProcessExecutor one-shot execution uses `stdin: 'ignore'`
-            // for both buffered and streamed output policies.
-            stdinInteractive: false,
-            ...(model !== undefined ? { model } : {}),
-            ...(translated !== undefined && prompt !== undefined ? { translatedFrom: traceSafePrompt(prompt) } : {}),
-        };
-
-        // dispatch
-        let result: AgentRunResult;
+        // Lifecycle + signal handlers set up ONCE, shared across all dispatches
+        // (0407): a single AgentExecutionLifecycle spans the escalation chain,
+        // and a single AbortController lets SIGTERM/SIGINT cancel any dispatch.
         const controller = new AbortController();
         const onTerminate = () => controller.abort();
         const onExternalAbort = () => controller.abort();
@@ -605,40 +567,189 @@ export class AgentService {
             configuredSecretValues(this.ctx.env),
             options.execution?.heartbeatMs,
         );
-        lifecycle.start({
-            agent,
-            ...(model !== undefined ? { model } : {}),
-            invocation: `${invocation.command} ${invocation.argv.join(' ')}`,
-            ...(timeoutMs !== undefined ? { timeoutMs } : {}),
-        });
-        const dispatchStartedAt = Date.now();
+        process.on('SIGTERM', onTerminate);
+        process.on('SIGINT', onTerminate);
+        options.execution?.signal?.addEventListener('abort', onExternalAbort, { once: true });
+        if (options.execution?.signal?.aborted === true) controller.abort();
+
+        let result: AgentRunResult | undefined;
+        let invocation: AgentRunInvocation | undefined;
+        let dispatchStartedAt = Date.now();
+
         try {
-            process.on('SIGTERM', onTerminate);
-            process.on('SIGINT', onTerminate);
-            options.execution?.signal?.addEventListener('abort', onExternalAbort, { once: true });
-            if (options.execution?.signal?.aborted === true) controller.abort();
-            result = await runner.runPromptCommand(agent, promptOptions, {
-                cwd: cwd || undefined,
-                ...(timeoutMs !== undefined ? { timeout: timeoutMs } : {}),
-                signal: controller.signal,
-                correlation: lifecycle.identity,
-                onOutput: (output) => lifecycle.observe(output),
-            });
-        } catch (error) {
-            lifecycle.finish({
-                exitCode: null,
-                durationMs: Date.now() - dispatchStartedAt,
-                ...(controller.signal.aborted ? { reason: 'cancelled' } : {}),
-                ...(!controller.signal.aborted
-                    ? { reason: error instanceof Error ? error.message : String(error) }
-                    : {}),
-            });
-            return { ok: false, exitCode: 2, message: error instanceof Error ? error.message : String(error) };
+            for (let attempt = 0; ; attempt++) {
+                const agent = currentAgent;
+                const model = explicitModel ?? currentModel;
+
+                // slash-command translation (recomputed each iteration — agent
+                // may change on escalation).
+                const translated =
+                    prompt !== undefined && isClaudeStyleSlashCommand(prompt)
+                        ? translateSlashCommand(agent, prompt)
+                        : undefined;
+                const input = translated ?? prompt;
+
+                const promptOptions: PromptOptions = {
+                    input,
+                    continue: continueFlag || undefined,
+                    model,
+                    mode: mode as 'text' | 'json',
+                    ...(purpose !== undefined ? { purpose } : {}),
+                    ...(tags !== undefined ? { tags } : {}),
+                    ...(systemPrompt !== undefined ? { systemPrompt } : {}),
+                    ...(taskId !== undefined ? { taskId } : {}),
+                };
+
+                // Resolve shim command. On the first attempt a failure is a
+                // hard error. On escalation attempts the prior result stands.
+                let shimCommand: { command: string; args: string[] };
+                try {
+                    shimCommand =
+                        typeof runner.buildPromptCommand === 'function'
+                            ? runner.buildPromptCommand(agent, promptOptions, { cwd: cwd || undefined })
+                            : getAgentShim(agent).getPromptCommand(promptOptions);
+                    if (!jsonOutput) {
+                        const version = (await detector.detectOne(agent)).version;
+                        this.ctx.output.error(
+                            `⚙️  ${agent}${version !== null ? ` v${version}` : ''}\n   ${shimCommand.command} ${shimCommand.args.join(' ')}`,
+                        );
+                    }
+                } catch (error) {
+                    if (attempt === 0) {
+                        return {
+                            ok: false,
+                            exitCode: 2,
+                            message: error instanceof Error ? error.message : String(error),
+                        };
+                    }
+                    if (!jsonOutput) {
+                        this.ctx.output.error(
+                            `Escalation aborted: ${error instanceof Error ? error.message : String(error)}`,
+                        );
+                    }
+                    break;
+                }
+
+                // Capture invocation for the workflow run trace.
+                const traceInput = input === undefined ? undefined : traceSafePrompt(input);
+                const attemptInvocation: AgentRunInvocation = {
+                    agent,
+                    source: currentSource,
+                    command: shimCommand.command,
+                    argv: sanitizeInvocationArgv(shimCommand.args, input, traceInput),
+                    ...(cwd !== '' ? { cwd } : {}),
+                    mode: mode as 'text' | 'json',
+                    outputMode,
+                    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+                    continue: continueFlag,
+                    stdinInteractive: false,
+                    ...(model !== undefined ? { model } : {}),
+                    ...(translated !== undefined && prompt !== undefined
+                        ? { translatedFrom: traceSafePrompt(prompt) }
+                        : {}),
+                };
+
+                // Start lifecycle ONCE before first dispatch.
+                if (attempt === 0) {
+                    lifecycle.start({
+                        agent,
+                        ...(model !== undefined ? { model } : {}),
+                        invocation: `${attemptInvocation.command} ${attemptInvocation.argv.join(' ')}`,
+                        ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+                    });
+                    dispatchStartedAt = Date.now();
+                }
+
+                // Dispatch
+                try {
+                    result = await runner.runPromptCommand(agent, promptOptions, {
+                        cwd: cwd || undefined,
+                        ...(timeoutMs !== undefined ? { timeout: timeoutMs } : {}),
+                        signal: controller.signal,
+                        correlation: lifecycle.identity,
+                        onOutput: (output) => lifecycle.observe(output),
+                    });
+                } catch (error) {
+                    if (attempt === 0) {
+                        lifecycle.finish({
+                            exitCode: null,
+                            durationMs: Date.now() - dispatchStartedAt,
+                            ...(controller.signal.aborted ? { reason: 'cancelled' } : {}),
+                            ...(!controller.signal.aborted
+                                ? { reason: error instanceof Error ? error.message : String(error) }
+                                : {}),
+                        });
+                        return {
+                            ok: false,
+                            exitCode: 2,
+                            message: error instanceof Error ? error.message : String(error),
+                        };
+                    }
+                    // Escalation dispatch failure — prior result stands.
+                    if (!jsonOutput) {
+                        this.ctx.output.error(
+                            `Escalation dispatch failed: ${error instanceof Error ? error.message : String(error)}`,
+                        );
+                    }
+                    break;
+                }
+                invocation = attemptInvocation;
+
+                // Success — done.
+                if (result.exitCode === 0) break;
+
+                // Attempt escalation (0407 R1/R2/R6).
+                const escalationSignal = classifyObjectiveFailure(result);
+                if (escalationSignal === undefined || currentStage === undefined || attempt >= maxEscalations) {
+                    break;
+                }
+
+                // Re-resolve with escalation flags to pick the next executor.
+                runFlags.signal = escalationSignal;
+                runFlags['from-executor'] = currentStage.executorName;
+                const nextResolved = await this.resolveAgent(prompt, runFlags, doctorRunner);
+                if (
+                    !nextResolved.ok ||
+                    nextResolved.stage === undefined ||
+                    attemptedExecutors.has(nextResolved.stage.executorName)
+                ) {
+                    // Chain exhausted (R4) — report executors attempted.
+                    if (!jsonOutput) {
+                        this.ctx.output.error(
+                            `Escalation chain exhausted after ${attempt + 1} attempt(s); executors tried: ${[...attemptedExecutors].join(', ')}`,
+                        );
+                    }
+                    break;
+                }
+
+                // Escalating (R3) — report which executor failed and why.
+                if (!jsonOutput) {
+                    this.ctx.output.error(
+                        `Escalating: ${currentStage.executorName} (tier ${currentStage.executorTier}) failed with ${escalationSignal}; retrying on ${nextResolved.stage.executorName} (tier ${nextResolved.stage.executorTier})`,
+                    );
+                }
+                currentAgent = nextResolved.agent;
+                currentModel = nextResolved.model;
+                currentSource = nextResolved.source;
+                currentStage = nextResolved.stage;
+                attemptedExecutors.add(nextResolved.stage.executorName);
+            }
         } finally {
             process.off('SIGTERM', onTerminate);
             process.off('SIGINT', onTerminate);
             options.execution?.signal?.removeEventListener('abort', onExternalAbort);
         }
+
+        // Impossible-state guard: the loop always dispatches at least once.
+        if (result === undefined || invocation === undefined) {
+            lifecycle.finish({
+                exitCode: null,
+                durationMs: Date.now() - dispatchStartedAt,
+                reason: 'no dispatch attempted',
+            });
+            return { ok: false, exitCode: 2, message: 'No dispatch attempted' };
+        }
+
         lifecycle.finish({
             exitCode: result.exitCode,
             durationMs: result.durationMs,
@@ -798,6 +909,12 @@ export class AgentService {
                     agent: canonical,
                     model: executor.model,
                     source: 'stage',
+                    stage: {
+                        stageId: stageRecord.id,
+                        policy,
+                        executorName: executor.name,
+                        executorTier: getExecutorTier(executor),
+                    },
                 };
             }
         }
@@ -1156,4 +1273,33 @@ function getExecutorTier(executor: AgentExecutorConfig): CapabilityTier {
     if (/\b(cheap|haiku|flash|lite|mini|fast)\b/.test(combined)) return 'cheap';
     if (/\b(capable|opus|pro|sonnet|r1|o1|o3|expert)\b/.test(combined)) return 'capable-1';
     return 'standard';
+}
+
+/**
+ * Classify a dispatch result into an objective escalation signal (0407 R1).
+ *
+ * Biased toward precision: the multi-pattern match avoids false positives on
+ * ordinary stderr noise. Only well-known resource-exhaustion and timeout
+ * signatures map to escalation triggers — everything else returns `undefined`
+ * and the result stands as-is.
+ *
+ * Trigger vocabulary mirrors {@link ObjectiveEscalationSignal} (0405 R8):
+ * `resource-exhaustion` and `timeout` are the only auto-classifiable signals;
+ * `gate-fail`, `insufficient-evidence`, and `retry-exhausted` require human or
+ * upstream judgement and are never inferred from process output.
+ */
+function classifyObjectiveFailure(result: AgentRunResult): ObjectiveEscalationSignal | undefined {
+    // A signal on the result means the subprocess was killed (timeout-kill).
+    if (result.signal !== undefined) return 'timeout';
+
+    if (result.exitCode === 0) return undefined;
+    const text = `${result.stderr} ${result.stdout}`.toLowerCase();
+    if (
+        /\b(rate[\s-]?limit|429|too many requests|quota|token limit|token budget|context length|maximum context|context window)\b/.test(
+            text,
+        )
+    ) {
+        return 'resource-exhaustion';
+    }
+    return undefined;
 }

@@ -134,8 +134,6 @@ describe('sp plugin — command flag parity with dev-operations.md (R8/R9, task 
     // Scope (per header lines 13–15): only commands with a numbered dev-operations.md
     // table row. rule-*, workflow-*, spur-init, dev-next, dev-parallel, dev-findissue
     // have no SSOT row and are out of scope — their flags are not anchored here.
-    // --agent is explicitly deferred to feature H9 (task 0401 R12); skip it entirely.
-    const H9_DEFERRED = new Set(['--agent']);
 
     // In-scope command -> argument-hint, for commands that have a numbered table row.
     const inScopeHints: Map<string, string> = new Map();
@@ -155,7 +153,7 @@ describe('sp plugin — command flag parity with dev-operations.md (R8/R9, task 
     };
     const inScopeFlags = new Set<string>();
     for (const hint of inScopeHints.values()) {
-        for (const f of extractFlags(hint)) if (!H9_DEFERRED.has(f)) inScopeFlags.add(f);
+        for (const f of extractFlags(hint)) inScopeFlags.add(f);
     }
     const sharedFlags = new Set<string>();
     for (const flag of inScopeFlags) {

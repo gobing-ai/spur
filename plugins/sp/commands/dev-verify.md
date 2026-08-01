@@ -1,6 +1,6 @@
 ---
 description: Verify a task against its requirements and Acceptance Criteria — traceability check producing a PASS/PARTIAL/FAIL verdict with evidence
-argument-hint: "<wbs> [--agent <name|auto>] [[`--fix`](../skills/spur-dev/references/dev-operations.md#flag-fix) <none|blockers-first|all>] [[`--focus`](../skills/spur-dev/references/dev-operations.md#flag-focus) <lens>] [[`--bdd`](../skills/spur-dev/references/dev-operations.md#flag-bdd)] [[`--auto`](../skills/spur-dev/references/dev-operations.md#flag-auto)] [[`--force`](../skills/spur-dev/references/dev-operations.md#flag-force)] [--next] [--skip-shippable]"
+argument-hint: "<wbs> [[`--agent`](../skills/spur-dev/references/dev-operations.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/dev-operations.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/dev-operations.md#flag-subprocess)] [[`--fix`](../skills/spur-dev/references/dev-operations.md#flag-fix) <none|blockers-first|all>] [[`--focus`](../skills/spur-dev/references/dev-operations.md#flag-focus) <lens>] [[`--bdd`](../skills/spur-dev/references/dev-operations.md#flag-bdd)] [[`--auto`](../skills/spur-dev/references/dev-operations.md#flag-auto)] [[`--force`](../skills/spur-dev/references/dev-operations.md#flag-force)] [--next] [--skip-shippable]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
@@ -11,7 +11,7 @@ Wraps the **sp:code-verification** skill.
 ## Usage
 
 ```
-/sp:dev-verify <wbs> [--agent <name|auto>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--skip-shippable]
+/sp:dev-verify <wbs> [--agent <name|auto>] [--inline|--subprocess] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--skip-shippable]
 ```
 
 **Shippable readiness** (feature-level): when `--fix all` and the task has a `feature_id`, the
@@ -21,6 +21,7 @@ See `sp:code-verification` § Shippable readiness gate.
 
 ## Implementation
 
+- Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 - `Skill(skill="sp:code-verification", args="verify $ARGUMENTS")`
 
 **Flags:**
