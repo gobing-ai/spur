@@ -49,7 +49,15 @@ vars:
   # Step-level timeout for agent.run steps in milliseconds. A timed-out agent
   # subprocess is killed (not abandoned) and the step fails → pipeline routes to
   # `failed`. Override per run with `--vars '{"stepTimeoutMs":120000}'`.
-  stepTimeoutMs: "600000"
+  # Raised 600s → 1800s (task 0398 R4). The H6 dogfood batch lost 3 of its 4
+  # timeouts on `test` steps hitting exactly the 600s wall (0391, 0395 test;
+  # `.spur/run/*-test-partial.md`), the same failure signature that justified
+  # implementTimeoutMs below. Agentic test/review/verify steps read the diff,
+  # run the suite, and write a section — that does not fit in 10 min on this
+  # corpus. Same honesty rule as implementTimeoutMs: 30 min is headroom, not a
+  # licence to run unbounded. If a step still hits this wall, STOP and record it
+  # rather than raising again without operator sign-off.
+  stepTimeoutMs: "1800000"
   # Timeout for the `implement` step specifically (R2a). Implementation is the
   # heaviest agent.run step (full read/write/test-probe loop) and has timed out
   # at the 600s default in five consecutive dogfood runs (bugs 742/744/746/748),
