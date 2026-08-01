@@ -88,13 +88,18 @@ describe('context-session-start — side effects', () => {
         }
     });
 
-    test('is idempotent across two starts — appends a second event', async () => {
+    test('a second start inside the same session appends nothing (task 0398 R3)', async () => {
+        // Superseded assertion: this test previously expected two `session_start` rows from two
+        // fires and called that "idempotent". It was encoding RC-2 — SessionStart fires per nested
+        // agent.run subprocess, so "one row per fire" meant one pipeline run registered as dozens
+        // of sessions (332 starts vs 157 ends across the H6 ledger). One row per *session* is the
+        // contract; `resolveActiveSession` enforces it.
         const dir = makeTempProject();
         try {
             await runHook(START_HOOK, dir, {});
             await runHook(START_HOOK, dir, {});
             const ledger = readLedger(dir);
-            expect(ledger).toHaveLength(2);
+            expect(ledger).toHaveLength(1);
             expect(ledger.every((e) => e.type === 'session_start')).toBe(true);
         } finally {
             rmSync(dir, { recursive: true, force: true });
@@ -443,5 +448,182 @@ describe('all context hooks — fail-open contract', () => {
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
+    });
+});
+
+describe('context-session-start — idempotency per in-flight session (task 0398 R3)', () => {
+    // SessionStart fires in every nested agent.run subprocess, not once per host session. Each
+    // firing used to mint a new id, append a session_start row, and overwrite the .session.json
+    // pointer that context-post-tool reads — 332 starts vs 157 ends across the H6 ledger.
+    const ctxDir = (projectDir: string) => join(projectDir, '.spur', 'context');
+    const ledgerLines = (projectDir: string): Record<string, unknown>[] => {
+        const p = join(ctxDir(projectDir), 'token-ledger.jsonl');
+        if (!existsSync(p)) return [];
+        return readFileSync(p, 'utf-8')
+            .split('\n')
+            .filter((l) => l.trim())
+            .map((l) => JSON.parse(l) as Record<string, unknown>);
+    };
+
+    test('a nested fire reuses the ancestor session and appends no second session_start', async () => {
+        const projectDir = makeTempProject();
+        await runHook(START_HOOK, projectDir, {});
+        const afterFirst = readFileSync(join(ctxDir(projectDir), '.session.json'), 'utf-8');
+        const firstId = (JSON.parse(afterFirst) as { session: string }).session;
+
+        await runHook(START_HOOK, projectDir, {});
+        await runHook(START_HOOK, projectDir, {});
+
+        const starts = ledgerLines(projectDir).filter((e) => e.type === 'session_start');
+        expect(starts).toHaveLength(1);
+        // The pointer must still name the original session — post-tool events key off it.
+        const afterNested = JSON.parse(readFileSync(join(ctxDir(projectDir), '.session.json'), 'utf-8')) as {
+            session: string;
+        };
+        expect(afterNested.session).toBe(firstId);
+        rmSync(projectDir, { recursive: true, force: true });
+    });
+
+    test('a genuinely new host session (no pointer file) still opens one', async () => {
+        const projectDir = makeTempProject();
+        await runHook(START_HOOK, projectDir, {});
+        // True teardown removes .session.json; the next start must mint a fresh session.
+        rmSync(join(ctxDir(projectDir), '.session.json'), { force: true });
+        await runHook(START_HOOK, projectDir, {});
+
+        const starts = ledgerLines(projectDir).filter((e) => e.type === 'session_start');
+        expect(starts).toHaveLength(2);
+        // NOTE: ids are minute-granular (`session-<date>-<HHMM>`), so two sessions opened inside
+        // the same minute share an id. That collision predates 0398 and is not what R3 fixes —
+        // assert the pointer was re-minted rather than asserting id inequality.
+        expect(existsSync(join(ctxDir(projectDir), '.session.json'))).toBe(true);
+        rmSync(projectDir, { recursive: true, force: true });
+    });
+
+    test('start → stop → start yields a balanced, non-reused pair', async () => {
+        const projectDir = makeTempProject();
+        await runHook(START_HOOK, projectDir, {});
+        await runHook(STOP_HOOK, projectDir, {});
+        await runHook(START_HOOK, projectDir, {});
+
+        const events = ledgerLines(projectDir);
+        expect(events.filter((e) => e.type === 'session_start')).toHaveLength(2);
+        expect(events.filter((e) => e.type === 'session_end')).toHaveLength(1);
+        rmSync(projectDir, { recursive: true, force: true });
+    });
+});
+
+describe('resolveActiveSession — unit (task 0398 R3)', () => {
+    const seed = (body: unknown): string => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-sess-'));
+        writeFileSync(join(dir, '.session.json'), typeof body === 'string' ? body : JSON.stringify(body));
+        return dir;
+    };
+    const NOW = new Date('2026-07-31T12:00:00.000Z');
+
+    test('returns the id when the session is recent', async () => {
+        const { resolveActiveSession } = await import('./context-session-start');
+        const dir = seed({ session: 'session-2026-07-31-1150', started: '2026-07-31T11:50:00.000Z' });
+        expect(resolveActiveSession(dir, NOW)).toBe('session-2026-07-31-1150');
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('returns null past the idle window so a stale file cannot capture a new session', async () => {
+        const { resolveActiveSession, SESSION_REUSE_IDLE_MS } = await import('./context-session-start');
+        const stale = new Date(NOW.getTime() - SESSION_REUSE_IDLE_MS - 1000).toISOString();
+        const dir = seed({ session: 'session-old', started: stale });
+        expect(resolveActiveSession(dir, NOW)).toBeNull();
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('returns null on a future timestamp (clock skew)', async () => {
+        const { resolveActiveSession } = await import('./context-session-start');
+        const dir = seed({ session: 'session-future', started: '2026-08-01T00:00:00.000Z' });
+        expect(resolveActiveSession(dir, NOW)).toBeNull();
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test.each([
+        ['corrupt json', 'not json at all'],
+        ['missing session', JSON.stringify({ started: '2026-07-31T11:50:00.000Z' })],
+        ['empty session', JSON.stringify({ session: '', started: '2026-07-31T11:50:00.000Z' })],
+        ['missing started', JSON.stringify({ session: 'x' })],
+        ['unparseable started', JSON.stringify({ session: 'x', started: 'whenever' })],
+    ])('returns null on %s', async (_label, body) => {
+        const { resolveActiveSession } = await import('./context-session-start');
+        const dir = seed(body);
+        expect(resolveActiveSession(dir, NOW)).toBeNull();
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('returns null when no pointer file exists', async () => {
+        const { resolveActiveSession } = await import('./context-session-start');
+        const dir = mkdtempSync(join(tmpdir(), 'spur-sess-none-'));
+        expect(resolveActiveSession(dir, NOW)).toBeNull();
+        rmSync(dir, { recursive: true, force: true });
+    });
+});
+
+describe('resolveActiveSession — exact ancestor signal (task 0398 R3, ts-ai-runner >= 0.4.15)', () => {
+    // AiRunner exports SPUR_RUN_ID into the agent subprocess when the caller supplies a
+    // correlation, which Spur's pipeline always does. Its presence proves nesting exactly, so the
+    // wall-clock window must not apply — a pipeline step may legitimately run for 30+ minutes.
+    const seed = (body: unknown): string => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-sess-env-'));
+        writeFileSync(join(dir, '.session.json'), JSON.stringify(body));
+        return dir;
+    };
+    const NOW = new Date('2026-07-31T12:00:00.000Z');
+
+    test('reuses the session when SPUR_RUN_ID is set, even far past the idle window', async () => {
+        const { resolveActiveSession, SESSION_REUSE_IDLE_MS, AGENT_RUN_ID_ENV } = await import(
+            './context-session-start'
+        );
+        const ancient = new Date(NOW.getTime() - SESSION_REUSE_IDLE_MS * 10).toISOString();
+        const dir = seed({ session: 'session-parent', started: ancient });
+        expect(resolveActiveSession(dir, NOW, { [AGENT_RUN_ID_ENV]: 'run-abc' })).toBe('session-parent');
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('without the marker the same ancient session is retired by the window', async () => {
+        const { resolveActiveSession, SESSION_REUSE_IDLE_MS } = await import('./context-session-start');
+        const ancient = new Date(NOW.getTime() - SESSION_REUSE_IDLE_MS * 10).toISOString();
+        const dir = seed({ session: 'session-parent', started: ancient });
+        expect(resolveActiveSession(dir, NOW, {})).toBeNull();
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('reuses on the marker even when started is missing or unparseable', async () => {
+        const { resolveActiveSession, AGENT_RUN_ID_ENV } = await import('./context-session-start');
+        for (const body of [{ session: 'session-x' }, { session: 'session-x', started: 'whenever' }]) {
+            const dir = seed(body);
+            expect(resolveActiveSession(dir, NOW, { [AGENT_RUN_ID_ENV]: 'run-abc' })).toBe('session-x');
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test.each([
+        ['empty', ''],
+        ['whitespace', '   '],
+    ])('a %s SPUR_RUN_ID is not a marker and falls through to the window', async (_label, value) => {
+        const { resolveActiveSession, SESSION_REUSE_IDLE_MS, AGENT_RUN_ID_ENV } = await import(
+            './context-session-start'
+        );
+        const ancient = new Date(NOW.getTime() - SESSION_REUSE_IDLE_MS * 10).toISOString();
+        const dir = seed({ session: 'session-parent', started: ancient });
+        expect(resolveActiveSession(dir, NOW, { [AGENT_RUN_ID_ENV]: value })).toBeNull();
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('the marker never fabricates a session when no pointer file exists', async () => {
+        const { resolveActiveSession, AGENT_RUN_ID_ENV } = await import('./context-session-start');
+        const dir = mkdtempSync(join(tmpdir(), 'spur-sess-env-none-'));
+        expect(resolveActiveSession(dir, NOW, { [AGENT_RUN_ID_ENV]: 'run-abc' })).toBeNull();
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('the env var name matches the ts-ai-runner published contract', async () => {
+        const { AGENT_RUN_ID_ENV } = await import('./context-session-start');
+        expect(AGENT_RUN_ID_ENV).toBe('SPUR_RUN_ID');
     });
 });
