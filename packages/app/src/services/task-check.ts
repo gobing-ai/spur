@@ -437,6 +437,36 @@ export class TaskCheckService extends PlanningCheckService {
             }
         }
 
+        // A status-required section that is still the shipped scaffold is not "nothing to
+        // validate" — it is an unfilled obligation. Every other L3 content rule here skips
+        // placeholders (correctly: at `todo`/`wip` an empty Testing is the normal state), which
+        // left a hole at the far end: a task could reach `done` carrying the verbatim
+        // `<!-- Filled during verification: … -->` scaffold and every Testing rule would decline
+        // to look at it. Feature H8's four tasks did exactly that.
+        //
+        // The `record` step (`spur task record`) is what normally fills Testing from the verdict
+        // artifact, so the gap opens whenever a task is driven outside the pipeline — which is the
+        // common case when `agent.run` is unavailable. Matrix-keyed rather than status-hardcoded:
+        // it fires only where the section-matrix already declares the section required, so a `wip`
+        // task with an empty Testing stays clean and the rule tracks the matrix if it changes.
+        //
+        // Same shape as L3.requirements-empty / L3.ac-empty, and an error for the same reason:
+        // `testing → done` is gated by `spur task check --strict-core`, so this blocks the
+        // transition until the section is filled instead of discovering it months later.
+        const requiredSections = new Set(entry?.required ?? []);
+        for (const sectionName of ['Testing', 'Solution'] as const) {
+            if (!requiredSections.has(sectionName)) continue;
+            const body = doc.getSection(sectionName);
+            if (body === null || !isPlaceholderBody(body)) continue;
+            findings.push({
+                layer: 'L3',
+                code: FINDING_CODES.L3_REQUIRED_SECTION_PLACEHOLDER,
+                severity: 'error',
+                section: sectionName,
+                message: `${sectionName} is required at status '${status}' but is still placeholder-only — run \`spur task record <wbs>\` to fill it from the verdict artifact, or author it directly`,
+            });
+        }
+
         // Testing: results + coverage claim or N/A (warning)
         const testBody = doc.getSection('Testing');
         if (testBody !== null && !isPlaceholderBody(testBody)) {
