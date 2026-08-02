@@ -28,6 +28,8 @@ subagents, and hooks as thin wrappers delegating deterministic work to CLI verbs
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0239 | Extend spur agent doctor to detect token quota and model availability | done |
+| 0410 | Harden verdict artifact parsing: accept scenario key, warn on zero-coverage PASS verdicts, and add fuzzy AC title matching | done |
+| 0411 | Stop batch orchestration from retrying unchanged blocked feature sync | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

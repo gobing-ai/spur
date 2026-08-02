@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.3.0
+version: 1.4.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-07-29
+updated_at: 2026-08-01
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -346,3 +346,32 @@ task ## Acceptance Criteria (subset coverage)
   CLI verbs where they exist, but are not limited to CLI wrapping.
 - Cross-cutting needs reuse the owning ts-libs package (`ts-utils` output/errors, `ts-runtime`
   FileSystem, `.spur/config.yaml` via ADR-017) — no parallel local re-implementations.
+
+## 13. Dev-Command Argument Contract (accepted design — ADR-032 amendment; not yet built)
+
+The agent-facing input contract stays inside each hand-authored command file and is projected to
+platform adapters by Superskill. The three representations have separate ownership:
+
+| Representation | Owner | Content |
+| --- | --- | --- |
+| `argument-hint` frontmatter | command file | canonical invocation syntax only |
+| `## Argument Flags` | command file | public positionals and flags, command-local descriptions, deterministic defaults |
+| shared flag glossary | `spur-dev` reference | canonical cross-command semantics and compatibility vocabulary |
+
+`validate-commands.ts` parses command structure and hint-to-table parity. The command-contract and
+flag-parity tests derive the dev-command inventory from `plugins/sp/commands/dev-*.md`, validate
+shared glossary membership across that complete set, and retain the numbered `dev-operations.md`
+parity check as an additional catalog constraint.
+
+Invariants:
+
+1. Every dev command has exactly `Argument Flags`, `Usage`, and `Implementation` level-two headings
+   in that order.
+2. Dev-command `argument-hint` values contain no Markdown link or prose definition.
+3. Canonical public positionals and flags match bidirectionally between the hint and table.
+4. Each shared flag resolves to one glossary entry or an explicitly documented contextual meaning.
+5. Aliases and deprecated spellings remain compatibility metadata; they do not silently become
+   canonical hint syntax or disappear without migration evidence.
+6. No generated command registry or committed platform adapter participates in validation.
+
+Concrete shapes and rollout: `docs/design/dev-command-argument-contract.md`.

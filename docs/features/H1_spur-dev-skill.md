@@ -241,7 +241,7 @@ Feature: spur-dev umbrella skill
 | 0229 | bind structured-input tool calls in dev-brainstorm and brainstorm | done |
 | 0230 | bind structured-input tools and centralize up-front questionnaires across dev commands | done |
 | 0231 | migrate reverse-engineering skill and dev-reverse command from rd3 to sp | done |
-| 0408 | Extract the flag glossary out of dev-operations.md into its own reference | todo |
+| 0408 | Extract the flag glossary out of dev-operations.md into its own reference | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

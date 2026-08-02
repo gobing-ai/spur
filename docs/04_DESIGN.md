@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.10.0
+version: 1.11.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-08-01
@@ -31,6 +31,7 @@ detail-first then index (§4.5 rule 5 / T9).
 | [`workflow-observability.md`](design/workflow-observability.md) | Workflow run observability — correlated EventBus projection, human output levels, durable trace follow, producer audit (0114/0310/0365) | partial |
 | [`dev-plan-design-doc-generation.md`](design/dev-plan-design-doc-generation.md) | `/sp:dev-plan` design-doc step — design by default / `--skip-design` only, seam heuristic (ties lean design), satellite + index authoring (0124) | implemented |
 | [`dev-agent-flag-and-dogfood-skill.md`](design/dev-agent-flag-and-dogfood-skill.md) | Dev execution surface — `--agent` threading (0125), inline default + `--inline\|--subprocess` + named escalation triggers (0406), and `sp:dogfood-testing` extraction | implemented |
+| [`dev-command-argument-contract.md`](design/dev-command-argument-contract.md) | `/sp:dev-*` argument surface — syntax-only hints, command-local flag/default tables, full-surface semantic parity (H81; ADR-032 amendment) | accepted design |
 | [`e2e-workflow-for-system-development.md`](design/e2e-workflow-for-system-development.md) | End-to-end workflow system for system development — pipeline architecture, design step auto-detection, HITL gate model, doc-sync boundary (0167) | design |
 | [`portable-agents-harness-contract.md`](design/portable-agents-harness-contract.md) | `spur init` root `AGENTS.md` seed — complementary Spur/Superskill ownership, portable routing, conditional root `DESIGN.md` | implemented |
 | [`feature-tree-status-affordance.md`](design/feature-tree-status-affordance.md) | Board Features tree — icon-only leading status indicator, accessible-name contract, glyph silhouettes, semantic-token convergence (ADR-034, feature R2) | implemented |
@@ -372,7 +373,7 @@ Scaffold BDD `test.todo` stubs from task Acceptance Criteria into `<workspace>/t
 
 ### 1.3 Agent command surface — commands as SSOT (feature H5 (was O), ADR-032)
 
-The `plugins/sp` agent-facing command surface (31 Claude Code `/sp:dev-*` slash wrappers) is
+The `plugins/sp` agent-facing command surface (28 `/sp:dev-*` wrappers; 34 command wrappers total) is
 **hand-authored** — each `commands/<name>.md` is the authoritative, directly-editable source.
 Per-platform adapters are **install-time output** owned by `superskill` (`superskill install sp`)
 and never committed in plugin `sp` (ADR-032).
@@ -389,6 +390,12 @@ validation, not generation — commands are hand-editable; the validator catches
 session is required to trust an in-session dogfood of a just-edited wrapper (platforms snapshot
 command bodies at session start). The command index is owned by `plugins/sp/README.md`.
 Supersedes the 0308 generated-adapter approach (ADR-032 records the decision).
+
+**Accepted H81 contract (not yet built).** Dev-command frontmatter carries syntax-only
+`argument-hint`; each body adds `## Argument Flags` immediately before `## Usage`, with exact
+`Flag | Description | Default` columns and one canonical glossary reference. Validator and parity
+tests derive coverage from all 28 dev commands. Full shapes:
+[`dev-command-argument-contract.md`](design/dev-command-argument-contract.md).
 
 ## 2. Configuration
 

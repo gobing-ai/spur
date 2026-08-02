@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — cross-cutting decisions, one-line reasons
 authority: authoritative
-version: 1.1.0
+version: 1.2.0
 owner: Robin Min
-updated_at: 2026-07-29
+updated_at: 2026-08-01
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -772,6 +772,18 @@ rationale. This ADR explicitly selects the "validated" branch and supersedes the
 **Detail:** plugins/sp/scripts/validate-commands.ts (four-gate validator),
 plugins/sp/tests/command-contract.test.ts (contract test + negative-path coverage),
 plugins/sp/README.md section 2 (commands-as-SSOT documentation).
+
+**Amendment (2026-08-01) — dev-command argument contract.** The 28 `dev-*` commands use a
+three-layer input contract: syntax-only `argument-hint` frontmatter; a command-local
+`Argument Flags` table for public positionals, flags, descriptions, and defaults; and the shared
+flag glossary for canonical cross-command semantics. Existing validation and parity tests enforce
+the contract across the complete dev-command surface. Command Markdown remains the sole editable
+source; no registry or generator is introduced.
+
+**Why.** Native completion hints must stay renderer-safe while defaults and compatibility behavior
+remain discoverable and mechanically consistent with their backing contracts.
+
+**Detail:** `docs/design/dev-command-argument-contract.md`; feature H81.
 
 ---
 
