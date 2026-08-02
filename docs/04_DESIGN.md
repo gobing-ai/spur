@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — every CLI command, flag, config key, env var, table, DTO
 authority: derived
-version: 1.9.0
+version: 1.10.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-08-01
@@ -35,6 +35,7 @@ detail-first then index (§4.5 rule 5 / T9).
 | [`portable-agents-harness-contract.md`](design/portable-agents-harness-contract.md) | `spur init` root `AGENTS.md` seed — complementary Spur/Superskill ownership, portable routing, conditional root `DESIGN.md` | implemented |
 | [`feature-tree-status-affordance.md`](design/feature-tree-status-affordance.md) | Board Features tree — icon-only leading status indicator, accessible-name contract, glyph silhouettes, semantic-token convergence (ADR-034, feature R2) | implemented |
 | [`feature-action-progress-transparency.md`](design/feature-action-progress-transparency.md) | Features detail action progress — F83 job-queue runner, queue.job.* SSE correlation, floating progress layer (implements F81/0352–0354) | design |
+| [`feature-check-strict-ac-satisfaction.md`](design/feature-check-strict-ac-satisfaction.md) | `spur feature check --strict` — verdict-backed AC satisfaction and malformed-artifact diagnostics (0340/0410) | implemented |
 | [`project-switcher.md`](design/project-switcher.md) | Multi-project Spur Board switcher — registry, serve lifecycle, switcher UI (K1) | design |
 
 > Filenames retain `-design`/`-finalized` suffixes (stable grep anchors referenced across task/plans
@@ -708,7 +709,7 @@ Every subcommand supports `--json` (ADR-010 invariant). Source: delivery §1.2, 
 | `spur feature update <id> [status]` | `--field <key> --value <v>` `--section <name> --from-file <path>` `--folder <path>` `--json` | 0/1/2 | `<status>` runs the lifecycle transition (guarded, §7.5); `--field/--value` sets a scalar frontmatter field; `--section/--from-file` replaces an existing feature section body using the same body-only contract as `spur task update --section`. Section, field, and status updates may be composed in one invocation and apply in that order. 2 if an option pair is incomplete. |
 | `spur feature advance <id>` | `--to <status>` `--folder <path>` `--json` | 0/1 | Walk a feature through the legal forward lifecycle path (`backlog→active→verifying→done`, default target `done`). Runs the same feature checks the old wrapup shell ladder used before guarded hops (`active→verifying` non-strict, `verifying→done` strict), verifies observed status after each transition, and returns `{id,status,hops}` in `--json`. |
 | `spur feature list` | `--status <s>` `--priority <p>` `--folder <path>` `--json` | 0/1 | Lists features sorted by ID; optional status/priority filters. |
-| `spur feature check [<id>]` | `--strict` `--folder <path>` `--json` | 0/1 | Four-layer validation (§3): L1 schema, L2 section-matrix, L3 BDD AC (shared 0043 module) + one-active-P0-goal over {active,verifying} + ≤9-children (DD-14, corpus-derived), L4 incoming `feature_id` edges + orphan-scenario warnings + **AC coverage** (DD-09: feature scenarios covered by no linked task = warnings) + verifying-readiness (linked tasks not done/cancelled). Validates all features when `<id>` omitted; `--strict` elevates warnings. |
+| `spur feature check [<id>]` | `--strict` `--folder <path>` `--json` | 0/1 | Four-layer validation (§3): L1 schema, L2 section-matrix, L3 BDD AC (shared 0043 module) + one-active-P0-goal over {active,verifying} + ≤9-children (DD-14, corpus-derived), L4 incoming `feature_id` edges + orphan-scenario warnings + **AC coverage** (DD-09) + verdict-backed AC satisfaction from canonical `id` rows or the `scenario` compatibility alias + bounded malformed-artifact diagnostics + verifying-readiness (linked tasks not done/cancelled). Validates all features when `<id>` omitted; `--strict` elevates warnings. Details: [`feature-check-strict-ac-satisfaction.md`](design/feature-check-strict-ac-satisfaction.md). |
 | `spur feature refresh` | `--folder <path>` `--json` | 0/1 | Regenerate `INDEX.md` (deterministic ID-encoded tree, per-node status badge + relative link, §4.3) and repopulate each feature's `## Tasks` auto-gen marker region from task `feature_id` edges. Only the marker region is rewritten; the rest of the feature file and all task files are byte-preserved. |
 | `spur feature move <id> --parent <id>` | `--parent <id>` `--dry-run` `--folder <path>` `--json` | 0/1 | Cascade-rename (DD-14): re-IDs the node + all descendants (ID encodes position), renames their files, rewrites each `id` frontmatter + appends a move History line, and updates every task `feature_id` edge. Validates the full old→new plan first (collision / ≤9 / not-into-own-subtree); applies atomically with best-effort rollback. `--dry-run` returns the old→new map + affected tasks with zero writes. Omit `--parent` to move to a top-level group. |
 

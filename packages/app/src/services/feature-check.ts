@@ -19,6 +19,7 @@ import {
     validateAcceptanceCriteria,
 } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+import { readVerdictArtifact as readGuardVerdictArtifact } from './done-transition-guard';
 import {
     type CheckFindings,
     FINDING_CODES,
@@ -543,10 +544,47 @@ export class FeatureCheckService extends PlanningCheckService {
             covers[sc.title] = linked;
         }
 
+        // 0410 R3/R4: pre-read each unique done-task artifact once, emit a bounded
+        // L4.malformed-verdict-artifact finding per artifact with rejected rows,
+        // then verify scenarios against the cache instead of re-reading files.
+        const doneWbs = new Set<string>();
+        for (const sc of scenarioAliases) {
+            for (const task of covers[sc.title] ?? []) {
+                if (task.status === 'done') doneWbs.add(task.wbs);
+            }
+        }
+        const artifacts = new Map<string, ParsedVerdictArtifact>();
+        for (const wbs of doneWbs) {
+            const artifact = await this.readVerdictArtifact(runDir, wbs);
+            artifacts.set(wbs, artifact);
+            const diagnosticParts: string[] = [];
+            if (artifact.diagnostics.artifactError !== undefined) {
+                diagnosticParts.push(artifact.diagnostics.artifactError);
+            }
+            if (artifact.diagnostics.rejectedRowCount > 0) {
+                diagnosticParts.push(`${artifact.diagnostics.rejectedRowCount} rejected coverage row(s)`);
+            }
+            if (artifact.diagnostics.invalidFields.length > 0) {
+                diagnosticParts.push(`invalid fields: ${artifact.diagnostics.invalidFields.join(', ')}`);
+            }
+            if (diagnosticParts.length > 0) {
+                findings.push({
+                    layer: 'L4',
+                    code: FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT,
+                    severity: 'warning',
+                    section: 'Acceptance Criteria',
+                    message:
+                        `Task ${wbs} verdict artifact (${artifact.path}) is invalid: ${diagnosticParts.join('; ')}. ` +
+                        'Rows were not silently dropped — verify the artifact uses canonical `id` ' +
+                        '(or `scenario` alias) and `status` fields.',
+                });
+            }
+        }
+
         for (const sc of scenarioAliases) {
             const linked = covers[sc.title] ?? [];
             if (linked.length === 0) continue; // orphan — already handled above
-            const verified = await this.isScenarioVerified(sc, linked, runDir);
+            const verified = this.isScenarioVerified(sc, linked, artifacts);
             if (!verified) {
                 findings.push({
                     layer: 'L4',
@@ -566,16 +604,18 @@ export class FeatureCheckService extends PlanningCheckService {
      * artifact shows verdict PASS with a matching requirement **or acceptanceCriteria**
      * row of status MET. Matching id = normalized scenario title, optional
      * `Scenario: ` prefix, or AC-N alias.
+     *
+     * 0410: reads from the pre-built artifact cache (no per-scenario file I/O).
      */
-    private async isScenarioVerified(
+    private isScenarioVerified(
         sc: { title: string; normalized: string; alias: string },
         linked: Array<{ wbs: string; status: string }>,
-        runDir: string,
-    ): Promise<boolean> {
+        artifacts: Map<string, ParsedVerdictArtifact>,
+    ): boolean {
         for (const task of linked) {
             if (task.status !== 'done') continue;
-            const artifact = await this.readVerdictArtifact(runDir, task.wbs);
-            if (artifact === null) continue;
+            const artifact = artifacts.get(task.wbs);
+            if (artifact === undefined) continue;
             if (artifact.verdict !== 'PASS') continue;
             const rows = [...artifact.requirements, ...artifact.acceptanceCriteria];
             const matched = rows.find((r) => rowMatchesScenario(r.id, sc));
@@ -585,41 +625,160 @@ export class FeatureCheckService extends PlanningCheckService {
     }
 
     /**
-     * Read and parse `<runDir>/<wbs>-verdict.json`. Returns null on missing or
-     * malformed (graceful degradation — treated as unverified).
+     * Read and parse `<runDir>/<wbs>-verdict.json` (0410: hardened parser).
+     *
+     * Returns accepted rows plus structured diagnostics for missing/unreadable
+     * artifacts, malformed JSON/root values, absent/invalid arrays, and rejected
+     * rows so callers can emit one bounded finding per artifact.
+     *
+     * Row acceptance (R1/R2): each row yields a canonical `{ id, status }` when:
+     * - `status` is a string AND
+     * - `id` is a string (canonical) OR `scenario` is a string (compatibility alias)
+     * - When both `id` and `scenario` are present and differ → rejected (R2 conflict)
      */
-    private async readVerdictArtifact(
-        runDir: string,
-        wbs: string,
-    ): Promise<{
-        verdict: string;
-        requirements: Array<{ id: string; status: string }>;
-        acceptanceCriteria: Array<{ id: string; status: string }>;
-    } | null> {
-        try {
-            const raw = await this.fs.readFile(join(runDir, `${wbs}-verdict.json`));
-            const parsed = JSON.parse(raw) as {
-                verdict?: unknown;
-                requirements?: Array<{ id?: unknown; status?: unknown }>;
-                acceptanceCriteria?: Array<{ id?: unknown; status?: unknown }>;
+    private async readVerdictArtifact(runDir: string, wbs: string): Promise<ParsedVerdictArtifact> {
+        const loaded = await readGuardVerdictArtifact(this.fs, runDir, wbs);
+        if (loaded.artifact === undefined) {
+            return {
+                path: loaded.path,
+                requirements: [],
+                acceptanceCriteria: [],
+                diagnostics: {
+                    artifactError: loaded.readError ?? 'artifact is missing',
+                    rejectedRowCount: 0,
+                    invalidFields: [],
+                    arrayStates: { requirements: 'unavailable', acceptanceCriteria: 'unavailable' },
+                },
             };
-            if (typeof parsed.verdict !== 'string') return null;
-            const pickRows = (arr: Array<{ id?: unknown; status?: unknown }> | undefined) =>
-                (arr ?? [])
-                    .filter(
-                        (r): r is { id: string; status: string } =>
-                            typeof r?.id === 'string' && typeof r?.status === 'string',
-                    )
-                    .map((r) => ({ id: r.id, status: r.status }));
-            const requirements = pickRows(parsed.requirements);
-            const acceptanceCriteria = pickRows(parsed.acceptanceCriteria);
-            // Need at least one row surface (req or AC) to count as a real verdict.
-            if (requirements.length === 0 && acceptanceCriteria.length === 0) return null;
-            return { verdict: parsed.verdict, requirements, acceptanceCriteria };
-        } catch {
-            return null;
+        }
+        const parsed = loaded.artifact as unknown as {
+            verdict?: unknown;
+            requirements?: unknown;
+            acceptanceCriteria?: unknown;
+        };
+        const req = decodeVerdictRows(parsed.requirements, 'requirements', true);
+        const ac = decodeVerdictRows(parsed.acceptanceCriteria, 'acceptanceCriteria', false);
+        return {
+            path: loaded.path,
+            verdict: typeof parsed.verdict === 'string' ? parsed.verdict : undefined,
+            requirements: req.rows,
+            acceptanceCriteria: ac.rows,
+            diagnostics: {
+                artifactError: typeof parsed.verdict === 'string' ? undefined : 'invalid `verdict` field',
+                rejectedRowCount: req.rejected + ac.rejected,
+                invalidFields: [...new Set([...req.invalidFields, ...ac.invalidFields])],
+                arrayStates: { requirements: req.state, acceptanceCriteria: ac.state },
+            },
+        };
+    }
+}
+
+/** Canonical coverage row after verdict parsing (0410). */
+interface VerdictRow {
+    id: string;
+    status: string;
+}
+
+/** Structured result of reading a verdict artifact (0410). */
+interface ParsedVerdictArtifact {
+    path: string;
+    verdict?: string;
+    requirements: VerdictRow[];
+    acceptanceCriteria: VerdictRow[];
+    diagnostics: {
+        artifactError?: string;
+        rejectedRowCount: number;
+        invalidFields: string[];
+        arrayStates: {
+            requirements: VerdictArrayState;
+            acceptanceCriteria: VerdictArrayState;
+        };
+    };
+}
+
+type VerdictArrayState = 'unavailable' | 'absent' | 'empty' | 'invalid' | 'populated';
+
+interface DecodedVerdictRows {
+    rows: VerdictRow[];
+    rejected: number;
+    invalidFields: string[];
+    state: VerdictArrayState;
+}
+
+/**
+ * Decode a verdict coverage array into accepted canonical rows plus diagnostics
+ * for rejected rows (0410 R1–R5).
+ *
+ * Acceptance rules per row:
+ * - `status` must be a string.
+ * - `id` (canonical) or `scenario` (compatibility alias) must be a string.
+ * - Both present and equal → `id` wins (canonical).
+ * - Both present and differ → rejected (conflict, R2).
+ * - Neither → rejected (missing identifier).
+ *
+ * `sectionName` labels rejected-row diagnostics for the finding message.
+ */
+function decodeVerdictRows(source: unknown, sectionName: string, required: boolean): DecodedVerdictRows {
+    if (source === undefined) {
+        return {
+            rows: [],
+            rejected: 0,
+            invalidFields: required ? [`${sectionName} (missing array)`] : [],
+            state: 'absent',
+        };
+    }
+    if (!Array.isArray(source)) {
+        return {
+            rows: [],
+            rejected: 0,
+            invalidFields: [`${sectionName} (expected array)`],
+            state: 'invalid',
+        };
+    }
+    const rows: VerdictRow[] = [];
+    const invalidFields = new Set<string>();
+    let rejected = 0;
+    for (const r of source) {
+        if (typeof r !== 'object' || r === null) {
+            rejected++;
+            invalidFields.add(`${sectionName}[non-object]`);
+            continue;
+        }
+        const row = r as { id?: unknown; scenario?: unknown; status?: unknown };
+        const hasId = Object.hasOwn(row, 'id');
+        const hasScenario = Object.hasOwn(row, 'scenario');
+        const idStr = typeof row.id === 'string';
+        const scStr = typeof row.scenario === 'string';
+        const statusOk = typeof row.status === 'string';
+        if (!statusOk) {
+            rejected++;
+            invalidFields.add(`${sectionName}.status`);
+            continue;
+        }
+        if (hasId && hasScenario) {
+            if (idStr && scStr && row.id === row.scenario) {
+                rows.push({ id: row.id as string, status: row.status as string });
+            } else {
+                rejected++;
+                invalidFields.add(`${sectionName}.id/scenario conflict`);
+            }
+            continue;
+        }
+        if (hasId && idStr) {
+            rows.push({ id: row.id as string, status: row.status as string });
+        } else if (hasScenario && scStr) {
+            rows.push({ id: row.scenario as string, status: row.status as string });
+        } else {
+            rejected++;
+            invalidFields.add(`${sectionName}.id/scenario missing`);
         }
     }
+    return {
+        rows,
+        rejected,
+        invalidFields: [...invalidFields],
+        state: source.length === 0 ? 'empty' : 'populated',
+    };
 }
 
 /**

@@ -38,6 +38,30 @@ interface VerifyVerdict {
 }
 ```
 
+## Compatibility alias: `scenario` row key
+
+Task 0410 hardened the verdict reader. Producers SHOULD use the canonical `id` field for every
+requirement and AC row. Consumers (the feature-check L4 traceability layer) ALSO accept `scenario`
+as a compatibility alias for the row identifier, with these rules:
+
+- Row with `id` only → canonical; accepted as-is.
+- Row with `scenario` only → accepted; normalized to `{ id: scenario, … }`.
+- Row with both `id` and `scenario` where they are EQUAL → `id` is authoritative; accepted.
+- Row with both `id` and `scenario` where they DIFFER or either value is not a string → **rejected**
+  (conflict); the rejected row
+  count and invalid fields surface as a bounded `L4.malformed-verdict-artifact` warning naming the
+  task WBS and artifact path.
+- Row missing both `id` and `scenario`, or missing `status`, or not an object → rejected and warned.
+
+Empty `requirements` / `acceptanceCriteria` arrays are valid and produce no warning. The required
+`requirements` array being absent, either coverage field being a non-array value, a missing artifact,
+malformed JSON, and a non-object JSON root are distinct diagnostic outcomes. Each emits one bounded
+`L4.malformed-verdict-artifact` warning per task/artifact whose message names the failure mode;
+optional `acceptanceCriteria` may remain absent.
+
+Canonical producers and docs continue to use `id`. The `scenario` alias exists so older or
+third-party verdict emitters keyed on scenario titles are not silently dropped.
+
 ## Aggregation rule
 
 The aggregate `verdict` is derived from the per-requirement, per-AC, and blocking review statuses:

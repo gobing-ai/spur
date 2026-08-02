@@ -2022,11 +2022,378 @@ describe('FeatureCheckService', () => {
             featuresDir,
             tasksDir,
         });
-        // runDir defaults to <tasksDir parent>/.spur/run — which doesn't exist,
-        // so readVerdictArtifact returns null for every task → all unverified.
-        // The todo task produces an unverified warning.
+        // runDir defaults to <tasksDir parent>/.spur/run. The covering task is
+        // still todo, so it cannot provide eligible PASS evidence.
         const unverified = result.findings.filter((f) => f.code === 'L4.scenario-unverified');
         expect(unverified).toHaveLength(1);
         rmSync(dir, { recursive: true, force: true });
+    });
+    // ── 0410: Verdict artifact hardening (scenario alias + diagnostics) ────
+
+    /**
+     * Variant of setupScenarioSatisfaction that writes a RAW verdict artifact
+     * string (so 0410 tests can exercise `scenario` aliases, conflicts, and
+     * malformed shapes the typed helper cannot express). Pass `rawArtifact`
+     * undefined for the missing-artifact case, or 'MALFORMED' for invalid JSON.
+     */
+    async function setup0410(opts: {
+        taskStatus: string;
+        rawArtifact?: string;
+        scenarioTitle?: string;
+    }): Promise<{ result: CheckFeatureResult; cleanup: () => void }> {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-fc-0410-'));
+        const featuresDir = join(dir, 'features');
+        const tasksDir = join(dir, 'tasks');
+        const runDir = join(dir, '.spur', 'run');
+        mkdirSync(featuresDir, { recursive: true });
+        mkdirSync(tasksDir, { recursive: true });
+        mkdirSync(runDir, { recursive: true });
+        const scenario = opts.scenarioTitle ?? 'alpha';
+        const fenced = (lines: string[]) => ['```gherkin', ...lines, '```'];
+        writeFileSync(
+            join(featuresDir, 'A_0410.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'id: "A"',
+                'name: "Hardened"',
+                'status: active',
+                'priority: P1',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# A: Hardened',
+                '',
+                '## Goal',
+                '',
+                'g',
+                '',
+                '## Scope',
+                '',
+                'In scope: x',
+                '',
+                '## Acceptance Criteria',
+                '',
+                ...fenced(['Feature: A', '', `  Scenario: ${scenario}`, '    Given x']),
+            ].join('\n'),
+        );
+        writeFileSync(
+            join(tasksDir, '0001_a.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'name: "covers alpha"',
+                `status: ${opts.taskStatus}`,
+                'feature_id: A',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '## 0001. covers alpha',
+                '',
+                '### Acceptance Criteria',
+                '',
+                ...fenced(['Feature: T', '', `  Scenario: ${scenario}`, '    Given x']),
+            ].join('\n'),
+        );
+        if (opts.rawArtifact !== undefined) {
+            writeFileSync(
+                join(runDir, '0001-verdict.json'),
+                opts.rawArtifact === 'MALFORMED' ? '{ not valid json' : opts.rawArtifact,
+            );
+        }
+        const svc = new FeatureCheckService(createNodeFileSystem());
+        const result = await svc.check(join(featuresDir, 'A_0410.md'), 'A', {
+            featuresDir,
+            tasksDir,
+            runDir,
+        });
+        return { result, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+    }
+
+    const malformedCode = 'L4.malformed-verdict-artifact';
+
+    test('0410 R1: verdict row using `scenario` key alias verifies the scenario (no id present)', async () => {
+        const { result, cleanup } = await setup0410({
+            taskStatus: 'done',
+            rawArtifact: JSON.stringify({
+                verdict: 'PASS',
+                requirements: [{ scenario: 'alpha', status: 'MET' }],
+            }),
+        });
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(0);
+        expect(result.findings.filter((f) => f.code === malformedCode)).toHaveLength(0);
+        cleanup();
+    });
+
+    test('0410 R1: verdict row using `scenario` alias with AC-N form verifies', async () => {
+        const { result, cleanup } = await setup0410({
+            taskStatus: 'done',
+            rawArtifact: JSON.stringify({
+                verdict: 'PASS',
+                requirements: [{ scenario: 'AC-1', status: 'MET' }],
+            }),
+        });
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(0);
+        expect(result.findings.filter((f) => f.code === malformedCode)).toHaveLength(0);
+        cleanup();
+    });
+
+    test('0410 R2: id and scenario both present and equal → id authoritative, row accepted (no warning)', async () => {
+        const { result, cleanup } = await setup0410({
+            taskStatus: 'done',
+            rawArtifact: JSON.stringify({
+                verdict: 'PASS',
+                requirements: [{ id: 'AC-1', scenario: 'AC-1', status: 'MET' }],
+            }),
+        });
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(0);
+        expect(result.findings.filter((f) => f.code === malformedCode)).toHaveLength(0);
+        cleanup();
+    });
+
+    test('0410 R2: id and scenario both present and DIFFER → row rejected, scenario unverified, bounded L4 warning', async () => {
+        const { result, cleanup } = await setup0410({
+            taskStatus: 'done',
+            rawArtifact: JSON.stringify({
+                verdict: 'PASS',
+                requirements: [{ id: 'alpha', scenario: 'beta', status: 'MET' }],
+            }),
+        });
+        // Conflict row was rejected → scenario has no MET match → unverified.
+        const unverified = result.findings.filter((f) => f.code === 'L4.scenario-unverified');
+        expect(unverified).toHaveLength(1);
+        // Bounded warning names task WBS, artifact path, rejected count, invalid fields.
+        const malformed = result.findings.filter((f) => f.code === malformedCode);
+        expect(malformed).toHaveLength(1);
+        const msg = malformed[0]?.message ?? '';
+        expect(msg).toContain('0001');
+        expect(msg).toContain('0001-verdict.json');
+        expect(msg).toContain('1 rejected coverage row');
+        expect(msg).toContain('conflict');
+        cleanup();
+    });
+
+    test('0410 R2: present non-string scenario alias conflicts with canonical id and is rejected', async () => {
+        const { result, cleanup } = await setup0410({
+            taskStatus: 'done',
+            rawArtifact: JSON.stringify({
+                verdict: 'PASS',
+                requirements: [{ id: 'alpha', scenario: 7, status: 'MET' }],
+            }),
+        });
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(1);
+        const malformed = result.findings.filter((f) => f.code === malformedCode);
+        expect(malformed).toHaveLength(1);
+        expect(malformed[0]?.message).toContain('id/scenario conflict');
+        cleanup();
+    });
+
+    test('0410 R3: row missing status is rejected and warned; valid sibling rows still verify', async () => {
+        const { result, cleanup } = await setup0410({
+            taskStatus: 'done',
+            rawArtifact: JSON.stringify({
+                verdict: 'PASS',
+                requirements: [
+                    { id: 'gamma', status: 'MET' }, // valid but unmatched
+                    { id: 'AC-1', status: 'MET' }, // valid, verifies scenario
+                    { id: 'orphan-no-status' }, // rejected: no status
+                ],
+            }),
+        });
+        // Valid AC-1 row verifies the scenario.
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(0);
+        // Rejected row produces the bounded warning.
+        const malformed = result.findings.filter((f) => f.code === malformedCode);
+        expect(malformed).toHaveLength(1);
+        expect(malformed[0]?.message).toContain('1 rejected coverage row');
+        expect(malformed[0]?.message).toContain('requirements.status');
+        cleanup();
+    });
+
+    test('0410 R3: row missing both id and scenario is rejected and warned', async () => {
+        const { result, cleanup } = await setup0410({
+            taskStatus: 'done',
+            rawArtifact: JSON.stringify({
+                verdict: 'PASS',
+                requirements: [{ unknown: 'alpha', status: 'MET' }],
+            }),
+        });
+        // No valid row → scenario unverified.
+        const unverified = result.findings.filter((f) => f.code === 'L4.scenario-unverified');
+        expect(unverified).toHaveLength(1);
+        const malformed = result.findings.filter((f) => f.code === malformedCode);
+        expect(malformed).toHaveLength(1);
+        expect(malformed[0]?.message).toContain('requirements.id/scenario missing');
+        cleanup();
+    });
+
+    test('0410 R3: non-object row (string) is rejected and warned', async () => {
+        const { result, cleanup } = await setup0410({
+            taskStatus: 'done',
+            rawArtifact: JSON.stringify({
+                verdict: 'PASS',
+                requirements: ['not-an-object', { id: 'AC-1', status: 'MET' }],
+            }),
+        });
+        // Valid AC-1 row still verifies the scenario despite the sibling junk row.
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(0);
+        const malformed = result.findings.filter((f) => f.code === malformedCode);
+        expect(malformed).toHaveLength(1);
+        expect(malformed[0]?.message).toContain('1 rejected coverage row');
+        expect(malformed[0]?.message).toContain('[non-object]');
+        cleanup();
+    });
+
+    test('0410 R5: empty requirements array produces no malformed-artifact warning', async () => {
+        const { result, cleanup } = await setup0410({
+            taskStatus: 'done',
+            rawArtifact: JSON.stringify({ verdict: 'PASS', requirements: [] }),
+        });
+        // Empty array → no valid MET row → scenario unverified (expected).
+        // But NO malformed-artifact warning (R5: empty arrays are not warned).
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(1);
+        expect(result.findings.filter((f) => f.code === malformedCode)).toHaveLength(0);
+        cleanup();
+    });
+
+    test('0410 R3: absent required requirements array is distinct from a valid empty array', async () => {
+        const { result, cleanup } = await setup0410({
+            taskStatus: 'done',
+            rawArtifact: JSON.stringify({ verdict: 'PASS' }),
+        });
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(1);
+        const malformed = result.findings.filter((f) => f.code === malformedCode);
+        expect(malformed).toHaveLength(1);
+        expect(malformed[0]?.message).toContain('requirements (missing array)');
+        cleanup();
+    });
+
+    test('0410 R3: malformed JSON artifact emits a task-specific failure-mode warning', async () => {
+        const { result, cleanup } = await setup0410({
+            taskStatus: 'done',
+            rawArtifact: 'MALFORMED',
+        });
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(1);
+        const malformed = result.findings.filter((f) => f.code === malformedCode);
+        expect(malformed).toHaveLength(1);
+        expect(malformed[0]?.message).toContain('Task 0001');
+        expect(malformed[0]?.message).toContain('malformed JSON');
+        cleanup();
+    });
+
+    test('0410 R3: missing artifact emits a task-specific failure-mode warning distinct from malformed JSON', async () => {
+        const { result, cleanup } = await setup0410({
+            taskStatus: 'done',
+            rawArtifact: undefined, // file not written
+        });
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(1);
+        const malformed = result.findings.filter((f) => f.code === malformedCode);
+        expect(malformed).toHaveLength(1);
+        expect(malformed[0]?.message).toContain('Task 0001');
+        expect(malformed[0]?.message).toContain('artifact is missing');
+        expect(malformed[0]?.message).not.toContain('malformed JSON');
+        cleanup();
+    });
+
+    test('0410 R3: valid JSON with a non-object root is diagnosed without throwing', async () => {
+        const { result, cleanup } = await setup0410({
+            taskStatus: 'done',
+            rawArtifact: 'null',
+        });
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(1);
+        const malformed = result.findings.filter((f) => f.code === malformedCode);
+        expect(malformed).toHaveLength(1);
+        expect(malformed[0]?.message).toContain('missing required `verdict` field');
+        cleanup();
+    });
+
+    test('0410 R3/R7: valid unmatched rows remain distinct from malformed rows', async () => {
+        const { result, cleanup } = await setup0410({
+            taskStatus: 'done',
+            rawArtifact: JSON.stringify({
+                verdict: 'PASS',
+                requirements: [{ id: 'does-not-match', status: 'MET' }],
+            }),
+        });
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(1);
+        expect(result.findings.filter((f) => f.code === malformedCode)).toHaveLength(0);
+        cleanup();
+    });
+
+    test('0410 R3: non-array requirements is diagnosed separately from an empty array', async () => {
+        const { result, cleanup } = await setup0410({
+            taskStatus: 'done',
+            rawArtifact: JSON.stringify({ verdict: 'PASS', requirements: {} }),
+        });
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(1);
+        const malformed = result.findings.filter((f) => f.code === malformedCode);
+        expect(malformed).toHaveLength(1);
+        expect(malformed[0]?.message).toContain('requirements (expected array)');
+        cleanup();
+    });
+
+    test('0410 R4: rejected rows in acceptanceCriteria also produce bounded warning', async () => {
+        const { result, cleanup } = await setup0410({
+            taskStatus: 'done',
+            rawArtifact: JSON.stringify({
+                verdict: 'PASS',
+                requirements: [],
+                acceptanceCriteria: [{ id: 'alpha', scenario: 'beta', status: 'MET' }],
+            }),
+        });
+        const unverified = result.findings.filter((f) => f.code === 'L4.scenario-unverified');
+        expect(unverified).toHaveLength(1);
+        const malformed = result.findings.filter((f) => f.code === malformedCode);
+        expect(malformed).toHaveLength(1);
+        expect(malformed[0]?.message).toContain('acceptanceCriteria.id/scenario conflict');
+        cleanup();
+    });
+
+    test('0410 R4: scenario-key alias in acceptanceCriteria verifies (no id present)', async () => {
+        const { result, cleanup } = await setup0410({
+            taskStatus: 'done',
+            rawArtifact: JSON.stringify({
+                verdict: 'PASS',
+                requirements: [],
+                acceptanceCriteria: [{ scenario: 'AC-1', status: 'MET' }],
+            }),
+        });
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(0);
+        expect(result.findings.filter((f) => f.code === malformedCode)).toHaveLength(0);
+        cleanup();
+    });
+
+    test('0410 R6 regression: canonical `id` key still verifies (no behavior change)', async () => {
+        const { result, cleanup } = await setup0410({
+            taskStatus: 'done',
+            rawArtifact: JSON.stringify({
+                verdict: 'PASS',
+                requirements: [{ id: 'AC-1', status: 'MET' }],
+            }),
+        });
+        expect(result.findings.filter((f) => f.code === 'L4.scenario-unverified')).toHaveLength(0);
+        expect(result.findings.filter((f) => f.code === malformedCode)).toHaveLength(0);
+        cleanup();
+    });
+
+    test('0410: single warning per artifact regardless of rejected-row count', async () => {
+        const { result, cleanup } = await setup0410({
+            taskStatus: 'done',
+            rawArtifact: JSON.stringify({
+                verdict: 'PASS',
+                requirements: [
+                    { id: 'a', scenario: 'b', status: 'MET' }, // conflict
+                    { id: 'c' }, // missing status
+                    { status: 'MET' }, // missing id/scenario
+                    'junk', // non-object
+                ],
+            }),
+        });
+        const malformed = result.findings.filter((f) => f.code === malformedCode);
+        expect(malformed).toHaveLength(1);
+        expect(malformed[0]?.message).toContain('4 rejected coverage row');
+        cleanup();
     });
 });

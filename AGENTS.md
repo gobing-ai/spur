@@ -226,7 +226,7 @@ spur <noun> --help
 | `message`  | Inter-agent messages              |
 | `team`     | Assign / start / stop / status    |
 | `task`     | Task corpus → **`sp:spur-cli`**   |
-| `feature`  | Feature tree → **`sp:spur-cli`**  |
+| `feature`  | Feature tree + AC gates → **`sp:spur-cli`** |
 | `status`   | Project / Git status              |
 | `migrate`  | CLI schema migrations             |
 | `serve`    | Local web server                  |
