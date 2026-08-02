@@ -3,6 +3,11 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ActionRunContext } from '@gobing-ai/ts-dual-workflow-engine';
+import type {
+    AgentExecutionEvent,
+    AgentExecutionObserver,
+    AgentExecutionOptions,
+} from '../../../src/observability/agent-execution';
 import type { AgentRunInvocation, AgentRunTracedResult, AgentService } from '../../../src/services/agent-service';
 import { AgentRunActionRunner } from '../../../src/workflow/actions/agent-run';
 import { type SteeringCommand, WorkflowSteeringController } from '../../../src/workflow/steering';
@@ -1025,5 +1030,130 @@ describe('AgentRunActionRunner timeout & cancellation (R4 / task 0295)', () => {
         const artifact = readFileSync(join(dir, '.spur', 'run', 'disp-run-implement-partial.md'), 'utf8');
         expect(artifact).toContain('dispatch error: invalid mode');
         expect(artifact).toContain('(invocation not captured)');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: task 0414 — live output capture into `.spur/run/<runId>-output.log`
+// ---------------------------------------------------------------------------
+
+/** Build a fake AgentService whose `runTraced` invokes the execution observer with lifecycle events. */
+function svcInvokingObserver(
+    emit: (observer: AgentExecutionObserver) => void,
+    result: Partial<AgentRunTracedResult> = {},
+): AgentService {
+    const full: AgentRunTracedResult = { exitCode: 0, stdout: '', invocation: invocation(), ...result };
+    return {
+        runTraced: async (
+            _input: string | undefined,
+            _flags: Record<string, string | boolean>,
+            _deps?: unknown,
+            execution?: AgentExecutionOptions,
+        ) => {
+            if (execution?.observer !== undefined) emit(execution.observer);
+            return full;
+        },
+    } as unknown as AgentService;
+}
+
+function outputEvent(overrides: Partial<Extract<AgentExecutionEvent, { kind: 'output' }>> = {}): AgentExecutionEvent {
+    return {
+        kind: 'output',
+        schemaVersion: 1,
+        eventId: 'e-out',
+        sequence: 2,
+        runId: 'test-1',
+        executionId: 'execution-1',
+        actionId: 'test-1:s1',
+        at: '2026-08-02T00:00:02.000Z',
+        stream: 'stdout',
+        chunk: 'working on phase A',
+        ...overrides,
+    };
+}
+
+function startedEvent(): AgentExecutionEvent {
+    return {
+        kind: 'started',
+        schemaVersion: 1,
+        eventId: 'e-st',
+        sequence: 1,
+        runId: 'test-1',
+        executionId: 'execution-1',
+        actionId: 'test-1:s1',
+        at: '2026-08-02T00:00:01.000Z',
+        agent: 'claude',
+        invocation: 'claude -p hi',
+    };
+}
+
+function finishedEvent(): AgentExecutionEvent {
+    return {
+        kind: 'finished',
+        schemaVersion: 1,
+        eventId: 'e-fin',
+        sequence: 3,
+        runId: 'test-1',
+        executionId: 'execution-1',
+        actionId: 'test-1:s1',
+        at: '2026-08-02T00:00:10.000Z',
+        outcome: 'done',
+        exitCode: 0,
+        durationMs: 9_000,
+        usage: 'unavailable',
+    };
+}
+
+describe('AgentRunActionRunner live output capture (task 0414)', () => {
+    test('writes observed chunks to the per-run artifact while the run is in flight', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'agent-run-0414-'));
+        const svc = svcInvokingObserver((observer) => {
+            observer(startedEvent());
+            observer(outputEvent());
+            observer(finishedEvent());
+        });
+        const runner = new AgentRunActionRunner(svc, undefined, undefined, { maxBytes: 1024 });
+        const result = await runner.execute({ input: 'hello' }, makeCtx({ runId: 'test-1', workdir: dir }));
+        expect(result.ok).toBe(true);
+
+        const artifact = readFileSync(join(dir, '.spur', 'run', 'test-1-output.log'), 'utf8');
+        expect(artifact).toContain('claude -p hi');
+        expect(artifact).toContain('[2026-08-02T00:00:02.000Z] stdout: working on phase A');
+        expect(artifact).toContain('run done (exit 0)');
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('chunks observed during a buffered run reach the artifact even without an observability bus', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'agent-run-0414-'));
+        const svc = svcInvokingObserver((observer) => {
+            observer(outputEvent({ chunk: 'mid-run progress' }));
+        });
+        const runner = new AgentRunActionRunner(svc, undefined, undefined, {});
+        const result = await runner.execute({ input: 'hello' }, makeCtx({ runId: 'test-1', workdir: dir }));
+        expect(result.ok).toBe(true);
+        expect(readFileSync(join(dir, '.spur', 'run', 'test-1-output.log'), 'utf8')).toContain('mid-run progress');
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('no outputLog config creates no artifact', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'agent-run-0414-'));
+        const runner = new AgentRunActionRunner(svcWithRunTraced({ exitCode: 0, stdout: '' }));
+        await runner.execute({ input: 'hello' }, makeCtx({ runId: 'test-1', workdir: dir }));
+        expect(existsSync(join(dir, '.spur', 'run', 'test-1-output.log'))).toBe(false);
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('volume bound truncates visibly in the artifact', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'agent-run-0414-'));
+        const svc = svcInvokingObserver((observer) => {
+            observer(outputEvent({ chunk: 'x'.repeat(5000) }));
+            observer(outputEvent({ chunk: 'after-bound' }));
+        });
+        const runner = new AgentRunActionRunner(svc, undefined, undefined, { maxBytes: 64 });
+        await runner.execute({ input: 'hello' }, makeCtx({ runId: 'test-1', workdir: dir }));
+        const artifact = readFileSync(join(dir, '.spur', 'run', 'test-1-output.log'), 'utf8');
+        expect(artifact).toContain('[truncated]');
+        expect(artifact).not.toContain('after-bound');
+        rmSync(dir, { recursive: true, force: true });
     });
 });

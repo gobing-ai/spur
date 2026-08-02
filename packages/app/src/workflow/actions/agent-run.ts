@@ -2,6 +2,7 @@ import { dirname, isAbsolute, join } from 'node:path';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { AgentExecutionObserver } from '../../observability/agent-execution';
+import { RunOutputSink, type RunOutputSinkConfig } from '../../observability/run-output-sink';
 import type { AgentRunInvocation, AgentRunTracedResult, AgentService } from '../../services/agent-service';
 import type { WorkflowObservabilityBus } from '../observability';
 import { parseSteeringPolicy, type WorkflowSteeringController } from '../steering';
@@ -69,6 +70,12 @@ const KIND = 'agent.run';
  * Resume-mode fallback (task 0406): when the latch auto-sets continue and the agent's
  * resume mode rejects a new prompt (codex), the action retries once as a fresh dispatch
  * and writes `__agentSession: "no-resume"` so subsequent steps skip the latch.
+ *
+ * Live output capture (task 0414): when an `outputLog` config is provided, the
+ * redacted incremental lifecycle events are appended to
+ * `.spur/run/<runId>-output.log` (bounded, best-effort) so the run is observable
+ * mid-flight via `spur workflow trace`. The child's output policy stays buffered
+ * and stdin stays `'ignore'` — the sink consumes the `onOutput` relay as-is.
  */
 export class AgentRunActionRunner implements ActionRunner {
     readonly kind = KIND;
@@ -79,6 +86,7 @@ export class AgentRunActionRunner implements ActionRunner {
         agentService: AgentService,
         private readonly observabilityBus?: WorkflowObservabilityBus,
         private readonly steeringController?: WorkflowSteeringController,
+        private readonly outputLog?: RunOutputSinkConfig,
     ) {
         this.agentService = agentService;
     }
@@ -140,10 +148,25 @@ export class AgentRunActionRunner implements ActionRunner {
         // trace (R1). The legacy capture/non-capture branch collapses into a
         // single dispatch path — `capture` now only controls whether the
         // stdout is surfaced as `data.answer`.
+        // Live output capture (task 0414): the sink appends redacted lifecycle
+        // events to `.spur/run/<runId>-output.log` so a supervisor can tail the
+        // run mid-flight. The observer fans out to the sink AND the J3
+        // observability bus — both are consumers of the same bounded relay.
+        const outputLog = this.outputLog;
+        const sink =
+            outputLog === undefined
+                ? undefined
+                : new RunOutputSink({
+                      dir: join(cwd, '.spur', 'run'),
+                      runId: context.runId,
+                      ...(outputLog.maxBytes !== undefined ? { maxBytes: outputLog.maxBytes } : {}),
+                      ...(outputLog.maxLines !== undefined ? { maxLines: outputLog.maxLines } : {}),
+                  });
         const observer: AgentExecutionObserver | undefined =
-            this.observabilityBus === undefined
+            this.observabilityBus === undefined && sink === undefined
                 ? undefined
                 : (event) => {
+                      sink?.observe(event);
                       void this.observabilityBus?.emit('workflow.agent', event);
                   };
         const actionId = context.actionId ?? `${context.runId}:${context.stateOrNodeId}`;
@@ -151,110 +174,114 @@ export class AgentRunActionRunner implements ActionRunner {
         let resumeRetried = false;
         let steeringNote: string | undefined;
         let traced: AgentRunTracedResult;
-        // Outer loop: resume-mode fallback (task 0406). If the session latch
-        // auto-set continue and the agent's resume mode rejects a new prompt
-        // (exitCode 2 = shim threw before process launch), retry once as a
-        // fresh dispatch. Agent-agnostic — works for codex and any agent with
-        // the same limitation. The sentinel `__agentSession: 'no-resume'`
-        // written on success prevents future steps from repeating the cycle.
-        for (;;) {
-            steeringNote = undefined;
-            let steeringSignal = this.steeringController?.begin(context.runId, actionId, steeringPolicy);
-            while (true) {
-                traced = await this.agentService.runTraced(input, flags, undefined, {
-                    correlation: {
-                        runId: context.runId,
-                        executionId: crypto.randomUUID(),
-                        actionId,
-                    },
-                    ...(observer !== undefined ? { observer } : {}),
-                    ...(steeringSignal !== undefined ? { signal: steeringSignal } : {}),
-                });
-                if (this.steeringController === undefined) break;
-                const decision = await this.steeringController.boundary(traced.exitCode === 0);
-                if (decision.operation === 'retry') {
-                    steeringSignal = this.steeringController.nextAttempt();
-                    continue;
+        try {
+            // Outer loop: resume-mode fallback (task 0406). If the session latch
+            // auto-set continue and the agent's resume mode rejects a new prompt
+            // (exitCode 2 = shim threw before process launch), retry once as a
+            // fresh dispatch. Agent-agnostic — works for codex and any agent with
+            // the same limitation. The sentinel `__agentSession: 'no-resume'`
+            // written on success prevents future steps from repeating the cycle.
+            for (;;) {
+                steeringNote = undefined;
+                let steeringSignal = this.steeringController?.begin(context.runId, actionId, steeringPolicy);
+                while (true) {
+                    traced = await this.agentService.runTraced(input, flags, undefined, {
+                        correlation: {
+                            runId: context.runId,
+                            executionId: crypto.randomUUID(),
+                            actionId,
+                        },
+                        ...(observer !== undefined ? { observer } : {}),
+                        ...(steeringSignal !== undefined ? { signal: steeringSignal } : {}),
+                    });
+                    if (this.steeringController === undefined) break;
+                    const decision = await this.steeringController.boundary(traced.exitCode === 0);
+                    if (decision.operation === 'retry') {
+                        steeringSignal = this.steeringController.nextAttempt();
+                        continue;
+                    }
+                    if (decision.operation === 'note') steeringNote = decision.note;
+                    if (decision.operation === 'abort' && traced.exitCode === 0) {
+                        traced = {
+                            ...traced,
+                            exitCode: 3,
+                            signal: 'STEERING_ABORT',
+                            message: 'aborted at steering boundary',
+                        };
+                    }
+                    break;
                 }
-                if (decision.operation === 'note') steeringNote = decision.note;
-                if (decision.operation === 'abort' && traced.exitCode === 0) {
-                    traced = {
-                        ...traced,
-                        exitCode: 3,
-                        signal: 'STEERING_ABORT',
-                        message: 'aborted at steering boundary',
-                    };
+                this.steeringController?.complete();
+
+                // Resume-mode fallback: exitCode 2 signals a dispatch error (shim
+                // threw before process launch), not an agent failure or timeout.
+                if (!resumeRetried && latchAutoContinued && traced.exitCode === 2) {
+                    resumeRetried = true;
+                    delete flags.continue;
+                    continue;
                 }
                 break;
             }
-            this.steeringController?.complete();
+            const { exitCode, stdout: answer } = traced;
+            const ok = exitCode === 0;
+            const invocation = traced.invocation;
 
-            // Resume-mode fallback: exitCode 2 signals a dispatch error (shim
-            // threw before process launch), not an agent failure or timeout.
-            if (!resumeRetried && latchAutoContinued && traced.exitCode === 2) {
-                resumeRetried = true;
-                delete flags.continue;
-                continue;
+            if (capture && answerFile !== undefined) {
+                const target = isAbsolute(answerFile) ? answerFile : join(cwd, answerFile);
+                const fs = createNodeFileSystem(cwd);
+                await fs.ensureDir(dirname(target));
+                await fs.writeFile(target, answer);
             }
-            break;
-        }
-        const { exitCode, stdout: answer } = traced;
-        const ok = exitCode === 0;
-        const invocation = traced.invocation;
 
-        if (capture && answerFile !== undefined) {
-            const target = isAbsolute(answerFile) ? answerFile : join(cwd, answerFile);
-            const fs = createNodeFileSystem(cwd);
-            await fs.ensureDir(dirname(target));
-            await fs.writeFile(target, answer);
-        }
-
-        // R6-S2a: verify expected side-effect artifact exists after exit-0.
-        if (ok && expectFile !== undefined) {
-            const target = isAbsolute(expectFile) ? expectFile : join(cwd, expectFile);
-            const fs = createNodeFileSystem(cwd);
-            if (!(await fs.exists(target))) {
-                return {
-                    ok: false,
-                    data: buildResultData(exitCode, agentLabel, capture, answer, invocation),
-                    error: `agent.run (${agentLabel}) exited 0 but expected file is absent: ${expectFile}`,
-                };
+            // R6-S2a: verify expected side-effect artifact exists after exit-0.
+            if (ok && expectFile !== undefined) {
+                const target = isAbsolute(expectFile) ? expectFile : join(cwd, expectFile);
+                const fs = createNodeFileSystem(cwd);
+                if (!(await fs.exists(target))) {
+                    return {
+                        ok: false,
+                        data: buildResultData(exitCode, agentLabel, capture, answer, invocation),
+                        error: `agent.run (${agentLabel}) exited 0 but expected file is absent: ${expectFile}`,
+                    };
+                }
             }
+
+            if (!ok) {
+                await writePartialWorkArtifact(context, agentLabel, model, traced, cwd);
+            }
+
+            // Actionable failure message (R4 / task 0295): identify the workflow
+            // step and configured timeout, then distinguish signal termination from
+            // dispatch failure and a plain non-zero exit.
+            const stepLabel = context.stateOrNodeId;
+            const error = ok
+                ? undefined
+                : traced.signal !== undefined
+                  ? timeoutMs !== undefined
+                      ? `agent.run '${stepLabel}' (${agentLabel}) terminated by signal ${traced.signal} (configured timeout: ${timeoutMs}ms; timeout or cancellation); see partial-work artifact`
+                      : `agent.run '${stepLabel}' (${agentLabel}) was cancelled by signal ${traced.signal}; see partial-work artifact`
+                  : traced.message !== undefined
+                    ? `agent.run '${stepLabel}' (${agentLabel}) dispatch failed: ${traced.message}`
+                    : `agent.run '${stepLabel}' (${agentLabel}) exited with code ${exitCode}`;
+
+            return {
+                ok,
+                data: buildResultData(exitCode, agentLabel, capture, answer, invocation),
+                error,
+                // Latch: mark the session open after the first successful agent.run so later
+                // steps auto-continue (Q8). When we fell back to a fresh dispatch because
+                // the agent's resume mode rejected continue (task 0406), write 'no-resume'
+                // so subsequent steps skip the latch and avoid repeating the wasted dispatch.
+                setVars: ok
+                    ? {
+                          __agentSession: resumeRetried ? 'no-resume' : 'open',
+                          ...(steeringNote !== undefined ? { __steeringNote: steeringNote } : {}),
+                      }
+                    : undefined,
+            };
+        } finally {
+            sink?.close();
         }
-
-        if (!ok) {
-            await writePartialWorkArtifact(context, agentLabel, model, traced, cwd);
-        }
-
-        // Actionable failure message (R4 / task 0295): identify the workflow
-        // step and configured timeout, then distinguish signal termination from
-        // dispatch failure and a plain non-zero exit.
-        const stepLabel = context.stateOrNodeId;
-        const error = ok
-            ? undefined
-            : traced.signal !== undefined
-              ? timeoutMs !== undefined
-                  ? `agent.run '${stepLabel}' (${agentLabel}) terminated by signal ${traced.signal} (configured timeout: ${timeoutMs}ms; timeout or cancellation); see partial-work artifact`
-                  : `agent.run '${stepLabel}' (${agentLabel}) was cancelled by signal ${traced.signal}; see partial-work artifact`
-              : traced.message !== undefined
-                ? `agent.run '${stepLabel}' (${agentLabel}) dispatch failed: ${traced.message}`
-                : `agent.run '${stepLabel}' (${agentLabel}) exited with code ${exitCode}`;
-
-        return {
-            ok,
-            data: buildResultData(exitCode, agentLabel, capture, answer, invocation),
-            error,
-            // Latch: mark the session open after the first successful agent.run so later
-            // steps auto-continue (Q8). When we fell back to a fresh dispatch because
-            // the agent's resume mode rejected continue (task 0406), write 'no-resume'
-            // so subsequent steps skip the latch and avoid repeating the wasted dispatch.
-            setVars: ok
-                ? {
-                      __agentSession: resumeRetried ? 'no-resume' : 'open',
-                      ...(steeringNote !== undefined ? { __steeringNote: steeringNote } : {}),
-                  }
-                : undefined,
-        };
     }
 }
 

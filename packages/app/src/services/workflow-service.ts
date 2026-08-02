@@ -1,5 +1,6 @@
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
 import {
     type ActionCost,
@@ -27,6 +28,7 @@ import {
 } from '@gobing-ai/ts-dual-workflow-engine';
 import type { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem, type ProcessExecutor, parseYamlObject } from '@gobing-ai/ts-runtime';
+import type { RunOutputSinkConfig } from '../observability/run-output-sink';
 import type { HostAllowlist, HttpRequester } from '../workflow/actions/http-request';
 import { registerSpurBuiltins } from '../workflow/builtins';
 import { ObservableWorkflowAdapter, type WorkflowObservabilityBus } from '../workflow/observability';
@@ -275,6 +277,11 @@ export type TimelineEvent =
 export interface WorkflowTraceTimeline {
     run: WorkflowTraceEntry;
     events: TimelineEvent[];
+    /**
+     * Relative path to the per-run agent-output artifact
+     * (`.spur/run/<runId>-output.log`, task 0414) when the capture file exists.
+     */
+    outputArtifact?: string;
 }
 
 /** Runtime dependencies injected into WorkflowAppService. */
@@ -738,7 +745,12 @@ export class WorkflowAppService {
             }
         }
 
-        return { run, events };
+        const outputArtifact = await outputArtifactForRun(this.ctx.cwd, runId);
+        return {
+            run,
+            events,
+            ...(outputArtifact !== undefined ? { outputArtifact } : {}),
+        };
     }
 
     private async createEngineService(
@@ -759,6 +771,9 @@ export class WorkflowAppService {
             hostAllowlist: this.ctx.hostAllowlist?.(),
             ...(bus !== undefined ? { observabilityBus: bus } : {}),
             ...(opts.steeringController !== undefined ? { steeringController: opts.steeringController } : {}),
+            // Per-run live output capture is always on for agent.run steps (task 0414),
+            // with bounds from `.spur/config.yaml` `agent.output` (defaults when unset).
+            outputLog: await resolveOutputLogConfig(this.ctx.cwd),
         });
         const db = await this.ctx.getDb();
         let persistence: WorkflowPersistenceAdapter = new DbWorkflowPersistenceAdapter(db);
@@ -779,6 +794,34 @@ export class WorkflowAppService {
 async function fileExists(path: string): Promise<boolean> {
     const fs = createNodeFileSystem();
     return await fs.exists(path);
+}
+
+/**
+ * Resolve per-run output capture bounds from `.spur/config.yaml` `agent.output`
+ * (task 0414 R4). Best-effort: any config failure degrades to defaults rather
+ * than failing the workflow run (R5).
+ */
+async function resolveOutputLogConfig(cwd: string): Promise<RunOutputSinkConfig> {
+    try {
+        const output = (await loadSpurConfig(cwd)).agent?.output;
+        if (output === undefined) return {};
+        return {
+            ...(output['max-bytes'] !== undefined ? { maxBytes: output['max-bytes'] } : {}),
+            ...(output['max-lines'] !== undefined ? { maxLines: output['max-lines'] } : {}),
+        };
+    } catch {
+        // Observability configuration must never fail a workflow run.
+        return {};
+    }
+}
+
+/**
+ * Relative path to a run's agent-output capture artifact
+ * (`.spur/run/<runId>-output.log`, task 0414), when the file exists.
+ */
+async function outputArtifactForRun(cwd: string, runId: string): Promise<string | undefined> {
+    const relative = join('.spur', 'run', `${runId}-output.log`);
+    return (await fileExists(join(cwd, relative))) ? relative : undefined;
 }
 
 /**

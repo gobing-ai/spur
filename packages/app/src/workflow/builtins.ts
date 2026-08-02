@@ -1,5 +1,6 @@
 import type { HitlResponder, WorkflowEngineHost } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
+import type { RunOutputSinkConfig } from '../observability/run-output-sink';
 import type { AgentService } from '../services/agent-service';
 import type { RuleService } from '../services/rule-service';
 import { AgentRunActionRunner } from './actions/agent-run';
@@ -25,13 +26,20 @@ export interface SpurWorkflowBuiltinsOptions {
     responseValidateEngine?: ResponseValidateEngine;
     observabilityBus?: WorkflowObservabilityBus;
     steeringController?: WorkflowSteeringController;
+    /** Per-run live output capture bounds (task 0414); when set, agent.run steps write `.spur/run/<runId>-output.log`. */
+    outputLog?: RunOutputSinkConfig;
 }
 
 /** Register all spur-specific built-in action runners on a workflow host. */
 export function registerSpurBuiltins(host: WorkflowEngineHost, options: SpurWorkflowBuiltinsOptions): void {
     const fileSystem = options.fileSystem ?? createNodeFileSystem();
     host.registerAction(
-        new AgentRunActionRunner(options.agentService, options.observabilityBus, options.steeringController),
+        new AgentRunActionRunner(
+            options.agentService,
+            options.observabilityBus,
+            options.steeringController,
+            options.outputLog,
+        ),
         'builtin',
     );
     host.registerAction(new RuleCheckActionRunner(options.ruleService), 'builtin');

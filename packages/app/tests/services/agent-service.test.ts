@@ -1553,6 +1553,47 @@ describe('AgentService.runTraced', () => {
         expect(stale.invocation?.argv).toContain('-c');
         expect(stale.invocation?.argv).not.toContain('--no-session');
     });
+
+    // R7 (task 0414): the core claim — chunks are observed during a buffered
+    // run because runTraced threads onOutput into the executor call. Must fail
+    // if the onOutput wiring is ever removed.
+    test('passes onOutput to the executor on the runTraced path (R7 core claim)', async () => {
+        const svc = makeService();
+        const { deps, runner } = mockDeps();
+        await svc.runTraced('prompt', { agent: 'pi' }, deps);
+        const callArgs = runner.runPromptCommand.mock.calls[0] as [
+            string,
+            unknown,
+            { onOutput?: (output: unknown) => void } | undefined,
+        ];
+        expect(typeof callArgs[2]?.onOutput).toBe('function');
+    });
+
+    // R3 mutation check (task 0414): the pipeline path must never re-expose a
+    // TTY to the child. If nonInteractive were dropped (or output policy
+    // switched to inherit), outputMode flips to 'stream' and stdinInteractive
+    // becomes true — these assertions fail, catching the 0295 regression.
+    test('non-interactive contract keeps the child TTY-blind (R3 mutation check)', async () => {
+        const svc = makeService();
+        const deps = makeSimpleDeps('pi');
+        const result = await svc.runTraced('/sp:dev-run 0414 --mode implement --auto', { agent: 'pi' }, deps);
+        expect(result.invocation?.outputMode).toBe('buffered');
+        expect(result.invocation?.stdinInteractive).toBe(false);
+    });
+
+    // R5 (task 0414): observability must be best-effort — an observer that
+    // throws must not interrupt or fail the agent run.
+    test('a throwing observer never fails the run (R5)', async () => {
+        const svc = makeService();
+        const deps = makeSimpleDeps('pi');
+        const result = await svc.runTraced('hello', { agent: 'pi' }, deps, {
+            observer: () => {
+                throw new Error('observer exploded');
+            },
+            heartbeatMs: 0,
+        });
+        expect(result.exitCode).toBe(0);
+    });
 });
 
 // ---------------------------------------------------------------------------
