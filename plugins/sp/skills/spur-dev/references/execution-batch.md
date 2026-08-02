@@ -255,6 +255,41 @@ bun plugins/sp/scripts/batch-preflight.ts --wbs <wbs> --status <status> --recove
 Helper: `recoveryHint(status, wbs)` in `plugins/sp/scripts/batch-preflight.ts`. Tables remain SSOT
 in next-router; this only maps status → primary TABLE A hop for recovery.
 
+### 3.3c Bounded feature-sync retry suppression (task 0411)
+
+During a batch, the per-task `record` step and the wrap-up `feature-transition` step each invoke
+feature status sync. When a feature is L4-gate-blocked (e.g. not all linked tasks are `done`), the
+identical blocked proposal repeats on every call with no intervening input change — in the H9
+dogfood, 4 redundant sync calls produced the same blocked result. The orchestration seam fixes
+this, not the engine.
+
+Both `task-pipeline.yaml` (`record` step) and `wrapup-pipeline.yaml` (`feature-transition` step)
+invoke the bounded wrapper instead of raw `feature sync`:
+
+```bash
+bun plugins/sp/scripts/feature-sync-bounded.ts <feature-id> --spur-bin "<spurBin>" --json
+```
+
+The wrapper:
+
+1. Reads an input fingerprint (feature file content hash, linked task statuses, verdict artifact
+   mtimes) **before** invoking `feature sync`.
+2. Classifies the structured result — `gateBlocked` checked first (a partial hop can have
+   `applied: true` while still gate-blocked), then `applied`, then `no-op`.
+3. On a **blocked** result, persists `.spur/run/feature-sync-blocked-<id>.json` and, on the next
+   call with an **identical fingerprint**, suppresses the redundant sync and replays the prior
+   blocked result.
+4. On **applied** or **no-op** results, passes through unchanged (no suppression).
+5. When the fingerprint **changes** (a task completed, a verdict file updated), suppression is
+   invalidated and a fresh sync runs.
+
+**Batch driver contract:** the orchestrator does **nothing extra** — the wrapper lives inside the
+pipeline's `record` step and the wrap-up's `feature-transition` step. The driver still launches
+`task-pipeline.yaml` verbatim (R4.1). Suppression is transparent: the wrapper emits the same
+`FeatureSyncResult` JSON shape as `feature sync --json`, so downstream report logic is unchanged.
+The only observable difference is fewer redundant `feature sync` invocations and a one-line
+`feature-sync-bounded:` annotation on stderr when a duplicate is suppressed.
+
 ## Step 4 — Failure policy (R3)
 
 ### 4.1 Stop-the-batch (default) (R3.1)
@@ -328,6 +363,7 @@ The batch verdict: `clean` (all attempted tasks `done`) | `halted` (a failure st
 | R4.3 (`--agent` merged into per-task vars) | Step 3.2 |
 | R5.1 (orchestrator boundary) | "Zero engine code" preamble + Step 3 |
 | R5.2 (structured batch report) | Step 5 |
+| 0411 (bounded feature-sync retry suppression) | Step 3.3c — wrapper lives in pipeline `record` + wrap-up `feature-transition`; driver unchanged |
 
 ## Parallel Execution
 
