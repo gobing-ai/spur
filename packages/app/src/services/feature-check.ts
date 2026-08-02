@@ -87,8 +87,51 @@ export const DEFAULT_FEATURE_MATRIX: FeatureSectionMatrix = {
                 optional: ['Goal', 'Scope', 'Acceptance Criteria', 'Tasks', 'History'],
             },
         },
+        // Group (umbrella) features: identical to `standard` minus the Acceptance Criteria
+        // requirement. AC lives on the leaf children; a group that carried its own would
+        // duplicate or contradict them. Goal/Scope/Tasks stay required — an umbrella still has
+        // to say what it covers and what hangs off it.
+        group: {
+            backlog: {
+                required: [],
+                optional: ['Goal', 'Scope', 'Acceptance Criteria', 'Tasks', 'Notes', 'History'],
+            },
+            active: {
+                required: ['Goal', 'Scope'],
+                optional: ['Acceptance Criteria', 'Tasks', 'Notes', 'History'],
+                gate: true,
+            },
+            verifying: {
+                required: ['Goal', 'Scope'],
+                optional: ['Acceptance Criteria', 'Tasks', 'Notes', 'History'],
+                gate: true,
+            },
+            blocked: {
+                required: ['Goal', 'Notes'],
+                optional: ['Scope', 'Acceptance Criteria', 'Tasks', 'History'],
+            },
+            done: {
+                required: ['Goal', 'Scope', 'Tasks'],
+                optional: ['Acceptance Criteria', 'Notes', 'History'],
+                gate: true,
+            },
+            cancelled: {
+                required: ['Notes'],
+                optional: ['Goal', 'Scope', 'Acceptance Criteria', 'Tasks', 'History'],
+            },
+        },
     },
 };
+
+/**
+ * Select the section-matrix variant for a feature. Features tagged `group` are umbrellas whose
+ * Acceptance Criteria live on their leaf children (convention held by every group feature in the
+ * corpus); everything else uses the standard matrix.
+ */
+function isGroupFeature(fm: Record<string, unknown>): string {
+    const tags = fm.tags;
+    return Array.isArray(tags) && tags.includes('group') ? 'group' : 'standard';
+}
 
 // ─── FeatureCheckService ────────────────────────────────────────────────
 
@@ -130,7 +173,10 @@ export class FeatureCheckService extends PlanningCheckService {
 
         const fm = doc.frontmatterData ?? {};
         const status = (fm.status as string) ?? 'backlog';
-        const entry = this.resolveMatrixEntry('standard', status);
+        // Group features are umbrellas: their leaf children own Acceptance Criteria, so requiring
+        // AC on the parent would duplicate the children's scope and strand every group at the L2
+        // gate. `resolveMatrixEntry` already falls back to `standard` for unknown variants.
+        const entry = this.resolveMatrixEntry(isGroupFeature(fm), status);
 
         // ── L2: Section presence (warning-first, gate:true hard) ──
         this.runL2(doc, entry, findings);

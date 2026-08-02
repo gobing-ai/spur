@@ -150,6 +150,106 @@ describe('FeatureCheckService', () => {
         expect(result.missingSections).toContain('Acceptance Criteria');
     });
 
+    // Group (umbrella) features carry no Acceptance Criteria — their leaf children own it.
+    // Before the `group` matrix variant existed, every group feature in the corpus (A-H) failed
+    // the L2 gate on a section the convention says they must not have.
+    test('L2: group-tagged active feature does not require Acceptance Criteria', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'id: "B"',
+            'name: "Umbrella Feature"',
+            'status: active',
+            'priority: P1',
+            'tags: [group]',
+            'created_at: 2026-06-14T00:00:00.000Z',
+            'updated_at: 2026-06-14T00:00:00.000Z',
+            '---',
+            '',
+            '# B: Umbrella Feature',
+            '',
+            '## Goal',
+            '',
+            'The goal.',
+            '',
+            '## Scope',
+            '',
+            'The scope.',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new FeatureCheckService(fs);
+        const result = await svc.check(path, 'B');
+        cleanup();
+
+        expect(result.missingSections).not.toContain('Acceptance Criteria');
+        expect(result.findings.filter((f) => f.layer === 'L2' && f.severity === 'error')).toHaveLength(0);
+        expect(result.pass).toBe(true);
+    });
+
+    test('L2: group variant still requires Goal and Scope', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'id: "B"',
+            'name: "Umbrella Feature"',
+            'status: active',
+            'priority: P1',
+            'tags: [group]',
+            'created_at: 2026-06-14T00:00:00.000Z',
+            'updated_at: 2026-06-14T00:00:00.000Z',
+            '---',
+            '',
+            '# B: Umbrella Feature',
+            '',
+            '## Goal',
+            '',
+            'The goal.',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new FeatureCheckService(fs);
+        const result = await svc.check(path, 'B');
+        cleanup();
+
+        // The exemption is scoped to Acceptance Criteria — an umbrella must still say what it covers.
+        expect(result.missingSections).toContain('Scope');
+        expect(result.pass).toBe(false);
+    });
+
+    test('L2: an untagged active feature is still gated on Acceptance Criteria', async () => {
+        const content = [
+            '---',
+            'schema_version: 1',
+            'id: "B"',
+            'name: "Leaf Feature"',
+            'status: active',
+            'priority: P1',
+            'tags: [rd3-migration]',
+            'created_at: 2026-06-14T00:00:00.000Z',
+            'updated_at: 2026-06-14T00:00:00.000Z',
+            '---',
+            '',
+            '# B: Leaf Feature',
+            '',
+            '## Goal',
+            '',
+            'The goal.',
+            '',
+            '## Scope',
+            '',
+            'The scope.',
+        ].join('\n');
+
+        const { fs, path, cleanup } = seedFile(content);
+        const svc = new FeatureCheckService(fs);
+        const result = await svc.check(path, 'B');
+        cleanup();
+
+        expect(result.missingSections).toContain('Acceptance Criteria');
+        expect(result.pass).toBe(false);
+    });
+
     test('L2: backlog status has no required sections', async () => {
         const content = [
             '---',
