@@ -659,7 +659,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
     });
 
     test('R44 — glossary.md exists exactly once and is linked from spur-dev SKILL.md (task 0187 R7/AC7)', () => {
-        const copies = allMarkdown.filter((p) => p.endsWith('glossary.md'));
+        const copies = allMarkdown.filter((p) => p.endsWith('/glossary.md'));
         expect(copies.map((p) => relative(PLUGIN_ROOT, p))).toEqual(['skills/spur-dev/references/glossary.md']);
 
         const spineSkill = readFileSync(join(SKILLS_DIR, 'spur-dev', 'SKILL.md'), 'utf8');

@@ -86,7 +86,7 @@ command's own `--next` chain does). Never self-loop `/sp:dev-next`.
 
 ## Chain progression contract (`--next`)
 
-The router is the single owner of `--next` chain progression. The definition of [`--next`](../spur-dev/references/dev-operations.md#flag-next)
+The router is the single owner of `--next` chain progression. The definition of [`--next`](../spur-dev/references/flag-glossary.md#flag-next)
 and the full chain contract (stop conditions, hop bound, reporting) live in the glossary; this
 section states the router's side: how a chain propagates, how it stops, and how it reports.
 

@@ -1,6 +1,6 @@
 ---
 description: "Review code for a task or path — multi-dimensional review across functional traceability, SECUA quality, and architectural depth. Triggers: \"review this\", \"check the code\", \"SECUA review\", \"dev review\", \"audit this\"."
-argument-hint: "[<wbs|path>] [[`--agent`](../skills/spur-dev/references/dev-operations.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/dev-operations.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/dev-operations.md#flag-subprocess)] [[`--focus`](../skills/spur-dev/references/dev-operations.md#flag-focus) <dims>] [--fix (deprecated)]"
+argument-hint: "[<wbs|path>] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/flag-glossary.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/flag-glossary.md#flag-subprocess)] [[`--focus`](../skills/spur-dev/references/flag-glossary.md#flag-focus) <dims>] [--fix (deprecated)]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 

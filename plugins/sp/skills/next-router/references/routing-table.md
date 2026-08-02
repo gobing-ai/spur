@@ -133,7 +133,7 @@ ties in v1 — `--auto` only skips confirmations *inside* a single chosen comman
 
 ## 5. Chain semantics (success path)
 
-**Canonical definition.** [`--next`](../../spur-dev/references/dev-operations.md#flag-next) is
+**Canonical definition.** [`--next`](../../spur-dev/references/flag-glossary.md#flag-next) is
 chain-to-completion with propagation: on success, hand the task back to `sp:next-router`, which
 resolves the next dispatch and re-invokes with `--next` still set, until the work is done or a gate
 stops it. The full chain contract (stop conditions, hop bound, reporting) lives in the glossary; this

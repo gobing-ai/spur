@@ -1,6 +1,6 @@
 ---
 description: Generate or extend tests until the unit target is met
-argument-hint: "<target> [--coverage <n>] [[`--agent`](../skills/spur-dev/references/dev-operations.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/dev-operations.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/dev-operations.md#flag-subprocess)] [[`--auto`](../skills/spur-dev/references/dev-operations.md#flag-auto)]"
+argument-hint: "<target> [--coverage <n>] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/flag-glossary.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/flag-glossary.md#flag-subprocess)] [[`--auto`](../skills/spur-dev/references/flag-glossary.md#flag-auto)]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 ---
 

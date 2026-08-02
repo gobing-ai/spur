@@ -172,6 +172,10 @@ for "what's actually in file Y" or for resources that sit outside the step seque
 - [references/glossary.md](references/glossary.md) — sp's own vocabulary: spine, competency, facade,
   corpus, gate, verdict, noun/verb, half, HITL, WBS, section-write contract — canonical term +
   Avoid list. Owns term definitions only; `cross-cutting.md` owns the process rules that use them.
+- [references/flag-glossary.md](references/flag-glossary.md) — the shared-flag glossary (one
+  canonical entry per flag used by two or more `/sp:dev-*` commands) and the `--next` chain
+  contract. Moved verbatim from `dev-operations.md` (task 0408) so command files can deep-link
+  flag entries while this spine reads the operation catalog linearly.
 - [references/gate-checklists.md](references/gate-checklists.md) — checkbox checklists for the
   five gates (feature-check, batch-create, precheck, review, verify). Each checklist is a
   `- [ ]` list of prerequisites an agent verifies before entering the gate.

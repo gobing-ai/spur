@@ -1,6 +1,6 @@
 ---
 description: Fan out independent tasks or investigations in parallel via subagents — choose the right pattern and synthesize results
-argument-hint: "[`--tasks`](../skills/spur-dev/references/dev-operations.md#flag-tasks) <selector> [[`--feature`](../skills/spur-dev/references/dev-operations.md#flag-feature) <id>] [[`--mode`](../skills/spur-dev/references/dev-operations.md#flag-mode) <fan-out|review-panel|investigation>] [[`--agent`](../skills/spur-dev/references/dev-operations.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/dev-operations.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/dev-operations.md#flag-subprocess)] [[`--json`](../skills/spur-dev/references/dev-operations.md#flag-json)]"
+argument-hint: "[`--tasks`](../skills/spur-dev/references/flag-glossary.md#flag-tasks) <selector> [[`--feature`](../skills/spur-dev/references/flag-glossary.md#flag-feature) <id>] [[`--mode`](../skills/spur-dev/references/flag-glossary.md#flag-mode) <fan-out|review-panel|investigation>] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/flag-glossary.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/flag-glossary.md#flag-subprocess)] [[`--json`](../skills/spur-dev/references/flag-glossary.md#flag-json)]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 

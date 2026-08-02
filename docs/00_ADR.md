@@ -935,7 +935,7 @@ amendment.
 on success, hand the task back to `sp:next-router`, which resolves the next dispatch and re-invokes
 with `--next` still set, until the work is done or a gate stops it. The definition, stop conditions,
 hop bound, and the full shared-flag glossary live in
-`plugins/sp/skills/spur-dev/references/dev-operations.md` § Flag glossary (one entry per shared
+`plugins/sp/skills/spur-dev/references/flag-glossary.md` § Flag glossary (one entry per shared
 flag). `command-flag-parity.test.ts` was extended (task 0403) to assert every shared flag has
 exactly one glossary entry and each declaring command references it — the gate that failed silently
 under the old four-meaning regime.
@@ -959,7 +959,7 @@ This ADR composes with ADR-038 (same-change parity enforcement): ADR-038 governs
 surface; this decision governs the slash-command flag surface and adds the semantic-anchoring
 dimension ADR-038's presence-parity could not enforce.
 
-**Detail:** `plugins/sp/skills/spur-dev/references/dev-operations.md` § Flag glossary + § `--next`
+**Detail:** `plugins/sp/skills/spur-dev/references/flag-glossary.md` § Flag glossary + § `--next`
 chain contract; `plugins/sp/skills/next-router/SKILL.md` (chain progression + hop bound);
 `plugins/sp/skills/next-router/references/routing-table.md` §5 (chain semantics); feature `H8`
 (`docs/features/H8_sp-command-surface-coherence-…md`).

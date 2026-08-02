@@ -1,6 +1,6 @@
 ---
 description: Generate conventional commit message(s) from staged changes via per-file summarization, optionally commit
-argument-hint: "[--commit] [--squash] [[`--scope`](../skills/spur-dev/references/dev-operations.md#flag-scope) <path>]"
+argument-hint: "[--commit] [--squash] [[`--scope`](../skills/spur-dev/references/flag-glossary.md#flag-scope) <path>]"
 allowed-tools: ["Bash", "Read"]
 ---
 

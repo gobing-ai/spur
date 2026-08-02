@@ -1,6 +1,6 @@
 ---
 description: Refresh feature status by feature ID, task WBS, or batch sweep via spur feature sync
-argument-hint: "[<feature-id|wbs>] [--all] [--auto] [[`--agent`](../skills/spur-dev/references/dev-operations.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/dev-operations.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/dev-operations.md#flag-subprocess)]"
+argument-hint: "[<feature-id|wbs>] [--all] [--auto] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/flag-glossary.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/flag-glossary.md#flag-subprocess)]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 

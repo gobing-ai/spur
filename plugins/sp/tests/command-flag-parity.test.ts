@@ -14,7 +14,7 @@
  * rule-*, workflow-*, spur-init, …) are out of scope — they have no SSOT row
  * to parity-check against here.
  * R10/R11 (task 0403, feature H8): every flag declared in two or more command
- *     argument-hints has exactly one canonical glossary entry in dev-operations.md,
+ *     argument-hints has exactly one canonical glossary entry in flag-glossary.md,
  *     and each declaring command references that entry. Structural only — no prose
  *     comparison (R5). Residual gap accepted: a command could carry the reference
  *     AND contradict it in prose; that is not caught here, deliberately, because
@@ -27,6 +27,7 @@ import { join } from 'node:path';
 const ROOT = join(import.meta.dir, '..', '..', '..');
 const COMMANDS_DIR = join(ROOT, 'plugins', 'sp', 'commands');
 const DEV_OPS_PATH = join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'dev-operations.md');
+const GLOSSARY_PATH = join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'flag-glossary.md');
 
 // R9 — deprecated-flag ignore-list. Each entry names the command + flag + reason.
 // dev-review --next was dropped entirely in task 0401 (not deprecated) — no entry here.
@@ -170,7 +171,7 @@ describe('sp plugin — command flag parity with dev-operations.md (R8/R9, task 
     // An earlier revision asserted `<= 1`, treating a missing entry as an out-of-scope follow-up.
     // That exemption is not load-bearing: all 22 in-scope shared flags already carry exactly one
     // anchor, so the strict form matches requirement R1 as written and costs nothing today.
-    const opsRaw = readFileSync(DEV_OPS_PATH, 'utf8');
+    const opsRaw = readFileSync(GLOSSARY_PATH, 'utf8');
     function glossaryEntryCount(flag: string): number {
         const name = flag.replace(/^--/, '');
         const re = new RegExp(`\\*\\*Anchor:\\*\\* \`#flag-${name}\``, 'g');
@@ -181,15 +182,14 @@ describe('sp plugin — command flag parity with dev-operations.md (R8/R9, task 
             const count = glossaryEntryCount(flag);
             expect(
                 count,
-                `${flag} is declared by ${flagDeclaringCommands(flag).length} in-scope commands but has ${count} glossary entries in dev-operations.md; expected exactly 1. Zero means the shared flag has no canonical definition; two means the "two definitions" state this gate exists to prevent. Add or de-duplicate the "**Anchor:** \`#flag-${flag.replace(/^--/, '')}\`" entry.`,
+                `${flag} is declared by ${flagDeclaringCommands(flag).length} in-scope commands but has ${count} glossary entries in flag-glossary.md; expected exactly 1. Zero means the shared flag has no canonical definition; two means the "two definitions" state this gate exists to prevent. Add or de-duplicate the "**Anchor:** \`#flag-${flag.replace(/^--/, '')}\`" entry.`,
             ).toBe(1);
         });
     }
 
     // R2/R3: each declaring command references the glossary entry, for shared flags
     // that HAVE exactly one anchor. Reference form (task 0399): a markdown link whose
-    // visible text is `--<flag>` and whose URL contains "#flag-". Matches both same-file
-    // (#flag-x) and relative-path (path/dev-operations.md#flag-x) forms.
+    // (#flag-x) and relative-path (path/flag-glossary.md#flag-x) forms.
     function commandHasReference(commandName: string, flag: string): boolean {
         const raw = readFileSync(join(COMMANDS_DIR, `${commandName}.md`), 'utf8');
         const name = flag.replace(/^--/, '');
@@ -204,7 +204,7 @@ describe('sp plugin — command flag parity with dev-operations.md (R8/R9, task 
                 if (deprecated) return; // deprecated flags are exempt from re-documentation
                 expect(
                     commandHasReference(commandName, flag),
-                    `${commandName} declares ${flag} (shared by ≥2 in-scope commands) but does not reference its glossary entry. A command inventing its own meaning for a shared flag fails here — add a [\`${flag}\`](../skills/spur-dev/references/dev-operations.md#flag-${flag.replace(/^--/, '')}) reference.`,
+                    `${commandName} declares ${flag} (shared by ≥2 in-scope commands) but does not reference its glossary entry. A command inventing its own meaning for a shared flag fails here — add a [\`${flag}\`](../skills/spur-dev/references/flag-glossary.md#flag-${flag.replace(/^--/, '')}) reference.`,
                 ).toBe(true);
             });
         }

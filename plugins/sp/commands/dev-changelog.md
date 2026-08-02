@@ -1,6 +1,6 @@
 ---
 description: Generate changelog from git commits
-argument-hint: "[[`--since`](../skills/spur-dev/references/dev-operations.md#flag-since) <tag|commit>] [--until <tag|commit>] [--version <version>]"
+argument-hint: "[[`--since`](../skills/spur-dev/references/flag-glossary.md#flag-since) <tag|commit>] [--until <tag|commit>] [--version <version>]"
 allowed-tools: ["Bash", "Read"]
 ---
 

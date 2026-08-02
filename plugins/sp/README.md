@@ -221,7 +221,8 @@ plugins/sp/
 │   ├── spur-dev/                    # Thin planning→execution orchestration spine
 │   │   └── references/  # ac-style-guide, cross-cutting, decision-brief, dev-operations,
 │   │                      execution-batch, execution-workflow, feature-link-helper,
-│   │                      gate-checklists, glossary, planning-workflow, product-planning  (11 files)
+│   │                      flag-glossary, gate-checklists, glossary, planning-workflow,
+│   │                      product-planning  (12 files)
 │   ├── test-driven-development/                    # TDD workflow companion (SKILL.md only)
 │   ├── reverse-engineering/         # Codebase reverse engineering / HLD / audit
 │   │   ├── agents/openai.yaml

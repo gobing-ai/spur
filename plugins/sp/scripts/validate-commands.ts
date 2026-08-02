@@ -233,7 +233,7 @@ function checkTargetResolution(cmd: ParsedCommand, skillsDir: string, root: stri
         const headings = content.split('\n').filter((l) => l.startsWith('#'));
         const slugAnchors = headings.map((l) => slugify(l.replace(/^#+\s*/, '').trim()));
         // Honor explicit `**Anchor:** `#id`` directives (the glossary convention in
-        // dev-operations.md) so a shared-flag entry can expose a stable `#flag-<name>`
+        // flag-glossary.md) so a shared-flag entry can expose a stable `#flag-<name>`
         // anchor independent of its heading text.
         const explicitAnchors = [...content.matchAll(/^\*\*Anchor:\*\*\s*`#([^`]+)`/gm)].map((m) => m[1]);
         const anchors = [...slugAnchors, ...explicitAnchors];

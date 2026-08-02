@@ -354,7 +354,7 @@ describe('(c) target resolution — Skill() calls resolve to skills/', () => {
                     const content = readFileSync(resolved, 'utf8');
                     const headings = content.split('\n').filter((l) => l.startsWith('#'));
                     const slugAnchors = headings.map((l) => slugify(l.replace(/^#+\s*/, '').trim()));
-                    // Honor explicit `**Anchor:** `#id`` directives (dev-operations.md glossary).
+                    // Honor explicit `**Anchor:** `#id`` directives (flag-glossary.md glossary).
                     const explicitAnchors = [...content.matchAll(/^\*\*Anchor:\*\*\s*`#([^`]+)`/gm)].map((m) => m[1]);
                     const anchors = [...slugAnchors, ...explicitAnchors];
                     expect(anchors, `${file}: anchor #${anchor} not found in ${filePart}`).toContain(anchor);

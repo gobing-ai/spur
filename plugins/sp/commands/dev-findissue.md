@@ -1,6 +1,6 @@
 ---
 description: "Review agent session logs, identify performance bottlenecks and behavioral anti-patterns, and generate a structured task file with proposed fixes. Triggers: post-mortem, performance analysis, session review, find issues, identify bottlenecks"
-argument-hint: "[<topic>] [--sessions <glob>] [--source <auto|omp|claude|codex|gemini|opencode|antigravity|openclaw|pi>] [--feature <id>] [--template <meta|issue|standard>] [--priority <P0|P1|P2|P3>] [--severity <S0|S1|S2>] [--category <list>] [--since <iso>] [--until <iso>] [--top <n>] [--min-cost <duration>] [--strict-topic] [--use-history] [--no-task] [[`--agent`](../skills/spur-dev/references/dev-operations.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/dev-operations.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/dev-operations.md#flag-subprocess)] [--json]"
+argument-hint: "[<topic>] [--sessions <glob>] [--source <auto|omp|claude|codex|gemini|opencode|antigravity|openclaw|pi>] [--feature <id>] [--template <meta|issue|standard>] [--priority <P0|P1|P2|P3>] [--severity <S0|S1|S2>] [--category <list>] [--since <iso>] [--until <iso>] [--top <n>] [--min-cost <duration>] [--strict-topic] [--use-history] [--no-task] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/flag-glossary.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/flag-glossary.md#flag-subprocess)] [--json]"
 allowed-tools: ["Bash", "Read", "Write", "Grep", "Glob", "Skill"]
 ---
 

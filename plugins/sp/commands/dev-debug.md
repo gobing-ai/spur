@@ -1,6 +1,6 @@
 ---
 description: "Systematic debugging protocol — reproduce, isolate, diagnose root cause, apply minimal fix, and verify with regression tests"
-argument-hint: "\"<symptom | failing command>\" [--scope <path>] [--task [<wbs>]] [[`--agent`](../skills/spur-dev/references/dev-operations.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/dev-operations.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/dev-operations.md#flag-subprocess)]"
+argument-hint: "\"<symptom | failing command>\" [--scope <path>] [--task [<wbs>]] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/flag-glossary.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/flag-glossary.md#flag-subprocess)]"
 allowed-tools: ["Bash", "Read", "Write", "Skill"]
 ---
 

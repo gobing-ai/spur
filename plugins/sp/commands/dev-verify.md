@@ -1,6 +1,6 @@
 ---
 description: Verify a task against its requirements and Acceptance Criteria — traceability check producing a PASS/PARTIAL/FAIL verdict with evidence
-argument-hint: "<wbs> [[`--agent`](../skills/spur-dev/references/dev-operations.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/dev-operations.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/dev-operations.md#flag-subprocess)] [[`--fix`](../skills/spur-dev/references/dev-operations.md#flag-fix) <none|blockers-first|all>] [[`--focus`](../skills/spur-dev/references/dev-operations.md#flag-focus) <lens>] [[`--bdd`](../skills/spur-dev/references/dev-operations.md#flag-bdd)] [[`--auto`](../skills/spur-dev/references/dev-operations.md#flag-auto)] [[`--force`](../skills/spur-dev/references/dev-operations.md#flag-force)] [--next] [--skip-shippable]"
+argument-hint: "<wbs> [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/flag-glossary.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/flag-glossary.md#flag-subprocess)] [[`--fix`](../skills/spur-dev/references/flag-glossary.md#flag-fix) <none|blockers-first|all>] [[`--focus`](../skills/spur-dev/references/flag-glossary.md#flag-focus) <lens>] [[`--bdd`](../skills/spur-dev/references/flag-glossary.md#flag-bdd)] [[`--auto`](../skills/spur-dev/references/flag-glossary.md#flag-auto)] [[`--force`](../skills/spur-dev/references/flag-glossary.md#flag-force)] [--next] [--skip-shippable]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
@@ -16,7 +16,7 @@ Wraps the **sp:code-verification** skill.
 
 **Shippable readiness** (feature-level): when `--fix all` and the task has a `feature_id`, the
 skill runs `spur feature check <id>` after the per-task verdict and emits `Shippable: PASS|FAIL|N/A`.
-Default **on** with `--fix all`. Opt out only with **[`--skip-shippable`](../skills/spur-dev/references/dev-operations.md#flag-skip-shippable)** (alias `--skip-shipable`).
+Default **on** with `--fix all`. Opt out only with **[`--skip-shippable`](../skills/spur-dev/references/flag-glossary.md#flag-skip-shippable)** (alias `--skip-shipable`).
 See `sp:code-verification` § Shippable readiness gate.
 
 ## Implementation
@@ -26,7 +26,7 @@ See `sp:code-verification` § Shippable readiness gate.
 
 **Flags:**
 
-[`--next`](../skills/spur-dev/references/dev-operations.md#flag-next): chain-to-completion with
+[`--next`](../skills/spur-dev/references/flag-glossary.md#flag-next): chain-to-completion with
 propagation — on a PASS verdict, hand the task back to `sp:next-router` to advance and re-invoke
 until done or a gate stops it. The `testing → done` transition is the chain's first hop. A PARTIAL
 or FAIL verdict halts the chain (task stays `testing` as review-pending). **was: `--next` chain-ish (undefined formally).**

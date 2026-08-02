@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Extract the flag glossary out of dev-operations.md into its own reference"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: H1
@@ -12,7 +12,7 @@ priority: P2
 tags: ["sp-plugin", "skills", "spur-dev", "refactor"]
 dependencies: []
 created_at: "2026-08-01T16:36:59.760Z"
-updated_at: "2026-08-01T16:57:29.382Z"
+updated_at: "2026-08-02T00:05:43.221Z"
 ---
 
 ## 0408. Extract the flag glossary out of dev-operations.md into its own reference
@@ -111,28 +111,63 @@ While moving 281 lines it will be tempting to improve wording. Do not — R7 mak
 Splitting the operation catalog further (skill-backed 212 / inline 178) is the next natural seam if it keeps growing, but at 450 lines it is not warranted and the citation pattern argues against it. Revisit only if the catalog passes ~600 lines on its own.
 
 ### Plan
-
-- [ ] Record the baseline: `bun test plugins/sp/tests/command-flag-parity.test.ts` pass count, and `wc -l dev-operations.md`.
-- [ ] Create the new reference; move the two sections verbatim.
-- [ ] Remove them from `dev-operations.md`; confirm the remaining top-level sections are exactly the four catalog sections.
-- [ ] Rewrite the 79 anchor citations by script; confirm zero `dev-operations.md#flag-` references remain.
-- [ ] Split `DEV_OPS_PATH` into two constants in the parity test.
-- [ ] Update ADR-039 Detail, `spur-dev/SKILL.md`, and any file-level glossary citations.
-- [ ] Verify the move was verbatim (diff the extracted text against the original section).
-- [ ] Gate: parity test at or above baseline, `bun run lint`, `bun run test`, `bun run build`.
-
+- [x] Record the baseline: `bun test plugins/sp/tests/command-flag-parity.test.ts` pass count, and `wc -l dev-operations.md`.
+- [x] Create the new reference; move the two sections verbatim.
+- [x] Remove them from `dev-operations.md`; confirm the remaining top-level sections are exactly the four catalog sections.
+- [x] Rewrite the anchor citations mechanically; confirm zero `dev-operations.md#flag-` references remain.
+- [x] Split `DEV_OPS_PATH` into two constants in the parity test.
+- [x] Update ADR-039 Detail, `spur-dev/SKILL.md`, and file-level glossary citations.
+- [x] Verify the move was verbatim against the pre-change section.
+- [x] Gate: parity test at or above baseline, `bun run lint`, `bun run test`, `bun run test-cf`, and `bun run build`.
 ### Solution
+| File | Change |
+| --- | --- |
+| `plugins/sp/skills/spur-dev/references/flag-glossary.md:1` | Adds the reference wrapper around the verbatim glossary and `--next` chain sections. |
+| `plugins/sp/skills/spur-dev/references/dev-operations.md:14` | Leaves the four operation-catalog sections together and removes glossary-only content. |
+| `plugins/sp/commands/*.md` | Mechanically repoints all 134 command flag anchors to `flag-glossary.md` without changing anchor names. |
+| `plugins/sp/tests/command-flag-parity.test.ts:29` | Separates operation-table and glossary paths; parity assertions read the owning reference. |
+| `docs/00_ADR.md:937` | Repoints ADR-039's canonical glossary location. |
+| `plugins/sp/skills/spur-dev/SKILL.md:175` | Adds the extracted reference to the spine's reference map. |
+| `plugins/sp/README.md:221` and affected plugin fixtures | Updates the documented reference inventory and path-sensitive contract fixtures. |
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-
+The task's cited count of 79 links was stale at implementation time: the mechanical HEAD baseline and working-tree result are both 134, with zero old-path command links remaining.
 ### Testing
+Verdict: **PASS**
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `plugins/sp/skills/spur-dev/references/flag-glossary.md:16`, `plugins/sp/skills/spur-dev/references/flag-glossary.md:282`; old sections absent from `plugins/sp/skills/spur-dev/references/dev-operations.md` |
+| R2 | MET | Both sections remain together in `plugins/sp/skills/spur-dev/references/flag-glossary.md:16` and `:282` |
+| R3 | MET | Mechanical count: HEAD had 134 `dev-operations.md#flag-*` links; working tree has 134 `flag-glossary.md#flag-*` links and zero old-path command links |
+| R4 | MET | `plugins/sp/skills/spur-dev/references/dev-operations.md:14`, `:52`, `:76`, `:289` retain the four catalog sections in one file |
+| R5 | MET | `plugins/sp/tests/command-flag-parity.test.ts:29-30`, `:174` split operation-table and glossary ownership |
+| R6 | MET | `docs/00_ADR.md:937-962`; `plugins/sp/skills/spur-dev/SKILL.md:175-178` |
+| R7 | MET | `diff` of HEAD's extracted sections against the new file found no content changes (only the final blank line at the file boundary) |
+| R8 | MET | `bun test plugins/sp/tests/command-flag-parity.test.ts`: 166 pass, 0 fail; 134 command anchor targets preserve `#flag-*` |
 
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| Scenario: The glossary lives in its own reference | MET | command | Top-level heading scan shows glossary + chain only in `flag-glossary.md`; absent from `dev-operations.md` |
+| Scenario: The operation catalog is left whole | MET | command | Heading scan shows all four required sections remain in `dev-operations.md` |
+| Scenario: Every command link resolves to the new location | MET | test | `bun test plugins/sp/tests/command-flag-parity.test.ts`: 166 pass, 0 fail |
+| Scenario: The move is verbatim | MET | command | Baseline-vs-working-tree section diff had no content delta |
+| Scenario: Location pointers are updated | MET | static-ref | `docs/00_ADR.md:937-962`; `plugins/sp/skills/spur-dev/SKILL.md:175-178` |
+| Scenario: The repository stays green | MET | command | `bun run autofix && bun run spur-check`, `bun run lint`, `bun run test-cf`, and `bun run build` exited 0; no skipped-test rule violations |
+
+Checks: parity 166/166; recommended Spur rules 42/42; lint/typecheck PASS; full test chain PASS; Cloudflare test 1/1; build PASS.
+
+Coverage: N/A (documentation/reference relocation; no runtime code path added).
 ### Review
+| Priority | Finding | Disposition |
+| --- | --- | --- |
+| P1 | None | No security or data-loss risk; documentation/reference-only relocation. |
+| P2 | None | All 134 baseline command anchors resolve through the parity gate. |
+| P3 | None | Operation catalog remains cohesive; glossary and chain contract remain together. |
+| P4 | None | No advisory cleanup required before commit. |
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Residual risk: future manual command links remain guarded by `command-flag-parity.test.ts`.
 
+Disposition: PASS.
 ### References
 
 H1
@@ -140,3 +175,6 @@ H1
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+- 2026-08-02T00:04:58.088Z todo → wip (system)
+- 2026-08-02T00:05:13.747Z wip → testing (system)
+- 2026-08-02T00:05:43.221Z testing → done (system)
