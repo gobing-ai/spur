@@ -264,10 +264,12 @@ function runSpurJson(spurBin: string, args: string[]): SpawnResult {
     const binParts = spurBin.split(/\s+/).filter(Boolean);
     const cmd = binParts[0] ?? 'spur';
     const cmdArgs = [...binParts.slice(1), ...args];
-    const r = Bun.spawnSync({ cmd: [cmd, ...cmdArgs], stdout: 'string', stderr: 'string' });
+    const r = Bun.spawnSync({ cmd: [cmd, ...cmdArgs], stdio: ['ignore', 'pipe', 'pipe'] });
+    const decode = (b: unknown): string =>
+        typeof b === 'string' ? b : Buffer.from((b as Uint8Array) ?? []).toString('utf8');
     return {
-        stdout: (r.stdout as string) ?? '',
-        stderr: (r.stderr as string) ?? '',
+        stdout: decode(r.stdout),
+        stderr: decode(r.stderr),
         exitCode: r.exitCode ?? 0,
         ok: (r.exitCode ?? 0) === 0,
     };
