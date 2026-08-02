@@ -172,7 +172,10 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
                     c.includes('--transition testing'),
             ),
         ).toBe(true);
-        expect(cmds.some((c) => c.includes('feature sync'))).toBe(true);
+        // The post-record hop must still sync feature status, but the mechanism is free: task 0411
+        // routes it through `feature-sync-bounded.ts`, which wraps `spur feature sync --json` with
+        // retry suppression. Assert the intent (a feature-sync hop exists), not one spelling.
+        expect(cmds.some((c) => c.includes('feature sync') || c.includes('feature-sync-bounded'))).toBe(true);
     });
 
     test('R3: status transitions go through the normal verb (`spur task update <wbs> <status>`)', () => {

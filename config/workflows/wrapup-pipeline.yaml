@@ -117,13 +117,14 @@ states:
 
   - id: feature-transition
     description: >
-      If vars.feature is set, derive and sync feature status with linked task states via
-      `spur feature sync` (task 0328 / ADR-0322).
-      Replaces prior unconditional `spur feature advance` with conservative status sync.
+      If vars.feature is set, derive and sync feature status with linked task states via the
+      bounded `feature-sync-bounded` wrapper (task 0328 / ADR-0322, task 0411 retry-suppression).
+      Replaces prior unconditional `spur feature advance` with conservative status sync that
+      suppresses identical blocked retries until relevant inputs change.
     onEnter:
       - kind: shell
         options:
-          command: '${vars.spurBin} feature sync ${vars.feature} --json'
+          command: 'bun plugins/sp/scripts/feature-sync-bounded.ts ${vars.feature} --spur-bin "${vars.spurBin}" --json'
 
   - id: branch-cleanup
     description: >
