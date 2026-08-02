@@ -642,6 +642,12 @@ export function formatTraceTimeline(result: WorkflowTraceTimeline): string {
         `Started: ${run.startedAt}   Completed: ${run.completedAt ?? '-'}   Events: ${events.length}`,
         '',
     ];
+    // Per-run agent-output capture (task 0414): point the operator at the live
+    // artifact so a long-running agent.run step is observable mid-flight.
+    if (result.outputArtifact !== undefined) {
+        lines.push(`Agent output: ${result.outputArtifact} (tail -f for live view)`);
+        lines.push('');
+    }
     for (const event of events) {
         lines.push(formatTimelineEvent(event));
     }

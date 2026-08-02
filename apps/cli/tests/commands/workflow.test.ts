@@ -1138,6 +1138,35 @@ describe('formatTraceTimeline cost footer', () => {
     });
 });
 
+describe('formatTraceTimeline output artifact (task 0414)', () => {
+    function makeTimeline(overrides: Partial<WorkflowTraceTimeline> = {}): WorkflowTraceTimeline {
+        return {
+            run: {
+                runId: 'r1',
+                workflowName: 'wf',
+                mode: 'sync',
+                status: 'running',
+                startedAt: '2026-01-15T10:00:00.000Z',
+                completedAt: null,
+                isDryRun: false,
+            },
+            events: [],
+            ...overrides,
+        };
+    }
+
+    test('points the operator at the live output artifact when present', () => {
+        const out = formatTraceTimeline(makeTimeline({ outputArtifact: '.spur/run/r1-output.log' }));
+        expect(out).toContain('Agent output: .spur/run/r1-output.log');
+        expect(out).toContain('tail -f');
+    });
+
+    test('omits the artifact line when no capture exists', () => {
+        const out = formatTraceTimeline(makeTimeline());
+        expect(out).not.toContain('Agent output');
+    });
+});
+
 describe('followTrace', () => {
     test('replays persisted events, emits action updates, and stops at terminal status', async () => {
         const running: WorkflowTraceTimeline = {
