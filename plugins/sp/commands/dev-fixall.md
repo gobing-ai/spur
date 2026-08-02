@@ -14,7 +14,7 @@ Implements an inline procedure — see [dev-operations.md](../skills/spur-dev/re
 | --- | --- | --- |
 | `[<validation-command>]` | Validation command to iterate against. | project gate |
 | `--max-retry` `<n>` | Max fix iterations. | 3 |
-| `--scope` `<path>` | Scope fixes to a path. | cwd |
+| `--scope` `<path>` | Scope fixes to a path. | entire working tree |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 

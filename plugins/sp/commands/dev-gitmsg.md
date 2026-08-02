@@ -14,7 +14,7 @@ Implements an inline procedure — see [dev-operations.md](../skills/spur-dev/re
 | --- | --- | --- |
 | `--commit` | Stage and commit with the generated message. | off |
 | `--squash` | Squash staged changes into one commit. | off |
-| `--scope` `<path>` | Scope the diff to a path. | cwd |
+| `--scope` `<path>` | Scope the diff to a path. | all staged changes |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 

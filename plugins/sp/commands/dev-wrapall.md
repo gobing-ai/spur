@@ -14,7 +14,7 @@ Wraps the **wrapup-pipeline.yaml** workflow.
 | --- | --- | --- |
 | `--since` `<iso-date>` | Wrap tasks completed since a date. | configured |
 | `--feature` `<id>` | Wrap tasks in a feature. | omitted |
-| `--status` `<s>` | Only wrap tasks in a status. | omitted |
+| `--status` `<s>` | Only wrap tasks in a status. | done |
 | `--auto` | Skip objective HITL gates. | off |
 | `--merge` | Merge wrap branches. | off |
 | `--dry-run` | Render wraps without writing. | off |

@@ -20,7 +20,7 @@ operation, applied to a resolved set (typically every task under a feature).
 | `--agent` `<inline\|auto\|name>` | Who runs the model-bearing refinement. | inline |
 | `--auto` | Skip objective HITL gates. | off |
 | `--keep-going` | Continue past per-task failures. | off |
-| `--status` `<s>` | Only refine tasks in a status. | omitted |
+| `--status` `<s>` | Only refine tasks in a status. | backlog,todo |
 | `--json` | Emit structured JSON. | off |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
