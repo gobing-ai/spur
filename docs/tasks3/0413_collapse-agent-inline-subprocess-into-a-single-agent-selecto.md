@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-08-02T05:51:07.703Z"
-updated_at: "2026-08-02T07:28:33.542Z"
+updated_at: "2026-08-02T20:42:30.612Z"
 ---
 
 ## 0413. Collapse --agent/--inline/--subprocess into a single --agent selector with inline as the default value
@@ -81,51 +81,51 @@ dropped silently.
 `agent.executors` config block but **never tested thoroughly** — the operator flagged this directly.
 It becomes load-bearing under the collapse, so it needs real coverage before the aliases are removed.
 ### Requirements
-- **R1 — One flag, one decision.** Replace the triple with `--agent <inline|auto|<agent>|<executor>>`
+- R1 — **One flag, one decision.** Replace the triple with `--agent <inline|auto|<agent>|<executor>>`
   on all 19 declaring commands. Default (flag omitted) is `inline`. No command declares `--inline` or
   `--subprocess` as canonical syntax. (H82 R1)
 
-- **R2 — Total, unambiguous value semantics.** `--agent <value>` names *who* does the model-bearing
+- R2 — **Total, unambiguous value semantics.** `--agent <value>` names *who* does the model-bearing
   work; the surface is **derived**, never declared separately. `inline` → current session.
   `auto` → subprocess with a tier-resolved executor. `<name>` → inline when it resolves to the current
   session's agent, subprocess otherwise. Every surface that states this must state it identically.
   *(Amended 2026-08-02: originally required `<name>` to dispatch unconditionally. Under the derived-
   surface rule, naming the agent you are already running means it already does the work — inline is
   the correct implementation of identical semantics, not an exception.)* (H82 R2)
-- **R3 — Objective triggers still win.** The four named escalation triggers continue to force
+- R3 — **Objective triggers still win.** The four named escalation triggers continue to force
   subprocess even under `--agent inline`, and the applied trigger is named in the dispatch or result.
   Operator preference never suppresses a machine-detected requirement. (H82 R3)
 
-- **R4 — Reserve the sentinel values.** `inline` and `auto` become reserved executor names; agent
+- R4 — **Reserve the sentinel values.** `inline` and `auto` become reserved executor names; agent
   config validation rejects an executor claiming either, naming the reserved value and the offending
   entry. (H82 R4)
 
-- **R5 — Removed spellings stay discoverable.** The flag glossary retains `#flag-inline` and
+- R5 — **Removed spellings stay discoverable.** The flag glossary retains `#flag-inline` and
   `#flag-subprocess` as stubs naming `--agent` as the replacement; neither spelling appears in any
   canonical hint or command body. *(Amended 2026-08-02: originally required a parse-time deprecation
   warning. These were never CLI-parsed — they are prompt text, so there is no parser to warn from.
   Glossary stubs are the deprecation surface a prompt contract actually has; alias prose across 19
   files would be an unenforceable, untestable warning.)* (H82 R5)
-- **R6 — Dissolve the pipeline carve-out into the general rule.** On `dev-run` / `dev-runall`,
+- R6 — **Dissolve the pipeline carve-out into the general rule.** On `dev-run` / `dev-runall`,
   `--agent` addresses the stages that do the model-bearing work (via `vars.agent`), and the contract
   presents that as the general rule applied — not as an exception or "carve-out". The ADR records why
   dissolving beats deleting. *(Amended 2026-08-02: "remove the carve-out" was wrong — deleting it
   would make `--agent` select an executor for an orchestrator loop that runs no prompts.)* (H82 R6)
-- **R7 — Reconcile the contradiction as part of the change.** `cross-cutting.md` and the flag
+- R7 — **Reconcile the contradiction as part of the change.** `cross-cutting.md` and the flag
   glossary must state identical `--agent auto` behavior, with one designated authority and the other
   referencing it. (H82 R7)
 
-- **R8 — Prove executor-name resolution.** `--agent <executor-name>` selects that profile's declared
+- R8 — **Prove executor-name resolution.** `--agent <executor-name>` selects that profile's declared
   agent and model under test (executor-only, agent-only, and both-name cases); an unknown name fails
   with a diagnostic listing available executors. *(Amended 2026-08-02: dropped "and tier" — tier does
   not participate in explicit-selector resolution; it governs `auto` and escalation, which R9 owns.)*
   (H82 R8)
-- **R9 — Verify tier resolution end to end.** `--agent auto` selects the cheapest eligible executor
+- R9 — **Verify tier resolution end to end.** `--agent auto` selects the cheapest eligible executor
   at or above `min_tier`, escalates along the declared `fallback` on objective failure, and reports
   every executor tried on exhaustion. Tune per-stage floors if evidence warrants; do not redesign the
   mechanism. (H82 R9)
 
-- **R10 — Land the surface and its documentation together.** Command validation, lint, tests, and
+- R10 — **Land the surface and its documentation together.** Command validation, lint, tests, and
   build pass; ADR, cross-cutting contract, glossary, and affected backing skills agree with the
   shipped command files. (H82 R10)
 ### Acceptance Criteria
@@ -175,6 +175,41 @@ in the H82 scenario comments. Amendments are recorded, not silent.
 - [x] `bun test plugins/sp + packages/app + packages/config` → 1826 pass, 11 fail; all 11 are `project-start` / `ProjectRegistry` port-binding sandbox denials matching the environmental baseline, none on this task's surface.
 - [x] Post-change inventory recorded for task 0412: the `--agent`/`--inline`/`--subprocess` triple is now one row, and 0412's Phase 0 re-derives the full count rather than trusting the pre-0413 baseline.
 - [x] `superskill install sp --targets codex --dry-run --verbose` → clean; no frontmatter or Markdown-contract error on any of the 19 changed wrappers. Generated adapters remain uncommitted (`[DRY-RUN] No files were written to install targets`).
+
+**H82 scenario coverage (DD-09)**
+
+Explicit title-aligned coverage rows for feature H82's R1–R10. The substance and evidence are the
+grouped rows above; these rows exist so DD-09 normalized-title matching can link each feature
+scenario to its covering task. Added 2026-08-02 during the `/sp:dev-verify 0415` shippable pass —
+no new work is claimed here, only the mapping that was previously implicit.
+
+- [x] R1 — One flag expresses the execution-surface decision
+    - `--agent` **19**, `--inline` **0**, `--subprocess` **0** across the declaring commands.
+- [x] R2 — Each value resolves to one surface and one executor
+    - `inline` → current session; `auto` → tier-resolved subprocess; `<name>` → inline when it is the
+      current session's agent, subprocess otherwise. Surface derived from one value, never two.
+- [x] R3 — Objective escalation still overrides the operator
+    - All four triggers present in the trigger table; asserted at
+      `plugins/sp/tests/inline-execution-contract.test.ts:69-90`.
+- [x] R4 — Reserved values cannot be shadowed by configuration
+    - `packages/config/src/index.ts:324-336`, two negative fixtures in `packages/config/tests/loader.test.ts`.
+- [x] R5 — Removed spellings stay discoverable
+    - `#flag-inline` / `#flag-subprocess` retained as redirect stubs; neither spelling appears in any
+      canonical argument hint or command body.
+- [x] R6 — The pipeline carve-out is dissolved into the general rule
+    - `dev-run` / `dev-runall` propagate via `vars.agent`; zero exception-framing occurrences remain.
+- [x] R7 — The documented auto contradiction is resolved
+    - `cross-cutting.md` and `flag-glossary.md` state identical `auto` behavior; mechanically gated by
+      `plugins/sp/scripts/validate-flag-contracts.ts` C3a (task 0415).
+- [x] R8 — Executor-name resolution is proven, not assumed
+    - `packages/app/tests/services/agent-service.test.ts:1811,1821,1832`; unknown-name diagnostic at
+      `packages/app/src/services/agent-service.ts:1007-1019`.
+- [x] R9 — Tier-based auto resolution is verified end to end
+    - Cheapest eligible executor at or above `min_tier`, sub-tier ordering respected; escalation and
+      chain-exhaustion reporting covered in `packages/app/tests/services/agent-service.test.ts`.
+- [x] R10 — Surface and gates stay green
+    - `validate-commands.ts --json` → 0 violations / 34 files; lint clean; build clean; full-suite
+      failures confined to the environmental port-binding baseline.
 ### Q&A
 
 <!-- Clarifications and decisions made during refinement. Keep empty if none. -->
@@ -322,7 +357,7 @@ Ordered within one release. All phases complete; Phase 1 findings changed what P
 - **R8 — unknown-name diagnostic (`packages/app/src/services/agent-service.ts:1006-1018`):** `resolveExecutorSelector()` lists available executors in its error message. Tests: `packages/app/tests/services/agent-service.test.ts`.
 - **R1/R2/R6 — 19 command files (`plugins/sp/commands/dev-*.md`):** argument-hints and usage blocks changed from `[[--agent](...#flag-agent) <name|auto>] [[--inline](...#flag-inline)|[--subprocess](...#flag-subprocess)]` to `[[--agent](...#flag-agent) <inline|auto|name>]`. All local flag prose updated. ~~The pipeline-wrapper carve-out is removed from `dev-run` and `dev-runall`.~~ **FALSE (verifier, R6):** both files still carry `vars.agent` carve-out prose; the carve-out was retained, not removed.
 - **Surface docs (`plugins/sp/skills/spur-dev/references/dev-operations.md`):** 11 table rows + 8 prose patterns (A/A2/B/B2/C/D) + L124 + L226 complex paragraphs rewritten.
-- **R7 — cross-cutting contract (`plugins/sp/skills/spur-dev/references/cross-cutting.md:19-109`):** entire "Inline-default execution surface" section rewritten — new single-selector subsection with value table; three-step positive resolution order (escalation trigger → `--agent auto`/`--agent <name>` → `--agent inline`/omitted); single-hop strip rule; ~~pipeline-wrapper carve-out removed~~ **FALSE (verifier, R6):** the `**Pipeline-wrapper carve-out:**` paragraph is still present in `cross-cutting.md`, and `inline-execution-contract.test.ts:145` *asserts* it must be — the test enforces the opposite of this claim; explicit-subprocess and inline-trade-off sections preserved.
+- **R7 — cross-cutting contract (`plugins/sp/skills/spur-dev/references/cross-cutting.md:19-109`):** entire "Inline-default execution surface" section rewritten — new single-selector subsection with value table; three-step positive resolution order (escalation trigger → `--agent auto`/`--agent <name>` → `--agent inline`/omitted); single-hop strip rule; ~~pipeline-wrapper carve-out removed~~ **FALSE (verifier, R6):** the `**Pipeline-wrapper carve-out:**` paragraph is still present in `cross-cutting.md`, and `plugins/sp/tests/inline-execution-contract.test.ts:145` (as of 0413; that pin was removed by task 0415) *asserts* it must be — the test enforces the opposite of this claim; explicit-subprocess and inline-trade-off sections preserved.
 - **R7 — flag glossary (`plugins/sp/skills/spur-dev/references/flag-glossary.md:38-72`):** `--agent`, `--inline`, `--subprocess` merged into one `#flag-agent` entry with a value table. `#flag-inline` and `#flag-subprocess` retained as redirect stubs so existing deep links resolve.
 - **Skill references:** `code-verification/SKILL.md` (verify + review flag sections), `brainstorm/SKILL.md` (delegate-research execution surface), `next-router/SKILL.md` (inputs table) — all updated to the unified selector.
 - **R10 — ADR-041 (`docs/00_ADR.md:1022-1067`):** records the collapse, the reserved words, and why ~~the carve-out removal, the lost combination (orchestrator out-of-process, stages on executor X) with its workaround (`spur agent run` wrap)~~ **FALSE (verifier, R6):** ADR-041 contains zero mentions of the carve-out, the lost combination, or a wrap workaround. Also documents why the inline default is a prompt-runtime rule, not an `AgentService` branch.
