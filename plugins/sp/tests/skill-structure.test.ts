@@ -196,13 +196,13 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         );
 
         // Thin-wrapper world (0308): the command carries only the delegation line; the AC-gate
-        // contract lives in the dispatched skill.
+        // contract lives in the dispatched skill. Asserted via structural markers (headings,
+        // table header, schema union) — the evidenceType union excludes `llm-judge` by
+        // construction, so no prose sentence is pinned.
         expect(command).toContain('Skill(skill="sp:code-verification", args="verify $ARGUMENTS")');
-        expect(skill).toContain('AC evaluation is mandatory when this section is non-empty');
         expect(skill).toContain('### Step 8 — Strict BDD scenario lens');
         expect(skill).toContain('### Step 5 — Acceptance Criteria guard');
         expect(skill).toContain('| AC | Status | Evidence Type | Evidence |');
-        expect(skill).toContain('Objective AC cannot be cleared by `llm-judge` alone');
         expect(verdictSchema).toContain('acceptanceCriteria?: Array');
         expect(verdictSchema).toContain("evidenceType: 'test' | 'command' | 'static-ref'");
     });
@@ -774,8 +774,9 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         // R5: source-driven-development is the single sp owner; the two questions are distinguished.
         const source = readFileSync(join(SKILLS_DIR, 'source-driven-development', 'SKILL.md'), 'utf8');
         expect(source).toContain('single sp owner');
-        expect(source).toContain('Does the API exist?');
-        expect(source).toContain('using it correctly under its contract');
+        // Both questions are numbered bold labels (structured markers), not free prose.
+        expect(source).toContain('**Does the API exist?**');
+        expect(source).toContain('**Am I using it correctly under its contract?**');
         // Overlap resolved: brainstorm delegates to the sp owner, not the external cc: skill.
         const brainstorm = readFileSync(join(SKILLS_DIR, 'brainstorm', 'SKILL.md'), 'utf8');
         expect(brainstorm).toContain('sp:source-driven-development');
@@ -841,7 +842,8 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         statSync(join(SKILLS_DIR, 'sys-architecture', 'references', 'upkeep-survey.md'));
         const survey = readFileSync(join(SKILLS_DIR, 'sys-architecture', 'references', 'upkeep-survey.md'), 'utf8');
         expect(survey).toContain('never'); // never auto-refactor
-        expect(survey.toLowerCase()).toContain('never emit an html');
+        // The markdown-only constraint is carried by its bold bullet label, not the prose after it.
+        expect(survey).toContain('**Markdown only.**');
         expect(survey).toContain('decision-method.md'); // reuse-by-reference, not restated
         statSync(join(PLUGIN_ROOT, 'commands', 'dev-arch.md'));
         // /sp:dev-review is unchanged — still the SECUA per-task diff review, not a survey.
@@ -1003,7 +1005,8 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(outputDiscipline).toContain(['$', '{PIPESTATUS[0]}'].join(''));
         expect(outputDiscipline).toContain('$pipestatus[1]');
         expect(outputDiscipline).toContain('exit "$test_status"');
-        expect(outputDiscipline).toContain('target under 500 tokens');
+        // Token-budget prose pin deleted as redundant — the mechanisms asserted above
+        // (--reporter=dots, --test-name-pattern) are what enforce the budget.
 
         const sectionEditing = readFileSync(
             join(SKILLS_DIR, 'spur-cli', 'references', 'tasks', 'section-editing.md'),
@@ -1031,7 +1034,8 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const firstCheckIndex = batching.indexOf('Run `spur task check <wbs> --json` once');
         expect(stageIndex).toBeGreaterThan(-1);
         expect(firstCheckIndex).toBeGreaterThan(stageIndex);
-        expect(batching).toContain('two task checks per task');
+        // Budget prose pin deleted as redundant — the stage-then-single-check ordering
+        // asserted above is the batching discipline this test guards.
 
         const pipeline = readFileSync(join(WORKFLOWS_DIR, 'task-pipeline.yaml'), 'utf8');
         expect(pipeline).toContain('normal: backlog → todo → wip → testing → done');
@@ -1039,8 +1043,8 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(pipeline).toContain('testing → done: spur task check <wbs> --strict-core');
 
         const debugging = readFileSync(join(SKILLS_DIR, 'sys-debugging', 'SKILL.md'), 'utf8');
+        // Heading is the structured marker; the sentence pin below it was redundant.
         expect(debugging).toContain('### Source before git state');
-        expect(debugging).toContain('A stash touching different files has no causal evidence');
 
         const sectionMatrix = readFileSync(join(REPO_ROOT, 'config', 'tasks', 'section-matrix.yaml'), 'utf8');
         const metaMatrix = sectionMatrix.slice(

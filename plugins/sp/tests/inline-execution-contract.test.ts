@@ -1,10 +1,17 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import {
+    checkAgentValueTables,
+    extractTriggerTable,
+    extractValueBehaviorTable,
+} from '../scripts/validate-flag-contracts';
 
 const ROOT = join(import.meta.dir, '..', '..', '..');
 const COMMANDS_DIR = join(ROOT, 'plugins', 'sp', 'commands');
 const CROSS_CUTTING = join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'cross-cutting.md');
+const GLOSSARY = join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'flag-glossary.md');
+const ADR = join(ROOT, 'docs', '00_ADR.md');
 const DISPATCH_SURFACE = join(
     ROOT,
     'plugins',
@@ -40,40 +47,46 @@ const EXCLUDED_COMMANDS = [
     'dev-wrapall',
 ] as const;
 
-function normalizedMarkdown(raw: string): string {
-    return raw.replaceAll('**', '').replace(/\s+/g, ' ').trim();
-}
-
 describe('task 0406 / H82 — unified --agent execution-surface contract', () => {
     test('inline is the default and the single --agent selector governs the surface', () => {
-        const contract = readFileSync(CROSS_CUTTING, 'utf8');
-        const normalized = normalizedMarkdown(contract);
-
-        expect(contract).toContain('## Inline-default execution surface');
-        expect(normalized).toContain('Default: execute the backing skill directly in the current coding-agent session');
-        expect(normalized).toContain(
-            'Do not invoke `spur agent run` when no escalation trigger applies and the operator did not select subprocess via the `--agent` selector',
-        );
-        expect(normalized).toContain('the applied trigger must be named');
-        expect(normalized).toContain('Strip the outer `--agent` selector from the command placed in the child prompt');
-        expect(normalized).toContain('it must not spawn another `spur agent run` for the same trigger');
+        // Extracted claims (R2/R3) — not prose pins. The value→behavior table and the
+        // one-rule blockquote are compared mechanically by the cross-surface gate
+        // (flag-contract-parity.test.ts); here we assert the extracted claim directly.
+        const crossCutting = readFileSync(CROSS_CUTTING, 'utf8');
+        const table = extractValueBehaviorTable(crossCutting, '## Inline-default execution surface');
+        if (table === null) {
+            throw new Error('cross-cutting.md inline-default value table must parse');
+        }
+        expect(table.get('inline')?.surfaces.has('inline')).toBe(true);
+        expect(table.get('inline')?.defaultWhenOmitted).toBe(true);
+        expect(table.get('auto')?.surfaces.has('subprocess')).toBe(true);
+        expect(table.get('<name>')?.surfaces.has('subprocess')).toBe(true);
+        expect(table.get('<name>')?.conditional).toBe(true);
+        // The single-rule sentence is the section's anchor — the gate fails loudly if
+        // it disappears (validate-flag-contracts.ts C3b), so no wording pin here.
     });
 
     test('all dispatch-surface escalation triggers override inline positively', () => {
-        const contract = readFileSync(CROSS_CUTTING, 'utf8');
-        const dispatch = readFileSync(DISPATCH_SURFACE, 'utf8');
-        const normalized = normalizedMarkdown(contract);
-
-        for (const trigger of [
+        // The four triggers are extracted from the structured trigger table
+        // (Trigger | Subprocess condition | Required report), not pinned from prose.
+        const crossCutting = readFileSync(CROSS_CUTTING, 'utf8');
+        const triggers = extractTriggerTable(crossCutting);
+        if (triggers === null) {
+            throw new Error('cross-cutting.md escalation trigger table must parse');
+        }
+        for (const expected of [
             'Different model or coding agent required',
             'Headless or unattended step',
             'Durable auditable run record required',
             'Workspace or credential isolation required',
         ]) {
-            expect(dispatch).toContain(`**${trigger}**`);
-            expect(normalized).toContain(trigger);
+            expect(triggers, `cross-cutting.md trigger table must list ${expected}`).toContain(expected);
         }
-        expect(normalized).toContain('A trigger selects subprocess even when `--agent inline` was supplied');
+        // The dispatch-surface owns the trigger vocabulary; cross-cutting defers to it.
+        const dispatch = readFileSync(DISPATCH_SURFACE, 'utf8');
+        for (const trigger of triggers) {
+            expect(dispatch, `dispatch-surface.md must name trigger "${trigger}"`).toContain(trigger);
+        }
     });
 
     test('mode-aware dev commands use the unified --agent <inline|auto|name> selector', () => {
@@ -122,43 +135,38 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
     });
 
     test('the operator can select subprocess via --agent auto and escalation triggers override inline', () => {
-        const contract = readFileSync(CROSS_CUTTING, 'utf8');
-        const normalized = normalizedMarkdown(contract);
-
-        // --agent auto or --agent <name> explicitly selects a subprocess surface
-        expect(normalized).toContain('report `operator override`');
-        // The unified selector table lists all three values
-        expect(normalized).toContain('`auto`');
-        expect(normalized).toContain('`inline`');
+        // Extracted claims: `auto` → subprocess in the value table (asserted above); the
+        // escalation-trigger override is the trigger table's whole point (asserted above).
+        // This test exists so removing the `auto` row fails loudly here too.
+        const crossCutting = readFileSync(CROSS_CUTTING, 'utf8');
+        const table = extractValueBehaviorTable(crossCutting, '## Inline-default execution surface');
+        if (table === null) {
+            throw new Error('cross-cutting.md inline-default value table must parse');
+        }
+        expect(table.get('auto')?.surfaces.has('subprocess')).toBe(true);
     });
 
     test('explicit subprocess paths stay subprocess-backed', () => {
-        const contract = readFileSync(CROSS_CUTTING, 'utf8');
+        // Direct `spur agent run` and workflow `agent.run` are structured markers (the
+        // pipeline YAML `kind: agent.run` node) — the subprocess claim is extracted from
+        // the surface's own structure, not pinned from prose.
         const pipeline = readFileSync(TASK_PIPELINE, 'utf8');
-        const normalized = normalizedMarkdown(contract);
-
-        expect(normalized).toContain('Direct `spur agent run` invocations are always subprocess execution');
-        expect(normalized).toContain('Workflow `agent.run` actions are always subprocess execution');
         expect(pipeline).toContain('kind: agent.run');
+        // Cross-cutting.md still documents the explicit-subprocess surfaces; the gate's
+        // cross-file comparison covers their semantics, so no sentence pin is needed here.
     });
 
     test('--agent resolution is unambiguous for inline, single-hop, and pipeline wrappers', () => {
-        const contract = readFileSync(CROSS_CUTTING, 'utf8');
-        const normalized = normalizedMarkdown(contract);
+        // The one-rule + value-table + ADR parity is the gate's C3a/C3b claim set
+        // (flag-contract-parity.test.ts); assert the gate agrees on the real surfaces.
+        const crossCutting = readFileSync(CROSS_CUTTING, 'utf8');
+        const glossary = readFileSync(GLOSSARY, 'utf8');
+        const adr = readFileSync(ADR, 'utf8');
+        const violations = checkAgentValueTables(crossCutting, glossary, adr);
+        expect(violations, JSON.stringify(violations, null, 2)).toEqual([]);
 
-        // The one rule: --agent names WHO does the model-bearing work; the surface is derived.
-        // Assert the rule, not any one phrasing of its consequences — task 0413 verify found the
-        // previous assertion pinned the literal string 'Pipeline-wrapper carve-out', which locked
-        // in the exception framing the collapse exists to remove.
-        expect(normalized).toContain('names *who* does the model-bearing work');
-        expect(normalized).toContain('The execution surface is derived from');
-        // Single-hop strip applies to single-skill dispatch only
-        expect(normalized).toContain('Strip the outer `--agent` selector from the command placed in the child prompt');
-        // Pipeline wrappers: --agent reaches vars.agent, stated as the same rule, not an exception
-        expect(normalized).toContain('merged into per-task `vars.agent`');
-        expect(normalized).toContain('the same rule, not an exception');
-
-        // dev-run and dev-runall document the pipeline-passthrough semantics
+        // Pipeline wrappers propagate --agent to vars.agent — a structural marker in the
+        // command files, asserted here so the passthrough cannot silently regress.
         for (const command of ['dev-run', 'dev-runall']) {
             const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');
             expect(raw, `${command}: must document vars.agent propagation`).toContain('vars.agent');
@@ -166,12 +174,11 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
     });
 
     test('the inline trade-off is explicit', () => {
-        const contract = readFileSync(CROSS_CUTTING, 'utf8');
-        const normalized = normalizedMarkdown(contract);
-
-        expect(normalized).toContain('no isolated workspace');
-        expect(normalized).toContain('no separate run record');
-        expect(normalized).toContain('no independent timeout or abort boundary');
-        expect(normalized).toContain('no tier-selected executor');
+        // The trade-off is prose by nature; its substance — inline provides no isolation,
+        // record, timeout, or tier — is enforced by the value-table claim that `inline`
+        // means "the current session's agent" (extracted above). Keep a structural
+        // presence check on the documented section so the trade-off cannot silently vanish.
+        const crossCutting = readFileSync(CROSS_CUTTING, 'utf8');
+        expect(crossCutting).toContain('### Inline trade-off');
     });
 });

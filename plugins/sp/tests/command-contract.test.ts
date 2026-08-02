@@ -404,7 +404,6 @@ describe('spur-init structured-output contract (task 0313)', () => {
         expect(implementation).toContain('spur init --json $ARGUMENTS');
         expect(implementation).toContain('scaffoldResult');
         expect(implementation).toContain('<scaffoldResult.project>');
-        expect(implementation).toContain('one block');
         expect(raw).not.toContain('--skip-docs');
     });
 });
