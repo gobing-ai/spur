@@ -280,6 +280,14 @@ export function resolveExecutor(
     throw new Error(`Unknown executor or agent reference: "${name}"`);
 }
 
+/** Schema for the agent output-capture section (per-run live log sink, task 0414). */
+export const AgentOutputConfigSchema = z.object({
+    /** Hard cap on captured bytes for the per-run output artifact (default 1 MiB). */
+    'max-bytes': z.number().int().positive().optional(),
+    /** Hard cap on captured lines for the per-run output artifact (default unbounded). */
+    'max-lines': z.number().int().positive().optional(),
+});
+
 /**
  * Schema for the `agent` section.
  *
@@ -301,6 +309,7 @@ export function resolveExecutor(
  * - `executors` — named `{ name, agent, model? }` profiles; names must be unique.
  * - `default-by-phase` — a `Record<phase, executorSelector>` **map**.
  * - `team` — a `Record<teamId, TeamConfig>` map of declarative agent teams (feature M).
+ * - `output` — per-run output-capture bounds for pipeline agent runs (task 0414).
  */
 export const AgentConfigSchema = z
     .object({
@@ -308,6 +317,7 @@ export const AgentConfigSchema = z
         executors: z.array(AgentExecutorConfigSchema).optional(),
         'default-by-phase': z.record(z.string(), z.string()).optional(),
         team: z.record(z.string(), TeamConfigSchema).optional(),
+        output: AgentOutputConfigSchema.optional(),
     })
     .superRefine((value, ctx) => {
         const executors = value.executors;
@@ -429,6 +439,9 @@ export type SpurConfig = z.infer<typeof spurConfigSchema>;
 
 /** Inferred type for the `agent` config section. */
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;
+
+/** Inferred type for the `agent.output` config section (per-run output capture bounds). */
+export type AgentOutputConfig = z.infer<typeof AgentOutputConfigSchema>;
 
 /**
  * Back-compat type for the app-layer (non-planning) section of the config.

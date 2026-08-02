@@ -159,6 +159,40 @@ describe('app-section schemas', () => {
         }
     });
 
+    test('AgentConfigSchema parses agent.output capture bounds (task 0414 R4)', () => {
+        const result = AgentConfigSchema.safeParse({
+            output: { 'max-bytes': 1024 * 1024, 'max-lines': 5000 },
+        });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.output?.['max-bytes']).toBe(1024 * 1024);
+            expect(result.data.output?.['max-lines']).toBe(5000);
+        }
+    });
+
+    test('AgentConfigSchema output is optional and absent bounds are undefined (task 0414 R4)', () => {
+        const result = AgentConfigSchema.safeParse({});
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.output).toBeUndefined();
+        }
+    });
+
+    test('AgentConfigSchema rejects non-positive max-bytes (task 0414 R4)', () => {
+        for (const bad of [0, -1]) {
+            const result = AgentConfigSchema.safeParse({ output: { 'max-bytes': bad } });
+            expect(result.success).toBe(false);
+            if (!result.success) {
+                expect(result.error.issues.some((i) => i.path.join('.') === 'output.max-bytes')).toBe(true);
+            }
+        }
+    });
+
+    test('AgentConfigSchema rejects non-integer max-lines (task 0414 R4)', () => {
+        const result = AgentConfigSchema.safeParse({ output: { 'max-lines': 2.5 } });
+        expect(result.success).toBe(false);
+    });
+
     test('executor tier accepts capable-1/2/3 and normalizes legacy bare capable (0343)', () => {
         const result = AgentConfigSchema.parse({
             executors: [
