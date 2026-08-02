@@ -2,11 +2,11 @@
 schema_version: 1
 id: "J3"
 name: "Observability data plane: event ingestion, retention, correlation, and run/team read APIs"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-07-29T00:09:27.959Z"
-updated_at: "2026-07-29T03:47:01.587Z"
+updated_at: "2026-08-02T18:29:32.199Z"
 ---
 
 # J3: Observability data plane: event ingestion, retention, correlation, and run/team read APIs
@@ -283,3 +283,4 @@ Feature: Observability data plane
 
 ## History
 - 2026-07-29T03:47:01.587Z backlog → active (system)
+- 2026-08-02T18:29:32.199Z active → verifying (system)
