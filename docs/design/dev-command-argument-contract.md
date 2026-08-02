@@ -3,7 +3,12 @@
 Feature: [`H81`](../features/H81_dev-command-argument-contract-clarity.md).  
 Decision: `docs/00_ADR.md` ADR-032 amendment (2026-08-01).  
 Working evidence: [`2026-08-01-dev-command-argument-flags-brainstorm.md`](../plans/2026-08-01-dev-command-argument-flags-brainstorm.md).  
-Status: accepted design; not yet built.
+Status: accepted design; not yet built.  
+Depends on: task **0413** / feature [`H82`](../features/H82_unified-agent-execution-surface-selector.md)
+— collapses `--agent` / `--inline` / `--subprocess` into a single
+`--agent <inline|auto|<agent>|<executor>>` selector on 19 of these 28 commands. **Land 0413 first**;
+this design's tables and hints assume the collapsed selector, and migrating first would document a
+contract 0413 deletes.
 
 ## Surface
 

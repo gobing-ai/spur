@@ -134,6 +134,31 @@ describe('app-section schemas', () => {
         expect(result.success).toBe(true);
     });
 
+    test('AgentConfigSchema rejects an executor named "inline" (task 0413 R4)', () => {
+        const result = AgentConfigSchema.safeParse({
+            executors: [{ name: 'inline', agent: 'pi' }],
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            expect(
+                result.error.issues.some((i) => i.message.includes('reserved') && i.message.includes('inline')),
+            ).toBe(true);
+            expect(result.error.issues.some((i) => i.path.join('.') === 'executors.0.name')).toBe(true);
+        }
+    });
+
+    test('AgentConfigSchema rejects an executor named "auto" (task 0413 R4)', () => {
+        const result = AgentConfigSchema.safeParse({
+            executors: [{ name: 'auto', agent: 'claude' }],
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            expect(result.error.issues.some((i) => i.message.includes('reserved') && i.message.includes('auto'))).toBe(
+                true,
+            );
+        }
+    });
+
     test('executor tier accepts capable-1/2/3 and normalizes legacy bare capable (0343)', () => {
         const result = AgentConfigSchema.parse({
             executors: [

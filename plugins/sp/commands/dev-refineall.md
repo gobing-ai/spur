@@ -1,6 +1,6 @@
 ---
 description: Refine a batch of tasks via structured Q&A — resolve a set (feature or selector), refine each in dependency-correct order, emit a batch report
-argument-hint: "--feature <id> | [`--tasks`](../skills/spur-dev/references/flag-glossary.md#flag-tasks) <selector> [--focus <mode>] [--description <text>] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/flag-glossary.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/flag-glossary.md#flag-subprocess)] [--auto] [--keep-going] [--status <s>] [--json]"
+argument-hint: "--feature <id> | [`--tasks`](../skills/spur-dev/references/flag-glossary.md#flag-tasks) <selector> [--focus <mode>] [--description <text>] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <inline|auto|name>] [--auto] [--keep-going] [--status <s>] [--json]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---
 
@@ -12,8 +12,8 @@ operation, applied to a resolved set (typically every task under a feature).
 ## Usage
 
 ```
-/sp:dev-refineall --feature <id> [shared refine flags…] [--inline|--subprocess]
-/sp:dev-refineall --tasks <selector> [shared refine flags…] [--inline|--subprocess]
+/sp:dev-refineall --feature <id> [shared refine flags…] [--agent <inline|auto|name>]
+/sp:dev-refineall --tasks <selector> [shared refine flags…] [--agent <inline|auto|name>]
 ```
 
 Flags: [`--feature`](../skills/spur-dev/references/flag-glossary.md#flag-feature) (sugar for `feature:<id>`), `--tasks <selector>`, shared refine flags

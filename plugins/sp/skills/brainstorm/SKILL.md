@@ -98,10 +98,9 @@ For synthesis → `spur agent run`
 ```
 
 **Resolve the execution surface first.** Run synthesis in the current session by default. Use
-`spur agent run` only for `--subprocess`, an explicit subprocess agent, or a named escalation
-trigger; report the applied trigger or `operator override`. Never hardcode the agent — the selector
-flows from `--agent`. See the
-[inline-default contract](../spur-dev/references/cross-cutting.md#inline-default-execution-surface).
+`spur agent run` only for `--agent auto`, `--agent <name>`, or a named escalation trigger; report the
+applied trigger or `operator override`. Never hardcode the agent — the selector flows from `--agent`.
+See the [inline-default contract](../spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 
 ### 3. Generate 2-3 Approaches
 

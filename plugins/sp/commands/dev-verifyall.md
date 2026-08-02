@@ -1,6 +1,6 @@
 ---
 description: Verify a batch of tasks against their requirements and Acceptance Criteria — batch traceability check producing per-task verdicts and a summary report
-argument-hint: "[`--tasks`](../skills/spur-dev/references/flag-glossary.md#flag-tasks) <selector> [--feature <id>] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/flag-glossary.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/flag-glossary.md#flag-subprocess)] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable]"
+argument-hint: "[`--tasks`](../skills/spur-dev/references/flag-glossary.md#flag-tasks) <selector> [--feature <id>] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <inline|auto|name>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
@@ -11,7 +11,7 @@ Wraps the **sp:spur-dev** and **sp:code-verification** skills.
 ## Usage
 
 ```
-/sp:dev-verifyall --tasks <selector> [--feature <id>] [--agent <name|auto>] [--inline|--subprocess] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable]
+/sp:dev-verifyall --tasks <selector> [--feature <id>] [--agent <inline|auto|name>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable]
 ```
 
 Flags: `--tasks <selector>` (required unless [`--feature`](../skills/spur-dev/references/flag-glossary.md#flag-feature)), `--feature <id>` (sugar for

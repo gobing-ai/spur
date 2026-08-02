@@ -1849,11 +1849,40 @@ describe('AgentService executor-aware explicit --agent (0346)', () => {
         expect(resolvedModel(runner)).toBeUndefined();
     });
 
-    test('explicit --agent <unknown> still exits 2', async () => {
+    test('explicit --agent <unknown> exits 2 and the diagnostic lists available executors (R8, task 0413)', async () => {
         const svc = makeConfiguredService(cfg);
         const { deps } = mockResolutionDeps();
         const code = await svc.run('plain prompt', { agent: 'not-a-name', json: true }, deps);
         expect(code).toBe(2);
+    });
+
+    test('R8 (task 0413): unknown --agent error message lists every configured executor', async () => {
+        const { errors, output } = captureOutput();
+        const svc = new AgentService({ cwd: process.cwd(), env: {}, output, agentConfig: cfg });
+        const { deps } = mockResolutionDeps();
+        await svc.run('plain prompt', { agent: 'not-a-name', json: true }, deps);
+        // The diagnostic must name the offending value AND list available executors
+        // so a typo is recoverable rather than an opaque "Unknown agent".
+        const diag = errors.join('\n');
+        expect(diag).toContain("Unknown agent: 'not-a-name'");
+        expect(diag).toContain('omp');
+        expect(diag).toContain('omp-zai');
+        expect(diag).toContain('claude');
+    });
+
+    test('task 0413: --agent inline reaching spur agent run fails with a clear diagnostic', async () => {
+        const { errors, output } = captureOutput();
+        const svc = new AgentService({ cwd: process.cwd(), env: {}, output, agentConfig: cfg });
+        const { deps, runner } = mockResolutionDeps();
+        const code = await svc.run('plain prompt', { agent: 'inline', json: true }, deps);
+        // inline selects in-session execution; spur agent run always starts a
+        // subprocess, so it must refuse rather than silently dispatching.
+        expect(code).toBe(2);
+        expect(runner.runPromptCommand).not.toHaveBeenCalled();
+        const diag = errors.join('\n');
+        expect(diag).toContain("'inline'");
+        expect(diag).toContain('cannot be passed');
+        expect(diag).toContain('--agent auto');
     });
 });
 
@@ -1937,6 +1966,41 @@ describe('AgentService stage-registry adaptive model routing (0319)', () => {
         const code = await svc.run('/sp:dev-changelog', { agent: 'auto', json: true }, deps);
         expect(code).toBe(0);
         expect(resolvedAgent(runner)).toBe('pi');
+    });
+
+    // Task 0413 R9: sub-tier ordering across capable-1/2/3 was the newest and least-proven part of
+    // the tier logic (0343 split bare `capable` into quality sub-tiers). Array order must NOT decide
+    // between different capable sub-tiers — only between executors sharing the exact same tier.
+    test('R9 (task 0413): cheapest eligible wins across capable sub-tiers, not array order', async () => {
+        const svc = makeConfiguredService({
+            executors: [
+                // Deliberately declared highest-first so array order would pick capable-3 if it won.
+                { name: 'cap3-exec', agent: 'claude', tier: 'capable-3' },
+                { name: 'cap2-exec', agent: 'grok', tier: 'capable-2' },
+                { name: 'cap1-exec', agent: 'pi', tier: 'capable-1' },
+                { name: 'std-exec', agent: 'omp', tier: 'standard' },
+            ],
+        });
+        const { deps, runner } = mockResolutionDeps();
+        // Stage verify floors at capable-1 -> cheapest ELIGIBLE is capable-1, despite being declared last.
+        const code = await svc.run('Verify task', { agent: 'auto', stage: 'verify', json: true }, deps);
+        expect(code).toBe(0);
+        expect(resolvedAgent(runner)).toBe('pi');
+    });
+
+    test('R9 (task 0413): a sub-tier below the floor is not eligible', async () => {
+        const svc = makeConfiguredService({
+            executors: [
+                { name: 'std-exec', agent: 'omp', tier: 'standard' },
+                { name: 'cap2-exec', agent: 'grok', tier: 'capable-2' },
+            ],
+        });
+        const { deps, runner } = mockResolutionDeps();
+        // verify floors at capable-1: standard is below the floor, so capable-2 must win even
+        // though it is more expensive and declared later.
+        const code = await svc.run('Verify task', { agent: 'auto', stage: 'verify', json: true }, deps);
+        expect(code).toBe(0);
+        expect(resolvedAgent(runner)).toBe('grok');
     });
 
     test('R3: objective escalation signal selects fallback entry and records escalation', async () => {

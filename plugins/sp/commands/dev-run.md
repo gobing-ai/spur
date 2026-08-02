@@ -1,6 +1,6 @@
 ---
 description: Run a task — full pipeline (precheck→implement→test→review→approve→verify→record→done) or single-step (implement)
-argument-hint: "<wbs> [[`--mode`](../skills/spur-dev/references/flag-glossary.md#flag-mode) <full|implement>] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/flag-glossary.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/flag-glossary.md#flag-subprocess)] [--auto] [--next] [--wrap] [--continue]"
+argument-hint: "<wbs> [[`--mode`](../skills/spur-dev/references/flag-glossary.md#flag-mode) <full|implement>] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <inline|auto|name>] [--auto] [--next] [--wrap] [--continue]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 ---
 
@@ -10,11 +10,11 @@ Wraps the **sp:spur-dev** and **sp:code-implementation** skills.
 
 ## Usage
 
-/sp:dev-run <wbs> [--mode <full|implement>] [--agent <name|auto>] [--inline|--subprocess] [--auto] [--next] [--wrap] [--continue]
+/sp:dev-run <wbs> [--mode <full|implement>] [--agent <inline|auto|name>] [--auto] [--next] [--wrap] [--continue]
 
 ## Implementation
 
-- Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface). Full mode retains workflow `agent.run` subprocess steps; implement mode runs the competency inline unless a trigger or `--subprocess` applies.
+- Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface). Full mode retains workflow `agent.run` subprocess steps; implement mode runs the competency inline unless a trigger or `--agent auto` applies.
 - Full pipeline (default `--mode full`): `Skill(skill="sp:spur-dev", args="run $ARGUMENTS")`
 - Implement step only (`--mode implement`): `Skill(skill="sp:code-implementation", args="$ARGUMENTS")`
 
@@ -26,7 +26,7 @@ Wraps the **sp:spur-dev** and **sp:code-implementation** skills.
 | [`--next`](../skills/spur-dev/references/flag-glossary.md#flag-next) | Chain-to-completion with propagation: on success, hand the task back to `sp:next-router`, which resolves the next dispatch and re-invokes with `--next` still set, until the work is done or a gate stops it. **No longer selects implement-only mode** — use `--mode implement`. |
 | [`--wrap`](../skills/spur-dev/references/flag-glossary.md#flag-wrap) | Run the wrap hop after the main step. |
 | [`--continue`](../skills/spur-dev/references/flag-glossary.md#flag-continue) | Resume an interrupted task from its checkpoint. |
-| [`--auto`](../skills/spur-dev/references/flag-glossary.md#flag-auto) \| `--agent <name\|auto>` | Skip objective HITL confirmations (taste/irreversible gates still pause). The `--agent` selector is a pipeline-stage executor selector, not the orchestrator surface — merged into `vars.agent` so `agent.run` steps spawn that executor while the orchestrator runs inline. See the [pipeline-wrapper carve-out](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface). |
+| [`--auto`](../skills/spur-dev/references/flag-glossary.md#flag-auto) \| `--agent <inline\|auto\|name>` | Skip objective HITL confirmations (taste/irreversible gates still pause). `--agent` names who does the model-bearing work; here that is the pipeline's stages, so the value is merged into `vars.agent` and `agent.run` steps run under it while the orchestrator loop continues in this session. Same rule as every other command, not an exception. See the [execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface). |
 
 > **⚠ Redefinition (feature H8, 2026-07-31).** `--next` previously selected implement-only mode on
 > this command. It no longer does — use `--mode implement`. The replacement already existed and is

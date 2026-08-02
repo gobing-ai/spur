@@ -1,6 +1,6 @@
 ---
 description: Generate or extend tests until the unit target is met
-argument-hint: "<target> [--coverage <n>] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/flag-glossary.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/flag-glossary.md#flag-subprocess)] [[`--auto`](../skills/spur-dev/references/flag-glossary.md#flag-auto)]"
+argument-hint: "<target> [--coverage <n>] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <inline|auto|name>] [[`--auto`](../skills/spur-dev/references/flag-glossary.md#flag-auto)]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 ---
 
@@ -10,7 +10,7 @@ Wraps the **sp:code-testing** skill.
 
 ## Usage
 
-/sp:dev-unit <target> [--coverage <n>] [--agent <name|auto>] [--inline|--subprocess] [--auto]
+/sp:dev-unit <target> [--coverage <n>] [--agent <inline|auto|name>] [--auto]
 
 ## Implementation
 

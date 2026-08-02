@@ -1,6 +1,6 @@
 ---
 description: Plan a feature from a description — intake → feature create → AC generation → feature check gate → decomposition → batch-create (Design by default)
-argument-hint: "\"<description>\" [[`--feature`](../skills/spur-dev/references/flag-glossary.md#flag-feature) <id>] [--parent <feature-id>] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/flag-glossary.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/flag-glossary.md#flag-subprocess)] [--skip-design] [[`--auto`](../skills/spur-dev/references/flag-glossary.md#flag-auto)] [--approve-taste]"
+argument-hint: "\"<description>\" [[`--feature`](../skills/spur-dev/references/flag-glossary.md#flag-feature) <id>] [--parent <feature-id>] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <inline|auto|name>] [--skip-design] [[`--auto`](../skills/spur-dev/references/flag-glossary.md#flag-auto)] [--approve-taste]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---
 
@@ -12,7 +12,7 @@ Wraps the **sp:spur-dev** skill.
 
 ```
 /sp:dev-plan "<description>"
-  [--feature <id>] [--parent <feature-id>] [--agent <name|auto>] [--inline|--subprocess]
+  [--feature <id>] [--parent <feature-id>] [--agent <inline|auto|name>]
   [--auto]              # skip objective HITL where the plan path supports it
   [--skip-design]       # design package off (satellite + task Design)
   [--approve-taste]     # with --auto: skip design-approval taste pause when applicable

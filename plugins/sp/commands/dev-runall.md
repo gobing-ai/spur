@@ -1,6 +1,6 @@
 ---
 description: Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via task-pipeline.yaml, emit a batch report
-argument-hint: "[`--tasks`](../skills/spur-dev/references/flag-glossary.md#flag-tasks) <selector> [[`--feature`](../skills/spur-dev/references/flag-glossary.md#flag-feature) <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/flag-glossary.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/flag-glossary.md#flag-subprocess)] [--json] [--wrap] [--next] [--continue]"
+argument-hint: "[`--tasks`](../skills/spur-dev/references/flag-glossary.md#flag-tasks) <selector> [[`--feature`](../skills/spur-dev/references/flag-glossary.md#flag-feature) <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <inline|auto|name>] [--json] [--wrap] [--next] [--continue]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
@@ -11,7 +11,7 @@ Wraps the **sp:spur-dev** skill.
 ## Usage
 
 ```
-/sp:dev-runall --tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <name|auto>] [--inline|--subprocess] [--json] [--wrap] [--next] [--continue]
+/sp:dev-runall --tasks <selector> [--feature <id>] [--mode <sequential|parallel>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--next] [--continue]
 ```
 
 Flags: `--tasks <selector>` (required — explicit WBS list, status pseudo-list, `feature:<id>`,
@@ -20,9 +20,9 @@ or `ready`), `--feature <id>` (sugar for `feature:<id>`), [`--mode`](../skills/s
 see `execution-batch.md` § Parallel Execution), [`--keep-going`](../skills/spur-dev/references/flag-glossary.md#flag-keep-going)
 (batch failure policy — skip a failed task's in-batch dependents, continue independents; default
 halts on first failure), [`--auto`](../skills/spur-dev/references/flag-glossary.md#flag-auto)
-(sets `profile=auto` on each per-task run, skipping the HITL approve gate), `--agent <name|auto>`
-(pipeline override merged into each per-task `vars.agent`; pins the step executor, not the
-orchestrator), [`--json`](../skills/spur-dev/references/flag-glossary.md#flag-json) (emit the
+(sets `profile=auto` on each per-task run, skipping the HITL approve gate), `--agent <inline|auto|name>`
+(names who does the model-bearing work — here the pipeline's stages, so it merges into each
+per-task `vars.agent`; the orchestrator loop continues in this session), [`--json`](../skills/spur-dev/references/flag-glossary.md#flag-json) (emit the
 report as JSON), [`--wrap`](../skills/spur-dev/references/flag-glossary.md#flag-wrap) (trigger
 `wrapup-pipeline.yaml` after the batch completes), [`--next`](../skills/spur-dev/references/flag-glossary.md#flag-next)
 (chain each task to terminal status, then run the wrap hop **once for the batch** — see below),

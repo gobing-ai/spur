@@ -44,20 +44,18 @@ function normalizedMarkdown(raw: string): string {
     return raw.replaceAll('**', '').replace(/\s+/g, ' ').trim();
 }
 
-describe('task 0406 — inline execution contract', () => {
-    test('inline is the default and never shells to spur agent run without a named trigger or override', () => {
+describe('task 0406 / H82 — unified --agent execution-surface contract', () => {
+    test('inline is the default and the single --agent selector governs the surface', () => {
         const contract = readFileSync(CROSS_CUTTING, 'utf8');
         const normalized = normalizedMarkdown(contract);
 
         expect(contract).toContain('## Inline-default execution surface');
         expect(normalized).toContain('Default: execute the backing skill directly in the current coding-agent session');
         expect(normalized).toContain(
-            'Do not invoke `spur agent run` when no escalation trigger or operator override applies',
+            'Do not invoke `spur agent run` when no escalation trigger applies and the operator did not select subprocess via the `--agent` selector',
         );
         expect(normalized).toContain('the applied trigger must be named');
-        expect(normalized).toContain(
-            'Strip `--inline`, `--subprocess`, and the outer `--agent` selector from the command placed in the child prompt',
-        );
+        expect(normalized).toContain('Strip the outer `--agent` selector from the command placed in the child prompt');
         expect(normalized).toContain('it must not spawn another `spur agent run` for the same trigger');
     });
 
@@ -75,10 +73,10 @@ describe('task 0406 — inline execution contract', () => {
             expect(dispatch).toContain(`**${trigger}**`);
             expect(normalized).toContain(trigger);
         }
-        expect(normalized).toContain('A trigger selects subprocess even when `--inline` was supplied');
+        expect(normalized).toContain('A trigger selects subprocess even when `--agent inline` was supplied');
     });
 
-    test('mode-aware dev commands expose inline default and an explicit subprocess override', () => {
+    test('mode-aware dev commands use the unified --agent <inline|auto|name> selector', () => {
         // Sanity: the known mode-aware set is non-empty and includes the originals
         expect(MODE_AWARE_COMMANDS.length).toBeGreaterThanOrEqual(12);
         for (const expected of ['dev-run', 'dev-review', 'dev-verify']) {
@@ -88,12 +86,20 @@ describe('task 0406 — inline execution contract', () => {
         for (const command of MODE_AWARE_COMMANDS) {
             const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');
 
-            expect(raw, `${command}: missing --inline`).toContain('--inline');
-            expect(raw, `${command}: missing --subprocess`).toContain('--subprocess');
+            // The unified selector must appear with all three values
+            expect(raw, `${command}: missing unified --agent selector`).toContain('--agent');
             expect(raw, `${command}: missing central execution-surface contract`).toContain(
                 'cross-cutting.md#inline-default-execution-surface',
             );
-            expect(raw, `${command}: operator flag must retain task 0405 vocabulary`).toContain('--agent');
+            // The old standalone --inline / --subprocess flags must not appear as
+            // independent command flags (they may appear only in migration/deprecation prose).
+            // Check the argument-hint line specifically — it must carry <inline|auto|name>.
+            const hintMatch = raw.match(/argument-hint:\s*(.+)/);
+            if (hintMatch) {
+                expect(hintMatch[1], `${command}: argument-hint must use the unified selector`).toContain(
+                    'inline|auto|name',
+                );
+            }
             expect(raw, `${command}: domain vocabulary leaked into the operator surface`).not.toContain('--executor');
         }
     });
@@ -115,13 +121,15 @@ describe('task 0406 — inline execution contract', () => {
         }
     });
 
-    test('the operator can force subprocess dispatch and contradictory mode flags are rejected', () => {
+    test('the operator can select subprocess via --agent auto and escalation triggers override inline', () => {
         const contract = readFileSync(CROSS_CUTTING, 'utf8');
         const normalized = normalizedMarkdown(contract);
 
-        expect(normalized).toContain('`--subprocess` forces subprocess execution');
-        expect(normalized).toContain('Report `operator override`');
-        expect(normalized).toContain('`--inline` and `--subprocess` together are invalid usage');
+        // --agent auto or --agent <name> explicitly selects a subprocess surface
+        expect(normalized).toContain('report `operator override`');
+        // The unified selector table lists all three values
+        expect(normalized).toContain('`auto`');
+        expect(normalized).toContain('`inline`');
     });
 
     test('explicit subprocess paths stay subprocess-backed', () => {
@@ -138,21 +146,17 @@ describe('task 0406 — inline execution contract', () => {
         const contract = readFileSync(CROSS_CUTTING, 'utf8');
         const normalized = normalizedMarkdown(contract);
 
-        // --agent <different> forces subprocess (trigger 1), wins over --inline
-        expect(normalized).toContain(
-            'An explicit `--agent <name>` that requires a different coding agent is trigger 1 and forces subprocess',
-        );
-        // --agent auto does NOT force subprocess on its own — runs inline
-        expect(normalized).toContain(
-            '`--agent auto` or a selector resolving to the current agent does not force subprocess on its own',
-        );
+        // The one rule: --agent names WHO does the model-bearing work; the surface is derived.
+        // Assert the rule, not any one phrasing of its consequences — task 0413 verify found the
+        // previous assertion pinned the literal string 'Pipeline-wrapper carve-out', which locked
+        // in the exception framing the collapse exists to remove.
+        expect(normalized).toContain('names *who* does the model-bearing work');
+        expect(normalized).toContain('The execution surface is derived from');
         // Single-hop strip applies to single-skill dispatch only
-        expect(normalized).toContain(
-            'Strip `--inline`, `--subprocess`, and the outer `--agent` selector from the command placed in the child prompt',
-        );
-        // Pipeline-wrapper carve-out: --agent reaches vars.agent, not stripped
-        expect(normalized).toContain('Pipeline-wrapper carve-out');
+        expect(normalized).toContain('Strip the outer `--agent` selector from the command placed in the child prompt');
+        // Pipeline wrappers: --agent reaches vars.agent, stated as the same rule, not an exception
         expect(normalized).toContain('merged into per-task `vars.agent`');
+        expect(normalized).toContain('the same rule, not an exception');
 
         // dev-run and dev-runall document the pipeline-passthrough semantics
         for (const command of ['dev-run', 'dev-runall']) {

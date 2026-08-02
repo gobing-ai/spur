@@ -1,6 +1,6 @@
 ---
 description: Status-aware router — pick and run the next best /sp:dev-* step for a task or feature frontier
-argument-hint: "[<wbs|feature-id>] [--dry-run] [--once] [--auto] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/flag-glossary.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/flag-glossary.md#flag-subprocess)] [--full]"
+argument-hint: "[<wbs|feature-id>] [--dry-run] [--once] [--auto] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <inline|auto|name>] [--full]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---
 
@@ -10,7 +10,7 @@ Wraps the **sp:next-router** skill.
 
 ## Usage
 
-/sp:dev-next [<wbs|feature-id>] [--dry-run] [--once] [--auto] [--agent <name|auto>] [--inline|--subprocess] [--full]
+/sp:dev-next [<wbs|feature-id>] [--dry-run] [--once] [--auto] [--agent <inline|auto|name>] [--full]
 
 ## Implementation
 

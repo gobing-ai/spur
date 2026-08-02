@@ -1,6 +1,6 @@
 ---
 description: "Review code for a task or path — multi-dimensional review across functional traceability, SECUA quality, and architectural depth. Triggers: \"review this\", \"check the code\", \"SECUA review\", \"dev review\", \"audit this\"."
-argument-hint: "[<wbs|path>] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/flag-glossary.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/flag-glossary.md#flag-subprocess)] [[`--focus`](../skills/spur-dev/references/flag-glossary.md#flag-focus) <dims>] [--fix (deprecated)]"
+argument-hint: "[<wbs|path>] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <inline|auto|name>] [[`--focus`](../skills/spur-dev/references/flag-glossary.md#flag-focus) <dims>] [--fix (deprecated)]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
@@ -10,7 +10,7 @@ Wraps the **sp:functional-review**, **sp:code-verification**, and **sp:code-impr
 
 ## Usage
 
-/sp:dev-review [<wbs|path>] [--agent <name|auto>] [--inline|--subprocess] [--focus <dims>] [--fix (deprecated)]
+/sp:dev-review [<wbs|path>] [--agent <inline|auto|name>] [--focus <dims>] [--fix (deprecated)]
 
 ## Implementation
 

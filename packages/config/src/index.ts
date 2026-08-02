@@ -321,6 +321,19 @@ export const AgentConfigSchema = z
                         path: ['executors', index, 'name'],
                     });
                 }
+                // R4 (task 0413): `inline` and `auto` are reserved selector
+                // values — `inline` = current session, `auto` = tier-resolved
+                // subprocess. An executor claiming either silently shadows the
+                // selector semantics the command surface promises, so reject
+                // at config-load with a diagnostic naming both the reserved
+                // value and the offending entry.
+                if (executor.name === 'inline' || executor.name === 'auto') {
+                    ctx.addIssue({
+                        code: z.ZodIssueCode.custom,
+                        message: `Executor name "${executor.name}" is reserved (the --agent selector value '${executor.name}' has fixed semantics); rename executor at index ${index}.`,
+                        path: ['executors', index, 'name'],
+                    });
+                }
                 seen.add(executor.name);
             }
         }

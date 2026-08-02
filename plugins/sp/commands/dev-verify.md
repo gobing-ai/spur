@@ -1,6 +1,6 @@
 ---
 description: Verify a task against its requirements and Acceptance Criteria — traceability check producing a PASS/PARTIAL/FAIL verdict with evidence
-argument-hint: "<wbs> [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/flag-glossary.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/flag-glossary.md#flag-subprocess)] [[`--fix`](../skills/spur-dev/references/flag-glossary.md#flag-fix) <none|blockers-first|all>] [[`--focus`](../skills/spur-dev/references/flag-glossary.md#flag-focus) <lens>] [[`--bdd`](../skills/spur-dev/references/flag-glossary.md#flag-bdd)] [[`--auto`](../skills/spur-dev/references/flag-glossary.md#flag-auto)] [[`--force`](../skills/spur-dev/references/flag-glossary.md#flag-force)] [--next] [--skip-shippable]"
+argument-hint: "<wbs> [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <inline|auto|name>] [[`--fix`](../skills/spur-dev/references/flag-glossary.md#flag-fix) <none|blockers-first|all>] [[`--focus`](../skills/spur-dev/references/flag-glossary.md#flag-focus) <lens>] [[`--bdd`](../skills/spur-dev/references/flag-glossary.md#flag-bdd)] [[`--auto`](../skills/spur-dev/references/flag-glossary.md#flag-auto)] [[`--force`](../skills/spur-dev/references/flag-glossary.md#flag-force)] [--next] [--skip-shippable]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
@@ -11,7 +11,7 @@ Wraps the **sp:code-verification** skill.
 ## Usage
 
 ```
-/sp:dev-verify <wbs> [--agent <name|auto>] [--inline|--subprocess] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--skip-shippable]
+/sp:dev-verify <wbs> [--agent <inline|auto|name>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--skip-shippable]
 ```
 
 **Shippable readiness** (feature-level): when `--fix all` and the task has a `feature_id`, the

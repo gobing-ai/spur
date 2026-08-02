@@ -35,33 +35,50 @@ where the command already has at least one HITL gate. The rule forces a declarat
 capability exists — a command that would benefit from `--json` but produces only prose is recorded
 as a follow-up, not quietly left inconsistent.
 
-### `--agent <name|auto>` — select a coding agent for subprocess execution
+### `--agent <inline|auto|name>` — name who does the model-bearing work
 
 **Anchor:** `#flag-agent`.
 
+**`--agent` names *who* does the model-bearing work. The execution surface is derived from that
+choice, never declared separately:** if the named executor is the agent already running this session,
+the work happens inline; otherwise it dispatches a subprocess.
+
+| Value | Who does the work | Derived surface |
+|---|---|---|
+| `inline` (default when omitted) | Whoever is running this session | Inline — by definition |
+| `auto` | Tier-resolved from the stage's `min_tier` + `fallback` | Subprocess |
+| `<name>` | That coding agent or configured executor | Inline when it is the current session's agent; subprocess otherwise |
+
+The previous `--inline` and `--subprocess` flags (feature H82, task 0413) are collapsed into this
+selector: `--inline` → `--agent inline`, `--subprocess` → `--agent auto`. Those two flags are no
+longer part of the command surface; their anchors (`#flag-inline`, `#flag-subprocess`) are retained
+as stubs below so external links do not dangle.
+
+Objective escalation triggers override the answer — they are detected *requirements* (isolation,
+audit record, headless) that the chosen executor cannot satisfy, not preferences. On a pipeline
+wrapper (`dev-run`, `dev-runall`) the loop does no model-bearing work itself, so `--agent` addresses
+its stages via `vars.agent`; that is the same rule applied, not an exception.
+
 Operator-layer vocabulary (task 0405): `agent` names the concrete coding-agent tool; `executor`
-remains the domain-layer role and is not a command flag. An explicit different agent activates
-execution-surface trigger 1. `auto` retains its backward-compatible meaning of a fresh process using
-the resolved agent. Omit the flag to keep the inline default; when subprocess is selected for another
-reason, omission lets `spur agent run` resolve its configured default.
-
-### `--inline` — explicitly select the default in-session surface
-
-**Anchor:** `#flag-inline`.
-
-Execute the backing skill in the current coding-agent session. This is already the default; the flag
-makes the choice explicit for scripts and reports. It never overrides an escalation trigger and is
-mutually exclusive with `--subprocess`. Full contract:
+remains the domain-layer role and is not a command flag. `inline` and `auto` are reserved values —
+config validation rejects an executor claiming either. Full contract:
 [cross-cutting.md](cross-cutting.md#inline-default-execution-surface).
 
-### `--subprocess` — force out-of-process dispatch
+#### `--inline` (removed — collapsed into `--agent`)
 
-**Anchor:** `#flag-subprocess`.
+**Anchor:** `#flag-inline` (stub retained to avoid dangling external links).
 
-Force the backing operation through `spur agent run` even when no objective escalation trigger
-applies. Report `operator override`; do not invent a trigger. When a real trigger applies, report
-that trigger instead. Mutually exclusive with `--inline`. Full contract:
-[cross-cutting.md](cross-cutting.md#inline-default-execution-surface).
+Removed in feature H82 (task 0413). `--inline` is now `--agent inline`. See
+[`--agent`](#flag-agent) above and
+[cross-cutting.md](cross-cutting.md#inline-default-execution-surface) for the full contract.
+
+#### `--subprocess` (removed — collapsed into `--agent`)
+
+**Anchor:** `#flag-subprocess` (stub retained to avoid dangling external links).
+
+Removed in feature H82 (task 0413). `--subprocess` is now `--agent auto`. See
+[`--agent`](#flag-agent) above and
+[cross-cutting.md](cross-cutting.md#inline-default-execution-surface) for the full contract.
 
 ### `--next` — chain-to-completion with propagation
 

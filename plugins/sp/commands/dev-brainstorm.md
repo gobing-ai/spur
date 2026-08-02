@@ -1,6 +1,6 @@
 ---
 description: Interactive solution design — heuristic discovery interview followed by structured ideation with trade-offs and confidence scoring
-argument-hint: "<topic> [--depth <basic|detailed|comprehensive>] [--options <n>] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/flag-glossary.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/flag-glossary.md#flag-subprocess)] [--skip-discovery] [--wayfind] [--task [<feature-id>]] [--feature [<parent-id>]] [--next]"
+argument-hint: "<topic> [--depth <basic|detailed|comprehensive>] [--options <n>] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <inline|auto|name>] [--skip-discovery] [--wayfind] [--task [<feature-id>]] [--feature [<parent-id>]] [--next]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---
 
@@ -10,7 +10,7 @@ Wraps the **sp:brainstorm** and **sp:wayfinder** skills.
 
 ## Usage
 
-/sp:dev-brainstorm <topic> [--depth <basic|detailed|comprehensive>] [--options <n>] [--agent <name|auto>] [--inline|--subprocess] [--skip-discovery] [--wayfind] [--task [<feature-id>]] [--feature [<parent-id>]] [--next]
+/sp:dev-brainstorm <topic> [--depth <basic|detailed|comprehensive>] [--options <n>] [--agent <inline|auto|name>] [--skip-discovery] [--wayfind] [--task [<feature-id>]] [--feature [<parent-id>]] [--next]
 
 ## Implementation
 

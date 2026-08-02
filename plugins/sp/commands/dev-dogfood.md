@@ -1,6 +1,6 @@
 ---
 description: Dogfood an agent skill/command/CLI — drive it end-to-end with bounded auto-fix, self-monitor, and emit a comprehensive report
-argument-hint: "<testee> [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/flag-glossary.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/flag-glossary.md#flag-subprocess)] [--max-retry <n>] [--save] [--task] [--chain-follow] [--full]"
+argument-hint: "<testee> [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <inline|auto|name>] [--max-retry <n>] [--save] [--task] [--chain-follow] [--full]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Grep", "Glob", "Skill"]
 ---
 
@@ -10,7 +10,7 @@ Wraps the **sp:dogfood-testing** skill.
 
 ## Usage
 
-/sp:dev-dogfood <testee> [--agent <name|auto>] [--inline|--subprocess] [--max-retry <n>] [--save] [--task] [--chain-follow] [--full]
+/sp:dev-dogfood <testee> [--agent <inline|auto|name>] [--max-retry <n>] [--save] [--task] [--chain-follow] [--full]
 
 ## Implementation
 

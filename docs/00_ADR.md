@@ -1018,3 +1018,68 @@ inventing evidence.
 check); `packages/config/src/finding-codes.ts` (`L3_REQUIRED_SECTION_PLACEHOLDER`);
 `packages/app/src/services/task-record.ts` (`renderTesting` / `renderReview` — what `record` writes);
 `.spur/tasks/section-matrix.yaml` (`done: required: [Solution, Testing, Review]`).
+
+## ADR-041: The Dev Command Surface Uses a Single `--agent <inline|auto|name>` Selector
+
+**Status:** Accepted · **Date:** 2026-08-01
+
+**Decision.** The `/sp:dev-*` command surface collapses its three execution-surface flags
+(`--agent <name|auto>`, `--inline`, `--subprocess`) into a single selector:
+`--agent <inline|auto|name>`, with `inline` as the default when the flag is omitted. The two removed
+flags map cleanly: `--inline` → `--agent inline`; `--subprocess` → `--agent auto`.
+
+`spur agent run` retains its own `auto` default — the unified selector governs only the dev command
+surface, not the CLI verb's default executor resolution.
+
+**Why.** Three flags carried two defects:
+
+1. **Default mismatch.** The operator surface defaulted to inline, but `spur agent run` defaulted to
+   `auto`. An operator who typed `--agent auto` assumed "use the configured default executor," which
+   is exactly what omitting the flag on `spur agent run` already did — but on the dev command surface
+   it meant "force subprocess." The word `auto` meant opposite things on the two surfaces.
+2. **Compound flag ambiguity.** `--agent <name>` selected a subprocess executor while `--inline`
+   forced inline — combining `--agent foo --inline` was undefined. The wrapper resolved it by
+   precedence rule, but the combination was never expressible to the operator in one glance.
+
+A single selector removes both: one flag, one value slot, one rule.
+
+**The rule — `--agent` names *who*, not *where*.** `--agent <value>` names who does the model-bearing
+work; the execution surface is **derived** from that choice, never declared separately. If the named
+executor is the agent already running the session, the work happens inline; otherwise it dispatches a
+subprocess. Objective escalation triggers still override, because a trigger is a detected
+*requirement* (isolation, audit record, headless) that the chosen executor cannot satisfy — not a
+preference. The rule is documented in `cross-cutting.md` (Inline-default execution surface) and
+enforced by the `inline-execution-contract.test.ts` parity gate.
+
+**The pipeline "carve-out" is dissolved, not removed (verify amendment, 2026-08-02).** An earlier
+draft of this decision called for deleting the `dev-run` / `dev-runall` special case, where `--agent`
+is merged into per-task `vars.agent` rather than selecting the orchestrator's own surface. That was
+wrong twice over. Deleting it would make `--agent claude` on `dev-runall` mean "run the batch loop
+itself in a claude subprocess" — a loop that executes no prompts and needs no executor. And framing
+it as an *exception* re-creates exactly the context-dependent overload this ADR exists to remove.
+
+Under "who does the model-bearing work," it is neither: a pipeline orchestrator does no model-bearing
+work itself — its **stages** do — so `--agent` addressing the stages **is** the general rule applied
+correctly. The behavior is unchanged and the exception framing is gone. Nothing was lost, so there is
+no lost-combination workaround to record; an operator who genuinely wants the orchestrator itself
+out-of-process wraps the whole invocation in `spur agent run`.
+
+**What this is not.** The inline/subprocess decision is a **prompt-runtime rule** owned by the
+command wrapper and its backing skill, not a new branch in `AgentService`. The current coding agent
+is already executing the command; "inline" means *continue in this session*. Threading an `inline`
+option through `AiRunner` would still start a subprocess and would therefore be a false
+implementation. The guard in `resolveAgent()` rejects the literal sentinel `inline` when it reaches
+the CLI verb, because `spur agent run` always dispatches a subprocess.
+
+**Backward-compat surface.** The old `--inline` and `--subprocess` flags are removed from all 19
+dev command files, `dev-operations.md`, `flag-glossary.md` (retained as redirect stubs under
+`#flag-agent`), `cross-cutting.md`, and the `code-verification` / `brainstorm` / `next-router`
+skill references. No CLI parser change was needed because these were never CLI-parsed flags — they
+are prompt-runtime contract flags consumed by the command wrapper. `AgentConfigSchema.superRefine()`
+now rejects `inline`/`auto` as executor *names* to prevent sentinel collision with selector values.
+
+**Detail:** `plugins/sp/commands/dev-*.md` (19 files); `plugins/sp/skills/spur-dev/references/`
+(`cross-cutting.md`, `flag-glossary.md`, `dev-operations.md`); `plugins/sp/skills/{code-verification,brainstorm,next-router}/`;
+`packages/config/src/index.ts` (`superRefine` sentinel rejection); `packages/app/src/services/agent-service.ts`
+(`resolveAgent` inline guard, `resolveExecutorSelector` unknown-name diagnostic);
+`plugins/sp/tests/inline-execution-contract.test.ts` (parity gate).

@@ -794,6 +794,20 @@ export class AgentService {
     ): Promise<AgentResolveResult> {
         const raw = stringFlag(flags, 'agent', 'auto');
         if (raw === 'auto') return this.resolveAgentAuto(prompt, flags, doctorRunner);
+        // Task 0413: `inline` is the single-selector value meaning "run in the
+        // current coding-agent session." It is resolved by the command wrapper,
+        // never by `spur agent run` (which always dispatches a subprocess). If it
+        // reaches here, the caller bypassed the command surface — fail with a
+        // diagnostic that names the cause and the intended path, rather than
+        // surfacing a confusing "Unknown agent: inline".
+        if (raw === 'inline') {
+            return {
+                ok: false,
+                exitCode: 2,
+                message:
+                    "'inline' selects in-session execution and cannot be passed to 'spur agent run', which always starts a subprocess. Run the backing skill directly in the current session, or use '--agent auto' for subprocess dispatch with a tier-resolved executor.",
+            };
+        }
         // Executor-aware (0346): explicit `--agent <name>` reuses the same
         // executor-first lookup as `agent.default`. phase stays undefined so no
         // default-by-phase mapping is consulted (R8: --agent wins, no phase).
@@ -989,7 +1003,19 @@ export class AgentService {
 
         // Default path: treat the selector as a legacy direct agent name.
         const canonical = resolveAgentName(selector);
-        if (canonical === undefined) return { ok: false, exitCode: 2, message: `Unknown agent: ${selector}` };
+        if (canonical === undefined) {
+            // Task 0413 (R8): surface the available executors so a typo does not
+            // look like an opaque failure. The agent-name space is open, so list
+            // configured executors only — those are the load-bearing targets.
+            const names = this.ctx.agentConfig?.executors?.map((e) => e.name) ?? [];
+            const available =
+                names.length > 0 ? names.join(', ') : '(no executors configured; use a canonical agent name)';
+            return {
+                ok: false,
+                exitCode: 2,
+                message: `Unknown agent: '${selector}'. Available executors: ${available}.`,
+            };
+        }
         const usable = await this.checkUsable(canonical, doctorRunner);
         if (!usable.ok) return usable.result;
         return { ok: true, agent: canonical, source };

@@ -1,6 +1,6 @@
 ---
 description: Refine task requirements via structured Q&A — clarify scope, elicit missing details, tighten acceptance criteria
-argument-hint: "<wbs> [[`--focus`](../skills/spur-dev/references/flag-glossary.md#flag-focus) <mode>] [[`--description`](../skills/spur-dev/references/flag-glossary.md#flag-description) <text>] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <name|auto>] [[`--inline`](../skills/spur-dev/references/flag-glossary.md#flag-inline)|[`--subprocess`](../skills/spur-dev/references/flag-glossary.md#flag-subprocess)] [--auto] [--next]"
+argument-hint: "<wbs> [[`--focus`](../skills/spur-dev/references/flag-glossary.md#flag-focus) <mode>] [[`--description`](../skills/spur-dev/references/flag-glossary.md#flag-description) <text>] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <inline|auto|name>] [--auto] [--next]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---
 
@@ -12,7 +12,7 @@ for blank Design/AC/Plan after `--skip-design` or incomplete create.
 ## Usage
 
 ```
-/sp:dev-refine <wbs> [--focus <mode>] [--description <text>] [--agent <name|auto>] [--inline|--subprocess] [--auto] [--next]
+/sp:dev-refine <wbs> [--focus <mode>] [--description <text>] [--agent <inline|auto|name>] [--auto] [--next]
 ```
 
 Under [`--auto`](../skills/spur-dev/references/flag-glossary.md#flag-auto), SKIP only when target sections have no L3 findings: Background, Requirements,

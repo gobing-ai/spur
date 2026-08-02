@@ -84,15 +84,7 @@ The JSON carries `{ wbs, name, status, filePath, content, frontmatter }`. Parse 
   AC targets). AC evaluation is mandatory when this section is non-empty; `--bdd` only tightens the
   scenario-to-test requirement.
 
-Flags: `--agent <name|auto>` (subprocess agent selector), `--inline|--subprocess` (execution
-surface; inline default, with named escalation triggers taking precedence — see
-[cross-cutting.md](../spur-dev/references/cross-cutting.md#inline-default-execution-surface)),
-`--auto` (no confirmations), `--force` (bypass the terminal-status guard), `--fix
-<none|blockers-first|all>` (post-verdict repair), `--focus <all|security|efficiency|correctness|usability|architecture>`
-(SECUA dimensions), `--bdd` (strict Gherkin scenario-to-test check), `--next` (on PASS,
-auto-transition `testing → done`; on PARTIAL/FAIL, stop),
-`--skip-shippable` (alias `--skip-shipable`) — disable the feature-level **Shippable readiness
-gate** that otherwise runs when `--fix all` and a feature context exists (see Step 13).
+Flags: `--agent <inline|auto|name>` (execution surface — inline default, with named escalation triggers taking precedence — see [cross-cutting.md](../spur-dev/references/cross-cutting.md#inline-default-execution-surface)), `--auto` (no confirmations), `--force` (bypass the terminal-status guard), `--fix <none|blockers-first|all>` (post-verdict repair), `--focus <all|security|efficiency|correctness|usability|architecture>` (SECUA dimensions), `--bdd` (strict Gherkin scenario-to-test check), `--next` (on PASS, auto-transition `testing → done`; on PARTIAL/FAIL, stop), `--skip-shippable` (alias `--skip-shipable`) — disable the feature-level **Shippable readiness gate** that otherwise runs when `--fix all` and a feature context exists (see Step 13).
 
 ### Step 2 — Status guard
 
@@ -429,16 +421,7 @@ The source-oriented path: SECUA review of a task's diff without the full traceab
 Steps 3 + 7 + 10 (Review section only) — no verdict artifact, no `done` gate. Use for a focused
 quality/security audit of changes when the full verify isn't wanted.
 
-Flags: `--agent <name|auto>` (subprocess agent selector), `--inline|--subprocess` (execution
-surface), `--auto` (no confirmations), `--fix
-<none|blockers-first|all>` (post-review repair), and `--focus
-<all|security|efficiency|correctness|usability|architecture>` (SECUA dimensions).
-
-**Execution surface:** review runs in the current session by default. `--subprocess` forces a fresh
-process; `--agent <name|auto>` selects that process's agent. A named escalation trigger overrides
-`--inline`. Apply the
-[central contract](../spur-dev/references/cross-cutting.md#inline-default-execution-surface) before
-starting the review.
+Flags: `--agent <inline|auto|name>` (execution surface — inline default, with named escalation triggers taking precedence), `--auto` (no confirmations), `--fix <none|blockers-first|all>` (post-review repair), and `--focus <all|security|efficiency|correctness|usability|architecture>` (SECUA dimensions). Apply the [central contract](../spur-dev/references/cross-cutting.md#inline-default-execution-surface) before starting the review.
 
 ---
 

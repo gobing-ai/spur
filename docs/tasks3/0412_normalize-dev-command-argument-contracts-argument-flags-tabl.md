@@ -10,14 +10,21 @@ feature_id: H81
 parent_wbs: null
 priority: P2
 tags: []
-dependencies: []
+dependencies: ["0413"]
 created_at: "2026-08-02T04:14:27.417Z"
-updated_at: "2026-08-02T04:19:58.252Z"
+updated_at: "2026-08-02T05:59:42.449Z"
 ---
 
 ## 0412. Normalize dev-command argument contracts: Argument Flags tables, syntax-only hints, flag audit
 
 ### Background
+> **Depends on task 0413 (feature H82) — land that first.** 0413 collapses
+> `--agent` / `--inline` / `--subprocess` into a single `--agent <inline|auto|<agent>|<executor>>`
+> selector across the same 19 commands this task migrates. Running this migration first would
+> document a contract 0413 deletes, then require a second pass over those 19 files. Every count
+> below is a **2026-08-01 pre-0413 baseline** — Phase 0 re-derives the inventory from the tree it
+> actually finds and treats these numbers as a starting hypothesis, not fact.
+
 Feature **H81**. Design approved 2026-08-01 (Approach A) — see `docs/design/dev-command-argument-contract.md` and the ADR-032 amendment at `docs/00_ADR.md:776`. Working evidence: `docs/plans/2026-08-01-dev-command-argument-flags-brainstorm.md`.
 
 The 28 `plugins/sp/commands/dev-*.md` wrappers centralized shared flag semantics into
@@ -52,6 +59,9 @@ This is the substantive half of the work. Measured inventory (2026-08-01, all 28
 | Flags declared by exactly one command | 34 |
 | Commands with zero flags | 1 (`dev-handover`) |
 
+After 0413 lands, expect roughly 162 declarations and the `--agent`/`--inline`/`--subprocess` rows to
+collapse into one. Do not hardcode either number — re-measure.
+
 Discovery already found contradictions between wrappers and their backing skills, numbered
 `dev-operations.md` contracts, workflows, and the glossary — enumerated in the design satellite's
 **Audited reconciliation set** (`docs/design/dev-command-argument-contract.md:92-110`). This task must
@@ -71,8 +81,9 @@ resolve every one of them with evidence.
 These three make the migration **atomic**: the heading gate flips for all 28 files in one commit or
 the tree does not validate.
 ### Requirements
-- **R1 — Audit every input before changing any.** Build a 28-command ledger covering all 64 hint
-  spellings and 7 body-only spellings. Per input record: classification (supported / compatibility
+- **R1 — Audit every input before changing any.** Build a 28-command ledger covering every hint spelling and
+  body-only spelling **present in the tree at implementation time** (2026-08-01 pre-0413 baseline:
+  64 + 7; re-derive rather than trusting it — 0413 lands first and changes the set). Per input record: classification (supported / compatibility
   alias / deprecated no-op / obsolete candidate / internal), owning consumer `file:line`, default, and
   compatibility status. Check both directions — advertised inputs must have a consumer, and consumer
   inputs must be advertised or explicitly internal. Preserve the ledger in `### Solution`; **do not
@@ -132,7 +143,10 @@ Every box needs mechanical evidence — a passing assertion, a validator diagnos
 
 **Flag necessity and sufficiency (H81 R4, R5, R6) — the substantive half**
 
-- [ ] An audit ledger covers **all 64 hint spellings + 7 body-only spellings across all 28 commands**.
+- [ ] The inventory is **re-derived from the working tree** at Phase 0; the recorded pre-0413
+      baseline (64 hint + 7 body-only spellings, 200 declarations) is superseded by the measured
+      figures, with both stated so the delta contributed by 0413 is visible.
+- [ ] An audit ledger covers **every hint spelling and body-only spelling across all 28 commands**.
       Each entry records: classification (supported / compatibility alias / deprecated no-op /
       obsolete candidate / internal), owning consumer, default, and evidence `file:line`. Recorded in
       `### Solution`; **no second shipped registry is created**.
@@ -204,7 +218,7 @@ only the deltas and the measured audit input.
 ```markdown
 ---
 description: <unchanged>
-argument-hint: "<wbs> [--mode <full|implement>] [--agent <name|auto>] [--inline|--subprocess] [--auto]"
+argument-hint: "<wbs> [--mode <full|implement>] [--agent <inline|auto|name>] [--auto]"
 allowed-tools: [...]
 ---
 
@@ -218,13 +232,14 @@ allowed-tools: [...]
 |------|-------------|---------|
 | `<wbs>` | Task WBS to run | `required` |
 | `--mode <full\|implement>` | Select execution mode | `full` |
+| `--agent <inline\|auto\|name>` | Execution surface + executor (post-0413 selector) | `inline` |
 | `--auto` | Skip objective HITL confirmations | `off` |
 
 **For the details of the above flags, refer to the [flag glossary](../skills/spur-dev/references/flag-glossary.md).**
 
 ## Usage
 
-/sp:dev-run <wbs> [--mode <full|implement>] [--auto]
+/sp:dev-run <wbs> [--mode <full|implement>] [--agent <inline|auto|name>] [--auto]
 
 ## Implementation
 
@@ -259,7 +274,7 @@ missing) with an evidence path, and record the resulting ledger in `### Solution
 
 | Flag | n | Declaring commands |
 |------|---|--------------------|
-| `--agent` `--inline` `--subprocess` | 19 each | arch, brainstorm, debug, dogfood, findissue, next, parallel, plan, refine, refineall, refresh, reverse, review, run, runall, simplify, unit, verify, verifyall |
+| `--agent` ~~`--inline`~~ ~~`--subprocess`~~ | 19 each | arch, brainstorm, debug, dogfood, findissue, next, parallel, plan, refine, refineall, refresh, reverse, review, run, runall, simplify, unit, verify, verifyall — **task 0413 collapses this triple into `--agent <inline\|auto\|<agent>\|<executor>>` on all 19.** Expect one row here, not three; `--inline`/`--subprocess` survive only as deprecated aliases (omit from canonical hints) |
 | `--auto` | 14 | idea, next, plan, refine, refineall, refresh, run, runall, simplify, unit, verify, verifyall, wrap, wrapall |
 | `--feature` | 8 | brainstorm, findissue, parallel, plan, refineall, runall, verifyall, wrapall |
 | `--focus` | 6 | refine, refineall, reverse, review, verify, verifyall |
@@ -321,9 +336,13 @@ tables only** — never from free body text.
   (`dogfood --full` vs `next --full`; `brainstorm/debug/dogfood --task`). Per the design satellite,
   document context-specific semantics explicitly or propose a compatible rename; **do not silently
   collapse the meanings into one glossary line.**
-- **The `--agent`/`--inline`/`--subprocess` triple** is declared by exactly the same 19 commands. That
-  invariant is worth asserting in the parity test — it is the inline-default execution-surface contract
-  (ADR-032 amendment, `cross-cutting.md#inline-default-execution-surface`) made mechanical.
+- **The execution-surface selector.** Pre-0413 this was a triple (`--agent`/`--inline`/`--subprocess`)
+  declared by exactly the same 19 commands. **Task 0413 collapses it to a single `--agent`** with
+  `inline` as the default value. Assert the post-0413 invariant — `--agent` on exactly those 19, and
+  neither `--inline` nor `--subprocess` in any canonical hint — which is the inline-default
+  execution-surface contract (`cross-cutting.md#inline-default-execution-surface`) made mechanical.
+  If 0413 has not landed when this task starts, **stop and sequence it first** rather than encoding
+  the triple in the parity test.
 - **The three existing ad hoc tables** (`dev-featurechange`, `dev-idea`, `dev-run`) must be *moved and
   reshaped* into `## Argument Flags`, not duplicated. `dev-run`'s table currently lives under
   `## Implementation` and carries a `Meaning` column plus an H8 redefinition callout — the callout is
@@ -341,6 +360,8 @@ The phases below are an **ordering within one commit**, not shippable increments
 
 **Phase 0 — audit before touching anything (the "necessary and sufficient" work)**
 
+- [ ] **Confirm task 0413 has landed.** It collapses the `--agent`/`--inline`/`--subprocess` triple across the same 19 commands. If it has not, stop — sequencing this first means editing those 19 files twice and documenting a contract 0413 deletes.
+- [ ] **Re-derive the flag inventory from the working tree.** The counts in `### Background` are a 2026-08-01 pre-0413 baseline; record the measured figures alongside them so the delta is visible.
 - [ ] Build the 28-command ledger. For each command, read the wrapper **and** its backing surface
       (`Skill(...)` target under `## Implementation`, the `dev-operations.md` numbered section, or the
       workflow YAML) and record per input: classification, owning consumer `file:line`, default,
@@ -385,7 +406,7 @@ The phases below are an **ordering within one commit**, not shippable increments
 - [ ] Drop the per-flag deep-link requirement; keep numbered-`dev-operations.md` parity as a separate
       bidirectional check.
 - [ ] Add explicit owning-contract assertions for each compatibility alias.
-- [ ] Assert the `--agent`/`--inline`/`--subprocess` 19-command invariant.
+- [ ] Assert the post-0413 execution-surface invariant: `--agent` declared by exactly 19 commands, and `--inline`/`--subprocess` absent from every canonical hint (deprecated aliases only).
 - [ ] Check `plugins/sp/tests/inline-execution-contract.test.ts` — update only if its parsing or
       exception list depends on hint shape.
 
@@ -410,8 +431,11 @@ The phases below are an **ordering within one commit**, not shippable increments
       `bun run build`.
 - [ ] Final ledger diff: re-derive the flag inventory from the shipped tree and confirm it matches the
       Phase 0 dispositions. Record the ledger in `### Solution`.
-- [ ] `git status` intentional only. Note: 3 sandbox-denied test failures (2× `Bun.serve` port bind,
-      1× `ps` EPERM) are pre-existing environment denials, not regressions.
+- [ ] `git status` intentional only. Note: the sandbox baseline is **24** denied tests (port/listen +
+      `ps` EPERM: `ProjectRegistry`, `project-start`, `startServer`, `healthModule`, `rpc client`),
+      re-measured 2026-08-01 — not 3. Bucket by cause: port/listen/`ps` is environmental, anything
+      else is yours. **Run the full `bun run test`, never a subset** — task 0411 shipped a drift-guard
+      regression that `plugins/sp/tests/` alone could not see.
 
 **Sequencing note:** do not start while another change is editing the same command / glossary / test
 surfaces — the working tree already carries unrelated modifications to `task-pipeline.yaml`,
@@ -429,6 +453,12 @@ surfaces — the working tree already carries unrelated modifications to `task-p
 <!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
 
 ### References
+**Dependency**
+
+- Task **0413** / feature **H82** (`docs/features/H82_unified-agent-execution-surface-selector.md`) —
+  collapses `--agent`/`--inline`/`--subprocess` into one selector across 19 of these 28 commands.
+  **Must land before this task starts.** Wired as `dependencies: ["0413"]`.
+
 **Authority**
 
 - Feature: `docs/features/H81_dev-command-argument-contract-clarity.md` (scenarios R1–R9)
@@ -462,7 +492,7 @@ surfaces — the working tree already carries unrelated modifications to `task-p
 - `plugins/sp/commands/dev-review.md:20`, `plugins/sp/commands/dev-refineall.md:26-30` — H8 `--next`
   removal notices (prose, not declarations)
 - `plugins/sp/skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface` —
-  the `--agent`/`--inline`/`--subprocess` contract
+  the execution-surface contract; rewritten by 0413 around the single `--agent` selector
 
 **Reproduce the inventory**
 
