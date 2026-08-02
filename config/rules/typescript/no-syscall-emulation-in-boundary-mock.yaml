@@ -1,0 +1,56 @@
+# Forbid mocking the syscall under test where the mock emulates it (task 0415 R4).
+#
+# WHY: `sp:test-driven-development` SKILL.md:164 already states the rule — "Mock
+# what crosses a process/IO boundary; never mock the code under test." This rule
+# enforces the narrow, mechanically detectable case: a test that mocks a
+# subprocess/syscall boundary (Bun.spawnSync / node:child_process) AND whose mock
+# handler emulates the syscall output (stat / mtime / %m) that the code under test
+# consumes. The 0411 defect is the canonical fixture: the verdict-mtime tests
+# mocked `Bun.spawnSync` INCLUDING the `stat -f %m` call, so the BSD-only stat
+# syntax silently returned nothing on Linux while 57 tests stayed green — the mock
+# replaced the very portability the tests were supposed to verify.
+#
+# SCOPE / discriminator: mocking the subprocess boundary to control *subprocess
+# responses* (e.g. feature-sync-bounded.test.ts intercepting `show`/`list`/`sync`
+# commands) is legitimate and NOT flagged — the boundary mock returns canned
+# responses, it does not re-implement the syscall the code under test calls. The
+# rule fires only when the mock handler itself references `stat`/`%m`/`birthtime`
+# (emulating the syscall) within a bounded window after the mock installation.
+#
+# FIX: use real files + real statSync/utimesSync (the 0411 remediation), or mock a
+# higher-level seam the code under test does NOT depend on for the behavior under
+# test. If a legit syscall-emulating mock is unavoidable, waive with a stated
+# reason in the test.
+include:
+  - "apps/**/tests/**/*.test.ts"
+  - "apps/**/tests/**/*.test.tsx"
+  - "packages/**/tests/**/*.test.ts"
+  - "packages/**/tests/**/*.test.tsx"
+  - "plugins/**/tests/**/*.test.ts"
+  - "plugins/**/tests/**/*.test.tsx"
+exclude:
+  - "**/node_modules/**"
+  - "**/dist/**"
+
+rules:
+  - id: no-syscall-emulation-in-boundary-mock
+    description: >
+      A test that mocks a subprocess/syscall boundary (Bun.spawnSync assignment,
+      spyOn(Bun,'spawnSync'), or mock.module('node:child_process')) MUST NOT have
+      the mock handler emulate the syscall output the code under test consumes
+      (stat / `-f %m` / birthtime / mtime-derived fingerprints). That mocks the
+      code under test, not the boundary: platform-specific syscall syntax (e.g.
+      BSD-only `stat -f %m`) silently no-ops on Linux while the test stays green —
+      the 0411 verdict-mtime defect. Prefer real files + real statSync/utimesSync
+      (the 0411 remediation) or mock a higher-level seam. Control of *subprocess
+      responses* (show/list/sync commands) is fine — only syscall emulation is
+      forbidden. sp:test-driven-development SKILL.md:164.
+    severity: warning
+    evaluator:
+      type: rg
+      config:
+        # Correlation in one bounded window: a boundary-mock installation followed
+        # (within ~700 chars) by stat/mtime syscall emulation. The window keeps
+        # legit subprocess-response mocks (which never mention stat/%m) quiet.
+        multiline: true
+        pattern: "(?:Bun\\.spawnSync\\s*=|spyOn\\(\\s*Bun\\s*,\\s*['\"]spawnSync['\"]\\s*\\)|mock\\.module\\(\\s*['\"]node:child_process['\"]\\s*\\))[\\s\\S]{0,700}?(?:cmd\\.includes\\(\\s*['\"]stat|stat\\s+-[fc]|%m|birthtime)"
