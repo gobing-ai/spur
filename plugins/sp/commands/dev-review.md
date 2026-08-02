@@ -1,12 +1,23 @@
 ---
 description: "Review code for a task or path — multi-dimensional review across functional traceability, SECUA quality, and architectural depth. Triggers: \"review this\", \"check the code\", \"SECUA review\", \"dev review\", \"audit this\"."
-argument-hint: "[<wbs|path>] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <inline|auto|name>] [[`--focus`](../skills/spur-dev/references/flag-glossary.md#flag-focus) <dims>] [--fix (deprecated)]"
+argument-hint: "[<wbs|path>] [--agent <inline|auto|name>] [--focus <dims>] [--fix (deprecated)]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
 # Dev Review
 
 Wraps the **sp:functional-review**, **sp:code-verification**, and **sp:code-improvement** skills.
+
+## Argument Flags
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `[<wbs\|path>]` | Task WBS or source path to review. | cwd |
+| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing review. | inline |
+| `--focus` `<dims>` | Review dimensions (functional / SECUA / architecture). | all |
+| `--fix` | Deprecated no-op + warning; route remediation to /sp:dev-verify --fix. | off |
+
+For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 
 ## Usage
 

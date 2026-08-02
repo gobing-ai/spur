@@ -55,6 +55,7 @@ The command forwards these via `$ARGUMENTS`:
 | `--save` | **Back-compat no-op for delivery.** Reports are always written to `docs/dogfood/…` and `.spur/run/dogfood/<run_id>.md`. The flag still documents/prints the report path. | always-on (flag optional) |
 | `--task` | File findings as a review-template task via `spur task create --template review`. | off |
 | `--chain-follow` | **Operator override for `--next` chains.** Permits the driver to follow the chain into named chained-leg artifacts (`.spur/run/<wbs>-verdict.json`, task-file section diffs, review tables) and attribute normally instead of stopping at the testing boundary. The flag licenses reading chained-leg evidence that already exists; it does NOT license the driver to execute the chained leg itself. Omit it to keep stop-at-testing as the default. See [§`--next` chain stop-at-testing](#next-chain-stop-at-testing) and [§Platform boundary (Claude Code)](#claude-code). | off |
+| `--full` | Full report verbosity — emit all six sections even when a step set is sparse. Default omits empty narrative sections. | off |
 
 > **Single-dash lenient parsing (R6b).** The argument parser accepts `-flag value` as equivalent to
 > `--flag value` for `--max-retry`, `--agent`, `--save`, `--task`, `--full` (and their `--fix`/

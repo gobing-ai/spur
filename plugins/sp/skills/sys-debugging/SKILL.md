@@ -23,6 +23,18 @@ see_also:
 
 A disciplined debugging protocol: build a feedback loop → isolate → identify root cause → fix → regression test. This skill teaches the agent to debug methodically rather than flailing with print statements or guessing at fixes.
 
+## Arguments
+
+When invoked via `/sp:dev-debug`, the command forwards `$ARGUMENTS` to this skill:
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `"<symptom \| failing command>"` | The symptom to diagnose or the failing command to reproduce. Positional, required. Quote if it contains shell metacharacters or flags. | (required) |
+| `--scope <path>` | Constrain the reproduction and isolation phases to a path (file, directory, or glob). | cwd (whole repo) |
+| `--task [<wbs>]` | Attach findings (root cause, issue task) to a task. With a WBS, write the root-cause summary into that task's `## Background`; without one, create an issue task via `spur task create --template issue`. | omitted |
+
+`--agent <inline|auto|name>` is consumed by the `dev-debug` wrapper (execution-surface selection) and is not forwarded as a debugging argument.
+
 ## The protocol
 
 ### Source before git state

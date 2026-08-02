@@ -7,10 +7,12 @@
  * hand-editable SSOT; superskill owns per-platform emission.
  *
  * Gates:
- *  (a) heading whitelist — H1 title + exactly ## Usage + ## Implementation
- *  (b) frontmatter schema — description, argument-hint, allowed-tools
+ *  (a) heading whitelist — H1 title + the per-contract ordered section headings
+ *  (b) frontmatter schema — description, argument-hint, allowed-tools; dev-only extras
  *  (c) target resolution — sp:<skill> refs, workflow files, procedure anchors
  *  (d) allowed-tools coherence — Skill present iff body contains Skill() call
+ *  (e) dev-command argument contract — syntax-only hint, Argument Flags table columns,
+ *      single glossary reference, and bidirectional hint↔table parity
  *
  * Exit non-zero listing every violation on stderr.
  */
@@ -24,7 +26,7 @@ export interface Violation {
     /** Command basename without extension (dev-run). */
     readonly command: string;
     /** Gate tag (a|b|c|d). */
-    readonly gate: 'a' | 'b' | 'c' | 'd';
+    readonly gate: 'a' | 'b' | 'c' | 'd' | 'e';
     /** Human-readable description of the violation. */
     readonly message: string;
 }
@@ -112,45 +114,93 @@ function extractYamlList(fm: string, key: string): string[] | undefined {
     return [...m[1].matchAll(/"([^"]*)"/g)].map((q) => q[1]);
 }
 
-// ─── Gate (a): heading whitelist ────────────────────────────────────────────
-
 const ALLOWED_HEADINGS: Record<string, true> = { Usage: true, Implementation: true };
 
-/** The heading set every command must carry — exactly these, no more, no fewer. */
+/** The heading set every non-dev command must carry — exactly these, no more, no fewer. */
 const REQUIRED_HEADINGS = ['Usage', 'Implementation'] as const;
+
+/** Dev commands carry an ordered Argument Flags → Usage → Implementation section sequence. */
+const DEV_REQUIRED_HEADINGS = ['Argument Flags', 'Usage', 'Implementation'] as const;
+
+const DEV_REQUIRED_SET: Record<string, true> = {
+    'Argument Flags': true,
+    Implementation: true,
+    Usage: true,
+};
+
+/** Canonical glossary reference every dev command carries exactly once. */
+const GLOSSARY_REF = '../skills/spur-dev/references/flag-glossary.md';
+
+function isDevCommand(name: string): boolean {
+    return name.startsWith('dev-');
+}
 
 function checkHeadingWhitelist(cmd: ParsedCommand): readonly Violation[] {
     const violations: Violation[] = [];
+    const dev = isDevCommand(cmd.name);
+    const required = dev ? DEV_REQUIRED_HEADINGS : REQUIRED_HEADINGS;
+    const allowedSet = dev ? DEV_REQUIRED_SET : ALLOWED_HEADINGS;
+    const allowedList = dev ? DEV_REQUIRED_HEADINGS : REQUIRED_HEADINGS;
 
-    // Forbidden: anything outside the whitelist, at any heading level.
+    // Forbidden: anything outside the allowed set, at any heading level.
     for (const h of cmd.headings) {
-        if (!ALLOWED_HEADINGS[h]) {
+        if (!allowedSet[h]) {
             violations.push({
                 command: cmd.name,
                 gate: 'a',
-                message: `forbidden heading "${h}" (allowed: ## Usage, ## Implementation)`,
+                message: `forbidden heading "${h}" (allowed: ${allowedList.map((x) => `## ${x}`).join(', ')})`,
             });
         }
     }
 
     // Missing: a wrapper that simply omits a required section must not pass.
-    for (const required of REQUIRED_HEADINGS) {
-        if (!cmd.headings.includes(required)) {
+    for (const req of required) {
+        if (!cmd.headings.includes(req)) {
             violations.push({
                 command: cmd.name,
                 gate: 'a',
-                message: `missing required heading "## ${required}"`,
+                message: `missing required heading "## ${req}"`,
             });
         }
     }
 
     // Duplicated: two `## Usage` sections is a malformed wrapper, not a thin one.
-    for (const required of REQUIRED_HEADINGS) {
-        if (cmd.headings.filter((h) => h === required).length > 1) {
+    for (const req of required) {
+        if (cmd.headings.filter((h) => h === req).length > 1) {
             violations.push({
                 command: cmd.name,
                 gate: 'a',
-                message: `duplicate heading "## ${required}"`,
+                message: `duplicate heading "## ${req}"`,
+            });
+        }
+    }
+
+    // Dev commands enforce order: Argument Flags immediately before Usage, Usage before Implementation.
+    if (dev) {
+        const indexes: Record<string, number> = {};
+        for (const [i, h] of cmd.headings.entries()) {
+            if (DEV_REQUIRED_SET[h] && indexes[h] === undefined) indexes[h] = i;
+        }
+        if (
+            indexes['Argument Flags'] !== undefined &&
+            indexes.Usage !== undefined &&
+            indexes['Argument Flags'] + 1 !== indexes.Usage
+        ) {
+            violations.push({
+                command: cmd.name,
+                gate: 'a',
+                message: 'heading order: "## Argument Flags" must immediately precede "## Usage"',
+            });
+        }
+        if (
+            indexes.Usage !== undefined &&
+            indexes.Implementation !== undefined &&
+            indexes.Usage >= indexes.Implementation
+        ) {
+            violations.push({
+                command: cmd.name,
+                gate: 'a',
+                message: 'heading order: "## Usage" must precede "## Implementation"',
             });
         }
     }
@@ -276,6 +326,204 @@ function checkAllowedToolsCoherence(cmd: ParsedCommand): readonly Violation[] {
     return violations;
 }
 
+// ─── Gate (e): dev-command argument contract ────────────────────────────────
+
+/**
+ * Extract the `## Argument Flags` section body (between the heading and the next
+ * level-two heading or end of body). Returns the raw section text.
+ */
+function extractArgumentFlagsSection(body: string): string {
+    const marker = /^## Argument Flags\n/m;
+    const start = body.search(marker);
+    if (start < 0) return '';
+    const after = body.slice(start);
+    // Cut at the next level-two heading (## ) that is not the Argument Flags header itself.
+    const nextH2 = after.slice(after.indexOf('\n') + 1).search(/^## /m);
+    if (nextH2 < 0) return after;
+    return after.slice(0, after.indexOf('\n') + 1 + nextH2);
+}
+
+/**
+ * Parse a markdown table in a section. Returns the header cells and data rows.
+ * Header row is the first `|`-delimited row following the heading; the separator
+ * row (`| --- |`) is skipped; data rows are every subsequent `|`-delimited line
+ * until a blank line or non-table line.
+ */
+interface MarkdownTable {
+    header: string[];
+    rows: string[][];
+}
+
+function parseMarkdownTable(section: string): MarkdownTable | null {
+    const lines = section.split('\n');
+    const tableLines: string[] = [];
+    let seenHeader = false;
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('|')) {
+            if (seenHeader) break;
+            continue;
+        }
+        tableLines.push(trimmed);
+        seenHeader = true;
+    }
+    if (tableLines.length < 2) return null;
+    // Split on unescaped pipes only, then unescape `\|` → `|` per cell.
+    // Standard GFM: `\|` in a table cell renders as a literal `|`.
+    const split = (row: string): string[] =>
+        row
+            .replace(/^\|/, '')
+            .replace(/\|$/, '')
+            .split(/(?<!\\)\|/)
+            .map((c) => c.trim().replace(/\\\|/g, '|'));
+    const header = split(tableLines[0]);
+    // Skip the separator row (--- cells).
+    const dataRows = tableLines
+        .slice(1)
+        .filter((r) => !split(r).every((c) => /^:?-{2,}:?$/.test(c) || c === ''))
+        .map(split);
+    return { header, rows: dataRows };
+}
+
+/**
+ * Extract flag and positional tokens from a canonical (syntax-only) argument-hint.
+ * Positionals: `<...>` tokens. Flags: `--flag` optionally with `<value>` / alternatives.
+ */
+function extractHintTokens(hint: string): { positionals: string[]; flags: string[] } {
+    const positionals = [...hint.matchAll(/<[^>]+>/g)].map((m) => m[0]);
+    // Flags: capture the `--flag` literal, ignoring the value placeholder that follows.
+    const flags = [...hint.matchAll(/(--[a-z][a-z0-9-]*)/g)].map((m) => m[1]);
+    // Deduplicate while preserving order.
+    return {
+        positionals: [...new Set(positionals)],
+        flags: [...new Set(flags)],
+    };
+}
+
+/**
+ * Extract the flag / positional tokens declared in an Argument Flags table. The
+ * first cell of each row is the token: `<positional>` or `--flag` (with optional
+ * value placeholder and alternatives). For parity we compare the leading token
+ * (`--flag` or `<positional>`), since hint parity is on those literals.
+ */
+function extractTableTokens(rows: string[][]): { positionals: string[]; flags: string[] } {
+    const positionals: string[] = [];
+    const flags: string[] = [];
+    for (const row of rows) {
+        const cell = row[0] ?? '';
+        const pos = [...cell.matchAll(/<[^>]+>/g)].map((m) => m[0]);
+        const flg = cell.match(/--[a-z][a-z0-9-]*/);
+        if (pos.length > 0) positionals.push(...pos);
+        if (flg) flags.push(flg[0]); // Not `else if` — a cell like `--mode <full|implement>` has both.
+    }
+    return {
+        positionals: [...new Set(positionals)],
+        flags: [...new Set(flags)],
+    };
+}
+
+/** Flags whose table-row description marks them as alias / compat / no-op / deprecated. */
+const COMPAT_MARKERS = /\b(alias|compat|no-op|deprecated|compatibility)\b/i;
+
+function checkDevArgumentContract(cmd: ParsedCommand): readonly Violation[] {
+    if (!isDevCommand(cmd.name)) return [];
+    const violations: Violation[] = [];
+    const hint = cmd.argumentHint ?? '';
+
+    // 1. Syntax-only hint: no Markdown links (`](`) and no `<...>`-wrapped prose.
+    if (hint.includes('](')) {
+        violations.push({
+            command: cmd.name,
+            gate: 'e',
+            message: `argument-hint contains a Markdown link "](" — hint must be syntax only`,
+        });
+    }
+
+    // 2. Argument Flags table: exactly one table with exactly Flag | Description | Default.
+    const section = extractArgumentFlagsSection(cmd.body);
+    const table = parseMarkdownTable(section);
+    if (!table) {
+        violations.push({
+            command: cmd.name,
+            gate: 'e',
+            message: '## Argument Flags section must contain a markdown table',
+        });
+        return violations;
+    }
+    const expectedCols = ['Flag', 'Description', 'Default'];
+    if (table.header.length !== 3 || !expectedCols.every((c, i) => table.header[i] === c)) {
+        violations.push({
+            command: cmd.name,
+            gate: 'e',
+            message: `Argument Flags table columns must be exactly "Flag | Description | Default" (got "${table.header.join(' | ')}")`,
+        });
+    }
+
+    // Every row must have a non-blank Default cell (deterministic default rule).
+    for (const [idx, row] of table.rows.entries()) {
+        const defaultCell = row[2];
+        if (defaultCell === undefined || defaultCell === '' || /^\s*$/.test(defaultCell)) {
+            violations.push({
+                command: cmd.name,
+                gate: 'e',
+                message: `Argument Flags row ${idx + 1} ("${row[0] ?? ''}") has a blank Default cell`,
+            });
+        }
+    }
+
+    // 3. Exactly one canonical glossary reference.
+    const glossaryCount = (cmd.body.match(new RegExp(GLOSSARY_REF.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) ?? [])
+        .length;
+    if (glossaryCount !== 1) {
+        violations.push({
+            command: cmd.name,
+            gate: 'e',
+            message: `expected exactly one glossary reference to ${GLOSSARY_REF}, found ${glossaryCount}`,
+        });
+    }
+
+    // 4. Bidirectional hint ↔ table parity.
+    const hintTokens = extractHintTokens(hint);
+    const tableTokens = extractTableTokens(table.rows);
+
+    // Forward: every hint positional and flag must appear in the table.
+    for (const pos of hintTokens.positionals) {
+        if (!tableTokens.positionals.includes(pos)) {
+            violations.push({
+                command: cmd.name,
+                gate: 'e',
+                message: `hint positional "${pos}" has no matching row in the Argument Flags table`,
+            });
+        }
+    }
+    for (const flag of hintTokens.flags) {
+        if (!tableTokens.flags.includes(flag)) {
+            violations.push({
+                command: cmd.name,
+                gate: 'e',
+                message: `hint flag "${flag}" has no matching row in the Argument Flags table`,
+            });
+        }
+    }
+
+    // Reverse: every table flag must appear in the hint, unless the row marks it
+    // as an alias / compat / no-op / deprecated spelling (compatibility surface).
+    for (const flag of tableTokens.flags) {
+        if (hintTokens.flags.includes(flag)) continue;
+        const row = table.rows.find((r) => (r[0] ?? '').includes(flag));
+        const desc = row?.[1] ?? '';
+        if (!COMPAT_MARKERS.test(desc)) {
+            violations.push({
+                command: cmd.name,
+                gate: 'e',
+                message: `table flag "${flag}" is absent from the hint and is not marked alias/compat/no-op/deprecated`,
+            });
+        }
+    }
+
+    return violations;
+}
+
 // ─── Core validation ────────────────────────────────────────────────────────
 
 export function validate(root: string = process.cwd()): ValidationResult {
@@ -296,6 +544,7 @@ export function validate(root: string = process.cwd()): ValidationResult {
         allViolations.push(...checkFrontmatterSchema(cmd));
         allViolations.push(...checkTargetResolution(cmd, skillsDir, root));
         allViolations.push(...checkAllowedToolsCoherence(cmd));
+        allViolations.push(...checkDevArgumentContract(cmd));
     }
 
     return { violations: allViolations, fileCount: files.length };
@@ -329,10 +578,12 @@ export function renderHelp(): string {
         '  --help    Show this help',
         '',
         'Gates:',
-        '  (a) heading whitelist  — only ## Usage + ## Implementation beyond the H1',
+        '  (a) heading whitelist  — H1 title + per-contract ordered section headings',
         '  (b) frontmatter schema — description, argument-hint, allowed-tools present',
         '  (c) target resolution  — sp:<skill>, workflow, procedure anchor exist on disk',
         '  (d) allowed-tools coherence — Skill <-> Skill() call',
+        '  (e) dev argument contract — syntax-only hint, Argument Flags table columns,',
+        '      single glossary reference, and bidirectional hint↔table parity (dev-* only)',
     ].join('\n');
 }
 
@@ -361,7 +612,7 @@ export function runCli(
     }
 
     if (v.violations.length === 0) {
-        const msg = `${v.fileCount} commands pass all 4 thin-wrapper gates.\n`;
+        const msg = `${v.fileCount} commands pass all 5 thin-wrapper gates.\n`;
         return { exitCode: 0, stdout: msg, stderr: '' };
     }
 

@@ -83,9 +83,10 @@ function makeTempCommand(
 
 // ─── (a) heading whitelist ──────────────────────────────────────────────────
 
-describe('(a) heading whitelist — only ## Usage + ## Implementation beyond H1', () => {
-    test('every command .md has exactly the allowed headings', () => {
-        const allowed = new Set(['Usage', 'Implementation']);
+describe('(a) heading whitelist — per-contract ordered section headings', () => {
+    test('every command .md has only allowed headings', () => {
+        const nonDevAllowed = new Set(['Usage', 'Implementation']);
+        const devAllowed = new Set(['Argument Flags', 'Usage', 'Implementation']);
         for (const file of listCommandFiles()) {
             const name = file.replace(/\.md$/, '');
             const raw = readFileSync(join(COMMANDS_DIR, file), 'utf8');
@@ -99,6 +100,7 @@ describe('(a) heading whitelist — only ## Usage + ## Implementation beyond H1'
                 .split('\n')
                 .filter((l) => l.startsWith('## '))
                 .map((l) => l.slice(3).trim());
+            const allowed = name.startsWith('dev-') ? devAllowed : nonDevAllowed;
             for (const h of h2s) {
                 expect(allowed.has(h), `${name}: forbidden heading ## ${h}`).toBe(true);
             }
@@ -113,8 +115,9 @@ describe('(a) heading whitelist — only ## Usage + ## Implementation beyond H1'
         }
     });
 
-    test('every command carries exactly the two required headings, once each', () => {
+    test('every command carries exactly its required headings, once each, in order', () => {
         for (const file of listCommandFiles()) {
+            const name = file.replace(/\.md$/, '');
             const raw = readFileSync(join(COMMANDS_DIR, file), 'utf8');
             const fmMatch = raw.match(/^---\n([\s\S]*?)\n---/);
             const body = fmMatch ? raw.slice(fmMatch[0].length).trim() : raw;
@@ -123,10 +126,10 @@ describe('(a) heading whitelist — only ## Usage + ## Implementation beyond H1'
                 .slice(1) // drop the H1 title
                 .filter((l) => l.startsWith('#'))
                 .map((l) => l.replace(/^#+\s*/, '').trim());
-            expect(headings, `${file}: heading set must be exactly Usage + Implementation`).toEqual([
-                'Usage',
-                'Implementation',
-            ]);
+            const expected = name.startsWith('dev-')
+                ? ['Argument Flags', 'Usage', 'Implementation']
+                : ['Usage', 'Implementation'];
+            expect(headings, `${file}: heading set must be exactly ${expected.join(' + ')}`).toEqual(expected);
         }
     });
 });
@@ -383,8 +386,8 @@ describe('(d) allowed-tools coherence — Skill <-> Skill() call', () => {
 
 // ─── (e) validator integration — no violations on the real corpus ───────────
 
-describe('(e) validator reports no violations on the live corpus', () => {
-    test('validate() returns zero violations', () => {
+describe('(e) validator integration — corpus is clean after the 28-file migration (task 0412)', () => {
+    test('validate() reports zero violations across all 34 commands', () => {
         const result = validate(ROOT);
         expect(result.fileCount).toBe(34);
         expect(result.violations).toEqual([]);
@@ -618,6 +621,279 @@ describe('(f) validator catches violations in corrupted files', () => {
     });
 });
 
+// ─── (e) dev-command argument contract negative fixtures ───────────────────
+
+/** Create a minimal dev-* command with an Argument Flags section in a temp tree. */
+function makeTempDevCommand(
+    tmp: string,
+    name: string,
+    argumentHint: string,
+    flagsSection: string,
+    implementation: string,
+): void {
+    const dir = join(tmp, 'plugins', 'sp', 'commands');
+    mkdirSync(dir, { recursive: true });
+    const content = [
+        '---',
+        `description: ${name} test command`,
+        `argument-hint: ${argumentHint}`,
+        'allowed-tools: ["Bash"]',
+        '---',
+        '',
+        `# ${name}`,
+        '',
+        `${name} wrapper.`,
+        '',
+        '## Argument Flags',
+        '',
+        flagsSection,
+        '',
+        '## Usage',
+        '',
+        `/sp:${name}`,
+        '',
+        '## Implementation',
+        '',
+        implementation,
+        '',
+    ].join('\n');
+    writeFileSync(join(dir, `${name}.md`), content);
+}
+
+const VALID_FLAGS_SECTION = [
+    '| Flag | Description | Default |',
+    '| --- | --- | --- |',
+    '| `<wbs>` | Task WBS | `required` |',
+    '| `--auto` | Skip HITL | `off` |',
+    '',
+    'For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).',
+].join('\n');
+
+describe('(e) dev-command argument contract negative fixtures', () => {
+    test('gate (e) — clean dev command passes', () => {
+        const tmp = mkdtempSync(join(tmpdir(), 'cmd-contract-'));
+        try {
+            makeTempDevCommand(tmp, 'dev-test', '"<wbs>" [--auto]', VALID_FLAGS_SECTION, '- Run it.');
+            const result = validate(tmp);
+            const eViolations = result.violations.filter((v) => v.gate === 'e');
+            expect(eViolations).toEqual([]);
+        } finally {
+            rmSync(tmp, { recursive: true, force: true });
+        }
+    });
+
+    test('gate (e) — Markdown link in hint is reported', () => {
+        const tmp = mkdtempSync(join(tmpdir(), 'cmd-contract-'));
+        try {
+            makeTempDevCommand(
+                tmp,
+                'dev-test',
+                '"<wbs>" [`--auto`](../skills/spur-dev/references/flag-glossary.md#flag-auto)',
+                VALID_FLAGS_SECTION,
+                '- Run it.',
+            );
+            const result = validate(tmp);
+            const eViolations = result.violations.filter((v) => v.gate === 'e');
+            expect(eViolations.length).toBeGreaterThan(0);
+            expect(eViolations.some((v) => v.message.includes('Markdown link'))).toBe(true);
+        } finally {
+            rmSync(tmp, { recursive: true, force: true });
+        }
+    });
+
+    test('gate (e) — missing Argument Flags table is reported', () => {
+        const tmp = mkdtempSync(join(tmpdir(), 'cmd-contract-'));
+        try {
+            makeTempDevCommand(tmp, 'dev-test', '"<wbs>" [--auto]', 'No table here.', '- Run it.');
+            const result = validate(tmp);
+            const eViolations = result.violations.filter((v) => v.gate === 'e');
+            expect(eViolations.length).toBeGreaterThan(0);
+            expect(eViolations.some((v) => v.message.includes('must contain a markdown table'))).toBe(true);
+        } finally {
+            rmSync(tmp, { recursive: true, force: true });
+        }
+    });
+
+    test('gate (e) — wrong table columns are reported', () => {
+        const tmp = mkdtempSync(join(tmpdir(), 'cmd-contract-'));
+        try {
+            const wrongCols = [
+                '| Flag | Meaning |',
+                '| --- | --- |',
+                '| `--auto` | Skip HITL |',
+                '',
+                'For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).',
+            ].join('\n');
+            makeTempDevCommand(tmp, 'dev-test', '[--auto]', wrongCols, '- Run it.');
+            const result = validate(tmp);
+            const eViolations = result.violations.filter((v) => v.gate === 'e');
+            expect(eViolations.some((v) => v.message.includes('Flag | Description | Default'))).toBe(true);
+        } finally {
+            rmSync(tmp, { recursive: true, force: true });
+        }
+    });
+
+    test('gate (e) — blank Default cell is reported', () => {
+        const tmp = mkdtempSync(join(tmpdir(), 'cmd-contract-'));
+        try {
+            const blankDefault = [
+                '| Flag | Description | Default |',
+                '| --- | --- | --- |',
+                '| `--auto` | Skip HITL |  |',
+                '',
+                'For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).',
+            ].join('\n');
+            makeTempDevCommand(tmp, 'dev-test', '[--auto]', blankDefault, '- Run it.');
+            const result = validate(tmp);
+            const eViolations = result.violations.filter((v) => v.gate === 'e');
+            expect(eViolations.some((v) => v.message.includes('blank Default'))).toBe(true);
+        } finally {
+            rmSync(tmp, { recursive: true, force: true });
+        }
+    });
+
+    test('gate (e) — missing glossary reference is reported', () => {
+        const tmp = mkdtempSync(join(tmpdir(), 'cmd-contract-'));
+        try {
+            const noGlossary = [
+                '| Flag | Description | Default |',
+                '| --- | --- | --- |',
+                '| `--auto` | Skip HITL | `off` |',
+            ].join('\n');
+            makeTempDevCommand(tmp, 'dev-test', '[--auto]', noGlossary, '- Run it.');
+            const result = validate(tmp);
+            const eViolations = result.violations.filter((v) => v.gate === 'e');
+            expect(eViolations.some((v) => v.message.includes('glossary reference'))).toBe(true);
+        } finally {
+            rmSync(tmp, { recursive: true, force: true });
+        }
+    });
+
+    test('gate (e) — duplicate glossary reference is reported', () => {
+        const tmp = mkdtempSync(join(tmpdir(), 'cmd-contract-'));
+        try {
+            const dupGlossary = [
+                '| Flag | Description | Default |',
+                '| --- | --- | --- |',
+                '| `--auto` | Skip HITL | `off` |',
+                '',
+                'For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).',
+                'See also the [flag glossary](../skills/spur-dev/references/flag-glossary.md).',
+            ].join('\n');
+            makeTempDevCommand(tmp, 'dev-test', '[--auto]', dupGlossary, '- Run it.');
+            const result = validate(tmp);
+            const eViolations = result.violations.filter((v) => v.gate === 'e');
+            expect(eViolations.some((v) => v.message.includes('glossary reference'))).toBe(true);
+        } finally {
+            rmSync(tmp, { recursive: true, force: true });
+        }
+    });
+
+    test('gate (e) — hint flag with no table row is reported (forward parity)', () => {
+        const tmp = mkdtempSync(join(tmpdir(), 'cmd-contract-'));
+        try {
+            const noAutoRow = [
+                '| Flag | Description | Default |',
+                '| --- | --- | --- |',
+                '| `<wbs>` | Task WBS | `required` |',
+                '',
+                'For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).',
+            ].join('\n');
+            makeTempDevCommand(tmp, 'dev-test', '"<wbs>" [--auto]', noAutoRow, '- Run it.');
+            const result = validate(tmp);
+            const eViolations = result.violations.filter((v) => v.gate === 'e');
+            expect(eViolations.some((v) => v.message.includes('--auto') && v.message.includes('no matching row'))).toBe(
+                true,
+            );
+        } finally {
+            rmSync(tmp, { recursive: true, force: true });
+        }
+    });
+
+    test('gate (e) — table flag absent from hint and not marked compat is reported (reverse parity)', () => {
+        const tmp = mkdtempSync(join(tmpdir(), 'cmd-contract-'));
+        try {
+            const extraFlagRow = [
+                '| Flag | Description | Default |',
+                '| --- | --- | --- |',
+                '| `<wbs>` | Task WBS | `required` |',
+                '| `--verbose` | More output | `off` |',
+                '',
+                'For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).',
+            ].join('\n');
+            makeTempDevCommand(tmp, 'dev-test', '"<wbs>"', extraFlagRow, '- Run it.');
+            const result = validate(tmp);
+            const eViolations = result.violations.filter((v) => v.gate === 'e');
+            expect(eViolations.some((v) => v.message.includes('--verbose') && v.message.includes('not marked'))).toBe(
+                true,
+            );
+        } finally {
+            rmSync(tmp, { recursive: true, force: true });
+        }
+    });
+
+    test('gate (e) — table flag marked compat alias is allowed without hint', () => {
+        const tmp = mkdtempSync(join(tmpdir(), 'cmd-contract-'));
+        try {
+            const compatRow = [
+                '| Flag | Description | Default |',
+                '| --- | --- | --- |',
+                '| `<wbs>` | Task WBS | `required` |',
+                '| `--old-name` | Compatibility alias of `--new-name` | `off` |',
+                '',
+                'For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).',
+            ].join('\n');
+            makeTempDevCommand(tmp, 'dev-test', '"<wbs>"', compatRow, '- Run it.');
+            const result = validate(tmp);
+            const eViolations = result.violations.filter((v) => v.gate === 'e');
+            expect(eViolations).toEqual([]);
+        } finally {
+            rmSync(tmp, { recursive: true, force: true });
+        }
+    });
+
+    test('gate (e) — hint positional with no table row is reported (forward parity)', () => {
+        const tmp = mkdtempSync(join(tmpdir(), 'cmd-contract-'));
+        try {
+            // WBS in hint but removed from the table.
+            const noWbsRow = [
+                '| Flag | Description | Default |',
+                '| --- | --- | --- |',
+                '| `--auto` | Skip HITL | `off` |',
+                '',
+                'For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).',
+            ].join('\n');
+            makeTempDevCommand(tmp, 'dev-test', '"<wbs>" [--auto]', noWbsRow, '- Run it.');
+            const result = validate(tmp);
+            const eViolations = result.violations.filter((v) => v.gate === 'e');
+            expect(eViolations.some((v) => v.message.includes('<wbs>') && v.message.includes('no matching row'))).toBe(
+                true,
+            );
+        } finally {
+            rmSync(tmp, { recursive: true, force: true });
+        }
+    });
+
+    test('gate (e) — dev-handover positional-only validates with no -- row', () => {
+        const tmp = mkdtempSync(join(tmpdir(), 'cmd-contract-'));
+        try {
+            const positionalOnly = [
+                '| Flag | Description | Default |',
+                '| --- | --- | --- |',
+                '| `"<blocker description>"` | Blocker description | `required` |',
+                '',
+                'For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).',
+            ].join('\n');
+            makeTempDevCommand(tmp, 'dev-handover', '"<blocker description>"', positionalOnly, '- Run it.');
+            const result = validate(tmp);
+            const eViolations = result.violations.filter((v) => v.gate === 'e');
+            expect(eViolations).toEqual([]);
+        } finally {
+            rmSync(tmp, { recursive: true, force: true });
+        }
+    });
+});
+
 // ─── (g) CLI surface ────────────────────────────────────────────────────────
 
 describe('(g) CLI surface', () => {
@@ -636,6 +912,7 @@ describe('(g) CLI surface', () => {
         expect(help).toContain('(b)');
         expect(help).toContain('(c)');
         expect(help).toContain('(d)');
+        expect(help).toContain('(e)');
     });
 
     test('runCli --help exits 0', () => {

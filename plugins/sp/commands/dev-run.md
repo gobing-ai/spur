@@ -1,12 +1,26 @@
 ---
 description: Run a task — full pipeline (precheck→implement→test→review→approve→verify→record→done) or single-step (implement)
-argument-hint: "<wbs> [[`--mode`](../skills/spur-dev/references/flag-glossary.md#flag-mode) <full|implement>] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <inline|auto|name>] [--auto] [--next] [--wrap] [--continue]"
+argument-hint: "<wbs> [--mode <full|implement>] [--agent <inline|auto|name>] [--auto] [--next] [--wrap] [--continue]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 ---
 
 # Dev Run
 
 Wraps the **sp:spur-dev** and **sp:code-implementation** skills.
+
+## Argument Flags
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `<wbs>` | Task WBS to run. | required |
+| `--mode` `<full\|implement>` | Full pipeline or single implement step. | full |
+| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing stages. | inline |
+| `--auto` | Skip objective HITL confirmations. | off |
+| `--next` | Chain-to-completion via the next-router. | off |
+| `--wrap` | Run the wrap hop after the main step. | off |
+| `--continue` | Resume an interrupted task from its checkpoint. | off |
+
+For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 
 ## Usage
 
@@ -20,13 +34,7 @@ Wraps the **sp:spur-dev** and **sp:code-implementation** skills.
 
 **Flags:**
 
-| Flag | Meaning |
-|---|---|
-| `--mode <full\|implement>` | Select execution mode. `--mode implement` is the documented way to run only the implement step. |
-| [`--next`](../skills/spur-dev/references/flag-glossary.md#flag-next) | Chain-to-completion with propagation: on success, hand the task back to `sp:next-router`, which resolves the next dispatch and re-invokes with `--next` still set, until the work is done or a gate stops it. **No longer selects implement-only mode** — use `--mode implement`. |
-| [`--wrap`](../skills/spur-dev/references/flag-glossary.md#flag-wrap) | Run the wrap hop after the main step. |
-| [`--continue`](../skills/spur-dev/references/flag-glossary.md#flag-continue) | Resume an interrupted task from its checkpoint. |
-| [`--auto`](../skills/spur-dev/references/flag-glossary.md#flag-auto) \| `--agent <inline\|auto\|name>` | Skip objective HITL confirmations (taste/irreversible gates still pause). `--agent` names who does the model-bearing work; here that is the pipeline's stages, so the value is merged into `vars.agent` and `agent.run` steps run under it while the orchestrator loop continues in this session. Same rule as every other command, not an exception. See the [execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface). |
+- `--auto` | `--agent <inline|auto|name>` — Skip objective HITL confirmations (taste/irreversible gates still pause). `--agent` names who does the model-bearing work; here that is the pipeline's stages, so the value is merged into `vars.agent` and `agent.run` steps run under it while the orchestrator loop continues in this session. Same rule as every other command, not an exception. See the [execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 
 > **⚠ Redefinition (feature H8, 2026-07-31).** `--next` previously selected implement-only mode on
 > this command. It no longer does — use `--mode implement`. The replacement already existed and is

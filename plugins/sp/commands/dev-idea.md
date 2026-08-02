@@ -8,6 +8,19 @@ allowed-tools: ["Bash", "Read", "AskUserQuestion"]
 
 Wraps the **idea-pipeline.yaml** workflow.
 
+## Argument Flags
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `"<idea>"` | Vague idea to turn into a feature with AC and tasks. | required |
+| `--auto` | Skip objective HITL gates only (taste gates still pause). | off |
+| `--skip-design` | Omit system-design and per-task Design. | off |
+| `--approve-taste` | With `--auto`: set idea_approved + design_approved so idea-eval / design-approval do not pause. | off |
+| `--idea-approved` | Compatibility alias for idea_approved=true (subset of --approve-taste). | off |
+| `--design-approved` | Compatibility alias for design_approved=true (subset of --approve-taste). | off |
+
+For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
+
 ## Usage
 
 ```
@@ -16,13 +29,6 @@ Wraps the **idea-pipeline.yaml** workflow.
   [--skip-design]       # design package off (system-design + task Design)
   [--approve-taste]     # with --auto: skip idea-eval + design-approval pauses
 ```
-
-| Flag | Axis | Effect |
-|------|------|--------|
-| *(none)* | interactive | All HITL; design package on by default |
-| [`--auto`](../skills/spur-dev/references/flag-glossary.md#flag-auto) | HITL depth | Skip **objective** gates; **taste** gates still pause |
-| [`--skip-design`](../skills/spur-dev/references/flag-glossary.md#flag-skip-design) | scope | No system-design; omit per-task Design (refine later) |
-| [`--approve-taste`](../skills/spur-dev/references/flag-glossary.md#flag-approve-taste) | taste re-entry | Only meaningful with `--auto`: sets `idea_approved` + `design_approved` so idea-eval and design-approval do not pause |
 
 There is **no** `--design` force flag. Design is default-on; only `--skip-design` opts out.
 
@@ -42,11 +48,3 @@ spur workflow run .spur/workflows/idea-pipeline.yaml --vars '{
   "idea_approved":"false|true"
 }'
 ```
-
-| Flag | Vars |
-|------|------|
-| `--auto` | `profile=auto` |
-| `--skip-design` | `design=skip` |
-| `--approve-taste` | `idea_approved=true` **and** `design_approved=true` |
-| `--idea-approved` (alias) | `idea_approved=true` |
-| `--design-approved` (alias) | `design_approved=true` |

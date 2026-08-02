@@ -1,6 +1,6 @@
 ---
 description: "Review agent session logs, identify performance bottlenecks and behavioral anti-patterns, and generate a structured task file with proposed fixes. Triggers: post-mortem, performance analysis, session review, find issues, identify bottlenecks"
-argument-hint: "[<topic>] [--sessions <glob>] [--source <auto|omp|claude|codex|gemini|opencode|antigravity|openclaw|pi>] [--feature <id>] [--template <meta|issue|standard>] [--priority <P0|P1|P2|P3>] [--severity <S0|S1|S2>] [--category <list>] [--since <iso>] [--until <iso>] [--top <n>] [--min-cost <duration>] [--strict-topic] [--use-history] [--no-task] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <inline|auto|name>] [--json]"
+argument-hint: "[<topic>] [--sessions <glob>] [--source <auto|omp|claude|codex|gemini|opencode|antigravity|openclaw|pi>] [--feature <id>] [--template <meta|issue|standard>] [--priority <P0|P1|P2|P3>] [--severity <S0|S1|S2>] [--category <list>] [--since <iso>] [--until <iso>] [--top <n>] [--min-cost <duration>] [--strict-topic] [--use-history] [--no-task] [--agent <inline|auto|name>] [--json]"
 allowed-tools: ["Bash", "Read", "Write", "Grep", "Glob", "Skill"]
 ---
 
@@ -9,6 +9,30 @@ allowed-tools: ["Bash", "Read", "Write", "Grep", "Glob", "Skill"]
 Wraps the **sp:issue-finding** skill — forensic session log analysis that identifies performance
 bottlenecks, ranks root causes by time cost, proposes targeted fixes, and generates a structured
 task file via `spur task create`.
+
+## Argument Flags
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `[<topic>]` | Narrow the analysis to a topic. | omitted |
+| `--sessions` `<glob>` | Session log glob to scan. | recent |
+| `--source` `<auto\|omp\|claude\|codex\|gemini\|opencode\|antigravity\|openclaw\|pi>` | Agent source to scan. | auto |
+| `--feature` `<id>` | Attach findings to a feature. | omitted |
+| `--template` `<meta\|issue\|standard>` | Output template shape. | standard |
+| `--priority` `<P0\|P1\|P2\|P3>` | Filter / assign priority. | omitted |
+| `--severity` `<S0\|S1\|S2>` | Filter / assign severity. | omitted |
+| `--category` `<list>` | Comma list of categories to keep. | all |
+| `--since` `<iso>` | Start of the scan window. | configured |
+| `--until` `<iso>` | End of the scan window. | now |
+| `--top` `<n>` | Limit to top N findings. | omitted |
+| `--min-cost` `<duration>` | Minimum wasted duration to report. | omitted |
+| `--strict-topic` | Drop findings off-topic. | off |
+| `--use-history` | Incorporate indexed history. | off |
+| `--no-task` | Do not create a task for findings. | off |
+| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing analysis. | inline |
+| `--json` | Emit structured JSON. | off |
+
+For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 
 ## Usage
 

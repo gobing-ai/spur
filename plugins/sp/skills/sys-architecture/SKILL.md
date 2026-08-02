@@ -93,6 +93,18 @@ grilling-to-design flow (the planning half — `/sp:dev-idea` / `/sp:dev-plan`) 
 where it is stress-tested and shaped into a task. The survey stops at surfacing candidates; it never
 auto-refactors — upkeep framing, not a refactor bot.
 
+## Arguments
+
+When invoked via `/sp:dev-arch`, the command forwards `survey $ARGUMENTS` to this skill:
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `[<module-path>]` | Module path to scope the architecture survey. | omitted (whole repo) |
+| `--scope <all\|path>` | Limit the survey to a path or expand to the whole repo. | all |
+| `--json` | Emit structured JSON instead of the MARKDOWN candidate report. | off |
+
+`--agent <inline|auto|name>` is consumed by the `dev-arch` wrapper (execution-surface selection) and is not forwarded as a survey argument.
+
 ## Common Rationalizations
 
 | Rationalization | Reality |

@@ -1,12 +1,24 @@
 ---
 description: Fan out independent tasks or investigations in parallel via subagents — choose the right pattern and synthesize results
-argument-hint: "[`--tasks`](../skills/spur-dev/references/flag-glossary.md#flag-tasks) <selector> [[`--feature`](../skills/spur-dev/references/flag-glossary.md#flag-feature) <id>] [[`--mode`](../skills/spur-dev/references/flag-glossary.md#flag-mode) <fan-out|review-panel|investigation>] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <inline|auto|name>] [[`--json`](../skills/spur-dev/references/flag-glossary.md#flag-json)]"
+argument-hint: "--tasks <selector> [--feature <id>] [--mode <fan-out|review-panel|investigation>] [--agent <inline|auto|name>] [--json]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
 # Dev Parallel
 
 Wraps the **sp:parallel-execution** skill.
+
+## Argument Flags
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `--tasks` `<selector>` | Task selector to fan out. | required |
+| `--feature` `<id>` | Restrict the selector to a feature. | omitted |
+| `--mode` `<fan-out\|review-panel\|investigation>` | Fan-out pattern. | fan-out |
+| `--agent` `<inline\|auto\|name>` | Who runs each dispatched slice. | inline |
+| `--json` | Emit structured JSON. | off |
+
+For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 
 ## Usage
 

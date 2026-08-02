@@ -783,7 +783,7 @@ source; no registry or generator is introduced.
 **Why.** Native completion hints must stay renderer-safe while defaults and compatibility behavior
 remain discoverable and mechanically consistent with their backing contracts.
 
-**Detail:** `docs/design/dev-command-argument-contract.md`; feature H81.
+**Detail:** `docs/design/dev-command-argument-contract.md`; feature H81; task 0412.
 
 ---
 

@@ -1,12 +1,23 @@
 ---
 description: Refresh feature status by feature ID, task WBS, or batch sweep via spur feature sync
-argument-hint: "[<feature-id|wbs>] [--all] [--auto] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <inline|auto|name>]"
+argument-hint: "[<feature-id|wbs>] [--all] [--auto] [--agent <inline|auto|name>]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
 # Dev Refresh
 
 Wraps the **sp:spur-dev** skill.
+
+## Argument Flags
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `[<feature-id\|wbs>]` | Feature id or task WBS to refresh. | active |
+| `--all` | Refresh every feature. | off |
+| `--auto` | Skip objective HITL gates. | off |
+| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing refresh. | inline |
+
+For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 
 ## Usage
 

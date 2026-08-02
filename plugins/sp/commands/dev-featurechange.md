@@ -11,20 +11,24 @@ allowed-tools: ["Bash", "Read", "AskUserQuestion", "Skill"]
 
 CLI-gated feature-tree restructure orchestrator. Executes dispositions from a mapping file; does not invent hierarchy.
 
+## Argument Flags
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `--map` `<path>` | Feature-restructure mapping file. | configured |
+| `--dry-run` | Plan only; write nothing. | off |
+| `--apply` | Apply the planned restructure. | off |
+| `--limit` `<old-id>` | Restrict to a single old feature id. | omitted |
+| `--wave` `<1\|2\|3\|all>` | Migration wave to execute. | all |
+| `--yes` | Skip confirmation prompts. | off |
+
+For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
+
 ## Usage
 
 ```
 /sp:dev-featurechange [--map <path>] [--dry-run] [--apply] [--limit <old-id>] [--wave <1|2|3|all>] [--yes]
 ```
-
-| Flag | Default | Meaning |
-| --- | --- | --- |
-| `--map` | `docs/plans/feature-tree-restructure-map.md` | Old→new disposition SSOT (do not re-audit the tree) |
-| `--dry-run` | *(default if neither dry-run nor apply)* | Print planned CLI steps; write nothing |
-| `--apply` | off | After confirm (unless `--yes`), run moves + refreshes + doc rewrites |
-| `--limit <old-id>` | none | Only process one `old_id` row (dogfood single node) |
-| `--wave <n\|all>` | `all` | Restrict to apply-order wave 1 / 2 / 3 from the map |
-| `--yes` | off | Skip interactive confirm on apply (still print plan first) |
 
 ## Implementation
 

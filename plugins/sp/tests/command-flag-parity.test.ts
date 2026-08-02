@@ -1,24 +1,18 @@
 /**
- * command-flag-parity.test — bidirectional flag parity between each
- * numbered command-table entry in dev-operations.md and the matching
- * plugins/sp/commands/<cmd>.md frontmatter `argument-hint` (task 0397,
- * feature H6). Closes the same drift class as spur-cli-parity (task 0396)
- * but for the slash-command layer.
+ * command-flag-parity.test — multi-layer flag parity for dev-* commands.
  *
- * R8: for every command that HAS a numbered entry in the dev-operations.md
- *     command table, every flag in its argument-hint appears in that table
- *     row, and every flag in the row appears in the argument-hint.
- * R9: deprecated flags are excluded via a named ignore-list with a stated reason.
+ * R8/R9 (task 0397, H6): bidirectional parity between each numbered dev-operations.md
+ *     table row and the matching argument-hint. Deprecated flags excluded via ignore-list.
+ * R1 (task 0412, H81): every flag declared by ≥2 dev-* hints has exactly one canonical
+ *     glossary entry. Membership derived from ALL 28 hints (not just table-rowed commands).
+ *     The old R2/R3 per-flag inline deep-link is dropped — gate (e) in validate-commands.ts
+ *     now enforces a single footer glossary reference per command.
+ * R4 (task 0413, H82): --inline/--subprocess absent from every hint (collapsed to --agent).
+ * R5 (task 0413, H82): --agent declared by exactly 19 mode-aware commands.
+ * R6 (task 0412, H81): compatibility aliases documented in body, absent from canonical hint.
  *
- * Commands not in the numbered table (dev-findissue, dev-next, dev-parallel,
- * rule-*, workflow-*, spur-init, …) are out of scope — they have no SSOT row
- * to parity-check against here.
- * R10/R11 (task 0403, feature H8): every flag declared in two or more command
- *     argument-hints has exactly one canonical glossary entry in flag-glossary.md,
- *     and each declaring command references that entry. Structural only — no prose
- *     comparison (R5). Residual gap accepted: a command could carry the reference
- *     AND contradict it in prose; that is not caught here, deliberately, because
- *     prose comparison produces false failures that get suppressed.
+ * Body text (removal notices, disambiguation prose) is deliberately excluded from flag
+ * derivation — see task 0412 ### Design on false positives.
  */
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -129,84 +123,97 @@ describe('sp plugin — command flag parity with dev-operations.md (R8/R9, task 
         // with a batch-once wrap hop, which dev-runall supports.
         expect(runallHint).toContain('--next');
     });
-
-    // ---------- task 0403 (feature H8): glossary anchoring ----------
+    // ---------- task 0412 (feature H81): glossary membership from ALL 28 dev commands ----------
     //
-    // Scope (per header lines 13–15): only commands with a numbered dev-operations.md
-    // table row. rule-*, workflow-*, spur-init, dev-next, dev-parallel, dev-findissue
-    // have no SSOT row and are out of scope — their flags are not anchored here.
+    // Shared-flag membership is now derived from every dev-*.md hint (not just those with a
+    // numbered dev-operations.md table row). Body text — removal notices, disambiguation prose,
+    // compatibility aliases — is deliberately excluded (see task 0412 ### Design: "a naive
+    // body-wide flag regex produces false positives").
+    //
+    // R1: every shared flag (declared by ≥2 dev commands) has EXACTLY one canonical glossary
+    //     entry. The per-flag inline deep-link (old R2/R3) is dropped: gate (e) in
+    //     validate-commands.ts now enforces a single command-level footer glossary reference.
 
-    // In-scope command -> argument-hint, for commands that have a numbered table row.
-    const inScopeHints: Map<string, string> = new Map();
+    const allDevHints: Map<string, string> = new Map();
     for (const file of commandFiles) {
         const commandName = file.replace(/\.md$/, '');
-        if (!tableFlags.has(commandName)) continue; // out of scope: no table row
+        if (!commandName.startsWith('dev-')) continue;
         const raw = readFileSync(join(COMMANDS_DIR, file), 'utf8');
         const hint = argumentHint(raw);
-        if (hint) inScopeHints.set(commandName, hint);
+        if (hint) allDevHints.set(commandName, hint);
     }
     const flagDeclaringCommands = (flag: string): string[] => {
         const out: string[] = [];
-        for (const [name, hint] of inScopeHints) {
+        for (const [name, hint] of allDevHints) {
             if (extractFlags(hint).has(flag)) out.push(name);
         }
         return out;
     };
-    const inScopeFlags = new Set<string>();
-    for (const hint of inScopeHints.values()) {
-        for (const f of extractFlags(hint)) inScopeFlags.add(f);
+    const allDevFlags = new Set<string>();
+    for (const hint of allDevHints.values()) {
+        for (const f of extractFlags(hint)) allDevFlags.add(f);
     }
     const sharedFlags = new Set<string>();
-    for (const flag of inScopeFlags) {
+    for (const flag of allDevFlags) {
         if (flagDeclaringCommands(flag).length >= 2) sharedFlags.add(flag);
     }
 
-    // R1: every shared flag has EXACTLY one canonical glossary entry.
-    // Entry form (task 0399): "**Anchor:** `#flag-<name>`".
-    //
-    // Both failure directions matter and neither is hypothetical:
-    //   0 entries — a shared flag with no canonical definition is the state H8 exists to end; the
-    //               next flag added to a second command would otherwise pass this gate silently.
-    //   2 entries — the "two definitions" state, the original defect (`--next` had four).
-    // An earlier revision asserted `<= 1`, treating a missing entry as an out-of-scope follow-up.
-    // That exemption is not load-bearing: all 22 in-scope shared flags already carry exactly one
-    // anchor, so the strict form matches requirement R1 as written and costs nothing today.
-    const opsRaw = readFileSync(GLOSSARY_PATH, 'utf8');
+    const glossaryRaw = readFileSync(GLOSSARY_PATH, 'utf8');
     function glossaryEntryCount(flag: string): number {
         const name = flag.replace(/^--/, '');
         const re = new RegExp(`\\*\\*Anchor:\\*\\* \`#flag-${name}\``, 'g');
-        return (opsRaw.match(re) ?? []).length;
+        return (glossaryRaw.match(re) ?? []).length;
     }
     for (const flag of sharedFlags) {
         test(`R1 — shared flag ${flag} has exactly one canonical glossary entry`, () => {
             const count = glossaryEntryCount(flag);
             expect(
                 count,
-                `${flag} is declared by ${flagDeclaringCommands(flag).length} in-scope commands but has ${count} glossary entries in flag-glossary.md; expected exactly 1. Zero means the shared flag has no canonical definition; two means the "two definitions" state this gate exists to prevent. Add or de-duplicate the "**Anchor:** \`#flag-${flag.replace(/^--/, '')}\`" entry.`,
+                `${flag} is declared by ${flagDeclaringCommands(flag).length} dev commands but has ${count} glossary entries in flag-glossary.md; expected exactly 1. Zero means the shared flag has no canonical definition; two means the "two definitions" state this gate exists to prevent. Add or de-duplicate the "**Anchor:** \`#flag-${flag.replace(/^--/, '')}\`" entry.`,
             ).toBe(1);
         });
     }
 
-    // R2/R3: each declaring command references the glossary entry, for shared flags
-    // that HAVE exactly one anchor. Reference form (task 0399): a markdown link whose
-    // (#flag-x) and relative-path (path/flag-glossary.md#flag-x) forms.
-    function commandHasReference(commandName: string, flag: string): boolean {
-        const raw = readFileSync(join(COMMANDS_DIR, `${commandName}.md`), 'utf8');
-        const name = flag.replace(/^--/, '');
-        const re = new RegExp(`\\[\`--${name}\`]\\([^)]*#flag-${name}`);
-        return re.test(raw);
-    }
-    for (const flag of sharedFlags) {
-        if (glossaryEntryCount(flag) !== 1) continue; // no anchor -> not enforceable here
-        for (const commandName of flagDeclaringCommands(flag)) {
-            test(`R2/R3 — ${commandName} references the ${flag} glossary entry`, () => {
-                const deprecated = DEPRECATED_FLAGS[commandName]?.[flag];
-                if (deprecated) return; // deprecated flags are exempt from re-documentation
-                expect(
-                    commandHasReference(commandName, flag),
-                    `${commandName} declares ${flag} (shared by ≥2 in-scope commands) but does not reference its glossary entry. A command inventing its own meaning for a shared flag fails here — add a [\`${flag}\`](../skills/spur-dev/references/flag-glossary.md#flag-${flag.replace(/^--/, '')}) reference.`,
-                ).toBe(true);
-            });
+    // ---------- task 0413 (feature H82): post-collapse execution-surface invariant ----------
+    //
+    // The --agent / --inline / --subprocess triple was collapsed to a single --agent selector.
+    // Assert: --agent on exactly the mode-aware commands; --inline / --subprocess absent from
+    // every canonical hint.
+
+    test('R4 — --inline and --subprocess are absent from every dev command hint', () => {
+        for (const [name, hint] of allDevHints) {
+            const flags = extractFlags(hint);
+            expect(flags.has('--inline'), `${name} still declares --inline`).toBe(false);
+            expect(flags.has('--subprocess'), `${name} still declares --subprocess`).toBe(false);
         }
+    });
+
+    test('R5 — --agent is declared by exactly the mode-aware commands (those referencing the inline-default contract)', () => {
+        const agentCommands = [...allDevHints.keys()].filter((n) =>
+            extractFlags(allDevHints.get(n) ?? '').has('--agent'),
+        );
+        expect(agentCommands.length).toBe(19);
+    });
+
+    // ---------- compatibility alias owning-contract assertions ----------
+    //
+    const COMPAT_ALIASES: Array<{ command: string; flag: string; doc: string }> = [
+        { command: 'dev-verify', flag: '--skip-shipable', doc: 'typo-tolerant alias of --skip-shippable' },
+        { command: 'dev-verifyall', flag: '--skip-shipable', doc: 'typo-tolerant alias of --skip-shippable' },
+    ];
+    for (const { command, flag, doc } of COMPAT_ALIASES) {
+        test(`R6 — ${command} documents compatibility alias ${flag}`, () => {
+            const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');
+            expect(
+                raw.includes(flag),
+                `${command} must document the compatibility alias ${flag} in its body (${doc}). It was removed or never added.`,
+            ).toBe(true);
+            // The alias must NOT appear in the canonical hint
+            const hint = argumentHint(raw);
+            expect(
+                extractFlags(hint).has(flag),
+                `${command}: compatibility alias ${flag} must not appear in the canonical argument-hint`,
+            ).toBe(false);
+        });
     }
 });

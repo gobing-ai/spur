@@ -1,6 +1,6 @@
 ---
 description: Refine a batch of tasks via structured Q&A — resolve a set (feature or selector), refine each in dependency-correct order, emit a batch report
-argument-hint: "--feature <id> | [`--tasks`](../skills/spur-dev/references/flag-glossary.md#flag-tasks) <selector> [--focus <mode>] [--description <text>] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <inline|auto|name>] [--auto] [--keep-going] [--status <s>] [--json]"
+argument-hint: "--feature <id> | --tasks <selector> [--focus <mode>] [--description <text>] [--agent <inline|auto|name>] [--auto] [--keep-going] [--status <s>] [--json]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---
 
@@ -9,6 +9,22 @@ allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 Wraps the **sp:spur-dev** skill. Batch counterpart of `/sp:dev-refine` — same per-task refine
 operation, applied to a resolved set (typically every task under a feature).
 
+## Argument Flags
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `--feature` `<id>` | Refine all tasks in a feature. | see usage |
+| `--tasks` `<selector>` | Task selector to refine (alternative to --feature). | see usage |
+| `--focus` `<mode>` | Refinement focus mode. | omitted |
+| `--description` `<text>` | Override description for each task. | omitted |
+| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing refinement. | inline |
+| `--auto` | Skip objective HITL gates. | off |
+| `--keep-going` | Continue past per-task failures. | off |
+| `--status` `<s>` | Only refine tasks in a status. | omitted |
+| `--json` | Emit structured JSON. | off |
+
+For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
+
 ## Usage
 
 ```
@@ -16,11 +32,11 @@ operation, applied to a resolved set (typically every task under a feature).
 /sp:dev-refineall --tasks <selector> [shared refine flags…] [--agent <inline|auto|name>]
 ```
 
-Flags: [`--feature`](../skills/spur-dev/references/flag-glossary.md#flag-feature) (sugar for `feature:<id>`), `--tasks <selector>`, shared refine flags
-([`--focus`](../skills/spur-dev/references/flag-glossary.md#flag-focus), [`--description`](../skills/spur-dev/references/flag-glossary.md#flag-description), `--agent`, [`--auto`](../skills/spur-dev/references/flag-glossary.md#flag-auto)),
-plus [`--keep-going`](../skills/spur-dev/references/flag-glossary.md#flag-keep-going),
-[`--status`](../skills/spur-dev/references/flag-glossary.md#flag-status) (default `backlog,todo`),
-[`--json`](../skills/spur-dev/references/flag-glossary.md#flag-json). Prefer `--auto` for batch
+Flags: `--feature` (sugar for `feature:<id>`), `--tasks <selector>`, shared refine flags
+(`--focus`, `--description`, `--agent`, `--auto`),
+plus `--keep-going`,
+`--status` (default `backlog,todo`),
+`--json`. Prefer `--auto` for batch
 scale. Full procedure: `plugins/sp/skills/spur-dev/references/dev-operations.md` § refineall.
 
 > **`--next` dropped** (feature H8, 2026-07-31). Batch-level chaining was a token bomb — each refine

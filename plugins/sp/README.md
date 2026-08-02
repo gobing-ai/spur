@@ -351,11 +351,18 @@ bun plugins/sp/scripts/validate-commands.ts            # validate all 34 command
 bun plugins/sp/scripts/validate-commands.ts --json     # machine-readable output
 ```
 
-The validator checks four gates: (a) heading whitelist — only `## Usage` + `## Implementation`
-beyond the H1 title; (b) frontmatter schema — `description`, `argument-hint`, `allowed-tools`
-present; (c) target resolution — every `sp:<skill>` reference, workflow file, and procedure anchor
-in `## Implementation` exists on disk; (d) `allowed-tools` coherence — `Skill` is present iff the
-body contains a `Skill()` call. The same gates are tested in `tests/command-contract.test.ts`.
+The validator checks five gates. For **non-`dev-*`** commands: (a) heading whitelist — only
+`## Usage` + `## Implementation` beyond the H1 title; (b) frontmatter schema — `description`,
+`argument-hint`, `allowed-tools` present; (c) target resolution — every `sp:<skill>` reference,
+workflow file, and procedure anchor in `## Implementation` exists on disk; (d) `allowed-tools`
+coherence — `Skill` is present iff the body contains a `Skill()` call. For **`dev-*`** commands,
+gate (a) is strengthened: the ordered three-heading set `## Argument Flags` → `## Usage` →
+`## Implementation` is required, and gate (e) checks the `argument-hint` is syntax-only (no
+Markdown links), the `## Argument Flags` table has exactly `Flag | Description | Default` columns,
+the command carries exactly one glossary reference, and canonical hint tokens have bidirectional
+parity with table rows. The same gates are tested in `tests/command-contract.test.ts` and
+`tests/command-flag-parity.test.ts`. See
+`docs/design/dev-command-argument-contract.md` for the full contract.
 
 Commands are hand-editable by design: edit the `.md` directly; the validator catches drift.
 **A fresh session is required to trust an in-session dogfood of a just-edited wrapper** (platforms

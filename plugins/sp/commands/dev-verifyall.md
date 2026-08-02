@@ -1,6 +1,6 @@
 ---
 description: Verify a batch of tasks against their requirements and Acceptance Criteria — batch traceability check producing per-task verdicts and a summary report
-argument-hint: "[`--tasks`](../skills/spur-dev/references/flag-glossary.md#flag-tasks) <selector> [--feature <id>] [[`--agent`](../skills/spur-dev/references/flag-glossary.md#flag-agent) <inline|auto|name>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable]"
+argument-hint: "--tasks <selector> [--feature <id>] [--agent <inline|auto|name>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
@@ -8,28 +8,46 @@ allowed-tools: ["Bash", "Read", "Skill"]
 
 Wraps the **sp:spur-dev** and **sp:code-verification** skills.
 
+## Argument Flags
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `--tasks` `<selector>` | Task selector to verify. | required |
+| `--feature` `<id>` | Restrict to a feature. | omitted |
+| `--agent` `<inline\|auto\|name>` | Who runs each verification. | inline |
+| `--fix` `<none\|blockers-first\|all>` | Auto-fix policy on findings. | none |
+| `--focus` `<lens>` | Verification lens. | omitted |
+| `--bdd` | Run BDD scenarios. | off |
+| `--auto` | Skip objective HITL gates. | off |
+| `--force` | Re-run even if already verified. | off |
+| `--next` | Hand off to the next-router on success. | off |
+| `--json` | Emit structured JSON. | off |
+| `--skip-shippable` | Compatibility alias for --skip-shipable; skip the shippable gate. | off |
+
+For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
+
 ## Usage
 
 ```
 /sp:dev-verifyall --tasks <selector> [--feature <id>] [--agent <inline|auto|name>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable]
 ```
 
-Flags: `--tasks <selector>` (required unless [`--feature`](../skills/spur-dev/references/flag-glossary.md#flag-feature)), `--feature <id>` (sugar for
-`feature:<id>`), shared verify flags (`--agent`, [`--fix`](../skills/spur-dev/references/flag-glossary.md#flag-fix),
-[`--focus`](../skills/spur-dev/references/flag-glossary.md#flag-focus), [`--bdd`](../skills/spur-dev/references/flag-glossary.md#flag-bdd),
-[`--auto`](../skills/spur-dev/references/flag-glossary.md#flag-auto), [`--force`](../skills/spur-dev/references/flag-glossary.md#flag-force)),
-[`--next`](../skills/spur-dev/references/flag-glossary.md#flag-next) (per-task lifecycle chaining — see below),
-[`--json`](../skills/spur-dev/references/flag-glossary.md#flag-json), [`--skip-shippable`](../skills/spur-dev/references/flag-glossary.md#flag-skip-shippable).
+Flags: `--tasks <selector>` (required unless `--feature`), `--feature <id>` (sugar for
+`feature:<id>`), shared verify flags (`--agent`, `--fix`,
+`--focus`, `--bdd`,
+`--auto`, `--force`),
+`--next` (per-task lifecycle chaining — see below),
+`--json`, `--skip-shippable`.
 
-**`--next` (per-task lifecycle chaining):** [`--next`](../skills/spur-dev/references/flag-glossary.md#flag-next)
+**`--next` (per-task lifecycle chaining):** `--next`
 is chain-to-completion with propagation. For each task whose verdict is **PASS**, the chain's first
 hop transitions `testing → done` through the FSM with the `--strict-core` Review L3 guard honored;
 a task whose verdict is **PARTIAL** or **FAIL** does **not** transition (it stays `testing` as
 review-pending) — that task's chain halts, reporting the verdict. One task's non-PASS never blocks
 another task's transition — each task's verdict is its own, and each task's chain is independent.
 Transitions run **before** the shippable gate (R3), so `spur feature check` observes the final
-statuses. Do not confuse with [`--keep-going`](../skills/spur-dev/references/flag-glossary.md#flag-keep-going)
-(batch failure policy, dev-runall) or [`--continue`](../skills/spur-dev/references/flag-glossary.md#flag-continue)
+statuses. Do not confuse with `--keep-going`
+(batch failure policy, dev-runall) or `--continue`
 (resume from checkpoint) — see the glossary. **was: `--next` chain-ish (per-task transition, undefined formally).**
 
 **Shippable readiness** (feature-level): when `--fix all` and a feature context exists
