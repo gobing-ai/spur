@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: "Normalize dev-command argument contracts: Argument Flags tables, syntax-only hints, flag audit"
 description: ""
-status: todo
+status: done
 type: task
 profile: standard
 feature_id: H81
@@ -12,7 +12,9 @@ priority: P2
 tags: []
 dependencies: ["0413"]
 created_at: "2026-08-02T04:14:27.417Z"
-updated_at: "2026-08-02T05:59:42.449Z"
+updated_at: "2026-08-02T16:46:26.144Z"
+done_forced: "true"
+done_reason: "Pipeline implement step timed out (30-min subprocess limit); implementation done directly. Verification: 4329 tests pass/0 fail, validator 0 violations/34 commands pass all 5 gates, 3 contract tests 140 pass/0 fail, lint+typecheck+build+test-cf all green, superskill codex dry-run clean. Commit 70df78de."
 ---
 
 ## 0412. Normalize dev-command argument contracts: Argument Flags tables, syntax-only hints, flag audit
@@ -446,12 +448,48 @@ surfaces — the working tree already carries unrelated modifications to `task-p
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Commands run (2026-08-02):**
 
+| Check | Command | Result |
+| --- | --- | --- |
+| Validator | `bun plugins/sp/scripts/validate-commands.ts --json` | 0 violations, 34 files pass all 5 gates |
+| Contract tests | `bun test plugins/sp/tests/command-contract.test.ts` | 71 pass, 0 fail (incl. 5 negative fixtures + inverted corpus) |
+| Parity tests | `bun test plugins/sp/tests/command-flag-parity.test.ts` | 61 pass, 0 fail (R1/R4/R5/R6/R8/R9) |
+| Inline-exec tests | `bun test plugins/sp/tests/inline-execution-contract.test.ts` | 8 pass, 0 fail |
+| Full suite | `bun run test` | 4329 pass, 0 fail |
+| Lint + typecheck | `bun run lint` | clean (0 warnings, 0 errors) |
+| CF Workers | `bun run test-cf` | 1 pass, 0 fail |
+| Build | `bun run build` | green (CLI + server + web) |
+| Superskill dry-run | `superskill install sp --targets codex --dry-run --verbose` | 44 skills, 11 scripts, 0 errors |
+
+**Coverage:** `validate-commands.ts` 96.89% lines; uncovered lines (188-193, 199-204) are the non-dev-command early-return path in gate (e) which has no dev-* fixture to trigger it (all 34 tested commands include 28 dev commands that enter the dev path).
+
+**Smoke test:** `validate-commands.ts --json` returns `{"violations":[],"fileCount":34}` — all 28 dev commands plus 6 non-dev commands pass the five-gate contract.
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Review date:** 2026-08-02 · **Reviewer:** direct implementation (pipeline subprocess timed out at 30-min limit during implement; implementation done inline with full manual verification).
 
+**P1–P4 Findings**
+
+| Priority | Finding | Disposition |
+| --- | --- | --- |
+| P1 | None | - |
+| P2 | `parseMarkdownTable` split on all `\|` including escaped pipes in option tokens like `--mode <full\|implement>`, causing column miscount | **Fixed**: split on unescaped `(?<!\\)\|` only, then unescape `\|` -> `|` in cell values (validate-commands.ts:371-378) |
+| P2 | `extractTableTokens` used `else if (flg)` so a cell with both positional and flag tokens (e.g. `--mode <full|implement>`) dropped the positional | **Fixed**: changed to `if (flg)` so both branches can fire (validate-commands.ts:416-417) |
+| P3 | `dev-run.md` Implementation section lost its `**Flags:**` prose and `vars.agent` documentation during v2 migration | **Fixed**: restored; `inline-execution-contract.test.ts` confirms `vars.agent` presence in dev-run and dev-runall |
+| P3 | `command-flag-parity.test.ts` R5 used non-null assertion `allDevHints.get(n)!` triggering `noNonNullAssertion` lint warning | **Fixed**: replaced with `?? ''` fallback; formatter wrapped the line |
+| P4 | Migration scripts (`audit-flags.ts`, `migrate-0412.ts`, `migrate-0412-v3.ts`) left as untracked working-tree artifacts | **Excluded** from commit; one-shot tooling, not contract surfaces. Can be deleted or gitignored. |
+| P4 | 3 feature docs (F2, H82, J3) modified by task-creation automation | **Excluded** from commit; not 0412-scoped. Belong to tasks 0414/0415/0416. |
+
+**Residual Risk**
+
+- **Migration scripts untracked**: If someone re-runs `migrate-0412-v3.ts` it is idempotent (escaped pipes stay escaped, glossary links already stripped), so no corruption risk. Deleting them is safe.
+- **`--full` semantic dual-meaning**: `dev-next --full` (rewrite as full pipeline) vs `dev-dogfood --full` (full report verbosity). Both are context-specific and documented in the glossary as such. The parity test checks count=1 glossary entry per shared flag, not semantic alignment. No action needed.
+- **Gate (e) coverage gap**: The non-dev-command early-return branch (lines 188-193, 199-204) has no test fixture. All 34 tested commands include 28 dev commands that enter the dev path. A non-dev command test fixture would close this, but the 6 existing non-dev commands pass gates (a)–(d) correctly.
+
+**Final Disposition**
+
+**PASS.** All 28 dev commands migrated to the H81 three-layer contract. Validator enforces five gates (a–e) with zero violations. 4329 tests pass. Lint, typecheck, build, test-cf all green. Superskill dry-run converts cleanly. Commit `70df78de`.
 ### References
 **Dependency**
 
@@ -501,3 +539,5 @@ Markdown links in `argument-hint`, extract `--flag` and `<positional>` tokens, a
 against body-mentioned flags. Re-run it in Phase 5 against the shipped tree to confirm the
 dispositions landed.
 ### History
+- 2026-08-02T16:46:17.730Z todo → testing (system)
+- 2026-08-02T16:46:26.134Z testing → done (system)
