@@ -59,6 +59,7 @@ rules:
             - "packages/app/src/services/token-ledger-service.ts" # FD byte-window log tailing
             - "packages/app/src/services/token-ledger-watcher.ts" # node:fs watch() live watcher
             - "packages/app/src/services/project-registry.ts" # atomic projects.json persistence
+            - "packages/app/src/observability/run-output-sink.ts" # sync FD append for mid-run tail-able artifact (task 0414 R2); observe() is sync from the lifecycle relay
             - "apps/web/src/modules/discover.ts" # Vite/Astro module scanner fallback under bun test
 
             # Synchronous bootstrap & path resolution:
