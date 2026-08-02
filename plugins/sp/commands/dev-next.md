@@ -17,7 +17,7 @@ Wraps the **sp:next-router** skill.
 | `--once` | Resolve exactly one step and stop. | off |
 | `--auto` | Skip objective HITL gates in the dispatched step. | off |
 | `--agent` `<inline\|auto\|name>` | Who runs the dispatched model-bearing step. | inline |
-| `--full` | Print the full routing trace. | off |
+| `--full` | When the primary route is `dev-run … --next`, substitute `dev-run <wbs> --mode full` (no `--next`). No effect on other routes (warning W-FULL). | off |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 

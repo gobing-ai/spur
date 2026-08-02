@@ -13,8 +13,8 @@ operation, applied to a resolved set (typically every task under a feature).
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--feature` `<id>` | Refine all tasks in a feature. | see usage |
-| `--tasks` `<selector>` | Task selector to refine (alternative to --feature). | see usage |
+| `--feature` `<id>` | Refine all tasks in a feature. | required (one of `--feature` / `--tasks`) |
+| `--tasks` `<selector>` | Task selector to refine (alternative to `--feature`). | required (one of `--feature` / `--tasks`) |
 | `--focus` `<mode>` | Refinement focus mode. | omitted |
 | `--description` `<text>` | Override description for each task. | omitted |
 | `--agent` `<inline\|auto\|name>` | Who runs the model-bearing refinement. | inline |

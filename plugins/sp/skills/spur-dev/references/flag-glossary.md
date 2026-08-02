@@ -117,7 +117,7 @@ Only declared where the command already has at least one HITL gate the flag can 
 
 **Anchor:** `#flag-keep-going`.
 
-Batch operation only (`dev-runall`, `dev-refineall`, `dev-verifyall`). When a task in the batch
+Batch operation only (`dev-refineall`, `dev-runall`). When a task in the batch
 fails, skip its in-batch dependents and continue the independent ones, instead of the default
 halt-on-first-failure. Never silently retried; the failure is still reported.
 
@@ -161,15 +161,16 @@ honored.
 
 Constrain the operation to a named subset of dimensions — review dimensions on `dev-review`/
 `dev-verify`/`dev-verifyall` (`all|stack|dependencies|data|flows|api|security|quality|performance`),
-or a refine focus mode on `dev-refine`/`dev-refineall`. Narrowing reduces token cost; omitting runs
+a refine focus mode on `dev-refine`/`dev-refineall`, or a reconstruction lens on `dev-reverse`.
+Narrowing reduces token cost; omitting runs
 all dimensions.
 
 ### `--scope <path>` — limit the operation to a path
 
 **Anchor:** `#flag-scope`.
 
-Limit the operation to a file or directory path. Used by inline operations (`dev-fixall`,
-`dev-gitmsg`) and review operations to bound the working set.
+Limit the operation to a file or directory path (`dev-arch`, `dev-debug`, `dev-fixall`,
+`dev-gitmsg`, `dev-simplify`) to bound the working set.
 
 ### `--dry-run` — print the plan without executing
 
@@ -182,10 +183,11 @@ is the contract; divergence between `--dry-run` and the real run is a bug.
 
 **Anchor:** `#flag-tasks`.
 
-Batch operation only (`dev-runall`, `dev-verifyall`, `dev-parallel`). An explicit selector — WBS
+Batch operation only (`dev-parallel`, `dev-refineall`, `dev-runall`, `dev-verifyall`). An explicit selector — WBS
 list, status pseudo-list (`todo`, `wip`), `feature:<id>`, or `ready` — resolving to the set the
-batch runs over. Required on `dev-runall` and `dev-parallel`; optional alternative to `--feature`
-on `dev-verifyall`.
+batch runs over. Required on `dev-parallel`, `dev-runall`, and `dev-verifyall`, where `--feature` is an optional
+restrictor. On `dev-refineall` it is instead one of a required pair — supply exactly one of
+`--feature` or `--tasks`.
 
 ### `--mode <kind>` — select an execution mode
 
@@ -193,7 +195,8 @@ on `dev-verifyall`.
 
 Select an execution mode: `full|implement` on `dev-run` (full pipeline vs implement-only),
 `sequential|parallel` on `dev-runall` (serial vs fanned-out-independent-subset),
-`fan-out|review-panel|investigation` on `dev-parallel`. Mode selection is explicit and orthogonal
+`fan-out|review-panel|investigation` on `dev-parallel`, and the reconstruction depth
+`briefing|structure|architecture|design|full` on `dev-reverse`. Mode selection is explicit and orthogonal
 to `--next`.
 
 ### `--task [<feature-id>]` — seed a task from the current result
@@ -207,7 +210,8 @@ lands at `todo` ready for `dev-refine`. Optional feature id scopes it.
 
 **Anchor:** `#flag-since`.
 
-Lower bound on a range: a git ref on `dev-changelog`, or an ISO date on `dev-wrapall` (filters done
+Lower bound on a range: a git ref on `dev-changelog`, or an ISO date on `dev-findissue` and
+`dev-wrapall` (filters done
 tasks by `updated_at >= date`).
 
 ### `--fix <policy>` — remediation policy
@@ -222,7 +226,8 @@ Remediation policy on verify-family commands (`dev-verify`, `dev-verifyall`):
 
 **Anchor:** `#flag-until`.
 
-Upper bound on a git-log range (`dev-changelog`); defaults to `HEAD`.
+Upper bound on a range: a git ref on `dev-changelog` (defaults to `HEAD`), or an ISO date on
+`dev-findissue` (defaults to now).
 
 ### `--status <s>` — filter by task status
 
@@ -249,7 +254,7 @@ Omit the design package (system-design satellite + task `### Design`) on plannin
 
 **Anchor:** `#flag-output`.
 
-Write the command's result to a file path (`dev-changelog`, `dev-daily`) instead of stdout.
+Write the command's result to a file path (`dev-daily`, `dev-reverse`) instead of stdout.
 
 ### `--merge` — trigger branch cleanup
 
@@ -269,15 +274,22 @@ failed fix attempts, stop and ask the operator rather than looping indefinitely.
 
 **Anchor:** `#flag-full`.
 
-`dev-next` only: rewrite a `dev-run … --next` primary dispatch into `dev-run <wbs> --mode full`
-(without `--next`). No effect on non-run routes (warning W-FULL).
+**Context-specific — two unrelated meanings; do not collapse them.**
+
+- `dev-next`: rewrite a `dev-run … --next` primary dispatch into `dev-run <wbs> --mode full`
+  (without `--next`). No effect on non-run routes (warning W-FULL).
+- `dev-dogfood`: full report verbosity — emit all report sections rather than the summary set.
+
+The shared spelling is historical. A rename would be the cleaner fix; until then each command's
+Argument Flags row states its own meaning and this entry records that they differ.
 
 ### `--description <text>` — supply a description
 
 **Anchor:** `#flag-description`.
 
-Supply a description (`dev-refine`/`dev-refineall` focus description, `dev-idea` idea text). Used
-when the operator wants to inject a specific framing rather than derive it from context.
+Supply a description (`dev-refine` / `dev-refineall` focus description). Used when the operator
+wants to inject a specific framing rather than derive it from context. `dev-idea` takes its idea as
+a positional argument, not via this flag.
 
 ### `--bdd` — use BDD scenarios as the verification lens
 
