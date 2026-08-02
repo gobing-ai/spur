@@ -129,6 +129,7 @@ spur.js
 /.spur/run
 /.spur/context/.session*.json
 /.spur/context/token-ledger.jsonl
+/.spur/memory/sessions/*-checkpoint.md
 
 logs/
 .tmp/
