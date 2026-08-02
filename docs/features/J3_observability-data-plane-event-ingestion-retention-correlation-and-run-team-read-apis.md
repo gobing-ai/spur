@@ -276,6 +276,7 @@ Feature: Observability data plane
 | 0371 | Author and emit the team.* event family for team and member lifecycle | done |
 | 0372 | Add server-side filtering and cursor pagination to the event history query surface | done |
 | 0373 | Expose the workflow run store as a read API for run digest, phase progress, and action log | done |
+| 0414 | Stream agent subprocess output during pipeline runs via the unused onOutput hook | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
