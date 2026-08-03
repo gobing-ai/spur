@@ -16,8 +16,8 @@ describe('task handlers', () => {
                 foldersConfig: {
                     active_folder: 'docs/tasks',
                     folders: {
-                        'docs/tasks': { base_counter: 0, label: 'Primary' },
-                        'docs/sprint2': { base_counter: 0, label: 'Sprint 2' },
+                        'docs/tasks': { baseCounter: 0, label: 'Primary' },
+                        'docs/sprint2': { baseCounter: 0, label: 'Sprint 2' },
                     },
                 },
             }),
@@ -282,7 +282,7 @@ describe('task handlers', () => {
                 featuresDir: 'docs/features',
                 foldersConfig: {
                     active_folder: 'docs/tasks',
-                    folders: { 'docs/tasks': { base_counter: 0, label: 'Primary' } },
+                    folders: { 'docs/tasks': { baseCounter: 0, label: 'Primary' } },
                 },
             }),
         } as unknown as ServerContext;
@@ -307,8 +307,8 @@ describe('task handlers', () => {
                 foldersConfig: {
                     active_folder: 'docs/tasks2',
                     folders: {
-                        'docs/tasks': { base_counter: 0, label: 'Primary' },
-                        'docs/tasks2': { base_counter: 128, label: 'Phase 2' },
+                        'docs/tasks': { baseCounter: 0, label: 'Primary' },
+                        'docs/tasks2': { baseCounter: 128, label: 'Phase 2' },
                     },
                 },
             }),

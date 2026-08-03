@@ -330,7 +330,7 @@ describe('createServerContext', () => {
             folders: {
                 tasksDir,
                 featuresDir,
-                foldersConfig: { active_folder: tasksDir, folders: { [tasksDir]: { base_counter: 0 } } },
+                foldersConfig: { active_folder: tasksDir, folders: { [tasksDir]: { baseCounter: 0 } } },
             },
         });
 

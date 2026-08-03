@@ -91,7 +91,7 @@ class LazyPlanningEventEmitter implements EventEmitter {
 const DEFAULT_PLANNING_FOLDERS: PlanningFolders = {
     tasksDir: DEFAULT_TASKS_DIR,
     featuresDir: DEFAULT_FEATURES_DIR,
-    foldersConfig: { active_folder: DEFAULT_TASKS_DIR, folders: { [DEFAULT_TASKS_DIR]: { base_counter: 0 } } },
+    foldersConfig: { active_folder: DEFAULT_TASKS_DIR, folders: { [DEFAULT_TASKS_DIR]: { baseCounter: 0 } } },
 };
 
 /**

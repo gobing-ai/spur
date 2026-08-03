@@ -1,3 +1,4 @@
+import { WbsCollisionError } from '@gobing-ai/spur-app';
 import type { ErrorHandler } from 'hono';
 import { GuardDeniedError, LockTimeoutError } from '../errors';
 
@@ -106,6 +107,7 @@ function messageForStatus(status: number): string {
  * | ValidationError (ts-utils)    | 422  | VALIDATION_FAILED |
  * | ConflictError (ts-utils)      | 409  | CONFLICT          |
  * | GuardDeniedError              | 409  | GUARD_DENIED      |
+ * | WbsCollisionError             | 409  | WBS_COLLISION     |
  * | LockTimeoutError              | 503  | LOCK_TIMEOUT      |
  * | Unknown / InternalError       | 500  | INTERNAL_ERROR    |
  *
@@ -128,6 +130,17 @@ function resolveError(err: unknown, requestId: string | undefined, isProd: boole
             apiCode: 'GUARD_DENIED',
             message: isProd ? 'Transition blocked by lifecycle guard' : message,
             details: { requestId },
+        };
+    }
+
+    // WBS collision (typed - TaskService throws WbsCollisionError when a file
+    // with the allocated WBS prefix already exists; task 0416 R1)
+    if (err instanceof WbsCollisionError) {
+        return {
+            status: 409,
+            apiCode: 'WBS_COLLISION',
+            message: isProd ? 'WBS collision - task already exists' : message,
+            details: { requestId, wbs: err.wbs, existingPath: err.existingPath, attemptedPath: err.attemptedPath },
         };
     }
 

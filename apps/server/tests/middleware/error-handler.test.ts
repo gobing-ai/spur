@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { WbsCollisionError } from '@gobing-ai/spur-app';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { ConflictError, NotFoundError, ValidationError } from '@gobing-ai/ts-utils';
@@ -75,6 +76,23 @@ describe('globalErrorHandler', () => {
         const body = await json(res);
         expect(body.ok).toBe(false);
         expect(body.error.code).toBe('GUARD_DENIED');
+    });
+
+    test('WbsCollisionError -> 409 WBS_COLLISION', async () => {
+        const a = app();
+        a.get('/test', () => {
+            throw new WbsCollisionError('0150', '/corpus/docs/tasks3/0150_x.md', '/corpus/docs/tasks3/0150_y.md');
+        });
+        const res = await a.request('/test');
+        expect(res.status).toBe(409);
+        const body = await json(res);
+        expect(body.ok).toBe(false);
+        expect(body.error.code).toBe('WBS_COLLISION');
+        expect(body.error.details).toMatchObject({
+            wbs: '0150',
+            existingPath: '/corpus/docs/tasks3/0150_x.md',
+            attemptedPath: '/corpus/docs/tasks3/0150_y.md',
+        });
     });
 
     test('LockTimeoutError → 503', async () => {
