@@ -77,7 +77,7 @@ export { ALL_FINDING_CODES, FINDING_CODES, type FindingCode, isFindingCode };
  * ```
  *
  * `folders` is a map of folder path → {@link folderConfigSchema} (absorbs the
- * legacy `docs/.tasks/config.json` folders + base_counter); `active` is the
+ * legacy `docs/.tasks/config.json` folders + baseCounter); `active` is the
  * default folder for `create`; `severity` overrides rule severities by code.
  */
 export const tasksConfigSchema = z

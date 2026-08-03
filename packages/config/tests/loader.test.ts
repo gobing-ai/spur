@@ -289,7 +289,7 @@ describe('resolveConfigFile', () => {
 
 const DEFAULT_FOLDERS: TaskFoldersConfig = {
     active_folder: DEFAULT_TASKS_DIR,
-    folders: { [DEFAULT_TASKS_DIR]: { base_counter: 0 } },
+    folders: { [DEFAULT_TASKS_DIR]: { baseCounter: 0 } },
 };
 
 describe('resolvePlanningFolders', () => {
@@ -311,8 +311,8 @@ describe('resolvePlanningFolders', () => {
         expect(result.tasksDir).toBe('docs/tasks2');
         expect(result.featuresDir).toBe('docs/features');
         expect(result.foldersConfig.active_folder).toBe('docs/tasks2');
-        expect(result.foldersConfig.folders['docs/tasks']).toEqual({ base_counter: 0, label: 'Core' });
-        expect(result.foldersConfig.folders['docs/tasks2']).toEqual({ base_counter: 100, label: 'Phase 2' });
+        expect(result.foldersConfig.folders['docs/tasks']).toEqual({ baseCounter: 0, label: 'Core' });
+        expect(result.foldersConfig.folders['docs/tasks2']).toEqual({ baseCounter: 100, label: 'Phase 2' });
     });
 
     test('falls back to defaults when the config is malformed', async () => {
@@ -329,7 +329,7 @@ describe('resolvePlanningFolders', () => {
         const result = await resolvePlanningFolders(fs);
         expect(result.featuresDir).toBe(DEFAULT_FEATURES_DIR);
         expect(result.tasksDir).toBe('docs/tasks');
-        expect(result.foldersConfig.folders['docs/tasks']).toEqual({ base_counter: 5 });
+        expect(result.foldersConfig.folders['docs/tasks']).toEqual({ baseCounter: 5 });
     });
 });
 // ---- resolveConfigFile: global fallback ----
@@ -484,7 +484,7 @@ describe('resolvePlanningFolders no-tasks branch', () => {
         expect(result.tasksDir).toBe(DEFAULT_TASKS_DIR);
         expect(result.featuresDir).toBe('docs/my-features');
         expect(result.foldersConfig.active_folder).toBe(DEFAULT_TASKS_DIR);
-        expect(result.foldersConfig.folders[DEFAULT_TASKS_DIR]).toEqual({ base_counter: 0 });
+        expect(result.foldersConfig.folders[DEFAULT_TASKS_DIR]).toEqual({ baseCounter: 0 });
     });
 
     test('caches the parsed planning folders for the same FileSystem instance', async () => {

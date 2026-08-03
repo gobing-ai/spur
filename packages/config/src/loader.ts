@@ -45,9 +45,9 @@ export { renderTemplate } from './template-renderer';
 
 // ---- Types ----
 
-/** A registered task folder in the snake_case shape services consume. */
+/** A registered task folder. Field names match the zod schema (`folderConfigSchema`). */
 export interface TaskFolderEntry {
-    base_counter: number;
+    baseCounter: number;
     label?: string;
 }
 
@@ -366,7 +366,7 @@ export async function loadStructuredSpurConfig(
 function defaultFoldersConfig(): TaskFoldersConfig {
     return {
         active_folder: DEFAULT_TASKS_DIR,
-        folders: { [DEFAULT_TASKS_DIR]: { base_counter: 0 } },
+        folders: { [DEFAULT_TASKS_DIR]: { baseCounter: 0 } },
     };
 }
 
@@ -422,8 +422,7 @@ async function resolvePlanningFoldersUncached(fs: FileSystem): Promise<PlanningF
         const tasks = tasksConfigSchema.parse(parsed.tasks);
         const folders: TaskFoldersConfig['folders'] = {};
         for (const [path, fc] of Object.entries(tasks.folders)) {
-            const validated = folderConfigSchema.parse(fc);
-            folders[path] = { base_counter: validated.baseCounter, label: validated.label };
+            folders[path] = folderConfigSchema.parse(fc);
         }
         const foldersConfig: TaskFoldersConfig = {
             active_folder: tasks.active,

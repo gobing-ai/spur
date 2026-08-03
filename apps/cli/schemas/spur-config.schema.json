@@ -239,7 +239,7 @@
         },
         "tasks": {
             "type": "object",
-            "description": "Task-folder registration (design §9). Absorbs the legacy docs/.tasks/config.json folders + base_counter concepts. Mirrors @gobing-ai/spur-config tasksConfigSchema (Zod is SSOT).",
+            "description": "Task-folder registration (design §9). Absorbs the legacy docs/.tasks/config.json folders + baseCounter concepts. Mirrors @gobing-ai/spur-config tasksConfigSchema (Zod is SSOT).",
             "properties": {
                 "folders": {
                     "type": "object",
