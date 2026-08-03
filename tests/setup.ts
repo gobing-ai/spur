@@ -25,11 +25,13 @@ if (utilTypes && typeof utilTypes.isEventTarget === 'function') {
 
 if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.prototype === 'object' && AbortSignal.prototype !== null) {
     try {
+        const noopSetMaxListeners = (_n?: number): void => {};
         Object.defineProperty(AbortSignal.prototype, 'setMaxListeners', {
-            value: (_n?: number): void => {},
+            value: noopSetMaxListeners,
             writable: true,
             configurable: true,
         });
+        noopSetMaxListeners(0);
     } catch {
         // Fallback for environments where prototype is frozen
     }
