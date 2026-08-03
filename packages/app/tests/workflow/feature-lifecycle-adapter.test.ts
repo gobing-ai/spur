@@ -195,7 +195,7 @@ describe('FeatureLifecycleAdapter (engine integration)', () => {
             taskRunLinkDao: (adapter) => new TaskRunLinkDao(adapter),
             workflowPath: WORKFLOW_PATH,
             cwd: root,
-            spurBin: `bun ${join(repoRoot, 'apps', 'cli', 'src', 'index.ts')}`,
+            spurBin: `${process.execPath} ${join(repoRoot, 'apps', 'cli', 'src', 'index.ts')}`,
         };
         const adapter = new LifecycleAdapter(opts);
 
