@@ -209,6 +209,20 @@ describe('FeatureLifecycleAdapter (engine integration)', () => {
             writeFileSync(path, raw);
         };
 
+        const execPath = process.execPath;
+        const cliIndex = join(repoRoot, 'apps', 'cli', 'src', 'index.ts');
+        const diagCmd = `${execPath} ${cliIndex} feature check F2 --as verifying`;
+        const { nodeBunFactory } = await import('@gobing-ai/ts-runtime');
+        const diagRes = await nodeBunFactory.createProcessExecutor().run({
+            command: '/bin/sh',
+            args: ['-c', diagCmd],
+            cwd: root,
+        });
+        if (diagRes.exitCode !== 0) {
+            console.log('DIAG_CMD:', diagCmd);
+            console.log('DIAG_RES:', JSON.stringify(diagRes, null, 2));
+        }
+
         // Relieving transition: F2 leaves active — the guard (`--as verifying`)
         // must not deny the exit the rule would otherwise relieve.
         const hop1 = await adapter.requestTransition(makeRef('F2'), 'active', 'verifying');
