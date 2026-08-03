@@ -1,22 +1,14 @@
-import events from 'node:events';
 import { setLoggerMuted } from '@gobing-ai/ts-infra';
 import { configure, reset } from '@logtape/logtape';
 
-// Polyfill node:events setMaxListeners for Bun on Linux where AbortSignal
-// passed by execa 9.6+ fails Bun's internal isEventTarget check.
-const origSetMaxListeners = events.setMaxListeners;
-if (typeof origSetMaxListeners === 'function') {
-    events.setMaxListeners = (n?: number, ...targets: unknown[]) => {
-        try {
-            return origSetMaxListeners.call(events, n, ...(targets as Parameters<typeof origSetMaxListeners>[1][]));
-        } catch (err: unknown) {
-            const e = err as { code?: string };
-            if (e?.code === 'ERR_INVALID_ARG_TYPE') {
-                return;
-            }
-            throw err;
-        }
-    };
+// Polyfill AbortSignal.prototype.setMaxListeners for Bun on Linux where
+// execa 9.6+ calls node:events setMaxListeners(n, controller.signal) and
+// Bun's internal node:events types.isEventTarget(signal) returns false.
+if (
+    typeof AbortSignal !== 'undefined' &&
+    typeof (AbortSignal.prototype as { setMaxListeners?: unknown }).setMaxListeners !== 'function'
+) {
+    (AbortSignal.prototype as { setMaxListeners?: (n?: number) => void }).setMaxListeners = (_n?: number): void => {};
 }
 
 // Gate the ts-infra logger adapter (per-instance).
