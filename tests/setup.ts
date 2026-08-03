@@ -1,14 +1,30 @@
+import util from 'node:util';
 import { setLoggerMuted } from '@gobing-ai/ts-infra';
 import { configure, reset } from '@logtape/logtape';
 
-// Polyfill AbortSignal.prototype.setMaxListeners for Bun on Linux where
-// execa 9.6+ calls node:events setMaxListeners(n, controller.signal) and
-// Bun's internal node:events types.isEventTarget(signal) returns false.
-if (
-    typeof AbortSignal !== 'undefined' &&
-    typeof (AbortSignal.prototype as { setMaxListeners?: unknown }).setMaxListeners !== 'function'
-) {
-    (AbortSignal.prototype as { setMaxListeners?: (n?: number) => void }).setMaxListeners = (_n?: number): void => {};
+type UtilTypesWithEventTarget = typeof util.types & {
+    isEventTarget?: (target: unknown) => boolean;
+};
+
+// Fix Bun 1.3.14 on Linux where node:util types.isEventTarget(signal) returns false for AbortSignal,
+// causing node:events setMaxListeners(n, controller.signal) in execa 9.6+ to throw ERR_INVALID_ARG_TYPE.
+const utilTypes = util?.types as UtilTypesWithEventTarget | undefined;
+if (utilTypes && typeof utilTypes.isEventTarget === 'function') {
+    const origIsEventTarget = utilTypes.isEventTarget.bind(utilTypes);
+    utilTypes.isEventTarget = (target: unknown): boolean => {
+        if (
+            target != null &&
+            (target instanceof AbortSignal ||
+                (target as { constructor?: { name?: string } }).constructor?.name === 'AbortSignal')
+        ) {
+            return true;
+        }
+        return origIsEventTarget(target);
+    };
+}
+
+if (typeof AbortSignal !== 'undefined') {
+    (AbortSignal.prototype as unknown as { setMaxListeners?: (n?: number) => void }).setMaxListeners ??= () => {};
 }
 
 // Gate the ts-infra logger adapter (per-instance).
