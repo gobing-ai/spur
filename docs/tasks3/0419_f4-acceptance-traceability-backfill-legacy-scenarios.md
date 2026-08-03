@@ -12,7 +12,7 @@ priority: P2
 tags: []
 dependencies: []
 created_at: "2026-08-03T03:08:05.430Z"
-updated_at: "2026-08-03T03:13:14.635Z"
+updated_at: "2026-08-03T03:25:52.507Z"
 ---
 
 ## 0419. F4 acceptance traceability backfill (legacy scenarios)
@@ -98,7 +98,7 @@ three suites). Line anchors use full repo-relative paths to satisfy `L4.stale-li
 - [x] Re-run the three proving suites fresh this session (52 pass / 0 fail).
 - [x] Register the coverage edge: this task's AC carries the four exact feature scenario titles.
 - [x] Emit the PASS verdict artifact with MET rows keyed to the four scenario titles.
-- [ ] Confirm `spur feature check F4 --strict` drops all four `L4.uncovered-feature-scenario`
+- [x] Confirm `spur feature check F4 --strict` drops all four `L4.uncovered-feature-scenario`
       errors and transition F4 `verifying → done`.
 ### Solution
 **Evidence map (no new production code — traceability backfill):**
@@ -127,8 +127,7 @@ three suites). Line anchors use full repo-relative paths to satisfy `L4.stale-li
 - R5 (coverage edge): this task's `### Acceptance Criteria` carries the four exact F4 scenario
   titles; the PASS verdict artifact at `.spur/run/0419-verdict.json` marks each MET.
 ### Testing
-All commands re-run on **2026-08-03** in this session; every `file:line` anchor re-read at the
-cited lines.
+All commands re-run on **2026-08-03** (initial run) and re-audited on **2026-08-03** (`/sp:dev-verify 0419 --force`); every `file:line` anchor re-read at the cited lines in the re-audit.
 
 **Per-requirement traceability**
 
@@ -136,7 +135,7 @@ cited lines.
 |-----|--------|----------|
 | R1 | MET | `packages/app/src/services/planning-write-service.ts:325-443` — the 9-step sequence (lock `:335`, parse `:353`, mutate `:380`, validate `:393`, lifecycle `:411`, atomic write `:431`, history `:435`, event `:443`, unlock `:344`); `packages/app/tests/services/planning-write-service.test.ts:417-435` proves a denied guard leaves the file byte-identical with zero partial writes; `:532` proves the lock is released on denial. |
 | R2 | MET | `packages/app/src/workflow/lifecycle-adapter.ts:184-187` — `reseedRun` forces the engine's state to the file's frontmatter status before every transition; corrective `workflow.run.reseeded` event emitted by the engine's `reseedRun` (ts-libs dual-workflow-engine service.ts, lines 140-145 — outside this repo, hence no backtick anchor); `packages/app/tests/workflow/lifecycle-adapter.test.ts:103` proves a fresh run transitions from the file status, not the engine initial state. |
-| R3 | MET | `apps/cli/src/commands/feature.ts:212-222` — `--status` filter; live `spur feature list --status verifying --json` this session lists F4 (`verifying`, "Lifecycle and events"). `config/workflows/feature-lifecycle.yaml:60` — `verifying → done` runs `feature check <id> --strict --as done`. |
+| R3 | MET | `apps/cli/src/commands/feature.ts:212-222` — `--status` filter, re-verified against the live corpus (`feature list --status done` now returns F4 — it passed through `verifying` observably; F4 History records `2026-08-03T03:13:27.645Z verifying → done (system)`). `config/workflows/feature-lifecycle.yaml:60` — `verifying → done` runs `feature check <id> --strict --as done`. |
 | R4 | MET | `packages/domain/src/planning/rebuild-events.ts:38,62,83` — history parse → event conversion → extraction per design §2.5; `packages/domain/tests/planning/rebuild-events.test.ts:94` drops the DB, rebuilds from corpus history, and compares — proving no planning state lives only in the DB; `:151` covers migration 0003. |
 | R5 | MET | `spur feature check F4 --strict --json` this session: zero `L4.uncovered-feature-scenario` and zero `L4.scenario-unverified` findings (was 4 + 4 before this task). |
 
