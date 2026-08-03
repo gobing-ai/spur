@@ -212,15 +212,12 @@ describe('FeatureLifecycleAdapter (engine integration)', () => {
         const execPath = process.execPath;
         const cliIndex = join(repoRoot, 'apps', 'cli', 'src', 'index.ts');
         const diagCmd = `${execPath} ${cliIndex} feature check F2 --as verifying`;
-        const { nodeBunFactory } = await import('@gobing-ai/ts-runtime');
-        const diagRes = await nodeBunFactory.createProcessExecutor().run({
-            command: '/bin/sh',
-            args: ['-c', diagCmd],
-            cwd: root,
-        });
-        if (diagRes.exitCode !== 0) {
-            console.log('DIAG_CMD:', diagCmd);
-            console.log('DIAG_RES:', JSON.stringify(diagRes, null, 2));
+        const { execa } = await import('execa');
+        try {
+            const rawRes = await execa('/bin/sh', ['-c', diagCmd], { cwd: root, reject: false, all: true });
+            console.log('RAW_RES:', JSON.stringify(rawRes, null, 2));
+        } catch (err) {
+            console.log('RAW_ERR:', err);
         }
 
         // Relieving transition: F2 leaves active — the guard (`--as verifying`)
