@@ -6,6 +6,7 @@ import {
     getStage,
     getTableCRedirect,
     listStages,
+    MUTATION_CLASSES,
     parseCliArgs,
     pickFrontierTask,
     REGISTERED_STAGES,
@@ -78,7 +79,9 @@ describe('stage registry — record structure', () => {
             expect(s.artifacts.length).toBeGreaterThan(0);
             expect(s.reasoning_skill.length).toBeGreaterThan(0);
             expect(s.retry.max_attempts).toBeGreaterThanOrEqual(1);
-            expect(['none', 'corpus', 'worktree', 'irreversible']).toContain(s.mutation_class);
+            // Assert against the exported constant, not a hand-copied list: a third
+            // copy of the vocabulary is what let MUTATION_CLASSES drift unnoticed.
+            expect([...MUTATION_CLASSES]).toContain(s.mutation_class);
             expect(['inline', 'deterministic', 'hitl']).toContain(s.execution.kind);
         }
     });

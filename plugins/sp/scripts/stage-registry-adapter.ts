@@ -24,7 +24,19 @@ export type SchemaVersion = { major: number; minor: number };
 export const CURRENT_SCHEMA_VERSION: SchemaVersion = { major: 1, minor: 0 };
 export const AUTHORITY_LANES = ['registry', 'workflow', 'skill', 'cli', 'adapter'] as const;
 export type AuthorityLane = (typeof AUTHORITY_LANES)[number];
-export const MUTATION_CLASSES = ['none', 'corpus', 'worktree', 'irreversible'] as const;
+// Mirrors packages/domain/src/stage-registry/schema.ts MUTATION_CLASSES. Pinned by
+// tests/stage-registry-parity.test.ts — the plugin cannot import the domain package
+// (it installs into foreign repos), so the copy is guarded rather than eliminated.
+export const MUTATION_CLASSES = [
+    'none',
+    'corpus',
+    'code',
+    'tests',
+    'verdict',
+    'learnings',
+    'driver',
+    'irreversible',
+] as const;
 export type MutationClass = (typeof MUTATION_CLASSES)[number];
 export const EXECUTION_KINDS = ['inline', 'subprocess', 'deterministic', 'hitl', 'irreversible'] as const;
 export type ExecutionKind = (typeof EXECUTION_KINDS)[number];
@@ -303,7 +315,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
         ],
         reasoning_skill: 'sp:code-implementation',
         gates: [],
-        mutation_class: 'worktree',
+        mutation_class: 'code',
         retry: defaultRetry,
         model_policy: standardModel,
         context_layers: [layer('task-state'), layer('run-state')],
@@ -320,7 +332,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
         ],
         reasoning_skill: 'sp:code-testing',
         gates: [{ name: 'coverage-floor', timing: 'post', min_verdict: 'pass', description: '≥90% function coverage' }],
-        mutation_class: 'worktree',
+        mutation_class: 'tests',
         retry: defaultRetry,
         model_policy: standardModel,
         context_layers: [layer('task-state'), layer('run-state')],
@@ -340,7 +352,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
             { name: 'verdict-artifact', timing: 'post', min_verdict: 'pass' },
             { name: 'strict-core', timing: 'post', description: 'L3 core findings must pass' },
         ],
-        mutation_class: 'corpus',
+        mutation_class: 'verdict',
         retry: { max_attempts: 2, terminal_stop: 'escalate', timeout_seconds: 600 },
         model_policy: capableModel,
         context_layers: [layer('task-state'), layer('run-state'), layer('indexed-evidence')],
@@ -365,7 +377,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
                 description: 'Task check must PASS before close',
             },
         ],
-        mutation_class: 'corpus',
+        mutation_class: 'learnings',
         retry: { max_attempts: 2, terminal_stop: 'block', timeout_seconds: 180 },
         model_policy: standardModel,
         context_layers: [layer('task-state'), layer('indexed-evidence')],
@@ -379,7 +391,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
         artifacts: [{ kind: 'review-findings', direction: 'output', required: true }],
         reasoning_skill: 'sp:code-verification',
         gates: [{ name: 'review-guard', timing: 'post', min_verdict: 'pass', description: 'No P1 findings blocking' }],
-        mutation_class: 'corpus',
+        mutation_class: 'verdict',
         retry: { max_attempts: 2, terminal_stop: 'block', timeout_seconds: 300 },
         model_policy: standardModel,
         context_layers: [layer('task-state'), layer('run-state')],
@@ -405,7 +417,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
                 description: 'Report must pass schema validation',
             },
         ],
-        mutation_class: 'none',
+        mutation_class: 'driver',
         retry: { max_attempts: 3, terminal_stop: 'block', timeout_seconds: 600 },
         model_policy: capableModel,
         context_layers: [layer('task-state'), layer('run-state')],
@@ -436,7 +448,7 @@ export const REGISTERED_STAGES: StageRecord[] = [
         ],
         reasoning_skill: 'inline',
         gates: [],
-        mutation_class: 'worktree',
+        mutation_class: 'code',
         retry: { max_attempts: 1, terminal_stop: 'block', timeout_seconds: 120 },
         model_policy: standardModel,
         context_layers: [layer('task-state')],
@@ -534,7 +546,9 @@ function statusAndDepsSatisfied(s: string): (input: ResolutionInput) => boolean 
     };
 }
 
-const TABLE_A: TableARow[] = [
+// Exported for tests/routing-table-parity.test.ts (C2): the markdown routing table
+// and these rows are two live representations of one contract and must be pinned.
+export const TABLE_A: TableARow[] = [
     // A1 — backlog → refine
     {
         condition: statusEquals('backlog'),
@@ -560,10 +574,14 @@ const TABLE_A: TableARow[] = [
         probe: false,
         requiresConfirmation: false,
     },
-    // A3 — todo with satisfied deps → run --next
+    // A3 — todo with satisfied deps → run --mode implement --next.
+    // The explicit mode is load-bearing (bug-742, routing-table.md §1 A3): without
+    // it the pipeline step can recursively launch full mode, and the dispatch also
+    // fails to match the implement pattern in STAGE_BY_DISPATCH, resolving to a null
+    // stage record. Pinned against routing-table.md by tests/routing-table-parity.test.ts.
     {
         condition: statusAndDepsSatisfied('todo'),
-        dispatch: '/sp:dev-run {wbs} --auto --next',
+        dispatch: '/sp:dev-run {wbs} --mode implement --auto --next',
         rowId: 'A3',
         chain: true,
         stop: false,
@@ -646,7 +664,8 @@ interface TableBRow {
     requiresConfirmation: boolean;
 }
 
-const TABLE_B: TableBRow[] = [
+/** Exported for tests/routing-table-parity.test.ts (C2). */
+export const TABLE_B: TableBRow[] = [
     // B0 — unknown feature
     {
         condition: (input) => input.feature == null,
@@ -920,21 +939,27 @@ function resolveTask(input: ResolutionInput): StageResolution {
             }
         }
 
-        // Map dispatch command pattern → canonical stage id
-        const STAGE_BY_DISPATCH_PREFIX: Record<string, string> = {
-            refine: 'refine',
-            verify: 'verify',
-            wrap: 'wrap',
-            handover: 'handover',
-            'run --mode': 'implement',
-            'run --continue': 'implement',
-            unit: 'test',
-            fixall: 'fixall',
-        };
+        // Map dispatch command → canonical stage id, first match wins.
+        //
+        // Patterns, not substrings: the run routes carry the WBS between the verb
+        // and the flag (`/sp:dev-run 0104 --mode implement`), so the old
+        // `'run --mode'` substring key could never match and every A3/A4/A5
+        // dispatch resolved to a null stage record — silently dropping the
+        // implement stage's gates, retry and model policy from the resolution.
+        const STAGE_BY_DISPATCH: Array<{ pattern: RegExp; stage: string }> = [
+            { pattern: /dev-refine/, stage: 'refine' },
+            { pattern: /dev-verify/, stage: 'verify' },
+            { pattern: /dev-wrap/, stage: 'wrap' },
+            { pattern: /dev-handover/, stage: 'handover' },
+            { pattern: /dev-run\b[^\n]*--mode/, stage: 'implement' },
+            { pattern: /dev-run\b[^\n]*--continue/, stage: 'implement' },
+            { pattern: /dev-unit/, stage: 'test' },
+            { pattern: /dev-fixall/, stage: 'fixall' },
+        ];
         let stageId: string | undefined;
         if (dispatchCmd) {
-            for (const [prefix, sid] of Object.entries(STAGE_BY_DISPATCH_PREFIX)) {
-                if (dispatchCmd.includes(prefix)) {
+            for (const { pattern, stage: sid } of STAGE_BY_DISPATCH) {
+                if (pattern.test(dispatchCmd)) {
                     stageId = sid;
                     break;
                 }
