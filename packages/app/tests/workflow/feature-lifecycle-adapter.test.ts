@@ -212,15 +212,15 @@ describe('FeatureLifecycleAdapter (engine integration)', () => {
         // Relieving transition: F2 leaves active — the guard (`--as verifying`)
         // must not deny the exit the rule would otherwise relieve.
         const hop1 = await adapter.requestTransition(makeRef('F2'), 'active', 'verifying');
-        expect(hop1.allowed).toBe(true);
-        if (!hop1.allowed) throw new Error('expected the relieving transition to be allowed');
+        expect(hop1.allowed, hop1.report ?? 'no report').toBe(true);
+        if (!hop1.allowed) throw new Error(`expected relieving transition allowed: ${hop1.report}`);
         writeStatus('F2_second.md', 'verifying');
 
         // Terminal hop: F2 → done — strict guard (`--as done`) passes because the
         // fixture is strict-clean and the goal rule no longer counts a done target.
         const hop2 = await adapter.requestTransition(makeRef('F2'), 'verifying', 'done');
-        expect(hop2.allowed).toBe(true);
-        if (!hop2.allowed) throw new Error('expected the terminal transition to be allowed');
+        expect(hop2.allowed, hop2.report ?? 'no report').toBe(true);
+        if (!hop2.allowed) throw new Error(`expected terminal transition allowed: ${hop2.report}`);
         writeStatus('F2_second.md', 'done');
 
         // Corpus is back to a single active goal: static checks drop the goal error.
