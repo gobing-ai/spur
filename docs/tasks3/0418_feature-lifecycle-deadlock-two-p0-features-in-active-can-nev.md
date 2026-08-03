@@ -12,7 +12,7 @@ priority: P2
 tags: ["bug"]
 dependencies: []
 created_at: "2026-08-03T00:40:11.223Z"
-updated_at: "2026-08-03T02:59:45.826Z"
+updated_at: "2026-08-03T03:16:18.154Z"
 ---
 
 ## 0418. Feature lifecycle deadlock: two P0 features in active can never transition out
@@ -231,6 +231,14 @@ literal `['active']` duplicated at `packages/app/src/services/feature-check.ts:3
 
 **Fix-pass writes (gitignored, disclosure).** `.spur/run/0418-verdict.json` written this run
 (new file; PASS aggregate with the 4 requirement + 4 AC rows above). No other `.spur/**` mutation.
+
+**Final state (2026-08-03, post-review chain).** Task transitioned `testing → done` after
+`### Review` gained the P1–P4 table. Shippable gate on F4 re-run: `spur feature check F4
+--strict` **pass=true**; all `feature_id: F4` tasks done (0418, 0419); the 4 legacy-scenario
+coverage gaps were closed by task 0419 (traceability backfill), the dogfood finding by
+`docs/dogfood/2026-08-03-F4-sp-dev-verify-0418-dogfood.md`, and Scope delineation by an
+In/Out rewrite. F4 transitioned `verifying → done` through the CLI. Shippable: **PASS**.
+Verdict artifact updated in place: `.spur/run/0418-verdict.json` (`shippable-readiness: pass`).
 ### Review
 **Priority findings**
 
