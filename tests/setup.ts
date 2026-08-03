@@ -23,8 +23,16 @@ if (utilTypes && typeof utilTypes.isEventTarget === 'function') {
     };
 }
 
-if (typeof AbortSignal !== 'undefined') {
-    (AbortSignal.prototype as unknown as { setMaxListeners?: (n?: number) => void }).setMaxListeners ??= () => {};
+if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.prototype === 'object' && AbortSignal.prototype !== null) {
+    try {
+        Object.defineProperty(AbortSignal.prototype, 'setMaxListeners', {
+            value: (_n?: number): void => {},
+            writable: true,
+            configurable: true,
+        });
+    } catch {
+        // Fallback for environments where prototype is frozen
+    }
 }
 
 // Gate the ts-infra logger adapter (per-instance).
