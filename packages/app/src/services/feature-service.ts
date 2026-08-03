@@ -8,7 +8,12 @@
 
 import { acquireCreateLock, atomicWriteAsync, MarkdownDocument } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
-import { type CheckFeatureFindings, defaultVerdictRunDir, FeatureCheckService } from './feature-check';
+import {
+    type CheckFeatureFindings,
+    defaultVerdictRunDir,
+    FeatureCheckService,
+    findOtherP0InStatus,
+} from './feature-check';
 import type { EntityRef, PlanningWriteService, WriteResult } from './planning-write-service';
 import { TaskLocator } from './task-locator';
 
@@ -42,6 +47,12 @@ export interface FeatureSyncResult {
     proposal: FeatureSyncProposal;
     applied: boolean;
     appliedHops: string[];
+    /**
+     * 0418 R3: set when a proposed hop into `active` was refused because another
+     * P0 feature is already `active` (one-active-goal WIP limit). Surfaces the
+     * conflict at the moment the lifecycle would have created it silently.
+     */
+    goalConflict?: { featureId: string; status: string };
 }
 
 /** Result of a bulk feature status sync over all features with linked tasks. */
@@ -502,11 +513,43 @@ export class FeatureService {
 
         const appliedHops: string[] = [];
         for (const hop of hops) {
+            // 0418 R3: the lifecycle must not silently create a state its own rules
+            // forbid. A P0 feature auto-activating into `active` while another P0 is
+            // already active would manufacture the two-active-goal corpus — refuse
+            // the hop, surface the conflict, and leave the corpus legal. The
+            // operator still has a CLI path (advance the older goal first, or
+            // transition manually once a goal slot is free).
+            if (hop === 'active') {
+                const conflict = await this.findOneActiveGoalConflict(featureId);
+                if (conflict !== null) {
+                    return {
+                        proposal: {
+                            ...proposal,
+                            reason: `Activation blocked by one-active-goal: P0 feature "${conflict.featureId}" is already ${conflict.status}`,
+                        },
+                        applied: false,
+                        appliedHops,
+                        goalConflict: conflict,
+                    };
+                }
+            }
             await this.transition(featureId, hop);
             appliedHops.push(hop);
         }
 
         return { proposal, applied: true, appliedHops };
+    }
+
+    /**
+     * 0418 R3: first other P0 feature currently `active`, or null when activating
+     * `featureId` would respect the one-active-goal limit. Same corpus scan the
+     * feature-check L3 rule uses — one WIP-limit definition, one enforcement.
+     */
+    private async findOneActiveGoalConflict(featureId: string): Promise<{ featureId: string; status: string } | null> {
+        const feature = await this.show(featureId);
+        if (feature === null || feature.frontmatter.priority !== 'P0') return null;
+        const conflict = await findOtherP0InStatus(this.ctx.fs, this.ctx.featuresDir, featureId, ['active']);
+        return conflict === null ? null : { featureId: conflict.id, status: conflict.status };
     }
 
     /**

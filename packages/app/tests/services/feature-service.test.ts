@@ -763,6 +763,85 @@ updated_at: "${new Date().toISOString()}"
             expect(res.evaluated).toBeGreaterThan(0);
             expect(res.results.some((r) => r.proposal.featureId === feat.ref.id)).toBe(true);
         });
+
+        test('syncFeature refuses a P0 auto-activation while another P0 is active, then allows it once the goal slot frees (0418 R3)', async () => {
+            // Self-contained fixture (the suite shares one features dir): create the
+            // blocking P0 goal and the contender, then clean both files up so no
+            // other test inherits an active P0.
+            const goal = await svc.create('Sync Goal Blocker');
+            await svc.update(goal.ref.id, 'priority', 'P0');
+            await svc.transition(goal.ref.id, 'active');
+
+            const contender = await svc.create('Sync Contender');
+            await svc.update(contender.ref.id, 'priority', 'P0');
+            writeFileSync(
+                join(tasksDir, '9905_contender-task.md'),
+                `---
+schema_version: 1
+wbs: "9905"
+name: "Contender Task"
+status: "done"
+feature_id: "${contender.ref.id}"
+created_at: "${new Date().toISOString()}"
+updated_at: "${new Date().toISOString()}"
+---
+# 9905: Contender Task
+`,
+            );
+
+            // Auto-activation would create a second active P0 — refused and surfaced.
+            const blocked = await svc.syncFeature(contender.ref.id);
+            expect(blocked.applied).toBe(false);
+            expect(blocked.appliedHops).toEqual([]);
+            expect(blocked.goalConflict?.featureId).toBe(goal.ref.id);
+            expect(blocked.proposal.reason).toContain('one-active-goal');
+            const stillBacklog = await svc.show(contender.ref.id);
+            expect(stillBacklog?.status).toBe('backlog');
+
+            // Once the goal leaves active (operator advances it), the same sync applies.
+            await svc.transition(goal.ref.id, 'verifying');
+            await svc.transition(goal.ref.id, 'done');
+            const applied = await svc.syncFeature(contender.ref.id);
+            expect(applied.applied).toBe(true);
+            expect(applied.appliedHops).toEqual(['active', 'verifying', 'done']);
+            expect(applied.goalConflict).toBeUndefined();
+            const updated = await svc.show(contender.ref.id);
+            expect(updated?.status).toBe('done');
+
+            // Cleanup: drop both fixture files so the shared dir stays neutral.
+            const goalFile = join(featuresDir, `${goal.ref.id}_sync-goal-blocker.md`);
+            const contenderFile = join(featuresDir, `${contender.ref.id}_sync-contender.md`);
+            rmSync(goalFile, { force: true });
+            rmSync(contenderFile, { force: true });
+        });
+
+        test('syncFeature activates a P0 feature when no other P0 is active (0418 R3 control)', async () => {
+            const feat = await svc.create('Sync Goal Open');
+            await svc.update(feat.ref.id, 'priority', 'P0');
+            writeFileSync(
+                join(tasksDir, '9906_open-task.md'),
+                `---
+schema_version: 1
+wbs: "9906"
+name: "Open Task"
+status: "wip"
+feature_id: "${feat.ref.id}"
+created_at: "${new Date().toISOString()}"
+updated_at: "${new Date().toISOString()}"
+---
+# 9906: Open Task
+`,
+            );
+
+            const res = await svc.syncFeature(feat.ref.id);
+            expect(res.applied).toBe(true);
+            expect(res.appliedHops).toEqual(['active']);
+            expect(res.goalConflict).toBeUndefined();
+            const updated = await svc.show(feat.ref.id);
+            expect(updated?.status).toBe('active');
+
+            rmSync(join(featuresDir, `${feat.ref.id}_sync-goal-open.md`), { force: true });
+        });
     });
 
     describe('fulfillAction', () => {

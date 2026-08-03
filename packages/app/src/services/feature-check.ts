@@ -159,6 +159,15 @@ export class FeatureCheckService extends PlanningCheckService {
             /** Directory containing `<wbs>-verdict.json` artifacts (default: <tasksDir parent>/.spur/run). */
             runDir?: string;
             severityOverrides?: Record<string, 'error' | 'warning' | 'off'>;
+            /**
+             * Transition-target hint (0418): evaluate the one-active-goal rule as if
+             * the feature were already in this status. The lifecycle FSM guards pass
+             * the edge's `to` status (`--as verifying` / `--as done`) so the rule
+             * sees the post-transition state and never denies the exit it would
+             * relieve. Only the one-active-goal rule consumes the hint; every other
+             * layer keeps evaluating the current frontmatter.
+             */
+            asStatus?: string;
         },
     ): Promise<CheckFeatureResult> {
         const strict = options?.strict === true;
@@ -186,7 +195,7 @@ export class FeatureCheckService extends PlanningCheckService {
 
         // ── L3: One-active-goal + children-limit (corpus-derived) ──
         if (options?.featuresDir) {
-            await this.checkOneActiveGoal(fm, featureId, options.featuresDir, findings);
+            await this.checkOneActiveGoal(fm, featureId, options.featuresDir, findings, options.asStatus);
             await this.checkChildrenLimit(featureId, options.featuresDir, findings);
         }
 
@@ -291,61 +300,39 @@ export class FeatureCheckService extends PlanningCheckService {
         }
     }
 
-    // ── L3: One-active-goal — at most one P0 feature in {active, verifying} ──
+    // ── L3: One-active-goal — at most one P0 feature in `active` ──
     private async checkOneActiveGoal(
         fm: Record<string, unknown>,
         currentId: string,
         featuresDir: string,
         findings: CheckFeatureFindings[],
+        asStatus?: string,
     ): Promise<void> {
         type Priority = string;
-        type Status = string;
         const priority = fm.priority as Priority | undefined;
-        const status = fm.status as Status | undefined;
+        const status = (fm.status as string | undefined) ?? 'backlog';
 
-        // Only check P0 features in active/verifying status
+        // 0418 (direction-aware): `asStatus` is the transition target the lifecycle
+        // FSM guard is moving this feature to. The rule evaluates the post-transition
+        // state, so a transition that EXITS the active set (`active → verifying`,
+        // `verifying → done`) is never denied by the same rule it relieves.
+        const effectiveStatus = asStatus ?? status;
+
+        // Only P0 features count as goals, and only `active` is a goal status: a P0
+        // in `verifying` is terminal-bound (verification toward done, DD-13) and no
+        // longer blocks a new active goal (0418).
         if (priority !== 'P0') return;
-        if (status !== 'active' && status !== 'verifying') return;
+        if (effectiveStatus !== 'active') return;
 
-        // Read all feature files in the directory and check for other P0 active/verifying
-        try {
-            const entries = await this.fs.readDir(featuresDir);
-            for (const entry of entries) {
-                if (!entry.endsWith('.md')) continue;
-
-                const otherPath = `${featuresDir}/${entry}`;
-                // Extract ID from filename: <ID>_<slug>.md
-                const match = /^([A-Z][1-9]*)_/.exec(entry);
-                if (!match) continue;
-                const otherId = match[1];
-
-                // Skip self
-                if (otherId === currentId) continue;
-
-                try {
-                    const raw = await this.fs.readFile(otherPath);
-                    const doc = MarkdownDocument.parse(raw, 'feature');
-                    const otherFm = doc.frontmatterData ?? {};
-                    const otherPriority = otherFm.priority as Priority | undefined;
-                    const otherStatus = otherFm.status as Status | undefined;
-
-                    if (otherPriority === 'P0' && (otherStatus === 'active' || otherStatus === 'verifying')) {
-                        findings.push({
-                            layer: 'L3',
-                            code: FINDING_CODES.L3_ONE_ACTIVE_GOAL,
-                            severity: 'error',
-                            section: '',
-                            message: `One-active-goal violated: P0 feature "${otherId}" is already ${otherStatus}`,
-                        });
-                        // Only report the first conflict
-                        return;
-                    }
-                } catch {
-                    // Skip unparseable files in the directory scan
-                }
-            }
-        } catch {
-            // Directory unreadable — skip the one-active-goal check
+        const conflict = await findOtherP0InStatus(this.fs, featuresDir, currentId, ['active']);
+        if (conflict !== null) {
+            findings.push({
+                layer: 'L3',
+                code: FINDING_CODES.L3_ONE_ACTIVE_GOAL,
+                severity: 'error',
+                section: '',
+                message: `One-active-goal violated: P0 feature "${conflict.id}" is already ${conflict.status}`,
+            });
         }
     }
 
@@ -717,6 +704,52 @@ export class FeatureCheckService extends PlanningCheckService {
             },
         };
     }
+}
+
+/**
+ * Find the first other P0 feature in `featuresDir` whose status is one of `statuses`.
+ * Shared by the one-active-goal rule (feature-check L3) and the activation-side
+ * guard (FeatureService sync, 0418 R3) so both enforce the same WIP limit against
+ * the same corpus scan. Returns `null` on an unreadable directory or no match;
+ * unparseable sibling files are skipped.
+ */
+export async function findOtherP0InStatus(
+    fs: FileSystem,
+    featuresDir: string,
+    currentId: string,
+    statuses: readonly string[],
+): Promise<{ id: string; status: string } | null> {
+    try {
+        const entries = await fs.readDir(featuresDir);
+        for (const entry of entries) {
+            if (!entry.endsWith('.md')) continue;
+
+            const match = /^([A-Z][1-9]*)_/.exec(entry);
+            if (match === null) continue;
+            const otherId = match[1];
+            if (otherId === undefined) continue;
+
+            // Skip self
+            if (otherId === currentId) continue;
+
+            try {
+                const raw = await fs.readFile(`${featuresDir}/${entry}`);
+                const doc = MarkdownDocument.parse(raw, 'feature');
+                const otherFm = doc.frontmatterData ?? {};
+                const otherPriority = otherFm.priority as string | undefined;
+                const otherStatus = (otherFm.status as string | undefined) ?? 'backlog';
+
+                if (otherPriority === 'P0' && statuses.includes(otherStatus)) {
+                    return { id: otherId, status: otherStatus };
+                }
+            } catch {
+                // Skip unparseable files in the directory scan
+            }
+        }
+    } catch {
+        // Directory unreadable — no conflict found
+    }
+    return null;
 }
 
 /** Canonical coverage row after verdict parsing (0410). */

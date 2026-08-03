@@ -603,7 +603,10 @@ describe('FeatureCheckService', () => {
         expect(goalErrors).toHaveLength(0);
     });
 
-    test('L3: one-active-goal counts verifying as active for P0 rule', async () => {
+    test('L3: one-active-goal does not count verifying as an active goal (0418)', async () => {
+        // 0418: a P0 in `verifying` is terminal-bound (verification toward done,
+        // DD-13), not an active goal — it neither triggers the rule when checked
+        // nor blocks another P0 from being the single active goal.
         const files: Record<string, string> = {
             'A_active.md': [
                 '---',
@@ -636,14 +639,217 @@ describe('FeatureCheckService', () => {
         const { fs, dir, cleanup } = seedFeaturesDir(files);
         const svc = new FeatureCheckService(fs);
 
-        // Check verifying P0 — should detect conflict with active P0
-        const result = await svc.check(`${dir}/B_verifying.md`, 'B', {
+        // Checking the verifying feature: it is not an active goal → no finding.
+        const resultB = await svc.check(`${dir}/B_verifying.md`, 'B', {
+            featuresDir: dir,
+        });
+        // Checking the active feature: B in verifying no longer blocks A — A is
+        // the sole active P0 goal.
+        const resultA = await svc.check(`${dir}/A_active.md`, 'A', {
             featuresDir: dir,
         });
         cleanup();
 
+        for (const result of [resultA, resultB]) {
+            const goalErrors = result.findings.filter((f) => f.message.includes('One-active-goal'));
+            expect(goalErrors).toHaveLength(0);
+        }
+    });
+
+    // ── L3: One-active-goal — direction-aware (0418) ─────────────────────
+
+    test('L3: one-active-goal is direction-aware — the relieving transition (--as verifying) is not denied (0418)', async () => {
+        // The deadlock fixture: two P0 features both `active`. The active→verifying
+        // guard checks the feature with `--as verifying`; the rule must evaluate
+        // the POST-transition state (verifying = not an active goal) and let the
+        // exit through — the transition that leaves a single active goal must not
+        // be denied by the rule it relieves.
+        const files: Record<string, string> = {
+            'A_first.md': [
+                '---',
+                'schema_version: 1',
+                'id: "A"',
+                'name: "First P0"',
+                'status: active',
+                'priority: P0',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# A: First P0',
+                '',
+                '## Goal',
+                '',
+                'Finish.',
+                '',
+                '## Scope',
+                '',
+                'In: x',
+                'Out: y',
+                '',
+                '## Acceptance Criteria',
+                '',
+                '- [ ] fixture item',
+            ].join('\n'),
+            'B_second.md': [
+                '---',
+                'schema_version: 1',
+                'id: "B"',
+                'name: "Second P0"',
+                'status: active',
+                'priority: P0',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# B: Second P0',
+                '',
+                '## Goal',
+                '',
+                'Finish.',
+                '',
+                '## Scope',
+                '',
+                'In: x',
+                'Out: y',
+                '',
+                '## Acceptance Criteria',
+                '',
+                '- [ ] fixture item',
+            ].join('\n'),
+        };
+
+        const { fs, dir, cleanup } = seedFeaturesDir(files);
+        const svc = new FeatureCheckService(fs);
+
+        const result = await svc.check(`${dir}/B_second.md`, 'B', {
+            featuresDir: dir,
+            asStatus: 'verifying',
+        });
+        cleanup();
+
         const goalErrors = result.findings.filter((f) => f.message.includes('One-active-goal'));
-        expect(goalErrors.length).toBe(1);
+        expect(goalErrors).toHaveLength(0);
+        expect(result.pass).toBe(true);
+    });
+
+    test('L3: one-active-goal is direction-aware — entering active (--as active) while another P0 is active is denied (0418)', async () => {
+        // The WIP limit still governs ENTRY: a P0 activating (backlog → active)
+        // while another P0 is active must be denied.
+        const files: Record<string, string> = {
+            'A_active.md': [
+                '---',
+                'schema_version: 1',
+                'id: "A"',
+                'name: "Active P0"',
+                'status: active',
+                'priority: P0',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# A: Active P0',
+            ].join('\n'),
+            'B_backlog.md': [
+                '---',
+                'schema_version: 1',
+                'id: "B"',
+                'name: "Backlog P0"',
+                'status: backlog',
+                'priority: P0',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# B: Backlog P0',
+            ].join('\n'),
+        };
+
+        const { fs, dir, cleanup } = seedFeaturesDir(files);
+        const svc = new FeatureCheckService(fs);
+
+        const result = await svc.check(`${dir}/B_backlog.md`, 'B', {
+            featuresDir: dir,
+            asStatus: 'active',
+        });
+        cleanup();
+
+        const goalErrors = result.findings.filter((f) => f.message.includes('One-active-goal'));
+        expect(goalErrors).toHaveLength(1);
+        expect(goalErrors[0]?.severity).toBe('error');
+        expect(result.pass).toBe(false);
+    });
+
+    test('L3: one-active-goal is direction-aware — a done target (--as done) is not denied (0418)', async () => {
+        // The verifying→done guard checks with `--as done`; a feature leaving the
+        // goal set for terminal must not be blocked by the rule.
+        const files: Record<string, string> = {
+            'A_active.md': [
+                '---',
+                'schema_version: 1',
+                'id: "A"',
+                'name: "Active P0"',
+                'status: active',
+                'priority: P0',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# A: Active P0',
+                '',
+                '## Goal',
+                '',
+                'Finish.',
+                '',
+                '## Scope',
+                '',
+                'In: x',
+                'Out: y',
+                '',
+                '## Acceptance Criteria',
+                '',
+                '- [ ] fixture item',
+            ].join('\n'),
+            'B_verifying.md': [
+                '---',
+                'schema_version: 1',
+                'id: "B"',
+                'name: "Verifying P0"',
+                'status: verifying',
+                'priority: P0',
+                'created_at: 2026-06-14T00:00:00.000Z',
+                'updated_at: 2026-06-14T00:00:00.000Z',
+                '---',
+                '',
+                '# B: Verifying P0',
+                '',
+                '## Goal',
+                '',
+                'Finish.',
+                '',
+                '## Scope',
+                '',
+                'In: x',
+                'Out: y',
+                '',
+                '## Acceptance Criteria',
+                '',
+                '- [ ] fixture item',
+            ].join('\n'),
+        };
+
+        const { fs, dir, cleanup } = seedFeaturesDir(files);
+        const svc = new FeatureCheckService(fs);
+
+        const result = await svc.check(`${dir}/B_verifying.md`, 'B', {
+            featuresDir: dir,
+            asStatus: 'done',
+        });
+        cleanup();
+
+        const goalErrors = result.findings.filter((f) => f.message.includes('One-active-goal'));
+        expect(goalErrors).toHaveLength(0);
+        expect(result.pass).toBe(true);
     });
 
     // ── L3: Children-limit (DD-14, corpus-derived) ───────────────────────

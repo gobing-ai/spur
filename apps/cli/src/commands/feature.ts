@@ -172,9 +172,9 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                 let next: string | undefined = forwardPath[current];
                 while (next !== undefined) {
                     if (current === 'active') {
-                        await assertFeatureCheckPass(context, id, options.folder, false);
+                        await assertFeatureCheckPass(context, id, options.folder, false, 'verifying');
                     } else if (current === 'verifying') {
-                        await assertFeatureCheckPass(context, id, options.folder, true);
+                        await assertFeatureCheckPass(context, id, options.folder, true, 'done');
                     }
 
                     const result = await svc.transition(id, next);
@@ -305,6 +305,10 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         .summary('Validate feature file(s) through the four-layer check (design §3).')
         .argument('[id]', 'Feature ID (validates all features in the folder when omitted)')
         .option('--strict', 'Elevate warnings to failures')
+        .option(
+            '--as <status>',
+            'Evaluate the one-active-goal rule as if the feature were in <status> (0418: lifecycle FSM guards pass the transition target)',
+        )
         .option('--folder <path>', 'Custom features folder')
         .option('--json', 'Output machine-readable JSON')
         .action(async (id, options) => {
@@ -337,6 +341,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                         // Verdict SSOT is always <cwd>/.spur/run (not docs/.spur/run).
                         runDir: context.fs.resolve('.spur/run'),
                         severityOverrides: resolved.severityOverrides,
+                        asStatus: options.as,
                     });
                     results.push(result);
                     if (!json) {
@@ -390,9 +395,11 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                         for (const res of result.results) {
                             const tag = res.applied
                                 ? 'UPDATED'
-                                : res.proposal.from === res.proposal.to
-                                  ? 'NOOP'
-                                  : 'SKIPPED';
+                                : res.goalConflict !== undefined
+                                  ? 'GOAL-CONFLICT'
+                                  : res.proposal.from === res.proposal.to
+                                    ? 'NOOP'
+                                    : 'SKIPPED';
                             context.output.write(
                                 `  [${tag}] ${res.proposal.featureId}: ${res.proposal.from} -> ${res.proposal.to} (${res.proposal.reason})`,
                             );
@@ -408,9 +415,11 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                     } else {
                         const tag = result.applied
                             ? 'UPDATED'
-                            : result.proposal.from === result.proposal.to
-                              ? 'NOOP'
-                              : 'SKIPPED';
+                            : result.goalConflict !== undefined
+                              ? 'GOAL-CONFLICT'
+                              : result.proposal.from === result.proposal.to
+                                ? 'NOOP'
+                                : 'SKIPPED';
                         context.output.write(
                             `Feature ${id}: [${tag}] ${result.proposal.from} -> ${result.proposal.to} (${result.proposal.reason})`,
                         );
@@ -450,6 +459,7 @@ async function assertFeatureCheckPass(
     id: string,
     folderOverride: string | undefined,
     strict: boolean,
+    asStatus?: string,
 ): Promise<void> {
     const resolved = await resolvePlanningFolders(context.fs);
     const featuresDir = folderOverride ?? context.fs.resolve(resolved.featuresDir);
@@ -463,6 +473,9 @@ async function assertFeatureCheckPass(
         strict,
         featuresDir,
         tasksDir,
+        // 0418: the hop's target status so the one-active-goal rule sees the
+        // post-transition state (same hint the FSM shell guard passes).
+        asStatus,
     });
     if (!result.pass) {
         const details = result.findings.map((f) => `${f.layer} ${f.section}: ${f.message}`).join('; ');

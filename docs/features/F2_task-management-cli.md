@@ -2,11 +2,11 @@
 schema_version: 1
 id: F2
 name: Task management CLI
-status: active
+status: done
 priority: P0
 tags: [rd3-migration, wave-1]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-08-03T00:10:22.177Z"
+updated_at: "2026-08-03T01:45:45.280Z"
 ---
 
 # F2: Task management CLI
@@ -74,3 +74,5 @@ Surface: delivery doc §1.1/§3. Same-commit 04_DESIGN §7.1/7.3/7.4 sync per ta
 
 - 2026-06-12 — created (rd3-migration feature finalizing)
 - 2026-08-03T00:10:22.177Z backlog → active (system)
+- 2026-08-03T01:45:44.844Z active → verifying (system)
+- 2026-08-03T01:45:45.280Z verifying → done (system)

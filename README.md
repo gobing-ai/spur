@@ -1,7 +1,7 @@
 # Spur
 
 <div align="center">
-  <img src="./docs/spur_logo.png" width="45%" alt="Spur logo" />
+  <img src="./docs/spur_logo.svg" width="45%" alt="Spur logo" />
 </div>
 
 **Local-first harness engineering toolkit for mainstream coding agents.**

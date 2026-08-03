@@ -1,7 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { resolve } from 'node:path';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { applyCliMigrations, type DbAdapter, TaskRunLinkDao } from '@gobing-ai/spur-domain';
 import { createDbAdapter } from '@gobing-ai/ts-db';
+import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { FeatureCheckService } from '../../src/services/feature-check';
 import type { EntityRef } from '../../src/services/planning-write-service';
 import {
     FEATURE_LIFECYCLE_PROFILE,
@@ -103,5 +107,137 @@ describe('FeatureLifecycleAdapter (engine integration)', () => {
         expect(result.from).toBe('verifying');
         expect(result.to).toBe('active');
         db.close();
+    });
+
+    test('R4 (0418): a two-P0-active corpus is recoverable through the CLI guard chain', async () => {
+        // The deadlock fixture: F2 + F4 both P0 `active`, both finished (linked
+        // tasks all done). Driving F2 active→verifying→done through the real FSM
+        // shell guards (which pass `--as verifying` / `--as done`) must succeed,
+        // leaving F4 as the single active goal. Removing the direction-aware fix
+        // (or the `--as` guard wiring) makes the first transition fail → this test
+        // fails, which is the mutation check R4 requires.
+        const root = mkdtempSync(join(tmpdir(), 'spur-0418-recovery-'));
+        const featuresDir = join(root, 'docs', 'features');
+        const tasksDir = join(root, 'docs', 'tasks');
+        mkdirSync(featuresDir, { recursive: true });
+        mkdirSync(tasksDir, { recursive: true });
+
+        const featureFile = (id: string, name: string, wbs: string): string =>
+            [
+                '---',
+                'schema_version: 1',
+                `id: "${id}"`,
+                `name: "${name}"`,
+                'status: active',
+                'priority: P0',
+                'created_at: 2026-08-02T00:00:00.000Z',
+                'updated_at: 2026-08-02T00:00:00.000Z',
+                '---',
+                '',
+                `# ${id}: ${name}`,
+                '',
+                '## Goal',
+                '',
+                'Finish the fixture goal.',
+                '',
+                '## Scope',
+                '',
+                'In: fixture',
+                'Out: nothing',
+                '',
+                '## Acceptance Criteria',
+                '',
+                '- [ ] fixture item',
+                '',
+                '## Tasks',
+                '',
+                '| WBS | Task | Status |',
+                '| --- | ---- | ------ |',
+                `| ${wbs} | done task | done |`,
+                '',
+                '## Notes',
+                '',
+                'Fixture feature for the 0418 deadlock-recovery regression.',
+            ].join('\n');
+        const taskFile = (wbs: string, featureId: string): string =>
+            [
+                '---',
+                'schema_version: 1',
+                `wbs: "${wbs}"`,
+                `name: "Task ${wbs}"`,
+                'status: done',
+                `feature_id: "${featureId}"`,
+                'created_at: 2026-08-02T00:00:00.000Z',
+                'updated_at: 2026-08-02T00:00:00.000Z',
+                '---',
+                '',
+                `# ${wbs}: Task ${wbs}`,
+                '',
+                '### Solution',
+                '',
+                'Done.',
+            ].join('\n');
+
+        writeFileSync(join(featuresDir, 'F2_second.md'), featureFile('F2', 'Second P0', '9901'));
+        writeFileSync(join(featuresDir, 'F4_fourth.md'), featureFile('F4', 'Fourth P0', '9902'));
+        writeFileSync(join(tasksDir, '9901_done.md'), taskFile('9901', 'F2'));
+        writeFileSync(join(tasksDir, '9902_done.md'), taskFile('9902', 'F4'));
+
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        // The dev CLI entry is the spur binary the FSM shell guards invoke — it
+        // carries the `--as` support this fix adds. `cwd` points at the fixture
+        // project so the spawned check resolves docs/features + docs/tasks there.
+        const repoRoot = resolve(import.meta.dir, '..', '..', '..', '..');
+        const opts: LifecycleAdapterOptions = {
+            profile: FEATURE_LIFECYCLE_PROFILE,
+            getDb: async () => db,
+            taskRunLinkDao: (adapter) => new TaskRunLinkDao(adapter),
+            workflowPath: WORKFLOW_PATH,
+            cwd: root,
+            spurBin: `bun ${join(repoRoot, 'apps', 'cli', 'src', 'index.ts')}`,
+        };
+        const adapter = new LifecycleAdapter(opts);
+
+        // The adapter is the write service's LifecyclePort: it validates and
+        // re-seeds engine state but never writes frontmatter. Mirror what the
+        // write path does after each allowed transition so the file SSOT (and the
+        // guard's file-wins re-seed) stays in sync with the requested state.
+        const writeStatus = (file: string, status: string): void => {
+            const path = join(featuresDir, file);
+            const raw = readFileSync(path, 'utf8').replace(/^status: .*$/m, `status: ${status}`);
+            writeFileSync(path, raw);
+        };
+
+        // Relieving transition: F2 leaves active — the guard (`--as verifying`)
+        // must not deny the exit the rule would otherwise relieve.
+        const hop1 = await adapter.requestTransition(makeRef('F2'), 'active', 'verifying');
+        expect(hop1.allowed).toBe(true);
+        if (!hop1.allowed) throw new Error('expected the relieving transition to be allowed');
+        writeStatus('F2_second.md', 'verifying');
+
+        // Terminal hop: F2 → done — strict guard (`--as done`) passes because the
+        // fixture is strict-clean and the goal rule no longer counts a done target.
+        const hop2 = await adapter.requestTransition(makeRef('F2'), 'verifying', 'done');
+        expect(hop2.allowed).toBe(true);
+        if (!hop2.allowed) throw new Error('expected the terminal transition to be allowed');
+        writeStatus('F2_second.md', 'done');
+
+        // Corpus is back to a single active goal: static checks drop the goal error.
+        const fs = createNodeFileSystem();
+        for (const [id, file] of [
+            ['F2', 'F2_second.md'],
+            ['F4', 'F4_fourth.md'],
+        ] as const) {
+            const res = await new FeatureCheckService(fs).check(`${featuresDir}/${file}`, id, {
+                featuresDir,
+                tasksDir,
+            });
+            const goalErrors = res.findings.filter((f) => f.message.includes('One-active-goal'));
+            expect(goalErrors).toHaveLength(0);
+        }
+
+        db.close();
+        rmSync(root, { recursive: true, force: true });
     });
 });
