@@ -138,6 +138,33 @@ export class DuplicateFollowUpError extends Error {
 }
 
 /**
+ * Error thrown by the WBS allocation guard (task 0416 R1) when a file with the
+ * allocated WBS prefix already exists in any configured folder. The allocation
+ * scan returned a stale maximum (e.g. a file was created after the scan but
+ * before the write, or the scan missed a non-conventional filename). The guard
+ * refuses to write rather than silently overwriting the existing file.
+ *
+ * The CLI maps this to a non-zero exit and surfaces both paths so the operator
+ * can see what would have been overwritten.
+ */
+export class WbsCollisionError extends Error {
+    readonly wbs: string;
+    readonly existingPath: string;
+    readonly attemptedPath: string;
+    constructor(wbs: string, existingPath: string, attemptedPath: string) {
+        super(
+            `wbs-collision: WBS ${wbs} already exists at "${existingPath}". ` +
+                `Refusing to overwrite with "${attemptedPath}". ` +
+                `Re-run create; if the collision persists, inspect the corpus with: spur task check.`,
+        );
+        this.name = 'WbsCollisionError';
+        this.wbs = wbs;
+        this.existingPath = existingPath;
+        this.attemptedPath = attemptedPath;
+    }
+}
+
+/**
  * Result of a section mutation (R3). `list` is read-only and returns no
  * write-event fields; `init`/`add` write through `writeService.updateSection`
  * (atomic, schema-validated, emits `task.updated`) and carry the write result.
@@ -590,9 +617,8 @@ export class TaskService {
                     throw new DuplicateFollowUpError(collision.wbs, collision.name, params.title);
                 }
             }
-            const wbs = await this.allocateWbs();
             const slug = this.slugify(params.title);
-            const filePath = this.resolveTaskPath(wbs, slug);
+            const { wbs, filePath } = await this.allocateWbsChecked(slug);
 
             const now = new Date().toISOString();
 
@@ -1256,9 +1282,8 @@ export class TaskService {
 
         // Allocate + write inside the create-lock (race-safe WBS allocation).
         return this.writeService.createAllocated(folder, async () => {
-            const wbs = await this.allocateWbs();
             const slug = this.slugify(item.name);
-            const filePath = this.resolveTaskPath(wbs, slug);
+            const { wbs, filePath } = await this.allocateWbsChecked(slug);
 
             const now = new Date().toISOString();
 
@@ -1483,14 +1508,26 @@ export class TaskService {
 
     private async allocateWbs(): Promise<string> {
         // Scan ALL configured folders for global WBS uniqueness (rd3:tasks model).
-        // Falls back to tasksDir-only when foldersConfig is absent.
+        // Reuse the locator's already-resolved absolute folder list so the config
+        // lookup (which keys on relative paths in config.yaml) can be resolved
+        // to the same absolute shape the directory walk uses (task 0416 R3/R4).
         let max = 0;
-        const dirs = this.ctx.foldersConfig
-            ? [...new Set([this.ctx.tasksDir, ...Object.keys(this.ctx.foldersConfig.folders)])]
-            : [this.ctx.tasksDir];
+        const dirs = this.allFolderDirs();
+
+        // Build an absolute-path -> baseCounter lookup so the active folder's
+        // floor is found regardless of whether it was sourced from tasksDir
+        // (absolute) or a config key (relative). Without this, folders[dir]
+        // misses for the active folder because tasksDir is absolute but config
+        // keys are relative (task 0416 root cause).
+        const folderFloors = new Map<string, number>();
+        if (this.ctx.foldersConfig) {
+            for (const [key, entry] of Object.entries(this.ctx.foldersConfig.folders)) {
+                folderFloors.set(this.ctx.fs.resolve(key), entry.baseCounter);
+            }
+        }
 
         for (const dir of dirs) {
-            const baseCounter = this.ctx.foldersConfig?.folders[dir]?.base_counter ?? 0;
+            const baseCounter = folderFloors.get(dir) ?? 0;
             if (baseCounter > max) max = baseCounter;
             try {
                 const entries = await this.ctx.fs.readDir(dir);
@@ -1506,6 +1543,23 @@ export class TaskService {
             }
         }
         return String(max + 1).padStart(4, '0');
+    }
+
+    /**
+     * Allocate a WBS and verify no file with that prefix already exists (task
+     * 0416 R1/R2). The guard lives at the allocation seam so both `create()`
+     * and `createBatchItem()` inherit it and a new caller cannot bypass it.
+     * Reuses `locator.findByWbs` rather than adding a second directory walk.
+     *
+     * @throws {WbsCollisionError} when a file with the allocated WBS prefix exists.
+     */
+    private async allocateWbsChecked(slug: string): Promise<{ wbs: string; filePath: string }> {
+        const wbs = await this.allocateWbs();
+        const existing = await this.locator.findByWbs(wbs);
+        if (existing !== null) {
+            throw new WbsCollisionError(wbs, existing.filePath, this.resolveTaskPath(wbs, slug));
+        }
+        return { wbs, filePath: this.resolveTaskPath(wbs, slug) };
     }
 
     /** Resolve a WBS to its absolute file path. Returns `null` when not found. */

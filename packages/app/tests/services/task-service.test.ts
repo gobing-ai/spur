@@ -5,12 +5,14 @@ import { join } from 'node:path';
 import { MarkdownDocument } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { PlanningWriteService } from '../../src/services/planning-write-service';
+import { TaskLocator } from '../../src/services/task-locator';
 import {
     DuplicateFollowUpError,
     sectionIsBare,
     TASK_ACTION_COMMANDS,
     type TaskActionJob,
     TaskService,
+    WbsCollisionError,
 } from '../../src/services/task-service';
 
 let tasksDir: string;
@@ -730,8 +732,8 @@ describe('TaskService', () => {
                 foldersConfig: {
                     active_folder: primary,
                     folders: {
-                        [primary]: { base_counter: 0 },
-                        [archive]: { base_counter: 0 },
+                        [primary]: { baseCounter: 0 },
+                        [archive]: { baseCounter: 0 },
                     },
                 },
             });
@@ -769,8 +771,8 @@ describe('TaskService', () => {
                 foldersConfig: {
                     active_folder: primary,
                     folders: {
-                        [primary]: { base_counter: 0 },
-                        [archive]: { base_counter: 0 },
+                        [primary]: { baseCounter: 0 },
+                        [archive]: { baseCounter: 0 },
                     },
                 },
             });
@@ -1457,5 +1459,263 @@ describe('sectionIsBare', () => {
             await expect(svc.refreshRoster('0001')).rejects.toThrow(/no ## Plan/);
             rmSync(root, { recursive: true, force: true });
         });
+    });
+});
+
+describe('TaskService 0416: WBS collision guard + baseCounter', () => {
+    // Helper: shadow the private allocateWbs on an instance to force a specific WBS.
+    // allocateWbsChecked calls this.allocateWbs(), so the shadow is picked up.
+    function forceAllocateWbs(svc: TaskService, wbs: string): void {
+        // Private method shadow: allocateWbsChecked calls this.allocateWbs(),
+        // so an own property on the instance is picked up at call time.
+        type Allocatable = { allocateWbs: () => Promise<string> };
+        const target = svc as unknown as Allocatable;
+        target.allocateWbs = async () => wbs;
+    }
+
+    test('R1: create() refuses to overwrite an existing WBS (collision -> WbsCollisionError)', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-task-collision-'));
+        const dir = join(root, 'tasks');
+        const fs = createNodeFileSystem(root);
+        await fs.ensureDir(dir);
+        const writeService = new PlanningWriteService({ fs });
+        const isolateSvc = new TaskService({ fs, tasksDir: dir, writeService });
+
+        try {
+            // Pre-seed a file with WBS 0500.
+            await fs.writeFile(
+                join(dir, '0500_existing-task.md'),
+                '---\nname: "Existing task"\nstatus: backlog\n---\n\n## 0500. Existing task\n',
+            );
+
+            // Force allocateWbs to return 0500 (collides with the pre-seeded file).
+            // In a single process, allocateWbs naturally returns max+1 and never
+            // collides. The guard exists for the concurrent-process race; this test
+            // simulates the stale-scan outcome deterministically.
+            forceAllocateWbs(isolateSvc, '0500');
+
+            await expect(isolateSvc.create({ title: 'New task' })).rejects.toThrow(WbsCollisionError);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('R1: batchCreate() refuses to overwrite an existing WBS (collision -> WbsCollisionError)', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-task-batch-collision-'));
+        const dir = join(root, 'tasks');
+        const fs = createNodeFileSystem(root);
+        await fs.ensureDir(dir);
+        const writeService = new PlanningWriteService({ fs });
+        const isolateSvc = new TaskService({ fs, tasksDir: dir, writeService });
+
+        try {
+            await fs.writeFile(
+                join(dir, '0500_existing.md'),
+                '---\nname: "Existing"\nstatus: backlog\n---\n\n## 0500. Existing\n',
+            );
+            forceAllocateWbs(isolateSvc, '0500');
+
+            const batchFile = join(dir, 'batch-collision.json');
+            await fs.writeFile(batchFile, JSON.stringify([{ name: 'Colliding batch item' }]));
+
+            await expect(isolateSvc.batchCreate(batchFile)).rejects.toThrow(WbsCollisionError);
+
+            // R2: the collision must be caught before the write, so the
+            // colliding task file is never created and the pre-seeded file
+            // is preserved untouched.
+            const entries = await fs.readDir(dir);
+            expect(entries).toContain('0500_existing.md');
+            expect(entries.some((e) => e.startsWith('0500_') && e !== '0500_existing.md')).toBe(false);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('R1: WbsCollisionError contains wbs, existingPath, and attemptedPath fields', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-task-collision-fields-'));
+        const dir = join(root, 'tasks');
+        const fs = createNodeFileSystem(root);
+        await fs.ensureDir(dir);
+        const writeService = new PlanningWriteService({ fs });
+        const isolateSvc = new TaskService({ fs, tasksDir: dir, writeService });
+
+        try {
+            await fs.writeFile(
+                join(dir, '0500_existing.md'),
+                '---\nname: "Existing"\nstatus: backlog\n---\n\n## 0500. Existing\n',
+            );
+            forceAllocateWbs(isolateSvc, '0500');
+
+            let caught: WbsCollisionError | null = null;
+            try {
+                await isolateSvc.create({ title: 'New task' });
+            } catch (err) {
+                if (err instanceof WbsCollisionError) caught = err;
+            }
+
+            expect(caught).not.toBeNull();
+            if (caught === null) throw new Error('WbsCollisionError was not thrown');
+            expect(caught.wbs).toBe('0500');
+            expect(caught.existingPath).toContain('0500_existing.md');
+            expect(caught.attemptedPath).toContain('0500_');
+            expect(caught.attemptedPath).toContain('.md');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('R3/R4: baseCounter is honored when folder is empty (floor > 0)', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-task-basecounter-empty-'));
+        const dir = join(root, 'tasks');
+        const fs = createNodeFileSystem(root);
+        await fs.ensureDir(dir);
+        const writeService = new PlanningWriteService({ fs });
+        const isolateSvc = new TaskService({
+            fs,
+            tasksDir: dir,
+            writeService,
+            foldersConfig: {
+                active_folder: dir,
+                folders: {
+                    [dir]: { baseCounter: 348 },
+                },
+            },
+        });
+
+        try {
+            const result = await isolateSvc.create({ title: 'First task after floor' });
+            // baseCounter=348 is the floor; with no existing files, max=348, alloc=0349.
+            expect(result.ref.id).toBe('0349');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('R3/R4: baseCounter is honored as a floor when existing WBS are below it', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-task-basecounter-floor-'));
+        const dir = join(root, 'tasks');
+        const fs = createNodeFileSystem(root);
+        await fs.ensureDir(dir);
+        const writeService = new PlanningWriteService({ fs });
+        const isolateSvc = new TaskService({
+            fs,
+            tasksDir: dir,
+            writeService,
+            foldersConfig: {
+                active_folder: dir,
+                folders: {
+                    [dir]: { baseCounter: 500 },
+                },
+            },
+        });
+
+        try {
+            // Pre-seed a task below the baseCounter floor.
+            await fs.writeFile(
+                join(dir, '0100_below-floor.md'),
+                '---\nname: "Below floor"\nstatus: backlog\n---\n\n## 0100. Below floor\n',
+            );
+
+            const result = await isolateSvc.create({ title: 'Above floor task' });
+            // baseCounter=500 > existing max 0100, so floor wins. alloc=0501.
+            expect(result.ref.id).toBe('0501');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('R3/R4: baseCounter from non-active folder contributes to global max', async () => {
+        // allocateWbs scans ALL configured folders and takes the global max of
+        // every baseCounter and every existing WBS. A non-active folder's
+        // baseCounter must be read correctly (not silently defaulted to 0 due
+        // to the relative-vs-absolute key mismatch that was the original bug).
+        const root = mkdtempSync(join(tmpdir(), 'spur-task-multi-floor-'));
+        const primary = join(root, 'tasks');
+        const archive = join(root, 'archive');
+        const fs = createNodeFileSystem(root);
+        await fs.ensureDir(primary);
+        await fs.ensureDir(archive);
+        const writeService = new PlanningWriteService({ fs });
+        const isolateSvc = new TaskService({
+            fs,
+            tasksDir: primary,
+            writeService,
+            foldersConfig: {
+                active_folder: primary,
+                folders: {
+                    [primary]: { baseCounter: 0 },
+                    [archive]: { baseCounter: 1000 },
+                },
+            },
+        });
+
+        try {
+            // Both folders empty. Global max = max(0, 1000) = 1000. alloc = 1001.
+            const result = await isolateSvc.create({ title: 'Primary task' });
+            expect(result.ref.id).toBe('1001');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('R6: TaskLocator.findDuplicateWbs detects same-WBS files across folders', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-task-dup-wbs-'));
+        const primary = join(root, 'tasks');
+        const archive = join(root, 'archive');
+        const fs = createNodeFileSystem(root);
+        await fs.ensureDir(primary);
+        await fs.ensureDir(archive);
+        const locator = new TaskLocator({
+            fs,
+            tasksDir: primary,
+            foldersConfig: {
+                folders: {
+                    [primary]: {},
+                    [archive]: {},
+                },
+            },
+        });
+
+        try {
+            // Same WBS 0042 in both folders -> duplicate.
+            await fs.writeFile(join(primary, '0042_primary.md'), '---\nname: "P"\n---\n\n## 0042. P\n');
+            await fs.writeFile(join(archive, '0042_archive.md'), '---\nname: "A"\n---\n\n## 0042. A\n');
+            // Unique WBS in primary -> not a duplicate.
+            await fs.writeFile(join(primary, '0043_unique.md'), '---\nname: "U"\n---\n\n## 0043. U\n');
+
+            const dups = await locator.findDuplicateWbs();
+            expect(dups).toHaveLength(1);
+            const [group] = dups;
+            expect(group).toBeDefined();
+            if (group === undefined) throw new Error('expected a duplicate group');
+            expect(group).toHaveLength(2);
+            const hitA = group[0];
+            const hitB = group[1];
+            expect(hitA).toBeDefined();
+            expect(hitB).toBeDefined();
+            if (!hitA || !hitB) throw new Error('expected two duplicate hits');
+            expect(hitA.wbs).toBe('0042');
+            expect(hitB.wbs).toBe('0042');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('R6: TaskLocator.findDuplicateWbs returns empty when no duplicates', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-task-no-dup-'));
+        const dir = join(root, 'tasks');
+        const fs = createNodeFileSystem(root);
+        await fs.ensureDir(dir);
+        const locator = TaskLocator.forSingleDir(fs, dir);
+
+        try {
+            await fs.writeFile(join(dir, '0042_a.md'), '---\nname: "A"\n---\n\n## 0042. A\n');
+            await fs.writeFile(join(dir, '0043_b.md'), '---\nname: "B"\n---\n\n## 0043. B\n');
+
+            const dups = await locator.findDuplicateWbs();
+            expect(dups).toHaveLength(0);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
     });
 });

@@ -129,4 +129,28 @@ export class TaskLocator {
         }
         return null;
     }
+
+    /**
+     * Find WBS prefixes that appear in more than one file across all configured
+     * folders (task 0416 R6). Returns groups of hits keyed by WBS - each group
+     * has at least two entries. Uses the same folder scan as {@link findByWbs}.
+     */
+    async findDuplicateWbs(): Promise<TaskFileHit[][]> {
+        const wbsMap = new Map<string, TaskFileHit[]>();
+        for (const dir of this.folderDirs()) {
+            for (const name of await readDirIfPresent(this.fs, dir)) {
+                const captured = TASK_FILENAME_RE.exec(name);
+                if (captured === null) continue;
+                const wbs = captured[1] as string;
+                const hit: TaskFileHit = { wbs, name, filePath: `${dir}/${name}` };
+                const existing = wbsMap.get(wbs);
+                if (existing) {
+                    existing.push(hit);
+                } else {
+                    wbsMap.set(wbs, [hit]);
+                }
+            }
+        }
+        return [...wbsMap.values()].filter((hits) => hits.length > 1);
+    }
 }

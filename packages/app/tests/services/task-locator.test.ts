@@ -202,4 +202,61 @@ describe('TaskLocator', () => {
             expect(dirs).toEqual([seed.tasksDir]);
         });
     });
+
+    describe('findDuplicateWbs', () => {
+        test('returns empty when there are no duplicate WBS prefixes', async () => {
+            const seed = seedCorpus();
+            const dups = await multiFolder(seed).findDuplicateWbs();
+            seed.cleanup();
+
+            expect(dups).toEqual([]);
+        });
+
+        test('detects the same WBS across two folders', async () => {
+            const seed = seedCorpus();
+            writeFileSync(join(seed.otherDir, '0001_dup.md'), 'dup');
+            const dups = await multiFolder(seed).findDuplicateWbs();
+            seed.cleanup();
+
+            expect(dups).toHaveLength(1);
+            const [group] = dups;
+            expect(group).toHaveLength(2);
+            expect(group?.map((h) => h.wbs)).toEqual(['0001', '0001']);
+            const names = group?.map((h) => h.name).sort();
+            expect(names).toEqual(['0001_dup.md', '0001_first.md']);
+        });
+
+        test('detects the same WBS within a single folder', async () => {
+            const seed = seedCorpus();
+            writeFileSync(join(seed.tasksDir, '0001_dup.md'), 'dup');
+            const dups = await multiFolder(seed).findDuplicateWbs();
+            seed.cleanup();
+
+            expect(dups).toHaveLength(1);
+            expect(dups[0]).toHaveLength(2);
+            expect(dups[0]?.map((h) => h.wbs)).toEqual(['0001', '0001']);
+        });
+
+        test('ignores non-task files like kanban.md', async () => {
+            const seed = seedCorpus();
+            const dups = await multiFolder(seed).findDuplicateWbs();
+            seed.cleanup();
+
+            // kanban.md exists in the seed corpus but has no WBS prefix.
+            expect(dups).toEqual([]);
+        });
+
+        test('returns multiple groups when several WBS prefixes collide', async () => {
+            const seed = seedCorpus();
+            writeFileSync(join(seed.otherDir, '0001_dup.md'), 'dup1');
+            writeFileSync(join(seed.otherDir, '0002_dup.md'), 'dup2');
+            const dups = await multiFolder(seed).findDuplicateWbs();
+            seed.cleanup();
+
+            expect(dups).toHaveLength(2);
+            expect(dups.every((g) => g.length === 2)).toBe(true);
+            const wbsValues = dups.map((g) => g[0]?.wbs ?? '').sort();
+            expect(wbsValues).toEqual(['0001', '0002']);
+        });
+    });
 });

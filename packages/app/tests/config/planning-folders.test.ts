@@ -54,7 +54,7 @@ describe('resolvePlanningFolders', () => {
         expect(result.tasksDir).toBe('docs/tasks2');
         expect(result.featuresDir).toBe('docs/features2');
         expect(Object.keys(result.foldersConfig.folders).sort()).toEqual(['docs/tasks', 'docs/tasks2']);
-        expect(result.foldersConfig.folders['docs/tasks2']?.base_counter).toBe(128);
+        expect(result.foldersConfig.folders['docs/tasks2']?.baseCounter).toBe(128);
     });
 
     test('falls back to defaults on malformed config (never throws)', async () => {

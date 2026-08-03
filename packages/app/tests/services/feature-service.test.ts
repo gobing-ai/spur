@@ -526,8 +526,8 @@ describe('FeatureService', () => {
                 tasksDir: tdir,
                 foldersConfig: {
                     folders: {
-                        tasks: { base_counter: 0 },
-                        tasks2: { base_counter: 100 },
+                        tasks: { baseCounter: 0 },
+                        tasks2: { baseCounter: 100 },
                     },
                 },
                 writeService: write,

@@ -268,6 +268,7 @@ export {
     SectionMutationError,
     TASK_ACTION_COMMANDS,
     TaskService,
+    WbsCollisionError,
 } from './services/task-service';
 export type { BatchAggregation, BatchTaskOutcome, BatchTaskResult } from './services/task-verdict';
 export { aggregateBatchVerdicts, classifyTaskOutcome, deriveVerdict } from './services/task-verdict';
