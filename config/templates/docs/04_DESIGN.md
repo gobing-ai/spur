@@ -18,12 +18,15 @@ sync: [T3, T9]
 > `docs/design/<slug>.md` satellite; this index carries the surface map + pointers.
 > Edit order: satellite first, then index row — same change (T9).
 
-## UI/UX boundary
+## UI/UX boundary & DESIGN.md
 
-Repository-root `DESIGN.md` owns all UI/UX design, including visual language, design tokens,
-components, layout, interaction, accessibility, and responsive behavior. Read and update it for UI
-work; keep this document focused on non-UI surface design. If `DESIGN.md` is absent, follow the
-project's established UI conventions rather than adding UI guidance here.
+Repository-root `DESIGN.md` owns all UI/UX design documentation (industry standard visual language, color tokens, typography, component specs, accessibility, and responsive patterns). Read and update it for UI work; keep `docs/04_DESIGN.md` focused on non-UI surface design by default. If `DESIGN.md` is absent, ignore it and follow the project's established UI conventions.
+
+By contrast, `docs/04_DESIGN.md` is our SSOT of non-UI surface design by default — covering CLI command signatures, flags, config schemas, DTOs, tables, and system boundaries.
+
+When collaborating with the design team:
+- **UI/UX & Visual Design:** Refer to and update repository-root `DESIGN.md`.
+- **Non-UI Surface & API/Schema DTOs:** Refer to and update `docs/04_DESIGN.md` (and `docs/design/<slug>.md` satellites).
 
 ## 1. CLI commands
 

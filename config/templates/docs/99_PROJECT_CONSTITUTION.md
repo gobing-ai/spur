@@ -80,7 +80,8 @@ Each project's `AGENTS.md` embeds an instantiated copy of this table (§4.4). A 
 | `docs/01_PRD.md` | **WHAT** — product vision, users, scope (in / out / deferred) | **Authoritative on scope** | Read before adding a command/feature; edit when scope changes |
 | `docs/02_ROADMAP.md` | **WHEN** — phases, current vs deferred, sequencing | Derived | Read to place work in a phase; edit when phase status changes |
 | `docs/03_ARCHITECTURE.md` | **HOW** — module boundaries, data flow, runtime model, invariants, rationale-in-depth | Derived (ADR wins) | Read before cross-module/seam/schema work; edit when boundaries or mechanisms change |
-| `docs/04_DESIGN.md` | **SURFACE** — concrete shapes: every CLI command, flag, config key, env var, table, DTO; **index over `docs/design/<slug>.md`** (§4.5) | Derived | Read/edit when changing a command, flag, env var, or schema — same commit |
+| `docs/04_DESIGN.md` | **SURFACE** — concrete shapes: every CLI command, flag, config key, env var, table, DTO; **index over `docs/design/<slug>.md`** (§4.5) | Derived | Read/edit when changing a non-UI command, flag, env var, or schema — same commit |
+| `DESIGN.md` (repo root) | **UI/UX SURFACE** — visual design, color tokens, typography, component specs, layout, micro-animations, accessibility | **Authoritative for UI/UX when present** | Read/edit when planning or implementing UI/UX visual changes (dynamically supported; ignored when absent) |
 | `docs/05_FEATURES.md` | **STATUS** — feature decomposition + state (✅ done / 🔶 partial / ⏳ planned / 💤 deferred); **index over `docs/features/<id>_<slug>.md`** (§4.5) | Derived | Read to find a feature's state; edit when a feature's status changes |
 | `docs/99_PROJECT_CONSTITUTION.md` | **PROCESS** — how the files above are maintained | **Authoritative on process** | Read before editing any doc above; edit per §6.8 |
 | `AGENTS.md` (repo root) | **ENTRY** — how agents work in this repo: stack, commands, gates, conventions + the instantiated doc map | Derived (from 99 + 00/01/04) | Read first every session; regenerate factual blocks from code (§6.7) |
@@ -89,7 +90,8 @@ Each project's `AGENTS.md` embeds an instantiated copy of this table (§4.4). A 
 
 - Decision + one-line reason → `00`. Rationale/mechanism in depth → `03`.
 - Scope (in/out/deferred) → `01`. Mechanism / data flow / invariants → `03`.
-- Command/flag/config/schema/DTO shapes → `04`. Phase timing → `02`. Feature status → `05`.
+- UI/UX visual design, design tokens, component specs & accessibility → `DESIGN.md` (when present; otherwise follow established project UI conventions).
+- Non-UI command/flag/config/schema/DTO shapes → `04`. Phase timing → `02`. Feature status → `05`.
 - If you are writing *how it's built* or *why* inside `00`/`01`/`02`, it belongs in `03`/`04`.
 
 ### 4.2 Working layers (outside the authority chain)

@@ -103,14 +103,9 @@ feature status → `05`. Working layers §4.2; audits §7; satellites §4.5.
 
 ## Design system
 
-**Conditional contract:** If repository-root `DESIGN.md` exists, read it before planning or
-implementing any change to UI, styling, interaction, accessibility, or responsive behavior. Treat
-it as the project source of truth for visual and interaction design — tokens, components, patterns,
-and UX constraints — and keep affected work consistent with it. If it is absent, continue with the
-project's established UI conventions.
+**Conditional contract:** If repository-root `DESIGN.md` exists, leverage it dynamically as the industry-standard SSOT for UI design documentation — visual language, color tokens, typography, component specs, layout, micro-animations, accessibility, and responsive patterns. Read it before planning or implementing any UI changes, and keep affected work consistent with it. If `DESIGN.md` is absent, ignore it and continue with the project's established UI conventions.
 
-Root `DESIGN.md` owns UI/UX guidance; `docs/04_DESIGN.md` still owns command, config, schema, and DTO
-surface shapes under the doc map above.
+**Boundary distinction:** Root `DESIGN.md` owns UI/UX design guidance; `docs/04_DESIGN.md` owns non-UI surface design by default (command signatures, flags, config schemas, DTOs, and system boundaries). When working with design teams, choose `DESIGN.md` for UI/UX visual design and `docs/04_DESIGN.md` for non-UI API/schema surfaces.
 
 ---
 

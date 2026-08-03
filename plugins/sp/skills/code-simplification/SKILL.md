@@ -75,6 +75,28 @@ context first — you are not ready to simplify:
 - Why might it be shaped this way — a performance constraint, a platform quirk, a historical reason?
   Check `git blame` / `git log` for the original context.
 
+#### Over-Engineering Classifier & Reserved Pattern Audit
+
+When encountering complex or indirect abstractions (factories, strategies, deep wrappers), classify them before acting:
+
+1. **Accidental LLM Over-Engineering**: Generic wrappers over single primitives, factory-for-a-factory, or single-implementation interfaces introduced during broad AI generation without sufficient local context.
+2. **Intentional Reserved Patterns**: Architectural extension points, framework contracts, or documented anchors reserved for upcoming roadmap features.
+
+#### HITL Confirmation Gate for Over-Engineering Removal
+
+If an abstraction appears to be accidental over-engineering:
+
+```text
+IF abstraction has 0 callers or adds indirection without distinct value →
+  Formulate proposal:
+    - Target: file:line and symbol signature
+    - Reason: why it appears over-engineered
+    - Pros: reduced cognitive load, fewer lines, simpler debugging
+    - Cons / Risks: re-implementation cost if reserved for planned features
+    - Recommendation & Rationale: explicit recommendation (Remove vs Keep)
+  Present proposal to user → DO NOT delete until operator confirms.
+```
+
 ### Step 2 — Identify opportunities
 
 Each pattern below is a concrete signal, not a vague smell. Match against the target code.
@@ -98,14 +120,25 @@ Each pattern below is a concrete signal, not a vague smell. Match against the ta
 | Comment restating the code | `// increment counter` over `count++` | Delete it |
 | Comment carrying intent | `// retry: the API is flaky under load` | Keep it — the code can't say why |
 
-**Redundancy**
+**Redundancy & Over-engineering**
 
 | Pattern | Signal | Move |
 |---------|--------|------|
-| Duplicated logic | Same shape in 2+ places | Extract one shared function |
+| Duplicated logic (local) | Same shape in 2+ places within scope | Extract local helper function |
+| Duplicated logic (cross-module) | Common pattern across files | Follow 5-Stage Common Pattern Consolidation |
 | Dead code | Unreachable branch, unused var, commented block | Remove after confirming it's dead |
-| Pass-through wrapper | Adds indirection, no value | Inline it; call the target directly |
-| Over-engineered pattern | Factory-for-a-factory, one-strategy strategy | Replace with the direct approach |
+| Pass-through wrapper | Adds indirection, no value | Inline it (after HITL confirmation) |
+| Over-engineered pattern | Factory-for-a-factory, one-strategy strategy | Replace with direct approach (after HITL confirmation) |
+
+#### 5-Stage Common Pattern Consolidation Protocol
+
+When identical or structurally near-identical operations repeat across multiple locations:
+
+1. **Identify Candidate Patterns**: Locate repeated operations across files/modules within the allowed scope.
+2. **Operator Confirmation Gate**: Present proposed shared helper/utility signature, suggested module location (e.g. `utils/`, `helpers/`, or shared domain module), affected files/lines, and coupling trade-offs to the end user.
+3. **Implement Shared Unit**: After confirmation, author the shared helper/class in the appropriate shared location with dedicated unit tests in isolation.
+4. **Refactor Call-Sites**: Replace repeating logic site-by-site with invocations of the shared helper.
+5. **Regression Verification**: Run the project validation command (`--check <cmd>`) to verify all callers pass existing and unit tests cleanly.
 
 A couple of stack-native examples (the discipline is stack-agnostic; these happen to be `bun:test` TS):
 
@@ -155,12 +188,15 @@ a failed simplification honestly reverted beats a clever one shipped.
 | "Fewer lines is always simpler." | Comprehension speed is the metric, not line count. A dense one-liner can be the harder version. |
 | "I'll simplify this unrelated code too while I'm here." | Unscoped edits create noisy diffs and regressions in code you didn't mean to change. Stay in scope (R3). |
 | "The original author must have had a reason." | Maybe — check `git blame` (Chesterton's Fence). But accumulated complexity often has no reason; it's residue of iteration under pressure. |
-| "This abstraction might be useful later." | Speculative abstraction is complexity without a caller (R2). Remove it; re-add when a second use actually arrives. |
+| "This abstraction might be useful later." | Speculative abstraction is complexity without a caller (R2). Remove it or confirm with operator; re-add when a second use actually arrives. |
+| "I'll delete this generic wrapper immediately without asking." | Over-engineered abstractions may be intentional reserved patterns; classify and confirm with pros/cons/recommendation first. |
 | "I'll refactor while I add this feature." | Mixed diffs are harder to review, revert, and read in history. Two changes, two commits. |
 | "The types make it self-documenting." | Types document structure, not intent. A well-named function says *why* a signature can't. |
 
 ## Red Flags
 
+- Deleting an abstraction without checking if it's an intentional reserved pattern or confirming with the user.
+- Extracting shared utilities across modules without operator confirmation or isolated unit tests.
 - A simplification that required editing a test to pass — you changed behavior, not form.
 - The "simplified" code is longer or harder to follow than the original.
 - Renaming to your taste instead of the project's conventions.
@@ -174,6 +210,8 @@ a failed simplification honestly reverted beats a clever one shipped.
 After a simplification pass, confirm — with evidence, not assertion:
 
 - [ ] All existing tests pass **without modification** (paste the command + result).
+- [ ] Potential over-engineering evaluated, classified, and confirmed with operator before removal.
+- [ ] Common pattern extractions confirmed with operator, backed by isolated unit tests, and regression verified across call-sites.
 - [ ] Build succeeds; lint/format clean (no style regressions).
 - [ ] Each simplification is an incremental, reviewable change; the diff has nothing unrelated.
 - [ ] The result follows project conventions (`AGENTS.md` / `CLAUDE.md`).

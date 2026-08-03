@@ -250,7 +250,8 @@ Read the doc that governs your change before editing code. On conflict, **lower 
 | [`docs/01_PRD.md`](docs/01_PRD.md)                   | _What_ — product, scope, in/out of scope                         | Authoritative for scope            |
 | [`docs/02_ROADMAP.md`](docs/02_ROADMAP.md)           | _When_ — phases, current vs deferred work                        | Derived                            |
 | [`docs/03_ARCHITECTURE.md`](docs/03_ARCHITECTURE.md) | _How_ — module boundaries, data flow, invariants                 | Derived (ADR wins)                 |
-| [`docs/04_DESIGN.md`](docs/04_DESIGN.md)             | Concrete surface — every CLI command, config schema, data shapes | Derived                            |
+| [`docs/04_DESIGN.md`](docs/04_DESIGN.md)             | Concrete non-UI surface — CLI commands, config schemas, DTOs | Derived                            |
+| [`DESIGN.md`](DESIGN.md)                             | UI/UX design SSOT — visual language, tokens, component specs | Authoritative for UI/UX (dynamic)  |
 | [`docs/05_FEATURES.md`](docs/05_FEATURES.md)         | Feature decomposition + status (✅/🔶/⏳/💤)                     | Derived                            |
 
 Agent-facing guidance for working in this repo lives in [`AGENTS.md`](AGENTS.md) (`CLAUDE.md` /

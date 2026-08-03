@@ -46,6 +46,13 @@ export async function createMigratedDbViaRuntime(config: DatabaseConfig): Promis
     const { loadRuntimeFactory } = await import('@gobing-ai/ts-runtime');
     const factory = await loadRuntimeFactory();
     const runtimeAdapter = await factory.createDbAdapter(config);
+    // Set a busy timeout so concurrent spur processes (or a stale WAL lock) retry
+    // briefly instead of throwing SQLITE_BUSY immediately. The upstream
+    // BunSqliteAdapter defaults omit busy_timeout, which makes parallel CLI
+    // invocations against the same project DB fail non-deterministically.
+    // (Run via exec because the typed pragmas option only accepts journalMode/
+    // synchronous/foreignKeys — the runtime constructor only applies those three.)
+    await runtimeAdapter.exec('PRAGMA busy_timeout = 5000');
     await applyCliMigrations(runtimeAdapter as unknown as DbAdapter);
     return runtimeAdapter as unknown as DbAdapter;
 }

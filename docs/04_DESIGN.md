@@ -16,9 +16,15 @@ sync: [T3, T9]
 The external, user-facing design surface: every CLI command, the config schema, and the persisted
 data shapes. Feature-internal design lives in code.
 
-This doc is the **index** over the `docs/design/` satellites (constitution §4.5): the surface spec
-below is the entry point; deep per-area design lives in the satellite files. Edit order is
-detail-first then index (§4.5 rule 5 / T9).
+## UI/UX boundary & DESIGN.md
+
+Repository-root `DESIGN.md` owns all UI/UX design documentation (industry standard visual language, color tokens, typography, component specs, accessibility, and responsive patterns). Read and update it for UI work; keep `docs/04_DESIGN.md` focused on non-UI surface design by default. If `DESIGN.md` is absent, ignore it and follow the project's established UI conventions.
+
+By contrast, `docs/04_DESIGN.md` is our SSOT of non-UI surface design by default — covering CLI command signatures, flags, config schemas, DTOs, tables, and system boundaries.
+
+When collaborating with the design team:
+- **UI/UX & Visual Design:** Refer to and update repository-root `DESIGN.md`.
+- **Non-UI Surface & API/Schema DTOs:** Refer to and update `docs/04_DESIGN.md` (and `docs/design/<slug>.md` satellites).
 
 ## 0. Design satellites (`docs/design/`)
 
