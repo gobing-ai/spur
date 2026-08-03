@@ -1,5 +1,65 @@
 # Changelog
 
+## [0.3.29] — 2026-08-02
+
+### Added
+
+- Add cross-surface flag-contract parity gate (5261c555)
+- Add no-syscall-emulation-in-boundary-mock lint rule (9df6026c)
+- Add per-run agent output capture to workflow runs (fc04326d)
+- Add bounded per-run agent output sink (09ffe412)
+- Add group-feature matrix variant exempt from AC requirement (1e1b59be)
+- Add feature-sync-bounded retry-suppression script and tests (cf9aaf86)
+- Accept scenario alias and warn on malformed verdict artifacts (f3e31f04)
+- Coherent `--next` flag semantics + canonical glossary (H8) (59f667c3)
+
+### Fixed
+
+- Resolve feature lifecycle deadlock for P0 features in active state (d3aaf3a6)
+- Map WBS collision to 409 WBS_COLLISION in server (77809468)
+- Surface WBS collisions with exit 3 and duplicate detection in CLI (77809468)
+- Guard WBS allocation against collisions and honor baseCounter in app (801b2cf6)
+- Rename base_counter to baseCounter in folder schema (1169347e)
+- Make feature-sync-bounded spawnSync Bun-API compatible (e1786061)
+- Correct flag descriptions and glossary entries after 0412 audit (aab4c30c)
+- Correct flag-default descriptions on dev command surfaces (b471fe1b)
+
+### Changed
+
+- Point workflow trace at the live agent-output artifact (8faac124)
+- Add agent.output capture-bound schema (bce56d8f)
+- Normalize dev-command argument contracts (0412) (70df78de)
+- Unify `--agent`/`--inline`/`--subprocess` into one selector (07814d6e)
+- Make inline the default execution surface with automatic tier escalation (04cab820)
+- Block done transition on placeholder required sections (f373e90b)
+
+### Refactored
+
+- Replace prose-literal test pins with structured markers (d6849636)
+- Extract flag glossary out of dev-operations.md into own reference (01f689e7)
+
+### Documentation
+
+- Update task status after implementation (de8e549f, 902fd19d)
+- Backfill F4 scenario traceability in task 0419 (15698251)
+- Mark 0416 done and sync F2 feature status (a42d26c5)
+- Add F2 coverage and deadlock task records (22e169d9)
+- Update 0413 and 0415 task records (4c71fe1b)
+- Record task 0414 completion and J3 verifying status (4253e80a)
+- Document H81 contract, H9 completion, and task 0411 verify record (105a1b4c)
+- Document bounded feature-sync retry suppression in execution-batch (36cbfc34)
+- Add H81 dev-command argument-flags brainstorm (9debdd38)
+
+### Other
+
+- Ignore .spur memory session checkpoints (d2c510d6)
+- Allowlist run-output-sink sync FD writes (8b12bf14)
+- Remove 0412 one-shot migration scripts (ee64cf89)
+- Refresh 0412 task checkboxes and H81 feature status to done (b66288d6)
+- Add 0412 migration tooling scripts (9851eeef)
+- Create task 0416, 0415, 0414 records (b449ef66, 8b2bf1c5, dd172e3f)
+- Mark task 0412 done with review and testing evidence (ff5aeea2)
+
 ## [0.3.28] — 2026-07-31
 
 ### Added
