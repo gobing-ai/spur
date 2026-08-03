@@ -213,13 +213,22 @@ describe('FeatureLifecycleAdapter (engine integration)', () => {
         const cliIndex = join(repoRoot, 'apps', 'cli', 'src', 'index.ts');
         const diagCmd = `${execPath} ${cliIndex} feature check F2 --as verifying`;
         const { nodeBunFactory } = await import('@gobing-ai/ts-runtime');
-        const diagRes = await nodeBunFactory.createProcessExecutor().run({
-            command: '/bin/sh',
-            args: ['-c', diagCmd],
-            cwd: root,
-        });
-        console.log('DIAG_CMD:', diagCmd);
-        console.log('DIAG_RES:', JSON.stringify(diagRes, null, 2));
+        try {
+            const diagRes = await nodeBunFactory.createProcessExecutor().run({
+                command: '/bin/sh',
+                args: ['-c', diagCmd],
+                cwd: root,
+                rejectOnError: true,
+            });
+            console.log('DIAG_RES:', JSON.stringify(diagRes, null, 2));
+        } catch (err: unknown) {
+            const e = err as Record<string, unknown>;
+            console.log('DIAG_CATCH_KEYS:', Object.keys(e ?? {}));
+            console.log('DIAG_CATCH_MSG:', e?.message);
+            console.log('DIAG_CATCH_CODE:', e?.code);
+            console.log('DIAG_CATCH_ERR:', String(err));
+            console.log('DIAG_CATCH_FULL:', JSON.stringify(err, Object.getOwnPropertyNames(err as object), 2));
+        }
 
         // Relieving transition: F2 leaves active — the guard (`--as verifying`)
         // must not deny the exit the rule would otherwise relieve.
